@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" windowtype="zotpop:search">
+<head>
+	<meta charset="utf-8"/>
+	<title>ZotPoP — 논문 검색 &amp; 가져오기</title>
+	<link rel="stylesheet" href="chrome://zotpop/content/search.css"/>
+	<script src="chrome://zotero/content/include.js"></script>
+	<script src="chrome://zotpop/content/sources.js"></script>
+	<script src="chrome://zotpop/content/metrics.js"></script>
+	<script src="chrome://zotpop/content/importer.js"></script>
+	<script src="chrome://zotpop/content/ui.js"></script>
+</head>
+<body>
+<div id="app">
+	<form id="query-form" class="query" onsubmit="return false;">
+		<div class="field">
+			<label for="source">검색 소스</label>
+			<select id="source"></select>
+		</div>
+		<div class="field grow">
+			<label for="authors">저자</label>
+			<input id="authors" type="text" placeholder="예: Sung JY; Kim JS"/>
+		</div>
+		<div class="field grow">
+			<label for="venue">저널</label>
+			<input id="venue" type="text" placeholder="예: Nucleic Acids Research"/>
+		</div>
+		<div class="field grow">
+			<label for="title">제목 단어</label>
+			<input id="title" type="text" placeholder="제목에 모두 포함될 단어"/>
+		</div>
+		<div class="field grow2">
+			<label for="keywords">키워드 (전체 필드)</label>
+			<input id="keywords" type="text" placeholder="예: CRISPR base editing"/>
+		</div>
+		<div class="field years">
+			<label>연도</label>
+			<div class="row">
+				<input id="yearFrom" type="number" min="1800" max="2100" placeholder="시작"/>
+				<span>–</span>
+				<input id="yearTo" type="number" min="1800" max="2100" placeholder="끝"/>
+			</div>
+		</div>
+		<div class="field narrow">
+			<label for="maxResults">최대 결과</label>
+			<input id="maxResults" type="number" min="1" max="2000" value="200"/>
+		</div>
+		<div class="field buttons">
+			<label>&#160;</label>
+			<div class="row">
+				<button id="search-btn" type="submit" class="primary">검색</button>
+				<button id="stop-btn" type="button" disabled="disabled">중지</button>
+				<button id="clear-btn" type="button">초기화</button>
+			</div>
+		</div>
+	</form>
+
+	<div id="banner" class="banner" hidden="hidden"><span id="banner-text"></span><button id="banner-close" type="button" title="닫기">×</button></div>
+
+	<div id="main">
+		<aside id="metrics">
+			<h3>인용 지표</h3>
+			<table id="metrics-table">
+				<tr><td>출판 연도</td><td id="m-years">–</td></tr>
+				<tr><td>인용 연수</td><td id="m-cyears">–</td></tr>
+				<tr><td>논문 수</td><td id="m-papers">–</td></tr>
+				<tr><td>총 인용</td><td id="m-citations">–</td></tr>
+				<tr><td>연간 인용</td><td id="m-cpy">–</td></tr>
+				<tr><td>논문당 인용</td><td id="m-cpp">–</td></tr>
+				<tr><td>저자당 인용</td><td id="m-cpa">–</td></tr>
+				<tr><td>저자당 논문</td><td id="m-ppa">–</td></tr>
+				<tr><td>논문당 저자</td><td id="m-app">–</td></tr>
+				<tr class="hl"><td>h-index</td><td id="m-h">–</td></tr>
+				<tr class="hl"><td>g-index</td><td id="m-g">–</td></tr>
+				<tr><td>hI,norm</td><td id="m-hinorm">–</td></tr>
+				<tr><td>hI,annual</td><td id="m-hiannual">–</td></tr>
+				<tr><td>hA-index</td><td id="m-ha">–</td></tr>
+			</table>
+			<p class="hint">현재 표에 보이는 결과(필터 적용 후) 기준으로 계산합니다.</p>
+		</aside>
+
+		<div id="vsplit" class="splitter-v" title="드래그해서 너비 조절"></div>
+
+		<section id="results">
+			<div class="toolbar">
+				<input id="filter" type="search" placeholder="결과 필터… (⌘F)"/>
+				<span class="spacer"></span>
+				<button id="select-all" type="button">전체</button>
+				<button id="select-none" type="button">해제</button>
+				<button id="select-new" type="button" title="라이브러리에 없는 논문만 선택">미보유만</button>
+				<span class="sep"></span>
+				<button id="copy-csv" type="button" title="보이는 결과를 CSV로 클립보드에 복사">CSV 복사</button>
+				<button id="save-csv" type="button" title="보이는 결과를 바탕화면에 CSV 파일로 저장">CSV 저장</button>
+				<button id="toggle-detail" type="button" title="상세 패널 켜기/끄기">상세 ▾</button>
+			</div>
+			<div class="table-wrap" id="table-wrap">
+				<table id="results-table">
+					<colgroup id="cols">
+						<col data-k="chk"/><col data-k="citations"/><col data-k="cpy"/><col data-k="rank"/>
+						<col data-k="authorString"/><col data-k="title"/><col data-k="year"/><col data-k="venue"/>
+						<col data-k="doi"/><col data-k="pdf"/><col data-k="inLibrary"/><col data-k="status"/>
+					</colgroup>
+					<thead>
+						<tr>
+							<th class="chk"><input id="chk-all" type="checkbox" title="보이는 결과 전체 선택"/></th>
+							<th data-sort="citations" class="num">인용<span class="rz"></span></th>
+							<th data-sort="cpy" class="num">연간<span class="rz"></span></th>
+							<th data-sort="rank" class="num">순위<span class="rz"></span></th>
+							<th data-sort="authorString">저자<span class="rz"></span></th>
+							<th data-sort="title">제목</th>
+							<th data-sort="year" class="num">연도<span class="rz"></span></th>
+							<th data-sort="venue">저널<span class="rz"></span></th>
+							<th data-sort="doi">DOI<span class="rz"></span></th>
+							<th data-sort="pdf" class="mini" title="열람 가능한 PDF 링크">PDF<span class="rz"></span></th>
+							<th data-sort="inLibrary" class="mini" title="라이브러리 보유 여부">보유<span class="rz"></span></th>
+							<th data-sort="status">상태</th>
+						</tr>
+					</thead>
+					<tbody id="results-body"></tbody>
+				</table>
+				<div id="empty" class="empty">위에 조건을 입력하고 검색을 누르세요.</div>
+				<div id="busy" class="empty" hidden="hidden"><span class="spinner"></span><span id="busy-text">검색 중…</span></div>
+			</div>
+			<div id="hsplit" class="splitter-h" title="드래그해서 높이 조절"></div>
+			<div id="detail">
+				<div id="detail-empty" class="detail-empty">행을 클릭하면 상세 정보가 표시됩니다.</div>
+				<div id="detail-body" hidden="hidden">
+					<div class="detail-head">
+						<div id="d-title" class="d-title"></div>
+						<div id="d-badges" class="badges"></div>
+					</div>
+					<div id="d-authors" class="d-authors"></div>
+					<div id="d-meta" class="d-meta"></div>
+					<div class="d-actions">
+						<button id="d-open" type="button">브라우저에서 열기</button>
+						<button id="d-pdf" type="button">PDF 열기</button>
+						<button id="d-copy-doi" type="button">DOI 복사</button>
+						<button id="d-copy-cite" type="button">인용 복사</button>
+						<button id="d-add" type="button" class="primary">이 논문 추가</button>
+					</div>
+					<div id="d-abstract" class="d-abstract"></div>
+				</div>
+			</div>
+		</section>
+	</div>
+
+	<div id="import-bar">
+		<label for="target">추가 위치</label>
+		<select id="target"></select>
+		<label class="cb"><input id="opt-pdf" type="checkbox" checked="checked"/> PDF 자동 첨부</label>
+		<label class="cb"><input id="opt-skip" type="checkbox" checked="checked"/> 중복 건너뛰기 (DOI)</label>
+		<label class="cb"><input id="opt-extra" type="checkbox" checked="checked"/> 인용 수를 Extra에 기록</label>
+		<span class="spacer"></span>
+		<span id="selected-count">0개 선택</span>
+		<button id="import-btn" type="button" class="primary" disabled="disabled">Zotero에 추가</button>
+	</div>
+
+	<div id="statusbar">
+		<span id="status">준비됨.</span>
+		<span class="spacer"></span>
+		<progress id="progress" max="100" value="0" hidden="hidden"></progress>
+	</div>
+
+	<div id="ctxmenu" class="ctxmenu" hidden="hidden"></div>
+</div>
+</body>
+</html>

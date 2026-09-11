@@ -1,0 +1,11 @@
+{
+  "name": "zotpop",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Publish or Perish-style literature search and import for Zotero",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "build": "sh scripts/build.sh",
+    "install": "sh scripts/install.sh"
+  }
+}

@@ -1,0 +1,131 @@
+// Live API smoke tests: node --test test/
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const S = require("../content/sources.js");
+const M = require("../content/metrics.js");
+
+const http = {
+	async getJSON(url, headers = {}) {
+		let res = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "ZotPoP-tests (mailto:test@example.com)", ...headers } });
+		if (!res.ok) { let e = new Error("HTTP " + res.status + " " + url); e.status = res.status; throw e; }
+		return res.json();
+	},
+	async getText(url, headers = {}) {
+		let res = await fetch(url, { headers: { "User-Agent": "ZotPoP-tests", ...headers } });
+		if (!res.ok) { let e = new Error("HTTP " + res.status + " " + url); e.status = res.status; throw e; }
+		return res.text();
+	}
+};
+const ctx = { email: "test@example.com", onProgress: () => {} };
+const q = { keywords: "CRISPR base editing", yearFrom: 2018, yearTo: 2024, maxResults: 15 };
+
+function check(recs, source, lo = 2018, hi = 2024) {
+	assert.ok(recs.length > 0, source + " returned results");
+	for (let r of recs) {
+		assert.equal(r.source, source);
+		assert.ok(r.title.length > 3, "title");
+		assert.ok(Array.isArray(r.authors));
+		if (r.year) assert.ok(r.year >= lo && r.year <= hi, "year in range: " + r.year + " " + r.title);
+		if (r.doi) assert.match(r.doi, /^10\./);
+	}
+}
+
+test("metrics", () => {
+	let m = M.compute([
+		{ citations: 10, year: 2020, authors: [{}, {}] },
+		{ citations: 5, year: 2021, authors: [{}] },
+		{ citations: 1, year: 2023, authors: [{}, {}, {}] },
+		{ citations: 0, year: 2024, authors: [{}] }
+	], 2026);
+	assert.equal(m.papers, 4);
+	assert.equal(m.citations, 16);
+	assert.equal(m.hIndex, 2);
+	assert.equal(m.gIndex, 4); // 10 >= 1, 15 >= 4, 16 >= 9, 16 >= 16
+	assert.equal(m.citationYears, 6);
+	assert.equal(m.hiNorm, 2); // 5, 5, 0.33, 0
+});
+
+test("pubmedYear prefers the earlier date", () => {
+	assert.equal(S.pubmedYear({ pubdate: "2026 Jun", epubdate: "2024 Jun 10", sortpubdate: "2026/06/01 00:00" }), 2024);
+	assert.equal(S.pubmedYear({ pubdate: "2025 Jan", epubdate: "2024 Dec 31" }), 2024);
+	assert.equal(S.pubmedYear({ pubdate: "2019 Mar" }), 2019);
+	assert.equal(S.pubmedYear({}), null);
+});
+
+test("unit helpers", () => {
+	assert.equal(S.normalizeDOI("https://doi.org/10.1000/ABC.123"), "10.1000/abc.123");
+	assert.equal(S.normalizeDOI("garbage"), null);
+	assert.deepEqual(S.parseName("Jae Yoon Sung"), { firstName: "Jae Yoon", lastName: "Sung", name: "Jae Yoon Sung" });
+	assert.deepEqual(S.parseName("Sung, Jae Yoon").lastName, "Sung");
+	assert.equal(S.pubmedTerm({ keywords: "crispr", authors: "Sung JY", yearFrom: 2020 }), "(crispr) AND Sung JY[au] AND 2020:3000[dp]");
+	assert.ok(S.titleSimilarity("Base editing of the human genome", "Base editing of the human genome.") > 0.9);
+});
+
+test("openalex", async () => { check(await S.search("openalex", q, http, ctx), "openalex"); });
+test("openalex venue+author", async () => {
+	let recs = await S.search("openalex", { authors: "David R Liu", venue: "Nature", yearFrom: 2016, maxResults: 5 }, http, ctx);
+	check(recs, "openalex", 2016, 2030);
+	assert.ok(recs.every(r => /nature/i.test(r.venue)), recs.map(r => r.venue).join("|"));
+});
+test("crossref", async () => { check(await S.search("crossref", q, http, ctx), "crossref"); });
+test("semanticscholar", async (t) => {
+	// Unauthenticated access is rate-limited; a 429 is the service, not our code.
+	try {
+		check(await S.search("semanticscholar", q, http, ctx), "semanticscholar");
+	}
+	catch (e) {
+		if (e.status === 429) return t.skip("Semantic Scholar rate limit (set an API key to test)");
+		throw e;
+	}
+});
+test("pubmed", async () => {
+	let recs = await S.search("pubmed", q, http, ctx);
+	check(recs, "pubmed");
+	assert.ok(recs.some(r => r.citations != null), "enriched with citation counts");
+	assert.ok(recs.every(r => r.pmid));
+});
+test("arxiv", async () => {
+	let recs = await S.search("arxiv", { keywords: "transformer attention", yearFrom: 2018, yearTo: 2024, maxResults: 10 }, http, ctx);
+	check(recs, "arxiv");
+	assert.ok(recs.every(r => r.arxiv));
+});
+test("resolveDOIByTitle", async () => {
+	let rec = { title: "Programmable editing of a target base in genomic DNA without double-stranded DNA cleavage", year: 2016 };
+	let doi = await S.resolveDOIByTitle(rec, http, ctx);
+	assert.equal(doi, "10.1038/nature17946");
+});
+test("citesPerYear defaults", () => {
+	let v = M.citesPerYear({ citations: 100, year: new Date().getFullYear() - 4 });
+	assert.equal(v, 25);
+});
+test("pdfCandidates", async () => {
+	let rec = { doi: "10.1093/nar/gku623", pmcid: "PMC4176153", pdfUrls: ["https://academic.oup.com/x.pdf"], pdfUrl: "https://academic.oup.com/x.pdf" };
+	let urls = await S.pdfCandidates(rec, http, { email: "" });
+	assert.deepEqual(urls, ["https://academic.oup.com/x.pdf", "https://europepmc.org/articles/PMC4176153?pdf=render"]);
+});
+test("openalex pmcid + pdfUrls", async () => {
+	let recs = await S.search("openalex", { title: "CRISPR-Cas9-assisted recombineering in Lactobacillus reuteri", maxResults: 3 }, http, ctx);
+	let r = recs.find(x => x.doi === "10.1093/nar/gku623");
+	assert.ok(r, "found");
+	assert.equal(r.pmcid, "PMC4176153");
+	assert.ok(r.pdfUrls.length >= 1, "pdfUrls");
+});
+
+test("multi-source merged search", async () => {
+	let recs = await S.search("multi", { keywords: "single-stranded DNA annealing protein", yearFrom: 2015, maxResults: 30 }, http, { ...ctx, log: () => {} });
+	assert.ok(recs.length > 5, "merged results: " + recs.length);
+	for (let r of recs) {
+		assert.ok(Array.isArray(r.sources) && r.sources.length >= 1, "sources array");
+		assert.ok(r.title.length > 3);
+	}
+	// merging must collapse duplicate DOIs across sources
+	let dois = recs.map(r => r.doi).filter(Boolean);
+	assert.equal(new Set(dois).size, dois.length, "no duplicate DOIs after merge");
+	// at least one record should have been seen by more than one source
+	assert.ok(recs.some(r => r.sources.length > 1), "some record merged from 2+ sources");
+	// sorted by citations descending
+	let cited = recs.map(r => r.citations ?? -1);
+	assert.deepEqual(cited, [...cited].sort((a, b) => b - a), "sorted by citations");
+});

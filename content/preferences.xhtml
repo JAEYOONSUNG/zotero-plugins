@@ -1,0 +1,20 @@
+<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" xmlns:html="http://www.w3.org/1999/xhtml" onload="Zotero.ZotPoPPrefs?.init()">
+	<groupbox>
+		<label><html:h2>ZotPoP — Search &amp; Import Papers</html:h2></label>
+		<html:p>Publish or Perish-style literature search. Open it from the magnifier button in the items toolbar, or <html:b>도구 → 논문 검색 &amp; 가져오기</html:b>.</html:p>
+		<hbox align="center">
+			<label value="Contact e-mail (OpenAlex / Crossref polite pool, PubMed):" control="zotpop-email"/>
+			<html:input id="zotpop-email" type="email" preference="extensions.zotpop.email" style="width: 260px"/>
+		</hbox>
+		<hbox align="center">
+			<label value="Semantic Scholar API key (optional, avoids rate limits):" control="zotpop-s2"/>
+			<html:input id="zotpop-s2" type="text" preference="extensions.zotpop.s2ApiKey" style="width: 260px"/>
+		</hbox>
+		<hbox align="center">
+			<label value="Default max results:" control="zotpop-max"/>
+			<html:input id="zotpop-max" type="number" min="1" max="2000" preference="extensions.zotpop.maxResults" style="width: 80px"/>
+		</hbox>
+		<checkbox label="Look up citation counts from OpenAlex for sources without them (PubMed, arXiv)" preference="extensions.zotpop.enrichCitations"/>
+		<html:p style="color: gray">Google Scholar support is experimental: Google may show a CAPTCHA after a few queries.</html:p>
+	</groupbox>
+</vbox>
