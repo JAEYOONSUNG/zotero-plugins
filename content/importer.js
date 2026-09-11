@@ -136,8 +136,9 @@ var ZotPoPImporter = (function () {
 		catch (e) {
 			log?.("Zotero PDF lookup failed: " + e.message);
 		}
-		// 2) Open-access URLs: source-reported, Europe PMC, arXiv, Unpaywall
-		let urls = await ZotPoPSources.pdfCandidates(rec, opts.http, { email: opts.email });
+		// 2) Open-access URLs first, then the library proxy for anything paywalled
+		let urls = await ZotPoPSources.pdfCandidates(rec, opts.http, { email: opts.email, proxyPrefix: opts.proxyPrefix });
+		let prefix = (opts.proxyPrefix || "").trim();
 		for (let url of urls) {
 			let att = null;
 			try {
@@ -153,7 +154,9 @@ var ZotPoPImporter = (function () {
 				log?.("PDF download failed (" + url + "): " + e.message);
 				continue;
 			}
-			if (att && await isPDFAttachment(att)) return { ok: true, how: "oa", url };
+			if (att && await isPDFAttachment(att)) {
+				return { ok: true, how: prefix && url.startsWith(prefix) ? "proxy" : "oa", url };
+			}
 			if (att) {
 				log?.("Not a PDF, discarding: " + url);
 				try { await att.eraseTx(); } catch (e) {}
@@ -167,7 +170,7 @@ var ZotPoPImporter = (function () {
 	 * @return {{status: 'added'|'exists'|'failed', item?: Zotero.Item, pdf?: string, error?: string}}
 	 */
 	async function importRecord(rec, opts) {
-		let { libraryID, collections = [], attachPDF: wantPDF = true, skipDuplicates = true, citationsInExtra = true, http, email, log } = opts;
+		let { libraryID, collections = [], attachPDF: wantPDF = true, skipDuplicates = true, citationsInExtra = true, http, email, proxyPrefix, log } = opts;
 		try {
 			if (!rec.doi && !rec.pmid && !rec.arxiv && http) {
 				try { await ZotPoPSources.resolveDOIByTitle(rec, http, { email }); } catch (e) { log?.("DOI lookup failed: " + e.message); }
@@ -205,7 +208,7 @@ var ZotPoPImporter = (function () {
 
 			let pdf = "skipped";
 			if (wantPDF) {
-				let r = await attachPDF(item, rec, { http, email, log });
+				let r = await attachPDF(item, rec, { http, email, proxyPrefix, log });
 				pdf = r.ok ? "pdf:" + r.how : "no pdf";
 			}
 			return { status: "added", item, how, pdf };

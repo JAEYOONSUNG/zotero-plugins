@@ -4,11 +4,19 @@ A Zotero 7/8/9 plugin that copies the Publish or Perish workflow and puts it ins
 search a bibliographic database with author / journal / title / keyword / year filters,
 see the result list with citation counts and PoP metrics (h-index, g-index, hI,norm, hI,annual, hA),
 tick the papers you want, and add them to your library — metadata via Zotero's own
-translators and the PDF fetched automatically. The window is in Korean.
+translators and the PDF fetched automatically.
 
-Interface: resizable columns and panes (remembered between sessions), a detail pane with the abstract
-and per-paper actions, a right-click menu, filtering, CSV copy/export, and keyboard control
-(↑/↓ to move, Space to select, Enter to open, ⌘F to filter, ⌘A to select all, Esc to stop).
+**Interface** — glass surfaces and line icons matching Zotero's own chrome, English by default with
+Korean selectable in Settings → ZotPoP, resizable columns and panes that persist, a detail pane with
+the abstract and per-paper actions, a right-click menu, filtering, CSV copy/export, and keyboard
+control (↑/↓ to move, Space to select, Enter to open, ⌘F to filter, ⌘A to select all, Esc to stop).
+
+**Sorting** — relevance, citations or newest first. Put a journal in the *Publication* field and sort
+by newest to browse that journal's latest papers.
+
+**Library proxy** — papers behind a subscription are retried through your institution's proxy after
+the free routes fail, and *Open via library* opens the publisher page through it. Configure it in
+Settings → ZotPoP; a Yonsei preset is built in.
 
 ## Sources
 
@@ -20,7 +28,9 @@ and per-paper actions, a right-click menu, filtering, CSV copy/export, and keybo
 | PubMed | via OpenAlex | counts looked up by DOI after the search |
 | arXiv | via OpenAlex | |
 | Google Scholar | yes | experimental, scraped; expect CAPTCHAs after a few queries |
-| 통합 검색 | yes | runs OpenAlex, Crossref, PubMed and arXiv together and merges them by DOI/title |
+| Europe PMC | yes | articles plus preprints |
+| Preprints | yes | bioRxiv, medRxiv, Research Square (via Europe PMC) and arXiv, merged |
+| Combined | yes | OpenAlex, Crossref, Europe PMC and arXiv together, merged by DOI/title |
 
 ## Install
 
@@ -66,9 +76,13 @@ These cost a lot of debugging time, so they are worth knowing:
 - After editing files under `content/`, reopening the window is not always enough — restart Zotero
   with `-purgecaches`.
 
-Layout: `bootstrap.js` (plugin lifecycle), `src/zotpop.js` (menu + window), `content/sources.js`
-(API adapters, also runs in Node), `content/metrics.js` (PoP metrics), `content/importer.js`
-(Zotero item creation + PDF), `content/ui.js` + `search.xhtml` (the window).
+Layout: `bootstrap.js` (plugin lifecycle), `src/zotpop.js` (menu, toolbar button, window, preference
+pane), `content/sources.js` (API adapters and the library proxy, also runs in Node),
+`content/metrics.js` (PoP metrics), `content/importer.js` (Zotero item creation + PDF),
+`content/i18n.js` (English/Korean strings), `content/ui.js` + `search.xhtml` + `search.css` (the window).
+
+Inline `<svg>` icons in `search.xhtml` must carry `xmlns="http://www.w3.org/2000/svg"`. The document is
+XHTML, so an `<svg>` without it is parsed in the XHTML namespace and silently renders nothing.
 
 ## How import works
 

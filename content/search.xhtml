@@ -2,96 +2,125 @@
 <html xmlns="http://www.w3.org/1999/xhtml" windowtype="zotpop:search">
 <head>
 	<meta charset="utf-8"/>
-	<title>ZotPoP — 논문 검색 &amp; 가져오기</title>
+	<title>ZotPoP</title>
 	<link rel="stylesheet" href="chrome://zotpop/content/search.css"/>
 	<script src="chrome://zotero/content/include.js"></script>
+	<script src="chrome://zotpop/content/i18n.js"></script>
 	<script src="chrome://zotpop/content/sources.js"></script>
 	<script src="chrome://zotpop/content/metrics.js"></script>
 	<script src="chrome://zotpop/content/importer.js"></script>
 	<script src="chrome://zotpop/content/ui.js"></script>
 </head>
 <body>
+<svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
+	<symbol id="ic-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.4 10.4 14 14"/></symbol>
+	<symbol id="ic-stop" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.2"/></symbol>
+	<symbol id="ic-clear" viewBox="0 0 16 16"><path d="M3 3.5h10M6.5 3.5V2.5h3v1M4.5 3.5l.7 9a1 1 0 0 0 1 .9h3.6a1 1 0 0 0 1-.9l.7-9"/></symbol>
+	<symbol id="ic-all" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2"/><path d="M5.2 8.2 7.2 10.3l3.6-4"/></symbol>
+	<symbol id="ic-none" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2"/></symbol>
+	<symbol id="ic-new" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2"/><path d="M8 5.4v5.2M5.4 8h5.2"/></symbol>
+	<symbol id="ic-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 5.5v-1a1.5 1.5 0 0 0-1.5-1.5H4a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 4 11h1"/></symbol>
+	<symbol id="ic-save" viewBox="0 0 16 16"><path d="M8 2.5v7.5M5 7.2 8 10.2l3-3M2.8 12.5h10.4"/></symbol>
+	<symbol id="ic-panel" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2"/><path d="M2.5 10h11"/></symbol>
+	<symbol id="ic-external" viewBox="0 0 16 16"><path d="M9 3h4v4M13 3 7.6 8.4M12 9.5v3A1.5 1.5 0 0 1 10.5 14h-7A1.5 1.5 0 0 1 2 12.5v-7A1.5 1.5 0 0 1 3.5 4h3"/></symbol>
+	<symbol id="ic-pdf" viewBox="0 0 16 16"><path d="M4 2.5h5l3 3v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z"/><path d="M9 2.5v3h3"/><path d="M5.4 11.6V8.9h1a.9.9 0 0 1 0 1.8h-1"/></symbol>
+	<symbol id="ic-library" viewBox="0 0 16 16"><path d="M2.5 13.5h11M3.5 13.5V6.2M6.5 13.5V6.2M9.5 13.5V6.2M12.5 13.5V6.2M8 2.2l5.5 3.2h-11z"/></symbol>
+	<symbol id="ic-plus" viewBox="0 0 16 16"><path d="M8 3.2v9.6M3.2 8h9.6"/></symbol>
+	<symbol id="ic-quote" viewBox="0 0 16 16"><path d="M6.3 4.5C4.6 5.3 3.5 6.8 3.5 8.6c0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2zM12.6 4.5c-1.7.8-2.8 2.3-2.8 4.1 0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2z"/></symbol>
+</svg>
+
 <div id="app">
-	<form id="query-form" class="query" onsubmit="return false;">
+	<form id="query-form" class="query glass" onsubmit="return false;">
 		<div class="field">
-			<label for="source">검색 소스</label>
+			<label for="source" data-i18n="source"></label>
 			<select id="source"></select>
 		</div>
 		<div class="field grow">
-			<label for="authors">저자</label>
-			<input id="authors" type="text" placeholder="예: Sung JY; Kim JS"/>
+			<label for="authors" data-i18n="authors"></label>
+			<input id="authors" type="text" data-i18n-ph="authorsPh"/>
 		</div>
 		<div class="field grow">
-			<label for="venue">저널</label>
-			<input id="venue" type="text" placeholder="예: Nucleic Acids Research"/>
+			<label for="venue" data-i18n="venue"></label>
+			<input id="venue" type="text" data-i18n-ph="venuePh"/>
 		</div>
 		<div class="field grow">
-			<label for="title">제목 단어</label>
-			<input id="title" type="text" placeholder="제목에 모두 포함될 단어"/>
+			<label for="title" data-i18n="titleWords"></label>
+			<input id="title" type="text" data-i18n-ph="titlePh"/>
 		</div>
 		<div class="field grow2">
-			<label for="keywords">키워드 (전체 필드)</label>
-			<input id="keywords" type="text" placeholder="예: CRISPR base editing"/>
+			<label for="keywords" data-i18n="keywords"></label>
+			<input id="keywords" type="text" data-i18n-ph="keywordsPh"/>
 		</div>
 		<div class="field years">
-			<label>연도</label>
+			<label data-i18n="years"></label>
 			<div class="row">
-				<input id="yearFrom" type="number" min="1800" max="2100" placeholder="시작"/>
-				<span>–</span>
-				<input id="yearTo" type="number" min="1800" max="2100" placeholder="끝"/>
+				<input id="yearFrom" type="number" min="1800" max="2100" data-i18n-ph="yearFromPh"/>
+				<span class="dash">–</span>
+				<input id="yearTo" type="number" min="1800" max="2100" data-i18n-ph="yearToPh"/>
 			</div>
 		</div>
+		<div class="field">
+			<label for="sort" data-i18n="sort"></label>
+			<select id="sort">
+				<option value="relevance" data-i18n="sortRelevance"></option>
+				<option value="citations" data-i18n="sortCitations"></option>
+				<option value="date" data-i18n="sortDate"></option>
+			</select>
+		</div>
 		<div class="field narrow">
-			<label for="maxResults">최대 결과</label>
+			<label for="maxResults" data-i18n="maxResults"></label>
 			<input id="maxResults" type="number" min="1" max="2000" value="200"/>
 		</div>
 		<div class="field buttons">
 			<label>&#160;</label>
 			<div class="row">
-				<button id="search-btn" type="submit" class="primary">검색</button>
-				<button id="stop-btn" type="button" disabled="disabled">중지</button>
-				<button id="clear-btn" type="button">초기화</button>
+				<button id="search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="search"></span></button>
+				<button id="stop-btn" type="button" class="icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop"/></svg><span data-i18n="stop"></span></button>
+				<button id="clear-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-clear"/></svg><span data-i18n="clear"></span></button>
 			</div>
 		</div>
 	</form>
 
-	<div id="banner" class="banner" hidden="hidden"><span id="banner-text"></span><button id="banner-close" type="button" title="닫기">×</button></div>
+	<div id="banner" class="banner" hidden="hidden"><span id="banner-text"></span><span class="spacer"></span><button id="banner-close" type="button">×</button></div>
 
 	<div id="main">
-		<aside id="metrics">
-			<h3>인용 지표</h3>
+		<aside id="metrics" class="glass">
+			<h3 data-i18n="metricsTitle"></h3>
 			<table id="metrics-table">
-				<tr><td>출판 연도</td><td id="m-years">–</td></tr>
-				<tr><td>인용 연수</td><td id="m-cyears">–</td></tr>
-				<tr><td>논문 수</td><td id="m-papers">–</td></tr>
-				<tr><td>총 인용</td><td id="m-citations">–</td></tr>
-				<tr><td>연간 인용</td><td id="m-cpy">–</td></tr>
-				<tr><td>논문당 인용</td><td id="m-cpp">–</td></tr>
-				<tr><td>저자당 인용</td><td id="m-cpa">–</td></tr>
-				<tr><td>저자당 논문</td><td id="m-ppa">–</td></tr>
-				<tr><td>논문당 저자</td><td id="m-app">–</td></tr>
+				<tr><td data-i18n="mYears"></td><td id="m-years">–</td></tr>
+				<tr><td data-i18n="mCitationYears"></td><td id="m-cyears">–</td></tr>
+				<tr><td data-i18n="mPapers"></td><td id="m-papers">–</td></tr>
+				<tr><td data-i18n="mCitations"></td><td id="m-citations">–</td></tr>
+				<tr><td data-i18n="mCitesPerYear"></td><td id="m-cpy">–</td></tr>
+				<tr><td data-i18n="mCitesPerPaper"></td><td id="m-cpp">–</td></tr>
+				<tr><td data-i18n="mCitesPerAuthor"></td><td id="m-cpa">–</td></tr>
+				<tr><td data-i18n="mPapersPerAuthor"></td><td id="m-ppa">–</td></tr>
+				<tr><td data-i18n="mAuthorsPerPaper"></td><td id="m-app">–</td></tr>
 				<tr class="hl"><td>h-index</td><td id="m-h">–</td></tr>
 				<tr class="hl"><td>g-index</td><td id="m-g">–</td></tr>
 				<tr><td>hI,norm</td><td id="m-hinorm">–</td></tr>
 				<tr><td>hI,annual</td><td id="m-hiannual">–</td></tr>
 				<tr><td>hA-index</td><td id="m-ha">–</td></tr>
 			</table>
-			<p class="hint">현재 표에 보이는 결과(필터 적용 후) 기준으로 계산합니다.</p>
+			<p class="hint" data-i18n="metricsHint"></p>
 		</aside>
 
-		<div id="vsplit" class="splitter-v" title="드래그해서 너비 조절"></div>
+		<div id="vsplit" class="splitter-v"></div>
 
 		<section id="results">
-			<div class="toolbar">
-				<input id="filter" type="search" placeholder="결과 필터… (⌘F)"/>
+			<div class="toolbar glass">
+				<span class="searchbox">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic muted"><use href="#ic-search"/></svg>
+					<input id="filter" type="search" data-i18n-ph="filterPh"/>
+				</span>
 				<span class="spacer"></span>
-				<button id="select-all" type="button">전체</button>
-				<button id="select-none" type="button">해제</button>
-				<button id="select-new" type="button" title="라이브러리에 없는 논문만 선택">미보유만</button>
+				<button id="select-all" type="button" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-all"/></svg><span data-i18n="selAll"></span></button>
+				<button id="select-none" type="button" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-none"/></svg><span data-i18n="selNone"></span></button>
+				<button id="select-new" type="button" class="ghost icon-text" data-i18n-title="selNewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-new"/></svg><span data-i18n="selNew"></span></button>
 				<span class="sep"></span>
-				<button id="copy-csv" type="button" title="보이는 결과를 CSV로 클립보드에 복사">CSV 복사</button>
-				<button id="save-csv" type="button" title="보이는 결과를 바탕화면에 CSV 파일로 저장">CSV 저장</button>
-				<button id="toggle-detail" type="button" title="상세 패널 켜기/끄기">상세 ▾</button>
+				<button id="copy-csv" type="button" class="ghost icon-text" data-i18n-title="copyCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy"/></svg><span data-i18n="copyCsv"></span></button>
+				<button id="save-csv" type="button" class="ghost icon-text" data-i18n-title="saveCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-save"/></svg><span data-i18n="saveCsv"></span></button>
+				<button id="toggle-detail" type="button" class="ghost icon-text" data-i18n-title="detailTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-panel"/></svg><span id="toggle-detail-label"></span></button>
 			</div>
 			<div class="table-wrap" id="table-wrap">
 				<table id="results-table">
@@ -102,28 +131,28 @@
 					</colgroup>
 					<thead>
 						<tr>
-							<th class="chk"><input id="chk-all" type="checkbox" title="보이는 결과 전체 선택"/></th>
-							<th data-sort="citations" class="num">인용<span class="rz"></span></th>
-							<th data-sort="cpy" class="num">연간<span class="rz"></span></th>
-							<th data-sort="rank" class="num">순위<span class="rz"></span></th>
-							<th data-sort="authorString">저자<span class="rz"></span></th>
-							<th data-sort="title">제목</th>
-							<th data-sort="year" class="num">연도<span class="rz"></span></th>
-							<th data-sort="venue">저널<span class="rz"></span></th>
-							<th data-sort="doi">DOI<span class="rz"></span></th>
-							<th data-sort="pdf" class="mini" title="열람 가능한 PDF 링크">PDF<span class="rz"></span></th>
-							<th data-sort="inLibrary" class="mini" title="라이브러리 보유 여부">보유<span class="rz"></span></th>
-							<th data-sort="status">상태</th>
+							<th class="chk"><input id="chk-all" type="checkbox" data-i18n-title="chkAllTip"/></th>
+							<th data-sort="citations" class="num"><span data-i18n="thCites"></span><span class="rz"></span></th>
+							<th data-sort="cpy" class="num"><span data-i18n="thPerYear"></span><span class="rz"></span></th>
+							<th data-sort="rank" class="num"><span data-i18n="thRank"></span><span class="rz"></span></th>
+							<th data-sort="authorString"><span data-i18n="thAuthors"></span><span class="rz"></span></th>
+							<th data-sort="title"><span data-i18n="thTitle"></span></th>
+							<th data-sort="year" class="num"><span data-i18n="thYear"></span><span class="rz"></span></th>
+							<th data-sort="venue"><span data-i18n="thVenue"></span><span class="rz"></span></th>
+							<th data-sort="doi"><span data-i18n="thDoi"></span><span class="rz"></span></th>
+							<th data-sort="pdf" class="mini" data-i18n-title="thPdfTip"><span data-i18n="thPdf"></span><span class="rz"></span></th>
+							<th data-sort="inLibrary" class="mini" data-i18n-title="thLibTip"><span data-i18n="thLib"></span><span class="rz"></span></th>
+							<th data-sort="status"><span data-i18n="thStatus"></span></th>
 						</tr>
 					</thead>
 					<tbody id="results-body"></tbody>
 				</table>
-				<div id="empty" class="empty">위에 조건을 입력하고 검색을 누르세요.</div>
-				<div id="busy" class="empty" hidden="hidden"><span class="spinner"></span><span id="busy-text">검색 중…</span></div>
+				<div id="empty" class="empty"></div>
+				<div id="busy" class="empty" hidden="hidden"><span class="spinner"></span><span id="busy-text"></span></div>
 			</div>
-			<div id="hsplit" class="splitter-h" title="드래그해서 높이 조절"></div>
-			<div id="detail">
-				<div id="detail-empty" class="detail-empty">행을 클릭하면 상세 정보가 표시됩니다.</div>
+			<div id="hsplit" class="splitter-h"></div>
+			<div id="detail" class="glass">
+				<div id="detail-empty" class="detail-empty" data-i18n="detailEmpty"></div>
 				<div id="detail-body" hidden="hidden">
 					<div class="detail-head">
 						<div id="d-title" class="d-title"></div>
@@ -132,11 +161,12 @@
 					<div id="d-authors" class="d-authors"></div>
 					<div id="d-meta" class="d-meta"></div>
 					<div class="d-actions">
-						<button id="d-open" type="button">브라우저에서 열기</button>
-						<button id="d-pdf" type="button">PDF 열기</button>
-						<button id="d-copy-doi" type="button">DOI 복사</button>
-						<button id="d-copy-cite" type="button">인용 복사</button>
-						<button id="d-add" type="button" class="primary">이 논문 추가</button>
+						<button id="d-open" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-external"/></svg><span data-i18n="dOpen"></span></button>
+						<button id="d-pdf" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="dPdf"></span></button>
+						<button id="d-proxy" type="button" class="icon-text" data-i18n-title="dProxyTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-library"/></svg><span data-i18n="dProxy"></span></button>
+						<button id="d-copy-doi" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy"/></svg><span data-i18n="dCopyDoi"></span></button>
+						<button id="d-copy-cite" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-quote"/></svg><span data-i18n="dCopyCite"></span></button>
+						<button id="d-add" type="button" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus"/></svg><span data-i18n="dAdd"></span></button>
 					</div>
 					<div id="d-abstract" class="d-abstract"></div>
 				</div>
@@ -144,19 +174,19 @@
 		</section>
 	</div>
 
-	<div id="import-bar">
-		<label for="target">추가 위치</label>
+	<div id="import-bar" class="glass">
+		<label for="target" data-i18n="addTo"></label>
 		<select id="target"></select>
-		<label class="cb"><input id="opt-pdf" type="checkbox" checked="checked"/> PDF 자동 첨부</label>
-		<label class="cb"><input id="opt-skip" type="checkbox" checked="checked"/> 중복 건너뛰기 (DOI)</label>
-		<label class="cb"><input id="opt-extra" type="checkbox" checked="checked"/> 인용 수를 Extra에 기록</label>
+		<label class="cb"><input id="opt-pdf" type="checkbox" checked="checked"/> <span data-i18n="optPdf"></span></label>
+		<label class="cb"><input id="opt-skip" type="checkbox" checked="checked"/> <span data-i18n="optSkip"></span></label>
+		<label class="cb"><input id="opt-extra" type="checkbox" checked="checked"/> <span data-i18n="optExtra"></span></label>
 		<span class="spacer"></span>
-		<span id="selected-count">0개 선택</span>
-		<button id="import-btn" type="button" class="primary" disabled="disabled">Zotero에 추가</button>
+		<span id="selected-count"></span>
+		<button id="import-btn" type="button" class="primary icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus"/></svg><span data-i18n="importBtn"></span></button>
 	</div>
 
 	<div id="statusbar">
-		<span id="status">준비됨.</span>
+		<span id="status"></span>
 		<span class="spacer"></span>
 		<progress id="progress" max="100" value="0" hidden="hidden"></progress>
 	</div>

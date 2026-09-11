@@ -1,4 +1,4 @@
-/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter */
+/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter */
 "use strict";
 
 (function () {
@@ -13,11 +13,21 @@
 
 	// Title has no fixed width: it absorbs whatever is left, so keep these lean.
 	const DEFAULT_COLS = {
-		chk: 28, citations: 52, cpy: 52, rank: 42, authorString: 150,
+		chk: 28, citations: 56, cpy: 64, rank: 46, authorString: 150,
 		year: 46, venue: 140, doi: 135, pdf: 46, inLibrary: 46, status: 100
 	};
 
-	const COL_VERSION = 2;
+	const COL_VERSION = 3;
+
+	// Localised string lookup; replaced in init() once the pref is read.
+	let t = ZotPoPI18N.make("en");
+
+	// Source labels that should follow the UI language rather than the API's own name
+	const SOURCE_LABEL_KEYS = { multi: "srcMulti", preprint: "srcPreprint", europepmc: "srcEuropePMC", scholar: "srcScholar" };
+	function sourceLabel(key) {
+		let k = SOURCE_LABEL_KEYS[key];
+		return k ? t(k) : (ZotPoPSources.SOURCES[key]?.label || key);
+	}
 
 	const state = {
 		records: [],
@@ -89,10 +99,16 @@
 
 	// ------------------------------------------------------------ init
 	function init() {
+		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "en", Zotero.locale || Services.locale?.appLocaleAsBCP47);
+		t = ZotPoPI18N.make(locale);
+		document.documentElement.setAttribute("lang", locale);
+		ZotPoPI18N.apply(document, t);
+		document.title = t("windowTitle");
+
 		let sel = $("source");
-		for (let [key, src] of Object.entries(ZotPoPSources.SOURCES)) {
+		for (let key of Object.keys(ZotPoPSources.SOURCES)) {
 			let o = document.createElement("option");
-			o.value = key; o.textContent = src.label;
+			o.value = key; o.textContent = sourceLabel(key);
 			sel.appendChild(o);
 		}
 		sel.value = PREF("defaultSource") || "openalex";
@@ -108,13 +124,15 @@
 		wireEvents();
 		sourceHint();
 		applyColumnWidths();
+		setDetailVisible(!$("detail").hidden);
+		setStatus(t("ready"));
 		render();
 		$("keywords").focus();
 	}
 
 	function wireEvents() {
 		$("query-form").addEventListener("submit", e => { e.preventDefault(); runSearch(); });
-		$("stop-btn").addEventListener("click", () => { state.cancelled = true; setStatus("중지하는 중…"); });
+		$("stop-btn").addEventListener("click", () => { state.cancelled = true; setStatus(t("stopping")); });
 		$("clear-btn").addEventListener("click", clearAll);
 		$("banner-close").addEventListener("click", hideBanner);
 		$("filter").addEventListener("input", () => { state.focusKey = null; render(); });
@@ -142,14 +160,15 @@
 				render();
 			});
 		}
-		for (let id of ["source", "opt-pdf", "opt-skip", "opt-extra", "maxResults"]) {
+		for (let id of ["source", "sort", "opt-pdf", "opt-skip", "opt-extra", "maxResults"]) {
 			$(id).addEventListener("change", savePrefs);
 		}
 		// detail actions
 		$("d-open").addEventListener("click", () => { let r = detailRecord(); if (r?.url) Zotero.launchURL(r.url); });
 		$("d-pdf").addEventListener("click", () => { let r = detailRecord(); let u = (r?.pdfUrls || [])[0] || r?.pdfUrl; if (u) Zotero.launchURL(u); });
-		$("d-copy-doi").addEventListener("click", () => { let r = detailRecord(); if (r?.doi) copyText(r.doi, "DOI를 복사했습니다."); });
-		$("d-copy-cite").addEventListener("click", () => { let r = detailRecord(); if (r) copyText(citationText(r), "인용 정보를 복사했습니다."); });
+		$("d-proxy").addEventListener("click", () => openViaProxy(detailRecord()));
+		$("d-copy-doi").addEventListener("click", () => { let r = detailRecord(); if (r?.doi) copyText(r.doi, t("copiedDoi")); });
+		$("d-copy-cite").addEventListener("click", () => { let r = detailRecord(); if (r) copyText(citationText(r), t("copiedCite")); });
 		$("d-add").addEventListener("click", () => { let r = detailRecord(); if (r) importRecords([r]); });
 
 		setupSplitters();
@@ -176,20 +195,15 @@
 
 	function sourceHint() {
 		let key = $("source").value;
-		if (key === "semanticscholar" && !(PREF("s2ApiKey") || "").trim()) {
-			showBanner("Semantic Scholar는 API 키 없이 쓰면 요청 제한(429)에 자주 걸립니다. 설정 → ZotPoP에서 무료 키를 넣으면 안정적입니다.");
-		}
-		else if (key === "scholar") {
-			showBanner("Google Scholar는 실험적 기능입니다. 몇 번 검색하면 구글이 CAPTCHA를 띄울 수 있습니다.");
-		}
-		else if (key === "multi") {
-			showBanner("통합 검색은 OpenAlex·Crossref·PubMed·arXiv를 동시에 조회한 뒤 DOI와 제목으로 중복을 합칩니다. 한 소스만 쓸 때보다 느립니다.");
-		}
+		if (key === "semanticscholar" && !(PREF("s2ApiKey") || "").trim()) showBanner(t("bannerS2"));
+		else if (key === "scholar") showBanner(t("bannerScholar"));
+		else if (key === "preprint") showBanner(t("bannerPreprint"));
+		else if (key === "multi") showBanner(t("bannerMulti"));
 		else hideBanner();
 	}
 
 	// ------------------------------------------------------------ query persistence
-	const QUERY_FIELDS = ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "maxResults"];
+	const QUERY_FIELDS = ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "maxResults", "sort"];
 	function restoreQuery() {
 		let saved = {};
 		try { saved = JSON.parse(PREF("lastQuery") || "{}"); } catch (e) {}
@@ -236,7 +250,7 @@
 	function setDetailVisible(on) {
 		$("detail").hidden = !on;
 		$("hsplit").hidden = !on;
-		$("toggle-detail").textContent = on ? "상세 ▾" : "상세 ▸";
+		$("toggle-detail-label").textContent = on ? t("detailOn") : t("detailOff");
 	}
 	function toggleDetail() {
 		setDetailVisible($("detail").hidden);
@@ -342,7 +356,8 @@
 		let num = id => { let v = parseInt($(id).value, 10); return Number.isFinite(v) ? v : null; };
 		return {
 			authors: $("authors").value, venue: $("venue").value, title: $("title").value, keywords: $("keywords").value,
-			yearFrom: num("yearFrom"), yearTo: num("yearTo"), maxResults: num("maxResults") || 200
+			yearFrom: num("yearFrom"), yearTo: num("yearTo"), maxResults: num("maxResults") || 200,
+			sort: $("sort").value || "relevance"
 		};
 	}
 
@@ -350,14 +365,14 @@
 		if (state.searching || state.importing) return;
 		let q = readQuery();
 		if (![q.authors, q.venue, q.title, q.keywords].some(x => x.trim())) {
-			setStatus("검색 조건을 하나 이상 입력하세요.", "err");
+			setStatus(t("needCriteria"), "err");
 			$("keywords").focus();
 			return;
 		}
 		saveQuery();
 		savePrefs();
 		let sourceKey = $("source").value;
-		let label = ZotPoPSources.SOURCES[sourceKey].label;
+		let label = sourceLabel(sourceKey);
 		state.searching = true;
 		state.cancelled = false;
 		state.records = [];
@@ -367,9 +382,9 @@
 		$("search-btn").disabled = true;
 		$("stop-btn").disabled = false;
 		$("busy").hidden = false;
-		$("busy-text").textContent = label + " 검색 중…";
+		$("busy-text").textContent = t("searching", label);
 		render();
-		setStatus(label + " 검색 중…");
+		setStatus(t("searching", label));
 		setProgress(0, q.maxResults);
 		let ctx = {
 			email: PREF("email") || "",
@@ -389,19 +404,19 @@
 			});
 			state.records = recs;
 			await refreshLibraryFlags();
-			let extra = ctx.errors?.length ? ` (일부 소스 실패: ${ctx.errors.join(" / ")})` : "";
-			setStatus(`${label}에서 ${recs.length}건${state.cancelled ? " (중지됨)" : ""}.${extra}`);
-			if (ctx.errors?.length) showBanner("일부 소스에서 결과를 못 받았습니다 — " + ctx.errors.join(" / "));
-			if (!recs.length) setStatus(`${label}에서 결과가 없습니다. 조건을 넓혀 보세요.`);
+			setStatus(t("resultCount", label, recs.length, state.cancelled));
+			if (ctx.errors?.length) showBanner(t("partialFail", ctx.errors.join(" / ")));
+			if (!recs.length) setStatus(t("noResults", label));
+			else if (q.sort === "date" && q.venue.trim()) setStatus(t("journalFeed", q.venue.trim(), recs.length));
 			else if (!PREF("hintShown")) {
 				PREF("hintShown", true);
-				setStatus(`${label}에서 ${recs.length}건 · 행을 클릭하면 상세, 체크박스나 스페이스바로 선택, 오른쪽 클릭으로 메뉴가 열립니다.`);
+				setStatus(t("firstHint", label, recs.length));
 			}
 		}
 		catch (e) {
 			Zotero.logError(e);
-			setStatus("검색 실패: " + (e.message || e), "err");
-			showBanner("검색 실패: " + (e.message || e));
+			setStatus(t("searchFailed", e.message || e), "err");
+			showBanner(t("searchFailed", e.message || e));
 		}
 		finally {
 			state.searching = false;
@@ -431,7 +446,7 @@
 		state.detailKey = null;
 		saveQuery();
 		hideBanner();
-		setStatus("준비됨.");
+		setStatus(t("ready"));
 		render();
 	}
 
@@ -479,7 +494,7 @@
 		tbody.appendChild(frag);
 
 		$("empty").hidden = list.length > 0 || !$("busy").hidden;
-		$("empty").textContent = state.records.length ? "필터와 일치하는 결과가 없습니다." : "위에 조건을 입력하고 검색을 누르세요.";
+		$("empty").textContent = state.records.length ? t("emptyFiltered") : t("emptyInitial");
 		updateCounts();
 		renderMetrics(list);
 		renderDetail();
@@ -508,7 +523,7 @@
 		cb.addEventListener("change", () => toggleSelect(r, cb.checked));
 		c0.appendChild(cb);
 
-		td("num", r.citations == null ? "–" : String(r.citations), r.citationSource ? "출처: " + (ZotPoPSources.SOURCES[r.citationSource]?.label || r.citationSource) : "");
+		td("num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : "");
 		td("num", fmt(ZotPoPMetrics.citesPerYear(r)));
 		td("num", String(r.rank));
 		td("", r.authorString, r.authorString);
@@ -523,8 +538,8 @@
 		td("num", r.year == null ? "" : String(r.year));
 		td("", r.venue, r.venue);
 		td("", r.doi || "", r.doi || "");
-		td("mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? "열람 가능한 PDF 링크가 있습니다" : "");
-		td("mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? "이미 라이브러리에 있습니다" : "");
+		td("mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfTip") : "");
+		td("mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibTip") : "");
 		let st = td("status", r.status || "", r.statusTitle || "");
 		if (r.statusClass) st.classList.add(r.statusClass);
 
@@ -569,7 +584,7 @@
 
 	function updateCounts() {
 		let n = state.records.filter(r => state.selected.has(r.key)).length;
-		$("selected-count").textContent = `${n}개 선택`;
+		$("selected-count").textContent = t("selected", n);
 		$("import-btn").disabled = n === 0 || state.importing || state.searching;
 		$("chk-all").checked = state.visible.length > 0 && state.visible.every(r => state.selected.has(r.key));
 	}
@@ -616,14 +631,14 @@
 			s.textContent = text;
 			badges.appendChild(s);
 		};
-		if (r.citations != null) chip(`인용 ${r.citations}`, "cite");
+		if (r.citations != null) chip(t("badgeCites", r.citations), "cite");
 		let cpy = ZotPoPMetrics.citesPerYear(r);
-		if (cpy != null) chip(`연간 ${fmt(cpy)}`);
-		for (let s of r.sources || [r.source]) chip(ZotPoPSources.SOURCES[s]?.label || s);
-		if (r.inLibrary) chip("보유 중", "lib");
-		if (hasPDF(r)) chip("PDF 있음");
+		if (cpy != null) chip(t("badgePerYear", fmt(cpy)));
+		for (let s of r.sources || [r.source]) chip(sourceLabel(s));
+		if (r.inLibrary) chip(t("badgeInLibrary"), "lib");
+		if (hasPDF(r)) chip(t("badgeHasPdf"));
 
-		$("d-authors").textContent = r.authorString || "저자 정보 없음";
+		$("d-authors").textContent = r.authorString || t("noAuthors");
 		let bits = [];
 		if (r.venue) bits.push(r.venue);
 		if (r.year) bits.push(String(r.year));
@@ -632,12 +647,28 @@
 		if (r.pmid) bits.push("PMID " + r.pmid);
 		if (r.arxiv) bits.push("arXiv " + r.arxiv);
 		$("d-meta").textContent = bits.join(" · ");
-		$("d-abstract").textContent = r.abstract || "초록이 제공되지 않습니다.";
+		$("d-abstract").textContent = r.abstract || t("noAbstract");
 
 		$("d-open").disabled = !r.url;
 		$("d-pdf").disabled = !((r.pdfUrls || [])[0] || r.pdfUrl);
 		$("d-copy-doi").disabled = !r.doi;
+		$("d-proxy").disabled = !proxyLanding(r);
 		$("d-add").disabled = state.importing || state.searching;
+	}
+
+	function proxyLanding(r) {
+		return r ? ZotPoPSources.proxyLandingURL(r, (PREF("proxyPrefix") || "").trim()) : null;
+	}
+
+	function openViaProxy(r) {
+		let url = proxyLanding(r);
+		if (!url) {
+			setStatus(t("proxyNotSet"), "err");
+			showBanner(t("proxyHint"));
+			return;
+		}
+		Zotero.launchURL(url);
+		setStatus(t("proxyOpened"));
 	}
 
 	function citationText(r) {
@@ -659,15 +690,16 @@
 			else d.addEventListener("click", () => { hideCtxMenu(); fn(); });
 			menu.appendChild(d);
 		};
-		add(state.selected.has(r.key) ? "선택 해제" : "선택", () => toggleSelect(r, !state.selected.has(r.key)));
-		add("이 논문 추가", () => importRecords([r]), state.importing || state.searching);
+		add(state.selected.has(r.key) ? t("ctxDeselect") : t("ctxSelect"), () => toggleSelect(r, !state.selected.has(r.key)));
+		add(t("ctxAdd"), () => importRecords([r]), state.importing || state.searching);
 		menu.appendChild(document.createElement("hr"));
-		add("브라우저에서 열기", () => Zotero.launchURL(r.url), !r.url);
-		add("PDF 열기", () => Zotero.launchURL((r.pdfUrls || [])[0] || r.pdfUrl), !((r.pdfUrls || [])[0] || r.pdfUrl));
+		add(t("ctxOpen"), () => Zotero.launchURL(r.url), !r.url);
+		add(t("ctxPdf"), () => Zotero.launchURL((r.pdfUrls || [])[0] || r.pdfUrl), !((r.pdfUrls || [])[0] || r.pdfUrl));
+		add(t("ctxProxy"), () => openViaProxy(r), !proxyLanding(r));
 		menu.appendChild(document.createElement("hr"));
-		add("제목 복사", () => copyText(r.title, "제목을 복사했습니다."));
-		add("DOI 복사", () => copyText(r.doi, "DOI를 복사했습니다."), !r.doi);
-		add("인용 복사", () => copyText(citationText(r), "인용 정보를 복사했습니다."));
+		add(t("ctxCopyTitle"), () => copyText(r.title, t("copiedTitle")));
+		add(t("ctxCopyDoi"), () => copyText(r.doi, t("copiedDoi")), !r.doi);
+		add(t("ctxCopyCite"), () => copyText(citationText(r), t("copiedCite")));
 		menu.hidden = false;
 		let w = menu.offsetWidth, h = menu.offsetHeight;
 		menu.style.left = Math.min(x, window.innerWidth - w - 6) + "px";
@@ -680,7 +712,7 @@
 		let mod = e.metaKey || e.ctrlKey;
 		if (e.key === "Escape") {
 			if (!$("ctxmenu").hidden) { hideCtxMenu(); return; }
-			if (state.searching || state.importing) { state.cancelled = true; setStatus("중지하는 중…"); return; }
+			if (state.searching || state.importing) { state.cancelled = true; setStatus(t("stopping")); return; }
 			return;
 		}
 		if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); $("filter").focus(); $("filter").select(); return; }
@@ -722,7 +754,7 @@
 	// ------------------------------------------------------------ export
 	function copyText(text, msg) {
 		Zotero.Utilities.Internal.copyTextToClipboard(String(text || ""));
-		setStatus(msg || "복사했습니다.");
+		setStatus(msg || t("copied"));
 	}
 
 	function csvText() {
@@ -740,23 +772,23 @@
 	}
 
 	function copyCSV() {
-		if (!state.visible.length) { setStatus("복사할 결과가 없습니다.", "err"); return; }
-		copyText(csvText(), `${state.visible.length}개 행을 CSV로 클립보드에 복사했습니다.`);
+		if (!state.visible.length) { setStatus(t("nothingToCopy"), "err"); return; }
+		copyText(csvText(), t("copiedCsv", state.visible.length));
 	}
 
 	async function saveCSV() {
-		if (!state.visible.length) { setStatus("저장할 결과가 없습니다.", "err"); return; }
+		if (!state.visible.length) { setStatus(t("nothingToSave"), "err"); return; }
 		try {
 			let stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
 			let path = PathUtils.join(desktopPath(), `zotpop-${stamp}.csv`);
 			// UTF-8 BOM so Excel opens Korean text correctly
 			await IOUtils.writeUTF8(path, "\uFEFF" + csvText());
-			setStatus(`CSV를 저장했습니다: ${path}`);
+			setStatus(t("csvSaved", path));
 			try { Zotero.File.reveal(Zotero.File.pathToFile(path)); } catch (e) { log("reveal failed: " + e.message); }
 		}
 		catch (e) {
 			Zotero.logError(e);
-			setStatus("CSV 저장 실패: " + (e.message || e), "err");
+			setStatus(t("csvSaveFailed", e.message || e), "err");
 		}
 	}
 
@@ -795,7 +827,7 @@
 			attachPDF: $("opt-pdf").checked,
 			skipDuplicates: $("opt-skip").checked,
 			citationsInExtra: $("opt-extra").checked,
-			http, email: PREF("email") || "", log
+			http, email: PREF("email") || "", proxyPrefix: PREF("proxyPrefix") || "", log
 		};
 		state.importing = true;
 		state.cancelled = false;
@@ -808,8 +840,8 @@
 		for (let i = 0; i < recs.length; i++) {
 			if (state.cancelled) break;
 			let r = recs[i];
-			setStatus(`추가 중 ${i + 1}/${recs.length}: ${r.title.slice(0, 70)}`);
-			setRowStatus(r, "추가 중…", "");
+			setStatus(t("adding", i + 1, recs.length, r.title.slice(0, 70)));
+			setRowStatus(r, t("statusAdding"), "");
 			let res = await ZotPoPImporter.importRecord(r, opts);
 			if (res.status === "added") {
 				added++;
@@ -817,18 +849,19 @@
 				if (r.doi) state.doiMap.set(r.doi, res.item.id);
 				let gotPDF = res.pdf.startsWith("pdf");
 				if (gotPDF) pdfs++;
-				let note = res.pdf === "skipped" ? "" : gotPDF ? " + PDF" : " (PDF 없음)";
-				setRowStatus(r, "추가됨" + note, "ok",
-					res.how === "manual" ? "검색 메타데이터로 생성 (번역기 미일치)" : "Zotero 번역기로 가져옴");
+				let label = res.pdf === "skipped" ? t("statusAdded")
+					: res.pdf === "pdf:proxy" ? t("statusAddedProxy")
+					: gotPDF ? t("statusAddedPdf") : t("statusAddedNoPdf");
+				setRowStatus(r, label, "ok", res.how === "manual" ? t("tipManual") : t("tipTranslator"));
 			}
 			else if (res.status === "exists") {
 				exists++;
 				r.inLibrary = true;
-				setRowStatus(r, "이미 있음", "warn");
+				setRowStatus(r, t("statusExists"), "warn");
 			}
 			else {
 				failed++;
-				setRowStatus(r, "실패", "err", res.error);
+				setRowStatus(r, t("statusFailed"), "err", res.error);
 			}
 			state.selected.delete(r.key);
 			setProgress(i + 1, recs.length);
@@ -839,8 +872,8 @@
 		setProgress(null);
 		paintRows();
 		renderDetail();
-		setStatus(`완료: ${added}건 추가 (PDF ${pdfs}건), ${exists}건 이미 있음, ${failed}건 실패${state.cancelled ? ", 중간 중지" : ""}.`);
-		if (failed) showBanner(`${failed}건을 추가하지 못했습니다. 상태 열에 마우스를 올리면 이유가 표시됩니다.`);
+		setStatus(t("importDone", added, pdfs, exists, failed, state.cancelled));
+		if (failed) showBanner(t("importFailures", failed));
 	}
 
 	window.addEventListener("load", init);

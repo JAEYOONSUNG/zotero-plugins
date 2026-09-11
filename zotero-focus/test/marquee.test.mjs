@@ -179,6 +179,25 @@ test("table scroll resets the title, while animation scroll events do not cancel
   cleanup();
 });
 
+test("switching titles resets the first without letting its delayed scroll event cancel the second", () => {
+  const f = fixture();
+  const cleanup = marquee.attach(f.window);
+  const nextRow = new Element("row", f.table);
+  const nextCell = new Element("cell title primary", nextRow);
+  const nextText = new Element("cell-text", nextCell, "Another overflowing title");
+  nextText.scrollWidth = 300;
+  f.hover(f.text);
+  f.advance(700);
+  f.hover(nextText);
+  assert.equal(f.text.scrollLeft, 0);
+  f.document.emit("scroll", { target: f.text });
+  f.advance(700);
+  assert.equal(nextText.scrollLeft, 90);
+  f.document.emit("mouseout", { target: nextText, relatedTarget: f.row });
+  assert.equal(nextText.scrollLeft, 0);
+  cleanup();
+});
+
 test("recycling and title edits reset immediately, then new rows can be hovered", () => {
   const f = fixture();
   const cleanup = marquee.attach(f.window);

@@ -150,7 +150,9 @@ var ZotPoPSources = (function () {
 		}
 		if (filters.length) params.push("filter=" + filters.join(","));
 		if (!params.length) return [];
-		if (!q.keywords?.trim()) params.push("sort=cited_by_count:desc");
+		let sort = q.sort || "relevance";
+		if (sort === "date") params.push("sort=publication_date:desc");
+		else if (sort === "citations" || !q.keywords?.trim()) params.push("sort=cited_by_count:desc");
 		if (ctx.email) params.push("mailto=" + enc(ctx.email));
 		params.push("select=id,doi,title,display_name,publication_year,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids");
 
@@ -242,6 +244,8 @@ var ZotPoPSources = (function () {
 		if (q.yearFrom) filters.push("from-pub-date:" + q.yearFrom);
 		if (q.yearTo) filters.push("until-pub-date:" + q.yearTo);
 		if (filters.length) params.push("filter=" + filters.join(","));
+		if (q.sort === "date") params.push("sort=published", "order=desc");
+		else if (q.sort === "citations") params.push("sort=is-referenced-by-count", "order=desc");
 		if (ctx.email) params.push("mailto=" + enc(ctx.email));
 		params.push("select=DOI,title,author,issued,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link");
 
@@ -386,7 +390,8 @@ var ZotPoPSources = (function () {
 		let max = q.maxResults || 200;
 		let base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/";
 		let tool = "&tool=zotpop" + (ctx.email ? "&email=" + enc(ctx.email) : "");
-		let es = await withRetry(() => http.getJSON(base + "esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax=" + max + "&term=" + enc(pubmedTerm(q)) + tool));
+		let sort = q.sort === "date" ? "pub_date" : "relevance";
+		let es = await withRetry(() => http.getJSON(base + "esearch.fcgi?db=pubmed&retmode=json&sort=" + sort + "&retmax=" + max + "&term=" + enc(pubmedTerm(q)) + tool));
 		let ids = es.esearchresult?.idlist || [];
 		let total = toInt(es.esearchresult?.count) || ids.length;
 		let out = [];
@@ -453,7 +458,7 @@ var ZotPoPSources = (function () {
 		while (out.length < max) {
 			if (ctx.isCancelled?.()) break;
 			let n = Math.min(100, max - out.length);
-			let url = "https://export.arxiv.org/api/query?search_query=" + enc(query) + "&start=" + start + "&max_results=" + n + "&sortBy=relevance";
+			let url = "https://export.arxiv.org/api/query?search_query=" + enc(query) + "&start=" + start + "&max_results=" + n + (q.sort === "date" ? "&sortBy=submittedDate&sortOrder=descending" : "&sortBy=relevance");
 			let xml = await withRetry(() => http.getText(url), { tries: 5, delay: 4000 });
 			if (total == null) total = toInt(xmlText(xml, "opensearch:totalResults")) ?? 0;
 			let entries = xml.match(/<entry>[\s\S]*?<\/entry>/g) || [];
@@ -486,6 +491,107 @@ var ZotPoPSources = (function () {
 		}
 		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(out, http, ctx);
 		return out.slice(0, max);
+	}
+
+	// ---------------------------------------------------------------- Europe PMC
+	// Indexes PubMed + PMC and, crucially, the preprint servers: bioRxiv, medRxiv
+	// and Research Square. Used both as a general source and as the preprint source.
+	const PREPRINT_PUBLISHERS = /biorxiv|medrxiv|research\s*square|ssrn|preprints\.org|authorea|chemrxiv/i;
+
+	function epmcQuery(q, preprintsOnly) {
+		let parts = [];
+		if (q.keywords?.trim()) parts.push("(" + q.keywords.trim() + ")");
+		if (q.title?.trim()) parts.push('TITLE:"' + q.title.trim().replace(/"/g, "") + '"');
+		if (q.authors?.trim()) {
+			for (let a of q.authors.trim().split(/\s*;\s*|\s+and\s+/i)) parts.push('AUTH:"' + a.replace(/"/g, "") + '"');
+		}
+		if (q.venue?.trim()) {
+			let v = q.venue.trim().replace(/"/g, "");
+			parts.push(preprintsOnly ? '(PUBLISHER:"' + v + '" OR JOURNAL:"' + v + '")' : 'JOURNAL:"' + v + '"');
+		}
+		if (q.yearFrom || q.yearTo) parts.push("PUB_YEAR:[" + (q.yearFrom || 1800) + " TO " + (q.yearTo || 3000) + "]");
+		if (preprintsOnly) parts.push("SRC:PPR");
+		return parts.join(" AND ");
+	}
+
+	function epmcRecord(r) {
+		let ft = r.fullTextUrlList?.fullTextUrl || [];
+		let pdf = ft.find(x => x.documentStyle === "pdf")?.url || null;
+		let publisher = r.bookOrReportDetails?.publisher || r.publisher || "";
+		let isPreprint = r.source === "PPR" || (r.pubTypeList?.pubType || []).some(t => /preprint/i.test(t));
+		let authors = (r.authorList?.author || []).map(a => a.firstName || a.lastName
+			? { firstName: a.firstName || (a.initials || ""), lastName: a.lastName || "", name: [a.firstName || a.initials, a.lastName].filter(Boolean).join(" ") }
+			: parseName(a.fullName));
+		if (!authors.length && r.authorString) {
+			authors = r.authorString.replace(/\.$/, "").split(/,\s*/).filter(Boolean).map(n => {
+				let m = n.trim().match(/^(.*\S)\s+(\S+)$/);
+				return m ? { firstName: m[2], lastName: m[1], name: n.trim() } : parseName(n);
+			});
+		}
+		return makeRecord({
+			source: "europepmc",
+			sourceId: r.id,
+			title: r.title || "",
+			authors,
+			year: toInt(r.pubYear) || yearOf(r.firstPublicationDate),
+			venue: r.journalInfo?.journal?.title || r.journalTitle || publisher || (isPreprint ? "Preprint" : ""),
+			publisher,
+			doi: r.doi,
+			pmid: r.pmid || null,
+			pmcid: r.pmcid || null,
+			url: r.doi ? "https://doi.org/" + r.doi : (ft[0]?.url || null),
+			pdfUrl: pdf,
+			pdfUrls: [pdf, r.pmcid ? "https://europepmc.org/articles/" + r.pmcid + "?pdf=render" : null].filter(Boolean),
+			citations: toInt(r.citedByCount),
+			volume: r.journalInfo?.volume || "",
+			issue: r.journalInfo?.issue || "",
+			pages: r.pageInfo || "",
+			abstract: r.abstractText ? stripTags(r.abstractText) : "",
+			itemType: isPreprint ? "preprint" : "journalArticle"
+		});
+	}
+
+	async function searchEuropePMC(q, http, ctx, preprintsOnly = false) {
+		let query = epmcQuery(q, preprintsOnly);
+		if (!query.trim()) return [];
+		let sort = q.sort === "date" ? "&sort=" + enc("P_PDATE_D desc")
+			: q.sort === "citations" ? "&sort=" + enc("CITED desc") : "";
+		let max = q.maxResults || 200;
+		let out = [];
+		let cursor = "*";
+		while (out.length < max) {
+			if (ctx.isCancelled?.()) break;
+			let pageSize = Math.min(100, max - out.length);
+			let url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core"
+				+ "&pageSize=" + pageSize + "&cursorMark=" + enc(cursor) + sort + "&query=" + enc(query);
+			let data = await withRetry(() => http.getJSON(url));
+			let items = data.resultList?.result || [];
+			for (let r of items) out.push(epmcRecord(r));
+			let total = toInt(data.hitCount) ?? out.length;
+			ctx.onProgress?.(`${preprintsOnly ? "Preprints" : "Europe PMC"}: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
+			let next = data.nextCursorMark;
+			if (!items.length || !next || next === cursor || out.length >= total) break;
+			cursor = next;
+		}
+		return out.slice(0, max);
+	}
+
+	// bioRxiv / medRxiv / Research Square (via Europe PMC) plus arXiv, merged
+	async function searchPreprints(q, http, ctx) {
+		let [epmc, arx] = await Promise.allSettled([
+			searchEuropePMC(q, http, ctx, true),
+			searchArxiv(Object.assign({}, q), http, Object.assign({}, ctx, { enrichCitations: false }))
+		]);
+		let errors = [];
+		if (epmc.status === "rejected") errors.push("Europe PMC: " + epmc.reason.message);
+		if (arx.status === "rejected") errors.push("arXiv: " + arx.reason.message);
+		let merged = mergeRecords([epmc.value || [], arx.value || []]);
+		for (let r of merged) if (!r.itemType || r.itemType === "journalArticle") r.itemType = "preprint";
+		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(merged, http, ctx);
+		if (q.sort === "date") merged.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+		else merged.sort((a, b) => (b.citations ?? -1) - (a.citations ?? -1));
+		ctx.errors = errors;
+		return merged.slice(0, q.maxResults || 200);
 	}
 
 	// ---------------------------------------------------------------- Google Scholar (experimental)
@@ -552,7 +658,7 @@ var ZotPoPSources = (function () {
 		let start = 0;
 		while (out.length < max) {
 			if (ctx.isCancelled?.()) break;
-			let url = "https://scholar.google.com/scholar?hl=en&as_sdt=0,5&num=20&q=" + enc(query)
+			let url = "https://scholar.google.com/scholar?hl=en&as_sdt=0,5&num=20" + (q.sort === "date" ? "&scisbd=1" : "") + "&q=" + enc(query)
 				+ (q.yearFrom ? "&as_ylo=" + q.yearFrom : "") + (q.yearTo ? "&as_yhi=" + q.yearTo : "") + "&start=" + start;
 			let html = await http.getText(url, { "Accept-Language": "en-US,en;q=0.9" });
 			let recs = parseScholarPage(html, ctx.DOMParser);
@@ -564,6 +670,35 @@ var ZotPoPSources = (function () {
 			await sleep(2500 + Math.random() * 2000);
 		}
 		return out.slice(0, max);
+	}
+
+	// ---------------------------------------------------------------- library proxy
+	// Hosts that already serve open access; routing them through a campus proxy only
+	// adds a redirect (and often an interstitial), so leave them alone.
+	const OPEN_HOSTS = /(^|\.)(europepmc\.org|ncbi\.nlm\.nih\.gov|pmc\.ncbi\.nlm\.nih\.gov|arxiv\.org|biorxiv\.org|medrxiv\.org|osf\.io|zenodo\.org)$/i;
+
+	function hostOf(url) {
+		let m = String(url || "").match(/^https?:\/\/([^/?#]+)/i);
+		return m ? m[1].replace(/:\d+$/, "") : "";
+	}
+
+	/**
+	 * Wrap a URL in an institutional proxy.
+	 * `prefix` is either a plain prefix the target is appended to
+	 * (e.g. "https://access.yonsei.ac.kr/link.n2s?url=") or a template
+	 * containing %URL%, in which case the target is percent-encoded.
+	 */
+	function proxify(url, prefix) {
+		if (!url || !prefix) return null;
+		if (url.startsWith(prefix)) return url;
+		let proxyHost = hostOf(prefix);
+		if (proxyHost && hostOf(url) === proxyHost) return url;
+		return prefix.includes("%URL%") ? prefix.replace("%URL%", enc(url)) : prefix + url;
+	}
+
+	function needsProxy(url) {
+		let h = hostOf(url);
+		return Boolean(h) && !OPEN_HOSTS.test(h);
 	}
 
 	// ---------------------------------------------------------------- PDF candidates
@@ -579,13 +714,31 @@ var ZotPoPSources = (function () {
 		}
 	}
 
-	// Ordered list of URLs that may serve the full-text PDF for a record
+	// Ordered list of URLs that may serve the full-text PDF for a record.
+	// Free routes first; anything behind a paywall is retried through the library proxy.
 	async function pdfCandidates(rec, http, ctx = {}) {
 		let urls = [...(rec.pdfUrls || [])];
 		if (rec.pmcid) urls.push("https://europepmc.org/articles/" + rec.pmcid + "?pdf=render");
 		if (rec.arxiv) urls.push("https://arxiv.org/pdf/" + rec.arxiv);
 		if (http) urls.push(...await unpaywallPDFs(rec.doi, http, ctx.email));
-		return [...new Set(urls.filter(Boolean))];
+		let free = [...new Set(urls.filter(Boolean))];
+
+		let prefix = (ctx.proxyPrefix || "").trim();
+		if (!prefix) return free;
+		let viaProxy = [];
+		for (let u of free) if (needsProxy(u)) viaProxy.push(proxify(u, prefix));
+		// The landing page / DOI resolver is what a campus proxy handles best: it lands on
+		// the publisher's licensed article page, from which Zotero can pick up the PDF.
+		if (rec.doi) viaProxy.push(proxify("https://doi.org/" + rec.doi, prefix));
+		if (rec.url && needsProxy(rec.url)) viaProxy.push(proxify(rec.url, prefix));
+		return [...new Set([...free, ...viaProxy].filter(Boolean))];
+	}
+
+	// The article page to open in a browser for a licensed read
+	function proxyLandingURL(rec, prefix) {
+		if (!prefix) return null;
+		let target = rec.doi ? "https://doi.org/" + rec.doi : rec.url;
+		return target ? proxify(target, prefix) : null;
 	}
 
 	// ---------------------------------------------------------------- merge / multi-source
@@ -634,7 +787,7 @@ var ZotPoPSources = (function () {
 		return out;
 	}
 
-	const MULTI_SOURCES = ["openalex", "crossref", "pubmed", "arxiv"];
+	const MULTI_SOURCES = ["openalex", "crossref", "europepmc", "arxiv"];
 
 	async function searchMulti(q, http, ctx) {
 		let done = 0;
@@ -670,10 +823,12 @@ var ZotPoPSources = (function () {
 		crossref: { label: "Crossref", search: searchCrossref, hasCitations: true },
 		semanticscholar: { label: "Semantic Scholar", search: searchSemanticScholar, hasCitations: true },
 		pubmed: { label: "PubMed", search: searchPubMed, hasCitations: false },
+		europepmc: { label: "Europe PMC (articles + preprints)", search: searchEuropePMC, hasCitations: true },
+		preprint: { label: "Preprints (bioRxiv, medRxiv, Research Square, arXiv)", search: searchPreprints, hasCitations: true },
 		arxiv: { label: "arXiv", search: searchArxiv, hasCitations: false },
-		scholar: { label: "Google Scholar (\uC2E4\uD5D8\uC801)", search: searchScholar, hasCitations: true }
+		scholar: { label: "Google Scholar (experimental)", search: searchScholar, hasCitations: true }
 	};
-	SOURCES.multi = { label: "\uD1B5\uD569 \uAC80\uC0C9 (OpenAlex+Crossref+PubMed+arXiv)", search: searchMulti, hasCitations: true, multi: true };
+	SOURCES.multi = { label: "Combined (OpenAlex + Crossref + Europe PMC + arXiv)", search: searchMulti, hasCitations: true, multi: true };
 
 	function dedupe(records) {
 		let seen = new Set();
@@ -695,7 +850,7 @@ var ZotPoPSources = (function () {
 	}
 
 	return {
-		SOURCES, search, dedupe, mergeRecords, pubmedYear, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, pdfCandidates,
+		SOURCES, search, dedupe, mergeRecords, pubmedYear, proxify, needsProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, pdfCandidates,
 		titleSimilarity, parseScholarPage, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();

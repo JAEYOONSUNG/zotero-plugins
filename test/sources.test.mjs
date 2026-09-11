@@ -129,3 +129,54 @@ test("multi-source merged search", async () => {
 	let cited = recs.map(r => r.citations ?? -1);
 	assert.deepEqual(cited, [...cited].sort((a, b) => b - a), "sorted by citations");
 });
+
+test("europepmc", async () => {
+	let recs = await S.search("europepmc", q, http, ctx);
+	check(recs, "europepmc");
+	assert.ok(recs.some(r => r.citations != null), "citation counts");
+	assert.ok(recs.some(r => r.authors.length > 0), "authors parsed");
+});
+
+test("preprint source covers bioRxiv / Research Square", async () => {
+	let recs = await S.search("preprint", { keywords: "recombineering", yearFrom: 2021, maxResults: 40 }, http, { ...ctx, log: () => {} });
+	assert.ok(recs.length > 3, "results: " + recs.length);
+	assert.ok(recs.every(r => r.itemType === "preprint"), "all preprints");
+	let venues = recs.map(r => (r.venue + " " + r.publisher).toLowerCase()).join("|");
+	assert.match(venues, /biorxiv|medrxiv|research square|arxiv/, "preprint servers present: " + venues.slice(0, 200));
+});
+
+test("sort by date", async () => {
+	let recs = await S.search("openalex", { venue: "Nucleic Acids Research", sort: "date", maxResults: 12 }, http, ctx);
+	assert.ok(recs.length > 5, "journal feed returned results");
+	let years = recs.map(r => r.year).filter(Boolean);
+	assert.deepEqual(years, [...years].sort((a, b) => b - a), "newest first: " + years.join(","));
+	assert.ok(years[0] >= new Date().getFullYear() - 1, "includes current material: " + years[0]);
+});
+
+test("crossref journal feed sorted by date", async () => {
+	let recs = await S.search("crossref", { venue: "Nature Communications", sort: "date", maxResults: 10 }, http, ctx);
+	assert.ok(recs.length > 3, "results: " + recs.length);
+	let years = recs.map(r => r.year).filter(Boolean);
+	assert.ok(years[0] >= new Date().getFullYear() - 1, "recent first: " + years.slice(0, 3).join(","));
+});
+
+test("proxy wrapping and candidate order", async () => {
+	const P = "https://access.yonsei.ac.kr/link.n2s?url=";
+	assert.equal(S.proxify("https://www.nature.com/a.pdf", P), P + "https://www.nature.com/a.pdf");
+	assert.equal(S.proxify(P + "https://x/a", P), P + "https://x/a", "never double-wraps");
+	assert.equal(S.proxify("https://x/a", "https://p/?u=%URL%"), "https://p/?u=" + encodeURIComponent("https://x/a"));
+	assert.equal(S.proxify("https://x/a", ""), null);
+	assert.equal(S.needsProxy("https://europepmc.org/x"), false, "open hosts skip the proxy");
+	assert.equal(S.needsProxy("https://arxiv.org/pdf/1"), false);
+	assert.equal(S.needsProxy("https://www.sciencedirect.com/x"), true);
+
+	let rec = { doi: "10.1038/x", url: "https://www.nature.com/articles/x", pmcid: null,
+		pdfUrls: ["https://www.nature.com/articles/x.pdf"], pdfUrl: "https://www.nature.com/articles/x.pdf" };
+	let urls = await S.pdfCandidates(rec, null, { proxyPrefix: P });
+	assert.equal(urls[0], "https://www.nature.com/articles/x.pdf", "free route is tried first");
+	assert.ok(urls.slice(1).every(u => u.startsWith(P)), "proxy routes come after");
+	assert.ok(urls.includes(P + "https://doi.org/10.1038/x"), "DOI landing page via proxy");
+
+	let noProxy = await S.pdfCandidates(rec, null, {});
+	assert.ok(noProxy.every(u => !u.includes("yonsei")), "no proxy configured means no proxy URLs");
+});

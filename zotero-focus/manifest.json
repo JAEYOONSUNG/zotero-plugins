@@ -7,6 +7,7 @@
   "applications": {
     "zotero": {
       "id": "zotero-focus@sungjaeyoon.dev",
+      "update_url": "https://updates.invalid/zotero-focus.json",
       "strict_min_version": "9.0",
       "strict_max_version": "9.*"
     }

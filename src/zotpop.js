@@ -8,6 +8,19 @@ Zotero.ZotPoP = {
 	_window: null,
 	_prefPaneID: null,
 
+	t(key) {
+		try {
+			let locale = Zotero.ZotPoPI18N.resolveLocale(
+				Zotero.Prefs.get("extensions.zotpop.language", true) || "en",
+				Zotero.locale
+			);
+			return Zotero.ZotPoPI18N.make(locale)(key);
+		}
+		catch (e) {
+			return key;
+		}
+	},
+
 	async init({ id, version, rootURI }) {
 		this.id = id;
 		this.version = version;
@@ -26,6 +39,27 @@ Zotero.ZotPoP = {
 		Zotero.debug(`ZotPoP ${version} initialized`);
 	},
 
+	// Fill a preference pane: data-i18n (text), data-i18n-value / data-i18n-label (XUL attributes)
+	localizePrefs(doc) {
+		try {
+			for (let el of doc.querySelectorAll("[data-i18n]")) el.textContent = this.t(el.getAttribute("data-i18n"));
+			for (let el of doc.querySelectorAll("[data-i18n-value]")) el.setAttribute("value", this.t(el.getAttribute("data-i18n-value")));
+			for (let el of doc.querySelectorAll("[data-i18n-label]")) el.setAttribute("label", this.t(el.getAttribute("data-i18n-label")));
+		}
+		catch (e) {
+			Zotero.logError(e);
+		}
+	},
+
+	setProxyPrefix(doc, value) {
+		Zotero.Prefs.set("extensions.zotpop.proxyPrefix", value, true);
+		let input = doc.getElementById("zotpop-proxy");
+		if (input) {
+			input.value = value;
+			input.dispatchEvent(new doc.defaultView.Event("change", { bubbles: true }));
+		}
+	},
+
 	addToWindow(window) {
 		let menu = this._addMenuItem(window);
 		let toolbar = this._addToolbarButton(window);
@@ -39,7 +73,7 @@ Zotero.ZotPoP = {
 		if (!popup) return "no Tools menu";
 		let item = doc.createXULElement("menuitem");
 		item.id = "zotpop-menuitem";
-		item.setAttribute("label", "\uB17C\uBB38 \uAC80\uC0C9 & \uAC00\uC838\uC624\uAE30 (Publish or Perish)\u2026");
+		item.setAttribute("label", this.t("menuLabel"));
 		item.addEventListener("command", () => this.openSearchWindow(window));
 		popup.appendChild(item);
 		return "ok";
@@ -54,7 +88,7 @@ Zotero.ZotPoP = {
 		let btn = doc.createXULElement("toolbarbutton");
 		btn.id = "zotpop-toolbar-button";
 		btn.className = "zotero-tb-button";
-		btn.setAttribute("tooltiptext", "\uB17C\uBB38 \uAC80\uC0C9 & \uAC00\uC838\uC624\uAE30 (Publish or Perish)");
+		btn.setAttribute("tooltiptext", this.t("toolbarTip"));
 		btn.setAttribute("image", "chrome://zotpop/content/icon.svg");
 		btn.style.setProperty("-moz-context-properties", "fill, fill-opacity");
 		btn.style.fill = "currentColor";

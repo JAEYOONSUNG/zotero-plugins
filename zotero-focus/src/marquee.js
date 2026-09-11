@@ -25,6 +25,7 @@
     const document = window.document;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const listeners = [];
+    const animatedText = new WeakSet();
     let active = null;
     let disposed = false;
     let frame = null;
@@ -107,11 +108,14 @@
 
     function begin(cell) {
       if (disposed) return;
+      const config = settings();
+      if (!config.enabled) {
+        reset();
+        return;
+      }
       if (active?.cell === cell && isCurrent(active)) return;
       reset();
       if (!cell) return;
-      const config = settings();
-      if (!config.enabled) return;
       const text = cell.querySelector(".cell-text");
       if (!text || text.clientWidth <= 0 || text.scrollWidth - text.clientWidth <= 1) return;
       const content = text.textContent;
@@ -131,6 +135,7 @@
         delay: config.delay,
         speed: config.speed
       };
+      animatedText.add(text);
       cell.setAttribute("title", content);
       // Observe only while hovering. Zotero replaces cell children when reusing a
       // virtualized row, even when the mouse has not moved to generate mouseout.
@@ -155,7 +160,8 @@
 
     function onScroll(event) {
       // Updating scrollLeft dispatches scroll events; those are our own animation.
-      if (active && event.target !== active.text) reset();
+      // A previous cell can dispatch its reset event after a new hover has begun.
+      if (active && !animatedText.has(event.target)) reset();
     }
 
     function onMotionChange() {

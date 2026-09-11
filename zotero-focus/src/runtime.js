@@ -174,18 +174,25 @@ var ZoteroFocusRuntime = class ZoteroFocusRuntime {
   edit(items, patch) {
     // Capture selection now; serialize commands so rapid status/rating clicks compose.
     const selection = [...new Set(items)];
+    // Validate before queueing and do not let callers mutate a queued patch.
+    try { this.model.updateTags([], patch); }
+    catch (error) { return Promise.reject(error); }
+    const change = { ...patch };
     const work = this.queue.then(async () => {
       if (!this.active) throw new Error(this.text("Plugin is disabled.", "플러그인이 비활성화되어 있습니다."));
       if (!selection.length) throw new Error(this.text("Select a reference first.", "먼저 문헌을 선택하세요."));
       if (selection.some(item => !this.canEdit(item))) throw new Error(this.text("This selection is not editable.", "선택한 문헌을 편집할 수 없습니다."));
+      if (selection.some(item => item.hasChanged?.())) throw new Error(this.text("Wait for pending item changes to save, then try again.", "문헌의 다른 변경 사항이 저장된 뒤 다시 시도하세요."));
       const touched = [];
       try {
         await this.Z.DB.executeTransaction(async () => {
           for (const item of selection) {
             if (!this.canEdit(item)) throw new Error("Item is no longer editable");
-            const tags = this.model.updateTags(item.getTags(), patch);
-            touched.push(item);
+            if (item.hasChanged?.()) throw new Error(this.text("Wait for pending item changes to save, then try again.", "문헌의 다른 변경 사항이 저장된 뒤 다시 시도하세요."));
+            const tags = this.model.updateTags(item.getTags(), change);
             item.setTags(tags);
+            // Capture Zotero's normalized representation, not our input order.
+            touched.push({ item, written: item.getTags() });
             await item.save();
           }
         });
@@ -193,8 +200,26 @@ var ZoteroFocusRuntime = class ZoteroFocusRuntime {
       catch (error) {
         // The DB transaction rolls back persisted tags, but previous saves may
         // already have updated cached Items. Reload only after the rollback ends.
-        for (const item of touched) {
-          try { await item.reload(["primaryData", "tags"], true); }
+        for (const { item, written } of touched) {
+          try {
+            const latest = item.getTags();
+            const oldByName = new Map(written.map(tag => [tag.tag, tag]));
+            const newByName = new Map(latest.map(tag => [tag.tag, tag]));
+            const removed = new Set(written.filter(tag => !newByName.has(tag.tag)).map(tag => tag.tag));
+            const added = latest.filter(tag => !oldByName.has(tag.tag) || oldByName.get(tag.tag).type !== tag.type);
+            // Zotero 9's tag loader refreshes _tags but leaves pending tag
+            // changes intact after a save fails before _saveData. Clear only
+            // that field before reloading the rolled-back database value.
+            item._clearChanged("tags");
+            await item.reload(["primaryData", "tags"], true);
+            // A separate editor can change an earlier item while a later save
+            // awaits. Reapply those tag differences as pending edits; do not
+            // save them or lose them while undoing this failed transaction.
+            if (removed.size || added.length) {
+              const replaced = new Set(added.map(tag => tag.tag));
+              item.setTags([...item.getTags().filter(tag => !removed.has(tag.tag) && !replaced.has(tag.tag)), ...added]);
+            }
+          }
           catch (reloadError) { this.Z.logError(reloadError); }
         }
         throw error;

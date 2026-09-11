@@ -1,0 +1,392 @@
+/*
+ * ZotPoP strings. English is the default; Korean is selectable.
+ * Also loadable in Node for tests.
+ */
+var ZotPoPI18N = (function () {
+	"use strict";
+
+	const STRINGS = {
+		en: {
+			windowTitle: "ZotPoP — Search & Import Papers",
+			menuLabel: "Search & Import Papers (Publish or Perish)…",
+			toolbarTip: "Search & Import Papers (Publish or Perish)",
+
+			source: "Source",
+			authors: "Authors",
+			authorsPh: "e.g. Sung JY; Kim JS",
+			venue: "Publication",
+			venuePh: "e.g. Nucleic Acids Research",
+			titleWords: "Title words",
+			titlePh: "all words must appear in the title",
+			keywords: "Keywords (any field)",
+			keywordsPh: "e.g. CRISPR base editing",
+			years: "Years",
+			yearFromPh: "from",
+			yearToPh: "to",
+			sort: "Sort",
+			sortRelevance: "Relevance",
+			sortCitations: "Citations",
+			sortDate: "Newest",
+			maxResults: "Max results",
+			search: "Search",
+			stop: "Stop",
+			clear: "Clear",
+
+			metricsTitle: "Citation metrics",
+			mYears: "Publication years",
+			mCitationYears: "Citation years",
+			mPapers: "Papers",
+			mCitations: "Citations",
+			mCitesPerYear: "Cites/year",
+			mCitesPerPaper: "Cites/paper",
+			mCitesPerAuthor: "Cites/author",
+			mPapersPerAuthor: "Papers/author",
+			mAuthorsPerPaper: "Authors/paper",
+			metricsHint: "Computed over the results currently shown, after filtering.",
+
+			filterPh: "Filter results… (⌘F)",
+			selAll: "All",
+			selNone: "None",
+			selNew: "Not in library",
+			selNewTip: "Select only papers that are not in your library yet",
+			copyCsv: "Copy CSV",
+			copyCsvTip: "Copy the visible results to the clipboard as CSV",
+			saveCsv: "Save CSV",
+			saveCsvTip: "Save the visible results to your desktop as a CSV file",
+			detailOn: "Details ▾",
+			detailOff: "Details ▸",
+			detailTip: "Show or hide the detail pane",
+
+			thCites: "Cites",
+			thPerYear: "Per year",
+			thRank: "Rank",
+			thAuthors: "Authors",
+			thTitle: "Title",
+			thYear: "Year",
+			thVenue: "Publication",
+			thDoi: "DOI",
+			thPdf: "PDF",
+			thPdfTip: "A reachable PDF link is known",
+			thLib: "Lib",
+			thLibTip: "Already in your library",
+			thStatus: "Status",
+			chkAllTip: "Select every visible result",
+
+			emptyInitial: "Enter a query above and press Search.",
+			emptyFiltered: "No results match the filter.",
+			busySearching: "Searching…",
+			detailEmpty: "Click a row to see its details.",
+
+			dOpen: "Open in browser",
+			dPdf: "Open PDF",
+			dProxy: "Open via library",
+			dProxyTip: "Open the publisher page through your library proxy",
+			dCopyDoi: "Copy DOI",
+			dCopyCite: "Copy citation",
+			dAdd: "Add this paper",
+			noAuthors: "No author information",
+			noAbstract: "No abstract provided.",
+
+			addTo: "Add to",
+			optPdf: "Find & attach PDF",
+			optSkip: "Skip duplicates (by DOI)",
+			optExtra: "Record citation count in Extra",
+			importBtn: "Add to Zotero",
+
+			ready: "Ready.",
+			selected: n => `${n} selected`,
+			needCriteria: "Enter at least one search field.",
+			searching: label => `Searching ${label}…`,
+			stopping: "Stopping…",
+			resultCount: (label, n, stopped) => `${n} result${n === 1 ? "" : "s"} from ${label}${stopped ? " (stopped)" : ""}.`,
+			noResults: label => `No results from ${label}. Try broadening the query.`,
+			searchFailed: msg => "Search failed: " + msg,
+			firstHint: (label, n) => `${n} from ${label} · click a row for details, use the checkbox or Space to select, right-click for more.`,
+			journalFeed: (venue, n) => `${n} newest papers from ${venue}.`,
+			partialFail: errs => "Some sources returned nothing — " + errs,
+
+			adding: (i, n, title) => `Adding ${i}/${n}: ${title}`,
+			statusAdding: "Adding…",
+			statusAdded: "Added",
+			statusAddedPdf: "Added + PDF",
+			statusAddedProxy: "Added + PDF (library)",
+			statusAddedNoPdf: "Added (no PDF)",
+			statusExists: "Already in library",
+			statusFailed: "Failed",
+			tipTranslator: "Imported via a Zotero translator",
+			tipManual: "Created from search metadata (no translator match)",
+			importDone: (added, pdfs, exists, failed, stopped) =>
+				`Done: ${added} added (${pdfs} with PDF), ${exists} already in library, ${failed} failed${stopped ? ", stopped early" : ""}.`,
+			importFailures: n => `${n} could not be added. Hover the Status column to see why.`,
+
+			copied: "Copied.",
+			copiedDoi: "DOI copied.",
+			copiedTitle: "Title copied.",
+			copiedCite: "Citation copied.",
+			copiedCsv: n => `Copied ${n} rows as CSV.`,
+			nothingToCopy: "There are no results to copy.",
+			nothingToSave: "There are no results to save.",
+			csvSaved: path => "Saved CSV: " + path,
+			csvSaveFailed: msg => "Could not save the CSV: " + msg,
+
+			proxyNotSet: "No library proxy is configured. Set one in Settings → ZotPoP.",
+			proxyHint: "Set a library proxy in Settings → ZotPoP to open and download papers your institution subscribes to.",
+			proxyOpened: "Opened through the library proxy. You need to be logged in there in your browser.",
+
+			bannerS2: "Semantic Scholar rate-limits unauthenticated use (HTTP 429). Add a free API key in Settings → ZotPoP.",
+			bannerScholar: "Google Scholar support is experimental. Google may show a CAPTCHA after a few queries.",
+			bannerMulti: "The combined search queries several sources at once and merges them by DOI and title. It is slower than a single source.",
+			bannerPreprint: "The preprint search covers bioRxiv, medRxiv and Research Square (via Europe PMC) together with arXiv.",
+
+			ctxSelect: "Select",
+			ctxDeselect: "Deselect",
+			ctxAdd: "Add this paper",
+			ctxOpen: "Open in browser",
+			ctxPdf: "Open PDF",
+			ctxProxy: "Open via library",
+			ctxCopyTitle: "Copy title",
+			ctxCopyDoi: "Copy DOI",
+			ctxCopyCite: "Copy citation",
+
+			badgeCites: n => `${n} cites`,
+			badgePerYear: v => `${v}/yr`,
+			badgeInLibrary: "In library",
+			badgeHasPdf: "PDF available",
+			citeSource: label => "Source: " + label,
+
+			prefTitle: "ZotPoP — Search & Import Papers",
+			prefOpenHint: "Open it from the magnifier button in the items toolbar, or Tools → Search & Import Papers.",
+			prefLanguage: "Language",
+			prefLangEn: "English",
+			prefLangKo: "한국어 (Korean)",
+			prefLangAuto: "Follow Zotero",
+			prefLangNote: "Reopen the search window to apply a language change.",
+			prefEmail: "Contact e-mail (polite pool for OpenAlex/Crossref, PubMed):",
+			prefS2: "Semantic Scholar API key (optional, avoids rate limits):",
+			prefMax: "Default maximum results:",
+			prefEnrich: "Look up citation counts from OpenAlex for sources that lack them (PubMed, arXiv)",
+			prefProxyTitle: "Library proxy (subscribed journals)",
+			prefProxyIntro: "PDFs your institution subscribes to need a proxy. Free open-access copies are tried first; the proxy is only used when those fail.",
+			prefProxyLabel: "Proxy URL prefix:",
+			prefProxyPreset: "Yonsei preset",
+			prefProxyClear: "Clear",
+			prefProxyNote1: "The paper URL is appended to this prefix. Use %URL% to place it somewhere else, percent-encoded. Another campus EZproxy usually looks like https://login.ezproxy.example.edu/login?url=",
+			prefProxyNote2: "Automatic download only works when Zotero itself holds the proxy login session. If it fails, right-click the paper and choose Open via library, then drag the PDF into Zotero.",
+			prefNotesTitle: "Notes",
+			prefNoteScholar: "Google Scholar is experimental. Google may show a CAPTCHA after a few queries.",
+			prefNoteFeed: "To browse a journal's latest papers, put the journal in the Publication field and set Sort to Newest.",
+			srcMulti: "Combined (OpenAlex + Crossref + Europe PMC + arXiv)",
+			srcPreprint: "Preprints (bioRxiv · medRxiv · Research Square · arXiv)",
+			srcEuropePMC: "Europe PMC (articles + preprints)",
+			srcScholar: "Google Scholar (experimental)"
+		},
+
+		ko: {
+			windowTitle: "ZotPoP — 논문 검색 & 가져오기",
+			menuLabel: "논문 검색 & 가져오기 (Publish or Perish)…",
+			toolbarTip: "논문 검색 & 가져오기 (Publish or Perish)",
+
+			source: "검색 소스",
+			authors: "저자",
+			authorsPh: "예: Sung JY; Kim JS",
+			venue: "저널",
+			venuePh: "예: Nucleic Acids Research",
+			titleWords: "제목 단어",
+			titlePh: "제목에 모두 포함될 단어",
+			keywords: "키워드 (전체 필드)",
+			keywordsPh: "예: CRISPR base editing",
+			years: "연도",
+			yearFromPh: "시작",
+			yearToPh: "끝",
+			sort: "정렬",
+			sortRelevance: "관련도순",
+			sortCitations: "인용순",
+			sortDate: "최신순",
+			maxResults: "최대 결과",
+			search: "검색",
+			stop: "중지",
+			clear: "초기화",
+
+			metricsTitle: "인용 지표",
+			mYears: "출판 연도",
+			mCitationYears: "인용 연수",
+			mPapers: "논문 수",
+			mCitations: "총 인용",
+			mCitesPerYear: "연간 인용",
+			mCitesPerPaper: "논문당 인용",
+			mCitesPerAuthor: "저자당 인용",
+			mPapersPerAuthor: "저자당 논문",
+			mAuthorsPerPaper: "논문당 저자",
+			metricsHint: "현재 표에 보이는 결과(필터 적용 후) 기준으로 계산합니다.",
+
+			filterPh: "결과 필터… (⌘F)",
+			selAll: "전체",
+			selNone: "해제",
+			selNew: "미보유만",
+			selNewTip: "라이브러리에 없는 논문만 선택",
+			copyCsv: "CSV 복사",
+			copyCsvTip: "보이는 결과를 CSV로 클립보드에 복사",
+			saveCsv: "CSV 저장",
+			saveCsvTip: "보이는 결과를 바탕화면에 CSV 파일로 저장",
+			detailOn: "상세 ▾",
+			detailOff: "상세 ▸",
+			detailTip: "상세 패널 켜기/끄기",
+
+			thCites: "인용",
+			thPerYear: "연간",
+			thRank: "순위",
+			thAuthors: "저자",
+			thTitle: "제목",
+			thYear: "연도",
+			thVenue: "저널",
+			thDoi: "DOI",
+			thPdf: "PDF",
+			thPdfTip: "열람 가능한 PDF 링크가 있습니다",
+			thLib: "보유",
+			thLibTip: "이미 라이브러리에 있습니다",
+			thStatus: "상태",
+			chkAllTip: "보이는 결과 전체 선택",
+
+			emptyInitial: "위에 조건을 입력하고 검색을 누르세요.",
+			emptyFiltered: "필터와 일치하는 결과가 없습니다.",
+			busySearching: "검색 중…",
+			detailEmpty: "행을 클릭하면 상세 정보가 표시됩니다.",
+
+			dOpen: "브라우저에서 열기",
+			dPdf: "PDF 열기",
+			dProxy: "도서관으로 열기",
+			dProxyTip: "소속 도서관 프록시를 거쳐 출판사 페이지를 엽니다",
+			dCopyDoi: "DOI 복사",
+			dCopyCite: "인용 복사",
+			dAdd: "이 논문 추가",
+			noAuthors: "저자 정보 없음",
+			noAbstract: "초록이 제공되지 않습니다.",
+
+			addTo: "추가 위치",
+			optPdf: "PDF 자동 첨부",
+			optSkip: "중복 건너뛰기 (DOI)",
+			optExtra: "인용 수를 Extra에 기록",
+			importBtn: "Zotero에 추가",
+
+			ready: "준비됨.",
+			selected: n => `${n}개 선택`,
+			needCriteria: "검색 조건을 하나 이상 입력하세요.",
+			searching: label => `${label} 검색 중…`,
+			stopping: "중지하는 중…",
+			resultCount: (label, n, stopped) => `${label}에서 ${n}건${stopped ? " (중지됨)" : ""}.`,
+			noResults: label => `${label}에서 결과가 없습니다. 조건을 넓혀 보세요.`,
+			searchFailed: msg => "검색 실패: " + msg,
+			firstHint: (label, n) => `${label}에서 ${n}건 · 행을 클릭하면 상세, 체크박스나 스페이스바로 선택, 오른쪽 클릭으로 메뉴가 열립니다.`,
+			journalFeed: (venue, n) => `${venue} 최신 논문 ${n}건 (최신순).`,
+			partialFail: errs => "일부 소스에서 결과를 못 받았습니다 — " + errs,
+
+			adding: (i, n, title) => `추가 중 ${i}/${n}: ${title}`,
+			statusAdding: "추가 중…",
+			statusAdded: "추가됨",
+			statusAddedPdf: "추가됨 + PDF",
+			statusAddedProxy: "추가됨 + PDF(도서관)",
+			statusAddedNoPdf: "추가됨 (PDF 없음)",
+			statusExists: "이미 있음",
+			statusFailed: "실패",
+			tipTranslator: "Zotero 번역기로 가져옴",
+			tipManual: "검색 메타데이터로 생성 (번역기 미일치)",
+			importDone: (added, pdfs, exists, failed, stopped) =>
+				`완료: ${added}건 추가 (PDF ${pdfs}건), ${exists}건 이미 있음, ${failed}건 실패${stopped ? ", 중간 중지" : ""}.`,
+			importFailures: n => `${n}건을 추가하지 못했습니다. 상태 열에 마우스를 올리면 이유가 표시됩니다.`,
+
+			copied: "복사했습니다.",
+			copiedDoi: "DOI를 복사했습니다.",
+			copiedTitle: "제목을 복사했습니다.",
+			copiedCite: "인용 정보를 복사했습니다.",
+			copiedCsv: n => `${n}개 행을 CSV로 복사했습니다.`,
+			nothingToCopy: "복사할 결과가 없습니다.",
+			nothingToSave: "저장할 결과가 없습니다.",
+			csvSaved: path => "CSV를 저장했습니다: " + path,
+			csvSaveFailed: msg => "CSV 저장 실패: " + msg,
+
+			proxyNotSet: "도서관 프록시 주소가 설정되지 않았습니다. 설정 → ZotPoP에서 지정하세요.",
+			proxyHint: "설정 → ZotPoP에서 도서관 프록시 주소를 넣으면, 구독 중인 저널 논문을 바로 열고 내려받을 수 있습니다.",
+			proxyOpened: "도서관 프록시로 열었습니다. 브라우저에서 로그인되어 있어야 합니다.",
+
+			bannerS2: "Semantic Scholar는 API 키 없이 쓰면 요청 제한(429)에 자주 걸립니다. 설정 → ZotPoP에서 무료 키를 넣으면 안정적입니다.",
+			bannerScholar: "Google Scholar는 실험적 기능입니다. 몇 번 검색하면 구글이 CAPTCHA를 띄울 수 있습니다.",
+			bannerMulti: "통합 검색은 여러 소스를 동시에 조회한 뒤 DOI와 제목으로 중복을 합칩니다. 한 소스만 쓸 때보다 느립니다.",
+			bannerPreprint: "프리프린트 검색은 bioRxiv·medRxiv·Research Square(Europe PMC 경유)와 arXiv를 함께 조회합니다.",
+
+			ctxSelect: "선택",
+			ctxDeselect: "선택 해제",
+			ctxAdd: "이 논문 추가",
+			ctxOpen: "브라우저에서 열기",
+			ctxPdf: "PDF 열기",
+			ctxProxy: "도서관으로 열기",
+			ctxCopyTitle: "제목 복사",
+			ctxCopyDoi: "DOI 복사",
+			ctxCopyCite: "인용 복사",
+
+			badgeCites: n => `인용 ${n}`,
+			badgePerYear: v => `연간 ${v}`,
+			badgeInLibrary: "보유 중",
+			badgeHasPdf: "PDF 있음",
+			citeSource: label => "출처: " + label,
+
+			prefTitle: "ZotPoP — 논문 검색 & 가져오기",
+			prefOpenHint: "아이템 툴바의 돋보기 버튼 또는 도구 → 논문 검색 & 가져오기로 엽니다.",
+			prefLanguage: "언어",
+			prefLangEn: "English",
+			prefLangKo: "한국어",
+			prefLangAuto: "Zotero 설정 따름",
+			prefLangNote: "언어를 바꾼 뒤에는 검색 창을 다시 열어야 적용됩니다.",
+			prefEmail: "연락 이메일 (OpenAlex·Crossref 우선 처리, PubMed):",
+			prefS2: "Semantic Scholar API 키 (선택, 요청 제한 회피):",
+			prefMax: "기본 최대 결과 수:",
+			prefEnrich: "인용 수가 없는 소스(PubMed, arXiv)는 OpenAlex에서 인용 수를 보충",
+			prefProxyTitle: "도서관 프록시 (구독 논문 받기)",
+			prefProxyIntro: "학교가 구독 중인 저널 PDF는 프록시를 거쳐야 받을 수 있습니다. 무료 공개본을 먼저 시도하고, 실패했을 때만 프록시로 다시 시도합니다.",
+			prefProxyLabel: "프록시 주소 접두사:",
+			prefProxyPreset: "연세대 기본값",
+			prefProxyClear: "지우기",
+			prefProxyNote1: "주소 끝에 논문 URL이 그대로 붙습니다. %URL%을 넣으면 그 자리에 인코딩되어 들어갑니다. 다른 학교 EZproxy는 보통 https://login.ezproxy.example.edu/login?url= 형태입니다.",
+			prefProxyNote2: "자동 내려받기는 Zotero가 프록시 로그인 세션을 갖고 있을 때만 됩니다. 실패하면 결과 목록에서 논문을 오른쪽 클릭 → 도서관으로 열기로 브라우저에서 받은 뒤 Zotero로 끌어다 놓으세요.",
+			prefNotesTitle: "참고",
+			prefNoteScholar: "Google Scholar는 실험적입니다. 몇 번 검색하면 구글이 CAPTCHA를 띄울 수 있습니다.",
+			prefNoteFeed: "저널 최신 목록을 훑으려면 저널 칸에 학술지명을 넣고 정렬을 최신순으로 두세요.",
+			srcMulti: "통합 검색 (OpenAlex + Crossref + Europe PMC + arXiv)",
+			srcPreprint: "프리프린트 (bioRxiv · medRxiv · Research Square · arXiv)",
+			srcEuropePMC: "Europe PMC (논문 + 프리프린트)",
+			srcScholar: "Google Scholar (실험적)"
+		}
+	};
+
+	const SUPPORTED = ["en", "ko"];
+
+	function resolveLocale(pref, systemLocale) {
+		if (SUPPORTED.includes(pref)) return pref;
+		if (pref === "auto") {
+			let base = String(systemLocale || "en").toLowerCase().split(/[-_]/)[0];
+			return SUPPORTED.includes(base) ? base : "en";
+		}
+		return "en";
+	}
+
+	function make(locale) {
+		let table = STRINGS[locale] || STRINGS.en;
+		function t(key, ...args) {
+			let v = table[key] !== undefined ? table[key] : STRINGS.en[key];
+			if (v === undefined) return key;
+			return typeof v === "function" ? v(...args) : v;
+		}
+		t.locale = locale;
+		return t;
+	}
+
+	// Fill a DOM tree: data-i18n (text), data-i18n-ph (placeholder), data-i18n-title (tooltip)
+	function apply(root, t) {
+		for (let el of root.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+		for (let el of root.querySelectorAll("[data-i18n-ph]")) el.setAttribute("placeholder", t(el.dataset.i18nPh));
+		for (let el of root.querySelectorAll("[data-i18n-title]")) el.setAttribute("title", t(el.dataset.i18nTitle));
+	}
+
+	return { STRINGS, SUPPORTED, resolveLocale, make, apply };
+})();
+
+if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPI18N;

@@ -1,20 +1,53 @@
-<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" xmlns:html="http://www.w3.org/1999/xhtml" onload="Zotero.ZotPoPPrefs?.init()">
+<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" xmlns:html="http://www.w3.org/1999/xhtml"
+      onload="Zotero.ZotPoP.localizePrefs(document);">
 	<groupbox>
-		<label><html:h2>ZotPoP — Search &amp; Import Papers</html:h2></label>
-		<html:p>Publish or Perish-style literature search. Open it from the magnifier button in the items toolbar, or <html:b>도구 → 논문 검색 &amp; 가져오기</html:b>.</html:p>
+		<label><html:h2 data-i18n="prefTitle"></html:h2></label>
+		<html:p data-i18n="prefOpenHint"></html:p>
 		<hbox align="center">
-			<label value="Contact e-mail (OpenAlex / Crossref polite pool, PubMed):" control="zotpop-email"/>
-			<html:input id="zotpop-email" type="email" preference="extensions.zotpop.email" style="width: 260px"/>
+			<label data-i18n-value="prefLanguage" control="zotpop-language"/>
+			<menulist id="zotpop-language" preference="extensions.zotpop.language" native="true">
+				<menupopup>
+					<menuitem value="en" data-i18n-label="prefLangEn"/>
+					<menuitem value="ko" data-i18n-label="prefLangKo"/>
+					<menuitem value="auto" data-i18n-label="prefLangAuto"/>
+				</menupopup>
+			</menulist>
+			<label style="color: gray" data-i18n-value="prefLangNote"/>
 		</hbox>
 		<hbox align="center">
-			<label value="Semantic Scholar API key (optional, avoids rate limits):" control="zotpop-s2"/>
-			<html:input id="zotpop-s2" type="text" preference="extensions.zotpop.s2ApiKey" style="width: 260px"/>
+			<label data-i18n-value="prefEmail" control="zotpop-email"/>
+			<html:input id="zotpop-email" type="email" preference="extensions.zotpop.email" style="width: 240px"/>
 		</hbox>
 		<hbox align="center">
-			<label value="Default max results:" control="zotpop-max"/>
+			<label data-i18n-value="prefS2" control="zotpop-s2"/>
+			<html:input id="zotpop-s2" type="text" preference="extensions.zotpop.s2ApiKey" style="width: 240px"/>
+		</hbox>
+		<hbox align="center">
+			<label data-i18n-value="prefMax" control="zotpop-max"/>
 			<html:input id="zotpop-max" type="number" min="1" max="2000" preference="extensions.zotpop.maxResults" style="width: 80px"/>
 		</hbox>
-		<checkbox label="Look up citation counts from OpenAlex for sources without them (PubMed, arXiv)" preference="extensions.zotpop.enrichCitations"/>
-		<html:p style="color: gray">Google Scholar support is experimental: Google may show a CAPTCHA after a few queries.</html:p>
+		<checkbox id="zotpop-enrich" data-i18n-label="prefEnrich" preference="extensions.zotpop.enrichCitations"/>
+	</groupbox>
+
+	<groupbox>
+		<label><html:h2 data-i18n="prefProxyTitle"></html:h2></label>
+		<html:p data-i18n="prefProxyIntro"></html:p>
+		<hbox align="center">
+			<label data-i18n-value="prefProxyLabel" control="zotpop-proxy"/>
+			<html:input id="zotpop-proxy" type="text" preference="extensions.zotpop.proxyPrefix"
+				placeholder="https://access.yonsei.ac.kr/link.n2s?url=" style="width: 320px"/>
+			<button id="zotpop-proxy-preset" data-i18n-label="prefProxyPreset"
+				oncommand="Zotero.ZotPoP.setProxyPrefix(document, 'https://access.yonsei.ac.kr/link.n2s?url=');"/>
+			<button id="zotpop-proxy-clear" data-i18n-label="prefProxyClear"
+				oncommand="Zotero.ZotPoP.setProxyPrefix(document, '');"/>
+		</hbox>
+		<html:p style="color: gray" data-i18n="prefProxyNote1"></html:p>
+		<html:p style="color: gray" data-i18n="prefProxyNote2"></html:p>
+	</groupbox>
+
+	<groupbox>
+		<label><html:h2 data-i18n="prefNotesTitle"></html:h2></label>
+		<html:p style="color: gray" data-i18n="prefNoteScholar"></html:p>
+		<html:p style="color: gray" data-i18n="prefNoteFeed"></html:p>
 	</groupbox>
 </vbox>

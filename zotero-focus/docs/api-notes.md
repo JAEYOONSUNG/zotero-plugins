@@ -6,6 +6,8 @@ Implementation sources below are archive members of `Contents/Resources/app/omni
 
 ## Columns and lifecycle
 
+**Manifest requirement discovered by real installation checks:** installed platform archive `Contents/Resources/omni.ja`, `modules/Extension.sys.mjs:1868–1886`, requires `applications.zotero.id`, `applications.zotero.update_url`, and `applications.zotero.strict_max_version`. A manifest missing `update_url` is invalid, and a sideloaded XPI can be removed during startup. `modules/addons/XPIDatabase.sys.mjs` requires an HTTPS update URL under the default update-security policy; a data/file/resource URL is not a compatible offline workaround. This release uses the reserved `https://updates.invalid/zotero-focus.json` and manual XPI updates. Zotero may attempt its normal update lookup and report that the reserved endpoint is unavailable; metadata and hover behavior remain local. Do not describe this as disabling every network attempt by Zotero's updater.
+
 `chrome/content/zotero/xpcom/pluginAPI/itemTreeManager.js`:
 
 - `Zotero.ItemTreeManager.registerColumn(option) -> string | false`. Required strings: `dataKey`, `label`, `pluginID`. Save the returned key, which is namespaced and can differ from the input. A false return is registration failure.
@@ -20,6 +22,8 @@ Implementation sources below are archive members of `Contents/Resources/app/omni
 - `await Zotero.PreferencePanes.register({pluginID, src, id?, label?, scripts?, stylesheets?, image?, helpURL?}) -> paneID`.
 - `Zotero.PreferencePanes.unregister(paneID)` removes the pane and refreshes open preferences windows. Registering requires both `pluginID` and `src`. Scripts and stylesheets default to empty arrays; resource paths can be relative to the extension root.
 - Plugin shutdown also automatically unregisters the plugin's panes. Explicitly remove plugin-owned window listeners, styles, timers, and DOM nodes; manager cleanup does not cover them.
+
+The real startup smoke also exposed a subscript-scope pitfall: passing a plain `{Zotero}` object to `Services.scriptloader.loadSubScript()` does not make it the `globalThis` used by UMD-style exports. A module assigning `globalThis.ZoteroFocusMarquee` therefore need not populate that plain object's property. The final bootstrap loads modules into its existing `globalThis`: Zotero already gives each plugin a private privileged bootstrap sandbox. It removes its own UI/listeners/registrations and lets Zotero manage that sandbox's lifetime. Creating a redundant sandbox fixed exports but calling `Cu.nukeSandbox()` from this plugin environment failed with `NS_ERROR_ILLEGAL_VALUE` during the real disable test. Verify packaged bootstrap and shutdown behavior, not only Node imports.
 
 ## Native title cells and hover scrolling
 
@@ -46,7 +50,7 @@ Sources: `zoteroPane.xhtml:978`; `zoteroPane.js:3720–3765`; `xpcom/data/item.j
 
 ## Disposable-profile smoke strategy
 
-`/Applications/Zotero.app/Contents/MacOS/zotero -help` exited successfully and advertises `--new-instance`, `--profile <path>`, `--headless`, `--marionette`, and `--remote-allow-system-access`. This leaf did not start a second Zotero instance; the integration owner runs the smoke test.
+`/Applications/Zotero.app/Contents/MacOS/zotero -help` exited successfully and advertises `--new-instance`, `--profile <path>`, `--headless`, `--marionette`, and `--remote-allow-system-access`.
 
 Use a freshly created temporary parent with separate empty `profile/` and `data/` directories, then launch the installed executable with:
 
@@ -58,8 +62,12 @@ Use a freshly created temporary parent with separate empty `profile/` and `data/
 
 Here `smoke_dir` must be the absolute path of the newly created disposable directory. Set a unique `marionette.port` in that profile's `user.js`; use only that port/process for test control. `--headless` can be added for API checks; visible native UI behavior requires a visible test window. Install the built XPI into this disposable profile only, seed artificial records, check registration/write/rollback/unload behavior, and close only the process started for the test.
 
+**Actual control mechanism:** Marionette's `WebDriver:NewSession` waits for Gecko's browser-window startup signal (`chrome/remote/content/marionette/driver.sys.mjs:648–660`), which did not complete for Zotero in the bounded attempts. `scripts/smoke.py` therefore installs a separate temporary companion XPI in the disposable profile. The companion receives synthetic test scripts through files in that same temporary directory, installs an unchanged snapshot of the real Focus XPI using `AddonManager.installTemporaryAddon()`, and returns structured results. Set `extensions.startupScanScopes=15`, `extensions.autoDisableScopes=0`, and `extensions.sideloadScopes=15` in that profile to allow companion discovery. The companion has the required HTTPS `update_url`; extension update checks are disabled in the disposable profile. Also set `extensions.zoteroMacWordIntegration.skipInstallation=true` and `extensions.zoteroOpenOfficeIntegration.skipInstallation=true` to suppress fresh-profile word-processor installation. Earlier exploratory startup exposed a LibreOffice installer failure before these suppression flags were added.
+
+The checked-in JSON report is the authoritative execution result. It hashes the precise XPI snapshot and identifies headless native DOM behavior; a successful hover measurement is not a visual screenshot of the user's running app. The harness removes temporary data and terminates only its own `Popen` process, including error paths.
+
 Isolation depends on **both** flags: `xpcom/dataDirectory.js:57–83` gives command-line `Zotero.forceDataDir` precedence, and `xpcom/zotero.js:369–383` skips migration when that directory is forced. A new profile without an explicit data directory can inspect or migrate other profiles/default data directories. Do not reuse the user's live profile or library, change their profile list, or stop the running user instance.
 
 ## Gate evidence
 
-G1 complete: version/build, exact API signatures, renderer/virtualization, context menu anchor, editability/feed behavior, save/rollback cache semantics, preference cleanup, and isolated-start flags were verified against the installed archive and executable help. Actual end-to-end smoke execution is a separate root integration gate; this document does not claim it passed.
+G1 complete: version/build, manifest requirements, exact API signatures, renderer/virtualization, context menu anchor, editability/feed behavior, save/rollback cache semantics, preference cleanup, and isolated-start flags were verified against the installed archives and executable help. Actual end-to-end smoke execution is a separate root integration gate; see `smoke-result.json` for its outcome.
