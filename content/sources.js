@@ -73,6 +73,7 @@ var ZotPoPSources = (function () {
 		let rec = Object.assign({
 			source: "", sourceId: "", title: "", authors: [], year: null, venue: "", publisher: "",
 			doi: null, pmid: null, pmcid: null, arxiv: null, url: null, pdfUrl: null, pdfUrls: [], citations: null, citationSource: null, sources: null,
+			journalId: null, issn: null, journalIF: null, journalH: null,
 			volume: "", issue: "", pages: "", abstract: "", itemType: "journalArticle"
 		}, r, { doi });
 		rec.title = stripTags(decodeEntities(rec.title));
@@ -177,6 +178,8 @@ var ZotPoPSources = (function () {
 					year: w.publication_year || null,
 					venue: src.display_name || "",
 					publisher: src.host_organization_name || "",
+					journalId: src.id ? src.id.replace("https://openalex.org/", "") : null,
+					issn: src.issn_l || (src.issn || [])[0] || null,
 					doi: w.doi,
 					pmid: ids.pmid ? String(ids.pmid).replace(/.*\//, "") : null,
 					pmcid: pmcidFromOpenAlex(w),
@@ -227,6 +230,124 @@ var ZotPoPSources = (function () {
 		return records;
 	}
 
+	// ---------------------------------------------------------------- journal metrics
+	// OpenAlex publishes a 2-year mean citedness per source: the Journal Impact Factor
+	// formula computed over OpenAlex's open citation graph. Free, no key needed.
+	const JOURNAL_CACHE = new Map(); // "S123" | "issn:0028-0836" -> stats | null
+
+	function journalStats(s) {
+		let ss = s.summary_stats || {};
+		return {
+			id: (s.id || "").replace("https://openalex.org/", ""),
+			name: s.display_name || "",
+			issn: s.issn_l || (s.issn || [])[0] || null,
+			if2y: Number.isFinite(ss["2yr_mean_citedness"]) ? ss["2yr_mean_citedness"] : null,
+			h: toInt(ss.h_index),
+			works: toInt(s.works_count),
+			oa: Boolean(s.is_oa),
+			doaj: Boolean(s.is_in_doaj)
+		};
+	}
+
+	function applyJournal(r, st) {
+		if (!st) return;
+		r.journalIF = st.if2y;
+		r.journalH = st.h;
+		if (!r.journalId) r.journalId = st.id;
+		if (!r.issn) r.issn = st.issn;
+	}
+
+	// Fill journalIF / journalH on records from their OpenAlex source id or ISSN. Mutates records.
+	async function enrichJournalMetrics(records, http, ctx = {}) {
+		const SELECT = "select=id,display_name,issn_l,issn,summary_stats,works_count,is_oa,is_in_doaj";
+		let mailto = ctx.email ? "&mailto=" + enc(ctx.email) : "";
+		let byId = new Map(), byIssn = new Map();
+		for (let r of records) {
+			if (r.journalIF != null) continue;
+			if (r.journalId) {
+				if (JOURNAL_CACHE.has(r.journalId)) applyJournal(r, JOURNAL_CACHE.get(r.journalId));
+				else { if (!byId.has(r.journalId)) byId.set(r.journalId, []); byId.get(r.journalId).push(r); }
+			}
+			else if (r.issn) {
+				let k = "issn:" + r.issn;
+				if (JOURNAL_CACHE.has(k)) applyJournal(r, JOURNAL_CACHE.get(k));
+				else { if (!byIssn.has(r.issn)) byIssn.set(r.issn, []); byIssn.get(r.issn).push(r); }
+			}
+		}
+		let total = byId.size + byIssn.size, done = 0;
+		let fetchChunks = async (map, filterName, keysOf) => {
+			let keys = [...map.keys()];
+			for (let i = 0; i < keys.length; i += 50) {
+				if (ctx.isCancelled?.()) return;
+				let chunk = keys.slice(i, i + 50);
+				let url = "https://api.openalex.org/sources?filter=" + filterName + ":" + chunk.map(enc).join("|") + "&per-page=50&" + SELECT + mailto;
+				try {
+					let data = await withRetry(() => http.getJSON(url));
+					let seen = new Set();
+					for (let s of data.results || []) {
+						let st = journalStats(s);
+						JOURNAL_CACHE.set(st.id, st);
+						for (let issn of s.issn || []) JOURNAL_CACHE.set("issn:" + issn, st);
+						for (let k of chunk) {
+							if (!keysOf(s).includes(k)) continue;
+							seen.add(k);
+							for (let r of map.get(k)) applyJournal(r, st);
+						}
+					}
+					for (let k of chunk) if (!seen.has(k)) JOURNAL_CACHE.set(filterName === "issn" ? "issn:" + k : k, null);
+				}
+				catch (e) {
+					ctx.log?.("Journal metrics lookup failed: " + e.message);
+				}
+				done += chunk.length;
+				ctx.onProgress?.(`Journal metrics: ${done} / ${total}`, done, total);
+			}
+		};
+		await fetchChunks(byId, "ids.openalex", s => [(s.id || "").replace("https://openalex.org/", "")]);
+		await fetchChunks(byIssn, "issn", s => s.issn || []);
+		return records;
+	}
+
+	// Live citation counts for one record from every free source that knows it.
+	// Returns { openalex, crossref, semanticscholar } (null = not found) and updates rec
+	// with the highest count plus its journal's impact.
+	async function checkCitations(rec, http, ctx = {}) {
+		let doi = rec.doi;
+		let mailto = ctx.email ? "mailto=" + enc(ctx.email) : "";
+		let out = { openalex: null, crossref: null, semanticscholar: null };
+		let tasks = [];
+		if (doi) {
+			tasks.push(http.getJSON("https://api.openalex.org/works/doi:" + doi + "?select=cited_by_count,primary_location" + (mailto ? "&" + mailto : "")).then(w => {
+				out.openalex = toInt(w.cited_by_count);
+				let src = w.primary_location?.source;
+				if (src?.id && !rec.journalId) rec.journalId = src.id.replace("https://openalex.org/", "");
+				if (src && !rec.issn) rec.issn = src.issn_l || (src.issn || [])[0] || null;
+			}).catch(e => ctx.log?.("OpenAlex: " + e.message)));
+			tasks.push(http.getJSON("https://api.crossref.org/works/" + doi + (mailto ? "?" + mailto : "")).then(d => {
+				out.crossref = toInt(d.message?.["is-referenced-by-count"]);
+				if (!rec.issn) rec.issn = (d.message?.ISSN || [])[0] || null;
+			}).catch(e => ctx.log?.("Crossref: " + e.message)));
+		}
+		else if (rec.source === "openalex" && rec.sourceId) {
+			tasks.push(http.getJSON("https://api.openalex.org/works/" + rec.sourceId + "?select=cited_by_count" + (mailto ? "&" + mailto : "")).then(w => {
+				out.openalex = toInt(w.cited_by_count);
+			}).catch(e => ctx.log?.("OpenAlex: " + e.message)));
+		}
+		let s2id = doi ? "DOI:" + doi : rec.arxiv ? "ARXIV:" + rec.arxiv : rec.pmid ? "PMID:" + rec.pmid : null;
+		if (s2id) {
+			let headers = ctx.s2ApiKey ? { "x-api-key": ctx.s2ApiKey } : {};
+			tasks.push(http.getJSON("https://api.semanticscholar.org/graph/v1/paper/" + s2id + "?fields=citationCount", headers).then(p => {
+				out.semanticscholar = toInt(p.citationCount);
+			}).catch(e => ctx.log?.("Semantic Scholar: " + e.message)));
+		}
+		await Promise.all(tasks);
+		let best = null;
+		for (let [k, v] of Object.entries(out)) if (v != null && (best == null || v > best.n)) best = { n: v, src: k };
+		if (best) { rec.citations = best.n; rec.citationSource = best.src; }
+		if (rec.journalIF == null && (rec.journalId || rec.issn)) await enrichJournalMetrics([rec], http, ctx);
+		return out;
+	}
+
 	// ---------------------------------------------------------------- Crossref
 	const CROSSREF_TYPES = {
 		"journal-article": "journalArticle", "proceedings-article": "conferencePaper", "posted-content": "preprint",
@@ -268,6 +389,7 @@ var ZotPoPSources = (function () {
 					year: w.issued?.["date-parts"]?.[0]?.[0] || null,
 					venue: (w["container-title"] || [])[0] || "",
 					publisher: w.publisher || "",
+					issn: (w.ISSN || [])[0] || null,
 					doi: w.DOI,
 					url: w.URL || null,
 					pdfUrl: pdf?.URL || null,
@@ -418,6 +540,7 @@ var ZotPoPSources = (function () {
 					}),
 					year: pubmedYear(d),
 					venue: d.fulljournalname || d.source || "",
+					issn: d.issn || d.essn || null,
 					doi,
 					pmid: uid,
 					pmcid: pmc,
@@ -536,6 +659,7 @@ var ZotPoPSources = (function () {
 			year: toInt(r.pubYear) || yearOf(r.firstPublicationDate),
 			venue: r.journalInfo?.journal?.title || r.journalTitle || publisher || (isPreprint ? "Preprint" : ""),
 			publisher,
+			issn: r.journalInfo?.journal?.issn || r.journalInfo?.journal?.essn || null,
 			doi: r.doi,
 			pmid: r.pmid || null,
 			pmcid: r.pmcid || null,
@@ -756,6 +880,9 @@ var ZotPoPSources = (function () {
 		if (!a.year && b.year) a.year = b.year;
 		if (!a.venue && b.venue) a.venue = b.venue;
 		if (!a.publisher && b.publisher) a.publisher = b.publisher;
+		if (!a.journalId && b.journalId) a.journalId = b.journalId;
+		if (!a.issn && b.issn) a.issn = b.issn;
+		if (a.journalIF == null && b.journalIF != null) { a.journalIF = b.journalIF; a.journalH = b.journalH; }
 		if (!a.volume && b.volume) a.volume = b.volume;
 		if (!a.issue && b.issue) a.issue = b.issue;
 		if (!a.pages && b.pages) a.pages = b.pages;
@@ -845,12 +972,13 @@ var ZotPoPSources = (function () {
 	async function search(sourceKey, query, http, ctx = {}) {
 		let src = SOURCES[sourceKey];
 		if (!src) throw new Error("Unknown source: " + sourceKey);
-		let recs = await src.search(query, http, ctx);
-		return dedupe(recs);
+		let recs = dedupe(await src.search(query, http, ctx));
+		if (ctx.journalMetrics !== false && !ctx.isCancelled?.()) await enrichJournalMetrics(recs, http, ctx);
+		return recs;
 	}
 
 	return {
-		SOURCES, search, dedupe, mergeRecords, pubmedYear, proxify, needsProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, pdfCandidates,
+		SOURCES, search, dedupe, mergeRecords, pubmedYear, proxify, needsProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();

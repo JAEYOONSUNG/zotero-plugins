@@ -10,3 +10,4 @@ pref("extensions.zotpop.attachPDF", true);
 pref("extensions.zotpop.skipDuplicates", true);
 pref("extensions.zotpop.citationsInExtra", true);
 pref("extensions.zotpop.enrichCitations", true);
+pref("extensions.zotpop.journalMetrics", true);

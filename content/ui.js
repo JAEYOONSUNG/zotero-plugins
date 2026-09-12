@@ -14,7 +14,7 @@
 	// Title has no fixed width: it absorbs whatever is left, so keep these lean.
 	const DEFAULT_COLS = {
 		chk: 28, citations: 56, cpy: 64, rank: 46, authorString: 150,
-		year: 46, venue: 140, doi: 135, pdf: 46, inLibrary: 46, status: 100
+		year: 46, venue: 140, journalIF: 48, doi: 135, pdf: 46, inLibrary: 46, status: 100
 	};
 
 	const COL_VERSION = 3;
@@ -36,6 +36,7 @@
 		focusKey: null,
 		detailKey: null,
 		sortKey: "citations",
+		checking: false,
 		sortDir: "desc",
 		searching: false,
 		importing: false,
@@ -113,6 +114,7 @@
 		}
 		sel.value = PREF("defaultSource") || "openalex";
 		if (!sel.value) sel.value = "openalex";
+		for (let id of ["source", "sort", "target"]) enhanceSelect($(id));
 
 		restoreQuery();
 		$("opt-pdf").checked = PREF("attachPDF") !== false;
@@ -156,7 +158,7 @@
 				if (e.target.classList.contains("rz")) return;
 				let k = th.dataset.sort;
 				if (state.sortKey === k) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-				else { state.sortKey = k; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf"].includes(k) ? "desc" : "asc"; }
+				else { state.sortKey = k; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf", "journalIF"].includes(k) ? "desc" : "asc"; }
 				render();
 			});
 		}
@@ -170,13 +172,125 @@
 		$("d-copy-doi").addEventListener("click", () => { let r = detailRecord(); if (r?.doi) copyText(r.doi, t("copiedDoi")); });
 		$("d-copy-cite").addEventListener("click", () => { let r = detailRecord(); if (r) copyText(citationText(r), t("copiedCite")); });
 		$("d-add").addEventListener("click", () => { let r = detailRecord(); if (r) importRecords([r]); });
+		$("d-check").addEventListener("click", () => checkCitations(detailRecord()));
 
 		setupSplitters();
 		setupColumnResize();
 		document.addEventListener("keydown", onKeyDown);
-		document.addEventListener("click", () => hideCtxMenu());
+		document.addEventListener("click", () => { hideCtxMenu(); closeSelMenu(); });
+		window.addEventListener("blur", closeSelMenu);
+		window.addEventListener("resize", closeSelMenu);
+		document.addEventListener("scroll", closeSelMenu, true);
 		window.addEventListener("unload", saveLayout);
 		window.addEventListener("resize", debounce(saveLayout, 400));
+	}
+
+	// ---------------------------------------------------------------- dropdowns
+	// Gecko paints a native <select> popup through this window's backdrop-filter
+	// layers, so the option list came out transparent and doubled over the page.
+	// The <select> stays as the value model; an opaque in-page menu drives it.
+	let openSel = null;
+
+	function selButton(sel) { return sel.parentNode.querySelector(".sel-btn"); }
+
+	function syncSel(sel) {
+		let btn = selButton(sel);
+		if (!btn) return;
+		let o = sel.options[sel.selectedIndex];
+		btn.querySelector(".sel-label").textContent = o ? o.textContent.trim() : "";
+		btn.disabled = sel.disabled;
+	}
+
+	function closeSelMenu() {
+		if (!openSel) return;
+		let { sel, menu } = openSel;
+		menu.remove();
+		selButton(sel)?.setAttribute("aria-expanded", "false");
+		openSel = null;
+	}
+
+	function openSelMenu(sel) {
+		if (openSel && openSel.sel === sel) { closeSelMenu(); return; }
+		closeSelMenu();
+		if (sel.disabled || !sel.options.length) return;
+		let btn = selButton(sel);
+		let menu = document.createElement("div");
+		menu.className = "selmenu";
+		menu.setAttribute("role", "listbox");
+		let items = [];
+		for (let i = 0; i < sel.options.length; i++) {
+			let o = sel.options[i];
+			let d = document.createElement("div");
+			d.className = "selopt" + (i === sel.selectedIndex ? " on" : "");
+			d.setAttribute("role", "option");
+			d.textContent = o.textContent;
+			d.addEventListener("mouseenter", () => highlight(i));
+			d.addEventListener("click", e => { e.stopPropagation(); pick(i); });
+			menu.appendChild(d);
+			items.push(d);
+		}
+		let cur = sel.selectedIndex < 0 ? 0 : sel.selectedIndex;
+		let highlight = i => {
+			cur = i;
+			items.forEach((d, n) => d.classList.toggle("hot", n === i));
+			items[i]?.scrollIntoView({ block: "nearest" });
+		};
+		let pick = i => {
+			let prev = sel.value;
+			sel.selectedIndex = i;
+			syncSel(sel);
+			closeSelMenu();
+			btn.focus();
+			if (sel.value !== prev) sel.dispatchEvent(new Event("change", { bubbles: true }));
+		};
+		document.body.appendChild(menu);
+		let r = btn.getBoundingClientRect();
+		menu.style.minWidth = r.width + "px";
+		let h = menu.offsetHeight;
+		let below = window.innerHeight - r.bottom - 8;
+		if (h > below && r.top > below) {
+			menu.style.maxHeight = Math.min(h, r.top - 8) + "px";
+			menu.style.top = Math.max(6, r.top - Math.min(h, r.top - 8) - 3) + "px";
+		}
+		else {
+			menu.style.maxHeight = Math.max(120, below) + "px";
+			menu.style.top = (r.bottom + 3) + "px";
+		}
+		menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - menu.offsetWidth - 6)) + "px";
+		btn.setAttribute("aria-expanded", "true");
+		openSel = { sel, menu, items, pick, move: d => highlight(Math.max(0, Math.min(items.length - 1, cur + d))), commit: () => pick(cur) };
+		highlight(cur);
+	}
+
+	function enhanceSelect(sel) {
+		let wrap = document.createElement("div");
+		wrap.className = "sel";
+		sel.parentNode.insertBefore(wrap, sel);
+		wrap.appendChild(sel);
+		let btn = document.createElement("button");
+		btn.type = "button";
+		btn.className = "sel-btn";
+		btn.setAttribute("aria-haspopup", "listbox");
+		btn.setAttribute("aria-expanded", "false");
+		let label = document.createElement("span");
+		label.className = "sel-label";
+		btn.appendChild(label);
+		let caret = document.createElement("span");
+		caret.className = "sel-caret";
+		btn.appendChild(caret);
+		wrap.appendChild(btn);
+		btn.addEventListener("click", e => { e.stopPropagation(); openSelMenu(sel); });
+		btn.addEventListener("keydown", e => {
+			if (openSel && openSel.sel === sel) {
+				if (e.key === "ArrowDown") { e.preventDefault(); openSel.move(1); }
+				else if (e.key === "ArrowUp") { e.preventDefault(); openSel.move(-1); }
+				else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSel.commit(); }
+				else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeSelMenu(); }
+				return;
+			}
+			if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); openSelMenu(sel); }
+		});
+		syncSel(sel);
 	}
 
 	function debounce(fn, ms) {
@@ -209,6 +323,7 @@
 		try { saved = JSON.parse(PREF("lastQuery") || "{}"); } catch (e) {}
 		for (let f of QUERY_FIELDS) if (saved[f] != null) $(f).value = saved[f];
 		if (!$("maxResults").value) $("maxResults").value = PREF("maxResults") || 200;
+		syncSel($("sort"));
 	}
 	function saveQuery() {
 		let o = {};
@@ -342,6 +457,7 @@
 		}
 		sel.value = cur.libraryID + ":" + (cur.collectionID || "");
 		if (!sel.value) sel.selectedIndex = 0;
+		syncSel(sel);
 	}
 	function currentTarget() {
 		let [lib, col] = ($("target").value || "").split(":");
@@ -390,6 +506,7 @@
 			email: PREF("email") || "",
 			s2ApiKey: PREF("s2ApiKey") || "",
 			enrichCitations: PREF("enrichCitations") !== false,
+			journalMetrics: PREF("journalMetrics") !== false,
 			DOMParser: window.DOMParser,
 			isCancelled: () => state.cancelled,
 			onProgress: (msg, n, total) => { setStatus(msg); $("busy-text").textContent = msg; setProgress(n, total); },
@@ -462,7 +579,7 @@
 		if (k === "inLibrary") return r.inLibrary ? 1 : 0;
 		if (k === "pdf") return hasPDF(r) ? 1 : 0;
 		let v = r[k];
-		if (v == null) return ["citations", "year", "rank"].includes(k) ? -1 : "";
+		if (v == null) return ["citations", "year", "rank", "journalIF"].includes(k) ? -1 : "";
 		return typeof v === "string" ? v.toLowerCase() : v;
 	}
 
@@ -537,6 +654,7 @@
 
 		td("num", r.year == null ? "" : String(r.year));
 		td("", r.venue, r.venue);
+		td("num if", r.journalIF == null ? "" : fmt(r.journalIF, 1), r.journalIF == null ? "" : t("ifTip", fmt(r.journalIF, 1), r.journalH));
 		td("", r.doi || "", r.doi || "");
 		td("mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfTip") : "");
 		td("mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibTip") : "");
@@ -632,6 +750,7 @@
 			badges.appendChild(s);
 		};
 		if (r.citations != null) chip(t("badgeCites", r.citations), "cite");
+		if (r.journalIF != null) chip(t("badgeIF", fmt(r.journalIF, 1)), "if");
 		let cpy = ZotPoPMetrics.citesPerYear(r);
 		if (cpy != null) chip(t("badgePerYear", fmt(cpy)));
 		for (let s of r.sources || [r.source]) chip(sourceLabel(s));
@@ -654,6 +773,31 @@
 		$("d-copy-doi").disabled = !r.doi;
 		$("d-proxy").disabled = !proxyLanding(r);
 		$("d-add").disabled = state.importing || state.searching;
+		$("d-check").disabled = state.checking || !(r.doi || r.arxiv || r.pmid || (r.source === "openalex" && r.sourceId));
+	}
+
+	// Re-query every free source for one paper's current citation count and its journal's impact
+	async function checkCitations(r) {
+		if (!r || state.checking) return;
+		state.checking = true;
+		$("d-check").disabled = true;
+		setStatus(t("citeChecking"));
+		try {
+			let res = await ZotPoPSources.checkCitations(r, http, { email: PREF("email") || "", s2ApiKey: PREF("s2ApiKey") || "", log });
+			let parts = [["openalex", res.openalex], ["crossref", res.crossref], ["semanticscholar", res.semanticscholar]]
+				.filter(([, v]) => v != null).map(([k, v]) => sourceLabel(k) + " " + v);
+			if (!parts.length) setStatus(t("citeCheckNone"), "err");
+			else setStatus(t("citeCheckResult", parts.join(" · "), r.journalIF == null ? null : fmt(r.journalIF, 1)));
+			render();
+		}
+		catch (e) {
+			log("citation check failed: " + e.message);
+			setStatus(t("citeCheckFailed", e.message || String(e)), "err");
+		}
+		finally {
+			state.checking = false;
+			renderDetail();
+		}
 	}
 
 	function proxyLanding(r) {
@@ -700,6 +844,8 @@
 		add(t("ctxCopyTitle"), () => copyText(r.title, t("copiedTitle")));
 		add(t("ctxCopyDoi"), () => copyText(r.doi, t("copiedDoi")), !r.doi);
 		add(t("ctxCopyCite"), () => copyText(citationText(r), t("copiedCite")));
+		menu.appendChild(document.createElement("hr"));
+		add(t("ctxCheck"), () => checkCitations(r), state.checking || !(r.doi || r.arxiv || r.pmid || (r.source === "openalex" && r.sourceId)));
 		menu.hidden = false;
 		let w = menu.offsetWidth, h = menu.offsetHeight;
 		menu.style.left = Math.min(x, window.innerWidth - w - 6) + "px";
@@ -711,6 +857,7 @@
 	function onKeyDown(e) {
 		let mod = e.metaKey || e.ctrlKey;
 		if (e.key === "Escape") {
+			if (openSel) { closeSelMenu(); return; }
 			if (!$("ctxmenu").hidden) { hideCtxMenu(); return; }
 			if (state.searching || state.importing) { state.cancelled = true; setStatus(t("stopping")); return; }
 			return;
@@ -763,7 +910,7 @@
 		for (let r of state.visible) {
 			lines.push([
 				r.citations ?? "", fmt(ZotPoPMetrics.citesPerYear(r)), r.rank, r.authorString, r.title,
-				r.year ?? "", r.venue, r.publisher, r.doi ?? "", r.url ?? "",
+				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2), r.publisher, r.doi ?? "", r.url ?? "",
 				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo")
 			].map(esc).join(","));
 		}

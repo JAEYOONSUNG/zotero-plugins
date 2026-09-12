@@ -5,6 +5,7 @@
 	--bg-tint: rgba(255, 255, 255, 0.62);
 	--glass: rgba(252, 252, 254, 0.72);
 	--glass-strong: rgba(252, 252, 254, 0.9);
+	--menu-bg: #ffffff;
 	--border: rgba(0, 0, 0, 0.10);
 	--border-strong: rgba(0, 0, 0, 0.20);
 	--text: #17171a;
@@ -29,6 +30,7 @@
 		--bg-tint: rgba(255, 255, 255, 0.04);
 		--glass: rgba(44, 44, 50, 0.72);
 		--glass-strong: rgba(44, 44, 50, 0.92);
+		--menu-bg: #2c2c32;
 		--border: rgba(255, 255, 255, 0.10);
 		--border-strong: rgba(255, 255, 255, 0.20);
 		--text: #ebebf0;
@@ -199,6 +201,8 @@ td.status.err { color: var(--err); }
 .badge { background: var(--chip); color: var(--muted); border-radius: 999px; padding: 1.5px 9px; font-size: 10.5px; white-space: nowrap; }
 .badge.cite { background: var(--accent); color: var(--accent-text); font-weight: 650; }
 .badge.lib { background: var(--ok); color: #fff; }
+.badge.if { background: var(--warn); color: #fff; font-weight: 650; }
+td.if { color: var(--warn); font-weight: 600; }
 .d-authors { margin-top: 5px; }
 .d-meta { margin-top: 3px; color: var(--muted); }
 .d-actions { display: flex; gap: 6px; margin: 10px 0 9px; flex-wrap: wrap; }
@@ -206,7 +210,7 @@ td.status.err { color: var(--err); }
 
 /* ---------------------------------------------------------------- bottom bars */
 #import-bar { display: flex; align-items: center; gap: 12px; padding: 9px 13px; border-top: 1px solid var(--border); flex-wrap: wrap; }
-#import-bar #target { max-width: 300px; }
+#import-bar .sel { max-width: 300px; }
 label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); white-space: nowrap; }
 #selected-count { font-variant-numeric: tabular-nums; color: var(--muted); }
 #statusbar { display: flex; align-items: center; gap: 10px; padding: 5px 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; background: var(--bg-tint); }
@@ -223,6 +227,28 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 .ctxmenu div:hover { background: var(--accent); color: var(--accent-text); }
 .ctxmenu div.disabled { opacity: .38; pointer-events: none; }
 .ctxmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
+
+/* ---------------------------------------------------------------- dropdowns */
+.sel { position: relative; display: flex; }
+.sel > select { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.sel-btn {
+	flex: 1 1 auto; display: flex; align-items: center; gap: 6px;
+	font: inherit; padding: 4px 7px; color: var(--text); text-align: left; cursor: pointer;
+	border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-tint);
+	white-space: nowrap; overflow: hidden;
+}
+.sel-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.sel-caret { flex: 0 0 auto; width: 0; height: 0; border-left: 3.5px solid transparent; border-right: 3.5px solid transparent; border-top: 4px solid currentColor; opacity: .65; }
+.sel-btn:hover { border-color: var(--accent); background: var(--bg-tint); }
+.sel-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.selmenu {
+	position: fixed; z-index: 60; padding: 5px; overflow-y: auto;
+	background: var(--menu-bg); border: 1px solid var(--border-strong);
+	border-radius: 9px; box-shadow: var(--shadow);
+}
+.selopt { padding: 5px 11px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.selopt.on { font-weight: 650; }
+.selopt.hot { background: var(--accent); color: var(--accent-text); }
 
 /* ---------------------------------------------------------------- proxy login window */
 #pl-bar { border-bottom: 1px solid var(--border); }

@@ -102,12 +102,15 @@ var ZotPoPImporter = (function () {
 	}
 
 	async function recordCitations(item, rec) {
-		if (rec.citations == null) return;
-		let label = ZotPoPSources.SOURCES[rec.source]?.label || rec.source;
-		let line = `Citations: ${rec.citations} (${label}, ${today()})`;
+		if (rec.citations == null && rec.journalIF == null) return;
 		let extra = item.getField("extra") || "";
-		let lines = extra.split("\n").filter(l => !/^Citations:\s/i.test(l));
-		lines.push(line);
+		let lines = extra.split("\n").filter(l => !/^(Citations|Journal IF)\b/i.test(l));
+		if (rec.citations != null) {
+			let srcKey = rec.citationSource || rec.source;
+			let label = ZotPoPSources.SOURCES[srcKey]?.label || srcKey;
+			lines.push(`Citations: ${rec.citations} (${label}, ${today()})`);
+		}
+		if (rec.journalIF != null) lines.push(`Journal IF (OpenAlex 2y): ${rec.journalIF.toFixed(2)} (${today()})`);
 		item.setField("extra", lines.filter(Boolean).join("\n"));
 		await item.saveTx();
 	}

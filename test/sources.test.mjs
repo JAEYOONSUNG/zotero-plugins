@@ -180,3 +180,25 @@ test("proxy wrapping and candidate order", async () => {
 	let noProxy = await S.pdfCandidates(rec, null, {});
 	assert.ok(noProxy.every(u => !u.includes("yonsei")), "no proxy configured means no proxy URLs");
 });
+
+test("journal impact via OpenAlex source id and ISSN", async () => {
+	let recs = [
+		{ title: "a", journalId: "S137773608", issn: null, journalIF: null, journalH: null },
+		{ title: "b", journalId: null, issn: "1476-4687", journalIF: null, journalH: null },
+		{ title: "c", journalId: null, issn: "0000-0000", journalIF: null, journalH: null }
+	];
+	await S.enrichJournalMetrics(recs, http, ctx);
+	assert.ok(recs[0].journalIF > 5, "Nature IF by id: " + recs[0].journalIF);
+	assert.ok(recs[1].journalIF > 5, "Nature IF by e-ISSN: " + recs[1].journalIF);
+	assert.equal(recs[1].journalId, "S137773608");
+	assert.equal(recs[2].journalIF, null);
+});
+
+test("citation check merges OpenAlex, Crossref and Semantic Scholar", async () => {
+	let rec = { doi: "10.1038/s41586-020-2308-7", citations: null, journalIF: null, journalId: null, issn: null };
+	let r = await S.checkCitations(rec, http, ctx);
+	assert.ok(r.openalex > 1000 && r.crossref > 1000, JSON.stringify(r));
+	assert.ok(rec.citations >= Math.max(r.openalex, r.crossref));
+	assert.ok(["openalex", "crossref", "semanticscholar"].includes(rec.citationSource));
+	assert.ok(rec.journalIF > 5, "journal IF filled from check: " + rec.journalIF);
+});

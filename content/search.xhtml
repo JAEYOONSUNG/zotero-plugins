@@ -126,7 +126,7 @@
 				<table id="results-table">
 					<colgroup id="cols">
 						<col data-k="chk"/><col data-k="citations"/><col data-k="cpy"/><col data-k="rank"/>
-						<col data-k="authorString"/><col data-k="title"/><col data-k="year"/><col data-k="venue"/>
+						<col data-k="authorString"/><col data-k="title"/><col data-k="year"/><col data-k="venue"/><col data-k="journalIF"/>
 						<col data-k="doi"/><col data-k="pdf"/><col data-k="inLibrary"/><col data-k="status"/>
 					</colgroup>
 					<thead>
@@ -139,6 +139,7 @@
 							<th data-sort="title"><span data-i18n="thTitle"></span></th>
 							<th data-sort="year" class="num"><span data-i18n="thYear"></span><span class="rz"></span></th>
 							<th data-sort="venue"><span data-i18n="thVenue"></span><span class="rz"></span></th>
+							<th data-sort="journalIF" class="num" data-i18n-title="thIFTip"><span data-i18n="thIF"></span><span class="rz"></span></th>
 							<th data-sort="doi"><span data-i18n="thDoi"></span><span class="rz"></span></th>
 							<th data-sort="pdf" class="mini" data-i18n-title="thPdfTip"><span data-i18n="thPdf"></span><span class="rz"></span></th>
 							<th data-sort="inLibrary" class="mini" data-i18n-title="thLibTip"><span data-i18n="thLib"></span><span class="rz"></span></th>
@@ -166,6 +167,7 @@
 						<button id="d-proxy" type="button" class="icon-text" data-i18n-title="dProxyTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-library"/></svg><span data-i18n="dProxy"></span></button>
 						<button id="d-copy-doi" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy"/></svg><span data-i18n="dCopyDoi"></span></button>
 						<button id="d-copy-cite" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-quote"/></svg><span data-i18n="dCopyCite"></span></button>
+						<button id="d-check" type="button" class="icon-text" data-i18n-title="dCheckTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="dCheck"></span></button>
 						<button id="d-add" type="button" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus"/></svg><span data-i18n="dAdd"></span></button>
 					</div>
 					<div id="d-abstract" class="d-abstract"></div>
