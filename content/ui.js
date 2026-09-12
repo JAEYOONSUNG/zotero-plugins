@@ -759,13 +759,12 @@
 
 	function csvText() {
 		let esc = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
-		let head = ["인용", "연간인용", "순위", "저자", "제목", "연도", "저널", "출판사", "DOI", "URL", "PDF", "소스", "보유"];
-		let lines = [head.join(",")];
+		let lines = [t("csvHead").join(",")];
 		for (let r of state.visible) {
 			lines.push([
 				r.citations ?? "", fmt(ZotPoPMetrics.citesPerYear(r)), r.rank, r.authorString, r.title,
 				r.year ?? "", r.venue, r.publisher, r.doi ?? "", r.url ?? "",
-				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? "예" : "아니오"
+				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo")
 			].map(esc).join(","));
 		}
 		return lines.join("\n");
@@ -779,7 +778,9 @@
 	async function saveCSV() {
 		if (!state.visible.length) { setStatus(t("nothingToSave"), "err"); return; }
 		try {
-			let stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
+			let d = new Date();
+			let p2 = n => String(n).padStart(2, "0");
+			let stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
 			let path = PathUtils.join(desktopPath(), `zotpop-${stamp}.csv`);
 			// UTF-8 BOM so Excel opens Korean text correctly
 			await IOUtils.writeUTF8(path, "\uFEFF" + csvText());
@@ -835,7 +836,7 @@
 		$("search-btn").disabled = true;
 		$("stop-btn").disabled = false;
 		$("d-add").disabled = true;
-		let added = 0, exists = 0, failed = 0, pdfs = 0;
+		let added = 0, exists = 0, failed = 0, pdfs = 0, proxyLoginNeeded = false;
 		setProgress(0, recs.length);
 		for (let i = 0; i < recs.length; i++) {
 			if (state.cancelled) break;
@@ -848,6 +849,7 @@
 				r.inLibrary = true;
 				if (r.doi) state.doiMap.set(r.doi, res.item.id);
 				let gotPDF = res.pdf.startsWith("pdf");
+				if (res.proxyLoginNeeded) proxyLoginNeeded = true;
 				if (gotPDF) pdfs++;
 				let label = res.pdf === "skipped" ? t("statusAdded")
 					: res.pdf === "pdf:proxy" ? t("statusAddedProxy")
@@ -874,6 +876,7 @@
 		renderDetail();
 		setStatus(t("importDone", added, pdfs, exists, failed, state.cancelled));
 		if (failed) showBanner(t("importFailures", failed));
+		else if (proxyLoginNeeded) showBanner(t("loginNeeded"));
 	}
 
 	window.addEventListener("load", init);

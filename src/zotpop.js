@@ -6,6 +6,7 @@ Zotero.ZotPoP = {
 	version: null,
 	rootURI: null,
 	_window: null,
+	_loginWindow: null,
 	_prefPaneID: null,
 
 	t(key) {
@@ -49,6 +50,21 @@ Zotero.ZotPoP = {
 		catch (e) {
 			Zotero.logError(e);
 		}
+	},
+
+	openProxyLogin() {
+		if (this._loginWindow && !this._loginWindow.closed) {
+			this._loginWindow.focus();
+			return this._loginWindow;
+		}
+		let opener = Zotero.getMainWindow();
+		this._loginWindow = opener.openDialog(
+			"chrome://zotpop/content/proxylogin.xhtml",
+			"zotpop-proxy-login",
+			"chrome,centerscreen,resizable=yes,dialog=no,width=1000,height=780",
+			{ Zotero, plugin: this }
+		);
+		return this._loginWindow;
 	},
 
 	setProxyPrefix(doc, value) {
@@ -134,6 +150,8 @@ Zotero.ZotPoP = {
 	shutdown() {
 		if (this._window && !this._window.closed) this._window.close();
 		this._window = null;
+		if (this._loginWindow && !this._loginWindow.closed) this._loginWindow.close();
+		this._loginWindow = null;
 		for (let win of Zotero.getMainWindows()) this.removeFromWindow(win);
 		if (this._prefPaneID) {
 			try { Zotero.PreferencePanes.unregister(this._prefPaneID); } catch (e) {}

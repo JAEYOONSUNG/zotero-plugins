@@ -223,3 +223,10 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 .ctxmenu div:hover { background: var(--accent); color: var(--accent-text); }
 .ctxmenu div.disabled { opacity: .38; pointer-events: none; }
 .ctxmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
+
+/* ---------------------------------------------------------------- proxy login window */
+#pl-bar { border-bottom: 1px solid var(--border); }
+.pl-url { color: var(--muted); font-size: 11px; max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-intro { margin: 0; padding: 9px 13px; color: var(--muted); line-height: 1.5; border-bottom: 1px solid var(--border); }
+#pl-browser-host { flex: 1 1 auto; display: flex; min-height: 0; }
+#pl-browser { flex: 1 1 auto; border: none; }

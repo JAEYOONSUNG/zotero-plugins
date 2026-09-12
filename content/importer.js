@@ -139,6 +139,7 @@ var ZotPoPImporter = (function () {
 		// 2) Open-access URLs first, then the library proxy for anything paywalled
 		let urls = await ZotPoPSources.pdfCandidates(rec, opts.http, { email: opts.email, proxyPrefix: opts.proxyPrefix });
 		let prefix = (opts.proxyPrefix || "").trim();
+		let proxyLogin = false;
 		for (let url of urls) {
 			let att = null;
 			try {
@@ -159,10 +160,15 @@ var ZotPoPImporter = (function () {
 			}
 			if (att) {
 				log?.("Not a PDF, discarding: " + url);
+				// A proxy that answers with HTML is almost always showing its sign-in page
+				if (prefix && url.startsWith(prefix)) proxyLogin = true;
 				try { await att.eraseTx(); } catch (e) {}
 			}
+			else if (prefix && url.startsWith(prefix)) {
+				proxyLogin = true;
+			}
 		}
-		return { ok: false };
+		return { ok: false, proxyLogin };
 	}
 
 	/**
@@ -207,11 +213,13 @@ var ZotPoPImporter = (function () {
 			if (citationsInExtra) await recordCitations(item, rec);
 
 			let pdf = "skipped";
+			let proxyLoginNeeded = false;
 			if (wantPDF) {
 				let r = await attachPDF(item, rec, { http, email, proxyPrefix, log });
 				pdf = r.ok ? "pdf:" + r.how : "no pdf";
+				if (!r.ok && r.proxyLogin) proxyLoginNeeded = true;
 			}
-			return { status: "added", item, how, pdf };
+			return { status: "added", item, how, pdf, proxyLoginNeeded };
 		}
 		catch (e) {
 			Zotero.logError(e);
