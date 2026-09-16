@@ -1,0 +1,1319 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Style Custom 0.8 · 상세 환경설정 미리보기</title><style>body{margin:0;padding:20px;max-width:1100px;margin-inline:auto;background:Canvas;color:CanvasText;font:14px system-ui}header{display:flex;align-items:center;gap:12px;border-bottom:1px solid GrayText;padding-bottom:12px}header img{width:40px;height:40px}header small{display:block;color:GrayText}#style-custom-settings-root{color:CanvasText;background:Canvas;font:13px/1.5 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;min-width:0;width:100%}
+#style-custom-settings-root *{box-sizing:border-box}
+#style-custom-settings-root [hidden]{display:none!important}
+#style-custom-settings-root h2{font-size:18px;margin:0 0 5px}
+#style-custom-settings-root h3{font-size:15px;margin:0}
+#style-custom-settings-root p{margin:5px 0;overflow-wrap:anywhere}
+#style-custom-settings-root .scs-heading{padding-block:8px}
+#style-custom-settings-root .scs-message{min-height:24px;padding:5px 0}
+#style-custom-settings-root .scs-message[data-error=true]{color:MarkText;background:Mark}
+#style-custom-settings-root .scs-live{padding:9px 0;border-block:1px solid GrayText;font-size:12px}
+#style-custom-settings-root .scs-search{display:flex;align-items:center;gap:8px;padding-block:12px;flex-wrap:wrap}
+#style-custom-settings-root .scs-search input{flex:1;min-width:160px}
+#style-custom-settings-root .scs-layout{display:grid;grid-template-columns:150px minmax(0,1fr);gap:18px;align-items:start}
+#style-custom-settings-root .scs-nav{display:flex;flex-direction:column;gap:3px;position:sticky;top:8px}
+#style-custom-settings-root button,#style-custom-settings-root input,#style-custom-settings-root select,#style-custom-settings-root textarea{font:inherit;color:FieldText;background:Field;border:1px solid GrayText;border-radius:2px;max-width:100%}
+#style-custom-settings-root button{padding:5px 9px;background:ButtonFace;color:ButtonText;cursor:pointer}
+#style-custom-settings-root button:disabled{opacity:.55;cursor:default}
+#style-custom-settings-root input:not([type=checkbox]):not([type=color]),#style-custom-settings-root select,#style-custom-settings-root textarea{padding:5px 7px}
+#style-custom-settings-root input[type=checkbox]{margin:0;width:16px;height:16px;accent-color:Highlight}
+#style-custom-settings-root input[type=color]{width:52px;height:30px;padding:2px}
+#style-custom-settings-root input[type=number]{width:130px}
+#style-custom-settings-root .scs-nav button{text-align:start;border-color:transparent;background:transparent;min-height:32px}
+#style-custom-settings-root .scs-nav button.active{border-color:GrayText;font-weight:600;background:ButtonFace}
+#style-custom-settings-root .scs-category-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid GrayText;padding:4px 0 10px}
+#style-custom-settings-root .scs-category{padding-bottom:24px;min-width:0}
+#style-custom-settings-root .scs-setting{padding:13px 0;border-bottom:1px solid color-mix(in srgb,GrayText 25%,transparent)}
+#style-custom-settings-root .scs-label{display:block;font-weight:600;margin-bottom:6px;overflow-wrap:anywhere}
+#style-custom-settings-root .scs-value{display:flex;gap:8px;align-items:start;min-width:0}
+#style-custom-settings-root .scs-value input[type=text],#style-custom-settings-root .scs-value input[type=password],#style-custom-settings-root .scs-value input[type=url],#style-custom-settings-root .scs-value input[type=email],#style-custom-settings-root textarea{flex:1;min-width:0;width:100%}
+#style-custom-settings-root textarea{resize:vertical;min-height:75px}
+#style-custom-settings-root .scs-help{font-size:12px;color:GrayText}
+#style-custom-settings-root .scs-feedback{font-size:12px;min-height:0}
+#style-custom-settings-root .scs-feedback:empty{display:none}
+#style-custom-settings-root :focus-visible{outline:2px solid Highlight;outline-offset:2px}
+@media(max-width:650px){#style-custom-settings-root .scs-layout{grid-template-columns:minmax(0,1fr);gap:10px}#style-custom-settings-root .scs-nav{position:static;flex-direction:row;flex-wrap:wrap;border-bottom:1px solid GrayText;padding-bottom:8px}#style-custom-settings-root .scs-nav button{flex:0 1 auto}#style-custom-settings-root .scs-category-heading button{font-size:12px}}
+@media(prefers-reduced-motion:reduce){#style-custom-settings-root *{scroll-behavior:auto!important}}
+
+#style-custom-settings-root .scs-reading-label{font-size:12px;margin-top:8px}
+#style-custom-settings-root .scs-reading-value{display:block;font-size:26px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums;margin-block:3px 8px;color:CanvasText}
+</style></head><body><header><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0IiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IlN0eWxlIEN1c3RvbTogcmVzZWFyY2ggcGFwZXIgYW5kIGNpdGF0aW9uIGxpbmtzIj4KPHJlY3QgeD0iMiIgeT0iMiIgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiByeD0iMyIgZmlsbD0iIzM3NDE1MSIvPgo8cGF0aCBkPSJNMTIgMTlWNTVIMzgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzljYTNhZiIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxwYXRoIGQ9Ik0xOCAxM0gzOEw0NiAyMVY1MUgxOFoiIGZpbGw9IiNmZmZmZmYiLz4KPHBhdGggZD0iTTM4IDEzVjIxSDQ2WiIgZmlsbD0iI2NiZDVlMSIvPgo8cGF0aCBkPSJNMjQgMjdIMzhNMjQgMzJIMzMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzM3NDE1MSIgc3Ryb2tlLXdpZHRoPSIyIi8+CjxwYXRoIGQ9Ik0yNyA0M0wzOCAzOE0yNyA0M0wzOCA0NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMzc0MTUxIiBzdHJva2Utd2lkdGg9IjIiLz4KPGcgZmlsbD0iIzM3NDE1MSI+PHJlY3QgeD0iMjQiIHk9IjQwIiB3aWR0aD0iNiIgaGVpZ2h0PSI2Ii8+PHJlY3QgeD0iMzUiIHk9IjM1IiB3aWR0aD0iNiIgaGVpZ2h0PSI2Ii8+PHJlY3QgeD0iMzUiIHk9IjQ0IiB3aWR0aD0iNiIgaGVpZ2h0PSI2Ii8+PC9nPgo8L3N2Zz4K" alt="Style Custom 아이콘"><div><strong>상세 환경설정 미리보기</strong><small>예시 값 · 실제 Zotero·라이브러리에 연결하지 않습니다.</small></div></header><div id="style-custom-settings-root"><div class="scs-heading"><h2>Style Custom 설정</h2><p>항목별 설명을 확인하고 값을 적용하세요. 텍스트 입력은 적용을 눌러야 저장됩니다.</p><button type="button">설정 다시 읽기</button></div><p data-error="false" class="scs-message" aria-live="polite" role="status">설정을 불러왔습니다.</p><section aria-label="현재 동작 상태" class="scs-live"><strong>현재 동작</strong><p class="scs-reading-label">현재 선택 문헌 누적 읽기</p><output aria-live="polite" aria-label="현재 선택 문헌 누적 읽기" class="scs-reading-value">0초</output><p>버전 0.8.0 미리보기 · 읽기 기록 켜짐 · 선택: 예시 문헌 · 누적 읽기 0초 · 인용 조회: 실제 연결 없음 · 저장 위치: 예시 · 실제 파일에 저장하지 않음</p></section><div class="scs-search"><input aria-label="Style Custom 설정 검색" placeholder="설정 이름·설명 검색" type="search"><button type="button">검색 지우기</button><span role="status"></span></div><div class="scs-layout"><nav class="scs-nav" aria-label="설정 분류"><button class="active" aria-current="page" data-category="columns" type="button">열 표시</button><button aria-current="false" data-category="views" type="button">뷰·작업 패널</button><button aria-current="false" data-category="reader" type="button">리더·주석</button><button aria-current="false" data-category="sidebar" type="button">사이드바·탭</button><button aria-current="false" data-category="tags" type="button">태그</button><button aria-current="false" data-category="collections" type="button">컬렉션</button><button aria-current="false" data-category="menus" type="button">메뉴·디자인</button><button aria-current="false" data-category="storage" type="button">읽기 기록</button><button aria-current="false" data-category="metrics" type="button">인용 수·IF</button><button aria-current="false" data-category="ai" type="button">번역·AI</button></nav><div class="scs-content"><p hidden class="scs-empty">검색에 맞는 설정이 없습니다. 검색어를 바꾸거나 지우세요.</p><section data-category="columns" class="scs-category"><div class="scs-category-heading"><h3>열 표시</h3><button aria-label="열 표시 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">메인 문헌 목록의 지표·상태·별점·읽기 시간과 추가 열을 조절합니다.</p><div aria-busy="false" data-setting="feature.IFColumn" class="scs-setting"><label class="scs-label" for="scs-feature.IFColumn">IF 열 사용</label><div class="scs-value"><input aria-describedby="scs-feature.IFColumn-help scs-feature.IFColumn-feedback" type="checkbox" id="scs-feature.IFColumn"><button hidden disabled aria-label="IF 열 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.IFColumn-help">IF · Custom · 공식 카탈로그·저장 데이터 범위</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.IFColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.annotationColumn" class="scs-setting"><label class="scs-label" for="scs-feature.annotationColumn">주석 수·페이지별 색상 분포·원문 이동 사용</label><div class="scs-value"><input aria-describedby="scs-feature.annotationColumn-help scs-feature.annotationColumn-feedback" type="checkbox" id="scs-feature.annotationColumn"><button hidden disabled aria-label="주석 수·페이지별 색상 분포·원문 이동 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.annotationColumn-help">Annotations · Custom · 색상 막대는 주석이 있는 페이지를 표시; 문서 전체 진행률로 추정하지 않음</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.annotationColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.citedCountColumn" class="scs-setting"><label class="scs-label" for="scs-feature.citedCountColumn">인용 수 열·자동 조회 사용</label><div class="scs-value"><input aria-describedby="scs-feature.citedCountColumn-help scs-feature.citedCountColumn-feedback" type="checkbox" id="scs-feature.citedCountColumn"><button hidden disabled aria-label="인용 수 열·자동 조회 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.citedCountColumn-help">Cited Count · Custom</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.citedCountColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.creatorColumn" class="scs-setting"><label class="scs-label" for="scs-feature.creatorColumn">저자·기여자 열 사용</label><div class="scs-value"><input aria-describedby="scs-feature.creatorColumn-help scs-feature.creatorColumn-feedback" type="checkbox" id="scs-feature.creatorColumn"><button hidden disabled aria-label="저자·기여자 열 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.creatorColumn-help">Creators · Custom</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.creatorColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.dateAddedColumn" class="scs-setting"><label class="scs-label" for="scs-feature.dateAddedColumn">추가일·수정일 열 사용</label><div class="scs-value"><input aria-describedby="scs-feature.dateAddedColumn-help scs-feature.dateAddedColumn-feedback" type="checkbox" id="scs-feature.dateAddedColumn"><button hidden disabled aria-label="추가일·수정일 열 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.dateAddedColumn-help">Added / Modified · Custom</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.dateAddedColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.itemTypeFilter" class="scs-setting"><label class="scs-label" for="scs-feature.itemTypeFilter">항목 유형 빠른 필터 사용</label><div class="scs-value"><input aria-describedby="scs-feature.itemTypeFilter-help scs-feature.itemTypeFilter-feedback" type="checkbox" id="scs-feature.itemTypeFilter"><button hidden disabled aria-label="항목 유형 빠른 필터 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.itemTypeFilter-help">항목 아이콘 / 작업 패널 유형 필터</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.itemTypeFilter-feedback"></p></div><div aria-busy="false" data-setting="feature.publicationColumn" class="scs-setting"><label class="scs-label" for="scs-feature.publicationColumn">저널·발행처 열 사용</label><div class="scs-value"><input aria-describedby="scs-feature.publicationColumn-help scs-feature.publicationColumn-feedback" type="checkbox" id="scs-feature.publicationColumn"><button hidden disabled aria-label="저널·발행처 열 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.publicationColumn-help">Publication · Custom</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.publicationColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.publicationTagsColumn" class="scs-setting"><label class="scs-label" for="scs-feature.publicationTagsColumn">저널 등급 태그·조회 사용</label><div class="scs-value"><input aria-describedby="scs-feature.publicationTagsColumn-help scs-feature.publicationTagsColumn-feedback" type="checkbox" id="scs-feature.publicationTagsColumn"><button hidden disabled aria-label="저널 등급 태그·조회 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.publicationTagsColumn-help">Journal Tags · Custom / 저널 지표 · 추가 등급 조회는 본인의 easyScholar 키 필요</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.publicationTagsColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.ratingColumn" class="scs-setting"><label class="scs-label" for="scs-feature.ratingColumn">별점 열 표시</label><div class="scs-value"><input aria-describedby="scs-feature.ratingColumn-help scs-feature.ratingColumn-feedback" type="checkbox" id="scs-feature.ratingColumn"><button hidden disabled aria-label="별점 열 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.ratingColumn-help">메인 문헌 목록에서 해당 열을 표시합니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.ratingColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.readTimeColumn" class="scs-setting"><label class="scs-label" for="scs-feature.readTimeColumn">읽기 시간·페이지 진행 열 표시</label><div class="scs-value"><input aria-describedby="scs-feature.readTimeColumn-help scs-feature.readTimeColumn-feedback" type="checkbox" id="scs-feature.readTimeColumn"><button hidden disabled aria-label="읽기 시간·페이지 진행 열 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.readTimeColumn-help">메인 문헌 목록에서 해당 열을 표시합니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.readTimeColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.remarkColumn" class="scs-setting"><label class="scs-label" for="scs-feature.remarkColumn">읽기 메모 열 사용</label><div class="scs-value"><input aria-describedby="scs-feature.remarkColumn-help scs-feature.remarkColumn-feedback" type="checkbox" id="scs-feature.remarkColumn"><button hidden disabled aria-label="읽기 메모 열 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.remarkColumn-help">Remark · Custom / 상세 문헌 메모</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.remarkColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.statusColumn" class="scs-setting"><label class="scs-label" for="scs-feature.statusColumn">읽기 상태 열 표시</label><div class="scs-value"><input aria-describedby="scs-feature.statusColumn-help scs-feature.statusColumn-feedback" type="checkbox" id="scs-feature.statusColumn"><button hidden disabled aria-label="읽기 상태 열 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.statusColumn-help">메인 문헌 목록에서 해당 열을 표시합니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.statusColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.titleColumn" class="scs-setting"><label class="scs-label" for="scs-feature.titleColumn">제목 히트맵·태그·강조 사용</label><div class="scs-value"><input aria-describedby="scs-feature.titleColumn-help scs-feature.titleColumn-feedback" type="checkbox" id="scs-feature.titleColumn"><button hidden disabled aria-label="제목 히트맵·태그·강조 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.titleColumn-help">스타일 편집 / 문헌 제목</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.titleColumn-feedback"></p></div><div aria-busy="false" data-setting="showZeroReadTime" class="scs-setting"><label class="scs-label" for="scs-showZeroReadTime">기록이 없어도 0초 표시</label><div class="scs-value"><input aria-describedby="scs-showZeroReadTime-help scs-showZeroReadTime-feedback" type="checkbox" id="scs-showZeroReadTime"><button hidden disabled aria-label="기록이 없어도 0초 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-showZeroReadTime-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-showZeroReadTime-feedback"></p></div><div aria-busy="false" data-setting="titleHeatmap" class="scs-setting"><label class="scs-label" for="scs-titleHeatmap">제목에 읽기 히트맵 표시</label><div class="scs-value"><input aria-describedby="scs-titleHeatmap-help scs-titleHeatmap-feedback" type="checkbox" id="scs-titleHeatmap"><button hidden disabled aria-label="제목에 읽기 히트맵 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-titleHeatmap-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-titleHeatmap-feedback"></p></div><div aria-busy="false" data-setting="unreadBold" class="scs-setting"><label class="scs-label" for="scs-unreadBold">안 읽은 제목 굵게</label><div class="scs-value"><input aria-describedby="scs-unreadBold-help scs-unreadBold-feedback" type="checkbox" id="scs-unreadBold"><button hidden disabled aria-label="안 읽은 제목 굵게 적용" type="button">적용</button></div><p class="scs-help" id="scs-unreadBold-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-unreadBold-feedback"></p></div><div aria-busy="false" data-setting="timeFormat" class="scs-setting"><label class="scs-label" for="scs-timeFormat">읽기 시간 표시 형식</label><div class="scs-value"><select aria-describedby="scs-timeFormat-help scs-timeFormat-feedback" id="scs-timeFormat"><option value="compact">1h 20m 05s</option><option value="clock">01:20:05</option><option value="seconds">4805초</option></select><button hidden disabled aria-label="읽기 시간 표시 형식 적용" type="button">적용</button></div><p class="scs-help" id="scs-timeFormat-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-timeFormat-feedback"></p></div><div aria-busy="false" data-setting="dateDisplay" class="scs-setting"><label class="scs-label" for="scs-dateDisplay">날짜 표시</label><div class="scs-value"><select aria-describedby="scs-dateDisplay-help scs-dateDisplay-feedback" id="scs-dateDisplay"><option value="absolute">저장된 날짜</option><option value="relative">몇 시간·며칠 전</option></select><button hidden disabled aria-label="날짜 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-dateDisplay-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-dateDisplay-feedback"></p></div><div aria-busy="false" data-setting="customFields" class="scs-setting"><label class="scs-label" for="scs-customFields">추가 필드 열</label><div class="scs-value"><input aria-describedby="scs-customFields-help scs-customFields-feedback" value="" type="text" id="scs-customFields"><button disabled aria-label="추가 필드 열 적용" type="button">적용</button></div><p class="scs-help" id="scs-customFields-help">쉼표로 DOI, publisher, language 등 Zotero 필드명을 입력합니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-customFields-feedback"></p></div><div aria-busy="false" data-setting="marquee" class="scs-setting"><label class="scs-label" for="scs-marquee">긴 제목 호버 스크롤</label><div class="scs-value"><input aria-describedby="scs-marquee-help scs-marquee-feedback" type="checkbox" id="scs-marquee"><button hidden disabled aria-label="긴 제목 호버 스크롤 적용" type="button">적용</button></div><p class="scs-help" id="scs-marquee-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marquee-feedback"></p></div><div aria-busy="false" data-setting="hoverDelay" class="scs-setting"><label class="scs-label" for="scs-hoverDelay">스크롤 시작 대기 (ms)</label><div class="scs-value"><input aria-describedby="scs-hoverDelay-help scs-hoverDelay-feedback" value="200" step="50" max="2000" min="0" type="number" id="scs-hoverDelay"><button disabled aria-label="스크롤 시작 대기 (ms) 적용" type="button">적용</button></div><p class="scs-help" id="scs-hoverDelay-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-hoverDelay-feedback"></p></div><div aria-busy="false" data-setting="scrollSpeed" class="scs-setting"><label class="scs-label" for="scs-scrollSpeed">스크롤 속도 (px/s)</label><div class="scs-value"><input aria-describedby="scs-scrollSpeed-help scs-scrollSpeed-feedback" value="180" step="10" max="600" min="30" type="number" id="scs-scrollSpeed"><button disabled aria-label="스크롤 속도 (px/s) 적용" type="button">적용</button></div><p class="scs-help" id="scs-scrollSpeed-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-scrollSpeed-feedback"></p></div><div aria-busy="false" data-setting="quickTypeFilter" class="scs-setting"><label class="scs-label" for="scs-quickTypeFilter">항목 아이콘으로 유형 필터</label><div class="scs-value"><input aria-describedby="scs-quickTypeFilter-help scs-quickTypeFilter-feedback" type="checkbox" id="scs-quickTypeFilter"><button hidden disabled aria-label="항목 아이콘으로 유형 필터 적용" type="button">적용</button></div><p class="scs-help" id="scs-quickTypeFilter-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-quickTypeFilter-feedback"></p></div><div aria-busy="false" data-setting="show-columns" class="scs-setting"><label hidden class="scs-label" for="scs-show-columns">기본 Custom 열 표시</label><div class="scs-value"><button aria-describedby="scs-show-columns-help scs-show-columns-feedback" id="scs-show-columns" type="button">기본 Custom 열 표시</button></div><p class="scs-help" id="scs-show-columns-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-show-columns-feedback"></p></div></section><section hidden data-category="views" class="scs-category"><div class="scs-category-heading"><h3>뷰·작업 패널</h3><button aria-label="뷰·작업 패널 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">기능별 작업 패널과 표시 밀도·목록 크기를 조절합니다.</p><div aria-busy="false" data-setting="feature.Recent" class="scs-setting"><label class="scs-label" for="scs-feature.Recent">최근 문헌 사용</label><div class="scs-value"><input aria-describedby="scs-feature.Recent-help scs-feature.Recent-feedback" type="checkbox" id="scs-feature.Recent"><button hidden disabled aria-label="최근 문헌 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.Recent-help">워크벤치 → 최근 문헌</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.Recent-feedback"></p></div><div aria-busy="false" data-setting="feature.annotationManager" class="scs-setting"><label class="scs-label" for="scs-feature.annotationManager">주석 관리·범위 선택·색상 일괄 변경·노트 추출 사용</label><div class="scs-value"><input aria-describedby="scs-feature.annotationManager-help scs-feature.annotationManager-feedback" type="checkbox" id="scs-feature.annotationManager"><button hidden disabled aria-label="주석 관리·범위 선택·색상 일괄 변경·노트 추출 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.annotationManager-help">워크벤치 → 주석 · 현재 컬렉션·하위 컬렉션·선택 문헌 범위</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.annotationManager-feedback"></p></div><div aria-busy="false" data-setting="feature.attachmentPreview" class="scs-setting"><label class="scs-label" for="scs-feature.attachmentPreview">첨부 미리보기 사용</label><div class="scs-value"><input aria-describedby="scs-feature.attachmentPreview-help scs-feature.attachmentPreview-feedback" type="checkbox" id="scs-feature.attachmentPreview"><button hidden disabled aria-label="첨부 미리보기 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.attachmentPreview-help">워크벤치 → 첨부 미리보기 · Zotero 9 attachment-preview 컴포넌트</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.attachmentPreview-feedback"></p></div><div aria-busy="false" data-setting="feature.backlinks" class="scs-setting"><label class="scs-label" for="scs-feature.backlinks">주석별 참조 노트 수·역링크 사용</label><div class="scs-value"><input aria-describedby="scs-feature.backlinks-help scs-feature.backlinks-feedback" type="checkbox" id="scs-feature.backlinks"><button hidden disabled aria-label="주석별 참조 노트 수·역링크 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.backlinks-help">PDF 주석 머리글 / 워크벤치 → 주석·역링크 · 같은 PDF의 다른 주석 및 다른 라이브러리 참조 구분</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.backlinks-feedback"></p></div><div aria-busy="false" data-setting="feature.canvas" class="scs-setting"><label class="scs-label" for="scs-feature.canvas">카드·보드 이름·색상·연결 편집과 삭제 복원 사용</label><div class="scs-value"><input aria-describedby="scs-feature.canvas-help scs-feature.canvas-feedback" type="checkbox" id="scs-feature.canvas"><button hidden disabled aria-label="카드·보드 이름·색상·연결 편집과 삭제 복원 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.canvas-help">워크벤치 → 캔버스 · 문헌/메모 카드; 보드 최대100개, 카드 최대500개</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.canvas-feedback"></p></div><div aria-busy="false" data-setting="feature.explore" class="scs-setting"><label class="scs-label" for="scs-feature.explore">문헌 상세·노트·주석·필터·정렬·페이지 탐색 사용</label><div class="scs-value"><input aria-describedby="scs-feature.explore-help scs-feature.explore-feedback" type="checkbox" id="scs-feature.explore"><button hidden disabled aria-label="문헌 상세·노트·주석·필터·정렬·페이지 탐색 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.explore-help">워크벤치 → 문헌 탐색 · 상태·별점·연도 필터 및 현재 컬렉션 범위; 화면100개씩 페이지 이동</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.explore-feedback"></p></div><div aria-busy="false" data-setting="feature.graphView" class="scs-setting"><label class="scs-label" for="scs-feature.graphView">관계·태그·저자 그래프 사용</label><div class="scs-value"><input aria-describedby="scs-feature.graphView-help scs-feature.graphView-feedback" type="checkbox" id="scs-feature.graphView"><button hidden disabled aria-label="관계·태그·저자 그래프 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.graphView-help">워크벤치 → 관계 그래프 · 화면 최대180노드, 검색으로 범위를 좁힘</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.graphView-feedback"></p></div><div aria-busy="false" data-setting="feature.noteManager" class="scs-setting"><label class="scs-label" for="scs-feature.noteManager">노트 검색·생성·편집 사용</label><div class="scs-value"><input aria-describedby="scs-feature.noteManager-help scs-feature.noteManager-feedback" type="checkbox" id="scs-feature.noteManager"><button hidden disabled aria-label="노트 검색·생성·편집 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.noteManager-help">워크벤치 → 노트 · 기존 리치 노트 편집은 Zotero 네이티브 편집기로 연결</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.noteManager-feedback"></p></div><div aria-busy="false" data-setting="feature.relatedItems" class="scs-setting"><label class="scs-label" for="scs-feature.relatedItems">선택 문헌 연결·상호 연결 해제 사용</label><div class="scs-value"><input aria-describedby="scs-feature.relatedItems-help scs-feature.relatedItems-feedback" type="checkbox" id="scs-feature.relatedItems"><button hidden disabled aria-label="선택 문헌 연결·상호 연결 해제 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.relatedItems-help">작업 패널 하단 · 같은 라이브러리 문헌; 다른 문헌의 연결 보존</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.relatedItems-feedback"></p></div><div aria-busy="false" data-setting="feature.renderItemAnnotations" class="scs-setting"><label class="scs-label" for="scs-feature.renderItemAnnotations">문헌 상세에 주석 직접 표시 사용</label><div class="scs-value"><input aria-describedby="scs-feature.renderItemAnnotations-help scs-feature.renderItemAnnotations-feedback" type="checkbox" id="scs-feature.renderItemAnnotations"><button hidden disabled aria-label="문헌 상세에 주석 직접 표시 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.renderItemAnnotations-help">문헌 탐색 → 자세히 / 주석 탭 · 다른 탭·문헌으로 전환 시 늦은 응답 무시</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.renderItemAnnotations-feedback"></p></div><div aria-busy="false" data-setting="feature.renderItemNotes" class="scs-setting"><label class="scs-label" for="scs-feature.renderItemNotes">문헌 상세에 노트 직접 표시 사용</label><div class="scs-value"><input aria-describedby="scs-feature.renderItemNotes-help scs-feature.renderItemNotes-feedback" type="checkbox" id="scs-feature.renderItemNotes"><button hidden disabled aria-label="문헌 상세에 노트 직접 표시 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.renderItemNotes-help">문헌 탐색 → 자세히 / 노트 탭 · 단일 문헌 상세에서 노트·주석 함께 표시</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.renderItemNotes-feedback"></p></div><div aria-busy="false" data-setting="feature.viewManager" class="scs-setting"><label class="scs-label" for="scs-feature.viewManager">열 배치 저장·복원·이름·내용 갱신 사용</label><div class="scs-value"><input aria-describedby="scs-feature.viewManager-help scs-feature.viewManager-feedback" type="checkbox" id="scs-feature.viewManager"><button hidden disabled aria-label="열 배치 저장·복원·이름·내용 갱신 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.viewManager-help">워크벤치 → 뷰 그룹 · 열 순서·너비·표시·정렬 저장</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.viewManager-feedback"></p></div><div aria-busy="false" data-setting="workbenchDensity" class="scs-setting"><label class="scs-label" for="scs-workbenchDensity">화면 밀도</label><div class="scs-value"><select aria-describedby="scs-workbenchDensity-help scs-workbenchDensity-feedback" id="scs-workbenchDensity"><option value="comfortable">간격 넓게</option><option value="compact">간격 좁게</option></select><button hidden disabled aria-label="화면 밀도 적용" type="button">적용</button></div><p class="scs-help" id="scs-workbenchDensity-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-workbenchDensity-feedback"></p></div><div aria-busy="false" data-setting="explorePageSize" class="scs-setting"><label class="scs-label" for="scs-explorePageSize">한 페이지 문헌 수</label><div class="scs-value"><input aria-describedby="scs-explorePageSize-help scs-explorePageSize-feedback" value="100" step="1" max="200" min="25" type="number" id="scs-explorePageSize"><button disabled aria-label="한 페이지 문헌 수 적용" type="button">적용</button></div><p class="scs-help" id="scs-explorePageSize-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-explorePageSize-feedback"></p></div><div aria-busy="false" data-setting="matrixPageSize" class="scs-setting"><label class="scs-label" for="scs-matrixPageSize">비교표 한 페이지 문헌 수</label><div class="scs-value"><input aria-describedby="scs-matrixPageSize-help scs-matrixPageSize-feedback" value="50" step="1" max="100" min="10" type="number" id="scs-matrixPageSize"><button disabled aria-label="비교표 한 페이지 문헌 수 적용" type="button">적용</button></div><p class="scs-help" id="scs-matrixPageSize-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-matrixPageSize-feedback"></p></div><div aria-busy="false" data-setting="inlineEvidenceCount" class="scs-setting"><label class="scs-label" for="scs-inlineEvidenceCount">처음 펼칠 노트·주석 수</label><div class="scs-value"><input aria-describedby="scs-inlineEvidenceCount-help scs-inlineEvidenceCount-feedback" value="5" step="1" max="20" min="1" type="number" id="scs-inlineEvidenceCount"><button disabled aria-label="처음 펼칠 노트·주석 수 적용" type="button">적용</button></div><p class="scs-help" id="scs-inlineEvidenceCount-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-inlineEvidenceCount-feedback"></p></div><div aria-busy="false" data-setting="maxExcerptLength" class="scs-setting"><label class="scs-label" for="scs-maxExcerptLength">본문 발췌 표시 글자 수</label><div class="scs-value"><input aria-describedby="scs-maxExcerptLength-help scs-maxExcerptLength-feedback" value="1200" step="1" max="5000" min="200" type="number" id="scs-maxExcerptLength"><button disabled aria-label="본문 발췌 표시 글자 수 적용" type="button">적용</button></div><p class="scs-help" id="scs-maxExcerptLength-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-maxExcerptLength-feedback"></p></div><div aria-busy="false" data-setting="graphNodeLimit" class="scs-setting"><label class="scs-label" for="scs-graphNodeLimit">그래프 최대 문헌 수</label><div class="scs-value"><input aria-describedby="scs-graphNodeLimit-help scs-graphNodeLimit-feedback" value="180" step="1" max="180" min="20" type="number" id="scs-graphNodeLimit"><button disabled aria-label="그래프 최대 문헌 수 적용" type="button">적용</button></div><p class="scs-help" id="scs-graphNodeLimit-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-graphNodeLimit-feedback"></p></div><div aria-busy="false" data-setting="annotationIgnoreFigures" class="scs-setting"><label class="scs-label" for="scs-annotationIgnoreFigures">Figure·Table로 시작하는 주석 제외</label><div class="scs-value"><input aria-describedby="scs-annotationIgnoreFigures-help scs-annotationIgnoreFigures-feedback" type="checkbox" id="scs-annotationIgnoreFigures"><button hidden disabled aria-label="Figure·Table로 시작하는 주석 제외 적용" type="button">적용</button></div><p class="scs-help" id="scs-annotationIgnoreFigures-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-annotationIgnoreFigures-feedback"></p></div><div aria-busy="false" data-setting="annotationPreferComment" class="scs-setting"><label class="scs-label" for="scs-annotationPreferComment">주석 텍스트보다 메모를 우선 표시</label><div class="scs-value"><input aria-describedby="scs-annotationPreferComment-help scs-annotationPreferComment-feedback" type="checkbox" id="scs-annotationPreferComment"><button hidden disabled aria-label="주석 텍스트보다 메모를 우선 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-annotationPreferComment-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-annotationPreferComment-feedback"></p></div><div aria-busy="false" data-setting="open-workbench" class="scs-setting"><label hidden class="scs-label" for="scs-open-workbench">연구 작업 패널 열기</label><div class="scs-value"><button aria-describedby="scs-open-workbench-help scs-open-workbench-feedback" id="scs-open-workbench" type="button">연구 작업 패널 열기</button></div><p class="scs-help" id="scs-open-workbench-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-open-workbench-feedback"></p></div></section><section hidden data-category="reader" class="scs-category"><div class="scs-category-heading"><h3>리더·주석</h3><button aria-label="리더·주석 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">PDF 테마와 여백 주석의 실제 표시·필터를 조절합니다.</p><div aria-busy="false" data-setting="feature.PDFStyles" class="scs-setting"><label class="scs-label" for="scs-feature.PDFStyles">PDF 테마·사용자 색상·원래 모양 복원 사용</label><div class="scs-value"><input aria-describedby="scs-feature.PDFStyles-help scs-feature.PDFStyles-feedback" type="checkbox" id="scs-feature.PDFStyles"><button hidden disabled aria-label="PDF 테마·사용자 색상·원래 모양 복원 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.PDFStyles-help">읽기 진행 / PDF Style 도구 · 복원은 Custom이 추적한 원래 테마·사이드바 적용</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.PDFStyles-feedback"></p></div><div aria-busy="false" data-setting="feature.annotationColors" class="scs-setting"><label class="scs-label" for="scs-feature.annotationColors">주석 색상·팔레트 사용</label><div class="scs-value"><input aria-describedby="scs-feature.annotationColors-help scs-feature.annotationColors-feedback" type="checkbox" id="scs-feature.annotationColors"><button hidden disabled aria-label="주석 색상·팔레트 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.annotationColors-help">읽기 진행 / PDF Style 도구</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.annotationColors-feedback"></p></div><div aria-busy="false" data-setting="feature.marginAnnotation" class="scs-setting"><label class="scs-label" for="scs-feature.marginAnnotation">여백 주석과 위치·너비·표시 길이 설정 사용</label><div class="scs-value"><input aria-describedby="scs-feature.marginAnnotation-help scs-feature.marginAnnotation-feedback" type="checkbox" id="scs-feature.marginAnnotation"><button hidden disabled aria-label="여백 주석과 위치·너비·표시 길이 설정 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.marginAnnotation-help">읽기 진행 / PDF Style 도구 · 왼쪽/오른쪽, 너비160–480px, 발췌100–5000자</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.marginAnnotation-feedback"></p></div><div aria-busy="false" data-setting="feature.showAnnotationColorName" class="scs-setting"><label class="scs-label" for="scs-feature.showAnnotationColorName">주석 색상 이름 사용</label><div class="scs-value"><input aria-describedby="scs-feature.showAnnotationColorName-help scs-feature.showAnnotationColorName-feedback" type="checkbox" id="scs-feature.showAnnotationColorName"><button hidden disabled aria-label="주석 색상 이름 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.showAnnotationColorName-help">읽기 진행 → 색상 이름</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.showAnnotationColorName-feedback"></p></div><div aria-busy="false" data-setting="feature.reader.mergeAnnotations" class="scs-setting"><label class="scs-label" for="scs-feature.reader.mergeAnnotations">선택 주석 병합 사용</label><div class="scs-value"><input aria-describedby="scs-feature.reader.mergeAnnotations-help scs-feature.reader.mergeAnnotations-feedback" type="checkbox" id="scs-feature.reader.mergeAnnotations"><button hidden disabled aria-label="선택 주석 병합 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.reader.mergeAnnotations-help">PDF 주석 우클릭·Style 메뉴 / 워크벤치 → 주석 · 동일 PDF·유형·색상인 하이라이트/밑줄, 같은 페이지 또는 인접 두 페이지; 위치·텍스트·메모·태그 보존, 나머지는 휴지통</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.reader.mergeAnnotations-feedback"></p></div><div aria-busy="false" data-setting="feature.reader.attachmentVersionSwitch" class="scs-setting"><label class="scs-label" for="scs-feature.reader.attachmentVersionSwitch">PDF 첨부 버전 전환 사용</label><div class="scs-value"><input aria-describedby="scs-feature.reader.attachmentVersionSwitch-help scs-feature.reader.attachmentVersionSwitch-feedback" type="checkbox" id="scs-feature.reader.attachmentVersionSwitch"><button hidden disabled aria-label="PDF 첨부 버전 전환 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.reader.attachmentVersionSwitch-help">PDF Style 메뉴 → Switch PDF version · 같은 문헌에 속한 실제 존재하는 PDF만 선택; 기존 탭 유지</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.reader.attachmentVersionSwitch-feedback"></p></div><div aria-busy="false" data-setting="readerTheme" class="scs-setting"><label class="scs-label" for="scs-readerTheme">PDF 테마</label><div class="scs-value"><select aria-describedby="scs-readerTheme-help scs-readerTheme-feedback" id="scs-readerTheme"><option value="original">원래 테마 유지</option><option value="light">밝게</option><option value="dark">어둡게</option><option value="sepia">세피아</option><option value="custom">사용자 색상</option></select><button hidden disabled aria-label="PDF 테마 적용" type="button">적용</button></div><p class="scs-help" id="scs-readerTheme-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-readerTheme-feedback"></p></div><div aria-busy="false" data-setting="readerCustomBackground" class="scs-setting"><label class="scs-label" for="scs-readerCustomBackground">사용자 PDF 배경</label><div class="scs-value"><input aria-describedby="scs-readerCustomBackground-help scs-readerCustomBackground-feedback" value="#ffffff" type="color" id="scs-readerCustomBackground"><button disabled aria-label="사용자 PDF 배경 적용" type="button">적용</button></div><p class="scs-help" id="scs-readerCustomBackground-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-readerCustomBackground-feedback"></p></div><div aria-busy="false" data-setting="readerCustomForeground" class="scs-setting"><label class="scs-label" for="scs-readerCustomForeground">사용자 PDF 글자</label><div class="scs-value"><input aria-describedby="scs-readerCustomForeground-help scs-readerCustomForeground-feedback" value="#202d46" type="color" id="scs-readerCustomForeground"><button disabled aria-label="사용자 PDF 글자 적용" type="button">적용</button></div><p class="scs-help" id="scs-readerCustomForeground-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-readerCustomForeground-feedback"></p></div><div aria-busy="false" data-setting="marginEnabled" class="scs-setting"><label class="scs-label" for="scs-marginEnabled">여백 주석 표시</label><div class="scs-value"><input aria-describedby="scs-marginEnabled-help scs-marginEnabled-feedback" type="checkbox" id="scs-marginEnabled"><button hidden disabled aria-label="여백 주석 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginEnabled-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginEnabled-feedback"></p></div><div aria-busy="false" data-setting="marginSide" class="scs-setting"><label class="scs-label" for="scs-marginSide">여백 위치</label><div class="scs-value"><select aria-describedby="scs-marginSide-help scs-marginSide-feedback" id="scs-marginSide"><option value="right">오른쪽</option><option value="left">왼쪽</option></select><button hidden disabled aria-label="여백 위치 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginSide-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginSide-feedback"></p></div><div aria-busy="false" data-setting="marginWidth" class="scs-setting"><label class="scs-label" for="scs-marginWidth">여백 주석 너비 (px)</label><div class="scs-value"><input aria-describedby="scs-marginWidth-help scs-marginWidth-feedback" value="210" step="1" max="480" min="160" type="number" id="scs-marginWidth"><button disabled aria-label="여백 주석 너비 (px) 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginWidth-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginWidth-feedback"></p></div><div aria-busy="false" data-setting="marginFontSize" class="scs-setting"><label class="scs-label" for="scs-marginFontSize">여백 주석 글자 크기</label><div class="scs-value"><input aria-describedby="scs-marginFontSize-help scs-marginFontSize-feedback" value="13" step="1" max="22" min="10" type="number" id="scs-marginFontSize"><button disabled aria-label="여백 주석 글자 크기 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginFontSize-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginFontSize-feedback"></p></div><div aria-busy="false" data-setting="marginTextLimit" class="scs-setting"><label class="scs-label" for="scs-marginTextLimit">여백 주석 최대 글자 수</label><div class="scs-value"><input aria-describedby="scs-marginTextLimit-help scs-marginTextLimit-feedback" value="1500" step="1" max="5000" min="100" type="number" id="scs-marginTextLimit"><button disabled aria-label="여백 주석 최대 글자 수 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginTextLimit-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginTextLimit-feedback"></p></div><div aria-busy="false" data-setting="marginShowQuote" class="scs-setting"><label class="scs-label" for="scs-marginShowQuote">인용 텍스트 표시</label><div class="scs-value"><input aria-describedby="scs-marginShowQuote-help scs-marginShowQuote-feedback" type="checkbox" id="scs-marginShowQuote"><button hidden disabled aria-label="인용 텍스트 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginShowQuote-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginShowQuote-feedback"></p></div><div aria-busy="false" data-setting="marginShowComment" class="scs-setting"><label class="scs-label" for="scs-marginShowComment">주석 메모 표시</label><div class="scs-value"><input aria-describedby="scs-marginShowComment-help scs-marginShowComment-feedback" type="checkbox" id="scs-marginShowComment"><button hidden disabled aria-label="주석 메모 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginShowComment-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginShowComment-feedback"></p></div><div aria-busy="false" data-setting="marginShowHighlight" class="scs-setting"><label class="scs-label" for="scs-marginShowHighlight">하이라이트 표시</label><div class="scs-value"><input aria-describedby="scs-marginShowHighlight-help scs-marginShowHighlight-feedback" type="checkbox" id="scs-marginShowHighlight"><button hidden disabled aria-label="하이라이트 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginShowHighlight-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginShowHighlight-feedback"></p></div><div aria-busy="false" data-setting="marginShowUnderline" class="scs-setting"><label class="scs-label" for="scs-marginShowUnderline">밑줄 표시</label><div class="scs-value"><input aria-describedby="scs-marginShowUnderline-help scs-marginShowUnderline-feedback" type="checkbox" id="scs-marginShowUnderline"><button hidden disabled aria-label="밑줄 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginShowUnderline-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginShowUnderline-feedback"></p></div><div aria-busy="false" data-setting="marginShowNote" class="scs-setting"><label class="scs-label" for="scs-marginShowNote">메모 주석 표시</label><div class="scs-value"><input aria-describedby="scs-marginShowNote-help scs-marginShowNote-feedback" type="checkbox" id="scs-marginShowNote"><button hidden disabled aria-label="메모 주석 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginShowNote-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginShowNote-feedback"></p></div><div aria-busy="false" data-setting="marginShowImage" class="scs-setting"><label class="scs-label" for="scs-marginShowImage">이미지 주석 표시</label><div class="scs-value"><input aria-describedby="scs-marginShowImage-help scs-marginShowImage-feedback" type="checkbox" id="scs-marginShowImage"><button hidden disabled aria-label="이미지 주석 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginShowImage-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginShowImage-feedback"></p></div><div aria-busy="false" data-setting="marginShowText" class="scs-setting"><label class="scs-label" for="scs-marginShowText">텍스트 주석 표시</label><div class="scs-value"><input aria-describedby="scs-marginShowText-help scs-marginShowText-feedback" type="checkbox" id="scs-marginShowText"><button hidden disabled aria-label="텍스트 주석 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginShowText-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginShowText-feedback"></p></div><div aria-busy="false" data-setting="marginShowInk" class="scs-setting"><label class="scs-label" for="scs-marginShowInk">펜 주석 표시</label><div class="scs-value"><input aria-describedby="scs-marginShowInk-help scs-marginShowInk-feedback" type="checkbox" id="scs-marginShowInk"><button hidden disabled aria-label="펜 주석 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-marginShowInk-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-marginShowInk-feedback"></p></div></section><section hidden data-category="sidebar" class="scs-category"><div class="scs-category-heading"><h3>사이드바·탭</h3><button aria-label="사이드바·탭 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">리더 사이드바와 세로 탭·저장 그룹을 조절합니다.</p><div aria-busy="false" data-setting="feature.tabManager" class="scs-setting"><label class="scs-label" for="scs-feature.tabManager">탭 순서·다른 탭 닫기·저장 그룹 편집 사용</label><div class="scs-value"><input aria-describedby="scs-feature.tabManager-help scs-feature.tabManager-feedback" type="checkbox" id="scs-feature.tabManager"><button hidden disabled aria-label="탭 순서·다른 탭 닫기·저장 그룹 편집 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.tabManager-help">워크벤치 → 탭 관리 · 그룹 이름·내용 갱신; 라이브러리 탭 보호</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.tabManager-feedback"></p></div><div aria-busy="false" data-setting="feature.toogleSidebar" class="scs-setting"><label class="scs-label" for="scs-feature.toogleSidebar">리더 사이드바 토글 사용</label><div class="scs-value"><input aria-describedby="scs-feature.toogleSidebar-help scs-feature.toogleSidebar-feedback" type="checkbox" id="scs-feature.toogleSidebar"><button hidden disabled aria-label="리더 사이드바 토글 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.toogleSidebar-help">읽기 진행 / PDF Style 도구</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.toogleSidebar-feedback"></p></div><div aria-busy="false" data-setting="feature.verticalTabManager" class="scs-setting"><label class="scs-label" for="scs-feature.verticalTabManager">독립 세로 탭 목록 사용</label><div class="scs-value"><input aria-describedby="scs-feature.verticalTabManager-help scs-feature.verticalTabManager-feedback" type="checkbox" id="scs-feature.verticalTabManager"><button hidden disabled aria-label="독립 세로 탭 목록 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.verticalTabManager-help">탭 관리 / PDF Style 도구</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.verticalTabManager-feedback"></p></div><div aria-busy="false" data-setting="readerSidebar" class="scs-setting"><label class="scs-label" for="scs-readerSidebar">리더 사이드바 표시</label><div class="scs-value"><input aria-describedby="scs-readerSidebar-help scs-readerSidebar-feedback" type="checkbox" id="scs-readerSidebar"><button hidden disabled aria-label="리더 사이드바 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-readerSidebar-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-readerSidebar-feedback"></p></div><div aria-busy="false" data-setting="verticalTabs" class="scs-setting"><label class="scs-label" for="scs-verticalTabs">세로 탭 목록 표시</label><div class="scs-value"><input aria-describedby="scs-verticalTabs-help scs-verticalTabs-feedback" type="checkbox" id="scs-verticalTabs"><button hidden disabled aria-label="세로 탭 목록 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-verticalTabs-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-verticalTabs-feedback"></p></div></section><section hidden data-category="tags" class="scs-category"><div class="scs-category-heading"><h3>태그</h3><button aria-label="태그 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">태그 표시 방식과 제목 옆 태그를 조절합니다.</p><div aria-busy="false" data-setting="feature.addTags" class="scs-setting"><label class="scs-label" for="scs-feature.addTags">태그 추가·제거·경로 이름 변경·병합 사용</label><div class="scs-value"><input aria-describedby="scs-feature.addTags-help scs-feature.addTags-feedback" type="checkbox" id="scs-feature.addTags"><button hidden disabled aria-label="태그 추가·제거·경로 이름 변경·병합 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.addTags-help">워크벤치 → 중첩 태그 · 선택 문헌 범위에서만 변경; 상태·별점 전용 태그 경로 변경 제외</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.addTags-feedback"></p></div><div aria-busy="false" data-setting="feature.tags" class="scs-setting"><label class="scs-label" for="scs-feature.tags">중첩 태그 탐색 사용</label><div class="scs-value"><input aria-describedby="scs-feature.tags-help scs-feature.tags-feedback" type="checkbox" id="scs-feature.tags"><button hidden disabled aria-label="중첩 태그 탐색 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.tags-help">워크벤치 → 중첩 태그</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.tags-feedback"></p></div><div aria-busy="false" data-setting="feature.tagsColumn" class="scs-setting"><label class="scs-label" for="scs-feature.tagsColumn">색상 태그 표시 사용</label><div class="scs-value"><input aria-describedby="scs-feature.tagsColumn-help scs-feature.tagsColumn-feedback" type="checkbox" id="scs-feature.tagsColumn"><button hidden disabled aria-label="색상 태그 표시 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.tagsColumn-help">Tags · Custom / 제목 태그</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.tagsColumn-feedback"></p></div><div aria-busy="false" data-setting="feature.textTagsColumn" class="scs-setting"><label class="scs-label" for="scs-feature.textTagsColumn">텍스트 태그·태그 수 사용</label><div class="scs-value"><input aria-describedby="scs-feature.textTagsColumn-help scs-feature.textTagsColumn-feedback" type="checkbox" id="scs-feature.textTagsColumn"><button hidden disabled aria-label="텍스트 태그·태그 수 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.textTagsColumn-help">Tags / #Tags · Custom</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.textTagsColumn-feedback"></p></div><div aria-busy="false" data-setting="tagDisplayMode" class="scs-setting"><label class="scs-label" for="scs-tagDisplayMode">태그 열 표시 대상</label><div class="scs-value"><select aria-describedby="scs-tagDisplayMode-help scs-tagDisplayMode-feedback" id="scs-tagDisplayMode"><option value="all">모든 일반 태그</option><option value="colored">색상이 지정된 태그</option><option value="prefixed">접두사와 일치하는 태그</option></select><button hidden disabled aria-label="태그 열 표시 대상 적용" type="button">적용</button></div><p class="scs-help" id="scs-tagDisplayMode-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-tagDisplayMode-feedback"></p></div><div aria-busy="false" data-setting="textTagPrefix" class="scs-setting"><label class="scs-label" for="scs-textTagPrefix">텍스트 태그 접두사</label><div class="scs-value"><input aria-describedby="scs-textTagPrefix-help scs-textTagPrefix-feedback" value="#" type="text" id="scs-textTagPrefix"><button disabled aria-label="텍스트 태그 접두사 적용" type="button">적용</button></div><p class="scs-help" id="scs-textTagPrefix-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-textTagPrefix-feedback"></p></div><div aria-busy="false" data-setting="titleTags" class="scs-setting"><label class="scs-label" for="scs-titleTags">제목 옆 태그 표시</label><div class="scs-value"><input aria-describedby="scs-titleTags-help scs-titleTags-feedback" type="checkbox" id="scs-titleTags"><button hidden disabled aria-label="제목 옆 태그 표시 적용" type="button">적용</button></div><p class="scs-help" id="scs-titleTags-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-titleTags-feedback"></p></div><div aria-busy="false" data-setting="titleTagLimit" class="scs-setting"><label class="scs-label" for="scs-titleTagLimit">제목 옆 최대 태그 수</label><div class="scs-value"><input aria-describedby="scs-titleTagLimit-help scs-titleTagLimit-feedback" value="3" step="1" max="10" min="1" type="number" id="scs-titleTagLimit"><button disabled aria-label="제목 옆 최대 태그 수 적용" type="button">적용</button></div><p class="scs-help" id="scs-titleTagLimit-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-titleTagLimit-feedback"></p></div></section><section hidden data-category="collections" class="scs-category"><div class="scs-category-heading"><h3>컬렉션</h3><button aria-label="컬렉션 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">개수·즐겨찾기·정렬 기능을 선택합니다.</p><div aria-busy="false" data-setting="feature.collectionItemCount" class="scs-setting"><label class="scs-label" for="scs-feature.collectionItemCount">컬렉션 문헌 수 사용</label><div class="scs-value"><input aria-describedby="scs-feature.collectionItemCount-help scs-feature.collectionItemCount-feedback" type="checkbox" id="scs-feature.collectionItemCount"><button hidden disabled aria-label="컬렉션 문헌 수 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.collectionItemCount-help">워크벤치 → 컬렉션</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.collectionItemCount-feedback"></p></div><div aria-busy="false" data-setting="feature.favoriteCollections" class="scs-setting"><label class="scs-label" for="scs-feature.favoriteCollections">컬렉션 즐겨찾기 사용</label><div class="scs-value"><input aria-describedby="scs-feature.favoriteCollections-help scs-feature.favoriteCollections-feedback" type="checkbox" id="scs-feature.favoriteCollections"><button hidden disabled aria-label="컬렉션 즐겨찾기 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.favoriteCollections-help">워크벤치 → 컬렉션</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.favoriteCollections-feedback"></p></div><div aria-busy="false" data-setting="feature.sortCollectionItem" class="scs-setting"><label class="scs-label" for="scs-feature.sortCollectionItem">컬렉션 이름·개수·즐겨찾기 정렬 사용</label><div class="scs-value"><input aria-describedby="scs-feature.sortCollectionItem-help scs-feature.sortCollectionItem-feedback" type="checkbox" id="scs-feature.sortCollectionItem"><button hidden disabled aria-label="컬렉션 이름·개수·즐겨찾기 정렬 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.sortCollectionItem-help">워크벤치 → 컬렉션</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.sortCollectionItem-feedback"></p></div></section><section hidden data-category="menus" class="scs-category"><div class="scs-category-heading"><h3>메뉴·디자인</h3><button aria-label="메뉴·디자인 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">작업 메뉴와 패널 디자인을 조절합니다.</p><div aria-busy="false" data-setting="feature.darkLightButton" class="scs-setting"><label class="scs-label" for="scs-feature.darkLightButton">앱 밝게·어둡게 전환 사용</label><div class="scs-value"><input aria-describedby="scs-feature.darkLightButton-help scs-feature.darkLightButton-feedback" type="checkbox" id="scs-feature.darkLightButton"><button hidden disabled aria-label="앱 밝게·어둡게 전환 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.darkLightButton-help">워크벤치 → 스타일 편집</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.darkLightButton-feedback"></p></div><div aria-busy="false" data-setting="feature.menuVisibility" class="scs-setting"><label class="scs-label" for="scs-feature.menuVisibility">작업 메뉴 표시·숨김 사용</label><div class="scs-value"><input aria-describedby="scs-feature.menuVisibility-help scs-feature.menuVisibility-feedback" type="checkbox" id="scs-feature.menuVisibility"><button hidden disabled aria-label="작업 메뉴 표시·숨김 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.menuVisibility-help">워크벤치 → 스타일 편집</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.menuVisibility-feedback"></p></div><div aria-busy="false" data-setting="feature.styleEditor" class="scs-setting"><label class="scs-label" for="scs-feature.styleEditor">패널 CSS 편집 사용</label><div class="scs-value"><input aria-describedby="scs-feature.styleEditor-help scs-feature.styleEditor-feedback" type="checkbox" id="scs-feature.styleEditor"><button hidden disabled aria-label="패널 CSS 편집 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.styleEditor-help">워크벤치 → 스타일 편집 · 패널 범위 CSS, 외부 로딩 규칙 제외</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.styleEditor-feedback"></p></div><div aria-busy="false" data-setting="accentColor" class="scs-setting"><label class="scs-label" for="scs-accentColor">강조 색상</label><div class="scs-value"><input aria-describedby="scs-accentColor-help scs-accentColor-feedback" value="#374151" type="color" id="scs-accentColor"><button disabled aria-label="강조 색상 적용" type="button">적용</button></div><p class="scs-help" id="scs-accentColor-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-accentColor-feedback"></p></div><div aria-busy="false" data-setting="panelFontSize" class="scs-setting"><label class="scs-label" for="scs-panelFontSize">패널 글자 크기</label><div class="scs-value"><input aria-describedby="scs-panelFontSize-help scs-panelFontSize-feedback" value="13" step="1" max="20" min="11" type="number" id="scs-panelFontSize"><button disabled aria-label="패널 글자 크기 적용" type="button">적용</button></div><p class="scs-help" id="scs-panelFontSize-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-panelFontSize-feedback"></p></div><div aria-busy="false" data-setting="panelCSS" class="scs-setting"><label class="scs-label" for="scs-panelCSS">Custom 패널 CSS</label><div class="scs-value"><textarea aria-describedby="scs-panelCSS-help scs-panelCSS-feedback" rows="5" id="scs-panelCSS"></textarea><button disabled aria-label="Custom 패널 CSS 적용" type="button">적용</button></div><p class="scs-help" id="scs-panelCSS-help">패널 범위에만 적용됩니다. 외부 파일을 불러오는 CSS는 허용하지 않습니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-panelCSS-feedback"></p></div></section><section hidden data-category="storage" class="scs-category"><div class="scs-category-heading"><h3>읽기 기록</h3><button aria-label="읽기 기록 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">기록 간격·무활동 제외·상태 연동을 조절합니다. 읽기 기록은 로컬 파일에 저장합니다.</p><div aria-busy="false" data-setting="feature.ReadUnreadStatus" class="scs-setting"><label class="scs-label" for="scs-feature.ReadUnreadStatus">읽음·안 읽음 제목 구분 사용</label><div class="scs-value"><input aria-describedby="scs-feature.ReadUnreadStatus-help scs-feature.ReadUnreadStatus-feedback" type="checkbox" id="scs-feature.ReadUnreadStatus"><button hidden disabled aria-label="읽음·안 읽음 제목 구분 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.ReadUnreadStatus-help">스타일 편집 → 안 읽은 제목 굵게</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.ReadUnreadStatus-feedback"></p></div><div aria-busy="false" data-setting="feature.readStatus" class="scs-setting"><label class="scs-label" for="scs-feature.readStatus">읽기 시간·상태 연동 사용</label><div class="scs-value"><input aria-describedby="scs-feature.readStatus-help scs-feature.readStatus-feedback" type="checkbox" id="scs-feature.readStatus"><button hidden disabled aria-label="읽기 시간·상태 연동 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.readStatus-help">Status · Custom</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.readStatus-feedback"></p></div><div aria-busy="false" data-setting="feature.updateItemDateModified" class="scs-setting"><label class="scs-label" for="scs-feature.updateItemDateModified">탭 활동 시 수정일 갱신 사용</label><div class="scs-value"><input aria-describedby="scs-feature.updateItemDateModified-help scs-feature.updateItemDateModified-feedback" type="checkbox" id="scs-feature.updateItemDateModified"><button hidden disabled aria-label="탭 활동 시 수정일 갱신 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.updateItemDateModified-help">스타일 편집 → 수정일 갱신 · 기본 꺼짐; 사용자 선택 시 첨부·부모 날짜 갱신</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.updateItemDateModified-feedback"></p></div><div aria-busy="false" data-setting="recordReading" class="scs-setting"><label class="scs-label" for="scs-recordReading">활성 PDF 읽기 시간 기록</label><div class="scs-value"><input aria-describedby="scs-recordReading-help scs-recordReading-feedback" type="checkbox" id="scs-recordReading"><button hidden disabled aria-label="활성 PDF 읽기 시간 기록 적용" type="button">적용</button></div><p class="scs-help" id="scs-recordReading-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-recordReading-feedback"></p></div><div aria-busy="false" data-setting="autoStatus" class="scs-setting"><label class="scs-label" for="scs-autoStatus">읽기 시작 시 reading 상태 자동 반영</label><div class="scs-value"><input aria-describedby="scs-autoStatus-help scs-autoStatus-feedback" type="checkbox" id="scs-autoStatus"><button hidden disabled aria-label="읽기 시작 시 reading 상태 자동 반영 적용" type="button">적용</button></div><p class="scs-help" id="scs-autoStatus-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-autoStatus-feedback"></p></div><div aria-busy="false" data-setting="touchDateOnRead" class="scs-setting"><label class="scs-label" for="scs-touchDateOnRead">읽는 문헌의 수정일 갱신</label><div class="scs-value"><input aria-describedby="scs-touchDateOnRead-help scs-touchDateOnRead-feedback" type="checkbox" id="scs-touchDateOnRead"><button hidden disabled aria-label="읽는 문헌의 수정일 갱신 적용" type="button">적용</button></div><p class="scs-help" id="scs-touchDateOnRead-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-touchDateOnRead-feedback"></p></div><div aria-busy="false" data-setting="recordIntervalMs" class="scs-setting"><label class="scs-label" for="scs-recordIntervalMs">기록·표시 갱신 간격 (ms)</label><div class="scs-value"><input aria-describedby="scs-recordIntervalMs-help scs-recordIntervalMs-feedback" value="1000" step="250" max="5000" min="250" type="number" id="scs-recordIntervalMs"><button disabled aria-label="기록·표시 갱신 간격 (ms) 적용" type="button">적용</button></div><p class="scs-help" id="scs-recordIntervalMs-help">기본 1초. 비활성 창과 무활동 시간은 제외합니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-recordIntervalMs-feedback"></p></div><div aria-busy="false" data-setting="idleSeconds" class="scs-setting"><label class="scs-label" for="scs-idleSeconds">무활동 제외 기준 (초)</label><div class="scs-value"><input aria-describedby="scs-idleSeconds-help scs-idleSeconds-feedback" value="60" step="1" max="300" min="5" type="number" id="scs-idleSeconds"><button disabled aria-label="무활동 제외 기준 (초) 적용" type="button">적용</button></div><p class="scs-help" id="scs-idleSeconds-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-idleSeconds-feedback"></p></div></section><section hidden data-category="metrics" class="scs-category"><div class="scs-category-heading"><h3>인용 수·IF</h3><button aria-label="인용 수·IF 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">실제 제공자와 조회 주기·메타데이터 저장을 설정합니다.</p><div aria-busy="false" data-setting="autoCitations" class="scs-setting"><label class="scs-label" for="scs-autoCitations">보이는 문헌 인용 수 자동 조회</label><div class="scs-value"><input aria-describedby="scs-autoCitations-help scs-autoCitations-feedback" type="checkbox" id="scs-autoCitations"><button hidden disabled aria-label="보이는 문헌 인용 수 자동 조회 적용" type="button">적용</button></div><p class="scs-help" id="scs-autoCitations-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-autoCitations-feedback"></p></div><div aria-busy="false" data-setting="metadataCitations" class="scs-setting"><label class="scs-label" for="scs-metadataCitations">논문 추가·수정 시 인용 수 조회 후 Extra 저장</label><div class="scs-value"><input aria-describedby="scs-metadataCitations-help scs-metadataCitations-feedback" type="checkbox" id="scs-metadataCitations"><button hidden disabled aria-label="논문 추가·수정 시 인용 수 조회 후 Extra 저장 적용" type="button">적용</button></div><p class="scs-help" id="scs-metadataCitations-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-metadataCitations-feedback"></p></div><div aria-busy="false" data-setting="citationRefreshDays" class="scs-setting"><label class="scs-label" for="scs-citationRefreshDays">성공한 인용 수 재조회 간격 (일)</label><div class="scs-value"><input aria-describedby="scs-citationRefreshDays-help scs-citationRefreshDays-feedback" value="7" step="1" max="90" min="1" type="number" id="scs-citationRefreshDays"><button disabled aria-label="성공한 인용 수 재조회 간격 (일) 적용" type="button">적용</button></div><p class="scs-help" id="scs-citationRefreshDays-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-citationRefreshDays-feedback"></p></div><div aria-busy="false" data-setting="citationRetryMinutes" class="scs-setting"><label class="scs-label" for="scs-citationRetryMinutes">조회 오류 재시도 간격 (분)</label><div class="scs-value"><input aria-describedby="scs-citationRetryMinutes-help scs-citationRetryMinutes-feedback" value="30" step="1" max="1440" min="1" type="number" id="scs-citationRetryMinutes"><button disabled aria-label="조회 오류 재시도 간격 (분) 적용" type="button">적용</button></div><p class="scs-help" id="scs-citationRetryMinutes-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-citationRetryMinutes-feedback"></p></div><div aria-busy="false" data-setting="citationEmail" class="scs-setting"><label class="scs-label" for="scs-citationEmail">연락 이메일 (선택)</label><div class="scs-value"><input aria-describedby="scs-citationEmail-help scs-citationEmail-feedback" value="" type="email" id="scs-citationEmail"><button disabled aria-label="연락 이메일 (선택) 적용" type="button">적용</button></div><p class="scs-help" id="scs-citationEmail-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-citationEmail-feedback"></p></div><div aria-busy="false" data-setting="openalexApiKey" class="scs-setting"><label class="scs-label" for="scs-openalexApiKey">OpenAlex API 키 (선택)</label><div class="scs-value"><input aria-describedby="scs-openalexApiKey-help scs-openalexApiKey-feedback" value="" spellcheck="false" autocomplete="off" type="password" id="scs-openalexApiKey"><button disabled aria-label="OpenAlex API 키 (선택) 적용" type="button">적용</button></div><p class="scs-help" id="scs-openalexApiKey-help">비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-openalexApiKey-feedback"></p></div><div aria-busy="false" data-setting="journalRankKey" class="scs-setting"><label class="scs-label" for="scs-journalRankKey">easyScholar API 키</label><div class="scs-value"><input aria-describedby="scs-journalRankKey-help scs-journalRankKey-feedback" value="" spellcheck="false" autocomplete="off" type="password" id="scs-journalRankKey"><button disabled aria-label="easyScholar API 키 적용" type="button">적용</button></div><p class="scs-help" id="scs-journalRankKey-help">별도 저널 등급 조회용입니다. IF는 공식 카탈로그·검증된 저장값과 자동 매칭합니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-journalRankKey-feedback"></p></div><div aria-busy="false" data-setting="update-citations" class="scs-setting"><label hidden class="scs-label" for="scs-update-citations">선택 문헌 인용 수 조회</label><div class="scs-value"><button aria-describedby="scs-update-citations-help scs-update-citations-feedback" id="scs-update-citations" type="button">선택 문헌 인용 수 조회</button></div><p class="scs-help" id="scs-update-citations-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-update-citations-feedback"></p></div><div aria-busy="false" data-setting="stop-citations" class="scs-setting"><label hidden class="scs-label" for="scs-stop-citations">인용 수 조회 중지</label><div class="scs-value"><button aria-describedby="scs-stop-citations-help scs-stop-citations-feedback" id="scs-stop-citations" type="button">인용 수 조회 중지</button></div><p class="scs-help" id="scs-stop-citations-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-stop-citations-feedback"></p></div><div aria-busy="false" data-setting="update-if" class="scs-setting"><label hidden class="scs-label" for="scs-update-if">선택 저널 공식 IF 확인</label><div class="scs-value"><button aria-describedby="scs-update-if-help scs-update-if-feedback" id="scs-update-if" type="button">선택 저널 공식 IF 확인</button></div><p class="scs-help" id="scs-update-if-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-update-if-feedback"></p></div><div aria-busy="false" data-setting="ranks" class="scs-setting"><label hidden class="scs-label" for="scs-ranks">선택 저널 등급 조회</label><div class="scs-value"><button aria-describedby="scs-ranks-help scs-ranks-feedback" id="scs-ranks" type="button">선택 저널 등급 조회</button></div><p class="scs-help" id="scs-ranks-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-ranks-feedback"></p></div></section><section hidden data-category="ai" class="scs-category"><div class="scs-category-heading"><h3>번역·AI</h3><button aria-label="번역·AI 기본값 복원" type="button">이 분류 기본값 복원</button></div><p class="scs-help">사용할 모델과 요청 문구를 직접 설정합니다. 요청은 사용자가 실행할 때만 전송됩니다.</p><div aria-busy="false" data-setting="feature.AIGenerateRemark" class="scs-setting"><label class="scs-label" for="scs-feature.AIGenerateRemark">AI 읽기 메모 제안 사용</label><div class="scs-value"><input aria-describedby="scs-feature.AIGenerateRemark-help scs-feature.AIGenerateRemark-feedback" type="checkbox" id="scs-feature.AIGenerateRemark"><button hidden disabled aria-label="AI 읽기 메모 제안 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.AIGenerateRemark-help">워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.AIGenerateRemark-feedback"></p></div><div aria-busy="false" data-setting="feature.AIGenerateTags" class="scs-setting"><label class="scs-label" for="scs-feature.AIGenerateTags">AI 태그 제안 사용</label><div class="scs-value"><input aria-describedby="scs-feature.AIGenerateTags-help scs-feature.AIGenerateTags-feedback" type="checkbox" id="scs-feature.AIGenerateTags"><button hidden disabled aria-label="AI 태그 제안 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.AIGenerateTags-help">워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.AIGenerateTags-feedback"></p></div><div aria-busy="false" data-setting="feature.tldr" class="scs-setting"><label class="scs-label" for="scs-feature.tldr">초록 요약 사용</label><div class="scs-value"><input aria-describedby="scs-feature.tldr-help scs-feature.tldr-feedback" type="checkbox" id="scs-feature.tldr"><button hidden disabled aria-label="초록 요약 사용 적용" type="button">적용</button></div><p class="scs-help" id="scs-feature.tldr-help">워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-feature.tldr-feedback"></p></div><div aria-busy="false" data-setting="aiEndpoint" class="scs-setting"><label class="scs-label" for="scs-aiEndpoint">Chat Completions endpoint</label><div class="scs-value"><input aria-describedby="scs-aiEndpoint-help scs-aiEndpoint-feedback" value="" type="url" id="scs-aiEndpoint"><button disabled aria-label="Chat Completions endpoint 적용" type="button">적용</button></div><p class="scs-help" id="scs-aiEndpoint-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-aiEndpoint-feedback"></p></div><div aria-busy="false" data-setting="aiModel" class="scs-setting"><label class="scs-label" for="scs-aiModel">모델 이름</label><div class="scs-value"><input aria-describedby="scs-aiModel-help scs-aiModel-feedback" value="" type="text" id="scs-aiModel"><button disabled aria-label="모델 이름 적용" type="button">적용</button></div><p class="scs-help" id="scs-aiModel-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-aiModel-feedback"></p></div><div aria-busy="false" data-setting="aiKey" class="scs-setting"><label class="scs-label" for="scs-aiKey">API 키</label><div class="scs-value"><input aria-describedby="scs-aiKey-help scs-aiKey-feedback" value="" spellcheck="false" autocomplete="off" type="password" id="scs-aiKey"><button disabled aria-label="API 키 적용" type="button">적용</button></div><p class="scs-help" id="scs-aiKey-help">비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-aiKey-feedback"></p></div><div aria-busy="false" data-setting="aiLanguage" class="scs-setting"><label class="scs-label" for="scs-aiLanguage">출력 언어</label><div class="scs-value"><input aria-describedby="scs-aiLanguage-help scs-aiLanguage-feedback" value="Korean" type="text" id="scs-aiLanguage"><button disabled aria-label="출력 언어 적용" type="button">적용</button></div><p class="scs-help" id="scs-aiLanguage-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-aiLanguage-feedback"></p></div><div aria-busy="false" data-setting="aiTagsPrompt" class="scs-setting"><label class="scs-label" for="scs-aiTagsPrompt">태그 제안 지시문</label><div class="scs-value"><textarea aria-describedby="scs-aiTagsPrompt-help scs-aiTagsPrompt-feedback" rows="4" id="scs-aiTagsPrompt">Suggest 3 to 8 concise topical tags for this abstract. Return only a JSON array of strings.</textarea><button disabled aria-label="태그 제안 지시문 적용" type="button">적용</button></div><p class="scs-help" id="scs-aiTagsPrompt-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-aiTagsPrompt-feedback"></p></div><div aria-busy="false" data-setting="aiRemarkPrompt" class="scs-setting"><label class="scs-label" for="scs-aiRemarkPrompt">읽기 메모 지시문</label><div class="scs-value"><textarea aria-describedby="scs-aiRemarkPrompt-help scs-aiRemarkPrompt-feedback" rows="4" id="scs-aiRemarkPrompt">Write a concise research reading remark. Separate findings from limitations.</textarea><button disabled aria-label="읽기 메모 지시문 적용" type="button">적용</button></div><p class="scs-help" id="scs-aiRemarkPrompt-help">이 값은 해당 기능에 적용됩니다.</p><p aria-live="polite" role="status" class="scs-feedback" id="scs-aiRemarkPrompt-feedback"></p></div></section></div></div></div><script>/* Explicit typed settings shared by the runtime and the preferences pane. */
+(function(root){
+ 'use strict';
+ const schema={
+  "categories": [
+    {
+      "id": "columns",
+      "label": "열 표시",
+      "description": "메인 문헌 목록의 지표·상태·별점·읽기 시간과 추가 열을 조절합니다."
+    },
+    {
+      "id": "views",
+      "label": "뷰·작업 패널",
+      "description": "기능별 작업 패널과 표시 밀도·목록 크기를 조절합니다."
+    },
+    {
+      "id": "reader",
+      "label": "리더·주석",
+      "description": "PDF 테마와 여백 주석의 실제 표시·필터를 조절합니다."
+    },
+    {
+      "id": "sidebar",
+      "label": "사이드바·탭",
+      "description": "리더 사이드바와 세로 탭·저장 그룹을 조절합니다."
+    },
+    {
+      "id": "tags",
+      "label": "태그",
+      "description": "태그 표시 방식과 제목 옆 태그를 조절합니다."
+    },
+    {
+      "id": "collections",
+      "label": "컬렉션",
+      "description": "개수·즐겨찾기·정렬 기능을 선택합니다."
+    },
+    {
+      "id": "menus",
+      "label": "메뉴·디자인",
+      "description": "작업 메뉴와 패널 디자인을 조절합니다."
+    },
+    {
+      "id": "storage",
+      "label": "읽기 기록",
+      "description": "기록 간격·무활동 제외·상태 연동을 조절합니다. 읽기 기록은 로컬 파일에 저장합니다."
+    },
+    {
+      "id": "metrics",
+      "label": "인용 수·IF",
+      "description": "실제 제공자와 조회 주기·메타데이터 저장을 설정합니다."
+    },
+    {
+      "id": "ai",
+      "label": "번역·AI",
+      "description": "사용할 모델과 요청 문구를 직접 설정합니다. 요청은 사용자가 실행할 때만 전송됩니다."
+    }
+  ],
+  "settings": [
+    {
+      "key": "feature.AIGenerateRemark",
+      "category": "ai",
+      "label": "AI 읽기 메모 제안 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.AIGenerateTags",
+      "category": "ai",
+      "label": "AI 태그 제안 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.IFColumn",
+      "category": "columns",
+      "label": "IF 열 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "IF · Custom · 공식 카탈로그·저장 데이터 범위",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.PDFStyles",
+      "category": "reader",
+      "label": "PDF 테마·사용자 색상·원래 모양 복원 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "읽기 진행 / PDF Style 도구 · 복원은 Custom이 추적한 원래 테마·사이드바 적용",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.ReadUnreadStatus",
+      "category": "storage",
+      "label": "읽음·안 읽음 제목 구분 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "스타일 편집 → 안 읽은 제목 굵게",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.Recent",
+      "category": "views",
+      "label": "최근 문헌 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 최근 문헌",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.addTags",
+      "category": "tags",
+      "label": "태그 추가·제거·경로 이름 변경·병합 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 중첩 태그 · 선택 문헌 범위에서만 변경; 상태·별점 전용 태그 경로 변경 제외",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.annotationColors",
+      "category": "reader",
+      "label": "주석 색상·팔레트 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "읽기 진행 / PDF Style 도구",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.annotationColumn",
+      "category": "columns",
+      "label": "주석 수·페이지별 색상 분포·원문 이동 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Annotations · Custom · 색상 막대는 주석이 있는 페이지를 표시; 문서 전체 진행률로 추정하지 않음",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.annotationManager",
+      "category": "views",
+      "label": "주석 관리·범위 선택·색상 일괄 변경·노트 추출 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 주석 · 현재 컬렉션·하위 컬렉션·선택 문헌 범위",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.attachmentPreview",
+      "category": "views",
+      "label": "첨부 미리보기 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 첨부 미리보기 · Zotero 9 attachment-preview 컴포넌트",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.backlinks",
+      "category": "views",
+      "label": "주석별 참조 노트 수·역링크 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "PDF 주석 머리글 / 워크벤치 → 주석·역링크 · 같은 PDF의 다른 주석 및 다른 라이브러리 참조 구분",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.canvas",
+      "category": "views",
+      "label": "카드·보드 이름·색상·연결 편집과 삭제 복원 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 캔버스 · 문헌/메모 카드; 보드 최대100개, 카드 최대500개",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.citedCountColumn",
+      "category": "columns",
+      "label": "인용 수 열·자동 조회 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Cited Count · Custom",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.collectionItemCount",
+      "category": "collections",
+      "label": "컬렉션 문헌 수 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 컬렉션",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.creatorColumn",
+      "category": "columns",
+      "label": "저자·기여자 열 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Creators · Custom",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.darkLightButton",
+      "category": "menus",
+      "label": "앱 밝게·어둡게 전환 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 스타일 편집",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.dateAddedColumn",
+      "category": "columns",
+      "label": "추가일·수정일 열 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Added / Modified · Custom",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.explore",
+      "category": "views",
+      "label": "문헌 상세·노트·주석·필터·정렬·페이지 탐색 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 문헌 탐색 · 상태·별점·연도 필터 및 현재 컬렉션 범위; 화면100개씩 페이지 이동",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.favoriteCollections",
+      "category": "collections",
+      "label": "컬렉션 즐겨찾기 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 컬렉션",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.graphView",
+      "category": "views",
+      "label": "관계·태그·저자 그래프 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 관계 그래프 · 화면 최대180노드, 검색으로 범위를 좁힘",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.itemTypeFilter",
+      "category": "columns",
+      "label": "항목 유형 빠른 필터 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "항목 아이콘 / 작업 패널 유형 필터",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.marginAnnotation",
+      "category": "reader",
+      "label": "여백 주석과 위치·너비·표시 길이 설정 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "읽기 진행 / PDF Style 도구 · 왼쪽/오른쪽, 너비160–480px, 발췌100–5000자",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.menuVisibility",
+      "category": "menus",
+      "label": "작업 메뉴 표시·숨김 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 스타일 편집",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.noteManager",
+      "category": "views",
+      "label": "노트 검색·생성·편집 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 노트 · 기존 리치 노트 편집은 Zotero 네이티브 편집기로 연결",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.publicationColumn",
+      "category": "columns",
+      "label": "저널·발행처 열 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Publication · Custom",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.publicationTagsColumn",
+      "category": "columns",
+      "label": "저널 등급 태그·조회 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Journal Tags · Custom / 저널 지표 · 추가 등급 조회는 본인의 easyScholar 키 필요",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.ratingColumn",
+      "category": "columns",
+      "label": "별점 열 표시",
+      "type": "boolean",
+      "default": true,
+      "description": "메인 문헌 목록에서 해당 열을 표시합니다.",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.readStatus",
+      "category": "storage",
+      "label": "읽기 시간·상태 연동 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Status · Custom",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.readTimeColumn",
+      "category": "columns",
+      "label": "읽기 시간·페이지 진행 열 표시",
+      "type": "boolean",
+      "default": true,
+      "description": "메인 문헌 목록에서 해당 열을 표시합니다.",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.relatedItems",
+      "category": "views",
+      "label": "선택 문헌 연결·상호 연결 해제 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "작업 패널 하단 · 같은 라이브러리 문헌; 다른 문헌의 연결 보존",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.remarkColumn",
+      "category": "columns",
+      "label": "읽기 메모 열 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Remark · Custom / 상세 문헌 메모",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.renderItemAnnotations",
+      "category": "views",
+      "label": "문헌 상세에 주석 직접 표시 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "문헌 탐색 → 자세히 / 주석 탭 · 다른 탭·문헌으로 전환 시 늦은 응답 무시",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.renderItemNotes",
+      "category": "views",
+      "label": "문헌 상세에 노트 직접 표시 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "문헌 탐색 → 자세히 / 노트 탭 · 단일 문헌 상세에서 노트·주석 함께 표시",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.showAnnotationColorName",
+      "category": "reader",
+      "label": "주석 색상 이름 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "읽기 진행 → 색상 이름",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.sortCollectionItem",
+      "category": "collections",
+      "label": "컬렉션 이름·개수·즐겨찾기 정렬 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 컬렉션",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.statusColumn",
+      "category": "columns",
+      "label": "읽기 상태 열 표시",
+      "type": "boolean",
+      "default": true,
+      "description": "메인 문헌 목록에서 해당 열을 표시합니다.",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.styleEditor",
+      "category": "menus",
+      "label": "패널 CSS 편집 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 스타일 편집 · 패널 범위 CSS, 외부 로딩 규칙 제외",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.tabManager",
+      "category": "sidebar",
+      "label": "탭 순서·다른 탭 닫기·저장 그룹 편집 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 탭 관리 · 그룹 이름·내용 갱신; 라이브러리 탭 보호",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.tags",
+      "category": "tags",
+      "label": "중첩 태그 탐색 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 중첩 태그",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.tagsColumn",
+      "category": "tags",
+      "label": "색상 태그 표시 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Tags · Custom / 제목 태그",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.textTagsColumn",
+      "category": "tags",
+      "label": "텍스트 태그·태그 수 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "Tags / #Tags · Custom",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.titleColumn",
+      "category": "columns",
+      "label": "제목 히트맵·태그·강조 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "스타일 편집 / 문헌 제목",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.tldr",
+      "category": "ai",
+      "label": "초록 요약 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.toogleSidebar",
+      "category": "sidebar",
+      "label": "리더 사이드바 토글 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "읽기 진행 / PDF Style 도구",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.updateItemDateModified",
+      "category": "storage",
+      "label": "탭 활동 시 수정일 갱신 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "스타일 편집 → 수정일 갱신 · 기본 꺼짐; 사용자 선택 시 첨부·부모 날짜 갱신",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.verticalTabManager",
+      "category": "sidebar",
+      "label": "독립 세로 탭 목록 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "탭 관리 / PDF Style 도구",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.viewManager",
+      "category": "views",
+      "label": "열 배치 저장·복원·이름·내용 갱신 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "워크벤치 → 뷰 그룹 · 열 순서·너비·표시·정렬 저장",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.reader.mergeAnnotations",
+      "category": "reader",
+      "label": "선택 주석 병합 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "PDF 주석 우클릭·Style 메뉴 / 워크벤치 → 주석 · 동일 PDF·유형·색상인 하이라이트/밑줄, 같은 페이지 또는 인접 두 페이지; 위치·텍스트·메모·태그 보존, 나머지는 휴지통",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "feature.reader.attachmentVersionSwitch",
+      "category": "reader",
+      "label": "PDF 첨부 버전 전환 사용",
+      "type": "boolean",
+      "default": true,
+      "description": "PDF Style 메뉴 → Switch PDF version · 같은 문헌에 속한 실제 존재하는 PDF만 선택; 기존 탭 유지",
+      "consumer": "featureEnabled"
+    },
+    {
+      "key": "showZeroReadTime",
+      "category": "columns",
+      "label": "기록이 없어도 0초 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "titleHeatmap",
+      "category": "columns",
+      "label": "제목에 읽기 히트맵 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "unreadBold",
+      "category": "columns",
+      "label": "안 읽은 제목 굵게",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "timeFormat",
+      "category": "columns",
+      "label": "읽기 시간 표시 형식",
+      "type": "select",
+      "default": "compact",
+      "options": [
+        {
+          "value": "compact",
+          "label": "1h 20m 05s"
+        },
+        {
+          "value": "clock",
+          "label": "01:20:05"
+        },
+        {
+          "value": "seconds",
+          "label": "4805초"
+        }
+      ]
+    },
+    {
+      "key": "dateDisplay",
+      "category": "columns",
+      "label": "날짜 표시",
+      "type": "select",
+      "default": "absolute",
+      "options": [
+        {
+          "value": "absolute",
+          "label": "저장된 날짜"
+        },
+        {
+          "value": "relative",
+          "label": "몇 시간·며칠 전"
+        }
+      ]
+    },
+    {
+      "key": "customFields",
+      "category": "columns",
+      "label": "추가 필드 열",
+      "type": "text",
+      "default": "",
+      "description": "쉼표로 DOI, publisher, language 등 Zotero 필드명을 입력합니다."
+    },
+    {
+      "key": "recordReading",
+      "category": "storage",
+      "label": "활성 PDF 읽기 시간 기록",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "autoStatus",
+      "category": "storage",
+      "label": "읽기 시작 시 reading 상태 자동 반영",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "touchDateOnRead",
+      "category": "storage",
+      "label": "읽는 문헌의 수정일 갱신",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "recordIntervalMs",
+      "category": "storage",
+      "label": "기록·표시 갱신 간격 (ms)",
+      "type": "number",
+      "default": 1000,
+      "min": 250,
+      "max": 5000,
+      "step": 250,
+      "description": "기본 1초. 비활성 창과 무활동 시간은 제외합니다."
+    },
+    {
+      "key": "idleSeconds",
+      "category": "storage",
+      "label": "무활동 제외 기준 (초)",
+      "type": "number",
+      "default": 60,
+      "min": 5,
+      "max": 300,
+      "step": 1
+    },
+    {
+      "key": "workbenchDensity",
+      "category": "views",
+      "label": "화면 밀도",
+      "type": "select",
+      "default": "comfortable",
+      "options": [
+        {
+          "value": "comfortable",
+          "label": "간격 넓게"
+        },
+        {
+          "value": "compact",
+          "label": "간격 좁게"
+        }
+      ]
+    },
+    {
+      "key": "explorePageSize",
+      "category": "views",
+      "label": "한 페이지 문헌 수",
+      "type": "number",
+      "default": 100,
+      "min": 25,
+      "max": 200,
+      "step": 1
+    },
+    {
+      "key": "matrixPageSize",
+      "category": "views",
+      "label": "비교표 한 페이지 문헌 수",
+      "type": "number",
+      "default": 50,
+      "min": 10,
+      "max": 100,
+      "step": 1
+    },
+    {
+      "key": "inlineEvidenceCount",
+      "category": "views",
+      "label": "처음 펼칠 노트·주석 수",
+      "type": "number",
+      "default": 5,
+      "min": 1,
+      "max": 20,
+      "step": 1
+    },
+    {
+      "key": "maxExcerptLength",
+      "category": "views",
+      "label": "본문 발췌 표시 글자 수",
+      "type": "number",
+      "default": 1200,
+      "min": 200,
+      "max": 5000,
+      "step": 1
+    },
+    {
+      "key": "graphNodeLimit",
+      "category": "views",
+      "label": "그래프 최대 문헌 수",
+      "type": "number",
+      "default": 180,
+      "min": 20,
+      "max": 180,
+      "step": 1
+    },
+    {
+      "key": "annotationIgnoreFigures",
+      "category": "views",
+      "label": "Figure·Table로 시작하는 주석 제외",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "annotationPreferComment",
+      "category": "views",
+      "label": "주석 텍스트보다 메모를 우선 표시",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "readerTheme",
+      "category": "reader",
+      "label": "PDF 테마",
+      "type": "select",
+      "default": "original",
+      "options": [
+        {
+          "value": "original",
+          "label": "원래 테마 유지"
+        },
+        {
+          "value": "light",
+          "label": "밝게"
+        },
+        {
+          "value": "dark",
+          "label": "어둡게"
+        },
+        {
+          "value": "sepia",
+          "label": "세피아"
+        },
+        {
+          "value": "custom",
+          "label": "사용자 색상"
+        }
+      ]
+    },
+    {
+      "key": "readerCustomBackground",
+      "category": "reader",
+      "label": "사용자 PDF 배경",
+      "type": "color",
+      "default": "#ffffff"
+    },
+    {
+      "key": "readerCustomForeground",
+      "category": "reader",
+      "label": "사용자 PDF 글자",
+      "type": "color",
+      "default": "#202d46"
+    },
+    {
+      "key": "marginEnabled",
+      "category": "reader",
+      "label": "여백 주석 표시",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "marginSide",
+      "category": "reader",
+      "label": "여백 위치",
+      "type": "select",
+      "default": "right",
+      "options": [
+        {
+          "value": "right",
+          "label": "오른쪽"
+        },
+        {
+          "value": "left",
+          "label": "왼쪽"
+        }
+      ]
+    },
+    {
+      "key": "marginWidth",
+      "category": "reader",
+      "label": "여백 주석 너비 (px)",
+      "type": "number",
+      "default": 210,
+      "min": 160,
+      "max": 480,
+      "step": 1
+    },
+    {
+      "key": "marginFontSize",
+      "category": "reader",
+      "label": "여백 주석 글자 크기",
+      "type": "number",
+      "default": 13,
+      "min": 10,
+      "max": 22,
+      "step": 1
+    },
+    {
+      "key": "marginTextLimit",
+      "category": "reader",
+      "label": "여백 주석 최대 글자 수",
+      "type": "number",
+      "default": 1500,
+      "min": 100,
+      "max": 5000,
+      "step": 1
+    },
+    {
+      "key": "marginShowQuote",
+      "category": "reader",
+      "label": "인용 텍스트 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "marginShowComment",
+      "category": "reader",
+      "label": "주석 메모 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "marginShowHighlight",
+      "category": "reader",
+      "label": "하이라이트 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "marginShowUnderline",
+      "category": "reader",
+      "label": "밑줄 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "marginShowNote",
+      "category": "reader",
+      "label": "메모 주석 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "marginShowImage",
+      "category": "reader",
+      "label": "이미지 주석 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "marginShowText",
+      "category": "reader",
+      "label": "텍스트 주석 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "marginShowInk",
+      "category": "reader",
+      "label": "펜 주석 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "readerSidebar",
+      "category": "sidebar",
+      "label": "리더 사이드바 표시",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "verticalTabs",
+      "category": "sidebar",
+      "label": "세로 탭 목록 표시",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "tagDisplayMode",
+      "category": "tags",
+      "label": "태그 열 표시 대상",
+      "type": "select",
+      "default": "all",
+      "options": [
+        {
+          "value": "all",
+          "label": "모든 일반 태그"
+        },
+        {
+          "value": "colored",
+          "label": "색상이 지정된 태그"
+        },
+        {
+          "value": "prefixed",
+          "label": "접두사와 일치하는 태그"
+        }
+      ]
+    },
+    {
+      "key": "textTagPrefix",
+      "category": "tags",
+      "label": "텍스트 태그 접두사",
+      "type": "text",
+      "default": "#"
+    },
+    {
+      "key": "titleTags",
+      "category": "tags",
+      "label": "제목 옆 태그 표시",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "titleTagLimit",
+      "category": "tags",
+      "label": "제목 옆 최대 태그 수",
+      "type": "number",
+      "default": 3,
+      "min": 1,
+      "max": 10,
+      "step": 1
+    },
+    {
+      "key": "marquee",
+      "category": "columns",
+      "label": "긴 제목 호버 스크롤",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "hoverDelay",
+      "category": "columns",
+      "label": "스크롤 시작 대기 (ms)",
+      "type": "number",
+      "default": 200,
+      "min": 0,
+      "max": 2000,
+      "step": 50
+    },
+    {
+      "key": "scrollSpeed",
+      "category": "columns",
+      "label": "스크롤 속도 (px/s)",
+      "type": "number",
+      "default": 180,
+      "min": 30,
+      "max": 600,
+      "step": 10
+    },
+    {
+      "key": "quickTypeFilter",
+      "category": "columns",
+      "label": "항목 아이콘으로 유형 필터",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "accentColor",
+      "category": "menus",
+      "label": "강조 색상",
+      "type": "color",
+      "default": "#374151"
+    },
+    {
+      "key": "panelFontSize",
+      "category": "menus",
+      "label": "패널 글자 크기",
+      "type": "number",
+      "default": 13,
+      "min": 11,
+      "max": 20,
+      "step": 1
+    },
+    {
+      "key": "panelCSS",
+      "category": "menus",
+      "label": "Custom 패널 CSS",
+      "type": "textarea",
+      "default": "",
+      "description": "패널 범위에만 적용됩니다. 외부 파일을 불러오는 CSS는 허용하지 않습니다.",
+      "rows": 5
+    },
+    {
+      "key": "autoCitations",
+      "category": "metrics",
+      "label": "보이는 문헌 인용 수 자동 조회",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "metadataCitations",
+      "category": "metrics",
+      "label": "논문 추가·수정 시 인용 수 조회 후 Extra 저장",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "citationRefreshDays",
+      "category": "metrics",
+      "label": "성공한 인용 수 재조회 간격 (일)",
+      "type": "number",
+      "default": 7,
+      "min": 1,
+      "max": 90,
+      "step": 1
+    },
+    {
+      "key": "citationRetryMinutes",
+      "category": "metrics",
+      "label": "조회 오류 재시도 간격 (분)",
+      "type": "number",
+      "default": 30,
+      "min": 1,
+      "max": 1440,
+      "step": 1
+    },
+    {
+      "key": "citationEmail",
+      "category": "metrics",
+      "label": "연락 이메일 (선택)",
+      "type": "email",
+      "default": ""
+    },
+    {
+      "key": "openalexApiKey",
+      "category": "metrics",
+      "label": "OpenAlex API 키 (선택)",
+      "type": "password",
+      "default": "",
+      "secret": true
+    },
+    {
+      "key": "journalRankKey",
+      "category": "metrics",
+      "label": "easyScholar API 키",
+      "type": "password",
+      "default": "",
+      "secret": true,
+      "description": "별도 저널 등급 조회용입니다. IF는 공식 카탈로그·검증된 저장값과 자동 매칭합니다."
+    },
+    {
+      "key": "aiEndpoint",
+      "category": "ai",
+      "label": "Chat Completions endpoint",
+      "type": "url",
+      "default": ""
+    },
+    {
+      "key": "aiModel",
+      "category": "ai",
+      "label": "모델 이름",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "key": "aiKey",
+      "category": "ai",
+      "label": "API 키",
+      "type": "password",
+      "default": "",
+      "secret": true
+    },
+    {
+      "key": "aiLanguage",
+      "category": "ai",
+      "label": "출력 언어",
+      "type": "text",
+      "default": "Korean"
+    },
+    {
+      "key": "aiTagsPrompt",
+      "category": "ai",
+      "label": "태그 제안 지시문",
+      "type": "textarea",
+      "default": "Suggest 3 to 8 concise topical tags for this abstract. Return only a JSON array of strings."
+    },
+    {
+      "key": "aiRemarkPrompt",
+      "category": "ai",
+      "label": "읽기 메모 지시문",
+      "type": "textarea",
+      "default": "Write a concise research reading remark. Separate findings from limitations."
+    },
+    {
+      "key": "open-workbench",
+      "category": "views",
+      "label": "연구 작업 패널 열기",
+      "type": "action",
+      "default": null,
+      "action": "workbench"
+    },
+    {
+      "key": "show-columns",
+      "category": "columns",
+      "label": "기본 Custom 열 표시",
+      "type": "action",
+      "default": null,
+      "action": "columns"
+    },
+    {
+      "key": "update-citations",
+      "category": "metrics",
+      "label": "선택 문헌 인용 수 조회",
+      "type": "action",
+      "default": null,
+      "action": "citations"
+    },
+    {
+      "key": "stop-citations",
+      "category": "metrics",
+      "label": "인용 수 조회 중지",
+      "type": "action",
+      "default": null,
+      "action": "cancelCitations"
+    },
+    {
+      "key": "update-if",
+      "category": "metrics",
+      "label": "선택 저널 공식 IF 확인",
+      "type": "action",
+      "default": null,
+      "action": "journals"
+    },
+    {
+      "key": "ranks",
+      "category": "metrics",
+      "label": "선택 저널 등급 조회",
+      "type": "action",
+      "default": null,
+      "action": "ranks"
+    }
+  ]
+};
+ function validate(key,value){const setting=schema.settings.find(row=>row.key===key);if(!setting||setting.type==='action')throw new Error('Unknown setting: '+key);
+  if(setting.type==='boolean'){if(typeof value!=='boolean')throw new Error('참/거짓 값을 선택하세요.');}
+  else if(setting.type==='number'){if(typeof value!=='number'||!Number.isFinite(value)||value<setting.min||value>setting.max||setting.step&&!Number.isInteger((value-setting.min)/setting.step))throw new Error(`${setting.min}–${setting.max} 범위의 값을 입력하세요.`);}
+  else if(setting.type==='select'){if(!setting.options.some(option=>option.value===value))throw new Error('목록의 값을 선택하세요.');}
+  else {if(typeof value!=='string'||value.length>50000)throw new Error('설정 문자열이 너무 깁니다.');if(setting.type==='color'&&!/^#[a-f0-9]{6}$/i.test(value))throw new Error('#RRGGBB 색상을 입력하세요.');}
+  return value;
+ }
+ const api={schema,validate};root.CustomStyleSettingsSchema=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+})(globalThis);
+</script><script>/* Schema-driven preferences. Values stay local; only explicit runtime actions act externally. */
+(function (root) {
+ 'use strict';
+ const HTML='http://www.w3.org/1999/xhtml',instances=new WeakMap();
+ function mount({document:doc,runtime}) {
+  const host=doc.getElementById('style-custom-settings-root');
+  if(!host)throw new Error('Style Custom preferences container is unavailable');
+  const existing=instances.get(host);if(existing)return existing;
+  if(!runtime?.settingsSchema)throw new Error('Style Custom이 준비되지 않았습니다. 설정을 다시 여세요.');
+  const win=doc.defaultView,schema=runtime.settingsSchema,states=new Map(),sections=new Map(),categories=new Map();
+  let destroyed=false,active=schema.categories[0]?.id||'',poll=null,observer=null,statusPending=false;
+  const node=(tag,text,parent,attrs={})=>{const element=doc.createElementNS(HTML,tag);if(text!==null)element.textContent=text;for(const [name,value]of Object.entries(attrs))element.setAttribute(name,String(value));parent?.appendChild(element);return element;};
+  host.replaceChildren();
+  const heading=node('div',null,host,{class:'scs-heading'});node('h2','Style Custom 설정',heading);node('p','항목별 설명을 확인하고 값을 적용하세요. 텍스트 입력은 적용을 눌러야 저장됩니다.',heading);
+  const message=node('p','설정을 불러오는 중…',host,{role:'status','aria-live':'polite',class:'scs-message'});
+  const live=node('section',null,host,{class:'scs-live','aria-label':'현재 동작 상태'});node('strong','현재 동작',live);node('p','현재 선택 문헌 누적 읽기',live,{class:'scs-reading-label'});const readTime=node('output','—',live,{class:'scs-reading-value','aria-label':'현재 선택 문헌 누적 읽기','aria-live':'polite'});const liveText=node('p','현재 상태를 확인하는 중…',live);
+  const searchBar=node('div',null,host,{class:'scs-search'});const search=node('input',null,searchBar,{type:'search',placeholder:'설정 이름·설명 검색','aria-label':'Style Custom 설정 검색'});
+  const clearSearch=node('button','검색 지우기',searchBar,{type:'button'});const resultCount=node('span','',searchBar,{role:'status'});
+  const layout=node('div',null,host,{class:'scs-layout'}),nav=node('nav',null,layout,{'aria-label':'설정 분류',class:'scs-nav'}),content=node('div',null,layout,{class:'scs-content'});
+  const empty=node('p','검색에 맞는 설정이 없습니다. 검색어를 바꾸거나 지우세요.',content,{class:'scs-empty'});empty.hidden=true;
+  const notify=(text,error=false)=>{if(destroyed)return;message.textContent=text;message.dataset.error=String(error);};
+  const secret=spec=>!!spec.secret||spec.type==='password';
+  const valueOf=state=>state.spec.type==='boolean'?state.input.checked:state.input.value;
+  function display(state,value){if(state.spec.type==='boolean')state.input.checked=!!value;else state.input.value=String(value??'');}
+  function sync(state){
+   const busy=state.pending||categories.get(state.spec.category)?.pending;
+   state.input.disabled=!!busy||state.loading;
+   if(state.apply){state.apply.disabled=!!busy||state.loading||!state.dirty;state.apply.hidden=['boolean','select'].includes(state.spec.type)&&!state.error;}
+   state.row.setAttribute('aria-busy',String(!!busy||state.loading));
+  }
+  function changed(state){state.revision++;state.dirty=state.spec.type==='boolean'?state.input.checked!==state.original:String(state.input.value)!==String(state.original??'');state.error=false;state.feedback.textContent=state.dirty?'아직 적용하지 않았습니다.':'';sync(state);}
+  function parse(state){
+   const spec=state.spec;
+   if(spec.type==='boolean')return !!state.input.checked;
+   const raw=state.input.value;
+   if(spec.type==='number'){
+    if(!raw.trim())throw new Error('숫자를 입력하세요.');const value=Number(raw);
+    if(!Number.isFinite(value)||(spec.min!==undefined&&value<spec.min)||(spec.max!==undefined&&value>spec.max))throw new Error(`범위에 맞는 숫자를 입력하세요${spec.min!==undefined||spec.max!==undefined?' ('+(spec.min??'제한 없음')+'–'+(spec.max??'제한 없음')+')':''}.`);
+    if(spec.step&&spec.step!=='any'){const steps=(value-(spec.min??0))/Number(spec.step);if(Math.abs(steps-Math.round(steps))>1e-8)throw new Error('설정된 간격에 맞는 숫자를 입력하세요.');}
+    return value;
+   }
+   if(spec.type==='select'){const option=(spec.options||[]).find(option=>String(option.value)===raw);if(!option)throw new Error('목록에서 값을 선택하세요.');return option.value;}
+   if(spec.type==='color'&&!/^#[0-9a-f]{6}$/i.test(raw))throw new Error('#RRGGBB 형식의 색상을 선택하세요.');
+   return raw;
+  }
+  async function hydrate(state,{force=false,expectedRevision=state.revision}={}){
+   if(state.spec.type==='action')return;
+   try{
+    const value=await runtime.getSetting(state.spec.key);if(destroyed)return;
+    state.original=value===undefined?state.spec.default:value;
+    if(state.revision===expectedRevision&&(force||!state.dirty)){display(state,state.original);state.dirty=false;state.error=false;state.feedback.textContent='';}
+   }catch(error){if(!destroyed){state.error=true;state.feedback.textContent='값을 읽지 못했습니다: '+(error.message||error);}}
+   finally{state.loading=false;if(!destroyed)sync(state);}
+  }
+  async function save(state){
+   if(destroyed||state.pending||categories.get(state.spec.category)?.pending)return;
+   let value;try{value=parse(state);}catch(error){state.error=true;state.feedback.textContent=error.message;sync(state);return;}
+   const revision=state.revision;state.pending=true;state.feedback.textContent='적용하는 중…';sync(state);
+   try{
+    const result=await runtime.setSetting(state.spec.key,value);if(destroyed)return;const committed=['string','number','boolean'].includes(typeof result)?result:value;state.original=committed;
+    if(state.revision===revision)display(state,committed);
+    state.dirty=state.spec.type==='boolean'?state.input.checked!==committed:String(state.input.value)!==String(committed??'');state.error=false;
+    state.feedback.textContent=state.revision===revision||!state.dirty?'적용했습니다.':'이전 값을 적용했습니다. 새 입력은 아직 적용하지 않았습니다.';
+    await refreshStatus();
+   }catch(error){if(!destroyed){state.error=true;state.dirty=true;state.feedback.textContent='적용하지 못했습니다: '+(error.message||error);}}
+   finally{state.pending=false;if(!destroyed)sync(state);}
+  }
+  async function reset(category){
+   const section=categories.get(category);if(section.pending||destroyed)return;
+   const members=[...states.values()].filter(state=>state.spec.category===category);
+   if(members.some(state=>state.pending)){notify('진행 중인 적용이 끝난 뒤 기본값으로 되돌리세요.',true);return;}
+   const revisions=new Map(members.map(state=>[state,state.revision]));section.pending=true;section.reset.disabled=true;members.forEach(sync);notify(section.label+' 기본값을 적용하는 중…');
+   try{
+    await runtime.resetSettings(category);if(destroyed)return;
+    await Promise.all(members.filter(state=>!secret(state.spec)).map(state=>hydrate(state,{force:true,expectedRevision:revisions.get(state)})));
+    notify(section.label+' 설정을 기본값으로 되돌렸습니다. API 키·비밀번호는 유지했습니다.');await refreshStatus();
+   }catch(error){notify('기본값으로 되돌리지 못했습니다: '+(error.message||error),true);}
+   finally{section.pending=false;section.reset.disabled=false;if(!destroyed)members.forEach(sync);}
+  }
+  function filter(){
+   const query=search.value.trim().toLocaleLowerCase();let count=0;
+   for(const [id,section]of sections){let visible=0;for(const state of states.values())if(state.spec.category===id){const hay=[state.spec.label,state.spec.description,categories.get(id).label,...(state.spec.options||[]).map(option=>option.label)].join(' ').toLocaleLowerCase();const matches=!query||hay.includes(query);state.row.hidden=!matches;if(matches)visible++;}section.hidden=query?!visible:id!==active;if(!section.hidden)count+=visible;}
+   for(const [id,category]of categories){category.button.setAttribute('aria-current',!query&&id===active?'page':'false');category.button.classList.toggle('active',!query&&id===active);}
+   empty.hidden=count>0;resultCount.textContent=query?`${count}개 설정 검색됨`:'';
+  }
+  function selectCategory(id){if(!categories.has(id)||destroyed)return;active=id;search.value='';filter();}
+  for(const category of schema.categories){
+   const button=node('button',category.label,nav,{type:'button','data-category':category.id});button.addEventListener('click',()=>selectCategory(category.id));
+   const section=node('section',null,content,{class:'scs-category','data-category':category.id}),title=node('div',null,section,{class:'scs-category-heading'});node('h3',category.label,title);if(category.description)node('p',category.description,section,{class:'scs-help'});
+   const resetButton=node('button','이 분류 기본값 복원',title,{type:'button','aria-label':category.label+' 기본값 복원'});resetButton.addEventListener('click',()=>reset(category.id));
+   categories.set(category.id,{label:category.label,button,reset:resetButton,pending:false});sections.set(category.id,section);
+  }
+  for(const spec of schema.settings){
+   const section=sections.get(spec.category);if(!section||!spec.key||states.has(spec.key))throw new Error('Invalid settings schema');
+   const id='scs-'+encodeURIComponent(spec.key),row=node('div',null,section,{class:'scs-setting','data-setting':spec.key});
+   const state={spec,row,revision:0,original:spec.default,dirty:false,pending:false,loading:spec.type!=='action',error:false};
+   const descriptionID=id+'-help',feedbackID=id+'-feedback';
+   const label=node('label',spec.label,row,{for:id,class:'scs-label'});const line=node('div',null,row,{class:'scs-value'});
+   if(spec.type==='action'){
+    state.input=node('button',spec.label,line,{type:'button',id});label.hidden=true;
+    state.input.addEventListener('click',async()=>{if(state.pending||destroyed)return;state.pending=true;state.feedback.textContent='실행하는 중…';sync(state);try{await runtime.runSettingAction(spec.action);if(!destroyed){state.feedback.textContent='실행했습니다.';await refreshStatus();}}catch(error){if(!destroyed){state.error=true;state.feedback.textContent='실행하지 못했습니다: '+(error.message||error);}}finally{state.pending=false;if(!destroyed)sync(state);}});
+   }else{
+    if(spec.type==='select'){state.input=node('select',null,line,{id});for(const option of spec.options||[])node('option',option.label,state.input,{value:option.value});}
+    else if(spec.type==='textarea'){state.input=node('textarea',null,line,{id,rows:spec.rows||4});}
+    else if(['boolean','number','color','text','password','email','url'].includes(spec.type)){state.input=node('input',null,line,{id,type:secret(spec)?'password':spec.type==='boolean'?'checkbox':spec.type});}
+    else throw new Error('Unsupported settings type: '+spec.type);
+    if(secret(spec)){state.input.type='password';state.input.setAttribute('autocomplete','off');state.input.setAttribute('spellcheck','false');}
+    for(const key of ['min','max','step'])if(spec[key]!==undefined)state.input.setAttribute(key,spec[key]);
+    display(state,spec.default);state.apply=node('button','적용',line,{type:'button','aria-label':spec.label+' 적용'});state.apply.addEventListener('click',()=>save(state));
+    state.input.addEventListener('input',()=>changed(state));state.input.addEventListener('change',()=>{changed(state);if(['boolean','select'].includes(spec.type))void save(state);});
+    state.input.addEventListener('keydown',event=>{if(event.key==='Enter'&&spec.type!=='textarea'){event.preventDefault();void save(state);}});
+   }
+   state.input.setAttribute('aria-describedby',descriptionID+' '+feedbackID);
+   node('p',spec.description|| (secret(spec)?'비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.':'이 값은 해당 기능에 적용됩니다.'),row,{id:descriptionID,class:'scs-help'});
+   state.feedback=node('p','',row,{id:feedbackID,class:'scs-feedback',role:'status','aria-live':'polite'});states.set(spec.key,state);sync(state);
+  }
+  async function refreshStatus(){
+   if(destroyed||statusPending)return;statusPending=true;
+   try{const value=await runtime.getSettingsStatus?.();if(destroyed)return;
+    if(!value){readTime.textContent='—';liveText.textContent='현재 동작 정보를 제공하지 않습니다.';return;}
+    const seconds=typeof value.readSeconds==='number'&&Number.isFinite(value.readSeconds)&&value.readSeconds>=0?Math.floor(value.readSeconds):null;
+    readTime.textContent=seconds===null?'—':seconds+'초';
+    const parts=[value.version?'버전 '+value.version:null,'읽기 기록 '+(value.recordReading?'켜짐':'꺼짐'),value.selectedTitle?'선택: '+value.selectedTitle:'선택한 문헌 없음','누적 읽기 '+(seconds===null?'—':seconds+'초'),value.citationStatus?'인용 조회: '+value.citationStatus:null,value.storagePath?'저장 위치: '+value.storagePath:null];
+    liveText.textContent=parts.filter(Boolean).join(' · ');
+   }catch(error){if(!destroyed){readTime.textContent='—';liveText.textContent='현재 동작을 확인하지 못했습니다.';}}
+   finally{statusPending=false;}
+  }
+  search.addEventListener('input',filter);clearSearch.addEventListener('click',()=>{search.value='';filter();search.focus();});
+  nav.addEventListener('keydown',event=>{if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...nav.querySelectorAll('button')],index=buttons.indexOf(doc.activeElement);if(index<0)return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:Math.max(0,Math.min(buttons.length-1,index+(event.key==='ArrowDown'?1:-1)));buttons[next].focus();selectCategory(buttons[next].dataset.category);});
+  function destroy(){if(destroyed)return;destroyed=true;if(poll!==null)win.clearInterval(poll);observer?.disconnect();win.removeEventListener('unload',destroy);instances.delete(host);}
+  async function loadValues(){
+   await Promise.all([...states.values()].filter(state=>!state.pending&&!categories.get(state.spec.category)?.pending).map(state=>{state.loading=state.spec.type!=='action';sync(state);return hydrate(state);}));
+   if(destroyed)return;filter();const errors=[...states.values()].filter(state=>state.error).length;notify(errors?errors+'개 설정을 읽지 못했습니다. 설정 다시 읽기로 재시도하세요.':'설정을 불러왔습니다.',errors>0);await refreshStatus();
+  }
+  const reload=node('button','설정 다시 읽기',heading,{type:'button'});reload.addEventListener('click',async()=>{if(reload.disabled||destroyed)return;reload.disabled=true;try{await loadValues();}finally{reload.disabled=false;}});
+  const ready=loadValues();
+  const controller={ready,destroy,refreshStatus,selectCategory};instances.set(host,controller);
+  win.addEventListener('unload',destroy,{once:true});poll=win.setInterval(()=>{if(!destroyed&&host.isConnected&&!doc.hidden)void refreshStatus();},1000);
+  if(win.MutationObserver){observer=new win.MutationObserver(()=>{if(!host.isConnected)destroy();});observer.observe(doc,{childList:true,subtree:true});}
+  filter();return controller;
+ }
+ async function init(input){const doc=input?.nodeType===9?input:input?.target?.ownerDocument||input?.ownerDocument||root.document;const runtime=doc.defaultView?.Zotero?.StyleCustom||root.Zotero?.StyleCustom;
+  try{const controller=mount({document:doc,runtime});await controller.ready;return controller;}catch(error){const host=doc?.getElementById('style-custom-settings-root');if(host){host.replaceChildren();const message=doc.createElementNS(HTML,'p');message.textContent='설정을 열지 못했습니다: '+(error.message||error);message.setAttribute('role','alert');host.appendChild(message);}throw error;}
+ }
+ const api={mount,init};root.CustomStyleSettings=api;if(root.document?.defaultView)root.document.defaultView.CustomStyleSettings=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+})(typeof globalThis!=='undefined'?globalThis:this);
+</script><script>(async function mountPreview(document,api,schema){
+ const values=Object.fromEntries(schema.schema.settings.filter(row=>row.type!=='action').map(row=>[row.key,row.default]));
+ const runtime={settingsSchema:schema.schema,getSetting:key=>values[key],setSetting:async(key,value)=>{schema.validate(key,value);values[key]=value;return value;},resetSettings:async category=>{for(const row of schema.schema.settings)if(row.category===category&&!row.secret&&row.type!=='action')values[row.key]=row.default;},runSettingAction:async()=>{throw new Error('설정 화면 미리보기입니다. 실제 Zotero 작업은 실행하지 않습니다.');},getSettingsStatus:()=>({version:'0.8.0 미리보기',recordReading:values.recordReading,selectedTitle:'예시 문헌',readSeconds:0,citationStatus:'실제 연결 없음',storagePath:'예시 · 실제 파일에 저장하지 않음'})};
+ const pane=api.mount({document,runtime});await pane.ready;return pane;
+})(document,CustomStyleSettings,CustomStyleSettingsSchema);</script></body></html>

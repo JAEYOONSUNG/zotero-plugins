@@ -1,0 +1,916 @@
+{
+  "schema": 1,
+  "version": "0.8.0",
+  "baseline": "Installed Ethereal Style 6.0.76: all 50 simple and dotted preference feature IDs plus requested workflows",
+  "sourceFeatureIDs": [
+    "AIGenerateRemark",
+    "AIGenerateTags",
+    "IFColumn",
+    "PDFStyles",
+    "ReadUnreadStatus",
+    "Recent",
+    "addTags",
+    "annotationColors",
+    "annotationColumn",
+    "annotationManager",
+    "attachmentPreview",
+    "backlinks",
+    "canvas",
+    "citedCountColumn",
+    "collectionItemCount",
+    "creatorColumn",
+    "darkLightButton",
+    "dateAddedColumn",
+    "explore",
+    "favoriteCollections",
+    "graphView",
+    "itemTypeFilter",
+    "marginAnnotation",
+    "menuVisibility",
+    "noteManager",
+    "publicationColumn",
+    "publicationTagsColumn",
+    "ratingColumn",
+    "readStatus",
+    "readTimeColumn",
+    "reader.attachmentVersionSwitch",
+    "reader.mergeAnnotations",
+    "relatedItems",
+    "remarkColumn",
+    "renderItemAnnotations",
+    "renderItemNotes",
+    "showAnnotationColorName",
+    "sortCollectionItem",
+    "statusColumn",
+    "styleEditor",
+    "tabManager",
+    "tags",
+    "tagsColumn",
+    "textTagsColumn",
+    "titleColumn",
+    "tldr",
+    "toogleSidebar",
+    "updateItemDateModified",
+    "verticalTabManager",
+    "viewManager"
+  ],
+  "features": [
+    {
+      "id": "AIGenerateRemark",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "AI 읽기 메모 제안",
+      "implementation": {
+        "file": "src/assist.js",
+        "marker": "remark:"
+      },
+      "tests": [
+        "test/assist.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 번역 · AI",
+      "condition": "사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "status": "implemented"
+    },
+    {
+      "id": "AIGenerateTags",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "AI 태그 제안",
+      "implementation": {
+        "file": "src/assist.js",
+        "marker": "tags:"
+      },
+      "tests": [
+        "test/assist.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 번역 · AI",
+      "condition": "사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "status": "implemented"
+    },
+    {
+      "id": "IFColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "IF 열",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "key === \"if\""
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "IF · Custom",
+      "condition": "공식 카탈로그·저장 데이터 범위",
+      "status": "implemented"
+    },
+    {
+      "id": "PDFStyles",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "PDF 테마·사용자 색상·원래 모양 복원",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "applyTheme"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs"
+      ],
+      "entryPoint": "읽기 진행 / PDF Style 도구",
+      "condition": "복원은 Custom이 추적한 원래 테마·사이드바 적용",
+      "status": "implemented"
+    },
+    {
+      "id": "ReadUnreadStatus",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "읽음·안 읽음 제목 구분",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "unreadBold"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "스타일 편집 → 안 읽은 제목 굵게",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "Recent",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "최근 문헌",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "drawRecent"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 최근 문헌",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "addTags",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "태그 추가·제거·경로 이름 변경·병합",
+      "implementation": {
+        "file": "src/library.js",
+        "marker": "async function addTags"
+      },
+      "tests": [
+        "test/library.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 중첩 태그",
+      "condition": "선택 문헌 범위에서만 변경; 상태·별점 전용 태그 경로 변경 제외",
+      "status": "implemented"
+    },
+    {
+      "id": "annotationColors",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "주석 색상·팔레트",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "saveAnnotationPalette"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs"
+      ],
+      "entryPoint": "읽기 진행 / PDF Style 도구",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "annotationColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "주석 수·페이지별 색상 분포·원문 이동",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "annotationCount"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Annotations · Custom",
+      "condition": "색상 막대는 주석이 있는 페이지를 표시; 문서 전체 진행률로 추정하지 않음",
+      "status": "implemented"
+    },
+    {
+      "id": "annotationManager",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "주석 관리·범위 선택·색상 일괄 변경·노트 추출",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "drawAnnotations"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 주석",
+      "condition": "현재 컬렉션·하위 컬렉션·선택 문헌 범위",
+      "status": "implemented"
+    },
+    {
+      "id": "attachmentPreview",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "첨부 미리보기",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "drawAttachments"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 첨부 미리보기",
+      "condition": "Zotero 9 attachment-preview 컴포넌트",
+      "status": "implemented"
+    },
+    {
+      "id": "backlinks",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "주석별 참조 노트 수·역링크",
+      "implementation": {
+        "file": "src/library.js",
+        "marker": "async function backlinks"
+      },
+      "tests": [
+        "test/library.test.mjs"
+      ],
+      "entryPoint": "PDF 주석 머리글 / 워크벤치 → 주석·역링크",
+      "condition": "같은 PDF의 다른 주석 및 다른 라이브러리 참조 구분",
+      "status": "implemented"
+    },
+    {
+      "id": "canvas",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "카드·보드 이름·색상·연결 편집과 삭제 복원",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "drawCanvas"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 캔버스",
+      "condition": "문헌/메모 카드; 보드 최대100개, 카드 최대500개",
+      "status": "implemented"
+    },
+    {
+      "id": "citedCountColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "인용 수 열·자동 조회",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "refreshCitations"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Cited Count · Custom",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "collectionItemCount",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "컬렉션 문헌 수",
+      "implementation": {
+        "file": "src/library.js",
+        "marker": "async function collections"
+      },
+      "tests": [
+        "test/library.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 컬렉션",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "creatorColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "저자·기여자 열",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "key === \"authors\""
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Creators · Custom",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "darkLightButton",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "앱 밝게·어둡게 전환",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "toggleAppTheme"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 스타일 편집",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "dateAddedColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "추가일·수정일 열",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "key === \"added\""
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Added / Modified · Custom",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "explore",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "문헌 상세·노트·주석·필터·정렬·페이지 탐색",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "paperList"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 문헌 탐색",
+      "condition": "상태·별점·연도 필터 및 현재 컬렉션 범위; 화면100개씩 페이지 이동",
+      "status": "implemented"
+    },
+    {
+      "id": "favoriteCollections",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "컬렉션 즐겨찾기",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "favoriteCollections"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 컬렉션",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "graphView",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "관계·태그·저자 그래프",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "drawGraph"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 관계 그래프",
+      "condition": "화면 최대180노드, 검색으로 범위를 좁힘",
+      "status": "implemented"
+    },
+    {
+      "id": "itemTypeFilter",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "항목 유형 빠른 필터",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "quickTypeFilter"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "항목 아이콘 / 작업 패널 유형 필터",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "marginAnnotation",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "여백 주석과 위치·너비·표시 길이 설정",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "paintCards"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs"
+      ],
+      "entryPoint": "읽기 진행 / PDF Style 도구",
+      "condition": "왼쪽/오른쪽, 너비160–480px, 발췌100–5000자",
+      "status": "implemented"
+    },
+    {
+      "id": "menuVisibility",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "작업 메뉴 표시·숨김",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "hiddenWorkbenchTabs"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 스타일 편집",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "noteManager",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "노트 검색·생성·편집",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "drawNotes"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 노트",
+      "condition": "기존 리치 노트 편집은 Zotero 네이티브 편집기로 연결",
+      "status": "implemented"
+    },
+    {
+      "id": "publicationColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "저널·발행처 열",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "key === \"venue\""
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Publication · Custom",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "publicationTagsColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "저널 등급 태그·조회",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "refreshPublicationRanks"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Journal Tags · Custom / 저널 지표",
+      "condition": "추가 등급 조회는 본인의 easyScholar 키 필요",
+      "status": "implemented"
+    },
+    {
+      "id": "ratingColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "별점 표시·편집",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "key === \"rating\""
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Rating · Custom",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "readStatus",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "읽기 시간·상태 연동",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "unreadOverride"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Status · Custom",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "readTimeColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "활성 읽기 시간",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "addReading"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Read Time · Custom",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "relatedItems",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "선택 문헌 연결·상호 연결 해제",
+      "implementation": {
+        "file": "src/library.js",
+        "marker": "async function relate"
+      },
+      "tests": [
+        "test/library.test.mjs"
+      ],
+      "entryPoint": "작업 패널 하단",
+      "condition": "같은 라이브러리 문헌; 다른 문헌의 연결 보존",
+      "status": "implemented"
+    },
+    {
+      "id": "remarkColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "읽기 메모 열",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "\"remark\",\"translatedTitle\""
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Remark · Custom / 상세 문헌 메모",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "renderItemAnnotations",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "문헌 상세에 주석 직접 표시",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "library.annotations(ids())"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "문헌 탐색 → 자세히 / 주석 탭",
+      "condition": "다른 탭·문헌으로 전환 시 늦은 응답 무시",
+      "status": "implemented"
+    },
+    {
+      "id": "renderItemNotes",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "문헌 상세에 노트 직접 표시",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "library.notes(ids())"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "문헌 탐색 → 자세히 / 노트 탭",
+      "condition": "단일 문헌 상세에서 노트·주석 함께 표시",
+      "status": "implemented"
+    },
+    {
+      "id": "showAnnotationColorName",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "주석 색상 이름",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "setColorLabel"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs"
+      ],
+      "entryPoint": "읽기 진행 → 색상 이름",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "sortCollectionItem",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "컬렉션 이름·개수·즐겨찾기 정렬",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "drawCollections"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 컬렉션",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "statusColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "상태 열·수동 지정",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "key === \"status\""
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Status · Custom / 문헌 우클릭",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "styleEditor",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "패널 CSS 편집",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "setPanelCSS"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 스타일 편집",
+      "condition": "패널 범위 CSS, 외부 로딩 규칙 제외",
+      "status": "implemented"
+    },
+    {
+      "id": "tabManager",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "탭 순서·다른 탭 닫기·저장 그룹 편집",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "restoreTabGroup"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 탭 관리",
+      "condition": "그룹 이름·내용 갱신; 라이브러리 탭 보호",
+      "status": "implemented"
+    },
+    {
+      "id": "tags",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "중첩 태그 탐색",
+      "implementation": {
+        "file": "src/library.js",
+        "marker": "function tagTree"
+      },
+      "tests": [
+        "test/library.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 중첩 태그",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "tagsColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "색상 태그 표시",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "displayTags"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Tags · Custom / 제목 태그",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "textTagsColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "텍스트 태그·태그 수",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "key === \"tagCount\""
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "Tags / #Tags · Custom",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "titleColumn",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "제목 히트맵·태그·강조",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "enhanceTitles"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "스타일 편집 / 문헌 제목",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "tldr",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "초록 요약",
+      "implementation": {
+        "file": "src/assist.js",
+        "marker": "summary:"
+      },
+      "tests": [
+        "test/assist.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 번역 · AI",
+      "condition": "사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "status": "implemented"
+    },
+    {
+      "id": "toogleSidebar",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "리더 사이드바 토글",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "setSidebar"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs"
+      ],
+      "entryPoint": "읽기 진행 / PDF Style 도구",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "updateItemDateModified",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "탭 활동 시 수정일 갱신",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "touchReadingItem"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "스타일 편집 → 수정일 갱신",
+      "condition": "기본 꺼짐; 사용자 선택 시 첨부·부모 날짜 갱신",
+      "status": "implemented"
+    },
+    {
+      "id": "verticalTabManager",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "독립 세로 탭 목록",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "setVerticalTabs"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs"
+      ],
+      "entryPoint": "탭 관리 / PDF Style 도구",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "viewManager",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "열 배치 저장·복원·이름·내용 갱신",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "applyView"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 뷰 그룹",
+      "condition": "열 순서·너비·표시·정렬 저장",
+      "status": "implemented"
+    },
+    {
+      "id": "titleMarquee",
+      "origin": "additional requested workflow",
+      "name": "제목 호버 롤링",
+      "implementation": {
+        "file": "src/marquee.js",
+        "marker": "function attach"
+      },
+      "tests": [
+        "test/marquee.test.mjs"
+      ],
+      "entryPoint": "문헌 제목 호버",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "titleTranslate",
+      "origin": "additional requested workflow",
+      "name": "제목 번역",
+      "implementation": {
+        "file": "src/assist.js",
+        "marker": "translate:"
+      },
+      "tests": [
+        "test/assist.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 번역 · AI",
+      "condition": "사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "status": "implemented"
+    },
+    {
+      "id": "paperMatrix",
+      "origin": "additional requested workflow",
+      "name": "항목 선택·페이지 탐색·전체 CSV 비교표",
+      "implementation": {
+        "file": "src/workspace.js",
+        "marker": "function matrix"
+      },
+      "tests": [
+        "test/workspace.test.mjs"
+      ],
+      "entryPoint": "워크벤치 → 논문 비교",
+      "condition": "화면50개씩, CSV는 전체 선택/필터 결과",
+      "status": "implemented"
+    },
+    {
+      "id": "customColumn",
+      "origin": "additional requested workflow",
+      "name": "사용자 추가 필드 열",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "setCustomFields"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "스타일 편집 → 추가 문헌 열",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "perPageReading",
+      "origin": "additional requested workflow",
+      "name": "첨부별 페이지 읽기 기록",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "readingAttachments"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "읽기 진행 / Pages · Custom",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "metadataCitations",
+      "origin": "additional requested workflow",
+      "name": "메타데이터 인용 수 자동 저장",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "scheduleMetadataCitations"
+      },
+      "tests": [
+        "test/runtime.test.mjs"
+      ],
+      "entryPoint": "논문 추가·메타데이터 변경",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "durableDrafts",
+      "origin": "additional requested workflow",
+      "name": "초안 저장·복원",
+      "implementation": {
+        "file": "src/workbench.js",
+        "marker": "workbenchDrafts"
+      },
+      "tests": [
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "작성 중 노트·메모·AI 결과",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
+      "id": "reader.mergeAnnotations",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "선택 주석 병합",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "mergeSelectedAnnotations"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs",
+        "test/library.test.mjs"
+      ],
+      "entryPoint": "PDF 주석 우클릭·Style 메뉴 / 워크벤치 → 주석",
+      "condition": "동일 PDF·유형·색상인 하이라이트/밑줄, 같은 페이지 또는 인접 두 페이지; 위치·텍스트·메모·태그 보존, 나머지는 휴지통",
+      "status": "implemented"
+    },
+    {
+      "id": "reader.attachmentVersionSwitch",
+      "origin": "Ethereal Style 6.0.76 installed preference",
+      "name": "PDF 첨부 버전 전환",
+      "implementation": {
+        "file": "src/reader-tools.js",
+        "marker": "switchAttachmentVersion"
+      },
+      "tests": [
+        "test/reader-tools.test.mjs"
+      ],
+      "entryPoint": "PDF Style 메뉴 → Switch PDF version",
+      "condition": "같은 문헌에 속한 실제 존재하는 PDF만 선택; 기존 탭 유지",
+      "status": "implemented"
+    }
+  ],
+  "verification": "Background Node/DOM tests and local Zotero API source inspection. Not activated or visually verified in user Zotero."
+}

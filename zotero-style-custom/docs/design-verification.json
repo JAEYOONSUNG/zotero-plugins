@@ -1,0 +1,28 @@
+{
+  "version": "0.7.0",
+  "nodeDOMAndStyleTests": 265,
+  "installerTests": 11,
+  "allPassed": true,
+  "workbenchTests": 44,
+  "styleTests": 9,
+  "baselineFeatures": 50,
+  "additionalWorkflows": 7,
+  "previousImprovementRoundsRetained": 18,
+  "gates": {
+    "met": 6,
+    "unmet": 0,
+    "abandoned": 0
+  },
+  "preview": "docs/design-preview.html",
+  "previewData": "Fictional and memory-only; no real library access",
+  "nativeAppLaunched": false,
+  "nativeBrowserLaunched": false,
+  "userUIControlled": false,
+  "nativeVisualVerification": false,
+  "activationVerified": false,
+  "currentInstalledVersion": "0.4.1",
+  "stateAtRecord": "waiting-for-zotero-exit",
+  "liveStatusFile": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/zotero-style-custom/build/pending/install-status.json",
+  "artifactSha256": "61cdb8eb60330fa969fd4c5282709879dd43b9e044539dffb801f562a2398efd",
+  "recordedAt": "2026-09-14T20:43:03.240681+00:00"
+}

@@ -19,9 +19,19 @@
 			<html:input id="zotpop-email" type="email" preference="extensions.zotpop.email" style="width: 240px"/>
 		</hbox>
 		<hbox align="center">
+			<label data-i18n-value="prefOpenAlexKey" control="zotpop-openalex"/>
+			<html:input id="zotpop-openalex" type="text" preference="extensions.zotpop.openAlexApiKey" style="width: 240px"/>
+		</hbox>
+		<html:p style="color: gray" data-i18n="prefOpenAlexNote"></html:p>
+		<hbox align="center">
 			<label data-i18n-value="prefS2" control="zotpop-s2"/>
 			<html:input id="zotpop-s2" type="text" preference="extensions.zotpop.s2ApiKey" style="width: 240px"/>
 		</hbox>
+		<hbox align="center">
+			<label data-i18n-value="prefPoP" control="zotpop-pop"/>
+			<html:input id="zotpop-pop" type="text" preference="extensions.zotpop.popExecutable" style="width: 320px"/>
+		</hbox>
+		<html:p style="color: gray" data-i18n="prefPoPNote"></html:p>
 		<hbox align="center">
 			<label data-i18n-value="prefMax" control="zotpop-max"/>
 			<html:input id="zotpop-max" type="number" min="1" max="2000" preference="extensions.zotpop.maxResults" style="width: 80px"/>

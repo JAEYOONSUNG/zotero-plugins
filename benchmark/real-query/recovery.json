@@ -1,0 +1,41 @@
+{
+  "query": {
+    "source": "scholar",
+    "keywords": "geobacillus",
+    "yearFrom": null,
+    "yearTo": null,
+    "requestedMax": 1000
+  },
+  "received": 210,
+  "complete": false,
+  "reason": "GoogleScholarCAPTCHAatstart210;confirmedcachedHTMLgs_captcha_f",
+  "recovery": "OfficialPoPCLI--offline--max210;alreadyreceivedHTTPpagesonly;noadditionalnetworkrequest",
+  "before2015": 123,
+  "oldestYear": 2001,
+  "knownVisibleExamples": [
+    {
+      "rank": 2,
+      "year": 2001,
+      "title": "Taxonomic study of aerobic thermophilic bacilli: descriptions of Geobacillus subterraneus gen. nov., sp. nov. and Geobacillus uzenensis sp. nov. from petroleum …",
+      "doi": "10.1099/00207713-51-2-433"
+    },
+    {
+      "rank": 11,
+      "year": 2015,
+      "title": "Genetic engineering of Geobacillus spp.",
+      "doi": null
+    },
+    {
+      "rank": 106,
+      "year": 2020,
+      "title": "Biotechnological platforms of the moderate thermophiles, Geobacillus species: notable properties and genetic tools",
+      "doi": null
+    },
+    {
+      "rank": 129,
+      "year": 2017,
+      "title": "Genetic toolbox for controlled expression of functional proteins in Geobacillus spp.",
+      "doi": null
+    }
+  ]
+}

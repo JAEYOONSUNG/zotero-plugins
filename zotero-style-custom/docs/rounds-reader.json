@@ -1,0 +1,225 @@
+[
+  {
+    "round": "R05",
+    "title": "Tab ordering and close other tabs",
+    "gap": "Tab list previously only selected and closed individual tabs.",
+    "implementation": [
+      "moveTab accepts a final document position and translates to native insertion-boundary semantics.",
+      "closeOtherTabs batches only other reader IDs; pinned library and note tabs remain.",
+      "Vertical rail exposes move up/down and explicit close-others actions."
+    ],
+    "reference": [
+      "Zotero tabs.js:819-840",
+      "Style6.0.76 preferences: verticalTabManager and vertical-tab workflow description"
+    ],
+    "verification": {
+      "command": "node --test zotero-style-custom/test/reader-tools.test.mjs",
+      "tests": [
+        "R05 tab reorder uses final positions and close-others protects the library and non-reader tabs"
+      ],
+      "passCountAfterRound": 28,
+      "failCount": 0
+    },
+    "expertReread": "Native tabs.js move(id,newIndex) decreases forward insertion index; verified forward/backward moves and pinned library0.",
+    "adversarialReview": "Reject stale IDs, invalid destinations and library movement before mutation; unrelated note tabs remain.",
+    "finalVerification": {
+      "passCount": 43,
+      "failCount": 0,
+      "syntaxCheck": "node --check zotero-style-custom/src/reader-tools.js"
+    },
+    "limits": "Background Node/DOM verification only; no native app launch, live UI, profile mutation or activation claim."
+  },
+  {
+    "round": "R06",
+    "title": "Saved tab group rename and update",
+    "gap": "Saved sessions could be created/restored/deleted, but could not be renamed or updated in place.",
+    "implementation": [
+      "renameTabGroup preserves group ID and stored tabs.",
+      "updateTabGroup replaces current attachment order and page locations while preserving group ID/name.",
+      "Capture excludes non-reader and non-attachment records."
+    ],
+    "reference": [
+      "Style6.0.76 zoterostyle.js:33089-33118 saved tab group membership workflow",
+      "Zotero Reader.getByTabID and native tab DTOs"
+    ],
+    "verification": {
+      "command": "node --test zotero-style-custom/test/reader-tools.test.mjs",
+      "tests": [
+        "R06 saved tab groups rename and update current order/pages without changing identity or unrelated groups"
+      ],
+      "passCountAfterRound": 29,
+      "failCount": 0
+    },
+    "expertReread": "Reread stable library/key storage and source reference saved tab membership workflow; all changes occur before awaited persistence.",
+    "adversarialReview": "Empty names, stale group ID and empty document snapshot reject without cache changes; other groups retain prior pages.",
+    "finalVerification": {
+      "passCount": 43,
+      "failCount": 0,
+      "syntaxCheck": "node --check zotero-style-custom/src/reader-tools.js"
+    },
+    "limits": "Background Node/DOM verification only; no native app launch, live UI, profile mutation or activation claim."
+  },
+  {
+    "round": "R07",
+    "title": "Saved view rename and update",
+    "gap": "Saved column layouts could not be revised without deleting/recreating a group.",
+    "implementation": [
+      "renameView preserves ID/layout.",
+      "updateView captures current columns while preserving group ID/name and unrelated views.",
+      "Updated layout can be reapplied through existing native column APIs."
+    ],
+    "reference": [
+      "Style6.0.76 zoterostyle.js:34140-34205 view add/update workflow",
+      "Zotero virtualized-table.js Columns API"
+    ],
+    "verification": {
+      "command": "node --test zotero-style-custom/test/reader-tools.test.mjs",
+      "tests": [
+        "R07 saved views rename and update layout in place and reject stale or unavailable targets"
+      ],
+      "passCountAfterRound": 30,
+      "failCount": 0
+    },
+    "expertReread": "Reread native Columns API and reference view-manager add/update workflow; snapshot contains typed widths/visibility/order/sort only.",
+    "adversarialReview": "Stale IDs, empty names and closed target windows reject; update affects only chosen group; reapplication restores updated width.",
+    "finalVerification": {
+      "passCount": 43,
+      "failCount": 0,
+      "syntaxCheck": "node --check zotero-style-custom/src/reader-tools.js"
+    },
+    "limits": "Background Node/DOM verification only; no native app launch, live UI, profile mutation or activation claim."
+  },
+  {
+    "round": "R08",
+    "title": "Restore reader appearance and configure annotation margins",
+    "gap": "Users could apply styles but could not restore original appearance while keeping the plugin active; cards had fixed width/side/text length.",
+    "implementation": [
+      "resetAppearance restores tracked native themes/sidebar, hides own margin cards/rail and clears saved overrides.",
+      "Saved annotation palettes/labels and margin configuration remain intact.",
+      "setMarginOptions controls actual card width, left/right placement and combined excerpt limit; native toolbar exposes editor/reset."
+    ],
+    "reference": [
+      "Style6.0.76 prefs.js:9-17 margin display settings",
+      "Zotero reader/reader.js native theme/sidebar setters",
+      "Zotero pdf/web/viewer.css page overflow"
+    ],
+    "verification": {
+      "command": "node --test zotero-style-custom/test/reader-tools.test.mjs",
+      "tests": [
+        "R08 margin width side and text limit change actual cards with typed validation",
+        "R08 appearance reset restores original native settings while retaining palettes and display preferences"
+      ],
+      "passCountAfterRound": 32,
+      "failCount": 0
+    },
+    "expertReread": "Reference marginAnnotation.sideMode/cardWidth and quote/comment settings confirm configurable margins. Native PDF overflow override remains reversible in both views.",
+    "adversarialReview": "Reject invalid CSS/width/type before persistence; text uses textContent; reset does not reapply on next poll and preserves saved palettes.",
+    "finalVerification": {
+      "passCount": 43,
+      "failCount": 0,
+      "syntaxCheck": "node --check zotero-style-custom/src/reader-tools.js"
+    },
+    "limits": "Background Node/DOM verification only; no native app launch, live UI, profile mutation or activation claim."
+  },
+  {
+    "round": "R14",
+    "title": "Native annotation-to-note backlinks",
+    "gap": "Only paper-level backlinks were exposed; native annotation headers had no referring-note count.",
+    "implementation": [
+      "renderSidebarAnnotationHeader appends its container synchronously, then resolves annotation key within the current PDF library.",
+      "Exact libraryService.backlinks(annotationID) results populate a note count and explicit note-open buttons.",
+      "Rerender, reader close, item identity mismatch and disposal invalidate asynchronous results and queued clicks.",
+      "Repeated headers share in-flight/results cache; scans serialize, queued work without a live header is skipped, and completed result retention is bounded to128 entries.",
+      "Note/annotation item modifications invalidate results; next one-second reader poll reloads visible counts; unrelated paper-only updates do not rescan notes."
+    ],
+    "reference": [
+      "Style6.0.76 zoterostyle-preferences.ftl:218-220 and324-330",
+      "Zotero reader.js ReaderEvent renderSidebarAnnotationHeader; native SidebarAnnotationHeader annotation.id"
+    ],
+    "verification": {
+      "command": "node --test zotero-style-custom/test/reader-tools.test.mjs",
+      "tests": [
+        "R14 native annotation header resolves library-scoped identity and opens exact referring notes",
+        "R14 stale annotation headers and wrong PDF identities never publish late backlinks",
+        "R14 repeated headers share pending and completed lookups and distinct scans are serialized",
+        "R14 note modifications invalidate cached counts on next poll without reacting to unrelated paper updates"
+      ],
+      "passCountAfterRound": 34,
+      "failCount": 0
+    },
+    "expertReread": "Reread native synchronous append contract; only placeholder-free loading label appears before real exact counts, never guessed counts.",
+    "adversarialReview": "Wrong parent and library rejected before note lookup; disposal removes menus/listeners and ignores late results. Final lifecycle pass verifies request deduplication, single scan concurrency, note invalidation and notifier cleanup; each distinct first-time annotation still uses the library exact-match scan.",
+    "limits": "Background Node/DOM tests and local source inspection only; no native app launch, user UI or profile mutation.",
+    "finalVerification": {
+      "passCount": 43,
+      "failCount": 0,
+      "syntaxCheck": "node --check zotero-style-custom/src/reader-tools.js"
+    }
+  },
+  {
+    "round": "R15",
+    "title": "Explicit native merge-selected-annotations workflow",
+    "gap": "Baseline dotted reader.mergeAnnotations feature was missing from initial feature inventory and reader controls.",
+    "implementation": [
+      "Native annotation context menu and toolbar expose explicit merge-selected action.",
+      "Selected native annotation keys resolve to real IDs in the current PDF library; readonly, duplicates, wrong-parent and stale reader states reject.",
+      "Mutation delegates to libraryService.mergeAnnotations(ids,{isCurrent}) permission/transaction helper; reader layer does not bypass item permissions."
+    ],
+    "reference": [
+      "Style6.0.76 zoterostyle.js:32475-32510 merge annotation workflow",
+      "Zotero createAnnotationContextMenu params.ids",
+      "Native core.mergeAnnotations only merges ink; compatible highlight merge supplied by permission-safe library helper"
+    ],
+    "verification": {
+      "command": "node --test zotero-style-custom/test/reader-tools.test.mjs",
+      "tests": [
+        "R15 native merge resolves selected keys and delegates guarded transactional mutation",
+        "R15 merge rejects readonly wrong-PDF and stale reader selections before mutation",
+        "R15 reader validation and native menu enforce the same fifty-annotation limit as library merge"
+      ],
+      "passCountAfterRound": 36,
+      "failCount": 0
+    },
+    "expertReread": "Compared baseline unsafe text/delete behavior with native ink-only API and coordinated tested library-owned transactional helper.",
+    "adversarialReview": "No automatic mutation; context captured and revalidated after each await; library helper receives live-origin predicate. Reader tests mock transaction helper; parent must also verify library merge tests. Data agent confirmed actual helper implementation and39library regression passes; parent performs combined verification. Final consistency pass aligns reader and native menu maximum selection to library limit50 before item resolution.",
+    "limits": "Background Node/DOM tests and local source inspection only; no native app launch, user UI or profile mutation.",
+    "finalVerification": {
+      "passCount": 43,
+      "failCount": 0,
+      "syntaxCheck": "node --check zotero-style-custom/src/reader-tools.js"
+    }
+  },
+  {
+    "round": "R16",
+    "title": "Attachment-version listing and switching",
+    "gap": "Baseline dotted reader.attachmentVersionSwitch feature was missing from initial inventory and native toolbar.",
+    "implementation": [
+      "attachmentVersions lists same-parent, same-library, locally available PDF siblings with titles and current marker.",
+      "switchAttachmentVersion revalidates current reader after asynchronous file checks and opens only a listed sibling.",
+      "Native toolbar exposes user-triggered version list and choice buttons; original document stays open if alternate fails."
+    ],
+    "reference": [
+      "Style6.0.76 zoterostyle.js:32510-32630 attachment version workflow",
+      "Zotero Item.isPDFAttachment/fileExists and Reader.open"
+    ],
+    "verification": {
+      "command": "node --test zotero-style-custom/test/reader-tools.test.mjs",
+      "tests": [
+        "R16 attachment versions include only same-parent same-library locally readable PDFs and switch explicitly",
+        "R16 stale reader during file check prevents version switching and original tab is retained on open failure",
+        "R16 native toolbar version listing exposes working user-triggered PDF choices",
+        "R16 parent deletion reparenting and library changes during file checks reject stale version choices"
+      ],
+      "passCountAfterRound": 39,
+      "failCount": 0
+    },
+    "expertReread": "Verified baseline enumerates existing sibling files. Original implementation retains old tab rather than baseline close-before-open, preventing loss when open fails.",
+    "adversarialReview": "Wrong parent/library, missing file and changed active reader reject; tests cover explicit toolbar interaction and failed open. PDF siblings only, matching requested scope. Final consistency pass snapshots attachment/parent identity and library; deletion, reparenting or library changes during file checks abort before opening.",
+    "limits": "Background Node/DOM tests and local source inspection only; no native app launch, user UI or profile mutation.",
+    "finalVerification": {
+      "passCount": 43,
+      "failCount": 0,
+      "syntaxCheck": "node --check zotero-style-custom/src/reader-tools.js"
+    }
+  }
+]

@@ -1,0 +1,39 @@
+#style-custom-settings-root{color:CanvasText;background:Canvas;font:13px/1.5 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;min-width:0;width:100%}
+#style-custom-settings-root *{box-sizing:border-box}
+#style-custom-settings-root [hidden]{display:none!important}
+#style-custom-settings-root h2{font-size:18px;margin:0 0 5px}
+#style-custom-settings-root h3{font-size:15px;margin:0}
+#style-custom-settings-root p{margin:5px 0;overflow-wrap:anywhere}
+#style-custom-settings-root .scs-heading{padding-block:8px}
+#style-custom-settings-root .scs-message{min-height:24px;padding:5px 0}
+#style-custom-settings-root .scs-message[data-error=true]{color:MarkText;background:Mark}
+#style-custom-settings-root .scs-live{padding:9px 0;border-block:1px solid GrayText;font-size:12px}
+#style-custom-settings-root .scs-search{display:flex;align-items:center;gap:8px;padding-block:12px;flex-wrap:wrap}
+#style-custom-settings-root .scs-search input{flex:1;min-width:160px}
+#style-custom-settings-root .scs-layout{display:grid;grid-template-columns:150px minmax(0,1fr);gap:18px;align-items:start}
+#style-custom-settings-root .scs-nav{display:flex;flex-direction:column;gap:3px;position:sticky;top:8px}
+#style-custom-settings-root button,#style-custom-settings-root input,#style-custom-settings-root select,#style-custom-settings-root textarea{font:inherit;color:FieldText;background:Field;border:1px solid GrayText;border-radius:2px;max-width:100%}
+#style-custom-settings-root button{padding:5px 9px;background:ButtonFace;color:ButtonText;cursor:pointer}
+#style-custom-settings-root button:disabled{opacity:.55;cursor:default}
+#style-custom-settings-root input:not([type=checkbox]):not([type=color]),#style-custom-settings-root select,#style-custom-settings-root textarea{padding:5px 7px}
+#style-custom-settings-root input[type=checkbox]{margin:0;width:16px;height:16px;accent-color:Highlight}
+#style-custom-settings-root input[type=color]{width:52px;height:30px;padding:2px}
+#style-custom-settings-root input[type=number]{width:130px}
+#style-custom-settings-root .scs-nav button{text-align:start;border-color:transparent;background:transparent;min-height:32px}
+#style-custom-settings-root .scs-nav button.active{border-color:GrayText;font-weight:600;background:ButtonFace}
+#style-custom-settings-root .scs-category-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid GrayText;padding:4px 0 10px}
+#style-custom-settings-root .scs-category{padding-bottom:24px;min-width:0}
+#style-custom-settings-root .scs-setting{padding:13px 0;border-bottom:1px solid color-mix(in srgb,GrayText 25%,transparent)}
+#style-custom-settings-root .scs-label{display:block;font-weight:600;margin-bottom:6px;overflow-wrap:anywhere}
+#style-custom-settings-root .scs-value{display:flex;gap:8px;align-items:start;min-width:0}
+#style-custom-settings-root .scs-value input[type=text],#style-custom-settings-root .scs-value input[type=password],#style-custom-settings-root .scs-value input[type=url],#style-custom-settings-root .scs-value input[type=email],#style-custom-settings-root textarea{flex:1;min-width:0;width:100%}
+#style-custom-settings-root textarea{resize:vertical;min-height:75px}
+#style-custom-settings-root .scs-help{font-size:12px;color:GrayText}
+#style-custom-settings-root .scs-feedback{font-size:12px;min-height:0}
+#style-custom-settings-root .scs-feedback:empty{display:none}
+#style-custom-settings-root :focus-visible{outline:2px solid Highlight;outline-offset:2px}
+@media(max-width:650px){#style-custom-settings-root .scs-layout{grid-template-columns:minmax(0,1fr);gap:10px}#style-custom-settings-root .scs-nav{position:static;flex-direction:row;flex-wrap:wrap;border-bottom:1px solid GrayText;padding-bottom:8px}#style-custom-settings-root .scs-nav button{flex:0 1 auto}#style-custom-settings-root .scs-category-heading button{font-size:12px}}
+@media(prefers-reduced-motion:reduce){#style-custom-settings-root *{scroll-behavior:auto!important}}
+
+#style-custom-settings-root .scs-reading-label{font-size:12px;margin-top:8px}
+#style-custom-settings-root .scs-reading-value{display:block;font-size:26px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums;margin-block:3px 8px;color:CanvasText}

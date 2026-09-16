@@ -1,0 +1,1265 @@
+﻿[
+	{
+		"uid": "OA:W2890716991",
+		"type": "article",
+		"title": "Thermostable Xylanase Production by Geobacillus sp. Strain DUSELR13, and Its Application in Ethanol Production with Lignocellulosic Biomass",
+		"source": "Microorganisms",
+		"issn": "2076-2607",
+		"publisher": "Multidisciplinary Digital Publishing Institute",
+		"doi": "10.3390/microorganisms6030093",
+		"article_url": "https://doi.org/10.3390/microorganisms6030093",
+		"fulltext_url": "https://www.mdpi.com/2076-2607/6/3/93/pdf?version=1536136378",
+		"abstract": "The aim of the current study was to optimize the production of xylanase, and its application for ethanol production using the lignocellulosic biomass. A highly thermostable crude xylanase was obtained from the Geobacillus sp. strain DUSELR13 isolated from the deep biosphere of Homestake gold mine, Lead, SD. Geobacillus sp. strain DUSELR13 produced 6 U/mL of the xylanase with the beechwood xylan. The xylanase production was improved following the optimization studies, with one factor at a time approach, from 6 U/mL to 19.8 U/mL with xylan. The statistical optimization with response surface methodology further increased the production to 31 U/mL. The characterization studies revealed that the crude xylanase complex had an optimum pH of 7.0, with a broad pH range of 5.0–9.0, and an optimum temperature of 75 °C. The ~45 kDa xylanase protein was highly thermostable with t1/2 of 48, 38, and 13 days at 50, 60, and 70 °C, respectively. The xylanase activity increased with the addition of Cu+2, Zn+2, K+, and Fe+2 at 1 mM concentration, and Ca+2, Zn+2, Mg+2, and Na+ at 10 mM concentration. The comparative analysis of the crude xylanase against its commercial counterpart Novozymes Cellic HTec and Dupont, Accellerase XY, showed that it performed better at higher temperature, hydrolyzing 65.4% of the beechwood at 75 °C. The DUSEL R13 showed the mettle to hydrolyze, and utilize the pretreated, and untreated lignocellulosic biomass: prairie cord grass (PCG), and corn stover (CS) as the substrate, and gave a maximum yield of 20.5 U/mL with the untreated PCG. When grown in co-culture with Geobacillus thermoglucosidasius, it produced 3.53 and 3.72 g/L ethanol, respectively with PCG, and CS. With these characteristics the xylanase under study could be an industrial success for the high temperature bioprocesses.",
+		"rank": 1,
+		"year": 2018,
+		"volume": 6,
+		"issue": 3,
+		"startpage": 93,
+		"endpage": 93,
+		"cites": 81,
+		"ecc": 81,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Mohit Bibra",
+				"affiliation": "South Dakota School of Mines and Technology"
+			},
+			{
+				"name": "Venkat Reddy Kunreddy",
+				"affiliation": "South Dakota School of Mines and Technology"
+			},
+			{
+				"name": "Rajesh K. Sani",
+				"affiliation": "South Dakota School of Mines and Technology"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2899981305",
+		"type": "article",
+		"title": "Heat resistance of spores of 18 strains of Geobacillus stearothermophilus and impact of culturing conditions",
+		"source": "International Journal of Food Microbiology",
+		"issn": "0168-1605",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.ijfoodmicro.2018.11.005",
+		"article_url": "https://doi.org/10.1016/j.ijfoodmicro.2018.11.005",
+		"fulltext_url": "https://www.sciencedirect.com/science/article/pii/S0168160518308833/pdf",
+		"abstract": "In this study, different methods were evaluated for enumeration of spores of G. stearothermophilus, different sporulation methods were assessed for yields and wet heat resistances of obtained spores, and subsequently, the variation in heat resistances of spores was determined. Overall, tryptone soya agar (TSA) was the most suitable medium for enumeration of spores of this thermophilic bacterium. Sporulation on different media both at 55 and at 61 °C led to considerable variation in spore heat resistance. The heat resistance of spores was highest upon sporulation on medium supplemented with free ions of calcium, potassium, magnesium and manganese (CaKMgMn). For 18 different G. stearothermophilus strains that were isolated from various sources, spores were subsequently produced on nutrient agar supplemented with CaKMgMn at 55 °C. Strain ATCC 12980T, also known as 9A20, which is commonly used in steam sterilization tests was included. The survival of spores of all strains was assessed at 125 °C and 130 °C using two independent spore batches per strain. The mean D125°C for spores of the 18 strains was 1.1 min (95% PI 0.48–2.3 min) and the mean D130°C was 0.37 min (95% PI 0.17–0.82 min). For spore inactivation of these 18 strains, a z-value of 11.1 °C was estimated, resulting in an estimated D-value of 2.4 min (95% PI 1.1–5.2) at the reference temperature 121.1 °C. Based on the data sets obtained in this study, it was found that the variability in spore heat resistance could largely be attributed to strain variability and conditions used during sporulation (especially the sporulation medium); reproduction and experimental variabilities were much smaller. The established variabilities were compared with the overall variability in spore heat resistance of G. stearothermophilus based on a meta-analysis of reported D-values. The data presented indicate that strain variability and history of sporulation each account for approximately half of the overall variability observed with respect to the heat resistance of spores of G. stearothermophilus. The findings presented in this study allow for optimal recovery of G. stearothermophilus spores from foods and a better understanding of factors that determine the heat resistance properties of spores of G. stearothermophilus. Moreover, this study once more underlines the limited effects of heat treatments used in the food industry on inactivation of spores of this bacterium.",
+		"rank": 2,
+		"year": 2018,
+		"volume": 291,
+		"issue": 0,
+		"startpage": 161,
+		"endpage": 172,
+		"cites": 73,
+		"ecc": 73,
+		"use": 1,
+		"authors": [
+			{
+				"name": "M.H.J. Wells-Bennik",
+				"affiliation": "TiFN"
+			},
+			{
+				"name": "Patrick Janssen",
+				"affiliation": "TiFN"
+			},
+			{
+				"name": "Verena Klaus",
+				"affiliation": "TiFN"
+			},
+			{
+				"name": "Chi Yang",
+				"affiliation": "TiFN"
+			},
+			{
+				"name": "M.H. Zwietering",
+				"affiliation": "TiFN"
+			},
+			{
+				"name": "Heidy M.W. den Besten",
+				"affiliation": "TiFN"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3136929526",
+		"type": "article",
+		"title": "Optimization, purification, and biochemical characterization of thermoalkaliphilic lipase from a novel Geobacillus stearothermophilus FMR12 for detergent formulations",
+		"source": "International Journal of Biological Macromolecules",
+		"issn": "0141-8130",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.ijbiomac.2021.03.111",
+		"article_url": "https://doi.org/10.1016/j.ijbiomac.2021.03.111",
+		"rank": 3,
+		"year": 2021,
+		"volume": 181,
+		"issue": 0,
+		"startpage": 125,
+		"endpage": 135,
+		"cites": 69,
+		"ecc": 69,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Deyaa Abol-Fotouh",
+				"affiliation": "City of Scientific Research and Technological Applications"
+			},
+			{
+				"name": "Ola E.A. Al‐Hagar",
+				"affiliation": "Egyptian Atomic Energy Authority"
+			},
+			{
+				"name": "Mohamed A. Hassan",
+				"affiliation": "City of Scientific Research and Technological Applications"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3099680903",
+		"type": "article",
+		"title": "Two new exopolysaccharides from a thermophilic bacterium Geobacillus sp. WSUCF1: Characterization and bioactivities",
+		"source": "New Biotechnology",
+		"issn": "1871-6784",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.nbt.2020.11.004",
+		"article_url": "https://doi.org/10.1016/j.nbt.2020.11.004",
+		"rank": 4,
+		"year": 2020,
+		"volume": 61,
+		"issue": 0,
+		"startpage": 29,
+		"endpage": 39,
+		"cites": 53,
+		"ecc": 53,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Jia Wang",
+				"affiliation": "South Dakota School of Mines and Technology"
+			},
+			{
+				"name": "David R. Salem",
+				"affiliation": "South Dakota School of Mines and Technology"
+			},
+			{
+				"name": "Rajesh K. Sani",
+				"affiliation": "South Dakota School of Mines and Technology"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3047259019",
+		"type": "review",
+		"title": "A systematic review of the genera Geobacillus and Parageobacillus: their evolution, current taxonomic status and major applications",
+		"source": "Microbiology",
+		"issn": "1350-0872",
+		"publisher": "Microbiology Society",
+		"doi": "10.1099/mic.0.000945",
+		"article_url": "https://doi.org/10.1099/mic.0.000945",
+		"abstract": "The genus Geobacillus , belonging to the phylum Firmicutes, is one of the most important genera and comprises thermophilic bacteria. The genus Geobacillus was erected with the taxonomic reclassification of various Bacillus species. Taxonomic studies of Geobacillus remain in progress. However, there is no comprehensive review of the characteristic features, taxonomic status and study of various applications of this interesting genus. The main aim of this review is to give a comprehensive account of the genus Geobacillus . At present the genus acomprises 25 taxa, 14 validly published (with correct name), nine validly published (with synonyms) and two not validly published species. We describe only validly published species of the genera Geobacillus and Parageobacillus . Vegetative cells of Geobacillus species are Gram-strain-positive or -variable, rod-shaped, motile, endospore-forming, aerobic or facultatively anaerobic, obligately thermophilic and chemo-organotrophic. Growth occurs in the pH range 6.08.5 and a temperature of 37–75 °C. The major cellular fatty acids are iso-C15:o, iso-C16:0 and iso-C17:o. The main menaquinone type is MK-7. The G­+C content of the DNA ranges between 48.2 and 58 mol%. The genus Geobacillus is widely distributed in nature, being mostly found in many extreme locations such as hot springs, hydrothermal vents, marine trenches, hay composts, etc. Geobacillus species have been widely exploited in various industrial and biotechnological applications, and thus are promising candidates for further studies in the future.",
+		"rank": 5,
+		"year": 2020,
+		"volume": 166,
+		"issue": 9,
+		"startpage": 800,
+		"endpage": 816,
+		"cites": 53,
+		"ecc": 53,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Ishfaq Nabi Najar",
+				"affiliation": "Sikkim University"
+			},
+			{
+				"name": "Nagendra Thakur",
+				"affiliation": "Sikkim University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2914880451",
+		"type": "article",
+		"title": "Synthesis and characterization of cross-linked enzyme aggregates (CLEAs) of thermostable xylanase from Geobacillus thermodenitrificans X1",
+		"source": "Process Biochemistry",
+		"issn": "0032-9592",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.procbio.2019.01.019",
+		"article_url": "https://doi.org/10.1016/j.procbio.2019.01.019",
+		"rank": 6,
+		"year": 2019,
+		"volume": 80,
+		"issue": 0,
+		"startpage": 72,
+		"endpage": 79,
+		"cites": 53,
+		"ecc": 53,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Ritika Verma",
+				"affiliation": "Jaypee University of Information Technology"
+			},
+			{
+				"name": "Ashok Kumar",
+				"affiliation": "Jaypee University of Information Technology"
+			},
+			{
+				"name": "Sudhir Kumar",
+				"affiliation": "Jaypee University of Information Technology"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2803699288",
+		"type": "article",
+		"title": "Production and characterization of exopolysaccharides by Geobacillus thermodenitrificans ArzA-6 and Geobacillus toebii ArzA-8 strains isolated from an Armenian geothermal spring",
+		"source": "Extremophiles",
+		"issn": "1431-0651",
+		"publisher": "Springer Science+Business Media",
+		"doi": "10.1007/s00792-018-1032-9",
+		"article_url": "https://doi.org/10.1007/s00792-018-1032-9",
+		"rank": 7,
+		"year": 2018,
+		"volume": 22,
+		"issue": 5,
+		"startpage": 725,
+		"endpage": 737,
+		"cites": 52,
+		"ecc": 52,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Hovik Panosyan",
+				"affiliation": "Yerevan State University"
+			},
+			{
+				"name": "Paola Di Donato",
+				"affiliation": "Parthenope University of Naples"
+			},
+			{
+				"name": "Annarita Poli",
+				"affiliation": "Institute of Applied Science and Intelligent Systems"
+			},
+			{
+				"name": "Barbara Nicolaus",
+				"affiliation": "Institute of Applied Science and Intelligent Systems"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2912132420",
+		"type": "article",
+		"title": "Role of thermophilic bacteria (Bacillus and Geobacillus) on crude oil degradation and biocorrosion in oil reservoir environment",
+		"source": "3 Biotech",
+		"issn": "2190-572X",
+		"publisher": "Springer Science+Business Media",
+		"doi": "10.1007/s13205-019-1604-0",
+		"article_url": "https://doi.org/10.1007/s13205-019-1604-0",
+		"fulltext_url": "https://link.springer.com/content/pdf/10.1007/s13205-019-1604-0.pdf",
+		"rank": 8,
+		"year": 2019,
+		"volume": 9,
+		"issue": 3,
+		"startpage": 79,
+		"endpage": 79,
+		"cites": 51,
+		"ecc": 51,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Punniyakotti Elumalai",
+				"affiliation": "Jeonbuk National University"
+			},
+			{
+				"name": "Punniyakotti Parthipan",
+				"affiliation": "Pondicherry University"
+			},
+			{
+				"name": "Jayaraman Narenkumar",
+				"affiliation": "Thiruvalluvar University"
+			},
+			{
+				"name": "Balakrishnan Anandakumar",
+				"affiliation": "Indira Gandhi Centre for Atomic Research"
+			},
+			{
+				"name": "Jagannathan Madhavan",
+				"affiliation": "Thiruvalluvar University"
+			},
+			{
+				"name": "Byung‐Taek Oh",
+				"affiliation": "Jeonbuk National University"
+			},
+			{
+				"name": "Aruliah Rajasekar",
+				"affiliation": "Thiruvalluvar University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2796190521",
+		"type": "article",
+		"title": "Sequence, genome organization, annotation and proteomics of the thermophilic, 47.7-kb Geobacillus stearothermophilus bacteriophage TP-84 and its classification in the new Tp84virus genus",
+		"source": "PLoS ONE",
+		"issn": "1932-6203",
+		"publisher": "Public Library of Science",
+		"doi": "10.1371/journal.pone.0195449",
+		"article_url": "https://doi.org/10.1371/journal.pone.0195449",
+		"fulltext_url": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0195449&type=printable",
+		"abstract": "Bacteriophage TP-84 is a well-characterized bacteriophage of historical interest. It is a member of the Siphoviridae, and infects a number of thermophilic Geobacillus (Bacillus) stearothermophilus strains. Its' 47.7-kbp double-stranded DNA genome revealed the presence of 81 coding sequences (CDSs) coding for polypeptides of 4 kDa or larger. Interestingly, all CDSs are oriented in the same direction, pointing to a dominant transcription direction of one DNA strand. Based on a homology search, a hypothetical function could be assigned to 31 CDSs. No RNA or DNA polymerase-coding genes were found on the bacteriophage genome indicating that TP-84 relies on the host's transcriptional and replication enzymes. The TP84 genome is tightly packed with CDSs, typically spaced by several-to-tens of bp or often overlapping. The genome contains five putative promoter-like sequences showing similarity to the host promoter consensus sequence and allowing for a 2-bp mismatch. In addition, ten putative rho-independent terminators were detected. Because the genome sequence shows essentially no similarity to any previously characterised bacteriophage, TP-84 should be considered a new species in an undefined genus within the Siphoviridae family. Thus a taxonomic proposal of a new Tp84virus genus has been accepted by the International Committee on Taxonomy of Viruses. The bioinformatics genome analysis was verified by confirmation of 33 TP-84 proteins, which included: a) cloning of a selected CDS in Escherichia coli, coding for a DNA single-stranded binding protein (SSB; gene TP84_63), b) purification and functional assays of the recombinant TP-84 SSB, which has been shown to improve PCR reactions, c) mass spectrometric (MS) analysis of TP-84 bacteriophage capsid proteins, d) purification of TP-84 endolysin activity, e) MS analysis of the host cells from infection time course.",
+		"rank": 9,
+		"year": 2018,
+		"volume": 13,
+		"issue": 4,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 49,
+		"ecc": 49,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Piotr M. Skowron",
+				"affiliation": "University of Gdańsk"
+			},
+			{
+				"name": "Andrew M. Kropinski",
+				"affiliation": "University of Guelph"
+			},
+			{
+				"name": "Joanna Żebrowska",
+				"affiliation": "University of Gdańsk"
+			},
+			{
+				"name": "Łukasz Janus",
+				"affiliation": "University of Gdańsk"
+			},
+			{
+				"name": "Kasjan Szemiako",
+				"affiliation": "Gdańsk University of Technology"
+			},
+			{
+				"name": "Edyta Czajkowska",
+				"affiliation": "University of Gdańsk"
+			},
+			{
+				"name": "Natalia Maciejewska",
+				"affiliation": "University of Gdańsk"
+			},
+			"Małgorzata Skowron",
+			{
+				"name": "Joanna M. Łoś",
+				"affiliation": "University of Gdańsk"
+			},
+			{
+				"name": "Marcin Łoś",
+				"affiliation": "University of Gdańsk"
+			},
+			{
+				"name": "Agnieszka Żylicz-Stachula",
+				"affiliation": "University of Gdańsk"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3043830944",
+		"type": "article",
+		"title": "Identification and characterization of novel thermostable α-amylase from Geobacillus sp. GS33",
+		"source": "International Journal of Biological Macromolecules",
+		"issn": "0141-8130",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.ijbiomac.2020.07.171",
+		"article_url": "https://doi.org/10.1016/j.ijbiomac.2020.07.171",
+		"fulltext_url": "https://doi.org/10.1016/j.ijbiomac.2020.07.171",
+		"rank": 10,
+		"year": 2020,
+		"volume": 164,
+		"issue": 0,
+		"startpage": 578,
+		"endpage": 585,
+		"cites": 48,
+		"ecc": 48,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Tülin Burhanoğlu",
+				"affiliation": "Gebze Technical University"
+			},
+			{
+				"name": "Yusuf Sürmeli",
+				"affiliation": "Izmir Institute of Technology"
+			},
+			{
+				"name": "Gülşah Şanlı‐Mohamed",
+				"affiliation": "Izmir Institute of Technology"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3010757333",
+		"type": "article",
+		"title": "Single pot biovalorization of food waste to ethanol by Geobacillus and Thermoanaerobacter spp.",
+		"source": "Renewable Energy",
+		"issn": "0960-1481",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.renene.2020.02.093",
+		"article_url": "https://doi.org/10.1016/j.renene.2020.02.093",
+		"rank": 11,
+		"year": 2020,
+		"volume": 155,
+		"issue": 0,
+		"startpage": 1032,
+		"endpage": 1041,
+		"cites": 48,
+		"ecc": 48,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Mohit Bibra",
+				"affiliation": "South Dakota School of Mines and Technology"
+			},
+			{
+				"name": "Navanietha K. Rathinam",
+				"affiliation": "South Dakota School of Mines and Technology"
+			},
+			"Glenn R. Johnson",
+			{
+				"name": "Rajesh K. Sani",
+				"affiliation": "South Dakota School of Mines and Technology"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3173560731",
+		"type": "article",
+		"title": "Incidence of Bacillus cereus, Bacillus sporothermodurans and Geobacillus stearothermophilus in ultra-high temperature milk and biofilm formation capacity of isolates",
+		"source": "International Journal of Food Microbiology",
+		"issn": "0168-1605",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.ijfoodmicro.2021.109318",
+		"article_url": "https://doi.org/10.1016/j.ijfoodmicro.2021.109318",
+		"rank": 12,
+		"year": 2021,
+		"volume": 354,
+		"issue": 0,
+		"startpage": 109318,
+		"endpage": 109318,
+		"cites": 47,
+		"ecc": 47,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Vanessa Pereira Perez Alonso",
+				"affiliation": "Universidade Estadual de Campinas (UNICAMP)"
+			},
+			{
+				"name": "Jéssica de Oliveira Morais",
+				"affiliation": "Universidade Estadual de Campinas (UNICAMP)"
+			},
+			{
+				"name": "Dirce Yorika Kabuki",
+				"affiliation": "Universidade Estadual de Campinas (UNICAMP)"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3033370603",
+		"type": "article",
+		"title": "Effect of Cultural Conditions on Protease Production by a Thermophilic Geobacillus thermoglucosidasius SKF4 Isolated from Sungai Klah Hot Spring Park, Malaysia",
+		"source": "Molecules",
+		"issn": "1420-3049",
+		"publisher": "Multidisciplinary Digital Publishing Institute",
+		"doi": "10.3390/molecules25112609",
+		"article_url": "https://doi.org/10.3390/molecules25112609",
+		"fulltext_url": "https://www.mdpi.com/1420-3049/25/11/2609/pdf?version=1591251384",
+		"abstract": "Major progress in the fields of agriculture, industry, and biotechnology over the years has influenced the quest for a potent microorganism with favorable properties to be used in scientific research and industry. This study intended to isolate a new thermophilic-protease-producing bacterium and evaluate its growth and protease production under cultural conditions. Protease producing bacteria were successfully isolated from Sungai Klah Hot Spring Park in Perak, Malaysia, and coded as SKF4; they were promising protease producers. Based on microscopic, morphological, and 16S rRNA gene analysis, isolate SKF4 was identified as Geobacillus thermoglucosidasius SKF4. The process of isolating SKF4 to grow and produce proteases under different cultural conditions, including temperature, pH, NaCl concentration, carbon and nitrogen sources, and incubation time, was explored. The optimum cultural conditions observed for growth and protease production were at 60 to 65 °C of temperature, pH 7 to 8, and under 1% NaCl concentration. Further, the use of casein and yeast extract as the nitrogen sources, and sucrose and fructose as the carbon sources enhanced the growth and protease production of isolate SKF4. Meanwhile, isolate SKF4 reached maximum growth and protease production at 24 h of incubation time. The results of this study revealed a new potent strain of thermophilic bacterium isolated from Sungai Klah Hot Spring Park in Perak, Malaysia for the first time. The high production of thermostable protease enzyme by G. thermoglucosidasius SKF4 highlighted the promising properties of this bacterium for industrial and biotechnological applications.",
+		"rank": 13,
+		"year": 2020,
+		"volume": 25,
+		"issue": 11,
+		"startpage": 2609,
+		"endpage": 2609,
+		"cites": 46,
+		"ecc": 46,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Allison D. Suleiman",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Nor’Aini Abdul Rahman",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Hidayat Mohd Yusof",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Fairolniza Mohd Shariff",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Nur Adeela Yasid",
+				"affiliation": "Universiti Putra Malaysia"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2914590558",
+		"type": "article",
+		"title": "A Thermostable Monoacylglycerol Lipase from Marine Geobacillus sp. 12AMOR1: Biochemical Characterization and Mutagenesis Study",
+		"source": "International Journal of Molecular Sciences",
+		"issn": "1422-0067",
+		"publisher": "Multidisciplinary Digital Publishing Institute",
+		"doi": "10.3390/ijms20030780",
+		"article_url": "https://doi.org/10.3390/ijms20030780",
+		"fulltext_url": "https://www.mdpi.com/1422-0067/20/3/780/pdf?version=1549964945",
+		"abstract": "Lipases with unique substrate specificity are highly desired in biotechnological applications. In this study, a putative marine Geobacillus sp. monoacylglycerol lipase (GMGL) encoded gene was identified by a genomic mining strategy. The gene was expressed in Escherichia coli as a His-tag fusion protein and purified by affinity chromatography with a yield of 264 mg per liter fermentation broth. The recombinant GMGL shows the highest hydrolysis activity at 60 °C and pH 8.0, and the half-life was 60 min at 70 °C. The GMGL is active on monoacylglycerol (MAG) substrate but not diacylglycerol (DAG) or triacylglycerol (TAG), and produces MAG as the single product in the esterification reaction. Modeling structure analysis showed that the catalytic triad is formed by Ser97, Asp196 and His226, and the flexible cap region is constituted by residues from Ala120 to Thr160. A mutagenesis study on Leu142, Ile145 and Ile170 located in the substrate binding tunnel revealed that these residues were related with its substrate specificity. The kcat/Km value toward the pNP-C6 substrate in mutants Leu142Ala, Ile145Ala and Ile170Phe increased to 2.3-, 1.4- and 2.2-fold as compared to that of the wild type, respectively.",
+		"rank": 14,
+		"year": 2019,
+		"volume": 20,
+		"issue": 3,
+		"startpage": 780,
+		"endpage": 780,
+		"cites": 46,
+		"ecc": 46,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Wei Tang",
+				"affiliation": "South China University of Technology"
+			},
+			{
+				"name": "Dongming Lan",
+				"affiliation": "South China University of Technology"
+			},
+			{
+				"name": "Zexin Zhao",
+				"affiliation": "South China University of Technology"
+			},
+			{
+				"name": "Shuang Li",
+				"affiliation": "South China University of Technology"
+			},
+			{
+				"name": "Xiuting Li",
+				"affiliation": "Beijing Technology and Business University"
+			},
+			{
+				"name": "Yonghua Wang",
+				"affiliation": "South China University of Technology"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2972921799",
+		"type": "article",
+		"title": "Geobacillus strains that have potential value in microbial enhanced oil recovery",
+		"source": "Applied Microbiology and Biotechnology",
+		"issn": "0175-7598",
+		"publisher": "Springer Science+Business Media",
+		"doi": "10.1007/s00253-019-10115-7",
+		"article_url": "https://doi.org/10.1007/s00253-019-10115-7",
+		"rank": 15,
+		"year": 2019,
+		"volume": 103,
+		"issue": 20,
+		"startpage": 8339,
+		"endpage": 8350,
+		"cites": 45,
+		"ecc": 45,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Jiahui Lin",
+				"affiliation": "Nanjing Tech University"
+			},
+			{
+				"name": "Kuncheng Zhang",
+				"affiliation": "Nanjing Tech University"
+			},
+			{
+				"name": "Weiyi Tao",
+				"affiliation": "Nanjing Tech University"
+			},
+			{
+				"name": "Dan Wang",
+				"affiliation": "Nanjing Tech University"
+			},
+			{
+				"name": "Shuang Li",
+				"affiliation": "Nanjing Tech University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3013005642",
+		"type": "article",
+		"title": "Comparison of pulsed light inactivation kinetics and modeling of Escherichia coli (ATCC-29055), Clostridium sporogenes (ATCC-7955) and Geobacillus stearothermophilus (ATCC-10149)",
+		"source": "Current Research in Food Science",
+		"issn": "2665-9271",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.crfs.2020.03.005",
+		"article_url": "https://doi.org/10.1016/j.crfs.2020.03.005",
+		"fulltext_url": "https://www.sciencedirect.com/science/article/pii/S2665927120300125/pdf",
+		"abstract": "Pulsed light (PL) inactivation kinetics of Escherichia coli K-12, Clostridium sporogenes and Geobacillus stearothermophilus were evaluated under different treatment conditions. The PL system was factory set to operate at three pulses per second with a pulse width of 360 μs exposing samples placed on one of the 9 trays on a rack. Two PL parameters were evaluated in the study: number of pulses (a time factor) and the tray position (a spatial distance factor) both influencing the amount of light energy absorbed. As expected, the level of microbial inactivation increased with an increase in the number of pulses (from 1 to 15) and decreased with an increase in the Spatial distance (Tray # 1 to 9) away from the light source. Both the number of pulses and spatial distance as well as their interactions were found to have a significant effect (P < 0.05) on the extent of microbial inactivation. Vegetative cells of E. coli were most sensitive to PL treatment with a maximum 5 logarithmic reductions on Tray 1 after a 12-pulse treatment (4 s). G. stearothermophilus was more resistant to PL than C. sporogenes. Overall, the PL treatments (12–15 pulses) achieved a minimum four logarithmic reductions in the populations of all three microorganisms on the top tray at doses still below 12 J/cm2, the FDA-approved limit.",
+		"rank": 16,
+		"year": 2020,
+		"volume": 3,
+		"issue": 0,
+		"startpage": 82,
+		"endpage": 91,
+		"cites": 43,
+		"ecc": 43,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Dalia John",
+				"affiliation": "McGill University"
+			},
+			{
+				"name": "Hosahalli S. Ramaswamy",
+				"affiliation": "McGill University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2922355460",
+		"type": "article",
+		"title": "Genome analysis of a thermophilic exopolysaccharide-producing bacterium - Geobacillus sp. WSUCF1",
+		"source": "Scientific Reports",
+		"issn": "2045-2322",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41598-018-36983-z",
+		"article_url": "https://doi.org/10.1038/s41598-018-36983-z",
+		"fulltext_url": "https://www.nature.com/articles/s41598-018-36983-z.pdf",
+		"abstract": "Geobacillus sp. WSUCF1 is a Gram-positive, spore-forming, aerobic and thermophilic bacterium, isolated from a soil sample obtained from a compost facility. Strain WSUCF1 demonstrated EPS producing capability using different sugars as the carbon source. The whole-genome analysis of WSUCF1 was performed to disclose the essential genes correlated with nucleotide sugar precursor biosynthesis, assembly of monosaccharide units, export of the polysaccharide chain, and regulation of EPS production. Both the biosynthesis pathway and export mechanism of EPS were proposed based on functional annotation. Additionally, the genome description of strain WSUCF1 suggests sophisticated systems for its adaptation under thermophilic conditions. The presence of genes associated with CRISPR-Cas system, quorum quenching lactonase, polyketide synthesis and arsenic resistance makes this strain a potential candidate for various applications in biotechnology and biomedicine. The present study indicates that strain WSUCF1 has promise as a thermophilic EPS producer for a broad range of industrial applications. To the best of our knowledge, this is the first report on genome analysis of a thermophilic Geobacillus species focusing on its EPS biosynthesis and transportation, which will likely pave the way for both enhanced yield and tailor-made EPS production by thermophilic bacteria.",
+		"rank": 17,
+		"year": 2019,
+		"volume": 9,
+		"issue": 1,
+		"startpage": 1608,
+		"endpage": 1608,
+		"cites": 42,
+		"ecc": 42,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Jia Wang",
+				"affiliation": "South Dakota School of Mines and Technology"
+			},
+			{
+				"name": "Kian Mau Goh",
+				"affiliation": "University of Technology Malaysia"
+			},
+			{
+				"name": "David R. Salem",
+				"affiliation": "South Dakota School of Mines and Technology"
+			},
+			{
+				"name": "Rajesh K. Sani",
+				"affiliation": "South Dakota School of Mines and Technology"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2890801912",
+		"type": "article",
+		"title": "In silico Prediction and Exploration of Potential Bacteriocin Gene Clusters Within the Bacterial Genus Geobacillus",
+		"source": "Frontiers in Microbiology",
+		"issn": "1664-302X",
+		"publisher": "Frontiers Media",
+		"doi": "10.3389/fmicb.2018.02116",
+		"article_url": "https://doi.org/10.3389/fmicb.2018.02116",
+		"fulltext_url": "https://www.frontiersin.org/articles/10.3389/fmicb.2018.02116/pdf",
+		"abstract": "The thermophilic, endospore-forming genus of Geobacillus has historically been associated with spoilage of canned food. However, in recent years it has become the subject of much attention due its biotechnological potential in areas such as enzyme and biofuel applications. One aspect of this genus that has not been fully explored or realised is its use as a source of novel forms of the ribosomally synthesised antimicrobial peptides known as bacteriocins. To date only two bacteriocins have been fully characterised within this genus, i.e., Geobacillin I and II, with only a small number of others partially characterised. Here we bioinformatically investigate the potential of this genus as a source of novel bacteriocins through the use of the in silico screening software BAGEL3, which scans publically available genomes for potential bacteriocin gene clusters. In this study we examined the association of bacteriocin gene presence with niche and phylogenetic position within the genus. We also identified a number of candidates from multiple bacteriocin classes which may be promising antimicrobial candidates when investigated in vitro in future studies.",
+		"rank": 18,
+		"year": 2018,
+		"volume": 9,
+		"issue": 0,
+		"startpage": 2116,
+		"endpage": 2116,
+		"cites": 41,
+		"ecc": 41,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Kevin M. Egan",
+				"affiliation": "University College Cork"
+			},
+			{
+				"name": "Des Field",
+				"affiliation": "University College Cork"
+			},
+			{
+				"name": "R. Paul Ross",
+				"affiliation": "University College Cork"
+			},
+			{
+				"name": "Paul D. Cotter",
+				"affiliation": "Teagasc - The Irish Agriculture and Food Development Authority"
+			},
+			{
+				"name": "Colin Hill",
+				"affiliation": "University College Cork"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2782149754",
+		"type": "article",
+		"title": "Improvement in thermostability of xylanase from Geobacillus thermodenitrificans C5 by site directed mutagenesis",
+		"source": "Enzyme and Microbial Technology",
+		"issn": "0141-0229",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.enzmictec.2018.01.004",
+		"article_url": "https://doi.org/10.1016/j.enzmictec.2018.01.004",
+		"rank": 19,
+		"year": 2018,
+		"volume": 111,
+		"issue": 0,
+		"startpage": 38,
+		"endpage": 47,
+		"cites": 40,
+		"ecc": 40,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Muhammad Irfan",
+				"affiliation": "Quaid-i-Azam University"
+			},
+			{
+				"name": "Claudio F. González",
+				"affiliation": "University of Florida"
+			},
+			{
+				"name": "Saad Raza",
+				"affiliation": "Quaid-i-Azam University"
+			},
+			{
+				"name": "Muhamamd Rafiq",
+				"affiliation": "Quaid-i-Azam University"
+			},
+			{
+				"name": "Fariha Hasan",
+				"affiliation": "Quaid-i-Azam University"
+			},
+			{
+				"name": "Samiullah Khan",
+				"affiliation": "Quaid-i-Azam University"
+			},
+			{
+				"name": "Aamer Ali Shah",
+				"affiliation": "Quaid-i-Azam University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2969727558",
+		"type": "article",
+		"title": "EPS bound flavins driven mediated electron transfer in thermophilic Geobacillus sp.",
+		"source": "Microbiological Research",
+		"issn": "0944-5013",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.micres.2019.126324",
+		"article_url": "https://doi.org/10.1016/j.micres.2019.126324",
+		"fulltext_url": "https://www.sciencedirect.com/science/article/pii/S0944501319305774/pdf",
+		"rank": 20,
+		"year": 2019,
+		"volume": 229,
+		"issue": 0,
+		"startpage": 126324,
+		"endpage": 126324,
+		"cites": 39,
+		"ecc": 39,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Dummi Mahadevan Gurumurthy",
+				"affiliation": "University B.D.T College of Engineering"
+			},
+			{
+				"name": "Ram Naresh Bharagava",
+				"affiliation": "Babasaheb Bhimrao Ambedkar University"
+			},
+			{
+				"name": "Ashok Kumar",
+				"affiliation": "Jaypee University of Information Technology"
+			},
+			{
+				"name": "Bhaskar Singh",
+				"affiliation": "Central University of Jharkhand"
+			},
+			{
+				"name": "Muhammad Ashfaq",
+				"affiliation": "University of Gujrat"
+			},
+			{
+				"name": "Ganesh Dattatraya Saratale",
+				"affiliation": "Dongguk University"
+			},
+			{
+				"name": "Sikandar I. Mulla",
+				"affiliation": "REVA University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2899188145",
+		"type": "article",
+		"title": "Geobacillus and Bacillus Spore Inactivation by Low Energy Electron Beam Technology: Resistance and Influencing Factors",
+		"source": "Frontiers in Microbiology",
+		"issn": "1664-302X",
+		"publisher": "Frontiers Media",
+		"doi": "10.3389/fmicb.2018.02720",
+		"article_url": "https://doi.org/10.3389/fmicb.2018.02720",
+		"fulltext_url": "https://www.frontiersin.org/articles/10.3389/fmicb.2018.02720/pdf",
+		"abstract": "Low energy electron beam (LEEB) treatment is an emerging non-thermal technology that performs surface decontamination with a minimal influence on food quality. Bacterial spore resistance towards LEEB treatment and its influencing factors were investigated in this study. Spores from Geobacillus and Bacillus species were treated with a lab-scale LEEB at energy levels of 80 keV and 200 keV. The spore resistances were expressed as D values (the radiation dose required for one log10 reduction at a given energy level) calculated from the linear regression of log10 reduction against absorbed dose of the sample. The results revealed that the spore inactivation efficiency by the LEEB is comparable to that of other ionizing radiations and that the inactivation curves are mostly log10-linear at the investigated dose range (3.8 - 8.2 kGy at 80 keV; 6.0 - 9.8 kGy at 200 keV). The D values obtained from the wildtype strains varied from 2.2 - 3.0 kGy at 80 keV and 2.2 - 3.1 kGy at 200 keV. Bacillus subtilis mutant spores lacking α/β-type small, acid-soluble spore proteins showed decreased D values (1.3 kGy at 80 keV and 200 keV), indicating that spore DNA is one of the targets for LEEB spore inactivation. The results revealed that bacterial species, sporulation conditions and the treatment dose influence the spore LEEB inactivation. This finding indicates that for the application of this emerging technology, special attention should be paid to the choice of biological indicator, physiological state of the indicator and the processing settings. High spore inactivation efficiency supports the application of the LEEB for the purpose of food surface decontamination. With its environmental, logistical and economic advantages, LEEB can be a relevant technology for surface decontamination to deliver safe, minimally processed and additive-free food products.",
+		"rank": 21,
+		"year": 2018,
+		"volume": 9,
+		"issue": 0,
+		"startpage": 2720,
+		"endpage": 2720,
+		"cites": 39,
+		"ecc": 39,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Yifan Zhang",
+				"affiliation": "ETH Zurich"
+			},
+			{
+				"name": "Ralf Moeller",
+				"affiliation": "Deutsches Zentrum für Luft- und Raumfahrt e. V. (DLR)"
+			},
+			{
+				"name": "Sophia Tran",
+				"affiliation": "ETH Zurich"
+			},
+			{
+				"name": "Barbora Dubovcova",
+				"affiliation": "Bühler (Switzerland)"
+			},
+			{
+				"name": "Georgios Akepsimaidis",
+				"affiliation": "Bühler (Switzerland)"
+			},
+			{
+				"name": "Nicolás Meneses",
+				"affiliation": "Bühler (Switzerland)"
+			},
+			{
+				"name": "David Drissner",
+				"affiliation": "Albstadt-Sigmaringen University"
+			},
+			{
+				"name": "Alexander Mathys",
+				"affiliation": "ETH Zurich"
+			}
+		]
+	},
+	{
+		"uid": "OA:W4399173738",
+		"type": "article",
+		"title": "Production and characterization of rhamnolipid biosurfactant from thermophilic Geobacillus stearothermophilus bacterium isolated from Uhud mountain",
+		"source": "Frontiers in Microbiology",
+		"issn": "1664-302X",
+		"publisher": "Frontiers Media",
+		"doi": "10.3389/fmicb.2024.1358175",
+		"article_url": "https://doi.org/10.3389/fmicb.2024.1358175",
+		"fulltext_url": "https://doi.org/10.3389/fmicb.2024.1358175",
+		"abstract": "Introduction Biosurfactants have been given considerable attention as they are potential candidates for several biotechnological applications. Materials and methods In this study, a promising thermophilic biosurfactant-producing HA-2 was isolated from the volcanic and arid region of Uhud mountain, Madinah, Saudi Arabia. It was identified using 16S rRNA gene sequence analysis. The biosurfactant production ability was screened using different methods such as the drop collapse test, oil spreading test, hemolytic activity test, CTAB test, and emulsification index. The ability of rhamnolipid production by the tested strain was confirmed by the polymerase chain reaction (PCR) of rhlAB . The affinity of thermophilic HA-2 to hydrophobic substrates was also investigated. Optimization of biosurfactant production was conducted. The biological activities of produced surfactant were investigated. Results and discussion The isolated HA-1 was identified as Geobacillus stearothermophilus strain OR911984. It could utilize waste sunflower frying oil (WSFF) oil as a low-cost carbon source. It showed high emulsification activity (52 ± 0.0%) and positive results toward other biosurfactant screening tests. The strain showed high cell adhesion to hexane with 41.2% cell surface hydrophobicity. Fourier-transform infrared (FTIR) spectra indicated the presence of hydrophobic chains that comprise lipids, sugars, and hydrophilic glycolipid components. The optimization results showed the optimal factors included potato peel as a carbon source with 68.8% emulsification activity, yeast extract as a nitrogen source with 60% emulsification activity, a pH of 9 (56.6%), and a temperature of 50° (72%). The kinetics showed that optimum biosurfactant production (572.4 mg/L) was recorded at 5 days of incubation. The produced rhamnolipid biosurfactant showed high antimicrobial activity against some human and plant pathogenic bacterial and fungal isolates and high antioxidant activity (90.4%). In addition, it enhanced wheat ( Triticum aestivum ) growth, with the greatest enhancement obtained with the 5% concentration. Therefore, thermophilic G. stearothermophilus is a promising rhamnolipid biosurfactant producer that utilizes many organic wastes. The produced biosurfactant could be applied as a promising emulsifier, antimicrobial, antioxidant, and plant growth promoter.",
+		"rank": 22,
+		"year": 2024,
+		"volume": 15,
+		"issue": 0,
+		"startpage": 1358175,
+		"endpage": 1358175,
+		"cites": 38,
+		"ecc": 38,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Hibah M. Albasri",
+				"affiliation": "Taibah University"
+			},
+			{
+				"name": "Asmaa A. Almohammadi",
+				"affiliation": "Taibah University"
+			},
+			{
+				"name": "Areej Alhhazmi",
+				"affiliation": "Taibah University"
+			},
+			{
+				"name": "Duaa A. Bukhari",
+				"affiliation": "Taibah University"
+			},
+			{
+				"name": "Moayad S. Waznah",
+				"affiliation": "Taibah University"
+			},
+			{
+				"name": "Asmaa M. M. Mawad",
+				"affiliation": "Taibah University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3175248780",
+		"type": "article",
+		"title": "Decolorization of amaranth RI and fast red E azo dyes by thermophilic Geobacillus thermoleovorans KNG 112",
+		"source": "Journal of Chemical Technology & Biotechnology",
+		"issn": "0142-0356",
+		"publisher": "Wiley",
+		"doi": "10.1002/jctb.6834",
+		"article_url": "https://doi.org/10.1002/jctb.6834",
+		"abstract": "Abstract BACKGROUND Accumulation of industrial dyes in wastewater creates not only environmental problems, but also medical and aesthetic problems. Removal of synthetic dyes from contaminated hot textile industrial discharge is a fundamental issue. Herein, the microbial decolorization of azo dyes amaranth RI and fast red E was studied. The decolorization process was studied in terms of various physicochemical and analytical parameters. RESULTS The azo dye decolorization efficiency was improved with beef extract and maltose as nitrogen and carbon sources, respectively. At 55 °C, Geobacillus thermoleovorans KNG 112 showed the maximum decolorization for both amaranth RI and fast red E at pH 7 and 8, respectively. Fourier transform infrared spectral analysis revealed the formation of amide, nitrosamine, aromatic and carbonyl compounds, alkyne, alkane, alcohol and alkyl halide groups after dye decolorization. Mixed dye (amaranth RI and fast red E) decolorization resulted in formation of various alkyl acetals, amines (nitrosamines, secondary and tertiary amines) azo groups and alkyl chloride. Furthermore, phytotoxic effect of azo dyes on the germination of fenugreek and green gram showed no inhibitory effects; however, more and rapid germination compared to the control group was observed. CONCLUSIONS The results lead to the conclusion that the optimization of G. thermoleovorans KNG 112 for removal of azo dyes could have applications in decontamination of hot industrial discharges. © 2021 Society of Chemical Industry (SCI).",
+		"rank": 23,
+		"year": 2021,
+		"volume": 97,
+		"issue": 2,
+		"startpage": 482,
+		"endpage": 489,
+		"cites": 38,
+		"ecc": 38,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Kotresh Kyathanahally Rajashekarappa",
+				"affiliation": "Kuvempu University"
+			},
+			{
+				"name": "Gurumurthy Dummi Mahadevan",
+				"affiliation": "Czech Academy of Sciences, Institute of Biotechnology"
+			},
+			{
+				"name": "Shivayogeeswar Eshwarappa Neelagund",
+				"affiliation": "Kuvempu University"
+			},
+			{
+				"name": "Madhuri Sathynarayana",
+				"affiliation": "Kuvempu University"
+			},
+			{
+				"name": "Divya Vijaya",
+				"affiliation": "Kuvempu University"
+			},
+			{
+				"name": "Sikandar I. Mulla",
+				"affiliation": "REVA University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2946648914",
+		"type": "article",
+		"title": "Changes of Thermostability, Organic Solvent, and pH Stability in Geobacillus zalihae HT1 and Its Mutant by Calcium Ion",
+		"source": "International Journal of Molecular Sciences",
+		"issn": "1422-0067",
+		"publisher": "Multidisciplinary Digital Publishing Institute",
+		"doi": "10.3390/ijms20102561",
+		"article_url": "https://doi.org/10.3390/ijms20102561",
+		"fulltext_url": "https://www.mdpi.com/1422-0067/20/10/2561/pdf?version=1558706915",
+		"abstract": "Thermostable T1 lipase from Geobacillus zalihae has been crystallized using counter-diffusion method under space and Earth conditions. The comparison of the three-dimensional structures from both crystallized proteins show differences in the formation of hydrogen bond and ion interactions. Hydrogen bond and ion interaction are important in the stabilization of protein structure towards extreme temperature and organic solvents. In this study, the differences of hydrogen bond interactions at position Asp43, Thr118, Glu250, and Asn304 and ion interaction at position Glu226 was chosen to imitate space-grown crystal structure, and the impact of these combined interactions in T1 lipase-mutated structure was studied. Using space-grown T1 lipase structure as a reference, subsequent simultaneous mutation D43E, T118N, E226D, E250L, and N304E was performed on recombinant wild-type T1 lipase (wt-HT1) to generate a quintuple mutant term as 5M mutant lipase. This mutant lipase shared similar characteristics to its wild-type in terms of optimal pH and temperature. The stability of mutant 5M lipase improved significantly in acidic and alkaline pH as compared to wt-HT1. 5M lipase was highly stable in organic solvents such as dimethyl sulfoxide (DMSO), methanol, and n-hexane compared to wt-HT1. Both wild-type and mutant lipases were found highly activated in calcium as compared to other metal ions due to the presence of calcium-binding site for thermostability. The presence of calcium prolonged the half-life of mutant 5M and wt-HT1, and at the same time increased their melting temperature (Tm). The melting temperature of 5M and wt-HT1 lipases increased at 8.4 and 12.1 °C, respectively, in the presence of calcium as compared to those without. Calcium enhanced the stability of mutant 5M in 25% (v/v) DMSO, n-hexane, and n-heptane. The lipase activity of wt-HT1 also increased in 25% (v/v) ethanol, methanol, acetonitrile, n-hexane, and n-heptane in the presence of calcium. The current study showed that the accumulation of amino acid substitutions D43E, T118N, E226D, E250L, and N304E produced highly stable T1 mutant when hydrolyzing oil in selected organic solvents such as DMSO, n-hexane, and n-heptane. It is also believed that calcium ion plays important role in regulating lipase thermostability.",
+		"rank": 24,
+		"year": 2019,
+		"volume": 20,
+		"issue": 10,
+		"startpage": 2561,
+		"endpage": 2561,
+		"cites": 38,
+		"ecc": 38,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Siti Nor Hasmah Ishak",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Malihe Masomian",
+				"affiliation": "Sunway University"
+			},
+			{
+				"name": "Nor Hafizah Ahmad Kamarudin",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Mohd Shukuri Mohamad Ali",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Thean Chor Leow",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Raja Noor Zaliha Raja Abd Rahman",
+				"affiliation": "Universiti Putra Malaysia"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3016968469",
+		"type": "article",
+		"title": "Refolding, characterization, and dye decolorization ability of a highly thermostable laccase from Geobacillus sp. JS12",
+		"source": "Protein Expression and Purification",
+		"issn": "1046-5928",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.pep.2020.105646",
+		"article_url": "https://doi.org/10.1016/j.pep.2020.105646",
+		"rank": 25,
+		"year": 2020,
+		"volume": 173,
+		"issue": 0,
+		"startpage": 105646,
+		"endpage": 105646,
+		"cites": 36,
+		"ecc": 36,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Sung‐Jong Jeon",
+				"affiliation": "Dong-Eui University"
+			},
+			{
+				"name": "Jong‐Hun Park",
+				"affiliation": "Dong-Eui University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3009035324",
+		"type": "article",
+		"title": "Isolation of Thermostable Lignocellulosic Bacteria From Chicken Manure Compost and a M42 Family Endocellulase Cloning From Geobacillus thermodenitrificans Y7",
+		"source": "Frontiers in Microbiology",
+		"issn": "1664-302X",
+		"publisher": "Frontiers Media",
+		"doi": "10.3389/fmicb.2020.00281",
+		"article_url": "https://doi.org/10.3389/fmicb.2020.00281",
+		"fulltext_url": "https://www.frontiersin.org/articles/10.3389/fmicb.2020.00281/pdf",
+		"abstract": "The composting ecosystem provides a potential resource for finding new microorganisms with the capability for cellulose degradation. In the present study, Congo red method was used for the isolating of thermostable lignocellulose-degrading bacteria from chicken manure compost. A thermophilic strain named as Geobacillus thermodenitrificans Y7 with acid-resident property was successfully isolated and employed to degrade raw switchgrass at 60 ℃ for 5 days, which resulted in the final degradation rates of cellulose, xylan and acid-insoluble lignin as 18.64%, 12.96% and 17.21%, respectively. In addition, GC-MS analysis about aromatic degradation affirm the degradation of lignin by G. thermodenitrificans Y7. Moreover, an endocellulase gene belong to M42 family was successfully cloned from G. thermodenitrificans Y7 and expressed in E. coli BL21. Recombinant enzyme Cel-9 was purified by Ni-NTA column based the His-tag, and the molecular weight determined as 40.4 kDa by SDA-PAGE. The characterization of the enzyme Cel-9 indicated that the maximum enzyme activity was realized at 50 ℃ and pH 8.6 and, Mn2+ could greatly improve the CMCase enzyme activity of Cel-9 at 10mM, which was followed by Fe2+ and Co2+. Besides, it also found that the β-1,3-1,4, β-1,3, β-1,4 and β-1,6 glucan linkages all could be hydrolyzed by enzyme Cel-9. Finally, during the application of enzyme Cel-9 to switchgrass, the saccharification rates achieved to 1.81±0.04% and 2.65±0.03% for 50% and 100% crude enzyme, respectively. All these results indicated that both the strain G. thermodenitrificans Y7 and the recombinant endocellulase Cel-9 have the potential to be applied to the biomass industry.",
+		"rank": 26,
+		"year": 2020,
+		"volume": 11,
+		"issue": 0,
+		"startpage": 281,
+		"endpage": 281,
+		"cites": 36,
+		"ecc": 36,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Lingling Ma",
+				"affiliation": "Northwest A&F University"
+			},
+			{
+				"name": "Yuchun Zhao",
+				"affiliation": "Shanghai Jiao Tong University"
+			},
+			{
+				"name": "Limin Meng",
+				"affiliation": "Northwest A&F University"
+			},
+			{
+				"name": "Xin Wang",
+				"affiliation": "Northwest A&F University"
+			},
+			{
+				"name": "Yanglei Yi",
+				"affiliation": "Northwest A&F University"
+			},
+			{
+				"name": "Yuanyuan Shan",
+				"affiliation": "Northwest A&F University"
+			},
+			{
+				"name": "Bianfang Liu",
+				"affiliation": "Northwest A&F University"
+			},
+			{
+				"name": "Yuan Zhou",
+				"affiliation": "Northwest A&F University"
+			},
+			{
+				"name": "Xin Lü",
+				"affiliation": "Northwest A&F University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2809735069",
+		"type": "article",
+		"title": "Inactivation study of Bacillus subtilis, Geobacillus stearothermophilus, Alicyclobacillus acidoterrestris and Aspergillus niger spores under Ultra-High Pressure Homogenization, UV-C light and their combination",
+		"source": "Innovative Food Science & Emerging Technologies",
+		"issn": "1466-8564",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.ifset.2018.06.011",
+		"article_url": "https://doi.org/10.1016/j.ifset.2018.06.011",
+		"rank": 27,
+		"year": 2018,
+		"volume": 48,
+		"issue": 0,
+		"startpage": 258,
+		"endpage": 264,
+		"cites": 36,
+		"ecc": 36,
+		"use": 1,
+		"authors": [
+			{
+				"name": "L. Reverter-Carrión",
+				"affiliation": "Universitat Autònoma de Barcelona"
+			},
+			{
+				"name": "J.N. Sauceda-Gálvez",
+				"affiliation": "Universitat Autònoma de Barcelona"
+			},
+			{
+				"name": "Idoia Codina-Torrella",
+				"affiliation": "Universitat Autònoma de Barcelona"
+			},
+			{
+				"name": "M.M. Hernández-Herrero",
+				"affiliation": "Universitat Autònoma de Barcelona"
+			},
+			{
+				"name": "R. Gervilla",
+				"affiliation": "Universitat Autònoma de Barcelona"
+			},
+			{
+				"name": "Artur X. Roig-Sagués",
+				"affiliation": "Universitat Autònoma de Barcelona"
+			}
+		]
+	},
+	{
+		"uid": "OA:W4411040381",
+		"type": "article",
+		"title": "Inactivation of Geobacillus stearothermophilus spores by induced electric field in different food mediums",
+		"source": "Food Microbiology",
+		"issn": "0740-0020",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.fm.2025.104832",
+		"article_url": "https://doi.org/10.1016/j.fm.2025.104832",
+		"rank": 28,
+		"year": 2025,
+		"volume": 132,
+		"issue": 0,
+		"startpage": 104832,
+		"endpage": 104832,
+		"cites": 35,
+		"ecc": 35,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Li‐Ping Xue",
+				"affiliation": "Jiangnan University"
+			},
+			{
+				"name": "Na Yang",
+				"affiliation": "Jiangnan University"
+			},
+			{
+				"name": "Xueming Xu",
+				"affiliation": "Jiangnan University"
+			},
+			{
+				"name": "Yamei Jin",
+				"affiliation": "Jiangnan University"
+			},
+			{
+				"name": "Xiaohuang Cao",
+				"affiliation": "Yulin Normal University"
+			},
+			{
+				"name": "Huang Zhang",
+				"affiliation": "Henan Agricultural University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W4214695168",
+		"type": "article",
+		"title": "Current status and applications of genus Geobacillus in the production of industrially important products—a review",
+		"source": "Folia Microbiologica",
+		"issn": "0015-5632",
+		"publisher": "Springer Science+Business Media",
+		"doi": "10.1007/s12223-022-00961-w",
+		"article_url": "https://doi.org/10.1007/s12223-022-00961-w",
+		"rank": 29,
+		"year": 2022,
+		"volume": 67,
+		"issue": 3,
+		"startpage": 389,
+		"endpage": 404,
+		"cites": 35,
+		"ecc": 35,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Ashutosh Khaswal",
+				"affiliation": "Institute of Management Technology"
+			},
+			{
+				"name": "Neha Chaturvedi",
+				"affiliation": "Institute of Management Technology"
+			},
+			{
+				"name": "Santosh Kumar Mishra",
+				"affiliation": "Institute of Management Technology"
+			},
+			{
+				"name": "Priya Ranjan Kumar",
+				"affiliation": "Institute of Management Technology"
+			},
+			{
+				"name": "Prabir Kumar Paul",
+				"affiliation": "Institute of Management Technology"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3047224064",
+		"type": "article",
+		"title": "Newly Isolated Alkane Hydroxylase and Lipase Producing Geobacillus and Anoxybacillus Species Involved in Crude Oil Degradation",
+		"source": "Catalysts",
+		"issn": "2073-4344",
+		"publisher": "Multidisciplinary Digital Publishing Institute",
+		"doi": "10.3390/catal10080851",
+		"article_url": "https://doi.org/10.3390/catal10080851",
+		"fulltext_url": "https://www.mdpi.com/2073-4344/10/8/851/pdf?version=1596282660",
+		"abstract": "Isolation and studies of novel, crude oil biodegrading thermophilic strains may provide a wider knowledge in understanding their role in petroleum degradation. In this study, the screening of ten new thermophilic strains revealed that all strains were alkane hydroxylase producers and seven of them produced lipase concurrently. Three best strains were characterized and identified through 16S rRNA sequence analysis as Geobacillus sp. D4, Geobacillus sp. D7, and Anoxybacillus geothermalis D9 with GenBank accession numbers MK615934.1, MK615935.1, and MK615936.1, respectively. Gas chromatography (GC) analysis showed that all three strains were able to breakdown various compounds in crude oil such as alkanes, toxic poly-aromatic hydrocarbons (PAHs), organosulfur, carboxylic acids, alkene, resins, organosilicon, alcohol, organochlorine, and ester. For the first time, alkane hydroxylase and lipase activity as well as crude oil degradation by A. geothermalis species were reported. Geobacillus sp. D7 is the best alkane degrader followed by A. geothermalis D9 and Geobacillus sp. D4 with 17.3%, 13.1%, and 12.1% biodegradation efficiency (BE%), respectively. The potential of thermophiles isolated can be explored further for bioremediation of sites polluted by petroleum and oil spills.",
+		"rank": 30,
+		"year": 2020,
+		"volume": 10,
+		"issue": 8,
+		"startpage": 851,
+		"endpage": 851,
+		"cites": 35,
+		"ecc": 35,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Durratul Fatini Yusoff",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Raja Noor Zaliha Raja Abd Rahman",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Malihe Masomian",
+				"affiliation": "Sunway University"
+			},
+			{
+				"name": "Mohd Shukuri Mohamad Ali",
+				"affiliation": "Universiti Putra Malaysia"
+			},
+			{
+				"name": "Thean Chor Leow",
+				"affiliation": "Universiti Putra Malaysia"
+			}
+		]
+	}
+]

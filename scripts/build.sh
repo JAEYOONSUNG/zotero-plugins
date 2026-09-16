@@ -4,6 +4,12 @@
 # rejects with ERROR_CORRUPT_FILE (-3).
 set -e
 cd "$(dirname "$0")/.."
+if LC_ALL=C grep -q '[^[:print:][:space:]]' manifest.json; then
+	echo "manifest.json contains non-ASCII characters; Zotero would reject the .xpi."; exit 1
+fi
+if ! node -p "require('./manifest.json').applications.zotero.update_url || ''" | grep -q .; then
+	echo "manifest.json has no applications.zotero.update_url; Zotero would skip the .xpi silently."; exit 1
+fi
 VERSION=$(node -p "require('./manifest.json').version")
 mkdir -p build
 OUT="build/zotpop-${VERSION}.xpi"

@@ -1,0 +1,476 @@
+[
+  {
+    "title": "Cell",
+    "aliases": [],
+    "issns": [
+      "0092-8674"
+    ],
+    "impactFactor": 42.5,
+    "year": 2024,
+    "sourceURL": "https://www.cell.com/pb-assets/Health%20Advance/ux3/jbs_metrics_data_final-1751990404240.csv",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official publisher CSV: impact_factor=42.5; if_year=2024."
+  },
+  {
+    "title": "Cell Host & Microbe",
+    "aliases": [],
+    "issns": [
+      "1931-3128"
+    ],
+    "impactFactor": 18.7,
+    "year": 2024,
+    "sourceURL": "https://www.cell.com/pb-assets/Health%20Advance/ux3/jbs_metrics_data_final-1751990404240.csv",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official publisher CSV: impact_factor=18.7; if_year=2024."
+  },
+  {
+    "title": "Molecular Cell",
+    "aliases": [],
+    "issns": [
+      "1097-2765"
+    ],
+    "impactFactor": 16.6,
+    "year": 2024,
+    "sourceURL": "https://www.cell.com/pb-assets/Health%20Advance/ux3/jbs_metrics_data_final-1751990404240.csv",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official publisher CSV: impact_factor=16.6; if_year=2024."
+  },
+  {
+    "title": "Trends in Biotechnology",
+    "aliases": [],
+    "issns": [
+      "0167-7799"
+    ],
+    "impactFactor": 14.9,
+    "year": 2024,
+    "sourceURL": "https://www.cell.com/pb-assets/Health%20Advance/ux3/jbs_metrics_data_final-1751990404240.csv",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official publisher CSV: impact_factor=14.9; if_year=2024."
+  },
+  {
+    "title": "Trends in Microbiology",
+    "aliases": [],
+    "issns": [
+      "0966-842X"
+    ],
+    "impactFactor": 14.9,
+    "year": 2024,
+    "sourceURL": "https://www.cell.com/pb-assets/Health%20Advance/ux3/jbs_metrics_data_final-1751990404240.csv",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official publisher CSV: impact_factor=14.9; if_year=2024."
+  },
+  {
+    "title": "Cell Reports",
+    "aliases": [],
+    "issns": [
+      "2211-1247"
+    ],
+    "impactFactor": 6.9,
+    "year": 2024,
+    "sourceURL": "https://www.cell.com/pb-assets/Health%20Advance/ux3/jbs_metrics_data_final-1751990404240.csv",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official publisher CSV: impact_factor=6.9; if_year=2024."
+  },
+  {
+    "title": "Structure",
+    "aliases": [],
+    "issns": [
+      "0969-2126"
+    ],
+    "impactFactor": 4.3,
+    "year": 2024,
+    "sourceURL": "https://www.cell.com/pb-assets/Health%20Advance/ux3/jbs_metrics_data_final-1751990404240.csv",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official publisher CSV: impact_factor=4.3; if_year=2024."
+  },
+  {
+    "title": "Journal of Biological Chemistry",
+    "aliases": [],
+    "issns": [
+      "0021-9258"
+    ],
+    "impactFactor": 3.9,
+    "year": 2024,
+    "sourceURL": "https://www.cell.com/pb-assets/Health%20Advance/ux3/jbs_metrics_data_final-1751990404240.csv",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official publisher CSV: impact_factor=3.9; if_year=2024."
+  },
+  {
+    "title": "Applied and Environmental Microbiology",
+    "aliases": [],
+    "issns": [
+      "1098-5336"
+    ],
+    "impactFactor": 3.7,
+    "year": 2024,
+    "sourceURL": "https://journals.asm.org/pb-assets/pdf-text-excel-files/2026JournalsCatalog-1758123898603.pdf",
+    "checkedAt": "2026-09-13",
+    "evidence": "ASM catalog lists JIF 3.7; page 2 identifies June 2025 JCR release as 2024 data."
+  },
+  {
+    "title": "Journal of Bacteriology",
+    "aliases": [],
+    "issns": [
+      "1098-5530"
+    ],
+    "impactFactor": 3.0,
+    "year": 2024,
+    "sourceURL": "https://journals.asm.org/pb-assets/pdf-text-excel-files/2026JournalsCatalog-1758123898603.pdf",
+    "checkedAt": "2026-09-13",
+    "evidence": "ASM catalog lists JIF 3.0; page 2 identifies June 2025 JCR release as 2024 data."
+  },
+  {
+    "title": "Microbiology and Molecular Biology Reviews",
+    "aliases": [],
+    "issns": [
+      "1098-5557"
+    ],
+    "impactFactor": 7.8,
+    "year": 2024,
+    "sourceURL": "https://journals.asm.org/pb-assets/pdf-text-excel-files/2026JournalsCatalog-1758123898603.pdf",
+    "checkedAt": "2026-09-13",
+    "evidence": "ASM catalog lists JIF 7.8; page 2 identifies June 2025 JCR release as 2024 data."
+  },
+  {
+    "title": "mBio",
+    "aliases": [],
+    "issns": [
+      "2150-7511"
+    ],
+    "impactFactor": 4.7,
+    "year": 2024,
+    "sourceURL": "https://journals.asm.org/pb-assets/pdf-text-excel-files/2026JournalsCatalog-1758123898603.pdf",
+    "checkedAt": "2026-09-13",
+    "evidence": "ASM catalog lists JIF 4.7; page 2 identifies June 2025 JCR release as 2024 data."
+  },
+  {
+    "title": "Microbiology Spectrum",
+    "aliases": [],
+    "issns": [
+      "2165-0497"
+    ],
+    "impactFactor": 3.8,
+    "year": 2024,
+    "sourceURL": "https://journals.asm.org/pb-assets/pdf-text-excel-files/2026JournalsCatalog-1758123898603.pdf",
+    "checkedAt": "2026-09-13",
+    "evidence": "ASM catalog lists JIF 3.8; page 2 identifies June 2025 JCR release as 2024 data."
+  },
+  {
+    "title": "Frontiers in Microbiology",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 5.8,
+    "year": 2025,
+    "sourceURL": "https://www.frontiersin.org/about/impact",
+    "checkedAt": "2026-09-13",
+    "evidence": "Publisher table for JCR 2025, released 2026, lists Journal Impact Factor 5.8."
+  },
+  {
+    "title": "Frontiers in Bioengineering and Biotechnology",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 5.8,
+    "year": 2025,
+    "sourceURL": "https://www.frontiersin.org/about/impact",
+    "checkedAt": "2026-09-13",
+    "evidence": "Publisher table for JCR 2025, released 2026, lists Journal Impact Factor 5.8."
+  },
+  {
+    "title": "Frontiers in Molecular Biosciences",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 4.4,
+    "year": 2025,
+    "sourceURL": "https://www.frontiersin.org/about/impact",
+    "checkedAt": "2026-09-13",
+    "evidence": "Publisher table for JCR 2025, released 2026, lists Journal Impact Factor 4.4."
+  },
+  {
+    "title": "Frontiers in Genetics",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 3.0,
+    "year": 2025,
+    "sourceURL": "https://www.frontiersin.org/about/impact",
+    "checkedAt": "2026-09-13",
+    "evidence": "Publisher table for JCR 2025, released 2026, lists Journal Impact Factor 3.0."
+  },
+  {
+    "title": "Bioinformatics",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 5.5,
+    "year": 2025,
+    "sourceURL": "https://academic.oup.com/bioinformatics/pages/About",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official journal About page explicitly lists 2025 Impact Factor 5.5."
+  },
+  {
+    "title": "Molecular Biology and Evolution",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 5.3,
+    "year": 2024,
+    "sourceURL": "https://academic.oup.com/mbe/pages/About",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official journal About page explicitly lists 2024 Impact Factor 5.3."
+  },
+  {
+    "title": "FEMS Microbiology Letters",
+    "aliases": [],
+    "issns": [
+      "1574-6968",
+      "0378-1097"
+    ],
+    "impactFactor": 2.0,
+    "year": 2025,
+    "sourceURL": "https://academic.oup.com/femsle/pages/About",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official journal About page explicitly lists 2025 Impact Factor 2.0."
+  },
+  {
+    "title": "Microorganisms",
+    "aliases": [],
+    "issns": [
+      "2076-2607"
+    ],
+    "impactFactor": 4.7,
+    "year": 2025,
+    "sourceURL": "https://www.mdpi.com/journal/microorganisms/announcements/17166",
+    "checkedAt": "2026-09-13",
+    "evidence": "June 2026 announcement explicitly reports 2025 Journal Impact Factor 4.7."
+  },
+  {
+    "title": "ACS Synthetic Biology",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 4.5,
+    "year": 2025,
+    "sourceURL": "https://pubs.acs.org/page/asbcd6/about.html",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official About page labels metrics Data as of 2025 and two-year Impact Factor 4.5."
+  },
+  {
+    "title": "Journal of Agricultural and Food Chemistry",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 6.7,
+    "year": 2025,
+    "sourceURL": "https://pubs.acs.org/jafcau/pages/About",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official About page labels metrics Data as of 2025 and two-year Impact Factor 6.7."
+  },
+  {
+    "title": "Biochemistry",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 2.7,
+    "year": 2025,
+    "sourceURL": "https://pubs.acs.org/page/bichaw/about.html",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official About page labels metrics Data as of 2025 and two-year Impact Factor 2.7."
+  },
+  {
+    "title": "ACS Catalysis",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 13.6,
+    "year": 2025,
+    "sourceURL": "https://pubs.acs.org/page/accacs/about.html?src=IC001_ST0002D_T007683_physch_0226_MAC_PhysBeyondChem",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official About page labels metrics Data as of 2025 and two-year Impact Factor 13.6."
+  },
+  {
+    "title": "ACS Central Science",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 11.1,
+    "year": 2025,
+    "sourceURL": "https://pubs.acs.org/page/acscii/about.html?mobileUi=0",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official About page labels metrics Data as of 2025 and two-year Impact Factor 11.1."
+  },
+  {
+    "title": "Microbiology",
+    "aliases": [],
+    "issns": [
+      "1465-2080"
+    ],
+    "impactFactor": 4.3,
+    "year": 2025,
+    "sourceURL": "https://www.microbiologyresearch.org/article-journal-metrics",
+    "checkedAt": "2026-09-13",
+    "evidence": "2026 society announcement links this table as its 2025 metrics; Microbiology two-year JIF is 4.3."
+  },
+  {
+    "title": "Microbial Biotechnology",
+    "aliases": [],
+    "issns": [
+      "1751-7915"
+    ],
+    "impactFactor": 6.7,
+    "year": 2025,
+    "sourceURL": "https://enviromicro-journals.onlinelibrary.wiley.com/journal/17517915/journal-metrics",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official dedicated metrics page explicitly lists 2025 Journal Impact Factor (Clarivate): 6.7."
+  },
+  {
+    "title": "Molecular Microbiology",
+    "aliases": [],
+    "issns": [
+      "1365-2958",
+      "0950-382X"
+    ],
+    "impactFactor": 3.1,
+    "year": null,
+    "sourceURL": "https://onlinelibrary.wiley.com/journal/13652958",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official homepage lists Journal Impact Factor 3.1. JIF year not stated on publisher page."
+  },
+  {
+    "title": "Journal of Molecular Biology",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 4.5,
+    "year": null,
+    "sourceURL": "https://www.sciencedirect.com/journal/journal-of-molecular-biology/vol/437/issue/22",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official ScienceDirect journal header lists Impact Factor 4.5, separately from CiteScore. JIF year not stated on publisher page."
+  },
+  {
+    "title": "Metabolic Engineering",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 6.8,
+    "year": null,
+    "sourceURL": "https://www.sciencedirect.com/journal/metabolic-engineering/vol/29/suppl/C",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official ScienceDirect journal header lists Impact Factor 6.8, separately from CiteScore. JIF year not stated on publisher page."
+  },
+  {
+    "title": "International Journal of Molecular Sciences",
+    "aliases": [],
+    "issns": [
+      "1422-0067",
+      "1661-6596"
+    ],
+    "impactFactor": 5.6,
+    "year": 2025,
+    "sourceURL": "https://www.mdpi.com/journal/ijms/imprint",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official imprint explicitly lists Impact Factor 5.6 (2025), separately from five-year JIF."
+  },
+  {
+    "title": "FEMS Microbiology Reviews",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 16.9,
+    "year": 2025,
+    "sourceURL": "https://academic.oup.com/femsre/pages/About",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official journal About page explicitly lists 2025 Impact Factor 16.9."
+  },
+  {
+    "title": "Fermentation",
+    "aliases": [],
+    "issns": [
+      "2311-5637"
+    ],
+    "impactFactor": 4.1,
+    "year": 2025,
+    "sourceURL": "https://www.mdpi.com/journal/fermentation/imprint",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official imprint explicitly lists Impact Factor 4.1 (2025), separately from five-year JIF."
+  },
+  {
+    "title": "Biotechnology and Bioengineering",
+    "aliases": [],
+    "issns": [
+      "1097-0290",
+      "0006-3592"
+    ],
+    "impactFactor": 3.9,
+    "year": null,
+    "sourceURL": "https://analyticalsciencejournals.onlinelibrary.wiley.com/journal/10970290",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official homepage lists Journal Impact Factor 3.9. JIF year not stated on publisher page."
+  },
+  {
+    "title": "Environmental Microbiology",
+    "aliases": [],
+    "issns": [
+      "1462-2920",
+      "1462-2912"
+    ],
+    "impactFactor": 4.0,
+    "year": null,
+    "sourceURL": "https://enviromicro-journals.onlinelibrary.wiley.com/journal/14622920",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official homepage lists Journal Impact Factor 4.0. JIF year not stated on publisher page."
+  },
+  {
+    "title": "Journal of Computational Chemistry",
+    "aliases": [],
+    "issns": [
+      "1096-987X",
+      "0192-8651"
+    ],
+    "impactFactor": 2.9,
+    "year": null,
+    "sourceURL": "https://onlinelibrary.wiley.com/journal/1096987x",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official homepage lists Journal Impact Factor 2.9. JIF year not stated on publisher page."
+  },
+  {
+    "title": "Synthetic and Systems Biotechnology",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 4.4,
+    "year": null,
+    "sourceURL": "https://www.sciencedirect.com/journal/synthetic-and-systems-biotechnology/vol/7/issue/1",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official ScienceDirect journal listing labels Impact Factor 4.4, separately from CiteScore. JIF year not stated on publisher page."
+  },
+  {
+    "title": "Gene",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 2.4,
+    "year": null,
+    "sourceURL": "https://www.sciencedirect.com/journal/gene/vol/908/suppl/C",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official ScienceDirect journal listing labels Impact Factor 2.4, separately from CiteScore. JIF year not stated on publisher page."
+  },
+  {
+    "title": "Plasmid",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 2.3,
+    "year": null,
+    "sourceURL": "https://www.sciencedirect.com/browse/calls-for-papers",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official ScienceDirect journal listing labels Impact Factor 2.3, separately from CiteScore. JIF year not stated on publisher page."
+  },
+  {
+    "title": "International Journal of Systematic and Evolutionary Microbiology",
+    "aliases": [],
+    "issns": [],
+    "impactFactor": 2.3,
+    "year": 2025,
+    "sourceURL": "https://www.microbiologyresearch.org/article-journal-metrics",
+    "checkedAt": "2026-09-13",
+    "evidence": "2026 society announcement identifies linked table as 2025 metrics; journal two-year JIF is 2.3."
+  },
+  {
+    "title": "Trends in Biochemical Sciences",
+    "aliases": [],
+    "issns": [
+      "0968-0004"
+    ],
+    "impactFactor": 11.0,
+    "year": 2024,
+    "sourceURL": "https://www.cell.com/pb-assets/Health%20Advance/ux3/jbs_metrics_data_final-1751990404240.csv",
+    "checkedAt": "2026-09-13",
+    "evidence": "Official publisher CSV: impact_factor=11; if_year=2024."
+  }
+]

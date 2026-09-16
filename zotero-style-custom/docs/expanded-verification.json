@@ -1,0 +1,15 @@
+{
+  "version": "0.5.0",
+  "sourceFeatures": 48,
+  "additionalWorkflows": 7,
+  "nodeDOMTests": 178,
+  "installerFilesystemTests": 6,
+  "allPassed": true,
+  "userUIControlled": false,
+  "nativeAppLaunched": false,
+  "nativeActivationVerified": false,
+  "artifactSha256": "3bc75bf9e9f5fcee7e5393a9d7ae28a181ce80d40542b34f42f51b36ef9b5de9",
+  "deploymentState": "waiting-for-zotero-exit",
+  "liveStatusFile": "build/pending/install-status.json",
+  "updateWaitLimitHours": 24
+}

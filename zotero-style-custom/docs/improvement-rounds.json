@@ -1,0 +1,603 @@
+{
+  "version": "0.8.0",
+  "minimumRequestedRounds": 10,
+  "rounds": [
+    {
+      "round": "R01",
+      "title": "Scoped nested tag branch rename and merge",
+      "gap": "Maps exact prefix boundaries once, preserves descendant suffixes and tag types; existing destination metadata wins merges; protects status/rating tags and rejects cross-library selections.",
+      "entryPoint": "중첩 태그 → 선택 문헌 태그 이름 변경",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "renameTagBranch"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R01 branch rename merges existing destinations without losing types or sibling tags"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R01 exact rename and scoped guards prevent subtree and cross-library changes"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R01 moving a branch below itself maps each original suffix once and rolls back batch failure"
+        }
+      ],
+      "status": "verified",
+      "review": "Tested descendant-target rename without cascading, target collision metadata, and later-item save failure rolling earlier changes back.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R01"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R02",
+      "title": "Guarded bulk annotation recoloring",
+      "gap": "Validates six-digit colors and library identity, checks clean/editable annotation attachment and parent, skips unchanged colors, and saves transactionally.",
+      "entryPoint": "주석 → 선택 주석 색상 변경",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "recolorAnnotations"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R02 recolor validates complete parent chain before changing annotation color"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R02 failed bulk recolor preserves newer annotation comments and user colors"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R02 a parent becoming dirty mid-batch aborts later recolors without discarding parent edits"
+        }
+      ],
+      "status": "verified",
+      "review": "Later save failure preserves concurrently edited comments/colors; a parent becoming dirty between saves aborts and rolls back annotations without touching parent drafts.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R02"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R03",
+      "title": "Symmetric selected related-link removal",
+      "gap": "Deletes only selected-item URI links under Zotero related-item predicate; preserves links to other papers and all other relation predicates. Handles one-sided links, requires same-library editable clean regular items.",
+      "entryPoint": "패널 하단 → 선택 문헌끼리 연결 해제",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "unrelate"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R03 selected relation removal is symmetric and preserves other links and predicates"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R03 relation removal rejects cross-library input and restores links after later failure"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R03 unlink handles one-sided edges and retains concurrent unrelated edits on rollback"
+        }
+      ],
+      "status": "verified",
+      "review": "Verified one-sided edge removal and concurrent unrelated relation additions survive a later unlink-save failure.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R03"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R04",
+      "title": "Explicit direct and recursive collection scope",
+      "gap": "Requires explicit chosen library, returns regular undeleted collection members, deduplicates recursive descendants, yields between chunks and never changes default library scope.",
+      "entryPoint": "표시 범위 → 현재 컬렉션·하위 컬렉션",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "collectionItems"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R04 collection scope returns deduplicated direct or recursive regular item IDs"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R04 collection scope rejects foreign descendants and terminates cycles"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R04 querying another library collection does not change default note scope"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "collection changes during pending membership lookup discard the old scope and follow the current collection"
+        }
+      ],
+      "status": "verified",
+      "review": "Rejects foreign descendant/membership corruption, terminates cycles, excludes deleted/attachment records and preserves other-library note scope. Final integration review reproduced and fixed async scope/lost-update regression.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R04"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R05",
+      "title": "Tab ordering and close other tabs",
+      "gap": "Tab list previously only selected and closed individual tabs.",
+      "entryPoint": "탭 관리·세로 탭 → 순서 이동·다른 탭 닫기",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "moveTab"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R05 tab reorder uses final positions and close-others protects the library and non-reader tabs"
+        }
+      ],
+      "status": "verified",
+      "review": "Reject stale IDs, invalid destinations and library movement before mutation; unrelated note tabs remain.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R05"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R06",
+      "title": "Saved tab group rename and update",
+      "gap": "Saved sessions could be created/restored/deleted, but could not be renamed or updated in place.",
+      "entryPoint": "탭 관리 → 그룹 이름 변경·현재 탭으로 갱신",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "updateTabGroup"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R06 saved tab groups rename and update current order/pages without changing identity or unrelated groups"
+        }
+      ],
+      "status": "verified",
+      "review": "Empty names, stale group ID and empty document snapshot reject without cache changes; other groups retain prior pages.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R06"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R07",
+      "title": "Saved view rename and update",
+      "gap": "Saved column layouts could not be revised without deleting/recreating a group.",
+      "entryPoint": "뷰 그룹 → 이름 변경·현재 배치로 갱신",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "updateView"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R07 saved views rename and update layout in place and reject stale or unavailable targets"
+        }
+      ],
+      "status": "verified",
+      "review": "Stale IDs, empty names and closed target windows reject; update affects only chosen group; reapplication restores updated width.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R07"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R08",
+      "title": "Restore reader appearance and configure annotation margins",
+      "gap": "Users could apply styles but could not restore original appearance while keeping the plugin active; cards had fixed width/side/text length.",
+      "entryPoint": "읽기 진행 / PDF Style → 모양 복원·여백 설정",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "resetAppearance"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R08 margin width side and text limit change actual cards with typed validation"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R08 appearance reset restores original native settings while retaining palettes and display preferences"
+        }
+      ],
+      "status": "verified",
+      "review": "Reject invalid CSS/width/type before persistence; text uses textContent; reset does not reapply on next poll and preserves saved palettes.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R08"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R09",
+      "title": "읽기 상태·별점·연도 필터와 문헌 정렬",
+      "gap": "filters existed only partially in the model; no matching user controls",
+      "entryPoint": "워크벤치 상단 상세 필터",
+      "sources": [
+        {
+          "file": "src/workspace.js",
+          "marker": "sortItems"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "최소 별점"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "combined status year and rating filters sort known zero citations before unknown values without mutating input"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "visible status year rating and sort controls filter exploration and reset together"
+        }
+      ],
+      "status": "verified",
+      "review": "Combined filters, inverse year range, missing metrics versus actual zero and sort stability checked.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R10",
+      "title": "200개 제한을 넘는 탐색과 명시적 일괄 선택",
+      "gap": "The first 200 papers were reachable; later results required narrowing a search.",
+      "entryPoint": "문헌 탐색 → 이전/다음 페이지·검색 결과 전체 선택",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "검색 결과 전체 선택"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "exploration pages past the old 200 item limit and selects exactly the requested page or results"
+        }
+      ],
+      "status": "verified",
+      "review": "251-paper fixture reaches last page; page and whole-result selections verified separately and search resets stale page.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R11",
+      "title": "비교 항목 선택·저장과 전체 결과 CSV",
+      "gap": "Comparison fields were fixed; fallback silently used only 20 papers.",
+      "entryPoint": "논문 비교 → 비교 항목 선택·CSV 복사",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "비교 항목 선택"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "comparison field choices persist and CSV exports all rows while the table pages without losing zero values"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "rapid comparison field changes compose while persistence is still pending"
+        }
+      ],
+      "status": "verified",
+      "review": "61-paper fixture, persistent fields, 50-row pages, complete CSV, real zero metrics and transposed row headers verified. Final integration review reproduced and fixed async scope/lost-update regression.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R12",
+      "title": "캔버스 이름·카드 색상·제목·연결 편집",
+      "gap": "Boards/cards could not be renamed/recolored and connections could not be removed independently.",
+      "entryPoint": "캔버스 → 보드 이름 변경·카드 편집·카드 연결 해제",
+      "sources": [
+        {
+          "file": "src/workspace.js",
+          "marker": "unlinkCards"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "카드 모양 저장"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "canvas can rename boards edit card appearance and unlink without removing either document"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "canvas exposes board and card appearance editing and reversible relation removal"
+        }
+      ],
+      "status": "verified",
+      "review": "Invalid color rejects before label mutation; link removal preserves document IDs/cards; stable per-board/card draft keys.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R13",
+      "title": "Exact annotation-to-note backlinks",
+      "gap": "Matches native data-annotation attachmentURI+annotationKey pairs and scoped select/open-pdf annotation links, decoding escaped/URI-encoded attributes. Does not confuse different annotations sharing a PDF.",
+      "entryPoint": "주석 → 참조 노트 보기",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "async function backlinks"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R13 annotation backlinks distinguish two highlights in the same attachment"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R13 annotation backlinks accept escaped metadata and reject group or annotation-key collisions"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R13 malformed or ambiguous annotation references and quoted markup do not create backlinks"
+        }
+      ],
+      "status": "verified",
+      "review": "Rejects wrong-group/same-key links, same-PDF different annotation references, conflicting query parameters, invalid JSON and markup quoted as note text.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R13"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R14",
+      "title": "Native annotation-to-note backlinks",
+      "gap": "Only paper-level backlinks were exposed; native annotation headers had no referring-note count.",
+      "entryPoint": "PDF 주석 머리글 → 참조 노트 개수·노트 열기",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "backlinkHook"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R14 native annotation header resolves library-scoped identity and opens exact referring notes"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R14 stale annotation headers and wrong PDF identities never publish late backlinks"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R14 repeated headers share pending and completed lookups and distinct scans are serialized"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R14 note modifications invalidate cached counts on next poll without reacting to unrelated paper updates"
+        }
+      ],
+      "status": "verified",
+      "review": "Wrong parent and library rejected before note lookup; disposal removes menus/listeners and ignores late results. Final lifecycle pass verifies request deduplication, single scan concurrency, note invalidation and notifier cleanup; each distinct first-time annotation still uses the library exact-match scan.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R14"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R15",
+      "title": "Geometry-preserving selected annotation paragraph merge (library service)",
+      "gap": "Retains first annotation in page/sortIndex order, combines all rectangle positions across same or two adjacent pages via native nextPageRects, joins paragraph text/comments and merges tags; soft-deletes extras only after survivor save inside one DB transaction. Rejects external/read-only/dirty/mixed-PDF/mixed-type/mixed-color/malformed selections.",
+      "entryPoint": "PDF 주석 우클릭·Style 메뉴 / 주석 → 선택 주석 병합",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "mergeAnnotations"
+        },
+        {
+          "file": "src/reader-tools.js",
+          "marker": "mergeSelectedAnnotations"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 adjacent-page merge preserves geometry, paragraphs, comments and tags in reading order"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 merge rejects stale, external, mismatched or unsupported selections without writes"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 failure trashing an extra annotation rolls back survivor geometry and recoverable deletion"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 combines existing next-page rectangles and refuses three-page or malformed geometry"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 rollback preserves edits made to the survivor while an extra save fails"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 reader change after survivor save rolls back before deleting the other annotation"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R15 native merge resolves selected keys and delegates guarded transactional mutation"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R15 merge rejects readonly wrong-PDF and stale reader selections before mutation"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R15 reader validation and native menu enforce the same fifty-annotation limit as library merge"
+        }
+      ],
+      "status": "verified",
+      "review": "Tests invalid geometry/three-page spans, reversed input order, existing two-page source rectangles, stale reader after survivor save, later deletion failure and concurrent survivor comment/tag edits.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R15"
+        },
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R15"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R16",
+      "title": "Attachment-version listing and switching",
+      "gap": "Baseline dotted reader.attachmentVersionSwitch feature was missing from initial inventory and native toolbar.",
+      "entryPoint": "PDF Style → Switch PDF version",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "switchAttachmentVersion"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R16 attachment versions include only same-parent same-library locally readable PDFs and switch explicitly"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R16 stale reader during file check prevents version switching and original tab is retained on open failure"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R16 native toolbar version listing exposes working user-triggered PDF choices"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R16 parent deletion reparenting and library changes during file checks reject stale version choices"
+        }
+      ],
+      "status": "verified",
+      "review": "Wrong parent/library, missing file and changed active reader reject; tests cover explicit toolbar interaction and failed open. PDF siblings only, matching requested scope. Final consistency pass snapshots attachment/parent identity and library; deletion, reparenting or library changes during file checks abort before opening.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R16"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R17",
+      "title": "문헌 상세에 메타데이터·노트·주석 직접 표시",
+      "gap": "Status disappeared when IF and citations were both unknown; notes and annotations required separate tabs.",
+      "entryPoint": "문헌 탐색 → 자세히",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "주석 원문 열기"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "paper detail displays status without available metrics and includes scoped notes and annotations inline"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "late detail notes never leak into a different paper or tab"
+        }
+      ],
+      "status": "verified",
+      "review": "Separate failed note/annotation loads cannot blank the other section. Scoped IDs, textContent and generation guards checked.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R18",
+      "title": "주석 열의 페이지·색상 분포와 원문 이동",
+      "gap": "The original distribution feature was previously reduced to a numeric annotation count.",
+      "entryPoint": "Annotations · Custom 색 막대",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "annotationDistribution"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "annotation column maps colors to real attachment pages without inventing total pages and navigates clicked markers"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "annotation distribution includes both pages of a merged highlight without double-counting the annotation total"
+        }
+      ],
+      "status": "verified",
+      "review": "Multiple PDFs and nextPageRects remain distinct. Invalid colors cannot inject CSS; annotation totals and distribution pages counted independently.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    }
+  ],
+  "introducedInVersion": "0.6.0"
+}

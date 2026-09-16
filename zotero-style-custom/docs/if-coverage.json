@@ -1,0 +1,96 @@
+{
+  "version": "0.2.0",
+  "measuredAt": "2026-09-13T06:07:12.288Z",
+  "scope": "Live default user library: top-level regular items with publicationTitle",
+  "catalogRecords": 86,
+  "undatedRecords": 9,
+  "journalItems": 1116,
+  "beforeIF": 231,
+  "afterIF": 863,
+  "restored": 632,
+  "remaining": 253,
+  "largestRemaining": [
+    [
+      "PLoS ONE",
+      10
+    ],
+    [
+      "Molecular Systems Biology",
+      7
+    ],
+    [
+      "PLOS ONE",
+      7
+    ],
+    [
+      "Biotechnology Advances",
+      6
+    ],
+    [
+      "Journal of Microbiological Methods",
+      5
+    ],
+    [
+      "The EMBO Journal",
+      5
+    ],
+    [
+      "Metabolic Engineering Communications",
+      4
+    ],
+    [
+      "PLoS Genetics",
+      4
+    ],
+    [
+      "Journal of Visualized Experiments",
+      3
+    ],
+    [
+      "eLife",
+      3
+    ],
+    [
+      "PLOS Genetics",
+      3
+    ],
+    [
+      "FEBS Letters",
+      3
+    ],
+    [
+      "Biochemical and Biophysical Research Communications",
+      3
+    ],
+    [
+      "Journal of Microbiology and Biotechnology",
+      3
+    ],
+    [
+      "Current Opinion in Structural Biology",
+      3
+    ],
+    [
+      "International Journal of Biological Macromolecules",
+      3
+    ],
+    [
+      "Current Opinion in Chemical Biology",
+      3
+    ],
+    [
+      "Bioresource Technology",
+      2
+    ],
+    [
+      "Microbiological Research",
+      2
+    ],
+    [
+      "Agricultural and Biological Chemistry",
+      2
+    ]
+  ],
+  "installedMatchesBuild": true,
+  "xpiSha256": "7c65ee781f8cf2d3765f333548e1eb7e09ed7be3fee19fa391bbce35be9973f4"
+}

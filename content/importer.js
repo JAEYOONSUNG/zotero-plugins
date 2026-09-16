@@ -28,16 +28,33 @@ var ZotPoPImporter = (function () {
 		}
 		catch (e) {
 			Zotero.logError(e);
+			// An empty map is indistinguishable from "library has no DOIs", which would make
+			// every result look new. Mark it so the caller can say the status is unknown.
+			map.failed = true;
 		}
 		return map;
 	}
 
+	// Zotero's "is" search condition compares DOI bytes and itemDataValues.value has no
+	// NOCASE collation, while every search record is lowercased by normalizeDOI. Compare
+	// case-insensitively in SQL so a publisher DOI stored with uppercase still matches.
 	async function findByDOI(libraryID, doi) {
-		let s = new Zotero.Search({ libraryID });
-		s.addCondition("DOI", "is", doi);
-		s.addCondition("deleted", "false");
-		let ids = await s.search();
-		return ids.length ? ids[0] : null;
+		let target = ZotPoPSources.normalizeDOI(doi);
+		if (!target) return null;
+		try {
+			let sql = "SELECT I.itemID FROM items I "
+				+ "JOIN itemData ID ON I.itemID = ID.itemID "
+				+ "JOIN itemDataValues IDV ON ID.valueID = IDV.valueID "
+				+ "JOIN fields F ON ID.fieldID = F.fieldID "
+				+ "WHERE F.fieldName = 'DOI' AND I.libraryID = ? AND LOWER(IDV.value) = ? "
+				+ "AND I.itemID NOT IN (SELECT itemID FROM deletedItems) LIMIT 1";
+			let rows = await Zotero.DB.queryAsync(sql, [libraryID, target]);
+			return rows.length ? rows[0].itemID : null;
+		}
+		catch (e) {
+			Zotero.logError(e);
+			return null;
+		}
 	}
 
 	function identifierFor(rec) {
@@ -117,7 +134,8 @@ var ZotPoPImporter = (function () {
 
 	async function isPDFAttachment(att) {
 		try {
-			if (att.attachmentContentType === "application/pdf") return true;
+			// Do not trust attachmentContentType: importFromURL writes back whatever we asked
+			// for, so checking it here would approve an HTML login page. Read the magic bytes.
 			let path = await att.getFilePathAsync();
 			if (!path) return false;
 			let bytes = await IOUtils.read(path, { maxBytes: 5 });
@@ -155,19 +173,22 @@ var ZotPoPImporter = (function () {
 				});
 			}
 			catch (e) {
+				// Zotero enforces the requested type and throws for anything that is not a
+				// PDF, so this is where a proxy handing back its sign-in page lands.
 				log?.("PDF download failed (" + url + "): " + e.message);
+				if (ZotPoPSources.viaProxy(url, prefix)) proxyLogin = true;
 				continue;
 			}
 			if (att && await isPDFAttachment(att)) {
-				return { ok: true, how: prefix && url.startsWith(prefix) ? "proxy" : "oa", url };
+				return { ok: true, how: ZotPoPSources.viaProxy(url, prefix) ? "proxy" : "oa", url };
 			}
 			if (att) {
 				log?.("Not a PDF, discarding: " + url);
-				// A proxy that answers with HTML is almost always showing its sign-in page
-				if (prefix && url.startsWith(prefix)) proxyLogin = true;
-				try { await att.eraseTx(); } catch (e) {}
+				if (ZotPoPSources.viaProxy(url, prefix)) proxyLogin = true;
+				try { await att.eraseTx(); }
+				catch (e) { log?.("Could not discard the non-PDF attachment: " + e.message); }
 			}
-			else if (prefix && url.startsWith(prefix)) {
+			else if (ZotPoPSources.viaProxy(url, prefix)) {
 				proxyLogin = true;
 			}
 		}

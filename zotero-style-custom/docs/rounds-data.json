@@ -1,0 +1,109 @@
+[
+  {
+    "round": "R01",
+    "title": "Scoped nested tag branch rename and merge",
+    "api": "renameTagBranch(itemIDs, from, to, {subtree:true})",
+    "intendedEntrypoint": "Workbench Tags: selected-item branch rename/merge controls",
+    "behavior": "Maps exact prefix boundaries once, preserves descendant suffixes and tag types; existing destination metadata wins merges; protects status/rating tags and rejects cross-library selections.",
+    "tests": [
+      "R01 branch rename merges existing destinations without losing types or sibling tags",
+      "R01 exact rename and scoped guards prevent subtree and cross-library changes",
+      "R01 moving a branch below itself maps each original suffix once and rolls back batch failure"
+    ],
+    "redEvidence": "Before implementation:18 pass,2 fail (new API absent).",
+    "verification": "node --test zotero-style-custom/test/library.test.mjs:21 pass,0 fail",
+    "expertReview": "Confirmed native getTags/setTags and reused transactional differential rollback.",
+    "adversarialReview": "Tested descendant-target rename without cascading, target collision metadata, and later-item save failure rolling earlier changes back.",
+    "reference": "Local Zotero Item tag API; original implementation, no protected code copied."
+  },
+  {
+    "round": "R02",
+    "title": "Guarded bulk annotation recoloring",
+    "api": "recolorAnnotations(annotationIDs, hexColor) -> changedCount",
+    "intendedEntrypoint": "Workbench Annotations: recolor selected annotations",
+    "behavior": "Validates six-digit colors and library identity, checks clean/editable annotation attachment and parent, skips unchanged colors, and saves transactionally.",
+    "tests": [
+      "R02 recolor validates complete parent chain before changing annotation color",
+      "R02 failed bulk recolor preserves newer annotation comments and user colors",
+      "R02 a parent becoming dirty mid-batch aborts later recolors without discarding parent edits"
+    ],
+    "redEvidence": "Before implementation:21 pass,2 fail (new API absent).",
+    "verification": "node --test zotero-style-custom/test/library.test.mjs:24 pass,0 fail",
+    "expertReview": "Read Zotero item.js annotationColor setter, annotation/annotationDeferred loaders and field-specific _clearChanged behavior.",
+    "adversarialReview": "Later save failure preserves concurrently edited comments/colors; a parent becoming dirty between saves aborts and rolls back annotations without touching parent drafts.",
+    "reference": "Local Zotero Item annotation API; native saves retain existing quote text, comments, positions and source keys."
+  },
+  {
+    "round": "R03",
+    "title": "Symmetric selected related-link removal",
+    "api": "unrelate(itemIDs) -> changedItemCount",
+    "intendedEntrypoint": "Workbench selected papers: remove related links among selection",
+    "behavior": "Deletes only selected-item URI links under Zotero related-item predicate; preserves links to other papers and all other relation predicates. Handles one-sided links, requires same-library editable clean regular items.",
+    "tests": [
+      "R03 selected relation removal is symmetric and preserves other links and predicates",
+      "R03 relation removal rejects cross-library input and restores links after later failure",
+      "R03 unlink handles one-sided edges and retains concurrent unrelated edits on rollback"
+    ],
+    "redEvidence": "Before implementation:24 pass,2 fail (new API absent).",
+    "verification": "node --test zotero-style-custom/test/library.test.mjs:27 pass,0 fail",
+    "expertReview": "Confirmed Zotero removeRelatedItem delegates to relatedItemPredicate + exact ItemURI; used full getRelations/setRelations to preserve unrelated predicates.",
+    "adversarialReview": "Verified one-sided edge removal and concurrent unrelated relation additions survive a later unlink-save failure.",
+    "reference": "Local Zotero item.js removeRelatedItem and dataObject.js relation API."
+  },
+  {
+    "round": "R04",
+    "title": "Explicit direct and recursive collection scope",
+    "api": "collectionItems(collectionID,{libraryID,recursive:false}) -> string itemID[]",
+    "intendedEntrypoint": "Workbench scope selector: current collection with optional descendants",
+    "behavior": "Requires explicit chosen library, returns regular undeleted collection members, deduplicates recursive descendants, yields between chunks and never changes default library scope.",
+    "tests": [
+      "R04 collection scope returns deduplicated direct or recursive regular item IDs",
+      "R04 collection scope rejects foreign descendants and terminates cycles",
+      "R04 querying another library collection does not change default note scope"
+    ],
+    "redEvidence": "Before implementation:27 pass,2 fail (new API absent).",
+    "verification": "node --test zotero-style-custom/test/library.test.mjs:30 pass,0 fail",
+    "expertReview": "Confirmed getChildItems(false,false)/getChildCollections(false,false) return native objects; load child data before access.",
+    "adversarialReview": "Rejects foreign descendant/membership corruption, terminates cycles, excludes deleted/attachment records and preserves other-library note scope.",
+    "reference": "Local Zotero Collection data-loading and child traversal APIs."
+  },
+  {
+    "round": "R13",
+    "title": "Exact annotation-to-note backlinks",
+    "api": "backlinks(annotationID) -> [{id,title,kind:\"note\"}]",
+    "intendedEntrypoint": "Workbench annotation backlinks and native annotation-header backlink actions (R14)",
+    "behavior": "Matches native data-annotation attachmentURI+annotationKey pairs and scoped select/open-pdf annotation links, decoding escaped/URI-encoded attributes. Does not confuse different annotations sharing a PDF.",
+    "tests": [
+      "R13 annotation backlinks distinguish two highlights in the same attachment",
+      "R13 annotation backlinks accept escaped metadata and reject group or annotation-key collisions",
+      "R13 malformed or ambiguous annotation references and quoted markup do not create backlinks"
+    ],
+    "redEvidence": "Before implementation:30 pass,2 fail (paper-oriented backlinks missed exact annotation references).",
+    "verification": "node --test zotero-style-custom/test/library.test.mjs:33 pass,0 fail",
+    "expertReview": "Verified native EditorInstanceUtilities.serializeAnnotations stores attachmentURI and annotationKey in URI-encoded data-annotation attributes.",
+    "adversarialReview": "Rejects wrong-group/same-key links, same-PDF different annotation references, conflicting query parameters, invalid JSON and markup quoted as note text.",
+    "reference": "Local Zotero editorInstance.js serializeAnnotations; Style reference labels specify annotation-to-note backlinks."
+  },
+  {
+    "round": "R15",
+    "sharedRound": true,
+    "title": "Geometry-preserving selected annotation paragraph merge (library service)",
+    "api": "mergeAnnotations(annotationIDs,{isCurrent?}) -> survivorID string",
+    "intendedEntrypoint": "Native reader selected-annotation merge action implemented by reader leaf; root combines as one R15 round",
+    "behavior": "Retains first annotation in page/sortIndex order, combines all rectangle positions across same or two adjacent pages via native nextPageRects, joins paragraph text/comments and merges tags; soft-deletes extras only after survivor save inside one DB transaction. Rejects external/read-only/dirty/mixed-PDF/mixed-type/mixed-color/malformed selections.",
+    "tests": [
+      "R15 adjacent-page merge preserves geometry, paragraphs, comments and tags in reading order",
+      "R15 merge rejects stale, external, mismatched or unsupported selections without writes",
+      "R15 failure trashing an extra annotation rolls back survivor geometry and recoverable deletion",
+      "R15 combines existing next-page rectangles and refuses three-page or malformed geometry",
+      "R15 rollback preserves edits made to the survivor while an extra save fails",
+      "R15 reader change after survivor save rolls back before deleting the other annotation"
+    ],
+    "redEvidence": "Before implementation:33 pass,3 fail (new API absent).",
+    "verification": "node --test zotero-style-custom/test/library.test.mjs:39 pass,0 fail",
+    "expertReview": "Read installed Zotero app/omni.ja resource/reader/reader.js: nextPageRects explicitly maps pageIndex+1. Verified native annotation setters and recoverable deleted-item save semantics.",
+    "adversarialReview": "Tests invalid geometry/three-page spans, reversed input order, existing two-page source rectangles, stale reader after survivor save, later deletion failure and concurrent survivor comment/tag edits.",
+    "limitations": "Only highlights or underlines with identical type/color and at most two adjacent pages; surplus annotations remain recoverable in Trash. Existing notes referencing surplus annotation keys are not rewritten.",
+    "reference": "Native Zotero PDF rectangle/nextPageRects schema and annotation save APIs; original merge implementation, no protected code copied."
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "name": "zotero-style-custom",
+  "version": "0.8.0",
+  "private": true,
+  "description": "Personal Zotero reading workflow and native title scrolling",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build": "python3 scripts/build.py",
+    "smoke": "node --test test/bootstrap.test.mjs test/workbench.test.mjs",
+    "verify:features": "node scripts/verify-features.mjs",
+    "test:installer": "python3 test/install_background_test.py",
+    "smoke:native": "python3 scripts/smoke.py",
+    "verify:improvements": "node scripts/verify-improvements.mjs",
+    "preview:design": "node scripts/design-preview.mjs",
+    "preview:settings": "node scripts/settings-preview.mjs",
+    "build:icons": "python3 scripts/build-icons.py",
+    "verify:settings": "node scripts/verify-settings.mjs"
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.13",
+    "cssom": "^0.5.0"
+  }
+}

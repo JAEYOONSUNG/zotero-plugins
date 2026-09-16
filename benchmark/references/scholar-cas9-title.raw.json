@@ -1,0 +1,26 @@
+﻿[
+	{
+		"uid": "GS:10203281630155592862",
+		"title": "CRISPR–Cas9-assisted recombineering in Lactobacillus reuteri",
+		"source": "Nucleic acids research",
+		"publisher": "academic.oup.com",
+		"article_url": "https://academic.oup.com/nar/article-abstract/42/17/e131/2902458",
+		"cites_url": "https://scholar.google.com/scholar?cites=10203281630155592862&as_sdt=2005&sciodt=2007&hl=en",
+		"fulltext_url": "https://academic.oup.com/nar/article/42/17/e131/2902458",
+		"related_url": "https://scholar.google.com/scholar?q=related:nlSxVJVWmY0J:scholar.google.com/&scioq=intitle:crispr+intitle:cas9+intitle:assisted+intitle:recombineering+intitle:in+intitle:lactobacillus+intitle:reuteri&hl=en&as_sdt=2007&as_ylo=2014&as_yhi=2014",
+		"abstract": "Clustered regularly interspaced palindromic repeats (CRISPRs) and the CRISPR-associated (Cas) nuclease protect bacteria and archeae from foreign DNA by site-specific cleavage of incoming DNA. Type-II CRISPR–Cas systems, such as the Streptococcus pyogenes CRISPR–Cas9 system, can be adapted such that Cas9 can be guided to a user-defined site in the chromosome to introduce double-stranded breaks. Here we have developed and optimized CRISPR–Cas9 function in the lactic acid bacterium Lactobacillus …",
+		"rank": 1,
+		"year": 2014,
+		"volume": 0,
+		"issue": 0,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 538,
+		"ecc": 538,
+		"use": 1,
+		"authors": [
+			"JH Oh",
+			"JP van Pijkeren"
+		]
+	}
+]

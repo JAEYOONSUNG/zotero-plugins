@@ -1,0 +1,26 @@
+{
+  "version": "0.7.0",
+  "source": "scholar",
+  "query": {
+    "keywords": "geobacillus",
+    "yearFrom": 2015,
+    "yearTo": 2025,
+    "sort": "relevance",
+    "maxResults": 30
+  },
+  "observedCount": 30,
+  "firstTitles": [
+    "The genus Geobacillus and their biotechnological potential",
+    "Phylogenomic re-assessment of the thermophilic genus Geobacillus",
+    "A systematic review of the genera Geobacillus and Parageobacillus: their evolution, current taxonomic status and major applications",
+    "Unveiling the probiotic potential of the genus Geobacillus through comparative genomics and in silico analysis",
+    "Current status and applications of genus Geobacillus in the production of industrially important products—a review",
+    "Geobacillus Bacteria: potential commercial applications in industry, bioremediation, and bioenergy production",
+    "Peculiarities and biotechnological potential of environmental adaptation by Geobacillus species",
+    "Genetic engineering of Geobacillus spp.",
+    "Antimicrobial Potential of the Genera Geobacillus and Parageobacillus, as Well as Endolysins Biosynthesized by Their Bacteriophages",
+    "The Geobacillus Pan-Genome: Implications for the Evolution of the Genus"
+  ],
+  "observation": "Actual Zotero UI showed30GoogleScholarresults after user changed the keyword togeobacillus; confirms native PoP integration, not a matched-reference benchmark capture.",
+  "capturedAt": "2026-09-12T21:33:20.825Z"
+}

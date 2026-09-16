@@ -6,9 +6,13 @@
 	<link rel="stylesheet" href="chrome://zotpop/content/search.css"/>
 	<script src="chrome://zotero/content/include.js"></script>
 	<script src="chrome://zotpop/content/i18n.js"></script>
+	<script src="chrome://zotpop/content/query.js"></script>
+	<script src="chrome://zotpop/content/pop.js"></script>
 	<script src="chrome://zotpop/content/sources.js"></script>
 	<script src="chrome://zotpop/content/metrics.js"></script>
 	<script src="chrome://zotpop/content/importer.js"></script>
+	<script src="chrome://zotpop/content/preview.js"></script>
+	<script src="chrome://zotpop/content/marquee.js"></script>
 	<script src="chrome://zotpop/content/ui.js"></script>
 </head>
 <body>
@@ -114,6 +118,7 @@
 					<input id="filter" type="search" data-i18n-ph="filterPh"/>
 				</span>
 				<span class="spacer"></span>
+				<button id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="previewAction"></span></button>
 				<button id="select-all" type="button" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-all"/></svg><span data-i18n="selAll"></span></button>
 				<button id="select-none" type="button" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-none"/></svg><span data-i18n="selNone"></span></button>
 				<button id="select-new" type="button" class="ghost icon-text" data-i18n-title="selNewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-new"/></svg><span data-i18n="selNew"></span></button>
@@ -122,7 +127,7 @@
 				<button id="save-csv" type="button" class="ghost icon-text" data-i18n-title="saveCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-save"/></svg><span data-i18n="saveCsv"></span></button>
 				<button id="toggle-detail" type="button" class="ghost icon-text" data-i18n-title="detailTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-panel"/></svg><span id="toggle-detail-label"></span></button>
 			</div>
-			<div class="table-wrap" id="table-wrap">
+			<div class="table-wrap" id="table-wrap" tabindex="-1">
 				<table id="results-table">
 					<colgroup id="cols">
 						<col data-k="chk"/><col data-k="citations"/><col data-k="cpy"/><col data-k="rank"/>
@@ -164,6 +169,7 @@
 					<div class="d-actions">
 						<button id="d-open" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-external"/></svg><span data-i18n="dOpen"></span></button>
 						<button id="d-pdf" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="dPdf"></span></button>
+						<button id="d-preview" type="button" class="icon-text preview-action" data-i18n-title="previewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="previewAction"></span></button>
 						<button id="d-proxy" type="button" class="icon-text" data-i18n-title="dProxyTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-library"/></svg><span data-i18n="dProxy"></span></button>
 						<button id="d-copy-doi" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy"/></svg><span data-i18n="dCopyDoi"></span></button>
 						<button id="d-copy-cite" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-quote"/></svg><span data-i18n="dCopyCite"></span></button>
@@ -188,7 +194,7 @@
 	</div>
 
 	<div id="statusbar">
-		<span id="status"></span>
+		<span id="status" role="status" aria-live="polite"></span>
 		<span class="spacer"></span>
 		<progress id="progress" max="100" value="0" hidden="hidden"></progress>
 	</div>

@@ -1,0 +1,24 @@
+{
+  "version": "0.5.1",
+  "sourceFeatures": 48,
+  "additionalWorkflows": 7,
+  "nodeDOMTests": 195,
+  "installerFilesystemTests": 11,
+  "allPassed": true,
+  "gates": {
+    "met": 5,
+    "unmet": 0,
+    "abandoned": 0
+  },
+  "runtimeFileCount": 18,
+  "userUIControlled": false,
+  "nativeAppLaunched": false,
+  "nativeActivationVerified": false,
+  "artifactSha256": "6b7c354864b3b3b83586d47ea62c8854a34187d0e313d0e5373ace6b076ca209",
+  "deploymentStateAtRecord": "waiting-for-zotero-exit",
+  "installedVersionAtRecord": "0.4.1",
+  "liveStatusFile": "build/pending/install-status.json",
+  "watcherPID": 32345,
+  "updateWaitLimitHours": 24,
+  "recordedAt": "2026-09-14T12:59:37.679603+00:00"
+}

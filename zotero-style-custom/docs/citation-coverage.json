@@ -1,0 +1,51 @@
+{
+  "version": "0.4.1",
+  "before": {
+    "total": 1214,
+    "withCount": 319,
+    "zero": 0
+  },
+  "after": {
+    "total": 1214,
+    "withCount": 1158,
+    "zero": 18
+  },
+  "attempts": {
+    "ok": 1150,
+    "unsupported": 56,
+    "not-found": 8
+  },
+  "failures": {
+    "exact-title-year-first-author-required": 56,
+    "no-exact-title-year-author-match": 5,
+    "ambiguous-title-match": 2,
+    "Crossref:DOI-not-found": 1
+  },
+  "sources": {
+    "OpenAlex": 1145,
+    "Crossref": 5,
+    "Style cache: Total(DOI)": 8
+  },
+  "metadataSave": {
+    "libraryID": 1,
+    "total": 1214,
+    "processed": 1214,
+    "saved": 1150,
+    "unchanged": 0,
+    "unavailable": 64,
+    "errors": 0,
+    "running": false,
+    "startedAt": "2026-09-13T13:21:51.290Z",
+    "lookup": {
+      "cachedOnly": true
+    },
+    "finishedAt": "2026-09-13T13:23:18.095Z"
+  },
+  "verifiedExtraLines": 1150,
+  "missingExtraLines": 0,
+  "migrationComplete": true,
+  "installedMatchesBuild": true,
+  "nativeHashMatches": true,
+  "xpiSha256": "82701be7eff49bcb0441cbf7b3849b1b6e5ada8b0b2af9a2913e35cc7caeef13",
+  "verification": "Background files and saved SQLite only; no user UI calls"
+}

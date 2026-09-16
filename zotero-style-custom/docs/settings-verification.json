@@ -1,0 +1,36 @@
+{
+  "version": "0.8.0",
+  "settingsCategories": 10,
+  "storedSettings": 111,
+  "explicitActions": 6,
+  "sourceFeatureSwitches": 50,
+  "nodeDOMReaderSettingsTests": 298,
+  "installerTests": 11,
+  "allPassed": true,
+  "gates": {
+    "met": 6,
+    "unmet": 0,
+    "abandoned": 0
+  },
+  "icon": "content/icons/style-custom.svg",
+  "iconPNGSizes": [
+    16,
+    24,
+    32,
+    48,
+    96,
+    128,
+    256
+  ],
+  "iconVerified": "Original vector/PNG inspected; manifest sizes and packaged paths verified",
+  "settingsPreview": "docs/settings-preview.html",
+  "workbenchPreview": "docs/design-preview.html",
+  "nativeAppLaunched": false,
+  "nativeVisualVerification": false,
+  "activationVerified": false,
+  "currentInstalledVersion": "0.4.1",
+  "stateAtRecord": "waiting-for-zotero-exit",
+  "artifactSha256": "459ac371886c646317547d835a697bbc79c62b87be341f535e5791f077b0ff96",
+  "runtimeFiles": 29,
+  "recordedAt": "2026-09-14T23:30:21.112012+00:00"
+}

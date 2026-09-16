@@ -1,0 +1,71 @@
+{
+  "records": [
+    {
+      "uid": "OA:W2119633529",
+      "type": "article",
+      "title": "CRISPR–Cas9-assisted recombineering in Lactobacillus reuteri",
+      "source": "Nucleic Acids Research",
+      "issn": "0305-1048",
+      "publisher": "Oxford University Press",
+      "doi": "10.1093/nar/gku623",
+      "article_url": "https://doi.org/10.1093/nar/gku623",
+      "fulltext_url": "https://academic.oup.com/nar/article-pdf/42/17/e131/14120298/gku623.pdf",
+      "abstract": "Clustered regularly interspaced palindromic repeats (CRISPRs) and the CRISPR-associated (Cas) nuclease protect bacteria and archeae from foreign DNA by site-specific cleavage of incoming DNA. Type-II CRISPR-Cas systems, such as the Streptococcus pyogenes CRISPR-Cas9 system, can be adapted such that Cas9 can be guided to a user-defined site in the chromosome to introduce double-stranded breaks. Here we have developed and optimized CRISPR-Cas9 function in the lactic acid bacterium Lactobacillus reuteri ATCC PTA 6475. We established proof-of-concept showing that CRISPR-Cas9 selection combined with single-stranded DNA (ssDNA) recombineering is a realistic approach to identify at high efficiencies edited cells in a lactic acid bacterium. We show for three independent targets that subtle changes in the bacterial genome can be recovered at efficiencies ranging from 90 to 100%. By combining CRISPR-Cas9 and recombineering, we successfully applied codon saturation mutagenesis in the L. reuteri chromosome. Also, CRISPR-Cas9 selection is critical to identify low-efficiency events such as oligonucleotide-mediated chromosome deletions. This also means that CRISPR-Cas9 selection will allow identification of recombinant cells in bacteria with low recombineering efficiencies, eliminating the need for ssDNA recombineering optimization procedures. We envision that CRISPR-Cas genome editing has the potential to change the landscape of genome editing in lactic acid bacteria, and other Gram-positive bacteria.",
+      "rank": 1,
+      "year": 2014,
+      "volume": 42,
+      "issue": 17,
+      "startpage": 0,
+      "endpage": 0,
+      "cites": 404,
+      "ecc": 404,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Jee‐Hwan Oh",
+          "affiliation": "University of Wisconsin–Madison"
+        },
+        {
+          "name": "Jan‐Peter van Pijkeren",
+          "affiliation": "University of Wisconsin–Madison"
+        }
+      ]
+    }
+  ],
+  "provenance": {
+    "tool": "Publish or Perish",
+    "appVersion": "8.19.5300.9483",
+    "source": "openalex",
+    "query": {
+      "sort": "citations",
+      "maxResults": 30,
+      "title": "\"CRISPR Cas9 assisted recombineering in Lactobacillus reuteri\"",
+      "yearFrom": 2014,
+      "yearTo": 2014
+    },
+    "capturedAt": "2026-09-12T20:44:01.056211+00:00",
+    "completed": true,
+    "originalPath": "openalex-cas9-title.raw.json",
+    "command": [
+      "--datadir",
+      "build/pop-parity/pop-data",
+      "--openalex",
+      "--title",
+      "\"CRISPR Cas9 assisted recombineering in Lactobacillus reuteri\"",
+      "--years",
+      "2014-2014",
+      "--max",
+      "30",
+      "--direct",
+      "--sort",
+      "rank",
+      "--format",
+      "json",
+      "--noerrlog",
+      "benchmark/references/openalex-cas9-title.raw.json"
+    ],
+    "exitCode": 0,
+    "retrievalOrder": "PoP native retrieval order verified against provider: citations"
+  },
+  "elapsedMs": 1527
+}

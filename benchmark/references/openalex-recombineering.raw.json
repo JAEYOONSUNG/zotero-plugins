@@ -1,0 +1,1879 @@
+﻿[
+	{
+		"uid": "OA:W3119952098",
+		"type": "review",
+		"title": "Natural products in drug discovery: advances and opportunities",
+		"source": "Nature Reviews Drug Discovery",
+		"issn": "1474-1776",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41573-020-00114-z",
+		"article_url": "https://doi.org/10.1038/s41573-020-00114-z",
+		"fulltext_url": "https://www.nature.com/articles/s41573-020-00114-z.pdf",
+		"abstract": "Natural products and their structural analogues have historically made a major contribution to pharmacotherapy, especially for cancer and infectious diseases. Nevertheless, natural products also present challenges for drug discovery, such as technical barriers to screening, isolation, characterization and optimization, which contributed to a decline in their pursuit by the pharmaceutical industry from the 1990s onwards. In recent years, several technological and scientific developments - including improved analytical tools, genome mining and engineering strategies, and microbial culturing advances - are addressing such challenges and opening up new opportunities. Consequently, interest in natural products as drug leads is being revitalized, particularly for tackling antimicrobial resistance. Here, we summarize recent technological developments that are enabling natural product-based drug discovery, highlight selected applications and discuss key opportunities.",
+		"rank": 1,
+		"year": 2021,
+		"volume": 20,
+		"issue": 3,
+		"startpage": 200,
+		"endpage": 216,
+		"cites": 5340,
+		"ecc": 5340,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Atanas G. Atanasov",
+				"affiliation": "University of Vienna"
+			},
+			{
+				"name": "Sergey B. Zotchev",
+				"affiliation": "University of Vienna"
+			},
+			{
+				"name": "Verena M. Dirsch",
+				"affiliation": "University of Vienna"
+			},
+			{
+				"name": "the International Natural Product Sciences Taskforce",
+				"affiliation": "Gazi University"
+			},
+			{
+				"name": "İlkay Erdoğan Orhan",
+				"affiliation": "Polish Mother’s Memorial Hospital Research Institute"
+			},
+			{
+				"name": "Maciej Banach",
+				"affiliation": "University of Vienna"
+			},
+			{
+				"name": "Judith M. Rollinger",
+				"affiliation": "University of Messina"
+			},
+			{
+				"name": "Davide Barreca",
+				"affiliation": "University of Vienna"
+			},
+			{
+				"name": "Wolfram Weckwerth",
+				"affiliation": "University of Graz"
+			},
+			{
+				"name": "Rudolf Bauer",
+				"affiliation": "Weizmann Institute of Science"
+			},
+			{
+				"name": "Edward A. Bayer",
+				"affiliation": "Sami Labs (India)"
+			},
+			{
+				"name": "Muhammed Majeed",
+				"affiliation": "Lake Erie College of Osteopathic Medicine"
+			},
+			{
+				"name": "Anupam Bishayee",
+				"affiliation": "University of Graz"
+			},
+			{
+				"name": "Valery N. Bochkov",
+				"affiliation": "Universität Innsbruck"
+			},
+			{
+				"name": "Günther K. Bonn",
+				"affiliation": "UNSW Sydney"
+			},
+			{
+				"name": "Nady Braidy",
+				"affiliation": "University of Graz"
+			},
+			{
+				"name": "Franz Bučar",
+				"affiliation": "Instituto de Investigación en Ciencias de la Alimentación"
+			},
+			{
+				"name": "Alejandro Cifuentes",
+				"affiliation": "Casa Sollievo della Sofferenza"
+			},
+			{
+				"name": "Grazia D’Onofrio",
+				"affiliation": "Evotec (United Kingdom)"
+			},
+			{
+				"name": "Michael J. Bodkin",
+				"affiliation": "Seoul National University"
+			},
+			{
+				"name": "Marc Diederich",
+				"affiliation": "University of Dundee"
+			},
+			{
+				"name": "Albena T. Dinkova‐Kostova",
+				"affiliation": "Johannes Gutenberg University Mainz"
+			},
+			"Thomas Efferth",
+			"Khalid El Bairi",
+			{
+				"name": "Nicolas Arkells",
+				"affiliation": "University of Cambridge"
+			},
+			{
+				"name": "Tai-Ping Fan",
+				"affiliation": "University of Freiburg"
+			},
+			{
+				"name": "Bernd L. Fiebich",
+				"affiliation": "Medical University of Vienna"
+			},
+			{
+				"name": "Michael Freissmuth",
+				"affiliation": "Bulgarian Academy of Sciences"
+			},
+			{
+				"name": "Milen I. Georgiev",
+				"affiliation": "University College London"
+			},
+			{
+				"name": "Simon Gibbons",
+				"affiliation": "University Hospital Southampton NHS Foundation Trust"
+			},
+			{
+				"name": "Keith M. Godfrey",
+				"affiliation": "Medical University of Vienna"
+			},
+			{
+				"name": "Christian W. Gruber",
+				"affiliation": "UCB Pharma (United Kingdom)"
+			},
+			{
+				"name": "Jag Heer",
+				"affiliation": "Innsbruck Medical University"
+			},
+			{
+				"name": "Lukas A. Huber",
+				"affiliation": "Instituto de Investigación en Ciencias de la Alimentación"
+			},
+			{
+				"name": "Elena Ibáñez",
+				"affiliation": "Universidade do Porto"
+			},
+			{
+				"name": "Anake Kijjoa",
+				"affiliation": "Medical University of Warsaw"
+			},
+			{
+				"name": "Anna K. Kiss",
+				"affiliation": "Hong Kong Baptist University"
+			},
+			{
+				"name": "Aiping Lü",
+				"affiliation": "Universidad de Cádiz"
+			},
+			"Francisco A. Macı́as",
+			{
+				"name": "Mark J.S. Miller",
+				"affiliation": "Iuliu Hațieganu University of Medicine and Pharmacy"
+			},
+			{
+				"name": "Andrei Mocan",
+				"affiliation": "Helmholtz Centre for Infection Research"
+			},
+			{
+				"name": "Rolf Müller",
+				"affiliation": "University of Catania"
+			},
+			{
+				"name": "Ferdinando Nicoletti",
+				"affiliation": "The University of Texas at San Antonio"
+			},
+			{
+				"name": "George Perry",
+				"affiliation": "University of Catania"
+			},
+			{
+				"name": "Valeria Pittalà",
+				"affiliation": "University of Salerno"
+			},
+			{
+				"name": "Luca Rastrelli",
+				"affiliation": "ETH Zurich"
+			},
+			{
+				"name": "Michael Ristow",
+				"affiliation": "Institute of Food Science"
+			},
+			{
+				"name": "Gian Luigi Russo",
+				"affiliation": "Instituto Nacional de Investigação Agrária e Veterinária"
+			},
+			{
+				"name": "A. Sanches‐Silva",
+				"affiliation": "Paracelsus Medical University"
+			},
+			{
+				"name": "Daniela Schuster",
+				"affiliation": "Trinity College Dublin"
+			},
+			{
+				"name": "Helen Sheridan",
+				"affiliation": "Medical University of Lublin"
+			},
+			{
+				"name": "Krystyna Skalicka‐Woźniak",
+				"affiliation": "National and Kapodistrian University of Athens"
+			},
+			{
+				"name": "Léandros Skaltsounis",
+				"affiliation": "Universidade de Santiago de Compostela"
+			},
+			{
+				"name": "Eduardo Sobarzo‐Sánchez",
+				"affiliation": "Janssen (United States)"
+			},
+			{
+				"name": "David S. Bredt",
+				"affiliation": "Universität Innsbruck"
+			},
+			{
+				"name": "Hermann Stuppner",
+				"affiliation": "Health Research Institute of the Balearic Islands"
+			},
+			{
+				"name": "Antoni Sureda",
+				"affiliation": "Bulgarian Academy of Sciences"
+			},
+			{
+				"name": "Nikolay Tzvetkov",
+				"affiliation": "Institute of Biomembranes, Bioenergetics and Molecular Biotechnologies"
+			},
+			{
+				"name": "Rosa Anna Vacca",
+				"affiliation": "Inflammation Research Foundation"
+			},
+			{
+				"name": "Bharat B. Aggarwal",
+				"affiliation": "Marche Polytechnic University"
+			},
+			{
+				"name": "Maurizio Battino",
+				"affiliation": "Marche Polytechnic University"
+			},
+			{
+				"name": "Francesca Giampieri",
+				"affiliation": "Heidelberg University"
+			},
+			{
+				"name": "Michaël Wink",
+				"affiliation": "University of Geneva"
+			},
+			{
+				"name": "Jean‐Luc Wolfender",
+				"affiliation": "Jiangsu University"
+			},
+			{
+				"name": "Jianbo Xiao",
+				"affiliation": "University of Hong Kong"
+			},
+			{
+				"name": "Andy Wai Kan Yeung",
+				"affiliation": "Inserm"
+			},
+			{
+				"name": "Gérard Lizard",
+				"affiliation": "Bionorica (Germany)"
+			},
+			{
+				"name": "Michael Popp",
+				"affiliation": "University College London"
+			},
+			{
+				"name": "Michael Heinrich",
+				"affiliation": "Iuliu Hațieganu University of Medicine and Pharmacy"
+			},
+			{
+				"name": "Ioana Berindan-Neagoe",
+				"affiliation": "German Center for Infection Research"
+			},
+			{
+				"name": "Marc Stadler",
+				"affiliation": "Jiangsu University"
+			},
+			{
+				"name": "Maria Daglia",
+				"affiliation": "Leiden University"
+			},
+			{
+				"name": "Robert Verpoorte",
+				"affiliation": "University of Florence"
+			},
+			{
+				"name": "Claudiu T. Supuran",
+				"affiliation": "University of Florence"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3163348136",
+		"type": "article",
+		"title": "Cross-tissue organization of the fibroblast lineage",
+		"source": "Nature",
+		"issn": "0028-0836",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41586-021-03549-5",
+		"article_url": "https://doi.org/10.1038/s41586-021-03549-5",
+		"fulltext_url": "https://www.nature.com/articles/s41586-021-03549-5.pdf",
+		"rank": 2,
+		"year": 2021,
+		"volume": 593,
+		"issue": 7860,
+		"startpage": 575,
+		"endpage": 579,
+		"cites": 1165,
+		"ecc": 1165,
+		"use": 1,
+		"authors": [
+			"Matthew B. Buechler",
+			"Rachana Pradhan",
+			"Akshay T. Krishnamurty",
+			"Christian Cox",
+			"Aslıhan Karabacak Calviello",
+			"Amber W. Wang",
+			"Yeqing Angela Yang",
+			"Lucinda Tam",
+			"Roger Caothien",
+			"Merone Roose‐Girma",
+			"Zora Modrušan",
+			"Joseph R. Arron",
+			{
+				"name": "Richard Bourgon",
+				"affiliation": "Kaiser Permanente South San Francisco Medical Center"
+			},
+			{
+				"name": "Sören Müller",
+				"affiliation": "Genesys (United States)"
+			},
+			"Shannon J. Turley"
+		]
+	},
+	{
+		"uid": "OA:W4313560729",
+		"type": "article",
+		"title": "Phage therapy: From biological mechanisms to future directions",
+		"source": "Cell",
+		"issn": "0092-8674",
+		"publisher": "Cell Press",
+		"doi": "10.1016/j.cell.2022.11.017",
+		"article_url": "https://doi.org/10.1016/j.cell.2022.11.017",
+		"fulltext_url": "http://www.cell.com/article/S0092867422014611/pdf",
+		"abstract": "Increasing antimicrobial resistance rates have revitalized bacteriophage (phage) research, the natural predators of bacteria discovered over 100 years ago. In order to use phages therapeutically, they should (1) preferably be lytic, (2) kill the bacterial host efficiently, and (3) be fully characterized to exclude side effects. Developing therapeutic phages takes a coordinated effort of multiple stakeholders. Herein, we review the state of the art in phage therapy, covering biological mechanisms, clinical applications, remaining challenges, and future directions involving naturally occurring and genetically modified or synthetic phages.",
+		"rank": 3,
+		"year": 2023,
+		"volume": 186,
+		"issue": 1,
+		"startpage": 17,
+		"endpage": 31,
+		"cites": 818,
+		"ecc": 818,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Steffanie A. Strathdee",
+				"affiliation": "University of California San Diego"
+			},
+			{
+				"name": "Graham F. Hatfull",
+				"affiliation": "University of Pittsburgh"
+			},
+			{
+				"name": "Vivek K. Mutalik",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Robert T. Schooley",
+				"affiliation": "University of California San Diego"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3165616874",
+		"type": "article",
+		"title": "Environmental fate of tetracycline antibiotics: degradation pathway mechanisms, challenges, and perspectives",
+		"source": "Environmental Sciences Europe",
+		"issn": "2190-4715",
+		"publisher": "Springer Science+Business Media",
+		"doi": "10.1186/s12302-021-00505-y",
+		"article_url": "https://doi.org/10.1186/s12302-021-00505-y",
+		"fulltext_url": "https://enveurope.springeropen.com/track/pdf/10.1186/s12302-021-00505-y",
+		"abstract": "Abstract Tetracycline pollution is a growing global threat to aquatic and terrestrial biodiversity due to its unprecedented use in aquaculture, livestock, and human disease prevention. The influx of tetracycline may annihilate the microbial ecology structure in the environment and pose a severe threat to humans by disturbing the food chain. Although significant research data are available in the literature on various aspects of tetracycline, including detection techniques, degradation mechanisms, degradation products, and policy statements to curtail the issue, there is a scarcity of a report to compile the recent data in the literature for better analysis and comparison by the policymakers. To achieve this paucity in knowledge, the current study aims at collecting data on the available degradation strategies, mechanisms involved in biodegradable and non-biodegradable routes, the main factor affecting degradation strategies, compile novel detection techniques of tetracycline antibiotics in the environment, discuss antibiotic resistance genes and their potential role in degradation. Finally, limitations in the current bioremediation techniques and the future prospects are discussed with pointers for the decision-makers for a safer environment.",
+		"rank": 4,
+		"year": 2021,
+		"volume": 33,
+		"issue": 1,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 612,
+		"ecc": 612,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Fiaz Ahmad",
+				"affiliation": "Jiangsu University"
+			},
+			{
+				"name": "Daochen Zhu",
+				"affiliation": "Jiangsu University"
+			},
+			{
+				"name": "Jianzhong Sun",
+				"affiliation": "Jiangsu University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3195166090",
+		"type": "review",
+		"title": "Phage Therapy for Antibiotic-Resistant Bacterial Infections",
+		"source": "Annual Review of Medicine",
+		"issn": "0066-4219",
+		"publisher": "Annual Reviews",
+		"doi": "10.1146/annurev-med-080219-122208",
+		"article_url": "https://doi.org/10.1146/annurev-med-080219-122208",
+		"fulltext_url": "https://www.annualreviews.org/doi/pdf/10.1146/annurev-med-080219-122208",
+		"abstract": "Antibiotic resistance in bacterial pathogens presents a substantial threat to the control of infectious diseases. Development of new classes of antibiotics has slowed in recent years due to pressures of cost and market profitability, and there is a strong need for new antimicrobial therapies. The therapeutic use of bacteriophages has long been considered, with numerous anecdotal reports of success. Interest in phage therapy has been renewed by recent clinical successes in case studies with personalized phage cocktails, and several clinical trials are in progress. We discuss recent progress in the therapeutic use of phages and contemplate the key factors influencing the opportunities and challenges. With strong safety profiles, the main challenges of phage therapeutics involve strain variation among clinical isolates of many pathogens, battling phage resistance, and the potential limitations of host immune responses. However, the opportunities are considerable, with the potential to enhance current antibiotic efficacy, protect newly developed antibiotics, and provide a last resort in response to complete antibiotic failure.",
+		"rank": 5,
+		"year": 2021,
+		"volume": 73,
+		"issue": 1,
+		"startpage": 197,
+		"endpage": 211,
+		"cites": 575,
+		"ecc": 575,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Graham F. Hatfull",
+				"affiliation": "University of Pittsburgh"
+			},
+			{
+				"name": "Rebekah M. Dedrick",
+				"affiliation": "University of Pittsburgh"
+			},
+			{
+				"name": "Robert T. Schooley",
+				"affiliation": "University of California San Diego"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2928367333",
+		"type": "article",
+		"title": "A field of dreams: Lignin valorization into chemicals, materials, fuels, and health-care products",
+		"source": "Biotechnology Advances",
+		"issn": "0734-9750",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.biotechadv.2019.02.016",
+		"article_url": "https://doi.org/10.1016/j.biotechadv.2019.02.016",
+		"fulltext_url": "https://www.sciencedirect.com/science/article/pii/S0734975019300357/pdf",
+		"abstract": "Lignin is one of the most abundant renewable resources on earth and is readily produced as a sidestream during biomass fractioning. So far, these large quantities of lignin have been severely underutilized, thereby wasting this valuable renewable. Recent technological advances in lignin recovery, breakdown, and conversion have now started forming the first sustainable value chains to take advantage of lignin. Microbial cell factories, inspired by nature's miscellaneous set of lignin-degrading microbes, are at the heart of these novel processes. Recent success stories in which the enzymes and pathways of these microbes were harnessed for biobased production from lignin hold great promise for a sustainable upgrading of this renewable polymer into value-added compounds.",
+		"rank": 6,
+		"year": 2019,
+		"volume": 37,
+		"issue": 6,
+		"startpage": 107360,
+		"endpage": 107360,
+		"cites": 500,
+		"ecc": 500,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Judith Becker",
+				"affiliation": "Saarland University"
+			},
+			{
+				"name": "Christoph Wittmann",
+				"affiliation": "Saarland University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2804339294",
+		"type": "article",
+		"title": "Pseudomonas putida as a functional chassis for industrial biocatalysis: From native biochemistry to trans-metabolism",
+		"source": "Metabolic Engineering",
+		"issn": "1096-7176",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.ymben.2018.05.005",
+		"article_url": "https://doi.org/10.1016/j.ymben.2018.05.005",
+		"fulltext_url": "https://www.sciencedirect.com/science/article/pii/S1096717618301502/pdf",
+		"abstract": "The itinerary followed by Pseudomonas putida from being a soil-dweller and plant colonizer bacterium to become a flexible and engineer-able platform for metabolic engineering stems from its natural lifestyle, which is adapted to harsh environmental conditions and all sorts of physicochemical stresses. Over the years, these properties have been capitalized biotechnologically owing to the expanding wealth of genetic tools designed for deep-editing the P. putida genome. A suite of dedicated vectors inspired in the core tenets of synthetic biology have enabled to suppress many of the naturally-occurring undesirable traits native to this species while enhancing its many appealing properties, and also to import catalytic activities and attributes from other biological systems. Much of the biotechnological interest on P. putida stems from the distinct architecture of its central carbon metabolism. The native biochemistry is naturally geared to generate reductive currency [i.e., NAD(P)H] that makes this bacterium a phenomenal host for redox-intensive reactions. In some cases, genetic editing of the indigenous biochemical network of P. putida (cis-metabolism) has sufficed to obtain target compounds of industrial interest. Yet, the main value and promise of this species (in particular, strain KT2440) resides not only in its capacity to host heterologous pathways from other microorganisms, but also altogether artificial routes (trans-metabolism) for making complex, new-to-Nature molecules. A number of examples are presented for substantiating the worth of P. putida as one of the favorite workhorses for sustainable manufacturing of fine and bulk chemicals in the current times of the 4th Industrial Revolution. The potential of P. putida to extend its rich native biochemistry beyond existing boundaries is discussed and research bottlenecks to this end are also identified. These aspects include not just the innovative genetic design of new strains but also the incorporation of novel chemical elements into the extant biochemistry, as well as genomic stability and scaling-up issues.",
+		"rank": 7,
+		"year": 2018,
+		"volume": 50,
+		"issue": 0,
+		"startpage": 142,
+		"endpage": 155,
+		"cites": 500,
+		"ecc": 500,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Pablo I. Nikel",
+				"affiliation": "Novo Nordisk Foundation"
+			},
+			{
+				"name": "Vı́ctor de Lorenzo",
+				"affiliation": "Centro Nacional de Biotecnología"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2799295634",
+		"type": "article",
+		"title": "Evolution of high-level resistance during low-level antibiotic exposure",
+		"source": "Nature Communications",
+		"issn": "2041-1723",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41467-018-04059-1",
+		"article_url": "https://doi.org/10.1038/s41467-018-04059-1",
+		"fulltext_url": "https://www.nature.com/articles/s41467-018-04059-1.pdf",
+		"abstract": "It has become increasingly clear that low levels of antibiotics present in many environments can select for resistant bacteria, yet the evolutionary pathways for resistance development during exposure to low amounts of antibiotics remain poorly defined. Here we show that Salmonella enterica exposed to sub-MIC levels of streptomycin evolved high-level resistance via novel mechanisms that are different from those observed during lethal selections. During lethal selection only rpsL mutations are found, whereas at sub-MIC selection resistance is generated by several small-effect resistance mutations that combined confer high-level resistance via three different mechanisms: (i) alteration of the ribosomal RNA target (gidB mutations), (ii) reduction in aminoglycoside uptake (cyoB, nuoG, and trkH mutations), and (iii) induction of the aminoglycoside-modifying enzyme AadA (znuA mutations). These results demonstrate how the strength of the selective pressure influences evolutionary trajectories and that even weak selective pressures can cause evolution of high-level resistance.",
+		"rank": 8,
+		"year": 2018,
+		"volume": 9,
+		"issue": 1,
+		"startpage": 1599,
+		"endpage": 1599,
+		"cites": 483,
+		"ecc": 483,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Erik Wistrand-Yuen",
+				"affiliation": "Uppsala University"
+			},
+			{
+				"name": "Michael Knopp",
+				"affiliation": "Uppsala University"
+			},
+			{
+				"name": "Karin Hjort",
+				"affiliation": "Uppsala University"
+			},
+			{
+				"name": "Sanna Koskiniemi",
+				"affiliation": "Uppsala University"
+			},
+			{
+				"name": "Otto G. Berg",
+				"affiliation": "Uppsala University"
+			},
+			{
+				"name": "Dan I. Andersson",
+				"affiliation": "Uppsala University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3016984298",
+		"type": "article",
+		"title": "Aminoacyl-tRNA synthetases",
+		"source": "RNA",
+		"issn": "1355-8382",
+		"publisher": "Cold Spring Harbor Laboratory Press",
+		"doi": "10.1261/rna.071720.119",
+		"article_url": "https://doi.org/10.1261/rna.071720.119",
+		"fulltext_url": "http://rnajournal.cshlp.org/content/26/8/910.full.pdf",
+		"abstract": "The aminoacyl-tRNA synthetases are an essential and universally distributed family of enzymes that plays a critical role in protein synthesis, pairing tRNAs with their cognate amino acids for decoding mRNAs according to the genetic code. Synthetases help to ensure accurate translation of the genetic code by using both highly accurate cognate substrate recognition and stringent proofreading of noncognate products. While alterations in the quality control mechanisms of synthetases are generally detrimental to cellular viability, recent studies suggest that in some instances such changes facilitate adaption to stress conditions. Beyond their central role in translation, synthetases are also emerging as key players in an increasing number of other cellular processes, with far-reaching consequences in health and disease. The biochemical versatility of the synthetases has also proven pivotal in efforts to expand the genetic code, further emphasizing the wide-ranging roles of the aminoacyl-tRNA synthetase family in synthetic and natural biology.",
+		"rank": 9,
+		"year": 2020,
+		"volume": 26,
+		"issue": 8,
+		"startpage": 910,
+		"endpage": 936,
+		"cites": 473,
+		"ecc": 473,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Miguel A. Rubio",
+				"affiliation": "The Ohio State University"
+			},
+			{
+				"name": "Michael Ibba",
+				"affiliation": "The Ohio State University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3030200736",
+		"type": "article",
+		"title": "Immunotherapy with engineered bacteria by targeting the STING pathway for anti-tumor immunity",
+		"source": "Nature Communications",
+		"issn": "2041-1723",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41467-020-16602-0",
+		"article_url": "https://doi.org/10.1038/s41467-020-16602-0",
+		"fulltext_url": "https://www.nature.com/articles/s41467-020-16602-0.pdf",
+		"abstract": "Synthetic biology is a powerful tool to create therapeutics which can be rationally designed to enable unique and combinatorial functionalities. Here we utilize non-pathogenic E coli Nissle as a versatile platform for the development of a living biotherapeutic for the treatment of cancer. The engineered bacterial strain, referred to as SYNB1891, targets STING-activation to phagocytic antigen-presenting cells (APCs) in the tumor and activates complementary innate immune pathways. SYNB1891 treatment results in efficacious antitumor immunity with the formation of immunological memory in murine tumor models and robust activation of human APCs. SYNB1891 is designed to meet manufacturability and regulatory requirements with built in biocontainment features which do not compromise its efficacy. This work provides a roadmap for the development of future therapeutics and demonstrates the transformative potential of synthetic biology for the treatment of human disease when drug development criteria are incorporated into the design process for a living medicine.",
+		"rank": 10,
+		"year": 2020,
+		"volume": 11,
+		"issue": 1,
+		"startpage": 2739,
+		"endpage": 2739,
+		"cites": 456,
+		"ecc": 456,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Daniel S. Leventhal",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Anna Sokolovska",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Ning Li",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Christopher Plescia",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Starsha Kolodziej",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Carey W. Gallant",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Rudy Christmas",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Jianrong Gao",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Michael J. James",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Andrés Abín-Fuentes",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Munira Momin",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Christopher G Bergeron",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Adam Fisher",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Paul Miller",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "Kip A. West",
+				"affiliation": "Synlogic (United States)"
+			},
+			{
+				"name": "José M. Lora",
+				"affiliation": "Synlogic (United States)"
+			}
+		]
+	},
+	{
+		"uid": "OA:W4297997804",
+		"type": "article",
+		"title": "Streptomyces: The biofactory of secondary metabolites",
+		"source": "Frontiers in Microbiology",
+		"issn": "1664-302X",
+		"publisher": "Frontiers Media",
+		"doi": "10.3389/fmicb.2022.968053",
+		"article_url": "https://doi.org/10.3389/fmicb.2022.968053",
+		"fulltext_url": "https://doi.org/10.3389/fmicb.2022.968053",
+		"abstract": "Natural products derived from microorganisms serve as a vital resource of valuable pharmaceuticals and therapeutic agents. Streptomyces is the most ubiquitous bacterial genus in the environments with prolific capability to produce diverse and valuable natural products with significant biological activities in medicine, environments, food industries, and agronomy sectors. However, many natural products remain unexplored among Streptomyces . It is exigent to develop novel antibiotics, agrochemicals, anticancer medicines, etc., due to the fast growth in resistance to antibiotics, cancer chemotherapeutics, and pesticides. This review article focused the natural products secreted by Streptomyces and their function and importance in curing diseases and agriculture. Moreover, it discussed genomic-driven drug discovery strategies and also gave a future perspective for drug development from the Streptomyces .",
+		"rank": 11,
+		"year": 2022,
+		"volume": 13,
+		"issue": 0,
+		"startpage": 968053,
+		"endpage": 968053,
+		"cites": 451,
+		"ecc": 451,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Khorshed Alam",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Arpita Mazumder",
+				"affiliation": "University of Chittagong"
+			},
+			{
+				"name": "Suranjana Sikdar",
+				"affiliation": "University of Chittagong"
+			},
+			{
+				"name": "Yiming Zhao",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Jinfang Hao",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Chaoyi Song",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Yanyan Wang",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Rajib Sarkar",
+				"affiliation": "Bangladesh Council of Scientific and Industrial Research"
+			},
+			{
+				"name": "Saiful Islam",
+				"affiliation": "Bangladesh Council of Scientific and Industrial Research"
+			},
+			{
+				"name": "Youming Zhang",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Aiying Li",
+				"affiliation": "Shandong University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W4297497831",
+		"type": "article",
+		"title": "LRRC15+ myofibroblasts dictate the stromal setpoint to suppress tumour immunity",
+		"source": "Nature",
+		"issn": "0028-0836",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41586-022-05272-1",
+		"article_url": "https://doi.org/10.1038/s41586-022-05272-1",
+		"fulltext_url": "https://www.nature.com/articles/s41586-022-05272-1.pdf",
+		"abstract": "Abstract Recent single-cell studies of cancer in both mice and humans have identified the emergence of a myofibroblast population specifically marked by the highly restricted leucine-rich-repeat-containing protein 15 (LRRC15) 1–3 . However, the molecular signals that underlie the development of LRRC15 + cancer-associated fibroblasts (CAFs) and their direct impact on anti-tumour immunity are uncharacterized. Here in mouse models of pancreatic cancer, we provide in vivo genetic evidence that TGFβ receptor type 2 signalling in healthy dermatopontin + universal fibroblasts is essential for the development of cancer-associated LRRC15 + myofibroblasts. This axis also predominantly drives fibroblast lineage diversity in human cancers. Using newly developed Lrrc15– diphtheria toxin receptor knock-in mice to selectively deplete LRRC15 + CAFs, we show that depletion of this population markedly reduces the total tumour fibroblast content. Moreover, the CAF composition is recalibrated towards universal fibroblasts. This relieves direct suppression of tumour-infiltrating CD8 + T cells to enhance their effector function and augments tumour regression in response to anti-PDL1 immune checkpoint blockade. Collectively, these findings demonstrate that TGFβ-dependent LRRC15 + CAFs dictate the tumour-fibroblast setpoint to promote tumour growth. These cells also directly suppress CD8 + T cell function and limit responsiveness to checkpoint blockade. Development of treatments that restore the homeostatic fibroblast setpoint by reducing the population of pro-disease LRRC15 + myofibroblasts may improve patient survival and response to immunotherapy.",
+		"rank": 12,
+		"year": 2022,
+		"volume": 611,
+		"issue": 7934,
+		"startpage": 148,
+		"endpage": 154,
+		"cites": 432,
+		"ecc": 432,
+		"use": 1,
+		"authors": [
+			"Akshay T. Krishnamurty",
+			"Justin A. Shyer",
+			"Minh Thai",
+			"Vineela Gandham",
+			"Matthew B. Buechler",
+			"Yeqing Angela Yang",
+			"Rachana Pradhan",
+			"Amber W. Wang",
+			"Patricia L. Sanchez",
+			"Yan Qu",
+			"Beatrice Breart",
+			"Cécile Chalouni",
+			"Debra Dunlap",
+			"James Ziai",
+			"Justin Elstrott",
+			"Neelie T. Zacharias",
+			"Weiguang Mao",
+			"Rebecca K. Rowntree",
+			"Jack Sadowsky",
+			"Gail D. Lewis Phillips",
+			"Thomas H. Pillow",
+			"Barzin Y. Nabet",
+			"Romain Banchereau",
+			"Lucinda Tam",
+			"Roger Caothien",
+			"Natasha Bacarro",
+			"Merone Roose‐Girma",
+			"Zora Modrušan",
+			"Sanjeev Mariathasan",
+			{
+				"name": "Sören Müller",
+				"affiliation": "Genesys (United States)"
+			},
+			{
+				"name": "Shannon J. Turley",
+				"affiliation": "Gene Therapy Laboratory"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2901673575",
+		"type": "article",
+		"title": "ATP-Dependent Dynamic Protein Aggregation Regulates Bacterial Dormancy Depth Critical for Antibiotic Tolerance",
+		"source": "Molecular Cell",
+		"issn": "1097-2765",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.molcel.2018.10.022",
+		"article_url": "https://doi.org/10.1016/j.molcel.2018.10.022",
+		"fulltext_url": "http://www.cell.com/article/S1097276518308827/pdf",
+		"rank": 13,
+		"year": 2018,
+		"volume": 73,
+		"issue": 1,
+		"startpage": 143,
+		"endpage": 156,
+		"cites": 421,
+		"ecc": 421,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Yingying Pu",
+				"affiliation": "Peking University"
+			},
+			{
+				"name": "Yingxing Li",
+				"affiliation": "Peking University"
+			},
+			{
+				"name": "Xin Jin",
+				"affiliation": "Peking University"
+			},
+			{
+				"name": "Tian Tian",
+				"affiliation": "Peking University"
+			},
+			{
+				"name": "Qi Ma",
+				"affiliation": "Peking University"
+			},
+			{
+				"name": "Ziyi Zhao",
+				"affiliation": "Peking University"
+			},
+			{
+				"name": "Ssu-Yuan Lin",
+				"affiliation": "Institute of Biophysics"
+			},
+			{
+				"name": "Zhanghua Chen",
+				"affiliation": "Peking University"
+			},
+			{
+				"name": "Binghui Li",
+				"affiliation": "Capital Medical University"
+			},
+			{
+				"name": "Guang Yao",
+				"affiliation": "University of Arizona"
+			},
+			{
+				"name": "Mark C. Leake",
+				"affiliation": "University of York"
+			},
+			{
+				"name": "Chien‐Jung Lo",
+				"affiliation": "Institute of Biophysics"
+			},
+			{
+				"name": "Fan Bai",
+				"affiliation": "Peking University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3166176468",
+		"type": "review",
+		"title": "Recent trends in biocatalysis",
+		"source": "Chemical Society Reviews",
+		"issn": "0306-0012",
+		"publisher": "Royal Society of Chemistry",
+		"doi": "10.1039/d0cs01575j",
+		"article_url": "https://doi.org/10.1039/d0cs01575j",
+		"fulltext_url": "https://doi.org/10.1039/d0cs01575j",
+		"abstract": "Biocatalysis has undergone revolutionary progress in the past century. Benefited by the integration of multidisciplinary technologies, natural enzymatic reactions are constantly being explored. Protein engineering gives birth to robust biocatalysts that are widely used in industrial production. These research achievements have gradually constructed a network containing natural enzymatic synthesis pathways and artificially designed enzymatic cascades. Nowadays, the development of artificial intelligence, automation, and ultra-high-throughput technology provides infinite possibilities for the discovery of novel enzymes, enzymatic mechanisms and enzymatic cascades, and gradually complements the lack of remaining key steps in the pathway design of enzymatic total synthesis. Therefore, the research of biocatalysis is gradually moving towards the era of novel technology integration, intelligent manufacturing and enzymatic total synthesis.",
+		"rank": 14,
+		"year": 2021,
+		"volume": 50,
+		"issue": 14,
+		"startpage": 8003,
+		"endpage": 8049,
+		"cites": 384,
+		"ecc": 384,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Dong Yi",
+				"affiliation": "Universitätsmedizin Greifswald"
+			},
+			{
+				"name": "Thomas Bayer",
+				"affiliation": "Universitätsmedizin Greifswald"
+			},
+			{
+				"name": "Christoffel P. S. Badenhorst",
+				"affiliation": "Universitätsmedizin Greifswald"
+			},
+			{
+				"name": "Shuke Wu",
+				"affiliation": "Universitätsmedizin Greifswald"
+			},
+			{
+				"name": "Mark Doerr",
+				"affiliation": "Universitätsmedizin Greifswald"
+			},
+			{
+				"name": "Matthias Höhne",
+				"affiliation": "Universitätsmedizin Greifswald"
+			},
+			{
+				"name": "Uwe T. Bornscheuer",
+				"affiliation": "Universitätsmedizin Greifswald"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2979238556",
+		"type": "article",
+		"title": "Integrated evolutionary analysis reveals antimicrobial peptides with limited resistance",
+		"source": "Nature Communications",
+		"issn": "2041-1723",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41467-019-12364-6",
+		"article_url": "https://doi.org/10.1038/s41467-019-12364-6",
+		"fulltext_url": "https://www.nature.com/articles/s41467-019-12364-6.pdf",
+		"abstract": "Antimicrobial peptides (AMPs) are promising antimicrobials, however, the potential of bacterial resistance is a major concern. Here we systematically study the evolution of resistance to 14 chemically diverse AMPs and 12 antibiotics in Escherichia coli. Our work indicates that evolution of resistance against certain AMPs, such as tachyplesin II and cecropin P1, is limited. Resistance level provided by point mutations and gene amplification is very low and antibiotic-resistant bacteria display no cross-resistance to these AMPs. Moreover, genomic fragments derived from a wide range of soil bacteria confer no detectable resistance against these AMPs when introduced into native host bacteria on plasmids. We have found that simple physicochemical features dictate bacterial propensity to evolve resistance against AMPs. Our work could serve as a promising source for the development of new AMP-based therapeutics less prone to resistance, a feature necessary to avoid any possible interference with our innate immune system.",
+		"rank": 15,
+		"year": 2019,
+		"volume": 10,
+		"issue": 1,
+		"startpage": 4538,
+		"endpage": 4538,
+		"cites": 364,
+		"ecc": 364,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Réka Spohn",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Lejla Daruka",
+				"affiliation": "University of Szeged"
+			},
+			{
+				"name": "Viktória Lázár",
+				"affiliation": "Technion – Israel Institute of Technology"
+			},
+			{
+				"name": "Ana Martins",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Fanni Vidovics",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Gábor Grézal",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Orsolya Méhi",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Bálint Kintses",
+				"affiliation": "University of Szeged"
+			},
+			{
+				"name": "Mónika Számel",
+				"affiliation": "University of Szeged"
+			},
+			{
+				"name": "Pramod K. Jangir",
+				"affiliation": "University of Szeged"
+			},
+			{
+				"name": "Bálint Csörgő",
+				"affiliation": "University of California, San Francisco"
+			},
+			{
+				"name": "Ádám Györkei",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Zoltán Bódi",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Anikó Faragó",
+				"affiliation": "University of Szeged"
+			},
+			{
+				"name": "László Bodai",
+				"affiliation": "University of Szeged"
+			},
+			{
+				"name": "Imre Földesi",
+				"affiliation": "University of Szeged"
+			},
+			{
+				"name": "D Kata",
+				"affiliation": "University of Szeged"
+			},
+			{
+				"name": "Gergely Maróti",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Bernadett Pap",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Roland Wirth",
+				"affiliation": "University of Szeged"
+			},
+			{
+				"name": "Balázs Papp",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			},
+			{
+				"name": "Csaba Pál",
+				"affiliation": "HUN-REN Szegedi Biológiai Kutatóközpont"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2903602386",
+		"type": "article",
+		"title": "T5 exonuclease-dependent assembly offers a low-cost method for efficient cloning and site-directed mutagenesis",
+		"source": "Nucleic Acids Research",
+		"issn": "0305-1048",
+		"publisher": "Oxford University Press",
+		"doi": "10.1093/nar/gky1169",
+		"article_url": "https://doi.org/10.1093/nar/gky1169",
+		"fulltext_url": "https://academic.oup.com/nar/article-pdf/47/3/e15/27853643/gky1169.pdf",
+		"abstract": "The assembly of DNA fragments with homologous arms is becoming popular in routine cloning. For an in vitro assembly reaction, a DNA polymerase is often used either alone for its 3'-5' exonuclease activity or together with a 5'-3' exonuclease for its DNA polymerase activity. Here, we present a 'T5 exonuclease DNA assembly' (TEDA) method that only uses a 5'-3' exonuclease. DNA fragments with short homologous ends were treated by T5 exonuclease and then transformed into Escherichia coli to produce clone colonies. The cloning efficiency was similar to that of the commercial In-Fusion method employing a proprietary DNA polymerase, but higher than that of the Gibson method utilizing T5 exonuclease, Phusion DNA polymerase, and DNA ligase. It also assembled multiple DNA fragments and did simultaneous site-directed mutagenesis at multiple sites. The reaction mixture was simple, and each reaction used 0.04 U of T5 exonuclease that cost 0.25 US cents. The simplicity, cost effectiveness, and cloning efficiency should promote its routine use, especially for labs with a budget constraint. TEDA may trigger further development of DNA assembly methods that employ single exonucleases.",
+		"rank": 16,
+		"year": 2018,
+		"volume": 47,
+		"issue": 3,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 357,
+		"ecc": 357,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Yongzhen Xia",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Kai Li",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Jingjing Li",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Tianqi Wang",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Lichuan Gu",
+				"affiliation": "Shandong University"
+			},
+			{
+				"name": "Luying Xun",
+				"affiliation": "Shandong University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3108602813",
+		"type": "article",
+		"title": "CRISPR RNA-guided integrases for high-efficiency, multiplexed bacterial genome engineering",
+		"source": "Nature Biotechnology",
+		"issn": "0733-222X",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41587-020-00745-y",
+		"article_url": "https://doi.org/10.1038/s41587-020-00745-y",
+		"fulltext_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10583764/pdf/nihms-1935542.pdf",
+		"rank": 17,
+		"year": 2020,
+		"volume": 39,
+		"issue": 4,
+		"startpage": 480,
+		"endpage": 489,
+		"cites": 356,
+		"ecc": 356,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Phuc Leo H. Vo",
+				"affiliation": "Columbia University"
+			},
+			{
+				"name": "Carlotta Ronda",
+				"affiliation": "Columbia University"
+			},
+			{
+				"name": "Sanne E. Klompe",
+				"affiliation": "Columbia University"
+			},
+			{
+				"name": "Ethan Chen",
+				"affiliation": "Columbia University"
+			},
+			{
+				"name": "Christopher Acree",
+				"affiliation": "Columbia University"
+			},
+			{
+				"name": "Harris H. Wang",
+				"affiliation": "Columbia University"
+			},
+			{
+				"name": "Samuel H. Sternberg",
+				"affiliation": "Columbia University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W4323666971",
+		"type": "article",
+		"title": "Tuberculosis: Pathogenesis, Current Treatment Regimens and New Drug Targets",
+		"source": "International Journal of Molecular Sciences",
+		"issn": "1422-0067",
+		"publisher": "Multidisciplinary Digital Publishing Institute",
+		"doi": "10.3390/ijms24065202",
+		"article_url": "https://doi.org/10.3390/ijms24065202",
+		"fulltext_url": "https://www.mdpi.com/1422-0067/24/6/5202/pdf?version=1678335715",
+		"abstract": "Mycobacterium tuberculosis (M. tb), the causative agent of TB, is a recalcitrant pathogen that is rife around the world, latently infecting approximately a quarter of the worldwide population. The asymptomatic status of the dormant bacteria escalates to the transmissible, active form when the host’s immune system becomes debilitated. The current front-line treatment regimen for drug-sensitive (DS) M. tb strains is a 6-month protocol involving four different drugs that requires stringent adherence to avoid relapse and resistance. Poverty, difficulty to access proper treatment, and lack of patient compliance contributed to the emergence of more sinister drug-resistant (DR) strains, which demand a longer duration of treatment with more toxic and more expensive drugs compared to the first-line regimen. Only three new drugs, bedaquiline (BDQ) and the two nitroimidazole derivatives delamanid (DLM) and pretomanid (PMD) were approved in the last decade for treatment of TB—the first anti-TB drugs with novel mode of actions to be introduced to the market in more than 50 years—reflecting the attrition rates in the development and approval of new anti-TB drugs. Herein, we will discuss the M. tb pathogenesis, current treatment protocols and challenges to the TB control efforts. This review also aims to highlight several small molecules that have recently been identified as promising preclinical and clinical anti-TB drug candidates that inhibit new protein targets in M. tb.",
+		"rank": 18,
+		"year": 2023,
+		"volume": 24,
+		"issue": 6,
+		"startpage": 5202,
+		"endpage": 5202,
+		"cites": 333,
+		"ecc": 333,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Shahinda S. R. Alsayed",
+				"affiliation": "Curtin University"
+			},
+			{
+				"name": "Hendra Gunosewoyo",
+				"affiliation": "Curtin University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2962809499",
+		"type": "article",
+		"title": "A Characterization of the DNA Data Storage Channel",
+		"source": "Rice Research Repository (Rice University)",
+		"publisher": "Rice University",
+		"doi": "10.1038/s41598-019-45832-6",
+		"article_url": "https://doi.org/10.1038/s41598-019-45832-6.",
+		"fulltext_url": "https://doi.org/10.1038/s41598-019-45832-6.",
+		"rank": 19,
+		"year": 2019,
+		"volume": 0,
+		"issue": 0,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 325,
+		"ecc": 325,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Reinhard Heckel",
+				"affiliation": "Rice University"
+			},
+			{
+				"name": "Gediminas Mikutis",
+				"affiliation": "ETH Zurich"
+			},
+			{
+				"name": "Robert N. Grass",
+				"affiliation": "ETH Zurich"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3105098767",
+		"type": "article",
+		"title": "Machine learning for metabolic engineering: A review",
+		"source": "Metabolic Engineering",
+		"issn": "1096-7176",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.ymben.2020.10.005",
+		"article_url": "https://doi.org/10.1016/j.ymben.2020.10.005",
+		"fulltext_url": "https://www.sciencedirect.com/science/article/am/pii/S109671762030166X?via%3Dihub",
+		"abstract": "Machine learning provides researchers a unique opportunity to make metabolic engineering more predictable. In this review, we offer an introduction to this discipline in terms that are relatable to metabolic engineers, as well as providing in-depth illustrative examples leveraging omics data and improving production. We also include practical advice for the practitioner in terms of data management, algorithm libraries, computational resources, and important non-technical issues. A variety of applications ranging from pathway construction and optimization, to genetic editing optimization, cell factory testing, and production scale-up are discussed. Moreover, the promising relationship between machine learning and mechanistic models is thoroughly reviewed. Finally, the future perspectives and most promising directions for this combination of disciplines are examined.",
+		"rank": 20,
+		"year": 2020,
+		"volume": 63,
+		"issue": 0,
+		"startpage": 34,
+		"endpage": 60,
+		"cites": 319,
+		"ecc": 319,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Christopher E. Lawson",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Jose Manuel Martí",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Tijana Radivojević",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Sai Vamshi R. Jonnalagadda",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Reinhard Gentz",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Nathan J. Hillson",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Sean Peisert",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Joonhoon Kim",
+				"affiliation": "Pacific Northwest National Laboratory"
+			},
+			{
+				"name": "Blake A. Simmons",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Christopher J. Petzold",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Steven W. Singer",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Aindrila Mukhopadhyay",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Deepti Tanjore",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			},
+			{
+				"name": "Joshua G. Dunn",
+				"affiliation": "Ginkgo Bioworks, Inc. (United States)"
+			},
+			{
+				"name": "Héctor García Martín",
+				"affiliation": "Lawrence Berkeley National Laboratory"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2901652748",
+		"type": "review",
+		"title": "Phage Therapy: Going Temperate?",
+		"source": "Trends in Microbiology",
+		"issn": "0966-842X",
+		"publisher": "Elsevier BV",
+		"doi": "10.1016/j.tim.2018.10.008",
+		"article_url": "https://doi.org/10.1016/j.tim.2018.10.008",
+		"fulltext_url": "http://www.cell.com/article/S0966842X18302312/pdf",
+		"rank": 21,
+		"year": 2018,
+		"volume": 27,
+		"issue": 4,
+		"startpage": 368,
+		"endpage": 378,
+		"cites": 319,
+		"ecc": 319,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Rodrigo Monteiro",
+				"affiliation": "University of Minho"
+			},
+			{
+				"name": "Diana P. Pires",
+				"affiliation": "University of Minho"
+			},
+			{
+				"name": "Ana Rita Costa",
+				"affiliation": "Delft University of Technology"
+			},
+			{
+				"name": "Joana Azeredo",
+				"affiliation": "University of Minho"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2804657653",
+		"type": "article",
+		"title": "A CRISPRi screen in E. coli reveals sequence-specific toxicity of dCas9",
+		"source": "Nature Communications",
+		"issn": "2041-1723",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41467-018-04209-5",
+		"article_url": "https://doi.org/10.1038/s41467-018-04209-5",
+		"fulltext_url": "https://www.nature.com/articles/s41467-018-04209-5.pdf",
+		"abstract": "High-throughput CRISPR-Cas9 screens have recently emerged as powerful tools to decipher gene functions and genetic interactions. Here we use a genome-wide library of guide RNAs to direct the catalytically dead Cas9 (dCas9) to block gene transcription in Escherichia coli. Using a machine-learning approach, we reveal that guide RNAs sharing specific 5-nucleotide seed sequences can produce strong fitness defects or even kill E. coli regardless of the other 15 nucleotides of guide sequence. This effect occurs at high dCas9 concentrations and can be alleviated by tuning the expression of dCas9 while maintaining strong on-target repression. Our results also highlight the fact that off-targets with as little as nine nucleotides of homology to the guide RNA can strongly block gene expression. Altogether this study provides important design rules to safely use dCas9 in E. coli.",
+		"rank": 22,
+		"year": 2018,
+		"volume": 9,
+		"issue": 1,
+		"startpage": 1912,
+		"endpage": 1912,
+		"cites": 318,
+		"ecc": 318,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Lun Cui",
+				"affiliation": "Institut Pasteur"
+			},
+			{
+				"name": "A. Vigouroux",
+				"affiliation": "Institut Pasteur"
+			},
+			{
+				"name": "François Rousset",
+				"affiliation": "Institut Pasteur"
+			},
+			{
+				"name": "Hugo Varet",
+				"affiliation": "Centre National de la Recherche Scientifique"
+			},
+			{
+				"name": "Varun Khanna",
+				"affiliation": "Centre National de la Recherche Scientifique"
+			},
+			{
+				"name": "David Bikard",
+				"affiliation": "Institut Pasteur"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2971508091",
+		"type": "article",
+		"title": "Auxin-sensitive Aux/IAA proteins mediate drought tolerance in Arabidopsis by regulating glucosinolate levels",
+		"source": "Nature Communications",
+		"issn": "2041-1723",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41467-019-12002-1",
+		"article_url": "https://doi.org/10.1038/s41467-019-12002-1",
+		"fulltext_url": "https://www.nature.com/articles/s41467-019-12002-1.pdf",
+		"abstract": "A detailed understanding of abiotic stress tolerance in plants is essential to provide food security in the face of increasingly harsh climatic conditions. Glucosinolates (GLSs) are secondary metabolites found in the Brassicaceae that protect plants from herbivory and pathogen attack. Here we report that in Arabidopsis, aliphatic GLS levels are regulated by the auxin-sensitive Aux/IAA repressors IAA5, IAA6, and IAA19. These proteins act in a transcriptional cascade that maintains expression of GLS levels when plants are exposed to drought conditions. Loss of IAA5/6/19 results in reduced GLS levels and decreased drought tolerance. Further, we show that this phenotype is associated with a defect in stomatal regulation. Application of GLS to the iaa5,6,19 mutants restores stomatal regulation and normal drought tolerance. GLS action is dependent on the receptor kinase GHR1, suggesting that GLS may signal via reactive oxygen species. These results provide a novel connection between auxin signaling, GLS levels and drought response.",
+		"rank": 23,
+		"year": 2019,
+		"volume": 10,
+		"issue": 1,
+		"startpage": 4021,
+		"endpage": 4021,
+		"cites": 316,
+		"ecc": 316,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Mohammad Salehin",
+				"affiliation": "Howard Hughes Medical Institute"
+			},
+			{
+				"name": "Baohua Li",
+				"affiliation": "University of California, Davis"
+			},
+			{
+				"name": "Michelle Tang",
+				"affiliation": "University of California, Davis"
+			},
+			{
+				"name": "Ella Katz",
+				"affiliation": "University of California, Davis"
+			},
+			{
+				"name": "Liang Song",
+				"affiliation": "Salk Institute for Biological Studies"
+			},
+			{
+				"name": "Joseph R. Ecker",
+				"affiliation": "Salk Institute for Biological Studies"
+			},
+			{
+				"name": "Daniel J. Kliebenstein",
+				"affiliation": "University of California, Davis"
+			},
+			{
+				"name": "Mark Estelle",
+				"affiliation": "Howard Hughes Medical Institute"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2806394571",
+		"type": "article",
+		"title": "An automated Design-Build-Test-Learn pipeline for enhanced microbial production of fine chemicals",
+		"source": "Communications Biology",
+		"issn": "2399-3642",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s42003-018-0076-9",
+		"article_url": "https://doi.org/10.1038/s42003-018-0076-9",
+		"fulltext_url": "https://www.nature.com/articles/s42003-018-0076-9.pdf",
+		"abstract": "Abstract The microbial production of fine chemicals provides a promising biosustainable manufacturing solution that has led to the successful production of a growing catalog of natural products and high-value chemicals. However, development at industrial levels has been hindered by the large resource investments required. Here we present an integrated Design–Build-Test–Learn (DBTL) pipeline for the discovery and optimization of biosynthetic pathways, which is designed to be compound agnostic and automated throughout. We initially applied the pipeline for the production of the flavonoid (2 S )-pinocembrin in Escherichia coli , to demonstrate rapid iterative DBTL cycling with automation at every stage. In this case, application of two DBTL cycles successfully established a production pathway improved by 500-fold, with competitive titers up to 88 mg L −1 . The further application of the pipeline to optimize an alkaloids pathway demonstrates how it could facilitate the rapid optimization of microbial strains for production of any chemical compound of interest.",
+		"rank": 24,
+		"year": 2018,
+		"volume": 1,
+		"issue": 1,
+		"startpage": 66,
+		"endpage": 66,
+		"cites": 292,
+		"ecc": 292,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Pablo Carbonell",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Adrian J. Jervis",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Christopher Robinson",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Cunyu Yan",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Mark S. Dunstan",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Neil Swainston",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "María Vinaixa",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Katherine A. Hollywood",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Andrew Currin",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Nicholas J. W. Rattray",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Sandra Taylor",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Reynard Spiess",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Rehana Sung",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Alan Williams",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Donal Fellows",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Natalie Stanford",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Paul Mulherin",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Rosalind Le Feuvre",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Perdita E. Barran",
+				"affiliation": "Ollscoil na Gaillimhe – University of Galway"
+			},
+			{
+				"name": "Royston Goodacre",
+				"affiliation": "Ollscoil na Gaillimhe – University of Galway"
+			},
+			{
+				"name": "Nicholas J. Turner",
+				"affiliation": "Ollscoil na Gaillimhe – University of Galway"
+			},
+			{
+				"name": "Carole Goble",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "George Guo-Qiang Chen",
+				"affiliation": "University of Manchester"
+			},
+			{
+				"name": "Douglas B. Kell",
+				"affiliation": "Ollscoil na Gaillimhe – University of Galway"
+			},
+			{
+				"name": "Jason Micklefield",
+				"affiliation": "Ollscoil na Gaillimhe – University of Galway"
+			},
+			{
+				"name": "Rainer Breitling",
+				"affiliation": "Ollscoil na Gaillimhe – University of Galway"
+			},
+			{
+				"name": "Eriko Takano",
+				"affiliation": "Ollscoil na Gaillimhe – University of Galway"
+			},
+			{
+				"name": "Jean‐Loup Faulon",
+				"affiliation": "Ollscoil na Gaillimhe – University of Galway"
+			},
+			{
+				"name": "Nigel S. Scrutton",
+				"affiliation": "Ollscoil na Gaillimhe – University of Galway"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2940184083",
+		"type": "article",
+		"title": "Acetate Metabolism and the Inhibition of Bacterial Growth by Acetate",
+		"source": "Journal of Bacteriology",
+		"issn": "0021-9193",
+		"publisher": "American Society for Microbiology",
+		"doi": "10.1128/jb.00147-19",
+		"article_url": "https://doi.org/10.1128/jb.00147-19",
+		"fulltext_url": "https://jb.asm.org/content/jb/201/13/e00147-19.full.pdf",
+		"abstract": "and other bacteria. This phenomenon is of interest for understanding bacterial physiology but is also of practical relevance. Growth inhibition by organic acids underlies food preservation and causes problems during high-density fermentation in biotechnology. What causes this phenomenon? Classical explanations invoke the uncoupling effect of acetate and the establishment of an anion imbalance. Here, we propose and investigate an alternative hypothesis: the perturbation of acetate metabolism due to the inflow of excess acetate. We find that this perturbation accounts for 20% of the growth-inhibitory effect through a modification of the acetyl phosphate concentration. Moreover, we argue that our observations are not expected based on uncoupling alone.",
+		"rank": 25,
+		"year": 2019,
+		"volume": 201,
+		"issue": 13,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 290,
+		"ecc": 290,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Stéphane Pinhal",
+				"affiliation": "Centre National de la Recherche Scientifique"
+			},
+			{
+				"name": "Delphine Ropers",
+				"affiliation": "Centre Inria de l'Université Grenoble Alpes"
+			},
+			{
+				"name": "Johannes Geiselmann",
+				"affiliation": "Centre National de la Recherche Scientifique"
+			},
+			{
+				"name": "Hidde de Jong",
+				"affiliation": "Centre Inria de l'Université Grenoble Alpes"
+			}
+		]
+	},
+	{
+		"uid": "OA:W3048958360",
+		"type": "article",
+		"title": "Industrial biotechnology of Pseudomonas putida: advances and prospects",
+		"source": "Applied Microbiology and Biotechnology",
+		"issn": "0175-7598",
+		"publisher": "Springer Science+Business Media",
+		"doi": "10.1007/s00253-020-10811-9",
+		"article_url": "https://doi.org/10.1007/s00253-020-10811-9",
+		"fulltext_url": "https://link.springer.com/content/pdf/10.1007/s00253-020-10811-9.pdf",
+		"abstract": "Pseudomonas putida is a Gram-negative, rod-shaped bacterium that can be encountered in diverse ecological habitats. This ubiquity is traced to its remarkably versatile metabolism, adapted to withstand physicochemical stress, and the capacity to thrive in harsh environments. Owing to these characteristics, there is a growing interest in this microbe for industrial use, and the corresponding research has made rapid progress in recent years. Hereby, strong drivers are the exploitation of cheap renewable feedstocks and waste streams to produce value-added chemicals and the steady progress in genetic strain engineering and systems biology understanding of this bacterium. Here, we summarize the recent advances and prospects in genetic engineering, systems and synthetic biology, and applications of P. putida as a cell factory. KEY POINTS: • Pseudomonas putida advances to a global industrial cell factory. • Novel tools enable system-wide understanding and streamlined genomic engineering. • Applications of P. putida range from bioeconomy chemicals to biosynthetic drugs.",
+		"rank": 26,
+		"year": 2020,
+		"volume": 104,
+		"issue": 18,
+		"startpage": 7745,
+		"endpage": 7766,
+		"cites": 284,
+		"ecc": 284,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Anna Weimer",
+				"affiliation": "Saarland University"
+			},
+			{
+				"name": "Michael Kohlstedt",
+				"affiliation": "Saarland University"
+			},
+			{
+				"name": "Daniel C. Volke",
+				"affiliation": "Novo Nordisk Foundation"
+			},
+			{
+				"name": "Pablo I. Nikel",
+				"affiliation": "Novo Nordisk Foundation"
+			},
+			{
+				"name": "Christoph Wittmann",
+				"affiliation": "Saarland University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W4210628575",
+		"type": "article",
+		"title": "Genetically stable CRISPR-based kill switches for engineered microbes",
+		"source": "Nature Communications",
+		"issn": "2041-1723",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41467-022-28163-5",
+		"article_url": "https://doi.org/10.1038/s41467-022-28163-5",
+		"fulltext_url": "https://www.nature.com/articles/s41467-022-28163-5.pdf",
+		"abstract": "Microbial biocontainment is an essential goal for engineering safe, next-generation living therapeutics. However, the genetic stability of biocontainment circuits, including kill switches, is a challenge that must be addressed. Kill switches are among the most difficult circuits to maintain due to the strong selection pressure they impart, leading to high potential for evolution of escape mutant populations. Here we engineer two CRISPR-based kill switches in the probiotic Escherichia coli Nissle 1917, a single-input chemical-responsive switch and a 2-input chemical- and temperature-responsive switch. We employ parallel strategies to address kill switch stability, including functional redundancy within the circuit, modulation of the SOS response, antibiotic-independent plasmid maintenance, and provision of intra-niche competition by a closely related strain. We demonstrate that strains harboring either kill switch can be selectively and efficiently killed inside the murine gut, while strains harboring the 2-input switch are additionally killed upon excretion. Leveraging redundant strategies, we demonstrate robust biocontainment of our kill switch strains and provide a template for future kill switch development.",
+		"rank": 27,
+		"year": 2022,
+		"volume": 13,
+		"issue": 1,
+		"startpage": 672,
+		"endpage": 672,
+		"cites": 282,
+		"ecc": 282,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Austin G. Rottinghaus",
+				"affiliation": "Washington University in St. Louis"
+			},
+			{
+				"name": "Aura Ferreiro",
+				"affiliation": "Washington University in St. Louis"
+			},
+			{
+				"name": "Skye R. S. Fishbein",
+				"affiliation": "Washington University in St. Louis"
+			},
+			{
+				"name": "Gautam Dantas",
+				"affiliation": "Washington University in St. Louis"
+			},
+			{
+				"name": "Tae Seok Moon",
+				"affiliation": "Washington University in St. Louis"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2906522235",
+		"type": "article",
+		"title": "Diverse NLR immune receptors activate defence via the RPW 8‐ NLR NRG 1",
+		"source": "New Phytologist",
+		"issn": "0028-646X",
+		"publisher": "Wiley",
+		"doi": "10.1111/nph.15659",
+		"article_url": "https://doi.org/10.1111/nph.15659",
+		"fulltext_url": "https://nph.onlinelibrary.wiley.com/doi/pdfdirect/10.1111/nph.15659",
+		"abstract": "Most land plant genomes carry genes that encode RPW8-NLR Resistance (R) proteins. Angiosperms carry two RPW8-NLR subclasses: ADR1 and NRG1. ADR1s act as 'helper' NLRs for multiple TIR- and CC-NLR R proteins in Arabidopsis. In angiosperm families, NRG1 co-occurs with TIR-NLR Resistance (R) genes. We tested whether NRG1 is required for signalling of multiple TIR-NLRs. Using CRISPR mutagenesis, we obtained an nrg1a-nrg1b double mutant in two Arabidopsis accessions, and an nrg1 mutant in Nicotiana benthamiana. These mutants are compromised in signalling of all TIR-NLRs tested, including WRR4A, WRR4B, RPP1, RPP2, RPP4 and the pairs RRS1/RPS4, RRS1B/RPS4B, CHS1/SOC3 and CHS3/CSA1. In Arabidopsis, NRG1 is required for the hypersensitive cell death response (HR) and full oomycete resistance, but not for salicylic acid induction or bacterial resistance. By contrast, nrg1 loss of function does not compromise the CC-NLR R proteins RPS5 and MLA. RPM1 and RPS2 (CC-NLRs) function is slightly compromised in an nrg1 mutant. Thus, NRG1 is required for full TIR-NLR function and contributes to the signalling of some CC-NLRs. Some NRG1-dependent R proteins also signal partially via the NRG1 sister clade, ADR1. We propose that some NLRs signal via NRG1 only, some via ADR1 only and some via both or neither.",
+		"rank": 28,
+		"year": 2018,
+		"volume": 222,
+		"issue": 2,
+		"startpage": 966,
+		"endpage": 980,
+		"cites": 282,
+		"ecc": 282,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Baptiste Castel",
+				"affiliation": "University of East Anglia"
+			},
+			{
+				"name": "Bruno Pok Man Ngou",
+				"affiliation": "University of East Anglia"
+			},
+			{
+				"name": "Volkan Çevik",
+				"affiliation": "University of East Anglia"
+			},
+			{
+				"name": "Amey Redkar",
+				"affiliation": "University of East Anglia"
+			},
+			{
+				"name": "Dae Sung Kim",
+				"affiliation": "University of East Anglia"
+			},
+			{
+				"name": "Ying Yang",
+				"affiliation": "University of East Anglia"
+			},
+			{
+				"name": "Pingtao Ding",
+				"affiliation": "University of East Anglia"
+			},
+			{
+				"name": "Jonathan D. G. Jones",
+				"affiliation": "University of East Anglia"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2808800351",
+		"type": "article",
+		"title": "Pooled CRISPR interference screening enables genome-scale functional genomics study in bacteria with superior performance",
+		"source": "Nature Communications",
+		"issn": "2041-1723",
+		"publisher": "Nature Portfolio",
+		"doi": "10.1038/s41467-018-04899-x",
+		"article_url": "https://doi.org/10.1038/s41467-018-04899-x",
+		"fulltext_url": "https://www.nature.com/articles/s41467-018-04899-x.pdf",
+		"abstract": "To fully exploit the microbial genome resources, a high-throughput experimental platform is needed to associate genes with phenotypes at the genome level. We present here a novel method that enables investigation of the cellular consequences of repressing individual transcripts based on the CRISPR interference (CRISPRi) pooled screening in bacteria. We identify rules for guide RNA library design to handle the unique structure of prokaryotic genomes by tiling screening and construct an E. coli genome-scale guide RNA library (~60,000 members) accordingly. We show that CRISPRi outperforms transposon sequencing, the benchmark method in the microbial functional genomics field, when similar library sizes are used or gene length is short. This tool is also effective for mapping phenotypes to non-coding RNAs (ncRNAs), as elucidated by a comprehensive tRNA-fitness map constructed here. Our results establish CRISPRi pooled screening as a powerful tool for mapping complex prokaryotic genetic networks in a precise and high-throughput manner.",
+		"rank": 29,
+		"year": 2018,
+		"volume": 9,
+		"issue": 1,
+		"startpage": 2475,
+		"endpage": 2475,
+		"cites": 275,
+		"ecc": 275,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Tianmin Wang",
+				"affiliation": "Tsinghua University"
+			},
+			{
+				"name": "Changge Guan",
+				"affiliation": "Tsinghua University"
+			},
+			{
+				"name": "Jiahui Guo",
+				"affiliation": "Tsinghua University"
+			},
+			{
+				"name": "Bing Liu",
+				"affiliation": "Syngenta (China)"
+			},
+			{
+				"name": "Yinan Wu",
+				"affiliation": "Tsinghua University"
+			},
+			{
+				"name": "Zhen Xie",
+				"affiliation": "Tsinghua University"
+			},
+			{
+				"name": "Chong Zhang",
+				"affiliation": "Tsinghua University"
+			},
+			{
+				"name": "Xin‐Hui Xing",
+				"affiliation": "Tsinghua University"
+			}
+		]
+	},
+	{
+		"uid": "OA:W2808724041",
+		"type": "article",
+		"title": "Expression of mutant Sftpc in murine alveolar epithelia drives spontaneous lung fibrosis",
+		"source": "Journal of Clinical Investigation",
+		"issn": "0021-9738",
+		"publisher": "American Society for Clinical Investigation",
+		"doi": "10.1172/jci99287",
+		"article_url": "https://doi.org/10.1172/jci99287",
+		"fulltext_url": "http://www.jci.org/articles/view/99287/files/pdf",
+		"abstract": "Epithelial cell dysfunction is postulated as an important component in the pathogenesis of idiopathic pulmonary fibrosis (IPF). Mutations in the surfactant protein C (SP-C) gene (SFTPC), an alveolar type II (AT2) cell-restricted protein, have been found in sporadic and familial IPF. To causally link these events, we developed a knockin mouse model capable of regulated expression of an IPF-associated isoleucine-to-threonine substitution at codon 73 (I73T) in Sftpc (SP-CI73T). Tamoxifen-treated SP-CI73T cohorts developed rapid increases in SftpcI73T mRNA and misprocessed proSP-CI73T protein accompanied by increased early mortality (days 7-14). This acute phase was marked by diffuse parenchymal lung injury, tissue infiltration by monocytes, polycellular alveolitis, and elevations in bronchoalveolar lavage and AT2 mRNA content of select inflammatory cytokines. Resolution of alveolitis (2-4 weeks), commensurate with a rise in TGF-β1, was followed by aberrant remodeling marked by collagen deposition, AT2 cell hyperplasia, α-smooth muscle actin-positive (α-SMA-positive) cells, and restrictive lung physiology. The translational relevance of the model was supported by detection of multiple IPF biomarkers previously reported in human cohorts. These data provide proof of principle that mutant SP-C expression in vivo causes spontaneous lung fibrosis, strengthening the role of AT2 cell dysfunction as a key upstream driver of IPF pathogenesis.",
+		"rank": 30,
+		"year": 2018,
+		"volume": 128,
+		"issue": 9,
+		"startpage": 4008,
+		"endpage": 4024,
+		"cites": 273,
+		"ecc": 273,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Shin‐ichi Nureki",
+				"affiliation": "Oita University"
+			},
+			{
+				"name": "Yaniv Tomer",
+				"affiliation": "University of Pennsylvania"
+			},
+			{
+				"name": "Alessandro Venosa",
+				"affiliation": "University of Pennsylvania"
+			},
+			{
+				"name": "Jeremy Katzen",
+				"affiliation": "University of Pennsylvania"
+			},
+			{
+				"name": "Scott J. Russo",
+				"affiliation": "University of Pennsylvania"
+			},
+			{
+				"name": "Sarita Jamil",
+				"affiliation": "University of Pennsylvania"
+			},
+			{
+				"name": "Matthew Barrett",
+				"affiliation": "University of Pennsylvania"
+			},
+			{
+				"name": "Vivian Nguyen",
+				"affiliation": "University of Pennsylvania"
+			},
+			{
+				"name": "Meghan C. Kopp",
+				"affiliation": "University of Pennsylvania"
+			},
+			{
+				"name": "Surafel Mulugeta",
+				"affiliation": "Penn Center for AIDS Research"
+			},
+			{
+				"name": "Michael F. Beers",
+				"affiliation": "Penn Center for AIDS Research"
+			}
+		]
+	}
+]

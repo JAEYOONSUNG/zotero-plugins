@@ -1,0 +1,178 @@
+{
+  "description": "Same-source PoP8.19 comparison, capped at30. User-domain terms chosen before implementation.",
+  "thresholds": {
+    "referenceTopK": 10,
+    "candidateTopK": 30,
+    "minReferenceRecall": 0.9
+  },
+  "cases": [
+    {
+      "id": "scholar-thermophile",
+      "source": "scholar",
+      "kind": "topic",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "keywords": "thermophile",
+        "yearFrom": 2015,
+        "yearTo": 2025
+      },
+      "referencePath": "references/scholar-thermophile.json"
+    },
+    {
+      "id": "scholar-geobacillus-title",
+      "source": "scholar",
+      "kind": "title",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "title": "geobacillus",
+        "yearFrom": 2018,
+        "yearTo": 2025
+      },
+      "referencePath": "references/scholar-geobacillus-title.json"
+    },
+    {
+      "id": "scholar-recombineering",
+      "source": "scholar",
+      "kind": "topic",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "keywords": "recombineering",
+        "yearFrom": 2018,
+        "yearTo": 2025
+      },
+      "referencePath": "references/scholar-recombineering.json"
+    },
+    {
+      "id": "scholar-cas9-title",
+      "source": "scholar",
+      "kind": "known-paper",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "title": "CRISPR Cas9 assisted recombineering in Lactobacillus reuteri",
+        "yearFrom": 2014,
+        "yearTo": 2014
+      },
+      "referencePath": "references/scholar-cas9-title.json",
+      "expectedTitles": [
+        "CRISPR–Cas9-assisted recombineering in Lactobacillus reuteri"
+      ]
+    },
+    {
+      "id": "openalex-thermophile",
+      "source": "openalex",
+      "kind": "topic",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "keywords": "thermophile",
+        "yearFrom": 2015,
+        "yearTo": 2025
+      },
+      "referencePath": "references/openalex-thermophile.json",
+      "referenceQueryMode": "raw",
+      "referenceNote": "PoP8.19 CLI ignores its OpenAlex --keywords argument; use documented --raw search= with identical query text and date filter, and retain native syntax."
+    },
+    {
+      "id": "openalex-geobacillus-title",
+      "source": "openalex",
+      "kind": "title",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "title": "geobacillus",
+        "yearFrom": 2018,
+        "yearTo": 2025
+      },
+      "referencePath": "references/openalex-geobacillus-title.json"
+    },
+    {
+      "id": "openalex-recombineering",
+      "source": "openalex",
+      "kind": "topic",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "keywords": "recombineering",
+        "yearFrom": 2018,
+        "yearTo": 2025
+      },
+      "referencePath": "references/openalex-recombineering.json",
+      "referenceQueryMode": "raw",
+      "referenceNote": "PoP8.19 CLI ignores its OpenAlex --keywords argument; use documented --raw search= with identical query text and date filter, and retain native syntax."
+    },
+    {
+      "id": "openalex-cas9-title",
+      "source": "openalex",
+      "kind": "known-paper",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "title": "\"CRISPR Cas9 assisted recombineering in Lactobacillus reuteri\"",
+        "yearFrom": 2014,
+        "yearTo": 2014
+      },
+      "referencePath": "references/openalex-cas9-title.json",
+      "expectedTitles": [
+        "CRISPR–Cas9-assisted recombineering in Lactobacillus reuteri"
+      ]
+    },
+    {
+      "id": "crossref-recombineering",
+      "source": "crossref",
+      "kind": "topic",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "keywords": "recombineering",
+        "yearFrom": 2018,
+        "yearTo": 2025
+      },
+      "referencePath": "references/crossref-recombineering.json"
+    },
+    {
+      "id": "pubmed-recombineering",
+      "source": "pubmed",
+      "kind": "topic",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "keywords": "recombineering",
+        "yearFrom": 2018,
+        "yearTo": 2025
+      },
+      "referencePath": "references/pubmed-recombineering.json"
+    },
+    {
+      "id": "scholar-liu",
+      "source": "scholar",
+      "kind": "author",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "authors": "David R Liu",
+        "keywords": "base editing",
+        "yearFrom": 2018,
+        "yearTo": 2024
+      },
+      "referencePath": "references/scholar-liu.json"
+    },
+    {
+      "id": "scholar-nar",
+      "source": "scholar",
+      "kind": "journal",
+      "query": {
+        "sort": "relevance",
+        "maxResults": 30,
+        "venue": "Nucleic Acids Research",
+        "keywords": "recombineering",
+        "yearFrom": 2018,
+        "yearTo": 2025
+      },
+      "referencePath": "references/scholar-nar.json"
+    }
+  ]
+}

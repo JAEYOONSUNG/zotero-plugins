@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "name": "Zotero Focus",
+  "version": "0.1.0",
+  "description": "Offline reading status, ratings, tag columns and fast hover scrolling for long titles.",
+  "author": "Jae Yoon Sung",
+  "applications": {
+    "zotero": {
+      "id": "zotero-focus@sungjaeyoon.dev",
+      "update_url": "https://updates.invalid/zotero-focus.json",
+      "strict_min_version": "9.0",
+      "strict_max_version": "9.*"
+    }
+  }
+}

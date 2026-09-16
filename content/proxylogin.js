@@ -10,6 +10,11 @@
 	let t = ZotPoPI18N.make("en");
 	let browser = null;
 
+	function hostOf(url) {
+		let m = String(url || "").match(/^https?:\/\/([^/?#]+)/i);
+		return m ? m[1].replace(/:\d+$/, "").toLowerCase() : "";
+	}
+
 	// The proxy's own host, derived from the configured prefix
 	function proxyBase() {
 		let prefix = (PREF("proxyPrefix") || "").trim();
@@ -70,8 +75,15 @@
 			: prefix + "https://doi.org/10.1126/science.aaf5573";
 		try {
 			let xhr = await Zotero.HTTP.request("GET", probe, { responseType: "text", timeout: 45000, errorDelayMax: 0 });
-			let body = xhr.responseText || "";
-			let loggedOut = /authapi\.n2s|login|sso|로그인/i.test(body) && !/sciencemag|science\.org|doi\.org/i.test(xhr.responseURL || "");
+			// Judge from where the request ended up, never from the probe URL: the target DOI
+			// is embedded in the request, so matching it back would always look like success.
+			// A live session leaves the proxy host; a sign-in page keeps us on it.
+			let landed = hostOf(xhr.responseURL || probe);
+			let proxyHost = hostOf(prefix);
+			let stillOnProxy = Boolean(proxyHost) && landed === proxyHost;
+			let looksLikeForm = /<form[^>]*(password|login|signin|sso)/i.test(xhr.responseText || "")
+				|| /type=["']password["']/i.test(xhr.responseText || "");
+			let loggedOut = stillOnProxy && looksLikeForm;
 			$("pl-status").textContent = loggedOut ? t("loginNotYet") : t("loginOk");
 			$("pl-status").style.color = loggedOut ? "var(--warn)" : "var(--ok)";
 		}

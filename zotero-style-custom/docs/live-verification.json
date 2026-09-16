@@ -1,0 +1,14 @@
+{
+  "plugin": "Style Custom",
+  "version": "0.1.0",
+  "installed": true,
+  "enabled": true,
+  "visibleCustomColumns": 6,
+  "hoverMovedPixels": 52,
+  "hoverReset": true,
+  "richMarkupPreserved": true,
+  "selectedReadingSeconds": 140,
+  "selectedStatus": "reading",
+  "installedMatchesBuilt": true,
+  "xpiSha256": "4f72489ad7f8bc0182b54d8886921842075371e3e22046f380cc27069452da4f"
+}

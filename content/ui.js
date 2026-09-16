@@ -1,4 +1,4 @@
-/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter */
+/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee */
 "use strict";
 
 (function () {
@@ -17,7 +17,11 @@
 		year: 46, venue: 140, journalIF: 48, doi: 135, pdf: 46, inLibrary: 46, status: 100
 	};
 
-	const COL_VERSION = 3;
+	const COL_VERSION = 4;
+	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~40px)
+	const MIN_COL = 40;
+	// An unbounded drag used to persist a column wider than the window
+	const MAX_COL = 900;
 
 	// Localised string lookup; replaced in init() once the pref is read.
 	let t = ZotPoPI18N.make("en");
@@ -35,42 +39,92 @@
 		selected: new Set(),
 		focusKey: null,
 		detailKey: null,
-		sortKey: "citations",
+		sortKey: "rank",
 		checking: false,
-		sortDir: "desc",
+		sortDir: "asc",
 		searching: false,
+		searchController: null,
 		importing: false,
 		cancelled: false,
 		doiMap: new Map(),
 		libraryID: null,
 		colWidths: Object.assign({}, DEFAULT_COLS)
 	};
+	let marquee = null;
 
 	// ------------------------------------------------------------ HTTP adapter
-	function httpError(e, url) {
-		let status = e?.status || e?.xmlhttp?.status;
-		let msg = status ? `HTTP ${status}` : (e?.message || String(e));
-		let err = new Error(msg + " — " + url.split("?")[0]);
-		err.status = status;
+	function abortError() {
+		let err = new Error("Search cancelled");
+		err.name = "AbortError";
 		return err;
 	}
+
+	// Zotero embeds the requested URL in its own error text and redacts only "key=", so any
+	// message reused here is scrubbed of its query string before it reaches the UI or the log.
+	function scrubURLs(text) {
+		return String(text || "").replace(/(https?:\/\/[^\s?]+)\?\S*/g, "$1");
+	}
+
+	function httpError(e, url) {
+		if (e?.name === "AbortError") return e;
+		// Reading responseText throws outright when responseType is "json", so probe the
+		// parsed response first and only fall back to text behind a guard.
+		let body = "";
+		try {
+			let raw = e?.xmlhttp?.response;
+			if (typeof raw === "string") body = raw;
+			else if (raw && typeof raw === "object") body = JSON.stringify(raw);
+			else if (e?.xmlhttp?.responseType === "" || e?.xmlhttp?.responseType === "text") body = e.xmlhttp.responseText || "";
+		}
+		catch (ignored) { /* the body is a bonus; never let reading it break the error path */ }
+		let status = e?.status ?? e?.xmlhttp?.status;
+		// A network-level failure arrives as status 0, which is falsy: testing truthiness
+		// fell through to Zotero's message, which carries the contact e-mail.
+		let msg = status != null && status !== 0 ? `HTTP ${status}` : scrubURLs(e?.message || String(e));
+		let err = new Error(msg + " — " + url.split("?")[0]);
+		err.status = status;
+		// sources.js distinguishes an exhausted OpenAlex budget from a transient 429
+		err.body = String(body).slice(0, 400);
+		return err;
+	}
+	async function requestHTTP(url, headers, responseType, signal) {
+		if (signal?.aborted) throw abortError();
+		let cancelRequest;
+		let onAbort = () => cancelRequest?.();
+		signal?.addEventListener("abort", onAbort, { once: true });
+		try {
+			let xhr = await Zotero.HTTP.request("GET", url, {
+				headers, responseType, timeout: 60000, errorDelayMax: 0,
+				// Zotero.HTTP supplies a callback that rejects its promise and aborts XHR.
+				cancellerReceiver: cancel => {
+					cancelRequest = cancel;
+					if (signal?.aborted) cancel();
+				}
+			});
+			if (signal?.aborted) throw abortError();
+			return xhr;
+		}
+		catch (e) {
+			if (signal?.aborted || (Zotero.HTTP.CancelledException && e instanceof Zotero.HTTP.CancelledException)) throw abortError();
+			throw httpError(e, url);
+		}
+		finally { signal?.removeEventListener("abort", onAbort); }
+	}
 	const http = {
-		async getJSON(url, headers = {}) {
-			try {
-				let xhr = await Zotero.HTTP.request("GET", url, {
-					headers: Object.assign({ Accept: "application/json" }, headers),
-					responseType: "json", timeout: 60000, errorDelayMax: 0
-				});
-				return xhr.response;
+		async getJSON(url, headers = {}, signal) {
+			let xhr = await requestHTTP(url, Object.assign({ Accept: "application/json" }, headers), "json", signal);
+			// XHR yields null rather than throwing when a body is not JSON — a captive portal
+			// or an API maintenance page. Name it, instead of a TypeError deep in an adapter.
+			if (xhr.response === null) {
+				let err = new Error(t("notJSON", url.split("?")[0]));
+				err.status = xhr.status;
+				throw err;
 			}
-			catch (e) { throw httpError(e, url); }
+			return xhr.response;
 		},
-		async getText(url, headers = {}) {
-			try {
-				let xhr = await Zotero.HTTP.request("GET", url, { headers, responseType: "text", timeout: 60000, errorDelayMax: 0 });
-				return xhr.responseText;
-			}
-			catch (e) { throw httpError(e, url); }
+		async getText(url, headers = {}, signal) {
+			let xhr = await requestHTTP(url, headers, "text", signal);
+			return xhr.responseText;
 		}
 	};
 
@@ -130,11 +184,14 @@
 		setStatus(t("ready"));
 		render();
 		$("keywords").focus();
+		restoreCachedSearch();
 	}
 
 	function wireEvents() {
 		$("query-form").addEventListener("submit", e => { e.preventDefault(); runSearch(); });
-		$("stop-btn").addEventListener("click", () => { state.cancelled = true; setStatus(t("stopping")); });
+		$("query-form").addEventListener("input", cancelCacheRestore);
+		$("query-form").addEventListener("change", cancelCacheRestore);
+		$("stop-btn").addEventListener("click", stopOperation);
 		$("clear-btn").addEventListener("click", clearAll);
 		$("banner-close").addEventListener("click", hideBanner);
 		$("filter").addEventListener("input", () => { state.focusKey = null; render(); });
@@ -149,6 +206,7 @@
 		$("copy-csv").addEventListener("click", copyCSV);
 		$("save-csv").addEventListener("click", saveCSV);
 		$("toggle-detail").addEventListener("click", toggleDetail);
+		$("preview-btn").addEventListener("click", () => openPreview());
 		$("import-btn").addEventListener("click", () => importRecords(state.records.filter(r => state.selected.has(r.key))));
 		$("target").addEventListener("change", () => { state.doiMap.clear(); refreshLibraryFlags(); });
 		$("source").addEventListener("change", sourceHint);
@@ -168,11 +226,22 @@
 		// detail actions
 		$("d-open").addEventListener("click", () => { let r = detailRecord(); if (r?.url) Zotero.launchURL(r.url); });
 		$("d-pdf").addEventListener("click", () => { let r = detailRecord(); let u = (r?.pdfUrls || [])[0] || r?.pdfUrl; if (u) Zotero.launchURL(u); });
+		$("d-preview").addEventListener("click", () => openPreview(detailRecord()));
 		$("d-proxy").addEventListener("click", () => openViaProxy(detailRecord()));
 		$("d-copy-doi").addEventListener("click", () => { let r = detailRecord(); if (r?.doi) copyText(r.doi, t("copiedDoi")); });
 		$("d-copy-cite").addEventListener("click", () => { let r = detailRecord(); if (r) copyText(citationText(r), t("copiedCite")); });
 		$("d-add").addEventListener("click", () => { let r = detailRecord(); if (r) importRecords([r]); });
 		$("d-check").addEventListener("click", () => checkCitations(detailRecord()));
+
+		// Pressing in the results hands keyboard focus to the table. Done on mousedown because
+		// focusing during the click handler is undone when the browser settles focus after it;
+		// without this the caret stays in the last query box and arrows/Space never arrive.
+		$("table-wrap").addEventListener("mousedown", e => {
+			// e.target is not always an Element here (scrollbar and anonymous content have no
+			// closest), so probe for the method rather than assuming it.
+			if (typeof e.target?.closest === "function" && e.target.closest("input, a")) return;
+			$("table-wrap").focus({ preventScroll: true });
+		});
 
 		setupSplitters();
 		setupColumnResize();
@@ -180,8 +249,11 @@
 		document.addEventListener("click", () => { hideCtxMenu(); closeSelMenu(); });
 		window.addEventListener("blur", closeSelMenu);
 		window.addEventListener("resize", closeSelMenu);
-		document.addEventListener("scroll", closeSelMenu, true);
+		document.addEventListener("scroll", onDocumentScroll, true);
 		window.addEventListener("unload", saveLayout);
+		window.addEventListener("unload", () => state.searchController?.abort());
+		window.addEventListener("unload", cancelCacheRestore);
+		window.addEventListener("unload", () => previewManager?.close());
 		window.addEventListener("resize", debounce(saveLayout, 400));
 	}
 
@@ -205,8 +277,15 @@
 		if (!openSel) return;
 		let { sel, menu } = openSel;
 		menu.remove();
-		selButton(sel)?.setAttribute("aria-expanded", "false");
+		let btn = selButton(sel);
+		btn?.setAttribute("aria-expanded", "false");
+		btn?.removeAttribute("aria-activedescendant");
 		openSel = null;
+	}
+
+	function onDocumentScroll(event) {
+		// Reading a narrow result cell must not dismiss the open source/sort menu.
+		if (!event.target?.classList?.contains("marquee-text")) closeSelMenu();
 	}
 
 	function openSelMenu(sel) {
@@ -223,6 +302,10 @@
 			let d = document.createElement("div");
 			d.className = "selopt" + (i === sel.selectedIndex ? " on" : "");
 			d.setAttribute("role", "option");
+			// role="option" without aria-selected is not exposed as a choice to assistive
+			// technology, which left these reading as plain text.
+			d.setAttribute("aria-selected", i === sel.selectedIndex ? "true" : "false");
+			d.id = sel.id + "-opt-" + i;
 			d.textContent = o.textContent;
 			d.addEventListener("mouseenter", () => highlight(i));
 			d.addEventListener("click", e => { e.stopPropagation(); pick(i); });
@@ -234,9 +317,11 @@
 			cur = i;
 			items.forEach((d, n) => d.classList.toggle("hot", n === i));
 			items[i]?.scrollIntoView({ block: "nearest" });
+			if (items[i]) btn.setAttribute("aria-activedescendant", items[i].id);
 		};
 		let pick = i => {
 			let prev = sel.value;
+			items.forEach((d, n) => d.setAttribute("aria-selected", n === i ? "true" : "false"));
 			sel.selectedIndex = i;
 			syncSel(sel);
 			closeSelMenu();
@@ -267,6 +352,11 @@
 		wrap.className = "sel";
 		sel.parentNode.insertBefore(wrap, sel);
 		wrap.appendChild(sel);
+		// The real select stays as the value model but must not be reachable by Tab: focusing
+		// it invisibly and arrowing through it changed the value without updating the button.
+		sel.setAttribute("tabindex", "-1");
+		sel.setAttribute("aria-hidden", "true");
+		sel.addEventListener("change", () => syncSel(sel));
 		let btn = document.createElement("button");
 		btn.type = "button";
 		btn.className = "sel-btn";
@@ -331,18 +421,66 @@
 		PREF("lastQuery", JSON.stringify(o));
 	}
 
+	let cacheRestoreController;
+	function cancelCacheRestore() {
+		cacheRestoreController?.abort();
+		cacheRestoreController = null;
+	}
+
+	async function restoreCachedSearch() {
+		if ($("source").value !== "scholar" || typeof ZotPoPPoPBridge === "undefined" || state.searching || state.importing) return;
+		let query = readQuery();
+		if (![query.authors, query.venue, query.title, query.keywords].some(value => value.trim())) return;
+		cancelCacheRestore();
+		let controller = cacheRestoreController = new AbortController(), metadata;
+		let signature = () => JSON.stringify([$("source").value, ...QUERY_FIELDS.map(key => $(key).value)]);
+		let originalSignature = signature();
+		let active = () => cacheRestoreController === controller && !controller.signal.aborted
+			&& !state.searching && !state.importing && originalSignature === signature();
+		let noNetwork = async () => { throw new Error("Network is disabled while restoring a cached search"); };
+		let ctx = {
+			signal: controller.signal, isCancelled: () => controller.signal.aborted,
+			popCacheOnly: true, recoveryMaxResults: query.maxResults, errors: [],
+			enrichCitations: false, journalMetrics: false,
+			popSearch: async (q, context) => {
+				let rows = await ZotPoPPoPBridge.search(q, { ...context, popCacheOnly: true });
+				if (!rows?.cached || !rows?.partial) throw new Error("No cached search snapshot is available");
+				metadata = { capturedAt: rows.capturedAt };
+				return rows;
+			}
+		};
+		try {
+			let records = await ZotPoPSources.search("scholar", query, { getJSON: noNetwork, getText: noNetwork }, ctx);
+			if (!active() || !records.length) return;
+			await refreshLibraryFlags();
+			if (!active()) return;
+			state.sortKey = "rank";
+			state.sortDir = "asc";
+			displaySearchResults(records);
+			let captured = new Date(metadata.capturedAt).toLocaleString(t.locale || undefined);
+			setStatus(t("cacheRestored", records.length));
+			showBanner(t("cacheRestoredNotice", captured));
+		}
+		catch (_) {
+			// No recent matching snapshot is a normal startup condition. A live
+			// search remains available and receives its own error reporting.
+		}
+		finally { if (cacheRestoreController === controller) cacheRestoreController = null; }
+	}
+
 	// ------------------------------------------------------------ layout persistence
 	function restoreLayout() {
 		let w = parseInt(PREF("metricsWidth"), 10);
 		if (w >= 140 && w <= 500) $("metrics").style.width = w + "px";
 		let h = parseInt(PREF("detailHeight"), 10);
-		if (h >= 0 && h <= 700) $("detail").style.height = h + "px";
+		// A stored 0 used to come back as a dead strip with no way to grab the splitter
+		if (h >= 60 && h <= 700) $("detail").style.height = h + "px";
 		if (PREF("detailHidden") === true) setDetailVisible(false);
 		// COL_VERSION guards against stale widths after the defaults change
 		if (PREF("colWidthsVersion") === COL_VERSION) {
 			try {
 				let saved = JSON.parse(PREF("colWidths") || "{}");
-				for (let k of Object.keys(DEFAULT_COLS)) if (saved[k] > 20) state.colWidths[k] = saved[k];
+				for (let k of Object.keys(DEFAULT_COLS)) if (saved[k] >= MIN_COL && saved[k] <= MAX_COL) state.colWidths[k] = saved[k];
 			}
 			catch (e) {}
 		}
@@ -350,7 +488,8 @@
 	function saveLayout() {
 		try {
 			PREF("metricsWidth", $("metrics").offsetWidth);
-			PREF("detailHeight", $("detail").offsetHeight);
+			// offsetHeight is 0 for a hidden pane; saving that brings it back as a dead strip
+			if (!$("detail").hidden) PREF("detailHeight", $("detail").offsetHeight);
 			PREF("detailHidden", $("detail").hidden === true);
 			PREF("colWidths", JSON.stringify(state.colWidths));
 			PREF("colWidthsVersion", COL_VERSION);
@@ -428,7 +567,7 @@
 				let startX = e.clientX;
 				let startW = state.colWidths[key] || DEFAULT_COLS[key];
 				let move = ev => {
-					state.colWidths[key] = Math.max(28, startW + (ev.clientX - startX));
+					state.colWidths[key] = Math.min(MAX_COL, Math.max(MIN_COL, startW + (ev.clientX - startX)));
 					applyColumnWidths();
 				};
 				let up = () => {
@@ -441,6 +580,17 @@
 				document.addEventListener("mousemove", move);
 				document.addEventListener("mouseup", up);
 			});
+			// Double-clicking the grip restores the column's default width, so a column
+			// dragged too narrow to read is recoverable without editing preferences.
+			rz.addEventListener("dblclick", e => {
+				e.preventDefault();
+				e.stopPropagation();
+				state.colWidths[key] = DEFAULT_COLS[key];
+				applyColumnWidths();
+				saveLayout();
+				setStatus(t("columnReset"));
+			});
+			rz.setAttribute("title", t("columnResetTip"));
 		}
 	}
 
@@ -468,6 +618,58 @@
 	}
 
 	// ------------------------------------------------------------ search
+	function stopOperation() {
+		state.cancelled = true;
+		state.searchController?.abort();
+		setStatus(t("stopping"));
+	}
+
+	function recordIdentities(record) {
+		let ids = ["key:" + record.key];
+		let doi = ZotPoPSources.normalizeDOI(record.doi);
+		if (doi) ids.push("doi:" + doi);
+		if (record.pmid) ids.push("pmid:" + record.pmid);
+		if (record.arxiv) ids.push("arxiv:" + String(record.arxiv).replace(/v\d+$/, ""));
+		return ids;
+	}
+
+	function displaySearchResults(records) {
+		// A merged record may acquire a different source key. Carry row interaction
+		// state through a shared identifier as well as an unchanged key.
+		let previous = new Map();
+		for (let r of state.records) {
+			for (let id of recordIdentities(r)) {
+				let flags = previous.get(id) || {};
+				flags.selected ||= state.selected.has(r.key);
+				flags.focused ||= state.focusKey === r.key;
+				flags.detailed ||= state.detailKey === r.key;
+				previous.set(id, flags);
+			}
+		}
+		let selected = new Set(), focusKey = null, detailKey = null;
+		state.records = records.map((record, i) => {
+			let r = Object.assign({}, record, {
+				rank: i + 1,
+				authorString: (record.authors || []).map(a => a.name || [a.firstName, a.lastName].filter(Boolean).join(" ")).join(", "),
+				status: "",
+				inLibrary: Boolean(record.doi && state.doiMap.has(record.doi))
+			});
+			for (let id of recordIdentities(r)) {
+				let flags = previous.get(id);
+				if (flags?.selected) selected.add(r.key);
+				if (flags?.focused) focusKey = r.key;
+				if (flags?.detailed) detailKey = r.key;
+			}
+			return r;
+		});
+		state.selected = selected;
+		state.focusKey = focusKey;
+		state.detailKey = detailKey;
+		// Keep received rows readable; progress continues in the status bar.
+		$("busy").hidden = !state.searching || state.records.length > 0;
+		render();
+	}
+
 	function readQuery() {
 		let num = id => { let v = parseInt($(id).value, 10); return Number.isFinite(v) ? v : null; };
 		return {
@@ -479,6 +681,7 @@
 
 	async function runSearch() {
 		if (state.searching || state.importing) return;
+		cancelCacheRestore();
 		let q = readQuery();
 		if (![q.authors, q.venue, q.title, q.keywords].some(x => x.trim())) {
 			setStatus(t("needCriteria"), "err");
@@ -491,7 +694,16 @@
 		let label = sourceLabel(sourceKey);
 		state.searching = true;
 		state.cancelled = false;
+		let controller = new AbortController();
+		state.searchController = controller;
+		let active = () => state.searchController === controller && !controller.signal.aborted;
+		hideBanner();
 		state.records = [];
+		// The API layer already applies the requested search order. Preserve its rank
+		// until the user explicitly sorts a result column again.
+		state.sortKey = "rank";
+		state.sortDir = "asc";
+		$("filter").value = "";
 		state.selected.clear();
 		state.focusKey = null;
 		state.detailKey = null;
@@ -505,24 +717,33 @@
 		let ctx = {
 			email: PREF("email") || "",
 			s2ApiKey: PREF("s2ApiKey") || "",
+			openAlexApiKey: PREF("openAlexApiKey") || "",
 			enrichCitations: PREF("enrichCitations") !== false,
 			journalMetrics: PREF("journalMetrics") !== false,
 			DOMParser: window.DOMParser,
-			isCancelled: () => state.cancelled,
-			onProgress: (msg, n, total) => { setStatus(msg); $("busy-text").textContent = msg; setProgress(n, total); },
+			popSearch: typeof ZotPoPPoPBridge !== "undefined" ? (query, context) => ZotPoPPoPBridge.search(query, context) : undefined,
+			signal: controller.signal,
+			isCancelled: () => controller.signal.aborted,
+			onProgress: (msg, n, total) => {
+				if (!active()) return;
+				setStatus(msg); $("busy-text").textContent = msg; setProgress(n, total);
+			},
+			onResults: records => { if (active()) displaySearchResults(records); },
 			log
 		};
 		try {
 			let recs = await ZotPoPSources.search(sourceKey, q, http, ctx);
-			recs.forEach((r, i) => {
-				r.rank = i + 1;
-				r.authorString = r.authors.map(a => a.name).join(", ");
-				r.status = "";
-			});
-			state.records = recs;
+			if (!active()) throw abortError();
+			displaySearchResults(recs);
 			await refreshLibraryFlags();
-			setStatus(t("resultCount", label, recs.length, state.cancelled));
-			if (ctx.errors?.length) showBanner(t("partialFail", ctx.errors.join(" / ")));
+			if (!active()) throw abortError();
+			setStatus(t("resultCount", label, recs.length, false));
+			if (ctx.errors?.length) {
+				// A bare "HTTP 429" from OpenAlex is its exhausted daily budget, which the user
+				// can actually fix; say so instead of showing the status code alone.
+				let quota = ctx.errors.some(m => /openalex/i.test(m) && /429|budget|credit/i.test(m));
+				showBanner(t("partialFail", ctx.errors.join(" / ")) + (quota ? " " + t("openAlexQuota") : ""));
+			}
 			if (!recs.length) setStatus(t("noResults", label));
 			else if (q.sort === "date" && q.venue.trim()) setStatus(t("journalFeed", q.venue.trim(), recs.length));
 			else if (!PREF("hintShown")) {
@@ -531,12 +752,24 @@
 			}
 		}
 		catch (e) {
-			Zotero.logError(e);
-			setStatus(t("searchFailed", e.message || e), "err");
-			showBanner(t("searchFailed", e.message || e));
+			if (state.searchController !== controller) return;
+			if (controller.signal.aborted || e?.name === "AbortError") {
+				state.cancelled = true;
+				setStatus(t("searchStopped", state.records.length));
+			}
+			else {
+				Zotero.logError(e);
+				// An exhausted OpenAlex budget is the commonest failure and "HTTP 429" tells
+				// the user nothing they can act on.
+				let quota = e?.status === 429 && /budget|insufficient|credit/i.test(e?.body || e?.message || "");
+				let text = quota ? t("openAlexQuota") : t("searchFailed", e.message || e);
+				setStatus(text, "err");
+				showBanner(text);
+			}
 		}
 		finally {
 			state.searching = false;
+			state.searchController = null;
 			$("search-btn").disabled = false;
 			$("stop-btn").disabled = true;
 			$("busy").hidden = true;
@@ -556,6 +789,13 @@
 	}
 
 	function clearAll() {
+		cancelCacheRestore();
+		if (state.searching) {
+			state.cancelled = true;
+			state.searchController?.abort();
+			state.searchController = null;
+			$("busy").hidden = true;
+		}
 		for (let id of ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "filter"]) $(id).value = "";
 		state.records = [];
 		state.selected.clear();
@@ -609,6 +849,8 @@
 		}
 		tbody.textContent = "";
 		tbody.appendChild(frag);
+		if (!marquee) marquee = ZotPoPMarquee.attach(window, $("table-wrap"));
+		else marquee.refresh();
 
 		$("empty").hidden = list.length > 0 || !$("busy").hidden;
 		$("empty").textContent = state.records.length ? t("emptyFiltered") : t("emptyInitial");
@@ -643,9 +885,10 @@
 		td("num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : "");
 		td("num", fmt(ZotPoPMetrics.citesPerYear(r)));
 		td("num", String(r.rank));
-		td("", r.authorString, r.authorString);
+		td("", r.authorString, r.authorString).dataset.marquee = "authors";
 
 		let tt = td("title", null, r.title);
+		tt.dataset.marquee = "title";
 		let a = document.createElement("a");
 		a.textContent = r.title;
 		a.href = "#";
@@ -653,12 +896,13 @@
 		tt.appendChild(a);
 
 		td("num", r.year == null ? "" : String(r.year));
-		td("", r.venue, r.venue);
+		td("", r.venue, r.venue).dataset.marquee = "venue";
 		td("num if", r.journalIF == null ? "" : fmt(r.journalIF, 1), r.journalIF == null ? "" : t("ifTip", fmt(r.journalIF, 1), r.journalH));
-		td("", r.doi || "", r.doi || "");
+		td("", r.doi || "", r.doi || "").dataset.marquee = "doi";
 		td("mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfTip") : "");
 		td("mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibTip") : "");
 		let st = td("status", r.status || "", r.statusTitle || "");
+		st.dataset.marquee = "status";
 		if (r.statusClass) st.classList.add(r.statusClass);
 
 		tr.addEventListener("click", e => {
@@ -705,6 +949,8 @@
 		$("selected-count").textContent = t("selected", n);
 		$("import-btn").disabled = n === 0 || state.importing || state.searching;
 		$("chk-all").checked = state.visible.length > 0 && state.visible.every(r => state.selected.has(r.key));
+		$("preview-btn").disabled = !previewRecord();
+		previewManager?.update(previewRecord());
 	}
 
 	function selectVisible(on) {
@@ -732,6 +978,19 @@
 	}
 
 	// ------------------------------------------------------------ detail pane
+	let previewManager;
+	function previewRecord() {
+		return state.records.find(r => r.key === state.focusKey)
+			|| state.records.find(r => state.selected.has(r.key)) || detailRecord();
+	}
+	function openPreview(record = previewRecord()) {
+		if (!record) return;
+		if (!previewManager) previewManager = ZotPoPPreview.createManager(payload => window.openDialog(
+			"chrome://zotpop/content/preview.xhtml", "zotpop-preview",
+			"chrome,centerscreen,resizable=yes,dialog=no,width=860,height=960", payload
+		));
+		return previewManager.open(record, { Zotero, language: t.locale || PREF("language") || "en" });
+	}
 	function detailRecord() { return state.records.find(r => r.key === state.detailKey) || null; }
 
 	function renderDetail() {
@@ -769,6 +1028,7 @@
 		$("d-abstract").textContent = r.abstract || t("noAbstract");
 
 		$("d-open").disabled = !r.url;
+		$("d-preview").disabled = false;
 		$("d-pdf").disabled = !((r.pdfUrls || [])[0] || r.pdfUrl);
 		$("d-copy-doi").disabled = !r.doi;
 		$("d-proxy").disabled = !proxyLanding(r);
@@ -783,7 +1043,7 @@
 		$("d-check").disabled = true;
 		setStatus(t("citeChecking"));
 		try {
-			let res = await ZotPoPSources.checkCitations(r, http, { email: PREF("email") || "", s2ApiKey: PREF("s2ApiKey") || "", log });
+			let res = await ZotPoPSources.checkCitations(r, http, { email: PREF("email") || "", s2ApiKey: PREF("s2ApiKey") || "", openAlexApiKey: PREF("openAlexApiKey") || "", log });
 			let parts = [["openalex", res.openalex], ["crossref", res.crossref], ["semanticscholar", res.semanticscholar]]
 				.filter(([, v]) => v != null).map(([k, v]) => sourceLabel(k) + " " + v);
 			if (!parts.length) setStatus(t("citeCheckNone"), "err");
@@ -838,6 +1098,7 @@
 		add(t("ctxAdd"), () => importRecords([r]), state.importing || state.searching);
 		menu.appendChild(document.createElement("hr"));
 		add(t("ctxOpen"), () => Zotero.launchURL(r.url), !r.url);
+		add(t("previewAction"), () => openPreview(r));
 		add(t("ctxPdf"), () => Zotero.launchURL((r.pdfUrls || [])[0] || r.pdfUrl), !((r.pdfUrls || [])[0] || r.pdfUrl));
 		add(t("ctxProxy"), () => openViaProxy(r), !proxyLanding(r));
 		menu.appendChild(document.createElement("hr"));
@@ -859,16 +1120,17 @@
 		if (e.key === "Escape") {
 			if (openSel) { closeSelMenu(); return; }
 			if (!$("ctxmenu").hidden) { hideCtxMenu(); return; }
-			if (state.searching || state.importing) { state.cancelled = true; setStatus(t("stopping")); return; }
+			if (state.searching || state.importing) { stopOperation(); return; }
 			return;
 		}
 		if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); $("filter").focus(); $("filter").select(); return; }
 		if (mod && e.key === "Enter") { e.preventDefault(); runSearch(); return; }
 		if (mod && e.key.toLowerCase() === "w") { window.close(); return; }
-		if (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) {
-			if (!(mod && e.key.toLowerCase() === "a")) return;
-		}
+		// Keys typed into a form field belong to that field, Cmd/Ctrl+A included: hijacking
+		// it made select-all in the query boxes select every result row instead.
+		if (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
 		if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); selectVisible(true); return; }
+		if (!mod && !e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); openPreview(); return; }
 		if (!state.visible.length) return;
 		let idx = state.visible.findIndex(r => r.key === state.focusKey);
 		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -959,7 +1221,10 @@
 		let tr = document.querySelector(`#results-body tr[data-key="${CSS.escape(r.key)}"]`);
 		if (!tr) return;
 		let td = tr.querySelector("td.status");
-		if (td) { td.textContent = text; td.className = "status " + (cls || ""); td.title = title || ""; }
+		if (td) {
+			td.textContent = text; td.className = "status " + (cls || ""); td.title = title || "";
+			marquee?.refreshCell(td);
+		}
 		if (r.inLibrary) {
 			tr.classList.add("in-library");
 			let lib = tr.querySelector("td.lib");

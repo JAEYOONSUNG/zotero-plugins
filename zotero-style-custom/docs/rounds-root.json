@@ -1,0 +1,158 @@
+[
+  {
+    "round": "R09",
+    "title": "읽기 상태·별점·연도 필터와 문헌 정렬",
+    "gap": "filters existed only partially in the model; no matching user controls",
+    "entryPoint": "워크벤치 상단 상세 필터",
+    "sources": [
+      {
+        "file": "src/workspace.js",
+        "marker": "sortItems"
+      },
+      {
+        "file": "src/workbench.js",
+        "marker": "최소 별점"
+      }
+    ],
+    "tests": [
+      {
+        "file": "test/workspace.test.mjs",
+        "name": "combined status year and rating filters sort known zero citations before unknown values without mutating input"
+      },
+      {
+        "file": "test/workbench.test.mjs",
+        "name": "visible status year rating and sort controls filter exploration and reset together"
+      }
+    ],
+    "status": "verified",
+    "review": "Combined filters, inverse year range, missing metrics versus actual zero and sort stability checked.",
+    "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+    "nativeActivationVerified": false
+  },
+  {
+    "round": "R10",
+    "title": "200개 제한을 넘는 탐색과 명시적 일괄 선택",
+    "gap": "The first 200 papers were reachable; later results required narrowing a search.",
+    "entryPoint": "문헌 탐색 → 이전/다음 페이지·검색 결과 전체 선택",
+    "sources": [
+      {
+        "file": "src/workbench.js",
+        "marker": "검색 결과 전체 선택"
+      }
+    ],
+    "tests": [
+      {
+        "file": "test/workbench.test.mjs",
+        "name": "exploration pages past the old 200 item limit and selects exactly the requested page or results"
+      }
+    ],
+    "status": "verified",
+    "review": "251-paper fixture reaches last page; page and whole-result selections verified separately and search resets stale page.",
+    "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+    "nativeActivationVerified": false
+  },
+  {
+    "round": "R11",
+    "title": "비교 항목 선택·저장과 전체 결과 CSV",
+    "gap": "Comparison fields were fixed; fallback silently used only 20 papers.",
+    "entryPoint": "논문 비교 → 비교 항목 선택·CSV 복사",
+    "sources": [
+      {
+        "file": "src/workbench.js",
+        "marker": "비교 항목 선택"
+      }
+    ],
+    "tests": [
+      {
+        "file": "test/workbench.test.mjs",
+        "name": "comparison field choices persist and CSV exports all rows while the table pages without losing zero values"
+      }
+    ],
+    "status": "verified",
+    "review": "61-paper fixture, persistent fields, 50-row pages, complete CSV, real zero metrics and transposed row headers verified.",
+    "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+    "nativeActivationVerified": false
+  },
+  {
+    "round": "R12",
+    "title": "캔버스 이름·카드 색상·제목·연결 편집",
+    "gap": "Boards/cards could not be renamed/recolored and connections could not be removed independently.",
+    "entryPoint": "캔버스 → 보드 이름 변경·카드 편집·카드 연결 해제",
+    "sources": [
+      {
+        "file": "src/workspace.js",
+        "marker": "unlinkCards"
+      },
+      {
+        "file": "src/workbench.js",
+        "marker": "카드 모양 저장"
+      }
+    ],
+    "tests": [
+      {
+        "file": "test/workspace.test.mjs",
+        "name": "canvas can rename boards edit card appearance and unlink without removing either document"
+      },
+      {
+        "file": "test/workbench.test.mjs",
+        "name": "canvas exposes board and card appearance editing and reversible relation removal"
+      }
+    ],
+    "status": "verified",
+    "review": "Invalid color rejects before label mutation; link removal preserves document IDs/cards; stable per-board/card draft keys.",
+    "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+    "nativeActivationVerified": false
+  },
+  {
+    "round": "R17",
+    "title": "문헌 상세에 메타데이터·노트·주석 직접 표시",
+    "gap": "Status disappeared when IF and citations were both unknown; notes and annotations required separate tabs.",
+    "entryPoint": "문헌 탐색 → 자세히",
+    "sources": [
+      {
+        "file": "src/workbench.js",
+        "marker": "주석 원문 열기"
+      }
+    ],
+    "tests": [
+      {
+        "file": "test/workbench.test.mjs",
+        "name": "paper detail displays status without available metrics and includes scoped notes and annotations inline"
+      },
+      {
+        "file": "test/workbench.test.mjs",
+        "name": "late detail notes never leak into a different paper or tab"
+      }
+    ],
+    "status": "verified",
+    "review": "Separate failed note/annotation loads cannot blank the other section. Scoped IDs, textContent and generation guards checked.",
+    "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+    "nativeActivationVerified": false
+  },
+  {
+    "round": "R18",
+    "title": "주석 열의 페이지·색상 분포와 원문 이동",
+    "gap": "The original distribution feature was previously reduced to a numeric annotation count.",
+    "entryPoint": "Annotations · Custom 색 막대",
+    "sources": [
+      {
+        "file": "src/runtime.js",
+        "marker": "annotationDistribution"
+      }
+    ],
+    "tests": [
+      {
+        "file": "test/runtime.test.mjs",
+        "name": "annotation column maps colors to real attachment pages without inventing total pages and navigates clicked markers"
+      },
+      {
+        "file": "test/runtime.test.mjs",
+        "name": "annotation distribution includes both pages of a merged highlight without double-counting the annotation total"
+      }
+    ],
+    "status": "verified",
+    "review": "Multiple PDFs and nextPageRects remain distinct. Invalid colors cannot inject CSS; annotation totals and distribution pages counted independently.",
+    "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+    "nativeActivationVerified": false
+  }
+]

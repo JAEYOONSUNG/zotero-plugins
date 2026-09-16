@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" windowtype="zotpop:preview">
+<head>
+	<meta charset="utf-8"/>
+	<title>ZotPoP Preview</title>
+	<link rel="stylesheet" href="chrome://zotpop/content/search.css"/>
+	<link rel="stylesheet" href="chrome://zotpop/content/preview.css"/>
+	<script src="chrome://zotero/content/include.js"></script>
+	<script src="chrome://zotpop/content/i18n.js"></script>
+	<script src="chrome://zotpop/content/preview.js"></script>
+</head>
+<body>
+	<header class="preview-header glass">
+		<div class="preview-heading"><span id="preview-status" class="preview-caption" data-i18n="previewTitle"></span><h1 id="preview-title"></h1></div>
+		<button id="preview-original" type="button" data-i18n="previewOriginal" disabled="disabled"></button>
+	</header>
+	<main id="preview-content">
+		<div id="preview-page"></div>
+		<div class="preview-notice"><p id="preview-message" role="status" aria-live="polite" data-i18n="previewLoading"></p><button id="preview-retry" type="button" data-i18n="previewRetry" hidden="hidden"></button></div>
+	</main>
+</body>
+</html>

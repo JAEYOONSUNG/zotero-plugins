@@ -37,6 +37,8 @@ function shutdown() {
 		Zotero.ZotPoP.shutdown();
 		delete Zotero.ZotPoP;
 	}
+	// i18n.js is loaded with Zotero as its global, so its export outlives the plugin object
+	delete Zotero.ZotPoPI18N;
 	if (chromeHandle) {
 		chromeHandle.destruct();
 		chromeHandle = null;

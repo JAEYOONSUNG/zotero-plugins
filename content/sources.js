@@ -14,8 +14,77 @@
 var ZotPoPSources = (function () {
 	"use strict";
 
-	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	const enc = encodeURIComponent;
+	// Providers cap deep paging near here; it also stops a fully-filtered result set from
+	// walking forever, since the filtered output length can never reach the requested cap.
+	const PAGE_WALK_LIMIT = 10000;
+	const Query = typeof ZotPoPQuery !== "undefined" ? ZotPoPQuery
+		: typeof require === "function" ? require("./query.js") : null;
+
+	function abortError() { let e = new Error("Search cancelled"); e.name = "AbortError"; return e; }
+	function throwIfCancelled(ctx = {}) {
+		if (ctx.signal?.aborted || ctx.isCancelled?.()) throw abortError();
+	}
+	function sleep(ms, ctx = {}) {
+		throwIfCancelled(ctx);
+		return new Promise((resolve, reject) => {
+			let poll, timer;
+			let finish = error => {
+				clearTimeout(timer);
+				if (poll) clearInterval(poll);
+				ctx.signal?.removeEventListener("abort", cancel);
+				error ? reject(error) : resolve();
+			};
+			let cancel = () => finish(abortError());
+			timer = setTimeout(() => finish(), ms);
+			ctx.signal?.addEventListener("abort", cancel, { once: true });
+			if (!ctx.signal && ctx.isCancelled) poll = setInterval(() => { if (ctx.isCancelled()) cancel(); }, 100);
+			if (ctx.signal?.aborted) cancel();
+		});
+	}
+
+	// Providers rank loosely: a Crossref search for "Geobacillus thermophilic genome
+	// engineering" returned fracture-mechanics and finite-element papers, which matched only
+	// the word "engineering" in their journal name. Require half the distinctive terms to
+	// appear somewhere in the record before accepting it as a topic match.
+	const KEYWORD_STOPWORDS = new Set(["and", "for", "from", "into", "the", "their", "this", "that", "with",
+		"using", "use", "via", "between", "based", "new", "study", "studies", "analysis", "role", "effect", "effects"]);
+
+	function keywordTerms(value) {
+		// A quoted or Boolean query was already expressed precisely to the provider.
+		if (!value || /\b(AND|OR|NOT|ANDNOT)\b|["()]|\w+:/i.test(value)) return [];
+		return [...new Set(normalizedText(value).split(/\s+/).filter(w => w.length > 2 && !KEYWORD_STOPWORDS.has(w)))];
+	}
+
+	function matchesKeywords(terms, record) {
+		if (terms.length < 2) return true;
+		// Title and abstract only. Matching the journal name is what let a fracture-mechanics
+		// paper in on the word "engineering", and it is a weak signal for what a paper is about.
+		let hay = normalizedText([record.title, record.abstract].filter(Boolean).join(" "));
+		if (!hay) return true;
+		// One distinctive term is enough: this removes provider noise without second-guessing
+		// which of the user's words the relevant paper happens to use.
+		return terms.some(term => hay.includes(term));
+	}
+
+	function matchingRecords(records, query) {
+		// Scholar's bylines/journal names are snippets and can be truncated. Its
+		// fielded query has already constrained these fields; absence in a snippet
+		// cannot disprove a match. Never fill that missing metadata from the query.
+		// Scholar already constrains every field it was given, and its snippets are truncated,
+		// so only the year range is re-checked there.
+		let terms = keywordTerms(query.keywords);
+		return records.filter(r => {
+			if (r.source === "scholar") return Query ? Query.matchesRecord(r, { yearFrom: query.yearFrom, yearTo: query.yearTo }) : true;
+			if (Query && !Query.matchesRecord(r, query)) return false;
+			return matchesKeywords(terms, r);
+		});
+	}
+	function publishResults(records, query, ctx, final = false) {
+		if (!ctx.onResults || ctx.signal?.aborted || ctx.isCancelled?.()) return;
+		let snapshot = sortSearchResults(dedupe(records), query).slice(0, query.maxResults || 200);
+		ctx.onResults(snapshot, { final, source: snapshot[0]?.source });
+	}
 
 	function stripTags(s) {
 		if (!s) return "";
@@ -52,6 +121,17 @@ var ZotPoPSources = (function () {
 		return { firstName: parts.join(" "), lastName: last, name };
 	}
 
+	// "Sung JY" or "Doudna J" is the form Publish or Perish and PubMed use, and it is what the
+	// Authors box suggests. Quoted whole, OpenAlex treats it as an exact phrase and returns
+	// almost nothing ("Doudna J" matches 1 work, "Doudna" matches 882), so search the surname
+	// and let matchesAuthor() enforce the initials locally.
+	function searchableSurname(name) {
+		let author = parseName(name);
+		let initials = /^[A-Za-z]{1,3}\.?$/.test(author.lastName || "");
+		if (initials && author.firstName) return author.firstName;
+		return [author.firstName, author.lastName].filter(Boolean).join(" ");
+	}
+
 	function fromFamilyGiven(family, given) {
 		let lastName = (family || "").trim();
 		let firstName = (given || "").trim();
@@ -68,10 +148,19 @@ var ZotPoPSources = (function () {
 		return m ? parseInt(m[1], 10) : null;
 	}
 
+	function normalizedText(s) {
+		return stripTags(decodeEntities(s)).normalize("NFKC").toLowerCase()
+			.replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+	}
+
+	function dateFromParts(parts) {
+		return parts?.length ? parts.slice(0, 3).map((v, i) => String(v).padStart(i ? 2 : 4, "0")).join("-") : null;
+	}
+
 	function makeRecord(r) {
 		let doi = normalizeDOI(r.doi);
 		let rec = Object.assign({
-			source: "", sourceId: "", title: "", authors: [], year: null, venue: "", publisher: "",
+			source: "", sourceId: "", title: "", authors: [], year: null, publicationDate: null, venue: "", publisher: "",
 			doi: null, pmid: null, pmcid: null, arxiv: null, url: null, pdfUrl: null, pdfUrls: [], citations: null, citationSource: null, sources: null,
 			journalId: null, issn: null, journalIF: null, journalH: null,
 			volume: "", issue: "", pages: "", abstract: "", itemType: "journalArticle"
@@ -86,19 +175,37 @@ var ZotPoPSources = (function () {
 		return rec;
 	}
 
-	async function withRetry(fn, { tries = 4, delay = 1500, retryOn = [429, 500, 502, 503, 504] } = {}) {
+	async function withRetry(fn, { tries = 4, delay = 1500, retryOn = [429, 500, 502, 503, 504] } = {}, ctx = {}) {
 		let lastErr;
 		for (let i = 0; i < tries; i++) {
+			throwIfCancelled(ctx);
 			try {
-				return await fn();
+				let value = await fn();
+				throwIfCancelled(ctx);
+				return value;
 			}
 			catch (e) {
+				throwIfCancelled(ctx);
 				lastErr = e;
-				if (!retryOn.includes(e.status) || i === tries - 1) throw e;
-				await sleep(delay * (i + 1));
+				if (isQuotaError(e) || !retryOn.includes(e.status) || i === tries - 1) throw e;
+				await sleep(delay * (i + 1), ctx);
 			}
 		}
 		throw lastErr;
+	}
+
+	// OpenAlex is metered: a search request costs 10 credits, and an unauthenticated caller
+	// gets $0.01/day, which is about ten searches before every later request 429s. A free
+	// key raises that to $1/day. mailto alone no longer buys anything.
+	function openAlexAuth(ctx) {
+		let key = (ctx.openAlexApiKey || "").trim();
+		return (key ? "&api_key=" + enc(key) : "") + (ctx.email ? "&mailto=" + enc(ctx.email) : "");
+	}
+
+	// A budget refusal is not a transient rate limit: retrying burns the remainder and the
+	// wait cannot help until midnight UTC, so it must fail fast with an explanation.
+	function isQuotaError(e) {
+		return e?.status === 429 && /budget|insufficient|credit/i.test(e?.body || e?.message || "");
 	}
 
 	function hasAny(q) {
@@ -107,10 +214,13 @@ var ZotPoPSources = (function () {
 
 	// ---------------------------------------------------------------- OpenAlex
 	function openAlexAbstract(inv) {
-		if (!inv) return "";
+		if (!inv || typeof inv !== "object") return "";
 		let words = [];
 		for (let [w, positions] of Object.entries(inv)) {
-			for (let p of positions) words[p] = w;
+			// A single work with a null position list used to throw out of the whole search,
+			// discarding every record already fetched. An unusable abstract is not worth that.
+			if (!Array.isArray(positions)) continue;
+			for (let p of positions) if (Number.isInteger(p) && p >= 0) words[p] = w;
 		}
 		return words.join(" ").trim();
 	}
@@ -134,18 +244,57 @@ var ZotPoPSources = (function () {
 		report: "report", "proceedings-article": "conferencePaper", paratext: "journalArticle"
 	};
 
+	// A plain single name can be resolved to OpenAlex author entities, which is far cheaper
+	// and far more accurate than searching raw_author_name and filtering locally: "Sung JY"
+	// broadened to the surname returned thousands of other Sungs, 92% of which were then
+	// discarded, costing ~99 metered requests before the daily budget ran out.
+	function isPlainAuthorQuery(value) {
+		return !/\b(AND|OR|NOT)\b|[()";]/i.test(String(value || "").trim());
+	}
+
+	async function openAlexAuthorFilter(name, http, ctx) {
+		let url = "https://api.openalex.org/authors?search=" + enc(name)
+			+ "&per-page=25&select=id,display_name,display_name_alternatives,works_count" + openAlexAuth(ctx);
+		let data = await withRetry(() => http.getJSON(url), {}, ctx);
+		let ids = [];
+		for (let a of data.results || []) {
+			let names = [a.display_name, ...(a.display_name_alternatives || [])].filter(Boolean);
+			if (!names.some(n => Query.matchesAuthor(name, [{ name: n }]))) continue;
+			let id = String(a.id || "").replace("https://openalex.org/", "");
+			if (id) ids.push(id);
+			if (ids.length >= 25) break;
+		}
+		return ids.length ? "authorships.author.id:" + ids.join("|") : null;
+	}
+
 	async function searchOpenAlex(q, http, ctx) {
 		let params = [];
 		let filters = [];
 		if (q.keywords?.trim()) params.push("search=" + enc(q.keywords.trim()));
 		if (q.title?.trim()) filters.push("title.search:" + enc(q.title.trim()));
-		if (q.authors?.trim()) filters.push("raw_author_name.search:" + enc(q.authors.trim()));
+		if (q.authors?.trim()) {
+			let resolved = null;
+			if (isPlainAuthorQuery(q.authors)) {
+				try { resolved = await openAlexAuthorFilter(q.authors.trim(), http, ctx); }
+				catch (e) {
+					if (e.name === "AbortError" || isQuotaError(e)) throw e;
+					ctx.log?.("OpenAlex author lookup failed, falling back to name search: " + e.message);
+				}
+			}
+			filters.push(resolved || ("raw_author_name.search:" + enc(Query.compileAuthors(q.authors,
+				name => '"' + searchableSurname(name).replace(/"/g, "") + '"'))));
+		}
 		if (q.yearFrom) filters.push("from_publication_date:" + q.yearFrom + "-01-01");
 		if (q.yearTo) filters.push("to_publication_date:" + q.yearTo + "-12-31");
 		if (q.venue?.trim()) {
 			// Resolve the venue to an OpenAlex source id first
-			let s = await withRetry(() => http.getJSON("https://api.openalex.org/sources?search=" + enc(q.venue.trim()) + "&per-page=5" + (ctx.email ? "&mailto=" + enc(ctx.email) : "")));
-			let ids = (s.results || []).map(x => x.id.replace("https://openalex.org/", ""));
+			let s = await withRetry(() => http.getJSON("https://api.openalex.org/sources?search=" + enc(q.venue.trim()) + "&per-page=5" + openAlexAuth(ctx)), {}, ctx);
+			let candidates = s.results || [];
+			let name = normalizedText(q.venue);
+			let exact = candidates.filter(x => [x.display_name, x.abbreviated_title, ...(x.alternate_titles || [])]
+				.some(v => v && normalizedText(v) === name));
+			// A full journal name must not silently include similarly named journals.
+			let ids = (exact.length ? exact : candidates).map(x => x.id.replace("https://openalex.org/", ""));
 			if (!ids.length) return [];
 			filters.push("primary_location.source.id:" + ids.join("|"));
 		}
@@ -153,18 +302,22 @@ var ZotPoPSources = (function () {
 		if (!params.length) return [];
 		let sort = q.sort || "relevance";
 		if (sort === "date") params.push("sort=publication_date:desc");
-		else if (sort === "citations" || !q.keywords?.trim()) params.push("sort=cited_by_count:desc");
-		if (ctx.email) params.push("mailto=" + enc(ctx.email));
-		params.push("select=id,doi,title,display_name,publication_year,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids");
+		else if (sort === "citations") params.push("sort=cited_by_count:desc");
+		let auth = openAlexAuth(ctx);
+		if (auth) params.push(auth.replace(/^&/, "").replace(/&/g, "&"));
+		params.push("select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids");
 
 		let max = q.maxResults || 200;
 		let out = [];
 		let page = 1;
+		let seen = 0;
+		// Page-based APIs calculate offsets using the page size. Keep it fixed on
+		// the last page too, otherwise a request for 250 repeats rows 51–100.
+		let perPage = Math.min(200, max);
 		while (out.length < max) {
-			if (ctx.isCancelled?.()) break;
-			let perPage = Math.min(200, max - out.length);
+			throwIfCancelled(ctx);
 			let url = "https://api.openalex.org/works?" + params.join("&") + "&per-page=" + perPage + "&page=" + page;
-			let data = await withRetry(() => http.getJSON(url));
+			let data = await withRetry(() => http.getJSON(url), {}, ctx);
 			let results = data.results || [];
 			for (let w of results) {
 				let loc = w.primary_location || {};
@@ -176,6 +329,7 @@ var ZotPoPSources = (function () {
 					title: w.title || w.display_name || "",
 					authors: (w.authorships || []).map(a => parseName(a.author?.display_name || a.raw_author_name)),
 					year: w.publication_year || null,
+					publicationDate: w.publication_date || null,
 					venue: src.display_name || "",
 					publisher: src.host_organization_name || "",
 					journalId: src.id ? src.id.replace("https://openalex.org/", "") : null,
@@ -194,8 +348,11 @@ var ZotPoPSources = (function () {
 					itemType: OPENALEX_TYPES[w.type] || "journalArticle"
 				}));
 			}
+			seen += results.length;
+			out = matchingRecords(dedupe(out), q);
+			publishResults(out, q, ctx);
 			ctx.onProgress?.(`OpenAlex: ${out.length} / ${Math.min(max, data.meta?.count ?? max)}`, out.length, Math.min(max, data.meta?.count ?? max));
-			if (results.length < perPage || out.length >= (data.meta?.count || 0)) break;
+			if (results.length < perPage || seen >= (data.meta?.count ?? seen) || seen >= 10000) break;
 			page++;
 		}
 		return out.slice(0, max);
@@ -203,26 +360,34 @@ var ZotPoPSources = (function () {
 
 	// Batch-lookup citation counts (and OA PDFs) by DOI from OpenAlex. Mutates records.
 	async function enrichFromOpenAlex(records, http, ctx) {
+		// Several records can legitimately share a DOI: compatibleIdentity keeps copies apart
+		// when their other identifiers conflict. Keyed one-per-DOI, all but the last lost
+		// their citation count and OA links.
 		let byDoi = new Map();
-		for (let r of records) if (r.doi && r.citations == null) byDoi.set(r.doi, r);
+		for (let r of records) {
+			if (!r.doi || r.citations != null) continue;
+			if (!byDoi.has(r.doi)) byDoi.set(r.doi, []);
+			byDoi.get(r.doi).push(r);
+		}
 		let dois = [...byDoi.keys()];
 		for (let i = 0; i < dois.length; i += 50) {
-			if (ctx.isCancelled?.()) break;
+			throwIfCancelled(ctx);
 			let chunk = dois.slice(i, i + 50);
-			let url = "https://api.openalex.org/works?filter=doi:" + chunk.map(enc).join("|") + "&per-page=50&select=doi,ids,cited_by_count,best_oa_location,open_access,locations" + (ctx.email ? "&mailto=" + enc(ctx.email) : "");
+			let url = "https://api.openalex.org/works?filter=doi:" + chunk.map(enc).join("|") + "&per-page=50&select=doi,ids,cited_by_count,best_oa_location,open_access,locations" + openAlexAuth(ctx);
 			try {
-				let data = await withRetry(() => http.getJSON(url));
+				let data = await withRetry(() => http.getJSON(url), {}, ctx);
 				for (let w of data.results || []) {
-					let r = byDoi.get(normalizeDOI(w.doi));
-					if (!r) continue;
-					r.citations = toInt(w.cited_by_count);
-					if (!r.pdfUrl) r.pdfUrl = w.best_oa_location?.pdf_url || w.open_access?.oa_url || null;
-					for (let l of w.locations || []) if (l.is_oa && l.pdf_url && !r.pdfUrls.includes(l.pdf_url)) r.pdfUrls.push(l.pdf_url);
-					if (r.pdfUrl && !r.pdfUrls.includes(r.pdfUrl)) r.pdfUrls.unshift(r.pdfUrl);
-					if (!r.pmcid) r.pmcid = pmcidFromOpenAlex(w);
+					for (let r of byDoi.get(normalizeDOI(w.doi)) || []) {
+						r.citations = toInt(w.cited_by_count);
+						if (!r.pdfUrl) r.pdfUrl = w.best_oa_location?.pdf_url || w.open_access?.oa_url || null;
+						for (let l of w.locations || []) if (l.is_oa && l.pdf_url && !r.pdfUrls.includes(l.pdf_url)) r.pdfUrls.push(l.pdf_url);
+						if (r.pdfUrl && !r.pdfUrls.includes(r.pdfUrl)) r.pdfUrls.unshift(r.pdfUrl);
+						if (!r.pmcid) r.pmcid = pmcidFromOpenAlex(w);
+					}
 				}
 			}
 			catch (e) {
+				if (e.name === "AbortError") throw e;
 				ctx.log?.("OpenAlex enrichment failed: " + e.message);
 			}
 			ctx.onProgress?.(`Citation counts: ${Math.min(i + 50, dois.length)} / ${dois.length}`, i + 50, dois.length);
@@ -260,7 +425,7 @@ var ZotPoPSources = (function () {
 	// Fill journalIF / journalH on records from their OpenAlex source id or ISSN. Mutates records.
 	async function enrichJournalMetrics(records, http, ctx = {}) {
 		const SELECT = "select=id,display_name,issn_l,issn,summary_stats,works_count,is_oa,is_in_doaj";
-		let mailto = ctx.email ? "&mailto=" + enc(ctx.email) : "";
+		let mailto = openAlexAuth(ctx);
 		let byId = new Map(), byIssn = new Map();
 		for (let r of records) {
 			if (r.journalIF != null) continue;
@@ -278,11 +443,11 @@ var ZotPoPSources = (function () {
 		let fetchChunks = async (map, filterName, keysOf) => {
 			let keys = [...map.keys()];
 			for (let i = 0; i < keys.length; i += 50) {
-				if (ctx.isCancelled?.()) return;
+				throwIfCancelled(ctx);
 				let chunk = keys.slice(i, i + 50);
 				let url = "https://api.openalex.org/sources?filter=" + filterName + ":" + chunk.map(enc).join("|") + "&per-page=50&" + SELECT + mailto;
 				try {
-					let data = await withRetry(() => http.getJSON(url));
+					let data = await withRetry(() => http.getJSON(url), {}, ctx);
 					let seen = new Set();
 					for (let s of data.results || []) {
 						let st = journalStats(s);
@@ -297,6 +462,7 @@ var ZotPoPSources = (function () {
 					for (let k of chunk) if (!seen.has(k)) JOURNAL_CACHE.set(filterName === "issn" ? "issn:" + k : k, null);
 				}
 				catch (e) {
+					if (e.name === "AbortError") throw e;
 					ctx.log?.("Journal metrics lookup failed: " + e.message);
 				}
 				done += chunk.length;
@@ -313,30 +479,30 @@ var ZotPoPSources = (function () {
 	// with the highest count plus its journal's impact.
 	async function checkCitations(rec, http, ctx = {}) {
 		let doi = rec.doi;
-		let mailto = ctx.email ? "mailto=" + enc(ctx.email) : "";
+		let mailto = openAlexAuth(ctx).replace(/^&/, "");
 		let out = { openalex: null, crossref: null, semanticscholar: null };
 		let tasks = [];
 		if (doi) {
-			tasks.push(http.getJSON("https://api.openalex.org/works/doi:" + doi + "?select=cited_by_count,primary_location" + (mailto ? "&" + mailto : "")).then(w => {
+			tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/doi:" + enc(doi) + "?select=cited_by_count,primary_location" + (mailto ? "&" + mailto : "")), {}, ctx).then(w => {
 				out.openalex = toInt(w.cited_by_count);
 				let src = w.primary_location?.source;
 				if (src?.id && !rec.journalId) rec.journalId = src.id.replace("https://openalex.org/", "");
 				if (src && !rec.issn) rec.issn = src.issn_l || (src.issn || [])[0] || null;
 			}).catch(e => ctx.log?.("OpenAlex: " + e.message)));
-			tasks.push(http.getJSON("https://api.crossref.org/works/" + doi + (mailto ? "?" + mailto : "")).then(d => {
+			tasks.push(withRetry(() => http.getJSON("https://api.crossref.org/works/" + enc(doi) + (mailto ? "?" + mailto : "")), {}, ctx).then(d => {
 				out.crossref = toInt(d.message?.["is-referenced-by-count"]);
 				if (!rec.issn) rec.issn = (d.message?.ISSN || [])[0] || null;
 			}).catch(e => ctx.log?.("Crossref: " + e.message)));
 		}
 		else if (rec.source === "openalex" && rec.sourceId) {
-			tasks.push(http.getJSON("https://api.openalex.org/works/" + rec.sourceId + "?select=cited_by_count" + (mailto ? "&" + mailto : "")).then(w => {
+			tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/" + enc(rec.sourceId) + "?select=cited_by_count" + (mailto ? "&" + mailto : "")), {}, ctx).then(w => {
 				out.openalex = toInt(w.cited_by_count);
 			}).catch(e => ctx.log?.("OpenAlex: " + e.message)));
 		}
 		let s2id = doi ? "DOI:" + doi : rec.arxiv ? "ARXIV:" + rec.arxiv : rec.pmid ? "PMID:" + rec.pmid : null;
 		if (s2id) {
 			let headers = ctx.s2ApiKey ? { "x-api-key": ctx.s2ApiKey } : {};
-			tasks.push(http.getJSON("https://api.semanticscholar.org/graph/v1/paper/" + s2id + "?fields=citationCount", headers).then(p => {
+			tasks.push(withRetry(() => http.getJSON("https://api.semanticscholar.org/graph/v1/paper/" + enc(s2id) + "?fields=citationCount", headers), {}, ctx).then(p => {
 				out.semanticscholar = toInt(p.citationCount);
 			}).catch(e => ctx.log?.("Semantic Scholar: " + e.message)));
 		}
@@ -353,31 +519,49 @@ var ZotPoPSources = (function () {
 		"journal-article": "journalArticle", "proceedings-article": "conferencePaper", "posted-content": "preprint",
 		book: "book", monograph: "book", "edited-book": "book", "book-chapter": "bookSection", dissertation: "thesis", report: "report"
 	};
+	const CROSSREF_JOURNALS = new Map();
+	async function crossrefJournal(venue, http, ctx) {
+		if (/^\d{4}-?\d{3}[\dx]$/i.test(venue)) return { issn: venue.replace(/^(\d{4})(\d{3}[\dx])$/i, "$1-$2"), title: null };
+		let key = normalizedText(venue);
+		if (CROSSREF_JOURNALS.has(key)) return CROSSREF_JOURNALS.get(key);
+		let url = "https://api.crossref.org/journals?query=" + enc(venue) + "&rows=20" + (ctx.email ? "&mailto=" + enc(ctx.email) : "");
+		let data = await withRetry(() => http.getJSON(url), {}, ctx);
+		let exact = (data.message?.items || []).filter(j => typeof j.title === "string"
+			&& Query.matchesVenue(venue, { venue: j.title, issns: j.ISSN || [] }));
+		let result = exact.length === 1 && exact[0].ISSN?.length ? { issn: exact[0].ISSN[0], title: exact[0].title } : null;
+		if (result) CROSSREF_JOURNALS.set(key, result);
+		return result;
+	}
 
 	async function searchCrossref(q, http, ctx) {
 		if (!hasAny(q)) return [];
 		let params = [];
+		let endpoint = "https://api.crossref.org/works", journal = null;
 		if (q.keywords?.trim()) params.push("query=" + enc(q.keywords.trim()));
-		if (q.title?.trim()) params.push("query.title=" + enc(q.title.trim()));
+		if (q.title?.trim()) params.push("query.bibliographic=" + enc(q.title.trim()));
 		if (q.authors?.trim()) params.push("query.author=" + enc(q.authors.trim()));
-		if (q.venue?.trim()) params.push("query.container-title=" + enc(q.venue.trim()));
 		let filters = [];
+		if (q.venue?.trim()) {
+			journal = await crossrefJournal(q.venue.trim(), http, ctx);
+			if (journal) endpoint = "https://api.crossref.org/journals/" + enc(journal.issn) + "/works";
+			else filters.push("container-title:" + enc(q.venue.trim()));
+		}
 		if (q.yearFrom) filters.push("from-pub-date:" + q.yearFrom);
 		if (q.yearTo) filters.push("until-pub-date:" + q.yearTo);
 		if (filters.length) params.push("filter=" + filters.join(","));
 		if (q.sort === "date") params.push("sort=published", "order=desc");
 		else if (q.sort === "citations") params.push("sort=is-referenced-by-count", "order=desc");
 		if (ctx.email) params.push("mailto=" + enc(ctx.email));
-		params.push("select=DOI,title,author,issued,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link");
+		params.push("select=DOI,title,author,issued,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN");
 
 		let max = q.maxResults || 200;
 		let out = [];
 		let offset = 0;
 		while (out.length < max) {
-			if (ctx.isCancelled?.()) break;
+			throwIfCancelled(ctx);
 			let rows = Math.min(100, max - out.length);
-			let url = "https://api.crossref.org/works?" + params.join("&") + "&rows=" + rows + "&offset=" + offset;
-			let data = await withRetry(() => http.getJSON(url));
+			let url = endpoint + "?" + params.join("&") + "&rows=" + rows + "&offset=" + offset;
+			let data = await withRetry(() => http.getJSON(url), {}, ctx);
 			let items = data.message?.items || [];
 			for (let w of items) {
 				let pdf = (w.link || []).find(l => l["content-type"] === "application/pdf");
@@ -387,9 +571,12 @@ var ZotPoPSources = (function () {
 					title: (w.title || [])[0] || "",
 					authors: (w.author || []).map(a => a.family ? fromFamilyGiven(a.family, a.given) : parseName(a.name)),
 					year: w.issued?.["date-parts"]?.[0]?.[0] || null,
+					publicationDate: dateFromParts(w.issued?.["date-parts"]?.[0]),
 					venue: (w["container-title"] || [])[0] || "",
 					publisher: w.publisher || "",
 					issn: (w.ISSN || [])[0] || null,
+					issns: w.ISSN || [],
+					venueAliases: journal?.title ? [journal.title] : [],
 					doi: w.DOI,
 					url: w.URL || null,
 					pdfUrl: pdf?.URL || null,
@@ -402,8 +589,10 @@ var ZotPoPSources = (function () {
 				}));
 			}
 			let total = data.message?.["total-results"] ?? 0;
+			out = matchingRecords(dedupe(out), q);
+			publishResults(out, q, ctx);
 			ctx.onProgress?.(`Crossref: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
-			if (items.length < rows || out.length >= total) break;
+			if (items.length < rows || offset + items.length >= total || offset + rows >= 10000) break;
 			offset += rows;
 		}
 		return out.slice(0, max);
@@ -422,12 +611,12 @@ var ZotPoPSources = (function () {
 	}
 	async function resolveDOIByTitle(record, http, ctx = {}) {
 		if (record.doi || !record.title) return null;
-		let url = "https://api.crossref.org/works?rows=3&query.bibliographic=" + enc(record.title) + "&select=DOI,title,issued" + (ctx.email ? "&mailto=" + enc(ctx.email) : "");
-		let data = await withRetry(() => http.getJSON(url));
+		let url = "https://api.crossref.org/works?rows=5&query.bibliographic=" + enc(record.title) + "&select=DOI,title,issued,author" + (ctx.email ? "&mailto=" + enc(ctx.email) : "");
+		let data = await withRetry(() => http.getJSON(url), {}, ctx);
 		for (let w of data.message?.items || []) {
-			let sim = titleSimilarity(record.title, (w.title || [])[0]);
-			let y = w.issued?.["date-parts"]?.[0]?.[0];
-			if (sim >= 0.85 && (!record.year || !y || Math.abs(y - record.year) <= 1)) {
+			let candidate = { doi: w.DOI, title: (w.title || [])[0], year: w.issued?.["date-parts"]?.[0]?.[0],
+				authors: (w.author || []).map(a => a.family ? fromFamilyGiven(a.family, a.given) : parseName(a.name)) };
+			if (Query?.isSafeDOIMatch(record, candidate)) {
 				record.doi = normalizeDOI(w.DOI);
 				return record.doi;
 			}
@@ -436,56 +625,108 @@ var ZotPoPSources = (function () {
 	}
 
 	// ---------------------------------------------------------------- Semantic Scholar
+	const S2_FIELDS = "externalIds,title,authors,year,publicationDate,venue,journal,citationCount,openAccessPdf,abstract,url,publicationTypes,publicationVenue";
+	function semanticScholarRecord(p) {
+		let ext = p.externalIds || {};
+		let types = p.publicationTypes || [];
+		let itemType = types.includes("Conference") ? "conferencePaper" : types.includes("Book") ? "book" : "journalArticle";
+		if (!ext.DOI && ext.ArXiv) itemType = "preprint";
+		return makeRecord({
+			source: "semanticscholar",
+			sourceId: p.paperId,
+			title: p.title || "",
+			authors: (p.authors || []).map(a => parseName(a.name)),
+			year: p.year || null,
+			publicationDate: p.publicationDate || null,
+			venue: p.journal?.name || p.venue || p.publicationVenue?.name || "",
+			doi: ext.DOI,
+			pmid: ext.PubMed || null,
+			arxiv: ext.ArXiv || null,
+			url: p.url || null,
+			pdfUrl: p.openAccessPdf?.url || null,
+			citations: toInt(p.citationCount),
+			volume: p.journal?.volume || "",
+			pages: p.journal?.pages || "",
+			abstract: p.abstract || "",
+			itemType
+		});
+	}
+
 	async function searchSemanticScholar(q, http, ctx) {
-		let terms = [q.keywords, q.title, q.authors].map(x => (x || "").trim()).filter(Boolean);
+		let terms = [q.keywords, q.title].map(x => (x || "").trim().replace(/-/g, " ")).filter(Boolean);
+		// The paper relevance endpoint searches paper text, not author bylines.
+		// Author-only searches are resolved through the author graph below.
+		if (!terms.length && q.authors?.trim()) return searchSemanticScholarAuthor(q, http, ctx);
 		if (!terms.length && !q.venue?.trim()) return [];
 		let params = ["query=" + enc(terms.join(" ") || q.venue.trim())];
 		if (q.venue?.trim()) params.push("venue=" + enc(q.venue.trim()));
 		if (q.yearFrom || q.yearTo) params.push("year=" + (q.yearFrom || "") + "-" + (q.yearTo || ""));
-		params.push("fields=externalIds,title,authors,year,venue,journal,citationCount,openAccessPdf,abstract,url,publicationTypes,publicationVenue");
+		params.push("fields=" + S2_FIELDS);
 		let headers = ctx.s2ApiKey ? { "x-api-key": ctx.s2ApiKey } : {};
 
 		let max = Math.min(q.maxResults || 200, 1000);
 		let out = [];
 		let offset = 0;
 		while (out.length < max) {
-			if (ctx.isCancelled?.()) break;
+			throwIfCancelled(ctx);
 			let limit = Math.min(100, max - out.length, 1000 - offset);
 			if (limit <= 0) break;
 			let url = "https://api.semanticscholar.org/graph/v1/paper/search?" + params.join("&") + "&limit=" + limit + "&offset=" + offset;
-			let data = await withRetry(() => http.getJSON(url, headers), { tries: 6, delay: 4000 });
+			let data = await withRetry(() => http.getJSON(url, headers), { tries: 6, delay: 4000 }, ctx);
 			let items = data.data || [];
-			for (let p of items) {
-				let ext = p.externalIds || {};
-				let types = p.publicationTypes || [];
-				let itemType = types.includes("Conference") ? "conferencePaper" : types.includes("Book") ? "book" : "journalArticle";
-				if (!ext.DOI && ext.ArXiv) itemType = "preprint";
-				out.push(makeRecord({
-					source: "semanticscholar",
-					sourceId: p.paperId,
-					title: p.title || "",
-					authors: (p.authors || []).map(a => parseName(a.name)),
-					year: p.year || null,
-					venue: p.journal?.name || p.venue || p.publicationVenue?.name || "",
-					doi: ext.DOI,
-					pmid: ext.PubMed || null,
-					arxiv: ext.ArXiv || null,
-					url: p.url || null,
-					pdfUrl: p.openAccessPdf?.url || null,
-					citations: toInt(p.citationCount),
-					volume: p.journal?.volume || "",
-					pages: p.journal?.pages || "",
-					abstract: p.abstract || "",
-					itemType
-				}));
-			}
+			for (let p of items) out.push(semanticScholarRecord(p));
 			let total = data.total ?? 0;
+			out = matchingRecords(dedupe(out), q);
+			publishResults(out, q, ctx);
 			ctx.onProgress?.(`Semantic Scholar: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
-			if (items.length < limit || data.next == null || out.length >= total) break;
+			if (items.length < limit || data.next == null || offset + items.length >= total) break;
 			offset = data.next;
-			await sleep(1100); // unauthenticated rate limit ~1 req/s
+			await sleep(1100, ctx); // unauthenticated rate limit ~1 req/s
 		}
 		return out.slice(0, max);
+	}
+
+	async function searchSemanticScholarAuthor(q, http, ctx) {
+		if (/\bNOT\b|[()]/i.test(q.authors)) throw new Error("Semantic Scholar author lookup supports names separated by AND, OR or semicolons");
+		let names = q.authors.split(/\s+(?:AND|OR)\s+|;/i).map(n => n.trim().replace(/^"|"$/g, "")).filter(Boolean);
+		let headers = ctx.s2ApiKey ? { "x-api-key": ctx.s2ApiKey } : {};
+		let authors = new Map(), out = [], max = Math.min(q.maxResults || 200, 1000);
+		for (let name of names) {
+			let url = "https://api.semanticscholar.org/graph/v1/author/search?query=" + enc(name.replace(/-/g, " ")) + "&limit=20&fields=name";
+			let response = await withRetry(() => http.getJSON(url, headers), { tries: 3, delay: 2000 }, ctx);
+			for (let author of response.data || []) {
+				if (author.authorId && Query.matchesAuthor(name, [author])) authors.set(author.authorId, author);
+			}
+		}
+		if (authors.size > 5) throw new Error("Too many matching Semantic Scholar authors; enter a more specific full name");
+		// Papers are collected per profile and interleaved below: concatenating them meant a
+		// cap of 10 was filled entirely by the first matched profile, so "Doudna J" returned
+		// a power-systems engineer's papers and never reached Jennifer Doudna's.
+		let perAuthor = [];
+		for (let author of authors.values()) {
+			let offset = 0;
+			let authorRecords = [];
+			while (offset < 1000 && authorRecords.length < max) {
+				throwIfCancelled(ctx);
+				let url = "https://api.semanticscholar.org/graph/v1/author/" + enc(author.authorId) + "/papers?fields=" + S2_FIELDS + "&limit=100&offset=" + offset;
+				let response = await withRetry(() => http.getJSON(url, headers), { tries: 3, delay: 2000 }, ctx);
+				authorRecords = matchingRecords(dedupe([...authorRecords, ...(response.data || []).map(semanticScholarRecord)]), q);
+				out = dedupe([...out, ...authorRecords]);
+				publishResults(out, q, ctx);
+				if (response.next == null || response.next <= offset || !(response.data || []).length) break;
+				offset = response.next;
+				await sleep(1100, ctx);
+			}
+			perAuthor.push(authorRecords);
+		}
+		return sortSearchResults(interleave(perAuthor), q).slice(0, max);
+	}
+
+	// Round-robin so a result cap is shared between equally plausible author profiles
+	function interleave(lists) {
+		let out = [], depth = Math.max(0, ...lists.map(l => l.length));
+		for (let i = 0; i < depth; i++) for (let list of lists) if (i < list.length) out.push(list[i]);
+		return dedupe(out);
 	}
 
 	// ---------------------------------------------------------------- PubMed
@@ -499,12 +740,46 @@ var ZotPoPSources = (function () {
 
 	function pubmedTerm(q) {
 		let parts = [];
-		if (q.keywords?.trim()) parts.push("(" + q.keywords.trim() + ")");
-		if (q.title?.trim()) parts.push(q.title.trim().split(/\s+/).map(w => w + "[ti]").join(" AND "));
-		if (q.authors?.trim()) parts.push(q.authors.trim().split(/\s*;\s*|\s+and\s+/i).map(a => a + "[au]").join(" AND "));
+		// PoP uses Text Word, not PubMed's unrestricted automatic term mapping.
+		// Preserve phrases/Boolean operators while tagging the actual search terms.
+		if (q.keywords?.trim()) parts.push(pubmedFieldQuery(q.keywords, "Text Word"));
+		if (q.title?.trim()) parts.push(pubmedFieldQuery(q.title, "ti"));
+		if (q.authors?.trim()) parts.push(Query.compileAuthors(q.authors, name => name + "[au]", { binaryNot: true }));
 		if (q.venue?.trim()) parts.push('"' + q.venue.trim() + '"[ta]');
 		if (q.yearFrom || q.yearTo) parts.push((q.yearFrom || "1800") + ":" + (q.yearTo || "3000") + "[dp]");
 		return parts.join(" AND ");
+	}
+
+	// PubMed evaluates strictly left to right, so "a OR b c" becomes ("a" OR "b") AND "c",
+	// the opposite of what the box means and of what query.js applies locally. Emit explicit
+	// parentheses around each run of implicitly-ANDed terms so both sides agree.
+	function pubmedFieldQuery(value, field) {
+		let tokens = value.trim().match(/"[^"]*"(?:\[[^\]]+\])?|[^\s()[\]"]+\[[^\]]+\]|[()]|[^\s()]+/g) || [];
+		let pos = 0;
+
+		let tag = token => /\[[^\]]+\]$/.test(token) ? token : token + "[" + field + "]";
+
+		// One parenthesis level: AND-runs separated by OR/NOT.
+		function level() {
+			let segments = [[]], separators = [];
+			while (pos < tokens.length) {
+				let token = tokens[pos++];
+				if (token === ")") break;
+				if (token === "(") { segments[segments.length - 1].push("(" + level() + ")"); continue; }
+				if (token === "ANDNOT") token = "NOT";
+				if (/^(OR|NOT)$/.test(token)) { separators.push(token); segments.push([]); continue; }
+				if (token === "AND") continue;
+				segments[segments.length - 1].push(tag(token));
+			}
+			let grouped = segments.filter(seg => seg.length).map(seg =>
+				seg.length > 1 && separators.length ? "(" + seg.join(" AND ") + ")" : seg.join(" AND "));
+			if (!grouped.length) return "";
+			let out = grouped[0];
+			for (let i = 1; i < grouped.length; i++) out += " " + (separators[i - 1] || "AND") + " " + grouped[i];
+			return out;
+		}
+
+		return level();
 	}
 
 	async function searchPubMed(q, http, ctx) {
@@ -513,15 +788,15 @@ var ZotPoPSources = (function () {
 		let base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/";
 		let tool = "&tool=zotpop" + (ctx.email ? "&email=" + enc(ctx.email) : "");
 		let sort = q.sort === "date" ? "pub_date" : "relevance";
-		let es = await withRetry(() => http.getJSON(base + "esearch.fcgi?db=pubmed&retmode=json&sort=" + sort + "&retmax=" + max + "&term=" + enc(pubmedTerm(q)) + tool));
+		let es = await withRetry(() => http.getJSON(base + "esearch.fcgi?db=pubmed&retmode=json&sort=" + sort + "&retmax=" + Math.min(10000, max * 3) + "&term=" + enc(pubmedTerm(q)) + tool), {}, ctx);
 		let ids = es.esearchresult?.idlist || [];
 		let total = toInt(es.esearchresult?.count) || ids.length;
 		let out = [];
-		for (let i = 0; i < ids.length; i += 200) {
-			if (ctx.isCancelled?.()) break;
+		for (let i = 0; i < ids.length && out.length < max; i += 200) {
+			throwIfCancelled(ctx);
 			let chunk = ids.slice(i, i + 200);
-			await sleep(350);
-			let sum = await withRetry(() => http.getJSON(base + "esummary.fcgi?db=pubmed&retmode=json&id=" + chunk.join(",") + tool));
+			await sleep(350, ctx);
+			let sum = await withRetry(() => http.getJSON(base + "esummary.fcgi?db=pubmed&retmode=json&id=" + chunk.join(",") + tool), {}, ctx);
 			let result = sum.result || {};
 			for (let uid of result.uids || chunk) {
 				let d = result[uid];
@@ -553,10 +828,12 @@ var ZotPoPSources = (function () {
 					itemType: "journalArticle"
 				}));
 			}
+			out = matchingRecords(dedupe(out), q);
+			publishResults(out, q, ctx);
 			ctx.onProgress?.(`PubMed: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
 		}
 		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(out, http, ctx);
-		return out.slice(0, max);
+		return sortSearchResults(out, q).slice(0, max);
 	}
 
 	// ---------------------------------------------------------------- arXiv
@@ -565,11 +842,29 @@ var ZotPoPSources = (function () {
 		return m ? decodeEntities(m[1]).replace(/\s+/g, " ").trim() : "";
 	}
 
+	function arxivFieldQuery(value, field) {
+		// Preserve phrases and Boolean structure; add AND only between adjacent terms.
+		let tokens = value.trim().match(/(?:[a-z_]+:)?"[^"]*"|[()]|[^\s()]+/gi) || [];
+		let out = [], previousTerm = false;
+		for (let token of tokens) {
+			if (token === "NOT") {
+				if (out[out.length - 1] === "AND") out.pop();
+				token = "ANDNOT";
+			}
+			let operator = /^(AND|OR|ANDNOT)$/.test(token);
+			let startsTerm = !operator && token !== ")";
+			if (previousTerm && startsTerm) out.push("AND");
+			out.push(operator || token === "(" || token === ")" || /^[a-z_]+:/i.test(token) ? token : field + ":" + token);
+			previousTerm = !operator && token !== "(";
+		}
+		return out.join(" ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
+	}
+
 	async function searchArxiv(q, http, ctx) {
 		let parts = [];
-		if (q.keywords?.trim()) parts.push("all:" + q.keywords.trim().split(/\s+/).map(w => w).join(" AND all:"));
-		if (q.title?.trim()) parts.push(q.title.trim().split(/\s+/).map(w => "ti:" + w).join(" AND "));
-		if (q.authors?.trim()) parts.push(q.authors.trim().split(/\s*;\s*|\s+and\s+/i).map(a => 'au:"' + a + '"').join(" AND "));
+		if (q.keywords?.trim()) parts.push(arxivFieldQuery(q.keywords, "all"));
+		if (q.title?.trim()) parts.push(arxivFieldQuery(q.title, "ti"));
+		if (q.authors?.trim()) parts.push(Query.compileAuthors(q.authors, name => 'au:"' + name.replace(/"/g, "") + '"', { notOperator: "ANDNOT" }));
 		if (q.venue?.trim()) parts.push('jr:"' + q.venue.trim() + '"');
 		if (!parts.length) return [];
 		if (q.yearFrom || q.yearTo) parts.push("submittedDate:[" + (q.yearFrom || "1990") + "01010000 TO " + (q.yearTo || "2100") + "12312359]");
@@ -579,17 +874,20 @@ var ZotPoPSources = (function () {
 		let start = 0;
 		let total = null;
 		while (out.length < max) {
-			if (ctx.isCancelled?.()) break;
+			throwIfCancelled(ctx);
 			let n = Math.min(100, max - out.length);
 			let url = "https://export.arxiv.org/api/query?search_query=" + enc(query) + "&start=" + start + "&max_results=" + n + (q.sort === "date" ? "&sortBy=submittedDate&sortOrder=descending" : "&sortBy=relevance");
-			let xml = await withRetry(() => http.getText(url), { tries: 5, delay: 4000 });
+			let xml = await withRetry(() => http.getText(url), { tries: 5, delay: 4000 }, ctx);
 			if (total == null) total = toInt(xmlText(xml, "opensearch:totalResults")) ?? 0;
 			let entries = xml.match(/<entry>[\s\S]*?<\/entry>/g) || [];
 			for (let e of entries) {
 				let idUrl = xmlText(e, "id");
+				if (/\/api\/errors/i.test(idUrl)) throw new Error("arXiv rejected the search: " + xmlText(e, "summary"));
 				let arxivId = idUrl.replace(/^.*\/abs\//, "").replace(/v\d+$/, "");
 				let authors = [...e.matchAll(/<author>[\s\S]*?<name>([\s\S]*?)<\/name>/g)].map(m => parseName(decodeEntities(m[1])));
 				let doi = xmlText(e, "arxiv:doi");
+				let journalReference = xmlText(e, "arxiv:journal_ref");
+				let venue = journalReference.replace(/[,;]?\s+\d[\s\S]*$/, "").replace(/[,;]$/, "").trim();
 				let pdf = (e.match(/<link[^>]*title="pdf"[^>]*href="([^"]+)"/) || [])[1] || ("https://arxiv.org/pdf/" + arxivId);
 				out.push(makeRecord({
 					source: "arxiv",
@@ -597,7 +895,9 @@ var ZotPoPSources = (function () {
 					title: xmlText(e, "title"),
 					authors,
 					year: yearOf(xmlText(e, "published")),
-					venue: xmlText(e, "arxiv:journal_ref") || "arXiv",
+					publicationDate: xmlText(e, "published").slice(0, 10) || null,
+					venue: venue || "arXiv",
+					journalReference,
 					doi: doi || null,
 					arxiv: arxivId,
 					url: "https://arxiv.org/abs/" + arxivId,
@@ -607,10 +907,14 @@ var ZotPoPSources = (function () {
 					itemType: doi ? "journalArticle" : "preprint"
 				}));
 			}
+			out = matchingRecords(dedupe(out), q);
+			publishResults(out, q, ctx);
 			ctx.onProgress?.(`arXiv: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
-			if (entries.length < n || out.length >= total) break;
+			// start counts rows walked, not rows kept, so a filter that rejects everything
+			// would otherwise page through the entire result set three seconds at a time.
+			if (entries.length < n || start + entries.length >= total || start + entries.length >= PAGE_WALK_LIMIT) break;
 			start += n;
-			await sleep(3000); // arXiv asks for 3 s between requests
+			await sleep(3000, ctx); // arXiv asks for 3 s between requests
 		}
 		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(out, http, ctx);
 		return out.slice(0, max);
@@ -626,7 +930,7 @@ var ZotPoPSources = (function () {
 		if (q.keywords?.trim()) parts.push("(" + q.keywords.trim() + ")");
 		if (q.title?.trim()) parts.push('TITLE:"' + q.title.trim().replace(/"/g, "") + '"');
 		if (q.authors?.trim()) {
-			for (let a of q.authors.trim().split(/\s*;\s*|\s+and\s+/i)) parts.push('AUTH:"' + a.replace(/"/g, "") + '"');
+			parts.push(Query.compileAuthors(q.authors, name => 'AUTH:"' + name.replace(/"/g, "") + '"'));
 		}
 		if (q.venue?.trim()) {
 			let v = q.venue.trim().replace(/"/g, "");
@@ -657,6 +961,7 @@ var ZotPoPSources = (function () {
 			title: r.title || "",
 			authors,
 			year: toInt(r.pubYear) || yearOf(r.firstPublicationDate),
+			publicationDate: r.firstPublicationDate || null,
 			venue: r.journalInfo?.journal?.title || r.journalTitle || publisher || (isPreprint ? "Preprint" : ""),
 			publisher,
 			issn: r.journalInfo?.journal?.issn || r.journalInfo?.journal?.essn || null,
@@ -682,19 +987,24 @@ var ZotPoPSources = (function () {
 			: q.sort === "citations" ? "&sort=" + enc("CITED desc") : "";
 		let max = q.maxResults || 200;
 		let out = [];
-		let cursor = "*";
+		let cursor = "*", seen = 0;
 		while (out.length < max) {
-			if (ctx.isCancelled?.()) break;
+			throwIfCancelled(ctx);
 			let pageSize = Math.min(100, max - out.length);
 			let url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core"
 				+ "&pageSize=" + pageSize + "&cursorMark=" + enc(cursor) + sort + "&query=" + enc(query);
-			let data = await withRetry(() => http.getJSON(url));
+			let data = await withRetry(() => http.getJSON(url), {}, ctx);
 			let items = data.resultList?.result || [];
+			seen += items.length;
 			for (let r of items) out.push(epmcRecord(r));
 			let total = toInt(data.hitCount) ?? out.length;
+			out = matchingRecords(dedupe(out), q);
+			publishResults(out, q, ctx);
 			ctx.onProgress?.(`${preprintsOnly ? "Preprints" : "Europe PMC"}: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
 			let next = data.nextCursorMark;
-			if (!items.length || !next || next === cursor || out.length >= total) break;
+			// Local filtering can reject every row, so out.length alone never terminates the
+			// walk. Stop after the same 10,000 rows OpenAlex and Crossref stop at.
+			if (!items.length || !next || next === cursor || out.length >= total || seen >= PAGE_WALK_LIMIT) break;
 			cursor = next;
 		}
 		return out.slice(0, max);
@@ -702,28 +1012,19 @@ var ZotPoPSources = (function () {
 
 	// bioRxiv / medRxiv / Research Square (via Europe PMC) plus arXiv, merged
 	async function searchPreprints(q, http, ctx) {
-		let [epmc, arx] = await Promise.allSettled([
-			searchEuropePMC(q, http, ctx, true),
-			searchArxiv(Object.assign({}, q), http, Object.assign({}, ctx, { enrichCitations: false }))
-		]);
-		let errors = [];
-		if (epmc.status === "rejected") errors.push("Europe PMC: " + epmc.reason.message);
-		if (arx.status === "rejected") errors.push("arXiv: " + arx.reason.message);
-		let merged = mergeRecords([epmc.value || [], arx.value || []]);
-		for (let r of merged) if (!r.itemType || r.itemType === "journalArticle") r.itemType = "preprint";
-		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(merged, http, ctx);
-		if (q.sort === "date") merged.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
-		else merged.sort((a, b) => (b.citations ?? -1) - (a.citations ?? -1));
-		ctx.errors = errors;
-		return merged.slice(0, q.maxResults || 200);
+		return searchCombined(q, http, ctx, [
+			{ key: "europepmc", search: (query, transport, context) => searchEuropePMC(query, transport, context, true) },
+			{ key: "arxiv", search: searchArxiv }
+		], true);
 	}
 
 	// ---------------------------------------------------------------- Google Scholar (experimental)
 	function gsQuery(q) {
 		let parts = [];
 		if (q.keywords?.trim()) parts.push(q.keywords.trim());
-		if (q.title?.trim()) parts.push("allintitle:" + q.title.trim());
-		if (q.authors?.trim()) parts.push(q.authors.trim().split(/\s*;\s*|\s+and\s+/i).map(a => 'author:"' + a + '"').join(" "));
+		// allintitle would also scope later author/source terms to the title.
+		if (q.title?.trim()) parts.push(arxivFieldQuery(q.title, "intitle"));
+		if (q.authors?.trim()) parts.push(Query.compileAuthors(q.authors, name => 'author:"' + name.replace(/"/g, "") + '"'));
 		if (q.venue?.trim()) parts.push('source:"' + q.venue.trim() + '"');
 		return parts.join(" ");
 	}
@@ -750,8 +1051,8 @@ var ZotPoPSources = (function () {
 			let venue = venueSeg.replace(/,?\s*\b(1[5-9]\d{2}|20\d{2})\b/, "").trim();
 			let cites = null;
 			for (let link of div.querySelectorAll(".gs_fl a")) {
-				let m = link.textContent.match(/Cited by (\d+)/i);
-				if (m) { cites = parseInt(m[1], 10); break; }
+				let m = link.textContent.match(/Cited by ([\d,]+)/i);
+				if (m) { cites = parseInt(m[1].replace(/,/g, ""), 10); break; }
 			}
 			if (cites == null && /Cited by/i.test(div.textContent)) cites = 0;
 			if (cites == null) cites = 0;
@@ -761,6 +1062,7 @@ var ZotPoPSources = (function () {
 				source: "scholar",
 				sourceId: clusterId || title.toLowerCase(),
 				title,
+				abstract: div.querySelector(".gs_rs")?.textContent?.trim() || "",
 				authors: authorsSeg.split(",").map(s => s.replace(/…|\.\.\./g, "").trim()).filter(s => s && !/^\d+$/.test(s)).map(parseName),
 				year,
 				venue,
@@ -774,6 +1076,26 @@ var ZotPoPSources = (function () {
 	}
 
 	async function searchScholar(q, http, ctx) {
+		if (ctx.popSearch) {
+			let max = q.maxResults || 200;
+			// A large PoP query writes its JSON only on completion. Publish a small
+			// initial batch so users can inspect papers while the complete set loads.
+			let firstQuery = max > 50 ? Object.assign({}, q, { maxResults: 30 }) : q;
+			let popContext = Object.assign({}, ctx, { recoveryMaxResults: max });
+			let rows = await ctx.popSearch(firstQuery, popContext);
+			if (rows !== null) {
+				let records = normalizePoPRecords(rows);
+				publishResults(records, q, ctx);
+				if (!rows.partial && firstQuery !== q && rows.length >= firstQuery.maxResults) {
+					throwIfCancelled(ctx);
+					rows = await ctx.popSearch(q, popContext);
+					if (!Array.isArray(rows)) throw new Error("Publish or Perish became unavailable while extending the search");
+					records = normalizePoPRecords(rows);
+					publishResults(records, q, ctx);
+				}
+				return records;
+			}
+		}
 		if (typeof ctx.DOMParser !== "function") throw new Error("Google Scholar requires a DOM parser");
 		let query = gsQuery(q);
 		if (!query) return [];
@@ -781,19 +1103,34 @@ var ZotPoPSources = (function () {
 		let out = [];
 		let start = 0;
 		while (out.length < max) {
-			if (ctx.isCancelled?.()) break;
+			throwIfCancelled(ctx);
 			let url = "https://scholar.google.com/scholar?hl=en&as_sdt=0,5&num=20" + (q.sort === "date" ? "&scisbd=1" : "") + "&q=" + enc(query)
 				+ (q.yearFrom ? "&as_ylo=" + q.yearFrom : "") + (q.yearTo ? "&as_yhi=" + q.yearTo : "") + "&start=" + start;
 			let html = await http.getText(url, { "Accept-Language": "en-US,en;q=0.9" });
 			let recs = parseScholarPage(html, ctx.DOMParser);
 			if (!recs.length) break;
 			out.push(...recs);
+			publishResults(out, q, ctx);
 			ctx.onProgress?.(`Google Scholar: ${out.length}`, out.length, max);
 			if (recs.length < 10) break;
-			start += 20;
-			await sleep(2500 + Math.random() * 2000);
+			start += recs.length;
+			await sleep(2500 + Math.random() * 2000, ctx);
 		}
 		return out.slice(0, max);
+	}
+
+	function normalizePoPRecords(rows) {
+		if (!Array.isArray(rows)) throw new Error("Invalid Publish or Perish result list");
+		return rows.map(r => makeRecord({
+			source: "scholar", sourceId: String(r.uid || "").replace(/^GS:/, ""), searchBackend: "publish-or-perish",
+			title: r.title, authors: (r.authors || []).map(a => parseName(typeof a === "string" ? a : a.name)),
+			year: toInt(r.year), venue: r.source || "", publisher: r.publisher || "", issn: r.issn || null,
+			doi: r.doi || normalizeDOI(r.article_url), url: r.article_url || null,
+			pdfUrl: /\.pdf(?:[?#]|$)|\/pdf(?:[/?#]|$)/i.test(r.fulltext_url || "") ? r.fulltext_url : null,
+			citations: toInt(r.cites), abstract: r.abstract || "", volume: r.volume ? String(r.volume) : "",
+			issue: r.issue ? String(r.issue) : "", pages: r.startpage ? String(r.startpage) + (r.endpage && r.endpage !== r.startpage ? "-" + r.endpage : "") : "",
+			itemType: /preprint/i.test(r.type || "") ? "preprint" : /book/i.test(r.type || "") ? "book" : "journalArticle"
+		}));
 	}
 
 	// ---------------------------------------------------------------- library proxy
@@ -818,6 +1155,15 @@ var ZotPoPSources = (function () {
 		let proxyHost = hostOf(prefix);
 		if (proxyHost && hostOf(url) === proxyHost) return url;
 		return prefix.includes("%URL%") ? prefix.replace("%URL%", enc(url)) : prefix + url;
+	}
+
+	// Whether a URL was produced by proxify() for this prefix. A %URL% template rewrites the
+	// target into the middle of the proxy URL, so a startsWith() test on the prefix is wrong.
+	function viaProxy(url, prefix) {
+		if (!url || !prefix) return false;
+		if (!prefix.includes("%URL%")) return url.startsWith(prefix);
+		let host = hostOf(prefix);
+		return Boolean(host) && hostOf(url) === host;
 	}
 
 	function needsProxy(url) {
@@ -866,18 +1212,60 @@ var ZotPoPSources = (function () {
 	}
 
 	// ---------------------------------------------------------------- merge / multi-source
-	function recordKey(r) {
-		return r.doi ? "doi:" + r.doi : "t:" + r.title.toLowerCase().replace(/[^a-z0-9]+/g, "");
+	function identityKeys(r) {
+		let keys = [];
+		if (r.doi) keys.push("doi:" + r.doi);
+		if (r.pmid) keys.push("pmid:" + r.pmid);
+		if (r.pmcid) keys.push("pmcid:" + r.pmcid);
+		if (r.arxiv) keys.push("arxiv:" + String(r.arxiv).replace(/v\d+$/, ""));
+		if (r.source && r.sourceId) keys.push("source:" + r.source + ":" + r.sourceId);
+		return keys;
+	}
+
+	function compatibleIdentity(a, b) {
+		return !["doi", "pmid", "pmcid", "arxiv"].some(k => a[k] && b[k] && String(a[k]) !== String(b[k]));
+	}
+
+	function sameTitleWork(a, b, title) {
+		if (!title || !compatibleIdentity(a, b)) return false;
+		if (a.year && b.year && Math.abs(a.year - b.year) > 1) return false;
+		let authorA = normalizedText(a.authors?.[0]?.lastName || a.authors?.[0]?.name);
+		let authorB = normalizedText(b.authors?.[0]?.lastName || b.authors?.[0]?.name);
+		if (authorA && authorB && authorA !== authorB) return false;
+		// Generic titles (e.g. Introduction) need corroborating metadata.
+		let generic = /^(editorial|editorial board|introduction|acknowledg(e)?ments|preface|foreword|contents|table of contents|references|abstract|summary|conclusion|conclusions|correction|erratum|corrigendum)$/i.test(title);
+		if (generic && (!normalizedText(a.venue) || normalizedText(a.venue) !== normalizedText(b.venue))) return false;
+		return (!generic && (title.length >= 24 || title.split(" ").length >= 3))
+			|| Boolean(a.year && a.year === b.year && authorA && authorA === authorB);
+	}
+
+	function sortSearchResults(records, q, fused = false) {
+		if (q.sort === "citations") return records.sort((a, b) => (b.citations ?? -1) - (a.citations ?? -1));
+		if (q.sort === "date") {
+			let date = r => r.publicationDate || (r.year ? String(r.year) : "");
+			return records.sort((a, b) => date(a) < date(b) ? 1 : date(a) > date(b) ? -1 : 0);
+		}
+		let text = (q.title || q.keywords || "").trim();
+		let exact = /\b(?:AND|OR|NOT|ANDNOT)\b|\w+:/.test(text) ? "" : normalizedText(text);
+		// Native relevance scores have different scales. Fuse source ranks instead,
+		// counting each source once, with no citation-count tie breaker.
+		let score = r => Object.values(r.sourceRanks || {}).reduce((sum, rank) => sum + 1 / (60 + rank), 0);
+		return records.sort((a, b) => {
+			let match = r => exact && normalizedText(r.title) === exact ? 1 : 0;
+			return match(b) - match(a) || (fused ? score(b) - score(a) : 0);
+		});
 	}
 
 	// Fold b into a, keeping the richest field from either
 	function mergeInto(a, b) {
+		if (!a.title && b.title) a.title = b.title;
 		if (!a.doi && b.doi) a.doi = b.doi;
 		if (!a.pmid && b.pmid) a.pmid = b.pmid;
 		if (!a.pmcid && b.pmcid) a.pmcid = b.pmcid;
 		if (!a.arxiv && b.arxiv) a.arxiv = b.arxiv;
 		if (!a.url && b.url) a.url = b.url;
 		if (!a.year && b.year) a.year = b.year;
+		if (!a.publicationDate && b.publicationDate) a.publicationDate = b.publicationDate;
 		if (!a.venue && b.venue) a.venue = b.venue;
 		if (!a.publisher && b.publisher) a.publisher = b.publisher;
 		if (!a.journalId && b.journalId) a.journalId = b.journalId;
@@ -890,58 +1278,102 @@ var ZotPoPSources = (function () {
 		if ((b.authors || []).length > (a.authors || []).length) a.authors = b.authors;
 		if (b.citations != null && (a.citations == null || b.citations > a.citations)) {
 			a.citations = b.citations;
-			a.citationSource = b.source;
+			a.citationSource = b.citationSource || b.source;
 		}
 		for (let u of b.pdfUrls || []) if (!a.pdfUrls.includes(u)) a.pdfUrls.push(u);
 		if (!a.pdfUrl && b.pdfUrl) a.pdfUrl = b.pdfUrl;
-		if (!a.sources.includes(b.source)) a.sources.push(b.source);
+		for (let source of b.sources || [b.source]) if (source && !a.sources.includes(source)) a.sources.push(source);
+		for (let [source, rank] of Object.entries(b.sourceRanks || {})) {
+			a.sourceRanks[source] = Math.min(a.sourceRanks[source] ?? Infinity, rank);
+		}
 		return a;
 	}
 
 	function mergeRecords(lists) {
-		let byKey = new Map();
-		let out = [];
+		let byID = new Map(), byTitle = new Map(), entries = [];
+		let root = entry => { while (entry?.mergedInto) entry = entry.mergedInto; return entry; };
 		for (let list of lists) {
-			for (let r of list) {
-				if (!r.sources) r.sources = [r.source];
-				if (r.citations != null && !r.citationSource) r.citationSource = r.source;
-				let k = recordKey(r);
-				let existing = byKey.get(k);
-				if (existing) mergeInto(existing, r);
-				else { byKey.set(k, r); out.push(r); }
+			for (let [index, original] of list.entries()) {
+				let r = Object.assign({}, original, {
+					doi: normalizeDOI(original.doi),
+					arxiv: original.arxiv ? String(original.arxiv).replace(/v\d+$/, "") : null,
+					pdfUrls: [...(original.pdfUrls || [])], sources: [...(original.sources || [original.source])],
+					sourceRanks: Object.assign({}, original.sourceRanks || { [original.source]: index + 1 })
+				});
+				let ids = identityKeys(r), title = normalizedText(r.title);
+				let matches = [...new Set(ids.map(id => root(byID.get(id))).filter(e => e && compatibleIdentity(e.record, r)))];
+				if (!matches.length && title) {
+					let candidates = [...new Set((byTitle.get(title) || []).map(root))]
+						.filter(e => sameTitleWork(e.record, r, title));
+					// Do not guess which of several distinct same-title papers lacks a DOI.
+					if (candidates.length === 1) matches = candidates;
+				}
+				let entry = matches[0];
+				if (entry) {
+					mergeInto(entry.record, r);
+					for (let other of matches.slice(1)) {
+						if (!compatibleIdentity(entry.record, other.record)) continue;
+						mergeInto(entry.record, other.record);
+						other.mergedInto = entry;
+					}
+				}
+				else { entry = { record: r }; entries.push(entry); }
+				for (let id of ids) byID.set(id, entry);
+				if (title) {
+					if (!byTitle.has(title)) byTitle.set(title, []);
+					byTitle.get(title).push(entry);
+				}
 			}
 		}
-		return out;
+		return entries.filter(e => !e.mergedInto).map(e => e.record);
 	}
 
 	const MULTI_SOURCES = ["openalex", "crossref", "europepmc", "arxiv"];
 
-	async function searchMulti(q, http, ctx) {
-		let done = 0;
-		let errors = [];
-		let settled = await Promise.allSettled(MULTI_SOURCES.map(async (key) => {
+	async function searchCombined(q, http, ctx, sources, preprintsOnly = false) {
+		let lists = sources.map(() => []), errors = [], done = 0, succeeded = 0;
+		let snapshot = () => {
+			let records = matchingRecords(mergeRecords(lists), q);
+			if (preprintsOnly) for (let r of records) r.itemType = "preprint";
+			return sortSearchResults(records, q, true).slice(0, q.maxResults || 200);
+		};
+		let publish = () => publishResults(snapshot(), q, ctx);
+		await Promise.allSettled(sources.map(async (source, index) => {
 			let sub = Object.assign({}, ctx, {
 				enrichCitations: false,
-				onProgress: (msg) => ctx.onProgress?.(`${done}/${MULTI_SOURCES.length} \uC644\uB8CC \u00B7 ${msg}`, done, MULTI_SOURCES.length)
+				onResults: records => { lists[index] = records; publish(); },
+				onProgress: msg => ctx.onProgress?.(`${done}/${sources.length} · ${msg}`, done, sources.length)
 			});
 			try {
-				let recs = await SOURCES[key].search(q, http, sub);
-				done++;
-				ctx.onProgress?.(`${done}/${MULTI_SOURCES.length} \uC644\uB8CC`, done, MULTI_SOURCES.length);
-				return recs;
+				lists[index] = await source.search(q, http, sub);
+				succeeded++;
 			}
 			catch (e) {
+				if (e.name !== "AbortError") {
+					errors.push(`${SOURCES[source.key].label}: ${e.message}`);
+					ctx.log?.(`Search source ${source.key} failed: ${e.message}`);
+				}
+			}
+			finally {
 				done++;
-				errors.push(`${SOURCES[key].label}: ${e.message}`);
-				ctx.log?.(`multi-source ${key} failed: ${e.message}`);
-				return [];
+				publish();
+				ctx.onProgress?.(`${done}/${sources.length}`, done, sources.length);
 			}
 		}));
-		let merged = mergeRecords(settled.map(s => s.value || []));
-		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(merged, http, ctx);
-		merged.sort((a, b) => (b.citations ?? -1) - (a.citations ?? -1));
 		ctx.errors = errors;
-		return merged.slice(0, q.maxResults || 200);
+		throwIfCancelled(ctx);
+		if (!succeeded) throw Object.assign(new Error("All search sources failed: " + errors.join(" / ")), { errors });
+		let merged = matchingRecords(mergeRecords(lists), q);
+		if (preprintsOnly) for (let r of merged) r.itemType = "preprint";
+		// Citation enrichment can change which records belong in the top N.
+		// For relevance/date it cannot, so enrich only the chosen results there.
+		if (q.sort !== "citations") merged = sortSearchResults(merged, q, true).slice(0, q.maxResults || 200);
+		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(merged, http, ctx);
+		return sortSearchResults(merged, q, true).slice(0, q.maxResults || 200);
+	}
+
+	async function searchMulti(q, http, ctx) {
+		return searchCombined(q, http, ctx, MULTI_SOURCES.map(key => ({ key, search: SOURCES[key].search })));
 	}
 
 	// ---------------------------------------------------------------- registry
@@ -958,28 +1390,52 @@ var ZotPoPSources = (function () {
 	SOURCES.multi = { label: "Combined (OpenAlex + Crossref + Europe PMC + arXiv)", search: searchMulti, hasCitations: true, multi: true };
 
 	function dedupe(records) {
-		let seen = new Set();
-		let out = [];
-		for (let r of records) {
-			let k = r.doi ? "doi:" + r.doi : "t:" + r.title.toLowerCase().replace(/[^a-z0-9]+/g, "");
-			if (seen.has(k)) continue;
-			seen.add(k);
-			out.push(r);
-		}
-		return out;
+		return mergeRecords([records]);
 	}
 
 	async function search(sourceKey, query, http, ctx = {}) {
 		let src = SOURCES[sourceKey];
 		if (!src) throw new Error("Unknown source: " + sourceKey);
-		let recs = dedupe(await src.search(query, http, ctx));
-		if (ctx.journalMetrics !== false && !ctx.isCancelled?.()) await enrichJournalMetrics(recs, http, ctx);
+		throwIfCancelled(ctx);
+		query = Object.assign({ sort: "relevance", maxResults: 200 }, query);
+		for (let key of ["keywords", "title", "authors", "venue"]) query[key] = String(query[key] || "").trim();
+		if (!hasAny(query)) return [];
+		if (!Number.isInteger(query.maxResults) || query.maxResults < 1 || query.maxResults > 2000) throw new Error("Result limit must be an integer from 1 to 2000");
+		for (let key of ["yearFrom", "yearTo"]) {
+			if (query[key] === 0 || query[key] === "") query[key] = null;
+			if (query[key] != null && query[key] !== "" && (!Number.isInteger(query[key]) || query[key] < 1500 || query[key] > 2100)) throw new Error("Invalid publication year");
+		}
+		if (query.yearFrom && query.yearTo && query.yearFrom > query.yearTo) throw new Error("Start year must not exceed end year");
+		ctx.errors = [];
+		const transport = {};
+		for (let method of ["getJSON", "getText"]) transport[method] = async (url, headers = {}) => {
+			throwIfCancelled(ctx);
+			let onAbort;
+			try {
+				let request = Promise.resolve().then(() => { throwIfCancelled(ctx); return http[method](url, headers, ctx.signal); });
+				if (!ctx.signal) return await request;
+				let cancellation = new Promise((_, reject) => {
+					onAbort = () => reject(abortError());
+					ctx.signal.addEventListener("abort", onAbort, { once: true });
+					if (ctx.signal.aborted) onAbort();
+				});
+				return await Promise.race([request, cancellation]);
+			}
+			finally { if (onAbort) ctx.signal.removeEventListener("abort", onAbort); }
+		};
+		let recs = matchingRecords(dedupe(await src.search(query, transport, ctx)), query);
+		sortSearchResults(recs, query);
+		recs = recs.slice(0, query.maxResults);
+		publishResults(recs, query, ctx);
+		if (ctx.journalMetrics !== false) await enrichJournalMetrics(recs, transport, ctx);
+		throwIfCancelled(ctx);
+		publishResults(recs, query, ctx, true);
 		return recs;
 	}
 
 	return {
-		SOURCES, search, dedupe, mergeRecords, pubmedYear, proxify, needsProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, checkCitations, journalStats, pdfCandidates,
-		titleSimilarity, parseScholarPage, pubmedTerm, gsQuery, stripTags, decodeEntities
+		SOURCES, search, dedupe, mergeRecords, pubmedYear, searchableSurname, interleave, openAlexAbstract, isPlainAuthorQuery, openAlexAuthorFilter, openAlexAuth, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, checkCitations, journalStats, pdfCandidates,
+		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();
 

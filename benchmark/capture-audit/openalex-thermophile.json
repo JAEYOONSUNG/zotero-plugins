@@ -1,0 +1,1504 @@
+{
+  "records": [
+    {
+      "uid": "OA:W2980182901",
+      "type": "article",
+      "title": "Effects of textile dyes on health and the environment and bioremediation potential of living organisms",
+      "source": "Biotechnology Research and Innovation",
+      "issn": "2452-0721",
+      "publisher": "Elsevier BV",
+      "doi": "10.1016/j.biori.2019.09.001",
+      "article_url": "https://doi.org/10.1016/j.biori.2019.09.001",
+      "fulltext_url": "https://www.sciencedirect.com/science/article/pii/S2452072119300413/pdf",
+      "abstract": "The water is an essential resource for life on the planet and for human development. The textile industry is one of the anthropogenic activities that most consume water and pollute water bodies. Therefore, the present work aims to undertake a review on the main effects of the release of industrial dyes and the essential bioremediation mechanisms. The textile dyes significantly compromise the aesthetic quality of water bodies, increase biochemical and chemical oxygen demand (BOD and COD), impair photosynthesis, inhibit plant growth, enter the food chain, provide recalcitrance and bioaccumulation, and may promote toxicity, mutagenicity and carcinogenicity. In spite of this, the bioremediation of textile dyes, that is, the transformation or mineralization of these contaminants by the enzymatic action of plant, bacteria, extremophiles and fungi biomasses is fully possible. Another option is the adsorption. Despite some disadvantages, the bioremediation is essentially positive and can be progressively enhanced by modern biotechnological techniques that are related to the generation of more degrading and more resistant engineered organisms. This is a sustainable solution that provides a fundamental and innovative contribution to conventional physicochemical treatments. The resources of environmental biotechnology can, therefore, be used as tangible technological solutions for the treatment of textile dye effluents and are related to the ethical imperative of ensuring the minimum necessary for a quality life for the humankind.",
+      "rank": 1,
+      "year": 2019,
+      "volume": 3,
+      "issue": 2,
+      "startpage": 275,
+      "endpage": 290,
+      "cites": 2773,
+      "ecc": 2773,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Bruno Lellis",
+          "affiliation": "Universidade Estadual de Maringá"
+        },
+        {
+          "name": "Cíntia Zani Fávaro-Polonio",
+          "affiliation": "Universidade Estadual de Maringá"
+        },
+        {
+          "name": "João Alencar Pamphile",
+          "affiliation": "Universidade Estadual de Maringá"
+        },
+        {
+          "name": "Júlio César Polonio",
+          "affiliation": "Universidade Estadual de Maringá"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W3125960586",
+      "type": "article",
+      "title": "Agriculture Development, Pesticide Application and Its Impact on the Environment",
+      "source": "International Journal of Environmental Research and Public Health",
+      "issn": "1660-4601",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "doi": "10.3390/ijerph18031112",
+      "article_url": "https://doi.org/10.3390/ijerph18031112",
+      "fulltext_url": "https://www.mdpi.com/1660-4601/18/3/1112/pdf?version=1611886950",
+      "abstract": "Pesticides are indispensable in agricultural production. They have been used by farmers to control weeds and insects, and their remarkable increases in agricultural products have been reported. The increase in the world's population in the 20th century could not have been possible without a parallel increase in food production. About one-third of agricultural products are produced depending on the application of pesticides. Without the use of pesticides, there would be a 78% loss of fruit production, a 54% loss of vegetable production, and a 32% loss of cereal production. Therefore, pesticides play a critical role in reducing diseases and increasing crop yields worldwide. Thus, it is essential to discuss the agricultural development process; the historical perspective, types and specific uses of pesticides; and pesticide behavior, its contamination, and adverse effects on the natural environment. The review study indicates that agricultural development has a long history in many places around the world. The history of pesticide use can be divided into three periods of time. Pesticides are classified by different classification terms such as chemical classes, functional groups, modes of action, and toxicity. Pesticides are used to kill pests and control weeds using chemical ingredients; hence, they can also be toxic to other organisms, including birds, fish, beneficial insects, and non-target plants, as well as air, water, soil, and crops. Moreover, pesticide contamination moves away from the target plants, resulting in environmental pollution. Such chemical residues impact human health through environmental and food contamination. In addition, climate change-related factors also impact on pesticide application and result in increased pesticide usage and pesticide pollution. Therefore, this review will provide the scientific information necessary for pesticide application and management in the future.",
+      "rank": 2,
+      "year": 2021,
+      "volume": 18,
+      "issue": 3,
+      "startpage": 1112,
+      "endpage": 1112,
+      "cites": 2655,
+      "ecc": 2655,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Muyesaier Tudi",
+          "affiliation": "Griffith University"
+        },
+        {
+          "name": "Huada Daniel Ruan",
+          "affiliation": "Griffith University"
+        },
+        {
+          "name": "Li Wang",
+          "affiliation": "Chinese Academy of Sciences"
+        },
+        {
+          "name": "Jia Lyu",
+          "affiliation": "Chinese Center For Disease Control and Prevention"
+        },
+        {
+          "name": "Ross Sadler",
+          "affiliation": "Griffith University"
+        },
+        {
+          "name": "Des Connell",
+          "affiliation": "Griffith University"
+        },
+        {
+          "name": "Cordia Chu",
+          "affiliation": "Griffith University"
+        },
+        {
+          "name": "Dung Phung",
+          "affiliation": "Griffith University"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2886401819",
+      "type": "article",
+      "title": "Microbial tryptophan catabolites in health and disease",
+      "source": "Nature Communications",
+      "issn": "2041-1723",
+      "publisher": "Nature Portfolio",
+      "doi": "10.1038/s41467-018-05470-4",
+      "article_url": "https://doi.org/10.1038/s41467-018-05470-4",
+      "fulltext_url": "https://www.nature.com/articles/s41467-018-05470-4.pdf",
+      "abstract": "Accumulating evidence implicates metabolites produced by gut microbes as crucial mediators of diet-induced host-microbial cross-talk. Here, we review emerging data suggesting that microbial tryptophan catabolites resulting from proteolysis are influencing host health. These metabolites are suggested to activate the immune system through binding to the aryl hydrocarbon receptor (AHR), enhance the intestinal epithelial barrier, stimulate gastrointestinal motility, as well as secretion of gut hormones, exert anti-inflammatory, anti-oxidative or toxic effects in systemic circulation, and putatively modulate gut microbial composition. Tryptophan catabolites thus affect various physiological processes and may contribute to intestinal and systemic homeostasis in health and disease.",
+      "rank": 3,
+      "year": 2018,
+      "volume": 9,
+      "issue": 1,
+      "startpage": 3294,
+      "endpage": 3294,
+      "cites": 2228,
+      "ecc": 2228,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Henrik M. Roager",
+          "affiliation": "University of Copenhagen"
+        },
+        {
+          "name": "Tine Rask Licht",
+          "affiliation": "Technical University of Denmark"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W3209603403",
+      "type": "article",
+      "title": "Antibiotic resistance in microbes: History, mechanisms, therapeutic strategies and future prospects",
+      "source": "Journal of Infection and Public Health",
+      "issn": "1876-0341",
+      "publisher": "Elsevier BV",
+      "doi": "10.1016/j.jiph.2021.10.020",
+      "article_url": "https://doi.org/10.1016/j.jiph.2021.10.020",
+      "fulltext_url": "https://www.sciencedirect.com/science/article/pii/S1876034121003403/pdf",
+      "abstract": "Antibiotics have been used to cure bacterial infections for more than 70 years, and these low-molecular-weight bioactive agents have also been used for a variety of other medicinal applications. In the battle against microbes, antibiotics have certainly been a blessing to human civilization by saving millions of lives. Globally, infections caused by multidrug-resistant (MDR) bacteria are on the rise. Antibiotics are being used to combat diversified bacterial infections. Synthetic biology techniques, in combination with molecular, functional genomic, and metagenomic studies of bacteria, plants, and even marine invertebrates are aimed at unlocking the world's natural products faster than previous methods of antibiotic discovery. There are currently only few viable remedies, potential preventive techniques, and a limited number of antibiotics, thereby necessitating the discovery of innovative medicinal approaches and antimicrobial therapies. MDR is also facilitated by biofilms, which makes infection control more complex. In this review, we have spotlighted comprehensively various aspects of antibiotics viz. overview of antibiotics era, mode of actions of antibiotics, development and mechanisms of antibiotic resistance in bacteria, and future strategies to fight the emerging antimicrobial resistant threat.",
+      "rank": 4,
+      "year": 2021,
+      "volume": 14,
+      "issue": 12,
+      "startpage": 1750,
+      "endpage": 1766,
+      "cites": 1326,
+      "ecc": 1326,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Tanvir Mahtab Uddin",
+          "affiliation": "University of Dhaka"
+        },
+        {
+          "name": "Arka Chakraborty",
+          "affiliation": "University of Dhaka"
+        },
+        {
+          "name": "Ameer Khusro",
+          "affiliation": "Department of Biotechnology"
+        },
+        {
+          "name": "BM Redwan Matin Zidan",
+          "affiliation": "University of Dhaka"
+        },
+        {
+          "name": "Saikat Mitra",
+          "affiliation": "University of Dhaka"
+        },
+        {
+          "name": "Talha Bin Emran",
+          "affiliation": "BGC Trust University Bangladesh"
+        },
+        {
+          "name": "Kuldeep Dhama",
+          "affiliation": "Indian Veterinary Research Institute"
+        },
+        {
+          "name": "Md. Kamal Hossain Ripon",
+          "affiliation": "Mawlana Bhashani Science and Technology University"
+        },
+        {
+          "name": "Márió Gajdács",
+          "affiliation": "University of Szeged"
+        },
+        {
+          "name": "Muhammad Umar Khayam Sahibzada",
+          "affiliation": "Sarhad University of Science and Information Technology"
+        },
+        {
+          "name": "Md. Jamal Hossain",
+          "affiliation": "State University of Bangladesh"
+        },
+        {
+          "name": "Niranjan Koirala",
+          "affiliation": "B.P. Koirala Institute of Health Sciences"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2188082055",
+      "type": "article",
+      "title": "Algae–bacteria interactions: Evolution, ecology and emerging applications",
+      "source": "Biotechnology Advances",
+      "issn": "0734-9750",
+      "publisher": "Elsevier BV",
+      "doi": "10.1016/j.biotechadv.2015.12.003",
+      "article_url": "https://doi.org/10.1016/j.biotechadv.2015.12.003",
+      "fulltext_url": "https://www.sciencedirect.com/science/article/pii/S0734975015300586/pdf",
+      "abstract": "Algae and bacteria have coexisted ever since the early stages of evolution. This coevolution has revolutionized life on earth in many aspects. Algae and bacteria together influence ecosystems as varied as deep seas to lichens and represent all conceivable modes of interactions - from mutualism to parasitism. Several studies have shown that algae and bacteria synergistically affect each other's physiology and metabolism, a classic case being algae-roseobacter interaction. These interactions are ubiquitous and define the primary productivity in most ecosystems. In recent years, algae have received much attention for industrial exploitation but their interaction with bacteria is often considered a contamination during commercialization. A few recent studies have shown that bacteria not only enhance algal growth but also help in flocculation, both essential processes in algal biotechnology. Hence, there is a need to understand these interactions from an evolutionary and ecological standpoint, and integrate this understanding for industrial use. Here we reflect on the diversity of such relationships and their associated mechanisms, as well as the habitats that they mutually influence. This review also outlines the role of these interactions in key evolutionary events such as endosymbiosis, besides their ecological role in biogeochemical cycles. Finally, we focus on extending such studies on algal-bacterial interactions to various environmental and bio-technological applications.",
+      "rank": 5,
+      "year": 2015,
+      "volume": 34,
+      "issue": 1,
+      "startpage": 14,
+      "endpage": 29,
+      "cites": 1303,
+      "ecc": 1303,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Rishiram Ramanan",
+          "affiliation": "Korea Research Institute of Bioscience and Biotechnology"
+        },
+        {
+          "name": "Byung-Hyuk Kim",
+          "affiliation": "Korea Research Institute of Bioscience and Biotechnology"
+        },
+        {
+          "name": "Dae‐Hyun Cho",
+          "affiliation": "Korea Research Institute of Bioscience and Biotechnology"
+        },
+        {
+          "name": "Hee‐Mock Oh",
+          "affiliation": "Korea Research Institute of Bioscience and Biotechnology"
+        },
+        {
+          "name": "Hee-Sik Kim",
+          "affiliation": "Korea Research Institute of Bioscience and Biotechnology"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2518574522",
+      "type": "article",
+      "title": "Current State of Knowledge in Microbial Degradation of Polycyclic Aromatic Hydrocarbons (PAHs): A Review",
+      "source": "Frontiers in Microbiology",
+      "issn": "1664-302X",
+      "publisher": "Frontiers Media",
+      "doi": "10.3389/fmicb.2016.01369",
+      "article_url": "https://doi.org/10.3389/fmicb.2016.01369",
+      "fulltext_url": "https://www.frontiersin.org/articles/10.3389/fmicb.2016.01369/pdf",
+      "abstract": "Polycyclic aromatic hydrocarbons (PAHs) include a group of organic priority pollutants of critical environmental and public health concern due to their toxic, genotoxic, mutagenic and/or carcinogenic properties and their ubiquitous occurrence as well as recalcitrance. The increased awareness of their various adverse effects on ecosystem and human health has led to a dramatic increase in research aimed toward removing PAHs from the environment. PAHs may undergo adsorption, volatilization, photolysis, and chemical oxidation, although transformation by microorganisms is the major neutralization process of PAH-contaminated sites in an ecologically accepted manner. Microbial degradation of PAHs depends on various environmental conditions, such as nutrients, number and kind of the microorganisms, nature as well as chemical property of the PAH being degraded. A wide variety of bacterial, fungal and algal species have the potential to degrade/transform PAHs, among which bacteria and fungi mediated degradation has been studied most extensively. In last few decades microbial community analysis, biochemical pathway for PAHs degradation, gene organization, enzyme system, genetic regulation for PAH degradation have been explored in great detail. Although, xenobiotic-degrading microorganisms have incredible potential to restore contaminated environments inexpensively yet effectively, but new advancements are required to make such microbes effective and more powerful in removing those compounds, which were once thought to be recalcitrant. Recent analytical chemistry and genetic engineering tools might help to improve the efficiency of degradation of PAHs by microorganisms, and minimize uncertainties of successful bioremediation. However, appropriate implementation of the potential of naturally occurring microorganisms for field bioremediation could be considerably enhanced by optimizing certain factors such as bioavailability, adsorption and mass transfer of PAHs. The main purpose of this review is to provide an overview of current knowledge of bacteria, halophilic archaea, fungi and algae mediated degradation/transformation of PAHs. In addition, factors affecting PAHs degradation in the environment, recent advancement in genetic, genomic, proteomic and metabolomic techniques are also highlighted with an aim to facilitate the development of a new insight into the bioremediation of PAH in the environment.",
+      "rank": 6,
+      "year": 2016,
+      "volume": 7,
+      "issue": 0,
+      "startpage": 1369,
+      "endpage": 1369,
+      "cites": 1231,
+      "ecc": 1231,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Debajyoti Ghosal",
+          "affiliation": "Yeungnam University"
+        },
+        {
+          "name": "Shreya Ghosh",
+          "affiliation": "Yeungnam University"
+        },
+        {
+          "name": "Tapan K. Dutta",
+          "affiliation": "Bose Institute"
+        },
+        {
+          "name": "Young‐Ho Ahn",
+          "affiliation": "Yeungnam University"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2117349454",
+      "type": "article",
+      "title": "Bacterial membrane lipids: diversity in structures and pathways",
+      "source": "FEMS Microbiology Reviews",
+      "issn": "0168-6445",
+      "publisher": "Oxford University Press",
+      "doi": "10.1093/femsre/fuv008",
+      "article_url": "https://doi.org/10.1093/femsre/fuv008",
+      "fulltext_url": "https://academic.oup.com/femsre/article-pdf/40/1/133/10741007/fuv008.pdf",
+      "abstract": "For many decades, Escherichia coli was the main model organism for the study of bacterial membrane lipids. The results obtained served as a blueprint for membrane lipid biochemistry, but it is clear now that there is no such thing as a typical bacterial membrane lipid composition. Different bacterial species display different membrane compositions and even the membrane composition of cells belonging to a single species is not constant, but depends on the environmental conditions to which the cells are exposed. Bacterial membranes present a large diversity of amphiphilic lipids, including the common phospholipids phosphatidylglycerol, phosphatidylethanolamine and cardiolipin, the less frequent phospholipids phosphatidylcholine, and phosphatidylinositol and a variety of other membrane lipids, such as for example ornithine lipids, glycolipids, sphingolipids or hopanoids among others. In this review, we give an overview about the membrane lipid structures known in bacteria, the different metabolic pathways involved in their formation, and the distribution of membrane lipids and metabolic pathways across taxonomical groups.",
+      "rank": 7,
+      "year": 2015,
+      "volume": 40,
+      "issue": 1,
+      "startpage": 133,
+      "endpage": 159,
+      "cites": 1216,
+      "ecc": 1216,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Christian Sohlenkamp",
+          "affiliation": "Universidad Autónoma del Estado de Morelos"
+        },
+        {
+          "name": "Otto Geiger",
+          "affiliation": "Universidad Autónoma del Estado de Morelos"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W3022486080",
+      "type": "article",
+      "title": "DNA damage response signaling pathways and targets for radiotherapy sensitization in cancer",
+      "source": "Signal Transduction and Targeted Therapy",
+      "issn": "2059-3635",
+      "publisher": "Springer Nature",
+      "doi": "10.1038/s41392-020-0150-x",
+      "article_url": "https://doi.org/10.1038/s41392-020-0150-x",
+      "fulltext_url": "https://www.nature.com/articles/s41392-020-0150-x.pdf",
+      "abstract": "Radiotherapy is one of the most common countermeasures for treating a wide range of tumors. However, the radioresistance of cancer cells is still a major limitation for radiotherapy applications. Efforts are continuously ongoing to explore sensitizing targets and develop radiosensitizers for improving the outcomes of radiotherapy. DNA double-strand breaks are the most lethal lesions induced by ionizing radiation and can trigger a series of cellular DNA damage responses (DDRs), including those helping cells recover from radiation injuries, such as the activation of DNA damage sensing and early transduction pathways, cell cycle arrest, and DNA repair. Obviously, these protective DDRs confer tumor radioresistance. Targeting DDR signaling pathways has become an attractive strategy for overcoming tumor radioresistance, and some important advances and breakthroughs have already been achieved in recent years. On the basis of comprehensively reviewing the DDR signal pathways, we provide an update on the novel and promising druggable targets emerging from DDR pathways that can be exploited for radiosensitization. We further discuss recent advances identified from preclinical studies, current clinical trials, and clinical application of chemical inhibitors targeting key DDR proteins, including DNA-PKcs (DNA-dependent protein kinase, catalytic subunit), ATM/ATR (ataxia-telangiectasia mutated and Rad3-related), the MRN (MRE11-RAD50-NBS1) complex, the PARP (poly[ADP-ribose] polymerase) family, MDC1, Wee1, LIG4 (ligase IV), CDK1, BRCA1 (BRCA1 C terminal), CHK1, and HIF-1 (hypoxia-inducible factor-1). Challenges for ionizing radiation-induced signal transduction and targeted therapy are also discussed based on recent achievements in the biological field of radiotherapy.",
+      "rank": 8,
+      "year": 2020,
+      "volume": 5,
+      "issue": 1,
+      "startpage": 60,
+      "endpage": 60,
+      "cites": 1207,
+      "ecc": 1207,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Ruixue Huang",
+          "affiliation": "Central South University"
+        },
+        {
+          "name": "Ping‐Kun Zhou",
+          "affiliation": "Beijing Radiation Center"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2428898156",
+      "type": "article",
+      "title": "The Ecology of Acidobacteria: Moving beyond Genes and Genomes",
+      "source": "Frontiers in Microbiology",
+      "issn": "1664-302X",
+      "publisher": "Frontiers Media",
+      "doi": "10.3389/fmicb.2016.00744",
+      "article_url": "https://doi.org/10.3389/fmicb.2016.00744",
+      "fulltext_url": "https://www.frontiersin.org/articles/10.3389/fmicb.2016.00744/pdf",
+      "abstract": "The phylum Acidobacteria is one of the most widespread and abundant on the planet, yet remarkably our knowledge of the role of these diverse organisms in the functioning of terrestrial ecosystems remains surprisingly rudimentary. This blatant knowledge gap stems to a large degree from the difficulties associated with the cultivation of these bacteria by classical means. Given the phylogenetic breadth of the Acidobacteria, which is similar to the metabolically diverse Proteobacteria, it is clear that detailed and functional descriptions of acidobacterial assemblages are necessary. Fortunately, recent advances are providing a glimpse into the ecology of members of the phylum Acidobacteria. These include novel cultivation and enrichment strategies, genomic characterization and analyses of metagenomic DNA from environmental samples. Here, we couple the data from these complementary approaches for a better understanding of their role in the environment, thereby providing some initial insights into the ecology of this important phylum. All cultured acidobacterial type species are heterotrophic, and members of subdivisions 1, 3, and 4 appear to be more versatile in carbohydrate utilization. Genomic and metagenomic data predict a number of ecologically relevant capabilities for some acidobacteria, including the ability to: use of nitrite as N source, respond to soil macro-, micro nutrients and soil acidity, express multiple active transporters, degrade gellan gum and produce exopolysaccharide (EPS). Although these predicted properties allude to a competitive life style in soil, only very few of these prediction shave been confirmed via physiological studies. The increased availability of genomic and physiological information, coupled to distribution data in field surveys and experiments, should direct future progress in unraveling the ecology of this important but still enigmatic phylum.",
+      "rank": 9,
+      "year": 2016,
+      "volume": 7,
+      "issue": 0,
+      "startpage": 744,
+      "endpage": 744,
+      "cites": 1162,
+      "ecc": 1162,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Anna M. Kielak",
+          "affiliation": "Royal Netherlands Academy of Arts and Sciences"
+        },
+        {
+          "name": "Cristine Chaves Barreto",
+          "affiliation": "Universidade Católica de Brasília"
+        },
+        {
+          "name": "George A. Kowalchuk",
+          "affiliation": "Utrecht University"
+        },
+        {
+          "name": "Johannes A. van Veen",
+          "affiliation": "Royal Netherlands Academy of Arts and Sciences"
+        },
+        {
+          "name": "Eiko E. Kuramae",
+          "affiliation": "Royal Netherlands Academy of Arts and Sciences"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2113842526",
+      "type": "article",
+      "title": "Breaking down the barriers: the gut microbiome, intestinal permeability and stress-related psychiatric disorders",
+      "source": "Frontiers in Cellular Neuroscience",
+      "issn": "1662-5102",
+      "publisher": "Frontiers Media",
+      "doi": "10.3389/fncel.2015.00392",
+      "article_url": "https://doi.org/10.3389/fncel.2015.00392",
+      "fulltext_url": "https://www.frontiersin.org/articles/10.3389/fncel.2015.00392/pdf",
+      "abstract": "The emerging links between our gut microbiome and the central nervous system (CNS) are regarded as a paradigm shift in neuroscience with possible implications for not only understanding the pathophysiology of stress-related psychiatric disorders, but also their treatment. Thus the gut microbiome and its influence on host barrier function is positioned to be a critical node within the brain-gut axis. Mounting preclinical evidence broadly suggests that the gut microbiota can modulate brain development, function and behavior by immune, endocrine and neural pathways of the brain-gut-microbiota axis. Detailed mechanistic insights explaining these specific interactions are currently underdeveloped. However, the concept that a \"leaky gut\" may facilitate communication between the microbiota and these key signaling pathways has gained traction. Deficits in intestinal permeability may underpin the chronic low-grade inflammation observed in disorders such as depression and the gut microbiome plays a critical role in regulating intestinal permeability. In this review we will discuss the possible role played by the gut microbiota in maintaining intestinal barrier function and the CNS consequences when it becomes disrupted. We will draw on both clinical and preclinical evidence to support this concept as well as the key features of the gut microbiota which are necessary for normal intestinal barrier function.",
+      "rank": 10,
+      "year": 2015,
+      "volume": 9,
+      "issue": 0,
+      "startpage": 392,
+      "endpage": 392,
+      "cites": 1118,
+      "ecc": 1118,
+      "use": 1,
+      "authors": [
+        {
+          "name": "John R. Kelly",
+          "affiliation": "University College Cork"
+        },
+        {
+          "name": "Paul J. Kennedy",
+          "affiliation": "University College Cork"
+        },
+        {
+          "name": "John F. Cryan",
+          "affiliation": "University College Cork"
+        },
+        {
+          "name": "Timothy G. Dinan",
+          "affiliation": "University College Cork"
+        },
+        {
+          "name": "Gerard Clarke",
+          "affiliation": "University College Cork"
+        },
+        {
+          "name": "Niall P. Hyland",
+          "affiliation": "University College Cork"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2568352511",
+      "type": "article",
+      "title": "The Microbiome-Gut-Brain Axis in Health and Disease",
+      "source": "Gastroenterology Clinics of North America",
+      "issn": "0889-8553",
+      "publisher": "Elsevier BV",
+      "doi": "10.1016/j.gtc.2016.09.007",
+      "article_url": "https://doi.org/10.1016/j.gtc.2016.09.007",
+      "fulltext_url": "https://www.sciencedirect.com/science/article/pii/S0889855316300826",
+      "rank": 11,
+      "year": 2017,
+      "volume": 46,
+      "issue": 1,
+      "startpage": 77,
+      "endpage": 89,
+      "cites": 1111,
+      "ecc": 1111,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Timothy G. Dinan",
+          "affiliation": "University College Cork"
+        },
+        {
+          "name": "John F. Cryan",
+          "affiliation": "University College Cork"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2792803089",
+      "type": "article",
+      "title": "The Biology of CRISPR-Cas: Backward and Forward",
+      "source": "Cell",
+      "issn": "0092-8674",
+      "publisher": "Cell Press",
+      "doi": "10.1016/j.cell.2017.11.032",
+      "article_url": "https://doi.org/10.1016/j.cell.2017.11.032",
+      "fulltext_url": "http://www.cell.com/article/S0092867417313831/pdf",
+      "rank": 12,
+      "year": 2018,
+      "volume": 172,
+      "issue": 6,
+      "startpage": 1239,
+      "endpage": 1259,
+      "cites": 1106,
+      "ecc": 1106,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Frank Hille",
+          "affiliation": "Humboldt-Universität zu Berlin"
+        },
+        {
+          "name": "Hagen Richter",
+          "affiliation": "Max Planck Institute for Infection Biology"
+        },
+        {
+          "name": "Shi Pey Wong",
+          "affiliation": "Humboldt-Universität zu Berlin"
+        },
+        {
+          "name": "Majda Bratovič",
+          "affiliation": "Humboldt-Universität zu Berlin"
+        },
+        {
+          "name": "Sarah Ressel",
+          "affiliation": "Max Planck Institute for Infection Biology"
+        },
+        {
+          "name": "Emmanuelle Charpentier",
+          "affiliation": "Humboldt-Universität zu Berlin"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2426632426",
+      "type": "article",
+      "title": "Bifidobacteria and Their Role as Members of the Human Gut Microbiota",
+      "source": "Frontiers in Microbiology",
+      "issn": "1664-302X",
+      "publisher": "Frontiers Media",
+      "doi": "10.3389/fmicb.2016.00925",
+      "article_url": "https://doi.org/10.3389/fmicb.2016.00925",
+      "fulltext_url": "https://www.frontiersin.org/articles/10.3389/fmicb.2016.00925/pdf",
+      "abstract": "Members of the genus Bifidobacterium are among the first microbes to colonize the human gastrointestinal tract and are believed to exert positive health benefits on their host. Due to their purported health-promoting properties, bifidobacteria have been incorporated into many functional foods as active ingredients. Bifidobacteria naturally occur in a range of ecological niches that are either directly or indirectly connected to the animal gastrointestinal tract, such as the human oral cavity, the insect gut and sewage. To be able to survive in these particular ecological niches, bifidobacteria must possess specific adaptations to be competitive. Determination of genome sequences has revealed genetic attributes that may explain bifidobacterial ecological fitness, such as metabolic abilities, evasion of the host adaptive immune system and colonization of the host through specific appendages. However, genetic modification is crucial toward fully elucidating the mechanisms by which bifidobacteria exert their adaptive abilities and beneficial properties. In this review we provide an up to date summary of the general features of bifidobacteria, whilst paying particular attention to the metabolic abilities of this species. We also describe methods that have allowed successful genetic manipulation of bifidobacteria.",
+      "rank": 13,
+      "year": 2016,
+      "volume": 7,
+      "issue": 0,
+      "startpage": 925,
+      "endpage": 925,
+      "cites": 1084,
+      "ecc": 1084,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Amy O’Callaghan",
+          "affiliation": "University College Cork"
+        },
+        {
+          "name": "Douwe van Sinderen",
+          "affiliation": "University College Cork"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2800549213",
+      "type": "article",
+      "title": "A global perspective on carotenoids: Metabolism, biotechnology, and benefits for nutrition and health",
+      "source": "Progress in Lipid Research",
+      "issn": "0163-7827",
+      "publisher": "Elsevier BV",
+      "doi": "10.1016/j.plipres.2018.04.004",
+      "article_url": "https://doi.org/10.1016/j.plipres.2018.04.004",
+      "fulltext_url": "https://idus.us.es/handle//11441/86448",
+      "rank": 14,
+      "year": 2018,
+      "volume": 70,
+      "issue": 0,
+      "startpage": 62,
+      "endpage": 93,
+      "cites": 1052,
+      "ecc": 1052,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Manuel Rodrı́guez-Concepción",
+          "affiliation": "Center for Research in Agricultural Genomics"
+        },
+        {
+          "name": "Javier Ávalos",
+          "affiliation": "Universidad de Sevilla"
+        },
+        {
+          "name": "M. Luisa Bonet",
+          "affiliation": "Centro de Investigación Biomédica en Red"
+        },
+        {
+          "name": "Albert Boronat",
+          "affiliation": "Center for Research in Agricultural Genomics"
+        },
+        {
+          "name": "Lourdes Gómez‐Gómez",
+          "affiliation": "University of Castilla-La Mancha"
+        },
+        {
+          "name": "Dámaso Hornero‐Méndez",
+          "affiliation": "Instituto de la Grasa"
+        },
+        {
+          "name": "M. Carmen Limón",
+          "affiliation": "Universidad de Sevilla"
+        },
+        {
+          "name": "Antonio J. Meléndez‐Martínez",
+          "affiliation": "Universidad de Sevilla"
+        },
+        {
+          "name": "Begoña Olmedilla‐Alonso",
+          "affiliation": "Instituto de Ciencia y Tecnología de Alimentos y Nutrición"
+        },
+        {
+          "name": "Andreu Palou",
+          "affiliation": "Centro de Investigación Biomédica en Red"
+        },
+        {
+          "name": "Joan Ribot",
+          "affiliation": "Centro de Investigación Biomédica en Red"
+        },
+        {
+          "name": "Marı́a J. Rodrigo",
+          "affiliation": "Instituto de Agroquímica y Tecnología de Alimentos"
+        },
+        {
+          "name": "Lorenzo Zacarı́as",
+          "affiliation": "Instituto de Agroquímica y Tecnología de Alimentos"
+        },
+        {
+          "name": "Changfu Zhu",
+          "affiliation": "Universitat de Lleida"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W3031402809",
+      "type": "article",
+      "title": "Waste Management through Composting: Challenges and Potentials",
+      "source": "Sustainability",
+      "issn": "2071-1050",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "doi": "10.3390/su12114456",
+      "article_url": "https://doi.org/10.3390/su12114456",
+      "fulltext_url": "https://www.mdpi.com/2071-1050/12/11/4456/pdf?version=1591088392",
+      "abstract": "Composting is the controlled conversion of degradable organic products and wastes into stable products with the aid of microorganisms. Composting is a long-used technology, though it has some shortcomings that have reduced its extensive usage and efficiency. The shortcomings include pathogen detection, low nutrient status, long duration of composting, long mineralization duration, and odor production. These challenges have publicized the use of chemical fertilizers produced through the Haber–Bosch process as an alternative to compost over time. Chemical fertilizers make nutrients readily available to plants, but their disadvantages outweigh their advantages. For example, chemical fertilizers contribute to greenhouse effects, environmental pollution, death of soil organisms and marine inhabitants, ozone layer depletion, and human diseases. These have resulted in farmers reverting to the application of composts as a means of restoring soil fertility. Composting is a fundamental process in agriculture and helps in the recycling of farm wastes. The long duration of composting is a challenge; this is due to the presence of materials that take a longer time to compost, especially during co-composting. This review discusses the proper management of wastes through composting, different composting methods, the factors affecting composting, long-duration composting, the mechanism behind it, the present trends in composting and prospects. The extraction of mono-fertilizers from compost, development of strips to test for the availability of heavy metals and pathogens as well as an odor-trapping technique can go a long way in enhancing composting techniques. The addition of activators to raw materials can help to improve the nutritional quality of compost. This review further recommends that degradable organic material in which composts slowly should be assessed for their ability to mineralize slowly, which could make them advantageous to perennial or biennial crops. Viricides, fungicides, anti-nematodes, and anti-bacterial of plant or organic sources could as well be added to improve compost quality. The enhancement of composting duration will also be useful.",
+      "rank": 15,
+      "year": 2020,
+      "volume": 12,
+      "issue": 11,
+      "startpage": 4456,
+      "endpage": 4456,
+      "cites": 996,
+      "ecc": 996,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Modupe S. Ayilara",
+          "affiliation": "North-West University"
+        },
+        {
+          "name": "Oluwaseyi Samuel Olanrewaju",
+          "affiliation": "North-West University"
+        },
+        {
+          "name": "Olubukola Oluranti Babalola",
+          "affiliation": "North-West University"
+        },
+        {
+          "name": "Olu Odeyemi",
+          "affiliation": "Obafemi Awolowo University"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W3135522947",
+      "type": "article",
+      "title": "Anti-Inflammatory and Immunomodulatory Effects of Probiotics in Gut Inflammation: A Door to the Body",
+      "source": "Frontiers in Immunology",
+      "issn": "1664-3224",
+      "publisher": "Frontiers Media",
+      "doi": "10.3389/fimmu.2021.578386",
+      "article_url": "https://doi.org/10.3389/fimmu.2021.578386",
+      "fulltext_url": "https://www.frontiersin.org/articles/10.3389/fimmu.2021.578386/pdf",
+      "abstract": "Hosting millions of microorganisms, the digestive tract is the primary and most important part of bacterial colonization. On one side, in cases of opportunistic invasion, the abundant bacterial population inside intestinal tissues may face potential health problems such as inflammation and infections. Therefore, the immune system has evolved to sustain the host–microbiota symbiotic relationship. On the other hand, to maintain host immune homeostasis, the intestinal microflora often exerts an immunoregulatory function that cannot be ignored. A field of great interest is the association of either microbiota or probiotics with the immune system concerning clinical uses. This microbial community regulates some of the host’s metabolic and physiological functions and drives early-life immune system maturation, contributing to their homeostasis throughout life. Changes in gut microbiota can occur through modification in function, composition (dysbiosis), or microbiota–host interplays. Studies on animals and humans show that probiotics can have a pivotal effect on the modulation of immune and inflammatory mechanisms; however, the precise mechanisms have not yet been well defined. Diet, age, BMI (body mass index), medications, and stress may confound the benefits of probiotic intake. In addition to host gut functions (permeability and physiology), all these agents have profound implications for the gut microbiome composition. The use of probiotics could improve the gut microbial population, increase mucus-secretion, and prevent the destruction of tight junction proteins by decreasing the number of lipopolysaccharides (LPSs). When LPS binds endothelial cells to toll-like receptors (TLR 2, 4), dendritic cells and macrophage cells are activated, and inflammatory markers are increased. Furthermore, a decrease in gut dysbiosis and intestinal leakage after probiotic therapy may minimize the development of inflammatory biomarkers and blunt unnecessary activation of the immune system. In turn, probiotics improve the differentiation of T-cells against Th2 and development of Th2 cytokines such as IL-4 and IL-10. The present narrative review explores the interactions between gut microflora/probiotics and the immune system starting from the general perspective of a biological plausibility to get to the in vitro and in vivo demonstrations of a probiotic-based approach up to the possible uses for novel therapeutic strategies.",
+      "rank": 16,
+      "year": 2021,
+      "volume": 12,
+      "issue": 0,
+      "startpage": 578386,
+      "endpage": 578386,
+      "cites": 922,
+      "ecc": 922,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Fernanda Cristofori",
+          "affiliation": "University of Bari Aldo Moro"
+        },
+        {
+          "name": "Vanessa Nadia Dargenio",
+          "affiliation": "University of Bari Aldo Moro"
+        },
+        {
+          "name": "Costantino Dargenio",
+          "affiliation": "University of Bari Aldo Moro"
+        },
+        {
+          "name": "Vito Leonardo Miniello",
+          "affiliation": "University of Bari Aldo Moro"
+        },
+        {
+          "name": "M. Barone",
+          "affiliation": "University of Bari Aldo Moro"
+        },
+        {
+          "name": "Ruggiero Francavilla",
+          "affiliation": "University of Bari Aldo Moro"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2781990865",
+      "type": "article",
+      "title": "Arsenic Uptake, Toxicity, Detoxification, and Speciation in Plants: Physiological, Biochemical, and Molecular Aspects",
+      "source": "International Journal of Environmental Research and Public Health",
+      "issn": "1660-4601",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "doi": "10.3390/ijerph15010059",
+      "article_url": "https://doi.org/10.3390/ijerph15010059",
+      "fulltext_url": "https://www.mdpi.com/1660-4601/15/1/59/pdf?version=1516684754",
+      "abstract": "Environmental contamination with arsenic (As) is a global environmental, agricultural and health issue due to the highly toxic and carcinogenic nature of As. Exposure of plants to As, even at very low concentration, can cause many morphological, physiological, and biochemical changes. The recent research on As in the soil-plant system indicates that As toxicity to plants varies with its speciation in plants (e.g., arsenite, As(III); arsenate, As(V)), with the type of plant species, and with other soil factors controlling As accumulation in plants. Various plant species have different mechanisms of As(III) or As(V) uptake, toxicity, and detoxification. This review briefly describes the sources and global extent of As contamination and As speciation in soil. We discuss different mechanisms responsible for As(III) and As(V) uptake, toxicity, and detoxification in plants, at physiological, biochemical, and molecular levels. This review highlights the importance of the As-induced generation of reactive oxygen species (ROS), as well as their damaging impacts on plants at biochemical, genetic, and molecular levels. The role of different enzymatic (superoxide dismutase, catalase, glutathione reductase, and ascorbate peroxidase) and non-enzymatic (salicylic acid, proline, phytochelatins, glutathione, nitric oxide, and phosphorous) substances under As(III/V) stress have been delineated via conceptual models showing As translocation and toxicity pathways in plant species. Significantly, this review addresses the current, albeit partially understood, emerging aspects on (i) As-induced physiological, biochemical, and genotoxic mechanisms and responses in plants and (ii) the roles of different molecules in modulation of As-induced toxicities in plants. We also provide insight on some important research gaps that need to be filled to advance our scientific understanding in this area of research on As in soil-plant systems.",
+      "rank": 17,
+      "year": 2018,
+      "volume": 15,
+      "issue": 1,
+      "startpage": 59,
+      "endpage": 59,
+      "cites": 900,
+      "ecc": 900,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Ghulam Abbas",
+          "affiliation": "COMSATS University Islamabad"
+        },
+        {
+          "name": "Behzad Murtaza",
+          "affiliation": "COMSATS University Islamabad"
+        },
+        {
+          "name": "Irshad Bibi",
+          "affiliation": "University of Bremen"
+        },
+        {
+          "name": "Muhammad Shahid",
+          "affiliation": "COMSATS University Islamabad"
+        },
+        {
+          "name": "Nabeel Khan Niazi",
+          "affiliation": "University of Bremen"
+        },
+        {
+          "name": "Muhammad Imran Khan",
+          "affiliation": "University of Agriculture Faisalabad"
+        },
+        {
+          "name": "Muhammad Amjad",
+          "affiliation": "COMSATS University Islamabad"
+        },
+        {
+          "name": "Munawar Hussain",
+          "affiliation": "University of Agriculture Faisalabad"
+        },
+        {
+          "name": "Natasha Natasha",
+          "affiliation": "COMSATS University Islamabad"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2620185010",
+      "type": "article",
+      "title": "Protein–Sol: a web tool for predicting protein solubility from sequence",
+      "source": "Bioinformatics",
+      "issn": "1367-4803",
+      "publisher": "Oxford University Press",
+      "doi": "10.1093/bioinformatics/btx345",
+      "article_url": "https://doi.org/10.1093/bioinformatics/btx345",
+      "fulltext_url": "https://academic.oup.com/bioinformatics/article-pdf/33/19/3098/25164858/btx345.pdf",
+      "abstract": "MOTIVATION: Protein solubility is an important property in industrial and therapeutic applications. Prediction is a challenge, despite a growing understanding of the relevant physicochemical properties. RESULTS: Protein-Sol is a web server for predicting protein solubility. Using available data for Escherichia coli protein solubility in a cell-free expression system, 35 sequence-based properties are calculated. Feature weights are determined from separation of low and high solubility subsets. The model returns a predicted solubility and an indication of the features which deviate most from average values. Two other properties are profiled in windowed calculation along the sequence: fold propensity, and net segment charge. The utility of these additional features is demonstrated with the example of thioredoxin. AVAILABILITY AND IMPLEMENTATION: The Protein-Sol webserver is available at http://protein-sol.manchester.ac.uk. CONTACT: jim.warwicker@manchester.ac.uk.",
+      "rank": 18,
+      "year": 2017,
+      "volume": 33,
+      "issue": 19,
+      "startpage": 3098,
+      "endpage": 3100,
+      "cites": 886,
+      "ecc": 886,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Max Hebditch",
+          "affiliation": "University of Manchester"
+        },
+        {
+          "name": "Manuel Alejandro Carballo‐Amador",
+          "affiliation": "University of Manchester"
+        },
+        {
+          "name": "Spyros Charonis",
+          "affiliation": "University of Manchester"
+        },
+        {
+          "name": "Robin Curtis",
+          "affiliation": "University of Manchester"
+        },
+        {
+          "name": "Jim Warwicker",
+          "affiliation": "University of Manchester"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W4313472242",
+      "type": "article",
+      "title": "Probiotics Mechanism of Action on Immune Cells and Beneficial Effects on Human Health",
+      "source": "Cells",
+      "issn": "2073-4409",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "doi": "10.3390/cells12010184",
+      "article_url": "https://doi.org/10.3390/cells12010184",
+      "fulltext_url": "https://doi.org/10.3390/cells12010184",
+      "abstract": "Immune cells and commensal microbes in the human intestine constantly communicate with and react to each other in a stable environment in order to maintain healthy immune activities. Immune system-microbiota cross-talk relies on a complex network of pathways that sustain the balance between immune tolerance and immunogenicity. Probiotic bacteria can interact and stimulate intestinal immune cells and commensal microflora to modulate specific immune functions and immune homeostasis. Growing evidence shows that probiotic bacteria present important health-promoting and immunomodulatory properties. Thus, the use of probiotics might represent a promising approach for improving immune system activities. So far, few studies have been reported on the beneficial immune modulatory effect of probiotics. However, many others, which are mainly focused on their metabolic/nutritional properties, have been published. Therefore, the mechanisms behind the interaction between host immune cells and probiotics have only been partially described. The present review aims to collect and summarize the most recent scientific results and the resulting implications of how probiotic bacteria and immune cells interact to improve immune functions. Hence, a description of the currently known immunomodulatory mechanisms of probiotic bacteria in improving the host immune system is provided.",
+      "rank": 19,
+      "year": 2023,
+      "volume": 12,
+      "issue": 1,
+      "startpage": 184,
+      "endpage": 184,
+      "cites": 866,
+      "ecc": 866,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Chiara Mazziotta",
+          "affiliation": "University of Ferrara"
+        },
+        {
+          "name": "Mauro Tognon",
+          "affiliation": "University of Ferrara"
+        },
+        {
+          "name": "Fernanda Martini",
+          "affiliation": "University of Ferrara"
+        },
+        {
+          "name": "Elena Torreggiani",
+          "affiliation": "University of Ferrara"
+        },
+        {
+          "name": "John Charles Rotondo",
+          "affiliation": "University of Ferrara"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W3087348949",
+      "type": "article",
+      "title": "New developments in RiPP discovery, enzymology and engineering",
+      "source": "Natural Product Reports",
+      "issn": "0265-0568",
+      "publisher": "Royal Society of Chemistry",
+      "doi": "10.1039/d0np00027b",
+      "article_url": "https://doi.org/10.1039/d0np00027b",
+      "fulltext_url": "https://pubs.rsc.org/en/content/articlepdf/2021/np/d0np00027b",
+      "abstract": "Covering: up to June 2020Ribosomally-synthesized and post-translationally modified peptides (RiPPs) are a large group of natural products. A community-driven review in 2013 described the emerging commonalities in the biosynthesis of RiPPs and the opportunities they offered for bioengineering and genome mining. Since then, the field has seen tremendous advances in understanding of the mechanisms by which nature assembles these compounds, in engineering their biosynthetic machinery for a wide range of applications, and in the discovery of entirely new RiPP families using bioinformatic tools developed specifically for this compound class. The First International Conference on RiPPs was held in 2019, and the meeting participants assembled the current review describing new developments since 2013. The review discusses the new classes of RiPPs that have been discovered, the advances in our understanding of the installation of both primary and secondary post-translational modifications, and the mechanisms by which the enzymes recognize the leader peptides in their substrates. In addition, genome mining tools used for RiPP discovery are discussed as well as various strategies for RiPP engineering. An outlook section presents directions for future research.",
+      "rank": 20,
+      "year": 2020,
+      "volume": 38,
+      "issue": 1,
+      "startpage": 130,
+      "endpage": 239,
+      "cites": 828,
+      "ecc": 828,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Manuel Montalbán‐López",
+          "affiliation": "Universidad de Granada"
+        },
+        {
+          "name": "Thomas Allan Scott",
+          "affiliation": "ETH Zurich"
+        },
+        {
+          "name": "Sangeetha Ramesh",
+          "affiliation": "University of Illinois Urbana-Champaign"
+        },
+        {
+          "name": "Imran R. Rahman",
+          "affiliation": "University of Illinois Urbana-Champaign"
+        },
+        {
+          "name": "Auke J. van Heel",
+          "affiliation": "Biotechnology Institute"
+        },
+        {
+          "name": "Jakob H. Viel",
+          "affiliation": "Biotechnology Institute"
+        },
+        {
+          "name": "Vahe Bandarian",
+          "affiliation": "University of Utah"
+        },
+        {
+          "name": "Elke Dittmann",
+          "affiliation": "University of Potsdam"
+        },
+        {
+          "name": "Olga Genilloud",
+          "affiliation": "Fundación Medina"
+        },
+        {
+          "name": "Yuki Goto",
+          "affiliation": "The University of Tokyo"
+        },
+        {
+          "name": "María José Grande Burgos",
+          "affiliation": "Universidad de Jaén"
+        },
+        {
+          "name": "Colin Hill",
+          "affiliation": "University College Cork"
+        },
+        {
+          "name": "Seokhee Kim",
+          "affiliation": "Seoul National University"
+        },
+        {
+          "name": "Jesko Koehnke",
+          "affiliation": "Glasgow Life"
+        },
+        {
+          "name": "John Latham",
+          "affiliation": "University of Denver"
+        },
+        {
+          "name": "A. James Link",
+          "affiliation": "Princeton University"
+        },
+        {
+          "name": "Beatriz Martı́nez",
+          "affiliation": "Consejo Superior de Investigaciones Científicas"
+        },
+        {
+          "name": "Satish K. Nair",
+          "affiliation": "University of Illinois Urbana-Champaign"
+        },
+        {
+          "name": "Yvain Nicolet",
+          "affiliation": "Université Grenoble Alpes"
+        },
+        {
+          "name": "Sylvie Rebuffat",
+          "affiliation": "Centre National de la Recherche Scientifique"
+        },
+        {
+          "name": "Hans‐Georg Sahl",
+          "affiliation": "University of Bonn"
+        },
+        {
+          "name": "Dipti Sareen",
+          "affiliation": "Chandigarh University"
+        },
+        {
+          "name": "Eric W. Schmidt",
+          "affiliation": "University of Utah"
+        },
+        {
+          "name": "Lutz Schmitt",
+          "affiliation": "Heinrich Heine University Düsseldorf"
+        },
+        {
+          "name": "Konstantin Severinov",
+          "affiliation": "Rutgers, The State University of New Jersey"
+        },
+        {
+          "name": "Roderich D. Süßmuth",
+          "affiliation": "Technische Universität Berlin"
+        },
+        {
+          "name": "Andrew W. Truman",
+          "affiliation": "Universidad de Granada"
+        },
+        {
+          "name": "Huan Wang",
+          "affiliation": "Universidad de Granada"
+        },
+        {
+          "name": "Jing‐Ke Weng",
+          "affiliation": "University of Illinois Urbana-Champaign"
+        },
+        {
+          "name": "Gilles P. van Wezel",
+          "affiliation": "University of Illinois Urbana-Champaign"
+        },
+        {
+          "name": "Qi Zhang",
+          "affiliation": "University of Illinois Urbana-Champaign"
+        },
+        {
+          "name": "Jin Zhong",
+          "affiliation": "University of Groningen"
+        },
+        {
+          "name": "Jörn Piel",
+          "affiliation": "ETH Zurich"
+        },
+        {
+          "name": "Douglas A. Mitchell",
+          "affiliation": "University of Illinois Urbana-Champaign"
+        },
+        {
+          "name": "Oscar P. Kuipers",
+          "affiliation": "Biotechnology Institute"
+        },
+        {
+          "name": "Wilfred A. van der Donk",
+          "affiliation": "University of Illinois Urbana-Champaign"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2200372542",
+      "type": "article",
+      "title": "Dysbiosis in the Gut Microbiota of Patients with Multiple Sclerosis, with a Striking Depletion of Species Belonging to Clostridia XIVa and IV Clusters",
+      "source": "PLoS ONE",
+      "issn": "1932-6203",
+      "publisher": "Public Library of Science",
+      "doi": "10.1371/journal.pone.0137429",
+      "article_url": "https://doi.org/10.1371/journal.pone.0137429",
+      "fulltext_url": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0137429&type=printable",
+      "abstract": "The pathogenesis of multiple sclerosis (MS), an autoimmune disease affecting the brain and spinal cord, remains poorly understood. Patients with MS typically present with recurrent episodes of neurological dysfunctions such as blindness, paresis, and sensory disturbances. Studies on experimental autoimmune encephalomyelitis (EAE) animal models have led to a number of testable hypotheses including a hypothetical role of altered gut microbiota in the development of MS. To investigate whether gut microbiota in patients with MS is altered, we compared the gut microbiota of 20 Japanese patients with relapsing-remitting (RR) MS (MS20) with that of 40 healthy Japanese subjects (HC40) and an additional 18 healthy subjects (HC18). All the HC18 subjects repeatedly provided fecal samples over the course of months (158 samples in total). Analysis of the bacterial 16S ribosomal RNA (rRNA) gene by using a high-throughput culture-independent pyrosequencing method provided evidence of a moderate dysbiosis in the structure of gut microbiota in patients with MS. Furthermore, we found 21 species that showed significant differences in relative abundance between the MS20 and HC40 samples. On comparing MS samples to the 158 longitudinal HC18 samples, the differences were found to be reproducibly significant for most of the species. These taxa comprised primarily of clostridial species belonging to Clostridia clusters XIVa and IV and Bacteroidetes. The phylogenetic tree analysis revealed that none of the clostridial species that were significantly reduced in the gut microbiota of patients with MS overlapped with other spore-forming clostridial species capable of inducing colonic regulatory T cells (Treg), which prevent autoimmunity and allergies; this suggests that many of the clostridial species associated with MS might be distinct from those broadly associated with autoimmune conditions. Correcting the dysbiosis and altered gut microbiota might deserve consideration as a potential strategy for the prevention and treatment of MS.",
+      "rank": 21,
+      "year": 2015,
+      "volume": 10,
+      "issue": 9,
+      "startpage": 0,
+      "endpage": 0,
+      "cites": 823,
+      "ecc": 823,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Sachiko Miyake",
+          "affiliation": "Juntendo University"
+        },
+        {
+          "name": "Sangwan Kim",
+          "affiliation": "RIKEN Center for Integrative Medical Sciences"
+        },
+        {
+          "name": "Wataru Suda",
+          "affiliation": "The University of Tokyo"
+        },
+        {
+          "name": "Kenshiro Oshima",
+          "affiliation": "The University of Tokyo"
+        },
+        {
+          "name": "Masakazu Nakamura",
+          "affiliation": "National Center of Neurology and Psychiatry"
+        },
+        {
+          "name": "Takako Matsuoka",
+          "affiliation": "National Center of Neurology and Psychiatry"
+        },
+        {
+          "name": "Norio Chihara",
+          "affiliation": "National Center of Neurology and Psychiatry"
+        },
+        {
+          "name": "Atsuko Tomita",
+          "affiliation": "National Center of Neurology and Psychiatry"
+        },
+        {
+          "name": "Wakiro Sato",
+          "affiliation": "National Center of Neurology and Psychiatry"
+        },
+        {
+          "name": "Seok-Won Kim",
+          "affiliation": "RIKEN Center for Integrative Medical Sciences"
+        },
+        {
+          "name": "Hidetoshi Morita",
+          "affiliation": "Azabu University"
+        },
+        {
+          "name": "Masahira Hattori",
+          "affiliation": "The University of Tokyo"
+        },
+        {
+          "name": "Takashi Yamamura",
+          "affiliation": "National Center of Neurology and Psychiatry"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2599977611",
+      "type": "article",
+      "title": "Review on the current status of polymer degradation: a microbial approach",
+      "source": "Bioresources and Bioprocessing",
+      "issn": "2197-4365",
+      "publisher": "Springer Science+Business Media",
+      "doi": "10.1186/s40643-017-0145-9",
+      "article_url": "https://doi.org/10.1186/s40643-017-0145-9",
+      "fulltext_url": "https://bioresourcesbioprocessing.springeropen.com/counter/pdf/10.1186/s40643-017-0145-9",
+      "abstract": "Inertness and the indiscriminate use of synthetic polymers leading to increased land and water pollution are of great concern. Plastic is the most useful synthetic polymer, employed in wide range of applications viz. the packaging industries, agriculture, household practices, etc. Unpredicted use of synthetic polymers is leading towards the accumulation of increased solid waste in the natural environment. This affects the natural system and creates various environmental hazards. Plastics are seen as an environmental threat because they are difficult to degrade. This review describes the occurrence and distribution of microbes that are involved in the degradation of both natural and synthetic polymers. Much interest is generated by the degradation of existing plastics using microorganisms. It seems that biological agents and their metabolic enzymes can be exploited as a potent tool for polymer degradation. Bacterial and fungal species are the most abundant biological agents found in nature and have distinct degradation abilities for natural and synthetic polymers. Among the huge microbial population associated with polymer degradation, Pseudomonas aeruginosa , Pseudomonas stutzeri , Streptomyces badius , Streptomyces setonii , Rhodococcus ruber , Comamonas acidovorans , Clostridium thermocellum and Butyrivibrio fibrisolvens are the dominant bacterial species. Similarly, Aspergillus niger, Aspergillus flavus, Fusarium lini , Pycnoporus cinnabarinus and Mucor rouxii are prevalent fungal species.",
+      "rank": 22,
+      "year": 2017,
+      "volume": 4,
+      "issue": 1,
+      "startpage": 0,
+      "endpage": 0,
+      "cites": 817,
+      "ecc": 817,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Vinay Mohan Pathak",
+          "affiliation": "Gurukul Kangri Vishwavidyalaya"
+        },
+        {
+          "name": "Navneet",
+          "affiliation": "Gurukul Kangri Vishwavidyalaya"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2966371943",
+      "type": "article",
+      "title": "Fermented Foods: Definitions and Characteristics, Impact on the Gut Microbiota and Effects on Gastrointestinal Health and Disease",
+      "source": "Nutrients",
+      "issn": "2072-6643",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "doi": "10.3390/nu11081806",
+      "article_url": "https://doi.org/10.3390/nu11081806",
+      "fulltext_url": "https://www.mdpi.com/2072-6643/11/8/1806/pdf?version=1565063283",
+      "abstract": "Fermented foods are defined as foods or beverages produced through controlled microbial growth, and the conversion of food components through enzymatic action. In recent years, fermented foods have undergone a surge in popularity, mainly due to their proposed health benefits. The aim of this review is to define and characterise common fermented foods (kefir, kombucha, sauerkraut, tempeh, natto, miso, kimchi, sourdough bread), their mechanisms of action (including impact on the microbiota), and the evidence for effects on gastrointestinal health and disease in humans. Putative mechanisms for the impact of fermented foods on health include the potential probiotic effect of their constituent microorganisms, the fermentation-derived production of bioactive peptides, biogenic amines, and conversion of phenolic compounds to biologically active compounds, as well as the reduction of anti-nutrients. Fermented foods that have been tested in at least one randomised controlled trial (RCT) for their gastrointestinal effects were kefir, sauerkraut, natto, and sourdough bread. Despite extensive in vitro studies, there are no RCTs investigating the impact of kombucha, miso, kimchi or tempeh in gastrointestinal health. The most widely investigated fermented food is kefir, with evidence from at least one RCT suggesting beneficial effects in both lactose malabsorption and Helicobacter pylori eradication. In summary, there is very limited clinical evidence for the effectiveness of most fermented foods in gastrointestinal health and disease. Given the convincing in vitro findings, clinical high-quality trials investigating the health benefits of fermented foods are warranted.",
+      "rank": 23,
+      "year": 2019,
+      "volume": 11,
+      "issue": 8,
+      "startpage": 1806,
+      "endpage": 1806,
+      "cites": 787,
+      "ecc": 787,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Eirini Dimidi",
+          "affiliation": "King's College London"
+        },
+        {
+          "name": "Selina Cox",
+          "affiliation": "King's College London"
+        },
+        {
+          "name": "Megan Rossi",
+          "affiliation": "King's College London"
+        },
+        {
+          "name": "Kevin Whelan",
+          "affiliation": "King's College London"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W4384407057",
+      "type": "article",
+      "title": "Nanoparticles‐induced potential toxicity on human health: Applications, toxicity mechanisms, and evaluation models",
+      "source": "MedComm",
+      "issn": "2688-2663",
+      "publisher": "Wiley",
+      "doi": "10.1002/mco2.327",
+      "article_url": "https://doi.org/10.1002/mco2.327",
+      "fulltext_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/mco2.327",
+      "abstract": "Nanoparticles (NPs) have become one of the most popular objects of scientific study during the past decades. However, despite wealth of study reports, still there is a gap, particularly in health toxicology studies, underlying mechanisms, and related evaluation models to deeply understanding the NPs risk effects. In this review, we first present a comprehensive landscape of the applications of NPs on health, especially addressing the role of NPs in medical diagnosis, therapy. Then, the toxicity of NPs on health systems is introduced. We describe in detail the effects of NPs on various systems, including respiratory, nervous, endocrine, immune, and reproductive systems, and the carcinogenicity of NPs. Furthermore, we unravels the underlying mechanisms of NPs including ROS accumulation, mitochondrial damage, inflammatory reaction, apoptosis, DNA damage, cell cycle, and epigenetic regulation. In addition, the classical study models such as cell lines and mice and the emerging models such as 3D organoids used for evaluating the toxicity or scientific study are both introduced. Overall, this review presents a critical summary and evaluation of the state of understanding of NPs, giving readers more better understanding of the NPs toxicology to remedy key gaps in knowledge and techniques.",
+      "rank": 24,
+      "year": 2023,
+      "volume": 4,
+      "issue": 4,
+      "startpage": 0,
+      "endpage": 0,
+      "cites": 785,
+      "ecc": 785,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Lihui Xuan",
+          "affiliation": "Central South University"
+        },
+        {
+          "name": "Zhao Ju",
+          "affiliation": "Central South University"
+        },
+        {
+          "name": "Magdalena Skonieczna",
+          "affiliation": "Silesian University of Technology"
+        },
+        {
+          "name": "Ping‐Kun Zhou",
+          "affiliation": "Beijing Radiation Center"
+        },
+        {
+          "name": "Ruixue Huang",
+          "affiliation": "Central South University"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2624367749",
+      "type": "article",
+      "title": "Recent Advances and Challenges towards Sustainable Polyhydroxyalkanoate (PHA) Production",
+      "source": "Bioengineering",
+      "issn": "2306-5354",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "doi": "10.3390/bioengineering4020055",
+      "article_url": "https://doi.org/10.3390/bioengineering4020055",
+      "fulltext_url": "https://www.mdpi.com/2306-5354/4/2/55/pdf?version=1497421831",
+      "abstract": "Sustainable biofuels, biomaterials, and fine chemicals production is a critical matter that research teams around the globe are focusing on nowadays. Polyhydroxyalkanoates represent one of the biomaterials of the future due to their physicochemical properties, biodegradability, and biocompatibility. Designing efficient and economic bioprocesses, combined with the respective social and environmental benefits, has brought together scientists from different backgrounds highlighting the multidisciplinary character of such a venture. In the current review, challenges and opportunities regarding polyhydroxyalkanoate production are presented and discussed, covering key steps of their overall production process by applying pure and mixed culture biotechnology, from raw bioprocess development to downstream processing.",
+      "rank": 25,
+      "year": 2017,
+      "volume": 4,
+      "issue": 2,
+      "startpage": 55,
+      "endpage": 55,
+      "cites": 781,
+      "ecc": 781,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Konstantina Kourmentza",
+          "affiliation": "Rede de Química e Tecnologia"
+        },
+        {
+          "name": "Jersson Plácido",
+          "affiliation": "Swansea University"
+        },
+        {
+          "name": "Nikolaos Venetsaneas",
+          "affiliation": "Aston University"
+        },
+        {
+          "name": "Anna Burniol‐Figols",
+          "affiliation": "Technical University of Denmark"
+        },
+        {
+          "name": "Cristiano Varrone",
+          "affiliation": "Technical University of Denmark"
+        },
+        {
+          "name": "Hariklia N. Gavala",
+          "affiliation": "Technical University of Denmark"
+        },
+        {
+          "name": "Maria A.M. Reis",
+          "affiliation": "Rede de Química e Tecnologia"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2618064434",
+      "type": "review",
+      "title": "Syntrophy Goes Electric: Direct Interspecies Electron Transfer",
+      "source": "Annual Review of Microbiology",
+      "issn": "0066-4227",
+      "publisher": "Annual Reviews",
+      "doi": "10.1146/annurev-micro-030117-020420",
+      "article_url": "https://doi.org/10.1146/annurev-micro-030117-020420",
+      "fulltext_url": "https://www.annualreviews.org/doi/pdf/10.1146/annurev-micro-030117-020420",
+      "abstract": "Direct interspecies electron transfer (DIET) has biogeochemical significance, and practical applications that rely on DIET or DIET-based aspects of microbial physiology are growing. Mechanisms for DIET have primarily been studied in defined cocultures in which Geobacter species are one of the DIET partners. Electrically conductive pili (e-pili) can be an important electrical conduit for DIET. However, there may be instances in which electrical contacts are made between electron transport proteins associated with the outer membranes of the partners. Alternatively, DIET partners can plug into conductive carbon materials, such as granular activated carbon, carbon cloth, and biochar, for long-range electron exchange without the need for e-pili. Magnetite promotes DIET, possibly by acting as a substitute for outer-surface c-type cytochromes. DIET is the primary mode of interspecies electron exchange in some anaerobic digesters converting wastes to methane. Promoting DIET with conductive materials shows promise for stabilizing and accelerating methane production in digesters, permitting higher organic loading rates. Various lines of evidence suggest that DIET is important in terrestrial wetlands, which are an important source of atmospheric methane. DIET may also have a role in anaerobic methane oxidation coupled to sulfate reduction, an important control on methane releases. The finding that DIET can serve as the source of electrons for anaerobic photosynthesis further broadens its potential environmental significance. Microorganisms capable of DIET are good catalysts for several bioelectrochemical technologies and e-pili are a promising renewable source of electronic materials. The study of DIET is in its early stages, and additional investigation is required to better understand the diversity of microorganisms that are capable of DIET, the importance of DIET to carbon and electron flow in anaerobic environments, and the biochemistry and physiology of DIET.",
+      "rank": 26,
+      "year": 2017,
+      "volume": 71,
+      "issue": 1,
+      "startpage": 643,
+      "endpage": 664,
+      "cites": 754,
+      "ecc": 754,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Derek R. Lovley",
+          "affiliation": "University of Massachusetts Amherst"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2143420371",
+      "type": "article",
+      "title": "Insights from 20 years of bacterial genome sequencing",
+      "source": "Functional & Integrative Genomics",
+      "issn": "1438-793X",
+      "publisher": "Springer Science+Business Media",
+      "doi": "10.1007/s10142-015-0433-4",
+      "article_url": "https://doi.org/10.1007/s10142-015-0433-4",
+      "fulltext_url": "https://link.springer.com/content/pdf/10.1007/s10142-015-0433-4.pdf",
+      "abstract": "Since the first two complete bacterial genome sequences were published in 1995, the science of bacteria has dramatically changed. Using third-generation DNA sequencing, it is possible to completely sequence a bacterial genome in a few hours and identify some types of methylation sites along the genome as well. Sequencing of bacterial genome sequences is now a standard procedure, and the information from tens of thousands of bacterial genomes has had a major impact on our views of the bacterial world. In this review, we explore a series of questions to highlight some insights that comparative genomics has produced. To date, there are genome sequences available from 50 different bacterial phyla and 11 different archaeal phyla. However, the distribution is quite skewed towards a few phyla that contain model organisms. But the breadth is continuing to improve, with projects dedicated to filling in less characterized taxonomic groups. The clustered regularly interspaced short palindromic repeats (CRISPR)-Cas system provides bacteria with immunity against viruses, which outnumber bacteria by tenfold. How fast can we go? Second-generation sequencing has produced a large number of draft genomes (close to 90 % of bacterial genomes in GenBank are currently not complete); third-generation sequencing can potentially produce a finished genome in a few hours, and at the same time provide methlylation sites along the entire chromosome. The diversity of bacterial communities is extensive as is evident from the genome sequences available from 50 different bacterial phyla and 11 different archaeal phyla. Genome sequencing can help in classifying an organism, and in the case where multiple genomes of the same species are available, it is possible to calculate the pan- and core genomes; comparison of more than 2000 Escherichia coli genomes finds an E. coli core genome of about 3100 gene families and a total of about 89,000 different gene families. Why do we care about bacterial genome sequencing? There are many practical applications, such as genome-scale metabolic modeling, biosurveillance, bioforensics, and infectious disease epidemiology. In the near future, high-throughput sequencing of patient metagenomic samples could revolutionize medicine in terms of speed and accuracy of finding pathogens and knowing how to treat them.",
+      "rank": 27,
+      "year": 2015,
+      "volume": 15,
+      "issue": 2,
+      "startpage": 141,
+      "endpage": 161,
+      "cites": 752,
+      "ecc": 752,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Miriam Land",
+          "affiliation": "Oak Ridge National Laboratory"
+        },
+        {
+          "name": "Loren Hauser",
+          "affiliation": "Oak Ridge National Laboratory"
+        },
+        {
+          "name": "Se‐Ran Jun",
+          "affiliation": "Oak Ridge National Laboratory"
+        },
+        {
+          "name": "Intawat Nookaew",
+          "affiliation": "Oak Ridge National Laboratory"
+        },
+        {
+          "name": "Michael R. Leuze",
+          "affiliation": "Oak Ridge National Laboratory"
+        },
+        {
+          "name": "Tae-Hyuk Ahn",
+          "affiliation": "Oak Ridge National Laboratory"
+        },
+        {
+          "name": "Tatiana V. Karpinets",
+          "affiliation": "Oak Ridge National Laboratory"
+        },
+        {
+          "name": "Ole Lund",
+          "affiliation": "Technical University of Denmark"
+        },
+        {
+          "name": "Guruprased Kora",
+          "affiliation": "Oak Ridge National Laboratory"
+        },
+        {
+          "name": "Trudy M. Wassenaar",
+          "affiliation": "Molecular Microbiology and Genomics Consultants (Germany)"
+        },
+        {
+          "name": "Suresh Poudel",
+          "affiliation": "Oak Ridge National Laboratory"
+        },
+        {
+          "name": "David W. Ussery",
+          "affiliation": "Oak Ridge National Laboratory"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2419653649",
+      "type": "article",
+      "title": "Cellulases and beyond: the first 70 years of the enzyme producer Trichoderma reesei",
+      "source": "Microbial Cell Factories",
+      "issn": "1475-2859",
+      "publisher": "BioMed Central",
+      "doi": "10.1186/s12934-016-0507-6",
+      "article_url": "https://doi.org/10.1186/s12934-016-0507-6",
+      "fulltext_url": "https://microbialcellfactories.biomedcentral.com/counter/pdf/10.1186/s12934-016-0507-6",
+      "abstract": "More than 70 years ago, the filamentous ascomycete Trichoderma reesei was isolated on the Solomon Islands due to its ability to degrade and thrive on cellulose containing fabrics. This trait that relies on its secreted cellulases is nowadays exploited by several industries. Most prominently in biorefineries which use T. reesei enzymes to saccharify lignocellulose from renewable plant biomass in order to produce biobased fuels and chemicals. In this review we summarize important milestones of the development of T. reesei as the leading production host for biorefinery enzymes, and discuss emerging trends in strain engineering. Trichoderma reesei has very recently also been proposed as a consolidated bioprocessing organism capable of direct conversion of biopolymeric substrates to desired products. We therefore cover this topic by reviewing novel approaches in metabolic engineering of T. reesei.",
+      "rank": 28,
+      "year": 2016,
+      "volume": 15,
+      "issue": 1,
+      "startpage": 106,
+      "endpage": 106,
+      "cites": 716,
+      "ecc": 716,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Robert H. Bischof",
+          "affiliation": "TU Wien"
+        },
+        {
+          "name": "Jonas Ramoni",
+          "affiliation": "TU Wien"
+        },
+        {
+          "name": "Bernhard Seiboth",
+          "affiliation": "TU Wien"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2294033738",
+      "type": "article",
+      "title": "Carbonate Precipitation through Microbial Activities in Natural Environment, and Their Potential in Biotechnology: A Review",
+      "source": "Frontiers in Bioengineering and Biotechnology",
+      "issn": "2296-4185",
+      "publisher": "Frontiers Media",
+      "doi": "10.3389/fbioe.2016.00004",
+      "article_url": "https://doi.org/10.3389/fbioe.2016.00004",
+      "fulltext_url": "https://www.frontiersin.org/articles/10.3389/fbioe.2016.00004/pdf",
+      "abstract": "Calcium carbonate represents a large portion of carbon reservoir and is used commercially for a variety of applications. Microbial carbonate precipitation, a by-product of microbial activities, plays an important metal coprecipitation and cementation role in natural systems. This natural process occurring in various geological settings can be mimicked and used for a number of biotechnologies, such as metal remediation, carbon sequestration, enhanced oil recovery, and construction restoration. In this study, different metabolic activities leading to calcium carbonate precipitation, their native environment, and potential applications and challenges are reviewed.",
+      "rank": 29,
+      "year": 2016,
+      "volume": 4,
+      "issue": 0,
+      "startpage": 4,
+      "endpage": 4,
+      "cites": 690,
+      "ecc": 690,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Tingting Zhu",
+          "affiliation": "University of Toronto"
+        },
+        {
+          "name": "Maria Dittrich",
+          "affiliation": "University of Toronto"
+        }
+      ]
+    },
+    {
+      "uid": "OA:W2936282025",
+      "type": "article",
+      "title": "Living at the Extremes: Extremophiles and the Limits of Life in a Planetary Context",
+      "source": "Frontiers in Microbiology",
+      "issn": "1664-302X",
+      "publisher": "Frontiers Media",
+      "doi": "10.3389/fmicb.2019.00780",
+      "article_url": "https://doi.org/10.3389/fmicb.2019.00780",
+      "fulltext_url": "https://www.frontiersin.org/articles/10.3389/fmicb.2019.00780/pdf",
+      "abstract": "Prokaryotic life has dominated most of the evolutionary history of our planet, evolving to occupy virtually all available environmental niches. Extremophiles, especially those thriving under multiple extremes, represent a key area of research for multiple disciplines, spanning from the study of adaptations to harsh conditions, to the biogeochemical cycling of elements. Extremophile research also has implications for origin of life studies and the search for life on other planetary and celestial bodies. In this article, we will review the current state of knowledge for the biospace in which life operates on Earth and will discuss it in a planetary context, highlighting knowledge gaps and areas of opportunity.",
+      "rank": 30,
+      "year": 2019,
+      "volume": 10,
+      "issue": 0,
+      "startpage": 780,
+      "endpage": 780,
+      "cites": 642,
+      "ecc": 642,
+      "use": 1,
+      "authors": [
+        {
+          "name": "Nancy Merino",
+          "affiliation": "Tokyo Institute of Technology"
+        },
+        {
+          "name": "Heidi S. Aronson",
+          "affiliation": "University of Southern California"
+        },
+        {
+          "name": "Diana P. Bojanova",
+          "affiliation": "University of Southern California"
+        },
+        {
+          "name": "Jayme Feyhl‐Buska",
+          "affiliation": "University of Southern California"
+        },
+        {
+          "name": "Michael L. Wong",
+          "affiliation": "NASA Astrobiology Institute"
+        },
+        {
+          "name": "Shu Zhang",
+          "affiliation": "University of Southern California"
+        },
+        {
+          "name": "Donato Giovannelli",
+          "affiliation": "Rutgers, The State University of New Jersey"
+        }
+      ]
+    }
+  ],
+  "provenance": {
+    "tool": "Publish or Perish",
+    "appVersion": "8.19.5300.9483",
+    "source": "openalex",
+    "query": {
+      "sort": "relevance",
+      "maxResults": 30,
+      "keywords": "thermophile",
+      "yearFrom": 2015,
+      "yearTo": 2025
+    },
+    "capturedAt": "2026-09-12T20:43:55.227696+00:00",
+    "completed": true,
+    "originalPath": "openalex-thermophile.raw.json",
+    "command": [
+      "--datadir",
+      "build/pop-parity/pop-data",
+      "--openalex",
+      "--raw",
+      "search=thermophile, filter=publication_year:2015-2025",
+      "--max",
+      "30",
+      "--direct",
+      "--sort",
+      "rank",
+      "--format",
+      "json",
+      "--noerrlog",
+      "benchmark/references/openalex-thermophile.raw.json"
+    ],
+    "exitCode": 0
+  },
+  "elapsedMs": 2221
+}

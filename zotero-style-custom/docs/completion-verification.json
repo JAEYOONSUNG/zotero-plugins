@@ -1,0 +1,25 @@
+{
+  "version": "0.6.0",
+  "improvementRounds": 18,
+  "minimumRequestedRounds": 10,
+  "baselineVersion": "6.0.76",
+  "baselineFeatures": 50,
+  "additionalWorkflows": 7,
+  "nodeDOMTests": 249,
+  "installerFilesystemTests": 11,
+  "allPassed": true,
+  "gates": {
+    "met": 6,
+    "unmet": 0,
+    "abandoned": 0
+  },
+  "artifactSha256": "73742410f659c41191ca3143070e161426213f043f9a32998c8a45509b3a454a",
+  "runtimeFileCount": 18,
+  "userUIControlled": false,
+  "nativeAppLaunched": false,
+  "nativeActivationVerified": false,
+  "currentInstalledVersion": "0.4.1",
+  "stateAtRecord": "waiting-for-zotero-exit",
+  "liveStatusFile": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/zotero-style-custom/build/pending/install-status.json",
+  "recordedAt": "2026-09-14T14:08:42.412515+00:00"
+}

@@ -22,6 +22,9 @@ fi
 if LC_ALL=C grep -q '[^[:print:][:space:]]' manifest.json; then
 	echo "manifest.json contains non-ASCII characters; Zotero will reject the .xpi."; exit 1
 fi
+if ! node -p "require('./manifest.json').applications.zotero.update_url || ''" | grep -q .; then
+	echo "manifest.json has no applications.zotero.update_url; Zotero would skip the .xpi silently."; exit 1
+fi
 
 sh scripts/build.sh
 mkdir -p "$PROFILE/extensions"
@@ -43,8 +46,13 @@ process.exit(d.addons.some(a=>a.id==='$ID') ? 0 : 1);
 	echo "Updating existing registration"
 else
 	echo "First install: rebuilding the add-on registry (other plugins are re-detected)"
-	cp "$PROFILE/extensions.json" "$PROFILE/extensions.json.zotpop-backup"
-	rm -f "$PROFILE/extensions.json"
+	# A second run before Zotero relaunches finds no registry; do not abort, and never
+	# overwrite the original backup with an already-rebuilt one.
+	if [ -f "$PROFILE/extensions.json" ]; then
+		[ -f "$PROFILE/extensions.json.zotpop-backup" ] \
+			|| cp "$PROFILE/extensions.json" "$PROFILE/extensions.json.zotpop-backup"
+		rm -f "$PROFILE/extensions.json"
+	fi
 fi
 
 echo "Installed ZotPoP $VERSION -> $PROFILE/extensions/$ID.xpi"

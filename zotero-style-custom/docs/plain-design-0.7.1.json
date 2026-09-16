@@ -1,0 +1,26 @@
+{
+  "version": "0.7.1",
+  "changes": [
+    "neutral default UI palette",
+    "corners at most3px",
+    "no ornamental shadows or dotted canvas background",
+    "system fonts",
+    "neutral rating/status presentation",
+    "plain native reader menus and default new canvas cards"
+  ],
+  "functionalIndicatorsPreserved": [
+    "ratings",
+    "reading progress",
+    "annotation colors",
+    "user tag colors",
+    "saved custom card colors"
+  ],
+  "nodeDOMStyleTests": 265,
+  "installerTests": 11,
+  "allPassed": true,
+  "nativeVisualVerification": false,
+  "activationVerified": false,
+  "artifactSha256": "8106100847302527fd6df54ae1331dce7746065168cabb3836ce4ae16a6c7587",
+  "installedVersionAtRecord": "0.4.1",
+  "stateAtRecord": "waiting-for-zotero-exit"
+}

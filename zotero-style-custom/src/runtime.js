@@ -1,0 +1,873 @@
+/* global module */
+"use strict";
+var CustomStyleRuntime = class CustomStyleRuntime {
+  constructor({ Zotero, model, marquee, reading, storage, legacy = {}, catalog = [], citations }) {
+    Object.assign(this, { Z: Zotero, model, marquee, reading, storage, legacy });
+    this.windows = new Map(); this.columns = []; this.observers = [];
+    this.queue = Promise.resolve(); this.writeQueue = Promise.resolve();
+    this.cache = { schema: 1, items: {} }; this.active = false; this.dirty = false;
+    this.journalTools = typeof CustomStyleJournals !== "undefined" ? CustomStyleJournals : require("./journals.js");
+    this.catalog = catalog;
+    this.journals = this.journalTools.create(catalog);
+    this.citationTools = citations || (typeof CustomStyleCitations !== "undefined" ? CustomStyleCitations : require("./citations.js"));
+    this.citationJob = null;
+    this.citationProgress = null;
+    this.metadataIDs = new Set();
+    this.metadataQueue = Promise.resolve();
+    this.activityQueue=Promise.resolve();this.tabItems=new Map();
+    this.settingsTools=typeof CustomStyleSettingsSchema!=='undefined'?CustomStyleSettingsSchema:require('./settings-schema.js');this.settingsSchema=this.settingsTools.schema;
+    this.workspaceTools=typeof CustomStyleWorkspace!=="undefined"?CustomStyleWorkspace:require("./workspace.js");
+    this.Workbench=typeof CustomStyleWorkbench!=="undefined"?CustomStyleWorkbench:require("./workbench.js");
+    const Library=typeof CustomStyleLibrary!=="undefined"?CustomStyleLibrary:require("./library.js");
+    this.Library=Library;
+    const Reader=typeof CustomStyleReaderTools!=="undefined"?CustomStyleReaderTools:require("./reader-tools.js");
+    const Assist=typeof CustomStyleAssist!=="undefined"?CustomStyleAssist:require("./assist.js");
+    this.libraryService=Library.create({Zotero:this.Z,runtime:this});
+    this.readerTools=Reader.create({Zotero:this.Z,runtime:this});
+    this.assist=Assist.create({Zotero:this.Z,runtime:this});
+  }
+  text(english, korean) { return String(this.Z.locale || "").startsWith("ko") ? korean : english; }
+  pref(name, fallback) { return this.Z.Prefs.get("extensions.style-custom." + name, true) ?? fallback; }
+  isRegular(item) { return !!item?.isRegularItem?.() && !item.isFeedItem && !item.deleted; }
+  canEdit(item) {
+    if(!this.isRegular(item))return false;
+    const library = this.Z.Libraries.get(item.libraryID);
+    return this.isRegular(item) && item.isEditable() && !!library?.editable && library.libraryType !== "feed";
+  }
+  identity(item) { return `${item.libraryID}:${item.key}`; }
+  entry(item) { return this.cache.items[this.identity(item)] ||= {}; }
+  featureEnabled(id) { return this.pref('feature.'+id,true)!==false; }
+  getSetting(key) {
+    const definition=this.settingsSchema.settings.find(row=>row.key===key);if(!definition)throw new Error('Unknown setting: '+key);
+    let value=this.pref(key,undefined);
+    if(value===undefined){
+      const reader=this.cache.readerSettings||{},margin=reader.marginOptions||{};
+      const legacy={workbenchDensity:this.cache.workbenchUI?.density,readerTheme:typeof reader.theme==='object'?'custom':reader.theme,readerCustomBackground:reader.theme?.background,readerCustomForeground:reader.theme?.foreground,marginEnabled:reader.marginAnnotations,marginWidth:margin.width,marginSide:margin.side,marginFontSize:margin.fontSize,marginTextLimit:margin.textLimit,readerSidebar:reader.sidebarVisible,verticalTabs:reader.verticalTabs};
+      value=legacy[key]??definition.default;
+    }
+    if(definition.type==='action')return null;
+    try{return this.settingsTools.validate(key,value);}catch(_){return definition.default;}
+  }
+  async setSetting(key,value,{apply=true}={}) {
+    this.settingsTools.validate(key,value);
+    this.settingWriteDepth=(this.settingWriteDepth||0)+1;
+    try{if(key==='customFields')this.setCustomFields(value);else if(key==='panelCSS')this.setPanelCSS(value);else this.Z.Prefs.set('extensions.style-custom.'+key,value,true);}finally{this.settingWriteDepth--; }
+    if(key==='workbenchDensity'){this.cache.workbenchUI={...(this.cache.workbenchUI||{}),density:value};this.dirty=true;}
+    if(apply)await this.applySettings([key]);return this.getSetting(key);
+  }
+  async resetSettings(category) {
+    if(!this.settingsSchema.categories.some(row=>row.id===category))throw new Error('Unknown category');
+    const rows=this.settingsSchema.settings.filter(row=>row.category===category&&row.type!=='action'&&!row.secret);
+    for(const row of rows)await this.setSetting(row.key,row.default,{apply:false});
+    await this.applySettings(rows.map(row=>row.key));return {reset:rows.length,secretsPreserved:true};
+  }
+  async applySettings(keys=[]) {
+    if(!this.active||this.stopping)return;
+    this.syncFeatureColumns();
+    if(keys.includes('feature.styleEditor'))this.setPanelCSS(this.pref('panelCSS',''));
+    if(!this.featureEnabled('citedCountColumn'))this.citationJob?.controller.abort();
+    for(const [win,state]of this.windows){
+      if(win.closed)continue;
+      if(keys.some(key=>['recordReading','recordIntervalMs','idleSeconds'].includes(key)))this.attachMotion(win,state,{marquee:false,reading:true});
+      if(keys.some(key=>['marquee','hoverDelay','scrollSpeed'].includes(key)))this.attachMotion(win,state,{marquee:true,reading:false});
+      if(keys.some(key=>key.startsWith('reader')||key.startsWith('margin')||key.startsWith('feature.')||key==='verticalTabs'))await this.readerTools.applyPreferences?.(win);
+      state.signature=null;await state.workbench?.applyPreferences?.();
+    }
+    await this.flush();await this.refreshWindows();
+  }
+  async runSettingAction(action) {
+    const win=this.Z.getMainWindow?.();if(!win)throw new Error('Zotero 문헌 창을 열어 주세요.');
+    const selected=this.selected(win);
+    if(action==='workbench')return this.openWorkbench(win);
+    if(action==='columns')return this.useColumns(win);
+    if(action==='cancelCitations'){this.citationJob?.controller.abort();return;}
+    if(!selected.length)throw new Error('문헌 목록에서 대상 문헌을 선택하세요.');
+    if(action==='citations')return this.refreshCitations(selected,{force:true});
+    if(action==='journals')return this.refreshJournalMetrics(selected,win.DOMParser);
+    if(action==='ranks')return this.refreshPublicationRanks(selected);
+    throw new Error('Unknown action');
+  }
+  getSettingsStatus() {
+    const win=this.Z.getMainWindow?.(),selected=win?this.selected(win):[];const reader=win?.Zotero_Tabs&&this.Z.Reader?.getByTabID?.(win.Zotero_Tabs.selectedID),attachment=reader&&this.Z.Items.get(reader.itemID),item=(attachment?.parentID&&this.Z.Items.get(attachment.parentID))||selected[0];
+    return {version:this.version||'',recordReading:this.getSetting('recordReading'),selectedTitle:item?String(item.getField('title')||''):'선택한 문헌 없음',readSeconds:item?this.state(item).seconds:0,citationStatus:this.citationJob?'조회 중':'대기',storagePath:this.Z.DataDirectory?.dir?this.Z.DataDirectory.dir+'/style-custom.json':'Zotero 데이터 폴더/style-custom.json'};
+  }
+  columnFeature(key) {
+    return {if:'IFColumn',citations:'citedCountColumn',status:'statusColumn',rating:'ratingColumn',time:'readTimeColumn',tags:'tagsColumn',progress:'readTimeColumn',remark:'remarkColumn',publication:'publicationTagsColumn',authors:'creatorColumn',added:'dateAddedColumn',modified:'dateAddedColumn',lastRead:'Recent',tagCount:'textTagsColumn',summary:'tldr',annotationCount:'annotationColumn',noteCount:'renderItemNotes',venue:'publicationColumn'}[key];
+  }
+  syncFeatureColumns() {
+    this.featureColumns||=new Map();
+    for(const [dataKey,label,width]of this.columnDefinitions||[]){
+      const feature=this.columnFeature(dataKey),existing=this.featureColumns.get(dataKey);
+      if(feature&&!this.featureEnabled(feature)){
+        if(existing){this.Z.ItemTreeManager.unregisterColumn(existing);this.columns=this.columns.filter(key=>key!==existing);this.featureColumns.delete(dataKey);}continue;
+      }
+      if(existing)continue;
+      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label,width,minWidth:50,enabledTreeIDs:['main'],hidden:!['if','citations','status','rating','time','tags'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
+      if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
+    }
+  }
+  formatReadTime(seconds) {
+    const value=Math.max(0,Math.floor(Number(seconds)||0));if(!value&&!this.getSetting('showZeroReadTime'))return '';
+    if(this.getSetting('timeFormat')==='seconds')return value+'초';
+    const h=Math.floor(value/3600),m=Math.floor(value%3600/60),s=value%60;
+    if(this.getSetting('timeFormat')==='clock')return [h,m,s].map(n=>String(n).padStart(2,'0')).join(':');
+    return h?`${h}h ${m}m ${s}s`:m?`${m}m ${s}s`:`${s}s`;
+  }
+  refreshReadingDisplays() {
+    for(const [win,state]of this.windows){if(win.closed)continue;
+      for(const cell of win.document.querySelectorAll?.('[data-style-custom-reading]')||[]){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);if(cell.dataset.styleCustomReading==='time')cell.textContent=this.formatReadTime(value.seconds);else if(cell.firstChild)cell.firstChild.textContent=({unread:'○ ',reading:'◐ ',done:'✓ '})[value.status]+value.status;}
+      state.workbench?.refreshMetrics?.();
+    }
+  }
+  async start({ id, version, rootURI }) {
+    this.id = id; this.version=version; this.rootURI = rootURI;
+    const loaded = await this.storage.read();
+    if (!loaded || loaded.schema !== 1 || !loaded.items || typeof loaded.items !== "object" || Array.isArray(loaded.items)) {
+      throw new Error("Style Custom cache has an unsupported format; existing file was preserved");
+    }
+    this.cache = loaded; this.active = true;
+    for (const entry of Object.values(loaded.items)) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Invalid Style Custom item cache");
+      if (entry.citationPending) { delete entry.citationPending; this.dirty=true; }
+    }
+    this.rebuildJournals();
+    this.labels = { unread: "unread", reading: "reading", done: "done" };
+    this.columnDefinitions = [["if", "IF · Custom", "90"], ["citations", "Cited Count · Custom", "120"],
+      ["status", "Status · Custom", "100"], ["rating", "Rating · Custom", "100"],
+      ["time", "Read Time · Custom", "120"], ["tags", "Tags · Custom", "140"],
+      ["progress","Pages · Custom","100"],["remark","Remark · Custom","180"],
+      ["publication","Journal Tags · Custom","160"],["authors","Creators · Custom","160"],
+      ["added","Added · Custom","130"],["modified","Modified · Custom","130"],
+      ["lastRead","Last Read · Custom","130"],["tagCount","#Tags · Custom","70"],
+      ["translatedTitle","Translated Title · Custom","220"],["summary","Summary · Custom","220"],
+      ["annotationCount","Annotations · Custom","90"],["noteCount","Notes · Custom","70"],["venue","Publication · Custom","170"]];
+    this.syncFeatureColumns();
+    try{this.setCustomFields(this.pref('customFields',''),{persist:false});}catch(error){this.Z.logError(error);}
+    this.prefPane = await this.Z.PreferencePanes.register({ pluginID: id, src: rootURI + "content/preferences.xhtml", label: "Style Custom",image:rootURI+"content/icons/style-custom.svg",scripts:[rootURI+"src/settings.js"],stylesheets:[rootURI+"content/preferences.css"] });
+    for (const name of ["marquee", "hoverDelay", "scrollSpeed", "recordReading", "autoStatus", "autoCitations", "metadataCitations"]) {
+      this.observers.push(this.Z.Prefs.registerObserver("extensions.style-custom." + name, () => {
+        if (!this.active||this.settingWriteDepth) return;
+        if (name === "autoCitations" || name === "metadataCitations") {
+          if (!this.pref(name,true) && this.citationJob?.background) this.citationJob.controller.abort();
+        } else for (const [win, state] of this.windows) { if(name!=="autoStatus")this.attachMotion(win,state,{marquee:name!=="recordReading",reading:name==="recordReading"});state.signature=null; }
+      }, true));
+    }
+    if (this.Z.Notifier) this.itemObserver = this.Z.Notifier.registerObserver({notify:(event,type,ids,extraData)=>{
+      if(type === "item" && (event === "add" || event === "modify")) this.scheduleMetadataCitations((ids||[]).filter(id=>!extraData?.[id]?.styleCustomCitations));
+      if(type==='tab') {
+        const itemIDs=(ids||[]).map(id=>extraData?.[id]?.itemID||this.Z.Reader?.getByTabID?.(id)?.itemID||this.tabItems.get(id)).filter(Boolean);
+        if(['add','select','close'].includes(event)&&this.pref('touchDateOnRead',false))for(const id of new Set(itemIDs))this.activityQueue=this.activityQueue.then(()=>this.touchReadingItem(id)).catch(error=>this.Z.logError(error));
+        for(const [win]of this.windows)for(const tab of this.readerTools.tabs(win))if(tab.itemID)this.tabItems.set(tab.id,tab.itemID);
+        if(event==='close')for(const id of ids||[])this.tabItems.delete(id);
+      }
+    }},["item","tab"],"style-custom-citations");
+    this.Z.debug("Style Custom " + version + " ready");
+  }
+  metrics(item) {
+    const old = this.entry(item);
+    const liveAPI = this.Z.ZoteroStyle?.api;
+    const userLibrary = item.libraryID === this.Z.Libraries.userLibraryID;
+    const legacy = this.legacy && typeof this.legacy === "object" ? this.legacy : {};
+    const live = this.model.readMetrics(item, {
+      storage: { get: (reference, key) => liveAPI?.storage?.get(reference, key) ?? (userLibrary ? legacy[reference.key]?.[key] : undefined) },
+      rankStorage: { get: (reference, key) => this.cache.journalRanks?.[this.journalTools.name(reference.key)]?.rank || legacy[reference.key]?.[key] }
+    });
+    const providerRank=this.cache.journalRanks?.[this.journalTools.name(item.getField('publicationTitle'))];
+    if(providerRank&&live.impactSource==='Style journal cache: sciif')live.impactSource='easyScholar · '+providerRank.checkedAt+' · JIF year unspecified';
+    const number = value => typeof value === "number" && Number.isFinite(value) && value >= 0;
+    const cached = old.metrics || {};
+    const merged = { ...cached };
+    const citationKey = this.citationTools.identity(this.citationRecord(item));
+    if (old.citationExtra && old.citationExtra.identity!==citationKey && /^Extra: citations(?: |$)/.test(live.citationSource||"")
+        && String(item.getField("extra")||"").split(/\r?\n/).includes(old.citationExtra.line)) {
+      live.citations=null;live.citationSource=null;
+    }
+    if (!old.legacyCitationIdentity) { old.legacyCitationIdentity=cached.citationKey||citationKey; this.dirty=true; }
+    // Adding a previously absent author is enrichment, not a conflicting paper
+    // identity. Keep opaque legacy counts while the stricter title lookup runs.
+    try {
+      const previous=JSON.parse(old.legacyCitationIdentity), current=JSON.parse(citationKey);
+      if(previous.length===6 && !previous[0] && !previous[5] && current[5] && previous.slice(0,5).every((v,i)=>v===current[i])) {
+        old.legacyCitationIdentity=citationKey;this.dirty=true;
+      }
+    } catch(_) {}
+    const changedCitation = cached.citationKey && cached.citationKey !== citationKey;
+    if (changedCitation) { merged.citations=null; merged.citationSource=null; merged.citationCheckedAt=null; }
+    const legacyCitation = userLibrary && old.legacyCitationIdentity===citationKey ? this.model.readLegacyCitations(legacy[item.key]?.citedCount) : {citations:null};
+    if (live.citations === null && legacyCitation.citations !== null) Object.assign(live, legacyCitation);
+    const impactKey = this.journalTools.name(item.getField("publicationTitle")) + "|" + String(item.getField("ISSN") || "");
+    if (cached.impactKey !== impactKey) { merged.impactFactor = null; merged.impactSource = null; merged.impactYear = null; }
+    for (const [field, source] of [["citations", "citationSource"], ["impactFactor", "impactSource"]]) {
+      if (number(live[field])) { merged[field] = live[field]; merged[source] = live[source]; }
+      else if (!number(merged[field])) { merged[field] = null; merged[source] = null; }
+    }
+    if(providerRank&&live.impactSource?.startsWith('easyScholar'))merged.impactYear=null;
+    const journal = this.journals.lookup(item);
+    if (journal) {
+      merged.impactFactor = journal.impactFactor;
+      merged.impactYear = journal.year;
+      merged.impactSource = `${journal.title} · JIF ${journal.year ?? "연도 미표기"} · ${journal.sourceURL} · checked ${journal.checkedAt}`;
+    }
+    merged.impactKey = impactKey;
+    const lookup=old.citationLookup;
+    if (lookup?.status === "ok" && lookup.identity === citationKey && Number.isSafeInteger(lookup.count) && lookup.count >= 0) {
+      merged.citations=lookup.count;
+      merged.citationSource=lookup.source;
+      merged.citationCheckedAt=lookup.checkedAt;
+    }
+    merged.citationKey=citationKey;
+    const own = number(old.seconds) ? old.seconds : 0;
+    const prior = number(cached.seconds) ? cached.seconds : 0;
+    merged.seconds = Math.max(own, prior, number(live.seconds) ? live.seconds : 0);
+    if (JSON.stringify(cached) !== JSON.stringify(merged)) { old.metrics = merged; this.dirty = true; }
+    return merged;
+  }
+  state(item) {
+    const metrics = this.metrics(item);
+    const state = this.model.readState(item.getTags(), item.getField("extra"), this.pref("autoStatus", true)&&this.featureEnabled("readStatus") ? metrics.seconds : 0);
+    if (this.entry(item).unreadOverride && state.status !== "done") state.status = "unread";
+    return { ...metrics, ...state,lastRead:this.entry(item).lastRead||'',dateAdded:String(item.getField('dateAdded')||''),dateModified:String(item.getField('dateModified')||'') };
+  }
+  value(key, item) {
+    try {
+      const state = this.state(item);
+      if (key === "if") return state.impactFactor == null ? "" : String(state.impactFactor);
+      if (key === "citations") return state.citations == null ? "" : String(state.citations);
+      if (key === "status") return String({unread:0,reading:1,done:2}[state.status]);
+      if (key === "rating") return String(state.rating);
+      if (key === "time") return String(state.seconds);
+      if (key === "progress") {const p=this.pageProgress(item);return p.percent===null?"":String(p.percent);}
+      if (["remark","translatedTitle","summary"].includes(key)) return String(this.entry(item)[key]||"");
+      if (key === "publication") return this.publicationTags(item).join(' · ');
+      if (key === "venue") return ['publicationTitle','proceedingsTitle','university','publisher'].map(field=>item.getField(field)).find(Boolean)||'';
+      if (key === "authors") return (item.getCreators?.()||[]).map(c=>[c.firstName,c.lastName||c.name].filter(Boolean).join(' ')).join('; ');
+      if (key === "added"||key === "modified")return String(item.getField(key==='added'?'dateAdded':'dateModified')||'');
+      if (key === "lastRead")return String(this.entry(item).lastRead||'').replace('T',' ').slice(0,16);
+      if (key === "tagCount")return String(item.getTags().filter(t=>!/^style-custom:/.test(t.tag)).length);
+      if (key === "noteCount")return String(item.getNotes?.().length||0);
+      if (key === "annotationCount")return String((item.getAttachments?.()||[]).reduce((n,id)=>n+(this.Z.Items.get(id)?.deleted?0:(this.Z.Items.get(id)?.getAnnotations?.()||[]).filter(annotation=>!annotation.deleted).length),0));
+      if (key.startsWith('field-'))return String(item.getField(key.slice(6))||'');
+      return item.getTags().map(t => t.tag).filter(t => !/^\/(unread|reading|done)$/.test(t) && !/^style-custom:/.test(t) && !/^[★⭐]+$/.test(t)).join(" · ");
+    } catch (error) { this.Z.logError(error); return ""; }
+  }
+  annotationDistribution(item) {
+    const pages=new Map();
+    for(const id of item.getAttachments?.()||[]) {
+      const attachment=this.Z.Items.get(id);if(!attachment||attachment.deleted)continue;
+      for(const annotation of attachment.getAnnotations?.()||[]) {
+        if(annotation.deleted)continue;
+        let position;try{position=JSON.parse(annotation.annotationPosition);}catch(_){continue;}
+        if(!Number.isSafeInteger(position.pageIndex)||position.pageIndex<0)continue;
+        const indexes=[position.pageIndex];if(Array.isArray(position.nextPageRects)&&position.nextPageRects.length&&Number.isSafeInteger(position.pageIndex+1))indexes.push(position.pageIndex+1);
+        for(const index of indexes){
+          const key=id+':'+index;
+          if(!pages.has(key))pages.set(key,{attachmentID:id,pageIndex:index,count:0,colors:new Map()});
+          const page=pages.get(key),color=/^#[a-f\d]{6}$/i.test(annotation.annotationColor)?annotation.annotationColor.toLowerCase():'#888888';
+          page.count++;page.colors.set(color,(page.colors.get(color)||0)+1);
+        }
+      }
+    }
+    return [...pages.values()].sort((a,b)=>a.attachmentID-b.attachmentID||a.pageIndex-b.pageIndex).map(page=>({...page,colors:[...page.colors]}));
+  }
+  renderCell(key, index, value, column, doc) {
+    const cell = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+    cell.className = "cell " + (column.className || "");
+    Object.assign(cell.style, { overflow: "hidden", textOverflow: "ellipsis", alignItems: "center", display: "flex", gap: "5px" });
+    const item = doc.defaultView?.ZoteroPane?.itemsView?.getRow(index)?.ref;
+    // Read current data when painting: do not reuse a previously cached empty cell.
+    if (this.isRegular(item)) {value=this.value(key,item);if(['time','status'].includes(key)){cell.dataset.styleCustomReading=key;cell.dataset.itemId=String(item.id);}}
+    if (value === "") {
+      if (key === "if" && this.isRegular(item)) {
+        cell.textContent = "—";
+        cell.title = item.getField("publicationTitle") ? "이 저널의 공식 IF를 아직 확인하지 못했습니다. 저널명과 ISSN을 확인하세요." : "저널 정보가 없습니다. 프리프린트·책·데이터셋에는 저널 IF가 적용되지 않을 수 있습니다.";
+      }
+      if (key === "citations" && this.isRegular(item)) {
+        const state=this.entry(item), id=this.citationTools.identity(this.citationRecord(item));
+        cell.textContent=state.citationPending===id?"…":"—";
+        const attempt=state.citationAttempt?.identity===id?state.citationAttempt:null;
+        cell.title=state.citationPending===id?"인용 수 조회 중":attempt?({"not-found":"일치하는 논문의 인용 수를 찾지 못했습니다.",error:"조회 실패: 기존 값은 유지됩니다.",unsupported:"확인 가능한 논문 식별자가 부족합니다."}[attempt.status]||"")+(attempt.reason?" "+attempt.reason:""):"아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.";
+      }
+      return cell;
+    }
+    let label = value;
+    if (key === "status") {
+      label = ["unread", "reading", "done"][Number(value)] || "unread";
+      const badge = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      badge.textContent = ({unread:"○ ",reading:"◐ ",done:"✓ "})[label] + label;
+      Object.assign(badge.style, {borderRadius:"2px",padding:"1px 4px",background:"transparent",color:"inherit"});
+      cell.appendChild(badge);
+    } else if (key === "rating") {
+      const rating = Number(value);
+      label = "★".repeat(rating) + "☆".repeat(5-rating);
+      for (let n=1;n<=5;n++) {
+        const star = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        star.textContent = n<=rating ? "★" : "☆"; star.title = `${n}/5`;
+        star.style.cursor = "pointer"; star.style.color = "inherit";
+        star.addEventListener("click", event => { event.stopPropagation(); if (this.canEdit(item)) this.edit([item], {rating:n===rating?0:n}).catch(e=>this.Z.logError(e)); });
+        cell.appendChild(star);
+      }
+    } else if (key === "tags" && this.isRegular(item)) {
+      for(const tag of this.displayTags(item)) {
+        const label=doc.createElementNS('http://www.w3.org/1999/xhtml','span');label.textContent=tag.tag;label.title=tag.tag;label.style.whiteSpace='nowrap';
+        if(tag.color){const dot=doc.createElementNS('http://www.w3.org/1999/xhtml','span');dot.textContent='●';dot.style.color=tag.color;dot.style.marginInlineEnd='3px';label.prepend(dot);}
+        cell.appendChild(label);
+      }
+    } else if(key === 'annotationCount' && this.isRegular(item)) {
+      const count=doc.createElementNS('http://www.w3.org/1999/xhtml','span');count.textContent=value;cell.appendChild(count);
+      const pages=this.annotationDistribution(item),strip=doc.createElementNS('http://www.w3.org/1999/xhtml','span');
+      strip.setAttribute('aria-label','주석 위치 분포');strip.style.cssText='display:flex;gap:2px;overflow:hidden;flex:1;align-items:center;';
+      for(const page of pages.slice(0,120)){
+        const marker=doc.createElementNS('http://www.w3.org/1999/xhtml','button');marker.type='button';marker.title=`첨부 ${page.attachmentID} · ${page.pageIndex+1}페이지 · 주석 ${page.count}개`;
+        marker.setAttribute('aria-label',marker.title);marker.style.cssText='border:0;padding:0;min-width:4px;flex:1;height:12px;cursor:pointer;';
+        let start=0;const stops=[];for(const[color,count]of page.colors){const end=start+count/page.count*100;stops.push(`${color} ${start}% ${end}%`);start=end;}
+        marker.style.background=stops.length===1?page.colors[0][0]:`linear-gradient(0deg,${stops.join(',')})`;
+        marker.addEventListener('click',event=>{event.stopPropagation();this.libraryService.openItem(page.attachmentID,{pageIndex:page.pageIndex}).catch(error=>this.Z.logError(error));});strip.appendChild(marker);
+      }
+      cell.appendChild(strip);cell.title=`주석 ${value}개 · ${pages.length}개 페이지에 분포${pages.length>120?' · 앞 120개 위치 표시':''}. 색 막대를 클릭하면 해당 PDF 페이지로 이동합니다.`;
+    } else if(['added','modified'].includes(key)&&this.getSetting('dateDisplay')==='relative') {
+      const timestamp=Date.parse(value),age=Math.max(0,Date.now()-timestamp),minutes=Math.floor(age/60000),hours=Math.floor(minutes/60),days=Math.floor(hours/24);
+      cell.textContent=Number.isFinite(timestamp)?days?days+'일 전':hours?hours+'시간 전':minutes?minutes+'분 전':'방금':value;
+    } else if (key === "time") {
+      const seconds = Number(value);
+      label = this.formatReadTime(seconds);
+      cell.textContent = label;
+      cell.title = `${Math.floor(seconds)} seconds of active reading`;
+    } else if (key === "progress") {
+      const p=this.isRegular(item)?this.pageProgress(item):{percent:Number(value)};
+      cell.textContent=p.percent+'%';cell.style.backgroundImage=`linear-gradient(90deg,#245c7830 ${p.percent}%,transparent ${p.percent}%)`;
+      cell.title=p.total?`${p.visited}/${p.total} pages read`:cell.textContent;
+    } else { cell.textContent = label; }
+    if (!["time","progress","annotationCount"].includes(key)) cell.title = label;
+    if (this.isRegular(item) && ["if","citations"].includes(key)) {
+      const metrics = this.metrics(item);
+      cell.title = `${label} · ${metrics[key === "if" ? "impactSource" : "citationSource"] || "saved metadata"}`;
+      if (key === "citations" && metrics.citationCheckedAt) cell.title += ` · ${metrics.citationCheckedAt}`;
+      if (key === "citations" && this.entry(item).citationAttempt?.status === "error") cell.title += " · 최근 조회 실패, 마지막 확인값 유지";
+    }
+    return cell;
+  }
+  selected(win) {
+    const selected=win.ZoteroPane?.getSelectedItems();if(selected)return selected.filter(item=>this.isRegular(item));
+    const reader=this.Z.Reader?._readers?.find(r=>r._window===win),attachment=reader&&this.Z.Items.get(reader.itemID);
+    const parent=attachment?.parentID?this.Z.Items.get(attachment.parentID):attachment;
+    return this.isRegular(parent)?[parent]:[];
+  }
+  openWorkbench(win,tab='explore') {return this.windows.get(win)?.workbench?.show(tab);}
+  toggleAppTheme() {
+    const key='browser.theme.toolbar-theme',current=this.Z.Prefs.get(key,true),win=this.Z.getMainWindow?.();
+    const dark=current===0||current!==1&&!!win?.matchMedia?.('(prefers-color-scheme: dark)').matches;
+    const next=dark?1:0;this.Z.Prefs.set(key,next,true);return next;
+  }
+  async touchReadingItem(itemID) {
+    if(!this.active||this.stopping||!this.featureEnabled('updateItemDateModified')||!this.pref('touchDateOnRead',false))return;
+    const item=await this.Z.Items.getAsync(Number(itemID));if(!item)return;
+    const parent=item.parentID?await this.Z.Items.getAsync(item.parentID):null;
+    for(const value of [item,parent].filter(Boolean)) {
+      if(!this.active||this.stopping||value.deleted||!value.isEditable?.()||!this.Z.Libraries.get(value.libraryID)?.editable||value.hasChanged?.())continue;
+      const before=value.dateModified,now=new Date().toISOString().slice(0,19).replace('T',' ');value.dateModified=now;
+      try{await value.saveTx({skipDateModifiedUpdate:true,skipSelect:true,notifierData:{styleCustomActivity:true}});}
+      catch(error){if(value.dateModified===now)value.dateModified=before;throw error;}
+    }
+  }
+  displayTags(item) {
+    return item.getTags().filter(t=>!/^\/(unread|reading|done)$/.test(t.tag)&&!/^style-custom:/.test(t.tag)&&!/^[★⭐]+$/.test(t.tag)).map(t=>{
+      let color;try{color=this.Z.Tags?.getColor(item.libraryID,t.tag)?.color;}catch(_){}
+      return {tag:t.tag,color:/^#[0-9a-f]{6}$/i.test(color||'')?color:null};
+    }).filter(tag=>this.getSetting('tagDisplayMode')==='colored'?!!tag.color:this.getSetting('tagDisplayMode')==='prefixed'?tag.tag.startsWith(this.getSetting('textTagPrefix')):true);
+  }
+  publicationTags(item) {
+    const result=[];const metrics=this.metrics(item);
+    if(metrics.impactFactor!==null)result.push(`IF ${metrics.impactFactor}${metrics.impactYear?' ('+metrics.impactYear+')':''}`);
+    const journal=String(item.getField('publicationTitle')||''),rank=this.cache.journalRanks?.[this.journalTools.name(journal)]?.rank||this.legacy?.[journal]?.rank;
+    const allowed=['sci','ssci','utd24','ajg','sciBase','pku','JCR','JCI','CiteScore','中科院'];
+    if(rank&&typeof rank==='object')for(const key of allowed)if(['string','number'].includes(typeof rank[key])&&String(rank[key]).trim())result.push(key+': '+rank[key]);
+    return result;
+  }
+  setCustomFields(value,{persist=true}={}) {
+    const fields=[...new Set(String(value||'').split(',').map(s=>s.trim()).filter(Boolean))];
+    if(fields.length>12||fields.some(f=>!(/^[a-z][a-z0-9]*$/i.test(f))||this.Z.ItemFields?.getID&&!this.Z.ItemFields.getID(f)))throw new Error('올바른 Zotero 필드 이름을 최대 12개 입력하세요.');
+    const previous=this.dynamicFieldMap||new Map(),next=new Map(),created=[];
+    try {
+      for(const field of fields){
+        if(previous.has(field)){next.set(field,previous.get(field));continue;}
+        const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey:'field-'+field,label:field+' · Custom',width:'120',minWidth:40,hidden:true,enabledTreeIDs:['main'],zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value('field-'+field,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell('field-'+field,index,value,column,doc)});
+        if(!key)throw new Error('열을 등록하지 못했습니다: '+field);created.push(key);next.set(field,key);
+      }
+    } catch(error){for(const key of created)try{this.Z.ItemTreeManager.unregisterColumn(key);}catch(cleanup){this.Z.logError(cleanup);}throw error;}
+    for(const [field,key]of previous)if(!next.has(field)){this.Z.ItemTreeManager.unregisterColumn(key);this.columns=this.columns.filter(k=>k!==key);}
+    this.columns.push(...created);this.dynamicFieldMap=next;this.dynamicColumns=[...next.values()];
+    if(persist)this.Z.Prefs.set('extensions.style-custom.customFields',fields.join(', '),true);
+    return fields;
+  }
+  async refreshPublicationRanks(items) {
+    const secret=String(this.pref('journalRankKey','')).trim();if(!secret)throw new Error('설정에서 본인의 easyScholar API 키를 입력하세요.');
+    const win=this.Z.getMainWindow?.();if(!win?.fetch)throw new Error('현재 환경에서 저널 지표를 조회할 수 없습니다.');
+    const names=[...new Set(items.map(item=>String(item.getField('publicationTitle')||'').trim()).filter(Boolean))];
+    if(names.length>20)throw new Error('한 번에 20개 이하의 저널을 선택하세요.');
+    const result={updated:0,missing:0};
+    for(const journal of names){if(!this.active||this.stopping)break;
+      const controller=new win.AbortController(),timer=win.setTimeout(()=>controller.abort(),15000);
+      try{
+        const response=await win.fetch('https://www.easyscholar.cc/open/getPublicationRank?secretKey='+encodeURIComponent(secret)+'&publicationName='+encodeURIComponent(journal),{signal:controller.signal,credentials:'omit'});
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        const data=await response.json(),raw=data?.data?.officialRank?.all;
+        if(!raw||typeof raw!=='object'||Array.isArray(raw)){result.missing++;continue;}
+        const rank={};for(const[key,value]of Object.entries(raw))if(/^[\p{L}\p{N}_-]{1,50}$/u.test(key)&&['string','number'].includes(typeof value))rank[key]=String(value).slice(0,200);
+        if(!this.active||this.stopping)break;
+        this.cache.journalRanks||={};this.cache.journalRanks[this.journalTools.name(journal)]={rank,source:'easyScholar',checkedAt:new Date().toISOString()};this.dirty=true;result.updated++;
+      }catch(_){throw new Error('저널 등급을 조회하지 못했습니다. API 키와 연결을 확인하세요.');}finally{win.clearTimeout(timer);}
+    }
+    await this.flush();await this.refreshWindows();return result;
+  }
+  pageProgress(item,attachmentID) {
+    const entry=this.entry(item);let old;
+    const id=attachmentID??entry.readingAttachmentID;
+    const bucket=id&&entry.readingAttachments?.[String(id)];
+    if(bucket)return {...this.workspaceTools.progress(bucket),attachmentID:Number(id)};
+    if(id && entry.pageTimes && String(id)===String(entry.readingAttachmentID))return {...this.workspaceTools.progress(entry),attachmentID:Number(id)};
+    if(attachmentID!=null)return {...this.workspaceTools.progress({}),attachmentID:Number(attachmentID)};
+    try{old=this.Z.ZoteroStyle?.api?.storage?.get(item,'readingTime')||(item.libraryID===this.Z.Libraries.userLibraryID?this.legacy?.[item.key]?.readingTime:null);}catch(_){}
+    const pages={...(entry.pageTimes||{})};
+    if(old?.data&&typeof old.data==='object')for(const [key,value]of Object.entries(old.data))if(/^\d+$/.test(key)&&Number.isFinite(Number(value))&&Number(value)>0)pages[key]=Math.max(Number(pages[key])||0,Number(value));
+    const total=Number.isInteger(entry.totalPages)?entry.totalPages:Number(old?.page)||0;
+    return {...this.workspaceTools.progress({pageTimes:pages,totalPages:total}),attachmentID:null};
+  }
+  setPanelCSS(css) {
+    if(typeof css!=='string'||css.length>10000||/@|url\s*\(|expression\s*\(|-moz-binding|<\//i.test(css))throw new Error('외부 로딩 없이 단순 CSS 규칙만 입력하세요.');
+    const blocks=[...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+    if(css.replace(/([^{}]+)\{([^{}]*)\}/g,'').trim())throw new Error('CSS 규칙의 중괄호를 확인하세요.');
+    const scoped=blocks.map(([,selectors,body])=>selectors.split(',').map(s=>'#style-custom-workbench '+s.trim()).join(',')+'{'+body+'}').join('\n');
+    this.Z.Prefs.set('extensions.style-custom.panelCSS',css,true);
+    for(const [win,state]of this.windows){if(!state.panelStyle){state.panelStyle=win.document.createElementNS('http://www.w3.org/1999/xhtml','style');win.document.documentElement.appendChild(state.panelStyle);state.nodes.push(state.panelStyle);}state.panelStyle.textContent=this.featureEnabled('styleEditor')?scoped:'';}
+    return scoped;
+  }
+  enhanceTitles(win,state,records) {
+    for(const row of win.document.querySelectorAll('#zotero-items-tree .row')) {
+      const item=win.ZoteroPane?.itemsView?.getRow(Number(row.id.match(/-row-(\d+)$/)?.[1]))?.ref;
+      if(!this.isRegular(item))continue;
+      const cell=row.querySelector('.cell.title');if(!cell)continue;
+      const titleText=cell.querySelector('.cell-text');
+      if(titleText){
+        if(this.featureEnabled('titleColumn')&&this.featureEnabled('ReadUnreadStatus')&&this.pref('unreadBold',false)&&this.state(item).status==='unread'){if(!state.titleWeights.has(titleText))state.titleWeights.set(titleText,titleText.style.fontWeight);titleText.style.fontWeight='700';}
+        else if(state.titleWeights.has(titleText)){if(titleText.style.fontWeight==='700')titleText.style.fontWeight=state.titleWeights.get(titleText);state.titleWeights.delete(titleText);}
+      }
+      let strip=cell.querySelector('.style-custom-title-strip'),tags=cell.querySelector('.style-custom-title-tags');
+      if(this.featureEnabled('titleColumn')&&this.pref('titleHeatmap',true)) {
+        const p=this.pageProgress(item);
+        if(p.total){if(!strip){strip=win.document.createElementNS('http://www.w3.org/1999/xhtml','span');strip.className='style-custom-title-strip';strip.setAttribute('aria-hidden','true');strip.style.cssText='position:absolute;left:0;right:0;bottom:0;height:3px;pointer-events:none;';if(!cell.style.position){state.titlePositions.set(cell,cell.style.position);cell.style.position='relative';}cell.appendChild(strip);state.titleNodes.add(strip);}
+          const bins=Math.min(60,p.total),colors=[];for(let b=0;b<bins;b++){let seconds=0;for(let page=Math.floor(b*p.total/bins);page<Math.floor((b+1)*p.total/bins);page++)seconds+=Number(p.pages[page])||0;const a=seconds?Math.min(.8,.15+Math.log1p(seconds)/10):0;colors.push(`rgba(36,92,120,${a}) ${b/bins*100}% ${((b+1)/bins)*100}%`);}strip.style.background='linear-gradient(90deg,'+colors.join(',')+')';}
+        else strip?.remove();
+      }else strip?.remove();
+      if(this.featureEnabled('titleColumn')&&this.pref('titleTags',false)) {
+        if(!tags){tags=win.document.createElementNS('http://www.w3.org/1999/xhtml','span');tags.className='style-custom-title-tags';tags.style.cssText='font-size:10px;opacity:.85;white-space:nowrap;pointer-events:none;';cell.appendChild(tags);state.titleNodes.add(tags);}
+        tags.replaceChildren();const visible=this.displayTags(item).slice(0,this.getSetting('titleTagLimit'));const rating=this.state(item).rating;if(rating)visible.unshift({tag:'★'.repeat(rating),color:null});
+        for(const value of visible){const badge=win.document.createElementNS('http://www.w3.org/1999/xhtml','span');badge.textContent=value.tag;badge.title=value.tag;badge.style.marginInlineStart='4px';if(value.color)badge.style.color=value.color;tags.appendChild(badge);}
+      }else tags?.remove();
+    }
+    for(const n of [...state.titleNodes])if(!n.isConnected)state.titleNodes.delete(n);
+  }
+  citationRecord(item) {
+    const field = key => { try { return String(item.getField(key)||"").trim(); } catch (_) { return ""; } };
+    const extra=field("extra"), url=field("url");
+    const explicitDOI=field("DOI") || extra.match(/^\s*DOI:\s*(.+)$/im)?.[1];
+    const doi=explicitDOI ? this.citationTools.normalizeDOI(explicitDOI) || explicitDOI : this.citationTools.normalizeDOI(url);
+    const pmid=field("PMID") || extra.match(/^\s*PMID:\s*(\d+)\s*$/im)?.[1] || url.match(/pubmed\.ncbi\.nlm\.nih\.gov\/(\d+)/i)?.[1];
+    const arxiv=extra.match(/^\s*arxiv:\s*(\S+)/im)?.[1] || url.match(/arxiv\.org\/(?:abs|pdf)\/([^?#]+)/i)?.[1];
+    const authorType=this.Z.CreatorTypes?.getID("author");
+    const first=item.getCreators?.()?.find(c=>c.creatorType==="author" || authorType!==undefined && c.creatorTypeID===authorType);
+    // Author corroboration is needed for title lookup, not an already exact DOI.
+    // Keep DOI cache identity independent of loading optional creator metadata.
+    return {key:this.identity(item),doi,pmid,arxiv,title:field("title"),year:Number(field("date").match(/\b(?:1[5-9]|20)\d{2}\b/)?.[0])||null,firstAuthor:this.citationTools.normalizeDOI(doi)?"":first?.lastName||first?.name||""};
+  }
+  scheduleMetadataCitations(ids) {
+    if(!this.active||this.stopping||!this.featureEnabled("citedCountColumn")||!this.pref("metadataCitations",true)||!ids?.length)return;
+    for(const id of ids||[])if(Number.isInteger(Number(id)))this.metadataIDs.add(Number(id));
+    const win=this.Z.getMainWindow?.();if(!win)return;
+    if(this.metadataTimer!=null)this.metadataTimerWindow.clearTimeout(this.metadataTimer);
+    this.metadataTimerWindow=win;
+    this.metadataTimer=win.setTimeout(()=>{
+      this.metadataTimer=null;const batch=[...this.metadataIDs];this.metadataIDs.clear();
+      this.metadataQueue=this.metadataQueue.then(async()=>{
+        if(!this.active||this.stopping||!this.featureEnabled("citedCountColumn")||!this.pref("metadataCitations",true))return;
+        const items=[];
+        for(const id of batch){try{const item=await this.Z.Items.getAsync(id);if(this.canEdit(item))items.push(item);}catch(error){this.Z.logError(error);}}
+        if(!items.length)return;
+        await this.refreshCitations(items);
+        for(const item of items) {
+          if(!this.active||this.stopping||!this.featureEnabled("citedCountColumn")||!this.pref("metadataCitations",true))break;
+          try { await this.persistCitation(item,this.entry(item).citationLookup); }
+          catch(error){this.Z.logError(error);}
+        }
+      }).catch(error=>this.Z.logError(error));
+      return this.metadataQueue;
+    },1200);
+  }
+  async persistCitation(item,result,{flush=true}={}) {
+    if(!this.active||this.stopping||!this.canEdit(item)||item.hasChanged?.()||result?.status!=="ok"||!Number.isSafeInteger(result.count)||result.count<0)return false;
+    if(!["OpenAlex","Crossref"].includes(result.source)||result.identity!==this.citationTools.identity(this.citationRecord(item)))return false;
+    if(!Number.isFinite(Date.parse(result.checkedAt)))return false;
+    const before=String(item.getField("extra")||"");
+    const line=`Citations: ${result.count} (${result.source}, ${new Date(result.checkedAt).toISOString().slice(0,10)})`;
+    const lines=before.split(/\r?\n/),owned=/^\s*Citations:\s*\d[\d,]*(?:\s+\([^\r\n]*\))?\s*$/i;
+    const after=[...lines.filter(l=>!owned.test(l)),line].join("\n").replace(/^\n/,"");
+    if(before===after)return false;
+    item.setField("extra",after);
+    try {await item.saveTx({notifierData:{styleCustomCitations:true},skipSelect:true});}
+    catch(error){if(item.getField("extra")===after)item.setField("extra",before);throw error;}
+    this.entry(item).citationExtra={identity:result.identity,line};this.dirty=true;if(flush)await this.flush();return true;
+  }
+  async syncLibraryCitations(libraryID=this.Z.Libraries.userLibraryID,{lookup=true}={}) {
+    if(this.bulkCitationPromise)return this.bulkCitationPromise;
+    const work=(async()=>{
+      const items=(await this.Z.Items.getAll(libraryID,true,false)).filter(item=>this.isRegular(item));
+      const report={libraryID,total:items.length,processed:0,saved:0,unchanged:0,unavailable:0,errors:0,running:true,startedAt:new Date().toISOString()};
+      this.cache.lastCitationSave=report;this.dirty=true;await this.flush();
+      try {
+        report.lookup=lookup?await this.refreshCitations(items):{cachedOnly:true};
+        let lastFlush=0;
+        for(const item of items) {
+          if(!this.active||this.stopping){report.cancelled=true;break;}
+          const result=this.entry(item).citationLookup;
+          try {
+            if(result?.status!=="ok"||result.identity!==this.citationTools.identity(this.citationRecord(item)))report.unavailable++;
+            else if(await this.persistCitation(item,result,{flush:false}))report.saved++;
+            else report.unchanged++;
+          } catch(error){report.errors++;this.Z.logError(error);}
+          report.processed++;this.dirty=true;
+          if(Date.now()-lastFlush>1000){lastFlush=Date.now();await this.flush();}
+        }
+        return report;
+      } finally {
+        report.running=false;report.finishedAt=new Date().toISOString();this.dirty=true;
+        await this.flush();await this.refreshWindows();
+      }
+    })();
+    this.bulkCitationPromise=work;
+    try{return await work;}finally{if(this.bulkCitationPromise===work)this.bulkCitationPromise=null;}
+  }
+  citationDue(item, {force=false,onlyMissing=false}={}) {
+    if (force) return true;
+    if (onlyMissing && this.metrics(item).citations!==null) return false;
+    const id=this.citationTools.identity(this.citationRecord(item)),attempt=this.entry(item).citationAttempt;
+    if (!attempt || attempt.identity!==id) return true;
+    const age=Date.now()-Date.parse(attempt.checkedAt);
+    const ttl=attempt.status==="error"?this.getSetting("citationRetryMinutes")*60*1000:attempt.status==="not-found"?24*60*60*1000:this.getSetting("citationRefreshDays")*24*60*60*1000;
+    return !Number.isFinite(age)||age<0||age>=ttl;
+  }
+  citationHTTP(signal) {
+    return {getJSON:(url,headers={})=>new Promise((resolve,reject)=>{
+      let cancel,settled=false;
+      const finish=(fn,value)=>{if(settled)return;settled=true;signal.removeEventListener("abort",abort);fn(value);};
+      const abort=()=>{try{cancel?.();}catch(_){}finish(reject,Object.assign(new Error("Citation lookup cancelled"),{name:"AbortError"}));};
+      signal.addEventListener("abort",abort,{once:true});
+      if(signal.aborted){abort();return;}
+      try {
+        Promise.resolve(this.Z.HTTP.request("GET",url,{headers,responseType:"json",timeout:15000,successCodes:false,errorDelayMax:0,cancellerReceiver:fn=>{cancel=fn;if(signal.aborted)cancel();}}))
+          .then(response=>{
+            try {
+              const status=Number(response.status??200);
+              if(status<200||status>=300)finish(reject,Object.assign(new Error("Citation HTTP "+status),{status,retryAfter:response.getResponseHeader?.("Retry-After")}));
+              else finish(resolve,response.response);
+            } catch(error){finish(reject,error);}
+          },error=>finish(reject,error));
+      } catch(error){finish(reject,error);}
+    })};
+  }
+  async refreshCitations(items, options={}) {
+    if(!this.active||this.stopping)return {ok:0,"not-found":0,error:0,unsupported:0,skipped:items.length};
+    if(this.citationJob){if(options.background)return {busy:true};await this.citationJob.promise;return this.refreshCitations(items,options);}
+    const selection=[...new Set(items)].filter(item=>this.isRegular(item)&&this.citationDue(item,options));
+    const summary={ok:0,"not-found":0,error:0,unsupported:0,skipped:items.length-selection.length};
+    if(!selection.length)return summary;
+    const Controller=this.Z.getMainWindow?.()?.AbortController||globalThis.AbortController;
+    const job={controller:new Controller(),background:!!options.background};this.citationJob=job;
+    const records=selection.map(item=>this.citationRecord(item)),byKey=new Map(selection.map(item=>[this.identity(item),item]));
+    for(const record of records)this.entry(byKey.get(record.key)).citationPending=this.citationTools.identity(record);
+    let lastPaint=0;
+    const ctx={signal:job.controller.signal,email:this.pref("citationEmail","")||this.Z.Prefs.get("extensions.zotpop.email",true)||"",openalexApiKey:this.pref("openalexApiKey",""),
+      onProgress:progress=>{this.citationProgress=progress;options.onProgress?.(progress);},
+      onResult:async result=>{
+        const item=byKey.get(result.key);
+        if(!this.active||job.controller.signal.aborted||!item||this.citationTools.identity(this.citationRecord(item))!==result.identity)return;
+        const entry=this.entry(item);entry.citationAttempt=result;
+        if(result.status==="ok")entry.citationLookup=result;
+        delete entry.citationPending;summary[result.status]++;this.dirty=true;
+        if(Date.now()-lastPaint>1000){lastPaint=Date.now();await this.flush();await this.refreshWindows();}
+      }};
+    // Zotero's app-owned delay remains alive when a main window closes.
+    const timerWindow=this.Z.getMainWindow?.();
+    if(typeof this.Z.Promise?.delay==='function')ctx.sleep=(ms,signal)=>new Promise((resolve,reject)=>{
+      let settled=false;
+      const finish=(fn,value)=>{if(settled)return;settled=true;signal.removeEventListener('abort',abort);fn(value);};
+      const abort=()=>finish(reject,Object.assign(new Error('Citation lookup cancelled'),{name:'AbortError'}));
+      signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}
+      try{Promise.resolve(this.Z.Promise.delay(ms)).then(()=>finish(resolve),error=>finish(reject,error));}catch(error){finish(reject,error);}
+    });
+    else if(timerWindow)ctx.sleep=(ms,signal)=>new Promise((resolve,reject)=>{
+      const abort=()=>{timerWindow.clearTimeout(timer);signal.removeEventListener("abort",abort);reject(Object.assign(new Error("Citation lookup cancelled"),{name:"AbortError"}));};
+      const timer=timerWindow.setTimeout(()=>{signal.removeEventListener("abort",abort);resolve();},ms);
+      signal.addEventListener("abort",abort,{once:true});if(signal.aborted)abort();
+    });
+    job.promise=this.citationTools.lookupMany(records,this.citationHTTP(job.controller.signal),ctx)
+      .then(()=>summary).catch(error=>{if(error.name!=="AbortError")throw error;return {...summary,cancelled:true};})
+      .finally(async()=>{
+        for(const item of selection)delete this.entry(item).citationPending;
+        if(this.citationJob===job)this.citationJob=null;
+        this.dirty=true;await this.flush();await this.refreshWindows();
+      });
+    return job.promise;
+  }
+  rebuildJournals() {
+    const records = new Map(this.catalog.map(r => [this.journalTools.name(r.title), r]));
+    for (const r of Object.values(this.cache.journals || {})) {
+      if (!this.journalTools.valid(r)) continue;
+      const key = this.journalTools.name(r.title), previous = records.get(key);
+      if (!previous || (r.year || 0) >= (previous.year || 0) && r.checkedAt >= previous.checkedAt) records.set(key,r);
+    }
+    this.journals = this.journalTools.create([...records.values()]);
+  }
+  async refreshJournalMetrics(items, DOMParser) {
+    const rows = new Map(), unknown = new Set();
+    for (const item of items) {
+      const record = this.journals.lookup(item);
+      if (record) rows.set(this.journalTools.name(record.title),record);
+      else unknown.add(this.journalTools.name(item.getField("publicationTitle")) || this.identity(item));
+    }
+    const result = {updated:0,failed:0,unknown:unknown.size}, pages = new Map();
+    for (const [key,record] of rows) {
+      if (!this.active) break;
+      try {
+        if (/\.pdf(?:[?#]|$)/i.test(record.sourceURL)) throw new Error("Official PDF snapshot requires a new catalog release");
+        if (!pages.has(record.sourceURL)) pages.set(record.sourceURL,this.Z.HTTP.request("GET",record.sourceURL,{responseType:"text",timeout:10000}));
+        const response = await pages.get(record.sourceURL);
+        if (!this.active) break;
+        const parsed = this.journalTools.parsePage(response.responseText, record, DOMParser);
+        if (!parsed) throw new Error("A matching journal and explicitly dated two-year IF could not be verified");
+        this.cache.journals ||= {};
+        this.cache.journals[key] = {...record,...parsed,checkedAt:new Date().toISOString().slice(0,10)};
+        this.dirty = true;result.updated++;
+      } catch (error) { result.failed++;this.Z.logError(error); }
+    }
+    if (this.active) { this.rebuildJournals(); await this.flush(); await this.refreshWindows(); }
+    return result;
+  }
+  async addReading(item, seconds, location) {
+    if (!this.active || !this.isRegular(item) || !Number.isFinite(seconds) || seconds <= 0) return;
+    const record = this.entry(item);
+    if (!Number.isFinite(record.seconds)) record.seconds = this.metrics(item).seconds;
+    record.seconds += seconds; record.unreadOverride = false; this.dirty = true;
+    record.lastRead=new Date().toISOString();
+    if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0&&Number.isInteger(location.pageIndex)&&location.pageIndex>=0&&location.pageIndex<100000&&Number.isInteger(location.totalPages)&&location.totalPages>location.pageIndex&&location.totalPages<=100000){record.readingAttachments||={};const bucket=record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:location.totalPages};bucket.pageTimes||={};bucket.pageTimes[location.pageIndex]=(Number(bucket.pageTimes[location.pageIndex])||0)+seconds;bucket.totalPages=location.totalPages;bucket.lastRead=record.lastRead;record.readingAttachmentID=location.attachmentID;}
+    this.refreshReadingDisplays();
+    await this.flush();
+    await this.refreshWindows();
+  }
+  flush() {
+    const work = this.writeQueue.then(async () => {
+      if (!this.dirty) return;
+      const snapshot = JSON.parse(JSON.stringify(this.cache));
+      this.dirty = false;
+      try { await this.storage.write(snapshot); }
+      catch (error) { this.dirty = true; throw error; }
+    });
+    this.writeQueue = work.catch(error => this.Z.logError(error));
+    return work;
+  }
+  async refreshWindows() {
+    for (const [win, state] of this.windows) {
+      if (!win.closed && !state.refreshing) {
+        state.refreshing = true;
+        try {
+          const view = win.ZoteroPane?.itemsView;
+          if (view?.collectionTreeRow) await view.refreshAndMaintainSelection();
+          state.workbench?.refreshReading?.();
+        }
+        finally { state.refreshing = false; }
+      }
+    }
+  }
+  attachMotion(win, state, {marquee=true,reading=true}={}) {
+    if(marquee){state.marqueeCleanup?.(); state.marqueeCleanup = null;
+    if (this.pref("marquee",true)) state.marqueeCleanup = this.marquee.attach(win, {
+      delay: Math.max(0,Math.min(2000,Number(this.pref("hoverDelay",200))||0)),
+      speed: Math.max(30,Math.min(600,Number(this.pref("scrollSpeed",180))||180)) });}
+    if(reading){state.readingCleanup?.();state.readingCleanup=null;
+    if (this.pref("recordReading",true)) state.readingCleanup = this.reading.attach(win, {
+      intervalMs: this.getSetting('recordIntervalMs'),idleMs:this.getSetting('idleSeconds')*1000,
+      onSession: (item,location) => { if (this.isRegular(item)) {const record=this.entry(item);record.seconds=this.metrics(item).seconds;if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0){record.readingAttachments||={};record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:Number.isInteger(location.totalPages)?location.totalPages:0};record.readingAttachmentID=location.attachmentID;}} },
+      onTick:(item,seconds,location)=>this.addReading(item,seconds,location), onError:error=>this.Z.logError(error) });}
+  }
+  addWindow(win) {
+    if (!this.active || this.stopping || this.windows.has(win)) return;
+    const state = { nodes:[], listeners:[], signature:null,titleNodes:new Set(),titlePositions:new Map(),titleWeights:new Map() }; this.windows.set(win,state);
+    const unload = () => {this.removeWindow(win).catch(error=>this.Z.logError(error));};
+    win.addEventListener("unload", unload, { once: true });
+    state.listeners.push([win, "unload", unload]);
+    this.attachMotion(win,state);
+    state.readerCleanup=this.readerTools.attach(win);
+    for(const tab of this.readerTools.tabs(win))if(tab.itemID)this.tabItems.set(tab.id,tab.itemID);
+    state.workbench=this.Workbench.attach(win,{runtime:this,library:this.Library.create({Zotero:this.Z,runtime:this}),reader:this.readerTools,model:this.workspaceTools,assist:this.assist});
+    const doc = win.document, popup = doc.getElementById("zotero-itemmenu");
+    if (popup) {
+      const make = (tag,label,parent) => { const node=doc.createXULElement(tag); if(label)node.setAttribute("label",label);parent?.appendChild(node);return node; };
+      const menu=make("menu","Style Custom",popup);menu.id="style-custom-itemmenu";state.nodes.push(menu);
+      const body=make("menupopup",null,menu);
+      const action=(label,callback,parent=body)=>{ const node=make("menuitem",label,parent);node.addEventListener("command",()=>Promise.resolve().then(callback).catch(e=>{this.Z.logError(e);this.Z.alert(win,"Style Custom",e.message);}));return node; };
+      for(const status of ["unread","reading","done"]) action(({unread:"안 읽음",reading:"읽는 중",done:"읽음"})[status],()=>this.edit(this.selected(win),{status}));
+      const ratings=make("menupopup",null,make("menu","별점",body));
+      for(let rating=0;rating<=5;rating++)action(rating?"★".repeat(rating):"별점 지우기",()=>this.edit(this.selected(win),{rating}),ratings);
+      make("menuseparator",null,body);
+      action("커스텀 열로 전환",()=>this.useColumns(win));
+      action("연구 작업 패널",()=>state.workbench?.toggle(true));
+      action("그래프 · 태그 · 노트 · 주석",()=>state.workbench?.show('explore'));
+      action("저장된 지표와 읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();});
+      action("선택한 문헌 인용 수 새로고침",async()=>{
+        const result=await this.refreshCitations(this.selected(win),{force:true});
+        this.Z.alert(win,"Style Custom",`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
+      });
+      action("인용 수 조회 중지",()=>this.citationJob?.controller.abort());
+      action("현재 라이브러리 인용 수 조회·메타데이터 저장",()=>this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID));
+      action("선택한 저널 IF를 공식 페이지에서 새로고침",async()=>{
+        const result = await this.refreshJournalMetrics(this.selected(win), win.DOMParser);
+        this.Z.alert(win,"Style Custom",`IF 확인 ${result.updated}개 · 조회 실패 ${result.failed}개 · 미등록 저널 ${result.unknown}개. 기존 확인된 값은 유지됩니다.`);
+      });
+    }
+    const poll = async () => {
+      if (!this.active || win.closed || state.polling) return;
+      state.polling = true;
+      try {
+        const view=win.ZoteroPane?.itemsView;
+        const rows=[...doc.querySelectorAll("#zotero-items-tree .row")];
+        const records=rows.map(row=>view?.getRow(Number(row.id.match(/-row-(\d+)$/)?.[1]))?.ref).filter(item=>this.isRegular(item));
+        const signature=JSON.stringify(records.map(item=>[this.identity(item),this.state(item)]));
+        if(state.signature!==null && signature!==state.signature) await view?.refreshAndMaintainSelection();
+        state.signature=signature;this.enhanceTitles(win,state,records); await this.flush();
+        if(this.featureEnabled("citedCountColumn")&&this.pref("autoCitations",true)&&!this.citationJob&&!this.stopping) {
+          this.refreshCitations(records,{background:true}).catch(error=>this.Z.logError(error));
+        }
+      } catch(error){this.Z.logError(error);} finally{state.polling=false;}
+    };
+    state.timer=win.setInterval(poll,5000); poll();
+    const quickFilter=event=>{if(!this.featureEnabled('itemTypeFilter')||!this.pref('quickTypeFilter',true)||event.button!==0||!event.target.closest?.('.cell-icon'))return;const row=event.target.closest('.row');if(!row)return;const item=win.ZoteroPane?.itemsView?.getRow(Number(row.id.match(/-row-(\d+)$/)?.[1]))?.ref;if(!this.isRegular(item)||!state.workbench)return;event.preventDefault();event.stopPropagation();state.workbench.state.type=this.Z.ItemTypes.getName(item.itemTypeID);state.workbench.show('explore').catch(e=>this.Z.logError(e));};
+    const tree=doc.getElementById('zotero-items-tree');if(tree){tree.addEventListener('click',quickFilter,true);state.listeners.push([tree,'click',quickFilter,true]);}
+    const css=this.pref('panelCSS','');if(css)try{this.setPanelCSS(css);}catch(error){this.Z.logError(error);}
+  }
+  async useColumns(win) {
+    const manager=win.ZoteroPane?.itemsView?.tree?._columns;
+    if (!manager?.toggleHidden || !Array.isArray(manager._columns)) throw new Error("Column layout unavailable; right-click a column heading to select Custom columns.");
+    for(let i=0;i<manager._columns.length;i++) {
+      const column=manager._columns[i], key=column.dataKey;
+      const old=/^zoterostyle-(IF|citedCount|status|rating|readTime|tags|textTags)$/.test(key);
+      const own=this.columns.includes(key);
+      if ((old&&!column.hidden)||(own&&column.hidden)) manager.toggleHidden(i);
+    }
+    await win.ZoteroPane.itemsView.refreshAndMaintainSelection();
+  }
+  edit(items, patch) {
+    // Capture selection now; serialize commands so rapid status/rating clicks compose.
+    const selection = [...new Set(items)];
+    // Validate before queueing and do not let callers mutate a queued patch.
+    try { this.model.updateTags([], patch); }
+    catch (error) { return Promise.reject(error); }
+    const change = { ...patch };
+    const work = this.queue.then(async () => {
+      if (!this.active) throw new Error(this.text("Plugin is disabled.", "플러그인이 비활성화되어 있습니다."));
+      if (!selection.length) throw new Error(this.text("Select a reference first.", "먼저 문헌을 선택하세요."));
+      if (selection.some(item => !this.canEdit(item))) throw new Error(this.text("This selection is not editable.", "선택한 문헌을 편집할 수 없습니다."));
+      if (selection.some(item => item.hasChanged?.())) throw new Error(this.text("Wait for pending item changes to save, then try again.", "문헌의 다른 변경 사항이 저장된 뒤 다시 시도하세요."));
+      const touched = [];
+      try {
+        await this.Z.DB.executeTransaction(async () => {
+          for (const item of selection) {
+            if (!this.canEdit(item)) throw new Error("Item is no longer editable");
+            if (item.hasChanged?.()) throw new Error(this.text("Wait for pending item changes to save, then try again.", "문헌의 다른 변경 사항이 저장된 뒤 다시 시도하세요."));
+            const tags = this.model.updateTags(item.getTags(), change);
+            item.setTags(tags);
+            // Capture Zotero's normalized representation, not our input order.
+            touched.push({ item, written: item.getTags() });
+            await item.save();
+          }
+        });
+      }
+      catch (error) {
+        // The DB transaction rolls back persisted tags, but previous saves may
+        // already have updated cached Items. Reload only after the rollback ends.
+        for (const { item, written } of touched) {
+          try {
+            const latest = item.getTags();
+            const oldByName = new Map(written.map(tag => [tag.tag, tag]));
+            const newByName = new Map(latest.map(tag => [tag.tag, tag]));
+            const removed = new Set(written.filter(tag => !newByName.has(tag.tag)).map(tag => tag.tag));
+            const added = latest.filter(tag => !oldByName.has(tag.tag) || oldByName.get(tag.tag).type !== tag.type);
+            // Zotero 9's tag loader refreshes _tags but leaves pending tag
+            // changes intact after a save fails before _saveData. Clear only
+            // that field before reloading the rolled-back database value.
+            item._clearChanged("tags");
+            await item.reload(["primaryData", "tags"], true);
+            // A separate editor can change an earlier item while a later save
+            // awaits. Reapply those tag differences as pending edits; do not
+            // save them or lose them while undoing this failed transaction.
+            if (removed.size || added.length) {
+              const replaced = new Set(added.map(tag => tag.tag));
+              item.setTags([...item.getTags().filter(tag => !removed.has(tag.tag) && !replaced.has(tag.tag)), ...added]);
+            }
+          }
+          catch (reloadError) { this.Z.logError(reloadError); }
+        }
+        throw error;
+      }
+    });
+    const completed = work.then(async () => {
+      if (change.status) for (const item of selection) this.entry(item).unreadOverride = change.status === "unread";
+      this.dirty = true;
+      await this.flush();
+      await this.refreshWindows();
+    });
+    this.queue = completed.catch(() => {});
+    return completed;
+  }
+
+  async removeWindow(win) {
+    const state=this.windows.get(win);if(!state)return;
+    this.windows.delete(win);
+    const errors=[],pending=[];
+    const cleanup=fn=>{try{pending.push(Promise.resolve(fn()).catch(error=>errors.push(error)));}catch(error){errors.push(error);}};
+    cleanup(()=>win.clearInterval(state.timer));cleanup(()=>state.marqueeCleanup?.());
+    cleanup(()=>state.workbench?.destroy());cleanup(()=>state.readerCleanup?.());
+    for(const node of state.titleNodes||[])cleanup(()=>node.remove());
+    for(const[cell,position]of state.titlePositions||[])cleanup(()=>{if(cell.style.position==='relative'){if(position)cell.style.position=position;else cell.style.removeProperty('position');}});
+    for(const[node,weight]of state.titleWeights||[])cleanup(()=>{if(node.style.fontWeight==='700')node.style.fontWeight=weight;});
+    for(const[target,name,callback,capture]of state.listeners||[])cleanup(()=>target.removeEventListener(name,callback,capture||false));
+    for(const node of state.nodes||[])cleanup(()=>node.remove());
+    cleanup(()=>state.readingCleanup?.());
+    await Promise.all(pending);
+    if(errors.length)throw errors[0];
+  }
+  async stop() {
+    if(this.stopPromise)return this.stopPromise;
+    this.stopping=true;
+    this.stopPromise=(async()=>{
+      const errors=[];
+      const attempt=async fn=>{try{await fn();}catch(error){errors.push(error);}};
+      await attempt(()=>this.assist.stop());await attempt(()=>this.readerTools.stop());
+      if(this.itemObserver!=null){const observer=this.itemObserver;this.itemObserver=null;await attempt(()=>this.Z.Notifier.unregisterObserver(observer));}
+      if(this.metadataTimer!=null){const timer=this.metadataTimer;this.metadataTimer=null;await attempt(()=>this.metadataTimerWindow.clearTimeout(timer));}
+      this.metadataIDs.clear();
+      const citationJob=this.citationJob;await attempt(()=>citationJob?.controller.abort());
+      // Detach clocks and UI immediately, then drain already accepted writes.
+      await Promise.all([...this.windows.keys()].map(win=>attempt(()=>this.removeWindow(win))));
+      await attempt(()=>citationJob?.promise);await attempt(()=>this.bulkCitationPromise);
+      await attempt(()=>this.metadataQueue);await attempt(()=>this.activityQueue);
+      this.active=false;
+      await attempt(()=>this.queue);await attempt(()=>this.flush());
+      for(const observer of this.observers.splice(0))await attempt(()=>this.Z.Prefs.unregisterObserver(observer));
+      for(const column of this.columns.splice(0))await attempt(()=>this.Z.ItemTreeManager.unregisterColumn(column));
+      if(this.prefPane){const pane=this.prefPane;this.prefPane=null;await attempt(()=>this.Z.PreferencePanes.unregister(pane));}
+      this.tabItems.clear();
+      if(errors.length){for(const error of errors.slice(1))this.Z.logError(error);throw errors[0];}
+    })();
+    return this.stopPromise;
+  }
+
+};
+if(typeof module!=="undefined")module.exports=CustomStyleRuntime;

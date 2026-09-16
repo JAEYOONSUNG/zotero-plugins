@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "createdAt": "2026-09-12T22:21:29.502Z",
+  "policy": "Only URL query parameters with token, secret, password, api-key or authorization names were removed; all other JSON values are preserved.",
+  "originalLocation": "Ignored local build directory; originals are not part of shared artifacts.",
+  "reportHashMeaning": "Existing report reference SHA-256 values identify the original comparison inputs. This manifest maps each original input to its URL-sanitized export.",
+  "files": [
+    {
+      "path": "benchmark/real-query/geobacillus-recovered-210.raw.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/real-query/geobacillus-recovered-210.raw.json",
+      "originalSha256": "e299112695dd90f6b33389ebc478019bedcb510cdfc9f95121b436d6ca1aadeb",
+      "sanitizedSha256": "97fb943a8c75f5d71184a864d6387ef37641a036bf52fd827d345b39a4130540",
+      "removedParameterCounts": {
+        "casa_token": 216
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-geobacillus-title.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-geobacillus-title.json",
+      "originalSha256": "069346f5d7c45d06546b6319417350fec7936f74dd2a5398406c14481fd54121",
+      "sanitizedSha256": "2a78fdef9507c3bcfa21f07acddf7bb4b3ba6f1a9423d63736e2e182cb0c3983",
+      "removedParameterCounts": {
+        "casa_token": 22
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-geobacillus-title.raw.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-geobacillus-title.raw.json",
+      "originalSha256": "ef5035d5ce9a1cb0107f230538ad671faf6977c8160a3fcb63e67c7e7c6e41d6",
+      "sanitizedSha256": "4d939e3f5f0533610bd7c7ce48a8fee3e73f1a2bf605db64005c15feb89ade6d",
+      "removedParameterCounts": {
+        "casa_token": 22
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-liu.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-liu.json",
+      "originalSha256": "79b6fd9f4a3ce88e022b8c31f73fae1f4e3c172f72b15b9ac3591e633c35229f",
+      "sanitizedSha256": "9c747abb052f1c003d2ed4ce4fa649b5b65188d99f363b16560030f46a03eefe",
+      "removedParameterCounts": {
+        "casa_token": 32
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-liu.raw.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-liu.raw.json",
+      "originalSha256": "912866458bd9fcfba9a55e41f824bb4b88e273e9ab1f1bf7b33e2c059c3ead46",
+      "sanitizedSha256": "81817fd796fb030fd0fd9624229407101290bfb8ea6120b7769b79ba7537eaa0",
+      "removedParameterCounts": {
+        "casa_token": 32
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-nar.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-nar.json",
+      "originalSha256": "75aa482a6f5db147f00ef739980084b181890eb199db36c6304600cf37327a31",
+      "sanitizedSha256": "ccfb1c3bad10414b5c64b8172f5ea361fa671a3680abd6fb6637ecec29d5513d",
+      "removedParameterCounts": {
+        "token": 2
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-nar.raw.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-nar.raw.json",
+      "originalSha256": "9ee1bbda080fcb9e0a45c140f9079b697541ef8b9b6e0755711dd8851c23ee14",
+      "sanitizedSha256": "b39b3e2d08919b716a386e9cfb35937e195e7a96b7c7a4ca289861bec0b095d2",
+      "removedParameterCounts": {
+        "token": 2
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-recombineering.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-recombineering.json",
+      "originalSha256": "bbff7db42e7f181f347a6c452f82473f95ef53e7e3dbf5defc616cfc84fcb58a",
+      "sanitizedSha256": "a9782e27e2d95f7c7883a4a4e7e6e6dc1822a215df7404462307a9e3e23ac423",
+      "removedParameterCounts": {
+        "casa_token": 6
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-recombineering.raw.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-recombineering.raw.json",
+      "originalSha256": "57e3a56e2d43659ed2381f96829b82591fb43adb43f61913fab2a90c6c9348be",
+      "sanitizedSha256": "a39390a8a4e3e5db92fbea636c9ba48a0442824bc3b35db7669fa032eb14ef71",
+      "removedParameterCounts": {
+        "casa_token": 6
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-thermophile.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-thermophile.json",
+      "originalSha256": "6c468189dd71dd4bca19683a618e8f5d247e5cabb16597be48d2645fdc31682b",
+      "sanitizedSha256": "71be2b85bae999e957a1e2e2c421f20e7a46bc505746a224a1e7b08ddd8f3c6d",
+      "removedParameterCounts": {
+        "casa_token": 18
+      }
+    },
+    {
+      "path": "benchmark/references/scholar-thermophile.raw.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/references/scholar-thermophile.raw.json",
+      "originalSha256": "0b91ae821d38a79b0122817c5035068a399b33e64b4a292c3920389a8bbeca63",
+      "sanitizedSha256": "160e16f1249714ad51fe1a561cff64f4c06306269a6b4a7c9e116298f206c5e4",
+      "removedParameterCounts": {
+        "casa_token": 18
+      }
+    },
+    {
+      "path": "benchmark/results/improved-report.json",
+      "originalPath": "build/pop-parity/private-originals/benchmark/results/improved-report.json",
+      "originalSha256": "14e755489339156cf3e95aa4aba7854b1f8fe9404782a2275a02e77626446245",
+      "sanitizedSha256": "5d8cdf8642b5de15a007fa65c9de1980dd747010ed7a7ec2658cadd410426cd4",
+      "removedParameterCounts": {
+        "casa_token": 42,
+        "token": 3
+      }
+    }
+  ]
+}

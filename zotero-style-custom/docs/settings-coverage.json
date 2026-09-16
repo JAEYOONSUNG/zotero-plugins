@@ -1,0 +1,1110 @@
+{
+  "version": "0.8.0",
+  "categories": 10,
+  "persistedSettings": 111,
+  "actions": 6,
+  "method": "Static consumer links plus independent DOM/backend effect regressions; source links alone do not prove native activation.",
+  "entries": [
+    {
+      "key": "feature.AIGenerateRemark",
+      "label": "AI 읽기 메모 제안 사용",
+      "category": "ai",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js",
+        "src/assist.js"
+      ]
+    },
+    {
+      "key": "feature.AIGenerateTags",
+      "label": "AI 태그 제안 사용",
+      "category": "ai",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js",
+        "src/assist.js"
+      ]
+    },
+    {
+      "key": "feature.IFColumn",
+      "label": "IF 열 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.PDFStyles",
+      "label": "PDF 테마·사용자 색상·원래 모양 복원 사용",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "feature.ReadUnreadStatus",
+      "label": "읽음·안 읽음 제목 구분 사용",
+      "category": "storage",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.Recent",
+      "label": "최근 문헌 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.addTags",
+      "label": "태그 추가·제거·경로 이름 변경·병합 사용",
+      "category": "tags",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js",
+        "src/library.js"
+      ]
+    },
+    {
+      "key": "feature.annotationColors",
+      "label": "주석 색상·팔레트 사용",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js",
+        "src/reader-tools.js",
+        "src/library.js"
+      ]
+    },
+    {
+      "key": "feature.annotationColumn",
+      "label": "주석 수·페이지별 색상 분포·원문 이동 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.annotationManager",
+      "label": "주석 관리·범위 선택·색상 일괄 변경·노트 추출 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.attachmentPreview",
+      "label": "첨부 미리보기 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.backlinks",
+      "label": "주석별 참조 노트 수·역링크 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js",
+        "src/reader-tools.js",
+        "src/library.js"
+      ]
+    },
+    {
+      "key": "feature.canvas",
+      "label": "카드·보드 이름·색상·연결 편집과 삭제 복원 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.citedCountColumn",
+      "label": "인용 수 열·자동 조회 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.collectionItemCount",
+      "label": "컬렉션 문헌 수 사용",
+      "category": "collections",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.creatorColumn",
+      "label": "저자·기여자 열 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.darkLightButton",
+      "label": "앱 밝게·어둡게 전환 사용",
+      "category": "menus",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.dateAddedColumn",
+      "label": "추가일·수정일 열 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.explore",
+      "label": "문헌 상세·노트·주석·필터·정렬·페이지 탐색 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.favoriteCollections",
+      "label": "컬렉션 즐겨찾기 사용",
+      "category": "collections",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.graphView",
+      "label": "관계·태그·저자 그래프 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.itemTypeFilter",
+      "label": "항목 유형 빠른 필터 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.marginAnnotation",
+      "label": "여백 주석과 위치·너비·표시 길이 설정 사용",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "feature.menuVisibility",
+      "label": "작업 메뉴 표시·숨김 사용",
+      "category": "menus",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.noteManager",
+      "label": "노트 검색·생성·편집 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.publicationColumn",
+      "label": "저널·발행처 열 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.publicationTagsColumn",
+      "label": "저널 등급 태그·조회 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.ratingColumn",
+      "label": "별점 열 표시",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.readStatus",
+      "label": "읽기 시간·상태 연동 사용",
+      "category": "storage",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.readTimeColumn",
+      "label": "읽기 시간·페이지 진행 열 표시",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.relatedItems",
+      "label": "선택 문헌 연결·상호 연결 해제 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js",
+        "src/library.js"
+      ]
+    },
+    {
+      "key": "feature.remarkColumn",
+      "label": "읽기 메모 열 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.renderItemAnnotations",
+      "label": "문헌 상세에 주석 직접 표시 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.renderItemNotes",
+      "label": "문헌 상세에 노트 직접 표시 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.showAnnotationColorName",
+      "label": "주석 색상 이름 사용",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "feature.sortCollectionItem",
+      "label": "컬렉션 이름·개수·즐겨찾기 정렬 사용",
+      "category": "collections",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.statusColumn",
+      "label": "읽기 상태 열 표시",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.styleEditor",
+      "label": "패널 CSS 편집 사용",
+      "category": "menus",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.tabManager",
+      "label": "탭 순서·다른 탭 닫기·저장 그룹 편집 사용",
+      "category": "sidebar",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.tags",
+      "label": "중첩 태그 탐색 사용",
+      "category": "tags",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js",
+        "src/assist.js",
+        "src/library.js"
+      ]
+    },
+    {
+      "key": "feature.tagsColumn",
+      "label": "색상 태그 표시 사용",
+      "category": "tags",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.textTagsColumn",
+      "label": "텍스트 태그·태그 수 사용",
+      "category": "tags",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.titleColumn",
+      "label": "제목 히트맵·태그·강조 사용",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.tldr",
+      "label": "초록 요약 사용",
+      "category": "ai",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js",
+        "src/assist.js"
+      ]
+    },
+    {
+      "key": "feature.toogleSidebar",
+      "label": "리더 사이드바 토글 사용",
+      "category": "sidebar",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "feature.updateItemDateModified",
+      "label": "탭 활동 시 수정일 갱신 사용",
+      "category": "storage",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "feature.verticalTabManager",
+      "label": "독립 세로 탭 목록 사용",
+      "category": "sidebar",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "feature.viewManager",
+      "label": "열 배치 저장·복원·이름·내용 갱신 사용",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "feature.reader.mergeAnnotations",
+      "label": "선택 주석 병합 사용",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js",
+        "src/reader-tools.js",
+        "src/library.js"
+      ]
+    },
+    {
+      "key": "feature.reader.attachmentVersionSwitch",
+      "label": "PDF 첨부 버전 전환 사용",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "showZeroReadTime",
+      "label": "기록이 없어도 0초 표시",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "titleHeatmap",
+      "label": "제목에 읽기 히트맵 표시",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "unreadBold",
+      "label": "안 읽은 제목 굵게",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "timeFormat",
+      "label": "읽기 시간 표시 형식",
+      "category": "columns",
+      "type": "select",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "dateDisplay",
+      "label": "날짜 표시",
+      "category": "columns",
+      "type": "select",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "customFields",
+      "label": "추가 필드 열",
+      "category": "columns",
+      "type": "text",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "recordReading",
+      "label": "활성 PDF 읽기 시간 기록",
+      "category": "storage",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "autoStatus",
+      "label": "읽기 시작 시 reading 상태 자동 반영",
+      "category": "storage",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "touchDateOnRead",
+      "label": "읽는 문헌의 수정일 갱신",
+      "category": "storage",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "recordIntervalMs",
+      "label": "기록·표시 갱신 간격 (ms)",
+      "category": "storage",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "idleSeconds",
+      "label": "무활동 제외 기준 (초)",
+      "category": "storage",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "workbenchDensity",
+      "label": "화면 밀도",
+      "category": "views",
+      "type": "select",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "explorePageSize",
+      "label": "한 페이지 문헌 수",
+      "category": "views",
+      "type": "number",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "matrixPageSize",
+      "label": "비교표 한 페이지 문헌 수",
+      "category": "views",
+      "type": "number",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "inlineEvidenceCount",
+      "label": "처음 펼칠 노트·주석 수",
+      "category": "views",
+      "type": "number",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "maxExcerptLength",
+      "label": "본문 발췌 표시 글자 수",
+      "category": "views",
+      "type": "number",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "graphNodeLimit",
+      "label": "그래프 최대 문헌 수",
+      "category": "views",
+      "type": "number",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "annotationIgnoreFigures",
+      "label": "Figure·Table로 시작하는 주석 제외",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "annotationPreferComment",
+      "label": "주석 텍스트보다 메모를 우선 표시",
+      "category": "views",
+      "type": "boolean",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "readerTheme",
+      "label": "PDF 테마",
+      "category": "reader",
+      "type": "select",
+      "consumers": [
+        "src/runtime.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "readerCustomBackground",
+      "label": "사용자 PDF 배경",
+      "category": "reader",
+      "type": "color",
+      "consumers": [
+        "src/runtime.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "readerCustomForeground",
+      "label": "사용자 PDF 글자",
+      "category": "reader",
+      "type": "color",
+      "consumers": [
+        "src/runtime.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginEnabled",
+      "label": "여백 주석 표시",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginSide",
+      "label": "여백 위치",
+      "category": "reader",
+      "type": "select",
+      "consumers": [
+        "src/runtime.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginWidth",
+      "label": "여백 주석 너비 (px)",
+      "category": "reader",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginFontSize",
+      "label": "여백 주석 글자 크기",
+      "category": "reader",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginTextLimit",
+      "label": "여백 주석 최대 글자 수",
+      "category": "reader",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginShowQuote",
+      "label": "인용 텍스트 표시",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginShowComment",
+      "label": "주석 메모 표시",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginShowHighlight",
+      "label": "하이라이트 표시",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginShowUnderline",
+      "label": "밑줄 표시",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginShowNote",
+      "label": "메모 주석 표시",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginShowImage",
+      "label": "이미지 주석 표시",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginShowText",
+      "label": "텍스트 주석 표시",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "marginShowInk",
+      "label": "펜 주석 표시",
+      "category": "reader",
+      "type": "boolean",
+      "consumers": [
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "readerSidebar",
+      "label": "리더 사이드바 표시",
+      "category": "sidebar",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "verticalTabs",
+      "label": "세로 탭 목록 표시",
+      "category": "sidebar",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "tagDisplayMode",
+      "label": "태그 열 표시 대상",
+      "category": "tags",
+      "type": "select",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "textTagPrefix",
+      "label": "텍스트 태그 접두사",
+      "category": "tags",
+      "type": "text",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "titleTags",
+      "label": "제목 옆 태그 표시",
+      "category": "tags",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "titleTagLimit",
+      "label": "제목 옆 최대 태그 수",
+      "category": "tags",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "marquee",
+      "label": "긴 제목 호버 스크롤",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "hoverDelay",
+      "label": "스크롤 시작 대기 (ms)",
+      "category": "columns",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "scrollSpeed",
+      "label": "스크롤 속도 (px/s)",
+      "category": "columns",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "quickTypeFilter",
+      "label": "항목 아이콘으로 유형 필터",
+      "category": "columns",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "accentColor",
+      "label": "강조 색상",
+      "category": "menus",
+      "type": "color",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "panelFontSize",
+      "label": "패널 글자 크기",
+      "category": "menus",
+      "type": "number",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "panelCSS",
+      "label": "Custom 패널 CSS",
+      "category": "menus",
+      "type": "textarea",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "autoCitations",
+      "label": "보이는 문헌 인용 수 자동 조회",
+      "category": "metrics",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "metadataCitations",
+      "label": "논문 추가·수정 시 인용 수 조회 후 Extra 저장",
+      "category": "metrics",
+      "type": "boolean",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "citationRefreshDays",
+      "label": "성공한 인용 수 재조회 간격 (일)",
+      "category": "metrics",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "citationRetryMinutes",
+      "label": "조회 오류 재시도 간격 (분)",
+      "category": "metrics",
+      "type": "number",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "citationEmail",
+      "label": "연락 이메일 (선택)",
+      "category": "metrics",
+      "type": "email",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "openalexApiKey",
+      "label": "OpenAlex API 키 (선택)",
+      "category": "metrics",
+      "type": "password",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "journalRankKey",
+      "label": "easyScholar API 키",
+      "category": "metrics",
+      "type": "password",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "aiEndpoint",
+      "label": "Chat Completions endpoint",
+      "category": "ai",
+      "type": "url",
+      "consumers": [
+        "src/assist.js"
+      ]
+    },
+    {
+      "key": "aiModel",
+      "label": "모델 이름",
+      "category": "ai",
+      "type": "text",
+      "consumers": [
+        "src/assist.js"
+      ]
+    },
+    {
+      "key": "aiKey",
+      "label": "API 키",
+      "category": "ai",
+      "type": "password",
+      "consumers": [
+        "src/assist.js"
+      ]
+    },
+    {
+      "key": "aiLanguage",
+      "label": "출력 언어",
+      "category": "ai",
+      "type": "text",
+      "consumers": [
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "aiTagsPrompt",
+      "label": "태그 제안 지시문",
+      "category": "ai",
+      "type": "textarea",
+      "consumers": [
+        "src/assist.js"
+      ]
+    },
+    {
+      "key": "aiRemarkPrompt",
+      "label": "읽기 메모 지시문",
+      "category": "ai",
+      "type": "textarea",
+      "consumers": [
+        "src/assist.js"
+      ]
+    },
+    {
+      "key": "open-workbench",
+      "label": "연구 작업 패널 열기",
+      "category": "views",
+      "type": "action",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js",
+        "src/library.js"
+      ]
+    },
+    {
+      "key": "show-columns",
+      "label": "기본 Custom 열 표시",
+      "category": "columns",
+      "type": "action",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js",
+        "src/reader-tools.js"
+      ]
+    },
+    {
+      "key": "update-citations",
+      "label": "선택 문헌 인용 수 조회",
+      "category": "metrics",
+      "type": "action",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "stop-citations",
+      "label": "인용 수 조회 중지",
+      "category": "metrics",
+      "type": "action",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    },
+    {
+      "key": "update-if",
+      "label": "선택 저널 공식 IF 확인",
+      "category": "metrics",
+      "type": "action",
+      "consumers": [
+        "src/runtime.js",
+        "src/workbench.js"
+      ]
+    },
+    {
+      "key": "ranks",
+      "label": "선택 저널 등급 조회",
+      "category": "metrics",
+      "type": "action",
+      "consumers": [
+        "src/runtime.js"
+      ]
+    }
+  ]
+}

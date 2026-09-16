@@ -1,0 +1,1288 @@
+﻿[
+	{
+		"type": "Journal Article",
+		"title": "Emerging trends in genome integration tools for precision engineering of diverse bacterial species",
+		"source": "Synthetic biology (Oxford, England)",
+		"issn": "2397-7000",
+		"doi": "10.1093/synbio/ysaf019",
+		"abstract": "The ability to precisely insert DNA payloads into a genome enables the comprehensive engineering of cellular phenotypes and the creation of new biotechnologies. To achieve such modifications, the most widely used techniques rely on a host cell's native DNA repair mechanisms like homologous recombination, which hampers their broader use in organisms lacking these capabilities. Here, we explore the current landscape of genome integration systems with a particular focus on those that function in bacteria and are precise, self-contained, and portable, placing minimal requirements on the host cell. Through a historical analysis, we observe long-term use of recombineering technologies, a recent rise in the use of CRISPR-guided systems that consist of associated integrase machinery, and growing efforts to modify non-model organisms. Looking forward, we highlight some of the remaining challenges and how synthetic genomics may offer a way to create bacterial strains optimized for extensive long-term modification. As the field of synthetic biology sets its sights on real-world impact, the effective engineering of genomes will be critical to shaping the robust phenotypes that applications demand.",
+		"rank": 1,
+		"year": 2025,
+		"volume": 10,
+		"issue": 1,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Riesa K W Rohmat",
+				"affiliation": "School of Biological Sciences, University of Bristol, Bristol BS8 1TQ, United Kingdom."
+			},
+			{
+				"name": "Thea C T Irvine",
+				"affiliation": "School of Biological Sciences, University of Bristol, Bristol BS8 1TQ, United Kingdom."
+			},
+			{
+				"name": "Shivang Hina-Nilesh Joshi",
+				"affiliation": "School of Biological Sciences, University of Bristol, Bristol BS8 1TQ, United Kingdom."
+			},
+			{
+				"name": "Andrew M Bailey",
+				"affiliation": "School of Biological Sciences, University of Bristol, Bristol BS8 1TQ, United Kingdom."
+			},
+			{
+				"name": "Christopher Jenkins",
+				"affiliation": "Defence Science and Technology Laboratory, Porton Down, Wiltshire SP4 0JQ, United Kingdom."
+			},
+			{
+				"name": "David Ulaeto",
+				"affiliation": "Defence Science and Technology Laboratory, Porton Down, Wiltshire SP4 0JQ, United Kingdom."
+			},
+			{
+				"name": "Pierre Buscaill",
+				"affiliation": "School of Biological Sciences, University of Bristol, Bristol BS8 1TQ, United Kingdom."
+			},
+			{
+				"name": "Thomas E Gorochowski",
+				"affiliation": "School of Biological Sciences, University of Bristol, Bristol BS8 1TQ, United Kingdom."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Uncovering Insights Into the Biology of Mycobacterium tuberculosis Using Genetic Tools",
+		"source": "MicrobiologyOpen",
+		"issn": "2045-8827",
+		"doi": "10.1002/mbo3.70206",
+		"abstract": "Mycobacterium tuberculosis (Mtb), the etiological agent of tuberculosis, is one of the most challenging pathogens due to its complex physiology, diverse clinical manifestations, and growing multidrug resistance. The global rise of drug-resistant Mtb strains has prompted the search for innovative genetic and molecular strategies to accelerate drug discovery and vaccine development. Progress in Mtb research has long been hindered by its slow replication rate and impermeable cell envelope, which limit the efficacy of genetic manipulation. This review outlines methodological advances that have transformed the study of Mtb pathogenesis and drug resistance mechanisms. Traditional homologous recombination-based approaches, including allelic exchange and specialized transduction, laid the groundwork for targeted mutagenesis but were limited by low efficiency. The advent of phage-derived recombineering systems, such as the Che9c RecET, has substantially improved the precision and throughput of genetic modification. Hybrid systems such as ORBIT, which combines oligonucleotide-mediated recombineering with Bxb1 integrase, have further enabled rapid and versatile genome engineering across mycobacterial species. Parallel developments in conditional gene expression systems (e.g., the use of TetR/Pip-based promoters) have facilitated the functional analysis of essential genes and the validation of novel drug targets. The advent of CRISPR-Cas technologies has represented a paradigm shift, by enabling programmable, high-fidelity gene regulation and functional genomics even in slow-growing mycobacteria. Together, these genetic innovations are transforming Mtb research by accelerating drug discovery and vaccine design, and shedding light on host-pathogen interactions.",
+		"rank": 2,
+		"year": 2025,
+		"volume": 14,
+		"issue": 6,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Alessandro Stamilla",
+				"affiliation": "Dipartimento di Biologia e Biotecnologie \"Lazzaro Spallanzani\", Università di Pavia, Pavia, Italy."
+			},
+			{
+				"name": "Deborah Recchia",
+				"affiliation": "Dipartimento di Biologia e Biotecnologie \"Lazzaro Spallanzani\", Università di Pavia, Pavia, Italy."
+			},
+			{
+				"name": "Giovanni Stelitano",
+				"affiliation": "Dipartimento di Biologia e Biotecnologie \"Lazzaro Spallanzani\", Università di Pavia, Pavia, Italy."
+			},
+			{
+				"name": "Ludovica Maci",
+				"affiliation": "Dipartimento di Biologia e Biotecnologie \"Lazzaro Spallanzani\", Università di Pavia, Pavia, Italy."
+			},
+			{
+				"name": "Maria Concetta Marturano",
+				"affiliation": "Dipartimento di Biologia e Biotecnologie \"Lazzaro Spallanzani\", Università di Pavia, Pavia, Italy."
+			},
+			{
+				"name": "Edda De Rossi",
+				"affiliation": "Dipartimento di Biologia e Biotecnologie \"Lazzaro Spallanzani\", Università di Pavia, Pavia, Italy."
+			},
+			{
+				"name": "Laurent Roberto Chiarelli",
+				"affiliation": "Dipartimento di Biologia e Biotecnologie \"Lazzaro Spallanzani\", Università di Pavia, Pavia, Italy."
+			},
+			{
+				"name": "Maria Rosalia Pasca",
+				"affiliation": "Dipartimento di Biologia e Biotecnologie \"Lazzaro Spallanzani\", Università di Pavia, Pavia, Italy."
+			},
+			{
+				"name": "Giulia Degiacomi",
+				"affiliation": "Dipartimento di Biologia e Biotecnologie \"Lazzaro Spallanzani\", Università di Pavia, Pavia, Italy."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Mycobacteriophage Mcgavigan Uses Noncanonical Bxb1-Like Repressor for Heterotypic Superinfection Immunity",
+		"source": "Journal of basic microbiology",
+		"issn": "1521-4028",
+		"doi": "10.1002/jobm.70133",
+		"abstract": "Mycobacteriophage Mcgavigan could be a promising candidate for use as a preventative agent against infections with Mycobacterium avium subsp. paratuberculosis. Bioinformatic analysis of the Mcgavigan genome revealed the presence of an operon containing a \"Bxb1-like\" repressor. The operon may have been acquired by the phage through horizontal gene transfer with a Bxb1-like mycobacteriophage in its evolutionary past. We sought to investigate the function of the acquired repressor as a potential regulator of lysogeny or as a source of heterotypic superinfection immunity. Recombineering with CRISPR counter-selection was employed to achieve a clean deletion of the Bxb1-like repressor from Mcgavigan's genome. Integrase was also deleted as a means of creating a lytic-only phage for comparison purposes and the elimination of lysogeny with this edit was confirmed. To test phenotypic changes which resulted from these deletions, several parameters such as burst size, latency period, and killing efficiency were measured for each knockout mutant and lysogeny was tested. The integrase deletion mutant had complete lysogeny abolishment and performed similarly to wild-type phage on all measured parameters. The deletion of the Bxb1-like repressor did not affect the lysogenic capability of the phage. Whereas Mcgavigan lysogens are typically immune to superinfection from Terelak, a mycobacteriophage related to Bxb1, lysogens created from Mcgavigan with the Bxb1-like repressor deletion were completely resensitized to heterotypic superinfection by Terelak. This suggested that this repressor was acquired by Mcgavigan through horizontal gene transfer for the purposes of superinfection immunity against cluster A1 mycobacteriophages and was not used for maintenance of lysogeny.",
+		"rank": 3,
+		"year": 2026,
+		"volume": 66,
+		"issue": 1,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Natali Shafer",
+				"affiliation": "Faculty of Veterinary Medicine, University of Calgary, Calgary, Alberta, Canada."
+			},
+			{
+				"name": "Bradley E Dubrule",
+				"affiliation": "Faculty of Veterinary Medicine, University of Calgary, Calgary, Alberta, Canada."
+			},
+			{
+				"name": "Jeroen De Buck",
+				"affiliation": "Faculty of Veterinary Medicine, University of Calgary, Calgary, Alberta, Canada."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Advances and Challenges in Mycobacterial Genetic Engineering: Techniques for Knockout, Knockdown and Overexpression",
+		"source": "Journal of microbiology and biotechnology",
+		"issn": "1738-8872",
+		"doi": "10.4014/jmb.2507.07051",
+		"abstract": "Genetic engineering of mycobacteria is challenging due to their hydrophobic cell wall structure and slow growth rates. Despite these obstacles, significant progress has been made to develop genetic engineering tools to study gene function and pathogenesis in these organisms. This review comprehensively explores the current methodologies employed in the genetic modification of mycobacteria, focusing on gene knockout, knockdown, and overexpression systems. Techniques covered include homologous recombination, recombineering, transposon mutagenesis, CRISPR-Cas systems, conditional expression strategies, and phage-mediated gene delivery. The mechanism, advantages, and limitations of those methods are critically analyzed, with particular emphasis on the adaptability of these tools to various mycobacterial species. By providing a detailed comparative analysis of available genetic tools, this review is a practical guide for researchers aiming to develop targeted and efficient genetic modifications in Mycobacterium species, accelerating discoveries in pathogenesis, drug resistance, and vaccine development.",
+		"rank": 4,
+		"year": 2025,
+		"volume": 35,
+		"issue": 0,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Thi Oanh Dao",
+				"affiliation": "Department of Microbiology and Convergence Medical Science, College of Medicine, Gyeongsang National University, Jinju 52727, Republic of Korea."
+			},
+			{
+				"name": "Hyun-Eui Park",
+				"affiliation": "Department of Microbiology, Yonsei University Wonju College of Medicine, Wonju 26493, Republic of Korea."
+			},
+			{
+				"name": "Jun Ho Lee",
+				"affiliation": "Department of Infectious Disease, Research Institute for Veterinary Science, BK21 FOUR Future Veterinary Medicine Leading Education and Research Center, College of Veterinary Medicine, Seoul National University, Seoul 08826, Republic of Korea."
+			},
+			{
+				"name": "Kyu-Min Kim",
+				"affiliation": "Department of Microbiology and Convergence Medical Science, College of Medicine, Gyeongsang National University, Jinju 52727, Republic of Korea."
+			},
+			{
+				"name": "Minh Phuong Trinh",
+				"affiliation": "Department of Microbiology and Convergence Medical Science, College of Medicine, Gyeongsang National University, Jinju 52727, Republic of Korea."
+			},
+			{
+				"name": "Hyung-Lyun Kang",
+				"affiliation": "Department of Microbiology and Convergence Medical Science, College of Medicine, Gyeongsang National University, Jinju 52727, Republic of Korea."
+			},
+			{
+				"name": "Han Sang Yoo",
+				"affiliation": "Department of Infectious Disease, Research Institute for Veterinary Science, BK21 FOUR Future Veterinary Medicine Leading Education and Research Center, College of Veterinary Medicine, Seoul National University, Seoul 08826, Republic of Korea."
+			},
+			{
+				"name": "Min-Kyoung Shin",
+				"affiliation": "Department of Microbiology and Convergence Medical Science, College of Medicine, Gyeongsang National University, Jinju 52727, Republic of Korea."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Exploration of Retron Elements for the Genetic Engineering of Acidithiobacillus ferrooxidans",
+		"source": "ACS synthetic biology",
+		"issn": "2161-5063",
+		"doi": "10.1021/acssynbio.5c00583",
+		"abstract": "Acidithiobacillus ferrooxidans is a chemolithoautotrophic acidophilic bacterium widely found in industrial biomining operations. The cells obtain energy through iron and/or sulfur oxidation, and the resulting ferric iron can solubilize copper and other critical materials. The genetic engineering of acidophiles including A. ferrooxidans remains challenging due to limited molecular tools. In this study, we explored the feasibility of retron-based genetic engineering tools in A. ferrooxidans ATCC23270, leveraging a pBAD promoter system for inducible gene expression. We successfully expressed retron elements in Escherichia coli using the broad host pJRD215 plasmid and demonstrated both RNA and DNA antisense interference. We then expressed retron elements in A. ferrooxidans and targeted RNA antisense interference of the PetA2 gene, which is a bc1 complex gene involved in the sulfur metabolism electron transport chain. Engineered strains exhibited reduced expression of sulfur oxidation genes and increased iron oxidation under high sulfur conditions, demonstrating retron-mediated regulation. While transcriptional interference was evident, genome editing in concert with the addition of a single-stranded annealing protein (SSAP), or recombineering, was not detected in A. ferrooxidans. These findings establish retrons as a viable new tool for genetic modulation in A. ferrooxidans, suggesting a new capability for metabolic engineering of acidophilic extremophiles.",
+		"rank": 5,
+		"year": 2025,
+		"volume": 14,
+		"issue": 11,
+		"startpage": 4563,
+		"endpage": 4573,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Zihang Su",
+				"affiliation": "Department of Chemical Engineering, Columbia University, 500 West 120th Street, New York, New York 10027, United States."
+			},
+			{
+				"name": "Heejung Jung",
+				"affiliation": "Department of Chemical Engineering, Columbia University, 500 West 120th Street, New York, New York 10027, United States."
+			},
+			{
+				"name": "Yuta Inaba",
+				"affiliation": "Department of Chemical Engineering, Columbia University, 500 West 120th Street, New York, New York 10027, United States."
+			},
+			{
+				"name": "Scott A Banta",
+				"affiliation": "Department of Chemical Engineering, Columbia University, 500 West 120th Street, New York, New York 10027, United States."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "RECKLEEN is a lambda Red/CRISPR-Cas9 based single plasmid platform for enhanced genome editing in Klebsiella pneumoniae",
+		"source": "Communications biology",
+		"issn": "2399-3642",
+		"doi": "10.1038/s42003-025-08934-8",
+		"abstract": "Klebsiella pneumoniae (Kp) has evolved as a major public health threat due to its multidrug-resistance (MDR) and hypervirulence. Current Kp genome-editing tools are constrained by cumbersome workflows, low flexibility, and limited scalability. Here, we present the RECKLEEN system -Recombineering/CRISPR-based KLebsiella Engineering for Efficient Nucleotide editing - as a single plasmid platform designed for precise genetic manipulation of Kp. RECKLEEN combines lambda Red recombineering with powerful CRISPR-Cas9-based targeted counterselection, achieving up to 99.998% killing efficiency. By implementing the near PAM-less SpG Cas9 variant in RECKLEEN, the compatible target sequence spectrum was significantly broadened. This approach enables deletions, point mutations, and DNA integrations, with efficiencies reaching 100% of the counter-selected clones. Simultaneous multi-target deletions were accomplished with up to 72% efficiency. To streamline the process, we developed a toolbox of eleven plasmids based on a modular cloning standard, enabling time- and resource-efficient assembly of editing constructs. This allows a 5-days workflow, from plasmid construction to the generation of strains with the desired genetic modification(s). The efficacy of RECKLEEN extends to various MDR Kp strains, such as ATCC 700721, ATCC BAA-1705, and ATCC 700603, demonstrating its broad applicability. RECKLEEN significantly enhances genome-editing capabilities for Kp, advancing research into its pathology and MDR mechanisms.",
+		"rank": 6,
+		"year": 2025,
+		"volume": 8,
+		"issue": 1,
+		"startpage": 1509,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Eslam M Elsayed",
+				"affiliation": "Center for Synthetic Microbiology (SYNMIKRO), Philipps-Universität Marburg, Marburg, Germany."
+			},
+			{
+				"name": "Daniel Stukenberg",
+				"affiliation": "Center for Synthetic Microbiology (SYNMIKRO), Philipps-Universität Marburg, Marburg, Germany."
+			},
+			{
+				"name": "Doreen Meier",
+				"affiliation": "Center for Synthetic Microbiology (SYNMIKRO), Philipps-Universität Marburg, Marburg, Germany."
+			},
+			{
+				"name": "Bernd Schmeck",
+				"affiliation": "Center for Synthetic Microbiology (SYNMIKRO), Philipps-Universität Marburg, Marburg, Germany."
+			},
+			{
+				"name": "Anke Becker",
+				"affiliation": "Center for Synthetic Microbiology (SYNMIKRO), Philipps-Universität Marburg, Marburg, Germany. anke.becker@synmikro.uni-marburg.de."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Recombineering-based Manufacturing of Engineered Viral Vectors for Research and Therapy",
+		"source": "Journal of visualized experiments : JoVE",
+		"issn": "1940-087X",
+		"doi": "10.3791/68988",
+		"abstract": "The increasing demand for engineered viral vectors in both basic and translational research has underscored the need for flexible, rapid, and scalable methods to generate recombinant DNA viruses. Strategies relying on restriction enzyme digestion and ligation are constrained by sequence-dependent limitations and time-consuming cloning steps. Here, we describe the recombination-mediated genetic engineering method (recombineering) that circumvents these limitations by enabling precise and seamless modifications of viral genomes in bacterial artificial chromosomes (BACs). This approach allows for efficient deletion, insertion, or substitution of coding or non-coding genetic elements, providing a powerful platform for high-throughput viral vector development. Recombineering is particularly valuable in basic research applications, such as the deletion or mutation of viral genes to investigate their function. More importantly, this methodology enables the generation of tens of recombinant viruses encoding distinct immunostimulatory or therapeutic payloads in parallel, making it exceptionally well-suited for the rapid preclinical evaluation of novel constructs. While this technology can be potentially implemented for any scientific purpose, this article focuses on the application of recombineering in two specific areas: the generation of oncolytic viruses based on herpes simplex virus, and the development of non-replicative adenoviral vectors for gene transfer. In conclusion, recombineering offers a versatile approach to viral genome engineering, significantly accelerating the pipeline from design to functional testing. Its relevance spans from fundamental virology to translational medicine to meet evolving research and clinical needs.",
+		"rank": 7,
+		"year": 2025,
+		"volume": 0,
+		"issue": 223,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Annagiulia Scognamiglio",
+				"affiliation": "CEINGE Biotecnologie Avanzate Franco Salvatore S.C.aR.L.; Department of Molecular Medicine and Medical Biotechnology, University of Naples Federico II."
+			},
+			{
+				"name": "Simone Totaro",
+				"affiliation": "CEINGE Biotecnologie Avanzate Franco Salvatore S.C.aR.L.; Department of Molecular Medicine and Medical Biotechnology, University of Naples Federico II."
+			},
+			{
+				"name": "Alfredo Cipriano",
+				"affiliation": "CEINGE Biotecnologie Avanzate Franco Salvatore S.C.aR.L.; Department of Molecular Medicine and Medical Biotechnology, University of Naples Federico II."
+			},
+			{
+				"name": "Alfredo Nicosia",
+				"affiliation": "CEINGE Biotecnologie Avanzate Franco Salvatore S.C.aR.L.; Department of Molecular Medicine and Medical Biotechnology, University of Naples Federico II; ImGen-T Srl."
+			},
+			{
+				"name": "Nicola Zambrano",
+				"affiliation": "CEINGE Biotecnologie Avanzate Franco Salvatore S.C.aR.L.; Department of Molecular Medicine and Medical Biotechnology, University of Naples Federico II."
+			},
+			{
+				"name": "Emanuele Sasso",
+				"affiliation": "CEINGE Biotecnologie Avanzate Franco Salvatore S.C.aR.L.; Department of Molecular Medicine and Medical Biotechnology, University of Naples Federico II; ImGen-T Srl."
+			},
+			{
+				"name": "Guendalina Froechlich",
+				"affiliation": "CEINGE Biotecnologie Avanzate Franco Salvatore S.C.aR.L.; Department of Molecular Medicine and Medical Biotechnology, University of Naples Federico II; guendalina.froechlich@unina.it."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Isolation of Porcine Adenovirus Serotype 5 and Construction of Recombinant Virus as a Vector Platform for Vaccine Development",
+		"source": "Viruses",
+		"issn": "1999-4915",
+		"doi": "10.3390/v17091270",
+		"abstract": "Porcine adenovirus serotype 5 (PAdV-5) is an emerging viral vector platform for veterinary vaccines; however, its genomic plasticity and essential replication elements remain incompletely characterized. This study reports the isolation and reverse genetic manipulation of a novel PAdV-5 strain (GD84) from diarrheic piglets in China. PCR screening of 167 clinical samples revealed a PAdV-5 detection rate of 38.3% (64/167), with successful isolation on ST cells after three blind passages. The complete GD84 genome is 32,620 bp in length and exhibited 99.0% nucleotide identity to the contemporary strain Ino5, but only 97.0% to the prototype HNF-70. It features an atypical GC content of 51.0% and divergent structural genes-most notably the hexon gene (89% identity to HNF-70)-suggesting altered immunogenicity. Using Red/ET recombineering, we established a rapid (less than 3 weeks) reverse genetics platform and generated four E3-modified recombinants: ΔE3-All-eGFP, ΔE3-12.5K-eGFP, ΔE3-12.5K+ORF4-eGFP, and E3-Insert-eGFP. Crucially, the ΔE3-All-eGFP construct (complete E3 deletion) failed to be rescued, while constructs preserving the 12.5K open reading frame (ORF) yielded replication-competent viruses with sustained eGFP expression over three serial passages and titers over 107.0 TCID50/mL. Fluorescence intensity was inversely correlated with genome size, as the full-length E3-Insert-eGFP virus showed reduced expression compared with the ΔE3 variants. Our work identifies the 12.5K ORF as essential for PAdV-5 replication and provides an optimized vaccine engineering platform that balances genomic payload capacity with replicative fitness.",
+		"rank": 8,
+		"year": 2025,
+		"volume": 17,
+		"issue": 9,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Qianhua He",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, South China Agricultural University, Guangzhou 510642, China."
+			},
+			{
+				"name": "Jun Wu",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, South China Agricultural University, Guangzhou 510642, China."
+			},
+			{
+				"name": "Zhilong Bian",
+				"affiliation": "Artemis Shield Animal Health Co., Ltd., Guangzhou 510000, China."
+			},
+			{
+				"name": "Yuan Sun",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, South China Agricultural University, Guangzhou 510642, China."
+			},
+			{
+				"name": "Jingyun Ma",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, South China Agricultural University, Guangzhou 510642, China."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Teashirt and C-Terminal Binding Protein Interact to Regulate Drosophila Eye Development",
+		"source": "Genes",
+		"issn": "2073-4425",
+		"doi": "10.3390/genes16091045",
+		"abstract": "Background and Objectives: The Drosophila retinal determination network comprises the transcription factor Teashirt (Tsh) and the transcription co-regulator C-terminal Binding Protein (CtBP), both of which are essential for normal adult eye development. Both Tsh and CtBP show a pattern of co-expression in the proliferating cells anterior to the morphogenetic furrow that demarcates the boundary between the anteriorly placed proliferating eye precursor cells and the posteriorly placed differentiating photoreceptor cells in the larval eye-precursor tissue, the eye-antennal disc. The disc ultimately develops into the adult compound eyes, antenna, and other head structures. Both Tsh and CtBP were found to interact genetically during ectopic eye formation in Drosophila, and both were present in molecular complexes purified from gut and cultured cells. However, it remained unknown whether Tsh and CtBP molecules could interact in the eye-antennal discs and elicit an effect on eye development. The present study answers these questions. Methods: 5' GFP-tagging of the tsh gene in the Drosophila genome and 5' FLAG-tagging of the ctbp gene were accomplished by the CRISPR-Cas9 and BAC recombineering methods, respectively, to produce GFP-Tsh- and FLAG-CtBP-fused proteins in specific transgenic Drosophila strains. Verification of these proteins' expression in the larval eye-antennal discs was performed by immunohistological staining and confocal microscopy. Genetic screening was performed to establish functional interaction between Tsh and CtBP during eye development. Scanning Electron Microscopy was performed to image the adult eye structure. Co-immunoprecipitation and GST pulldown assays were performed to show that Tsh and CtBP interact in the cells of the third instar eye-antennal discs. Results: This study reveals that Tsh and CtBP interact genetically and physically in the Drosophila third instar larval eye-antennal disc to regulate adult eye development. This interaction is likely to limit the population of the eye precursor cells in the larval eye disc of Drosophila. Conclusions: The relative abundance of Tsh and CtBP in the third instar larval eye-antennal disc can dictate the outcome of their interaction on the Drosophila eye formation.",
+		"rank": 9,
+		"year": 2025,
+		"volume": 16,
+		"issue": 9,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Surya Jyoti Banerjee",
+				"affiliation": "Department of Biological Sciences, Texas Tech University, Lubbock, TX 79409, USA."
+			},
+			{
+				"name": "Jennifer Curtiss",
+				"affiliation": "Department of Biology, New Mexico State University, Las Cruces, NM 88003, USA."
+			},
+			{
+				"name": "Chase Drucker",
+				"affiliation": "Department of Biological Sciences, Texas Tech University, Lubbock, TX 79409, USA."
+			},
+			{
+				"name": "Harley Hines",
+				"affiliation": "Department of Biological Sciences, Arkansas Tech University, Russellville, AR 72801, USA."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "EASY-edit: a toolbox for high-throughput single-step custom genetic editing in bacteria",
+		"source": "Nucleic acids research",
+		"issn": "1362-4962",
+		"doi": "10.1093/nar/gkaf883",
+		"abstract": "Targeted gene editing can be achieved using CRISPR-Cas9-assisted recombineering. However, high-efficiency editing requires careful optimization for each locus to be modified, which can be tedious and time-consuming. In this work, we developed a simple, fast and cheap method: Engineered Assembly of SYnthetic operons for targeted editing (EASY-edit) in Escherichia coli. Highly efficient editing of the different constitutive elements of the operons can be achieved by using a set of optimized guide RNAs and single- or double-stranded DNA repair templates carrying relatively short homology arms. This facilitates the construction of multiple genetic tools, including mutant libraries or reporter genes. EASY-edit is also highly modular, as we provide alternative and complementary versions of the operon inserted in three loci which can be edited iteratively and easily combined. As a proof of concept, we report the construction of several fusions with reporter genes confirming known post-transcriptional regulation mechanisms and the construction of saturated and unbiased mutant libraries. In summary, the EASY-edit system provides a flexible genomic expression platform that can be used both for the understanding of biological processes and as a tool for bioengineering applications.",
+		"rank": 10,
+		"year": 2025,
+		"volume": 53,
+		"issue": 17,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Maxence Lejars",
+				"affiliation": "Expression génétique microbienne, UMR8261 CNRS, Université Paris Cité, Institut de Biologie Physico-Chimique, Paris 75005, France."
+			},
+			{
+				"name": "Tomoya Maeda",
+				"affiliation": "Laboratory of Microbial Physiology, Research Faculty of Agriculture, Hokkaido University, Sapporo 060-8589, Hokkaido, Japan."
+			},
+			{
+				"name": "Maude Guillier",
+				"affiliation": "Expression génétique microbienne, UMR8261 CNRS, Université Paris Cité, Institut de Biologie Physico-Chimique, Paris 75005, France."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Engineering and Functional Expression of the Type III Secretion System in Xenorhabdus: Enhancing Insecticidal Efficacy and Expanding T3SE Libraries",
+		"source": "Journal of agricultural and food chemistry",
+		"issn": "1520-5118",
+		"doi": "10.1021/acs.jafc.5c08269",
+		"abstract": "Entomopathogenic nematode symbiotic bacteria (EPNB) enhance nematode insecticidal capacity through symbiosis. This study cloned the complete 32-kb type III secretion system (T3SS) gene cluster from Photorhabdus luminescens TT01 using Red/ET recombineering and functionally expressed it in T3SS-deficient Xenorhabdus stockiae HN_xs01. Heterologous T3SS expression significantly enhanced HN_xs01 adhesion and invasion capabilities in CF-203 cells. In Helicoverpa armigera models, the engineered strain induced severe intestinal damage by suppressing antimicrobial peptide expression and demonstrated improved colonization and biocontrol efficacy (LC50 decreased by 3.7-fold). Crucially, the TT01 derived T3SS mediated delivery of XopA─a novel effector exhibiting YopJ-family homology and characteristic T3SS effector features─into host cells. These findings establish the synthetic biology-driven potential of T3SS and its effectors for biological control applications while providing a mechanistic framework for future research.",
+		"rank": 11,
+		"year": 2025,
+		"volume": 73,
+		"issue": 38,
+		"startpage": 24042,
+		"endpage": 24054,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Xiyin Huang",
+				"affiliation": "Institute of Synthetic Biology Industry (College of Synthetic Biology Industry), Hunan University of Arts and Science, Changde 415000, China."
+			},
+			{
+				"name": "Chen Li",
+				"affiliation": "State Key Laboratory of Developmental Biology of Freshwater Fish, Hunan Provincial Key Laboratory of Microbial Molecular Biology, College of Life Science, Hunan Normal University, Changsha 410081, China."
+			},
+			{
+				"name": "Ke Zhang",
+				"affiliation": "State Key Laboratory of Developmental Biology of Freshwater Fish, Hunan Provincial Key Laboratory of Microbial Molecular Biology, College of Life Science, Hunan Normal University, Changsha 410081, China."
+			},
+			{
+				"name": "Kunyan Li",
+				"affiliation": "State Key Laboratory of Developmental Biology of Freshwater Fish, Hunan Provincial Key Laboratory of Microbial Molecular Biology, College of Life Science, Hunan Normal University, Changsha 410081, China."
+			},
+			{
+				"name": "Jiajie Xie",
+				"affiliation": "State Key Laboratory of Developmental Biology of Freshwater Fish, Hunan Provincial Key Laboratory of Microbial Molecular Biology, College of Life Science, Hunan Normal University, Changsha 410081, China."
+			},
+			{
+				"name": "Meifang Quan",
+				"affiliation": "State Key Laboratory of Developmental Biology of Freshwater Fish, Hunan Provincial Key Laboratory of Microbial Molecular Biology, College of Life Science, Hunan Normal University, Changsha 410081, China."
+			},
+			{
+				"name": "Yunjun Sun",
+				"affiliation": "State Key Laboratory of Developmental Biology of Freshwater Fish, Hunan Provincial Key Laboratory of Microbial Molecular Biology, College of Life Science, Hunan Normal University, Changsha 410081, China."
+			},
+			{
+				"name": "Yibo Hu",
+				"affiliation": "State Key Laboratory of Developmental Biology of Freshwater Fish, Hunan Provincial Key Laboratory of Microbial Molecular Biology, College of Life Science, Hunan Normal University, Changsha 410081, China."
+			},
+			{
+				"name": "Liqiu Xia",
+				"affiliation": "State Key Laboratory of Developmental Biology of Freshwater Fish, Hunan Provincial Key Laboratory of Microbial Molecular Biology, College of Life Science, Hunan Normal University, Changsha 410081, China."
+			},
+			{
+				"name": "Shengbiao Hu",
+				"affiliation": "State Key Laboratory of Developmental Biology of Freshwater Fish, Hunan Provincial Key Laboratory of Microbial Molecular Biology, College of Life Science, Hunan Normal University, Changsha 410081, China."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Clusters of deep intronic RbFox motifs embedded in large assembly of splicing regulators sequences regulate alternative splicing",
+		"source": "PLoS genetics",
+		"issn": "1553-7404",
+		"doi": "10.1371/journal.pgen.1011855",
+		"abstract": "The RbFox RNA binding proteins regulate alternative splicing of genes governing mammalian development and organ function. They bind to the RNA sequence (U)GCAUG with high affinity but also non-canonical secondary motifs in a concentration dependent manner. However, the hierarchical requirement of RbFox motifs, which are widespread in the genome, is still unclear. Here we show that deep intronic, tightly clustered RbFox1 motifs cooperate and are important regulators of alternative exons splicing. Bioinformatic analysis revealed that (U)GCAUG-clusters are widely present in both mouse and human genes and are embedded in sequences binding the large assembly of splicing regulators (LASR). Integrative data analysis from eCLIP and RNAseq experiments showed a global increase in RNA isoform modulation of genes with Rbfox1 eCLIP-peaks associated with these clusters. Experimentally, by employing recombineering mutagenesis in a bacterial artificial chromosome containing the NTrk2 mouse region subjected to alternative splicing we showed that tightly clustered (U)GCAUG motifs in the middle of 50 Kb introns are necessary for RbFox1 regulation of NTrk2 gene isoforms expression. Moreover, our data raise the possibility that clustered (U)GCAUG-motifs promote the recruitment of RbFox proteins to form a Rbfox/LASR complex required for splicing. Altogether, these data suggest that clustered, distal intronic Rbfox-binding motifs embedded in LASR binding sequences are important determinants of RbFox1 function in the mammalian genome and provide a target for identification of pathogenic mutations.",
+		"rank": 12,
+		"year": 2025,
+		"volume": 21,
+		"issue": 9,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Francesco Tomassoni-Ardori",
+				"affiliation": "Neural Development Section, Mouse Cancer Genetics Program, Center for Cancer Research, National Cancer Institute, National Institutes of Health, Frederick, Maryland, United States of America."
+			},
+			{
+				"name": "Mary Ellen Palko",
+				"affiliation": "Neural Development Section, Mouse Cancer Genetics Program, Center for Cancer Research, National Cancer Institute, National Institutes of Health, Frederick, Maryland, United States of America."
+			},
+			{
+				"name": "Melissa Galloux",
+				"affiliation": "Independent bioinformatician, Marseille, France."
+			},
+			{
+				"name": "Lino Tessarollo",
+				"affiliation": "Neural Development Section, Mouse Cancer Genetics Program, Center for Cancer Research, National Cancer Institute, National Institutes of Health, Frederick, Maryland, United States of America."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Ultra-high field strength electroporation enables efficient DNA transformation and genome editing in nontuberculous mycobacteria",
+		"source": "Microbiology spectrum",
+		"issn": "2165-0497",
+		"doi": "10.1128/spectrum.01944-25",
+		"abstract": "Efficient DNA delivery is essential for genetic manipulation of mycobacteria and for dissecting their physiology, pathogenesis, and drug resistance. Although electroporation enables transformation efficiencies exceeding 10⁵ CFU per µg DNA in Mycobacterium smegmatis and Mycobacterium tuberculosis, it remains highly inefficient in many nontuberculous mycobacteria (NTM), including Mycobacterium abscessus. Here, we discovered that NTM such as M. abscessus exhibit exceptional tolerance to ultra-high electric field strengths and that hypertonic preconditioning partially protects cells from electroporation-induced damage. Using ultra-high electric field strength (3 kV/mm) electroporation, we achieved dramatic improvements in plasmid transformation efficiency-up to 106-fold in M. abscessus, 83-fold in Mycobacterium marinum, and 37-fold in Mycobacterium kansasii-compared to standard conditions (1.25  kV/mm). Transformation efficiency was further influenced by the choice of selectable marker. Ultra-high field strength electroporation also markedly enhanced allelic exchange in M. abscessus expressing Che9c RecET recombinases, increasing the recovery of gene deletion mutants by over 1,000-fold relative to conventional electroporation. In parallel, oligonucleotide-mediated recombineering for targeted point mutations produced nearly 10,000-fold more mutants under ultra-high field conditions. Together, these findings establish ultra-high field electroporation as a robust, broadly applicable platform for genetic engineering of NTMs. This method substantially enhances transformation efficiency and enables construction of advanced genetic tools-including expression libraries and CRISPRi knockdown libraries-in species that have historically resisted genetic manipulation.IMPORTANCEInfections caused by nontuberculous mycobacteria (NTM), including Mycobacterium abscessus, are increasing globally, yet genetic manipulation of these pathogens remains technically challenging due to inefficient DNA delivery and low gene editing success. The ultra-high electric field strength electroporation strategy described here overcomes these barriers, enabling dramatic improvements in both transformation and genome editing efficiency. This advance paves the way for high-throughput functional genomics in NTMs, including the construction of genome-wide knockout, CRISPRi knockdown, and expression libraries. Broad adoption of this approach will accelerate discovery of genetic determinants of virulence and drug resistance, facilitating the development of antimicrobials and vaccines.",
+		"rank": 13,
+		"year": 2025,
+		"volume": 13,
+		"issue": 10,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Daoyan Tang",
+				"affiliation": "Department of Respiratory and Critical Care Medicine, West China Hospital, Sichuan University, Chengdu, China."
+			},
+			{
+				"name": "Minggui Wang",
+				"affiliation": "Institute of Respiratory Health, Frontiers Science Center for Disease-related Molecular Network, West China Hospital, Sichuan University, Chengdu, China."
+			},
+			{
+				"name": "Dan Wang",
+				"affiliation": "Institute of Respiratory Health, Frontiers Science Center for Disease-related Molecular Network, West China Hospital, Sichuan University, Chengdu, China."
+			},
+			{
+				"name": "Danni Yang",
+				"affiliation": "Institute of Respiratory Health, Frontiers Science Center for Disease-related Molecular Network, West China Hospital, Sichuan University, Chengdu, China."
+			},
+			{
+				"name": "Yi Cai",
+				"affiliation": "Guangdong Provincial Key Laboratory of Infection Immunity and Inflammation, Department of Pathogen Biology, Shenzhen University Medical School, Shenzhen, China."
+			},
+			{
+				"name": "Tao Luo",
+				"affiliation": "Department of Pathogen Biology, West China School of Basic Medical Sciences & Forensic Medicine, Sichuan University, Chengdu, China."
+			},
+			{
+				"name": "Jianqing He",
+				"affiliation": "Department of Respiratory and Critical Care Medicine, West China Hospital, Sichuan University, Chengdu, China."
+			},
+			{
+				"name": "Qinglan Wang",
+				"affiliation": "Institute of Respiratory Health, Frontiers Science Center for Disease-related Molecular Network, West China Hospital, Sichuan University, Chengdu, China."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Recombinant SADS-CoV as a vector for porcine epidemic diarrhea vaccine development",
+		"source": "Frontiers in immunology",
+		"issn": "1664-3224",
+		"doi": "10.3389/fimmu.2025.1633661",
+		"abstract": "Swine acute diarrhea syndrome coronavirus (SADS-CoV) is an emerging porcine enteric coronavirus that can cause diarrhea in piglets younger than 5 days of age. However, infection of pigs older than 5 days of age does not usually result in obvious clinical symptoms. This relative intrinsic safety in older animals prompted us to investigate the potential of SADS-CoV as a viral vector for porcine diarrhea virus vaccines. We utilized Gibson assembly to clone the SADS-CoV sequence into an artificial bacterial chromosome (BAC) vector. Further manipulation was carried out by recombineering to generate four attenuated recombinant SADS-CoV strains expressing a PEDV protective antigen fused with peptides that target immune cells. Subsequently, the biological characteristics and immunogenic efficacy of these four recombinant strains were systematically assessed through in vitro cell models and in vivo animal challenge experiments. The recombinant viruses exhibited a proliferation profile similar to that of the wild-type virus in Vero cells, maintained stable cytopathic effects, retained the exogenous sequences for up to 20 passages, and consistently expressed the PEDV antigen fusion protein. Immunizing pregnant sows with these recombinant viruses effectively enhanced both cellular and mucosal immune responses and provided significant clinical protection against PEDV to their offspring. This study not only generated a vaccine candidate for PEDV but also established a pipeline for using the SADS-CoV as a vector for vaccine development.",
+		"rank": 14,
+		"year": 2025,
+		"volume": 16,
+		"issue": 0,
+		"startpage": 1633661,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Xiaoling Yan",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, College of Animal Science, South China Agricultural University, Guangzhou, China."
+			},
+			{
+				"name": "Xiaoli Zhang",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, College of Animal Science, South China Agricultural University, Guangzhou, China."
+			},
+			{
+				"name": "Xiaocheng Lyu",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, College of Animal Science, South China Agricultural University, Guangzhou, China."
+			},
+			{
+				"name": "Yaoyao Zheng",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, College of Animal Science, South China Agricultural University, Guangzhou, China."
+			},
+			{
+				"name": "Qianniu Li",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, College of Animal Science, South China Agricultural University, Guangzhou, China."
+			},
+			{
+				"name": "Xiaoya Zhao",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, College of Animal Science, South China Agricultural University, Guangzhou, China."
+			},
+			{
+				"name": "Jun Fu",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University-Helmholtz Institute of Biotechnology, Shandong University, Qingdao, China."
+			},
+			{
+				"name": "Jingyun Ma",
+				"affiliation": "State Key Laboratory of Swine and Poultry Breeding Industry, College of Animal Science, South China Agricultural University, Guangzhou, China."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Synthetic and Functional Engineering of Bacteriophages: Approaches for Tailored Bactericidal, Diagnostic, and Delivery Platforms",
+		"source": "Molecules (Basel, Switzerland)",
+		"issn": "1420-3049",
+		"doi": "10.3390/molecules30153132",
+		"abstract": "Bacteriophages (phages), the most abundant biological entities on Earth, have long served as both model systems and therapeutic tools. Recent advances in synthetic biology and genetic engineering have revolutionized the capacity to tailor phages with enhanced functionality beyond their natural capabilities. This review outlines the current landscape of synthetic and functional engineering of phages, encompassing both in-vivo and in-vitro strategies. We describe in-vivo approaches such as phage recombineering systems, CRISPR-Cas-assisted editing, and bacterial retron-based methods, as well as synthetic assembly platforms including yeast-based artificial chromosomes, Gibson, Golden Gate, and iPac assemblies. In addition, we explore in-vitro rebooting using TXTL (transcription-translation) systems, which offer a flexible alternative to cell-based rebooting but are less effective for large genomes or structurally complex phages. Special focus is given to the design of customized phages for targeted applications, including host range expansion via receptor-binding protein modifications, delivery of antimicrobial proteins or CRISPR payloads, and the construction of biocontained, non-replicative capsid systems for safe clinical use. Through illustrative examples, we highlight how these technologies enable the transformation of phages into programmable bactericidal agents, precision diagnostic tools, and drug delivery vehicles. Together, these advances establish a powerful foundation for next-generation antimicrobial platforms and synthetic microbiology.",
+		"rank": 15,
+		"year": 2025,
+		"volume": 30,
+		"issue": 15,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Ola Alessa",
+				"affiliation": "Division of Bacteriology, Department of Infection and Immunity, School of Medicine, Jichi Medical University, Shimotsuke 329-0498, Japan."
+			},
+			{
+				"name": "Yoshifumi Aiba",
+				"affiliation": "Division of Bacteriology, Department of Infection and Immunity, School of Medicine, Jichi Medical University, Shimotsuke 329-0498, Japan."
+			},
+			{
+				"name": "Mahmoud Arbaah",
+				"affiliation": "Division of Bacteriology, Department of Infection and Immunity, School of Medicine, Jichi Medical University, Shimotsuke 329-0498, Japan."
+			},
+			{
+				"name": "Yuya Hidaka",
+				"affiliation": "Division of Bacteriology, Department of Infection and Immunity, School of Medicine, Jichi Medical University, Shimotsuke 329-0498, Japan."
+			},
+			{
+				"name": "Shinya Watanabe",
+				"affiliation": "Division of Bacteriology, Department of Infection and Immunity, School of Medicine, Jichi Medical University, Shimotsuke 329-0498, Japan."
+			},
+			{
+				"name": "Kazuhiko Miyanaga",
+				"affiliation": "Division of Bacteriology, Department of Infection and Immunity, School of Medicine, Jichi Medical University, Shimotsuke 329-0498, Japan."
+			},
+			{
+				"name": "Dhammika Leshan Wannigama",
+				"affiliation": "Department of Infectious Diseases and Infection Control, Yamagata Prefectural Central Hospital, Yamagata 990-2292, Japan."
+			},
+			{
+				"name": "Longzhu Cui",
+				"affiliation": "Division of Bacteriology, Department of Infection and Immunity, School of Medicine, Jichi Medical University, Shimotsuke 329-0498, Japan."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Genome-Editing Tools for Lactic Acid Bacteria: Past Achievements, Current Platforms, and Future Directions",
+		"source": "International journal of molecular sciences",
+		"issn": "1422-0067",
+		"doi": "10.3390/ijms26157483",
+		"abstract": "Lactic acid bacteria (LAB) are central to food, feed, and health biotechnology, yet their genomes have long resisted rapid, precise manipulation. This review charts the evolution of LAB genome-editing strategies from labor-intensive RecA-dependent double-crossovers to state-of-the-art CRISPR and CRISPR-associated transposase systems. Native homologous recombination, transposon mutagenesis, and phage-derived recombineering opened the door to targeted gene disruption, but low efficiencies and marker footprints limited throughput. Recent phage RecT/RecE-mediated recombineering and CRISPR/Cas counter-selection now enable scar-less point edits, seamless deletions, and multi-kilobase insertions at efficiencies approaching model organisms. Endogenous Cas9 systems, dCas-based CRISPR interference, and CRISPR-guided transposases further extend the toolbox, allowing multiplex knockouts, precise single-base mutations, conditional knockdowns, and payloads up to 10 kb. The remaining hurdles include strain-specific barriers, reliance on selection markers for large edits, and the limited host-range of recombinases. Nevertheless, convergence of phage enzymes, CRISPR counter-selection and high-throughput oligo recombineering is rapidly transforming LAB into versatile chassis for cell-factory and therapeutic applications.",
+		"rank": 16,
+		"year": 2025,
+		"volume": 26,
+		"issue": 15,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Leonid A Shaposhnikov",
+				"affiliation": "Scientific Center of Genetics and Life Sciences, Sirius University of Science and Technology, Sirius 354340, Russia."
+			},
+			{
+				"name": "Aleksei S Rozanov",
+				"affiliation": "Scientific Center of Genetics and Life Sciences, Sirius University of Science and Technology, Sirius 354340, Russia."
+			},
+			{
+				"name": "Alexey E Sazonov",
+				"affiliation": "Scientific Center of Genetics and Life Sciences, Sirius University of Science and Technology, Sirius 354340, Russia."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Induction-free recombineering for simple targeted gene-deletions in various mycobacteria",
+		"source": "Microbiology spectrum",
+		"issn": "2165-0497",
+		"doi": "10.1128/spectrum.01897-25",
+		"abstract": "Gene deletion is a valuable tool for phenotypic characterization in bacteriology, but in mycobacteria, generating deletion mutants remains a cumbersome and time-consuming process. Here, we present a modification to the widely used recombineering method in mycobacteria. By expressing the recombineering-promoting proteins from a single-copy episomal plasmid, we could use a constitutive promotor. This approach eliminates the need for induction prior to electroporation of the targeting substrate (linear DNA fragment comprised of homologous regions to the gene of interest, flanking a selection marker), and shortens the subsequent plasmid curing process. We successfully demonstrated this method in Mycobacterium tuberculosis, M. marinum, and M. abscessus.IMPORTANCEAlthough several techniques exist for generating gene-deletion mutants in mycobacteria, these procedures remain limited to laboratories more specialized in molecular biology. Here we present a very simplified procedure, which is a modification on a well-tried technique. Our proposed procedure makes genetic manipulation in mycobacteria more accessible to a greater number of researchers throughout the world, including those with less advanced molecular biology expertizse.",
+		"rank": 17,
+		"year": 2025,
+		"volume": 13,
+		"issue": 9,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Yahav Bracha",
+				"affiliation": "The Koret School of Veterinary Medicine, Robert H. Smith Faculty for Agriculture, Food and Environment, The Hebrew University of Jerusalem, Rehovot, Israel."
+			},
+			{
+				"name": "Daniel Barkan",
+				"affiliation": "The Koret School of Veterinary Medicine, Robert H. Smith Faculty for Agriculture, Food and Environment, The Hebrew University of Jerusalem, Rehovot, Israel."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "An Undergraduate Laboratory on Recombineering and CRISPR/Cas9-Assisted Gene Editing in Escherichia coli",
+		"source": "Biochemistry and molecular biology education : a bimonthly publication of the International Union of Biochemistry and Molecular Biology",
+		"issn": "1539-3429",
+		"doi": "10.1002/bmb.70002",
+		"abstract": "Laboratory experience is vital to undergraduate science education. It allows students to observe and conduct engaging experiments to enhance their skills and literacy, helps them retain knowledge, and deepens their understanding of related content covered in lectures. This paper reports a 4-week undergraduate laboratory exercise on Escherichia coli gene editing by recombineering, recombination-mediated genetic engineering, with or without clustered regularly interspaced short palindromic repeats and their associated protein 9 (CRISPR/Cas9). Gene editing makes precise modifications to the DNA of living organisms that influence their development and functions. As technology evolves, recombineering and CRISPR/Cas9 have replaced methods that use restriction enzymes and DNA ligase and are applied to a wide variety of research and applications. It is necessary to introduce undergraduates to these two rapidly growing technologies. Student results obtained from the lab indicate that antisense single-stranded oligodeoxynucleotide (ssODN) has a 15-20 times higher recombineering efficiency than the sense strand. Treatment with a plasmid containing the crRNA target of CRISPR/Cas9 increased recombineering efficiency. Instructional assessments, based on student feedback, revealed that the lab had clear objectives, instructions, and explicit protocols, with sufficient time to complete them, and was found to be interesting and worthwhile. Student learning outcomes, assessed by comparing pre-lab questions and post-lab tests, suggested that they learned the underlying principles and detailed molecular mechanisms. Besides learning the technologies and acquiring basic laboratory skills, students practiced key components of scientific research, such as data collection, analysis, and scientific communication.",
+		"rank": 18,
+		"year": 2025,
+		"volume": 53,
+		"issue": 5,
+		"startpage": 555,
+		"endpage": 562,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Ming-Mei Chang",
+				"affiliation": "Department of Biology, State University of New York at Geneseo, Geneseo, New York, USA."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Development of a CRISPR/Cas9 genome editing toolbox for Corynebacterium stationis and its application in hypoxanthine biosynthesis",
+		"source": "Synthetic and systems biotechnology",
+		"issn": "2405-805X",
+		"doi": "10.1016/j.synbio.2025.06.010",
+		"abstract": "Corynebacterium stationis, a high-GC Gram-positive bacterium with significant industrial potential, has faced limitations due to the lack of efficient genetic tools. In this study, we developed a CRISPR/Cas9-based genome editing platform specifically tailored for C. stationis. First, electroporation efficiency was optimized to 1.81 ± 0.16 × 105 CFU (colony forming units)/μg plasmid DNA through medium selection, pulse parameter adjustments (2.5 kV, 2 pulses), and concentration optimization of cell wall-weakening agents (3.0 % glycine, 0.25 % isoniazid). Three functional shuttle vectors (p99E-pCG1, p19-Kan, p19-Spe) were constructed, enabling stable heterologous gene expression. By engineering a tightly regulated Cas9 expression system (Plac promoter with dual LacO∗ operators), we achieved high-efficiency genome editing, with deletion efficiencies of 81.2-98.6 % for 1.7-50 kb fragments and insertion efficiencies of 27.5-65.2 % for 1-5 kb fragments. CRISPR/Cas9-assisted ssDNA recombineering facilitated single/triple nucleotide changes with >90 % efficiency. Applying this toolbox, we engineered C. stationis for hypoxanthine biosynthesis by combining purA deletion with integration of heterologous feedback-resistant prsD128A and endogenous purF deregulation (purFK334Q), achieving a titer of 0.047 g/L. This study establishes a robust genetic platform for C. stationis, accelerating its industrial application in the production of biochemicals and biofuels.",
+		"rank": 19,
+		"year": 2025,
+		"volume": 10,
+		"issue": 4,
+		"startpage": 1190,
+		"endpage": 1199,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Zhilin Ouyang",
+				"affiliation": "Guangdong Key Laboratory of Fermentation and Enzyme Engineering, School of Biology and Biological Engineering, South China University of Technology, Guangzhou, 510006, PR China."
+			},
+			{
+				"name": "Xinyu Zhang",
+				"affiliation": "Guangdong Key Laboratory of Fermentation and Enzyme Engineering, School of Biology and Biological Engineering, South China University of Technology, Guangzhou, 510006, PR China."
+			},
+			{
+				"name": "Xinyi Hou",
+				"affiliation": "Guangdong Key Laboratory of Fermentation and Enzyme Engineering, School of Biology and Biological Engineering, South China University of Technology, Guangzhou, 510006, PR China."
+			},
+			{
+				"name": "Jiabei Huang",
+				"affiliation": "Guangdong Key Laboratory of Fermentation and Enzyme Engineering, School of Biology and Biological Engineering, South China University of Technology, Guangzhou, 510006, PR China."
+			},
+			{
+				"name": "Ying Lin",
+				"affiliation": "Guangdong Key Laboratory of Fermentation and Enzyme Engineering, School of Biology and Biological Engineering, South China University of Technology, Guangzhou, 510006, PR China."
+			},
+			{
+				"name": "Suiping Zheng",
+				"affiliation": "Guangdong Key Laboratory of Fermentation and Enzyme Engineering, School of Biology and Biological Engineering, South China University of Technology, Guangzhou, 510006, PR China."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Genome editing of phylogenetically distinct bacteria using portable retron-mediated recombineering",
+		"source": "bioRxiv : the preprint server for biology",
+		"issn": "2692-8205",
+		"doi": "10.1101/2025.06.16.660010",
+		"abstract": "Advanced genome editing technologies have enabled rapid and flexible rewriting of the Escherichia coli genome, benefiting fundamental biology and biomanufacturing. Unfortunately, some of the most useful technologies to advance genome editing in E. coli have not yet been ported into other bacterial species. For instance, the addition of bacterial retrons to the genome editing toolbox has increased the efficiency of recombineering in E. coli by enabling sustained, abundant production of ssDNA recombineering donors by reverse transcription that install flexible, precise edits in the prokaryotic chromosome. To extend the utility of this technology beyond E. coli, we surveyed the portability and versatility of retron-mediated recombineering across three different bacterial phyla (Proteobacteria, Bacillota and Actinomycetota) and a total of 15 different species. We found that retron recombineering is functional in all species tested, reaching editing efficiencies above 20% in six of them, above 40% in three of them, and above 90% in two of them. We also tested the extension of the recombitron architecture optimizations and strain backgrounds in a subset of hosts to additionally increase editing rates. The broad recombitron survey carried out in this study forms the basis for widespread use of retron-derived technologies through the whole Bacteria domain.",
+		"rank": 20,
+		"year": 2025,
+		"volume": 0,
+		"issue": 0,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Alejandro González-Delgado",
+				"affiliation": "Gladstone Institute of Data Science and Biotechnology, San Francisco, CA, USA."
+			},
+			{
+				"name": "Laura Bonillo-Lopez",
+				"affiliation": "Unitat Mixta d'Investigació IRTA-UAB en Sanitat Animal, Centre de Recerca en Sanitat Animal (CReSA). Campus de la Universitat Autònoma de Barcelona (UAB), 08193, Bellaterra, Barcelona, Catalonia, Spain."
+			},
+			{
+				"name": "Milo S Johnson",
+				"affiliation": "Department of Integrative Biology, University of California, Berkeley, Berkeley, CA 94720, USA."
+			},
+			{
+				"name": "Nastassia Knödlseder",
+				"affiliation": "Department of Medicine and Life Sciences, Universitat Pompeu Fabra, Barcelona, Spain."
+			},
+			{
+				"name": "Ching-Chung Ko",
+				"affiliation": "Department of Biological Sciences, University of Pittsburgh, Pittsburgh, PA, 15260, USA."
+			},
+			{
+				"name": "Yassir Lekbach",
+				"affiliation": "McKetta Department of Chemical Engineering, The University of Texas at Austin, Austin, TX, 78712, USA."
+			},
+			{
+				"name": "Jee-Hwan Oh",
+				"affiliation": "Department of Food Science, 1605 Linden Dr, University of Wisconsin-Madison, Madison, WI 53706, USA."
+			},
+			{
+				"name": "Hemaa Selvakumar",
+				"affiliation": "Environmental Genomics and Systems Biology Division, E.O. Lawrence Berkeley National Laboratory, Berkeley, CA, USA."
+			},
+			{
+				"name": "Michael C Wold",
+				"affiliation": "BioTechnology Institute, University of Minnesota-Twin Cities, St. Paul, Minnesota, USA."
+			},
+			{
+				"name": "Zihan Yu",
+				"affiliation": "McKetta Department of Chemical Engineering, The University of Texas at Austin, Austin, TX, 78712, USA."
+			},
+			{
+				"name": "Virginia Aragón",
+				"affiliation": "Unitat Mixta d'Investigació IRTA-UAB en Sanitat Animal, Centre de Recerca en Sanitat Animal (CReSA). Campus de la Universitat Autònoma de Barcelona (UAB), 08193, Bellaterra, Barcelona, Catalonia, Spain."
+			},
+			{
+				"name": "Jeffrey A Gralnick",
+				"affiliation": "BioTechnology Institute, University of Minnesota-Twin Cities, St. Paul, Minnesota, USA."
+			},
+			{
+				"name": "Marc Güell",
+				"affiliation": "Department of Medicine and Life Sciences, Universitat Pompeu Fabra, Barcelona, Spain."
+			},
+			{
+				"name": "Graham F Hatfull",
+				"affiliation": "Department of Biological Sciences, University of Pittsburgh, Pittsburgh, PA, 15260, USA."
+			},
+			{
+				"name": "Benjamin K Keitz",
+				"affiliation": "McKetta Department of Chemical Engineering, The University of Texas at Austin, Austin, TX, 78712, USA."
+			},
+			{
+				"name": "Britt Koskella",
+				"affiliation": "Department of Integrative Biology, University of California, Berkeley, Berkeley, CA 94720, USA."
+			},
+			{
+				"name": "Vivek K Mutalik",
+				"affiliation": "Environmental Genomics and Systems Biology Division, E.O. Lawrence Berkeley National Laboratory, Berkeley, CA, USA."
+			},
+			{
+				"name": "Jan-Peter van Pijkeren",
+				"affiliation": "Department of Food Science, 1605 Linden Dr, University of Wisconsin-Madison, Madison, WI 53706, USA."
+			},
+			{
+				"name": "Seth L Shipman",
+				"affiliation": "Gladstone Institute of Data Science and Biotechnology, San Francisco, CA, USA."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Precision engineering of human cytomegalovirus without BAC constraints: a Sendai virus-delivered CRISPR/Cas9 approach",
+		"source": "The Journal of general virology",
+		"issn": "1465-2099",
+		"doi": "10.1099/jgv.0.002126",
+		"abstract": "Human cytomegalovirus (HCMV) genetic manipulation traditionally relies on bacterial artificial chromosome (BAC) recombineering, necessitated by its large ~236 kb genome. This approach is limited by the scarcity of HCMV strains engineered into BACs and often requires the deletion of 'non-essential' genes to accommodate the BAC cassette. We developed a novel approach using temperature-sensitive Sendai virus (SeV) vectors to deliver CRISPR/Cas9 for targeted HCMV genome editing without these constraints. This system achieves high editing efficiency (80-90%) in fibroblasts, epithelial cells and endothelial cells without BAC intermediates. As proof of principle, we targeted the HCMV (TB40/E strain) pentamer complex (PC) genes UL128 and UL130, crucial for viral entry into non-fibroblast cells. Edited viruses showed significantly reduced infectivity in epithelial cells, confirming functional disruption of the PC. Plaque purification yielded isogenic clones with phenotypes comparable to AD169, a naturally PC-deficient strain. Furthermore, multiplexed editing created precise 663 bp deletions in over 60% of viral genomes. Importantly, this method enables HCMV editing in physiologically relevant cell types without fibroblast passaging, which typically introduces mutations. This SeV-Cas9 system represents a significant advancement for studying HCMV biology in diverse cell types.",
+		"rank": 21,
+		"year": 2025,
+		"volume": 106,
+		"issue": 7,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Jillian C Carmichael",
+				"affiliation": "Department of Microbiology, Icahn School of Medicine at Mount Sinai, New York, NY 10029, USA."
+			},
+			{
+				"name": "Christian S Stevens",
+				"affiliation": "Department of Microbiology, Icahn School of Medicine at Mount Sinai, New York, NY 10029, USA."
+			},
+			{
+				"name": "Kristina E Atanasoff",
+				"affiliation": "Department of Microbiology, Icahn School of Medicine at Mount Sinai, New York, NY 10029, USA."
+			},
+			{
+				"name": "Shreyas Kowdle",
+				"affiliation": "Department of Microbiology, Icahn School of Medicine at Mount Sinai, New York, NY 10029, USA."
+			},
+			{
+				"name": "Rebecca A Reis",
+				"affiliation": "Department of Microbiology, Icahn School of Medicine at Mount Sinai, New York, NY 10029, USA."
+			},
+			{
+				"name": "Domenico Tortorella",
+				"affiliation": "Department of Microbiology, Icahn School of Medicine at Mount Sinai, New York, NY 10029, USA."
+			},
+			{
+				"name": "Benhur Lee",
+				"affiliation": "Department of Microbiology, Icahn School of Medicine at Mount Sinai, New York, NY 10029, USA."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Phage engineering strategies to expand host range for controlling antibiotic-resistant pathogens",
+		"source": "Microbiological research",
+		"issn": "1618-0623",
+		"doi": "10.1016/j.micres.2025.128278",
+		"abstract": "Bacteriophages are known as a promising alternative to control rising bacterial resistance. The adsorption phase is critical for the successful infection of phages, as it determines their ability to recognize and attach to specific bacterial host cells. However, their limited host ranges due to narrow host specificity significantly limit their potential applications and overall effectiveness. Receptor-binding proteins (RBPs) are crucial in the recognition process, and modifying these proteins provides a valuable opportunity to broaden host ranges and enhance adsorption rates. Therefore, gaining a more comprehensive understanding of the interactions between phages and their bacterial hosts is essential. To overcome this challenge, various in vivo and in vitro engineering platforms have been developed, including recombineering, clustered regularly interspaced short palindromic repeats (CRISPR)-CRISPR-associated proteins (Cas) systems, yeast-based technologies, and cell-free systems. These methods provide diverse strategies and flexibility for constructing customized phage genomes with desired characteristics, ultimately enhancing phage application efficiency. This review discusses different types of RBPs in phages and their mechanisms of adsorption, highlighting their relevance for adaptable engineering strategies. We also summarize various phage engineering platforms and explore the design of synthetic phages with expanded host ranges. Finally, we highlight the advantages and limitations of current engineering methods, providing insights to guide future research efforts.",
+		"rank": 22,
+		"year": 2025,
+		"volume": 300,
+		"issue": 0,
+		"startpage": 128278,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Song Zhang",
+				"affiliation": "Department of Biomedical Science, Kangwon National University, Chuncheon, Gangwon 24341, Republic of Korea."
+			},
+			{
+				"name": "Jin-Chul Kim",
+				"affiliation": "Department of Biomedical Science, Kangwon National University, Chuncheon, Gangwon 24341, Republic of Korea. Electronic address: jinkim@kangwon.ac.kr."
+			},
+			{
+				"name": "Juhee Ahn",
+				"affiliation": "Department of Biomedical Science, Kangwon National University, Chuncheon, Gangwon 24341, Republic of Korea; Future Food Laboratory, Innovation Center of Yangtze River Delta, Zhejiang University, Jiaxing, Zhejiang 314100, China; College of Biosystems Engineering and Food Science, Zhejiang University, Hangzhou, Zhejiang 310058, China. Electronic address: juheeahn@kangwon.ac.kr."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "styMdtM gene deletion with modified λ Red recombineering approach: Implications for multidrug resistance in Salmonella Typhi",
+		"source": "Journal of microbiological methods",
+		"issn": "1872-8359",
+		"doi": "10.1016/j.mimet.2025.107191",
+		"abstract": "styMdtM is a multidrug efflux transporter of Salmonella Typhi. In the present study, a modified λ Red recombineering approach using shorter flanking arms (ca. 50 bp) was used to generate an styMdtM gene deletion in the S. Typhi genome. This approach worked efficiently to knockout the gene and the ensuing S. Typhi strain was considerably more sensitive to antibiotics.",
+		"rank": 23,
+		"year": 2025,
+		"volume": 236,
+		"issue": 0,
+		"startpage": 107191,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Anam Tariq",
+				"affiliation": "Health Biotechnology Division, National Institute for Biotechnology and Genetic Engineering (NIBGE), Faisalabad, Punjab, Pakistan."
+			},
+			{
+				"name": "Aqsa Shaheen",
+				"affiliation": "Health Biotechnology Division, National Institute for Biotechnology and Genetic Engineering (NIBGE), Faisalabad, Punjab, Pakistan; Department of Biochemistry and Biotechnology, University of Gujrat, Hafiz Hayat Campus, Gujrat, Pakistan."
+			},
+			{
+				"name": "Mazhar Iqbal",
+				"affiliation": "Health Biotechnology Division, National Institute for Biotechnology and Genetic Engineering (NIBGE), Faisalabad, Punjab, Pakistan."
+			},
+			{
+				"name": "Moazur Rahman",
+				"affiliation": "Health Biotechnology Division, National Institute for Biotechnology and Genetic Engineering (NIBGE), Faisalabad, Punjab, Pakistan; School of Biological Sciences, University of the Punjab, Lahore, Pakistan; Center of Excellence in Molecular Biology, University of the Punjab, Lahore, Pakistan. Electronic address: moazur.rahman@fulbrightmail.org."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Unraveling N-Terminal Proteoform Interactomes via Multiplexed Recombineering in Salmonella",
+		"source": "Methods in molecular biology (Clifton, N.J.)",
+		"issn": "1940-6029",
+		"doi": "10.1007/978-1-0716-4694-6_6",
+		"abstract": "N-terminal proteoforms (Nt-proteoforms), which arise through alternative translation initiation, exhibit variation at their N-termini that can influence subcellular localization, protein stability, and functional roles within multiprotein complexes. Advances in riboproteogenomics, particularly in ribosome profiling, have highlighted the significance of the alternative proteome in bacteria. However, Nt-proteoforms remain largely underexplored, emphasizing the need for detailed protein-protein interaction (PPI) studies to elucidate their potentially differential biological roles.Mass spectrometry-based proximity labeling techniques offer a high-throughput method for PPI screening. Here, we present a multiplexed recombineering approach that enables the genomic integration of a promiscuous biotin ligase (PBL) via double-stranded DNA (dsDNA) recombineering while simultaneously allowing the targeted mutation of specific translation initiation sites (TIS) using single-stranded DNA (ssDNA) oligos through oligo-mediated allelic replacement (OMAR). This multiplexed recombineering approach facilitates endogenous BioID tagging and the identification of Nt-proteoform-specific proxeomes.",
+		"rank": 24,
+		"year": 2025,
+		"volume": 2953,
+		"issue": 0,
+		"startpage": 81,
+		"endpage": 102,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Valdes Snauwaert",
+				"affiliation": "iRIP Unit, Laboratory of Microbiology, Department of Biochemistry and Microbiology, Ghent University, Ghent, Belgium."
+			},
+			{
+				"name": "Veronique Jonckheere",
+				"affiliation": "iRIP Unit, Laboratory of Microbiology, Department of Biochemistry and Microbiology, Ghent University, Ghent, Belgium."
+			},
+			{
+				"name": "Petra Van Damme",
+				"affiliation": "iRIP Unit, Laboratory of Microbiology, Department of Biochemistry and Microbiology, Ghent University, Ghent, Belgium. petra.vandamme@ugent.be."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Efficient genome engineering in Agrobacterium tumefaciens C58 using recombineering assisted by CRISPR/Cas9",
+		"source": "Journal of biotechnology",
+		"issn": "1873-4863",
+		"doi": "10.1016/j.jbiotec.2025.07.005",
+		"abstract": "Recombineering, a technique derived from phage-encoded homologous recombination, has emerged as a vital approach for bacterial genome engineering. Agrobacterium tumefaciens is extensively utilized to transfer DNA into the host plant genomes. To facilitate the transformation of various plant species, particularly those of considerable economic value, genetic modifications of Agrobacterium strains are essential. Our previous studies established an Agrobacterium-specific phage-encoded homologous recombination system for Agrobacterium species. Yet, recent investigations have indicated that there is a substantial variability in the recombination efficiency of these recombineering systems for gene editing across different genome loci in A. tumefaciens. In this work, we present the development of an efficient genome engineering tool for A. tumefaciens by integrating recombineering with CRISPR/Cas9 technology. Initially, we found that lengthening the homology arms significantly enhanced genome editing efficiency. Nevertheless, at certain genomic sites, even when the length of the homology arms was increased, the editing efficiency remained suboptimal. Subsequently, combination of the Agrobacterium-specific recombineering system with the CRISPR/Cas9 system markedly enhanced the genome engineering efficiency. This study offers an enhanced and efficient genome engineering tool for A. tumefaciens, which could potentially be applied to other species within the Agrobacterium genus.",
+		"rank": 25,
+		"year": 2025,
+		"volume": 406,
+		"issue": 0,
+		"startpage": 99,
+		"endpage": 104,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Shiqing Gao",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Xiuling Wang",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Runyu Yang",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Zhilong Bian",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Daojing Yong",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Shouying Xu",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Liujie Huo",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Qiang Tu",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Youming Zhang",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Jun Fu",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China. Electronic address: fujun@sdu.edu.cn."
+			},
+			{
+				"name": "Ruijuan Li",
+				"affiliation": "State Key Laboratory of Microbial Technology, Shandong University, Qingdao, Shandong, China. Electronic address: liruijuan@sdu.edu.cn."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Simple and robust in vivo engineering of plasmid DNA at any copy number in Escherichia coli",
+		"source": "Communications biology",
+		"issn": "2399-3642",
+		"doi": "10.1038/s42003-025-08361-9",
+		"abstract": "Plasmids and the model bacterium Escherichia coli are at the heart of recombinant gene technologies. Plasmids are handled in test tubes with enzymes such as restriction endonucleases, ligases, and polymerases. However, with the increasing demand for larger and more complex designs, in vitro manipulation constitutes a bottleneck. By combining recombination with genetic selection, in vivo manipulation of genomic DNA is becoming routine but is yet to be developed as a versatile and reliable way to make plasmid DNA. Here, we present a robust methodology for plasmid recombineering in E. coli using a triple-selection system customized for efficient performance at any copy number. Equipped with this genetic selection cassette, we generate a toolbox of plasmids in a standardized framework with popular genetic modules. By reducing the time and resources for making recombinant DNA, this approach should enable automation and accelerate the development of biological solutions.",
+		"rank": 26,
+		"year": 2025,
+		"volume": 8,
+		"issue": 1,
+		"startpage": 933,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Ana G V Sepulchro",
+				"affiliation": "Novo Nordisk Foundation Center for Biosustainability, Technical University of Denmark, Kgs., Lyngby, Denmark."
+			},
+			{
+				"name": "Hendrikje C J Kozlowski",
+				"affiliation": "Novo Nordisk Foundation Center for Biosustainability, Technical University of Denmark, Kgs., Lyngby, Denmark."
+			},
+			{
+				"name": "Morten H H Nørholm",
+				"affiliation": "Novo Nordisk Foundation Center for Biosustainability, Technical University of Denmark, Kgs., Lyngby, Denmark. ghnm@novonordisk.com."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "A recombineering-based platform for high-throughput genomic editing in Escherichia coli",
+		"source": "Applied and environmental microbiology",
+		"issn": "1098-5336",
+		"doi": "10.1128/aem.00193-25",
+		"abstract": "Functional analysis of bacterial genes or genomic fragments in vivo primarily relies on the analysis of knockout strains. Although various methods have successfully generated bacterial knockout mutants, the parallel operation of multiple sites, especially in biofoundries, remains challenging. New technological refinements of existing methods are necessary for high-throughput genomic editing in bacteria. In this study, to modify numerous sites in parallel, we optimized the linear donor DNA by adding modification at the different positions and achieved high-efficiency recombination with chemical transformation. Then, by combining with the CRISPR system, we established a guide sequence-independent and donor DNA-mediated genomic editing (GIDGE) method, enabling efficient and scarless engineering of common E. coli strains as well as wild-type strains such as E. coli MG1655, with particularly marked advantages demonstrated in E. coli Nissle 1917. This method allows for high-throughput genomic engineering in a 96-well format and is useful for sequence deletion with a wide range of lengths, sequence insertion, sequence replacement, and point mutation. As a proof-of-concept study, we constructed 96 single-gene knockout mutants and a genomic large-fragment deletion library in E. coli K-12 MG1655 using the GIDGE method. This high-throughput and easy-to-use method has great potential for automation and can be adapted for use in biofoundries. With the increasing demand in the microbiology field and the expansion of its application scope, the urgency for genome editing techniques that are not only efficient and versatile but also capable of high-throughput processing and even automation has become increasingly critical. In this study, we enhanced the efficiency of recombination engineering by incorporating modifications and integrated it with the CRISPR system to develop an advanced gene editing method. This method allows for various gene editing events such as insertion, replacement, and long fragment knockout without the need for plasmid construction. It not only demonstrated high efficiency in common E. coli strains but also exhibited marked advantages in the probiotic strain E. coli Nissle 1917. This method is a versatile, efficient approach capable of high-throughput parallel gene editing. Using this method, we successfully constructed a large-scale strain library, significantly accelerating the process of microbial engineering.",
+		"rank": 27,
+		"year": 2025,
+		"volume": 91,
+		"issue": 7,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Zeyu Liang",
+				"affiliation": "Center for Future Foods, Muyuan Laboratory, Zhengzhou, Henan Province, China."
+			},
+			{
+				"name": "Chaoyong Huang",
+				"affiliation": "Key Laboratory of Molecular Medicine and Biotherapy, Aerospace Center Hospital, School of Life Science, Beijing Institute of Technology, Beijing, China."
+			},
+			{
+				"name": "Yitian Li",
+				"affiliation": "Key Laboratory of Molecular Medicine and Biotherapy, Aerospace Center Hospital, School of Life Science, Beijing Institute of Technology, Beijing, China."
+			},
+			{
+				"name": "Chao Yang",
+				"affiliation": "Key Laboratory of Molecular Medicine and Biotherapy, Aerospace Center Hospital, School of Life Science, Beijing Institute of Technology, Beijing, China."
+			},
+			{
+				"name": "Ning Wang",
+				"affiliation": "Key Laboratory of Molecular Medicine and Biotherapy, Aerospace Center Hospital, School of Life Science, Beijing Institute of Technology, Beijing, China."
+			},
+			{
+				"name": "Xiaoyan Ma",
+				"affiliation": "Center for Future Foods, Muyuan Laboratory, Zhengzhou, Henan Province, China."
+			},
+			{
+				"name": "Yi-Xin Huo",
+				"affiliation": "Center for Future Foods, Muyuan Laboratory, Zhengzhou, Henan Province, China."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "DASH: a versatile and high-capacity gene stacking system for plant synthetic biology",
+		"source": "Plant biotechnology journal",
+		"issn": "1467-7652",
+		"doi": "10.1111/pbi.70179",
+		"abstract": "DNA assembly systems based on the Golden Gate method are popular in synthetic biology but have several limitations: small insert size, incompatibility with other cloning platforms, DNA domestication requirement, generation of fusion scars, and lack of post-assembly modification. To address these obstacles, we present the DASH assembly toolset, which combines features of Golden Gate-based cloning, recombineering, and site-specific recombinase systems. We developed (1) a set of donor vectors based on the GoldenBraid platform, (2) an acceptor vector derived from the plant transformation-competent artificial chromosome (TAC) vector, pYLTAC17, and (3) a re-engineered recombineering-ready E. coli strain, CZ105, based on SW105. The initial assembly steps are carried out using the donor vectors following standard GoldenBraid assembly procedures. Importantly, existing parts and transcriptional units created using compatible Golden Gate-based systems can be transferred to the DASH donor vectors using standard single-tube restriction/ligation reactions. The cargo DNA from a DASH donor vector is then efficiently transferred in vivo in E. coli into the acceptor vector by the sequential action of a rhamnose-inducible phage-derived PhiC31 integrase and arabinose-inducible yeast-derived Flippase (FLP) recombinase using CZ105. Furthermore, recombineering-based post-assembly modification, including the removal of undesirable scars, is greatly simplified. To demonstrate the utility of the DASH system, a 116 kilobase (kb) DNA construct harbouring a 97 kb cargo consisting of 35 transcriptional units was generated. One of the coding DNA sequences (CDSs) in the final assembly was replaced through recombineering, and the in planta functionality of the entire construct was tested in both transient and stable transformants.",
+		"rank": 28,
+		"year": 2025,
+		"volume": 23,
+		"issue": 9,
+		"startpage": 3697,
+		"endpage": 3712,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Chengsong Zhao",
+				"affiliation": "Department of Plant and Microbial Biology, Genetics and Genomics Academy, North Carolina State University, Raleigh, NC, USA."
+			},
+			{
+				"name": "Anna N Stepanova",
+				"affiliation": "Department of Plant and Microbial Biology, Genetics and Genomics Academy, North Carolina State University, Raleigh, NC, USA."
+			},
+			{
+				"name": "Jose M Alonso",
+				"affiliation": "Department of Plant and Microbial Biology, Genetics and Genomics Academy, North Carolina State University, Raleigh, NC, USA."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "MOSAIC: A Highly Efficient, One-Step Recombineering Approach to Plasmid Editing and Diversification",
+		"source": "ACS synthetic biology",
+		"issn": "2161-5063",
+		"doi": "10.1021/acssynbio.4c00657",
+		"abstract": "The editing of plasmids and construction of plasmid libraries is paramount to the engineering of desired functionalities in synthetic biology. Typically, plasmids with targeted mutations are produced through time- and resource-consuming DNA amplification and/or cloning steps. In this study, we establish MOSAIC, a highly efficient protocol for the editing of plasmids and generation of combinatorial plasmid libraries. This quick protocol employs the efficient single-stranded DNA annealing protein (SSAP) CspRecT to incorporate (libraries of) DNA oligos harboring the desired mutations into a target plasmid in Escherichia coli. In addition to up to 90% single-target plasmid editing efficiency, we demonstrate that MOSAIC enables the generation of a combinatorial plasmid library spanning four different target regions on a plasmid, in a single transformation. Lastly, we integrated a user-friendly validation pipeline using Nanopore sequencing reads, requiring minimal computational experience. We anticipate that MOSAIC will provide researchers with a simple, rapid and resource-effective method to edit plasmids or generate large, diverse plasmid libraries for a wide range of in vivo or in vitro applications in molecular and synthetic biology.",
+		"rank": 29,
+		"year": 2025,
+		"volume": 14,
+		"issue": 10,
+		"startpage": 3880,
+		"endpage": 3889,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Marijn van den Brink",
+				"affiliation": "Department of Bionanoscience, Kavli Institute of Nanoscience, Delft University of Technology, 2629 HZ Delft, The Netherlands."
+			},
+			{
+				"name": "Timotheus Y Althuis",
+				"affiliation": "Laboratory of Microbiology, Wageningen University, Stippeneng 4, 6708 WE Wageningen, The Netherlands."
+			},
+			{
+				"name": "Christophe Danelon",
+				"affiliation": "Department of Bionanoscience, Kavli Institute of Nanoscience, Delft University of Technology, 2629 HZ Delft, The Netherlands."
+			},
+			{
+				"name": "Nico J Claassens",
+				"affiliation": "Laboratory of Microbiology, Wageningen University, Stippeneng 4, 6708 WE Wageningen, The Netherlands."
+			}
+		]
+	},
+	{
+		"type": "Journal Article",
+		"title": "Programming virulent bacteriophages by developing a multiplex genome engineering method",
+		"source": "mBio",
+		"issn": "2150-7511",
+		"doi": "10.1128/mbio.03582-24",
+		"abstract": "The use of virulent bacteriophages (phages) against pathogenic bacteria has recently attracted considerable interest. The limitations of naturally isolated phages have promoted the development of genome engineering methods to optimize their functions; however, engineering of virulent phage genomes in bacterial hosts remains challenging. Here, we describe a SMART (splitting, modifying, assembling, and rebooting) method for multiplex genome engineering of virulent phages by splitting the genome into multiple segments cloned and inserted into single-copy bacterial artificial chromosome vectors in Escherichia coli to overcome the toxicity of phage gene products, modifying multiple targeted loci in parallel through recombineering, assembling split segments into an intact genome, and rebooting the recombined phage in bacterial hosts. Using the SMART method, the 39.9-kb T7 E. coli phage genome was split into 10 segments, and 8 genomic loci were deleted in parallel to obtain a chassis phage with 10% genome reduction. The insertion capacity of the chassis phage genome and the expression levels of exogenous genes at different loci were evaluated. Finally, a synthetic T7 phage that efficiently lyses widely different bacteria, such as E. coli, Staphylococcus aureus, and Streptococcus agalactiae, was constructed by expressing heterologous lysins from Staphylococcus and Streptococcus phages. SMART will facilitate the programming and understanding of the genome structure and function of virulent phages. Unlike temperate phages, which integrate into host genomes and allow time for genetic manipulation, lytic phages rapidly hijack the bacterial machinery and trigger host lysis within minutes, leaving an extremely narrow editing window. Furthermore, virulent phage genes usually encode toxic products that inhibit the growth of bacterial hosts. We developed a SMART (splitting, modifying, assembling, and rebooting) method for multiplex genome engineering of virulent phages. We deleted 3.9 kb sequences distributed across 8 sites in the 39.9 kb genome of the wild-type T7 Escherichia coli phage to construct a chassis phage. Synthetic T7 phages expressing heterologous lysin genes were constructed to efficiently lyse different bacteria, such as E. coli, Staphylococcus aureus, or Streptococcus agalactiae. The SMART method will facilitate targeted modifications of phage genomes for the creation of custom-designed phages with enhanced therapeutic efficacy, broader host specificity, and programmable behaviors.",
+		"rank": 30,
+		"year": 2025,
+		"volume": 16,
+		"issue": 6,
+		"startpage": 0,
+		"endpage": 0,
+		"cites": 0,
+		"ecc": 0,
+		"use": 1,
+		"authors": [
+			{
+				"name": "Hailin Zhang",
+				"affiliation": "State Key Laboratory of Microbial Technology, Institute of Microbial Technology, Helmholtz International Lab for Anti-infectives, Shandong University-Helmholtz Institute of Biotechnology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Ru Zhu",
+				"affiliation": "State Key Laboratory of Microbial Technology, Institute of Microbial Technology, Helmholtz International Lab for Anti-infectives, Shandong University-Helmholtz Institute of Biotechnology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Zhaofei Wang",
+				"affiliation": "School of Agriculture and Biology, Shanghai Jiao Tong University, Shanghai Key Laboratory of Veterinary Biotechnology, Shanghai, China."
+			},
+			{
+				"name": "Ruoting He",
+				"affiliation": "State Key Laboratory of Microbial Technology, Institute of Microbial Technology, Helmholtz International Lab for Anti-infectives, Shandong University-Helmholtz Institute of Biotechnology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Yuran Zhang",
+				"affiliation": "School of Life Sciences, Jining Medical University, Rizhao, Shandong, China."
+			},
+			{
+				"name": "Ji Luan",
+				"affiliation": "State Key Laboratory of Microbial Technology, Institute of Microbial Technology, Helmholtz International Lab for Anti-infectives, Shandong University-Helmholtz Institute of Biotechnology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Yaxian Yan",
+				"affiliation": "School of Agriculture and Biology, Shanghai Jiao Tong University, Shanghai Key Laboratory of Veterinary Biotechnology, Shanghai, China."
+			},
+			{
+				"name": "Youming Zhang",
+				"affiliation": "State Key Laboratory of Microbial Technology, Institute of Microbial Technology, Helmholtz International Lab for Anti-infectives, Shandong University-Helmholtz Institute of Biotechnology, Shandong University, Qingdao, Shandong, China."
+			},
+			{
+				"name": "Hailong Wang",
+				"affiliation": "State Key Laboratory of Microbial Technology, Institute of Microbial Technology, Helmholtz International Lab for Anti-infectives, Shandong University-Helmholtz Institute of Biotechnology, Shandong University, Qingdao, Shandong, China."
+			}
+		]
+	}
+]
