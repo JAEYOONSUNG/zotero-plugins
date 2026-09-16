@@ -7,7 +7,7 @@ pref("extensions.style-custom.autoCitations", true);
 pref("extensions.style-custom.citationEmail", "");
 pref("extensions.style-custom.openalexApiKey", "");
 pref("extensions.style-custom.metadataCitations", true);
-pref("extensions.style-custom.titleHeatmap", true);
+pref("extensions.style-custom.titleHeatmap", false);
 pref("extensions.style-custom.titleTags", false);
 pref("extensions.style-custom.unreadBold", false);
 pref("extensions.style-custom.quickTypeFilter", true);

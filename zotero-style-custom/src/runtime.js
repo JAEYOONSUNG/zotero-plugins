@@ -10,6 +10,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.catalog = catalog;
     this.journals = this.journalTools.create(catalog);
     this.citationTools = citations || (typeof CustomStyleCitations !== "undefined" ? CustomStyleCitations : require("./citations.js"));
+    this.citationFormats = typeof CustomStyleCitationFormats !== "undefined" ? CustomStyleCitationFormats : require("./citation-formats.js");
     this.citationJob = null;
     this.citationProgress = null;
     this.metadataIDs = new Set();
@@ -102,7 +103,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(existing){this.Z.ItemTreeManager.unregisterColumn(existing);this.columns=this.columns.filter(key=>key!==existing);this.featureColumns.delete(dataKey);}continue;
       }
       if(existing)continue;
-      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label,width,minWidth:50,enabledTreeIDs:['main'],hidden:!['if','citations','status','rating','time','tags'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
+      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label,width,minWidth:50,enabledTreeIDs:['main'],hidden:!['if','citations','status','rating','time','tags','files'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
       if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
     }
   }
@@ -115,7 +116,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   refreshReadingDisplays() {
     for(const [win,state]of this.windows){if(win.closed)continue;
-      for(const cell of win.document.querySelectorAll?.('[data-style-custom-reading]')||[]){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);if(cell.dataset.styleCustomReading==='time')cell.textContent=this.formatReadTime(value.seconds);else if(cell.firstChild)cell.firstChild.textContent=({unread:'○ ',reading:'◐ ',done:'✓ '})[value.status]+value.status;}
+      for(const cell of win.document.querySelectorAll?.('[data-style-custom-reading]')||[]){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);const P=this.palette(win.document);
+        if(cell.dataset.styleCustomReading==='time'){cell.textContent=this.formatReadTime(value.seconds);cell.style.color=value.seconds<=0?P.faint:value.seconds>=3600?P.blue:P.text;cell.style.fontWeight=value.seconds>=3600?'590':'';}
+        else if(cell.firstChild&&cell.lastChild){const tone={unread:P.faint,reading:P.orange,done:P.green}[value.status];cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status;cell.lastChild.style.color=value.status==='unread'?P.muted:P.text;}}
       state.workbench?.refreshMetrics?.();
     }
   }
@@ -135,6 +138,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.columnDefinitions = [["if", "IF · Custom", "90"], ["citations", "Cited Count · Custom", "120"],
       ["status", "Status · Custom", "100"], ["rating", "Rating · Custom", "100"],
       ["time", "Read Time · Custom", "120"], ["tags", "Tags · Custom", "140"],
+      ["files", "Files · Custom", "110"],
       ["progress","Pages · Custom","100"],["remark","Remark · Custom","180"],
       ["publication","Journal Tags · Custom","160"],["authors","Creators · Custom","160"],
       ["added","Added · Custom","130"],["modified","Modified · Custom","130"],
@@ -245,10 +249,36 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (key === "lastRead")return String(this.entry(item).lastRead||'').replace('T',' ').slice(0,16);
       if (key === "tagCount")return String(item.getTags().filter(t=>!/^style-custom:/.test(t.tag)).length);
       if (key === "noteCount")return String(item.getNotes?.().length||0);
+      if (key === "files") {const kinds=this.attachmentKinds(item);if(!kinds.length)return "";
+        const si=kinds.filter(k=>k.supplementary).length;
+        return [kinds.length-si?`PDF×${kinds.length-si}`:"",si?`SI×${si}`:""].filter(Boolean).join(" · ");}
       if (key === "annotationCount")return String((item.getAttachments?.()||[]).reduce((n,id)=>n+(this.Z.Items.get(id)?.deleted?0:(this.Z.Items.get(id)?.getAnnotations?.()||[]).filter(annotation=>!annotation.deleted).length),0));
       if (key.startsWith('field-'))return String(item.getField(key.slice(6))||'');
       return item.getTags().map(t => t.tag).filter(t => !/^\/(unread|reading|done)$/.test(t) && !/^style-custom:/.test(t) && !/^[★⭐]+$/.test(t)).join(" · ");
     } catch (error) { this.Z.logError(error); return ""; }
+  }
+  // Publishers name supplementary files in a handful of recognisable ways:
+  // an explicit word, an "SI"/"supp" token, or a house code (Elsevier mmc1,
+  // NPG media-1). Matching the stem avoids treating "PDF" alone as evidence.
+  isSupplementary(attachment) {
+    const stems = [attachment?.attachmentFilename, attachment?.getField?.('title'), attachment?.getDisplayTitle?.()];
+    // A spelled-out word is safe anywhere, but a terse token like "SI" or "ESM"
+    // is only evidence between filename separators: a title truncated mid-word
+    // ("...recognition si.pdf") would otherwise look supplementary.
+    const spelled = /supplement\w*|supporting[\s._-]*informations?|extended[\s._-]*data|\ubcf4\ucda9\uc790\ub8cc|\ubd80\ub85d/i;
+    const token = /(^|[._-])(s\.?i|esm|suppl?e?m?|mmc\d+|media[._-]?\d+|data[._-]?s\d+)([._-]|\.[a-z0-9]{2,4}$|$)/i;
+    return stems.filter(Boolean).some(text => spelled.test(String(text)) || token.test(String(text)));
+  }
+  attachmentKinds(item) {
+    const kinds = [];
+    for (const id of item.getAttachments?.() || []) {
+      const attachment = this.Z.Items.get(id);
+      if (!attachment || attachment.deleted || !attachment.isFileAttachment?.()) continue;
+      const name = String(attachment.attachmentFilename || attachment.getDisplayTitle?.() || '');
+      const pdf = /\.pdf$/i.test(name) || attachment.attachmentContentType === 'application/pdf';
+      kinds.push({id, supplementary: this.isSupplementary(attachment), pdf, name});
+    }
+    return kinds;
   }
   annotationDistribution(item) {
     const pages=new Map();
@@ -269,21 +299,61 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     return [...pages.values()].sort((a,b)=>a.attachmentID-b.attachmentID||a.pageIndex-b.pageIndex).map(page=>({...page,colors:[...page.colors]}));
   }
+  // Apple-like system palette. Restraint over rainbow: numbers stay monochrome,
+  // colour marks only the categorical dimensions (status, rating, IF tier).
+  palette(doc) {
+    const dark = !!doc?.defaultView?.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+    return dark
+      ? {blue:'#4C9AFF',green:'#4FD07A',orange:'#F0A030',red:'#F2685F',purple:'#B784E0',teal:'#5BBFD0',yellow:'#E8B93C',gray:'#98989D',faint:'#55555A',muted:'#A0A0A6',text:'#E8E8ED',tint:0.18,dark:true}
+      : {blue:'#2F6FD0',green:'#2E9E56',orange:'#C2761B',red:'#C2453C',purple:'#8250B8',teal:'#2D8C9E',yellow:'#D9A31B',gray:'#8E8E93',faint:'#C2C2C7',muted:'#6E6E73',text:'#1C1C1E',tint:0.10,dark:false};
+  }
+  tint(hex, alpha) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${alpha})`;
+  }
+  // Impact-factor bands. Chosen so the common 2-10 range stays calm and only a
+  // genuinely exceptional journal earns the strongest colour.
+  impactTier(value, p) {
+    if (!(value > 0)) return null;
+    if (value >= 30) return {color: p.purple, name: '최상위'};
+    if (value >= 10) return {color: p.blue, name: '상위'};
+    if (value >= 5) return {color: p.teal, name: '중상위'};
+    if (value >= 2) return {color: p.green, name: '중위'};
+    return {color: p.gray, name: '일반'};
+  }
+  pill(doc, text, color, p) {
+    const el = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+    el.textContent = text;
+    el.style.cssText = `display:inline-flex;align-items:center;border-radius:100px;padding:1px 7px;`
+      + `font-size:11px;font-weight:590;line-height:15px;letter-spacing:-0.01em;white-space:nowrap;`
+      + `background:${this.tint(color, p.tint)};color:${color};`;
+    return el;
+  }
+  // Log scale: citation counts span several orders of magnitude, so a linear bar
+  // would leave almost every row empty.
+  citationShare(count) {
+    if (!(count > 0)) return 0;
+    return Math.min(1, Math.log10(count + 1) / Math.log10(1001));
+  }
   renderCell(key, index, value, column, doc) {
     const cell = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
     cell.className = "cell " + (column.className || "");
     Object.assign(cell.style, { overflow: "hidden", textOverflow: "ellipsis", alignItems: "center", display: "flex", gap: "5px" });
+    const P = this.palette(doc);
+    if (["if","citations","time"].includes(key)) cell.style.fontVariantNumeric = "tabular-nums";
     const item = doc.defaultView?.ZoteroPane?.itemsView?.getRow(index)?.ref;
     // Read current data when painting: do not reuse a previously cached empty cell.
     if (this.isRegular(item)) {value=this.value(key,item);if(['time','status'].includes(key)){cell.dataset.styleCustomReading=key;cell.dataset.itemId=String(item.id);}}
     if (value === "") {
       if (key === "if" && this.isRegular(item)) {
         cell.textContent = "—";
+        cell.style.color = P.faint;
         cell.title = item.getField("publicationTitle") ? "이 저널의 공식 IF를 아직 확인하지 못했습니다. 저널명과 ISSN을 확인하세요." : "저널 정보가 없습니다. 프리프린트·책·데이터셋에는 저널 IF가 적용되지 않을 수 있습니다.";
       }
       if (key === "citations" && this.isRegular(item)) {
         const state=this.entry(item), id=this.citationTools.identity(this.citationRecord(item));
         cell.textContent=state.citationPending===id?"…":"—";
+        cell.style.color=P.faint;
         const attempt=state.citationAttempt?.identity===id?state.citationAttempt:null;
         cell.title=state.citationPending===id?"인용 수 조회 중":attempt?({"not-found":"일치하는 논문의 인용 수를 찾지 못했습니다.",error:"조회 실패: 기존 값은 유지됩니다.",unsupported:"확인 가능한 논문 식별자가 부족합니다."}[attempt.status]||"")+(attempt.reason?" "+attempt.reason:""):"아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.";
       }
@@ -292,25 +362,28 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     let label = value;
     if (key === "status") {
       label = ["unread", "reading", "done"][Number(value)] || "unread";
-      const badge = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-      badge.textContent = ({unread:"○ ",reading:"◐ ",done:"✓ "})[label] + label;
-      Object.assign(badge.style, {borderRadius:"2px",padding:"1px 4px",background:"transparent",color:"inherit"});
-      cell.appendChild(badge);
+      const tone = {unread: P.faint, reading: P.orange, done: P.green}[label];
+      const dot = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      dot.textContent = "●";
+      dot.style.cssText = `font-size:8px;line-height:1;color:${tone};`;
+      const text = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      text.textContent = label;
+      text.style.cssText = `color:${label === "unread" ? P.muted : P.text};`;
+      cell.append(dot, text);
     } else if (key === "rating") {
       const rating = Number(value);
       label = "★".repeat(rating) + "☆".repeat(5-rating);
       for (let n=1;n<=5;n++) {
         const star = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
         star.textContent = n<=rating ? "★" : "☆"; star.title = `${n}/5`;
-        star.style.cursor = "pointer"; star.style.color = "inherit";
+        star.style.cssText = `cursor:pointer;font-size:11px;line-height:1;color:${n<=rating?P.yellow:P.faint};`;
         star.addEventListener("click", event => { event.stopPropagation(); if (this.canEdit(item)) this.edit([item], {rating:n===rating?0:n}).catch(e=>this.Z.logError(e)); });
         cell.appendChild(star);
       }
     } else if (key === "tags" && this.isRegular(item)) {
       for(const tag of this.displayTags(item)) {
-        const label=doc.createElementNS('http://www.w3.org/1999/xhtml','span');label.textContent=tag.tag;label.title=tag.tag;label.style.whiteSpace='nowrap';
-        if(tag.color){const dot=doc.createElementNS('http://www.w3.org/1999/xhtml','span');dot.textContent='●';dot.style.color=tag.color;dot.style.marginInlineEnd='3px';label.prepend(dot);}
-        cell.appendChild(label);
+        const chip=this.pill(doc,tag.tag,tag.color||P.muted,P);chip.title=tag.tag;chip.style.fontWeight='400';
+        cell.appendChild(chip);
       }
     } else if(key === 'annotationCount' && this.isRegular(item)) {
       const count=doc.createElementNS('http://www.w3.org/1999/xhtml','span');count.textContent=value;cell.appendChild(count);
@@ -331,11 +404,42 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const seconds = Number(value);
       label = this.formatReadTime(seconds);
       cell.textContent = label;
+      // Untouched papers recede; the longer the session, the more present the number.
+      cell.style.color = seconds <= 0 ? P.faint : P.text;
+      if (seconds >= 3600) cell.style.fontWeight = "590";
       cell.title = `${Math.floor(seconds)} seconds of active reading`;
     } else if (key === "progress") {
       const p=this.isRegular(item)?this.pageProgress(item):{percent:Number(value)};
       cell.textContent=p.percent+'%';cell.style.backgroundImage=`linear-gradient(90deg,#245c7830 ${p.percent}%,transparent ${p.percent}%)`;
       cell.title=p.total?`${p.visited}/${p.total} pages read`:cell.textContent;
+    } else if (key === "files" && this.isRegular(item)) {
+      const kinds = this.attachmentKinds(item);
+      const main = kinds.filter(k => !k.supplementary), si = kinds.filter(k => k.supplementary);
+      if (main.length) {
+        const plain = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        plain.textContent = main.length > 1 ? `PDF ×${main.length}` : "PDF";
+        plain.style.cssText = `font-size:11px;color:${P.muted};`;
+        plain.title = main.map(k => k.name).join("\n");
+        cell.appendChild(plain);
+      }
+      if (si.length) { const pill = this.pill(doc, si.length > 1 ? `SI ×${si.length}` : "SI", P.purple, P); pill.title = "보충자료(supplementary)\n" + si.map(k => k.name).join("\n"); cell.appendChild(pill); }
+      cell.title = si.length ? `보충자료 ${si.length}개 포함` : main.length ? "보충자료 없음" : "첨부파일 없음";
+      return cell;
+    } else if (key === "if") {
+      const tier = this.impactTier(Number(value), P);
+      cell.textContent = label;
+      if (tier) { cell.style.color = tier.color; cell.style.fontWeight = "590"; cell.title = `${label} · ${tier.name}`; }
+    } else if (key === "citations") {
+      const count = Number(value);
+      const number = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      number.textContent = label;
+      number.style.cssText = `font-variant-numeric:tabular-nums;font-weight:${count >= 100 ? 590 : 400};color:${count > 0 ? P.text : P.faint};`;
+      cell.appendChild(number);
+      const track = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      track.style.cssText = `flex:1;min-width:14px;max-width:56px;height:2px;border-radius:100px;overflow:hidden;background:${this.tint(P.gray, 0.16)};`;
+      const fill = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      fill.style.cssText = `display:block;height:100%;border-radius:100px;width:${(this.citationShare(count) * 100).toFixed(1)}%;background:${this.tint(count >= 100 ? P.blue : P.gray, 0.85)};`;
+      track.appendChild(fill); cell.appendChild(track);
     } else { cell.textContent = label; }
     if (!["time","progress","annotationCount"].includes(key)) cell.title = label;
     if (this.isRegular(item) && ["if","citations"].includes(key)) {
@@ -452,7 +556,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         else if(state.titleWeights.has(titleText)){if(titleText.style.fontWeight==='700')titleText.style.fontWeight=state.titleWeights.get(titleText);state.titleWeights.delete(titleText);}
       }
       let strip=cell.querySelector('.style-custom-title-strip'),tags=cell.querySelector('.style-custom-title-tags');
-      if(this.featureEnabled('titleColumn')&&this.pref('titleHeatmap',true)) {
+      if(this.featureEnabled('titleColumn')&&this.pref('titleHeatmap',false)) {
         const p=this.pageProgress(item);
         if(p.total){if(!strip){strip=win.document.createElementNS('http://www.w3.org/1999/xhtml','span');strip.className='style-custom-title-strip';strip.setAttribute('aria-hidden','true');strip.style.cssText='position:absolute;left:0;right:0;bottom:0;height:3px;pointer-events:none;';if(!cell.style.position){state.titlePositions.set(cell,cell.style.position);cell.style.position='relative';}cell.appendChild(strip);state.titleNodes.add(strip);}
           const bins=Math.min(60,p.total),colors=[];for(let b=0;b<bins;b++){let seconds=0;for(let page=Math.floor(b*p.total/bins);page<Math.floor((b+1)*p.total/bins);page++)seconds+=Number(p.pages[page])||0;const a=seconds?Math.min(.8,.15+Math.log1p(seconds)/10):0;colors.push(`rgba(36,92,120,${a}) ${b/bins*100}% ${((b+1)/bins)*100}%`);}strip.style.background='linear-gradient(90deg,'+colors.join(',')+')';}
@@ -465,6 +569,42 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }else tags?.remove();
     }
     for(const n of [...state.titleNodes])if(!n.isConnected)state.titleNodes.delete(n);
+  }
+  // Everything a citation style needs, read straight off the item.
+  bibliographyRecord(item) {
+    const field = key => { try { return String(item.getField(key) || '').trim(); } catch (_) { return ''; } };
+    const base = this.citationRecord(item);
+    return {
+      title: field('title'),
+      creators: (item.getCreators?.() || []).filter(c => !c.creatorType || c.creatorType === 'author'),
+      year: base.year ? String(base.year) : (field('date').match(/\b(?:1[5-9]|20)\d{2}\b/) || [''])[0],
+      venue: ['publicationTitle', 'proceedingsTitle', 'bookTitle', 'university', 'publisher'].map(field).find(Boolean) || '',
+      volume: field('volume'), issue: field('issue'), pages: field('pages'),
+      DOI: base.doi || field('DOI'), url: field('url')
+    };
+  }
+  // Zotero's own CSL processor is authoritative when the style is installed;
+  // the local formatter only covers the case where it is not.
+  async citationText(items, style) {
+    const records = items.map(item => this.bibliographyRecord(item));
+    if (style.url) {
+      try {
+        const output = await this.Z.QuickCopy?.getContentFromItems?.(items, 'bibliography=' + style.url);
+        const produced = String(output?.text || '').trim();
+        if (produced) return produced;
+      } catch (error) { this.Z.logError(error); }
+    }
+    if (style.key === 'bibtex') return records.map(r => this.citationFormats.bibtex(r)).join('\n\n');
+    if (style.key === 'ris') return records.map(r => this.citationFormats.ris(r)).join('\n\n');
+    return records.map(r => this.citationFormats.format(style.key, r)).join('\n\n');
+  }
+  async copyCitations(win, style) {
+    const items = this.selected(win);
+    if (!items.length) throw new Error('문헌을 먼저 선택하세요.');
+    const output = await this.citationText(items, style);
+    if (!output.trim()) throw new Error('이 문헌에서 인용문을 만들 메타데이터가 부족합니다.');
+    this.Z.Utilities.Internal.copyTextToClipboard(output);
+    return output;
   }
   citationRecord(item) {
     const field = key => { try { return String(item.getField(key)||"").trim(); } catch (_) { return ""; } };
@@ -717,6 +857,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const ratings=make("menupopup",null,make("menu","별점",body));
       for(let rating=0;rating<=5;rating++)action(rating?"★".repeat(rating):"별점 지우기",()=>this.edit(this.selected(win),{rating}),ratings);
       make("menuseparator",null,body);
+      const cites=make("menupopup",null,make("menu","인용 복사",body));
+      const styles=[...this.citationFormats.STYLES,{key:'bibtex',label:'BibTeX'},{key:'ris',label:'RIS'}];
+      for(const style of styles)action(style.label,async()=>{
+        const output=await this.copyCitations(win,style);
+        this.Z.alert(win,"Style Custom",style.label+" 인용문을 복사했습니다.\n\n"+(output.length>400?output.slice(0,400)+"…":output));
+      },cites);
       action("커스텀 열로 전환",()=>this.useColumns(win));
       action("연구 작업 패널",()=>state.workbench?.toggle(true));
       action("그래프 · 태그 · 노트 · 주석",()=>state.workbench?.show('explore'));

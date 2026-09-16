@@ -517,7 +517,7 @@
       "category": "columns",
       "label": "제목에 읽기 히트맵 표시",
       "type": "boolean",
-      "default": true
+      "default": false
     },
     {
       "key": "unreadBold",

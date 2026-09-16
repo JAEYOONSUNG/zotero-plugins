@@ -1,4 +1,4 @@
-/* Read overflowing item titles without changing Zotero's row or title markup. */
+/* Read any overflowing item-tree cell without changing Zotero's row or cell markup. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -41,17 +41,23 @@
       };
     }
 
-    function titleCell(target) {
+    function cellOf(target) {
       const element = target?.nodeType === 1 ? target : target?.parentElement;
-      const cell = element?.closest?.(".cell.title");
+      const cell = element?.closest?.(".cell");
       if (!cell || !cell.closest(".row") || !cell.closest(".virtualized-table")
           || !cell.closest("#zotero-items-tree")) return null;
       return cell;
     }
 
+    // Only the title cell wraps its text in .cell-text (for the twisty and icon);
+    // every other column clips on the cell itself, so that is what must scroll.
+    function scroller(cell) {
+      return cell?.querySelector(".cell-text") || cell || null;
+    }
+
     function isCurrent(state) {
-      return state.text.isConnected && titleCell(state.text) === state.cell
-        && state.cell.querySelector(".cell-text") === state.text
+      return state.text.isConnected && cellOf(state.text) === state.cell
+        && scroller(state.cell) === state.text
         && state.text.textContent === state.content;
     }
 
@@ -116,7 +122,7 @@
       if (active?.cell === cell && isCurrent(active)) return;
       reset();
       if (!cell) return;
-      const text = cell.querySelector(".cell-text");
+      const text = scroller(cell);
       if (!text || text.clientWidth <= 0 || text.scrollWidth - text.clientWidth <= 1) return;
       const content = text.textContent;
       if (!content.trim()) return;
@@ -151,11 +157,11 @@
         reset();
         return;
       }
-      begin(titleCell(event.target));
+      begin(cellOf(event.target));
     }
 
     function onLeave(event) {
-      if (active && titleCell(event.relatedTarget) !== active.cell) reset();
+      if (active && cellOf(event.relatedTarget) !== active.cell) reset();
     }
 
     function onScroll(event) {

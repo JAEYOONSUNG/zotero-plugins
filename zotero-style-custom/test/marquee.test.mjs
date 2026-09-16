@@ -306,3 +306,27 @@ test("RTL titles scroll in their reading direction; live options can disable an 
   assert.equal(f.frames.size, 0);
   cleanup();
 });
+
+test("a long value in any column rolls, not just the title", () => {
+  const f = fixture();
+  // A plain column: Zotero clips on the cell itself, with no .cell-text wrapper.
+  const venue = new Element("cell venue", f.row, "Proceedings of the National Academy of Sciences");
+  venue.scrollWidth = 420;
+  const impact = new Element("cell if", f.row, "16.6");
+  const cleanup = marquee.attach(f.window);
+
+  f.hover(venue);
+  assert.equal(venue.getAttribute("title"), "Proceedings of the National Academy of Sciences");
+  f.advance(200);
+  f.advance(1000);
+  assert.ok(venue.scrollLeft > 0, "an overflowing journal name should roll");
+  assert.equal(f.text.scrollLeft, 0, "rolling one cell must not disturb the title");
+
+  // A value that already fits stays still, and leaving a cell restores it.
+  f.hover(impact);
+  f.advance(1200);
+  assert.equal(impact.scrollLeft, 0);
+  assert.equal(venue.scrollLeft, 0);
+  assert.equal(venue.getAttribute("title"), null);
+  cleanup();
+});

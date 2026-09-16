@@ -54,7 +54,7 @@ function fixture() {
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
   const { plugin, columns, observers } = fixture();
   await plugin.start({ id: 'test@focus', version: '0.1', rootURI: 'file:///focus/' });
-  assert.equal(columns.size, 19);
+  assert.equal(columns.size, 20);
   assert.equal(observers.size, 7);
   await plugin.stop();
   assert.equal(columns.size, 0);
@@ -336,9 +336,9 @@ test('legacy unbound progress is not assigned to a PDF or another library',()=>{
 });
 test('custom columns are validated and registration failure keeps previous fields intact',async()=>{
  const {plugin,Z,columns,item}=fixture();await plugin.start({id:'custom',version:'0.5',rootURI:'file:///custom/'});
- Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,21);
+ Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,22);
  const original=Z.ItemTreeManager.registerColumn;Z.ItemTreeManager.registerColumn=options=>options.dataKey==='field-pages'?false:original(options);
- assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,21);assert.ok(plugin.dynamicFieldMap.has('issue'));
+ assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,22);assert.ok(plugin.dynamicFieldMap.has('issue'));
  assert.throws(()=>plugin.setCustomFields('unknown'));const ref=item(1);ref.getField=key=>key==='volume'?'12':'';assert.equal(plugin.value('field-volume',ref),'12');await plugin.stop();
 });
 test('panel CSS is scoped and cannot load remote content or escape its rules',()=>{
@@ -362,7 +362,7 @@ test('journal rank provider uses explicit credentials and preserves quartiles se
 test('title decorations restore native weight and layout when toggled or removed',async()=>{
  const {parseHTML}=await import('linkedom');const {document}=parseHTML('<html><body><div id="zotero-items-tree"><div class="row" id="item-tree-main-row-0"><span class="cell title"><span class="cell-text" style="font-weight:400">Paper</span></span></div></div></body></html>');
  const {plugin,item,Z}=fixture();const ref=item(1);plugin.entry(ref).readingAttachmentID=9;plugin.entry(ref).readingAttachments={'9':{pageTimes:{0:5},totalPages:3}};
- Z.Prefs.set('extensions.style-custom.unreadBold',true);Z.Prefs.set('extensions.style-custom.titleTags',true);
+ Z.Prefs.set('extensions.style-custom.unreadBold',true);Z.Prefs.set('extensions.style-custom.titleTags',true);Z.Prefs.set('extensions.style-custom.titleHeatmap',true);
  const win={document,ZoteroPane:{itemsView:{getRow:()=>({ref})}},clearInterval(){}};const state={titleNodes:new Set(),titlePositions:new Map(),titleWeights:new Map(),nodes:[],listeners:[]};plugin.windows.set(win,state);
  plugin.enhanceTitles(win,state,[ref]);assert.equal(document.querySelector('.cell-text').style.fontWeight,'700');assert.ok(document.querySelector('.style-custom-title-strip'));assert.match(document.querySelector('.style-custom-title-tags').textContent,/#method/);
  Z.Prefs.set('extensions.style-custom.unreadBold',false);Z.Prefs.set('extensions.style-custom.titleTags',false);Z.Prefs.set('extensions.style-custom.titleHeatmap',false);plugin.enhanceTitles(win,state,[ref]);assert.equal(document.querySelector('.cell-text').style.fontWeight,'400');assert.equal(document.querySelector('.style-custom-title-strip'),null);
@@ -414,4 +414,82 @@ test('annotation column maps colors to real attachment pages without inventing t
 test('annotation distribution includes both pages of a merged highlight without double-counting the annotation total',()=>{
  const {plugin,item,Z}=fixture(),ref=item(1);ref.getAttachments=()=>[9];Z.Items={get:()=>({getAnnotations:()=>[{annotationPosition:JSON.stringify({pageIndex:4,rects:[[0,0,1,1]],nextPageRects:[[0,0,2,2]]}),annotationColor:'#ffd400'}]})};
  assert.deepEqual(plugin.annotationDistribution(ref).map(p=>p.pageIndex),[4,5]);assert.equal(plugin.value('annotationCount',ref),'1');
+});
+
+test('supplementary attachments are told apart from the main PDF by publisher naming conventions',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item,Z}=fixture();const ref=item(1);
+ const file=(id,name)=>[id,{id,attachmentFilename:name,isFileAttachment:()=>true,attachmentContentType:'application/pdf'}];
+ const files=new Map([file(1,'Roisne-Hamelin 2024 Molecular Cell.pdf'),file(2,'mmc1.pdf'),file(3,'1-s2.0-supplementary-information.pdf'),file(4,'media-3.xlsx'),file(5,'Structure of a Type II SMC Wadjet Complex.pdf'),
+  // A title truncated mid-word ends in " si." and must not read as supplementary.
+  file(6,'Horton 2019 - CcrM opens a bubble at its DNA recognition si.pdf'),file(7,'thermocas9-supple.pdf'),file(8,'pThermoBE_supp_data.docx'),file(9,'41467_2015_MOESM1323_ESM.pdf')]);
+ ref.getAttachments=()=>[1,2,3,4,5,6,7,8,9];Z.Items={get:id=>files.get(id)};
+ // "PDF" in a filename is not evidence either way; only an explicit marker is.
+ assert.deepEqual(plugin.attachmentKinds(ref).map(k=>k.supplementary),[false,true,true,true,false,false,true,true,true]);
+ assert.equal(plugin.value('files',ref),'PDF×3 · SI×6');
+ window.ZoteroPane={itemsView:{getRow:()=>({ref})}};
+ const cell=plugin.renderCell('files',0,'',{},document);const pills=[...cell.children].map(el=>el.textContent);
+ assert.deepEqual(pills,['PDF ×3','SI ×6']);assert.match(cell.title,/보충자료 6개/);
+});
+
+test('an item with only a main PDF says so rather than leaving the supplementary question open',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item,Z}=fixture();const ref=item(1);
+ ref.getAttachments=()=>[1];Z.Items={get:()=>({id:1,attachmentFilename:'paper.pdf',isFileAttachment:()=>true})};
+ window.ZoteroPane={itemsView:{getRow:()=>({ref})}};
+ const cell=plugin.renderCell('files',0,'',{},document);
+ assert.deepEqual([...cell.children].map(el=>el.textContent),['PDF']);assert.equal(cell.title,'보충자료 없음');
+});
+
+test('status rating and impact cells carry colour that tracks the value instead of one flat style',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item}=fixture();const ref=item(1);
+ window.ZoteroPane={itemsView:{getRow:()=>({ref})}};
+ const P=plugin.palette(document);
+ const status=label=>{plugin.value=(key)=>key==='status'?String({unread:0,reading:1,done:2}[label]):'';return plugin.renderCell('status',0,'',{},document).firstChild.style.color;};
+ assert.deepEqual([status('unread'),status('reading'),status('done')],[P.faint,P.orange,P.green]);
+ // A 16.6 and a 56.1 must not read as the same journal.
+ const tier=value=>plugin.impactTier(value,P)?.color;
+ assert.notEqual(tier(16.6),tier(56.1));
+ assert.deepEqual([tier(0),tier(1.2),tier(3),tier(6),tier(16.6),tier(56.1)],[undefined,P.gray,P.green,P.teal,P.blue,P.purple]);
+ // Citation bars are log-scaled, so a 40-citation paper is still visible next to a 900-citation one.
+ assert.ok(plugin.citationShare(40)>0.5&&plugin.citationShare(40)<plugin.citationShare(900));
+ assert.equal(plugin.citationShare(0),0);
+});
+
+test('the palette follows the window theme so cells stay legible in dark mode',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin}=fixture();
+ window.matchMedia=query=>({matches:query==='(prefers-color-scheme: dark)'});
+ const dark=plugin.palette(document);assert.equal(dark.dark,true);
+ window.matchMedia=()=>({matches:false});
+ const light=plugin.palette(document);assert.equal(light.dark,false);
+ assert.notEqual(dark.text,light.text);assert.ok(dark.tint>light.tint);
+});
+
+test('the reading heatmap stays off unless asked for, so nothing draws under the title by default',async()=>{
+ const {parseHTML}=await import('linkedom');const {document}=parseHTML('<html><body><div id="zotero-items-tree"><div class="row" id="item-tree-main-row-0"><span class="cell title"><span class="cell-text">Paper</span></span></div></div></body></html>');
+ const {plugin,item}=fixture();const ref=item(1);plugin.entry(ref).readingAttachmentID=9;plugin.entry(ref).readingAttachments={'9':{pageTimes:{0:5},totalPages:3}};
+ const win={document,ZoteroPane:{itemsView:{getRow:()=>({ref})}},clearInterval(){}};const state={titleNodes:new Set(),titlePositions:new Map(),titleWeights:new Map(),nodes:[],listeners:[]};plugin.windows.set(win,state);
+ plugin.enhanceTitles(win,state,[ref]);
+ assert.equal(document.querySelector('.style-custom-title-strip'),null,'an unrequested strip reads as a rendering bug');
+});
+
+test('every shipped default preference agrees with the default the code and schema use',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const shipped=new Map();
+ for(const line of readFileSync(new URL('../prefs.js',import.meta.url),'utf8').split('\n')){
+  const m=/^pref\("extensions\.style-custom\.([^"]+)",\s*(.+?)\);/.exec(line.trim());
+  if(m)shipped.set(m[1],m[2]);
+ }
+ assert.ok(shipped.size,'prefs.js should ship defaults');
+ const runtime=readFileSync(new URL('../src/runtime.js',import.meta.url),'utf8');
+ const workbench=readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const schema=(await import('../src/settings-schema.js')).default.schema.settings;
+ for(const [key,value] of shipped){
+  // Zotero.Prefs.get returns the shipped default, so a differing code fallback is dead.
+  for(const [name,source] of [['runtime',runtime],['workbench',workbench]]){
+   for(const m of source.matchAll(new RegExp(`pref\\\\('${key}',\\\\s*([^)]+)\\\\)`,'g'))){
+    assert.equal(m[1].trim(),value,`${name} fallback for ${key} contradicts prefs.js`);
+   }
+  }
+  const row=schema.find(r=>r.key===key);
+  if(row&&['boolean','number'].includes(row.type))assert.equal(String(row.default),value,`schema default for ${key} contradicts prefs.js`);
+ }
 });
