@@ -493,3 +493,119 @@ test('every shipped default preference agrees with the default the code and sche
   if(row&&['boolean','number'].includes(row.type))assert.equal(String(row.default),value,`schema default for ${key} contradicts prefs.js`);
  }
 });
+
+// The whole supplementary path with the network and the archive faked, because
+// a scope slip here ("bytes is not defined") only shows up at run time.
+function supplementaryFixture({article, archive, attach} = {}) {
+  const f = fixture();
+  const ref = f.item(1);
+  const fields = {title: 'An antiplasmid system', DOI: '10.1038/s41467-024-48219-y', date: '2024'};
+  ref.getField = key => fields[key] || '';
+  ref.getCreators = () => [{firstName: 'A', lastName: 'Zongo'}];
+  ref.getAttachments = () => [];
+  const requests = [];
+  f.Z.HTTP = {request: async (method, url, options) => {
+    requests.push(url);
+    if (/\/search\?/.test(url)) return {response: {resultList: {result: [article ?? {
+      id: '38744896', source: 'MED', pmid: '38744896', pmcid: 'PMC11096173',
+      doi: '10.1038/s41467-024-48219-y', hasSuppl: 'Y', isOpenAccess: 'Y'}]}}};
+    assert.equal(options.responseType, 'arraybuffer');
+    return {response: (archive ?? new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2])).buffer};
+  }};
+  const imported = [];
+  f.plugin.attachSupplementary = async (item, bytes, opts) => {
+    // The caller must hand over real bytes, not an undefined binding.
+    assert.ok(bytes instanceof Uint8Array && bytes.length, 'attachSupplementary needs the archive bytes');
+    imported.push({item, length: bytes.length, opts});
+    return attach ?? {status: 'ok', added: 2, skipped: 0};
+  };
+  return {...f, ref, requests, imported};
+}
+
+test('a supplementary fetch reaches the attach step with the downloaded bytes', async () => {
+  const f = supplementaryFixture();
+  const result = await f.plugin.fetchSupplementary(f.ref, {pdfOnly: true});
+  assert.deepEqual({status: result.status, added: result.added}, {status: 'ok', added: 2});
+  assert.equal(f.imported.length, 1);
+  assert.equal(f.imported[0].length, 6);
+  assert.equal(f.imported[0].opts.pdfOnly, true);
+  assert.match(f.requests[0], /\/search\?query=DOI/);
+  assert.equal(f.requests[1], 'https://www.ebi.ac.uk/europepmc/webservices/rest/PMC11096173/supplementaryFiles');
+});
+
+test('a closed-access article is reported as unavailable, not as a corrupt archive', async () => {
+  const xml = new TextEncoder().encode('<errorBean><errMsg>Article with id PMC1 is not open access one</errMsg></errorBean>');
+  const f = supplementaryFixture({archive: xml});
+  const result = await f.plugin.fetchSupplementary(f.ref);
+  assert.equal(result.status, 'none');
+  assert.match(result.reason, /not open access/);
+  assert.equal(f.imported.length, 0, 'nothing should be written for a non-archive response');
+});
+
+test('an article with no supplementary material, or none in PMC, says which', async () => {
+  const none = await supplementaryFixture({article: {pmcid: 'PMC1', doi: '10.1038/s41467-024-48219-y', hasSuppl: 'N'}})
+    .plugin.fetchSupplementary((await supplementaryFixture()).ref);
+  assert.equal(none.status, 'none');
+  const f = supplementaryFixture({article: {id: '1', source: 'MED', pmid: '1', doi: '10.1038/s41467-024-48219-y', hasSuppl: 'Y'}});
+  const notArchived = await f.plugin.fetchSupplementary(f.ref);
+  assert.equal(notArchived.status, 'none');
+  assert.match(notArchived.reason, /PMC/);
+  assert.equal(f.requests.length, 1, 'no download should be attempted');
+});
+
+test('an oversized archive is refused before anything is written to disk', async () => {
+  const f = supplementaryFixture({archive: new Uint8Array([0x50, 0x4b, 0x03, 0x04, ...new Array(60).fill(0)])});
+  const result = await f.plugin.fetchSupplementary(f.ref, {maxBytes: 8});
+  assert.equal(result.status, 'error');
+  assert.match(result.reason, /MB/);
+  assert.equal(f.imported.length, 0);
+});
+
+test('downloading for several items totals the outcomes and keeps going past a failure', async () => {
+  const f = supplementaryFixture();
+  const good = f.ref, bad = f.item(2);
+  bad.getField = () => '';
+  bad.getCreators = () => [];
+  const totals = await f.plugin.downloadSupplementary([good, bad, good]);
+  assert.equal(totals.ok, 2);
+  assert.equal(totals.added, 4);
+  assert.equal(totals.unsupported, 1, 'an item with no identifier cannot be looked up');
+});
+
+test('a supplementary attachment stays identifiable after a file mover renames it', () => {
+  const {plugin, item, Z} = fixture();
+  const ref = item(1);
+  // ZotMoov rewrites both the filename and the title to the parent's template.
+  const renamed = {id: 2, isFileAttachment: () => true, attachmentFilename: 'Zongo 2024 - An antiplasmid system 1.pdf',
+    getTags: () => [{tag: plugin.SUPPLEMENTARY_TAG, type: 1}]};
+  const main = {id: 3, isFileAttachment: () => true, attachmentFilename: 'Zongo 2024 - An antiplasmid system.pdf',
+    getTags: () => []};
+  ref.getAttachments = () => [2, 3];
+  Z.Items = {get: id => ({2: renamed, 3: main})[id]};
+  assert.deepEqual(plugin.attachmentKinds(ref).map(k => k.supplementary), [true, false]);
+  assert.equal(plugin.value('files', ref), 'PDF×1 · SI×1');
+});
+
+test('re-downloading does not attach the same supplementary file twice', async () => {
+  const f = supplementaryFixture();
+  // Restore the real attach path, with only the archive reading faked out.
+  const entries = ['41467_2024_48219_MOESM1_ESM.pdf', '41467_2024_48219_MOESM2_ESM.pdf'];
+  const tagged = [];
+  f.plugin.attachSupplementary = async function (item, bytes, {pdfOnly} = {}) {
+    const record = this.entry(item);
+    const imported = new Set(Array.isArray(record.supplementaryFiles) ? record.supplementaryFiles : []);
+    let added = 0, skipped = 0;
+    for (const file of this.supplementaryTools.classifyEntries(entries, {pdfOnly})) {
+      if (imported.has(file.name.toLowerCase())) { skipped++; continue; }
+      tagged.push(file.name); imported.add(file.name.toLowerCase()); added++;
+    }
+    if (added) record.supplementaryFiles = [...imported];
+    return {status: added ? 'ok' : skipped ? 'already' : 'none', added, skipped};
+  };
+  const first = await f.plugin.fetchSupplementary(f.ref);
+  assert.deepEqual({status: first.status, added: first.added}, {status: 'ok', added: 2});
+  const second = await f.plugin.fetchSupplementary(f.ref);
+  assert.deepEqual({status: second.status, added: second.added, skipped: second.skipped},
+    {status: 'already', added: 0, skipped: 2});
+  assert.equal(tagged.length, 2, 'the same two files must not be imported again');
+});

@@ -11,6 +11,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.journals = this.journalTools.create(catalog);
     this.citationTools = citations || (typeof CustomStyleCitations !== "undefined" ? CustomStyleCitations : require("./citations.js"));
     this.citationFormats = typeof CustomStyleCitationFormats !== "undefined" ? CustomStyleCitationFormats : require("./citation-formats.js");
+    this.supplementaryTools = typeof CustomStyleSupplementary !== "undefined" ? CustomStyleSupplementary : require("./supplementary.js");
+    this.SUPPLEMENTARY_TAG = 'style-custom:supplementary';
     this.citationJob = null;
     this.citationProgress = null;
     this.metadataIDs = new Set();
@@ -261,13 +263,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // an explicit word, an "SI"/"supp" token, or a house code (Elsevier mmc1,
   // NPG media-1). Matching the stem avoids treating "PDF" alone as evidence.
   isSupplementary(attachment) {
+    // A tag survives a file mover renaming the attachment; a filename does not.
+    try {
+      if ((attachment?.getTags?.() || []).some(t => t.tag === this.SUPPLEMENTARY_TAG)) return true;
+    } catch (ignored) { }
+    // One shared definition with the downloader, so a file the badge counts is
+    // a file the downloader keeps.
     const stems = [attachment?.attachmentFilename, attachment?.getField?.('title'), attachment?.getDisplayTitle?.()];
-    // A spelled-out word is safe anywhere, but a terse token like "SI" or "ESM"
-    // is only evidence between filename separators: a title truncated mid-word
-    // ("...recognition si.pdf") would otherwise look supplementary.
-    const spelled = /supplement\w*|supporting[\s._-]*informations?|extended[\s._-]*data|\ubcf4\ucda9\uc790\ub8cc|\ubd80\ub85d/i;
-    const token = /(^|[._-])(s\.?i|esm|suppl?e?m?|mmc\d+|media[._-]?\d+|data[._-]?s\d+)([._-]|\.[a-z0-9]{2,4}$|$)/i;
-    return stems.filter(Boolean).some(text => spelled.test(String(text)) || token.test(String(text)));
+    return stems.filter(Boolean).some(text => this.supplementaryTools.looksSupplementary(String(text)));
   }
   attachmentKinds(item) {
     const kinds = [];
@@ -570,6 +573,111 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     for(const n of [...state.titleNodes])if(!n.isConnected)state.titleNodes.delete(n);
   }
+  // Europe PMC hands back every supplementary file of an article as one zip.
+  // Nothing is written until the archive is open and its entries are triaged.
+  async fetchSupplementary(item, {pdfOnly = false, signal, maxBytes = 200 * 1024 * 1024} = {}) {
+    const record = this.bibliographyRecord(item);
+    const url = this.supplementaryTools.searchURL(record, {email: this.pref('contactEmail', '')});
+    if (!url) return {status: 'unsupported', reason: '식별자가 없어 조회할 수 없습니다', added: 0};
+    const search = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 20000});
+    const article = this.supplementaryTools.pickArticle(search?.response, record);
+    if (!article) return {status: 'not-found', reason: 'Europe PMC에서 찾지 못했습니다', added: 0};
+    const filesURL = article.hasSupplementary ? this.supplementaryTools.supplementaryURL(article) : null;
+    if (!filesURL) {
+      return {status: 'none', added: 0,
+        reason: article.source === 'PMC' ? '보충자료가 없는 논문입니다'
+          : 'PMC에 보관된 본문이 아니라 받을 수 없습니다'};
+    }
+    const archive = await this.Z.HTTP.request('GET', filesURL, {responseType: 'arraybuffer', timeout: 180000});
+    const buffer = archive?.response;
+    if (!buffer?.byteLength) return {status: 'error', reason: '빈 응답', added: 0};
+    const bytes = new Uint8Array(buffer);
+    // A closed-access article answers 200 with an XML error, not an archive.
+    const archiveError = this.supplementaryTools.readArchiveError(bytes);
+    if (archiveError) {
+      return {status: /open access/i.test(archiveError) ? 'none' : 'error', reason: archiveError, added: 0};
+    }
+    if (buffer.byteLength > maxBytes) {
+      return {status: 'error', added: 0,
+        reason: `보충자료가 ${(buffer.byteLength / 1048576).toFixed(0)}MB로 너무 커서 건너뜀습니다`};
+    }
+    signal?.throwIfAborted?.();
+    return this.attachSupplementary(item, bytes, {pdfOnly, article});
+  }
+
+  // Zotero has no in-memory zip reader, so the archive round-trips through a
+  // temporary file that is removed whether or not the import succeeds.
+  async attachSupplementary(item, bytes, {pdfOnly = false, article} = {}) {
+    const temp = this.Z.getTempDirectory();
+    const stem = 'style-custom-suppl-' + item.id + '-' + Date.now();
+    const zipPath = PathUtils.join(temp.path, stem + '.zip');
+    const outDir = PathUtils.join(temp.path, stem);
+    const record = this.entry(item);
+    const imported = new Set(Array.isArray(record.supplementaryFiles) ? record.supplementaryFiles : []);
+    const existing = new Set([...imported, ...(item.getAttachments?.() || [])
+      .map(id => String(this.Z.Items.get(id)?.attachmentFilename || '').toLowerCase()).filter(Boolean)]);
+    let added = 0, skipped = 0;
+    try {
+      await IOUtils.write(zipPath, bytes);
+      await IOUtils.makeDirectory(outDir, {ignoreExisting: true});
+      const reader = Components.classes['@mozilla.org/libjar/zip-reader;1']
+        .createInstance(Components.interfaces.nsIZipReader);
+      reader.open(this.Z.File.pathToFile(zipPath));
+      reader.test(null);
+      let names = [];
+      try {
+        const entries = reader.findEntries('*');
+        while (entries.hasMore()) names.push(entries.getNext());
+        for (const file of this.supplementaryTools.classifyEntries(names, {pdfOnly})) {
+          if (existing.has(file.name.toLowerCase())) { skipped++; continue; }
+          const target = PathUtils.join(outDir, file.name);
+          reader.extract(file.entry, this.Z.File.pathToFile(target));
+          const attached = await this.Z.Attachments.importFromFile({
+            file: target, parentItemID: item.id,
+            title: this.supplementaryTools.attachmentTitle(file)
+          });
+          await this.markSupplementary(attached);
+          imported.add(file.name.toLowerCase());
+          added++;
+        }
+      } finally { reader.close(); }
+    } finally {
+      await IOUtils.remove(zipPath, {ignoreAbsent: true}).catch(() => {});
+      await IOUtils.remove(outDir, {recursive: true, ignoreAbsent: true}).catch(() => {});
+    }
+    if (added) { record.supplementaryFiles = [...imported]; this.dirty = true; }
+    return {status: added ? 'ok' : skipped ? 'already' : 'none', added, skipped, article};
+  }
+
+  // Type 1 is an automatic tag: it identifies the file without cluttering the
+  // tag selector the way a manual tag would.
+  async markSupplementary(attachment) {
+    if (!attachment?.addTag) return;
+    try {
+      attachment.addTag(this.SUPPLEMENTARY_TAG, 1);
+      await attachment.saveTx({skipSelect: true, skipDateModifiedUpdate: true});
+    } catch (error) { this.Z.logError(error); }
+  }
+
+  async downloadSupplementary(items, {pdfOnly = false, onProgress} = {}) {
+    const totals = {ok: 0, added: 0, none: 0, 'not-found': 0, unsupported: 0, error: 0, already: 0};
+    const failures = [];
+    for (const [index, item] of items.entries()) {
+      onProgress?.(index, items.length, item);
+      try {
+        const result = await this.fetchSupplementary(item, {pdfOnly});
+        totals[result.status] = (totals[result.status] || 0) + 1;
+        totals.added += result.added || 0;
+        if (result.status === 'error') failures.push(this.bibliographyRecord(item).title + ': ' + result.reason);
+      } catch (error) {
+        this.Z.logError(error);
+        totals.error++;
+        failures.push(this.bibliographyRecord(item).title + ': ' + error.message);
+      }
+    }
+    return {...totals, failures};
+  }
+
   // Everything a citation style needs, read straight off the item.
   bibliographyRecord(item) {
     const field = key => { try { return String(item.getField(key) || '').trim(); } catch (_) { return ''; } };
@@ -857,6 +965,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const ratings=make("menupopup",null,make("menu","별점",body));
       for(let rating=0;rating<=5;rating++)action(rating?"★".repeat(rating):"별점 지우기",()=>this.edit(this.selected(win),{rating}),ratings);
       make("menuseparator",null,body);
+      const suppl=make("menupopup",null,make("menu","보충자료 내려받기",body));
+      for(const [label,pdfOnly] of [["PDF만",true],["모든 파일",false]])action(label,async()=>{
+        const items=this.selected(win);
+        if(!items.length)throw new Error("문헌을 먼저 선택하세요.");
+        const result=await this.downloadSupplementary(items,{pdfOnly});
+        this.Z.alert(win,"Style Custom",
+          `보충자료 ${result.added}개 추가 · 이미 있음 ${result.already} · 없음 ${result.none} · 미확인 ${result["not-found"]} · 실패 ${result.error}`
+          +(result.failures.length?"\n\n"+result.failures.slice(0,5).join("\n"):""));
+      },suppl);
       const cites=make("menupopup",null,make("menu","인용 복사",body));
       const styles=[...this.citationFormats.STYLES,{key:'bibtex',label:'BibTeX'},{key:'ris',label:'RIS'}];
       for(const style of styles)action(style.label,async()=>{
