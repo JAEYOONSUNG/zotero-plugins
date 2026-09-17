@@ -57,9 +57,11 @@
     if (hasStatus && !STATUSES.has(patch.status)) throw new RangeError('Unknown reading status');
     if (hasRating && (!Number.isInteger(patch.rating) || patch.rating < 0 || patch.rating > 5)) throw new RangeError('Rating must be an integer from 0 to 5');
     const result = list.filter(tag => !(hasStatus && statusOf(tag)) && !(hasRating && (starRating(tag) !== null || ownRating(tag) !== null))).map(tag => typeof tag === 'object' && tag !== null ? {...tag} : tag);
-    const wrap = tag => list.length && list.every(value => typeof value === 'string') ? tag : {tag, type: 0};
+    const wrap = (tag, type = 0) => list.length && list.every(value => typeof value === 'string') ? tag : {tag, type};
     if (hasStatus) result.push(wrap('/' + patch.status));
-    if (hasRating) result.push(wrap('style-custom:rating:' + patch.rating));
+    // Type 1 is an automatic tag, which Zotero keeps out of the tag selector.
+    // This one is purely internal bookkeeping and should never be browsable.
+    if (hasRating) result.push(wrap('style-custom:rating:' + patch.rating, 1));
     // A visible ★★★ tag is what Zotero prints in front of the title. The rating
     // has its own column, so writing one only clutters the title; legacy star
     // tags are still read, just not created.

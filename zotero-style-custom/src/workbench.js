@@ -108,7 +108,7 @@
   });
   let toolbar;
   const target=doc.getElementById('zotero-items-toolbar');
-  if(target){toolbar=doc.createXULElement?doc.createXULElement('toolbarbutton'):node('button');toolbar.id='style-custom-workbench-button';toolbar.setAttribute('image',runtime.rootURI+'content/icons/style-custom.svg');toolbar.setAttribute('label','워크벤치');toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});target.appendChild(toolbar);}
+  if(target){toolbar=doc.createXULElement?doc.createXULElement('toolbarbutton'):node('button');toolbar.id='style-custom-workbench-button';toolbar.setAttribute('image',runtime.rootURI+'content/icons/style-custom-toolbar.svg');toolbar.setAttribute('label','워크벤치');toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});target.appendChild(toolbar);}
   const selected=()=>state.items.filter(i=>state.selected.has(String(i.id)));
   function bindAI(itemID){if(state.aiItemID!==itemID){aiEpoch++;state.aiItemID=itemID;state.aiTask=null;state.aiOutput=null;}}
   const scoped=()=>state.scope==='selected'?selected():state.scope.startsWith('collection')?state.items.filter(i=>(state.collectionIDs||[]).includes(String(i.id))):state.items;

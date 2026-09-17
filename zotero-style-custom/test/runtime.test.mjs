@@ -1060,3 +1060,16 @@ test('items carrying a star tag are found, and ones without are not', () => {
   Z.Items = {...(Z.Items || {}), getAll: () => [starred, emoji, plain]};
   assert.deepEqual(plugin.starTagItems().map(i => i.id), [starred.id, emoji.id]);
 });
+
+test('the toolbar button uses a monochrome glyph, never the coloured app icon', async () => {
+  const {readFileSync} = await import('node:fs');
+  const workbench = readFileSync(new URL('../src/workbench.js', import.meta.url), 'utf8');
+  const image = /toolbar\.setAttribute\('image',runtime\.rootURI\+'([^']+)'\)/.exec(workbench);
+  assert.ok(image, 'the toolbar button should set an image');
+  // The app icon is a filled colour squircle; in a toolbar it looks like a sticker.
+  assert.equal(image[1], 'content/icons/style-custom-toolbar.svg');
+  const glyph = readFileSync(new URL('../' + image[1], import.meta.url), 'utf8');
+  assert.match(glyph, /viewBox="0 0 20 20"/, 'Zotero draws its toolbar icons on a 20px grid');
+  assert.match(glyph, /fill="context-fill"/, 'the glyph must take its colour from the theme');
+  assert.doesNotMatch(glyph, /#[0-9a-f]{3,6}/i, 'a hard-coded colour would not follow dark mode');
+});

@@ -19,12 +19,12 @@ test('updates preserve unrelated tag objects, data, status, and input', () => {
   const changed = data.updateTags(tags, {rating:4});
   // Zotero prints a visible tag in front of the title, so a rating no longer
   // writes one: the star column already says it. The old tag is still replaced.
-  assert.deepEqual(changed, [tags[0], tags[1], {tag:'style-custom:rating:4',type:0}]);
+  assert.deepEqual(changed, [tags[0], tags[1], {tag:'style-custom:rating:4',type:1}]);
   assert.deepEqual(data.updateTags(tags, {rating:4, legacyStarTag:true}),
-    [tags[0], tags[1], {tag:'style-custom:rating:4',type:0}, {tag:'★★★★',type:0}]);
+    [tags[0], tags[1], {tag:'style-custom:rating:4',type:1}, {tag:'★★★★',type:0}]);
   assert.equal(JSON.stringify(tags), before);
   assert.deepEqual(data.updateTags(['/reading', 'topic'], {status:'done'}), ['topic','/done']);
-  assert.deepEqual(data.updateTags(tags, {rating:0}), [...tags.slice(0,2),{tag:'style-custom:rating:0',type:0}]);
+  assert.deepEqual(data.updateTags(tags, {rating:0}), [...tags.slice(0,2),{tag:'style-custom:rating:0',type:1}]);
   assert.throws(() => data.updateTags(tags, {status:'garbage'}), RangeError);
 });
 test('unknown metadata stays unknown and cache failures are isolated', () => {
@@ -98,4 +98,12 @@ test('a star tag already in the library is still read, just never written again'
   // Re-rating clears the old visible tag rather than leaving a stale one behind.
   const cleaned = data.updateTags([{tag:'★★★',type:0}], {rating:5});
   assert.deepEqual(cleaned.map(t => t.tag), ['style-custom:rating:5']);
+});
+
+test('internal bookkeeping tags are automatic, so they never appear in the tag selector', () => {
+  const written = data.updateTags([{tag:'Topic',type:0}], {rating:3, status:'done'});
+  const rating = written.find(t => t.tag === 'style-custom:rating:3');
+  assert.equal(rating.type, 1, 'the rating tag is internal, not something to browse by');
+  // The reading status is a tag the user may colour and filter on, so it stays manual.
+  assert.equal(written.find(t => t.tag === '/done').type, 0);
 });
