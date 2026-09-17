@@ -14,6 +14,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.supplementaryTools = typeof CustomStyleSupplementary !== "undefined" ? CustomStyleSupplementary : require("./supplementary.js");
     this.SUPPLEMENTARY_TAG = 'style-custom:supplementary';
     this.discoverTools = typeof CustomStyleDiscover !== "undefined" ? CustomStyleDiscover : require("./discover.js");
+    // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
+    this.discoverCache = new Map();
+    this.DISCOVER_CACHE_LIMIT = 60;
     this.citationJob = null;
     this.citationProgress = null;
     this.metadataIDs = new Set();
@@ -698,6 +701,90 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       DOI: base.doi || field('DOI'), url: field('url')
     };
   }
+  // The same path Zotero's own "Add Item by Identifier" takes, so the import
+  // gets the full translator metadata and the PDF, not a bare stub.
+  async importByIdentifier(identifier, {libraryID, collections} = {}) {
+    const translate = new this.Z.Translate.Search();
+    translate.setIdentifier(identifier);
+    const translators = await translate.getTranslators();
+    if (!translators?.length) throw new Error('이 식별자를 읽을 수 있는 번역기가 없습니다.');
+    translate.setTranslator(translators);
+    const saved = await translate.translate({
+      libraryID: libraryID ?? this.Z.Libraries.userLibraryID,
+      collections: collections?.length ? collections : undefined,
+      saveAttachments: true
+    });
+    if (!saved?.length) throw new Error('가져오지 못했습니다.');
+    return saved;
+  }
+
+  // Newly imported papers should inherit the reading state a fresh item has,
+  // and land beside whatever the user was looking at.
+  async importWork(work, win) {
+    if (!work?.doi) throw new Error('DOI가 없어 자동으로 가져올 수 없습니다.');
+    const collection = win?.ZoteroPane?.getSelectedCollection?.();
+    const saved = await this.importByIdentifier({DOI: work.doi}, {
+      libraryID: win?.ZoteroPane?.getSelectedLibraryID?.(),
+      collections: collection ? [collection.id] : undefined
+    });
+    return saved;
+  }
+
+  // --- Following an author over time ---
+
+  watchedAuthors() {
+    const saved = this.cache.watchedAuthors;
+    return Array.isArray(saved) ? saved.filter(row => row && typeof row.id === 'string') : [];
+  }
+
+  async watchAuthor(person) {
+    const id = this.discoverTools.shortID(person?.id);
+    if (!id.startsWith('A')) throw new Error('저자 식별자가 올바르지 않습니다.');
+    const rest = this.watchedAuthors().filter(row => row.id !== id);
+    if (rest.length >= 100) throw new Error('관심 저자는 100명까지 저장합니다.');
+    this.cache.watchedAuthors = [...rest, {
+      id, name: String(person.name || id), institution: String(person.institution || ''),
+      // What was already known when the author was added, so "new" means new to the user.
+      seen: Array.isArray(person.seen) ? person.seen.slice(0, 200) : [],
+      checkedAt: new Date().toISOString()
+    }];
+    this.dirty = true;
+    await this.flush();
+    return this.cache.watchedAuthors[this.cache.watchedAuthors.length - 1];
+  }
+
+  async unwatchAuthor(authorID) {
+    const id = this.discoverTools.shortID(authorID);
+    this.cache.watchedAuthors = this.watchedAuthors().filter(row => row.id !== id);
+    this.dirty = true;
+    await this.flush();
+  }
+
+  // What this author has published since the user last looked.
+  async authorUpdates(authorID, {limit = 25, signal} = {}) {
+    const id = this.discoverTools.shortID(authorID);
+    const watched = this.watchedAuthors().find(row => row.id === id);
+    const {profile, works} = await this.authorActivity(id, {limit, signal});
+    const seen = new Set(watched?.seen || []);
+    const fresh = watched ? works.filter(work => !seen.has(work.id)) : [];
+    return {profile, works, fresh, watching: !!watched, checkedAt: watched?.checkedAt || null};
+  }
+
+  // Marking as read is explicit: opening the tab should not quietly clear the news.
+  async markAuthorSeen(authorID, works) {
+    const id = this.discoverTools.shortID(authorID);
+    const rows = this.watchedAuthors();
+    const row = rows.find(entry => entry.id === id);
+    if (!row) return false;
+    const ids = (Array.isArray(works) ? works : []).map(work => work.id).filter(Boolean);
+    row.seen = [...new Set([...ids, ...(row.seen || [])])].slice(0, 200);
+    row.checkedAt = new Date().toISOString();
+    this.cache.watchedAuthors = rows;
+    this.dirty = true;
+    await this.flush();
+    return true;
+  }
+
   // --- Discovery: what to read next, and what an author is doing now ---
 
   discoverOptions() {
@@ -722,6 +809,36 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (doi) owned.add(doi);
     }
     return owned;
+  }
+
+  // Least-recently-used, so revisiting a paper is instant without pinning memory.
+  discoverCached(key, build) {
+    if (this.discoverCache.has(key)) {
+      const value = this.discoverCache.get(key);
+      this.discoverCache.delete(key);
+      this.discoverCache.set(key, value);
+      return value;
+    }
+    const pending = Promise.resolve().then(build).catch(error => {
+      // A failed lookup must not be remembered as the answer.
+      this.discoverCache.delete(key);
+      throw error;
+    });
+    this.discoverCache.set(key, pending);
+    while (this.discoverCache.size > this.DISCOVER_CACHE_LIMIT) {
+      this.discoverCache.delete(this.discoverCache.keys().next().value);
+    }
+    return pending;
+  }
+
+  relatedWorksCached(item, options = {}) {
+    return this.discoverCached('related:' + this.identity(item), () => this.relatedWorks(item, options));
+  }
+  authorActivityCached(authorID, options = {}) {
+    return this.discoverCached('author:' + this.discoverTools.shortID(authorID), () => this.authorActivity(authorID, options));
+  }
+  authorsOfCached(item, options = {}) {
+    return this.discoverCached('authors:' + this.identity(item), () => this.authorsOf(item, options));
   }
 
   async relatedWorks(item, {limit = 40, signal, have} = {}) {

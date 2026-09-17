@@ -761,3 +761,130 @@ test('losing the citing-works request still returns the rest of the suggestions'
   const {suggestions} = await f.plugin.relatedWorks(f.ref);
   assert.deepEqual(suggestions.map(s => s.source), ['reference', 'related']);
 });
+
+test('a repeated lookup is served from memory, and a failed one is not remembered', async () => {
+  const f = discoverFixture();
+  const first = await f.plugin.relatedWorksCached(f.ref);
+  const asked = f.asked.length;
+  const second = await f.plugin.relatedWorksCached(f.ref);
+  assert.equal(f.asked.length, asked, 'a second look should not hit the network');
+  assert.equal(first, second);
+
+  // A lookup that throws must leave nothing behind to be served as the answer.
+  const g = discoverFixture();
+  g.Z.HTTP.request = async () => { throw new Error('offline'); };
+  await assert.rejects(() => g.plugin.relatedWorksCached(g.ref));
+  assert.equal(g.plugin.discoverCache.size, 0);
+  g.Z.HTTP.request = discoverFixture().Z.HTTP.request;
+  assert.ok((await g.plugin.relatedWorksCached(g.ref)).work, 'a retry should be allowed to succeed');
+});
+
+test('the lookup cache evicts the least recently used entry rather than growing without bound', async () => {
+  const f = discoverFixture();
+  f.plugin.DISCOVER_CACHE_LIMIT = 3;
+  for (const key of ['a', 'b', 'c']) await f.plugin.discoverCached(key, async () => key);
+  // Touching 'a' makes 'b' the oldest.
+  await f.plugin.discoverCached('a', async () => 'stale');
+  await f.plugin.discoverCached('d', async () => 'd');
+  assert.deepEqual([...f.plugin.discoverCache.keys()], ['c', 'a', 'd']);
+});
+
+test('an import goes through the same translator path Zotero uses, into the open collection', async () => {
+  const f = discoverFixture();
+  const translated = [];
+  f.Z.Translate = {Search: class {
+    setIdentifier(id) { this.id = id; }
+    async getTranslators() { return ['a-translator']; }
+    setTranslator(list) { this.translators = list; }
+    async translate(options) { translated.push([this.id, this.translators, options]); return [{getField: () => 'Saved'}]; }
+  }};
+  f.Z.Libraries.userLibraryID = 1;
+  const win = {ZoteroPane: {getSelectedCollection: () => ({id: 7}), getSelectedLibraryID: () => 3}};
+  const saved = await f.plugin.importWork({doi: '10.1/x', title: 'A paper'}, win);
+  assert.equal(saved[0].getField(), 'Saved');
+  const [identifier, translators, options] = translated[0];
+  assert.deepEqual(identifier, {DOI: '10.1/x'});
+  assert.deepEqual(translators, ['a-translator']);
+  assert.equal(options.libraryID, 3);
+  assert.deepEqual(options.collections, [7]);
+  assert.equal(options.saveAttachments, true, 'the PDF is the reason for importing');
+});
+
+test('a suggestion with no DOI is refused before a translator is asked for', async () => {
+  const f = discoverFixture();
+  f.Z.Translate = {Search: class { async getTranslators() { throw new Error('should not be reached'); } }};
+  await assert.rejects(() => f.plugin.importWork({title: 'No identifier'}, {}), /DOI/);
+});
+
+test('an identifier no translator recognises is reported rather than silently doing nothing', async () => {
+  const f = discoverFixture();
+  f.Z.Translate = {Search: class {
+    setIdentifier() {} setTranslator() {}
+    async getTranslators() { return []; }
+  }};
+  await assert.rejects(() => f.plugin.importWork({doi: '10.1/x'}, {}), /번역기/);
+});
+
+test('following an author records what was already published, so later news is genuinely new', async () => {
+  const f = discoverFixture();
+  const {works} = await f.plugin.authorActivity('A1');
+  await f.plugin.watchAuthor({id: 'A1', name: 'A Zongo', institution: 'Institut Pasteur',
+    seen: works.map(w => w.id)});
+  const first = await f.plugin.authorUpdates('A1');
+  assert.equal(first.watching, true);
+  assert.deepEqual(first.fresh, [], 'nothing is new the moment you start following');
+
+  // A paper appears that was not there before.
+  f.plugin.discoverCache.clear();
+  const original = f.Z.HTTP.request;
+  f.Z.HTTP.request = async (method, url) => {
+    if (/author\.id/.test(url)) return {response: {results: [
+      {id: 'https://openalex.org/W77', title: 'Just published', publication_year: 2026,
+       doi: 'https://doi.org/10.1/just', cited_by_count: 0},
+      {id: 'https://openalex.org/W5', title: 'Newest paper', publication_year: 2026,
+       doi: 'https://doi.org/10.1/new', cited_by_count: 0}]}};
+    return original(method, url);
+  };
+  const later = await f.plugin.authorUpdates('A1');
+  assert.deepEqual(later.fresh.map(w => w.title), ['Just published']);
+
+  // Marking as read clears it, and does not re-flag it next time.
+  await f.plugin.markAuthorSeen('A1', later.works);
+  assert.deepEqual((await f.plugin.authorUpdates('A1')).fresh, []);
+});
+
+test('an author who is not followed is never reported as having news', async () => {
+  const f = discoverFixture();
+  const {watching, fresh, works} = await f.plugin.authorUpdates('A1');
+  assert.equal(watching, false);
+  assert.deepEqual(fresh, [], 'an unfollowed author has no baseline, so nothing can be new');
+  assert.equal(works.length, 2, 'their recent work is still shown');
+});
+
+test('following the same author twice updates the entry instead of duplicating it', async () => {
+  const f = discoverFixture();
+  await f.plugin.watchAuthor({id: 'A1', name: 'Old name'});
+  await f.plugin.watchAuthor({id: 'a1', name: 'New name', institution: 'Somewhere'});
+  assert.equal(f.plugin.watchedAuthors().length, 1);
+  assert.equal(f.plugin.watchedAuthors()[0].name, 'New name');
+  await f.plugin.unwatchAuthor('A1');
+  assert.deepEqual(f.plugin.watchedAuthors(), []);
+});
+
+test('the watchlist refuses a work id and will not grow without bound', async () => {
+  const f = discoverFixture();
+  await assert.rejects(() => f.plugin.watchAuthor({id: 'W123'}), /식별자/);
+  f.plugin.cache.watchedAuthors = Array.from({length: 100}, (_, i) => ({id: 'A' + i, name: 'x', seen: []}));
+  await assert.rejects(() => f.plugin.watchAuthor({id: 'A999', name: 'one too many'}), /100/);
+  // Re-following someone already on the list is not growth.
+  await f.plugin.watchAuthor({id: 'A5', name: 'already there'});
+  assert.equal(f.plugin.watchedAuthors().length, 100);
+});
+
+test('a corrupt watchlist on disk is ignored rather than crashing the tab', async () => {
+  const f = discoverFixture();
+  for (const bad of [null, 'nonsense', [null, 3, {name: 'no id'}]]) {
+    f.plugin.cache.watchedAuthors = bad;
+    assert.deepEqual(f.plugin.watchedAuthors(), []);
+  }
+});

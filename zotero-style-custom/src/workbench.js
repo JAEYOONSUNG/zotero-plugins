@@ -385,17 +385,20 @@
   // One dense row per result: what it is, then the actions, which stay out of
   // the way until the row is hovered.
   function hitRow(work,parent){
-   const row=node('div',null,parent,{class:'sc-hit'});
+   const row=node('div',null,parent||null,{class:'sc-hit'});
    node('p',work.title||'제목 없음',row,{class:'sc-hit-title'});
    node('p',[work.year||'연도 미상',work.venue,work.citations==null?null:`인용 ${work.citations}`,work.openAccess?'오픈액세스':null].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
    if(work.authors?.length)node('p',work.authors.slice(0,4).join(', ')+(work.authors.length>4?` 외 ${work.authors.length-4}명`:''),row,{class:'sc-hit-authors'});
    if(work.inLibrary){node('span','보유 중',row,{class:'sc-hit-owned'});return row;}
    const actions=node('div',null,row,{class:'sc-hit-actions'});
    if(work.doi)button('추가',()=>run(async()=>{
-    message('DOI로 가져오는 중…');
-    if(win.ZoteroPane.addItemFromIdentifier)await win.ZoteroPane.addItemFromIdentifier({DOI:work.doi});
-    else{copy(work.doi);throw new Error('이 Zotero 버전에서는 자동 추가를 지원하지 않습니다. DOI를 복사했습니다.');}
-    message('라이브러리에 추가했습니다: '+work.doi);
+    message('가져오는 중… ' + (work.title||work.doi).slice(0,50));
+    const saved=await runtime.importWork(work,win);
+    // The row is now stale: say so in place rather than leaving a dead button.
+    // The row is stale once the paper is in: redraw it in place as owned.
+    work.inLibrary=true;
+    const fresh=hitRow(work,null);row.replaceWith(fresh);
+    message(`추가했습니다 — ${saved[0]?.getField('title')||work.doi}`);
    }),actions);
    if(work.doi)button('DOI',()=>copy(work.doi),actions);
    if(work.pdfURL)button('PDF',()=>win.Zotero.launchURL(work.pdfURL),actions);
@@ -413,11 +416,10 @@
    node('h2',item.title,body);
    const b=bar();
    const list=node('div',null,body);
-   let loaded=false;
-   async function find(){
-    if(loaded)return;loaded=true;
+   async function find({refresh=false}={}){
+    if(refresh)runtime.discoverCache.delete('related:'+runtime.identity(runtime.Z.Items.get(Number(item.id))));
     message('OpenAlex에서 관련 논문을 찾는 중…');
-    const {work,suggestions}=await runtime.relatedWorks(runtime.Z.Items.get(Number(item.id)));
+    const {work,suggestions}=await runtime.relatedWorksCached(runtime.Z.Items.get(Number(item.id)));
     if(token!==epoch||disposed||state.tab!=='related')return;
     list.replaceChildren();
     if(!work){message('이 논문을 OpenAlex에서 찾지 못했습니다.',true);return;}
@@ -430,18 +432,22 @@
      hitList(rows,list);
     }
    }
-   button('관련 논문 찾기',()=>run(find),b);
+   button('다시 찾기',()=>run(()=>find({refresh:true})),b);
    button('저자로 이동',()=>run(async()=>{await navigate('authors');}),b);
+   // The tab was asked for; do not make the user ask twice.
+   run(()=>find());
   }
 
   async function drawAuthors(token){
    let item;try{item=one();}catch(_){empty('저자를 추적할 문헌 하나를 선택하세요.');return;}
    node('h2',item.title,body);
    const b=bar();
+   // The watchlist outlives any one author view, so it gets its own container.
+   const watchArea=node('div',null,body);
    const list=node('div',null,body);
    async function show(person){
     message(`${person.name}의 최근 작업을 불러오는 중…`);
-    const {profile,works}=await runtime.authorActivity(person.id);
+    const {profile,works,fresh,watching,checkedAt}=await runtime.authorUpdates(person.id);
     if(token!==epoch||disposed||state.tab!=='authors')return;
     list.replaceChildren();
     node('h3',profile?.name||person.name,list);
@@ -454,18 +460,52 @@
      const chips=node('div',null,list,{class:'sc-chips'});
      for(const topic of profile.topics)node('span',topic.name+(topic.count?` ${topic.count}`:''),chips,{class:'sc-chip'});
     }
-    if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),list);
+    const follow=bar(list);
+    if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),follow);
+    if(watching){
+     button('관심 해제',()=>run(async()=>{await runtime.unwatchAuthor(person.id);refreshWatched();await show(person);}),follow);
+     if(fresh.length)button(`새 논문 ${fresh.length}편 확인함`,()=>run(async()=>{await runtime.markAuthorSeen(person.id,works);await show(person);}),follow);
+    } else {
+     // Everything visible now is the baseline, so "new" later means new to the user.
+     button('관심 저자로 등록',()=>run(async()=>{
+      await runtime.watchAuthor({...person,name:profile?.name||person.name,seen:works.map(w=>w.id)});
+      refreshWatched();
+      await show(person);
+     }),follow);
+    }
+    if(watching&&fresh.length){
+     node('h3',`마지막 확인 이후 새 논문 ${fresh.length}`,list,{class:'sc-hit-group'});
+     hitList(fresh,list);
+    }
     node('h3',`최근 논문 ${works.length}`,list,{class:'sc-hit-group'});
     if(!works.length)node('p','최근 논문을 찾지 못했습니다.',list,{class:'sc-muted'});
     else hitList(works,list);
-    message(`${works.length}편 · 이미 보유 ${works.filter(w=>w.inLibrary).length}편`);
+    message(`${works.length}편 · 이미 보유 ${works.filter(w=>w.inLibrary).length}편`
+     +(watching?` · 새 논문 ${fresh.length}편`+(checkedAt?` · 마지막 확인 ${checkedAt.slice(0,10)}`:''):''));
    }
-   button('이 논문의 저자 불러오기',()=>run(async()=>{
+   function drawWatched(parent){
+    const watched=runtime.watchedAuthors();
+    if(!watched.length)return;
+    node('h3',`관심 저자 ${watched.length}`,parent,{class:'sc-hit-group'});
+    const rows=node('div',null,parent,{class:'sc-hits'});
+    for(const person of watched){
+     const row=node('div',null,rows,{class:'sc-hit'});
+     node('p',person.name,row,{class:'sc-hit-title'});
+     node('p',[person.institution,person.checkedAt?`마지막 확인 ${person.checkedAt.slice(0,10)}`:null].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
+     const actions=node('div',null,row,{class:'sc-hit-actions'});
+     button('새 논문 보기',()=>run(()=>show(person)),actions);
+    }
+   }
+   function refreshWatched(){watchArea.replaceChildren();drawWatched(watchArea);}
+
+   async function loadAuthors(){
     message('저자 정보를 확인하는 중…');
-    const people=await runtime.authorsOf(runtime.Z.Items.get(Number(item.id)));
+    const people=await runtime.authorsOfCached(runtime.Z.Items.get(Number(item.id)));
     if(token!==epoch||disposed||state.tab!=='authors')return;
     list.replaceChildren();
+    refreshWatched();
     if(!people.length){message('OpenAlex에서 이 논문의 저자를 찾지 못했습니다.',true);return;}
+    node('h3',`이 논문의 저자 ${people.length}`,list,{class:'sc-hit-group'});
     message(`저자 ${people.length}명. 이름을 눌러 최근 작업을 확인하세요.`);
     const authors=node('div',null,list,{class:'sc-hits'});
     for(const person of people){
@@ -475,7 +515,14 @@
      const actions=node('div',null,row,{class:'sc-hit-actions'});
      button('최근 논문',()=>run(()=>show(person)),actions);
     }
+    // One author is not a choice; go straight to their work.
+    if(people.length===1)await show(people[0]);
+   }
+   button('새로고침',()=>run(async()=>{
+    runtime.discoverCache.delete('authors:'+runtime.identity(runtime.Z.Items.get(Number(item.id))));
+    await loadAuthors();
    }),b);
+   run(loadAuthors);
   }
 
   function drawJournals(){const seen=new Set();for(const item of rows()){if(!item.venue||seen.has(item.venue))continue;seen.add(item.venue);const c=card(item.venue,item.impactSource||'출처 정보 없음');node('p',item.impactFactor==null?'IF 미확인':`IF ${item.impactFactor}`,c,{class:'sc-metrics'});const tags=runtime.publicationTags?.(runtime.Z.Items.get(Number(item.id)))||[];if(tags.length)node('p',tags.join(' · '),c);button('저널 등급 조회',async()=>{await runtime.refreshPublicationRanks([runtime.Z.Items.get(Number(item.id))]);await load();message('저널 등급 조회를 마쳤습니다.');},c);button('공식 값 새로고침',async()=>{const result=await runtime.refreshJournalMetrics([runtime.Z.Items.get(Number(item.id))],win.DOMParser);message(`확인 ${result.updated} · 미확인 ${result.failed+result.unknown}`);await load();},c);}}

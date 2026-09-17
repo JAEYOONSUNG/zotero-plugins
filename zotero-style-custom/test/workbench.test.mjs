@@ -17,6 +17,33 @@ function fixture(initialCache){
  win.ZoteroPane={getSelectedLibraryID:()=>libraryID,collectionsView:{selectCollection:id=>calls.push(['collection',id])}};
  const record=(name,result)=>async(...args)=>{calls.push([name,...args]);return typeof result==='function'?result(...args):result;};
  const runtime={rootURI:'file:///plugin/',cache,dirty:false,selected:()=>mainSelection,pref:(key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||=( {}),state:()=>({citations:3,impactFactor:4,status:'reading'}),flush:record('flush'),refreshWindows:record('refresh'),publicationTags:()=>['Q1'],refreshJournalMetrics:record('journal',{updated:1,failed:0,unknown:0}),setPanelCSS:record('css'),toggleAppTheme:record('appTheme'),setCustomFields:record('customFields'),refreshPublicationRanks:record('ranks'),pageProgress:()=>({pages:{0:2,550:7},total:601,visited:2,percent:0,attachmentID:'99'})};
+ // Discovery goes out to OpenAlex; the panel only needs the shapes it returns.
+ let watched=[];
+ const suggestion=(id,source)=>({id,source,title:'Paper '+id,year:2024,venue:'Journal',citations:5,
+  authors:['A Author','B Author'],doi:'10.1/'+id,pdfURL:'https://x/'+id+'.pdf',relevance:3,inLibrary:false});
+ Object.assign(runtime,{
+  identity:ref=>'key-'+ref.id,
+  discoverCache:new Map(),
+  discoverTools:{GROUPS:['citing','reference','related'],shortID:v=>String(v).toUpperCase()},
+  relatedWorksCached:record('related',{work:{id:'W1',title:'Source'},
+   suggestions:[suggestion('W5','citing'),suggestion('W7','reference')]}),
+  authorsOfCached:record('authorsOf',[{id:'A1',name:'A Author',institution:'Somewhere',position:'first'},
+   {id:'A2',name:'B Author',institution:'Elsewhere',position:'last'}]),
+  authorActivityCached:record('authorActivity',{profile:{name:'A Author',hIndex:20,works:50,citations:900,
+   institutions:['Somewhere'],topics:[{name:'A topic',count:9}],orcid:'https://orcid.org/1'},
+   works:[suggestion('W9','citing')]}),
+  watchedAuthors:()=>watched,
+  watchAuthor:record('watchAuthor',person=>{watched.push({id:person.id,name:person.name,seen:person.seen||[]});}),
+  unwatchAuthor:record('unwatchAuthor',id=>{watched=watched.filter(row=>row.id!==id);}),
+  markAuthorSeen:record('markSeen',true),
+  authorUpdates:record('authorUpdates',id=>({
+   profile:{name:'A Author',hIndex:20,works:50,citations:900,institutions:['Somewhere'],
+    topics:[{name:'A topic',count:9}],orcid:'https://orcid.org/1'},
+   works:[suggestion('W9','citing')],
+   fresh:watched.some(row=>row.id===id)?[suggestion('W11','citing')]:[],
+   watching:watched.some(row=>row.id===id),checkedAt:'2026-09-17T00:00:00Z'})),
+  importWork:record('importWork',[{getField:()=>'Imported paper'}])
+ });
  runtime.Z={Items:{get:id=>refs.get(id),getAsync:async id=>refs.get(id)||{id}},Libraries:{userLibraryID:1},Prefs:{set:(...a)=>calls.push(['pref',...a])},Utilities:{Internal:{copyTextToClipboard:text=>calls.push(['copy',text])}},Notifier:{registerObserver:observer=>{notify=observer.notify;return 42;},unregisterObserver:id=>calls.push(['unregister',id])},logError:error=>errors.push(error)};
  const library={snapshot:record('snapshot',()=>papers),graph:rows=>({nodes:rows.map(i=>({id:i.id,label:i.title})),edges:[]}),tagTree:()=>[{name:'topic',path:'topic',count:2,children:[]}],notes:record('notes',[{id:'9',title:'Rich note',text:'<script>literal note</script>',modified:'today',html:'<b>unsafe raw HTML</b>'}]),annotations:record('annotations',[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'Highlight',comment:'Comment',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}]),backlinks:record('backlinks',[{id:'2',title:'Paper Beta',kind:'related'}]),attachments:record('attachments',[{id:'99',parentID:'1',title:'PDF one',contentType:'application/pdf'},{id:'100',parentID:'1',title:'PDF two',contentType:'application/pdf'}]),collections:record('collections',[{id:'4',name:'Research',count:2,parentID:null}]),openItem:record('open'),relate:record('relate'),addTags:record('addTags'),removeTags:record('removeTags'),setRemark:record('remark'),createNote:record('createNote','9'),noteFromAnnotations:record('extract','9')};
  const palettes=[];const reader={annotationPalettes:()=>palettes,saveAnnotationPalette:record('savePalette',(name,entries)=>{const row={id:'palette1',name,entries};palettes.push(row);return row;}),applyAnnotationPalette:record('applyPalette'),deleteAnnotationPalette:record('deletePalette',id=>{palettes.splice(palettes.findIndex(p=>p.id===id),1);}),tabs:()=>[{id:'tab1',title:'Paper Alpha',itemID:1,selected:true}],tabGroups:()=>[{id:'g1',name:'Group',tabs:[{id:1}]}],viewGroups:()=>[{id:'v1',name:'View',columns:[{dataKey:'title'}]}],applyTheme:record('theme'),setMarginAnnotations:record('margin'),setColorLabel:record('color'),setSidebar:record('sidebar'),setVerticalTabs:record('vertical'),saveTabGroup:record('saveTabs'),restoreTabGroup:record('restoreTabs',{opened:1,missing:0}),deleteTabGroup:record('deleteTabs'),selectTab:record('selectTab'),closeTab:record('closeTab'),saveView:record('saveView'),applyView:record('applyView'),deleteView:record('deleteView')};
@@ -300,4 +327,76 @@ test('disabled reader features block workbench recolor merge and backlink action
 
 test('configured page size and live reading metrics update existing paper cards without replacing editors',async()=>{
  const f=fixture();f.runtime.getSetting=key=>({explorePageSize:25,inlineEvidenceCount:5,maxExcerptLength:1200,workbenchDensity:'comfortable'})[key];f.runtime.formatReadTime=seconds=>Math.floor(seconds||0)+'s';f.papers.splice(0);for(let id=1;id<=30;id++){f.papers.push({id:String(id),title:'Paper '+id,itemType:'journalArticle',tags:[]});f.refs.set(id,{id});}let seconds=0;f.runtime.state=()=>({seconds,status:seconds?'reading':'unread',citations:null,impactFactor:null});await f.bench.show('explore');assert.equal(f.body().querySelectorAll('.sc-paper-card').length,25);const card=f.body().querySelector('[data-item-id="1"]');assert.match(card.querySelector('[data-metric=time]').textContent,/0s/);seconds=1;f.bench.refreshMetrics();assert.equal(f.body().querySelector('[data-item-id="1"]'),card);assert.match(card.querySelector('[data-metric=time]').textContent,/1s/);assert.equal(card.dataset.status,'reading');f.bench.destroy();
+});
+
+test('opening the related tab searches straight away instead of waiting for a second click',async()=>{
+ const f=fixture();
+ await f.bench.show('related');
+ assert.ok(f.calls.find(c=>c[0]==='related'),'the tab should look up on open');
+ const titles=[...f.body().querySelectorAll('.sc-hit-title')].map(n=>n.textContent);
+ assert.deepEqual(titles,['Paper W5','Paper W7']);
+ // The stronger signal is labelled first.
+ const groups=[...f.body().querySelectorAll('.sc-hit-group')].map(n=>n.textContent);
+ assert.deepEqual(groups,['이 논문을 인용한 논문 1','이 논문이 인용한 문헌 1']);
+ assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error,'true');
+ f.bench.destroy();
+});
+
+test('actions stay hidden until a row is wanted, and importing redraws that row as owned',async()=>{
+ const f=fixture();
+ await f.bench.show('related');
+ const first=f.body().querySelector('.sc-hit');
+ assert.ok(first.querySelector('.sc-hit-actions'),'a row that is not yet owned offers actions');
+ assert.equal(first.querySelector('.sc-hit-owned'),null);
+ await f.click('추가');
+ const call=f.calls.find(c=>c[0]==='importWork');
+ assert.equal(call[1].doi,'10.1/W5');
+ const redrawn=f.body().querySelector('.sc-hit');
+ assert.equal(redrawn.querySelector('.sc-hit-owned').textContent,'보유 중');
+ assert.equal(redrawn.querySelector('.sc-hit-actions'),null,'an owned paper has nothing left to do');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/Imported paper/);
+ f.bench.destroy();
+});
+
+test('a single author is opened directly rather than offered as a choice of one',async()=>{
+ const f=fixture();
+ f.runtime.authorsOfCached=async()=>[{id:'A1',name:'Only Author',institution:'Somewhere',position:'first'}];
+ await f.bench.show('authors');
+ assert.ok(f.calls.find(c=>c[0]==='authorUpdates'),'their work should load without another click');
+ assert.match(f.body().textContent,/h-index/);
+ assert.match(f.body().textContent,/A topic/);
+ f.bench.destroy();
+});
+
+test('two authors are listed for the user to choose between',async()=>{
+ const f=fixture();
+ await f.bench.show('authors');
+ const names=[...f.body().querySelectorAll('.sc-hit-title')].map(n=>n.textContent);
+ assert.deepEqual(names,['A Author','B Author']);
+ assert.equal(f.calls.filter(c=>c[0]==='authorUpdates').length,0,'no author is opened on the user’s behalf');
+ await f.click('최근 논문');
+ assert.equal(f.calls.find(c=>c[0]==='authorUpdates')[1],'A1');
+ f.bench.destroy();
+});
+
+test('following an author adds them to the panel and surfaces what is new next time',async()=>{
+ const f=fixture();
+ f.runtime.authorsOfCached=async()=>[{id:'A1',name:'Only Author',institution:'Somewhere',position:'first'}];
+ await f.bench.show('authors');
+ const headings=()=>[...f.body().querySelectorAll('.sc-hit-group')].map(n=>n.textContent);
+ assert.equal(headings().some(h=>h.startsWith('관심 저자')),false,'nothing is followed yet');
+
+ await f.click('관심 저자로 등록');
+ // Everything already published becomes the baseline.
+ const saved=f.calls.find(c=>c[0]==='watchAuthor')[1];
+ assert.deepEqual(saved.seen,['W9']);
+ assert.match(f.body().textContent,/마지막 확인 이후 새 논문 1/);
+
+ // Re-opening the tab lists them, so they can be checked without the paper in hand.
+ await f.bench.show('explore');await f.bench.show('authors');
+ assert.ok(headings().includes('관심 저자 1'));
+
+ await f.click('새 논문 1편 확인함');
+ assert.ok(f.calls.find(c=>c[0]==='markSeen'),'marking as read is an explicit act');
+ f.bench.destroy();
 });
