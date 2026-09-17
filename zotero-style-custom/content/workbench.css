@@ -485,3 +485,15 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #style-custom-workbench .sc-watch-new .sc-watch-sub { color: var(--sc-reading); }
+
+/* --- What is missing, said where the user already is --- */
+#style-custom-workbench .sc-notice {
+  flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 20px; border-block-end: 1px solid var(--sc-border);
+  background: var(--sc-accent-soft); color: var(--sc-text);
+  font: 11.5px/1.5 var(--sc-font);
+}
+#style-custom-workbench .sc-notice[hidden] { display: none; }
+#style-custom-workbench .sc-notice-text { flex: 1 1 auto; min-width: 0; }
+#style-custom-workbench .sc-notice-actions { display: flex; gap: 6px; margin-left: auto; }
+#style-custom-workbench .sc-notice-actions button { min-height: 24px; padding: 2px 10px; font-size: 11px; }

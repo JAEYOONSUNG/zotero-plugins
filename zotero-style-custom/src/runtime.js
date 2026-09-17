@@ -1577,6 +1577,27 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return wanted;
   }
 
+  // What the panel needs to say there is work to do, counted without asking
+  // the network anything.
+  backfillPending(libraryID) {
+    const id = libraryID ?? this.Z.Libraries.userLibraryID;
+    let signals = 0;
+    const journals = new Set();
+    for (const item of this.Z.Items.getAll ? this.Z.Items.getAll(id) : []) {
+      if (!this.isRegular(item)) continue;
+      const known = this.entry(item).signals;
+      if ((!known || known.partial) && this.signalTools.bareDOI(this.citationRecord(item).doi)) signals++;
+      const record = this.journalRecord(item);
+      if (!record.name && !record.issn) continue;
+      // Only journals the curated catalogue does not already answer.
+      if (this.value('if', item) !== '') continue;
+      const key = this.journalTools2.cacheKey(record);
+      if (!this.journalCache()[key]) journals.add(key);
+    }
+    const authors = this.watchedAuthors().filter(row => !row.sweptAt).length;
+    return {signals, journals: journals.size, authors};
+  }
+
   async backfill({libraryID, signal, onProgress, pace = 250} = {}) {
     const report = {signals: null, journals: null, authors: null, budgetGone: false, stage: null};
     const note = (stage, done, total) => onProgress?.({stage, done, total});

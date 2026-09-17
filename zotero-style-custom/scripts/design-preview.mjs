@@ -39,7 +39,17 @@ async function mountDemo(win,Workbench,Model){
   {id:'A11',name:'David R. Liu',institution:'Harvard University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A12',name:'Tobias J. Erb',institution:'Max Planck Institute for Terrestrial Microbiology',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'}
  ];
+ let pending={signals:1146,journals:169,authors:109};
  const runtime={rootURI:'',cache,
+  backfillPending:()=>pending,
+  runBackfill:async({onProgress}={})=>{
+   for(const [stage,total] of [['signals',1146],['journals',169],['authors',109]])
+    for(const done of [0,Math.floor(total/2),total-1])onProgress?.({stage,done,total});
+   pending={signals:0,journals:0,authors:0};
+   return {signals:{ok:1145,'not-found':1,error:0,partialOnly:0},journals:{found:160,missing:9},
+    authors:{authors:109,withNews:2,works:3},budgetGone:false};
+  },
+  backfillSummary:()=>'철회·공개접근 신호: 1145편 확인 · 1편은 기록 없음\n저널 지표: 160종 확인 · 9종은 OpenAlex에도 없음\n관심 저자: 2명이 새 논문 3편',
   watchedAuthors:()=>watched,
   watchedAuthorsByNews:()=>watched.slice().sort((a,b)=>(b.news?.length||0)-(a.news?.length||0)),
   sweepWatchedAuthors:async()=>({authors:watched.length,withNews:2,works:3,requests:1,budgetGone:false,remaining:0}),

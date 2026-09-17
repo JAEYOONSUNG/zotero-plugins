@@ -517,6 +517,38 @@ test('the library tab is not named as though it searched the literature',async()
  f.bench.destroy();
 });
 
+test('the panel says what has never been filled in, and offers to fill it', async () => {
+ const f=fixture();
+ f.runtime.backfillPending=()=>({signals:1214,journals:169,authors:109});
+ const ran=[];
+ f.runtime.runBackfill=()=>{ran.push(1);return Promise.resolve({signals:{ok:1214,'not-found':0,error:0},journals:{found:160,missing:9},authors:{authors:109,withNews:3,works:7},budgetGone:false});};
+ f.runtime.backfillSummary=()=>'채우기 완료';
+ await f.bench.show('explore');
+ const notice=f.bench.panel.querySelector('.sc-notice');
+ assert.equal(notice.hidden,false,'three empty features must not stay invisible a second time');
+ assert.match(notice.querySelector('.sc-notice-text').textContent,/1214편.*169종.*109명/);
+ await f.click('지금 채우기');
+ assert.equal(ran.length,1,'the button starts the sweep rather than only describing it');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/채우기 완료/);
+ f.bench.destroy();
+});
+
+test('nothing left to fill means nothing to say', async () => {
+ const f=fixture();
+ f.runtime.backfillPending=()=>({signals:0,journals:0,authors:0});
+ await f.bench.show('explore');
+ assert.equal(f.bench.panel.querySelector('.sc-notice').hidden,true);
+ f.bench.destroy();
+});
+
+test('a panel talking to an older runtime simply shows no notice', async () => {
+ const f=fixture();
+ delete f.runtime.backfillPending;
+ await f.bench.show('explore');
+ assert.equal(f.bench.panel.querySelector('.sc-notice').hidden,true);
+ f.bench.destroy();
+});
+
 test('every tab in the sidebar carries its own drawn icon',async()=>{
  const f=fixture();
  await f.bench.show('explore');

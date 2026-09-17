@@ -38,6 +38,34 @@
   const head=node('header',null,panel,{class:'sc-header'}),brand=node('div',null,head,{class:'sc-brand'});node('img',null,brand,{src:runtime.rootURI+'content/icons/style-custom.svg',width:24,height:24,alt:'','aria-hidden':'true'});node('strong','Style Custom',brand);node('span','연구 작업 패널',brand,{class:'sc-subtitle'});const headerActions=node('div',null,head,{class:'sc-header-actions'});
   const status=node('div','준비',panel,{class:'sc-status',role:'status','aria-live':'polite'});
   function message(value,error=false){if(disposed)return;status.textContent=String(value);status.dataset.error=String(error);}
+  // The last three features shipped and then sat empty because they waited on a
+  // context-menu item nobody had a reason to look for. Putting the new one in
+  // the same place would repeat that, so the panel says what is missing, where
+  // the user already is, and offers to fill it.
+  const notice=node('div',null,panel,{class:'sc-notice',hidden:'hidden'});
+  function refreshNotice(){
+   if(disposed||typeof runtime.backfillPending!=='function')return;
+   let pending=null;
+   try{pending=runtime.backfillPending();}catch(error){return;}
+   const total=(pending?.signals||0)+(pending?.journals||0)+(pending?.authors||0);
+   if(!total||runtime.backfilling){notice.hidden=true;return;}
+   notice.hidden=false;notice.replaceChildren();
+   const parts=[];
+   if(pending.signals)parts.push(`철회 여부 미확인 ${pending.signals}편`);
+   if(pending.journals)parts.push(`지표 없는 저널 ${pending.journals}종`);
+   if(pending.authors)parts.push(`확인 안 한 관심 저자 ${pending.authors}명`);
+   node('span',parts.join(' · '),notice,{class:'sc-notice-text'});
+   const act=node('div',null,notice,{class:'sc-notice-actions'});
+   button('지금 채우기',()=>run(async()=>{
+    refreshNotice();
+    const report=await runtime.runBackfill({onProgress:({stage,done,total})=>
+     message(`${({signals:'철회·공개접근 신호',journals:'저널 지표',authors:'관심 저자 새 논문'})[stage]||stage} 채우는 중 ${done+1}/${total}`)});
+    if(disposed)return;
+    message(runtime.backfillSummary(report),!!report.budgetGone);
+    refreshNotice();
+   }),act);
+   button('나중에',()=>{notice.hidden=true;},act);
+  }
   async function run(fn){try{return await fn();}catch(error){if(!disposed)message(error.message||error,true);return null;}}
   const button=(label,fn,parent,attrs={})=>{
    const b=node('button',label,parent,{type:'button',...attrs}),key=attrs['data-action-key'];
@@ -726,7 +754,7 @@
    const customFields=node('input',null,body,{'aria-label':'추가 문헌 열','placeholder':'DOI, publisher, language'});customFields.value=runtime.pref('customFields','');button('추가 열 적용',async()=>{await runtime.setCustomFields(customFields.value);message('추가 열을 적용했습니다.');},body);
    const css=node('textarea',null,body,{'aria-label':'Custom 패널 CSS',placeholder:'.sc-card { font-size: 13px; }'});css.value=runtime.pref('panelCSS','');css.hidden=!enabled('styleEditor');button('패널 CSS 적용',()=>runtime.setPanelCSS(css.value),body).hidden=!enabled('styleEditor');
   }
-  async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';const token=++epoch;clear();draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();try{
+  async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';const token=++epoch;clear();draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();refreshNotice();try{
    switch(state.tab){case'explore':await paperList(rows());break;case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();
   }catch(error){if(token===epoch&&!disposed)message(error.message||error,true);}}
