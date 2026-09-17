@@ -223,7 +223,7 @@
       "label": "문헌 상세·노트·주석·필터·정렬·페이지 탐색 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 문헌 탐색 · 상태·별점·연도 필터 및 현재 컬렉션 범위; 화면100개씩 페이지 이동",
+      "description": "워크벤치 → 보유 문헌 · 상태·별점·연도 필터 및 현재 컬렉션 범위; 화면100개씩 페이지 이동",
       "consumer": "featureEnabled"
     },
     {
@@ -349,7 +349,7 @@
       "label": "문헌 상세에 주석 직접 표시 사용",
       "type": "boolean",
       "default": true,
-      "description": "문헌 탐색 → 자세히 / 주석 탭 · 다른 탭·문헌으로 전환 시 늦은 응답 무시",
+      "description": "보유 문헌 → 자세히 / 주석 탭 · 다른 탭·문헌으로 전환 시 늦은 응답 무시",
       "consumer": "featureEnabled"
     },
     {
@@ -358,7 +358,7 @@
       "label": "문헌 상세에 노트 직접 표시 사용",
       "type": "boolean",
       "default": true,
-      "description": "문헌 탐색 → 자세히 / 노트 탭 · 단일 문헌 상세에서 노트·주석 함께 표시",
+      "description": "보유 문헌 → 자세히 / 노트 탭 · 단일 문헌 상세에서 노트·주석 함께 표시",
       "consumer": "featureEnabled"
     },
     {

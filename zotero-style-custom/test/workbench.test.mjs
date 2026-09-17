@@ -500,3 +500,14 @@ test('the toolbar button lets its own colour through, or a context-fill icon pai
  assert.ok(toolbarButton.getAttribute('tooltiptext'),'an icon-only button needs a tooltip');
  f.bench.destroy();
 });
+
+test('the library tab is not named as though it searched the literature',async()=>{
+ // Browsing what you already have and searching for new papers are different
+ // jobs in different plugins; sharing the name "문헌 탐색" conflated them.
+ const explore=Workbench.TABS.find(([id])=>id==='explore');
+ assert.equal(explore[1],'보유 문헌');
+ assert.ok(!Workbench.TABS.some(([,label])=>label==='문헌 탐색'));
+ const f=fixture();await f.bench.show('explore');
+ assert.equal(f.bench.panel.querySelector('.sc-section-title').textContent,'보유 문헌');
+ f.bench.destroy();
+});

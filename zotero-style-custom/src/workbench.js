@@ -2,7 +2,7 @@
 (function(root){
  'use strict';
  const HTML='http://www.w3.org/1999/xhtml',SVG='http://www.w3.org/2000/svg';
- const TABS=[['explore','문헌 탐색'],['recent','최근 문헌'],['related','관련 논문'],['authors','저자 추적'],['graph','관계 그래프'],['tags','중첩 태그'],['notes','노트'],['annotations','주석'],['backlinks','역링크'],['attachments','첨부 미리보기'],['reading','읽기 진행'],['tabs','탭 관리'],['views','뷰 그룹'],['canvas','캔버스'],['matrix','논문 비교'],['collections','컬렉션'],['journals','저널 지표'],['assist','번역 · AI'],['appearance','스타일 편집']];
+ const TABS=[['explore','보유 문헌'],['recent','최근 문헌'],['related','관련 논문'],['authors','저자 추적'],['graph','관계 그래프'],['tags','중첩 태그'],['notes','노트'],['annotations','주석'],['backlinks','역링크'],['attachments','첨부 미리보기'],['reading','읽기 진행'],['tabs','탭 관리'],['views','뷰 그룹'],['canvas','캔버스'],['matrix','논문 비교'],['collections','컬렉션'],['journals','저널 지표'],['assist','번역 · AI'],['appearance','스타일 편집']];
  const GROUPS=[['탐색',['explore','recent','related','authors','collections','journals']],['읽기',['reading','notes','annotations','attachments','backlinks']],['정리',['tags','graph','canvas','matrix']],['도구',['tabs','views','assist','appearance']]];
  const FILTER_TABS=new Set(['explore','recent','collections','journals','reading','notes','annotations','attachments','tags','graph']);
  function attach(win,{runtime,library,reader,model,assist}){
@@ -101,7 +101,7 @@
   selectFilter('sort','문헌 정렬',[['library','기본 순서'],['title','제목순'],['year-desc','최신 발행순'],['citations-desc','인용 많은 순'],['rating-desc','별점 높은 순'],['time-desc','읽기 시간순']]);
   button('필터 초기화',()=>{for(const key of ['status','ratingMin','yearFrom','yearTo']){state[key]='';filterInputs.get(key).value='';}state.query=search.value='';state.type=type.value='';state.tag='';state.sort='library';filterInputs.get('sort').value='library';render();},filters);
   const shell=node('div',null,panel,{class:'sc-shell'}),nav=node('nav',null,shell,{'aria-label':'작업 종류'}),content=node('div',null,shell,{class:'sc-content'});
-  const context=node('div',null,content,{class:'sc-context'}),sectionTitle=node('h2','문헌 탐색',context,{class:'sc-section-title'}),contextDetail=node('span',null,context,{class:'sc-context-detail'});
+  const context=node('div',null,content,{class:'sc-context'}),sectionTitle=node('h2','보유 문헌',context,{class:'sc-section-title'}),contextDetail=node('span',null,context,{class:'sc-context-detail'});
   const body=node('div',null,content,{class:'sc-body',tabindex:'-1'});
   const navButtons=new Map();
   async function navigate(id,{focus=false}={}){if(!TABS.some(([key])=>key===id)||hiddenTabs().has(id))return;const request=++navigationEpoch;state.tab=id;await render();if(disposed||panel.hidden||request!==navigationEpoch||state.tab!==id)return;await saveUI({lastTab:id});if(focus&&!disposed&&!panel.hidden&&request===navigationEpoch&&state.tab===id&&commands.hidden)body.focus?.();}
@@ -194,7 +194,7 @@
    message(state.items.length+'개 문헌');await render();
   }
   async function toggle(show){const wasHidden=panel.hidden,open=show===undefined?wasHidden:!!show;if(open&&wasHidden)returnFocus=doc.activeElement;panel.hidden=!open;if(open){state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));await load();if(!disposed&&!panel.hidden)(controls.hidden?body:search).focus?.();}else{navigationEpoch++;closeCommands(false);epoch++;loadEpoch++;aiEpoch++;clear();if(returnFocus?.isConnected&&!win.closed)returnFocus.focus?.();returnFocus=null;}}
-  async function paperList(items){if(!items.length){empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요.');return;}
+  async function paperList(items){if(!items.length){empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');return;}
    const pageSize=setting('explorePageSize',100),key=JSON.stringify([state.tab,state.scope,items.map(i=>i.id)]);
    if(state.pageKey!==key){state.pageKey=key;state.pageIndex=0;}
    state.pageIndex=Math.max(0,Math.min(state.pageIndex||0,Math.ceil(items.length/pageSize)-1));
