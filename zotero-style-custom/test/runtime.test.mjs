@@ -54,7 +54,7 @@ function fixture() {
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
   const { plugin, columns, observers } = fixture();
   await plugin.start({ id: 'test@focus', version: '0.1', rootURI: 'file:///focus/' });
-  assert.equal(columns.size, 20);
+  assert.equal(columns.size, 21);
   assert.equal(observers.size, 7);
   await plugin.stop();
   assert.equal(columns.size, 0);
@@ -336,9 +336,9 @@ test('legacy unbound progress is not assigned to a PDF or another library',()=>{
 });
 test('custom columns are validated and registration failure keeps previous fields intact',async()=>{
  const {plugin,Z,columns,item}=fixture();await plugin.start({id:'custom',version:'0.5',rootURI:'file:///custom/'});
- Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,22);
+ Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,23);
  const original=Z.ItemTreeManager.registerColumn;Z.ItemTreeManager.registerColumn=options=>options.dataKey==='field-pages'?false:original(options);
- assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,22);assert.ok(plugin.dynamicFieldMap.has('issue'));
+ assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,23);assert.ok(plugin.dynamicFieldMap.has('issue'));
  assert.throws(()=>plugin.setCustomFields('unknown'));const ref=item(1);ref.getField=key=>key==='volume'?'12':'';assert.equal(plugin.value('field-volume',ref),'12');await plugin.stop();
 });
 test('panel CSS is scoped and cannot load remote content or escape its rules',()=>{
@@ -1153,4 +1153,159 @@ test('a citation row grows with its text and stays operable by keyboard', async 
   // The export links are still buttons, which is correct: their labels do not wrap.
   assert.equal(document.querySelectorAll('.sc-cite-exports button').length,
     plugin.citationFormats.EXPORTS.length);
+});
+
+// --- Paper signals: retraction, open access, preprint -> published ---
+
+const CROSSREF_RETRACTED = {DOI: '10.1/paper', type: 'journal-article', title: ['A paper'], relation: {},
+  'updated-by': [{DOI: '10.1/notice', type: 'retraction', label: 'Retraction', updated: {'date-parts': [[2010, 2, 6]]}}]};
+const CROSSREF_CLEAN = {DOI: '10.1/paper', type: 'journal-article', title: ['A paper'], relation: {}};
+const OA_GOLD = {id: 'https://openalex.org/W1', doi: 'https://doi.org/10.1/paper', type: 'article',
+  is_retracted: false, open_access: {is_oa: true, oa_status: 'gold', oa_url: 'https://oa.example/paper.pdf'},
+  primary_location: {version: 'publishedVersion', source: {display_name: 'A Journal', type: 'journal'}},
+  locations: [{version: 'publishedVersion', source: {display_name: 'A Journal', type: 'journal'}}]};
+
+// `answers` pairs a matcher against the request URL with {status, response};
+// anything unmatched answers 404, as the live services do.
+function signalsFixture({DOI = '10.1/paper', answers = []} = {}) {
+  const f = fixture();
+  const ref = f.item(1);
+  const fields = {title: 'A paper', DOI, date: '2024'};
+  ref.getField = key => fields[key] || '';
+  ref.getCreators = () => [];
+  const asked = [], opened = [];
+  f.Z.launchURL = url => opened.push(url);
+  f.Z.HTTP = {request: async (method, url, options) => {
+    asked.push(url);
+    assert.equal(options.successCodes, false, 'a 404 is an answer about the paper, not a transport failure');
+    const hit = answers.find(([match]) => match.test(url));
+    return hit ? hit[1] : {status: 404, response: null};
+  }};
+  f.plugin.active = true;
+  return {...f, ref, asked, opened};
+}
+
+const crossrefAnswer = payload => [/api\.crossref\.org/, {status: 200, response: {message: payload}}];
+const openAlexAnswer = payload => [/openalex\.org\/works\/doi:/, {status: 200, response: payload}];
+
+test('a retracted paper is fetched, cached and painted as something you cannot miss', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const f = signalsFixture({answers: [crossrefAnswer(CROSSREF_RETRACTED), openAlexAnswer(OA_GOLD)]});
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref: f.ref})}};
+
+  // Before the lookup the cell must not read as reassurance.
+  const blank = f.plugin.renderCell('signals', 0, '', {}, document);
+  assert.equal(blank.textContent, '—');
+  assert.match(blank.title, /아직 조회하지/);
+
+  const summary = await f.plugin.refreshPaperSignals([f.ref]);
+  assert.deepEqual(summary, {ok: 1, 'not-found': 0, unsupported: 0, error: 0});
+  assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted');
+
+  const cell = f.plugin.renderCell('signals', 0, '', {}, document);
+  const badge = cell.firstChild;
+  assert.equal(badge.textContent, 'RETRACTED');
+  // Every other badge is a tinted pill; this one is filled, so it cannot be
+  // skimmed past in a list of fifty rows.
+  assert.doesNotMatch(badge.style.background, /rgba/);
+  assert.equal(badge.style.color, '#FFFFFF');
+  badge.dispatchEvent(new window.Event('click', {bubbles: true}));
+  assert.deepEqual(f.opened, ['https://doi.org/10.1/notice'], 'the badge opens the retraction notice');
+});
+
+test('the signals column sorts the worst news to the top and leaves unchecked papers out of it', async () => {
+  const f = signalsFixture({answers: [crossrefAnswer(CROSSREF_RETRACTED), openAlexAnswer(OA_GOLD)]});
+  const unchecked = f.item(2);
+  unchecked.getField = key => ({title: 'Another paper', DOI: '10.1/other'})[key] || '';
+  assert.equal(f.plugin.value('signals', unchecked), '', 'an unchecked paper has no verdict to sort by');
+  await f.plugin.refreshPaperSignals([f.ref]);
+  const bad = f.plugin.value('signals', f.ref);
+
+  const g = signalsFixture({answers: [crossrefAnswer(CROSSREF_CLEAN), openAlexAnswer(OA_GOLD)]});
+  await g.plugin.refreshPaperSignals([g.ref]);
+  const good = g.plugin.value('signals', g.ref);
+  assert.ok(bad < good, `retracted (${bad}) must sort above clean (${good})`);
+});
+
+test('a lookup that fails leaves a recorded retraction standing', async () => {
+  const f = signalsFixture({answers: [crossrefAnswer(CROSSREF_RETRACTED), openAlexAnswer(OA_GOLD)]});
+  await f.plugin.refreshPaperSignals([f.ref]);
+  assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted');
+  f.Z.HTTP.request = async () => { throw new Error('offline'); };
+  const summary = await f.plugin.refreshPaperSignals([f.ref]);
+  assert.equal(summary.error, 1);
+  assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted', 'a blinking network must not clear a retraction');
+  assert.equal(f.errors.length, 1);
+});
+
+test('a DOI neither service knows records nothing rather than a clean bill of health', async () => {
+  const f = signalsFixture({answers: []});
+  const summary = await f.plugin.refreshPaperSignals([f.ref]);
+  assert.deepEqual(summary, {ok: 0, 'not-found': 1, unsupported: 0, error: 0});
+  assert.equal(f.plugin.signalsOf(f.ref), null);
+  assert.equal(f.errors.length, 0, 'a 404 is not an error to log');
+});
+
+test('a paper with no DOI is never sent to either service', async () => {
+  const f = signalsFixture({DOI: ''});
+  const summary = await f.plugin.refreshPaperSignals([f.ref]);
+  assert.deepEqual(summary, {ok: 0, 'not-found': 0, unsupported: 1, error: 0});
+  assert.deepEqual(f.asked, [], 'a title search would answer about a different paper');
+});
+
+test('only a preprint falls back to the title search, and the published version it finds is offered', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const published = {id: 'https://openalex.org/W2', doi: 'https://doi.org/10.1/published', type: 'article',
+    publication_year: 2024, open_access: {is_oa: true, oa_status: 'hybrid', oa_url: 'https://oa.example/p.pdf'},
+    primary_location: {version: 'publishedVersion', landing_page_url: 'https://doi.org/10.1/published',
+      source: {display_name: 'A Journal', type: 'journal'}},
+    locations: [
+      {version: 'publishedVersion', landing_page_url: 'https://doi.org/10.1/published',
+        source: {display_name: 'A Journal', type: 'journal'}},
+      {version: 'acceptedVersion', landing_page_url: 'https://doi.org/10.1101/2022.11.11.516073',
+        source: {display_name: 'bioRxiv', type: 'repository'}}]};
+  // OpenAlex 404s the preprint's own DOI once it has merged it into the
+  // published work, which is why the title search exists at all.
+  const f = signalsFixture({DOI: '10.1101/2022.11.11.516073', answers: [
+    crossrefAnswer({DOI: '10.1101/2022.11.11.516073', type: 'posted-content', subtype: 'preprint',
+      title: ['A paper'], relation: {}}),
+    [/title\.search/, {status: 200, response: {results: [published]}}]]});
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref: f.ref})}};
+  await f.plugin.refreshPaperSignals([f.ref]);
+  assert.ok(f.asked.some(url => /title\.search/.test(url)), 'the fallback is made for a preprint');
+  assert.equal(f.plugin.signalsOf(f.ref).published.doi, '10.1/published');
+
+  const cell = f.plugin.renderCell('signals', 0, '', {}, document);
+  const badge = [...cell.children].find(el => el.textContent.startsWith('게재됨'));
+  badge.dispatchEvent(new window.Event('click', {bubbles: true}));
+  assert.deepEqual(f.opened, ['https://doi.org/10.1/published']);
+
+  // A published article that is simply missing from OpenAlex must not go
+  // title-searching: the first same-titled hit is not this paper.
+  const g = signalsFixture({answers: [crossrefAnswer(CROSSREF_CLEAN)]});
+  await g.plugin.refreshPaperSignals([g.ref]);
+  assert.equal(g.asked.filter(url => /title\.search/.test(url)).length, 0);
+  assert.equal(g.plugin.signalsOf(g.ref).status, 'ok');
+});
+
+test('the open-access link is offered only to a shelf that cannot already open the paper', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const f = signalsFixture({answers: [crossrefAnswer(CROSSREF_CLEAN), openAlexAnswer(OA_GOLD)]});
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref: f.ref})}};
+  await f.plugin.refreshPaperSignals([f.ref]);
+
+  const oaBadge = () => [...f.plugin.renderCell('signals', 0, '', {}, document).children]
+    .find(el => el.textContent.startsWith('OA'));
+  assert.equal(oaBadge().style.cursor, 'pointer');
+  oaBadge().dispatchEvent(new window.Event('click', {bubbles: true}));
+  assert.deepEqual(f.opened, ['https://oa.example/paper.pdf']);
+
+  // Give the item a PDF of its own and the link becomes noise.
+  f.ref.getAttachments = () => [9];
+  f.Z.Items = {get: () => ({id: 9, deleted: false, isFileAttachment: () => true,
+    attachmentFilename: 'paper.pdf', getTags: () => []})};
+  assert.equal(oaBadge().style.cursor, '');
 });
