@@ -6,6 +6,7 @@ Zotero.ZotPoP = {
 	version: null,
 	rootURI: null,
 	_window: null,
+	_tabID: null,
 	_loginWindow: null,
 	_prefPaneID: null,
 
@@ -90,7 +91,7 @@ Zotero.ZotPoP = {
 		let item = doc.createXULElement("menuitem");
 		item.id = "zotpop-menuitem";
 		item.setAttribute("label", this.t("menuLabel"));
-		item.addEventListener("command", () => this.openSearchWindow(window));
+		item.addEventListener("command", () => this.openSearch(window));
 		popup.appendChild(item);
 		return "ok";
 	},
@@ -108,7 +109,7 @@ Zotero.ZotPoP = {
 		btn.setAttribute("image", "chrome://zotpop/content/icons/zotpop-toolbar.svg");
 		btn.style.setProperty("-moz-context-properties", "fill, fill-opacity");
 		btn.style.fill = "currentColor";
-		btn.addEventListener("command", () => this.openSearchWindow(window));
+		btn.addEventListener("command", () => this.openSearch(window));
 		let anchor = doc.getElementById("zotero-tb-lookup");
 		if (anchor && anchor.parentElement === toolbar) anchor.after(btn);
 		else toolbar.appendChild(btn);
@@ -118,6 +119,52 @@ Zotero.ZotPoP = {
 	removeFromWindow(window) {
 		window.document.getElementById("zotpop-menuitem")?.remove();
 		window.document.getElementById("zotpop-toolbar-button")?.remove();
+	},
+
+	openSearch(mainWindow) {
+		let win = mainWindow || Zotero.getMainWindow();
+		let Tabs = win && win.Zotero_Tabs;
+		// Older builds have no tab API; a window is better than nothing.
+		if (!Tabs || typeof Tabs.add !== "function") return this.openSearchWindow(win);
+		let doc = win.document;
+		if (this._tabID && doc.getElementById(this._tabID)) {
+			Tabs.select(this._tabID);
+			return this._tabID;
+		}
+		let added;
+		try {
+			added = Tabs.add({
+				type: "zotpop-search",
+				title: this.t("toolbarTip"),
+				// The tab bar reads data.icon directly; without a data object it
+				// throws before the tab is ever shown.
+				data: { icon: "magnifier" },
+				select: true,
+				onClose: () => { this._tabID = null; }
+			});
+		}
+		catch (e) {
+			Zotero.logError(e);
+			return this.openSearchWindow(win);
+		}
+		this._tabID = added.id;
+		let browser = doc.createXULElement("browser");
+		browser.setAttribute("type", "content");
+		browser.setAttribute("flex", "1");
+		browser.setAttribute("disableglobalhistory", "true");
+		browser.setAttribute("src", "chrome://zotpop/content/search.xhtml");
+		browser.style.width = "100%";
+		browser.style.height = "100%";
+		added.container.appendChild(browser);
+		return this._tabID;
+	},
+
+	closeSearchTab(mainWindow) {
+		let win = mainWindow || Zotero.getMainWindow();
+		if (this._tabID && win && win.Zotero_Tabs) {
+			try { win.Zotero_Tabs.close(this._tabID); } catch (e) { Zotero.logError(e); }
+		}
+		this._tabID = null;
 	},
 
 	openSearchWindow(mainWindow) {
@@ -148,6 +195,7 @@ Zotero.ZotPoP = {
 	},
 
 	shutdown() {
+		this.closeSearchTab();
 		if (this._window && !this._window.closed) this._window.close();
 		this._window = null;
 		if (this._loginWindow && !this._loginWindow.closed) this._loginWindow.close();
