@@ -243,8 +243,13 @@ live("citation check merges OpenAlex, Crossref and Semantic Scholar", async (t) 
 	if (!await openAlexReady()) return t.skip("OpenAlex budget spent (set OPENALEX_API_KEY to test)");
 	let rec = { doi: "10.1038/s41586-020-2308-7", citations: null, journalIF: null, journalId: null, issn: null };
 	let r = await S.checkCitations(rec, http, ctx);
-	assert.ok(r.openalex > 1000 && r.crossref > 1000, JSON.stringify(r));
-	assert.ok(rec.citations >= Math.max(r.openalex, r.crossref));
+	// checkCitations swallows a provider error by design and reports null for it, so assert
+	// the merge rather than demanding that every provider answered: Crossref and Semantic
+	// Scholar both rate-limit anonymous callers.
+	let counts = ["openalex", "crossref", "semanticscholar"].map(k => r[k]).filter(v => v != null);
+	assert.ok(counts.length >= 1, "no provider answered: " + JSON.stringify(r));
+	assert.ok(counts.every(v => v > 1000), "a highly cited paper should exceed 1000: " + JSON.stringify(r));
+	assert.equal(rec.citations, Math.max(...counts), "the merged count is the highest reported");
 	assert.ok(["openalex", "crossref", "semanticscholar"].includes(rec.citationSource));
-	assert.ok(rec.journalIF > 5, "journal IF filled from check: " + rec.journalIF);
+	if (r.openalex != null) assert.ok(rec.journalIF > 5, "journal IF filled from check: " + rec.journalIF);
 });
