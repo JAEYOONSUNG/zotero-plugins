@@ -1122,3 +1122,35 @@ test('our own tracking wins: importing never shortens a longer record', async ()
   assert.equal(again.imported, 0);
   assert.equal(again.skipped, 2);
 });
+
+test('a citation row grows with its text and stays operable by keyboard', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item, Z} = fixture();
+  const ref = item(1);
+  ref.getField = key => ({title: 'A paper with a long title', date: '2024'})[key] || '';
+  ref.getCreators = () => [{firstName: 'A', lastName: 'Author'}];
+  const copied = [];
+  Z.Utilities = {Internal: {copyTextToClipboard: text => copied.push(text)}};
+  Z.QuickCopy = null;
+  const win = {document, addEventListener() {}, removeEventListener() {}, setTimeout(){}, Event: window.Event};
+  await plugin.citationPanel(win, [ref]);
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  const rows = [...document.querySelectorAll('.sc-cite-row')];
+  assert.equal(rows.length, plugin.citationFormats.PANEL_STYLES.length);
+  // A <button> does not grow with wrapped content in Gecko, so the rows piled
+  // on top of each other. They must not be buttons.
+  for (const row of rows) {
+    assert.notEqual(row.tagName.toLowerCase(), 'button', 'a button will not grow with wrapped text');
+    assert.equal(row.getAttribute('role'), 'button', 'it still has to act like one');
+    assert.equal(row.getAttribute('tabindex'), '0', 'and be reachable by keyboard');
+  }
+  // Enter copies, the same as a click.
+  rows[0].dispatchEvent(Object.assign(new window.Event('keydown', {bubbles: true}), {key: 'Enter'}));
+  assert.equal(copied.length, 1);
+  assert.match(copied[0], /Author/);
+  // The export links are still buttons, which is correct: their labels do not wrap.
+  assert.equal(document.querySelectorAll('.sc-cite-exports button').length,
+    plugin.citationFormats.EXPORTS.length);
+});

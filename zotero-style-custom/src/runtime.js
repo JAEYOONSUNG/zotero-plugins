@@ -1154,10 +1154,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       win.setTimeout(() => { delete element.dataset.copied; }, 900);
     };
 
+    const activate = (element, run) => {
+      element.addEventListener('click', run);
+      element.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); run(); }
+      });
+    };
     for (const style of this.citationFormats.PANEL_STYLES) {
-      const row = html('button');
-      row.type = 'button';
+      const row = html('div');
       row.className = 'sc-cite-row';
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
       const label = html('span');
       label.className = 'sc-cite-label';
       label.textContent = style.label;
@@ -1169,9 +1176,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // Each style is rendered on its own so one failure cannot blank the panel.
       this.citationText(items, style)
         .then(text => { value.textContent = text; })
-        .catch(error => { this.Z.logError(error); value.textContent = '\uB9CC\uB4E4 \uC218 \uC5C6\uC74C'; row.disabled = true; });
-      row.addEventListener('click', () => {
-        if (!value.textContent.trim()) return;
+        .catch(error => { this.Z.logError(error); value.textContent = '\uB9CC\uB4E4 \uC218 \uC5C6\uC74C'; row.setAttribute('aria-disabled', 'true'); });
+      row.setAttribute('aria-label', style.label);
+      activate(row, () => {
+        if (row.getAttribute('aria-disabled') === 'true' || !value.textContent.trim()) return;
         this.Z.Utilities.Internal.copyTextToClipboard(value.textContent);
         flash(row, `${style.label} \uC778\uC6A9\uBB38\uC744 \uBCF5\uC0AC\uD588\uC2B5\uB2C8\uB2E4.`);
       });
