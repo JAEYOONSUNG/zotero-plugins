@@ -488,3 +488,15 @@ test('the toolbar button survives a document that rejects innerHTML on SVG',asyn
   else delete proto.innerHTML;
  }
 });
+
+test('the toolbar button lets its own colour through, or a context-fill icon paints nothing',async()=>{
+ const f=fixture();
+ const toolbarButton=f.doc.getElementById('style-custom-workbench-button');
+ assert.ok(toolbarButton);
+ // Zotero's toolbar icons are context-fill; without these the glyph is transparent.
+ assert.match(toolbarButton.style.getPropertyValue('-moz-context-properties'),/fill/);
+ assert.equal(toolbarButton.style.fill,'currentColor');
+ assert.equal(toolbarButton.className,'zotero-tb-button','it should be styled like Zotero’s own');
+ assert.ok(toolbarButton.getAttribute('tooltiptext'),'an icon-only button needs a tooltip');
+ f.bench.destroy();
+});

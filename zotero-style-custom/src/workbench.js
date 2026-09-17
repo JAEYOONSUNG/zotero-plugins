@@ -134,7 +134,12 @@
   });
   let toolbar;
   const target=doc.getElementById('zotero-items-toolbar');
-  if(target){toolbar=doc.createXULElement?doc.createXULElement('toolbarbutton'):node('button');toolbar.id='style-custom-workbench-button';toolbar.setAttribute('image',runtime.rootURI+'content/icons/style-custom-toolbar.svg');toolbar.setAttribute('label','워크벤치');toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});target.appendChild(toolbar);}
+  if(target){toolbar=doc.createXULElement?doc.createXULElement('toolbarbutton'):node('button');toolbar.id='style-custom-workbench-button';toolbar.className='zotero-tb-button';toolbar.setAttribute('image',runtime.rootURI+'content/icons/style-custom-toolbar.svg');
+   // A context-fill icon paints nothing unless the button opts into passing its
+   // own colour through, which is why the button drew as an empty gap.
+   toolbar.style.setProperty('-moz-context-properties','fill, fill-opacity');
+   toolbar.style.fill='currentColor';
+   toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.setAttribute('label','워크벤치');toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});target.appendChild(toolbar);}
   const selected=()=>state.items.filter(i=>state.selected.has(String(i.id)));
   function bindAI(itemID){if(state.aiItemID!==itemID){aiEpoch++;state.aiItemID=itemID;state.aiTask=null;state.aiOutput=null;}}
   const scoped=()=>state.scope==='selected'?selected():state.scope.startsWith('collection')?state.items.filter(i=>(state.collectionIDs||[]).includes(String(i.id))):state.items;
