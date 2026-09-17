@@ -1073,3 +1073,52 @@ test('the toolbar button uses a monochrome glyph, never the coloured app icon', 
   assert.match(glyph, /fill="context-fill"/, 'the glyph must take its colour from the theme');
   assert.doesNotMatch(glyph, /#[0-9a-f]{3,6}/i, 'a hard-coded colour would not follow dark mode');
 });
+
+function legacyFixture() {
+  const {plugin, item, Z} = fixture();
+  const paper = item(1);
+  paper.key = 'AAAA1111';
+  paper.getAttachments = () => [77];
+  const other = item(2);
+  other.key = 'BBBB2222';
+  other.getAttachments = () => [];
+  const makeNote = (id, key, page, data) => ({
+    id, key: 'NOTE' + id, isNote: () => true, isRegularItem: () => false,
+    getNote: () => `<div class="zotero-note znv1">${key}\n{"readingTime":{"page":${page},"data":${JSON.stringify(data)}}}</div>`
+  });
+  const notes = [makeNote(10, 'AAAA1111', 16, {0: 600, 1: 900}), makeNote(11, 'BBBB2222', 4, {0: 120}),
+    makeNote(12, 'ZZZZ9999', 4, {0: 50})];
+  Z.Items = {...(Z.Items || {}), getAll: () => [paper, other, ...notes]};
+  return {plugin, paper, other, Z};
+}
+
+test('reading history is lifted out of the old plugin notes into our own store', async () => {
+  const f = legacyFixture();
+  const preview = await f.plugin.importLegacyReading({dryRun: true});
+  assert.deepEqual({notes: preview.notes, imported: preview.imported, seconds: preview.seconds},
+    {notes: 3, imported: 2, seconds: 1620});
+  assert.equal(f.plugin.entry(f.paper).seconds, undefined, 'a dry run writes nothing');
+
+  const result = await f.plugin.importLegacyReading();
+  assert.equal(result.imported, 2);
+  assert.equal(result.unresolved, 1, 'a note naming a paper that is gone cannot be placed');
+  assert.equal(f.plugin.entry(f.paper).seconds, 1500);
+  // Per-page times let the pages column work, not just the total.
+  assert.deepEqual(f.plugin.entry(f.paper).readingAttachments['77'],
+    {pageTimes: {0: 600, 1: 900}, totalPages: 16});
+  assert.equal(f.plugin.entry(f.other).seconds, 120);
+  assert.equal(f.plugin.entry(f.other).readingAttachments, undefined, 'no attachment, no page detail');
+});
+
+test('our own tracking wins: importing never shortens a longer record', async () => {
+  const f = legacyFixture();
+  f.plugin.entry(f.paper).seconds = 9000;
+  const result = await f.plugin.importLegacyReading();
+  assert.equal(f.plugin.entry(f.paper).seconds, 9000, 'the longer total must survive');
+  assert.equal(result.skipped, 1);
+  assert.equal(result.imported, 1);
+  // Running it twice is not additive.
+  const again = await f.plugin.importLegacyReading();
+  assert.equal(again.imported, 0);
+  assert.equal(again.skipped, 2);
+});

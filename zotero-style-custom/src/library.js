@@ -137,7 +137,13 @@
       }
       const convert=tree=>[...tree.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(n=>({...n,children:convert(n.children)}));return convert(roots);
     }
-    async function notes(ids) {return (await children(ids,'notes')).map(i=>{const html=safe(()=>i.getNote());return {id:String(i.id),parentID:i.parentID?String(i.parentID):null,title:safe(()=>i.getNoteTitle())||plain(html).split('\n')[0]||'(Untitled)',text:plain(html),html,modified:field(i,'dateModified')};});}
+    // Another plugin stored reading time as notes: 228 of the 233 in this
+    // library. They are machine bookkeeping, not writing, so the notes view
+    // shows what a person actually wrote.
+    const bookkeeping = html => {
+      try { return !!runtime?.legacyReading?.isBookkeeping(html); } catch (_) { return false; }
+    };
+    async function notes(ids) {return (await children(ids,'notes')).map(i=>{const html=safe(()=>i.getNote());return {id:String(i.id),parentID:i.parentID?String(i.parentID):null,title:safe(()=>i.getNoteTitle())||plain(html).split('\n')[0]||'(Untitled)',text:plain(html),html,modified:field(i,'dateModified')};}).filter(note=>!bookkeeping(note.html));}
     async function annotations(ids) {
       const out=[];
       for(const i of await children(ids,'annotations')) {

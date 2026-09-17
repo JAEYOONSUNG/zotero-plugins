@@ -14,6 +14,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.supplementaryTools = typeof CustomStyleSupplementary !== "undefined" ? CustomStyleSupplementary : require("./supplementary.js");
     this.SUPPLEMENTARY_TAG = 'style-custom:supplementary';
     this.discoverTools = typeof CustomStyleDiscover !== "undefined" ? CustomStyleDiscover : require("./discover.js");
+    this.legacyReading = typeof CustomStyleLegacyReading !== "undefined" ? CustomStyleLegacyReading : require("./legacy-reading.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
     this.DISCOVER_CACHE_LIMIT = 60;
@@ -848,6 +849,46 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return saved;
   }
 
+  // --- Taking ownership of the reading history ---
+
+  // The only copy of this history is in another plugin's notes, so it has to be
+  // read out before that plugin goes. Style Custom's own tracking always wins:
+  // a longer total here means it has been counting since, and must not be lost.
+  async importLegacyReading({dryRun = false} = {}) {
+    const notes = this.Z.Items.getAll ? this.Z.Items.getAll(this.Z.Libraries.userLibraryID) : [];
+    const byKey = new Map();
+    for (const item of notes) {
+      const key = item?.key;
+      if (key) byKey.set(key, item);
+    }
+    const result = {notes: 0, imported: 0, skipped: 0, unresolved: 0, seconds: 0};
+    for (const note of notes) {
+      if (!note?.isNote?.()) continue;
+      const parsed = this.legacyReading.parseNote(note.getNote?.() || '');
+      if (!parsed) continue;
+      result.notes++;
+      const target = byKey.get(parsed.key);
+      if (!this.isRegular(target)) { result.unresolved++; continue; }
+      const entry = this.entry(target);
+      if ((Number(entry.seconds) || 0) >= parsed.seconds) { result.skipped++; continue; }
+      if (dryRun) { result.imported++; result.seconds += parsed.seconds; continue; }
+      entry.seconds = parsed.seconds;
+      entry.legacyReadingKey = parsed.key;
+      const attachment = (target.getAttachments?.() || [])[0];
+      if (Number.isInteger(attachment) && parsed.totalPages) {
+        entry.readingAttachments ||= {};
+        entry.readingAttachments[String(attachment)] = {
+          pageTimes: parsed.pageTimes, totalPages: parsed.totalPages
+        };
+        entry.readingAttachmentID = attachment;
+      }
+      result.imported++;
+      result.seconds += parsed.seconds;
+    }
+    if (result.imported && !dryRun) { this.dirty = true; await this.flush(); await this.refreshWindows(); }
+    return result;
+  }
+
   // --- Following an author over time ---
 
   watchedAuthors() {
@@ -1410,6 +1451,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       },marks);
       make("menuseparator",null,marks);
       action("색 지우기",async()=>{await this.setHighlight(this.selected(win),null);},marks);
+      action("읽기 기록 가져오기 (이전 플러그인 노트에서)",async()=>{
+        const preview=await this.importLegacyReading({dryRun:true});
+        if(!preview.imported){this.Z.alert(win,"Style Custom",`가져올 읽기 기록이 없습니다. (노트 ${preview.notes}개 · 이미 보유 ${preview.skipped}개 · 대상 불명 ${preview.unresolved}개)`);return;}
+        const hours=(preview.seconds/3600).toFixed(1);
+        const result=await this.importLegacyReading();
+        this.Z.alert(win,"Style Custom",`읽기 기록 ${result.imported}편 · ${hours}시간을 가져왔습니다.\n이미 더 많이 기록된 ${result.skipped}편은 그대로 두었습니다.`+(result.unresolved?`\n대상 문헌을 찾지 못한 노트 ${result.unresolved}개`:""));
+      });
       action("제목 앞 별 태그 정리",async()=>{
         const found=this.starTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
         if(!found.length){this.Z.alert(win,"Style Custom","정리할 별 태그가 없습니다.");return;}
