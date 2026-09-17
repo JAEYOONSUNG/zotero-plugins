@@ -51,10 +51,29 @@
    });return b;
   };
   function saveUI(patch){if(patch.density)runtime.Z.Prefs.set('extensions.style-custom.workbenchDensity',patch.density,true);runtime.cache.workbenchUI={...(runtime.cache.workbenchUI||{}),...patch};runtime.dirty=true;return runtime.flush();}
-  const density=button('\u2261',()=>{panel.dataset.density=panel.dataset.density==='compact'?'comfortable':'compact';syncDensity();return saveUI({density:panel.dataset.density});},headerActions,{'aria-label':'화면 밀도 전환',class:'sc-icon-button'});
+  const ICONS={
+   density:'<line x1="3" y1="5" x2="13" y2="5"/><line x1="3" y1="8" x2="13" y2="8"/><line x1="3" y1="11" x2="13" y2="11"/>',
+   search:'<circle cx="7.25" cy="7.25" r="4.25"/><line x1="10.5" y1="10.5" x2="13.5" y2="13.5"/>',
+   close:'<line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/>'
+  };
+  function setIcon(element,name){
+   element.textContent='';
+   const svg=doc.createElementNS('http://www.w3.org/2000/svg','svg');
+   svg.setAttribute('viewBox','0 0 16 16');
+   svg.setAttribute('width','16');svg.setAttribute('height','16');
+   svg.setAttribute('fill','none');svg.setAttribute('aria-hidden','true');
+   svg.setAttribute('stroke','currentColor');
+   svg.setAttribute('stroke-width','1.5');
+   svg.setAttribute('stroke-linecap','round');
+   svg.innerHTML=ICONS[name];
+   element.appendChild(svg);
+   return element;
+  }
+  const density=button('',()=>{panel.dataset.density=panel.dataset.density==='compact'?'comfortable':'compact';syncDensity();return saveUI({density:panel.dataset.density});},headerActions,{'aria-label':'화면 밀도 전환',class:'sc-icon-button'});
+  setIcon(density,'density');
   function syncDensity(){const compact=panel.dataset.density==='compact';density.title=compact?'간격 넓게':'간격 좁게';density.setAttribute('aria-pressed',String(compact));}syncDensity();
-  button('\u2315',()=>openCommands(),headerActions,{'aria-keyshortcuts':'Meta+K Control+K','aria-label':'기능 찾기',title:'기능 찾기 · ⌘/Ctrl K',class:'sc-icon-button'});
-  button('\u2715',()=>toggle(false),headerActions,{'aria-label':'작업 패널 닫기',title:'닫기',class:'sc-icon-button'});
+  setIcon(button('',()=>openCommands(),headerActions,{'aria-keyshortcuts':'Meta+K Control+K','aria-label':'기능 찾기',title:'기능 찾기 · ⌘/Ctrl K',class:'sc-icon-button'}),'search');
+  setIcon(button('',()=>toggle(false),headerActions,{'aria-label':'작업 패널 닫기',title:'닫기',class:'sc-icon-button'}),'close');
   const controls=node('div',null,panel,{class:'sc-controls sc-search-row'});
   const search=node('input',null,controls,{type:'search',placeholder:'제목·저자·태그 검색','aria-label':'작업 패널 검색'});
   search.addEventListener('input',()=>{state.query=search.value;render();});

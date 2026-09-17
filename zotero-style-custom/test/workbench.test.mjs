@@ -435,3 +435,19 @@ test('a journal is listed once, and its impact factor is stated once',async()=>{
  assert.ok(rows[0].querySelector('.sc-hit-actions button'));
  f.bench.destroy();
 });
+
+test('chrome icons share one grid and one stroke, so they read as a set',async()=>{
+ const f=fixture();await f.bench.toggle(true);
+ const icons=[...f.bench.panel.querySelectorAll('.sc-header-actions button svg')];
+ assert.equal(icons.length,3,'each chrome button should carry a drawn icon, not a text glyph');
+ for(const svg of icons){
+  // Unicode glyphs come from different blocks and land at different optical
+  // sizes; a shared viewBox and stroke is what makes them look like one set.
+  assert.equal(svg.getAttribute('viewBox'),'0 0 16 16');
+  assert.equal(svg.getAttribute('width'),'16');
+  assert.equal(svg.getAttribute('stroke-width'),'1.5');
+  assert.equal(svg.getAttribute('stroke'),'currentColor','an icon must follow the button colour');
+  assert.equal(svg.getAttribute('aria-hidden'),'true','the button is named; the glyph must not be read twice');
+ }
+ f.bench.destroy();
+});

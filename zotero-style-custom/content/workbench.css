@@ -388,7 +388,7 @@
 #style-custom-workbench .sc-icon-button {
   min-width: 26px; width: 26px; min-height: 26px; height: 26px;
   padding: 0; border-radius: 7px; background: transparent;
-  color: var(--sc-muted); font-size: 14px; line-height: 1;
+  color: var(--sc-muted); line-height: 0;
   display: inline-flex; align-items: center; justify-content: center;
 }
 #style-custom-workbench .sc-icon-button:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
