@@ -104,9 +104,12 @@ var ZotPoPImporter = (function () {
 		setIf("pages", rec.pages);
 		setIf("url", rec.url);
 		setIf("abstractNote", rec.abstract);
-		if (rec.itemType === "preprint" && rec.arxiv) {
-			setIf("repository", "arXiv");
-			setIf("archiveID", "arXiv:" + rec.arxiv);
+		if (rec.itemType === "preprint") {
+			// Zotero's preprint type has a repository field and nothing else names the server,
+			// so without this a bioRxiv posting saved as an untitled preprint with a blank
+			// repository is indistinguishable from a journal article in the item pane.
+			setIf("repository", rec.preprintServer || (rec.arxiv ? "arXiv" : ""));
+			if (rec.arxiv) setIf("archiveID", "arXiv:" + rec.arxiv);
 		}
 		item.setCreators((rec.authors || []).filter(a => a.lastName || a.firstName).map(a => ({
 			firstName: a.firstName || "",

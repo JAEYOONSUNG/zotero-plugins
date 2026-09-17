@@ -189,6 +189,30 @@ live("preprint source covers bioRxiv / Research Square", async () => {
 	assert.match(venues, /biorxiv|medrxiv|research square|arxiv/, "preprint servers present: " + venues.slice(0, 200));
 });
 
+live("every live preprint names its archive", async () => {
+	let recs = await S.search("preprint", { keywords: "directed evolution protein engineering", yearFrom: 2024, maxResults: 40 },
+		http, { ...ctx, log: () => {} });
+	assert.ok(recs.length > 10, "results: " + recs.length);
+	let unnamed = recs.filter(r => !r.preprintServer);
+	assert.deepEqual(unnamed.map(r => r.doi || r.title), [], "every posting says where it lives");
+	// Crossref's posted-content index is what reaches the chemistry and physical-science
+	// archives; Europe PMC's SRC:PPR does not carry them.
+	let servers = new Set(recs.map(r => r.preprintServer));
+	assert.ok(servers.size > 2, "more than one archive reached: " + [...servers].join(", "));
+});
+
+live("osf preprints", async () => {
+	let recs = await S.search("osf", { keywords: "open science hardware", maxResults: 10 }, http, ctx);
+	assert.ok(recs.length > 0, "results: " + recs.length);
+	for (let r of recs) {
+		assert.equal(r.source, "osf");
+		assert.equal(r.itemType, "preprint");
+		assert.ok(r.preprintServer, "archive named for " + r.title);
+		assert.ok(r.title.length > 3, "title");
+		assert.match(r.doi || "10.", /^10\./);
+	}
+});
+
 live("sort by date", async () => {
 	let recs = await S.search("openalex", { venue: "Nucleic Acids Research", sort: "date", maxResults: 12 }, http, ctx);
 	assert.ok(recs.length > 5, "journal feed returned results");
