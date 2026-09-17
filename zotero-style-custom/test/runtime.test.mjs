@@ -7,6 +7,7 @@ const Runtime = require('../src/runtime.js');
 
 function fixture() {
   const records = new Map();
+  const extras = new Map();
   const columns = new Map();
   const prefs = new Map();
   const observers = new Map();
@@ -34,21 +35,32 @@ function fixture() {
       }
     }
   };
-  function item(id, { libraryID = 1, tags = [{ tag: '#method/CRISPR', type: 1 }], fail = false } = {}) {
+  function item(id, { libraryID = 1, tags = [{ tag: '#method/CRISPR', type: 1 }], fail = false, extra = '' } = {}) {
     records.set(id, structuredClone(tags));
+    extras.set(id, extra);
     return {
-      id, libraryID, key: String(id), getField: () => "", tags: structuredClone(tags), reloadCount: 0, pendingTags: null,
+      id, libraryID, key: String(id), tags: structuredClone(tags), reloadCount: 0, pendingTags: null,
+      // The rating now lives in Extra, so the item has to have one: a fixture
+      // without setField let a write path ship that throws on a real item.
+      fields: {extra}, pendingFields: null,
+      getField(name) { return String((this.pendingFields ?? this.fields)[name] ?? ''); },
+      setField(name, value) { this.pendingFields = {...(this.pendingFields ?? this.fields), [name]: String(value)}; },
       isRegularItem: () => true, isEditable: () => libraryID !== 2,
-      hasChanged() { return this.pendingTags !== null; },
+      hasChanged() { return this.pendingTags !== null || this.pendingFields !== null; },
       getTags() { return structuredClone(this.pendingTags ?? this.tags); },
       setTags(tags) { this.pendingTags = structuredClone(tags); },
-      _clearChanged(field) { assert.equal(field, 'tags'); this.pendingTags = null; },
-      async save() { if (fail) throw new Error('injected disk failure'); this.tags = structuredClone(this.pendingTags ?? this.tags); this.pendingTags = null; records.set(id, structuredClone(this.tags)); },
-      async reload() { this.reloadCount++; this.tags = structuredClone(records.get(id)); }
+      _clearChanged(field) { assert.ok(['tags', 'extra'].includes(field)); if (field === 'tags') this.pendingTags = null; else this.pendingFields = null; },
+      async save() {
+        if (fail) throw new Error('injected disk failure');
+        this.tags = structuredClone(this.pendingTags ?? this.tags); this.pendingTags = null;
+        this.fields = {...(this.pendingFields ?? this.fields)}; this.pendingFields = null;
+        records.set(id, structuredClone(this.tags)); extras.set(id, this.fields.extra ?? '');
+      },
+      async reload() { this.reloadCount++; this.tags = structuredClone(records.get(id)); this.fields = {extra: extras.get(id) ?? ''}; this.pendingFields = null; }
     };
   }
   const plugin = new Runtime({ Zotero: Z, model: Model, marquee: { attach: () => () => {} }, reading: { attach: () => () => {} }, storage: { read: async () => ({schema:1,items:{}}), write: async () => {} } });
-  return { Z, plugin, item, records, columns, observers, errors };
+  return { Z, plugin, item, records, extras, columns, observers, errors };
 }
 
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
@@ -63,16 +75,35 @@ test('startup registers typed, namespaced columns and stop removes all registrat
 });
 
 test('bulk changes persist, preserve unrelated tags, and serial rapid actions compose', async () => {
-  const { plugin, item, records } = fixture();
+  const { plugin, item, records, extras } = fixture();
   plugin.active = true;
   const items = [item(1), item(2)];
   await Promise.all([plugin.edit(items, { status: 'reading' }), plugin.edit(items, { rating: 4 })]);
-  for (const value of records.values()) {
-    assert.deepEqual(Model.readState(value), { status: 'reading', rating: 4 });
+  for (const [id, value] of records) {
+    // The status is still a tag and the rating is now the Extra line; reading
+    // them together is what the item tree does, and both have to be saved.
+    assert.deepEqual(Model.readState(value, extras.get(id)), { status: 'reading', rating: 4 });
     assert.deepEqual(value[0], { tag: '#method/CRISPR', type: 1 });
+    assert.equal(extras.get(id), 'Rating: 4');
+    assert.equal(value.find(tag => /rating/i.test(tag.tag)), undefined, 'no rating tag is left behind');
   }
   await plugin.edit(items, { status: 'unread', rating: 0 });
-  for (const value of records.values()) assert.deepEqual(Model.readState(value), {status:'unread',rating:0});
+  for (const [id, value] of records) {
+    assert.deepEqual(Model.readState(value, extras.get(id)), {status:'unread',rating:0});
+    assert.equal(extras.get(id), '', 'clearing the rating removes the line rather than writing zero');
+  }
+});
+
+test('a rating written into Extra leaves every other line of it alone', async () => {
+  const { plugin, item, extras } = fixture();
+  plugin.active = true;
+  const paper = item(1, {extra: 'PMID: 40112233\nCitations: 12 (OpenAlex, 2026-09-01)'});
+  await plugin.edit([paper], {rating: 5});
+  assert.equal(extras.get(1), 'PMID: 40112233\nCitations: 12 (OpenAlex, 2026-09-01)\nRating: 5');
+  await plugin.edit([paper], {rating: 2});
+  assert.equal(extras.get(1), 'PMID: 40112233\nCitations: 12 (OpenAlex, 2026-09-01)\nRating: 2');
+  await plugin.edit([paper], {rating: 0});
+  assert.equal(extras.get(1), 'PMID: 40112233\nCitations: 12 (OpenAlex, 2026-09-01)');
 });
 
 test('read-only and feed items reject the entire batch before any write', async () => {
@@ -100,7 +131,7 @@ test('failed second save rolls back storage and reloads every touched cached ite
   }
   // A failed edit must not poison the serialized queue.
   await plugin.edit([first], { rating: 2 });
-  assert.equal(Model.readState(first.tags).rating, 2);
+  assert.equal(Model.readState(first.tags, first.getField('extra')).rating, 2);
 });
 
 test('preexisting unsaved item changes are not committed by a Focus action', async () => {
@@ -874,11 +905,18 @@ test('following the same author twice updates the entry instead of duplicating i
 test('the watchlist refuses a work id and will not grow without bound', async () => {
   const f = discoverFixture();
   await assert.rejects(() => f.plugin.watchAuthor({id: 'W123'}), /식별자/);
-  f.plugin.cache.watchedAuthors = Array.from({length: 100}, (_, i) => ({id: 'A' + i, name: 'x', seen: []}));
-  await assert.rejects(() => f.plugin.watchAuthor({id: 'A999', name: 'one too many'}), /100/);
+  // The cap used to be 100 while the user already followed 109, so every
+  // addition failed. It is now set where the stored news starts to cost
+  // something, not where one-request-per-author used to.
+  f.plugin.cache.watchedAuthors = Array.from({length: 109}, (_, i) => ({id: 'A' + i, name: 'x', seen: []}));
+  await f.plugin.watchAuthor({id: 'A999', name: 'still room'});
+  assert.equal(f.plugin.watchedAuthors().length, 110);
+  const limit = f.plugin.WATCH_LIMIT;
+  f.plugin.cache.watchedAuthors = Array.from({length: limit}, (_, i) => ({id: 'A' + i, name: 'x', seen: []}));
+  await assert.rejects(() => f.plugin.watchAuthor({id: 'A' + limit, name: 'one too many'}), new RegExp(String(limit)));
   // Re-following someone already on the list is not growth.
   await f.plugin.watchAuthor({id: 'A5', name: 'already there'});
-  assert.equal(f.plugin.watchedAuthors().length, 100);
+  assert.equal(f.plugin.watchedAuthors().length, limit);
 });
 
 test('a corrupt watchlist on disk is ignored rather than crashing the tab', async () => {
@@ -1036,10 +1074,34 @@ test('cleaning up star tags moves the rating first, so nothing is lost', async (
   const {moved} = await plugin.migrateStarTags([onlyStars]);
   assert.equal(moved, 1);
   const tags = onlyStars.getTags().map(t => t.tag);
-  assert.ok(tags.includes('style-custom:rating:4'), 'the rating must survive');
+  assert.equal(onlyStars.getField('extra'), 'Rating: 4', 'the rating must survive the tag it lived in');
   assert.ok(!tags.some(t => /[★⭐]/.test(t)), 'the visible tag is what was cluttering the title');
   assert.ok(tags.includes('Topic'), 'unrelated tags are untouched');
+  assert.deepEqual(tags, ['Topic'], 'no replacement tag is written in its place');
   assert.equal(plugin.state(onlyStars).rating, 4, 'the rating still reads back the same');
+});
+
+test('the rating tags already in the library move to Extra in one pass per rating', async () => {
+  const {plugin, item, Z} = fixture();
+  await plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+  // Eighty of these exist in the real library, spread over five ratings.
+  const rated = [3, 5, 3, 1, 5, 5].map((n, i) =>
+    item(i + 1, {tags: [{tag: 'style-custom:rating:' + n, type: 1}, {tag: 'Topic'}]}));
+  Z.Items = {...(Z.Items || {}), getAll: () => rated};
+  const found = plugin.visibleRatingTagItems(1);
+  assert.equal(found.length, 6, 'an automatic rating tag still shows in the selector, so it still counts');
+  let transactions = 0;
+  const run = Z.DB.executeTransaction;
+  Z.DB.executeTransaction = fn => { transactions++; return run.call(Z.DB, fn); };
+  const {fixed, skipped} = await plugin.hideRatingTags(found);
+  assert.equal(fixed, 6);
+  assert.equal(skipped, 0);
+  assert.equal(transactions, 3, 'three distinct ratings, three writes -- not one per item');
+  for (const [i, paper] of rated.entries()) {
+    assert.equal(paper.getField('extra'), 'Rating: ' + [3, 5, 3, 1, 5, 5][i],
+      'grouping must never move a rating from one paper to another');
+    assert.deepEqual(paper.getTags().map(t => t.tag), ['Topic']);
+  }
 });
 
 test('an item that cannot be edited is counted, not silently skipped', async () => {

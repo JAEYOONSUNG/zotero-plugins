@@ -647,30 +647,37 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return {moved, skipped};
   }
 
-  // Items whose rating tag was written as a manual tag. Zotero shows manual
-  // tags in the selector unconditionally, so these turned up in the user's own
-  // tag list as "style-custom:rating:1" -- bookkeeping presented as a subject.
+  // Every item still carrying a rating tag. This library has sixteen distinct
+  // tags in total and five of them are ones the user chose, so eighty rows of
+  // style-custom:rating:N were most of their tag vocabulary. Marking the tag
+  // automatic did not help: Zotero shows automatic tags by default.
   visibleRatingTagItems(libraryID) {
     const id = libraryID ?? this.Z.Libraries.userLibraryID;
     const found = [];
     for (const item of this.Z.Items.getAll ? this.Z.Items.getAll(id) : []) {
       if (!this.isRegular(item)) continue;
       const tags = item.getTags?.() || [];
-      if (tags.some(tag => /^style-custom:rating:[0-5]$/.test(String(tag?.tag ?? tag)) && Number(tag?.type || 0) !== 1)) {
-        found.push(item);
-      }
+      if (tags.some(tag => /^style-custom:rating:[0-5]$/.test(String(tag?.tag ?? tag)))) found.push(item);
     }
     return found;
   }
 
-  // Rewriting the rating through the normal path re-types the tag; the rating
-  // itself is read back first, so nothing is lost.
+  // Rewriting the rating through the normal path writes Extra and drops the
+  // tag in one transaction. Grouped by rating so eighty items cost six writes
+  // rather than eighty; the rating is read back per item first, so the grouping
+  // never moves a rating from one paper to another.
   async hideRatingTags(items) {
     let fixed = 0, skipped = 0;
+    const byRating = new Map();
     for (const item of items) {
       if (!this.canEdit(item)) { skipped++; continue; }
-      await this.edit([item], {rating: this.state(item).rating});
-      fixed++;
+      const rating = this.state(item).rating;
+      if (!byRating.has(rating)) byRating.set(rating, []);
+      byRating.get(rating).push(item);
+    }
+    for (const [rating, group] of byRating) {
+      await this.edit(group, {rating});
+      fixed += group.length;
     }
     return {fixed, skipped};
   }
@@ -1015,7 +1022,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
       // Paced so a long sweep neither trips the rate limiter nor freezes the
       // library; the column fills in behind the user as they keep reading.
-      if (index + 1 < queue.length) await Zotero.Promise.delay(120);
+      if (index + 1 < queue.length) await this.pause(120);
     }
     if (result.found || result.missing) { await this.flush(); await this.refreshWindows(); }
     return result;
@@ -1102,6 +1109,22 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return result;
   }
 
+  // Fifty authors per request means following people is nearly free; what the
+  // file actually carries is their stored news, so the limit sits there.
+  get WATCH_LIMIT() { return 500; }
+  // Enough ids that a prolific lab's back catalogue cannot roll off the end and
+  // be re-announced as new.
+  get SEEN_LIMIT() { return 400; }
+
+  // Pacing, without reaching for a global the rest of this class does not use:
+  // Zotero.Promise is a bootstrap-scope global here and absent under test.
+  pause(ms) {
+    const win = this.Z.getMainWindow?.();
+    if (win?.setTimeout) return new Promise(resolve => win.setTimeout(resolve, ms));
+    if (this.Z.Promise?.delay) return this.Z.Promise.delay(ms);
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   watchedAuthors() {
     const saved = this.cache.watchedAuthors;
     return Array.isArray(saved) ? saved.filter(row => row && typeof row.id === 'string') : [];
@@ -1111,11 +1134,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const id = this.discoverTools.shortID(person?.id);
     if (!id.startsWith('A')) throw new Error('저자 식별자가 올바르지 않습니다.');
     const rest = this.watchedAuthors().filter(row => row.id !== id);
-    if (rest.length >= 100) throw new Error('관심 저자는 100명까지 저장합니다.');
+    // The old cap was 100 because each author used to cost a request of their
+    // own. The user already follows 109, so adding anyone simply failed. One
+    // sweep now covers fifty per request, and the real cost is the stored news,
+    // so the limit is set where the file size starts to matter instead.
+    if (rest.length >= this.WATCH_LIMIT) {
+      throw new Error(`관심 저자는 ${this.WATCH_LIMIT}명까지 저장합니다. 목록에서 몇 명을 해제하세요.`);
+    }
     this.cache.watchedAuthors = [...rest, {
       id, name: String(person.name || id), institution: String(person.institution || ''),
       // What was already known when the author was added, so "new" means new to the user.
-      seen: Array.isArray(person.seen) ? person.seen.slice(0, 200) : [],
+      seen: Array.isArray(person.seen) ? person.seen.slice(0, this.SEEN_LIMIT) : [],
       checkedAt: new Date().toISOString()
     }];
     this.dirty = true;
@@ -1139,11 +1168,29 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const rows = this.watchedAuthors();
     const result = {authors: rows.length, withNews: 0, works: 0, requests: 0, budgetGone: false, remaining: 0};
     if (!rows.length) return result;
-    const since = new Date(Date.now() - Math.max(1, months) * 30 * 24 * 3600 * 1000)
-      .toISOString().slice(0, 10);
     const options = this.discoverOptions();
+    const byID = new Map(rows.map(row => [this.discoverTools.shortID(row.id), row]));
     const batches = this.discoverTools.authorBatches(rows.map(row => row.id));
     const found = new Map();
+    // A fixed eighteen-month window silently hides anything published between
+    // following someone and first sweeping them, which for an author added two
+    // years ago is two years of work. The floor is therefore the oldest "last
+    // checked" in the batch, capped so a stale entry cannot ask for a career.
+    const sinceFor = batch => {
+      const stamps = batch
+        .map(id => byID.get(id))
+        .map(row => row && (row.sweptAt || row.checkedAt))
+        .filter(Boolean)
+        .map(stamp => Date.parse(stamp))
+        .filter(Number.isFinite);
+      const oldest = stamps.length === batch.length ? Math.min(...stamps) : null;
+      const floor = Date.now() - Math.max(1, months) * 30 * 24 * 3600 * 1000;
+      const cap = Date.now() - 6 * 365 * 24 * 3600 * 1000;
+      // A margin, because a posting's publication_date can precede the day it
+      // appeared, and a sweep that lands a day late would step over it.
+      const start = Math.max(cap, Math.min(floor, (oldest ?? floor) - 7 * 24 * 3600 * 1000));
+      return new Date(start).toISOString().slice(0, 10);
+    };
     for (const [index, batch] of batches.entries()) {
       if (signal?.aborted) { result.remaining = batches.length - index; break; }
       onProgress?.(index, batches.length);
@@ -1152,7 +1199,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         // Cursor paging, because a batch of fifty active labs clears 200 works
         // easily and a truncated page would silently under-report the news.
         for (let page = 0; page < 5 && cursor; page++) {
-          const url = this.discoverTools.watchedWorksURL(batch, {...options, since, cursor});
+          const url = this.discoverTools.watchedWorksURL(batch, {...options, since: sinceFor(batch), cursor});
           if (!url) break;
           const payload = await this.discoverJSON(url, {signal});
           result.requests++;
@@ -1161,7 +1208,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
             found.set(id, [...(found.get(id) || []), ...list]);
           }
           cursor = works.length ? payload?.meta?.next_cursor || '' : '';
-          if (cursor) await Zotero.Promise.delay(150);
+          if (cursor) await this.pause(150);
         }
       } catch (error) {
         if (this.outOfBudget(error)) { result.budgetGone = true; result.remaining = batches.length - index; break; }
@@ -1209,7 +1256,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const rows = this.watchedAuthors();
     const row = rows.find(entry => entry.id === id);
     if (!row) return false;
-    row.seen = [...new Set([...(row.news || []).map(work => work.id), ...(row.seen || [])])].slice(0, 200);
+    row.seen = [...new Set([...(row.news || []).map(work => work.id), ...(row.seen || [])])].slice(0, this.SEEN_LIMIT);
     row.news = [];
     row.checkedAt = new Date().toISOString();
     this.cache.watchedAuthors = rows;
@@ -1235,7 +1282,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const row = rows.find(entry => entry.id === id);
     if (!row) return false;
     const ids = (Array.isArray(works) ? works : []).map(work => work.id).filter(Boolean);
-    row.seen = [...new Set([...ids, ...(row.seen || [])])].slice(0, 200);
+    row.seen = [...new Set([...ids, ...(row.seen || [])])].slice(0, this.SEEN_LIMIT);
     row.checkedAt = new Date().toISOString();
     this.cache.watchedAuthors = rows;
     this.dirty = true;
@@ -1871,11 +1918,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const {moved,skipped}=await this.migrateStarTags(found);
         this.Z.alert(win,"Style Custom",`${moved}개 항목의 별 태그를 정리했습니다. 평점은 그대로 유지됩니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:""));
       });
-      action("태그 목록에서 평점 태그 숨기기",async()=>{
+      action("평점 태그를 Extra로 옮기기",async()=>{
         const found=this.visibleRatingTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
-        if(!found.length){this.Z.alert(win,"Style Custom","태그 목록에 드러난 평점 태그가 없습니다.");return;}
+        if(!found.length){this.Z.alert(win,"Style Custom","태그로 남은 평점이 없습니다.");return;}
         const {fixed,skipped}=await this.hideRatingTags(found);
-        this.Z.alert(win,"Style Custom",`${fixed}개 항목의 평점 태그를 자동 태그로 바꿨습니다. 평점은 그대로입니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:"")+"\n태그 목록에서 사라지지 않으면 태그 선택기 메뉴의 '자동 태그 표시'를 꺼 보세요.");
+        this.Z.alert(win,"Style Custom",`${fixed}개 항목의 평점을 Extra의 "Rating: N"으로 옮기고 태그를 지웠습니다. 별점은 그대로입니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:"")+"\nExtra는 동기화되고 직접 고칠 수 있으며, 태그 목록에는 나타나지 않습니다.");
       });
       action("인용…",()=>this.citationPanel(win,this.selected(win)));
       action("커스텀 열로 전환",()=>this.useColumns(win));
@@ -1948,6 +1995,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
             if (item.hasChanged?.()) throw new Error(this.text("Wait for pending item changes to save, then try again.", "문헌의 다른 변경 사항이 저장된 뒤 다시 시도하세요."));
             const tags = this.model.updateTags(item.getTags(), change);
             item.setTags(tags);
+            // The rating moves to Extra in the same write that drops its tag,
+            // so the two can never disagree and no rating exists in neither.
+            if (Object.prototype.hasOwnProperty.call(change, 'rating')) {
+              const before = String(item.getField('extra') || '');
+              const after = this.model.updateExtra(before, {rating: change.rating});
+              if (after !== before) item.setField('extra', after);
+            }
             // Capture Zotero's normalized representation, not our input order.
             touched.push({ item, written: item.getTags() });
             await item.save();

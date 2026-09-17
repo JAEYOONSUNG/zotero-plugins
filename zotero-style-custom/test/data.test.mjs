@@ -17,14 +17,16 @@ test('updates preserve unrelated tag objects, data, status, and input', () => {
   const tags = [{tag:'/done',type:0}, {tag:'science',type:1, color:'red'}, {tag:'★★',type:0}];
   const before = JSON.stringify(tags);
   const changed = data.updateTags(tags, {rating:4});
-  // Zotero prints a visible tag in front of the title, so a rating no longer
-  // writes one: the star column already says it. The old tag is still replaced.
-  assert.deepEqual(changed, [tags[0], tags[1], {tag:'style-custom:rating:4',type:1}]);
+  // A rating writes no tag at all now. Zotero prints a visible tag in front of
+  // the title, and an automatic one still shows in the selector, which in a
+  // library of sixteen tags made the bookkeeping most of the vocabulary. Old
+  // rating tags are still cleared out when the rating is written.
+  assert.deepEqual(changed, [tags[0], tags[1]]);
   assert.deepEqual(data.updateTags(tags, {rating:4, legacyStarTag:true}),
-    [tags[0], tags[1], {tag:'style-custom:rating:4',type:1}, {tag:'★★★★',type:0}]);
+    [tags[0], tags[1], {tag:'★★★★',type:0}]);
   assert.equal(JSON.stringify(tags), before);
   assert.deepEqual(data.updateTags(['/reading', 'topic'], {status:'done'}), ['topic','/done']);
-  assert.deepEqual(data.updateTags(tags, {rating:0}), [...tags.slice(0,2),{tag:'style-custom:rating:0',type:1}]);
+  assert.deepEqual(data.updateTags(tags, {rating:0}), [...tags.slice(0,2)]);
   assert.throws(() => data.updateTags(tags, {status:'garbage'}), RangeError);
 });
 test('unknown metadata stays unknown and cache failures are isolated', () => {
@@ -55,10 +57,31 @@ test('malformed and asynchronous caches do not leak into metrics', async () => {
   }
 });
 
-test('explicit clearing overrides legacy Extra without modifying Extra', () => {
-  const tags = data.updateTags([{tag:'★★★',type:0}], {rating:0});
-  assert.equal(data.readState(tags, 'Rating: 5').rating, 0);
-  assert.equal(data.readState(data.updateTags(tags,{rating:2}), 'Rating: 5').rating, 2);
+test('the tag and the Extra line are written together, so they can never disagree', () => {
+  // These two are one operation: updateTags clears the old rating tags and
+  // updateExtra records the value. Using either alone would leave a rating in
+  // neither place, or a stale star tag outranking the real answer.
+  const write = (tags, extra, rating) =>
+    ({tags: data.updateTags(tags, {rating}), extra: data.updateExtra(extra, {rating})});
+  const cleared = write([{tag:'★★★',type:0}], 'Rating: 5', 0);
+  assert.deepEqual(cleared.tags, []);
+  assert.equal(data.readState(cleared.tags, cleared.extra).rating, 0, 'clearing must beat a stale Extra');
+  const rerated = write(cleared.tags, cleared.extra, 2);
+  assert.equal(data.readState(rerated.tags, rerated.extra).rating, 2);
+  // Someone else's lines in Extra survive both operations untouched.
+  const shared = write([], 'PMID: 99\nRating: 5\nOA: yes', 3);
+  assert.equal(shared.extra, 'PMID: 99\nRating: 3\nOA: yes');
+  assert.equal(data.updateExtra(shared.extra, {rating:0}), 'PMID: 99\nOA: yes');
+});
+
+test('a rating written to Extra is read straight back', () => {
+  for (const rating of [1, 2, 3, 4, 5]) {
+    assert.equal(data.readState([], data.updateExtra('', {rating})).rating, rating);
+  }
+  assert.equal(data.readState([], data.updateExtra('', {rating:0})).rating, 0);
+  for (const bad of [1.5, -1, 6, '3', null]) {
+    assert.throws(() => data.updateExtra('', {rating: bad}), RangeError);
+  }
 });
 
 test('annotated numeric Extra preserves attribution without accepting arbitrary suffix', () => {
@@ -97,13 +120,15 @@ test('a star tag already in the library is still read, just never written again'
   assert.equal(data.readState([{tag:'style-custom:rating:2'}], '', 0).rating, 2);
   // Re-rating clears the old visible tag rather than leaving a stale one behind.
   const cleaned = data.updateTags([{tag:'★★★',type:0}], {rating:5});
-  assert.deepEqual(cleaned.map(t => t.tag), ['style-custom:rating:5']);
+  assert.deepEqual(cleaned, []);
 });
 
-test('internal bookkeeping tags are automatic, so they never appear in the tag selector', () => {
+test('a rating leaves no tag behind at all; only the status stays a tag', () => {
   const written = data.updateTags([{tag:'Topic',type:0}], {rating:3, status:'done'});
-  const rating = written.find(t => t.tag === 'style-custom:rating:3');
-  assert.equal(rating.type, 1, 'the rating tag is internal, not something to browse by');
-  // The reading status is a tag the user may colour and filter on, so it stays manual.
+  assert.equal(written.find(t => /rating/i.test(t.tag)), undefined,
+    'Zotero shows automatic tags by default, so marking it automatic never hid it');
+  // The reading status is a tag the user may colour and filter on, and '/done'
+  // sorts to the top of the selector rather than into the middle of their subjects.
   assert.equal(written.find(t => t.tag === '/done').type, 0);
+  assert.deepEqual(written.map(t => t.tag), ['Topic', '/done']);
 });

@@ -59,18 +59,40 @@
     const result = list.filter(tag => !(hasStatus && statusOf(tag)) && !(hasRating && (starRating(tag) !== null || ownRating(tag) !== null))).map(tag => typeof tag === 'object' && tag !== null ? {...tag} : tag);
     const wrap = (tag, type = 0) => list.length && list.every(value => typeof value === 'string') ? tag : {tag, type};
     if (hasStatus) result.push(wrap('/' + patch.status));
-    // Type 1 is an automatic tag, which Zotero keeps out of the tag selector
-    // unless the user has asked to see automatic tags. This one is purely
-    // internal bookkeeping and should never be browsable, so it is always
-    // written as an object: a bare string tag is stored as type 0, i.e. a
-    // manual tag, and those appear in the selector unconditionally. That is how
-    // style-custom:rating:1..3 ended up listed among the user's real tags.
-    if (hasRating) result.push({tag: 'style-custom:rating:' + patch.rating, type: 1});
+    // The rating is no longer a tag. Zotero shows automatic tags by default
+    // (tagSelector.showAutomatic is true), so marking it automatic did not hide
+    // it: style-custom:rating:1..5 sat in a library whose whole vocabulary is
+    // sixteen tags, five of which the user actually chose. It lives in Extra
+    // now, which syncs, is editable by hand, and is not a subject heading.
+    // Existing tags are still read, so nothing is lost before a migration.
     // A visible ★★★ tag is what Zotero prints in front of the title. The rating
     // has its own column, so writing one only clutters the title; legacy star
     // tags are still read, just not created.
     if (hasRating && patch.rating > 0 && patch.legacyStarTag) result.push(wrap('★'.repeat(patch.rating)));
     return result;
+  }
+  // Extra is shared ground: other tools, and the user, keep their own lines
+  // there. Only the Rating line is touched, its original spelling and position
+  // are kept, and everything else comes back byte for byte.
+  function updateExtra(extra, patch = {}) {
+    if (!Object.prototype.hasOwnProperty.call(patch, 'rating')) return String(extra == null ? '' : extra);
+    const rating = patch.rating;
+    if (!Number.isInteger(rating) || rating < 0 || rating > 5) throw new RangeError('Rating must be an integer from 0 to 5');
+    const text = String(extra == null ? '' : extra);
+    const lines = text ? text.split(/\r?\n/) : [];
+    const isRating = line => /^\s*rating\s*:/i.test(line);
+    const kept = lines.filter(line => !isRating(line));
+    if (rating === 0) {
+      // A zero rating is "not rated", so the line goes rather than reading 0.
+      return kept.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+    }
+    const index = lines.findIndex(isRating);
+    const written = 'Rating: ' + rating;
+    if (index === -1) return kept.length ? [...kept, written].join('\n') : written;
+    // Put it back where it was, so a hand-ordered Extra stays hand-ordered.
+    const before = lines.slice(0, index).filter(line => !isRating(line));
+    const after = lines.slice(index + 1).filter(line => !isRating(line));
+    return [...before, written, ...after].join('\n');
   }
   function safely(fn) { try { return fn(); } catch (_) { return undefined; } }
   function cached(store, item, key) {
@@ -111,7 +133,7 @@
     result.rating = readState(safely(() => item.getTags()), fields.has('rating') ? 'Rating: ' + fields.get('rating') : '', result.seconds).rating;
     return result;
   }
-  const api = {readState, updateTags, readMetrics, readLegacyCitations};
+  const api = {readState, updateTags, updateExtra, readMetrics, readLegacyCitations};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleData = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -5,8 +5,6 @@ const require = createRequire(import.meta.url);
 const Runtime = require("../src/runtime.js");
 const discover = require("../src/discover.js");
 
-globalThis.Zotero = globalThis.Zotero || {};
-globalThis.Zotero.Promise = {delay: () => Promise.resolve()};
 
 const work = (id, authorIDs, over = {}) => ({
   id: "https://openalex.org/" + id,
@@ -32,8 +30,11 @@ function host({rows, pages}) {
     discoverOptions: () => ({}),
     libraryDOIs: () => new Set(["10.1/w9"]),
     watchedAuthors: Runtime.prototype.watchedAuthors,
+    pause: Runtime.prototype.pause,
+    WATCH_LIMIT: 500, SEEN_LIMIT: 400,
     outOfBudget: Runtime.prototype.outOfBudget,
     watchedAuthorsByNews: Runtime.prototype.watchedAuthorsByNews,
+    watchAuthor: Runtime.prototype.watchAuthor,
     sweepWatchedAuthors: Runtime.prototype.sweepWatchedAuthors,
     clearAuthorNews: Runtime.prototype.clearAuthorNews,
     async discoverJSON(url) { calls.push(url); const next = pages.shift(); if (next instanceof Error) throw next; return next; },
@@ -142,4 +143,41 @@ test("fifty ids per filter is what OpenAlex accepts, so batches stop there", () 
   const batches = discover.authorBatches(ids);
   assert.deepEqual(batches.map(b => b.length), [50, 50, 9]);
   assert.deepEqual(discover.authorBatches(["A1", "A1", "A2"]), [["A1", "A2"]], "the same author twice is one id");
+});
+
+test("following someone still works past a hundred, which is where the user already is", async () => {
+  // The user follows 109. The old cap rejected every addition outright, so the
+  // feature was closed to exactly the person who had been using it.
+  const rows = Array.from({length: 109}, (_, n) => person("A" + (n + 1)));
+  const h = host({rows, pages: []});
+  await h.watchAuthor({id: "https://openalex.org/A999", name: "New Person"});
+  assert.equal(h.cache.watchedAuthors.length, 110);
+  assert.equal(h.cache.watchedAuthors.at(-1).name, "New Person");
+  h.cache.watchedAuthors = Array.from({length: 500}, (_, n) => person("B" + n));
+  await assert.rejects(() => h.watchAuthor({id: "A999", name: "Too many"}), /500/);
+});
+
+test("the lookback reaches back to when each author was last checked, not a fixed window", async () => {
+  const old = new Date(Date.now() - 900 * 24 * 3600 * 1000).toISOString();
+  const h = host({rows: [person("A1", {checkedAt: old})], pages: [{results: [], meta: {}}]});
+  await h.sweepWatchedAuthors();
+  const asked = decodeURIComponent(h.calls[0]).match(/from_publication_date:(\d{4}-\d{2}-\d{2})/)[1];
+  // Following someone two and a half years ago and sweeping today must not skip
+  // the two years in between just because the default window is eighteen months.
+  assert.ok(Date.parse(asked) < Date.now() - 880 * 24 * 3600 * 1000, "asked from " + asked);
+});
+
+test("a stale entry cannot ask OpenAlex for a whole career", async () => {
+  const h = host({rows: [person("A1", {checkedAt: "1998-01-01T00:00:00Z"})], pages: [{results: [], meta: {}}]});
+  await h.sweepWatchedAuthors();
+  const asked = decodeURIComponent(h.calls[0]).match(/from_publication_date:(\d{4}-\d{2}-\d{2})/)[1];
+  assert.ok(Date.parse(asked) > Date.now() - 6.1 * 365 * 24 * 3600 * 1000, "asked from " + asked);
+});
+
+test("an author who has never been checked uses the default window", async () => {
+  const h = host({rows: [{id: "A1", name: "Fresh", seen: []}], pages: [{results: [], meta: {}}]});
+  await h.sweepWatchedAuthors({months: 18});
+  const asked = decodeURIComponent(h.calls[0]).match(/from_publication_date:(\d{4}-\d{2}-\d{2})/)[1];
+  const days = (Date.now() - Date.parse(asked)) / (24 * 3600 * 1000);
+  assert.ok(days > 530 && days < 560, "asked from " + asked);
 });
