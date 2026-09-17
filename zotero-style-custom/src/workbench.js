@@ -51,21 +51,28 @@
    });return b;
   };
   function saveUI(patch){if(patch.density)runtime.Z.Prefs.set('extensions.style-custom.workbenchDensity',patch.density,true);runtime.cache.workbenchUI={...(runtime.cache.workbenchUI||{}),...patch};runtime.dirty=true;return runtime.flush();}
+  const SVG_NS='http://www.w3.org/2000/svg';
   const ICONS={
-   density:'<line x1="3" y1="5" x2="13" y2="5"/><line x1="3" y1="8" x2="13" y2="8"/><line x1="3" y1="11" x2="13" y2="11"/>',
-   search:'<circle cx="7.25" cy="7.25" r="4.25"/><line x1="10.5" y1="10.5" x2="13.5" y2="13.5"/>',
-   close:'<line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/>'
+   density:[['line',{x1:3,y1:5,x2:13,y2:5}],['line',{x1:3,y1:8,x2:13,y2:8}],['line',{x1:3,y1:11,x2:13,y2:11}]],
+   search:[['circle',{cx:7.25,cy:7.25,r:4.25}],['line',{x1:10.5,y1:10.5,x2:13.5,y2:13.5}]],
+   close:[['line',{x1:4,y1:4,x2:12,y2:12}],['line',{x1:12,y1:4,x2:4,y2:12}]]
   };
+  function svgShape(parent,tag,attrs){
+   const shape=doc.createElementNS(SVG_NS,tag);
+   for(const [name,value] of Object.entries(attrs))shape.setAttribute(name,String(value));
+   parent.appendChild(shape);
+   return shape;
+  }
   function setIcon(element,name){
    element.textContent='';
-   const svg=doc.createElementNS('http://www.w3.org/2000/svg','svg');
+   const svg=doc.createElementNS(SVG_NS,'svg');
    svg.setAttribute('viewBox','0 0 16 16');
    svg.setAttribute('width','16');svg.setAttribute('height','16');
    svg.setAttribute('fill','none');svg.setAttribute('aria-hidden','true');
    svg.setAttribute('stroke','currentColor');
    svg.setAttribute('stroke-width','1.5');
    svg.setAttribute('stroke-linecap','round');
-   svg.innerHTML=ICONS[name];
+   for(const [tag,attrs] of ICONS[name])svgShape(svg,tag,attrs);
    element.appendChild(svg);
    return element;
   }
@@ -195,11 +202,22 @@
    const list=node('div',null,body,{class:'sc-paper-list'}),details=[],generation=epoch;for(const item of page){
    const c=node('article',null,list,{class:'sc-card sc-paper-card','data-item-id':item.id,'data-status':['reading','done'].includes(item.status)?item.status:'unread','data-selected':String(state.selected.has(item.id))});
    const heading=node('div',null,c,{class:'sc-paper-heading'}),pick=check('선택',state.selected.has(item.id),on=>selectItem(item.id,on),heading);pick.setAttribute('aria-label',item.title+' 선택');
-   const identity=node('div',null,heading,{class:'sc-paper-identity'});node('h3',item.title||'제목 없음',identity,{class:'sc-paper-title'});node('p',[item.authors,item.year,item.venue].filter(Boolean).join(' · '),identity,{class:'sc-paper-meta'});
-   const metrics=node('p',null,c,{class:'sc-metrics'});
-   for(const[label,value]of [['인용',item.citations??'—'],['IF',item.impactFactor??'—'],['',({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음'],['별점',(item.rating??0)+'/5'],['읽기',runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(Number(item.seconds)||0)+'초']])node('span',[label,value].filter(value=>value!=='').join(' '),metrics,{class:'sc-metric','data-metric':label==='읽기'?'time':label===''?'status':label});
+   // A paper carries whatever colour it has been given; otherwise its reading state.
+   const marked=runtime.highlightOf?.(runtime.Z.Items.get(Number(item.id)));
+   if(marked)c.dataset.mark=marked;
+   const identity=node('div',null,heading,{class:'sc-paper-identity'});
+   node('h3',item.title||'제목 없음',identity,{class:'sc-paper-title',title:item.title||''});
+   node('span',[item.year,item.venue,item.authors].filter(Boolean).join(' · '),identity,{class:'sc-paper-meta',title:[item.authors,item.venue].filter(Boolean).join(' · ')});
+   const metrics=node('div',null,heading,{class:'sc-metrics'});
+   metric(metrics,{icon:'impact',name:'impact',text:item.impactFactor??'—',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
+   metric(metrics,{icon:'citations',name:'citations',text:item.citations??'—',label:'인용 수'});
+   const stars=node('span',null,metrics,{class:'sc-metric sc-stars',title:`별점 ${item.rating??0}/5`});stars.dataset.metric='rating';
+   node('span','\u2605'.repeat(item.rating??0)+'\u2606'.repeat(5-(item.rating??0)),stars,{class:'sc-metric-value'});
+   metric(metrics,{icon:'time',name:'time',text:runtime.formatReadTime?runtime.formatReadTime(item.seconds)||'0s':Math.floor(Number(item.seconds)||0)+'초',label:'읽은 시간'});
+   const unusedMetrics=node('p',null,c,{class:'sc-metrics-source',hidden:'hidden'});
+   for(const[label,value]of [['','']])node('span',[label,value].filter(value=>value!=='').join(' '),unusedMetrics,{class:'sc-metric','data-metric':label==='읽기'?'time':label===''?'status':label});
    const actions=bar(c);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-variant':'primary'});button('자세히',()=>{state.selected=new Set([item.id]);state.scope='selected';scope.value='selected';render();},actions);
-   metrics.title=[item.citationSource,item.impactSource].filter(Boolean).join(' · ')||'지표 출처 미확인';
+   unusedMetrics.title=[item.citationSource,item.impactSource].filter(Boolean).join(' · ')||'지표 출처 미확인';
    if(state.scope==='selected'){node('p',item.abstract||'초록이 없습니다.',c);const ref=runtime.Z.Items.get(Number(item.id));const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);message('메모를 저장했습니다.');},c);}
    if(state.scope==='selected'&&items.length===1)details.push((async()=>{
     const results=await Promise.allSettled([library.notes([item.id]),library.annotations([item.id])]);
@@ -544,6 +562,38 @@
    run(loadAuthors);
   }
 
+  const METRIC_ICONS={
+   citations:[['path',{d:'M5.5 4.5C3.8 4.5 2.5 5.8 2.5 7.5S3.8 10.5 5.5 10.5c.3 0 .6 0 .8-.1-.4 1-1.3 1.7-2.3 2v1.1c2.3-.4 4-2.4 4-4.8V7.5c0-1.7-1.3-3-3-3zM12.5 4.5c-1.7 0-3 1.3-3 3s1.3 3 3 3c.3 0 .6 0 .8-.1-.4 1-1.3 1.7-2.3 2v1.1c2.3-.4 4-2.4 4-4.8V7.5c0-1.7-1.3-3-3-3z'}]],
+   impact:[['path',{d:'M2.5 12.5h11v1.2h-11zM4 7.5h2V11H4zm3.5-3.5h2V11h-2zm3.5 4.5h2V11h-2z'}]],
+   time:[['path',{d:'M8 2.2a5.8 5.8 0 1 0 0 11.6A5.8 5.8 0 0 0 8 2.2zm0 1.3a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm-.6 1.4v3.5l2.7 1.6.6-1-2.1-1.3V4.9z'}]]
+  };
+  function metricIcon(name,parent){
+   const svg=doc.createElementNS(SVG_NS,'svg');
+   svg.setAttribute('viewBox','0 0 16 16');svg.setAttribute('width','12');svg.setAttribute('height','12');
+   svg.setAttribute('aria-hidden','true');svg.setAttribute('fill','currentColor');
+   for(const [tag,attrs] of METRIC_ICONS[name])svgShape(svg,tag,attrs);
+   parent.appendChild(svg);
+   return svg;
+  }
+  // The same bands the item tree uses, so a journal reads alike in both places.
+  function impactTone(value){
+   const n=Number(value);
+   if(!(n>0))return '';
+   if(n>=30)return 'top';
+   if(n>=10)return 'high';
+   if(n>=5)return 'mid';
+   if(n>=2)return 'low';
+   return 'base';
+  }
+  function metric(parent,{icon,text,tone,label,name}){
+   const span=node('span',null,parent,{class:'sc-metric',title:label});
+   if(name)span.dataset.metric=name;
+   if(icon)metricIcon(icon,span);
+   node('span',text,span,{class:'sc-metric-value'});
+   if(tone)span.dataset.tone=tone;
+   return span;
+  }
+
   function drawJournals(){const seen=new Set();const list=node('div',null,body,{class:'sc-hits'});for(const item of rows()){if(!item.venue||seen.has(item.venue))continue;seen.add(item.venue);
    const c=node('div',null,list,{class:'sc-hit sc-journal'});
    node('p',item.venue,c,{class:'sc-hit-title'});
@@ -577,7 +627,7 @@
   function refreshMetrics(){
    if(disposed||panel.hidden)return;
    for(const item of state.items){const ref=runtime.Z.Items.get(Number(item.id));if(ref)Object.assign(item,runtime.state(ref));}
-   for(const card of body.querySelectorAll('[data-item-id]')){const item=state.items.find(row=>String(row.id)===card.dataset.itemId);if(!item)continue;card.dataset.status=item.status;const time=card.querySelector('[data-metric=time]');if(time)time.textContent='읽기 '+(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(item.seconds||0)+'초');const status=card.querySelector('[data-metric=status]');if(status)status.textContent=({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음';}
+   for(const card of body.querySelectorAll('[data-item-id]')){const item=state.items.find(row=>String(row.id)===card.dataset.itemId);if(!item)continue;card.dataset.status=item.status;const time=card.querySelector('[data-metric=time] .sc-metric-value');if(time)time.textContent=(runtime.formatReadTime?runtime.formatReadTime(item.seconds)||'0s':Math.floor(item.seconds||0)+'초');const status=card.querySelector('[data-metric=status]');if(status)status.textContent=({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음';}
   }
   async function applyPreferences(){panel.dataset.density=setting('workbenchDensity',runtime.cache.workbenchUI?.density||'comfortable');syncDensity();const accent=setting('accentColor','#374151');if(['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=setting('panelFontSize',13)+'px';await render();}
   const keyboard=e=>{if(e.isComposing||panel.hidden)return;

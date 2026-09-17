@@ -256,7 +256,17 @@ test('tab and view editing plus margin and reset controls reach the reader servi
 });
 
 test('paper detail displays status without available metrics and includes scoped notes and annotations inline',async()=>{
- const f=fixture();f.runtime.state=()=>({citations:null,impactFactor:null,status:'done',rating:4,seconds:19});await f.bench.show('explore');assert.match(f.body().querySelector('.sc-metrics').textContent,/인용 —.*IF —.*완료.*4\/5.*19초/);
+ const f=fixture();f.runtime.state=()=>({citations:null,impactFactor:null,status:'done',rating:4,seconds:19});await f.bench.show('explore');
+ // Each figure carries its own mark now, so the row reads without a header and
+ // the reading state is the dot rather than a word taking up the line.
+ const row=f.body().querySelector('.sc-paper-card');
+ const value=name=>row.querySelector(`[data-metric=${name}] .sc-metric-value`).textContent;
+ assert.equal(value('impact'),'—');
+ assert.equal(value('citations'),'—');
+ assert.equal(value('time'),'19초');
+ assert.equal(value('rating'),'★★★★☆');
+ assert.equal(row.dataset.status,'done');
+ for(const name of ['impact','citations','time'])assert.ok(row.querySelector(`[data-metric=${name}] svg`),name+' needs its icon');
  await f.click('자세히');assert.match(f.body().textContent,/Rich note/);assert.match(f.body().textContent,/Highlight/);assert.ok(f.findButton('문헌 노트 편집'));assert.ok(f.findButton('주석 원문 열기'));assert.deepEqual(f.calls.find(c=>c[0]==='notes')[1],['1']);assert.deepEqual(f.calls.find(c=>c[0]==='annotations')[1],['1']);assert.equal(f.body().querySelector('script'),null);f.bench.destroy();
 });
 
@@ -450,4 +460,31 @@ test('chrome icons share one grid and one stroke, so they read as a set',async()
   assert.equal(svg.getAttribute('aria-hidden'),'true','the button is named; the glyph must not be read twice');
  }
  f.bench.destroy();
+});
+
+test('the toolbar button survives a document that rejects innerHTML on SVG',async()=>{
+ // Gecko does not support innerHTML on an element built with createElementNS.
+ // linkedom does, which is exactly why building the icons that way passed here
+ // and then threw inside Zotero, aborting attach before the toolbar button was
+ // ever created. Patching the shared prototype reproduces the real behaviour.
+ const {parseHTML}=await import('linkedom');
+ const probe=parseHTML('<html><body></body></html>');
+ const svg=probe.document.createElementNS('http://www.w3.org/2000/svg','svg');
+ const proto=Object.getPrototypeOf(svg);
+ const original=Object.getOwnPropertyDescriptor(proto,'innerHTML');
+ Object.defineProperty(proto,'innerHTML',{configurable:true,
+  set(){throw new Error('innerHTML is not available on SVG here');},get(){return '';}});
+ try{
+  const f=fixture();
+  await f.bench.toggle(true);
+  const toolbarButton=f.doc.getElementById('style-custom-workbench-button');
+  assert.ok(toolbarButton,'attach must reach the toolbar button');
+  assert.match(toolbarButton.getAttribute('image'),/style-custom-toolbar\.svg$/);
+  // The header icons must still be drawn, not silently skipped.
+  assert.equal(f.bench.panel.querySelectorAll('.sc-header-actions button svg').length,3);
+  f.bench.destroy();
+ } finally {
+  if(original)Object.defineProperty(proto,'innerHTML',original);
+  else delete proto.innerHTML;
+ }
 });

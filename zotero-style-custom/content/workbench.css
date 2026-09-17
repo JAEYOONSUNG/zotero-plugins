@@ -184,13 +184,16 @@
 #style-custom-workbench .sc-paper-card:focus-within { background: var(--sc-surface); }
 #style-custom-workbench .sc-paper-card[data-selected=true] { background: var(--sc-accent-soft); outline: 1px solid var(--sc-accent); outline-offset: -1px; }
 #style-custom-workbench .sc-paper-identity { flex: 1; min-width: 0; }
-#style-custom-workbench .sc-paper-heading { display: flex; align-items: flex-start; gap: 10px; }
+/* One line: mark, checkbox, title, source, then the figures. The title takes
+   the slack so the numbers stay in a column the eye can run down. */
+#style-custom-workbench .sc-paper-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#style-custom-workbench .sc-paper-identity { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
 #style-custom-workbench .sc-paper-heading .sc-check { margin-block-start: 1px; flex: 0 0 auto; opacity: 0; transition: opacity .12s ease; }
 #style-custom-workbench .sc-paper-card:hover .sc-check,
 #style-custom-workbench .sc-paper-card:focus-within .sc-check,
 #style-custom-workbench .sc-paper-card[data-selected=true] .sc-check { opacity: 1; }
-#style-custom-workbench .sc-paper-title { flex: 1; min-width: 0; margin: 0; font: 500 13px/1.45 var(--sc-title-font); letter-spacing: -.01em; }
-#style-custom-workbench .sc-paper-meta { color: var(--sc-muted); font-size: 11px; line-height: 1.5; }
+#style-custom-workbench .sc-paper-title { flex: 0 1 auto; min-width: 0; margin: 0; font: 500 13px/1.45 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-paper-meta { flex: 1 1 auto; min-width: 0; color: var(--sc-faint); font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-metrics { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; padding-block-start: 8px; color: var(--sc-muted); font: 11px/1.6 var(--sc-mono); }
 #style-custom-workbench .sc-paper-card .sc-metrics { border: 0; margin-block-start: 3px; font-size: 11px; }
 #style-custom-workbench .sc-metric { white-space: nowrap; }
@@ -398,3 +401,44 @@
 #style-custom-workbench .sc-journal { grid-template-columns: 1fr auto; padding: 9px 2px; }
 #style-custom-workbench .sc-journal .sc-hit-title { font-size: 13px; }
 #style-custom-workbench .sc-journal .sc-hit-authors { color: var(--sc-faint); }
+
+/* Figures sit in a fixed column so they can be compared down the list, each
+   with its own mark so the row reads without a header above it. */
+#style-custom-workbench .sc-paper-card { display: block; padding: 6px 10px 6px 20px; }
+#style-custom-workbench .sc-paper-card .sc-metrics { display: flex; align-items: center; gap: 12px; margin: 0; flex: 0 0 auto; }
+#style-custom-workbench .sc-metric { display: inline-flex; align-items: center; gap: 3px; color: var(--sc-muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#style-custom-workbench .sc-metric svg { flex: 0 0 auto; opacity: .55; }
+#style-custom-workbench .sc-metric-value { min-width: 1.6em; text-align: end; }
+#style-custom-workbench .sc-metric[data-tone] { font-weight: 600; }
+#style-custom-workbench .sc-metric[data-tone=top]   { color: #8A5CD1; }
+#style-custom-workbench .sc-metric[data-tone=high]  { color: #2764cf; }
+#style-custom-workbench .sc-metric[data-tone=mid]   { color: #128FA8; }
+#style-custom-workbench .sc-metric[data-tone=low]   { color: #1F9D62; }
+#style-custom-workbench .sc-metric[data-tone] svg { opacity: 1; }
+#style-custom-workbench .sc-stars .sc-metric-value { color: #E9A81C; letter-spacing: -1px; font-size: 10px; min-width: 4em; }
+/* The colour a paper has been given wins over its reading state. */
+#style-custom-workbench .sc-paper-card[data-mark]::before { background: var(--sc-mark); }
+#style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #DB4F4F; }
+#style-custom-workbench .sc-paper-card[data-mark=orange] { --sc-mark: #E0821E; }
+#style-custom-workbench .sc-paper-card[data-mark=gold]   { --sc-mark: #E9A81C; }
+#style-custom-workbench .sc-paper-card[data-mark=green]  { --sc-mark: #1F9D62; }
+#style-custom-workbench .sc-paper-card[data-mark=teal]   { --sc-mark: #128FA8; }
+#style-custom-workbench .sc-paper-card[data-mark=blue]   { --sc-mark: #2764cf; }
+#style-custom-workbench .sc-paper-card[data-mark=purple] { --sc-mark: #8A5CD1; }
+#style-custom-workbench .sc-paper-card[data-status]::before { inset-block-start: 50%; margin-block-start: -3px; }
+/* Actions take the place of the figures rather than adding a second line. */
+#style-custom-workbench .sc-paper-card .sc-paper-actions { margin: 0; }
+#style-custom-workbench .sc-paper-card:hover .sc-metrics,
+#style-custom-workbench .sc-paper-card:focus-within .sc-metrics { display: none; }
+#style-custom-workbench .sc-paper-card .sc-paper-actions { display: none; }
+#style-custom-workbench .sc-paper-card:hover .sc-paper-actions,
+#style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions,
+#style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-actions { display: flex; opacity: 1; }
+
+@media (prefers-color-scheme: dark) {
+  #style-custom-workbench .sc-metric[data-tone=top]  { color: #B48BF0; }
+  #style-custom-workbench .sc-metric[data-tone=high] { color: #5B9DFF; }
+  #style-custom-workbench .sc-metric[data-tone=mid]  { color: #3FC4D8; }
+  #style-custom-workbench .sc-metric[data-tone=low]  { color: #3FCF8E; }
+  #style-custom-workbench .sc-stars .sc-metric-value { color: #FFC95C; }
+}
