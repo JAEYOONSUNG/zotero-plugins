@@ -14,7 +14,9 @@ function host({items = [], fetched = new Map(), budgetAt = null} = {}) {
   const cache = {items: {}, watchedAuthors: []};
   const h = {
     cache, active: true, stopping: false, dirty: false, windows: new Map(),
-    Z: {logError() {}, Libraries: {userLibraryID: 1}, Items: {getAll: () => items}, getMainWindow: () => null},
+    // Real Zotero returns a Promise here. The fixture used to hand back a plain
+    // array, which is precisely why six broken sweeps passed every test.
+    Z: {logError() {}, Libraries: {userLibraryID: 1}, Items: {getAll: async () => items}, getMainWindow: () => null},
     signalTools: signals, discoverTools: discover,
     isRegular: item => item.regular !== false,
     entry: Runtime.prototype.entry,
@@ -23,6 +25,7 @@ function host({items = [], fetched = new Map(), budgetAt = null} = {}) {
     outOfBudget: Runtime.prototype.outOfBudget,
     pause: () => Promise.resolve(),
     itemsNeedingSignals: Runtime.prototype.itemsNeedingSignals,
+    libraryItems: Runtime.prototype.libraryItems,
     refreshPaperSignals: Runtime.prototype.refreshPaperSignals,
     backfill: Runtime.prototype.backfill,
     runBackfill: Runtime.prototype.runBackfill,
@@ -45,12 +48,12 @@ function host({items = [], fetched = new Map(), budgetAt = null} = {}) {
 
 const paper = (id, doi = "10.1/" + id) => ({id, doi, regular: true});
 
-test("only papers that can actually be answered are queued", () => {
+test("only papers that can actually be answered are queued", async () => {
   const h = host({items: [paper(1), paper(2, ""), {id: 3, doi: "10.1/c", regular: false}, paper(4)]});
   h.cache.items["4"] = {signals: {status: "standing"}};
   // No DOI means nothing to ask Crossref; an attachment is not a paper; and one
   // already answered must not be paid for twice.
-  assert.deepEqual(h.itemsNeedingSignals(1).map(i => i.id), [1]);
+  assert.deepEqual((await h.itemsNeedingSignals(1)).map(i => i.id), [1]);
 });
 
 test("a retraction found during the backfill is recorded on the paper", async () => {
@@ -143,11 +146,11 @@ test("a spent OpenAlex budget still records the retraction, which is the point o
   assert.ok(seen.some(url => /crossref/.test(url)));
 });
 
-test("a partial entry is asked again; a complete one is not", () => {
+test("a partial entry is asked again; a complete one is not", async () => {
   const h = host({items: [paper(1), paper(2), paper(3)]});
   h.cache.items["1"] = {signals: {status: "ok", partial: true}};
   h.cache.items["2"] = {signals: {status: "ok", openAccess: "gold"}};
-  assert.deepEqual(h.itemsNeedingSignals(1).map(i => i.id), [1, 3]);
+  assert.deepEqual((await h.itemsNeedingSignals(1)).map(i => i.id), [1, 3]);
 });
 
 test("when neither service answered and the budget was the reason, the sweep stops", async () => {

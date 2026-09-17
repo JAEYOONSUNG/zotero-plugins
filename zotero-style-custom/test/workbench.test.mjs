@@ -519,7 +519,7 @@ test('the library tab is not named as though it searched the literature',async()
 
 test('the panel says what has never been filled in, and offers to fill it', async () => {
  const f=fixture();
- f.runtime.backfillPending=()=>({signals:1214,journals:169,authors:109});
+ f.runtime.backfillPending=async()=>({signals:1214,journals:169,authors:109});
  const ran=[];
  f.runtime.runBackfill=()=>{ran.push(1);return Promise.resolve({signals:{ok:1214,'not-found':0,error:0},journals:{found:160,missing:9},authors:{authors:109,withNews:3,works:7},budgetGone:false});};
  f.runtime.backfillSummary=()=>'채우기 완료';
@@ -535,7 +535,7 @@ test('the panel says what has never been filled in, and offers to fill it', asyn
 
 test('nothing left to fill means nothing to say', async () => {
  const f=fixture();
- f.runtime.backfillPending=()=>({signals:0,journals:0,authors:0});
+ f.runtime.backfillPending=async()=>({signals:0,journals:0,authors:0});
  await f.bench.show('explore');
  assert.equal(f.bench.panel.querySelector('.sc-notice').hidden,true);
  f.bench.destroy();

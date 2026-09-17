@@ -1,5 +1,5 @@
 {
- "version": "0.18.1",
+ "version": "0.18.7",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1015,6 +1015,36 @@
    "review": "The counts are read from the cache, not the network, so opening the panel costs nothing. A runtime without backfillPending simply shows no notice, so an older pairing degrades rather than throwing. Live Crossref sweep of all 1,072 distinct library DOIs: 1 retracted, 29 corrected or errata, 1,041 clean, 1 not in Crossref -- twenty-nine papers carrying corrections that were invisible in Zotero.",
    "verification": "Node/DOM tests plus a full live Crossref sweep of the user's own library.",
    "nativeActivationVerified": false
+  },
+  {
+   "round": "R34",
+   "title": "진짜 Zotero 안에서 돌려보는 자체 점검",
+   "gap": "486 Node tests pass against linkedom and a fixture. Every bug that actually shipped was one only the real runtime could show, and there was no way to run anything inside Zotero without clicking it.",
+   "entryPoint": "prefs.js에 extensions.style-custom.selfCheck=true 후 실행 → Zotero 데이터 폴더의 style-custom-selfcheck.json",
+   "sources": [
+    {
+     "file": "src/selfcheck.js",
+     "marker": "async function run("
+    },
+    {
+     "file": "bootstrap.js",
+     "marker": "selfCheckRepair"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/runtime.test.mjs",
+     "name": "a library-wide sweep awaits Zotero rather than iterating the promise"
+    },
+    {
+     "file": "test/runtime.test.mjs",
+     "name": "a rating stranded on a PDF is lifted to the paper it belongs to"
+    }
+   ],
+   "status": "verified",
+   "review": "It found the bug no unit test could: Zotero.Items.getAll returns a Promise, and six library-wide sweeps iterated it directly, so each threw on its first line. The fixtures handed back a plain array, which is why all of them passed. The fixtures are shaped like the real API now. It also caught reading the repair flags after clearing them, and eight rating tags stranded on attachments that isRegular walked straight past.",
+   "verification": "Run inside the user's own Zotero against their own library: 20 of 23 checks pass, the three failures being a missing mailto and OpenAlex's spent daily budget.",
+   "nativeActivationVerified": true
   }
  ],
  "introducedInVersion": "0.6.0"

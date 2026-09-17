@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "version": "0.18.1",
+ "version": "0.18.7",
  "baseline": "Installed Ethereal Style 6.0.76: all 50 simple and dotted preference feature IDs plus requested workflows",
  "sourceFeatureIDs": [
   "AIGenerateRemark",
@@ -1119,6 +1119,21 @@
     "test/backfill.test.mjs"
    ],
    "entryPoint": "우클릭 → 빈 칸 채우기",
+   "condition": "",
+   "status": "implemented"
+  },
+  {
+   "id": "selfCheck",
+   "origin": "additional requested workflow",
+   "name": "실제 Zotero 안에서 도는 자체 점검",
+   "implementation": {
+    "file": "src/selfcheck.js",
+    "marker": "async function run("
+   },
+   "tests": [
+    "test/runtime.test.mjs"
+   ],
+   "entryPoint": "extensions.style-custom.selfCheck 설정 후 재시작",
    "condition": "",
    "status": "implemented"
   }

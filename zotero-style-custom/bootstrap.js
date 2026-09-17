@@ -7,7 +7,7 @@ function uninstall() {}
 async function startup({ id, version, rootURI }) {
   try {
     await Zotero.initializationPromise;
-    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "runtime"]) {
+    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "runtime"]) {
       Services.scriptloader.loadSubScript(rootURI + "src/" + name + ".js", globalThis);
     }
     const path = PathUtils.join(Zotero.DataDirectory.dir, "style-custom.json");
@@ -55,6 +55,29 @@ async function startup({ id, version, rootURI }) {
       runtime.syncLibraryCitations(Zotero.Libraries.userLibraryID,{lookup:false}).then(async report=>{
         if(!report.cancelled && !report.errors) {runtime.cache.citationMetadataMigrated=true;runtime.dirty=true;await runtime.flush();}
       }).catch(error=>Zotero.logError(error));
+    }
+    // A self-check the developer can ask for from outside: set the pref while
+    // Zotero is closed, start it, and read the report out of the data folder.
+    // The failures worth catching -- SVG innerHTML, a dialog whose rows overlap,
+    // a column that throws while painting -- only exist in the real runtime.
+    if (Zotero.Prefs.get("extensions.style-custom.selfCheck", true)) {
+      // Read the flags before clearing them: clearing first and reading inside
+      // the timer meant repair and fill were always false by the time they were
+      // asked for, and the run silently did nothing but the read-only checks.
+      const options = {
+        network: Zotero.Prefs.get("extensions.style-custom.selfCheckNetwork", true) !== false,
+        repair: Zotero.Prefs.get("extensions.style-custom.selfCheckRepair", true) === true,
+        fill: Zotero.Prefs.get("extensions.style-custom.selfCheckFill", true) === true
+      };
+      for (const flag of ["selfCheck", "selfCheckRepair", "selfCheckFill"]) Zotero.Prefs.set("extensions.style-custom." + flag, false, true);
+      const reportPath = PathUtils.join(Zotero.DataDirectory.dir, "style-custom-selfcheck.json");
+      setTimeout(() => {
+        globalThis.CustomStyleSelfCheck
+          .run(Zotero, customStyle, options)
+          .then(report => IOUtils.writeUTF8(reportPath, JSON.stringify(report, null, 1)))
+          .catch(error => IOUtils.writeUTF8(reportPath,
+            JSON.stringify({fatal: String(error && error.stack || error)}, null, 1)));
+      }, 6000);
     }
   } catch (error) {
     await shutdown();

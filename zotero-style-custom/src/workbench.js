@@ -43,10 +43,13 @@
   // the same place would repeat that, so the panel says what is missing, where
   // the user already is, and offers to fill it.
   const notice=node('div',null,panel,{class:'sc-notice',hidden:'hidden'});
-  function refreshNotice(){
+  async function refreshNotice(){
    if(disposed||typeof runtime.backfillPending!=='function')return;
    let pending=null;
-   try{pending=runtime.backfillPending();}catch(error){return;}
+   // Counting means reading every item, and reading items is asynchronous in
+   // Zotero; doing it synchronously is what broke every sweep in this plugin.
+   try{pending=await runtime.backfillPending();}catch(error){return;}
+   if(disposed)return;
    const total=(pending?.signals||0)+(pending?.journals||0)+(pending?.authors||0);
    if(!total||runtime.backfilling){notice.hidden=true;return;}
    notice.hidden=false;notice.replaceChildren();
@@ -57,12 +60,12 @@
    node('span',parts.join(' · '),notice,{class:'sc-notice-text'});
    const act=node('div',null,notice,{class:'sc-notice-actions'});
    button('지금 채우기',()=>run(async()=>{
-    refreshNotice();
+    notice.hidden=true;
     const report=await runtime.runBackfill({onProgress:({stage,done,total})=>
      message(`${({signals:'철회·공개접근 신호',journals:'저널 지표',authors:'관심 저자 새 논문'})[stage]||stage} 채우는 중 ${done+1}/${total}`)});
     if(disposed)return;
     message(runtime.backfillSummary(report),!!report.budgetGone);
-    refreshNotice();
+    await refreshNotice();
    }),act);
    button('나중에',()=>{notice.hidden=true;},act);
   }
@@ -754,7 +757,7 @@
    const customFields=node('input',null,body,{'aria-label':'추가 문헌 열','placeholder':'DOI, publisher, language'});customFields.value=runtime.pref('customFields','');button('추가 열 적용',async()=>{await runtime.setCustomFields(customFields.value);message('추가 열을 적용했습니다.');},body);
    const css=node('textarea',null,body,{'aria-label':'Custom 패널 CSS',placeholder:'.sc-card { font-size: 13px; }'});css.value=runtime.pref('panelCSS','');css.hidden=!enabled('styleEditor');button('패널 CSS 적용',()=>runtime.setPanelCSS(css.value),body).hidden=!enabled('styleEditor');
   }
-  async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';const token=++epoch;clear();draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();refreshNotice();try{
+  async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';const token=++epoch;clear();draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();refreshNotice().catch(()=>{});try{
    switch(state.tab){case'explore':await paperList(rows());break;case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();
   }catch(error){if(token===epoch&&!disposed)message(error.message||error,true);}}

@@ -46,6 +46,16 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   identity(item) { return `${item.libraryID}:${item.key}`; }
   entry(item) { return this.cache.items[this.identity(item)] ||= {}; }
+  // Zotero.Items.getAll returns a Promise. Six call sites iterated it directly,
+  // which throws, so every library-wide sweep in this plugin failed on the first
+  // line and no unit test could see it: the fixture handed back a plain array.
+  // Confirmed by the in-Zotero self-check on the user's own library.
+  async libraryItems(libraryID) {
+    const id = libraryID ?? this.Z.Libraries.userLibraryID;
+    if (!this.Z.Items.getAll) return [];
+    const found = await this.Z.Items.getAll(id);
+    return Array.isArray(found) ? found : [];
+  }
   featureEnabled(id) { return this.pref('feature.'+id,true)!==false; }
   getSetting(key) {
     const definition=this.settingsSchema.settings.find(row=>row.key===key);if(!definition)throw new Error('Unknown setting: '+key);
@@ -623,10 +633,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // A "\u2605\u2605\u2605" tag is a real Zotero tag, so Zotero prints it in front of the
   // title. For most items it is also the only place the rating is stored, so it
   // cannot simply be deleted: the rating moves to the hidden tag first.
-  starTagItems(libraryID) {
-    const id = libraryID ?? this.Z.Libraries.userLibraryID;
+  async starTagItems(libraryID) {
     const found = [];
-    for (const item of this.Z.Items.getAll ? this.Z.Items.getAll(id) : []) {
+    for (const item of await this.libraryItems(libraryID)) {
       if (!this.isRegular(item)) continue;
       const tags = (item.getTags?.() || []).map(tag => tag.tag);
       if (tags.some(tag => /^[\u2605\u2b50]+$/.test(String(tag).replace(/\ufe0f/g, '')))) found.push(item);
@@ -651,15 +660,63 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // tags in total and five of them are ones the user chose, so eighty rows of
   // style-custom:rating:N were most of their tag vocabulary. Marking the tag
   // automatic did not help: Zotero shows automatic tags by default.
-  visibleRatingTagItems(libraryID) {
-    const id = libraryID ?? this.Z.Libraries.userLibraryID;
+  ratingTagOf(item) {
+    for (const tag of item?.getTags?.() || []) {
+      const match = /^style-custom:rating:([0-5])$/.exec(String(tag?.tag ?? tag));
+      if (match) return Number(match[1]);
+    }
+    return null;
+  }
+
+  async visibleRatingTagItems(libraryID) {
     const found = [];
-    for (const item of this.Z.Items.getAll ? this.Z.Items.getAll(id) : []) {
+    for (const item of await this.libraryItems(libraryID)) {
       if (!this.isRegular(item)) continue;
-      const tags = item.getTags?.() || [];
-      if (tags.some(tag => /^style-custom:rating:[0-5]$/.test(String(tag?.tag ?? tag)))) found.push(item);
+      if (this.ratingTagOf(item) !== null) found.push(item);
     }
     return found;
+  }
+
+  // Eight attachments in this library carry a rating tag, because the rating was
+  // set while the attachment row was selected. An attachment has no Extra field
+  // to move it into, so a child's rating goes to its parent paper -- where the
+  // Rating column actually shows it -- and the stray tag goes. A standalone
+  // attachment has no parent and is not a paper, so its tag is reported and left
+  // alone rather than quietly thrown away.
+  async strayRatingTags(libraryID) {
+    const children = [], orphans = [];
+    for (const item of await this.libraryItems(libraryID)) {
+      if (this.isRegular(item)) continue;
+      const rating = this.ratingTagOf(item);
+      if (rating === null) continue;
+      let parent = null;
+      try {
+        const id = item.parentItemID ?? item.parentID;
+        if (id) parent = await this.Z.Items.getAsync(id);
+      } catch (error) { this.Z.logError(error); }
+      if (parent && this.isRegular(parent)) children.push({item, parent, rating});
+      else orphans.push({item, rating});
+    }
+    return {children, orphans};
+  }
+
+  async moveStrayRatingTags(libraryID) {
+    const {children, orphans} = await this.strayRatingTags(libraryID);
+    const result = {moved: 0, alreadyRated: 0, skipped: 0, orphans: orphans.length};
+    for (const {item, parent, rating} of children) {
+      // canEdit answers for papers; an attachment is never one, so it is asked
+      // about directly rather than through a check that rejects it by type.
+      const writable = item?.isEditable?.() !== false && this.Z.Libraries.get(item.libraryID)?.editable;
+      if (!writable || !this.canEdit(parent)) { result.skipped++; continue; }
+      const existing = this.state(parent).rating;
+      // A rating the user set on the paper itself outranks one set on its PDF.
+      if (existing > 0) result.alreadyRated++;
+      else { await this.edit([parent], {rating}); result.moved++; }
+      const kept = (item.getTags() || []).filter(tag => !/^style-custom:rating:[0-5]$/.test(String(tag?.tag ?? tag)));
+      item.setTags(kept);
+      if (typeof item.saveTx === 'function') await item.saveTx(); else await item.save();
+    }
+    return result;
   }
 
   // Rewriting the rating through the normal path writes Extra and drops the
@@ -1034,7 +1091,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // read out before that plugin goes. Style Custom's own tracking always wins:
   // a longer total here means it has been counting since, and must not be lost.
   async importLegacyReading({dryRun = false} = {}) {
-    const notes = this.Z.Items.getAll ? this.Z.Items.getAll(this.Z.Libraries.userLibraryID) : [];
+    const notes = await this.libraryItems(this.Z.Libraries.userLibraryID);
     const byKey = new Map();
     for (const item of notes) {
       const key = item?.key;
@@ -1561,10 +1618,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // so the columns showed a dash and the panel showed nothing. This fills them
   // in the background instead, cheapest and highest-stakes first: a retracted
   // paper is the one fact worth interrupting someone for.
-  itemsNeedingSignals(libraryID) {
-    const id = libraryID ?? this.Z.Libraries.userLibraryID;
+  async itemsNeedingSignals(libraryID) {
     const wanted = [];
-    for (const item of this.Z.Items.getAll ? this.Z.Items.getAll(id) : []) {
+    for (const item of await this.libraryItems(libraryID)) {
       if (!this.isRegular(item)) continue;
       // A partial entry carries Crossref's retraction verdict but not the
       // open-access half, so it is asked again rather than left half-answered.
@@ -1579,11 +1635,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   // What the panel needs to say there is work to do, counted without asking
   // the network anything.
-  backfillPending(libraryID) {
-    const id = libraryID ?? this.Z.Libraries.userLibraryID;
+  async backfillPending(libraryID) {
     let signals = 0;
     const journals = new Set();
-    for (const item of this.Z.Items.getAll ? this.Z.Items.getAll(id) : []) {
+    for (const item of await this.libraryItems(libraryID)) {
       if (!this.isRegular(item)) continue;
       const known = this.entry(item).signals;
       if ((!known || known.partial) && this.signalTools.bareDOI(this.citationRecord(item).doi)) signals++;
@@ -1603,7 +1658,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const note = (stage, done, total) => onProgress?.({stage, done, total});
 
     report.stage = 'signals';
-    const papers = this.itemsNeedingSignals(libraryID);
+    const papers = await this.itemsNeedingSignals(libraryID);
     if (papers.length) {
       report.signals = await this.refreshPaperSignals(papers,
         {signal, pace, onProgress: (done, total) => note('signals', done, total)});
@@ -1612,7 +1667,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (signal?.aborted || !this.active || this.stopping) return report;
 
     report.stage = 'journals';
-    const all = this.Z.Items.getAll ? this.Z.Items.getAll(libraryID ?? this.Z.Libraries.userLibraryID) : [];
+    const all = await this.libraryItems(libraryID);
     report.journals = await this.refreshJournalCitedness(all.filter(item => this.isRegular(item)),
       {signal, onProgress: (done, total) => note('journals', done, total)});
     if (report.journals.budgetGone) { report.budgetGone = true; return report; }
@@ -2039,7 +2094,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       make("menuseparator",null,marks);
       action("색 지우기",async()=>{await this.setHighlight(this.selected(win),null);},marks);
       action("라이브러리 저널 지표 채우기",async()=>{
-        const items=this.Z.Items.getAll?this.Z.Items.getAll(win.ZoteroPane?.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID):[];
+        const items=await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
         const papers=items.filter(item=>this.isRegular(item));
         this.Z.alert(win,"Style Custom","저널 지표를 조회합니다. 저널마다 한 번만 조회하고 결과는 보관합니다.");
         const result=await this.refreshJournalCitedness(papers);
@@ -2057,16 +2112,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         this.Z.alert(win,"Style Custom",`읽기 기록 ${result.imported}편 · ${hours}시간을 가져왔습니다.\n이미 더 많이 기록된 ${result.skipped}편은 그대로 두었습니다.`+(result.unresolved?`\n대상 문헌을 찾지 못한 노트 ${result.unresolved}개`:""));
       });
       action("제목 앞 별 태그 정리",async()=>{
-        const found=this.starTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
+        const found=await this.starTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
         if(!found.length){this.Z.alert(win,"Style Custom","정리할 별 태그가 없습니다.");return;}
         const {moved,skipped}=await this.migrateStarTags(found);
         this.Z.alert(win,"Style Custom",`${moved}개 항목의 별 태그를 정리했습니다. 평점은 그대로 유지됩니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:""));
       });
       action("평점 태그를 Extra로 옮기기",async()=>{
-        const found=this.visibleRatingTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
+        const found=await this.visibleRatingTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
         if(!found.length){this.Z.alert(win,"Style Custom","태그로 남은 평점이 없습니다.");return;}
         const {fixed,skipped}=await this.hideRatingTags(found);
-        this.Z.alert(win,"Style Custom",`${fixed}개 항목의 평점을 Extra의 "Rating: N"으로 옮기고 태그를 지웠습니다. 별점은 그대로입니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:"")+"\nExtra는 동기화되고 직접 고칠 수 있으며, 태그 목록에는 나타나지 않습니다.");
+        const stray=await this.moveStrayRatingTags(win.ZoteroPane?.getSelectedLibraryID?.());
+        const lines=[`${fixed}개 항목의 평점을 Extra의 "Rating: N"으로 옮기고 태그를 지웠습니다. 별점은 그대로입니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:"")];
+        if(stray.moved||stray.alreadyRated)lines.push(`첨부파일에 붙어 있던 평점 ${stray.moved+stray.alreadyRated}개를 정리했습니다(${stray.moved}개는 본 문헌으로 옮김).`);
+        if(stray.orphans)lines.push(`독립 첨부파일 ${stray.orphans}개는 본 문헌이 없어 태그를 그대로 두었습니다.`);
+        lines.push("Extra는 동기화되고 직접 고칠 수 있으며, 태그 목록에는 나타나지 않습니다.");
+        this.Z.alert(win,"Style Custom",lines.join("\n"));
       });
       action("인용…",()=>this.citationPanel(win,this.selected(win)));
       action("커스텀 열로 전환",()=>this.useColumns(win));

@@ -1087,8 +1087,8 @@ test('the rating tags already in the library move to Extra in one pass per ratin
   // Eighty of these exist in the real library, spread over five ratings.
   const rated = [3, 5, 3, 1, 5, 5].map((n, i) =>
     item(i + 1, {tags: [{tag: 'style-custom:rating:' + n, type: 1}, {tag: 'Topic'}]}));
-  Z.Items = {...(Z.Items || {}), getAll: () => rated};
-  const found = plugin.visibleRatingTagItems(1);
+  Z.Items = {...(Z.Items || {}), getAll: async () => rated};
+  const found = await plugin.visibleRatingTagItems(1);
   assert.equal(found.length, 6, 'an automatic rating tag still shows in the selector, so it still counts');
   let transactions = 0;
   const run = Z.DB.executeTransaction;
@@ -1114,13 +1114,28 @@ test('an item that cannot be edited is counted, not silently skipped', async () 
   assert.ok(locked.getTags().some(t => t.tag === '★★'), 'a read-only item is left alone');
 });
 
-test('items carrying a star tag are found, and ones without are not', () => {
+test('items carrying a star tag are found, and ones without are not', async () => {
   const {plugin, item, Z} = fixture();
   const starred = item(1, {tags: [{tag: '⭐⭐⭐'}]});
   const emoji = item(2, {tags: [{tag: '★★️'}]});
   const plain = item(3, {tags: [{tag: 'Topic'}, {tag: 'style-custom:rating:3'}]});
-  Z.Items = {...(Z.Items || {}), getAll: () => [starred, emoji, plain]};
-  assert.deepEqual(plugin.starTagItems().map(i => i.id), [starred.id, emoji.id]);
+  Z.Items = {...(Z.Items || {}), getAll: async () => [starred, emoji, plain]};
+  assert.deepEqual((await plugin.starTagItems()).map(i => i.id), [starred.id, emoji.id]);
+});
+
+test('a library-wide sweep awaits Zotero rather than iterating the promise', async () => {
+  // Zotero.Items.getAll returns a Promise. Six sweeps iterated it directly and
+  // threw on their first line, and every test passed because the fixture handed
+  // back a plain array. The fixture is now shaped like the real thing.
+  const {plugin, item, Z} = fixture();
+  const papers = [item(1), item(2)];
+  Z.Items = {...(Z.Items || {}), getAll: async () => papers};
+  assert.deepEqual((await plugin.libraryItems(1)).map(i => i.id), [1, 2]);
+  // Anything that is not an array is treated as an empty library, not thrown at.
+  Z.Items = {...(Z.Items || {}), getAll: async () => undefined};
+  assert.deepEqual(await plugin.libraryItems(1), []);
+  delete Z.Items.getAll;
+  assert.deepEqual(await plugin.libraryItems(1), []);
 });
 
 test('the toolbar button uses a monochrome glyph, never the coloured app icon', async () => {
@@ -1426,4 +1441,38 @@ test('the OpenAlex key is found wherever it was entered, so sweeps are never ano
   assert.equal(plugin.discoverOptions().apiKey, 'from-style-custom');
   Z.Prefs.set('extensions.style-custom.openalexApiKey', '  ', true);
   assert.equal(plugin.openAlexKey(), 'from-zotpop', 'blank is not a key');
+});
+
+test('a rating stranded on a PDF is lifted to the paper it belongs to', async () => {
+  // Eight attachments in the real library carry one, because the rating was set
+  // while the attachment row was selected. isRegular excludes them, so the
+  // migration walked straight past and the tags stayed in the selector.
+  const {plugin, item, Z} = fixture();
+  await plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+  const paper = item(10, {tags: [{tag: 'Topic'}]});
+  const ratedPaper = item(20, {tags: [], extra: 'Rating: 5'});
+  const child = item(11, {tags: [{tag: 'style-custom:rating:4', type: 1}]});
+  const duplicate = item(21, {tags: [{tag: 'style-custom:rating:2', type: 1}]});
+  const orphan = item(12, {tags: [{tag: 'style-custom:rating:3', type: 1}]});
+  for (const attachment of [child, duplicate, orphan]) attachment.isRegularItem = () => false;
+  child.parentItemID = 10;
+  duplicate.parentItemID = 20;
+  const byID = new Map([[10, paper], [20, ratedPaper]]);
+  Z.Items = {...(Z.Items || {}), getAll: async () => [paper, ratedPaper, child, duplicate, orphan],
+    getAsync: async id => byID.get(id)};
+
+  const {children, orphans} = await plugin.strayRatingTags(1);
+  assert.deepEqual(children.map(row => row.item.id), [11, 21]);
+  assert.deepEqual(orphans.map(row => row.item.id), [12]);
+
+  const result = await plugin.moveStrayRatingTags(1);
+  assert.equal(result.moved, 1, 'the paper with no rating gets the one off its PDF');
+  assert.equal(result.alreadyRated, 1, 'a rating set on the paper itself outranks one set on its PDF');
+  assert.equal(result.orphans, 1, 'a standalone attachment has no paper, so its tag is left rather than discarded');
+  assert.equal(plugin.state(paper).rating, 4);
+  assert.equal(plugin.state(ratedPaper).rating, 5, 'the existing rating is not overwritten');
+  for (const attachment of [child, duplicate]) {
+    assert.equal(plugin.ratingTagOf(attachment), null, 'the stray tag is gone');
+  }
+  assert.equal(plugin.ratingTagOf(orphan), 3, 'and the one with nowhere to go is untouched');
 });
