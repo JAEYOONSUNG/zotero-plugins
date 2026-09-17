@@ -8,7 +8,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ["manifest.json", "bootstrap.js", "prefs.js", "src/data.js", "src/reading.js", "src/marquee.js",
-         "src/workspace.js", "src/assist.js", "src/library.js", "src/reader-tools.js", "src/workbench.js", "content/workbench.css", "content/citation.css", "src/runtime.js", "src/citations.js", "src/citation-formats.js", "src/supplementary.js", "src/discover.js", "src/paper-signals.js", "src/legacy-reading.js", "src/journals.js", "data/if-catalog.json", "data/features.json", "content/preferences.xhtml", "content/preferences.css", "src/settings-schema.js", "src/settings.js", "content/icons/style-custom.svg", "content/icons/style-custom-toolbar.svg", *[f"content/icons/style-custom-{size}.png" for size in [16,24,32,48,96,128,256]]]
+         "src/workspace.js", "src/assist.js", "src/library.js", "src/reader-tools.js", "src/workbench.js", "content/workbench.css", "content/citation.css", "src/runtime.js", "src/citations.js", "src/citation-formats.js", "src/supplementary.js", "src/discover.js", "src/paper-signals.js", "src/legacy-reading.js", "src/journal-metrics.js", "src/journals.js", "data/if-catalog.json", "data/features.json", "content/preferences.xhtml", "content/preferences.css", "src/settings-schema.js", "src/settings.js", "content/icons/style-custom.svg", "content/icons/style-custom-toolbar.svg", *[f"content/icons/style-custom-{size}.png" for size in [16,24,32,48,96,128,256]]]
 
 
 def validate_manifest(manifest):

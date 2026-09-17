@@ -16,6 +16,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.discoverTools = typeof CustomStyleDiscover !== "undefined" ? CustomStyleDiscover : require("./discover.js");
     this.signalTools = typeof CustomStylePaperSignals !== "undefined" ? CustomStylePaperSignals : require("./paper-signals.js");
     this.legacyReading = typeof CustomStyleLegacyReading !== "undefined" ? CustomStyleLegacyReading : require("./legacy-reading.js");
+    this.journalTools2 = typeof CustomStyleJournalMetrics !== "undefined" ? CustomStyleJournalMetrics : require("./journal-metrics.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
     this.DISCOVER_CACHE_LIMIT = 60;
@@ -360,6 +361,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (this.isRegular(item)) {value=this.value(key,item);if(['time','status'].includes(key)){cell.dataset.styleCustomReading=key;cell.dataset.itemId=String(item.id);}}
     if (value === "") {
       if (key === "if" && this.isRegular(item)) {
+        // The catalogue covers 86 journals; this library spans 255. Rather than
+        // a blank, show OpenAlex's two-year mean citedness -- a different figure
+        // from a Clarivate JIF, so it is marked and never presented as one.
+        const estimate = this.journalCitedness(item);
+        if (estimate) {
+          const tier = this.impactTier(estimate.citedness, P);
+          cell.textContent = "~" + estimate.citedness;
+          cell.style.color = tier ? tier.color : P.muted;
+          cell.style.fontWeight = "400";
+          cell.title = `≈ ${estimate.citedness} · OpenAlex 2년 평균 피인용 · ${estimate.name || ""}`
+            + `\n공식 JIF가 아니라 추정치입니다.`;
+          return cell;
+        }
         cell.textContent = "—";
         cell.style.color = P.faint;
         cell.title = item.getField("publicationTitle") ? "이 저널의 공식 IF를 아직 확인하지 못했습니다. 저널명과 ISSN을 확인하세요." : "저널 정보가 없습니다. 프리프린트·책·데이터셋에는 저널 IF가 적용되지 않을 수 있습니다.";
@@ -633,6 +647,34 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return {moved, skipped};
   }
 
+  // Items whose rating tag was written as a manual tag. Zotero shows manual
+  // tags in the selector unconditionally, so these turned up in the user's own
+  // tag list as "style-custom:rating:1" -- bookkeeping presented as a subject.
+  visibleRatingTagItems(libraryID) {
+    const id = libraryID ?? this.Z.Libraries.userLibraryID;
+    const found = [];
+    for (const item of this.Z.Items.getAll ? this.Z.Items.getAll(id) : []) {
+      if (!this.isRegular(item)) continue;
+      const tags = item.getTags?.() || [];
+      if (tags.some(tag => /^style-custom:rating:[0-5]$/.test(String(tag?.tag ?? tag)) && Number(tag?.type || 0) !== 1)) {
+        found.push(item);
+      }
+    }
+    return found;
+  }
+
+  // Rewriting the rating through the normal path re-types the tag; the rating
+  // itself is read back first, so nothing is lost.
+  async hideRatingTags(items) {
+    let fixed = 0, skipped = 0;
+    for (const item of items) {
+      if (!this.canEdit(item)) { skipped++; continue; }
+      await this.edit([item], {rating: this.state(item).rating});
+      fixed++;
+    }
+    return {fixed, skipped};
+  }
+
   // --- Marking a row with a colour ---
 
   // A small, named set rather than a picker: rows only read as a grouping when
@@ -890,6 +932,95 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return saved;
   }
 
+  // --- Impact figures beyond the curated catalogue ---
+
+  journalCache() {
+    const store = this.cache.journalMetrics;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.journalMetrics = {});
+  }
+
+  journalRecord(item) {
+    const field = key => { try { return String(item.getField(key) || '').trim(); } catch (_) { return ''; } };
+    return {name: ['publicationTitle', 'proceedingsTitle'].map(field).find(Boolean) || '', issn: field('ISSN')};
+  }
+
+  // One lookup per journal, kept for good: 1,116 items in this library share
+  // 255 journals, so caching by journal is the difference between a sweep that
+  // fits the daily budget and one that cannot.
+  async fetchJournalMetric(record, {signal} = {}) {
+    const key = this.journalTools2.cacheKey(record);
+    if (!record.name && !record.issn) return null;
+    const store = this.journalCache();
+    if (store[key]) return store[key];
+    const url = this.journalTools2.lookupURL(record, this.discoverOptions());
+    if (!url) return null;
+    const payload = await this.discoverJSON(url, {signal});
+    const source = this.journalTools2.pickSource(payload, record);
+    if (!source || source.citedness == null) {
+      // Remember the miss too, or every sweep pays for it again.
+      store[key] = {citedness: null, checkedAt: new Date().toISOString()};
+      this.dirty = true;
+      return store[key];
+    }
+    store[key] = {
+      citedness: source.citedness, name: source.name, issn: source.issn,
+      openAlexID: source.id, checkedAt: new Date().toISOString()
+    };
+    this.dirty = true;
+    return store[key];
+  }
+
+  // The catalogue's JIF always wins; this only fills what it does not cover.
+  journalCitedness(item) {
+    const record = this.journalRecord(item);
+    if (!record.name && !record.issn) return null;
+    const hit = this.journalCache()[this.journalTools2.cacheKey(record)];
+    return hit && hit.citedness != null ? hit : null;
+  }
+
+  // OpenAlex meters by the day. Running out mid-sweep is normal, not a fault:
+  // stop, keep what was learned, and say how many are left, because the cache
+  // is permanent and tomorrow's sweep resumes exactly where this one stopped.
+  outOfBudget(error) {
+    const status = Number(error?.status ?? error?.xmlhttp?.status ?? 0);
+    if (status === 429) return true;
+    return /insufficient budget|rate limit/i.test(String(error?.message || ''));
+  }
+
+  async refreshJournalCitedness(items, {onProgress, signal} = {}) {
+    const wanted = new Map();
+    for (const item of items) {
+      if (!this.isRegular(item)) continue;
+      const record = this.journalRecord(item);
+      if (!record.name && !record.issn) continue;
+      const key = this.journalTools2.cacheKey(record);
+      if (!wanted.has(key) && !this.journalCache()[key]) wanted.set(key, record);
+    }
+    const queue = [...wanted.values()];
+    const result = {journals: queue.length, found: 0, missing: 0, failed: 0, remaining: 0, budgetGone: false};
+    for (const [index, record] of queue.entries()) {
+      if (signal?.aborted) { result.remaining = queue.length - index; break; }
+      onProgress?.(index, queue.length, record);
+      try {
+        const hit = await this.fetchJournalMetric(record, {signal});
+        if (hit && hit.citedness != null) result.found++; else result.missing++;
+      } catch (error) {
+        if (this.outOfBudget(error)) {
+          result.budgetGone = true;
+          result.remaining = queue.length - index;
+          break;
+        }
+        this.Z.logError(error);
+        result.failed++;
+      }
+      // Paced so a long sweep neither trips the rate limiter nor freezes the
+      // library; the column fills in behind the user as they keep reading.
+      if (index + 1 < queue.length) await Zotero.Promise.delay(120);
+    }
+    if (result.found || result.missing) { await this.flush(); await this.refreshWindows(); }
+    return result;
+  }
+
   // --- Taking ownership of the reading history ---
 
   // The only copy of this history is in another plugin's notes, so it has to be
@@ -997,6 +1128,94 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.cache.watchedAuthors = this.watchedAuthors().filter(row => row.id !== id);
     this.dirty = true;
     await this.flush();
+  }
+
+  // The watchlist existed but could not be read at a glance: every row showed
+  // the same "last checked" date, so the only way to learn whether anyone had
+  // published was to open all 109 of them one by one. That is exactly the cost
+  // this plugin is meant to remove. One sweep answers it for everyone at once,
+  // and stores the answer so the list itself shows who has news.
+  async sweepWatchedAuthors({months = 18, onProgress, signal} = {}) {
+    const rows = this.watchedAuthors();
+    const result = {authors: rows.length, withNews: 0, works: 0, requests: 0, budgetGone: false, remaining: 0};
+    if (!rows.length) return result;
+    const since = new Date(Date.now() - Math.max(1, months) * 30 * 24 * 3600 * 1000)
+      .toISOString().slice(0, 10);
+    const options = this.discoverOptions();
+    const batches = this.discoverTools.authorBatches(rows.map(row => row.id));
+    const found = new Map();
+    for (const [index, batch] of batches.entries()) {
+      if (signal?.aborted) { result.remaining = batches.length - index; break; }
+      onProgress?.(index, batches.length);
+      let cursor = '*';
+      try {
+        // Cursor paging, because a batch of fifty active labs clears 200 works
+        // easily and a truncated page would silently under-report the news.
+        for (let page = 0; page < 5 && cursor; page++) {
+          const url = this.discoverTools.watchedWorksURL(batch, {...options, since, cursor});
+          if (!url) break;
+          const payload = await this.discoverJSON(url, {signal});
+          result.requests++;
+          const works = this.discoverTools.readWorks(payload);
+          for (const [id, list] of this.discoverTools.attribute(works, batch)) {
+            found.set(id, [...(found.get(id) || []), ...list]);
+          }
+          cursor = works.length ? payload?.meta?.next_cursor || '' : '';
+          if (cursor) await Zotero.Promise.delay(150);
+        }
+      } catch (error) {
+        if (this.outOfBudget(error)) { result.budgetGone = true; result.remaining = batches.length - index; break; }
+        this.Z.logError(error);
+      }
+    }
+    const owned = this.libraryDOIs();
+    const checkedAt = new Date().toISOString();
+    for (const row of rows) {
+      // A batch that never ran must not be recorded as "checked, nothing new" --
+      // that would hide real news behind a clean-looking row.
+      if (!found.has(row.id) && (result.budgetGone || result.remaining)) continue;
+      const seen = new Set(row.seen || []);
+      const fresh = (found.get(row.id) || [])
+        .filter(work => !seen.has(work.id))
+        .sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
+      row.news = fresh.slice(0, 8).map(work => ({
+        id: work.id, title: work.title, venue: work.venue, doi: work.doi,
+        date: work.date || (work.year ? String(work.year) : ''),
+        inLibrary: !!work.doi && owned.has(work.doi)
+      }));
+      row.sweptAt = checkedAt;
+      if (fresh.length) result.withNews++;
+      result.works += fresh.length;
+    }
+    this.cache.watchedAuthors = rows;
+    this.dirty = true;
+    await this.flush();
+    return result;
+  }
+
+  // Sorted so the answer is the top of the list: people with news first, most
+  // recent first among them, and everyone else alphabetically underneath.
+  watchedAuthorsByNews() {
+    return this.watchedAuthors().slice().sort((a, b) => {
+      const an = a.news?.length || 0, bn = b.news?.length || 0;
+      if (an !== bn) return bn - an;
+      if (an) return String(b.news[0].date || '').localeCompare(String(a.news[0].date || ''));
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }
+
+  async clearAuthorNews(authorID) {
+    const id = this.discoverTools.shortID(authorID);
+    const rows = this.watchedAuthors();
+    const row = rows.find(entry => entry.id === id);
+    if (!row) return false;
+    row.seen = [...new Set([...(row.news || []).map(work => work.id), ...(row.seen || [])])].slice(0, 200);
+    row.news = [];
+    row.checkedAt = new Date().toISOString();
+    this.cache.watchedAuthors = rows;
+    this.dirty = true;
+    await this.flush();
+    return true;
   }
 
   // What this author has published since the user last looked.
@@ -1628,6 +1847,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       },marks);
       make("menuseparator",null,marks);
       action("색 지우기",async()=>{await this.setHighlight(this.selected(win),null);},marks);
+      action("라이브러리 저널 지표 채우기",async()=>{
+        const items=this.Z.Items.getAll?this.Z.Items.getAll(win.ZoteroPane?.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID):[];
+        const papers=items.filter(item=>this.isRegular(item));
+        this.Z.alert(win,"Style Custom","저널 지표를 조회합니다. 저널마다 한 번만 조회하고 결과는 보관합니다.");
+        const result=await this.refreshJournalCitedness(papers);
+        const lines=[`저널 ${result.journals}종 중 ${result.found}종 지표 확인 · ${result.missing}종은 OpenAlex에도 없음`];
+        if(result.failed) lines.push(`${result.failed}종 조회 실패`);
+        if(result.budgetGone) lines.push(`OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}종이 남았고, 한도는 UTC 자정에 초기화됩니다.\n지금까지 받은 값은 저장됐으니 내일 다시 실행하면 남은 것부터 이어서 채웁니다.`);
+        else lines.push("공식 JIF가 있는 저널은 그대로 두고, 없는 저널만 ~추정치로 채웁니다.");
+        this.Z.alert(win,"Style Custom",lines.join("\n"));
+      });
       action("읽기 기록 가져오기 (이전 플러그인 노트에서)",async()=>{
         const preview=await this.importLegacyReading({dryRun:true});
         if(!preview.imported){this.Z.alert(win,"Style Custom",`가져올 읽기 기록이 없습니다. (노트 ${preview.notes}개 · 이미 보유 ${preview.skipped}개 · 대상 불명 ${preview.unresolved}개)`);return;}
@@ -1640,6 +1870,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(!found.length){this.Z.alert(win,"Style Custom","정리할 별 태그가 없습니다.");return;}
         const {moved,skipped}=await this.migrateStarTags(found);
         this.Z.alert(win,"Style Custom",`${moved}개 항목의 별 태그를 정리했습니다. 평점은 그대로 유지됩니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:""));
+      });
+      action("태그 목록에서 평점 태그 숨기기",async()=>{
+        const found=this.visibleRatingTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
+        if(!found.length){this.Z.alert(win,"Style Custom","태그 목록에 드러난 평점 태그가 없습니다.");return;}
+        const {fixed,skipped}=await this.hideRatingTags(found);
+        this.Z.alert(win,"Style Custom",`${fixed}개 항목의 평점 태그를 자동 태그로 바꿨습니다. 평점은 그대로입니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:"")+"\n태그 목록에서 사라지지 않으면 태그 선택기 메뉴의 '자동 태그 표시'를 꺼 보세요.");
       });
       action("인용…",()=>this.citationPanel(win,this.selected(win)));
       action("커스텀 열로 전환",()=>this.useColumns(win));

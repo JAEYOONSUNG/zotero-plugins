@@ -59,9 +59,13 @@
     const result = list.filter(tag => !(hasStatus && statusOf(tag)) && !(hasRating && (starRating(tag) !== null || ownRating(tag) !== null))).map(tag => typeof tag === 'object' && tag !== null ? {...tag} : tag);
     const wrap = (tag, type = 0) => list.length && list.every(value => typeof value === 'string') ? tag : {tag, type};
     if (hasStatus) result.push(wrap('/' + patch.status));
-    // Type 1 is an automatic tag, which Zotero keeps out of the tag selector.
-    // This one is purely internal bookkeeping and should never be browsable.
-    if (hasRating) result.push(wrap('style-custom:rating:' + patch.rating, 1));
+    // Type 1 is an automatic tag, which Zotero keeps out of the tag selector
+    // unless the user has asked to see automatic tags. This one is purely
+    // internal bookkeeping and should never be browsable, so it is always
+    // written as an object: a bare string tag is stored as type 0, i.e. a
+    // manual tag, and those appear in the selector unconditionally. That is how
+    // style-custom:rating:1..3 ended up listed among the user's real tags.
+    if (hasRating) result.push({tag: 'style-custom:rating:' + patch.rating, type: 1});
     // A visible ★★★ tag is what Zotero prints in front of the title. The rating
     // has its own column, so writing one only clutters the title; legacy star
     // tags are still read, just not created.

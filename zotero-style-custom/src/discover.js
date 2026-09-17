@@ -17,6 +17,11 @@
 
   const WORK_FIELDS = 'id,doi,title,publication_year,cited_by_count,type,'
     + 'primary_location,authorships,related_works,referenced_works,open_access,topics';
+  // The sweep reads 200 works at a time. referenced_works alone is hundreds of
+  // ids per paper, and none of it is shown, so asking for it would turn a cheap
+  // question into a multi-megabyte one.
+  const WATCH_FIELDS = 'id,doi,title,publication_year,publication_date,cited_by_count,type,'
+    + 'primary_location,authorships,open_access';
 
   function workURL(record, options = {}) {
     const doi = bareDOI(record?.DOI || record?.doi);
@@ -81,6 +86,7 @@
     return {
       id, doi: bareDOI(raw.doi), title: text(raw.title),
       year: Number.isInteger(raw.publication_year) ? raw.publication_year : null,
+      date: /^\d{4}-\d{2}-\d{2}$/.test(String(raw.publication_date || '')) ? raw.publication_date : null,
       citations: Number.isInteger(raw.cited_by_count) ? raw.cited_by_count : null,
       venue: text(raw.primary_location?.source?.display_name),
       authors, people, type: text(raw.type),
@@ -499,6 +505,48 @@
       + `&sort=publication_date:desc&select=${WORK_FIELDS}${credentials(options)}`
     : null;
 
+  // Asking "who has published something new" one author at a time costs one
+  // request per person; 109 followed authors is 109 requests and most of them
+  // come back with nothing. OpenAlex ORs up to 50 ids in a single filter, so
+  // the same question costs three requests, and each work carries its
+  // authorships -- which is how a result is attributed back to the right person.
+  const AUTHOR_BATCH = 50;
+  function watchedWorksURL(authorIDs, {since, cursor = '*', ...options} = {}) {
+    const ids = [...new Set((Array.isArray(authorIDs) ? authorIDs : [])
+      .map(shortID).filter(id => id.startsWith('A')))].slice(0, AUTHOR_BATCH);
+    if (!ids.length) return null;
+    const filters = ['author.id:' + ids.join('|')];
+    // A date floor is what keeps this cheap: without it the query walks a
+    // prolific author's entire career to find this month's paper.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(since || ''))) filters.push('from_publication_date:' + since);
+    return `${API}works?per_page=200&cursor=${encodeURIComponent(cursor)}`
+      + `&filter=${encodeURIComponent(filters.join(','))}`
+      + `&sort=publication_date:desc&select=${WATCH_FIELDS}${credentials(options)}`;
+  }
+
+  const authorBatches = authorIDs => {
+    const ids = [...new Set((Array.isArray(authorIDs) ? authorIDs : [])
+      .map(shortID).filter(id => id.startsWith('A')))];
+    const batches = [];
+    for (let i = 0; i < ids.length; i += AUTHOR_BATCH) batches.push(ids.slice(i, i + AUTHOR_BATCH));
+    return batches;
+  };
+
+  // A work belongs to every followed author on it, so one paper by two
+  // colleagues counts as news for both.
+  function attribute(works, watchedIDs) {
+    const wanted = new Set([...(watchedIDs || [])].map(shortID).filter(Boolean));
+    const byAuthor = new Map();
+    for (const work of Array.isArray(works) ? works : []) {
+      for (const person of work.people || []) {
+        if (!wanted.has(person.id)) continue;
+        if (!byAuthor.has(person.id)) byAuthor.set(person.id, []);
+        byAuthor.get(person.id).push(work);
+      }
+    }
+    return byAuthor;
+  }
+
   // The name as the author themselves would search for it.
   function authorNames(item) {
     const creators = typeof item?.getCreators === 'function' ? item.getCreators() : [];
@@ -517,7 +565,8 @@
 
   const api = {API, GROUPS, scoreAuthor, pickAuthor, authorQueries, institutionAgrees, topicsAgree,
     workURL, worksByIDsURL, citingURL, readWork, readWorks, mergeSuggestions, relevance,
-    authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials};
+    authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials,
+    watchedWorksURL, authorBatches, attribute, AUTHOR_BATCH};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleDiscover = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

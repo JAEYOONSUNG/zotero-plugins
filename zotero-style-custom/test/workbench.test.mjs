@@ -33,6 +33,11 @@ function fixture(initialCache){
    institutions:['Somewhere'],topics:[{name:'A topic',count:9}],orcid:'https://orcid.org/1'},
    works:[suggestion('W9','citing')]}),
   watchedAuthors:()=>watched,
+  // The panel sorts by news; the real runtime owns that order, so the fake
+  // delegates to it rather than inventing a second one that could disagree.
+  watchedAuthorsByNews:()=>watched.slice().sort((a,b)=>(b.news?.length||0)-(a.news?.length||0)),
+  sweepWatchedAuthors:record('sweep',{authors:watched.length,withNews:0,works:0,requests:1,budgetGone:false,remaining:0}),
+  clearAuthorNews:record('clearNews',id=>{const row=watched.find(r=>r.id===id);if(row)row.news=[];return true;}),
   watchAuthor:record('watchAuthor',person=>{watched.push({id:person.id,name:person.name,seen:person.seen||[]});}),
   unwatchAuthor:record('unwatchAuthor',id=>{watched=watched.filter(row=>row.id!==id);}),
   markAuthorSeen:record('markSeen',true),
@@ -512,23 +517,62 @@ test('the library tab is not named as though it searched the literature',async()
  f.bench.destroy();
 });
 
+test('every tab in the sidebar carries its own drawn icon',async()=>{
+ const f=fixture();
+ await f.bench.show('explore');
+ const tabs=[...f.bench.panel.querySelectorAll('nav button[data-tab]')];
+ assert.equal(tabs.length,19);
+ const missing=tabs.filter(b=>!b.querySelector('.sc-nav-icon svg *')).map(b=>b.dataset.tab);
+ assert.deepEqual(missing,[],'a tab without an icon is back to being a line of text');
+ // Distinct shapes, or the icons are decoration rather than a way to find a tab.
+ const shapes=tabs.map(b=>[...b.querySelectorAll('.sc-nav-icon svg *')]
+  .map(n=>n.tagName+JSON.stringify([...n.attributes].map(a=>a.name+'='+a.value).sort())).join('|'));
+ assert.equal(new Set(shapes).size,19);
+ // The label stays: nineteen unlabelled glyphs would be a guessing game.
+ assert.ok(tabs.every(b=>b.textContent.trim().length));
+ f.bench.destroy();
+});
+
 test('followed authors are listed whether or not a paper happens to be selected',async()=>{
  const f=fixture();
- f.runtime.watchedAuthors=()=>[{id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],checkedAt:'2026-09-17T00:00:00Z'},
-  {id:'A2',name:'George M. Church',institution:'Harvard',seen:[]}];
+ const rows=[{id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],checkedAt:'2026-09-17T00:00:00Z'},
+  {id:'A2',name:'George M. Church',institution:'Harvard',seen:[],
+   news:[{id:'W1',title:'A new paper',venue:'Nature',date:'2026-09-01'}]}];
+ f.runtime.watchedAuthors=()=>rows;
+ f.runtime.watchedAuthorsByNews=()=>rows.slice().sort((a,b)=>(b.news?.length||0)-(a.news?.length||0));
  f.setSelection([]);
  await f.bench.show('authors');
  // Ninety-five followed authors were invisible because the whole tab returned
  // early when no single paper was selected.
- const names=[...f.body().querySelectorAll('.sc-hit-title')].map(n=>n.textContent);
- assert.deepEqual(names,['Christopher A. Voigt','George M. Church']);
+ const names=[...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent);
+ // Whoever published floats up: the list should answer the question, not store it.
+ assert.deepEqual(names,['George M. Church','Christopher A. Voigt']);
+ const badges=[...f.body().querySelectorAll('.sc-watch-badge')].map(n=>n.textContent);
+ assert.deepEqual(badges,['1'],'only the author with news is marked');
+ // The subtitle earns its line: what the news is, not the same date on every row.
+ const subs=[...f.body().querySelectorAll('.sc-watch-sub')].map(n=>n.textContent);
+ assert.equal(subs[0],'2026-09 · Nature');
+ assert.equal(subs[1],'MIT');
  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/관심 저자 2명/);
+ f.bench.destroy();
+});
+
+test('one sweep answers the watchlist for everyone, instead of opening them one by one',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'Followed Person',institution:'Somewhere',seen:[]}];
+ f.runtime.watchedAuthors=()=>rows;
+ f.runtime.watchedAuthorsByNews=()=>rows;
+ f.setSelection([]);
+ await f.bench.show('authors');
+ await f.click('새 논문 한 번에 확인');
+ assert.ok(f.calls.find(c=>c[0]==='sweep'),'the whole list is checked in one action');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/새 논문은 없습니다/);
  f.bench.destroy();
 });
 
 test('with a paper selected the watchlist stays, and its authors are offered too',async()=>{
  const f=fixture();
- f.runtime.watchedAuthors=()=>[{id:'A1',name:'Followed Person',institution:'Somewhere',seen:[]}];
+ f.runtime.watchedAuthorsByNews=f.runtime.watchedAuthors=()=>[{id:'A1',name:'Followed Person',institution:'Somewhere',seen:[]}];
  await f.bench.show('authors');
  const headings=[...f.body().querySelectorAll('.sc-hit-group')].map(n=>n.textContent);
  assert.ok(headings.some(h=>h.startsWith('관심 저자')),'the watchlist must not be replaced');
@@ -538,7 +582,7 @@ test('with a paper selected the watchlist stays, and its authors are offered too
 
 test('an empty watchlist with nothing selected explains what to do',async()=>{
  const f=fixture();
- f.runtime.watchedAuthors=()=>[];
+ f.runtime.watchedAuthorsByNews=f.runtime.watchedAuthors=()=>[];
  f.setSelection([]);
  await f.bench.show('authors');
  assert.match(f.body().textContent,/아직 관심 저자가 없습니다/);

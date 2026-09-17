@@ -55,7 +55,40 @@
   const ICONS={
    density:[['line',{x1:3,y1:5,x2:13,y2:5}],['line',{x1:3,y1:8,x2:13,y2:8}],['line',{x1:3,y1:11,x2:13,y2:11}]],
    search:[['circle',{cx:7.25,cy:7.25,r:4.25}],['line',{x1:10.5,y1:10.5,x2:13.5,y2:13.5}]],
-   close:[['line',{x1:4,y1:4,x2:12,y2:12}],['line',{x1:12,y1:4,x2:4,y2:12}]]
+   close:[['line',{x1:4,y1:4,x2:12,y2:12}],['line',{x1:12,y1:4,x2:4,y2:12}]],
+   // One drawn shape per tab. Nineteen identical lines of text is a list you
+   // read; nineteen distinct silhouettes is a list you recognise, which is the
+   // difference between finding a tab and scanning for it every time.
+   explore:[['rect',{x:2.75,y:3,width:3,height:10,rx:.8}],['rect',{x:7.25,y:3,width:3,height:10,rx:.8}],
+    ['path',{d:'M11.9 3.6l1.9.5-2.2 9.1-1.2-.3'}]],
+   recent:[['circle',{cx:8,cy:8,r:5.25}],['path',{d:'M8 5.1V8l2.2 1.7'}]],
+   related:[['circle',{cx:4.4,cy:11.4,r:2.1}],['circle',{cx:11.5,cy:4.6,r:2.1}],['line',{x1:6,y1:9.9,x2:10,y2:6.1}]],
+   authors:[['circle',{cx:8,cy:5.6,r:2.5}],['path',{d:'M3.3 13.1c.7-2.5 2.5-3.8 4.7-3.8s4 1.3 4.7 3.8'}]],
+   graph:[['circle',{cx:8,cy:3.6,r:1.7}],['circle',{cx:3.7,cy:11.8,r:1.7}],['circle',{cx:12.3,cy:11.8,r:1.7}],
+    ['line',{x1:6.9,y1:5.1,x2:4.6,y2:10.2}],['line',{x1:9.1,y1:5.1,x2:11.4,y2:10.2}],['line',{x1:5.4,y1:11.8,x2:10.6,y2:11.8}]],
+   tags:[['path',{d:'M8.4 2.6H13v4.6l-6 6a1.1 1.1 0 01-1.6 0L2.8 10.2a1.1 1.1 0 010-1.6z'}],
+    ['circle',{cx:10.5,cy:5.1,r:.95}]],
+   notes:[['path',{d:'M4 2.6h5.4L12.4 5.6v7.8H4z'}],['path',{d:'M9.2 2.7v3h3.1'}],
+    ['line',{x1:6,y1:9,x2:10.4,y2:9}],['line',{x1:6,y1:11.2,x2:9,y2:11.2}]],
+   annotations:[['rect',{x:2.6,y:9.6,width:10.8,height:2.6,rx:.9}],['path',{d:'M5.2 9.5l5.6-6 2.3 2.3-5.5 5.7'}]],
+   backlinks:[['path',{d:'M13.2 11.6a4.2 4.2 0 00-4.2-4.2H3.5'}],['path',{d:'M6.2 4.6L3.2 7.4l3 2.8'}]],
+   attachments:[['path',{d:'M11.5 7.2l-4.6 4.6a2.4 2.4 0 01-3.4-3.4l5.4-5.4a1.7 1.7 0 012.4 2.4l-5.2 5.2a.9.9 0 01-1.3-1.3l4.5-4.5'}]],
+   reading:[['path',{d:'M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z'}],
+    ['line',{x1:8,y1:4.8,x2:8,y2:13.4}]],
+   tabs:[['path',{d:'M2.6 12.6V6.2h4.1l1.3-1.8h5.4v8.2z'}],['path',{d:'M4.4 4.4h3.2'}]],
+   views:[['rect',{x:2.8,y:2.8,width:4.6,height:4.6,rx:1}],['rect',{x:8.6,y:2.8,width:4.6,height:4.6,rx:1}],
+    ['rect',{x:2.8,y:8.6,width:4.6,height:4.6,rx:1}],['rect',{x:8.6,y:8.6,width:4.6,height:4.6,rx:1}]],
+   canvas:[['rect',{x:2.6,y:3.3,width:10.8,height:9.4,rx:1.4}],['circle',{cx:5.9,cy:6.6,r:1.1}],
+    ['path',{d:'M3 11.6l3.1-3 2.2 2 2.1-2.4 2.6 3'}]],
+   matrix:[['rect',{x:2.6,y:3.2,width:10.8,height:9.6,rx:1.2}],['line',{x1:8,y1:3.2,x2:8,y2:12.8}],
+    ['line',{x1:2.6,y1:6.4,x2:13.4,y2:6.4}]],
+   collections:[['path',{d:'M2.7 12.6V4.2h3.9l1.4 1.7h5.3v6.7z'}]],
+   journals:[['line',{x1:4,y1:12.6,x2:4,y2:8.6}],['line',{x1:8,y1:12.6,x2:8,y2:5}],
+    ['line',{x1:12,y1:12.6,x2:12,y2:10}],['line',{x1:2.4,y1:12.6,x2:13.6,y2:12.6}]],
+   assist:[['path',{d:'M6 2.9l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z'}],
+    ['path',{d:'M11.4 8.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z'}]],
+   appearance:[['line',{x1:3,y1:5,x2:13,y2:5}],['line',{x1:3,y1:11,x2:13,y2:11}],
+    ['circle',{cx:6.4,cy:5,r:1.6}],['circle',{cx:10,cy:11,r:1.6}]]
   };
   function svgShape(parent,tag,attrs){
    const shape=doc.createElementNS(SVG_NS,tag);
@@ -105,7 +138,17 @@
   const body=node('div',null,content,{class:'sc-body',tabindex:'-1'});
   const navButtons=new Map();
   async function navigate(id,{focus=false}={}){if(!TABS.some(([key])=>key===id)||hiddenTabs().has(id))return;const request=++navigationEpoch;state.tab=id;await render();if(disposed||panel.hidden||request!==navigationEpoch||state.tab!==id)return;await saveUI({lastTab:id});if(focus&&!disposed&&!panel.hidden&&request===navigationEpoch&&state.tab===id&&commands.hidden)body.focus?.();}
-  for(const [label,ids]of GROUPS){const group=node('div',null,nav,{class:'sc-nav-group'});node('div',label,group,{class:'sc-nav-heading'});for(const id of ids){const label=TABS.find(([key])=>key===id)[1];navButtons.set(id,button(label,()=>navigate(id),group,{'data-tab':id}));}}
+  // The label stays: an icon alone would be a guessing game for nineteen tabs.
+  // The icon is what makes the right one findable without reading all of them.
+  function leadIcon(element,name){
+   if(!ICONS[name])return element;
+   const holder=doc.createElementNS(HTML,'span');
+   holder.className='sc-nav-icon';
+   setIcon(holder,name);
+   element.insertBefore(holder,element.firstChild);
+   return element;
+  }
+  for(const [label,ids]of GROUPS){const group=node('div',null,nav,{class:'sc-nav-group'});node('div',label,group,{class:'sc-nav-heading'});for(const id of ids){const label=TABS.find(([key])=>key===id)[1];navButtons.set(id,leadIcon(button(label,()=>navigate(id),group,{'data-tab':id}),id));}}
   const footer=node('footer',null,panel,{class:'sc-selection-bar'});const selectionLabel=node('span','선택한 문헌 없음',footer,{class:'sc-selection-label'});
   const clearSelection=button('선택 해제',()=>{state.selected.clear();state.annotationIDs.clear();render();},footer);
   const relatedAction=button('관련 문헌으로 연결',async()=>{await library.relate([...state.selected]);await load();message('관련 문헌 연결을 저장했습니다.');},footer);
@@ -507,7 +550,14 @@
     if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),follow);
     if(watching){
      button('관심 해제',()=>run(async()=>{await runtime.unwatchAuthor(person.id);refreshWatched();await show(person);}),follow);
-     if(fresh.length)button(`새 논문 ${fresh.length}편 확인함`,()=>run(async()=>{await runtime.markAuthorSeen(person.id,works);await show(person);}),follow);
+     if(fresh.length)button(`새 논문 ${fresh.length}편 확인함`,()=>run(async()=>{
+      await runtime.markAuthorSeen(person.id,works);
+      // The badge on the list is the same news; clearing one must clear both,
+      // or the list keeps advertising papers the user has just dismissed.
+      await runtime.clearAuthorNews(person.id);
+      refreshWatched();
+      await show(person);
+     }),follow);
     } else {
      // Everything visible now is the baseline, so "new" later means new to the user.
      button('관심 저자로 등록',()=>run(async()=>{
@@ -526,17 +576,56 @@
     message(`${works.length}편 · 이미 보유 ${works.filter(w=>w.inLibrary).length}편`
      +(watching?` · 새 논문 ${fresh.length}편`+(checkedAt?` · 마지막 확인 ${checkedAt.slice(0,10)}`:''):''));
    }
+   // Every row used to read "<institution> · 마지막 확인 2026-09-17" -- the same
+   // date on all 109 of them, which answered nothing and cost the only line
+   // available. A watchlist has exactly one question: who has published since I
+   // looked. So the sweep runs once for everyone, the answer lives on the row,
+   // and the people with news sort to the top.
    function drawWatched(parent){
-    const watched=runtime.watchedAuthors();
+    const watched=runtime.watchedAuthorsByNews();
     if(!watched.length)return;
-    node('h3',`관심 저자 ${watched.length}`,parent,{class:'sc-hit-group'});
-    const rows=node('div',null,parent,{class:'sc-hits'});
+    const swept=watched.some(person=>person.sweptAt);
+    const fresh=watched.filter(person=>person.news?.length);
+    const head=node('div',null,parent,{class:'sc-watch-head'});
+    node('h3',`관심 저자 ${watched.length}`,head,{class:'sc-hit-group'});
+    const tools=node('div',null,head,{class:'sc-watch-tools'});
+    button(swept?'새 논문 다시 확인':'새 논문 한 번에 확인',()=>run(async()=>{
+     message(`관심 저자 ${watched.length}명의 새 논문을 확인하는 중…`);
+     const result=await runtime.sweepWatchedAuthors({onProgress:(done,total)=>
+      message(`새 논문 확인 중 ${done+1}/${total}`)});
+     if(token!==epoch||disposed||state.tab!=='authors')return;
+     refreshWatched();
+     message(result.budgetGone
+      ? `OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}묶음이 남았고 UTC 자정에 초기화됩니다. 지금까지 확인한 결과는 저장했습니다.`
+      : result.withNews
+       ? `${result.withNews}명이 새 논문 ${result.works}편을 냈습니다. 요청 ${result.requests}회.`
+       : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`,
+      result.budgetGone);
+    }),tools);
+    if(fresh.length)node('span',`새 논문 ${fresh.reduce((n,p)=>n+p.news.length,0)}편 · ${fresh.length}명`,tools,{class:'sc-watch-count'});
+    else if(swept)node('span','새 논문 없음',tools,{class:'sc-watch-quiet'});
+    // A grid, not a column: at this panel width one name per row turned a
+    // hundred people into a scroll, and the whole point is to see them at once.
+    const rows=node('div',null,parent,{class:'sc-watch-grid'});
     for(const person of watched){
-     const row=node('div',null,rows,{class:'sc-hit'});
-     node('p',person.name,row,{class:'sc-hit-title'});
-     node('p',[person.institution,person.checkedAt?`마지막 확인 ${person.checkedAt.slice(0,10)}`:null].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
-     const actions=node('div',null,row,{class:'sc-hit-actions'});
-     button('새 논문 보기',()=>run(()=>show(person)),actions);
+     const count=person.news?.length||0;
+     const row=node('div',null,rows,{class:'sc-watch'+(count?' sc-watch-new':'')});
+     row.setAttribute('role','button');row.tabIndex=0;
+     const open=()=>run(()=>show(person));
+     row.addEventListener('click',open);
+     row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
+     const line=node('div',null,row,{class:'sc-watch-line'});
+     node('span',person.name,line,{class:'sc-watch-name'});
+     if(count)node('span',String(count),line,{class:'sc-watch-badge',title:`마지막 확인 이후 새 논문 ${count}편`});
+     // With news, the line says what the news is; without it, who they are.
+     const latest=count?person.news[0]:null;
+     const sub=node('span',latest?`${latest.date?latest.date.slice(0,7)+' · ':''}${latest.venue||latest.title||''}`
+      :(person.institution||'소속 미확인'),row,{class:'sc-watch-sub'});
+     sub.title=latest?`${latest.title||''}${latest.venue?' · '+latest.venue:''}`
+      :(person.institution||'');
+     row.title=count?`${person.name} · 새 논문 ${count}편`
+      :person.sweptAt?`${person.name} · 새 논문 없음 (확인 ${person.sweptAt.slice(0,10)})`
+      :`${person.name} · 아직 확인하지 않음`;
     }
    }
    function refreshWatched(){
