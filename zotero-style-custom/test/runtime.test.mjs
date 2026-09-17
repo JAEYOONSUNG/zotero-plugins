@@ -1314,17 +1314,22 @@ test('a caller identifies itself, falling back to the Zotero account address', (
   const {plugin, Z} = fixture();
   // The preference was read but never shipped, so this was always empty and
   // every request went to the anonymous pool -- which is what got rate limited.
-  Z.Prefs.set('extensions.style-custom.contactEmail', 'me@lab.org', true);
+  Z.Prefs.set('extensions.style-custom.citationEmail', 'me@lab.org', true);
   assert.equal(plugin.contactEmail(), 'me@lab.org');
 
-  Z.Prefs.set('extensions.style-custom.contactEmail', '', true);
+  // ZotPoP already asks for this; the two plugins should not ask twice.
+  Z.Prefs.set('extensions.style-custom.citationEmail', '', true);
+  Z.Prefs.set('extensions.zotpop.email', 'shared@lab.org', true);
+  assert.equal(plugin.contactEmail(), 'shared@lab.org');
+
+  Z.Prefs.set('extensions.zotpop.email', '', true);
   Z.Prefs.set('sync.server.username', 'account@example.edu', true);
   assert.equal(plugin.contactEmail(), 'account@example.edu', 'the Zotero account stands in');
 
   // A Zotero username is often not an address; sending rubbish is worse than nothing.
   Z.Prefs.set('sync.server.username', 'jaeyoon', true);
   assert.equal(plugin.contactEmail(), '');
-  Z.Prefs.set('extensions.style-custom.contactEmail', 'not an email', true);
+  Z.Prefs.set('extensions.style-custom.citationEmail', 'not an email', true);
   assert.equal(plugin.contactEmail(), '');
 });
 
@@ -1335,8 +1340,28 @@ test('the shipped preferences cover every preference the code reads', async () =
   const source = readFileSync(new URL('../src/runtime.js', import.meta.url), 'utf8');
   const read = [...source.matchAll(/this\.pref\('([A-Za-z][A-Za-z0-9]*)'/g)].map(m => m[1]);
   const schema = new Set((await import('../src/settings-schema.js')).default.schema.settings.map(row => row.key));
-  const missing = [...new Set(read)].filter(key => !shipped.has(key) && !schema.has(key));
+  const known = new Set([...shipped, ...schema]);
+  const lower = new Map([...known].map(key => [key.toLowerCase(), key]));
+  const missing = [...new Set(read)].filter(key => !known.has(key));
+  // A capitalised misspelling is not a preference, it is always undefined --
+  // which is how the OpenAlex key silently stopped being sent.
+  for (const key of missing) {
+    const near = lower.get(key.toLowerCase());
+    assert.equal(near, undefined, `"${key}" differs from the declared "${near}" only by case`);
+  }
   // contactEmail was read in two places and shipped in none, so it silently
   // stayed empty. Any preference the code reads must exist somewhere.
   assert.deepEqual(missing, [], `preferences read but never shipped: ${missing.join(', ')}`);
+});
+
+test('the OpenAlex key is found wherever it was entered, so sweeps are never anonymous', () => {
+  const {plugin, Z} = fixture();
+  // Both plugins offer a field for it; whichever the user filled must work.
+  Z.Prefs.set('extensions.zotpop.openAlexApiKey', 'from-zotpop', true);
+  assert.equal(plugin.openAlexKey(), 'from-zotpop');
+  Z.Prefs.set('extensions.style-custom.openalexApiKey', 'from-style-custom', true);
+  assert.equal(plugin.openAlexKey(), 'from-style-custom', 'this plugin’s own field wins');
+  assert.equal(plugin.discoverOptions().apiKey, 'from-style-custom');
+  Z.Prefs.set('extensions.style-custom.openalexApiKey', '  ', true);
+  assert.equal(plugin.openAlexKey(), 'from-zotpop', 'blank is not a key');
 });

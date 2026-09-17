@@ -1024,11 +1024,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // --- Discovery: what to read next, and what an author is doing now ---
 
   // OpenAlex and Europe PMC both put callers who identify themselves on a
-  // faster pool. contactEmail was read but never shipped as a preference, so it
-  // was always empty and every request went to the anonymous pool -- which is
-  // where the rate limiting came from. Fall back to the Zotero account.
+  // faster pool. This read a key that was never shipped, so it was always empty
+  // and every request went to the anonymous pool -- which is where the rate
+  // limiting came from. One accessor now, over the key the schema declares.
   contactEmail() {
-    const set = String(this.pref('contactEmail', '') || '').trim();
+    const clean = value => String(value == null ? '' : value).trim();
+    const set = clean(this.pref('citationEmail', '')) || clean(this.Z.Prefs.get('extensions.zotpop.email', true));
     if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(set)) return set;
     let account = '';
     try { account = String(this.Z.Prefs.get('sync.server.username', true) || '').trim(); }
@@ -1036,11 +1037,23 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(account) ? account : '';
   }
 
+  // The schema key is all lower case. A capitalised misspelling is not a
+  // preference, it is always undefined, so the citation sweep ran anonymous and
+  // spent OpenAlex's unauthenticated $0.01/day in about ten requests while a
+  // perfectly good key sat in ZotPoP's prefs.
+  openAlexKey() {
+    // Trim each candidate before choosing: a field holding only spaces is not a
+    // key, but it is truthy, so it would shadow a real one stored elsewhere.
+    const clean = value => String(value == null ? '' : value).trim();
+    return clean(this.pref('openalexApiKey', ''))
+      || clean(this.Z.Prefs.get('extensions.zotpop.openAlexApiKey', true));
+  }
+
   discoverOptions() {
     return {
       email: this.contactEmail() || undefined,
       // ZotPoP keeps the user's free OpenAlex key; reuse it when it is there.
-      apiKey: this.pref('openAlexApiKey', '') || this.Z.Prefs.get('extensions.zotpop.openAlexApiKey', true) || undefined
+      apiKey: this.openAlexKey() || undefined
     };
   }
 
@@ -1450,7 +1463,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const records=selection.map(item=>this.citationRecord(item)),byKey=new Map(selection.map(item=>[this.identity(item),item]));
     for(const record of records)this.entry(byKey.get(record.key)).citationPending=this.citationTools.identity(record);
     let lastPaint=0;
-    const ctx={signal:job.controller.signal,email:this.pref("citationEmail","")||this.Z.Prefs.get("extensions.zotpop.email",true)||"",openalexApiKey:this.pref("openalexApiKey",""),
+    const ctx={signal:job.controller.signal,email:this.contactEmail(),openalexApiKey:this.openAlexKey(),
       onProgress:progress=>{this.citationProgress=progress;options.onProgress?.(progress);},
       onResult:async result=>{
         const item=byKey.get(result.key);
