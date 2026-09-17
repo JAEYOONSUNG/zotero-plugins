@@ -124,7 +124,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     for(const [win,state]of this.windows){if(win.closed)continue;
       for(const cell of win.document.querySelectorAll?.('[data-style-custom-reading]')||[]){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);const P=this.palette(win.document);
         if(cell.dataset.styleCustomReading==='time'){cell.textContent=this.formatReadTime(value.seconds);cell.style.color=value.seconds<=0?P.faint:value.seconds>=3600?P.blue:P.text;cell.style.fontWeight=value.seconds>=3600?'590':'';}
-        else if(cell.firstChild&&cell.lastChild){const tone={unread:P.faint,reading:P.orange,done:P.green}[value.status];cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status;cell.lastChild.style.color=value.status==='unread'?P.muted:P.text;}}
+        else if(cell.firstChild&&cell.lastChild){const tone={unread:P.muted,reading:P.orange,done:P.green}[value.status];cell.firstChild.textContent={unread:'\u25cb',reading:'\u25d0',done:'\u25cf'}[value.status];cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status;cell.lastChild.style.color=value.status==='unread'?P.muted:tone;cell.lastChild.style.fontWeight=value.status==='unread'?'400':'590';}}
       state.workbench?.refreshMetrics?.();
     }
   }
@@ -311,8 +311,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   palette(doc) {
     const dark = !!doc?.defaultView?.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
     return dark
-      ? {blue:'#4C9AFF',green:'#4FD07A',orange:'#F0A030',red:'#F2685F',purple:'#B784E0',teal:'#5BBFD0',yellow:'#E8B93C',gray:'#98989D',faint:'#55555A',muted:'#A0A0A6',text:'#E8E8ED',tint:0.18,dark:true}
-      : {blue:'#2F6FD0',green:'#2E9E56',orange:'#C2761B',red:'#C2453C',purple:'#8250B8',teal:'#2D8C9E',yellow:'#D9A31B',gray:'#8E8E93',faint:'#C2C2C7',muted:'#6E6E73',text:'#1C1C1E',tint:0.10,dark:false};
+      ? {blue:'#5B9DFF',green:'#3FCF8E',orange:'#FFA94D',red:'#FF7A70',purple:'#B48BF0',teal:'#3FC4D8',gold:'#FFC95C',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.20,dark:true}
+      : {blue:'#2F6FE0',green:'#1F9D62',orange:'#E0821E',red:'#DB4F4F',purple:'#8A5CD1',teal:'#128FA8',gold:'#E9A81C',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.13,dark:false};
   }
   tint(hex, alpha) {
     const n = parseInt(hex.slice(1), 16);
@@ -369,13 +369,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     let label = value;
     if (key === "status") {
       label = ["unread", "reading", "done"][Number(value)] || "unread";
-      const tone = {unread: P.faint, reading: P.orange, done: P.green}[label];
+      // An empty, half and full circle reads as progress; one dot does not.
+      const tone = {unread: P.muted, reading: P.orange, done: P.green}[label];
       const dot = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-      dot.textContent = "●";
-      dot.style.cssText = `font-size:8px;line-height:1;color:${tone};`;
+      dot.textContent = {unread: "○", reading: "◐", done: "●"}[label];
+      dot.style.cssText = `font-size:10px;line-height:1;color:${tone};`;
       const text = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       text.textContent = label;
-      text.style.cssText = `color:${label === "unread" ? P.muted : P.text};`;
+      text.style.cssText = `color:${label === "unread" ? P.muted : tone};font-weight:${label === "unread" ? 400 : 590};`;
       cell.append(dot, text);
     } else if (key === "rating") {
       const rating = Number(value);
@@ -383,7 +384,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       for (let n=1;n<=5;n++) {
         const star = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
         star.textContent = n<=rating ? "★" : "☆"; star.title = `${n}/5`;
-        star.style.cssText = `cursor:pointer;font-size:11px;line-height:1;color:${n<=rating?P.yellow:P.faint};`;
+        star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.gold:P.faint};`;
         star.addEventListener("click", event => { event.stopPropagation(); if (this.canEdit(item)) this.edit([item], {rating:n===rating?0:n}).catch(e=>this.Z.logError(e)); });
         cell.appendChild(star);
       }
@@ -563,6 +564,87 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     for(const [win,state]of this.windows){if(!state.panelStyle){state.panelStyle=win.document.createElementNS('http://www.w3.org/1999/xhtml','style');win.document.documentElement.appendChild(state.panelStyle);state.nodes.push(state.panelStyle);}state.panelStyle.textContent=this.featureEnabled('styleEditor')?scoped:'';}
     return scoped;
   }
+  // A "\u2605\u2605\u2605" tag is a real Zotero tag, so Zotero prints it in front of the
+  // title. For most items it is also the only place the rating is stored, so it
+  // cannot simply be deleted: the rating moves to the hidden tag first.
+  starTagItems(libraryID) {
+    const id = libraryID ?? this.Z.Libraries.userLibraryID;
+    const found = [];
+    for (const item of this.Z.Items.getAll ? this.Z.Items.getAll(id) : []) {
+      if (!this.isRegular(item)) continue;
+      const tags = (item.getTags?.() || []).map(tag => tag.tag);
+      if (tags.some(tag => /^[\u2605\u2b50]+$/.test(String(tag).replace(/\ufe0f/g, '')))) found.push(item);
+    }
+    return found;
+  }
+
+  async migrateStarTags(items) {
+    let moved = 0, skipped = 0;
+    for (const item of items) {
+      if (!this.canEdit(item)) { skipped++; continue; }
+      // Reading first is what makes this safe: the rating is preserved, then the
+      // visible tag is dropped by the same write.
+      const rating = this.state(item).rating;
+      await this.edit([item], {rating});
+      moved++;
+    }
+    return {moved, skipped};
+  }
+
+  // --- Marking a row with a colour ---
+
+  // A small, named set rather than a picker: rows only read as a grouping when
+  // the same few colours repeat, and a name is what makes one mean something.
+  highlightColours() {
+    return [
+      {key: 'red', label: '\uBE68\uAC15'}, {key: 'orange', label: '\uC8FC\uD669'},
+      {key: 'gold', label: '\uB178\uB791'}, {key: 'green', label: '\uCD08\uB85D'},
+      {key: 'teal', label: '\uCCAD\uB85D'}, {key: 'blue', label: '\uD30C\uB791'},
+      {key: 'purple', label: '\uBCF4\uB77C'}
+    ];
+  }
+
+  highlightOf(item) {
+    const key = this.entry(item).highlight;
+    return this.highlightColours().some(colour => colour.key === key) ? key : null;
+  }
+
+  async setHighlight(items, key) {
+    const valid = key === null || this.highlightColours().some(colour => colour.key === key);
+    if (!valid) throw new RangeError('Unknown highlight colour');
+    let changed = 0;
+    for (const item of items) {
+      if (!this.isRegular(item)) continue;
+      const entry = this.entry(item);
+      if ((entry.highlight ?? null) === key) continue;
+      if (key === null) delete entry.highlight; else entry.highlight = key;
+      changed++;
+    }
+    if (changed) { this.dirty = true; await this.flush(); await this.refreshWindows(); }
+    return changed;
+  }
+
+  // Painted as a bar down the end of the row, not a background wash: a filled
+  // row fights Zotero's own selection and alternating stripes.
+  paintHighlights(win, state) {
+    for (const row of win.document.querySelectorAll('#zotero-items-tree .row')) {
+      const item = win.ZoteroPane?.itemsView?.getRow(Number(row.id.match(/-row-(\d+)$/)?.[1]))?.ref;
+      let bar = row.querySelector('.style-custom-highlight');
+      const key = this.isRegular(item) ? this.highlightOf(item) : null;
+      if (!key) { bar?.remove(); continue; }
+      if (!bar) {
+        bar = win.document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+        bar.className = 'style-custom-highlight';
+        bar.setAttribute('aria-hidden', 'true');
+        bar.style.cssText = 'position:absolute;inset-inline-end:0;inset-block:2px;width:3px;border-radius:2px;pointer-events:none;';
+        if (!row.style.position) { state.highlightRows ||= new Map(); state.highlightRows.set(row, row.style.position); row.style.position = 'relative'; }
+        row.appendChild(bar);
+        state.titleNodes.add(bar);
+      }
+      bar.style.background = this.palette(win.document)[key];
+    }
+  }
+
   enhanceTitles(win,state,records) {
     for(const row of win.document.querySelectorAll('#zotero-items-tree .row')) {
       const item=win.ZoteroPane?.itemsView?.getRow(Number(row.id.match(/-row-(\d+)$/)?.[1]))?.ref;
@@ -586,6 +668,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         for(const value of visible){const badge=win.document.createElementNS('http://www.w3.org/1999/xhtml','span');badge.textContent=value.tag;badge.title=value.tag;badge.style.marginInlineStart='4px';if(value.color)badge.style.color=value.color;tags.appendChild(badge);}
       }else tags?.remove();
     }
+    this.paintHighlights(win,state);
     for(const n of [...state.titleNodes])if(!n.isConnected)state.titleNodes.delete(n);
   }
   // Europe PMC hands back every supplementary file of an article as one zip.
@@ -938,6 +1021,107 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (style.key === 'ris') return records.map(r => this.citationFormats.ris(r)).join('\n\n');
     return records.map(r => this.citationFormats.format(style.key, r)).join('\n\n');
   }
+  // Google Scholar shows every style at once and lets you pick by eye. A stack of
+  // menu items makes you choose a format before you can see what it looks like.
+  async citationPanel(win, items) {
+    if (!items.length) throw new Error('\uBB38\uD5CC\uC744 \uBA3C\uC800 \uC120\uD0DD\uD558\uC138\uC694.');
+    const doc = win.document;
+    doc.getElementById('style-custom-cite')?.remove();
+    const html = tag => doc.createElementNS('http://www.w3.org/1999/xhtml', tag);
+
+    if (!doc.getElementById('style-custom-cite-css')) {
+      const sheet = html('link');
+      sheet.id = 'style-custom-cite-css';
+      sheet.rel = 'stylesheet';
+      sheet.href = this.rootURI + 'content/citation.css';
+      doc.documentElement.appendChild(sheet);
+    }
+    const backdrop = html('div');
+    backdrop.id = 'style-custom-cite';
+    const panel = html('div');
+    panel.className = 'sc-cite-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', '\uC778\uC6A9');
+    backdrop.appendChild(panel);
+
+    const head = html('div');
+    head.className = 'sc-cite-head';
+    const title = html('h2');
+    title.textContent = items.length > 1 ? `\uC778\uC6A9 \u00b7 ${items.length}\uAC1C` : '\uC778\uC6A9';
+    const close = html('button');
+    close.type = 'button';
+    close.className = 'sc-cite-close';
+    close.textContent = '\u2715';
+    close.setAttribute('aria-label', '\uB2EB\uAE30');
+    head.append(title, close);
+    panel.appendChild(head);
+
+    const rows = html('div');
+    rows.className = 'sc-cite-rows';
+    panel.appendChild(rows);
+
+    const note = html('p');
+    note.className = 'sc-cite-note';
+    note.textContent = '\uD589\uC744 \uB204\uB974\uBA74 \uBCF5\uC0AC\uB429\uB2C8\uB2E4.';
+    panel.appendChild(note);
+
+    const dismiss = () => { backdrop.remove(); win.removeEventListener('keydown', onKey, true); };
+    const onKey = event => { if (event.key === 'Escape') { event.stopPropagation(); dismiss(); } };
+    close.addEventListener('click', dismiss);
+    backdrop.addEventListener('mousedown', event => { if (event.target === backdrop) dismiss(); });
+    win.addEventListener('keydown', onKey, true);
+
+    const flash = (element, text) => {
+      note.textContent = text;
+      element.dataset.copied = 'true';
+      win.setTimeout(() => { delete element.dataset.copied; }, 900);
+    };
+
+    for (const style of this.citationFormats.PANEL_STYLES) {
+      const row = html('button');
+      row.type = 'button';
+      row.className = 'sc-cite-row';
+      const label = html('span');
+      label.className = 'sc-cite-label';
+      label.textContent = style.label;
+      const value = html('span');
+      value.className = 'sc-cite-value';
+      value.textContent = '\u2026';
+      row.append(label, value);
+      rows.appendChild(row);
+      // Each style is rendered on its own so one failure cannot blank the panel.
+      this.citationText(items, style)
+        .then(text => { value.textContent = text; })
+        .catch(error => { this.Z.logError(error); value.textContent = '\uB9CC\uB4E4 \uC218 \uC5C6\uC74C'; row.disabled = true; });
+      row.addEventListener('click', () => {
+        if (!value.textContent.trim()) return;
+        this.Z.Utilities.Internal.copyTextToClipboard(value.textContent);
+        flash(row, `${style.label} \uC778\uC6A9\uBB38\uC744 \uBCF5\uC0AC\uD588\uC2B5\uB2C8\uB2E4.`);
+      });
+    }
+
+    const exports = html('div');
+    exports.className = 'sc-cite-exports';
+    for (const format of this.citationFormats.EXPORTS) {
+      const link = html('button');
+      link.type = 'button';
+      link.textContent = format.label;
+      link.addEventListener('click', async () => {
+        try {
+          const text = await this.citationText(items, {key: format.key});
+          this.Z.Utilities.Internal.copyTextToClipboard(text);
+          flash(link, `${format.label} \uD615\uC2DD\uC744 \uBCF5\uC0AC\uD588\uC2B5\uB2C8\uB2E4.`);
+        } catch (error) { this.Z.logError(error); note.textContent = error.message; }
+      });
+      exports.appendChild(link);
+    }
+    panel.appendChild(exports);
+
+    doc.documentElement.appendChild(backdrop);
+    close.focus?.();
+    return backdrop;
+  }
+
   async copyCitations(win, style) {
     const items = this.selected(win);
     if (!items.length) throw new Error('문헌을 먼저 선택하세요.');
@@ -1219,12 +1403,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           `보충자료 ${result.added}개 추가 · 이미 있음 ${result.already} · 없음 ${result.none} · 미확인 ${result["not-found"]} · 실패 ${result.error}`
           +(result.failures.length?"\n\n"+result.failures.slice(0,5).join("\n"):""));
       },suppl);
-      const cites=make("menupopup",null,make("menu","인용 복사",body));
-      const styles=[...this.citationFormats.STYLES,{key:'bibtex',label:'BibTeX'},{key:'ris',label:'RIS'}];
-      for(const style of styles)action(style.label,async()=>{
-        const output=await this.copyCitations(win,style);
-        this.Z.alert(win,"Style Custom",style.label+" 인용문을 복사했습니다.\n\n"+(output.length>400?output.slice(0,400)+"…":output));
-      },cites);
+      const marks=make("menupopup",null,make("menu","색 표시",body));
+      for(const colour of this.highlightColours())action(colour.label,async()=>{
+        const changed=await this.setHighlight(this.selected(win),colour.key);
+        if(!changed)throw new Error("문헌을 먼저 선택하세요.");
+      },marks);
+      make("menuseparator",null,marks);
+      action("색 지우기",async()=>{await this.setHighlight(this.selected(win),null);},marks);
+      action("제목 앞 별 태그 정리",async()=>{
+        const found=this.starTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
+        if(!found.length){this.Z.alert(win,"Style Custom","정리할 별 태그가 없습니다.");return;}
+        const {moved,skipped}=await this.migrateStarTags(found);
+        this.Z.alert(win,"Style Custom",`${moved}개 항목의 별 태그를 정리했습니다. 평점은 그대로 유지됩니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:""));
+      });
+      action("인용…",()=>this.citationPanel(win,this.selected(win)));
       action("커스텀 열로 전환",()=>this.useColumns(win));
       action("연구 작업 패널",()=>state.workbench?.toggle(true));
       action("그래프 · 태그 · 노트 · 주석",()=>state.workbench?.show('explore'));

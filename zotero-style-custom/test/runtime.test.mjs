@@ -444,7 +444,7 @@ test('status rating and impact cells carry colour that tracks the value instead 
  window.ZoteroPane={itemsView:{getRow:()=>({ref})}};
  const P=plugin.palette(document);
  const status=label=>{plugin.value=(key)=>key==='status'?String({unread:0,reading:1,done:2}[label]):'';return plugin.renderCell('status',0,'',{},document).firstChild.style.color;};
- assert.deepEqual([status('unread'),status('reading'),status('done')],[P.faint,P.orange,P.green]);
+ assert.deepEqual([status('unread'),status('reading'),status('done')],[P.muted,P.orange,P.green]);
  // A 16.6 and a 56.1 must not read as the same journal.
  const tier=value=>plugin.impactTier(value,P)?.color;
  assert.notEqual(tier(16.6),tier(56.1));
@@ -950,4 +950,113 @@ test('the SI badge opens the supplementary file rather than just describing it',
   badge.dispatchEvent(new window.Event('click', {bubbles: true}));
   await Promise.resolve();
   assert.deepEqual(opened, [[3]], 'clicking opens the supplementary attachment');
+});
+
+test('an item can be marked with a colour, and the mark cleared again', async () => {
+  const {plugin, item} = fixture();
+  const a = item(1), b = item(2);
+  assert.equal(plugin.highlightOf(a), null);
+  assert.equal(await plugin.setHighlight([a, b], 'teal'), 2);
+  assert.equal(plugin.highlightOf(a), 'teal');
+  // Setting the colour it already has is not a change, so nothing is rewritten.
+  assert.equal(await plugin.setHighlight([a], 'teal'), 0);
+  assert.equal(await plugin.setHighlight([a], null), 1);
+  assert.equal(plugin.highlightOf(a), null);
+  assert.equal(plugin.highlightOf(b), 'teal', 'clearing one item leaves the other');
+  await assert.rejects(() => plugin.setHighlight([a], 'chartreuse'), RangeError);
+});
+
+test('a colour that is no longer offered is ignored rather than painted as something else', () => {
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  plugin.entry(ref).highlight = 'chartreuse';
+  assert.equal(plugin.highlightOf(ref), null);
+  // Every offered colour must exist in the palette, or the bar would be blank.
+  const {parseHTML} = require('linkedom');
+  for (const colour of plugin.highlightColours()) assert.ok(colour.label, colour.key);
+});
+
+test('the colour is a bar at the end of the row, so it cannot fight the selection', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document} = parseHTML('<html><body><div id="zotero-items-tree"><div class="row" id="item-tree-main-row-0"><span class="cell title"><span class="cell-text">Paper</span></span></div></div></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  await plugin.setHighlight([ref], 'purple');
+  const win = {document, ZoteroPane: {itemsView: {getRow: () => ({ref})}}, clearInterval() {}};
+  const state = {titleNodes: new Set(), titlePositions: new Map(), titleWeights: new Map(), nodes: [], listeners: []};
+  plugin.windows.set(win, state);
+  plugin.enhanceTitles(win, state, [ref]);
+  const bar = document.querySelector('.style-custom-highlight');
+  assert.ok(bar, 'a marked row should carry a bar');
+  assert.match(bar.style.cssText, /inset-inline-end:\s*0/);
+  assert.match(bar.style.cssText, /pointer-events:\s*none/, 'the bar must not swallow clicks');
+  assert.equal(bar.style.background, plugin.palette(document).purple);
+
+  // Clearing the colour removes the bar rather than leaving a stale one.
+  await plugin.setHighlight([ref], null);
+  plugin.enhanceTitles(win, state, [ref]);
+  assert.equal(document.querySelector('.style-custom-highlight'), null);
+});
+
+test('the status glyph changes shape with progress, not just colour', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  const glyph = label => {
+    plugin.value = key => key === 'status' ? String({unread: 0, reading: 1, done: 2}[label]) : '';
+    return plugin.renderCell('status', 0, '', {}, document).firstChild.textContent;
+  };
+  // Empty, half, full: legible even to a reader who cannot separate the colours.
+  assert.deepEqual([glyph('unread'), glyph('reading'), glyph('done')], ['○', '◐', '●']);
+});
+
+test('filled stars use gold with enough area to read, empty ones are plainly empty', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  const P = plugin.palette(document);
+  plugin.value = key => key === 'rating' ? '3' : '';
+  const stars = [...plugin.renderCell('rating', 0, '', {}, document).children];
+  assert.deepEqual(stars.map(s => s.textContent), ['★', '★', '★', '☆', '☆']);
+  assert.deepEqual(stars.map(s => s.style.color), [P.gold, P.gold, P.gold, P.faint, P.faint]);
+  assert.equal(stars[0].style.fontSize, '13px');
+  assert.notEqual(P.gold, P.faint);
+});
+
+test('cleaning up star tags moves the rating first, so nothing is lost', async () => {
+  const {plugin, item} = fixture();
+  await plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+  // The common case: the rating lives only in the visible tag.
+  const onlyStars = item(1, {tags: [{tag: '★★★★'}, {tag: 'Topic'}]});
+  assert.equal(plugin.state(onlyStars).rating, 4);
+  const {moved} = await plugin.migrateStarTags([onlyStars]);
+  assert.equal(moved, 1);
+  const tags = onlyStars.getTags().map(t => t.tag);
+  assert.ok(tags.includes('style-custom:rating:4'), 'the rating must survive');
+  assert.ok(!tags.some(t => /[★⭐]/.test(t)), 'the visible tag is what was cluttering the title');
+  assert.ok(tags.includes('Topic'), 'unrelated tags are untouched');
+  assert.equal(plugin.state(onlyStars).rating, 4, 'the rating still reads back the same');
+});
+
+test('an item that cannot be edited is counted, not silently skipped', async () => {
+  const {plugin, item} = fixture();
+  await plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+  const locked = item(1, {tags: [{tag: '★★'}]});
+  locked.isEditable = () => false;
+  const {moved, skipped} = await plugin.migrateStarTags([locked]);
+  assert.deepEqual({moved, skipped}, {moved: 0, skipped: 1});
+  assert.ok(locked.getTags().some(t => t.tag === '★★'), 'a read-only item is left alone');
+});
+
+test('items carrying a star tag are found, and ones without are not', () => {
+  const {plugin, item, Z} = fixture();
+  const starred = item(1, {tags: [{tag: '⭐⭐⭐'}]});
+  const emoji = item(2, {tags: [{tag: '★★️'}]});
+  const plain = item(3, {tags: [{tag: 'Topic'}, {tag: 'style-custom:rating:3'}]});
+  Z.Items = {...(Z.Items || {}), getAll: () => [starred, emoji, plain]};
+  assert.deepEqual(plugin.starTagItems().map(i => i.id), [starred.id, emoji.id]);
 });

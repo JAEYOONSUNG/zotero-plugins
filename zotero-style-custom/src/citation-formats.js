@@ -98,7 +98,20 @@
     return [period(who), period(text(record.title)), period(where), doiURL(record)].filter(Boolean).join(' ').trim();
   };
 
-  const FORMATTERS = {mla, apa, chicago, harvard, vancouver};
+  // ISO 690 puts the family name in capitals and the source after the title.
+  function iso690(record) {
+    const people = names(record.creators);
+    const first = people[0] ? [people[0].family.toUpperCase(), people[0].given].filter(Boolean).join(', ') : '';
+    const rest = people.slice(1).map(c => [c.family.toUpperCase(), c.given].filter(Boolean).join(', '));
+    const who = people.length > 3 ? first + ', et al.' : join([first, ...rest].filter(Boolean), {conjunction: 'and'});
+    const where = record.venue
+      ? record.venue + (record.year ? ', ' + record.year : '')
+        + (record.volume ? ', ' + record.volume : '') + (record.pages ? ': ' + record.pages : '')
+      : text(record.year);
+    return [period(who), period(text(record.title)), period(where)].filter(Boolean).join(' ').trim();
+  }
+
+  const FORMATTERS = {mla, apa, chicago, harvard, vancouver, iso690};
 
   function format(key, record) {
     const build = FORMATTERS[key];
@@ -125,7 +138,28 @@
     return lines.filter(([, v]) => text(v)).map(([tag, v]) => `${tag}  - ${text(v)}`).join('\n') + '\nER  - ';
   }
 
-  const api = {STYLES, format, bibtex, ris, FORMATTERS};
+  // EndNote's tagged format. RefMan and RefWorks both read RIS, so those three
+  // export links differ only in the file they are offered as.
+  function endnote(record) {
+    const lines = [['%0', 'Journal Article'], ...names(record.creators).map(c => ['%A', [c.family, c.given].filter(Boolean).join(', ')]),
+      ['%T', record.title], ['%J', record.venue], ['%D', record.year], ['%V', record.volume],
+      ['%N', record.issue], ['%P', record.pages], ['%R', record.DOI], ['%U', record.url]];
+    return lines.filter(([, value]) => text(value)).map(([tag, value]) => `${tag} ${text(value)}`).join('\n');
+  }
+
+  // What Google Scholar's citation popup shows, in its order.
+  const PANEL_STYLES = [
+    {key: 'mla', label: 'MLA'}, {key: 'apa', label: 'APA'}, {key: 'iso690', label: 'ISO 690'},
+    {key: 'chicago', label: 'Chicago'}, {key: 'harvard', label: 'Harvard'}, {key: 'vancouver', label: 'Vancouver'}
+  ];
+  const EXPORTS = [
+    {key: 'bibtex', label: 'BibTeX', extension: 'bib'},
+    {key: 'endnote', label: 'EndNote', extension: 'enw'},
+    {key: 'ris', label: 'RefMan', extension: 'ris'},
+    {key: 'ris', label: 'RefWorks', extension: 'ris'}
+  ];
+
+  const api = {STYLES, PANEL_STYLES, EXPORTS, format, bibtex, ris, endnote, FORMATTERS};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleCitationFormats = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

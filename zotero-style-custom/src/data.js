@@ -60,7 +60,10 @@
     const wrap = tag => list.length && list.every(value => typeof value === 'string') ? tag : {tag, type: 0};
     if (hasStatus) result.push(wrap('/' + patch.status));
     if (hasRating) result.push(wrap('style-custom:rating:' + patch.rating));
-    if (hasRating && patch.rating > 0) result.push(wrap('★'.repeat(patch.rating)));
+    // A visible ★★★ tag is what Zotero prints in front of the title. The rating
+    // has its own column, so writing one only clutters the title; legacy star
+    // tags are still read, just not created.
+    if (hasRating && patch.rating > 0 && patch.legacyStarTag) result.push(wrap('★'.repeat(patch.rating)));
     return result;
   }
   function safely(fn) { try { return fn(); } catch (_) { return undefined; } }

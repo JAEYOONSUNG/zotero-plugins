@@ -17,7 +17,11 @@ test('updates preserve unrelated tag objects, data, status, and input', () => {
   const tags = [{tag:'/done',type:0}, {tag:'science',type:1, color:'red'}, {tag:'★★',type:0}];
   const before = JSON.stringify(tags);
   const changed = data.updateTags(tags, {rating:4});
-  assert.deepEqual(changed, [tags[0], tags[1], {tag:'style-custom:rating:4',type:0}, {tag:'★★★★',type:0}]);
+  // Zotero prints a visible tag in front of the title, so a rating no longer
+  // writes one: the star column already says it. The old tag is still replaced.
+  assert.deepEqual(changed, [tags[0], tags[1], {tag:'style-custom:rating:4',type:0}]);
+  assert.deepEqual(data.updateTags(tags, {rating:4, legacyStarTag:true}),
+    [tags[0], tags[1], {tag:'style-custom:rating:4',type:0}, {tag:'★★★★',type:0}]);
   assert.equal(JSON.stringify(tags), before);
   assert.deepEqual(data.updateTags(['/reading', 'topic'], {status:'done'}), ['topic','/done']);
   assert.deepEqual(data.updateTags(tags, {rating:0}), [...tags.slice(0,2),{tag:'style-custom:rating:0',type:0}]);
@@ -85,4 +89,13 @@ test('legacy missing and malformed counts stay unknown including unsafe integers
   for (const value of ['',null,undefined,0,'105',[],{'Total(DOI)':''},{'Total(DOI)':null},{'Total(DOI)':false},{'Total(DOI)':'2.5'},{'Total(DOI)':-1},{'Total(DOI)':'1,23'},{'Total(DOI)':'12 citations'},{'Total(DOI)':'1e3'},{'Total(DOI)':Infinity},{'Total(DOI)':'9007199254740993'},Object.create({'Total(DOI)':12})]) {
     assert.deepEqual(data.readLegacyCitations(value),{citations:null,citationSource:null});
   }
+});
+
+test('a star tag already in the library is still read, just never written again', () => {
+  // Ratings set by Ethereal Style, or before this change, must keep working.
+  assert.equal(data.readState([{tag:'★★★'}], '', 0).rating, 3);
+  assert.equal(data.readState([{tag:'style-custom:rating:2'}], '', 0).rating, 2);
+  // Re-rating clears the old visible tag rather than leaving a stale one behind.
+  const cleaned = data.updateTags([{tag:'★★★',type:0}], {rating:5});
+  assert.deepEqual(cleaned.map(t => t.tag), ['style-custom:rating:5']);
 });
