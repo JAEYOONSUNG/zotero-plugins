@@ -8,8 +8,11 @@ pref("extensions.zotpop.popDataDir", "");
 pref("extensions.zotpop.proxyPrefix", "");
 // Combined by default: one metered or rate-limited provider can no longer empty a search.
 pref("extensions.zotpop.defaultSource", "multi");
+// Set once, when a profile that predates the combined search is moved onto it.
+pref("extensions.zotpop.multiSourceMigrated", false);
 pref("extensions.zotpop.sort", "relevance");
-pref("extensions.zotpop.maxResults", 200);
+// Publish or Perish fetches up to 1000 per query; a low cap reads as "it found nothing".
+pref("extensions.zotpop.maxResults", 1000);
 pref("extensions.zotpop.attachPDF", true);
 pref("extensions.zotpop.skipDuplicates", true);
 pref("extensions.zotpop.citationsInExtra", true);

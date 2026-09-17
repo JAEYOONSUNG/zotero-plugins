@@ -166,8 +166,18 @@
 			o.value = key; o.textContent = sourceLabel(key);
 			sel.appendChild(o);
 		}
-		sel.value = PREF("defaultSource") || "openalex";
-		if (!sel.value) sel.value = "openalex";
+		// A saved preference always beats the shipped default, so every profile
+		// that used ZotPoP before the combined search existed stayed pinned to a
+		// single source -- which is exactly the "it only searches one API"
+		// complaint. Move those over once, and never touch a later choice.
+		if (!PREF("multiSourceMigrated")) {
+			if (PREF("defaultSource") === "openalex") PREF("defaultSource", "multi");
+			PREF("multiSourceMigrated", true);
+		}
+		// The fallback has to agree with prefs.js; hard-coding a single source
+		// here quietly overrode the shipped default of "multi".
+		sel.value = PREF("defaultSource") || "multi";
+		if (!sel.value) sel.value = "multi";
 		for (let id of ["source", "sort", "target"]) enhanceSelect($(id));
 
 		restoreQuery();
