@@ -2,6 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import discover from "../src/discover.js";
 
+const topic = (id, subfield, field) => ({
+  id: "https://openalex.org/" + id,
+  subfield: {id: "https://openalex.org/" + subfield},
+  field: {id: "https://openalex.org/" + field},
+  domain: {id: "https://openalex.org/D1"}
+});
+const bare = id => ({id: "https://openalex.org/" + id, title: id, doi: "https://doi.org/10.1/" + id,
+  publication_year: 2020, cited_by_count: 1, related_works: [], referenced_works: []});
+
 const work = {
   id: "https://openalex.org/W123", doi: "https://doi.org/10.1038/S41467-024-48219-Y",
   title: "An antiplasmid system", publication_year: 2024, cited_by_count: 12, type: "article",
@@ -48,17 +57,47 @@ test("a title search response and a direct lookup both yield one work", () => {
   for (const bad of [null, {}, {results: []}]) assert.equal(discover.readWork(bad), null);
 });
 
-test("suggestions put OpenAlex's related works first and the bibliography after, without repeats", () => {
-  const found = ["W9", "W8", "W7"].map((id, i) => discover.readWork({
-    ...work, id: "https://openalex.org/" + id, title: id, doi: "https://doi.org/10.1/" + id,
-    cited_by_count: i, related_works: [], referenced_works: []}));
-  const merged = discover.mergeSuggestions(discover.readWork(work), found, {have: ["10.1/W8"]});
-  assert.deepEqual(merged.map(s => [s.id, s.source]), [["W9", "related"], ["W8", "related"], ["W7", "reference"]]);
-  // W9 is in both lists and must appear once, tagged by the stronger signal.
-  assert.equal(merged.filter(s => s.id === "W9").length, 1);
+test("a candidate with nothing in common with the source paper is dropped", () => {
+  // OpenAlex listed a Russian pedagogy paper among a bacterial condensin study's
+  // related works; sharing no topic, subfield or field is what disqualifies it.
+  const source = discover.readWork({...work, topics: [topic("T1", "S1", "F1")]});
+  const sameTopic = discover.readWork({...bare("W9"), topics: [topic("T1", "S1", "F1")]});
+  const sameField = discover.readWork({...bare("W8"), topics: [topic("T7", "S7", "F1")]});
+  const unrelated = discover.readWork({...bare("W6"), topics: [topic("T9", "S9", "F9")]});
+  assert.equal(discover.relevance(sameTopic, source), 3);
+  assert.equal(discover.relevance(sameField, source), 1);
+  assert.equal(discover.relevance(unrelated, source), 0);
+  const kept = discover.mergeSuggestions(source, [sameTopic, sameField, unrelated]);
+  assert.deepEqual(kept.map(s => s.id), ["W9", "W8"]);
+});
+
+test("papers citing this one rank above its bibliography, and OpenAlex's guesses last", () => {
+  const T = [topic("T1", "S1", "F1")];
+  const source = discover.readWork({...work, topics: T,
+    related_works: ["https://openalex.org/W8"], referenced_works: ["https://openalex.org/W7"]});
+  const citing = [discover.readWork({...bare("W5"), topics: T, cited_by_count: 9})];
+  const found = ["W8", "W7"].map(id => discover.readWork({...bare(id), topics: T}));
+  const merged = discover.mergeSuggestions(source, found, {citing, have: ["10.1/W7"]});
+  assert.deepEqual(merged.map(s => [s.id, s.source]),
+    [["W5", "citing"], ["W7", "reference"], ["W8", "related"]]);
   // What is already shelved is marked, not hidden.
   assert.deepEqual(merged.map(s => s.inLibrary), [false, true, false]);
-  assert.equal(discover.mergeSuggestions(null, found).length, 0);
+});
+
+test("a paper listed in two places appears once, and never suggests itself", () => {
+  const T = [topic("T1", "S1", "F1")];
+  const source = discover.readWork({...work, topics: T,
+    related_works: ["https://openalex.org/W9", "https://openalex.org/W123"],
+    referenced_works: ["https://openalex.org/W9"]});
+  const found = ["W9", "W123"].map(id => discover.readWork({...bare(id), topics: T}));
+  const merged = discover.mergeSuggestions(source, found);
+  assert.deepEqual(merged.map(s => [s.id, s.source]), [["W9", "reference"]]);
+});
+
+test("citing works are asked for by citation count, and only for a work id", () => {
+  assert.match(discover.citingURL("W123", {limit: 5}), /filter=cites%3AW123/);
+  assert.match(discover.citingURL("W123"), /sort=cited_by_count%3Adesc|sort=cited_by_count:desc/);
+  assert.equal(discover.citingURL("A1"), null);
 });
 
 test("identifier batches stay inside the URL limit and drop duplicates", () => {

@@ -640,7 +640,10 @@ test('citation bars all start at the same x, so their lengths can be compared', 
   assert.ok(parseFloat(large.bar) > parseFloat(small.bar));
 });
 
-function discoverFixture({work, batch, profile, authorWorks} = {}) {
+const TOPIC = {id: 'https://openalex.org/T1', subfield: {id: 'https://openalex.org/S1'},
+  field: {id: 'https://openalex.org/F1'}, domain: {id: 'https://openalex.org/D1'}};
+
+function discoverFixture({work, batch, profile, authorWorks, citing} = {}) {
   const f = fixture();
   const ref = f.item(1);
   const fields = {title: 'An antiplasmid system', DOI: '10.1038/s41467-024-48219-y', date: '2024'};
@@ -652,9 +655,11 @@ function discoverFixture({work, batch, profile, authorWorks} = {}) {
     if (/\/works\/doi:/.test(url)) return {response: work ?? {
       id: 'https://openalex.org/W1', doi: 'https://doi.org/10.1038/s41467-024-48219-y',
       title: 'An antiplasmid system', publication_year: 2024, cited_by_count: 12,
+      topics: [TOPIC],
       authorships: [{author: {id: 'https://openalex.org/A1', display_name: 'A Zongo'},
         author_position: 'first', institutions: [{display_name: 'Institut Pasteur'}]}],
       related_works: ['https://openalex.org/W9'], referenced_works: ['https://openalex.org/W7']}};
+    if (/cites%3A|cites:/.test(url)) return {response: {results: citing ?? []}};
     if (/\/authors\//.test(url)) return {response: profile ?? {
       id: 'https://openalex.org/A1', display_name: 'A Zongo', works_count: 40, cited_by_count: 900,
       summary_stats: {h_index: 21}, last_known_institutions: [{display_name: 'Institut Pasteur'}],
@@ -666,9 +671,9 @@ function discoverFixture({work, batch, profile, authorWorks} = {}) {
        doi: 'https://doi.org/10.1038/s41467-024-48219-y', cited_by_count: 12}]}};
     return {response: {results: batch ?? [
       {id: 'https://openalex.org/W9', title: 'A similar paper', publication_year: 2022, cited_by_count: 80,
-       doi: 'https://doi.org/10.1/similar'},
+       doi: 'https://doi.org/10.1/similar', topics: [TOPIC]},
       {id: 'https://openalex.org/W7', title: 'A cited paper', publication_year: 2019, cited_by_count: 300,
-       doi: 'https://doi.org/10.1/cited'}]}};
+       doi: 'https://doi.org/10.1/cited', topics: [TOPIC]}]}};
   }};
   return {...f, ref, asked};
 }
@@ -678,9 +683,10 @@ test('related papers come back ranked, with the ones already shelved marked', as
   f.plugin.cache.items = {x: {doi: '10.1/cited'}};
   const {work, suggestions} = await f.plugin.relatedWorks(f.ref);
   assert.equal(work.title, 'An antiplasmid system');
+  // The paper's own bibliography outranks OpenAlex's computed "related".
   assert.deepEqual(suggestions.map(s => [s.title, s.source, s.inLibrary]), [
-    ['A similar paper', 'related', false],
-    ['A cited paper', 'reference', true]
+    ['A cited paper', 'reference', true],
+    ['A similar paper', 'related', false]
   ]);
   assert.match(f.asked[0], /works\/doi:/);
   assert.match(f.asked[1], /openalex_id/);
@@ -722,4 +728,36 @@ test('a failed profile lookup still returns the work list rather than losing eve
 
 test('an author id that is really a work id is rejected', async () => {
   await assert.rejects(() => discoverFixture().plugin.authorActivity('W123'), /식별자/);
+});
+
+test('papers that cite this one lead the list, and off-topic results never reach it', async () => {
+  const f = discoverFixture({
+    citing: [{id: 'https://openalex.org/W5', title: 'What came after', publication_year: 2026,
+      doi: 'https://doi.org/10.1/after', cited_by_count: 400, topics: [TOPIC]}],
+    batch: [
+      {id: 'https://openalex.org/W7', title: 'A cited paper', publication_year: 2019,
+       doi: 'https://doi.org/10.1/cited', cited_by_count: 300, topics: [TOPIC]},
+      // OpenAlex really does return results like this; they must not be shown.
+      {id: 'https://openalex.org/W9', title: 'A pedagogy paper in another field', publication_year: 2024,
+       doi: 'https://doi.org/10.1/off', cited_by_count: 0,
+       topics: [{id: 'https://openalex.org/T9', subfield: {id: 'https://openalex.org/S9'},
+         field: {id: 'https://openalex.org/F9'}, domain: {id: 'https://openalex.org/D9'}}]}
+    ]});
+  const {suggestions} = await f.plugin.relatedWorks(f.ref);
+  assert.deepEqual(suggestions.map(s => [s.title, s.source]), [
+    ['What came after', 'citing'],
+    ['A cited paper', 'reference']
+  ]);
+  assert.ok(f.asked.some(url => /cites/.test(url)), 'citing works should be requested');
+});
+
+test('losing the citing-works request still returns the rest of the suggestions', async () => {
+  const f = discoverFixture();
+  const original = f.Z.HTTP.request;
+  f.Z.HTTP.request = async (method, url) => {
+    if (/cites/.test(url)) throw new Error('rate limited');
+    return original(method, url);
+  };
+  const {suggestions} = await f.plugin.relatedWorks(f.ref);
+  assert.deepEqual(suggestions.map(s => s.source), ['reference', 'related']);
 });

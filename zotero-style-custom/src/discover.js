@@ -16,7 +16,7 @@
   }
 
   const WORK_FIELDS = 'id,doi,title,publication_year,cited_by_count,type,'
-    + 'primary_location,authorships,related_works,referenced_works,open_access';
+    + 'primary_location,authorships,related_works,referenced_works,open_access,topics';
 
   function workURL(record, options = {}) {
     const doi = bareDOI(record?.DOI || record?.doi);
@@ -35,6 +35,32 @@
     return `${API}works?per_page=${list.length}`
       + `&filter=${encodeURIComponent('openalex_id:' + list.join('|'))}`
       + `&select=${WORK_FIELDS}${credentials(options)}`;
+  }
+
+  // OpenAlex classifies a work at four widening levels. Keeping all four lets a
+  // candidate be scored on how closely it sits to the paper in hand.
+  function subjectsOf(raw) {
+    const topics = Array.isArray(raw?.topics) ? raw.topics : [];
+    const pick = (list, key) => new Set(list.map(t => shortID(t?.[key]?.id)).filter(Boolean));
+    return {
+      topic: new Set(topics.map(t => shortID(t?.id)).filter(Boolean)),
+      subfield: pick(topics, 'subfield'),
+      field: pick(topics, 'field'),
+      domain: pick(topics, 'domain')
+    };
+  }
+
+  const shares = (a, b) => [...(a || [])].some(id => b?.has(id));
+
+  // OpenAlex's related_works can be plainly wrong -- a Russian pedagogy paper
+  // turns up beside a bacterial condensin study -- so a candidate has to sit in
+  // the same part of the literature to be worth showing at all.
+  function relevance(work, source) {
+    if (!work?.subjects || !source?.subjects) return 0;
+    if (shares(work.subjects.topic, source.subjects.topic)) return 3;
+    if (shares(work.subjects.subfield, source.subjects.subfield)) return 2;
+    if (shares(work.subjects.field, source.subjects.field)) return 1;
+    return 0;
   }
 
   function shapeWork(raw) {
@@ -61,7 +87,8 @@
       openAccess: raw.open_access?.is_oa === true,
       pdfURL: text(raw.primary_location?.pdf_url) || text(raw.open_access?.oa_url),
       related: (Array.isArray(raw.related_works) ? raw.related_works : []).map(shortID).filter(Boolean),
-      references: (Array.isArray(raw.referenced_works) ? raw.referenced_works : []).map(shortID).filter(Boolean)
+      references: (Array.isArray(raw.referenced_works) ? raw.referenced_works : []).map(shortID).filter(Boolean),
+      subjects: subjectsOf(raw)
     };
   }
 
@@ -76,22 +103,43 @@
 
   // OpenAlex's own related_works come first; references fill the rest, because a
   // paper's own bibliography is the most reliable "read this next" there is.
-  function mergeSuggestions(work, found, {have = new Set(), limit = 40} = {}) {
+  // Papers that cite this one are the strongest signal, then the ones it chose
+  // to cite; OpenAlex's computed "related" is the weakest and goes last.
+  const GROUPS = ['citing', 'reference', 'related'];
+  const GROUP_RANK = new Map(GROUPS.map((name, i) => [name, i]));
+
+  function mergeSuggestions(work, found, {have = new Set(), limit = 40, citing = []} = {}) {
     if (!work) return [];
     const byID = new Map(found.map(w => [w.id, w]));
+    for (const cited of citing) byID.set(cited.id, cited);
     const rank = new Map();
-    work.related.forEach((id, i) => rank.set(id, {source: 'related', order: i}));
+    citing.forEach((w, i) => rank.set(w.id, {source: 'citing', order: i}));
     work.references.forEach((id, i) => { if (!rank.has(id)) rank.set(id, {source: 'reference', order: i}); });
+    work.related.forEach((id, i) => { if (!rank.has(id)) rank.set(id, {source: 'related', order: i}); });
+    rank.delete(work.id);
     const owned = new Set([...have].map(value => bareDOI(value)).filter(Boolean));
     return [...rank.entries()]
       .map(([id, meta]) => {
         const hit = byID.get(id);
-        return hit ? {...hit, ...meta, inLibrary: !!hit.doi && owned.has(hit.doi)} : null;
+        if (!hit) return null;
+        const score = relevance(hit, work);
+        // Nothing in common with the source paper is noise, whatever list it came from.
+        if (!score) return null;
+        return {...hit, ...meta, relevance: score, inLibrary: !!hit.doi && owned.has(hit.doi)};
       })
       .filter(Boolean)
-      .sort((a, b) => (a.source === b.source ? a.order - b.order : a.source === 'related' ? -1 : 1))
+      .sort((a, b) => GROUP_RANK.get(a.source) - GROUP_RANK.get(b.source)
+        || b.relevance - a.relevance
+        || (b.citations ?? 0) - (a.citations ?? 0))
       .slice(0, limit);
   }
+
+  // Papers that cite this one, newest and most-cited first.
+  const citingURL = (workID, options = {}) => shortID(workID).startsWith('W')
+    ? `${API}works?per_page=${Math.min(50, options.limit || 25)}`
+      + `&filter=${encodeURIComponent('cites:' + shortID(workID))}`
+      + `&sort=cited_by_count:desc&select=${WORK_FIELDS}${credentials(options)}`
+    : null;
 
   const authorSearchURL = (name, options = {}) => text(name)
     ? `${API}authors?per_page=8&search=${encodeURIComponent(text(name))}`
@@ -143,7 +191,7 @@
     return names;
   }
 
-  const api = {API, workURL, worksByIDsURL, readWork, readWorks, mergeSuggestions,
+  const api = {API, GROUPS, workURL, worksByIDsURL, citingURL, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleDiscover = api;

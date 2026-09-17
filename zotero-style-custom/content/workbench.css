@@ -304,3 +304,24 @@
   #style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { border-color: Highlight; }
   #style-custom-workbench :focus-visible { outline-color: Highlight; }
 }
+
+/* Discovery results: a reading list, not a stack of cards. Dense rows with a
+   hairline between them, and actions that stay quiet until the row is wanted. */
+#style-custom-workbench .sc-hits { margin: 0; border-top: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-hit { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: start; padding: 10px 2px; border-bottom: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-hit:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-hit-title { grid-column: 1; margin: 0; font: 600 13px/1.45 var(--sc-title-font); overflow-wrap: anywhere; }
+#style-custom-workbench .sc-hit-meta { grid-column: 1; margin: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.5; }
+#style-custom-workbench .sc-hit-authors { grid-column: 1; margin: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-hit-actions { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 4px; align-items: center; opacity: 0; transition: opacity .12s; }
+#style-custom-workbench .sc-hit:hover .sc-hit-actions,
+#style-custom-workbench .sc-hit:focus-within .sc-hit-actions { opacity: 1; }
+#style-custom-workbench .sc-hit-actions button { min-height: 24px; padding: 2px 8px; font-size: 11px; }
+#style-custom-workbench .sc-hit-owned { grid-column: 2; grid-row: 1; align-self: center; color: var(--sc-done); font-size: 11px; font-weight: 600; white-space: nowrap; }
+#style-custom-workbench .sc-hit-group { margin: 18px 0 0; padding: 0 0 6px; color: var(--sc-muted); font: 650 10px/1.6 var(--sc-font); letter-spacing: .6px; text-transform: uppercase; }
+#style-custom-workbench .sc-hit-group:first-child { margin-top: 4px; }
+/* The subject a profile actually publishes in, kept readable at a glance. */
+#style-custom-workbench .sc-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; }
+#style-custom-workbench .sc-chip { padding: 2px 8px; border-radius: 100px; background: var(--sc-accent-soft); color: var(--sc-muted); font-size: 11px; }
+#style-custom-workbench .sc-profile { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 0; color: var(--sc-muted); font-size: 12px; }
+#style-custom-workbench .sc-profile b { color: var(--sc-text); font-variant-numeric: tabular-nums; }

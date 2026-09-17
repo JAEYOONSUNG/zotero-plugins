@@ -380,21 +380,32 @@
    shown.forEach((row,i)=>{const tr=node('tr',null,table);row.forEach((value,j)=>{const heading=state.transpose?j===0:i===0;const cell=node(heading?'th':'td',String(value),tr);if(heading)cell.setAttribute('scope',state.transpose?'row':'col');});});
   }
   async function drawCollections(token){const collections=await library.collections(win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID);if(token!==epoch||disposed)return;const b=bar();const sort=node('select',null,b,{'aria-label':'컬렉션 정렬'});sort.hidden=!enabled('sortCollectionItem');for(const[v,l]of [['name','이름순'],['count','문헌 많은 순'],['favorite','즐겨찾기 먼저']])node('option',l,sort,{value:v});const list=node('div',null,body);function draw(){list.replaceChildren();const favorites=runtime.cache.favoriteCollections||[];const rows=[...collections].sort((a,b)=>!enabled('sortCollectionItem')?0:sort.value==='count'?b.count-a.count:sort.value==='favorite'?Number(favorites.includes(b.id))-Number(favorites.includes(a.id))||a.name.localeCompare(b.name):a.name.localeCompare(b.name));for(const c of rows){const row=card(c.name,enabled('collectionItemCount')?c.count+'개 문헌':'',list);button('컬렉션 열기',()=>win.ZoteroPane.collectionsView.selectCollection(Number(c.id)),row);if(enabled('favoriteCollections'))check('즐겨찾기',favorites.includes(c.id),on=>run(async()=>{runtime.cache.favoriteCollections=on?[...new Set([...favorites,c.id])]:favorites.filter(id=>id!==c.id);runtime.dirty=true;await runtime.flush();draw();}),row);}}sort.value='name';sort.addEventListener('change',draw);draw();}
-  // Shared row for an OpenAlex work: says what it is, whether it is already
-  // shelved, and offers the one action that matters -- get it into the library.
-  function workCard(work,parent){
-   const marks=[work.year||'연도 미상',work.venue||'출처 미상',work.citations==null?null:`인용 ${work.citations}`,work.openAccess?'오픈액세스':null].filter(Boolean);
-   const c=card(work.title||'제목 없음',marks.join(' · '),parent);
-   if(work.authors?.length)node('p',work.authors.slice(0,6).join(', ')+(work.authors.length>6?' 외':''),c,{class:'sc-muted'});
-   if(work.inLibrary){node('p','내 라이브러리에 있음',c,{class:'sc-metrics'});return c;}
-   if(work.doi)button('라이브러리에 추가',()=>run(async()=>{
+  const GROUP_LABELS={citing:'이 논문을 인용한 논문',reference:'이 논문이 인용한 문헌',related:'주제가 가까운 논문'};
+
+  // One dense row per result: what it is, then the actions, which stay out of
+  // the way until the row is hovered.
+  function hitRow(work,parent){
+   const row=node('div',null,parent,{class:'sc-hit'});
+   node('p',work.title||'제목 없음',row,{class:'sc-hit-title'});
+   node('p',[work.year||'연도 미상',work.venue,work.citations==null?null:`인용 ${work.citations}`,work.openAccess?'오픈액세스':null].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
+   if(work.authors?.length)node('p',work.authors.slice(0,4).join(', ')+(work.authors.length>4?` 외 ${work.authors.length-4}명`:''),row,{class:'sc-hit-authors'});
+   if(work.inLibrary){node('span','보유 중',row,{class:'sc-hit-owned'});return row;}
+   const actions=node('div',null,row,{class:'sc-hit-actions'});
+   if(work.doi)button('추가',()=>run(async()=>{
     message('DOI로 가져오는 중…');
-    await win.ZoteroPane.addItemFromIdentifier?.({DOI:work.doi})??runtime.Z.Utilities.Internal.copyTextToClipboard(work.doi);
-    message('추가를 요청했습니다: '+work.doi);
-   }),c);
-   if(work.doi)button('DOI 복사',()=>copy(work.doi),c);
-   if(work.pdfURL)button('PDF 열기',()=>win.Zotero.launchURL(work.pdfURL),c);
-   return c;
+    if(win.ZoteroPane.addItemFromIdentifier)await win.ZoteroPane.addItemFromIdentifier({DOI:work.doi});
+    else{copy(work.doi);throw new Error('이 Zotero 버전에서는 자동 추가를 지원하지 않습니다. DOI를 복사했습니다.');}
+    message('라이브러리에 추가했습니다: '+work.doi);
+   }),actions);
+   if(work.doi)button('DOI',()=>copy(work.doi),actions);
+   if(work.pdfURL)button('PDF',()=>win.Zotero.launchURL(work.pdfURL),actions);
+   return row;
+  }
+
+  function hitList(works,parent){
+   const list=node('div',null,parent,{class:'sc-hits'});
+   for(const work of works)hitRow(work,list);
+   return list;
   }
 
   async function drawRelated(token){
@@ -410,14 +421,13 @@
     if(token!==epoch||disposed||state.tab!=='related')return;
     list.replaceChildren();
     if(!work){message('이 논문을 OpenAlex에서 찾지 못했습니다.',true);return;}
-    if(!suggestions.length){message('관련 논문을 찾지 못했습니다.');return;}
-    const already=suggestions.filter(s=>s.inLibrary).length;
-    message(`관련 ${suggestions.filter(s=>s.source==='related').length}편 · 참고문헌 ${suggestions.filter(s=>s.source==='reference').length}편 · 이미 보유 ${already}편`);
-    for(const group of ['related','reference']){
+    if(!suggestions.length){message('주제가 맞는 관련 논문을 찾지 못했습니다.');return;}
+    message(`${suggestions.length}편 · 이미 보유 ${suggestions.filter(s=>s.inLibrary).length}편`);
+    for(const group of runtime.discoverTools.GROUPS){
      const rows=suggestions.filter(s=>s.source===group);
      if(!rows.length)continue;
-     node('h3',group==='related'?'비슷한 논문':'이 논문이 인용한 문헌',list);
-     for(const work of rows)workCard(work,list);
+     node('h3',`${GROUP_LABELS[group]} ${rows.length}`,list,{class:'sc-hit-group'});
+     hitList(rows,list);
     }
    }
    button('관련 논문 찾기',()=>run(find),b);
@@ -434,12 +444,20 @@
     const {profile,works}=await runtime.authorActivity(person.id);
     if(token!==epoch||disposed||state.tab!=='authors')return;
     list.replaceChildren();
-    const head=card(profile?.name||person.name,[person.institution||profile?.institutions?.[0],profile?.hIndex==null?null:`h-index ${profile.hIndex}`,profile?.works==null?null:`논문 ${profile.works}편`,profile?.citations==null?null:`인용 ${profile.citations}`].filter(Boolean).join(' · '),list);
-    if(profile?.topics?.length)node('p','주요 주제 — '+profile.topics.map(t=>t.name+(t.count?` (${t.count})`:'')).join(', '),head,{class:'sc-metrics'});
-    if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),head);
-    node('h3','최근 논문',list);
+    node('h3',profile?.name||person.name,list);
+    const stats=node('p',null,list,{class:'sc-profile'});
+    for(const [label,value] of [['소속',person.institution||profile?.institutions?.[0]],['h-index',profile?.hIndex],['논문',profile?.works],['총 인용',profile?.citations]]){
+     if(value==null||value==='')continue;
+     const span=node('span',label+' ',stats);node('b',String(value),span);
+    }
+    if(profile?.topics?.length){
+     const chips=node('div',null,list,{class:'sc-chips'});
+     for(const topic of profile.topics)node('span',topic.name+(topic.count?` ${topic.count}`:''),chips,{class:'sc-chip'});
+    }
+    if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),list);
+    node('h3',`최근 논문 ${works.length}`,list,{class:'sc-hit-group'});
     if(!works.length)node('p','최근 논문을 찾지 못했습니다.',list,{class:'sc-muted'});
-    for(const work of works)workCard(work,list);
+    else hitList(works,list);
     message(`${works.length}편 · 이미 보유 ${works.filter(w=>w.inLibrary).length}편`);
    }
    button('이 논문의 저자 불러오기',()=>run(async()=>{
@@ -449,9 +467,13 @@
     list.replaceChildren();
     if(!people.length){message('OpenAlex에서 이 논문의 저자를 찾지 못했습니다.',true);return;}
     message(`저자 ${people.length}명. 이름을 눌러 최근 작업을 확인하세요.`);
+    const authors=node('div',null,list,{class:'sc-hits'});
     for(const person of people){
-     const c=card(person.name,[person.position==='first'?'제1저자':person.position==='last'?'교신·책임저자':'공저자',person.institution].filter(Boolean).join(' · '),list);
-     button('최근 논문 보기',()=>run(()=>show(person)),c);
+     const row=node('div',null,authors,{class:'sc-hit'});
+     node('p',person.name,row,{class:'sc-hit-title'});
+     node('p',[person.position==='first'?'제1저자':person.position==='last'?'교신·책임저자':'공저자',person.institution].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
+     const actions=node('div',null,row,{class:'sc-hit-actions'});
+     button('최근 논문',()=>run(()=>show(person)),actions);
     }
    }),b);
   }

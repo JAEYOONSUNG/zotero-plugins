@@ -730,10 +730,18 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (!url) throw new Error('이 문헌에는 DOI나 제목이 없어 조회할 수 없습니다.');
     const work = this.discoverTools.readWork(await this.discoverJSON(url, {signal}));
     if (!work) return {work: null, suggestions: []};
-    const ids = [...work.related, ...work.references].slice(0, limit + 10);
+    const ids = [...work.references, ...work.related].slice(0, 50);
     const batchURL = this.discoverTools.worksByIDsURL(ids, options);
-    const found = batchURL ? this.discoverTools.readWorks(await this.discoverJSON(batchURL, {signal})) : [];
-    return {work, suggestions: this.discoverTools.mergeSuggestions(work, found, {have: have ?? this.libraryDOIs(), limit})};
+    const citingURL = this.discoverTools.citingURL(work.id, {...options, limit: 30});
+    const [found, citing] = await Promise.all([
+      batchURL ? this.discoverJSON(batchURL, {signal}).then(this.discoverTools.readWorks) : [],
+      // What came after the paper is the most useful answer to "what next", but
+      // losing it should not cost the rest of the list.
+      citingURL ? this.discoverJSON(citingURL, {signal}).then(this.discoverTools.readWorks)
+        .catch(error => { this.Z.logError(error); return []; }) : []
+    ]);
+    return {work, suggestions: this.discoverTools.mergeSuggestions(work, found,
+      {have: have ?? this.libraryDOIs(), limit, citing})};
   }
 
   // Resolved from the paper's own authorships, never from the name alone.
