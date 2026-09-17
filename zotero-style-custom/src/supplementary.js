@@ -76,10 +76,17 @@
   // Frontiers names its supplementary files by kind and number, with no marker
   // word: Table_2.XLSX beside the article's own fmicb-07-00723-g001.jpg.
   const NUMBERED_KIND = /^(data[_ -]?sheet|table|image|presentation|video|audio)[_ -]?\d+\.[a-z0-9]{1,5}$/i;
-  const TOKEN = /(^|[._-])(s\.?i|esm|suppl?e?m?|mmc\d+|media[._-]?\d+|data[._-]?s\d+|s\d{1,3})([._-]|\.[a-z0-9]{2,4}$|$)/i;
+  const TOKEN = /(^|[._-])(s\.?i|esm|suppl?e?m?|mmc\d+|media[._-]?\d+|data[._-]?s\d+)([._-]|\.[a-z0-9]{2,4}$|$)/i;
+  // A bare "s1"/"s001" only numbers a supplementary file when it sits right
+  // before the extension. Elsevier's main-article downloads are named
+  // 1-s2.0-S0022283683715615-main.pdf, where the s2 is part of their id scheme.
+  const TRAILING_NUMBER = /(^|[._-])s\d{1,3}\.[a-z0-9]{2,5}$/i;
+  // Elsevier says outright which file is the article body.
+  const MAIN_ARTICLE = /[._-]main\.[a-z0-9]{2,5}$/i;
   const looksSupplementary = name => {
     const value = text(name);
-    return !!value && (SPELLED.test(value) || NUMBERED_KIND.test(value) || TOKEN.test(value));
+    if (!value || MAIN_ARTICLE.test(value)) return false;
+    return SPELLED.test(value) || NUMBERED_KIND.test(value) || TOKEN.test(value) || TRAILING_NUMBER.test(value);
   };
 
   const EXTENSION = /\.([a-z0-9]{1,5})$/i;

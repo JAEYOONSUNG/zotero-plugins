@@ -13,6 +13,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.citationFormats = typeof CustomStyleCitationFormats !== "undefined" ? CustomStyleCitationFormats : require("./citation-formats.js");
     this.supplementaryTools = typeof CustomStyleSupplementary !== "undefined" ? CustomStyleSupplementary : require("./supplementary.js");
     this.SUPPLEMENTARY_TAG = 'style-custom:supplementary';
+    this.discoverTools = typeof CustomStyleDiscover !== "undefined" ? CustomStyleDiscover : require("./discover.js");
     this.citationJob = null;
     this.citationProgress = null;
     this.metadataIDs = new Set();
@@ -137,16 +138,16 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     this.rebuildJournals();
     this.labels = { unread: "unread", reading: "reading", done: "done" };
-    this.columnDefinitions = [["if", "IF · Custom", "90"], ["citations", "Cited Count · Custom", "120"],
-      ["status", "Status · Custom", "100"], ["rating", "Rating · Custom", "100"],
-      ["time", "Read Time · Custom", "120"], ["tags", "Tags · Custom", "140"],
-      ["files", "Files · Custom", "110"],
-      ["progress","Pages · Custom","100"],["remark","Remark · Custom","180"],
-      ["publication","Journal Tags · Custom","160"],["authors","Creators · Custom","160"],
-      ["added","Added · Custom","130"],["modified","Modified · Custom","130"],
-      ["lastRead","Last Read · Custom","130"],["tagCount","#Tags · Custom","70"],
-      ["translatedTitle","Translated Title · Custom","220"],["summary","Summary · Custom","220"],
-      ["annotationCount","Annotations · Custom","90"],["noteCount","Notes · Custom","70"],["venue","Publication · Custom","170"]];
+    this.columnDefinitions = [["if", "IF", "90"], ["citations", "Cited Count", "120"],
+      ["status", "Status", "100"], ["rating", "Rating", "100"],
+      ["time", "Read Time", "120"], ["tags", "Tags", "140"],
+      ["files", "Files", "110"],
+      ["progress","Pages","100"],["remark","Remark","180"],
+      ["publication","Journal Tags","160"],["authors","Creators","160"],
+      ["added","Added","130"],["modified","Modified","130"],
+      ["lastRead","Last Read","130"],["tagCount","#Tags","70"],
+      ["translatedTitle","Translated Title","220"],["summary","Summary","220"],
+      ["annotationCount","Annotations","90"],["noteCount","Notes","70"],["venue","Publication","170"]];
     this.syncFeatureColumns();
     try{this.setCustomFields(this.pref('customFields',''),{persist:false});}catch(error){this.Z.logError(error);}
     this.prefPane = await this.Z.PreferencePanes.register({ pluginID: id, src: rootURI + "content/preferences.xhtml", label: "Style Custom",image:rootURI+"content/icons/style-custom.svg",scripts:[rootURI+"src/settings.js"],stylesheets:[rootURI+"content/preferences.css"] });
@@ -436,7 +437,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const count = Number(value);
       const number = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       number.textContent = label;
-      number.style.cssText = `font-variant-numeric:tabular-nums;font-weight:${count >= 100 ? 590 : 400};color:${count > 0 ? P.text : P.faint};`;
+      // A fixed, right-aligned number column so every bar starts at one x.
+      number.style.cssText = `font-variant-numeric:tabular-nums;min-width:3.4em;text-align:right;`
+        + `flex:none;font-weight:${count >= 100 ? 590 : 400};color:${count > 0 ? P.text : P.faint};`;
       cell.appendChild(number);
       const track = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       track.style.cssText = `flex:1;min-width:14px;max-width:56px;height:2px;border-radius:100px;overflow:hidden;background:${this.tint(P.gray, 0.16)};`;
@@ -497,7 +500,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     try {
       for(const field of fields){
         if(previous.has(field)){next.set(field,previous.get(field));continue;}
-        const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey:'field-'+field,label:field+' · Custom',width:'120',minWidth:40,hidden:true,enabledTreeIDs:['main'],zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value('field-'+field,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell('field-'+field,index,value,column,doc)});
+        const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey:'field-'+field,label:field,width:'120',minWidth:40,hidden:true,enabledTreeIDs:['main'],zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value('field-'+field,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell('field-'+field,index,value,column,doc)});
         if(!key)throw new Error('열을 등록하지 못했습니다: '+field);created.push(key);next.set(field,key);
       }
     } catch(error){for(const key of created)try{this.Z.ItemTreeManager.unregisterColumn(key);}catch(cleanup){this.Z.logError(cleanup);}throw error;}
@@ -636,7 +639,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
             file: target, parentItemID: item.id,
             title: this.supplementaryTools.attachmentTitle(file)
           });
-          await this.markSupplementary(attached);
+          await this.markSupplementary(attached, file);
           imported.add(file.name.toLowerCase());
           added++;
         }
@@ -651,10 +654,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   // Type 1 is an automatic tag: it identifies the file without cluttering the
   // tag selector the way a manual tag would.
-  async markSupplementary(attachment) {
+  async markSupplementary(attachment, file) {
     if (!attachment?.addTag) return;
     try {
       attachment.addTag(this.SUPPLEMENTARY_TAG, 1);
+      // Zotero's auto-rename gives every child the parent's title, which makes
+      // four different files look like four copies of one. Restore a name that
+      // says which file this is; the tag is what survives if it is renamed again.
+      if (file) attachment.setField('title', this.supplementaryTools.attachmentTitle(file));
       await attachment.saveTx({skipSelect: true, skipDateModifiedUpdate: true});
     } catch (error) { this.Z.logError(error); }
   }
@@ -691,6 +698,71 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       DOI: base.doi || field('DOI'), url: field('url')
     };
   }
+  // --- Discovery: what to read next, and what an author is doing now ---
+
+  discoverOptions() {
+    return {
+      email: this.pref('contactEmail', '') || undefined,
+      // ZotPoP keeps the user's free OpenAlex key; reuse it when it is there.
+      apiKey: this.pref('openAlexApiKey', '') || this.Z.Prefs.get('extensions.zotpop.openAlexApiKey', true) || undefined
+    };
+  }
+
+  async discoverJSON(url, {signal} = {}) {
+    const response = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 30000});
+    signal?.throwIfAborted?.();
+    return response?.response;
+  }
+
+  // Every DOI already on the shelf, so a suggestion can say "you have this".
+  libraryDOIs() {
+    const owned = new Set();
+    for (const [, entry] of Object.entries(this.cache.items || {})) {
+      const doi = this.discoverTools.bareDOI(entry?.doi);
+      if (doi) owned.add(doi);
+    }
+    return owned;
+  }
+
+  async relatedWorks(item, {limit = 40, signal, have} = {}) {
+    const options = this.discoverOptions();
+    const url = this.discoverTools.workURL(this.bibliographyRecord(item), options);
+    if (!url) throw new Error('이 문헌에는 DOI나 제목이 없어 조회할 수 없습니다.');
+    const work = this.discoverTools.readWork(await this.discoverJSON(url, {signal}));
+    if (!work) return {work: null, suggestions: []};
+    const ids = [...work.related, ...work.references].slice(0, limit + 10);
+    const batchURL = this.discoverTools.worksByIDsURL(ids, options);
+    const found = batchURL ? this.discoverTools.readWorks(await this.discoverJSON(batchURL, {signal})) : [];
+    return {work, suggestions: this.discoverTools.mergeSuggestions(work, found, {have: have ?? this.libraryDOIs(), limit})};
+  }
+
+  // Resolved from the paper's own authorships, never from the name alone.
+  async authorsOf(item, {signal} = {}) {
+    const options = this.discoverOptions();
+    const url = this.discoverTools.workURL(this.bibliographyRecord(item), options);
+    if (!url) return [];
+    const work = this.discoverTools.readWork(await this.discoverJSON(url, {signal}));
+    return work?.people?.filter(person => person.id) || [];
+  }
+
+  async authorActivity(authorID, {limit = 25, signal} = {}) {
+    const options = this.discoverOptions();
+    const worksURL = this.discoverTools.authorWorksURL(authorID, {...options, limit});
+    if (!worksURL) throw new Error('저자 식별자가 올바르지 않습니다.');
+    const profileURL = `${this.discoverTools.API}authors/${this.discoverTools.shortID(authorID)}`
+      + `?select=id,display_name,works_count,cited_by_count,summary_stats,last_known_institutions,topics,orcid`
+      + this.discoverTools.credentials(options);
+    const [profilePayload, worksPayload] = await Promise.all([
+      this.discoverJSON(profileURL, {signal}).catch(error => { this.Z.logError(error); return null; }),
+      this.discoverJSON(worksURL, {signal})
+    ]);
+    const [profile] = this.discoverTools.readAuthors({results: [profilePayload]});
+    const owned = this.libraryDOIs();
+    const works = this.discoverTools.readWorks(worksPayload)
+      .map(work => ({...work, inLibrary: !!work.doi && owned.has(work.doi)}));
+    return {profile: profile || null, works};
+  }
+
   // Zotero's own CSL processor is authoritative when the style is installed;
   // the local formatter only covers the case where it is not.
   async citationText(items, style) {

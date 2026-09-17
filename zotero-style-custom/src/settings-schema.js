@@ -79,7 +79,7 @@
       "label": "IF 열 사용",
       "type": "boolean",
       "default": true,
-      "description": "IF · Custom · 공식 카탈로그·저장 데이터 범위",
+      "description": "IF · 공식 카탈로그·저장 데이터 범위",
       "consumer": "featureEnabled"
     },
     {
@@ -133,7 +133,7 @@
       "label": "주석 수·페이지별 색상 분포·원문 이동 사용",
       "type": "boolean",
       "default": true,
-      "description": "Annotations · Custom · 색상 막대는 주석이 있는 페이지를 표시; 문서 전체 진행률로 추정하지 않음",
+      "description": "Annotations · 색상 막대는 주석이 있는 페이지를 표시; 문서 전체 진행률로 추정하지 않음",
       "consumer": "featureEnabled"
     },
     {
@@ -178,7 +178,7 @@
       "label": "인용 수 열·자동 조회 사용",
       "type": "boolean",
       "default": true,
-      "description": "Cited Count · Custom",
+      "description": "Cited Count",
       "consumer": "featureEnabled"
     },
     {
@@ -196,7 +196,7 @@
       "label": "저자·기여자 열 사용",
       "type": "boolean",
       "default": true,
-      "description": "Creators · Custom",
+      "description": "Creators",
       "consumer": "featureEnabled"
     },
     {
@@ -214,7 +214,7 @@
       "label": "추가일·수정일 열 사용",
       "type": "boolean",
       "default": true,
-      "description": "Added / Modified · Custom",
+      "description": "Added / Modified",
       "consumer": "featureEnabled"
     },
     {
@@ -286,7 +286,7 @@
       "label": "저널·발행처 열 사용",
       "type": "boolean",
       "default": true,
-      "description": "Publication · Custom",
+      "description": "Publication",
       "consumer": "featureEnabled"
     },
     {
@@ -295,7 +295,7 @@
       "label": "저널 등급 태그·조회 사용",
       "type": "boolean",
       "default": true,
-      "description": "Journal Tags · Custom / 저널 지표 · 추가 등급 조회는 본인의 easyScholar 키 필요",
+      "description": "Journal Tags / 저널 지표 · 추가 등급 조회는 본인의 easyScholar 키 필요",
       "consumer": "featureEnabled"
     },
     {
@@ -313,7 +313,7 @@
       "label": "읽기 시간·상태 연동 사용",
       "type": "boolean",
       "default": true,
-      "description": "Status · Custom",
+      "description": "Status",
       "consumer": "featureEnabled"
     },
     {
@@ -340,7 +340,7 @@
       "label": "읽기 메모 열 사용",
       "type": "boolean",
       "default": true,
-      "description": "Remark · Custom / 상세 문헌 메모",
+      "description": "Remark / 상세 문헌 메모",
       "consumer": "featureEnabled"
     },
     {
@@ -421,7 +421,7 @@
       "label": "색상 태그 표시 사용",
       "type": "boolean",
       "default": true,
-      "description": "Tags · Custom / 제목 태그",
+      "description": "Tags / 제목 태그",
       "consumer": "featureEnabled"
     },
     {
@@ -430,7 +430,7 @@
       "label": "텍스트 태그·태그 수 사용",
       "type": "boolean",
       "default": true,
-      "description": "Tags / #Tags · Custom",
+      "description": "Tags / #Tags",
       "consumer": "featureEnabled"
     },
     {

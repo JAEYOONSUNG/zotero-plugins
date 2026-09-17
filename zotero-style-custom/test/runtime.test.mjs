@@ -609,3 +609,117 @@ test('re-downloading does not attach the same supplementary file twice', async (
     {status: 'already', added: 0, skipped: 2});
   assert.equal(tagged.length, 2, 'the same two files must not be imported again');
 });
+
+test('column labels are the plain field name, with no plugin suffix', async () => {
+  const {plugin} = fixture();
+  await plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+  for (const [, label] of plugin.columnDefinitions) {
+    assert.doesNotMatch(label, /Custom/, `"${label}" should not advertise the plugin in every heading`);
+    assert.doesNotMatch(label, /·/);
+  }
+  assert.deepEqual(plugin.columnDefinitions.slice(0, 3).map(c => c[1]), ['IF', 'Cited Count', 'Status']);
+});
+
+test('citation bars all start at the same x, so their lengths can be compared', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  const track = count => {
+    plugin.value = key => key === 'citations' ? String(count) : '';
+    const cell = plugin.renderCell('citations', 0, '', {}, document);
+    return {number: cell.firstChild.style, bar: cell.lastChild.firstChild.style.width};
+  };
+  // A one-digit and a four-digit count must reserve the same width for the number.
+  const small = track(7), large = track(1234);
+  assert.equal(small.number.minWidth, large.number.minWidth);
+  assert.equal(small.number.textAlign, 'right');
+  assert.equal(small.number.flex, 'none', 'a growing number column would shift the bar');
+  // The bar itself still reflects the count.
+  assert.ok(parseFloat(large.bar) > parseFloat(small.bar));
+});
+
+function discoverFixture({work, batch, profile, authorWorks} = {}) {
+  const f = fixture();
+  const ref = f.item(1);
+  const fields = {title: 'An antiplasmid system', DOI: '10.1038/s41467-024-48219-y', date: '2024'};
+  ref.getField = key => fields[key] || '';
+  ref.getCreators = () => [{firstName: 'A', lastName: 'Zongo'}];
+  const asked = [];
+  f.Z.HTTP = {request: async (method, url) => {
+    asked.push(url);
+    if (/\/works\/doi:/.test(url)) return {response: work ?? {
+      id: 'https://openalex.org/W1', doi: 'https://doi.org/10.1038/s41467-024-48219-y',
+      title: 'An antiplasmid system', publication_year: 2024, cited_by_count: 12,
+      authorships: [{author: {id: 'https://openalex.org/A1', display_name: 'A Zongo'},
+        author_position: 'first', institutions: [{display_name: 'Institut Pasteur'}]}],
+      related_works: ['https://openalex.org/W9'], referenced_works: ['https://openalex.org/W7']}};
+    if (/\/authors\//.test(url)) return {response: profile ?? {
+      id: 'https://openalex.org/A1', display_name: 'A Zongo', works_count: 40, cited_by_count: 900,
+      summary_stats: {h_index: 21}, last_known_institutions: [{display_name: 'Institut Pasteur'}],
+      topics: [{display_name: 'Plasmid biology', count: 18}]}};
+    if (/author\.id/.test(url)) return {response: {results: authorWorks ?? [
+      {id: 'https://openalex.org/W5', title: 'Newest paper', publication_year: 2026,
+       doi: 'https://doi.org/10.1/new', cited_by_count: 0},
+      {id: 'https://openalex.org/W1', title: 'An antiplasmid system', publication_year: 2024,
+       doi: 'https://doi.org/10.1038/s41467-024-48219-y', cited_by_count: 12}]}};
+    return {response: {results: batch ?? [
+      {id: 'https://openalex.org/W9', title: 'A similar paper', publication_year: 2022, cited_by_count: 80,
+       doi: 'https://doi.org/10.1/similar'},
+      {id: 'https://openalex.org/W7', title: 'A cited paper', publication_year: 2019, cited_by_count: 300,
+       doi: 'https://doi.org/10.1/cited'}]}};
+  }};
+  return {...f, ref, asked};
+}
+
+test('related papers come back ranked, with the ones already shelved marked', async () => {
+  const f = discoverFixture();
+  f.plugin.cache.items = {x: {doi: '10.1/cited'}};
+  const {work, suggestions} = await f.plugin.relatedWorks(f.ref);
+  assert.equal(work.title, 'An antiplasmid system');
+  assert.deepEqual(suggestions.map(s => [s.title, s.source, s.inLibrary]), [
+    ['A similar paper', 'related', false],
+    ['A cited paper', 'reference', true]
+  ]);
+  assert.match(f.asked[0], /works\/doi:/);
+  assert.match(f.asked[1], /openalex_id/);
+});
+
+test('a paper with neither DOI nor title is refused before any request is made', async () => {
+  const f = discoverFixture();
+  f.ref.getField = () => '';
+  await assert.rejects(() => f.plugin.relatedWorks(f.ref), /DOI/);
+  assert.equal(f.asked.length, 0);
+});
+
+test('authors are resolved from the paper itself, carrying their OpenAlex ids', async () => {
+  const f = discoverFixture();
+  const people = await f.plugin.authorsOf(f.ref);
+  assert.deepEqual(people, [{id: 'A1', name: 'A Zongo', institution: 'Institut Pasteur', position: 'first'}]);
+});
+
+test("an author's recent work arrives newest first, with standing and subject area", async () => {
+  const f = discoverFixture();
+  f.plugin.cache.items = {x: {doi: '10.1038/s41467-024-48219-y'}};
+  const {profile, works} = await f.plugin.authorActivity('A1');
+  assert.equal(profile.hIndex, 21);
+  assert.deepEqual(profile.topics.map(t => t.name), ['Plasmid biology']);
+  assert.deepEqual(works.map(w => [w.year, w.inLibrary]), [[2026, false], [2024, true]]);
+});
+
+test('a failed profile lookup still returns the work list rather than losing everything', async () => {
+  const f = discoverFixture();
+  const original = f.Z.HTTP.request;
+  f.Z.HTTP.request = async (method, url) => {
+    if (/\/authors\//.test(url)) throw new Error('rate limited');
+    return original(method, url);
+  };
+  const {profile, works} = await f.plugin.authorActivity('A1');
+  assert.equal(profile, null);
+  assert.equal(works.length, 2);
+});
+
+test('an author id that is really a work id is rejected', async () => {
+  await assert.rejects(() => discoverFixture().plugin.authorActivity('W123'), /식별자/);
+});

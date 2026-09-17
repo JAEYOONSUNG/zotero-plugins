@@ -32,8 +32,8 @@ function fixture(initialCache){
  return {win,doc,bench,runtime,library,reader,assist,calls,errors,papers,refs,body,click,input,findButton,setLibrary:id=>{libraryID=id;},setSelection:ids=>{mainSelection=ids.map(id=>refs.get(id));},notify:()=>notify(),record};
 }
 
-test('workbench mounts hidden and all seventeen tabs render without raw note HTML',async()=>{
- const f=fixture();assert.equal(f.bench.panel.hidden,true);assert.equal(f.calls.length,0);assert.equal(Workbench.TABS.length,17);
+test('workbench mounts hidden and all nineteen tabs render without raw note HTML',async()=>{
+ const f=fixture();assert.equal(f.bench.panel.hidden,true);assert.equal(f.calls.length,0);assert.equal(Workbench.TABS.length,19);
  for(const [tab] of Workbench.TABS){await f.bench.show(tab);assert.ok(f.body().childNodes.length,tab);assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error,'true',tab);}
  await f.bench.show('notes');assert.ok(f.body().textContent.includes('<script>literal note</script>'));assert.equal(f.body().querySelector('script'),null);assert.equal(f.body().querySelector('b'),null);f.bench.destroy();assert.ok(f.calls.find(c=>c[0]==='unregister'));
 });
@@ -252,7 +252,7 @@ test('collection changes during pending membership lookup discard the old scope 
 });
 
 test('grouped navigation keeps every feature reachable and restores density without touching data',async()=>{
- const f=fixture({items:{},readerSettings:{},workbenchUI:{density:'compact',lastTab:'notes'}});await f.bench.toggle(true);assert.equal(f.bench.state.tab,'notes');assert.equal(f.bench.panel.dataset.density,'compact');assert.equal(f.bench.panel.querySelectorAll('.sc-nav-group').length,4);assert.equal(f.bench.panel.querySelectorAll('nav [data-tab]').length,17);
+ const f=fixture({items:{},readerSettings:{},workbenchUI:{density:'compact',lastTab:'notes'}});await f.bench.toggle(true);assert.equal(f.bench.state.tab,'notes');assert.equal(f.bench.panel.dataset.density,'compact');assert.equal(f.bench.panel.querySelectorAll('.sc-nav-group').length,4);assert.equal(f.bench.panel.querySelectorAll('nav [data-tab]').length,19);
  await f.click('간격 넓게');assert.equal(f.runtime.cache.workbenchUI.density,'comfortable');assert.equal(f.bench.panel.dataset.density,'comfortable');await f.click('논문 비교');assert.equal(f.runtime.cache.workbenchUI.lastTab,'matrix');assert.equal(f.bench.panel.querySelector('.sc-section-title').textContent,'논문 비교');assert.equal(f.bench.panel.querySelector('.sc-search-row').hidden,true);f.bench.destroy();
 });
 
@@ -265,7 +265,7 @@ test('collapsed filter chips remove only the requested filter and parent filters
 test('command finder supports keyboard navigation hidden-feature filtering and layered Escape focus restoration',async()=>{
  const f=fixture({items:{},readerSettings:{},hiddenWorkbenchTabs:['journals']});const origin=f.doc.createElement('button');f.doc.body.appendChild(origin);origin.focus();await f.bench.show('explore');
  const key=(target,value,extras={})=>{const e=new f.win.Event('keydown',{bubbles:true,cancelable:true});Object.assign(e,{key:value,...extras});target.dispatchEvent(e);return e;};
- const search=f.bench.panel.querySelector('[aria-label="작업 패널 검색"]');assert.equal(f.doc.activeElement,search);key(search,'k',{metaKey:true});const finder=f.bench.panel.querySelector('.sc-command-search');assert.equal(f.doc.activeElement,finder);assert.equal(f.bench.panel.querySelector('.sc-shell').inert,true);assert.equal(f.bench.panel.querySelectorAll('.sc-command-option').length,16);
+ const search=f.bench.panel.querySelector('[aria-label="작업 패널 검색"]');assert.equal(f.doc.activeElement,search);key(search,'k',{metaKey:true});const finder=f.bench.panel.querySelector('.sc-command-search');assert.equal(f.doc.activeElement,finder);assert.equal(f.bench.panel.querySelector('.sc-shell').inert,true);assert.equal(f.bench.panel.querySelectorAll('.sc-command-option').length,18);
  f.input('찾을 기능 이름','주석');key(finder,'Enter');await settle();assert.equal(f.bench.state.tab,'annotations');assert.equal(f.bench.panel.querySelector('.sc-command-palette').hidden,true);assert.equal(f.doc.activeElement,f.body());assert.notEqual(f.bench.panel.querySelector('.sc-shell').inert,true);
  key(f.body(),'k',{ctrlKey:true});key(finder,'Escape');assert.equal(f.bench.panel.hidden,false);assert.equal(f.doc.activeElement,f.body());key(f.body(),'Escape');assert.equal(f.bench.panel.hidden,true);assert.equal(f.doc.activeElement,origin);f.bench.destroy();
 });

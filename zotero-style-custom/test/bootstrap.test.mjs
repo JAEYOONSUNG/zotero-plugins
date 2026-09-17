@@ -12,6 +12,6 @@ test('Gecko-like bootstrap loads every module without Node globals and keeps use
  context.Services={scriptloader:{loadSubScript:(url,scope)=>{assert.equal(scope,vm.runInContext('globalThis',context));const name=url.split('/').at(-1);vm.runInContext(fs.readFileSync(path.join(root,'src',name),'utf8'),context,{filename:name});}},obs:{addObserver:o=>registered.add(o),removeObserver:o=>registered.delete(o)}};
  vm.runInContext(fs.readFileSync(path.join(root,'prefs.js'),'utf8'),context);vm.runInContext(fs.readFileSync(path.join(root,'bootstrap.js'),'utf8'),context);
  await vm.runInContext("startup({id:'style-custom@sungjaeyoon.dev',version:'0.8.0',rootURI:'file:///plugin/'})",context);
- assert.equal(columns.size,20);assert.equal(Z.StyleCustom.Workbench.TABS.length,17);assert.equal(typeof Z.StyleCustom.readerTools.setVerticalTabs,'function');assert.equal(typeof Z.StyleCustom.libraryService.graph,'function');assert.equal(registered.size,1);assert.equal(writes.length,0);
+ assert.equal(columns.size,20);assert.equal(Z.StyleCustom.Workbench.TABS.length,19);assert.equal(typeof Z.StyleCustom.readerTools.setVerticalTabs,'function');assert.equal(typeof Z.StyleCustom.libraryService.graph,'function');assert.equal(registered.size,1);assert.equal(writes.length,0);
  await vm.runInContext('shutdown()',context);assert.equal(columns.size,0);assert.equal(observers.size,0);assert.equal(registered.size,0);assert.equal(Z.StyleCustom,undefined);assert.equal(errors.length,0);
 });

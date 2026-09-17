@@ -294,7 +294,7 @@
     function mergeMenuHook({reader,params,append}){
       if(stopped||!enabled('reader.mergeAnnotations')||!reader?._window||typeof append!=='function')return;
       const keys=Array.isArray(params?.ids)?[...params.ids]:[];
-      append({label:'Merge selected annotations · Custom',disabled:keys.length<2||keys.length>50||!!reader._internalReader?._state?.readOnly,
+      append({label:'Merge selected annotations',disabled:keys.length<2||keys.length>50||!!reader._internalReader?._state?.readOnly,
         onCommand(){if(stopped||activeReader(reader._window)!==reader)return;return mergeSelectedAnnotations(reader._window,keys).catch(report);}});
     }
     async function attachmentVersions(win){
