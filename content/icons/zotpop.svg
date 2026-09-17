@@ -3,7 +3,7 @@
   <path d="M79 79 L101 101" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round"/>
   <circle cx="54" cy="54" r="27" fill="#2F6FE0" stroke="#FFFFFF" stroke-width="8"/>
   <g fill="#FFFFFF">
-    <rect x="42" y="56" width="9" height="14" rx="4.5"/>
-    <rect x="57" y="44" width="9" height="26" rx="4.5"/>
+    <rect x="40" y="52" width="12" height="18" rx="4"/>
+    <rect x="57" y="38" width="12" height="32" rx="4"/>
   </g>
 </svg>
