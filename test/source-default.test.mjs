@@ -39,3 +39,27 @@ test("the combined search really does span several sources", async () => {
   assert.ok(names.length >= 3, `"multi" should query several sources, got ${names.join(", ")}`);
   assert.ok(names.includes("openalex") && names.includes("crossref"));
 });
+
+test("the search tab asks for an icon Zotero can actually draw", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../src/zotpop.js", import.meta.url), "utf8");
+  const icon = /data:\s*\{\s*icon:\s*"([^"]+)"/.exec(source);
+  assert.ok(icon, "Zotero_Tabs.add throws without a data object");
+  // The tab bar renders this as data-item-type, so it must be an item type the
+  // skin styles; "magnifier" is not one and left an empty icon slot.
+  assert.ok(/^[a-z][A-Za-z]+$/.test(icon[1]));
+  assert.notEqual(icon[1], "magnifier");
+});
+
+test("no dead pattern pretends to filter preprints", async () => {
+  const { readFileSync } = await import("node:fs");
+  const sources = readFileSync(new URL("../content/sources.js", import.meta.url), "utf8");
+  // SRC:PPR is what restricts the source; a declared-but-unused publisher
+  // pattern read like a second, active filter.
+  const declared = [...sources.matchAll(/const (PREPRINT_[A-Z_]+)\s*=/g)].map(m => m[1]);
+  for (const name of declared) {
+    const uses = (sources.match(new RegExp(`\\b${name}\\b`, "g")) || []).length;
+    assert.ok(uses > 1, `${name} is declared but never used`);
+  }
+  assert.match(sources, /SRC:PPR/, "the preprint source is still restricted");
+});

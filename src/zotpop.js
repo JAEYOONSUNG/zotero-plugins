@@ -136,9 +136,11 @@ Zotero.ZotPoP = {
 			added = Tabs.add({
 				type: "zotpop-search",
 				title: this.t("toolbarTip"),
-				// The tab bar reads data.icon directly; without a data object it
-				// throws before the tab is ever shown.
-				data: { icon: "magnifier" },
+				// The tab bar reads data.icon directly (without a data object it
+				// throws before the tab is shown) and renders it as an item-type
+				// icon, so the value has to be one Zotero's skin actually styles.
+				// "magnifier" is not, and drew an empty slot.
+				data: { icon: "journalArticle" },
 				select: true,
 				onClose: () => { this._tabID = null; }
 			});

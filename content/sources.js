@@ -923,8 +923,6 @@ var ZotPoPSources = (function () {
 	// ---------------------------------------------------------------- Europe PMC
 	// Indexes PubMed + PMC and, crucially, the preprint servers: bioRxiv, medRxiv
 	// and Research Square. Used both as a general source and as the preprint source.
-	const PREPRINT_PUBLISHERS = /biorxiv|medrxiv|research\s*square|ssrn|preprints\.org|authorea|chemrxiv/i;
-
 	function epmcQuery(q, preprintsOnly) {
 		let parts = [];
 		if (q.keywords?.trim()) parts.push("(" + q.keywords.trim() + ")");
