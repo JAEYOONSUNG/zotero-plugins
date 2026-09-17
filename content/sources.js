@@ -5,7 +5,12 @@
  * {
  *   key, source, sourceId, title, authors: [{firstName,lastName,name}], year, venue, publisher,
  *   doi, pmid, pmcid, arxiv, url, pdfUrl, citations (Number|null), volume, issue, pages,
- *   abstract, itemType ('journalArticle'|'conferencePaper'|'preprint'|'book'|'bookSection'|'thesis'|'report')
+ *   abstract, itemType ('journalArticle'|'conferencePaper'|'preprint'|'book'|'bookSection'|'thesis'|'report'),
+ *   preprintServer (String|null: the archive that hosts the posting -- "bioRxiv", "ChemRxiv",
+ *     "arXiv", "PsyArXiv" ... -- set on and only on itemType 'preprint', so a posting is never
+ *     read as a journal article; the importer writes it to Zotero's `repository` field),
+ *   publishedDoi, publishedPmid (String|null: the peer-reviewed version of a preprint, once one
+ *     exists. Crossref identifies it by DOI, Europe PMC only ever by PMID, hence both.)
  * }
  *
  * `http` adapter: { getJSON(url, headers) -> Promise<Object>, getText(url, headers) -> Promise<String> }
@@ -163,8 +168,13 @@ var ZotPoPSources = (function () {
 			source: "", sourceId: "", title: "", authors: [], year: null, publicationDate: null, venue: "", publisher: "",
 			doi: null, pmid: null, pmcid: null, arxiv: null, url: null, pdfUrl: null, pdfUrls: [], citations: null, citationSource: null, sources: null,
 			journalId: null, issn: null, journalIF: null, journalH: null,
+			preprintServer: null, publishedDoi: null, publishedPmid: null,
 			volume: "", issue: "", pages: "", abstract: "", itemType: "journalArticle"
 		}, r, { doi });
+		rec.publishedDoi = normalizeDOI(rec.publishedDoi);
+		// A preprint whose peer-reviewed version has the very DOI we are holding is not
+		// "also published elsewhere"; it is that article, and claiming both would double it.
+		if (rec.publishedDoi && rec.publishedDoi === rec.doi) rec.publishedDoi = null;
 		rec.title = stripTags(decodeEntities(rec.title));
 		rec.key = rec.source + ":" + (rec.sourceId || rec.doi || rec.title.toLowerCase());
 		if (!rec.sources) rec.sources = [rec.source];
@@ -533,7 +543,36 @@ var ZotPoPSources = (function () {
 		return result;
 	}
 
-	async function searchCrossref(q, http, ctx) {
+	// `publisher` is the parent company, not the archive: a bioRxiv posting reads "openRxiv",
+	// ChemRxiv reads "American Chemical Society (ACS)", Preprints.org reads "MDPI AG" and
+	// TechRxiv reads "IEEE". `institution` names the archive but only bioRxiv, medRxiv and
+	// Research Square set it, and it cannot be requested through `select` at all.
+	// resource.primary.URL can, and it is the landing page on the archive itself, so its host
+	// identifies the archive exactly -- including which of bioRxiv and medRxiv a shared
+	// openRxiv prefix belongs to. Every host below was read back from a real record.
+	const PREPRINT_SERVER_HOSTS = {
+		"biorxiv.org": "bioRxiv", "medrxiv.org": "medRxiv", "chemrxiv.org": "ChemRxiv",
+		"researchsquare.com": "Research Square", "preprints.org": "Preprints.org",
+		"techrxiv.org": "TechRxiv", "authorea.com": "Authorea", "ssrn.com": "SSRN",
+		"peerj.com": "PeerJ Preprints", "qeios.com": "Qeios", "osf.io": "OSF Preprints",
+		"arxiv.org": "arXiv"
+	};
+
+	function crossrefPreprintServer(w) {
+		let host = hostOf(w.resource?.primary?.URL).replace(/^www\./, "");
+		return PREPRINT_SERVER_HOSTS[host] || w.institution?.[0]?.name || w.publisher || "Preprint";
+	}
+
+	// Crossref records `is-preprint-of` on the posting itself once the journal version is
+	// registered, so the published DOI comes back with the search and costs no extra request.
+	function crossrefPublishedDOI(w) {
+		for (let rel of w.relation?.["is-preprint-of"] || []) {
+			if (rel["id-type"] === "doi" && rel.id) return rel.id;
+		}
+		return null;
+	}
+
+	async function searchCrossref(q, http, ctx, preprintsOnly = false) {
 		if (!hasAny(q)) return [];
 		let params = [];
 		let endpoint = "https://api.crossref.org/works", journal = null;
@@ -541,7 +580,14 @@ var ZotPoPSources = (function () {
 		if (q.title?.trim()) params.push("query.bibliographic=" + enc(q.title.trim()));
 		if (q.authors?.trim()) params.push("query.author=" + enc(q.authors.trim()));
 		let filters = [];
-		if (q.venue?.trim()) {
+		// "posted-content" is Crossref's type for a preprint posting. It is the whole preprint
+		// landscape in one index -- bioRxiv, ChemRxiv, Research Square, SSRN, Preprints.org --
+		// and it carries the posting date, so it is what makes the archives searchable here.
+		if (preprintsOnly) filters.push("type:posted-content");
+		// A posting has no container-title and no ISSN, so both of Crossref's venue routes
+		// return nothing for one. On this route the venue names the archive instead, which
+		// is held in the record and matched locally below.
+		if (q.venue?.trim() && !preprintsOnly) {
 			journal = await crossrefJournal(q.venue.trim(), http, ctx);
 			if (journal) endpoint = "https://api.crossref.org/journals/" + enc(journal.issn) + "/works";
 			else filters.push("container-title:" + enc(q.venue.trim()));
@@ -552,7 +598,11 @@ var ZotPoPSources = (function () {
 		if (q.sort === "date") params.push("sort=published", "order=desc");
 		else if (q.sort === "citations") params.push("sort=is-referenced-by-count", "order=desc");
 		if (ctx.email) params.push("mailto=" + enc(ctx.email));
-		params.push("select=DOI,title,author,issued,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN");
+		// `institution` and `subtype` are not selectable on /works -- asking for either makes
+		// the whole request a 400. The preprint route therefore takes the full record and
+		// pays the extra bytes; every other route stays on the narrow projection, which
+		// `resource` keeps wide enough to name an archive when a posting turns up there.
+		if (!preprintsOnly) params.push("select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN");
 
 		let max = q.maxResults || 200;
 		let out = [];
@@ -565,15 +615,27 @@ var ZotPoPSources = (function () {
 			let items = data.message?.items || [];
 			for (let w of items) {
 				let pdf = (w.link || []).find(l => l["content-type"] === "application/pdf");
+				// Crossref files more than postings under posted-content, and separates them
+				// by subtype: in a 100-record sample the nine subtype "other" rows were
+				// conference-abstract aggregators, a preprint-highlights blog and a news
+				// site, none of which is a paper anyone asked a preprint search for.
+				if (preprintsOnly && w.subtype && w.subtype !== "preprint") continue;
+				let isPreprint = w.type === "posted-content";
+				// A preprint is dated by when it went up, which Crossref keeps in `posted`.
+				// `issued` can carry the journal version's date and would misdate the posting.
+				let dated = (isPreprint && w.posted?.["date-parts"]?.[0]) || w.issued?.["date-parts"]?.[0];
+				let server = isPreprint ? crossrefPreprintServer(w) : null;
 				out.push(makeRecord({
 					source: "crossref",
 					sourceId: w.DOI,
 					title: (w.title || [])[0] || "",
 					authors: (w.author || []).map(a => a.family ? fromFamilyGiven(a.family, a.given) : parseName(a.name)),
-					year: w.issued?.["date-parts"]?.[0]?.[0] || null,
-					publicationDate: dateFromParts(w.issued?.["date-parts"]?.[0]),
-					venue: (w["container-title"] || [])[0] || "",
+					year: dated?.[0] || null,
+					publicationDate: dateFromParts(dated),
+					venue: (w["container-title"] || [])[0] || server || "",
 					publisher: w.publisher || "",
+					preprintServer: server,
+					publishedDoi: isPreprint ? crossrefPublishedDOI(w) : null,
 					issn: (w.ISSN || [])[0] || null,
 					issns: w.ISSN || [],
 					venueAliases: journal?.title ? [journal.title] : [],
@@ -904,6 +966,10 @@ var ZotPoPSources = (function () {
 					pdfUrl: pdf,
 					citations: null,
 					abstract: xmlText(e, "summary"),
+					// Every arXiv entry is a posting on arXiv, whether or not a journal has
+					// since taken it, so the archive is always named. arxiv:doi is that
+					// journal version's DOI, which is what itemType keys off.
+					preprintServer: "arXiv",
 					itemType: doi ? "journalArticle" : "preprint"
 				}));
 			}
@@ -937,6 +1003,13 @@ var ZotPoPSources = (function () {
 		if (q.yearFrom || q.yearTo) parts.push("PUB_YEAR:[" + (q.yearFrom || 1800) + " TO " + (q.yearTo || 3000) + "]");
 		if (preprintsOnly) parts.push("SRC:PPR");
 		return parts.join(" AND ");
+	}
+
+	function epmcPublishedPmid(r) {
+		for (let c of r.commentCorrectionList?.commentCorrection || []) {
+			if (/^preprint of$/i.test(c.type || "") && c.source === "MED" && c.id) return String(c.id);
+		}
+		return null;
 	}
 
 	function epmcRecord(r) {
@@ -974,6 +1047,14 @@ var ZotPoPSources = (function () {
 			issue: r.journalInfo?.issue || "",
 			pages: r.pageInfo || "",
 			abstract: r.abstractText ? stripTags(r.abstractText) : "",
+			// Europe PMC files the archive under `publisher` -- "bioRxiv", "medRxiv",
+			// "Research Square" -- sometimes at the top level and sometimes nested in
+			// bookOrReportDetails, which `publisher` above already reconciles.
+			preprintServer: isPreprint ? (publisher || "Preprint") : null,
+			// Europe PMC records the journal version as a "Preprint of" cross-reference. It
+			// identifies it by PMID, never by DOI -- the observed entry is
+			// {source:"MED", id:"38289242", type:"Preprint of"} -- so that is what is kept.
+			publishedPmid: isPreprint ? epmcPublishedPmid(r) : null,
 			itemType: isPreprint ? "preprint" : "journalArticle"
 		});
 	}
@@ -1008,11 +1089,111 @@ var ZotPoPSources = (function () {
 		return out.slice(0, max);
 	}
 
-	// bioRxiv / medRxiv / Research Square (via Europe PMC) plus arXiv, merged
+	// ---------------------------------------------------------------- OSF Preprints
+	// One API over the 32 archives OSF hosts -- PsyArXiv, SocArXiv, engrXiv, bioHackrXiv,
+	// EcoEvoRxiv, EarthArXiv, PaleorXiv, Thesis Commons and the rest -- which nothing else
+	// here indexes. Free, unmetered, no key. 201,549 postings at the time of writing.
+	const OSF_PREPRINTS = "https://api.osf.io/v2/preprints/";
+	// OSF returns the archive, the ordered author list and the DOI only as relationships.
+	// Embedding them keeps a page of results to a single request instead of 1 + 2N.
+	const OSF_EMBEDS = "&embed=provider&embed=bibliographic_contributors";
+
+	function osfAuthors(item) {
+		return (item.embeds?.bibliographic_contributors?.data || [])
+			.slice()
+			.sort((a, b) => (a.attributes?.index ?? 0) - (b.attributes?.index ?? 0))
+			.map(c => {
+				let user = c.embeds?.users?.data?.attributes;
+				if (user?.family_name) {
+					return fromFamilyGiven(user.family_name, [user.given_name, user.middle_names].filter(Boolean).join(" "));
+				}
+				return parseName(user?.full_name || c.attributes?.unregistered_contributor || "");
+			})
+			.filter(a => a.name);
+	}
+
+	function osfRecord(item) {
+		let a = item.attributes || {};
+		let provider = item.embeds?.provider?.data;
+		let server = provider?.attributes?.name || provider?.id || "OSF Preprints";
+		return makeRecord({
+			source: "osf",
+			sourceId: item.id,
+			title: a.title || "",
+			authors: osfAuthors(item),
+			year: yearOf(a.date_published),
+			publicationDate: (a.date_published || "").slice(0, 10) || null,
+			venue: server,
+			publisher: server,
+			preprintServer: server,
+			// attributes.doi is null even on postings that have one; the minted DOI is only
+			// ever published as links.preprint_doi, e.g. https://doi.org/10.31235/osf.io/zn6c2_v1.
+			doi: item.links?.preprint_doi || null,
+			url: item.links?.html || null,
+			// /download/ 302s to the file on files.osf.io, so the redirect is the PDF -- but
+			// only where a file was ever attached. Offering the link regardless would hand
+			// the preview pane a URL that 404s.
+			pdfUrl: item.relationships?.primary_file ? "https://osf.io/download/" + item.id + "/" : null,
+			citations: null,
+			abstract: a.description || "",
+			itemType: "preprint"
+		});
+	}
+
+	async function searchOSF(q, http, ctx) {
+		let filters = [];
+		// filter[field] is a contiguous, case-insensitive substring test, not a term search:
+		// filter[title]=protein engineering matched 0 of 201,549 postings while
+		// filter[title,description] (OSF's OR over both fields) matched 31 for another phrase.
+		// So a keyword query goes to both fields and only a title query is narrowed to one.
+		if (q.title?.trim()) filters.push("filter[title]=" + enc(q.title.trim()));
+		else if (q.keywords?.trim()) filters.push("filter[title,description]=" + enc(q.keywords.trim()));
+		// OSF answered filter[contributors] with "not a filterable field", and there is no
+		// other author route on /preprints/, so an author-only query has nothing to ask.
+		if (!filters.length) return [];
+		if (q.yearFrom) filters.push("filter[date_published][gte]=" + q.yearFrom + "-01-01");
+		if (q.yearTo) filters.push("filter[date_published][lte]=" + q.yearTo + "-12-31");
+		if (q.sort === "date") filters.push("sort=-date_published");
+
+		let max = q.maxResults || 200;
+		let out = [];
+		let url = OSF_PREPRINTS + "?" + filters.join("&") + OSF_EMBEDS + "&page[size]=" + Math.min(100, max);
+		let seen = 0;
+		while (url && out.length < max) {
+			throwIfCancelled(ctx);
+			let data = await withRetry(() => http.getJSON(url), {}, ctx);
+			let items = data.data || [];
+			seen += items.length;
+			for (let item of items) {
+				// A withdrawn posting is still served, with its reason in
+				// withdrawal_justification. Offering one would be offering a paper
+				// that no longer exists; an item with no title is not a result at all.
+				if (item?.attributes?.date_withdrawn || !item?.attributes?.title) continue;
+				out.push(osfRecord(item));
+			}
+			let total = toInt(data.links?.meta?.total) ?? out.length;
+			out = matchingRecords(dedupe(out), q);
+			publishResults(out, q, ctx);
+			ctx.onProgress?.(`OSF Preprints: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
+			url = items.length && seen < PAGE_WALK_LIMIT ? data.links?.next || null : null;
+		}
+		return out.slice(0, max);
+	}
+
+	// ---------------------------------------------------------------- preprints
+	// The archives, merged. Europe PMC and Crossref both index bioRxiv, medRxiv and Research
+	// Square, and they are kept together rather than deduplicated away because they do not
+	// index the same thing: measured on 2026-09-18, Crossref held 439,123 bioRxiv postings
+	// with the newest posted that same day, matching bioRxiv's own feed, while Europe PMC
+	// held 349,948 with the newest three days old. Crossref also reaches ChemRxiv, SSRN,
+	// Preprints.org and Authorea, which Europe PMC does not; Europe PMC supplies citation
+	// counts and PMC full text, which Crossref does not. OSF adds its own 32 archives.
 	async function searchPreprints(q, http, ctx) {
 		return searchCombined(q, http, ctx, [
 			{ key: "europepmc", search: (query, transport, context) => searchEuropePMC(query, transport, context, true) },
-			{ key: "arxiv", search: searchArxiv }
+			{ key: "crossref", search: (query, transport, context) => searchCrossref(query, transport, context, true) },
+			{ key: "arxiv", search: searchArxiv },
+			{ key: "osf", search: searchOSF }
 		], true);
 	}
 
@@ -1266,6 +1447,11 @@ var ZotPoPSources = (function () {
 		if (!a.publicationDate && b.publicationDate) a.publicationDate = b.publicationDate;
 		if (!a.venue && b.venue) a.venue = b.venue;
 		if (!a.publisher && b.publisher) a.publisher = b.publisher;
+		// The one source that knows a posting is on bioRxiv must not lose that when it merges
+		// with a source that only knows the DOI, or the posting reads as a journal article.
+		if (!a.preprintServer && b.preprintServer) a.preprintServer = b.preprintServer;
+		if (!a.publishedDoi && b.publishedDoi) a.publishedDoi = b.publishedDoi;
+		if (!a.publishedPmid && b.publishedPmid) a.publishedPmid = b.publishedPmid;
 		if (!a.journalId && b.journalId) a.journalId = b.journalId;
 		if (!a.issn && b.issn) a.issn = b.issn;
 		if (a.journalIF == null && b.journalIF != null) { a.journalIF = b.journalIF; a.journalH = b.journalH; }
@@ -1381,8 +1567,9 @@ var ZotPoPSources = (function () {
 		semanticscholar: { label: "Semantic Scholar", search: searchSemanticScholar, hasCitations: true },
 		pubmed: { label: "PubMed", search: searchPubMed, hasCitations: false },
 		europepmc: { label: "Europe PMC (articles + preprints)", search: searchEuropePMC, hasCitations: true },
-		preprint: { label: "Preprints (bioRxiv, medRxiv, Research Square, arXiv)", search: searchPreprints, hasCitations: true },
+		preprint: { label: "Preprints (bioRxiv, medRxiv, ChemRxiv, Research Square, arXiv, OSF)", search: searchPreprints, hasCitations: true },
 		arxiv: { label: "arXiv", search: searchArxiv, hasCitations: false },
+		osf: { label: "OSF Preprints (PsyArXiv, SocArXiv, engrXiv, bioHackrXiv, ...)", search: searchOSF, hasCitations: false },
 		scholar: { label: "Google Scholar (experimental)", search: searchScholar, hasCitations: true }
 	};
 	SOURCES.multi = { label: "Combined (OpenAlex + Crossref + Europe PMC + arXiv)", search: searchMulti, hasCitations: true, multi: true };
