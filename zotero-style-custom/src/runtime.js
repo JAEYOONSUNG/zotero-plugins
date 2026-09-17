@@ -935,13 +935,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // Resolving a person by name is the whole difficulty: an unclear field is
   // refused rather than guessed, because watching the wrong person is worse
   // than watching nobody.
-  async resolveAuthor(name, {institution, signal} = {}) {
+  // Each query says what it takes to trust its answer: the plain forms of the
+  // name stand on their own, the guessed ones only count with the institution.
+  async resolveAuthor(name, {institution, topics, signal} = {}) {
     const options = this.discoverOptions();
-    for (const query of this.discoverTools.authorQueries(name)) {
+    for (const {query, confirm} of this.discoverTools.authorQueries(name, {institution})) {
       const url = this.discoverTools.authorSearchURL(query, options);
       if (!url) continue;
       const found = this.discoverTools.readAuthors(await this.discoverJSON(url, {signal}));
-      const hit = this.discoverTools.pickAuthor(found, {name, institution});
+      const hit = this.discoverTools.pickAuthor(found, {name, institution, topics, confirm});
       if (hit) return hit;
     }
     return null;
@@ -952,7 +954,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     for (const [index, person] of people.entries()) {
       onProgress?.(index, people.length, person);
       try {
-        const hit = await this.resolveAuthor(person.name, {institution: person.institution, signal});
+        const hit = await this.resolveAuthor(person.name,
+          {institution: person.institution, topics: person.topics, signal});
         if (!hit) { result.unresolved.push(person.name); continue; }
         if (this.watchedAuthors().some(row => row.id === hit.id)) { result.already++; continue; }
         // Nothing published so far counts as news; only what appears from now on.
