@@ -14,6 +14,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.supplementaryTools = typeof CustomStyleSupplementary !== "undefined" ? CustomStyleSupplementary : require("./supplementary.js");
     this.SUPPLEMENTARY_TAG = 'style-custom:supplementary';
     this.discoverTools = typeof CustomStyleDiscover !== "undefined" ? CustomStyleDiscover : require("./discover.js");
+    this.signalTools = typeof CustomStylePaperSignals !== "undefined" ? CustomStylePaperSignals : require("./paper-signals.js");
     this.legacyReading = typeof CustomStyleLegacyReading !== "undefined" ? CustomStyleLegacyReading : require("./legacy-reading.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
@@ -151,7 +152,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       ["added","Added","130"],["modified","Modified","130"],
       ["lastRead","Last Read","130"],["tagCount","#Tags","70"],
       ["translatedTitle","Translated Title","220"],["summary","Summary","220"],
-      ["annotationCount","Annotations","90"],["noteCount","Notes","70"],["venue","Publication","170"]];
+      ["annotationCount","Annotations","90"],["noteCount","Notes","70"],["venue","Publication","170"],
+      ["signals","Signals","160"]];
     this.syncFeatureColumns();
     try{this.setCustomFields(this.pref('customFields',''),{persist:false});}catch(error){this.Z.logError(error);}
     this.prefPane = await this.Z.PreferencePanes.register({ pluginID: id, src: rootURI + "content/preferences.xhtml", label: "Style Custom",image:rootURI+"content/icons/style-custom.svg",scripts:[rootURI+"src/settings.js"],stylesheets:[rootURI+"content/preferences.css"] });
@@ -256,6 +258,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (key === "lastRead")return String(this.entry(item).lastRead||'').replace('T',' ').slice(0,16);
       if (key === "tagCount")return String(item.getTags().filter(t=>!/^style-custom:/.test(t.tag)).length);
       if (key === "noteCount")return String(item.getNotes?.().length||0);
+      // An ordinal key, not a label: the column has to sort the worst news to
+      // the top. Empty until the paper has been looked up, so an unchecked
+      // paper is never mistaken for a clean one.
+      if (key === "signals")return this.signalTools.sortKey(this.signalsOf(item));
       if (key === "files") {const kinds=this.attachmentKinds(item);if(!kinds.length)return "";
         const si=kinds.filter(k=>k.supplementary).length;
         return [kinds.length-si?`PDF×${kinds.length-si}`:"",si?`SI×${si}`:""].filter(Boolean).join(" · ");}
@@ -365,6 +371,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const attempt=state.citationAttempt?.identity===id?state.citationAttempt:null;
         cell.title=state.citationPending===id?"인용 수 조회 중":attempt?({"not-found":"일치하는 논문의 인용 수를 찾지 못했습니다.",error:"조회 실패: 기존 값은 유지됩니다.",unsupported:"확인 가능한 논문 식별자가 부족합니다."}[attempt.status]||"")+(attempt.reason?" "+attempt.reason:""):"아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.";
       }
+      // "Not checked" and "nothing wrong" are different answers, and only one
+      // of them is safe to read as reassurance.
+      if (key === "signals" && this.isRegular(item)) {
+        cell.textContent = "—";
+        cell.style.color = P.faint;
+        cell.title = this.signalTools.bareDOI(this.citationRecord(item).doi)
+          ? "철회·공개접근 신호를 아직 조회하지 않았습니다. 문헌 목록 오른쪽 클릭 메뉴에서 조회하세요."
+          : "DOI가 없어 철회 여부를 확인할 수 없습니다.";
+      }
       return cell;
     }
     let label = value;
@@ -442,6 +457,32 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.appendChild(pill);
       }
       cell.title = si.length ? `보충자료 ${si.length}개 포함` : main.length ? "보충자료 없음" : "첨부파일 없음";
+      return cell;
+    } else if (key === "signals" && this.isRegular(item)) {
+      const signals = this.signalsOf(item);
+      // The OA link is only offered when the shelf cannot already open the
+      // paper, so it stays a way in rather than a decoration.
+      const hasPDF = this.attachmentKinds(item).some(kind => kind.pdf && !kind.supplementary);
+      for (const badge of this.signalTools.badges(signals, {hasPDF})) {
+        const tone = P[badge.tone] || P.gray;
+        const chip = this.pill(doc, badge.text, tone, P);
+        chip.title = badge.title;
+        // Every other badge is a tinted pill. A retraction is filled solid,
+        // because it is the one signal that must not be skimmed past.
+        if (badge.solid) {
+          chip.style.background = tone;
+          chip.style.color = P.dark ? "#141417" : "#FFFFFF";
+          chip.style.fontWeight = "700";
+          chip.style.letterSpacing = "0.03em";
+        }
+        if (badge.url) {
+          chip.style.cursor = "pointer";
+          chip.style.textDecoration = "underline";
+          chip.addEventListener("click", event => { event.stopPropagation(); this.Z.launchURL?.(badge.url); });
+        }
+        cell.appendChild(chip);
+      }
+      cell.title = signals ? `${signals.status} · 확인 ${signals.checkedAt}` : "";
       return cell;
     } else if (key === "if") {
       const tier = this.impactTier(Number(value), P);
@@ -1083,6 +1124,69 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return {profile: profile || null, works};
   }
 
+  // --- Paper signals: retraction, open access, preprint -> published ---
+
+  signalsOf(item) { return this.entry(item).signals || null; }
+
+  // Crossref answers 404 for a DOI it has never registered, and OpenAlex
+  // answers 404 for a preprint DOI it has merged into the published work.
+  // Both are answers about the paper, not transport failures, so they must not
+  // abort the other half of the lookup.
+  async signalsJSON(url, {signal} = {}) {
+    const response = await this.Z.HTTP.request("GET", url,
+      {responseType: "json", timeout: 20000, successCodes: false});
+    signal?.throwIfAborted?.();
+    return response?.status === 200 ? response.response : null;
+  }
+
+  async fetchPaperSignals(item, {signal} = {}) {
+    const record = this.bibliographyRecord(item);
+    const options = this.discoverOptions();
+    const crossrefURL = this.signalTools.crossrefURL(record, options);
+    const openAlexURL = this.signalTools.openAlexURL(record, options);
+    if (!crossrefURL && !openAlexURL) return {signals: null, reason: "unsupported"};
+    const [crossrefPayload, openAlexPayload] = await Promise.all([
+      crossrefURL ? this.signalsJSON(crossrefURL, {signal}) : null,
+      openAlexURL ? this.signalsJSON(openAlexURL, {signal}) : null
+    ]);
+    const crossref = this.signalTools.readCrossref(crossrefPayload);
+    let openAlex = this.signalTools.readOpenAlex(openAlexPayload);
+    let published = null;
+    // A merged preprint is no longer addressable by its own DOI, so the
+    // published version is located by title and accepted only when the work
+    // found carries this preprint's DOI among its locations.
+    if (!openAlex && (crossref?.isPreprint || this.signalTools.PREPRINT_PREFIXES.test(this.signalTools.bareDOI(record.DOI)))) {
+      const titleURL = this.signalTools.openAlexTitleURL(record, options);
+      const hits = titleURL ? await this.signalsJSON(titleURL, {signal}) : null;
+      for (const raw of Array.isArray(hits?.results) ? hits.results : []) {
+        const work = this.signalTools.readOpenAlex(raw);
+        const match = this.signalTools.publishedVersionOf(work, record);
+        if (match) { published = match; openAlex = work; break; }
+      }
+    }
+    if (!crossref?.valid && !openAlex) return {signals: null, reason: "not-found"};
+    return {signals: this.signalTools.summarise({crossref, openAlex, published, record}), reason: "ok"};
+  }
+
+  async refreshPaperSignals(items, {signal} = {}) {
+    const summary = {ok: 0, "not-found": 0, unsupported: 0, error: 0};
+    for (const item of [...new Set(items)].filter(item => this.isRegular(item))) {
+      if (!this.active || this.stopping) break;
+      try {
+        const {signals, reason} = await this.fetchPaperSignals(item, {signal});
+        if (!signals) { summary[reason]++; continue; }
+        this.entry(item).signals = signals;
+        this.dirty = true; summary.ok++;
+      } catch (error) {
+        // A failed lookup leaves the previous answer standing: a retraction
+        // already recorded must not disappear because the network blinked.
+        summary.error++; this.Z.logError(error);
+      }
+    }
+    if (this.active) { await this.flush(); await this.refreshWindows(); }
+    return summary;
+  }
+
   // Zotero's own CSL processor is authoritative when the style is installed;
   // the local formatter only covers the case where it is not.
   async citationText(items, style) {
@@ -1518,6 +1622,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         this.Z.alert(win,"Style Custom",`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
       });
       action("인용 수 조회 중지",()=>this.citationJob?.controller.abort());
+      action("선택한 문헌 철회·공개접근 신호 조회",async()=>{
+        const result=await this.refreshPaperSignals(this.selected(win));
+        this.Z.alert(win,"Style Custom",`신호 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · DOI 없음 ${result.unsupported}개 · 조회 오류 ${result.error}개`);
+      });
       action("현재 라이브러리 인용 수 조회·메타데이터 저장",()=>this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID));
       action("선택한 저널 IF를 공식 페이지에서 새로고침",async()=>{
         const result = await this.refreshJournalMetrics(this.selected(win), win.DOMParser);
