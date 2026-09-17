@@ -53,7 +53,10 @@ function fixture(initialCache){
  const model={...Model,deleteBoard:(cache,id)=>{calls.push(['deleteBoard',id]);cache.testDeleted=cache.boards.find(b=>b.id===id);cache.boards=cache.boards.filter(b=>b.id!==id);return cache.testDeleted;},restoreBoard:cache=>{calls.push(['restoreBoard']);const board=cache.testDeleted;if(board){cache.boards.push(board);delete cache.testDeleted;}return board;}};
  const bench=Workbench.attach(win,{runtime,library,reader,model,assist});
  const body=()=>bench.panel.querySelector('.sc-body');
- const findButton=label=>[...bench.panel.querySelectorAll('button')].find(b=>b.textContent===label);
+ // An icon button carries its name in the tooltip and the accessible label,
+ // not in its text, so a control is findable the way a user identifies it.
+ const findButton=label=>[...bench.panel.querySelectorAll('button')]
+   .find(b=>b.textContent===label||b.getAttribute('title')===label||b.getAttribute('aria-label')===label);
  const click=async label=>{const b=findButton(label);assert.ok(b,'button: '+label);b.dispatchEvent(new win.Event('click',{bubbles:true}));await settle();};
  const input=(label,value)=>{const el=bench.panel.querySelector('[aria-label="'+label+'"]');assert.ok(el,label);el.value=value;el.dispatchEvent(new win.Event('input',{bubbles:true}));return el;};
  return {win,doc,bench,runtime,library,reader,assist,calls,errors,papers,refs,body,click,input,findButton,setLibrary:id=>{libraryID=id;},setSelection:ids=>{mainSelection=ids.map(id=>refs.get(id));},notify:()=>notify(),record};
@@ -398,5 +401,37 @@ test('following an author adds them to the panel and surfaces what is new next t
 
  await f.click('새 논문 1편 확인함');
  assert.ok(f.calls.find(c=>c[0]==='markSeen'),'marking as read is an explicit act');
+ f.bench.destroy();
+});
+
+test('window chrome is icons, but every one still says what it does',async()=>{
+ const f=fixture();await f.bench.toggle(true);
+ const chrome=[...f.bench.panel.querySelectorAll('.sc-header-actions button')];
+ assert.equal(chrome.length,3);
+ for(const button of chrome){
+  assert.ok(button.textContent.trim().length<=2,'chrome should be a glyph, not a sentence: '+button.textContent);
+  // A glyph with no name is unusable by anyone who cannot see it.
+  assert.ok(button.getAttribute('aria-label')||button.getAttribute('title'),'unnamed icon button');
+ }
+ assert.ok(chrome.some(b=>b.getAttribute('aria-label')==='작업 패널 닫기'));
+ assert.ok(chrome.some(b=>b.getAttribute('aria-label')==='기능 찾기'));
+ f.bench.destroy();
+});
+
+test('a journal is listed once, and its impact factor is stated once',async()=>{
+ const f=fixture();
+ f.runtime.publicationTags=()=>['IF 56.1 (2025)','JCR: Q1'];
+ await f.bench.show('journals');
+ const rows=[...f.body().querySelectorAll('.sc-journal')];
+ assert.ok(rows.length,'journals should be listed');
+ for(const row of rows){
+  const text=row.textContent;
+  assert.equal((text.match(/IF 56\.1/g)||[]).length<=1,true,'the impact factor was printed twice: '+text);
+ }
+ // The source is kept but shortened; the full value stays in the tooltip.
+ const source=rows[0].querySelector('.sc-hit-authors');
+ assert.ok(source.getAttribute('title'),'the full provenance must remain available');
+ // Actions live in the hover group, not inline in the card.
+ assert.ok(rows[0].querySelector('.sc-hit-actions button'));
  f.bench.destroy();
 });

@@ -51,10 +51,10 @@
    });return b;
   };
   function saveUI(patch){if(patch.density)runtime.Z.Prefs.set('extensions.style-custom.workbenchDensity',patch.density,true);runtime.cache.workbenchUI={...(runtime.cache.workbenchUI||{}),...patch};runtime.dirty=true;return runtime.flush();}
-  const density=button('간격 좁게',()=>{panel.dataset.density=panel.dataset.density==='compact'?'comfortable':'compact';syncDensity();return saveUI({density:panel.dataset.density});},headerActions,{'aria-label':'화면 밀도 전환'});
-  function syncDensity(){density.textContent=panel.dataset.density==='compact'?'간격 넓게':'간격 좁게';density.setAttribute('aria-pressed',String(panel.dataset.density==='compact'));}syncDensity();
-  button('기능 찾기',()=>openCommands(),headerActions,{'aria-keyshortcuts':'Meta+K Control+K',title:'기능 찾기 · ⌘/Ctrl K'});
-  button('닫기',()=>toggle(false),headerActions,{'aria-label':'작업 패널 닫기'});
+  const density=button('\u2261',()=>{panel.dataset.density=panel.dataset.density==='compact'?'comfortable':'compact';syncDensity();return saveUI({density:panel.dataset.density});},headerActions,{'aria-label':'화면 밀도 전환',class:'sc-icon-button'});
+  function syncDensity(){const compact=panel.dataset.density==='compact';density.title=compact?'간격 넓게':'간격 좁게';density.setAttribute('aria-pressed',String(compact));}syncDensity();
+  button('\u2315',()=>openCommands(),headerActions,{'aria-keyshortcuts':'Meta+K Control+K','aria-label':'기능 찾기',title:'기능 찾기 · ⌘/Ctrl K',class:'sc-icon-button'});
+  button('\u2715',()=>toggle(false),headerActions,{'aria-label':'작업 패널 닫기',title:'닫기',class:'sc-icon-button'});
   const controls=node('div',null,panel,{class:'sc-controls sc-search-row'});
   const search=node('input',null,controls,{type:'search',placeholder:'제목·저자·태그 검색','aria-label':'작업 패널 검색'});
   search.addEventListener('input',()=>{state.query=search.value;render();});
@@ -525,7 +525,17 @@
    run(loadAuthors);
   }
 
-  function drawJournals(){const seen=new Set();for(const item of rows()){if(!item.venue||seen.has(item.venue))continue;seen.add(item.venue);const c=card(item.venue,item.impactSource||'출처 정보 없음');node('p',item.impactFactor==null?'IF 미확인':`IF ${item.impactFactor}`,c,{class:'sc-metrics'});const tags=runtime.publicationTags?.(runtime.Z.Items.get(Number(item.id)))||[];if(tags.length)node('p',tags.join(' · '),c);button('저널 등급 조회',async()=>{await runtime.refreshPublicationRanks([runtime.Z.Items.get(Number(item.id))]);await load();message('저널 등급 조회를 마쳤습니다.');},c);button('공식 값 새로고침',async()=>{const result=await runtime.refreshJournalMetrics([runtime.Z.Items.get(Number(item.id))],win.DOMParser);message(`확인 ${result.updated} · 미확인 ${result.failed+result.unknown}`);await load();},c);}}
+  function drawJournals(){const seen=new Set();const list=node('div',null,body,{class:'sc-hits'});for(const item of rows()){if(!item.venue||seen.has(item.venue))continue;seen.add(item.venue);
+   const c=node('div',null,list,{class:'sc-hit sc-journal'});
+   node('p',item.venue,c,{class:'sc-hit-title'});
+   // publicationTags already carries "IF 56.1 (2025)" and the rank grades, so the
+   // impact factor was being printed twice; say it once, with its provenance.
+   const tags=runtime.publicationTags?.(runtime.Z.Items.get(Number(item.id)))||[];
+   const facts=tags.length?tags:[item.impactFactor==null?'IF 미확인':`IF ${item.impactFactor}`];
+   node('p',facts.join(' · '),c,{class:'sc-hit-meta'});
+   const source=item.impactSource||'출처 정보 없음';
+   node('p',source.replace(/https?:\/\/[^\s·]+/,m=>m.replace(/^https?:\/\/(www\.)?/,'').split('/')[0]),c,{class:'sc-hit-authors',title:source});
+   const actions=node('div',null,c,{class:'sc-hit-actions'});button('저널 등급 조회',async()=>{await runtime.refreshPublicationRanks([runtime.Z.Items.get(Number(item.id))]);await load();message('저널 등급 조회를 마쳤습니다.');},actions);button('공식 값 새로고침',async()=>{const result=await runtime.refreshJournalMetrics([runtime.Z.Items.get(Number(item.id))],win.DOMParser);message(`확인 ${result.updated} · 미확인 ${result.failed+result.unknown}`);await load();},actions);}}
   function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. 설정에서 AI endpoint와 모델을 연결할 수 있습니다.');return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
    for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');const request=++aiEpoch;const result=await assist.run(task,item,{language:language.value});if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);
    button('요청 중지',()=>{aiEpoch++;assist.cancel?.();message('AI 요청을 중지했습니다.');},b);

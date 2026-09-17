@@ -30,10 +30,10 @@
   --sc-radius-card: 12px;
   --sc-radius-panel: 16px;
   --sc-control-height: 30px;
-  --sc-card-padding: 16px;
-  --sc-content-padding: 22px;
+  --sc-card-padding: 12px;
+  --sc-content-padding: 18px;
   --sc-nav-width: 178px;
-  --sc-paper-gap: 10px;
+  --sc-paper-gap: 8px;
   position: fixed;
   z-index: 10000;
   inset-block-start: 48px;
@@ -383,3 +383,18 @@
 #style-custom-workbench .sc-chip { padding: 2px 8px; border-radius: 100px; background: var(--sc-accent-soft); color: var(--sc-muted); font-size: 11px; }
 #style-custom-workbench .sc-profile { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 0; color: var(--sc-muted); font-size: 12px; }
 #style-custom-workbench .sc-profile b { color: var(--sc-text); font-variant-numeric: tabular-nums; }
+
+/* Window chrome is symbols, not sentences: a square button carrying one glyph. */
+#style-custom-workbench .sc-icon-button {
+  min-width: 26px; width: 26px; min-height: 26px; height: 26px;
+  padding: 0; border-radius: 7px; background: transparent;
+  color: var(--sc-muted); font-size: 14px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+#style-custom-workbench .sc-icon-button:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
+#style-custom-workbench .sc-icon-button[aria-pressed=true] { background: var(--sc-accent-soft); color: var(--sc-accent); }
+
+/* A journal says one thing: its impact factor and where that came from. */
+#style-custom-workbench .sc-journal { grid-template-columns: 1fr auto; padding: 9px 2px; }
+#style-custom-workbench .sc-journal .sc-hit-title { font-size: 13px; }
+#style-custom-workbench .sc-journal .sc-hit-authors { color: var(--sc-faint); }
