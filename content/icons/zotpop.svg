@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="ZotPoP: searching the literature">
+  <rect width="128" height="128" rx="28" fill="#2F6FE0"/>
+  <path d="M79 79 L101 101" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round"/>
+  <circle cx="54" cy="54" r="27" fill="#2F6FE0" stroke="#FFFFFF" stroke-width="8"/>
+  <g fill="#FFFFFF">
+    <rect x="42" y="56" width="9" height="14" rx="4.5"/>
+    <rect x="57" y="44" width="9" height="26" rx="4.5"/>
+  </g>
+</svg>

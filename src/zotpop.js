@@ -31,7 +31,7 @@ Zotero.ZotPoP = {
 				pluginID: id,
 				src: rootURI + "content/preferences.xhtml",
 				label: "ZotPoP",
-				image: rootURI + "content/icon.svg"
+				image: rootURI + "content/icons/zotpop-toolbar.svg"
 			});
 		}
 		catch (e) {
@@ -105,7 +105,7 @@ Zotero.ZotPoP = {
 		btn.id = "zotpop-toolbar-button";
 		btn.className = "zotero-tb-button";
 		btn.setAttribute("tooltiptext", this.t("toolbarTip"));
-		btn.setAttribute("image", "chrome://zotpop/content/icon.svg");
+		btn.setAttribute("image", "chrome://zotpop/content/icons/zotpop-toolbar.svg");
 		btn.style.setProperty("-moz-context-properties", "fill, fill-opacity");
 		btn.style.fill = "currentColor";
 		btn.addEventListener("command", () => this.openSearchWindow(window));
