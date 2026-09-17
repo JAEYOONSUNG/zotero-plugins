@@ -20,3 +20,11 @@ pref("extensions.style-custom.aiModel", "");
 pref("extensions.style-custom.aiKey", "");
 pref("extensions.style-custom.journalRankKey", "");
 pref("extensions.style-custom.touchDateOnRead", false);
+
+// Identifies the caller to OpenAlex and Europe PMC, which serve a named
+// caller from a faster pool. Empty falls back to the Zotero account address.
+pref("extensions.style-custom.contactEmail", "");
+
+// Optional override. Left empty, the key ZotPoP already holds is used, so
+// the two plugins share one OpenAlex budget instead of competing for it.
+pref("extensions.style-custom.openAlexApiKey", "");

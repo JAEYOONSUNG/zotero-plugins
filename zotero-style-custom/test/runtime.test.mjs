@@ -1309,3 +1309,34 @@ test('the open-access link is offered only to a shelf that cannot already open t
     attachmentFilename: 'paper.pdf', getTags: () => []})};
   assert.equal(oaBadge().style.cursor, '');
 });
+
+test('a caller identifies itself, falling back to the Zotero account address', () => {
+  const {plugin, Z} = fixture();
+  // The preference was read but never shipped, so this was always empty and
+  // every request went to the anonymous pool -- which is what got rate limited.
+  Z.Prefs.set('extensions.style-custom.contactEmail', 'me@lab.org', true);
+  assert.equal(plugin.contactEmail(), 'me@lab.org');
+
+  Z.Prefs.set('extensions.style-custom.contactEmail', '', true);
+  Z.Prefs.set('sync.server.username', 'account@example.edu', true);
+  assert.equal(plugin.contactEmail(), 'account@example.edu', 'the Zotero account stands in');
+
+  // A Zotero username is often not an address; sending rubbish is worse than nothing.
+  Z.Prefs.set('sync.server.username', 'jaeyoon', true);
+  assert.equal(plugin.contactEmail(), '');
+  Z.Prefs.set('extensions.style-custom.contactEmail', 'not an email', true);
+  assert.equal(plugin.contactEmail(), '');
+});
+
+test('the shipped preferences cover every preference the code reads', async () => {
+  const {readFileSync} = await import('node:fs');
+  const shipped = new Set([...readFileSync(new URL('../prefs.js', import.meta.url), 'utf8')
+    .matchAll(/pref\("extensions\.style-custom\.([^"]+)"/g)].map(m => m[1]));
+  const source = readFileSync(new URL('../src/runtime.js', import.meta.url), 'utf8');
+  const read = [...source.matchAll(/this\.pref\('([A-Za-z][A-Za-z0-9]*)'/g)].map(m => m[1]);
+  const schema = new Set((await import('../src/settings-schema.js')).default.schema.settings.map(row => row.key));
+  const missing = [...new Set(read)].filter(key => !shipped.has(key) && !schema.has(key));
+  // contactEmail was read in two places and shipped in none, so it silently
+  // stayed empty. Any preference the code reads must exist somewhere.
+  assert.deepEqual(missing, [], `preferences read but never shipped: ${missing.join(', ')}`);
+});

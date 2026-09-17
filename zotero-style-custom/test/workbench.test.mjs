@@ -511,3 +511,37 @@ test('the library tab is not named as though it searched the literature',async()
  assert.equal(f.bench.panel.querySelector('.sc-section-title').textContent,'보유 문헌');
  f.bench.destroy();
 });
+
+test('followed authors are listed whether or not a paper happens to be selected',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthors=()=>[{id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],checkedAt:'2026-09-17T00:00:00Z'},
+  {id:'A2',name:'George M. Church',institution:'Harvard',seen:[]}];
+ f.setSelection([]);
+ await f.bench.show('authors');
+ // Ninety-five followed authors were invisible because the whole tab returned
+ // early when no single paper was selected.
+ const names=[...f.body().querySelectorAll('.sc-hit-title')].map(n=>n.textContent);
+ assert.deepEqual(names,['Christopher A. Voigt','George M. Church']);
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/관심 저자 2명/);
+ f.bench.destroy();
+});
+
+test('with a paper selected the watchlist stays, and its authors are offered too',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthors=()=>[{id:'A1',name:'Followed Person',institution:'Somewhere',seen:[]}];
+ await f.bench.show('authors');
+ const headings=[...f.body().querySelectorAll('.sc-hit-group')].map(n=>n.textContent);
+ assert.ok(headings.some(h=>h.startsWith('관심 저자')),'the watchlist must not be replaced');
+ assert.ok(headings.some(h=>h.startsWith('이 논문의 저자')),'the paper’s own authors are still offered');
+ f.bench.destroy();
+});
+
+test('an empty watchlist with nothing selected explains what to do',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthors=()=>[];
+ f.setSelection([]);
+ await f.bench.show('authors');
+ assert.match(f.body().textContent,/아직 관심 저자가 없습니다/);
+ assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error,'true');
+ f.bench.destroy();
+});

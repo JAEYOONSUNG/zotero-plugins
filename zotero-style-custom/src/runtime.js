@@ -717,7 +717,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // Nothing is written until the archive is open and its entries are triaged.
   async fetchSupplementary(item, {pdfOnly = false, signal, maxBytes = 200 * 1024 * 1024} = {}) {
     const record = this.bibliographyRecord(item);
-    const url = this.supplementaryTools.searchURL(record, {email: this.pref('contactEmail', '')});
+    const url = this.supplementaryTools.searchURL(record, {email: this.contactEmail()});
     if (!url) return {status: 'unsupported', reason: '식별자가 없어 조회할 수 없습니다', added: 0};
     const search = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 20000});
     const article = this.supplementaryTools.pickArticle(search?.response, record);
@@ -1023,9 +1023,22 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   // --- Discovery: what to read next, and what an author is doing now ---
 
+  // OpenAlex and Europe PMC both put callers who identify themselves on a
+  // faster pool. contactEmail was read but never shipped as a preference, so it
+  // was always empty and every request went to the anonymous pool -- which is
+  // where the rate limiting came from. Fall back to the Zotero account.
+  contactEmail() {
+    const set = String(this.pref('contactEmail', '') || '').trim();
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(set)) return set;
+    let account = '';
+    try { account = String(this.Z.Prefs.get('sync.server.username', true) || '').trim(); }
+    catch (ignored) { }
+    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(account) ? account : '';
+  }
+
   discoverOptions() {
     return {
-      email: this.pref('contactEmail', '') || undefined,
+      email: this.contactEmail() || undefined,
       // ZotPoP keeps the user's free OpenAlex key; reuse it when it is there.
       apiKey: this.pref('openAlexApiKey', '') || this.Z.Prefs.get('extensions.zotpop.openAlexApiKey', true) || undefined
     };

@@ -481,12 +481,13 @@
   }
 
   async function drawAuthors(token){
-   let item;try{item=one();}catch(_){empty('저자를 추적할 문헌 하나를 선택하세요.');return;}
-   node('h2',item.title,body);
-   const b=bar();
-   // The watchlist outlives any one author view, so it gets its own container.
+   // The watchlist is drawn first and unconditionally: it is a list of people
+   // being followed, and hiding it until a paper happened to be selected made
+   // every followed author invisible.
    const watchArea=node('div',null,body);
    const list=node('div',null,body);
+   let item=null;
+   try{item=one();}catch(_){item=null;}
    async function show(person){
     message(`${person.name}의 최근 작업을 불러오는 중…`);
     const {profile,works,fresh,watching,checkedAt}=await runtime.authorUpdates(person.id);
@@ -538,7 +539,11 @@
      button('새 논문 보기',()=>run(()=>show(person)),actions);
     }
    }
-   function refreshWatched(){watchArea.replaceChildren();drawWatched(watchArea);}
+   function refreshWatched(){
+    watchArea.replaceChildren();
+    drawWatched(watchArea);
+    if(!watchArea.childNodes.length&&!item)node('p','아직 관심 저자가 없습니다. 문헌을 하나 선택하면 그 저자를 등록할 수 있습니다.',watchArea,{class:'sc-muted'});
+   }
 
    async function loadAuthors(){
     message('저자 정보를 확인하는 중…');
@@ -560,6 +565,13 @@
     // One author is not a choice; go straight to their work.
     if(people.length===1)await show(people[0]);
    }
+   refreshWatched();
+   if(!item){
+    message(`관심 저자 ${runtime.watchedAuthors().length}명. 새 저자를 등록하려면 문헌을 하나 선택하세요.`);
+    return;
+   }
+   node('h2',item.title,body);
+   const b=bar();
    button('새로고침',()=>run(async()=>{
     runtime.discoverCache.delete('authors:'+runtime.identity(runtime.Z.Items.get(Number(item.id))));
     await loadAuthors();
