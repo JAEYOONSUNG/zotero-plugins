@@ -429,7 +429,16 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         plain.title = main.map(k => k.name).join("\n");
         cell.appendChild(plain);
       }
-      if (si.length) { const pill = this.pill(doc, si.length > 1 ? `SI ×${si.length}` : "SI", P.purple, P); pill.title = "보충자료(supplementary)\n" + si.map(k => k.name).join("\n"); cell.appendChild(pill); }
+      if (si.length) {
+        const pill = this.pill(doc, si.length > 1 ? `SI ×${si.length}` : "SI", P.purple, P);
+        pill.title = "보충자료(supplementary) — 클릭하면 열립니다\n" + si.map(k => k.name).join("\n");
+        pill.style.cursor = "pointer";
+        pill.addEventListener("click", event => {
+          event.stopPropagation();
+          this.libraryService.openItem(si[0].id).catch(error => this.Z.logError(error));
+        });
+        cell.appendChild(pill);
+      }
       cell.title = si.length ? `보충자료 ${si.length}개 포함` : main.length ? "보충자료 없음" : "첨부파일 없음";
       return cell;
     } else if (key === "if") {
@@ -653,6 +662,32 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     if (added) { record.supplementaryFiles = [...imported]; this.dirty = true; }
     return {status: added ? 'ok' : skipped ? 'already' : 'none', added, skipped, article};
+  }
+
+  // Automatic detection only sees files the plugin fetched or that still carry a
+  // publisher's naming. Anything downloaded by hand needs saying so by hand.
+  selectedAttachments(win) {
+    const chosen = win?.ZoteroPane?.getSelectedItems?.() || [];
+    const direct = chosen.filter(item => item?.isFileAttachment?.());
+    if (direct.length) return direct;
+    // With a parent selected, its own files are the obvious subject.
+    return chosen.filter(item => this.isRegular(item))
+      .flatMap(item => (item.getAttachments?.() || []).map(id => this.Z.Items.get(id)))
+      .filter(attachment => attachment?.isFileAttachment?.());
+  }
+
+  async setSupplementary(attachments, supplementary) {
+    let changed = 0;
+    for (const attachment of attachments) {
+      const has = (attachment.getTags?.() || []).some(tag => tag.tag === this.SUPPLEMENTARY_TAG);
+      if (has === !!supplementary) continue;
+      if (supplementary) attachment.addTag(this.SUPPLEMENTARY_TAG, 1);
+      else attachment.removeTag(this.SUPPLEMENTARY_TAG);
+      await attachment.saveTx({skipSelect: true, skipDateModifiedUpdate: true});
+      changed++;
+    }
+    if (changed) await this.refreshWindows();
+    return changed;
   }
 
   // Type 1 is an automatic tag: it identifies the file without cluttering the
@@ -1163,6 +1198,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       for(let rating=0;rating<=5;rating++)action(rating?"★".repeat(rating):"별점 지우기",()=>this.edit(this.selected(win),{rating}),ratings);
       make("menuseparator",null,body);
       const suppl=make("menupopup",null,make("menu","보충자료 내려받기",body));
+      action("선택한 파일을 보충자료로 표시",async()=>{
+        const files=this.selectedAttachments(win);
+        if(!files.length)throw new Error("첨부파일을 선택하세요.");
+        const changed=await this.setSupplementary(files,true);
+        this.Z.alert(win,"Style Custom",`${changed}개를 보충자료로 표시했습니다.`);
+      },suppl);
+      action("보충자료 표시 해제",async()=>{
+        const files=this.selectedAttachments(win);
+        if(!files.length)throw new Error("첨부파일을 선택하세요.");
+        const changed=await this.setSupplementary(files,false);
+        this.Z.alert(win,"Style Custom",`${changed}개의 표시를 해제했습니다.`);
+      },suppl);
+      make("menuseparator",null,suppl);
       for(const [label,pdfOnly] of [["PDF만",true],["모든 파일",false]])action(label,async()=>{
         const items=this.selected(win);
         if(!items.length)throw new Error("문헌을 먼저 선택하세요.");

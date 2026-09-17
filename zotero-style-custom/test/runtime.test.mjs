@@ -888,3 +888,66 @@ test('a corrupt watchlist on disk is ignored rather than crashing the tab', asyn
     assert.deepEqual(f.plugin.watchedAuthors(), []);
   }
 });
+
+function attachmentFixture() {
+  const {plugin, item, Z} = fixture();
+  const parent = item(1);
+  const make = (id, tags = []) => ({
+    id, isFileAttachment: () => true, attachmentFilename: 'file' + id + '.pdf',
+    getTags: () => tags.map(tag => ({tag, type: 1})),
+    addTag(tag) { tags.push(tag); }, removeTag(tag) { tags.splice(tags.indexOf(tag), 1); },
+    async saveTx() { this.saved = (this.saved || 0) + 1; }
+  });
+  const files = new Map([[2, make(2)], [3, make(3, [plugin.SUPPLEMENTARY_TAG])]]);
+  parent.getAttachments = () => [2, 3];
+  Z.Items = {get: id => files.get(id)};
+  plugin.refreshWindows = async () => { plugin.refreshed = (plugin.refreshed || 0) + 1; };
+  return {plugin, parent, files, Z};
+}
+
+test('a file the user downloaded themselves can be marked supplementary by hand', async () => {
+  const {plugin, files} = attachmentFixture();
+  const changed = await plugin.setSupplementary([files.get(2)], true);
+  assert.equal(changed, 1);
+  assert.equal(plugin.isSupplementary(files.get(2)), true);
+  assert.equal(plugin.refreshed, 1, 'the column should repaint');
+
+  // Marking something already marked is not a change, and costs no write.
+  assert.equal(await plugin.setSupplementary([files.get(2)], true), 0);
+  assert.equal(files.get(2).saved, 1);
+});
+
+test('a wrongly marked file can be unmarked', async () => {
+  const {plugin, files} = attachmentFixture();
+  assert.equal(plugin.isSupplementary(files.get(3)), true);
+  assert.equal(await plugin.setSupplementary([files.get(3)], false), 1);
+  assert.equal(plugin.isSupplementary(files.get(3)), false);
+  assert.equal(await plugin.setSupplementary([files.get(3)], false), 0);
+});
+
+test('selecting a paper offers its files; selecting files uses exactly those', async () => {
+  const {plugin, parent, files} = attachmentFixture();
+  const win = selected => ({ZoteroPane: {getSelectedItems: () => selected}});
+  // A parent stands for its own attachments.
+  assert.deepEqual(plugin.selectedAttachments(win([parent])).map(a => a.id), [2, 3]);
+  // An explicit file selection is not widened to its siblings.
+  assert.deepEqual(plugin.selectedAttachments(win([files.get(3)])).map(a => a.id), [3]);
+  assert.deepEqual(plugin.selectedAttachments(win([])), []);
+  assert.deepEqual(plugin.selectedAttachments({}), []);
+});
+
+test('the SI badge opens the supplementary file rather than just describing it', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, parent} = attachmentFixture();
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref: parent})}};
+  const opened = [];
+  plugin.libraryService.openItem = async (...args) => { opened.push(args); };
+  const cell = plugin.renderCell('files', 0, '', {}, document);
+  const badge = [...cell.children].find(el => el.textContent.startsWith('SI'));
+  assert.ok(badge, 'the marked file should be badged');
+  assert.equal(badge.style.cursor, 'pointer');
+  badge.dispatchEvent(new window.Event('click', {bubbles: true}));
+  await Promise.resolve();
+  assert.deepEqual(opened, [[3]], 'clicking opens the supplementary attachment');
+});
