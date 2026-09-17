@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "version": "0.17.0",
+ "version": "0.18.0",
  "baseline": "Installed Ethereal Style 6.0.76: all 50 simple and dotted preference feature IDs plus requested workflows",
  "sourceFeatureIDs": [
   "AIGenerateRemark",
@@ -1104,6 +1104,21 @@
     "test/citation-formats.test.mjs"
    ],
    "entryPoint": "우클릭 → 인용…",
+   "condition": "",
+   "status": "implemented"
+  },
+  {
+   "id": "backfill",
+   "origin": "additional requested workflow",
+   "name": "빈 칸 자동 채우기 (철회 신호 · 저널 지표 · 새 논문)",
+   "implementation": {
+    "file": "src/runtime.js",
+    "marker": "async backfill("
+   },
+   "tests": [
+    "test/backfill.test.mjs"
+   ],
+   "entryPoint": "우클릭 → 빈 칸 채우기",
    "condition": "",
    "status": "implemented"
   }

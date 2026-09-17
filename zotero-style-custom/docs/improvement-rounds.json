@@ -1,5 +1,5 @@
 {
- "version": "0.17.0",
+ "version": "0.18.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -946,6 +946,44 @@
    "status": "verified",
    "review": "The cap was chosen when each author cost a request of their own; fifty share one now, so it sits where the stored news starts to matter. The lookback floor comes from each author's own last-checked date, capped at six years, so following someone two years ago and sweeping today does not skip the two years between.",
    "verification": "Targeted Node/DOM tests plus the integrated suite; the rating migration was sized against the user's real library (16 distinct tags, 81 rating tags, 109 watched authors) rather than against a guess.",
+   "nativeActivationVerified": false
+  },
+  {
+   "round": "R32",
+   "title": "만들어만 두고 비어 있던 세 기능을 채우기",
+   "gap": "Not one of the user's 1,214 papers had a retraction check, not one of their 255 journals had a figure, and not one of their 109 followed authors had been swept. Each waited on a context-menu item nobody had a reason to go looking for, so the columns showed a dash and the panel showed nothing.",
+   "entryPoint": "우클릭 → 빈 칸 채우기 (철회 신호 · 저널 지표 · 새 논문)",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "async backfill("
+    },
+    {
+     "file": "src/runtime.js",
+     "marker": "itemsNeedingSignals"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/backfill.test.mjs",
+     "name": "the stages run cheapest and highest-stakes first"
+    },
+    {
+     "file": "test/backfill.test.mjs",
+     "name": "running out of budget stops the whole backfill rather than sweeping on blind"
+    },
+    {
+     "file": "test/backfill.test.mjs",
+     "name": "a spent OpenAlex budget still records the retraction, which is the point of the column"
+    },
+    {
+     "file": "test/backfill.test.mjs",
+     "name": "cancelling stops at the next paper and keeps what was already learned"
+    }
+   ],
+   "status": "verified",
+   "review": "Retraction first, because it is the one fact worth interrupting someone for, and Crossref answers it free and unmetered: 30 of 30 real library DOIs resolved on Crossref alone. A 429 from OpenAlex used to read as 'no notices found', so a sweep during an outage would have walked the whole library and reported a clean bill of health; it now keeps Crossref's verdict, marks the entry partial, and asks again next time. One run at a time, cancellable, resumable.",
+   "verification": "Targeted Node/DOM tests plus a live Crossref check over real library DOIs.",
    "nativeActivationVerified": false
   }
  ],

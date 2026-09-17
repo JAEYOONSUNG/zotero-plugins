@@ -1262,7 +1262,7 @@ test('a retracted paper is fetched, cached and painted as something you cannot m
   assert.match(blank.title, /아직 조회하지/);
 
   const summary = await f.plugin.refreshPaperSignals([f.ref]);
-  assert.deepEqual(summary, {ok: 1, 'not-found': 0, unsupported: 0, error: 0});
+  assert.deepEqual(summary, {ok: 1, 'not-found': 0, unsupported: 0, error: 0, remaining: 0, budgetGone: false});
   assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted');
 
   const cell = f.plugin.renderCell('signals', 0, '', {}, document);
@@ -1304,7 +1304,7 @@ test('a lookup that fails leaves a recorded retraction standing', async () => {
 test('a DOI neither service knows records nothing rather than a clean bill of health', async () => {
   const f = signalsFixture({answers: []});
   const summary = await f.plugin.refreshPaperSignals([f.ref]);
-  assert.deepEqual(summary, {ok: 0, 'not-found': 1, unsupported: 0, error: 0});
+  assert.deepEqual(summary, {ok: 0, 'not-found': 1, unsupported: 0, error: 0, remaining: 0, budgetGone: false});
   assert.equal(f.plugin.signalsOf(f.ref), null);
   assert.equal(f.errors.length, 0, 'a 404 is not an error to log');
 });
@@ -1312,7 +1312,7 @@ test('a DOI neither service knows records nothing rather than a clean bill of he
 test('a paper with no DOI is never sent to either service', async () => {
   const f = signalsFixture({DOI: ''});
   const summary = await f.plugin.refreshPaperSignals([f.ref]);
-  assert.deepEqual(summary, {ok: 0, 'not-found': 0, unsupported: 1, error: 0});
+  assert.deepEqual(summary, {ok: 0, 'not-found': 0, unsupported: 1, error: 0, remaining: 0, budgetGone: false});
   assert.deepEqual(f.asked, [], 'a title search would answer about a different paper');
 });
 

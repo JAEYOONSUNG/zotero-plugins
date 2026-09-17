@@ -1431,6 +1431,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const response = await this.Z.HTTP.request("GET", url,
       {responseType: "json", timeout: 20000, successCodes: false});
     signal?.throwIfAborted?.();
+    // A 429 is not an answer about the paper. Left as null it reads as "no
+    // notices found", so a sweep during a budget outage would walk the whole
+    // library, learn nothing, and report it as a clean bill of health.
+    if (response?.status === 429) throw Object.assign(new Error("Insufficient budget"), {status: 429});
     return response?.status === 200 ? response.response : null;
   }
 
@@ -1440,9 +1444,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const crossrefURL = this.signalTools.crossrefURL(record, options);
     const openAlexURL = this.signalTools.openAlexURL(record, options);
     if (!crossrefURL && !openAlexURL) return {signals: null, reason: "unsupported"};
+    // Crossref answers the retraction question and is free and unmetered;
+    // OpenAlex adds open-access and preprint-to-published and is not. When the
+    // day's OpenAlex budget is gone, a retracted paper is still worth recording
+    // -- it is the fact this whole column exists for -- so that half is kept
+    // and the entry is marked partial for a later run to finish.
+    let openAlexOut = false;
     const [crossrefPayload, openAlexPayload] = await Promise.all([
       crossrefURL ? this.signalsJSON(crossrefURL, {signal}) : null,
-      openAlexURL ? this.signalsJSON(openAlexURL, {signal}) : null
+      openAlexURL ? this.signalsJSON(openAlexURL, {signal})
+        .catch(error => { if (!this.outOfBudget(error)) throw error; openAlexOut = true; return null; })
+        : null
     ]);
     const crossref = this.signalTools.readCrossref(crossrefPayload);
     let openAlex = this.signalTools.readOpenAlex(openAlexPayload);
@@ -1459,27 +1471,138 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (match) { published = match; openAlex = work; break; }
       }
     }
-    if (!crossref?.valid && !openAlex) return {signals: null, reason: "not-found"};
-    return {signals: this.signalTools.summarise({crossref, openAlex, published, record}), reason: "ok"};
+    if (!crossref?.valid && !openAlex) {
+      // Nothing was learned and the reason was a spent budget, not the paper.
+      if (openAlexOut) throw Object.assign(new Error("Insufficient budget"), {status: 429});
+      return {signals: null, reason: "not-found"};
+    }
+    const summary = this.signalTools.summarise({crossref, openAlex, published, record});
+    if (openAlexOut && summary) summary.partial = true;
+    return {signals: summary, reason: "ok", openAlexOut};
   }
 
-  async refreshPaperSignals(items, {signal} = {}) {
-    const summary = {ok: 0, "not-found": 0, unsupported: 0, error: 0};
-    for (const item of [...new Set(items)].filter(item => this.isRegular(item))) {
-      if (!this.active || this.stopping) break;
+  async refreshPaperSignals(items, {signal, onProgress, pace = 0} = {}) {
+    const summary = {ok: 0, "not-found": 0, unsupported: 0, error: 0, remaining: 0, budgetGone: false};
+    const queue = [...new Set(items)].filter(item => this.isRegular(item));
+    for (const [index, item] of queue.entries()) {
+      if (!this.active || this.stopping || signal?.aborted) { summary.remaining = queue.length - index; break; }
+      onProgress?.(index, queue.length);
       try {
-        const {signals, reason} = await this.fetchPaperSignals(item, {signal});
+        const {signals, reason, openAlexOut} = await this.fetchPaperSignals(item, {signal});
+        if (openAlexOut) summary.partialOnly = (summary.partialOnly || 0) + 1;
         if (!signals) { summary[reason]++; continue; }
         this.entry(item).signals = signals;
         this.dirty = true; summary.ok++;
       } catch (error) {
+        if (this.outOfBudget(error)) {
+          summary.budgetGone = true;
+          summary.remaining = queue.length - index;
+          break;
+        }
         // A failed lookup leaves the previous answer standing: a retraction
         // already recorded must not disappear because the network blinked.
         summary.error++; this.Z.logError(error);
       }
+      if (pace && index + 1 < queue.length) await this.pause(pace);
     }
     if (this.active) { await this.flush(); await this.refreshWindows(); }
     return summary;
+  }
+
+  // One run at a time, cancellable, and never two windows racing the same sweep.
+  // Not async: a second caller must get back the very promise already in
+  // flight, not a fresh wrapper around it.
+  runBackfill(options = {}) {
+    if (this.backfilling) return this.backfilling;
+    const controller = new (this.Z.getMainWindow?.()?.AbortController || globalThis.AbortController)();
+    this.backfillController = controller;
+    this.backfilling = this.backfill({...options, signal: controller.signal})
+      .finally(() => { this.backfilling = null; this.backfillController = null; });
+    return this.backfilling;
+  }
+
+  stopBackfill() { this.backfillController?.abort(); }
+
+  showBackfillProgress(win, stage, done, total) {
+    const label = {signals: '철회·공개접근 신호', journals: '저널 지표', authors: '관심 저자 새 논문'}[stage] || stage;
+    const text = `${label} 채우는 중 ${done + 1}/${total}`;
+    for (const [target, state] of this.windows) {
+      if (target.closed) continue;
+      try { state?.workbench?.setStatus?.(text); } catch (error) { this.Z.logError(error); }
+    }
+  }
+
+  backfillSummary(report) {
+    const lines = [];
+    if (report.signals) {
+      lines.push(`철회·공개접근 신호: ${report.signals.ok}편 확인`
+        + (report.signals['not-found'] ? ` · ${report.signals['not-found']}편은 기록 없음` : '')
+        + (report.signals.error ? ` · ${report.signals.error}편 조회 실패` : ''));
+      if (report.signals.partialOnly) {
+        lines.push(`  그중 ${report.signals.partialOnly}편은 철회 여부만 확인했습니다(공개접근 정보는 한도 복구 후 자동으로 채웁니다).`);
+      }
+    } else lines.push('철회·공개접근 신호: 더 확인할 문헌이 없습니다.');
+    if (report.journals) lines.push(`저널 지표: ${report.journals.found}종 확인 · ${report.journals.missing}종은 OpenAlex에도 없음`);
+    if (report.authors) {
+      lines.push(report.authors.withNews
+        ? `관심 저자: ${report.authors.withNews}명이 새 논문 ${report.authors.works}편`
+        : `관심 저자: ${report.authors.authors}명 확인, 새 논문 없음`);
+    }
+    if (report.budgetGone) {
+      lines.push('', 'OpenAlex 하루 한도를 다 썼습니다. UTC 자정에 초기화되고, 다시 실행하면 남은 것부터 이어서 채웁니다.');
+    }
+    return lines.join('\n');
+  }
+
+  // Three features were built, shipped, and then sat empty: not one of the
+  // user's 1,214 papers had a retraction check, not one of their 255 journals
+  // had a figure, and not one of their 109 followed authors had been swept.
+  // Each waited on a context-menu item nobody had a reason to go looking for,
+  // so the columns showed a dash and the panel showed nothing. This fills them
+  // in the background instead, cheapest and highest-stakes first: a retracted
+  // paper is the one fact worth interrupting someone for.
+  itemsNeedingSignals(libraryID) {
+    const id = libraryID ?? this.Z.Libraries.userLibraryID;
+    const wanted = [];
+    for (const item of this.Z.Items.getAll ? this.Z.Items.getAll(id) : []) {
+      if (!this.isRegular(item)) continue;
+      // A partial entry carries Crossref's retraction verdict but not the
+      // open-access half, so it is asked again rather than left half-answered.
+      const known = this.entry(item).signals;
+      if (known && !known.partial) continue;
+      // Without a DOI there is nothing to ask Crossref, so asking wastes a turn.
+      if (!this.signalTools.bareDOI(this.citationRecord(item).doi)) continue;
+      wanted.push(item);
+    }
+    return wanted;
+  }
+
+  async backfill({libraryID, signal, onProgress, pace = 250} = {}) {
+    const report = {signals: null, journals: null, authors: null, budgetGone: false, stage: null};
+    const note = (stage, done, total) => onProgress?.({stage, done, total});
+
+    report.stage = 'signals';
+    const papers = this.itemsNeedingSignals(libraryID);
+    if (papers.length) {
+      report.signals = await this.refreshPaperSignals(papers,
+        {signal, pace, onProgress: (done, total) => note('signals', done, total)});
+      if (report.signals.budgetGone) { report.budgetGone = true; return report; }
+    }
+    if (signal?.aborted || !this.active || this.stopping) return report;
+
+    report.stage = 'journals';
+    const all = this.Z.Items.getAll ? this.Z.Items.getAll(libraryID ?? this.Z.Libraries.userLibraryID) : [];
+    report.journals = await this.refreshJournalCitedness(all.filter(item => this.isRegular(item)),
+      {signal, onProgress: (done, total) => note('journals', done, total)});
+    if (report.journals.budgetGone) { report.budgetGone = true; return report; }
+    if (signal?.aborted || !this.active || this.stopping) return report;
+
+    report.stage = 'authors';
+    report.authors = await this.sweepWatchedAuthors(
+      {signal, onProgress: (done, total) => note('authors', done, total)});
+    report.budgetGone = !!report.authors.budgetGone;
+    report.stage = report.budgetGone ? 'authors' : 'done';
+    return report;
   }
 
   // Zotero's own CSL processor is authoritative when the style is installed;
@@ -1934,6 +2057,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         this.Z.alert(win,"Style Custom",`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
       });
       action("인용 수 조회 중지",()=>this.citationJob?.controller.abort());
+      action("빈 칸 채우기 (철회 신호 · 저널 지표 · 새 논문)",async()=>{
+        if(this.backfilling){this.stopBackfill();this.Z.alert(win,"Style Custom","채우기를 중지했습니다. 지금까지 받은 값은 저장했습니다.");return;}
+        const report=await this.runBackfill({libraryID:win.ZoteroPane?.getSelectedLibraryID?.(),
+          onProgress:({stage,done,total})=>this.showBackfillProgress(win,stage,done,total)});
+        this.Z.alert(win,"Style Custom",this.backfillSummary(report));
+      });
       action("선택한 문헌 철회·공개접근 신호 조회",async()=>{
         const result=await this.refreshPaperSignals(this.selected(win));
         this.Z.alert(win,"Style Custom",`신호 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · DOI 없음 ${result.unsupported}개 · 조회 오류 ${result.error}개`);
