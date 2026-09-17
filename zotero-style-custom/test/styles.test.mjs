@@ -69,11 +69,23 @@ test('canvas labels and controls stay legible over arbitrary saved card colors i
 test('hidden dialogs, keyboard focus, reading status and motion/forced-color accommodations are retained',()=>{
  assert.equal(rule('#style-custom-workbench [hidden]').getPropertyValue('display'),'none');assert.equal(rule('#style-custom-workbench [hidden]').getPropertyPriority('display'),'important');
  assert.match(rule('#style-custom-workbench :focus-visible').getPropertyValue('outline'),/2px/);
- for(const state of ['reading','done'])assert.ok(rule(`#style-custom-workbench .sc-paper-card[data-status=${state}]`).getPropertyValue('border-inline-start-color'));
+ // Reading state is a dot at the start of the row now, not a rail down its edge,
+ // but each state must still be told apart without reading the text.
+ const dot=state=>rule(`#style-custom-workbench .sc-paper-card[data-status=${state}]::before`).getPropertyValue('background');
+ const states=['reading','done'].map(dot);
+ for(const [i,value] of states.entries())assert.ok(value,['reading','done'][i]);
+ assert.notEqual(states[0],states[1]);
+ assert.ok(rule('#style-custom-workbench .sc-paper-card[data-status]::before').getPropertyValue('background'),'unread needs a mark too');
  assert.ok([...parsed.sheet.cssRules].some(r=>r.media?.mediaText.includes('prefers-reduced-motion')));assert.ok([...parsed.sheet.cssRules].some(r=>r.media?.mediaText.includes('forced-colors')));
 });
 test('selected papers preserve status rails and busy controls use visible non-animated feedback',()=>{
  const selected=rule('#style-custom-workbench .sc-paper-card[data-selected=true]');assert.equal(selected.getPropertyValue('background'),'var(--sc-accent-soft)');assert.ok(selected.getPropertyValue('outline'));assert.equal(selected.getPropertyValue('box-shadow'),'');assert.equal(selected.getPropertyValue('border-inline-start-color'),'');
+ // Actions are held at zero opacity until wanted, so they must come back for
+ // keyboard users who can reach them without a pointer.
+ assert.equal(rule('#style-custom-workbench .sc-paper-actions').getPropertyValue('opacity'),'0');
+ const revealed=rules.filter(r=>r.selectorText?.includes('.sc-paper-actions')&&/:focus-within|:hover/.test(r.selectorText));
+ assert.ok(revealed.some(r=>r.selectorText.includes(':focus-within')),'focus must reveal the actions');
+ assert.ok(revealed.some(r=>r.selectorText.includes(':hover')));
  assert.equal(rule('#style-custom-workbench .sc-paper-identity').getPropertyValue('min-width'),'0');
  const busy=rule('#style-custom-workbench button[aria-busy=true]');assert.equal(busy.getPropertyValue('cursor'),'progress');assert.equal(busy.getPropertyValue('opacity'),'1');assert.equal(busy.getPropertyValue('animation'),'');
 });

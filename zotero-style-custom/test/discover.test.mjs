@@ -141,3 +141,50 @@ test("author names come off the item deduplicated, ignoring editors and translat
   assert.deepEqual(discover.authorNames(item), ["Ada Lovelace", "Consortium X"]);
   assert.deepEqual(discover.authorNames({}), []);
 });
+
+const author = (name, institutions, hIndex, works) => ({
+  id: "A" + name.replace(/\W/g, ""), name, institutions, hIndex, works, citations: 0, topics: []
+});
+
+test("the family name must agree; a near-miss is not a match", () => {
+  const wanted = {name: "Michael Laub", institution: "MIT"};
+  assert.equal(discover.scoreAuthor(author("Michael Laue", [], 60, 200), wanted), 0);
+  assert.ok(discover.scoreAuthor(author("Michael T. Laub", [], 67, 225), wanted) > 0);
+});
+
+test("standing decides between namesakes when the recorded institution is stale", () => {
+  // OpenAlex lists Voigt under a former centre, so the institution cannot help.
+  const real = author("Christopher A. Voigt", ["Intelligent Synthetic Biology Center"], 78, 343);
+  const namesake = author("Christopher Voigt", ["Naval Medical Center Portsmouth"], 2, 3);
+  const picked = discover.pickAuthor([namesake, real], {name: "Christopher voigt", institution: "MIT"});
+  assert.equal(picked.name, "Christopher A. Voigt");
+});
+
+test("a matching institution settles it even between two established people", () => {
+  const atYale = author("Farren J. Isaacs", ["Yale University"], 44, 180);
+  const elsewhere = author("Farren Isaacs", ["Somewhere Else"], 46, 200);
+  assert.equal(discover.pickAuthor([elsewhere, atYale], {name: "Farren Isaacs", institution: "Yale University"}).institutions[0],
+    "Yale University");
+});
+
+test("an unclear field is refused rather than guessed", () => {
+  // Four namesakes of similar standing and no institution match: nobody wins.
+  const crowd = ["Dave Savage", "Dave Savage", "Dave Savage"].map((n, i) => author(n + i, [], 1, 2));
+  crowd.forEach(a => { a.name = "Dave Savage"; });
+  assert.equal(discover.pickAuthor(crowd, {name: "Dave Savage", institution: "UC berkely"}), null);
+  assert.equal(discover.pickAuthor([], {name: "Anyone"}), null);
+  assert.equal(discover.pickAuthor(null, {name: "Anyone"}), null);
+});
+
+test("a middle name recorded by hand is dropped on the retry, because the index lacks it", () => {
+  assert.deepEqual(discover.authorQueries("Jason William Chin"), ["Jason William Chin", "Jason Chin"]);
+  assert.deepEqual(discover.authorQueries("George Church"), ["George Church"]);
+  assert.deepEqual(discover.authorQueries("  "), []);
+});
+
+test("an author is searched by display name, not by the loose search parameter", () => {
+  // The generic search matched alternate names and returned an unrelated author.
+  const url = discover.authorSearchURL("Jason Chin");
+  assert.match(url, /display_name\.search/);
+  assert.doesNotMatch(url, /[?&]search=/);
+});

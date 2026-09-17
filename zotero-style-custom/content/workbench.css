@@ -164,20 +164,49 @@
 #style-custom-workbench .sc-card h3 { margin: 0 0 4px; font: 600 14px/1.5 var(--sc-title-font); letter-spacing: -.01em; overflow-wrap: anywhere; }
 #style-custom-workbench .sc-card p { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 #style-custom-workbench .sc-card .sc-actions { padding-block-end: 0; }
-#style-custom-workbench .sc-paper-card { border-inline-start: 3px solid var(--sc-border-strong); }
-#style-custom-workbench .sc-paper-card[data-status=reading] { border-inline-start-color: var(--sc-reading); }
-#style-custom-workbench .sc-paper-card[data-status=done] { border-inline-start-color: var(--sc-done); }
-#style-custom-workbench .sc-paper-card:focus-within { border-color: var(--sc-accent); }
+#style-custom-workbench .sc-paper-card {
+  position: relative;
+  padding: 11px 12px 11px 22px;
+  margin: 0;
+  border-radius: 8px;
+  box-shadow: none;
+  background: transparent;
+  border-block-end: 1px solid var(--sc-border);
+}
+#style-custom-workbench .sc-paper-card:hover { background: var(--sc-surface); }
+/* Reading state as a dot at the start of the row, not a slab down its edge. */
+#style-custom-workbench .sc-paper-card[data-status]::before {
+  content: ""; position: absolute; inset-inline-start: 8px; inset-block-start: 17px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--sc-faint);
+}
+#style-custom-workbench .sc-paper-card[data-status=reading]::before { background: var(--sc-reading); }
+#style-custom-workbench .sc-paper-card[data-status=done]::before { background: var(--sc-done); }
+#style-custom-workbench .sc-paper-card:focus-within { background: var(--sc-surface); }
 #style-custom-workbench .sc-paper-card[data-selected=true] { background: var(--sc-accent-soft); outline: 1px solid var(--sc-accent); outline-offset: -1px; }
 #style-custom-workbench .sc-paper-identity { flex: 1; min-width: 0; }
 #style-custom-workbench .sc-paper-heading { display: flex; align-items: flex-start; gap: 10px; }
-#style-custom-workbench .sc-paper-heading .sc-check { margin-block-start: 4px; flex: 0 0 auto; }
-#style-custom-workbench .sc-paper-title { flex: 1; min-width: 0; margin: 0; font: 600 14px/1.5 var(--sc-title-font); letter-spacing: -.1px; }
-#style-custom-workbench .sc-paper-meta { color: var(--sc-muted); font-size: 12px; line-height: 1.55; }
+#style-custom-workbench .sc-paper-heading .sc-check { margin-block-start: 1px; flex: 0 0 auto; opacity: 0; transition: opacity .12s ease; }
+#style-custom-workbench .sc-paper-card:hover .sc-check,
+#style-custom-workbench .sc-paper-card:focus-within .sc-check,
+#style-custom-workbench .sc-paper-card[data-selected=true] .sc-check { opacity: 1; }
+#style-custom-workbench .sc-paper-title { flex: 1; min-width: 0; margin: 0; font: 500 13px/1.45 var(--sc-title-font); letter-spacing: -.01em; }
+#style-custom-workbench .sc-paper-meta { color: var(--sc-muted); font-size: 11px; line-height: 1.5; }
 #style-custom-workbench .sc-metrics { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; padding-block-start: 8px; color: var(--sc-muted); font: 11px/1.6 var(--sc-mono); }
-#style-custom-workbench .sc-paper-card .sc-metrics { border-block-start: 1px solid var(--sc-border); margin-block-start: 10px; }
+#style-custom-workbench .sc-paper-card .sc-metrics { border: 0; margin-block-start: 3px; font-size: 11px; }
 #style-custom-workbench .sc-metric { white-space: nowrap; }
-#style-custom-workbench .sc-paper-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block-start: 10px; }
+/* Held out of the way until the row is wanted, so the list reads as a list. */
+#style-custom-workbench .sc-paper-actions {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-block-start: 6px;
+  opacity: 0; transition: opacity .12s ease;
+}
+#style-custom-workbench .sc-paper-card:hover .sc-paper-actions,
+#style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions,
+#style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-actions { opacity: 1; }
+#style-custom-workbench .sc-paper-actions button { min-height: 24px; padding: 2px 9px; font-size: 11px; }
+/* Keyboard users must still be able to reach a button they cannot yet see. */
+@media (prefers-reduced-motion: reduce) {
+  #style-custom-workbench .sc-paper-actions { transition: none; }
+}
 #style-custom-workbench .sc-paper-actions button { min-height: 28px; padding: 4px 8px; font-size: 11px; }
 #style-custom-workbench .sc-check { display: inline-flex; align-items: center; gap: 6px; margin: 4px 8px 4px 0; }
 #style-custom-workbench .sc-empty { margin: 0; padding: 32px 16px; color: var(--sc-muted); text-align: center; }

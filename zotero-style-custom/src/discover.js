@@ -141,8 +141,76 @@
       + `&sort=cited_by_count:desc&select=${WORK_FIELDS}${credentials(options)}`
     : null;
 
+  // Matching an author by name alone picks the wrong person often enough to be
+  // useless. An institution narrows it decisively, so it is scored first and a
+  // name-only match is only accepted when nothing else is close.
+  const normalise = value => text(value).toLowerCase()
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/\b(university|universite|universiteit|universitat|univ|college|institute|institut|school|of|the|for|and|at)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+
+  const nameParts = value => normalise(value).split(' ').filter(Boolean);
+
+  function scoreAuthor(candidate, {name, institution} = {}) {
+    const wanted = nameParts(name);
+    const got = nameParts(candidate?.name);
+    if (!wanted.length || !got.length) return 0;
+    // The family name is the one part that must agree.
+    if (wanted[wanted.length - 1] !== got[got.length - 1]) return 0;
+    let score = 1;
+    if (wanted.length > 1 && got.length > 1) {
+      if (wanted[0] === got[0]) score += 2;
+      else if (wanted[0][0] === got[0][0]) score += 1;
+    }
+    const place = normalise(institution);
+    if (place) {
+      const homes = (candidate?.institutions || []).map(normalise).filter(Boolean);
+      const words = place.split(' ').filter(word => word.length > 2);
+      if (homes.some(home => words.some(word => home.includes(word)))) score += 4;
+    }
+    // OpenAlex often records a former affiliation, so the institution cannot be
+    // relied on alone. Standing can, but only as a tie-break: capping it would
+    // flatten two well-known namesakes onto the same ceiling.
+    return score + Math.min(3, (candidate?.hIndex || 0) / 25);
+  }
+
+  const institutionMatched = (candidate, wanted) =>
+    scoreAuthor(candidate, wanted) - scoreAuthor({...candidate, institutions: []}, wanted) >= 4;
+
+  // Returns the best candidate, or null when nothing is clearly right. Watching
+  // the wrong person is worse than watching nobody, so an unclear field is
+  // refused rather than guessed: without a matching institution the leader has
+  // to dominate outright.
+  function pickAuthor(candidates, wanted = {}) {
+    const ranked = (Array.isArray(candidates) ? candidates : [])
+      .map(candidate => ({candidate, score: scoreAuthor(candidate, wanted)}))
+      .filter(row => row.score > 0)
+      .sort((a, b) => b.score - a.score);
+    if (!ranked.length) return null;
+    const [best, next] = ranked;
+    if (!next) return {...best.candidate, matchScore: best.score};
+    // A matching institution is decisive; a small score margin is then enough.
+    if (institutionMatched(best.candidate, wanted)) {
+      return best.score - next.score >= 1 ? {...best.candidate, matchScore: best.score} : null;
+    }
+    // Otherwise the leader has to dominate outright. Comparing standing as a
+    // ratio keeps two eminent namesakes apart, where a capped score cannot.
+    const top = best.candidate?.hIndex || 0, rival = next.candidate?.hIndex || 0;
+    const dominates = top >= 10 && top >= rival * 2;
+    return dominates ? {...best.candidate, matchScore: best.score} : null;
+  }
+
+  // "Jason William Chin" returns nothing; "Jason Chin" returns him first. A
+  // middle name recorded by hand is often absent from the indexed name.
+  function authorQueries(name) {
+    const parts = text(name).split(/\s+/).filter(Boolean);
+    const queries = [text(name)];
+    if (parts.length > 2) queries.push(parts[0] + ' ' + parts[parts.length - 1]);
+    return [...new Set(queries.filter(Boolean))];
+  }
+
   const authorSearchURL = (name, options = {}) => text(name)
-    ? `${API}authors?per_page=8&search=${encodeURIComponent(text(name))}`
+    ? `${API}authors?per_page=10&filter=${encodeURIComponent('display_name.search:' + text(name))}`
       + `&select=id,display_name,works_count,cited_by_count,summary_stats,last_known_institutions,topics,orcid`
       + credentials(options)
     : null;
@@ -191,7 +259,7 @@
     return names;
   }
 
-  const api = {API, GROUPS, workURL, worksByIDsURL, citingURL, readWork, readWorks, mergeSuggestions, relevance,
+  const api = {API, GROUPS, scoreAuthor, pickAuthor, authorQueries, workURL, worksByIDsURL, citingURL, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleDiscover = api;

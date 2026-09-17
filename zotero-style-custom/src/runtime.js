@@ -891,6 +891,42 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   // --- Following an author over time ---
 
+  // Resolving a person by name is the whole difficulty: an unclear field is
+  // refused rather than guessed, because watching the wrong person is worse
+  // than watching nobody.
+  async resolveAuthor(name, {institution, signal} = {}) {
+    const options = this.discoverOptions();
+    for (const query of this.discoverTools.authorQueries(name)) {
+      const url = this.discoverTools.authorSearchURL(query, options);
+      if (!url) continue;
+      const found = this.discoverTools.readAuthors(await this.discoverJSON(url, {signal}));
+      const hit = this.discoverTools.pickAuthor(found, {name, institution});
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  async importWatchedAuthors(people, {onProgress, signal} = {}) {
+    const result = {added: 0, already: 0, unresolved: [], failed: 0};
+    for (const [index, person] of people.entries()) {
+      onProgress?.(index, people.length, person);
+      try {
+        const hit = await this.resolveAuthor(person.name, {institution: person.institution, signal});
+        if (!hit) { result.unresolved.push(person.name); continue; }
+        if (this.watchedAuthors().some(row => row.id === hit.id)) { result.already++; continue; }
+        // Nothing published so far counts as news; only what appears from now on.
+        const {works} = await this.authorActivity(hit.id, {limit: 25, signal});
+        await this.watchAuthor({
+          id: hit.id, name: hit.name,
+          institution: person.institution || hit.institutions?.[0] || '',
+          seen: works.map(work => work.id)
+        });
+        result.added++;
+      } catch (error) { this.Z.logError(error); result.failed++; }
+    }
+    return result;
+  }
+
   watchedAuthors() {
     const saved = this.cache.watchedAuthors;
     return Array.isArray(saved) ? saved.filter(row => row && typeof row.id === 'string') : [];
