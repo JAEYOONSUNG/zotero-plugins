@@ -52,3 +52,26 @@ test("an alternate title still identifies the journal", () => {
   const payload = {results: [source("Proceedings of the National Academy of Sciences", {alternate_titles: ["PNAS"]})]};
   assert.ok(metrics.pickSource(payload, {name: "PNAS"}));
 });
+
+test("Zotero records both ISSNs in one field, and that must still be an ISSN lookup", () => {
+  // Taken from this library: 252 of its 255 journals carry an ISSN, and many
+  // hold the print and electronic number together. Stripping punctuation across
+  // the whole string gave a sixteen-digit non-ISSN, so every one of these fell
+  // through to a title search -- ten times the cost, and a worse match.
+  assert.equal(metrics.cleanISSN("0304-8608, 1432-8798"), "03048608");
+  assert.equal(metrics.cleanISSN("2041-6520, 2041-6539"), "20416520");
+  assert.equal(metrics.cleanISSN("1741-0126,1741-0134"), "17410126");
+  assert.equal(metrics.cleanISSN("1940-087X"), "1940087X");
+  assert.equal(metrics.cleanISSN("00222836"), "00222836");
+  assert.equal(metrics.cleanISSN("not an issn"), "");
+  assert.match(metrics.lookupURL({name: "Archives of Virology", issn: "0304-8608, 1432-8798"}),
+    /filter=issn%3A0304-8608/);
+});
+
+test("a journal found by its print ISSN is accepted when OpenAlex links the electronic one", () => {
+  // issn_l is only one of a journal's numbers. Matching on it alone rejected
+  // the very source the ISSN filter had just returned.
+  const payload = {results: [source("Chemical Science",
+    {issn_l: "2041-6539", issn: ["2041-6520", "2041-6539"]})]};
+  assert.ok(metrics.pickSource(payload, {name: "Chemical Science", issn: "2041-6520, 2041-6539"}));
+});

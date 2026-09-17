@@ -28,7 +28,18 @@
     .replace(/\s+/g, ' ')
     .trim();
 
-  const cleanISSN = value => text(value).toUpperCase().replace(/[^0-9X]/g, '');
+  // Zotero's ISSN field routinely holds both the print and electronic number,
+  // as "0304-8608, 1432-8798". Stripping punctuation across the whole string
+  // produced a sixteen-digit non-ISSN, which silently fell through to the title
+  // search -- ten times the cost and a worse match. Take the first one.
+  const issnList = value => (text(value).toUpperCase().match(/\d{4}\s*-?\s*\d{3}[\dX]/g) || [])
+    .map(code => code.replace(/[^0-9X]/g, ''))
+    .filter(code => code.length === 8);
+  const cleanISSN = value => {
+    const bare = text(value).toUpperCase().replace(/[^0-9X]/g, '');
+    if (bare.length === 8) return bare;
+    return issnList(value)[0] || '';
+  };
 
   // An ISSN names one journal; a title is a guess. Prefer it when the item has one.
   function lookupURL({name, issn} = {}, options = {}) {
@@ -51,6 +62,10 @@
       id: text(raw.id).replace(/^https?:\/\/openalex\.org\//i, ''),
       name: text(raw.display_name),
       issn: cleanISSN(raw.issn_l),
+      // A journal has a print and an electronic ISSN, and issn_l is only one of
+      // them. Matching on issn_l alone rejects a source found by the other.
+      issns: [...new Set([cleanISSN(raw.issn_l),
+        ...(Array.isArray(raw.issn) ? raw.issn : [raw.issn]).map(cleanISSN)].filter(Boolean))],
       type: text(raw.type),
       works: Number.isInteger(raw.works_count) ? raw.works_count : null,
       // Rounded to one place: the extra digits are false precision for a figure
@@ -70,7 +85,7 @@
     if (!shaped.length) return null;
     const code = cleanISSN(issn);
     if (code.length === 8) {
-      const byISSN = shaped.find(source => source.issn === code);
+      const byISSN = shaped.find(source => source.issns.includes(code));
       if (byISSN) return byISSN;
     }
     const wanted = normalise(name);
@@ -87,7 +102,7 @@
     return code.length === 8 ? 'issn:' + code : 'name:' + normalise(name);
   };
 
-  const api = {API, lookupURL, pickSource, shapeSource, cacheKey, normalise, cleanISSN, credentials};
+  const api = {API, lookupURL, pickSource, shapeSource, cacheKey, normalise, cleanISSN, issnList, credentials};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalMetrics = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

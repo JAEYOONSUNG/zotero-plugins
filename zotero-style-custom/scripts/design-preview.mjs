@@ -22,7 +22,30 @@ async function mountDemo(win,Workbench,Model){
  const hint=text=>{const node=doc.getElementById('demo-feedback');if(node)node.textContent=text;};
  const demoAction=async()=>hint('이 미리보기의 동작은 예시 데이터에만 적용됩니다. 실제 Zotero에는 연결하지 않습니다.');
  const cache={items:{},readerSettings:{},workbenchUI:{density:'comfortable'},boards:[],matrixFields:['title','year','citations','rating']};
- const runtime={rootURI:'',cache,selected:()=>[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,pageProgress:()=>({total:8,visited:4,percent:50,pages:{0:140,1:600,3:100,5:400},attachmentID:'9'})};
+ const watched=[
+  {id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],
+   news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},
+         {id:'W2',title:'A portable recombinase toolkit',venue:'Nature Methods',date:'2026-07-18'}]},
+  {id:'A2',name:'Jennifer A. Doudna',institution:'UC Berkeley',seen:[],
+   news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21'}]},
+  {id:'A3',name:'George M. Church',institution:'Harvard University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A4',name:'Brian Hie',institution:'Stanford University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A5',name:'Tom Ellis',institution:'Imperial College London',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A6',name:'Michael T. Laub',institution:'MIT',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A7',name:'Samuel H. Sternberg',institution:'Columbia University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A8',name:'Jason W. Chin',institution:'University of Cambridge',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A9',name:'Randall J. Platt',institution:'ETH Zurich',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A10',name:'Farren J. Isaacs',institution:'Yale University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A11',name:'David R. Liu',institution:'Harvard University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A12',name:'Tobias J. Erb',institution:'Max Planck Institute for Terrestrial Microbiology',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'}
+ ];
+ const runtime={rootURI:'',cache,
+  watchedAuthors:()=>watched,
+  watchedAuthorsByNews:()=>watched.slice().sort((a,b)=>(b.news?.length||0)-(a.news?.length||0)),
+  sweepWatchedAuthors:async()=>({authors:watched.length,withNews:2,works:3,requests:1,budgetGone:false,remaining:0}),
+  clearAuthorNews:demoAction,watchAuthor:demoAction,unwatchAuthor:demoAction,markAuthorSeen:demoAction,
+  authorsOfCached:async()=>[],
+  authorUpdates:async()=>({profile:null,works:[],fresh:[],watching:true,checkedAt:null}),selected:()=>[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,pageProgress:()=>({total:8,visited:4,percent:50,pages:{0:140,1:600,3:100,5:400},attachmentID:'9'})};
  runtime.Z={Items:{get:id=>refs.get(id),getAsync:async id=>refs.get(id)},Libraries:{userLibraryID:1},Prefs:{set:()=>{}},Utilities:{Internal:{copyTextToClipboard:()=>hint('예시 CSV를 만들었습니다. 이 미리보기에서는 클립보드를 변경하지 않습니다.')}},logError:error=>hint(String(error.message||error))};
  const notes=[{id:'10',title:'연구 질문과 후속 확인',text:'핵심 결과를 재현할 수 있는가?\n비교할 문헌과 연결해 검토합니다.',modified:'2026-09-15'}];
  const annotations=[{id:'11',text:'예시 하이라이트 — 근거와 해석을 분리해 기록합니다.',comment:'후속 문헌과 비교',color:'#ffd400',pageLabel:'3',pageIndex:2,type:'highlight'}];
@@ -40,7 +63,7 @@ Object.defineProperty(win.HTMLSelectElement.prototype,'value',{configurable:true
 const {bench}=await mountDemo(win,Workbench,Model);
 const icon='data:image/svg+xml;base64,'+Buffer.from(fs.readFileSync(path.join(root,'content/icons/style-custom.svg'))).toString('base64');
 bench.panel.querySelector('.sc-brand img').src=icon;
-assert.equal(bench.panel.querySelectorAll('nav [data-tab]').length,17);
+assert.equal(bench.panel.querySelectorAll('nav [data-tab]').length,19);
 assert.equal(bench.panel.querySelectorAll('.sc-paper-card').length,3);
 assert.equal(bench.panel.querySelector('.sc-filters').hasAttribute('open'),false);
 assert.equal(bench.panel.querySelector('.sc-command-palette').hidden,true);
@@ -50,4 +73,4 @@ const inline=file=>fs.readFileSync(path.join(root,file),'utf8').replace(/<\/scri
 const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta id="demo-icon" content="${icon}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Style Custom 0.8.0 · 디자인 미리보기</title><style>body{margin:0;background:#e5e7eb;font:12px system-ui;color:#374151}.demo-bar{height:40px;display:flex;align-items:center;gap:12px;padding:0 18px}.demo-bar strong{font-weight:650}.demo-bar span{color:#4b5563}.demo-feedback{position:fixed;bottom:4px;left:18px;right:18px;font-size:11px} ${css}</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div>${snapshot}<script>${inline('src/workspace.js')}</script><script>${inline('src/workbench.js')}</script><script>document.getElementById('style-custom-workbench').remove();(${mountDemo.toString()})(window,CustomStyleWorkbench,CustomStyleWorkspace);</script></body></html>`;
 assert.ok(!html.includes('<script src=')&&!html.includes('<link '));
 const target=path.join(root,'docs/design-preview.html');fs.writeFileSync(target,html);
-console.log('Offline design preview verified: actual workbench DOM, 17 sections, 3 fictional papers, no external assets: '+target);
+console.log('Offline design preview verified: actual workbench DOM, 19 sections, 3 fictional papers, no external assets: '+target);
