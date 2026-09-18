@@ -5,6 +5,7 @@ import Preview from "../../content/preview.js";
 import History from "../../content/history.js";
 import Affiliations from "../../content/affiliations.js";
 import JournalMarks from "../../content/journal-marks.js";
+import JCR from "../../content/jcr.js";
 
 export const paper = (key, extra = {}) => ({
 	key, title: key, citations: 1, year: 2026, authors: [], ...extra
@@ -114,6 +115,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPHistory: { ...History, memoryIO: () => History.memoryIO(historyFiles) },
 		ZotPoPAffiliations: Affiliations,
 		ZotPoPJournalMarks: JournalMarks,
+		ZotPoPJCR: JCR,
 		ZotPoPMarquee: marquee || { attach: () => ({ refresh() {}, refreshCell() {} }) },
 		ZotPoPMetrics: { citesPerYear: () => 1 },
 		CSS: { escape: value => value },

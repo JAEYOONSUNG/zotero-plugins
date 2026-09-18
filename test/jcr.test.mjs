@@ -34,7 +34,7 @@ test("apply fills the JIF and remembers where it came from; an unknown journal i
 	assert.equal(records[0].journalIF, 56.1);
 	assert.equal(records[0].journalIFSource, J.EDITION);
 	assert.equal(records[0].journalIFEstimate, false);
-	assert.equal(records[0].journalAbbrev, "NATURE");
+	assert.equal(records[0].journalAbbrev, undefined, "the JCR's capitalised abbreviation is not copied onto the record");
 	assert.equal(records[1].journalIF, null);
 });
 

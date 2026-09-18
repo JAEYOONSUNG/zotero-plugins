@@ -853,7 +853,17 @@
 		return ids;
 	}
 
+	// Results saved before the JCR table shipped, or arriving from a source that
+	// never asked it, still get the Journal Impact Factor; whatever OpenAlex figure
+	// remains is marked as the estimate it is.
+	function settleImpactFactors(records) {
+		if (typeof ZotPoPJCR === "undefined") return;
+		ZotPoPJCR.apply(records.filter(r => r.journalIFSource !== ZotPoPJCR.EDITION));
+		for (let r of records) if (r.journalIF != null && r.journalIFSource !== ZotPoPJCR.EDITION) r.journalIFEstimate = true;
+	}
+
 	function displaySearchResults(records) {
+		settleImpactFactors(records);
 		// A merged record may acquire a different source key. Carry row interaction
 		// state through a shared identifier as well as an unchanged key.
 		let previous = new Map();

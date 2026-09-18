@@ -408,3 +408,25 @@ test("a paper already on the shelf without a DOI is still recognised", async () 
   sandbox.Zotero.DB.queryAsync = async () => { throw new Error("locked"); };
   assert.equal(await api.findByTitle(1, "A thermostable type I-B CRISPR-Cas system", "2023"), null);
 });
+
+test("a restored or freshly displayed result gets the JCR impact factor, and an OpenAlex-only figure is marked as an estimate", async () => {
+	const files = new Map();
+	const ui = uiHarness({ historyFiles: files, search: async () => [
+		paper("nc", { venue: "Nature Communications", issn: "2041-1723", journalIF: 17.5 }),
+		paper("odd", { venue: "Some Obscure Bulletin", journalIF: 1.3 }),
+		paper("none", { venue: "Nowhere" })
+	] });
+	await ui.runSearch();
+	const byKey = key => ui.state.records.find(r => r.key === key);
+	assert.equal(byKey("nc").journalIF, 18.1, "the JCR figure replaces a stale OpenAlex one");
+	assert.equal(byKey("nc").journalIFEstimate, false);
+	assert.equal(byKey("odd").journalIF, 1.3);
+	assert.equal(byKey("odd").journalIFEstimate, true, "not in the JCR, so the OpenAlex figure is an estimate");
+	assert.equal(byKey("none").journalIF, undefined);
+	// The same holds for a search brought back from disk.
+	const [entry] = await ui.history.list();
+	const again = uiHarness({ historyFiles: files });
+	await again.openHistoryEntry(entry.id);
+	assert.equal(again.state.records.find(r => r.key === "nc").journalIF, 18.1);
+	assert.equal(again.state.records.find(r => r.key === "odd").journalIFEstimate, true);
+});
