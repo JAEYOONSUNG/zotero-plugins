@@ -21,7 +21,11 @@
       const detail = await fn();
       return detail === false ? bad(name, 'returned false') : ok(name, detail);
     } catch (error) {
-      return bad(name, (error && error.stack ? error.stack.split('\n').slice(0, 3).join(' | ') : error));
+      // The message is the part worth reading; a stack of jar: URLs is not.
+      // Reporting only the stack hid every explanation these checks write.
+      const said = String(error && error.message || error || 'failed');
+      const where = error && error.stack ? String(error.stack).split('\n')[0] : '';
+      return bad(name, where && !where.includes(said) ? `${said}  [${where}]` : said);
     }
   }
 
@@ -166,6 +170,43 @@
       if (/https?:\/\//.test(said)) throw new Error('still printing the URL: ' + said);
       if (!/OpenAlex/.test(said)) throw new Error('does not say which service: ' + said);
       return said.slice(0, 60) + '…';
+    }));
+
+    // What the Files column actually says, for one item of each kind. A verdict
+    // that never reaches the cell is a verdict nobody sees.
+    results.push(await attempt('the files column says what the scan found', async () => {
+      if (!doc) throw new Error('no main window');
+      const findings = await runtime.attachmentFindings(library);
+      const said = [];
+      // The badge text, not the group heading: the column says "SI", which is
+      // what publishers call it and what the user is looking for.
+      for (const [label, rows] of [['SI', findings.supplementary],
+                                   ['중복', findings.duplicate], ['다른 논문', findings.foreign]]) {
+        if (!rows.length) { said.push(`${label} 0`); continue; }
+        const item = await Zotero.Items.getAsync(Number(rows[0].id));
+        // renderCell finds its item through the visible row, so a row has to
+        // stand in for one. Borrowed and put straight back: the alternative is
+        // changing what the user has selected in order to test a badge.
+        const view = win.ZoteroPane && win.ZoteroPane.itemsView;
+        if (!view || typeof view.getRow !== 'function') throw new Error('no item tree to render into');
+        const original = view.getRow;
+        let cell;
+        try {
+          view.getRow = () => ({ref: item});
+          cell = runtime.renderCell('files', 0, runtime.value('files', item), {className: ''}, doc);
+        } finally { view.getRow = original; }
+        const text = String(cell.textContent || '');
+        if (!text.includes(label)) throw new Error(`${label}: the cell reads "${text}"`);
+        said.push(`${label} ${rows.length} -> "${text}"`);
+      }
+      return said.join(' · ');
+    }));
+
+    results.push(await attempt('what the attachment scan found', async () => {
+      const found = await runtime.attachmentFindings(library);
+      return `보충자료 ${found.supplementary.length} · 중복 ${found.duplicate.length}`
+        + ` · 다른 논문 ${found.foreign.length} · 첨부 없음 ${found.missing.length}`
+        + (found.unread ? ` · 미판별 ${found.unread}` : '');
     }));
 
     results.push(await attempt('the panel reports what is still empty', async () => {
