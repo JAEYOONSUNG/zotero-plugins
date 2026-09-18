@@ -413,8 +413,62 @@
    node('p','병합: 같은 PDF·유형·색상, 같은 페이지 또는 인접 두 페이지. 기존 참조 노트의 링크는 자동으로 바꾸지 않습니다.',body,{class:'sc-muted'});
    const list=await library.annotations(ids());if(token!==epoch||disposed)return;const filtered=list.filter(a=>(!setting('annotationIgnoreFigures',false)||!/^(?:figure|fig\.?|table|그림|표)\s*\d/i.test((a.text||'').trim()))&&(!state.color||a.color.toLowerCase()===state.color.toLowerCase())&&(!state.query||(a.text+' '+a.comment).toLowerCase().includes(state.query.toLowerCase())));state.annotationIDs=new Set([...state.annotationIDs].filter(id=>filtered.some(a=>a.id===id)));for(const a of filtered){visibleAnnotationIDs.add(a.id);const c=card(`p.${a.pageLabel||((a.pageIndex??0)+1)} · ${a.type}`,a.comment);c.style.borderInlineStart='4px solid '+(/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'#ccd7e1');check('주석 선택',state.annotationIDs.has(a.id),on=>on?state.annotationIDs.add(a.id):state.annotationIDs.delete(a.id),c);node('p',setting('annotationPreferComment',false)&&a.comment?a.comment:a.text,c);button('원문 위치',()=>library.openItem(a.id),c);button('참조 노트 보기',async()=>{const generation=epoch,links=await library.backlinks(a.id);if(disposed||generation!==epoch||!c.isConnected)return;let list=c.querySelector('[data-annotation-backlinks]');if(!list)list=node('div',null,c,{'data-annotation-backlinks':'true'});list.replaceChildren();const notes=links.filter(link=>link.kind==='note');node('p',`참조 노트 ${notes.length}개`,list);for(const note of notes)button(note.title||'제목 없는 노트',()=>library.openItem(note.id),list);},c);}if(!filtered.length)empty('조건에 맞는 주석이 없습니다. PDF에서 하이라이트나 메모를 추가하세요.');}
   async function drawBacklinks(token){let item;try{item=one();}catch(_){empty('역링크를 확인할 문헌 하나를 선택하세요.');return;}node('h2',item.title,body);const links=await library.backlinks(item.id);if(token!==epoch||disposed)return;for(const link of links){const c=card(link.title,link.kind==='note'?'이 문헌을 참조한 노트':'관련 문헌');button('열기',()=>library.openItem(link.id),c);}if(!links.length)empty('이 문헌을 가리키는 노트나 관련 문헌이 없습니다.');}
+  // What the scan found across the whole library, with somewhere to go. The
+  // classifier can name 29 supplementary files, 17 duplicates and 6 papers
+  // filed under the wrong item; until this existed, none of that was reachable.
+  async function drawFindings(token){
+   if(typeof runtime.attachmentFindings!=='function')return false;
+   let found=null;
+   try{found=await runtime.attachmentFindings(win.ZoteroPane?.getSelectedLibraryID?.());}
+   catch(error){runtime.Z.logError?.(error);return false;}
+   if(token!==epoch||disposed)return false;
+   const total=found.supplementary.length+found.duplicate.length+found.foreign.length+found.missing.length;
+   if(!total&&!found.unread)return false;
+   const bar0=bar();
+   node('span',`보충자료 ${found.supplementary.length} · 중복 ${found.duplicate.length} · 다른 논문 ${found.foreign.length} · 첨부 없음 ${found.missing.length}`,
+    bar0,{class:'sc-muted'});
+   if(found.unread){
+    button(`아직 안 읽은 ${found.unread}개 판별`,()=>run(async()=>{
+     const items=await runtime.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
+     const result=await runtime.scanAttachmentKinds(items,{onProgress:(d,t)=>message(`첨부파일 판별 중 ${d+1}/${t}`)});
+     message(`본문 ${result.article} · 보충자료 ${result.supplementary} · 중복 ${result.duplicate} · 다른 논문 ${result.foreign}`);
+     await render();
+    }),bar0);
+   }
+   const section=(title,rows,tone,act)=>{
+    if(!rows.length)return;
+    node('h3',`${title} ${rows.length}`,body,{class:'sc-hit-group'});
+    const list=node('div',null,body,{class:'sc-hits'});
+    for(const row of rows.slice(0,200)){
+     const c=node('div',null,list,{class:'sc-hit'+(tone?' sc-hit-'+tone:'')});
+     node('p',row.title||'제목 없음',c,{class:'sc-hit-title'});
+     node('p',[row.year,row.file,row.why].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
+     const actions=node('div',null,c,{class:'sc-hit-actions'});
+     if(row.fileID)button('파일 열기',()=>library.openItem(row.fileID),actions);
+     button('문헌 보기',()=>library.openItem(row.id),actions);
+     if(act)act(row,actions);
+    }
+   };
+   section('보충자료',found.supplementary,'');
+   section('같은 파일이 두 번',found.duplicate,'warn',(row,actions)=>{
+    button('휴지통으로',()=>run(async()=>{
+     const {moved}=await runtime.trashAttachments([row.fileID]);
+     message(moved?'중복 첨부를 휴지통으로 보냈습니다. Zotero에서 되돌릴 수 있습니다.':'옮기지 못했습니다.');
+     await render();
+    }),actions);
+   });
+   section('다른 논문이 붙어 있음',found.foreign,'alert');
+   section('첨부파일 없음',found.missing,'');
+   return true;
+  }
+
   async function drawAttachments(token){
+   // The library-wide findings sit above the per-item list rather than
+   // replacing it: the point is to reach them, not to hide the attachments.
    const list=await library.attachments(ids());if(token!==epoch||disposed)return;
+   await drawFindings(token);
+   if(token!==epoch||disposed)return;
+   if(list.length)node('h3','선택한 문헌의 첨부파일',body,{class:'sc-hit-group'});
    const matching=list.filter(a=>!state.query||(a.title+' '+a.contentType).toLowerCase().includes(state.query.toLowerCase()));
    for(const a of matching){const c=card(a.title,a.contentType);button('열기',()=>library.openItem(a.id),c);
     const supported=['application/pdf','application/epub+zip','application/epub','text/html'].includes(a.contentType)||/^(image|audio|video)\//.test(a.contentType||'');

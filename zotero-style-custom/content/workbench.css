@@ -568,3 +568,8 @@
 #style-custom-workbench .sc-source { display: inline-flex; align-items: center; gap: 5px; }
 #style-custom-workbench .sc-source svg { flex: none; width: 14px; height: 14px; opacity: .85; }
 #style-custom-workbench .sc-source-name { font-size: 11px; }
+
+/* A finding the user can act on, coloured by how much it matters. */
+#style-custom-workbench .sc-hit-warn { box-shadow: inset 2px 0 0 var(--sc-faint); padding-inline-start: 8px; }
+#style-custom-workbench .sc-hit-alert { box-shadow: inset 2px 0 0 var(--sc-error); padding-inline-start: 8px; }
+#style-custom-workbench .sc-hit-alert .sc-hit-meta { color: var(--sc-error); }

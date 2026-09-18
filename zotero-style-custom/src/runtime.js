@@ -344,6 +344,42 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     } catch (error) { return ''; }
   }
 
+  // Everything the scan found that the user can act on, gathered once so the
+  // panel can list it. Detection with nowhere to go is half a feature.
+  async attachmentFindings(libraryID) {
+    const found = {supplementary: [], duplicate: [], foreign: [], unknown: [], missing: [], unread: 0};
+    for (const item of await this.libraryItems(libraryID)) {
+      if (!this.isRegular(item)) continue;
+      const kinds = this.attachmentKinds(item);
+      const paper = {id: String(item.id), title: String(item.getField('title') || ''),
+        year: String(item.getField('date') || '').slice(0, 4)};
+      if (!kinds.length) { found.missing.push(paper); continue; }
+      found.unread += kinds.filter(kind => !kind.read).length;
+      for (const kind of kinds) {
+        if (!found[kind.kind]) continue;
+        found[kind.kind].push({...paper, fileID: kind.id, file: kind.name, why: kind.why});
+      }
+    }
+    return found;
+  }
+
+  // Sending a duplicate to the trash, which Zotero can undo. Nothing here
+  // deletes anything: the file itself is left where it is.
+  async trashAttachments(ids) {
+    let moved = 0, skipped = 0;
+    for (const id of ids) {
+      const attachment = this.Z.Items.get(Number(id));
+      if (!attachment || attachment.deleted) { skipped++; continue; }
+      if (attachment.libraryID != null && !this.Z.Libraries.get(attachment.libraryID)?.editable) { skipped++; continue; }
+      attachment.deleted = true;
+      if (typeof attachment.saveTx === 'function') await attachment.saveTx(); else await attachment.save();
+      delete this.fileVerdicts()[String(id)];
+      moved++;
+    }
+    if (moved) { this.dirty = true; await this.flush(); await this.refreshWindows(); }
+    return {moved, skipped};
+  }
+
   async scanAttachmentKinds(items, {signal, onProgress} = {}) {
     const store = this.fileVerdicts();
     const result = {items: 0, files: 0, article: 0, supplementary: 0, duplicate: 0, foreign: 0, unknown: 0, unread: 0};

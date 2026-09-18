@@ -590,6 +590,39 @@ test('a co-author is one click away, without leaving the tab', async () => {
  f.bench.destroy();
 });
 
+test('what the scan found is reachable, and a duplicate can be dealt with', async () => {
+ const f=fixture();
+ const trashed=[];
+ f.runtime.attachmentFindings=async()=>({
+  supplementary:[{id:'1',fileID:'11',title:'A paper with extras',year:'2026',file:'si.pdf',why:'says so in its opening words'}],
+  duplicate:[{id:'2',fileID:'22',title:'A paper attached twice',year:'2025',file:'again.pdf',why:''}],
+  foreign:[{id:'3',fileID:'33',title:'Dali server',year:'2010',file:'other.pdf',why:'never uses the title'}],
+  unknown:[],missing:[{id:'4',title:'A paper with no file',year:'2024'}],unread:0});
+ f.runtime.trashAttachments=async ids=>{trashed.push(...ids);return {moved:ids.length,skipped:0};};
+ await f.bench.show('attachments');
+ const text=f.body().textContent;
+ // 29 supplementary files, 17 duplicates and 6 mis-filed papers were detectable
+ // and completely unreachable until this existed.
+ assert.match(text,/보충자료 1/);
+ assert.match(text,/같은 파일이 두 번 1/);
+ assert.match(text,/다른 논문이 붙어 있음 1/);
+ assert.match(text,/첨부파일 없음 1/);
+ assert.match(text,/never uses the title/);
+ await f.click('휴지통으로');
+ assert.deepEqual(trashed,['22']);
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/휴지통/);
+ f.bench.destroy();
+});
+
+test('a runtime that cannot answer leaves the attachments tab exactly as it was', async () => {
+ const f=fixture();
+ delete f.runtime.attachmentFindings;
+ await f.bench.show('attachments');
+ assert.ok(f.body().childNodes.length);
+ assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error,'true');
+ f.bench.destroy();
+});
+
 test('every tab in the sidebar carries its own drawn icon',async()=>{
  const f=fixture();
  await f.bench.show('explore');

@@ -123,3 +123,31 @@ test("no text means no verdict, rather than a guess", () => {
   assert.equal(kinds.openingKind("").kind, "unknown");
   assert.equal(kinds.namesTitle("text here", "ab cd"), null, "a title too short to test gives no verdict");
 });
+
+test("a trashed duplicate is recoverable, and nothing on disk is touched", async () => {
+  // Zotero's trash is undoable; deleting the file would not be. The user has
+  // seventeen of these, and every one of them is their own file.
+  const { createRequire } = await import("node:module");
+  const Runtime = createRequire(import.meta.url)("../src/runtime.js");
+  const saved = [];
+  const store = {"22": {kind: "duplicate"}, "23": {kind: "article"}};
+  const items = new Map([
+    [22, {id: 22, libraryID: 1, deleted: false, async saveTx() { saved.push(this.id); }}],
+    [24, {id: 24, libraryID: 2, deleted: false, async saveTx() { saved.push(this.id); }}]
+  ]);
+  const host = {
+    cache: {fileKinds: store}, dirty: false,
+    Z: {Items: {get: id => items.get(id)}, Libraries: {get: id => ({editable: id === 1})}},
+    fileVerdicts: Runtime.prototype.fileVerdicts,
+    trashAttachments: Runtime.prototype.trashAttachments,
+    async flush() {}, async refreshWindows() {}
+  };
+  const result = await host.trashAttachments([22, 24, 999]);
+  assert.equal(result.moved, 1);
+  assert.equal(result.skipped, 2, "a read-only library and a missing item are skipped, not forced");
+  assert.equal(items.get(22).deleted, true);
+  assert.equal(items.get(24).deleted, false);
+  assert.deepEqual(saved, [22]);
+  assert.equal(store["22"], undefined, "its verdict goes with it");
+  assert.equal(store["23"].kind, "article");
+});
