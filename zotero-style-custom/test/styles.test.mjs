@@ -96,3 +96,49 @@ test('actual JavaScript-generated heatmap colors retain readable labels over the
  const ink=rule('#style-custom-workbench .sc-page-strip button').getPropertyValue('color');
  for(const alpha of [0,.15,cap]){const backdrop='#'+[36,92,120].map(c=>Math.round(c*alpha+255*(1-alpha)).toString(16).padStart(2,'0')).join('');assert.ok(contrast(ink,backdrop)>=4.5,`heatmap alpha ${alpha}`);}
 });
+
+test('every badge colour lands on the same contrast, so no one of them shouts', async () => {
+  const fs = await import('node:fs');
+  const { createRequire } = await import('node:module');
+  const Runtime = createRequire(import.meta.url)('../src/runtime.js');
+  const luminance = hex => {
+    const n = parseInt(hex.slice(1), 16);
+    const channel = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * channel(n >> 16 & 255) + 0.7152 * channel(n >> 8 & 255) + 0.0722 * channel(n & 255);
+  };
+  const ratio = (a, b) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const named = ['blue', 'green', 'orange', 'red', 'purple', 'teal', 'gold'];
+  const get = dark => Runtime.prototype.palette.call({},
+    {defaultView: {matchMedia: () => ({matches: dark})}});
+
+  for (const [dark, behind, floor] of [[false, '#FFFFFF', 3.4], [true, '#1C1C1F', 5.6]]) {
+    const P = get(dark);
+    const ratios = named.map(name => ratio(P[name], behind));
+    // In the old set gold sat at 2.1 against white and blue at 4.7: one badge
+    // shouted and another was hard to read, which is what made a row look loud.
+    const spread = Math.max(...ratios) - Math.min(...ratios);
+    assert.ok(spread < 0.5, `${dark ? 'dark' : 'light'} spread is ${spread.toFixed(2)}: ${ratios.map(r => r.toFixed(2))}`);
+    assert.ok(Math.min(...ratios) > floor, `${dark ? 'dark' : 'light'} floor ${Math.min(...ratios).toFixed(2)}`);
+  }
+
+  // Pastel is the saturation, not a wash: the fills carry it and the ink stays
+  // readable, so the tint is raised rather than the colours being lightened.
+  assert.ok(get(false).tint >= 0.18);
+  assert.ok(get(true).tint >= 0.24);
+
+  // Nothing loud left anywhere in the stylesheets.
+  for (const file of ['content/workbench.css', 'content/citation.css']) {
+    const css = fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+    for (const hex of css.match(/#[0-9a-fA-F]{6}\b/g) || []) {
+      const n = parseInt(hex.slice(1), 16);
+      const [r, g, b] = [n >> 16 & 255, n >> 8 & 255, n & 255].map(v => v / 255);
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const light = (max + min) / 2;
+      const saturation = max === min ? 0 : light > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+      assert.ok(saturation <= 0.55, `${file} still has ${hex} at saturation ${saturation.toFixed(2)}`);
+    }
+  }
+});

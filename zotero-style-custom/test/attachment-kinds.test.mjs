@@ -151,3 +151,61 @@ test("a trashed duplicate is recoverable, and nothing on disk is touched", async
   assert.equal(store["22"], undefined, "its verdict goes with it");
   assert.equal(store["23"].kind, "article");
 });
+
+test("a file Zotero has not indexed is indexed first, not written off", async () => {
+  // Eleven of this library's attachments had no extracted text, so they could
+  // not be judged at all. Asking Zotero to index them is the same extraction
+  // its own search does, and turns "cannot tell" into an answer.
+  const { createRequire } = await import("node:module");
+  const Runtime = createRequire(import.meta.url)("../src/runtime.js");
+  const indexed = [];
+  const cache = new Map([[1, ""], [2, "ORIGINAL RESEARCH A paper about thermophiles and their enzymes"]]);
+  const attachment = id => ({id, key: "K" + id, deleted: false, attachmentContentType: "application/pdf",
+    attachmentFilename: `f${id}.pdf`, isFileAttachment: () => true});
+  const item = {id: 9, getField: key => key === "title" ? "A paper about thermophiles and their enzymes" : "",
+    getAttachments: () => [1, 2], isRegularItem: () => true};
+  const host = {
+    cache: {items: {}, fileKinds: {}}, active: true, stopping: false, dirty: false,
+    Z: {
+      logError() {}, Items: {get: id => attachment(id)},
+      FullText: {async indexItems(ids) { indexed.push(...ids); for (const id of ids) cache.set(id, "Supplementary Information for A paper about thermophiles"); }}
+    },
+    fileTools: kinds, isRegular: () => true,
+    fileVerdicts: Runtime.prototype.fileVerdicts,
+    indexAttachments: Runtime.prototype.indexAttachments,
+    scanAttachmentKinds: Runtime.prototype.scanAttachmentKinds,
+    attachmentText: async a => cache.get(a.id) || "",
+    async flush() {}, async refreshWindows() {}
+  };
+  const result = await host.scanAttachmentKinds([item]);
+  assert.deepEqual(indexed, [1], "only the file with no text is indexed");
+  assert.equal(result.indexed, 1);
+  assert.equal(result.unread, 0, "once indexed it is no longer unreadable");
+  assert.equal(host.cache.fileKinds["1"].kind, "supplementary");
+  assert.equal(host.cache.fileKinds["2"].kind, "article");
+});
+
+test("a scan can be told not to index, and then simply reports what it could not read", async () => {
+  // The option used to be called `index`, which the enclosing loop counter
+  // shadowed: 0 !== false, so every scan indexed regardless of what was asked.
+  const { createRequire } = await import("node:module");
+  const Runtime = createRequire(import.meta.url)("../src/runtime.js");
+  let asked = 0;
+  const item = {id: 9, getField: () => "", getAttachments: () => [1], isRegularItem: () => true};
+  const host = {
+    cache: {items: {}, fileKinds: {}}, active: true, stopping: false, dirty: false,
+    Z: {logError() {}, Items: {get: id => ({id, key: "K", deleted: false, attachmentContentType: "application/pdf",
+      attachmentFilename: "f.pdf", isFileAttachment: () => true})},
+      FullText: {async indexItems() { asked++; }}},
+    fileTools: kinds, isRegular: () => true,
+    fileVerdicts: Runtime.prototype.fileVerdicts,
+    indexAttachments: Runtime.prototype.indexAttachments,
+    scanAttachmentKinds: Runtime.prototype.scanAttachmentKinds,
+    attachmentText: async () => "",
+    async flush() {}, async refreshWindows() {}
+  };
+  const result = await host.scanAttachmentKinds([item], {buildIndex: false});
+  assert.equal(asked, 0);
+  assert.equal(result.unread, 1);
+  assert.equal(result.indexed, 0);
+});

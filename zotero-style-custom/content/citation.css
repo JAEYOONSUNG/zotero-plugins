@@ -30,7 +30,7 @@
   text-align: start; font: inherit; color: inherit; cursor: pointer;
 }
 #style-custom-cite .sc-cite-row + .sc-cite-row { border-top: 1px solid var(--sc-cite-line, rgba(0,0,0,.06)); }
-#style-custom-cite .sc-cite-row:focus-visible { outline: 2px solid #2764cf; outline-offset: -2px; border-radius: 6px; }
+#style-custom-cite .sc-cite-row:focus-visible { outline: 2px solid #6484BA; outline-offset: -2px; border-radius: 6px; }
 #style-custom-cite .sc-cite-row[aria-disabled=true] { cursor: default; opacity: .5; }
 #style-custom-cite .sc-cite-row:hover { background: #f5f5f7; }
 #style-custom-cite .sc-cite-row[data-copied] { background: #e8f3ec; }
@@ -46,10 +46,10 @@
 }
 #style-custom-cite .sc-cite-exports button {
   padding: 0; border: 0; background: transparent; cursor: pointer;
-  color: #2f6fe0; font: inherit;
+  color: #4B6DA7; font: inherit;
 }
 #style-custom-cite .sc-cite-exports button:hover { text-decoration: underline; }
-#style-custom-cite .sc-cite-exports button[data-copied] { color: #2fa37a; }
+#style-custom-cite .sc-cite-exports button[data-copied] { color: #42926C; }
 
 @media (prefers-color-scheme: dark) {
   #style-custom-cite:not([data-theme="light"]) { color: #e8e8ed; }
@@ -57,10 +57,10 @@
   #style-custom-cite:not([data-theme="light"]) .sc-cite-head,
   #style-custom-cite:not([data-theme="light"]) .sc-cite-note { border-color: #35353a; }
   #style-custom-cite:not([data-theme="light"]) .sc-cite-row:hover { background: #2a2a2e; }
-  #style-custom-cite:not([data-theme="light"]) .sc-cite-row[data-copied] { background: #1f3a30; }
+  #style-custom-cite:not([data-theme="light"]) .sc-cite-row[data-copied] { background: #26423A; }
   #style-custom-cite:not([data-theme="light"]) .sc-cite-close:hover { background: #2a2a2e; color: #e8e8ed; }
   #style-custom-cite:not([data-theme="light"]) .sc-cite-label,
   #style-custom-cite:not([data-theme="light"]) .sc-cite-note,
   #style-custom-cite:not([data-theme="light"]) .sc-cite-close { color: #a0a0a6; }
-  #style-custom-cite:not([data-theme="light"]) .sc-cite-exports button { color: #6aa5ff; }
+  #style-custom-cite:not([data-theme="light"]) .sc-cite-exports button { color: #809DD0; }
 }

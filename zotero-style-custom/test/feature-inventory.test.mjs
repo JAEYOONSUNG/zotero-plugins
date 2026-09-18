@@ -31,7 +31,7 @@ test('both completeness ledgers describe the version actually being shipped', ()
 
 test('every round in the ledger names a source marker and a test that exist', () => {
   const rounds = JSON.parse(fs.readFileSync(new URL('../docs/improvement-rounds.json', import.meta.url), 'utf8')).rounds;
-  assert.ok(rounds.length >= 40);
+  assert.ok(rounds.length >= 42);
   for (const round of rounds) {
     for (const source of round.sources) {
       assert.ok(fs.readFileSync(new URL('../' + source.file, import.meta.url), 'utf8').includes(source.marker),

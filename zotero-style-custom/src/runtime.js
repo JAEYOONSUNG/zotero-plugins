@@ -380,25 +380,51 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return {moved, skipped};
   }
 
-  async scanAttachmentKinds(items, {signal, onProgress} = {}) {
+  // Zotero's own text extraction, asked for by name. It is what fills
+  // .zotero-ft-cache, so a file indexed here is a file this scan can read.
+  async indexAttachments(attachments, {signal} = {}) {
+    const wanted = attachments.filter(Boolean);
+    if (!wanted.length) return 0;
+    const service = this.Z.FullText || this.Z.Fulltext;
+    if (!service?.indexItems) return 0;
+    try {
+      await service.indexItems(wanted.map(attachment => attachment.id), {ignoreErrors: true});
+      signal?.throwIfAborted?.();
+      return wanted.length;
+    } catch (error) { this.Z.logError(error); return 0; }
+  }
+
+  async scanAttachmentKinds(items, {signal, onProgress, buildIndex = true} = {}) {
     const store = this.fileVerdicts();
-    const result = {items: 0, files: 0, article: 0, supplementary: 0, duplicate: 0, foreign: 0, unknown: 0, unread: 0};
+    const result = {items: 0, files: 0, article: 0, supplementary: 0, duplicate: 0, foreign: 0, unknown: 0, unread: 0, indexed: 0};
     const list = [...new Set(items)].filter(item => this.isRegular(item));
     for (const [index, item] of list.entries()) {
       if (signal?.aborted || !this.active || this.stopping) break;
       onProgress?.(index, list.length);
-      const files = [];
+      const files = [], attachments = new Map();
       for (const id of item.getAttachments?.() || []) {
         const attachment = this.Z.Items.get(id);
         if (!attachment || attachment.deleted || !attachment.isFileAttachment?.()) continue;
         const name = String(attachment.attachmentFilename || attachment.getDisplayTitle?.() || '');
         if (!(/\.pdf$/i.test(name) || attachment.attachmentContentType === 'application/pdf')) continue;
+        attachments.set(String(id), attachment);
         files.push({id: String(id), name, text: await this.attachmentText(attachment)});
       }
       if (!files.length) continue;
       result.items++;
       result.files += files.length;
+      // A file Zotero has not indexed yet has no text to read, and eleven of
+      // this library's attachments were in that state. Asking Zotero to index
+      // them is the difference between "cannot tell" and an answer, and it is
+      // the same extraction its own search would do.
+      const blank = files.filter(file => !file.text);
+      if (blank.length && buildIndex) {
+        const indexed = await this.indexAttachments(blank.map(file => attachments.get(file.id)), {signal});
+        result.indexed += indexed;
+        for (const file of blank) file.text = await this.attachmentText(attachments.get(file.id));
+      }
       if (files.every(file => !file.text)) { result.unread += files.length; continue; }
+      result.unread += files.filter(file => !file.text).length;
       const verdicts = this.fileTools.classifyGroup(files, {title: String(item.getField('title') || '')});
       for (const verdict of verdicts) {
         store[String(verdict.id)] = {kind: verdict.kind, why: verdict.why,
@@ -433,9 +459,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // colour marks only the categorical dimensions (status, rating, IF tier).
   palette(doc) {
     const dark = !!doc?.defaultView?.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+    // Pastel: the hue stays, the saturation drops to about a third, and the
+    // lightness of every colour is chosen so they all land on the same contrast
+    // against the surface behind them. Evenness is the point -- in the old set
+    // gold sat at 2.1 against white and blue at 4.7, so one badge shouted and
+    // another was hard to read, which is what made the row look loud.
+    // The pill tint is raised instead, so the softness lives in the fills.
     return dark
-      ? {blue:'#5B9DFF',green:'#3FCF8E',orange:'#FFA94D',red:'#FF7A70',purple:'#B48BF0',teal:'#3FC4D8',gold:'#FFC95C',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.20,dark:true}
-      : {blue:'#2F6FE0',green:'#1F9D62',orange:'#E0821E',red:'#DB4F4F',purple:'#8A5CD1',teal:'#128FA8',gold:'#E9A81C',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.13,dark:false};
+      ? {blue:'#809DD0',green:'#41AF7C',orange:'#C69164',red:'#D3888A',purple:'#B38DD5',teal:'#49A9BC',gold:'#B89944',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.26,dark:true}
+      : {blue:'#6484BA',green:'#42926C',orange:'#AA784C',red:'#BD6C6E',purple:'#9B71BF',teal:'#468D9B',gold:'#978144',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.20,dark:false};
   }
   tint(hex, alpha) {
     const n = parseInt(hex.slice(1), 16);
@@ -2365,7 +2397,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           `문헌 ${result.items}개 · PDF ${result.files}개를 첫 페이지로 판별했습니다.\n`
           +`본문 ${result.article} · 보충자료 ${result.supplementary} · 중복 ${result.duplicate} · 다른 논문 ${result.foreign}`
           +(result.unknown?` · 판단 불가 ${result.unknown}`:"")
-          +(result.unread?`\n${result.unread}개는 Zotero가 아직 본문을 추출하지 않아 판별하지 못했습니다.`:""));
+          +(result.indexed?`\n본문이 없던 ${result.indexed}개는 Zotero 색인을 먼저 만들었습니다.`:"")
+          +(result.unread?`\n${result.unread}개는 색인을 만든 뒤에도 본문을 읽지 못했습니다(스캔 PDF일 수 있습니다).`:""));
       });
       action("빈 칸 채우기 (철회 신호 · 저널 지표 · 새 논문)",async()=>{
         if(this.backfilling){this.stopBackfill();this.Z.alert(win,"Style Custom","채우기를 중지했습니다. 지금까지 받은 값은 저장했습니다.");return;}

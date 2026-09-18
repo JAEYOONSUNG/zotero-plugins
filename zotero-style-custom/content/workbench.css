@@ -10,15 +10,15 @@
   --sc-text: #1c1c1e;
   --sc-muted: #6e6e73;
   --sc-faint: #a0a0a6;
-  --sc-accent: #2764cf;
-  --sc-accent-soft: #e8effc;
-  --sc-selection: #2f6fe0;
+  --sc-accent: #4B6DA7;
+  --sc-accent-soft: #EDF1F7;
+  --sc-selection: #4B6DA7;
   --sc-border: rgba(0, 0, 0, .07);
   --sc-border-strong: rgba(0, 0, 0, .13);
-  --sc-reading: #e0821e;
-  --sc-done: #1f9d62;
-  --sc-error: #c8362f;
-  --sc-error-bg: #fdeceb;
+  --sc-reading: #AA784C;
+  --sc-done: #42926C;
+  --sc-error: #B34E51;
+  --sc-error-bg: #FAF2F2;
   --sc-graph-line: #b8bcc4;
   --sc-shadow: 0 18px 48px rgba(0, 0, 0, .18), 0 0 0 .5px rgba(0, 0, 0, .1);
   --sc-font: -apple-system, system-ui, sans-serif;
@@ -256,7 +256,6 @@
 #style-custom-workbench .sc-graph text { fill: var(--sc-muted); font: 10px var(--sc-font); }
 #style-custom-workbench .sc-graph line { stroke: var(--sc-graph-line); }
 #style-custom-workbench .sc-graph circle { fill: var(--sc-accent); }
-#style-custom-workbench .sc-graph circle[fill="#b9751b"] { fill: var(--sc-selection); }
 #style-custom-workbench .sc-graph g[role=button] { cursor: pointer; }
 #style-custom-workbench .sc-page-strip { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; border-radius: 3px; background: #ffffff; }
 #style-custom-workbench .sc-page-strip button { min-width: 28px; min-height: 28px; padding: 3px !important; color: #252a31; font: 11px var(--sc-mono) !important; border-color: #89919c; }
@@ -313,15 +312,15 @@
     --sc-text: #e8e8ed;
     --sc-muted: #a8a8ae;
     --sc-faint: #75757b;
-    --sc-accent: #7ab0ff;
-    --sc-accent-soft: #1e3157;
-    --sc-selection: #7ab0ff;
+    --sc-accent: #809DD0;
+    --sc-accent-soft: #2B3140;
+    --sc-selection: #809DD0;
     --sc-border: rgba(255, 255, 255, .09);
     --sc-border-strong: rgba(255, 255, 255, .18);
-    --sc-reading: #ffa94d;
-    --sc-done: #3fcf8e;
-    --sc-error: #ff9d95;
-    --sc-error-bg: #3a1f1d;
+    --sc-reading: #C69164;
+    --sc-done: #41AF7C;
+    --sc-error: #D3888A;
+    --sc-error-bg: #3A2A2C;
     --sc-graph-line: #5a5a62;
     --sc-shadow: 0 18px 48px rgba(0, 0, 0, .6), 0 0 0 .5px rgba(255, 255, 255, .12);
     color-scheme: dark;
@@ -445,21 +444,21 @@
 #style-custom-workbench .sc-metric svg { flex: 0 0 auto; opacity: .55; }
 #style-custom-workbench .sc-metric-value { min-width: 1.6em; text-align: end; }
 #style-custom-workbench .sc-metric[data-tone] { font-weight: 600; }
-#style-custom-workbench .sc-metric[data-tone=top]   { color: #8A5CD1; }
-#style-custom-workbench .sc-metric[data-tone=high]  { color: #2764cf; }
-#style-custom-workbench .sc-metric[data-tone=mid]   { color: #128FA8; }
-#style-custom-workbench .sc-metric[data-tone=low]   { color: #1F9D62; }
+#style-custom-workbench .sc-metric[data-tone=top]   { color: #9B71BF; }
+#style-custom-workbench .sc-metric[data-tone=high]  { color: #6484BA; }
+#style-custom-workbench .sc-metric[data-tone=mid]   { color: #468D9B; }
+#style-custom-workbench .sc-metric[data-tone=low]   { color: #42926C; }
 #style-custom-workbench .sc-metric[data-tone] svg { opacity: 1; }
-#style-custom-workbench .sc-stars .sc-metric-value { color: #E9A81C; letter-spacing: -1px; font-size: 10px; min-width: 4em; }
+#style-custom-workbench .sc-stars .sc-metric-value { color: #978144; letter-spacing: -1px; font-size: 10px; min-width: 4em; }
 /* The colour a paper has been given wins over its reading state. */
 #style-custom-workbench .sc-paper-card[data-mark]::before { background: var(--sc-mark); }
-#style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #DB4F4F; }
-#style-custom-workbench .sc-paper-card[data-mark=orange] { --sc-mark: #E0821E; }
-#style-custom-workbench .sc-paper-card[data-mark=gold]   { --sc-mark: #E9A81C; }
-#style-custom-workbench .sc-paper-card[data-mark=green]  { --sc-mark: #1F9D62; }
-#style-custom-workbench .sc-paper-card[data-mark=teal]   { --sc-mark: #128FA8; }
-#style-custom-workbench .sc-paper-card[data-mark=blue]   { --sc-mark: #2764cf; }
-#style-custom-workbench .sc-paper-card[data-mark=purple] { --sc-mark: #8A5CD1; }
+#style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #BD6C6E; }
+#style-custom-workbench .sc-paper-card[data-mark=orange] { --sc-mark: #AA784C; }
+#style-custom-workbench .sc-paper-card[data-mark=gold]   { --sc-mark: #978144; }
+#style-custom-workbench .sc-paper-card[data-mark=green]  { --sc-mark: #42926C; }
+#style-custom-workbench .sc-paper-card[data-mark=teal]   { --sc-mark: #468D9B; }
+#style-custom-workbench .sc-paper-card[data-mark=blue]   { --sc-mark: #6484BA; }
+#style-custom-workbench .sc-paper-card[data-mark=purple] { --sc-mark: #9B71BF; }
 #style-custom-workbench .sc-paper-card[data-status]::before { inset-block-start: 50%; margin-block-start: -3px; }
 /* Actions take the place of the figures rather than adding a second line. */
 #style-custom-workbench .sc-paper-card .sc-paper-actions { margin: 0; }
@@ -471,11 +470,11 @@
 #style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-actions { display: flex; opacity: 1; }
 
 @media (prefers-color-scheme: dark) {
-  #style-custom-workbench .sc-metric[data-tone=top]  { color: #B48BF0; }
-  #style-custom-workbench .sc-metric[data-tone=high] { color: #5B9DFF; }
-  #style-custom-workbench .sc-metric[data-tone=mid]  { color: #3FC4D8; }
-  #style-custom-workbench .sc-metric[data-tone=low]  { color: #3FCF8E; }
-  #style-custom-workbench .sc-stars .sc-metric-value { color: #FFC95C; }
+  #style-custom-workbench .sc-metric[data-tone=top]  { color: #B38DD5; }
+  #style-custom-workbench .sc-metric[data-tone=high] { color: #809DD0; }
+  #style-custom-workbench .sc-metric[data-tone=mid]  { color: #49A9BC; }
+  #style-custom-workbench .sc-metric[data-tone=low]  { color: #41AF7C; }
+  #style-custom-workbench .sc-stars .sc-metric-value { color: #B89944; }
 }
 
 /* --- Watchlist: a hundred people, readable at once --- */

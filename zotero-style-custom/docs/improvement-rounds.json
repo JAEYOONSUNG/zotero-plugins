@@ -1,5 +1,5 @@
 {
- "version": "0.20.5",
+ "version": "0.21.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1228,6 +1228,62 @@
    "status": "verified",
    "review": "Zotero already extracts every PDF's text for its own search index, so reading the first page costs nothing and needs no PDF parser. A supplementary file says so in its opening words; an article carries a masthead, a section label or a DOI line. Three things turn up as 'an extra PDF' and they are not the same -- a supplement, the same file twice, and a different paper filed here by mistake -- and calling all three 'SI x2' is what made the badge not worth looking at. Two measured corrections: the title check reads the whole document rather than page one, because a first page often opens with the abstract and never repeats the title (a Nature Chemical Biology review scored 43% and was called foreign); and Zotero titles carry markup, so <span style=\"font-variant:small-caps;\">BREX</span> made twelve correctly filed papers look like somebody else's. The 0.70 threshold is read off the distribution over all 1,211 attachments with text: 1,186 use every word of their title, everything below 0.70 is a real filing mistake, and nothing sits in between.",
    "verification": "Run live in Zotero over the user's own 1,223 attachments: 1,170 article, 29 supplementary, 17 duplicate, 6 different-paper, 1 unknown -- matching the offline prediction exactly.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R41",
+   "title": "Zotero가 아직 읽지 않은 첨부는 색인부터",
+   "gap": "Eleven attachments had no extracted text, so the scan could not judge them at all and simply reported them as unknown.",
+   "entryPoint": "우클릭 → 첨부파일 종류 판별",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "async indexAttachments"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "a file Zotero has not indexed is indexed first, not written off"
+    },
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "a scan can be told not to index, and then simply reports what it could not read"
+    }
+   ],
+   "status": "verified",
+   "review": "Asking Zotero to index them is the same extraction its own search does, and turns 'cannot tell' into an answer. The option to skip it was called `index`, which the enclosing loop counter shadowed -- 0 !== false, so every scan indexed regardless of what the caller asked; the test that was written to prove the option worked is what found it.",
+   "verification": "Contrast measured numerically for every colour in both schemes, rendered offline from the real stylesheet, and checked live in Zotero.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R42",
+   "title": "전체 색감을 파스텔로",
+   "gap": "The colours were loud and uneven: against white, gold sat at 2.1 contrast and blue at 4.7, so one badge shouted while another was hard to read. That unevenness is what made a row look garish rather than the hues themselves.",
+   "entryPoint": "문헌 목록의 모든 열 · 연구 작업 패널 · ZotPoP 검색 창",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "palette(doc)"
+    },
+    {
+     "file": "content/workbench.css",
+     "marker": "--sc-accent: #4B6DA7"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/styles.test.mjs",
+     "name": "every badge colour lands on the same contrast, so no one of them shouts"
+    },
+    {
+     "file": "test/styles.test.mjs",
+     "name": "light and dark semantic text, muted metadata and selected navigation meet normal-text contrast"
+    }
+   ],
+   "status": "verified",
+   "review": "The hue stays, the saturation drops to about a third, and the lightness of every colour is chosen so they all land within 0.5 of the same contrast against the surface behind them -- evenness is the point. The softness lives in the fills: the pill tint is raised from 0.13 to 0.20 in light and 0.20 to 0.26 in dark, rather than the ink being washed out. Three colours had to stay deeper than the family because they carry text on themselves: the accent under a white label, and the error ink on its own wash. A dead rule matching a colour nothing has emitted for a long time went with it.",
+   "verification": "Contrast measured numerically for every colour in both schemes, rendered offline from the real stylesheet, and checked live in Zotero.",
    "nativeActivationVerified": true
   }
  ],
