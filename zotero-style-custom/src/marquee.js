@@ -9,7 +9,6 @@
   const DEFAULT_DELAY = 200;
   const DEFAULT_SPEED = 180;
   const END_PAUSE = 900;
-  const REPEAT_PAUSE = 400;
 
   function finiteOption(value, fallback, min, max) {
     return typeof value === "number" && Number.isFinite(value)
@@ -61,6 +60,20 @@
         && state.text.textContent === state.content;
     }
 
+    // Putting the ellipsis back. Clipping is what lets the text roll past the
+    // edge, so it has to come off again the moment the roll is over -- whether
+    // that is because the pointer left or because the one pass finished.
+    function restoreOverflow(state) {
+      if (!state?.clipped) return;
+      if (state.text.style.getPropertyValue("text-overflow") !== "clip") return;
+      if (state.originalOverflow) {
+        state.text.style.setProperty("text-overflow", state.originalOverflow, state.overflowPriority);
+      } else {
+        state.text.style.removeProperty("text-overflow");
+      }
+      state.clipped = false;
+    }
+
     function reset() {
       if (frame !== null) window.cancelAnimationFrame(frame);
       frame = null;
@@ -70,13 +83,7 @@
       active = null;
       if (!state) return;
       state.text.scrollLeft = state.originalScroll;
-      if (state.clipped && state.text.style.getPropertyValue("text-overflow") === "clip") {
-        if (state.originalOverflow) {
-          state.text.style.setProperty("text-overflow", state.originalOverflow, state.overflowPriority);
-        } else {
-          state.text.style.removeProperty("text-overflow");
-        }
-      }
+      restoreOverflow(state);
       // Do not undo another renderer's tooltip change while a row is recycled.
       if (state.cell.getAttribute("title") === state.content) {
         if (state.originalTitle === null) state.cell.removeAttribute("title");
@@ -104,9 +111,15 @@
         const duration = state.distance / state.speed * 1000;
         state.text.scrollLeft = state.direction * Math.min(state.distance, movementTime / 1000 * state.speed);
         if (movementTime >= duration + END_PAUSE) {
+          // One pass, then it stops. It used to return to the start and set off
+          // again for as long as the pointer stayed, which is why a hovered row
+          // read as permanently in motion rather than as something that scrolled
+          // because you asked it to. The title attribute keeps the full text
+          // reachable after the roll has finished.
           state.text.scrollLeft = 0;
-          state.started = now;
-          state.delay = REPEAT_PAUSE;
+          restoreOverflow(state);
+          state.finished = true;
+          return;
         }
       }
       frame = window.requestAnimationFrame(tick);

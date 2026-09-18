@@ -101,7 +101,7 @@ function fixture({ reduced = false, direction = "ltr" } = {}) {
   return { window, document, media, tree, table, row, cell, icon, text, rich, hover, advance, mutation, frames, observers };
 }
 
-test("overflowing rich titles begin quickly, keep icon/markup intact, and repeat after an end pause", () => {
+test("overflowing rich titles begin quickly, keep icon/markup intact, and stop after one pass", () => {
   const f = fixture();
   const cleanup = marquee.attach(f.window);
   const children = [...f.text.children];
@@ -118,9 +118,16 @@ test("overflowing rich titles begin quickly, keep icon/markup intact, and repeat
   f.advance(800);
   assert.equal(f.text.scrollLeft, 360);
   f.advance(100);
+  // One pass, then it stops. It used to return to the start and set off again
+  // for as long as the pointer stayed, so a hovered row read as permanently in
+  // motion rather than as something that scrolled because you asked it to.
   assert.equal(f.text.scrollLeft, 0);
   f.advance(500);
-  assert.equal(f.text.scrollLeft, 18);
+  assert.equal(f.text.scrollLeft, 0, 'it does not set off again');
+  f.advance(4000);
+  assert.equal(f.text.scrollLeft, 0);
+  // And the ellipsis comes back, so the finished row looks like every other one.
+  assert.notEqual(f.text.style.getPropertyValue("text-overflow"), "clip");
   assert.equal(f.icon.scrollLeft, 0);
   assert.equal(f.icon.style.values.size, 0);
   assert.deepEqual(f.text.children, children);
@@ -329,4 +336,24 @@ test("a long value in any column rolls, not just the title", () => {
   assert.equal(venue.scrollLeft, 0);
   assert.equal(venue.getAttribute("title"), null);
   cleanup();
+});
+
+test("the roll is one pass per hover, and hovering away and back starts a fresh one", () => {
+  const f = fixture();
+  const stop = marquee.attach(f.window);
+  f.hover(f.rich);
+  // 200ms delay, then 360px at 180px/s, then the end pause.
+  f.advance(200 + 2000 + 900 + 100);
+  assert.equal(f.text.scrollLeft, 0, "one pass, then back to the start");
+  assert.notEqual(f.text.style.getPropertyValue("text-overflow"), "clip",
+    "and the ellipsis returns, so a finished row looks like every other one");
+  f.advance(4000);
+  assert.equal(f.text.scrollLeft, 0, "it does not set off again while the pointer stays");
+
+  // Leaving and coming back is a new request, and that does roll again.
+  f.document.emit("mouseout", { target: f.rich, relatedTarget: null });
+  f.hover(f.rich);
+  f.advance(400);
+  assert.ok(f.text.scrollLeft > 0, "a second hover rolls again");
+  stop();
 });

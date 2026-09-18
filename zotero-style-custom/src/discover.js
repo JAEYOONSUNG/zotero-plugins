@@ -75,12 +75,20 @@
     // Keep each author's OpenAlex id. Looking one up by name alone picks the
     // wrong person: "Eugene Kim" matches a surgeon before the biophysicist.
     const people = (Array.isArray(raw.authorships) ? raw.authorships : [])
-      .map(a => ({
-        id: shortID(a?.author?.id),
-        name: text(a?.author?.display_name),
-        institution: text((Array.isArray(a?.institutions) ? a.institutions : [])[0]?.display_name),
-        position: text(a?.author_position)
-      }))
+      .map(a => {
+        const affiliation = (Array.isArray(a?.institutions) ? a.institutions : [])[0];
+        return {
+          id: shortID(a?.author?.id),
+          name: text(a?.author?.display_name),
+          institution: text(affiliation?.display_name),
+          // Where the work was done, and who answers for it. OpenAlex knows
+          // both, and neither is written anywhere in a Zotero record.
+          ror: text(affiliation?.ror).replace(/^https?:\/\/ror\.org\//i, ''),
+          country: text(affiliation?.country_code).toUpperCase(),
+          corresponding: a?.is_corresponding === true,
+          position: text(a?.author_position)
+        };
+      })
       .filter(a => a.name);
     const authors = people.map(a => a.name);
     return {

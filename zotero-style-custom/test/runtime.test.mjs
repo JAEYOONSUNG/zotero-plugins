@@ -762,7 +762,10 @@ test('a paper with neither DOI nor title is refused before any request is made',
 test('authors are resolved from the paper itself, carrying their OpenAlex ids', async () => {
   const f = discoverFixture();
   const people = await f.plugin.authorsOf(f.ref);
-  assert.deepEqual(people, [{id: 'A1', name: 'A Zongo', institution: 'Institut Pasteur', position: 'first'}]);
+  // Where the work was done and who answers for it come along with the name:
+  // neither is anywhere in a Zotero record, and both are on every authorship.
+  assert.deepEqual(people, [{id: 'A1', name: 'A Zongo', institution: 'Institut Pasteur',
+    ror: '', country: '', corresponding: false, position: 'first'}]);
 });
 
 test("an author's recent work arrives newest first, with standing and subject area", async () => {
