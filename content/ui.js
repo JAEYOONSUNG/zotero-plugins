@@ -1057,20 +1057,36 @@
 	// ------------------------------------------------------------ journal mark
 	// The publisher's lettermark in its own colour, before the journal's name: a
 	// reader knows "Science is red, Cell is blue" long before reading the title.
-	function journalMark(r) {
+	function journalIdentity(r) {
 		if (typeof ZotPoPJournalMarks === "undefined" || !r?.venue) return null;
 		let identity = ZotPoPJournalMarks.identify(r.venue, r.publisher);
 		if (!identity) return null;
 		let dark = Boolean(window.matchMedia?.("(prefers-color-scheme: dark)")?.matches);
-		let tone = ZotPoPJournalMarks.colours(identity, { dark });
+		return { identity, tone: ZotPoPJournalMarks.colours(identity, { dark }),
+			// OpenAlex's ISO 4 abbreviation when the journal lookup supplied one; the
+			// module's own otherwise.
+			abbrev: r.journalAbbrev || identity.mark };
+	}
+	function journalMark(r) {
+		let found = journalIdentity(r);
+		if (!found) return null;
 		let mark = document.createElement("span");
-		mark.className = "jmark" + (identity.known ? " known" : "");
-		mark.textContent = identity.mark;
-		mark.style.background = tone.fill;
-		mark.style.color = tone.ink;
-		mark.style.boxShadow = "inset 0 0 0 .5px " + tone.edge;
-		mark.title = identity.label ? r.venue + " · " + identity.label : r.venue;
+		mark.className = "jmark" + (found.identity.known ? " known" : "");
+		mark.textContent = found.abbrev;
+		mark.style.background = found.tone.fill;
+		mark.style.color = found.tone.ink;
+		mark.style.boxShadow = "inset 0 0 0 .5px " + found.tone.edge;
+		mark.title = found.identity.label ? r.venue + " · " + found.identity.label : r.venue;
 		return mark;
+	}
+	// The journal's name written in its publisher's colour, as the library list does.
+	function paintVenue(cell, r) {
+		let found = journalIdentity(r);
+		if (!found) return;
+		cell.style.color = found.tone.ink;
+		cell.style.fontWeight = found.identity.known ? "600" : "500";
+		cell.classList.add("venue-known");
+		cell.title = [r.venue, found.abbrev !== r.venue ? found.abbrev : "", found.identity.label, r.publisher].filter(Boolean).join(" · ");
 	}
 
 	// ------------------------------------------------------------ affiliation
@@ -1174,13 +1190,9 @@
 		tt.appendChild(a);
 
 		td("num", r.year == null ? "" : String(r.year));
-		// The mark travels inside the marquee with the name, so a long journal title
-		// still rolls and the mark stays where the eye lands first.
-		let venueCell = td("venue", null, r.publisher ? r.venue + " · " + r.publisher : r.venue);
+		let venueCell = td("venue", r.venue, r.publisher ? r.venue + " · " + r.publisher : r.venue);
 		venueCell.dataset.marquee = "venue";
-		let mark = journalMark(r);
-		if (mark) venueCell.appendChild(mark);
-		venueCell.appendChild(document.createTextNode(r.venue || ""));
+		paintVenue(venueCell, r);
 		td("num if", r.journalIF == null ? "" : fmt(r.journalIF, 1), r.journalIF == null ? "" : t("ifTip", fmt(r.journalIF, 1), r.journalH));
 		let where = affiliationOf(r);
 		td("aff", where?.first?.institution || "", affiliationTip(where)).dataset.marquee = "affiliation";

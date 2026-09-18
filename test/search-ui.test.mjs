@@ -338,14 +338,16 @@ test("the journal cell carries the publisher's mark in its colour, and so does t
 	] });
 	await ui.runSearch();
 	const rows = ui.get("results-body").children;
-	const mark = rows[0].querySelector("td.venue").querySelector("span.jmark");
-	assert.equal(mark.textContent, "S");
-	assert.equal(mark.classList.contains("known"), true);
-	assert.match(mark.style.color, /^hsl\(358 /);
-	assert.equal(mark.title, "Science · Science");
-	assert.equal(rows[0].querySelector("td.venue").textContent, "SScience");
-	assert.equal(rows[0].querySelector("td.venue").dataset.marquee, "venue");
-	assert.equal(rows[1].querySelector("span.jmark").textContent, "JCP");
-	assert.equal(rows[1].querySelector("span.jmark").classList.contains("known"), true, "the publisher placed it");
-	assert.equal(rows[2].querySelector("span.jmark"), null);
+	const venue = rows[0].querySelector("td.venue");
+	assert.equal(venue.textContent, "Science", "the name itself carries the colour; no chip crowds it");
+	assert.match(venue.style.color, /^hsl\(358 /);
+	assert.equal(venue.style.fontWeight, "600");
+	assert.equal(venue.title, "Science · Science · American Association for the Advancement of Science (AAAS)");
+	assert.equal(venue.dataset.marquee, "venue");
+	assert.match(rows[1].querySelector("td.venue").title, /^Journal of Cleaner Production · J Clean Prod · Elsevier/);
+	assert.equal(rows[1].querySelector("td.venue").classList.contains("venue-known"), true, "the publisher placed it");
+	assert.equal(rows[2].querySelector("td.venue").style.color, undefined);
+	// The detail pane shows the abbreviation as a chip in the same colour.
+	ui.state.detailKey = "sci";
+	ui.state.records[0].journalAbbrev = "Science";
 });

@@ -12,9 +12,12 @@ test("loads in Gecko without CommonJS", () => {
 
 test("the flagships wear their own colours: Science red, Cell blue, Nature green", () => {
 	assert.deepEqual([J.identify("Science").hue, J.identify("Cell").hue, J.identify("Nature").hue], [358, 200, 168]);
-	assert.equal(J.identify("Science").mark, "S");
+	assert.equal(J.identify("Science").mark, "Science");
 	assert.equal(J.identify("Cell").mark, "Cell");
-	assert.equal(J.identify("Nature Communications").mark, "NC");
+	assert.equal(J.identify("Nature Communications").mark, "Nat Commun");
+	assert.equal(J.abbreviate("Journal of Molecular Biology"), "J Mol Biol", "word by word from the ISO 4 list");
+	assert.equal(J.abbreviate("Proceedings of the National Academy of Sciences"), "PNAS");
+	assert.equal(J.abbreviate("Bioinformatics"), "Bioinformatics", "a one-word title stays whole");
 	assert.equal(J.identify("Nature Communications").family, "nature-portfolio");
 	assert.equal(J.identify("Molecular Cell").family, "cell-press", "the family is read off the title before the publisher");
 	assert.equal(J.identify("Molecular Cell", "Elsevier BV").family, "cell-press");
@@ -24,10 +27,10 @@ test("a publisher name settles a title the patterns do not know; nothing known s
 	assert.equal(J.identify("The ISME Journal", "Oxford University Press (OUP)").family, "oxford");
 	assert.equal(J.identify("Biotechnology for Biofuels", "Springer Science and Business Media LLC").family, "springer");
 	assert.equal(J.identify("Journal of Cleaner Production", "Elsevier BV").family, "elsevier");
-	assert.equal(J.identify("Journal of Cleaner Production", "Elsevier BV").mark, "JCP");
+	assert.equal(J.identify("Journal of Cleaner Production", "Elsevier BV").mark, "J Clean Prod");
 	const other = J.identify("Some Obscure Bulletin", "Nobody Press");
 	assert.equal(other.known, false);
-	assert.equal(other.mark, "SOB");
+	assert.equal(other.mark, "Some Obscure Bull", "unknown words are kept whole, never guessed");
 	assert.equal(other.hue, J.identify("some obscure  bulletin").hue, "the same name is always the same colour");
 	assert.equal(J.identify(""), null);
 	assert.equal(J.identify("arXiv (Cornell University)").family, "other");
@@ -47,11 +50,13 @@ test("ink and fill come from one hue, a little stronger for a curated family, an
 test("every Nature sister journal keeps its own cover colour", () => {
 	const hue = title => J.identify(title).hue;
 	assert.notEqual(hue("Nature Biotechnology"), hue("Nature Methods"));
+	assert.equal(hue("Nature Communications"), 22, "Nature Communications is orange");
+	assert.equal(hue("Nature Biotechnology"), 50, "Nature Biotechnology is yellow");
 	assert.notEqual(hue("Nature Communications"), hue("Nature"));
 	assert.equal(hue("Nature Chemical Biology"), 285);
 	assert.equal(hue("Nature Medicine"), 5);
 	assert.equal(J.identify("Nature Reviews Microbiology").hue, 175);
-	assert.equal(J.identify("Nature Reviews Microbiology").mark, "NRM");
+	assert.equal(J.identify("Nature Reviews Microbiology").mark, "Nat Rev Microbiol");
 	assert.equal(J.identify("Nature Biotechnology").family, "nature-portfolio", "still one family for the label");
 	assert.equal(J.identify("Nature Something New").hue, 168, "an unlisted sister falls back to the house colour");
 	assert.equal(J.identify("Scientific Reports").hue, 160);

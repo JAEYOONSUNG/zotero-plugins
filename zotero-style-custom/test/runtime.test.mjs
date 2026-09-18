@@ -1546,11 +1546,11 @@ test('first author, corresponding author and tier each get a column of their own
   const first = plugin.renderCell('firstInstitution', 0, '', {}, document);
   // 640 sorts, but draws nothing: paper-weighted, the bucket it falls in covered
   // three rows in four, which is a texture rather than a mark.
-  assert.equal(first.textContent, '🇩🇰Technical University of DenmarkT3');
+  assert.equal(first.textContent, 'T3🇩🇰Technical University of Denmark');
   assert.match(first.title, /1저자 Sheila Ingemann Jensen · Technical University of Denmark \(DK\) · 기관 h-index 640/);
   assert.match(first.title, /교신저자 P I Boss · MIT \(US\) · 기관 h-index 2281/);
   const corresponding = plugin.renderCell('correspondingInstitution', 0, '', {}, document);
-  assert.equal(corresponding.textContent, '🇺🇸MITT1');
+  assert.equal(corresponding.textContent, 'T1🇺🇸MIT');
   const tier = plugin.renderCell('institutionTier', 0, '', {}, document);
   assert.equal(tier.textContent, 'T1');
   assert.match(tier.firstChild.title, /2000 이상.*기관 h-index 2281/);
@@ -1559,7 +1559,7 @@ test('first author, corresponding author and tier each get a column of their own
   // When the first author answers for the paper too, the column names the same
   // lab again rather than pointing at the other column.
   plugin.cache.works[plugin.identity(ref)].people.splice(1);
-  assert.equal(plugin.renderCell('correspondingInstitution', 0, '', {}, document).textContent, '🇩🇰Technical University of DenmarkT3');
+  assert.equal(plugin.renderCell('correspondingInstitution', 0, '', {}, document).textContent, 'T3🇩🇰Technical University of Denmark');
   assert.equal(plugin.value('correspondingInstitution', ref), 'Technical University of Denmark · DK');
   assert.equal(plugin.value('institutionTier', ref), '00640');
 });
@@ -1572,9 +1572,17 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   const getField = ref.getField.bind(ref);
   ref.getField = name => name === 'publicationTitle' ? 'Science' : getField(name);
   window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
-  assert.equal(plugin.value('journalMark', ref), 'S');
+  assert.equal(plugin.value('journalMark', ref), 'Science');
   const mark = plugin.renderCell('journalMark', 0, '', {}, document);
-  assert.equal(mark.textContent, 'S');
+  assert.equal(mark.textContent, 'Science');
+  // Zotero's own abbreviation field wins over the derived one when the record has it.
+  ref.getField = name => name === 'publicationTitle' ? 'Nature Communications' : name === 'journalAbbreviation' ? 'Nat. Commun.' : getField(name);
+  assert.equal(plugin.value('journalMark', ref), 'Nat. Commun.');
+  ref.getField = name => name === 'publicationTitle' ? 'Nature Communications' : getField(name);
+  assert.equal(plugin.value('journalMark', ref), 'Nat Commun', 'derived from the title when the field is empty');
+  ref.getField = name => name === 'publicationTitle' ? 'Molecular Cell' : name === 'journalAbbreviation' ? 'Molecular Cell' : getField(name);
+  assert.equal(plugin.value('journalMark', ref), 'Mol Cell', 'a full title filed as the abbreviation is not one');
+  ref.getField = name => name === 'publicationTitle' ? 'Science' : getField(name);
   assert.match(mark.firstChild.style.color, /^hsl\(358 /, 'Science is red');
   assert.equal(mark.title, 'Science · Science');
   plugin.value = (key, target) => key === 'if' ? '56.1' : '';
@@ -1593,4 +1601,21 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   await plugin.removeWindow(win);
   assert.equal(venue.style.color, '', 'unloading gives the cell back as it was');
   assert.equal(venue.dataset.styleCustomVenue, undefined);
+});
+
+test('a tall Extra field gets a row as tall as itself, and the row is given back on unload', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document} = parseHTML('<html><body><div id="zotero-item-pane"><div class="meta-row" id="r1"><span class="label">Extra</span><editable-text multiline="true" class="value"></editable-text></div><div class="meta-row" id="r2"><span class="label">Added</span><span class="value">x</span></div></div></body></html>');
+  const rows = {r1: 111, r2: 22}, values = {r1: 124, r2: 22};
+  for (const row of document.querySelectorAll('.meta-row')) {
+    row.getBoundingClientRect = () => ({height: rows[row.id]});
+    row.querySelector('.value').getBoundingClientRect = () => ({height: values[row.id]});
+  }
+  const {plugin} = fixture();
+  assert.equal(plugin.fixItemPaneRows(document), 1);
+  assert.equal(document.getElementById('r1').style.minHeight, '124px');
+  assert.equal(document.getElementById('r2').style.minHeight, '');
+  values.r1 = 40; rows.r1 = 111;
+  plugin.fixItemPaneRows(document);
+  assert.equal(document.getElementById('r1').style.minHeight, '', 'a value that shrank releases the row');
 });

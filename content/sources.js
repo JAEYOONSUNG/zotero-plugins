@@ -447,6 +447,7 @@ var ZotPoPSources = (function () {
 			name: s.display_name || "",
 			issn: s.issn_l || (s.issn || [])[0] || null,
 			if2y: Number.isFinite(ss["2yr_mean_citedness"]) ? ss["2yr_mean_citedness"] : null,
+			abbrev: s.abbreviated_title || null,
 			h: toInt(ss.h_index),
 			works: toInt(s.works_count),
 			oa: Boolean(s.is_oa),
@@ -458,6 +459,7 @@ var ZotPoPSources = (function () {
 		if (!st) return;
 		r.journalIF = st.if2y;
 		r.journalH = st.h;
+		if (!r.journalAbbrev && st.abbrev) r.journalAbbrev = st.abbrev;
 		if (!r.journalId) r.journalId = st.id;
 		if (!r.issn) r.issn = st.issn;
 	}

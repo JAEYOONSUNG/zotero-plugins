@@ -10,13 +10,13 @@ test("a journal is identified by the publisher a reader would recognise", () => 
     const id = journals.identify(title);
     return [id.mark, id.label];
   };
-  assert.deepEqual(seen("Nature"), ["N", "Nature"]);
-  assert.deepEqual(seen("Nature Communications"), ["NC", "Nature Portfolio"]);
-  assert.deepEqual(seen("Science"), ["S", "Science"]);
-  assert.deepEqual(seen("Nucleic Acids Research"), ["NAR", "Oxford"]);
+  assert.deepEqual(seen("Nature"), ["Nature", "Nature"]);
+  assert.deepEqual(seen("Nature Communications"), ["Nat Commun", "Nature Portfolio"]);
+  assert.deepEqual(seen("Science"), ["Science", "Science"]);
+  assert.deepEqual(seen("Nucleic Acids Research"), ["Nucleic Acids Res", "Oxford"]);
   assert.deepEqual(seen("Cell"), ["Cell", "Cell Press"]);
-  assert.deepEqual(seen("Applied and Environmental Microbiology"), ["AEM", "ASM"]);
-  assert.deepEqual(seen("Frontiers in Microbiology"), ["FM", "Frontiers"]);
+  assert.deepEqual(seen("Applied and Environmental Microbiology"), ["Appl Environ Microbiol", "ASM"]);
+  assert.deepEqual(seen("Frontiers in Microbiology"), ["Front Microbiol", "Frontiers"]);
   // Scientific Reports is Nature portfolio, and a reader knows it although the
   // name does not say so.
   assert.equal(journals.identify("Scientific Reports").label, "Nature Portfolio");
@@ -33,7 +33,7 @@ test("the more specific pattern is tested first, or every Nature title is just N
 test("a journal nobody curated still gets a mark and a colour of its own", () => {
   const odd = journals.identify("Journal of Thermophilic Enzyme Engineering");
   assert.equal(odd.known, false);
-  assert.equal(odd.mark, "JTE", "an initialism from the words that carry meaning");
+  assert.equal(odd.mark, "J Thermophilic Enzyme Eng", "the standard abbreviation, with unknown words kept whole");
   // Stable: the same title is always the same colour, so the column stays
   // coherent rather than arbitrary.
   assert.equal(odd.hue, journals.identify("Journal of Thermophilic Enzyme Engineering").hue);
@@ -43,7 +43,7 @@ test("a journal nobody curated still gets a mark and a colour of its own", () =>
 test("a one-word title keeps a name, not two letters", () => {
   assert.equal(journals.monogram("Cell"), "Cell");
   assert.equal(journals.monogram("Extremophiles"), "Ext");
-  assert.equal(journals.identify("Nature Protocols").mark, "NP");
+  assert.equal(journals.identify("Nature Protocols").mark, "Nat Protoc");
 });
 
 test("a curated family reads stronger than a derived one, in both schemes", () => {
@@ -70,6 +70,8 @@ test("no title means no mark, rather than a mark for nothing", () => {
 test("every Nature sister journal keeps its own cover colour", () => {
   const hue = title => journals.identify(title).hue;
   assert.notEqual(hue("Nature Biotechnology"), hue("Nature Methods"));
+  assert.equal(hue("Nature Communications"), 22, "Nature Communications is orange");
+  assert.equal(hue("Nature Biotechnology"), 50, "Nature Biotechnology is yellow");
   assert.equal(hue("Nature Chemical Biology"), 285);
   assert.equal(hue("Nature Medicine"), 5);
   assert.equal(journals.identify("Nature Microbiology").hue, 140);

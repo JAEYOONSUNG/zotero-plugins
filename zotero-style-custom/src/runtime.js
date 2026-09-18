@@ -159,7 +159,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     this.rebuildJournals();
     this.labels = { unread: "unread", reading: "reading", done: "done" };
-    this.columnDefinitions = [["journalMark", "Journal", "64"], ["if", "IF", "90"], ["citations", "Cited Count", "120"],
+    this.columnDefinitions = [["journalMark", "Journal", "110"], ["if", "IF", "90"], ["citations", "Cited Count", "120"],
       ["status", "Status", "100"], ["rating", "Rating", "100"],
       ["time", "Read Time", "120"], ["tags", "Tags", "140"],
       ["files", "Files", "110"],
@@ -264,7 +264,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     try {
       const state = this.state(item);
       if (key === "if") return state.impactFactor == null ? "" : String(state.impactFactor);
-      if (key === "journalMark") return this.journalIdentityOf(item)?.identity.mark || "";
+      if (key === "journalMark") return this.journalAbbreviationOf(item);
       if (key === "citations") return state.citations == null ? "" : String(state.citations);
       if (key === "status") return String({unread:0,reading:1,done:2}[state.status]);
       if (key === "rating") return String(state.rating);
@@ -565,16 +565,27 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const identity = title ? this.journalIdentity.identify(title) : null;
     return identity ? {title, identity} : null;
   }
-  // The publisher's lettermark in its colour. Its own column now: beside the IF
+  // The journal's standard abbreviation: Zotero's own field when the record has
+  // one, otherwise the abbreviation the mark module derives from the title.
+  journalAbbreviationOf(item) {
+    const found = this.journalIdentityOf(item);
+    const own = this.isRegular(item) ? String(item.getField('journalAbbreviation') || '').trim() : '';
+    // Some translators file the full title in the abbreviation field; that is
+    // not an abbreviation, so the derived one is used instead.
+    const same = value => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (own && (!found || same(own) !== same(found.title))) return own;
+    return found?.identity.mark || '';
+  }
+  // The abbreviation in the publisher's colour. Its own column now: beside the IF
   // it crowded the number, and the colour belongs on the journal's name anyway.
   journalMarkNode(doc, item, P) {
     const found = this.journalIdentityOf(item);
     if (!found) return null;
     const tone = this.journalIdentity.colours(found.identity, {dark: P.dark});
     const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-    mark.textContent = found.identity.mark;
+    mark.textContent = this.journalAbbreviationOf(item);
     mark.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;`
-      + `min-width:22px;height:14px;padding:0 3px;border-radius:3px;`
+      + `min-width:22px;height:14px;padding:0 4px;border-radius:3px;white-space:nowrap;`
       + `background:${tone.fill};color:${tone.ink};box-shadow:inset 0 0 0 .5px ${tone.edge};`
       + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
     mark.title = found.identity.label ? `${found.title} · ${found.identity.label}` : found.title;
@@ -879,12 +890,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.title = this.affiliationNote(where);
         return cell;
       }
-      const line = this.affiliationLine(doc, row, "first", P);
-      if (line) cell.appendChild(line);
+      // The tier capsule leads, so a column of them lines up down the left edge
+      // and the lab names start at the same place on every row.
       if (row.tier) {
         const pill = this.tierPill(doc, {tier: row.tier, hIndex: row.hIndex}, P);
         if (pill) cell.appendChild(pill);
       }
+      const line = this.affiliationLine(doc, row, "first", P);
+      if (line) cell.appendChild(line);
       cell.title = this.affiliationNote(where);
       return cell;
     } else if (key === "affiliation" && this.isRegular(item)) {
@@ -1227,6 +1240,33 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     this.paintHighlights(win,state);
     for(const n of [...state.titleNodes])if(!n.isConnected)state.titleNodes.delete(n);
+  }
+  /* A long Extra field -- a TLDR and a citation line -- renders taller than the
+     row Zotero measured for it, and the rows below draw over its last lines. The
+     row is given the height its value actually needs. Measured from the DOM the
+     bug showed: value 124px, row 111px, next row starting 11px too early. */
+  fixItemPaneRows(doc) {
+    let fixed = 0;
+    for (const row of doc.querySelectorAll('#zotero-item-pane .meta-row')) {
+      const value = row.querySelector('editable-text[multiline], .value');
+      if (!value) continue;
+      const need = value.getBoundingClientRect?.().height || 0, have = row.getBoundingClientRect?.().height || 0;
+      if (need > have + 1) { row.style.minHeight = Math.ceil(need) + 'px'; fixed++; }
+      else if (row.style.minHeight && need + 1 < have) row.style.removeProperty('min-height');
+    }
+    return fixed;
+  }
+  watchItemPane(win, state) {
+    const pane = win.document.getElementById('zotero-item-pane');
+    if (!pane || !win.MutationObserver) return;
+    let timer = null;
+    const schedule = () => { if (timer) win.clearTimeout(timer); timer = win.setTimeout(() => { timer = null; try { this.fixItemPaneRows(win.document); } catch (error) { this.Z.logError(error); } }, 120); };
+    const observer = new win.MutationObserver(schedule);
+    observer.observe(pane, {subtree: true, childList: true, attributes: true, attributeFilter: ['value', 'hidden', 'open']});
+    win.addEventListener('resize', schedule);
+    state.listeners.push([win, 'resize', schedule]);
+    state.itemPaneObserver = observer;
+    schedule();
   }
   // The journal's own name, in its publisher's colour: Science reads red and
   // Cell blue in Zotero's own Publication column, with no second column needed.
@@ -2728,6 +2768,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     win.addEventListener("unload", unload, { once: true });
     state.listeners.push([win, "unload", unload]);
     this.attachMotion(win,state);
+    this.watchItemPane(win,state);
     state.readerCleanup=this.readerTools.attach(win);
     for(const tab of this.readerTools.tabs(win))if(tab.itemID)this.tabItems.set(tab.id,tab.itemID);
     state.workbench=this.Workbench.attach(win,{runtime:this,library:this.Library.create({Zotero:this.Z,runtime:this}),reader:this.readerTools,model:this.workspaceTools,assist:this.assist});
@@ -2964,6 +3005,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const cleanup=fn=>{try{pending.push(Promise.resolve(fn()).catch(error=>errors.push(error)));}catch(error){errors.push(error);}};
     cleanup(()=>win.clearInterval(state.timer));cleanup(()=>state.marqueeCleanup?.());
     cleanup(()=>state.workbench?.destroy());cleanup(()=>state.readerCleanup?.());
+    cleanup(()=>state.itemPaneObserver?.disconnect());
+    for(const row of win.document.querySelectorAll('#zotero-item-pane .meta-row[style*="min-height"]'))cleanup(()=>row.style.removeProperty('min-height'));
     for(const node of state.titleNodes||[])cleanup(()=>node.remove());
     for(const[cell,position]of state.titlePositions||[])cleanup(()=>{if(cell.style.position==='relative'){if(position)cell.style.position=position;else cell.style.removeProperty('position');}});
     for(const[node,weight]of state.titleWeights||[])cleanup(()=>{if(node.style.fontWeight==='700')node.style.fontWeight=weight;});
