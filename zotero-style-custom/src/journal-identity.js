@@ -304,9 +304,30 @@
     return hash % 360;
   }
 
+  /* Memoised on the title.
+
+     The row's journal cell asks this through both the sort provider and the
+     renderer, for four columns, on every repaint: about eight calls a row. At
+     twenty microseconds each -- eighteen families of regular expressions, tried
+     in order -- a forty-row viewport spent six milliseconds an scroll frame
+     deciding facts that never change. A journal's publisher is fixed. */
+  const seen = new Map();
+  const SEEN_LIMIT = 4000;
+
   function identify(title) {
     const name = text(title);
     if (!name) return null;
+    const cached = seen.get(name);
+    if (cached !== undefined) return cached;
+    const found = classify(name);
+    // A library has hundreds of journals, not thousands; the cap is there so a
+    // pathological caller cannot grow this without bound.
+    if (seen.size >= SEEN_LIMIT) seen.clear();
+    seen.set(name, found);
+    return found;
+  }
+
+  function classify(name) {
     const key = flat(name);
     const measured = JOURNAL_HUES[key];
     const exact = Object.prototype.hasOwnProperty.call(JOURNAL_COLOURS, key) ? JOURNAL_COLOURS[key] : undefined;
@@ -374,7 +395,7 @@
   }
 
 
-  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, tonesFor, FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS};
+  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, tonesFor, FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

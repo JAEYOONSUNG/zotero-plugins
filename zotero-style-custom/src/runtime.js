@@ -62,8 +62,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return Array.isArray(found) ? found : [];
   }
   featureEnabled(id) { return this.pref('feature.'+id,true)!==false; }
+  // The schema is a list of 117 entries and this walked it on every lookup.
+  // The read-time column calls it for every cell, so a viewport scanned it
+  // thousands of times a frame to find the same row.
+  settingDefinition(key) {
+    if (!this.settingIndex) {
+      this.settingIndex = new Map((this.settingsSchema?.settings || []).map(row => [row.key, row]));
+    }
+    return this.settingIndex.get(key);
+  }
   getSetting(key) {
-    const definition=this.settingsSchema.settings.find(row=>row.key===key);if(!definition)throw new Error('Unknown setting: '+key);
+    const definition=this.settingDefinition(key);if(!definition)throw new Error('Unknown setting: '+key);
     let value=this.pref(key,undefined);
     if(value===undefined){
       const reader=this.cache.readerSettings||{},margin=reader.marginOptions||{};
@@ -75,6 +84,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   async setSetting(key,value,{apply=true}={}) {
     this.settingsTools.validate(key,value);
+    // Anything remembered from a preference is dropped the moment one is set.
+    this.timeFormatMemo = null;
+    this.bumpState();
     this.settingWriteDepth=(this.settingWriteDepth||0)+1;
     try{if(key==='customFields')this.setCustomFields(value);else if(key==='panelCSS')this.setPanelCSS(value);else this.Z.Prefs.set('extensions.style-custom.'+key,value,true);}finally{this.settingWriteDepth--; }
     if(key==='workbenchDensity'){this.cache.workbenchUI={...(this.cache.workbenchUI||{}),density:value};this.dirty=true;}
@@ -93,6 +105,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if(!this.featureEnabled('citedCountColumn'))this.citationJob?.controller.abort();
     for(const [win,state]of this.windows){
       if(win.closed)continue;
+      this.timeFormatMemo = null; this.bumpState();
       if(keys.some(key=>['recordReading','recordIntervalMs','idleSeconds'].includes(key)))this.attachMotion(win,state,{marquee:false,reading:true});
       if(keys.some(key=>['marquee','hoverDelay','scrollSpeed'].includes(key)))this.attachMotion(win,state,{marquee:true,reading:false});
       if(keys.some(key=>key.startsWith('reader')||key.startsWith('margin')||key.startsWith('feature.')||key==='verticalTabs'))await this.readerTools.applyPreferences?.(win);
@@ -132,10 +145,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
   }
   formatReadTime(seconds) {
-    const value=Math.max(0,Math.floor(Number(seconds)||0));if(!value&&!this.getSetting('showZeroReadTime'))return '';
-    if(this.getSetting('timeFormat')==='seconds')return value+'초';
+    // Both settings are read for every cell in the column. They are preferences,
+    // so they change when a preference changes and not once per row; the memo
+    // is dropped whenever one is set.
+    if (!this.timeFormatMemo) {
+      this.timeFormatMemo = {zero: this.getSetting('showZeroReadTime'), format: this.getSetting('timeFormat')};
+    }
+    const {zero, format} = this.timeFormatMemo;
+    const value=Math.max(0,Math.floor(Number(seconds)||0));if(!value&&!zero)return '';
+    if(format==='seconds')return value+'초';
     const h=Math.floor(value/3600),m=Math.floor(value%3600/60),s=value%60;
-    if(this.getSetting('timeFormat')==='clock')return [h,m,s].map(n=>String(n).padStart(2,'0')).join(':');
+    if(format==='clock')return [h,m,s].map(n=>String(n).padStart(2,'0')).join(':');
     return h?`${h}h ${m}m ${s}s`:m?`${m}m ${s}s`:`${s}s`;
   }
   refreshReadingDisplays() {
@@ -254,7 +274,52 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (JSON.stringify(cached) !== JSON.stringify(merged)) { old.metrics = merged; this.dirty = true; }
     return merged;
   }
+  /* One computation of a row's state per repaint, not one per column.
+
+     state() rebuilds everything: it reads the legacy store, resolves the
+     journal rank, builds a citation identity and merges three objects. Five
+     columns ask for it -- IF, citations, status, rating, read time -- and
+     Zotero asks each column for its sort value and then its cell, so a forty
+     row viewport recomputed all of that four hundred times a frame. Scrolling
+     spent about a tenth of a second per screen deciding facts that had not
+     changed.
+
+     The memo is keyed on a generation counter, bumped whenever anything is
+     written, and expires on its own after a fifth of a second. The counter is
+     what makes it correct; the expiry is what keeps a missed bump from being
+     visible for longer than a blink. */
+  bumpState() { this.stateGeneration = (this.stateGeneration || 0) + 1; }
+
   state(item) {
+    const id = item && item.id != null ? String(item.libraryID) + ':' + item.id : null;
+    const generation = this.stateGeneration || 0;
+    const now = Date.now();
+    /* The memo is only consulted when nothing is waiting to be written.
+
+     `dirty` means the cache has been changed and not yet saved, which is
+     exactly the window in which a remembered answer is the old answer. Keying
+     on it makes this correct by construction rather than by remembering to
+     invalidate at each of the places that mutate: the live reading-time cell
+     reads state during the same tick that increments it, before any flush, and
+     a memo keyed only on a counter served it the previous second's figure. */
+    const settled = !this.dirty;
+    if (id != null && settled) {
+      if (!this.stateCache) this.stateCache = new Map();
+      const hit = this.stateCache.get(id);
+      if (hit && hit.generation === generation && now - hit.at < 200) return hit.value;
+    }
+    const value = this.computeState(item);
+    if (id != null && settled) {
+      if (!this.stateCache) this.stateCache = new Map();
+      // A viewport is tens of rows; the cap is there so a sweep over a whole
+      // library cannot grow this without bound.
+      if (this.stateCache.size > 600) this.stateCache.clear();
+      this.stateCache.set(id, {generation, at: now, value});
+    }
+    return value;
+  }
+
+  computeState(item) {
     const metrics = this.metrics(item);
     const state = this.model.readState(item.getTags(), item.getField("extra"), this.pref("autoStatus", true)&&this.featureEnabled("readStatus") ? metrics.seconds : 0);
     if (this.entry(item).unreadOverride && state.status !== "done") state.status = "unread";
@@ -1037,6 +1102,27 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     await this.flush();await this.refreshWindows();return result;
   }
   pageProgress(item,attachmentID) {
+    // Memoised on the same terms as state(): only while nothing is waiting to
+    // be written, so a page turn is never served the previous page's figure.
+    // The Pages column asks through both the sort value and the cell.
+    const memoKey = attachmentID == null && item && item.id != null
+      ? String(item.libraryID) + ':' + item.id : null;
+    const generation = this.stateGeneration || 0;
+    const settled = !this.dirty;
+    if (memoKey != null && settled) {
+      if (!this.progressCache) this.progressCache = new Map();
+      const hit = this.progressCache.get(memoKey);
+      if (hit && hit.generation === generation && Date.now() - hit.at < 200) return hit.value;
+    }
+    const computed = this.computePageProgress(item, attachmentID);
+    if (memoKey != null && settled) {
+      if (this.progressCache.size > 600) this.progressCache.clear();
+      this.progressCache.set(memoKey, {generation, at: Date.now(), value: computed});
+    }
+    return computed;
+  }
+
+  computePageProgress(item,attachmentID) {
     const entry=this.entry(item);let old;
     const id=attachmentID??entry.readingAttachmentID;
     const bucket=id&&entry.readingAttachments?.[String(id)];
@@ -2734,6 +2820,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     await this.refreshWindows();
   }
   flush() {
+    // A write is a change, whether or not a window is refreshed after it.
+    this.bumpState();
     const work = this.writeQueue.then(async () => {
       if (!this.dirty) return;
       const snapshot = JSON.parse(JSON.stringify(this.cache));
@@ -2745,6 +2833,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return work;
   }
   async refreshWindows() {
+    // Anything worth repainting for is worth recomputing for.
+    this.bumpState();
     for (const [win, state] of this.windows) {
       if (!win.closed && !state.refreshing) {
         state.refreshing = true;

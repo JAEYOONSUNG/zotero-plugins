@@ -1637,3 +1637,58 @@ test('quitting Zotero leaves the columns registered, so their saved widths and o
   await again.plugin.stop();
   assert.equal(again.columns.size, 0, 'a disable or uninstall still cleans up');
 });
+
+test('a row is worked out once per repaint, and never while a change is unsaved', async () => {
+  // Driven against the memo itself rather than through a fixture, because
+  // metrics() marks the cache dirty the first time it meets an item and that
+  // bookkeeping is not what this is about.
+  const {createRequire} = await import('node:module');
+  const Runtime = createRequire(import.meta.url)('../src/runtime.js');
+  const host = Object.create(Runtime.prototype);
+  let computed = 0;
+  Object.assign(host, {dirty: false, stateGeneration: 0,
+    computeState: () => { computed++; return {seconds: computed}; }});
+  const paper = {id: 1, libraryID: 1};
+
+  // Five columns ask for a row's state, and Zotero asks each for its sort value
+  // and then its cell: a forty-row viewport recomputed all of it four hundred
+  // times a frame.
+  for (let n = 0; n < 20; n++) host.state(paper);
+  assert.equal(computed, 1, 'once per repaint, not once per column');
+
+  // `dirty` means the cache has been changed and not yet saved, which is exactly
+  // the window in which a remembered answer is the old answer: the live
+  // reading-time cell reads state during the tick that increments it.
+  host.dirty = true;
+  host.state(paper);
+  host.state(paper);
+  assert.equal(computed, 3, 'nothing is remembered while a write is pending');
+
+  /* Nothing was stored while the write was pending, so what is still held is
+     what was worked out before it -- and that is right: in this test nothing
+     was actually written. The bump is what retires it. */
+  host.dirty = false;
+  computed = 0;
+  host.state(paper);
+  assert.equal(computed, 0, 'the answer from before the pending write still stands');
+  host.bumpState();
+  host.state(paper);
+  assert.equal(computed, 1, 'a bump retires what was remembered');
+
+  // The same id in two libraries is two items. Keyed on the id alone, the memo
+  // handed the second one the first one's answer.
+  computed = 0;
+  host.state({id: 7, libraryID: 1});
+  host.state({id: 7, libraryID: 2});
+  assert.equal(computed, 2, 'library and id together are the key');
+});
+
+test('the settings schema is looked up by key, not walked', () => {
+  const {plugin} = fixture();
+  // 117 entries, walked on every lookup, and the read-time column looks up two
+  // of them for every cell it draws.
+  assert.ok(plugin.settingDefinition('timeFormat'));
+  assert.equal(plugin.settingDefinition('no-such-setting'), undefined);
+  assert.ok(plugin.settingIndex instanceof Map);
+  assert.ok(plugin.settingIndex.size > 100);
+});
