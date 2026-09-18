@@ -580,3 +580,63 @@
 #style-custom-workbench .sc-graph g[role=button]:focus-visible .sc-graph-label { fill: var(--sc-text); font-weight: 600; }
 #style-custom-workbench .sc-graph g[role=button] { transition: opacity .12s ease; }
 #style-custom-workbench .sc-graph line { transition: stroke-opacity .12s ease; }
+
+/* --- Reading back through what you marked up ---
+   The highlight is the content; everything else gets out of its way. The old
+   list boxed each annotation, ran a 4px colour bar down its side and kept a
+   checkbox and two buttons showing, so six of them filled the window and the
+   chrome outweighed the text. */
+#style-custom-workbench .sc-annots { display: flex; flex-direction: column; }
+#style-custom-workbench .sc-annot {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 12px; border-radius: var(--sc-radius);
+  border-inline-start: 2px solid transparent;
+  cursor: default;
+}
+#style-custom-workbench .sc-annot:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-annot:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -2px; }
+#style-custom-workbench .sc-annot[data-selected=true] {
+  background: var(--sc-accent-soft); border-inline-start-color: var(--sc-accent);
+}
+#style-custom-workbench .sc-annot-head { display: flex; align-items: center; gap: 7px; min-height: 20px; }
+#style-custom-workbench .sc-annot-dot {
+  flex: none; width: 9px; height: 9px; border-radius: 100px;
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .18);
+}
+#style-custom-workbench .sc-annot-page { font: 600 11px var(--sc-mono); color: var(--sc-text); }
+#style-custom-workbench .sc-annot-kind { font-size: 10px; color: var(--sc-faint); }
+/* The actions appear when the pointer or the keyboard is on the annotation,
+   rather than two buttons standing under every line of quoted text. */
+#style-custom-workbench .sc-annot-actions { margin-inline-start: auto; display: flex; gap: 4px; opacity: 0; }
+#style-custom-workbench .sc-annot:hover .sc-annot-actions,
+#style-custom-workbench .sc-annot:focus-within .sc-annot-actions { opacity: 1; }
+#style-custom-workbench .sc-annot-actions button { min-height: 22px; padding: 2px 8px; font-size: 11px; }
+#style-custom-workbench .sc-annot-text {
+  margin: 0; font: 13px/1.55 var(--sc-font); color: var(--sc-text); overflow-wrap: anywhere;
+}
+#style-custom-workbench .sc-annot-links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* A memo saves itself, and says so: an edit that vanished without a word would
+   be worse than a button. */
+#style-custom-workbench .sc-annot-memo {
+  width: 100%; min-height: 24px; resize: none; overflow: hidden;
+  padding: 4px 8px; border: 0; border-radius: var(--sc-radius-sm);
+  background: transparent; color: var(--sc-muted);
+  font: 12px/1.5 var(--sc-font);
+}
+#style-custom-workbench .sc-annot-memo:hover { background: var(--sc-fill); }
+#style-custom-workbench .sc-annot-memo:focus { background: var(--sc-fill); color: var(--sc-text); outline: none; box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
+#style-custom-workbench .sc-annot-memo[data-state=saving] { box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
+#style-custom-workbench .sc-annot-memo[data-state=saved] { box-shadow: inset 0 0 0 1px var(--sc-done); }
+#style-custom-workbench .sc-annot-memo[data-state=failed] { box-shadow: inset 0 0 0 1px var(--sc-error); color: var(--sc-error); }
+#style-custom-workbench .sc-memo { display: flex; flex-direction: column; gap: 2px; padding: 8px 0 4px; }
+#style-custom-workbench .sc-memo-label { font-size: 11px; color: var(--sc-faint); }
+
+/* The colour tally doubles as a filter. */
+#style-custom-workbench .sc-annot-swatch {
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 24px; padding: 2px 9px; border: 0;
+  border-radius: 100px; background: var(--sc-fill);
+  font: 11px var(--sc-font); color: var(--sc-muted); cursor: pointer;
+}
+#style-custom-workbench .sc-annot-swatch:hover { background: var(--sc-fill-hover); color: var(--sc-text); }

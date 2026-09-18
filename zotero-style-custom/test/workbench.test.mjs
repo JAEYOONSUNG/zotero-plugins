@@ -94,7 +94,7 @@ test('all tabs expose functional primary actions and use library service contrac
  await f.bench.show('graph');assert.ok(f.body().querySelector('svg'));await f.click('공통 태그');await f.click('확대');
  await f.bench.show('tags');f.input('추가할 태그','new, nested/tag');await f.click('선택 문헌에 태그 추가');assert.deepEqual(f.calls.find(c=>c[0]==='addTags').slice(1),[['1'],['new','nested/tag']]);
  await f.bench.show('notes');f.input('새 노트 내용','Plain note');await f.click('새 노트 저장');assert.ok(f.calls.find(c=>c[0]==='createNote'&&c[1]==='1'&&c[2]==='Plain note'));
- await f.bench.show('annotations');const checkbox=f.body().querySelector('[aria-label="주석 선택"]');checkbox.checked=true;checkbox.dispatchEvent(new f.win.Event('change',{bubbles:true}));await f.click('선택 주석을 노트로');assert.deepEqual(f.calls.find(c=>c[0]==='extract')[1],['3']);
+ await f.bench.show('annotations');const row=f.body().querySelector('.sc-annot');row.dispatchEvent(new f.win.Event('click',{bubbles:true}));assert.equal(row.dataset.selected,'true');await f.click('선택 주석을 노트로');assert.deepEqual(f.calls.find(c=>c[0]==='extract')[1],['3']);
  await f.bench.show('backlinks');assert.match(f.body().textContent,/Paper Beta/);await f.click('열기');
  await f.bench.show('attachments');await f.click('열기');assert.ok(f.calls.find(c=>c[0]==='open'&&c[1]==='99'));
  await f.bench.show('reading');await f.click('세피아 PDF');assert.ok(f.calls.find(c=>c[0]==='theme'&&c[2]==='sepia'));
@@ -271,7 +271,7 @@ test('canvas exposes board and card appearance editing and reversible relation r
 
 test('tag rename annotation recolor relationship removal and collection scope have real user entry points',async()=>{
  const f=fixture();await f.bench.show('tags');f.input('기존 태그 경로','topic');f.input('새 태그 경로','review');await f.click('선택 문헌 태그 이름 변경');assert.deepEqual(f.calls.find(c=>c[0]==='renameTagBranch').slice(1),[['1'],'topic','review',{subtree:true}]);
- await f.bench.show('annotations');await f.click('표시된 주석 전체 선택');f.input('선택 주석 새 색상','#ff6666');await f.click('선택 주석 색상 변경');assert.deepEqual(f.calls.find(c=>c[0]==='recolor').slice(1),[['3'],'#ff6666']);
+ await f.bench.show('annotations');await f.click('보이는 주석 전체 선택');f.input('선택 주석 새 색상','#ff6666');await f.click('선택 주석 색 바꾸기');assert.deepEqual(f.calls.find(c=>c[0]==='recolor').slice(1),[['3'],'#ff6666']);
  f.bench.state.selected=new Set(['1','2']);await f.bench.render();await f.click('선택 문헌끼리 연결 해제');assert.deepEqual(f.calls.find(c=>c[0]==='unrelate')[1],['1','2']);
  f.win.ZoteroPane.getSelectedCollection=()=>({id:4,libraryID:1});const scope=f.bench.panel.querySelector('[aria-label="표시 범위"]');scope.value='collection-recursive';scope.dispatchEvent(new f.win.Event('change',{bubbles:true}));await settle();assert.deepEqual(f.calls.find(c=>c[0]==='collectionItems').slice(1),[4,{libraryID:1,recursive:true}]);
  await f.bench.show('explore');assert.match(f.body().textContent,/Beta/);assert.doesNotMatch(f.body().textContent,/Alpha/);await f.bench.show('notes');assert.deepEqual(f.calls.filter(c=>c[0]==='notes').at(-1)[1],['2']);
@@ -305,8 +305,8 @@ test('late detail notes never leak into a different paper or tab',async()=>{
 });
 
 test('annotation merge and exact note backlinks operate on visible annotation IDs from the workbench',async()=>{
- const f=fixture();f.library.annotations=f.record('annotations',[{id:'3',text:'First',color:'#ffd400',type:'highlight',pageIndex:0},{id:'4',text:'Second',color:'#ffd400',type:'highlight',pageIndex:1}]);f.library.backlinks=f.record('backlinks',[{id:'9',title:'Linked annotation note',kind:'note'}]);await f.bench.show('annotations');await f.click('참조 노트 보기');assert.deepEqual(f.calls.find(c=>c[0]==='backlinks')[1],'3');await f.click('Linked annotation note');assert.ok(f.calls.find(c=>c[0]==='open'&&c[1]==='9'));
- await f.click('표시된 주석 전체 선택');await f.click('선택 주석 병합');const call=f.calls.find(c=>c[0]==='mergeAnnotations');assert.deepEqual(call[1],['3','4']);assert.equal(typeof call[2].isCurrent,'function');assert.match(f.bench.panel.querySelector('.sc-status').textContent,/휴지통/);f.bench.destroy();assert.equal(call[2].isCurrent(),false);
+ const f=fixture();f.library.annotations=f.record('annotations',[{id:'3',text:'First',color:'#ffd400',type:'highlight',pageIndex:0},{id:'4',text:'Second',color:'#ffd400',type:'highlight',pageIndex:1}]);f.library.backlinks=f.record('backlinks',[{id:'9',title:'Linked annotation note',kind:'note'}]);await f.bench.show('annotations');await f.click('참조 노트');assert.deepEqual(f.calls.find(c=>c[0]==='backlinks')[1],'3');await f.click('Linked annotation note');assert.ok(f.calls.find(c=>c[0]==='open'&&c[1]==='9'));
+ await f.click('보이는 주석 전체 선택');await f.click('선택 주석 병합');const call=f.calls.find(c=>c[0]==='mergeAnnotations');assert.deepEqual(call[1],['3','4']);assert.equal(typeof call[2].isCurrent,'function');assert.match(f.bench.panel.querySelector('.sc-status').textContent,/휴지통/);f.bench.destroy();assert.equal(call[2].isCurrent(),false);
 });
 
 test('rapid comparison field changes compose while persistence is still pending',async()=>{
@@ -364,8 +364,8 @@ test('a late earlier navigation cannot overwrite the remembered section or move 
 });
 
 test('disabled reader features block workbench recolor merge and backlink actions as well as native tools',async()=>{
- const f=fixture(),disabled=new Set();f.runtime.featureEnabled=id=>!disabled.has(id);await f.bench.show('annotations');await f.click('표시된 주석 전체 선택');const old=f.findButton('선택 주석 병합');disabled.add('reader.mergeAnnotations');old.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();assert.equal(f.calls.some(call=>call[0]==='mergeAnnotations'),false);
- disabled.add('annotationColors');disabled.add('backlinks');await f.bench.render();assert.equal(f.findButton('선택 주석 병합').hidden,true);assert.equal(f.findButton('선택 주석 색상 변경').hidden,true);assert.equal(f.findButton('참조 노트 보기').hidden,true);f.bench.destroy();
+ const f=fixture(),disabled=new Set();f.runtime.featureEnabled=id=>!disabled.has(id);await f.bench.show('annotations');await f.click('보이는 주석 전체 선택');const old=f.findButton('선택 주석 병합');disabled.add('reader.mergeAnnotations');old.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();assert.equal(f.calls.some(call=>call[0]==='mergeAnnotations'),false);
+ disabled.add('annotationColors');disabled.add('backlinks');await f.bench.render();assert.equal(f.findButton('선택 주석 병합').hidden,true);assert.equal(f.findButton('선택 주석 색 바꾸기').hidden,true);assert.equal(f.findButton('참조 노트').hidden,true);f.bench.destroy();
 });
 
 test('configured page size and live reading metrics update existing paper cards without replacing editors',async()=>{
@@ -744,4 +744,76 @@ test('a toolbar with nothing to anchor to still gets the button', async () => {
   assert.ok(ids.indexOf('style-custom-workbench-button') < ids.indexOf('zotero-tb-search'),
     'with no tools to follow, it goes before the spacer');
   g.bench.destroy();
+});
+
+test('every gated action label in the panel is one the gate actually knows', async () => {
+  // The gate is keyed on the button's Korean label, so renaming a button
+  // silently ungated it: "참조 노트 보기" became "참조 노트" and the backlinks
+  // feature switch stopped covering it.
+  const {readFileSync} = await import('node:fs');
+  const source = readFileSync(new URL('../src/workbench.js', import.meta.url), 'utf8');
+  const map = /const actionFeature=\{([^}]*)\}/.exec(source)[1];
+  const gated = [...map.matchAll(/'([^']+)':'[^']+'/g)].map(m => m[1]);
+  for (const label of ['선택 주석 색 바꾸기', '선택 주석 병합', '참조 노트']) {
+    assert.ok(gated.includes(label), `${label} is drawn but not gated`);
+  }
+});
+
+test('a memo saves itself, says so, and is not lost when the panel closes', async () => {
+  const f = fixture();
+  const saved = [];
+  f.library.annotations = f.record('annotations',
+    [{id: '3', text: 'A highlighted sentence', comment: '', color: '#ffd400', type: 'highlight', pageIndex: 0, attachmentID: '9'}]);
+  f.library.setAnnotationComment = async (id, text) => { saved.push([id, text]); return text; };
+  await f.bench.show('annotations');
+  // Scoped to the annotation: the paper's own memo shares the class and is
+  // drawn first, so an unscoped query picks up the wrong one.
+  const memo = f.body().querySelector('.sc-annot .sc-annot-memo');
+  assert.ok(memo, 'the annotation carries an editable memo');
+
+  // Writing a note used to mean making a whole note item and pressing a button.
+  memo.value = 'this is the claim to check';
+  memo.dispatchEvent(new f.win.Event('input', {bubbles: true}));
+  assert.equal(saved.length, 0, 'it waits rather than writing on every keystroke');
+
+  // Leaving the field commits at once: waiting out the timer after the panel has
+  // closed would lose the edit.
+  memo.dispatchEvent(new f.win.Event('blur', {bubbles: true}));
+  await settle();
+  assert.deepEqual(saved, [['3', 'this is the claim to check']]);
+  assert.equal(memo.dataset.state, 'saved', 'an edit that vanished without a word would be worse than a button');
+  f.bench.destroy();
+});
+
+test('a failure to save a memo is said out loud, not swallowed', async () => {
+  const f = fixture();
+  f.library.annotations = f.record('annotations',
+    [{id: '3', text: 'Text', comment: '', color: '#ffd400', type: 'highlight', pageIndex: 0, attachmentID: '9'}]);
+  f.library.setAnnotationComment = async () => { throw new Error('read-only library'); };
+  await f.bench.show('annotations');
+  const memo = f.body().querySelector('.sc-annot .sc-annot-memo');
+  memo.value = 'x';
+  memo.dispatchEvent(new f.win.Event('blur', {bubbles: true}));
+  await settle();
+  assert.equal(memo.dataset.state, 'failed');
+  assert.match(f.bench.panel.querySelector('.sc-status').textContent, /저장하지 못했습니다/);
+  f.bench.destroy();
+});
+
+test('the annotation list reads as a pass through the paper', async () => {
+  const f = fixture();
+  f.library.annotations = f.record('annotations', [
+    {id: '5', text: 'Later', comment: '', color: '#a28ae5', type: 'highlight', pageIndex: 8, attachmentID: '9'},
+    {id: '3', text: 'Earlier', comment: '', color: '#ffd400', type: 'underline', pageIndex: 1, attachmentID: '9'}
+  ]);
+  await f.bench.show('annotations');
+  const texts = [...f.body().querySelectorAll('.sc-annot-text')].map(el => el.textContent);
+  assert.deepEqual(texts, ['Earlier', 'Later'], 'page order, which is the order they were made in');
+  // The colour tally doubles as a filter, so a reader can pull out one pass.
+  const swatches = [...f.body().querySelectorAll('.sc-annot-swatch')];
+  assert.equal(swatches.length, 2);
+  swatches[0].dispatchEvent(new f.win.Event('click', {bubbles: true}));
+  await settle();
+  assert.ok(f.bench.state.color, 'clicking a colour narrows to it');
+  f.bench.destroy();
 });

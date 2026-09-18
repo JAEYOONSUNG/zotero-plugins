@@ -7,6 +7,9 @@
  const FILTER_TABS=new Set(['explore','recent','collections','journals','reading','notes','annotations','attachments','tags','graph']);
  function attach(win,{runtime,library,reader,model,assist}){
   const doc=win.document;let disposed=false,epoch=0,loadEpoch=0,previewEpoch=0,aiEpoch=0,preview=null,notifier=null,reloadTimer=null,draftTimer=null;
+  // Every self-saving memo currently on screen, so an edit still inside its
+  // one-second wait is written when the panel closes rather than lost.
+  let memoFields=[];
   let observedContext=null;let draftContext='',draftCounters=new Map();const drafts=new Map(),visibleAnnotationIDs=new Set(),pageRanges=new Map(),deletedCardSelections=new Map();
   const ui=runtime.cache.workbenchUI&&typeof runtime.cache.workbenchUI==='object'?runtime.cache.workbenchUI:{};
   let returnFocus=null,commandFocus=null,commandIndex=0,commandMatches=[],navigationEpoch=0;const pendingActions=new Set();
@@ -14,7 +17,7 @@
   const enabled=id=>runtime.featureEnabled?.(id)!==false;
   const setting=(key,fallback)=>runtime.getSetting?runtime.getSetting(key):runtime.pref(key,fallback);
   const tabFeature={explore:'explore',recent:'Recent',graph:'graphView',tags:'tags',notes:'noteManager',annotations:'annotationManager',backlinks:'backlinks',attachments:'attachmentPreview',tabs:'tabManager',views:'viewManager',canvas:'canvas'};
-  const actionFeature={'선택 주석 색상 변경':'annotationColors','선택 주석 병합':'reader.mergeAnnotations','참조 노트 보기':'backlinks','밝은 PDF':'PDFStyles','어두운 PDF':'PDFStyles','세피아 PDF':'PDFStyles','사용자 PDF 테마 적용':'PDFStyles','주석 팔레트 적용':'annotationColors','주석 팔레트 삭제':'annotationColors','주석 팔레트 저장':'annotationColors','색상 이름 저장':'showAnnotationColorName','여백 주석 설정 적용':'marginAnnotation','관련 문헌으로 연결':'relatedItems','선택 문헌끼리 연결 해제':'relatedItems','선택 문헌에 태그 추가':'addTags','선택 문헌에서 태그 제거':'addTags','선택 문헌 태그 이름 변경':'addTags','초록 요약':'tldr','읽기 메모 제안':'AIGenerateRemark','태그 제안':'AIGenerateTags','앱 밝게/어둡게 전환':'darkLightButton'};
+  const actionFeature={'선택 주석 색상 변경':'annotationColors','선택 주석 색 바꾸기':'annotationColors','선택 주석 병합':'reader.mergeAnnotations','참조 노트 보기':'backlinks','참조 노트':'backlinks','밝은 PDF':'PDFStyles','어두운 PDF':'PDFStyles','세피아 PDF':'PDFStyles','사용자 PDF 테마 적용':'PDFStyles','주석 팔레트 적용':'annotationColors','주석 팔레트 삭제':'annotationColors','주석 팔레트 저장':'annotationColors','색상 이름 저장':'showAnnotationColorName','여백 주석 설정 적용':'marginAnnotation','관련 문헌으로 연결':'relatedItems','선택 문헌끼리 연결 해제':'relatedItems','선택 문헌에 태그 추가':'addTags','선택 문헌에서 태그 제거':'addTags','선택 문헌 태그 이름 변경':'addTags','초록 요약':'tldr','읽기 메모 제안':'AIGenerateRemark','태그 제안':'AIGenerateTags','앱 밝게/어둡게 전환':'darkLightButton'};
   const DRAFT_LIMIT=100,DRAFT_LENGTH=50000,DRAFT_TOTAL=500000;
   function cachedDrafts(){const saved=runtime.cache.workbenchDrafts;const map=new Map(saved?.version===1&&Array.isArray(saved.entries)?saved.entries.filter(entry=>Array.isArray(entry)&&entry.length===2&&typeof entry[0]==='string'&&entry[0].length<=1000&&!/password|secret|api.?key|access.?token|bearer/i.test(entry[0])&&typeof entry[1]==='string'&&entry[1].length<=DRAFT_LENGTH).slice(-DRAFT_LIMIT):[]);let total=[...map.values()].reduce((sum,value)=>sum+value.length,0);while(total>DRAFT_TOTAL){const key=map.keys().next().value;total-=map.get(key).length;map.delete(key);}return map;}
   for(const [key,value]of cachedDrafts())drafts.set(key,value);
@@ -603,13 +606,192 @@
   async function drawNotes(token){const actions=bar(),draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'});button('새 노트 저장',async()=>{const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
    if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions);}
    const notes=await library.notes(ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>!state.query||(n.title+' '+n.text).toLowerCase().includes(state.query.toLowerCase()));for(const n of matching){const c=card(n.title,n.modified);node('p',n.text.slice(0,1200),c);button('노트 편집',()=>library.openItem(n.id),c);button('내용 복사',()=>copy(n.text),c);}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':'이 범위에 노트가 없습니다. 문헌을 선택해 새 노트를 작성하세요.');}
-  async function drawAnnotations(token){const actions=bar();const color=node('input',null,actions,{placeholder:'#ffd400 또는 색상 전체','aria-label':'주석 색상 필터'});color.value=state.color;button('색상 적용',()=>{state.color=color.value.trim();render();},actions);button('선택 주석을 노트로',async()=>{const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));if(!chosen.length)throw new Error('현재 범위의 주석을 선택하세요.');const id=await library.noteFromAnnotations(chosen);await library.openItem(id);message('출처 링크가 포함된 노트를 만들었습니다.');},actions);
-   const colorEdit=node('input',null,actions,{type:'color',value:'#ffd400','aria-label':'선택 주석 새 색상'});
-   button('선택 주석 색상 변경',async()=>{const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));if(!chosen.length)throw new Error('현재 범위의 주석을 선택하세요.');const count=await library.recolorAnnotations(chosen,colorEdit.value);await render();message(`${count}개 주석의 색상을 변경했습니다.`);},actions);
-   button('표시된 주석 전체 선택',()=>{state.annotationIDs=new Set(visibleAnnotationIDs);render();},actions);
-   button('선택 주석 병합',async()=>{const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));const token=epoch;const id=await library.mergeAnnotations(chosen,{isCurrent:()=>!disposed&&!panel.hidden&&epoch===token});state.annotationIDs=new Set([String(id)]);await render();message('주석을 병합했습니다. 나머지 주석은 휴지통에서 복원할 수 있습니다.');},actions);
-   node('p','병합: 같은 PDF·유형·색상, 같은 페이지 또는 인접 두 페이지. 기존 참조 노트의 링크는 자동으로 바꾸지 않습니다.',body,{class:'sc-muted'});
-   const list=await library.annotations(ids());if(token!==epoch||disposed)return;const filtered=list.filter(a=>(!setting('annotationIgnoreFigures',false)||!/^(?:figure|fig\.?|table|그림|표)\s*\d/i.test((a.text||'').trim()))&&(!state.color||a.color.toLowerCase()===state.color.toLowerCase())&&(!state.query||(a.text+' '+a.comment).toLowerCase().includes(state.query.toLowerCase())));state.annotationIDs=new Set([...state.annotationIDs].filter(id=>filtered.some(a=>a.id===id)));for(const a of filtered){visibleAnnotationIDs.add(a.id);const c=card(`p.${a.pageLabel||((a.pageIndex??0)+1)} · ${a.type}`,a.comment);c.style.borderInlineStart='4px solid '+(/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'#ccd7e1');check('주석 선택',state.annotationIDs.has(a.id),on=>on?state.annotationIDs.add(a.id):state.annotationIDs.delete(a.id),c);node('p',setting('annotationPreferComment',false)&&a.comment?a.comment:a.text,c);button('원문 위치',()=>library.openItem(a.id),c);button('참조 노트 보기',async()=>{const generation=epoch,links=await library.backlinks(a.id);if(disposed||generation!==epoch||!c.isConnected)return;let list=c.querySelector('[data-annotation-backlinks]');if(!list)list=node('div',null,c,{'data-annotation-backlinks':'true'});list.replaceChildren();const notes=links.filter(link=>link.kind==='note');node('p',`참조 노트 ${notes.length}개`,list);for(const note of notes)button(note.title||'제목 없는 노트',()=>library.openItem(note.id),list);},c);}if(!filtered.length)empty('조건에 맞는 주석이 없습니다. PDF에서 하이라이트나 메모를 추가하세요.');}
+  /* Reading back through what you marked up.
+
+     The list was a stack of boxed cards, each with a four-pixel colour bar down
+     its side, a checkbox labelled "주석 선택", and two buttons always showing.
+     Six annotations filled the window and the chrome outweighed the text, which
+     is the wrong way round for a panel whose whole job is to let you read your
+     own highlights in one go.
+
+     Now the highlight is the content and everything else gets out of its way:
+     a colour dot and the page, the text at reading size, the comment under it
+     as an editable memo, and the actions only on hover. */
+  async function drawAnnotations(token){
+   const tools=bar();
+   const color=node('input',null,tools,{placeholder:'#ffd400 또는 비워두면 전체','aria-label':'주석 색상 필터'});
+   color.value=state.color;
+   button('색상 적용',()=>{state.color=color.value.trim();render();},tools);
+   const colorEdit=node('input',null,tools,{type:'color',value:'#ffd400','aria-label':'선택 주석 새 색상'});
+   button('선택 주석 색 바꾸기',async()=>{
+    const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
+    if(!chosen.length)throw new Error('현재 범위의 주석을 선택하세요.');
+    const count=await library.recolorAnnotations(chosen,colorEdit.value);
+    await render();message(`${count}개 주석의 색상을 변경했습니다.`);
+   },tools);
+   button('선택 주석을 노트로',async()=>{
+    const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
+    if(!chosen.length)throw new Error('현재 범위의 주석을 선택하세요.');
+    const id=await library.noteFromAnnotations(chosen);
+    await library.openItem(id);message('출처 링크가 포함된 노트를 만들었습니다.');
+   },tools);
+   button('선택 주석 병합',async()=>{
+    const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
+    const mark=epoch;
+    const id=await library.mergeAnnotations(chosen,{isCurrent:()=>!disposed&&!panel.hidden&&epoch===mark});
+    state.annotationIDs=new Set([String(id)]);
+    await render();message('주석을 병합했습니다. 나머지 주석은 휴지통에서 복원할 수 있습니다.');
+   },tools);
+
+   const list=await library.annotations(ids());
+   if(token!==epoch||disposed)return;
+   const filtered=list.filter(a=>
+    (!setting('annotationIgnoreFigures',false)||!/^(?:figure|fig\.?|table|그림|표)\s*\d/i.test((a.text||'').trim()))
+    &&(!state.color||a.color.toLowerCase()===state.color.toLowerCase())
+    &&(!state.query||(a.text+' '+a.comment).toLowerCase().includes(state.query.toLowerCase())));
+   state.annotationIDs=new Set([...state.annotationIDs].filter(id=>filtered.some(a=>a.id===id)));
+
+   if(!filtered.length){
+    empty('조건에 맞는 주석이 없습니다. PDF에서 하이라이트나 메모를 추가하세요.');
+    return;
+   }
+
+   // A short memo on the paper itself, saved as you type. Writing one used to
+   // mean making a whole note item; this is the scrap-of-paper version.
+   const chosenPapers=selected();
+   if(chosenPapers.length===1)drawPaperMemo(chosenPapers[0]);
+
+   const counts=new Map();
+   for(const a of filtered)counts.set(a.color||'',(counts.get(a.color||'')||0)+1);
+   const summary=bar();
+   node('span',`주석 ${filtered.length}개`,summary,{class:'sc-muted'});
+   for(const [hex,n] of [...counts].sort((a,b)=>b[1]-a[1])){
+    const chip=node('button',null,summary,{class:'sc-annot-swatch',type:'button',
+     title:`${hex||'색 없음'} · ${n}개 · 눌러서 이 색만 보기`});
+    node('span',null,chip,{class:'sc-annot-dot',style:`background:${/^#[0-9a-f]{6}$/i.test(hex)?hex:'var(--sc-faint)'}`});
+    node('span',String(n),chip);
+    chip.addEventListener('click',()=>{state.color=state.color===hex?'':hex;render();});
+   }
+   button('보이는 주석 전체 선택',()=>{state.annotationIDs=new Set(visibleAnnotationIDs);render();},summary);
+   if(state.annotationIDs.size)button(`선택 해제 (${state.annotationIDs.size})`,()=>{state.annotationIDs=new Set();render();},summary);
+
+   // Grouped by document and read in page order, which is the order they were
+   // made in and the only order that reads as a pass through the paper.
+   const byDocument=new Map();
+   for(const a of filtered){
+    const key=a.attachmentID||'';
+    if(!byDocument.has(key))byDocument.set(key,[]);
+    byDocument.get(key).push(a);
+   }
+   const titles=new Map((await library.attachments(ids())).map(a=>[a.id,a.title]));
+   if(token!==epoch||disposed)return;
+
+   for(const [attachmentID,group] of byDocument){
+    group.sort((a,b)=>(a.pageIndex??1e9)-(b.pageIndex??1e9));
+    if(byDocument.size>1)node('h3',`${titles.get(attachmentID)||'첨부파일'} · ${group.length}개`,body,{class:'sc-hit-group'});
+    const stack=node('div',null,body,{class:'sc-annots'});
+    for(const a of group){
+     visibleAnnotationIDs.add(a.id);
+     const row=node('article',null,stack,{class:'sc-annot',tabindex:'0','data-selected':String(state.annotationIDs.has(a.id))});
+     const head=node('div',null,row,{class:'sc-annot-head'});
+     node('span',null,head,{class:'sc-annot-dot',
+      style:`background:${/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'var(--sc-faint)'}`});
+     node('span',`p.${a.pageLabel||((a.pageIndex??0)+1)}`,head,{class:'sc-annot-page'});
+     node('span',a.type,head,{class:'sc-annot-kind'});
+     const actions=node('div',null,head,{class:'sc-annot-actions'});
+     button('원문',()=>library.openItem(a.id),actions);
+     button('참조 노트',async()=>{
+      const mark=epoch,links=await library.backlinks(a.id);
+      if(disposed||mark!==epoch||!row.isConnected)return;
+      let box=row.querySelector('[data-annotation-backlinks]');
+      if(!box)box=node('div',null,row,{'data-annotation-backlinks':'true',class:'sc-annot-links'});
+      box.replaceChildren();
+      const notes=links.filter(link=>link.kind==='note');
+      node('span',notes.length?`참조 노트 ${notes.length}개`:'이 주석을 인용한 노트가 없습니다.',box,{class:'sc-muted'});
+      for(const note of notes)button(note.title||'제목 없는 노트',()=>library.openItem(note.id),box);
+     },actions);
+     if(a.text)node('p',a.text,row,{class:'sc-annot-text'});
+     // The annotation's own comment is the memo: it travels with the highlight,
+     // shows in the reader and syncs, so there is no second place to look.
+     const memo=node('textarea',null,row,{class:'sc-annot-memo',rows:'1',
+      placeholder:'메모…','aria-label':'이 주석의 메모'});
+     memo.value=a.comment||'';
+     autoGrow(memo);
+     bindMemo(memo,value=>library.setAnnotationComment(a.id,value),`주석 ${a.pageLabel||''}`);
+     // Clicking the card selects it; the checkbox that used to do this carried a
+     // label longer than most of the annotations.
+     row.addEventListener('click',event=>{
+      if(event.target.closest('button, textarea, a'))return;
+      if(state.annotationIDs.has(a.id))state.annotationIDs.delete(a.id);
+      else state.annotationIDs.add(a.id);
+      row.dataset.selected=String(state.annotationIDs.has(a.id));
+      const clear=body.querySelector('[data-role=annot-clear]');
+      if(clear)clear.textContent=`선택 해제 (${state.annotationIDs.size})`;
+     });
+     row.addEventListener('keydown',event=>{
+      if(event.key===' '||event.key==='Enter'){event.preventDefault();row.click();}
+     });
+    }
+   }
+   node('p','병합은 같은 PDF·유형·색상에, 같은 페이지 또는 인접한 두 페이지에서만 됩니다. 기존 참조 노트의 링크는 바뀌지 않습니다.',
+    body,{class:'sc-muted'});
+  }
+
+  // A textarea that grows to its text rather than scrolling inside two lines.
+  function autoGrow(field){
+   const fit=()=>{field.style.height='auto';field.style.height=(field.scrollHeight+2)+'px';};
+   field.addEventListener('input',fit);
+   fit();
+  }
+
+  /* A memo that saves itself.
+
+     Every note in this panel used to need a button pressed after it, which is
+     the difference between jotting something down and filing a document. This
+     writes a second after typing stops, and says so rather than saving in
+     silence -- an edit that vanished without a word would be worse than a
+     button. */
+  function bindMemo(field,save,label){
+   let timer=null,inFlight=null,last=field.value;
+   const commit=async()=>{
+    const value=field.value;
+    if(value===last)return;
+    last=value;
+    field.dataset.state='saving';
+    try{
+     inFlight=save(value);
+     await inFlight;
+     if(!field.isConnected)return;
+     field.dataset.state='saved';
+     win.setTimeout(()=>{if(field.dataset.state==='saved')field.dataset.state='';},1400);
+    }catch(error){
+     if(field.isConnected)field.dataset.state='failed';
+     last=null;
+     message(`${label} 메모를 저장하지 못했습니다: ${error.message}`,true);
+    }
+   };
+   field.addEventListener('input',()=>{
+    field.dataset.state='';
+    if(timer)win.clearTimeout(timer);
+    timer=win.setTimeout(commit,900);
+   });
+   // Leaving the field commits at once: waiting out the timer after the panel
+   // has closed would lose the edit.
+   field.addEventListener('blur',()=>{if(timer)win.clearTimeout(timer);commit();});
+   memoFields.push(()=>{if(timer)win.clearTimeout(timer);return commit();});
+  }
+
+  function drawPaperMemo(item){
+   const box=node('div',null,body,{class:'sc-memo'});
+   node('span','이 문헌 메모',box,{class:'sc-memo-label'});
+   const field=node('textarea',null,box,{class:'sc-annot-memo sc-paper-memo',rows:'1',
+    placeholder:'짧게 적어두세요. 노트 항목은 만들지 않습니다.','aria-label':'이 문헌의 메모'});
+   const ref=runtime.Z.Items.get(Number(item.id));
+   field.value=(ref&&runtime.entry(ref).remark)||'';
+   autoGrow(field);
+   bindMemo(field,value=>library.setRemark(item.id,value),item.title||'문헌');
+  }
+
   async function drawBacklinks(token){let item;try{item=one();}catch(_){empty('역링크를 확인할 문헌 하나를 선택하세요.');return;}node('h2',item.title,body);const links=await library.backlinks(item.id);if(token!==epoch||disposed)return;for(const link of links){const c=card(link.title,link.kind==='note'?'이 문헌을 참조한 노트':'관련 문헌');button('열기',()=>library.openItem(link.id),c);}if(!links.length)empty('이 문헌을 가리키는 노트나 관련 문헌이 없습니다.');}
   // What the scan found across the whole library, with somewhere to go. The
   // classifier can name 29 supplementary files, 17 duplicates and 6 papers
@@ -1159,7 +1341,7 @@
    const customFields=node('input',null,body,{'aria-label':'추가 문헌 열','placeholder':'DOI, publisher, language'});customFields.value=runtime.pref('customFields','');button('추가 열 적용',async()=>{await runtime.setCustomFields(customFields.value);message('추가 열을 적용했습니다.');},body);
    const css=node('textarea',null,body,{'aria-label':'Custom 패널 CSS',placeholder:'.sc-card { font-size: 13px; }'});css.value=runtime.pref('panelCSS','');css.hidden=!enabled('styleEditor');button('패널 CSS 적용',()=>runtime.setPanelCSS(css.value),body).hidden=!enabled('styleEditor');
   }
-  async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';const token=++epoch;clear();draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();refreshNotice().catch(()=>{});try{
+  async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';const token=++epoch;clear();memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();refreshNotice().catch(()=>{});try{
    switch(state.tab){case'explore':await paperList(rows());break;case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
@@ -1178,7 +1360,12 @@
   };panel.addEventListener('keydown',keyboard);
   if(runtime.Z.Notifier){notifier=runtime.Z.Notifier.registerObserver({notify:()=>{if(disposed||panel.hidden)return;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(()=>run(load),200);}},['item','item-tag','collection','tab'],'style-custom-workbench');}
   const selectionTimer=win.setInterval(()=>{if(!disposed&&!win.closed&&!panel.hidden&&scopeContext()!==observedContext)run(load);},500);
-  function destroy(){if(disposed)return;disposed=true;win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();}
+  function destroy(){if(disposed)return;
+   // An edit typed a moment ago is still waiting out its timer. Closing the
+   // panel must write it, not discard it.
+   for(const flush of memoFields)Promise.resolve(flush()).catch(error=>runtime.Z.logError?.(error));
+   memoFields=[];
+   disposed=true;win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();}
   const accent=runtime.pref('accentColor','#374151');if(/^#[a-f\d]{6}$/i.test(accent)&&!['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=Math.max(11,Math.min(20,Number(runtime.pref('panelFontSize',13))||13))+'px';
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.

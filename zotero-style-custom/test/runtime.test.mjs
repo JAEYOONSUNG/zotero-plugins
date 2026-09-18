@@ -66,7 +66,7 @@ function fixture() {
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
   const { plugin, columns, observers } = fixture();
   await plugin.start({ id: 'test@focus', version: '0.1', rootURI: 'file:///focus/' });
-  assert.equal(columns.size, 22);
+  assert.equal(columns.size, 26);
   assert.equal(observers.size, 7);
   await plugin.stop();
   assert.equal(columns.size, 0);
@@ -367,9 +367,9 @@ test('legacy unbound progress is not assigned to a PDF or another library',()=>{
 });
 test('custom columns are validated and registration failure keeps previous fields intact',async()=>{
  const {plugin,Z,columns,item}=fixture();await plugin.start({id:'custom',version:'0.5',rootURI:'file:///custom/'});
- Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,24);
+ Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,28);
  const original=Z.ItemTreeManager.registerColumn;Z.ItemTreeManager.registerColumn=options=>options.dataKey==='field-pages'?false:original(options);
- assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,24);assert.ok(plugin.dynamicFieldMap.has('issue'));
+ assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,28);assert.ok(plugin.dynamicFieldMap.has('issue'));
  assert.throws(()=>plugin.setCustomFields('unknown'));const ref=item(1);ref.getField=key=>key==='volume'?'12':'';assert.equal(plugin.value('field-volume',ref),'12');await plugin.stop();
 });
 test('panel CSS is scoped and cannot load remote content or escape its rules',()=>{
@@ -677,7 +677,7 @@ test('column labels are the plain field name, with no plugin suffix', async () =
     assert.doesNotMatch(label, /Custom/, `"${label}" should not advertise the plugin in every heading`);
     assert.doesNotMatch(label, /·/);
   }
-  assert.deepEqual(plugin.columnDefinitions.slice(0, 3).map(c => c[1]), ['IF', 'Cited Count', 'Status']);
+  assert.deepEqual(plugin.columnDefinitions.slice(0, 4).map(c => c[1]), ['Journal', 'IF', 'Cited Count', 'Status']);
 });
 
 test('citation bars all start at the same x, so their lengths can be compared', async () => {
@@ -1516,4 +1516,81 @@ test('a rating stranded on a PDF is lifted to the paper it belongs to', async ()
     assert.equal(plugin.ratingTagOf(attachment), null, 'the stray tag is gone');
   }
   assert.equal(plugin.ratingTagOf(orphan), 3, 'and the one with nowhere to go is untouched');
+});
+
+test('first author, corresponding author and tier each get a column of their own, sorted by what they show', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  await plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  const labels = Object.fromEntries(plugin.columnDefinitions.map(([key, label]) => [key, label]));
+  assert.deepEqual([labels.firstInstitution, labels.correspondingInstitution, labels.institutionTier], ['1st Author Inst.', 'Corresponding Inst.', 'Tier']);
+
+  // Nothing looked up yet: every cell says so instead of showing a blank.
+  assert.equal(plugin.value('firstInstitution', ref), '');
+  assert.equal(plugin.renderCell('institutionTier', 0, '', {}, document).textContent, '—');
+
+  plugin.cache.works = {[plugin.identity(ref)]: {people: [
+    {id: 'A1', name: 'Sheila Ingemann Jensen', institution: 'DTU', ror: 'dtu', country: 'DK', corresponding: false, position: 'first'},
+    {id: 'A2', name: 'M Middle', institution: '', ror: '', country: '', corresponding: false, position: 'middle'},
+    {id: 'A3', name: 'P I Boss', institution: 'MIT', ror: 'mit', country: 'US', corresponding: true, position: 'last'}
+  ]}};
+  plugin.cache.institutions = {dtu: {ror: 'dtu', name: 'Technical University of Denmark', hIndex: 640},
+    mit: {ror: 'mit', name: 'MIT', hIndex: 2281}};
+  assert.equal(plugin.value('firstInstitution', ref), 'Technical University of Denmark · DK');
+  assert.equal(plugin.value('correspondingInstitution', ref), 'MIT · US');
+  assert.equal(plugin.value('institutionTier', ref), '02281', 'the sort key is the better lab\'s h-index, zero-padded');
+
+  const first = plugin.renderCell('firstInstitution', 0, '', {}, document);
+  // 640 sorts, but draws nothing: paper-weighted, the bucket it falls in covered
+  // three rows in four, which is a texture rather than a mark.
+  assert.equal(first.textContent, '🇩🇰Technical University of Denmark');
+  assert.match(first.title, /1저자 Sheila Ingemann Jensen · Technical University of Denmark \(DK\) · 기관 h-index 640/);
+  assert.match(first.title, /교신저자 P I Boss · MIT \(US\) · 기관 h-index 2281/);
+  const corresponding = plugin.renderCell('correspondingInstitution', 0, '', {}, document);
+  assert.equal(corresponding.textContent, '🇺🇸MIT최상위');
+  const tier = plugin.renderCell('institutionTier', 0, '', {}, document);
+  assert.equal(tier.textContent, '최상위');
+  assert.match(tier.firstChild.title, /2000 이상.*기관 h-index 2281/);
+  assert.match(tier.firstChild.style.color, /#6484BA|#809DD0/i, 'the top bucket is blue');
+
+  // When the first author answers for the paper too, the column names the same
+  // lab again rather than pointing at the other column.
+  plugin.cache.works[plugin.identity(ref)].people.splice(1);
+  assert.equal(plugin.renderCell('correspondingInstitution', 0, '', {}, document).textContent, '🇩🇰Technical University of Denmark');
+  assert.equal(plugin.value('correspondingInstitution', ref), 'Technical University of Denmark · DK');
+  assert.equal(plugin.value('institutionTier', ref), '00640');
+});
+
+test('the publisher mark has its own column, the IF cell keeps only the figure, and the native journal cell takes the colour', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body><div id="zotero-items-tree"><div class="row" id="item-tree-main-row-0"><span class="cell title"><span class="cell-text" style="font-weight:400">Paper</span></span><span class="cell publicationTitle"><span class="cell-text">Science</span></span></div></div></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  const getField = ref.getField.bind(ref);
+  ref.getField = name => name === 'publicationTitle' ? 'Science' : getField(name);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  assert.equal(plugin.value('journalMark', ref), 'S');
+  const mark = plugin.renderCell('journalMark', 0, '', {}, document);
+  assert.equal(mark.textContent, 'S');
+  assert.match(mark.firstChild.style.color, /^hsl\(358 /, 'Science is red');
+  assert.equal(mark.title, 'Science · Science');
+  plugin.value = (key, target) => key === 'if' ? '56.1' : '';
+  const cell = plugin.renderCell('if', 0, '56.1', {}, document);
+  assert.equal(cell.textContent, '56.1', 'the figure stands alone; the mark is in its own column');
+  delete plugin.value;
+
+  const win = {document, ZoteroPane: window.ZoteroPane, clearInterval() {}};
+  const state = {titleNodes: new Set(), titlePositions: new Map(), titleWeights: new Map(), nodes: [], listeners: []};
+  plugin.windows.set(win, state);
+  plugin.enhanceTitles(win, state, [ref]);
+  const venue = document.querySelector('.cell.publicationTitle .cell-text');
+  assert.match(venue.style.color, /^hsl\(358 /, "the journal's name is written in its publisher's colour");
+  assert.equal(venue.style.fontWeight, '600');
+  assert.equal(venue.dataset.styleCustomVenue, 'science');
+  await plugin.removeWindow(win);
+  assert.equal(venue.style.color, '', 'unloading gives the cell back as it was');
+  assert.equal(venue.dataset.styleCustomVenue, undefined);
 });

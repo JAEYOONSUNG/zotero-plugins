@@ -18,24 +18,28 @@
 
   /* The buckets, in h-index of the institution's whole corpus.
 
-     The thresholds are read off the real distribution, not guessed. Over the
-     510 institutions behind this library the first attempt -- 700, 400, 200 --
-     put 39% of them in the top bucket and 85% in some bucket at all, which is a
-     label that says nothing. Taken from the measured spread instead, they mark
-     roughly the top tenth, third and two-thirds:
+     Calibrated twice, because the first calibration measured the wrong thing.
 
-       h >= 1400   the global research heavyweights (Harvard, MIT, CNRS, NIH)
-       h >=  800   the strong research universities (Kyushu, KAIST, Technion)
-       h >=  400   research-active institutes and departments
+     Counting institutions, 61% of the 510 behind this library sit above 400.
+     But a badge is worn by a paper, not by an institution, and papers pile up
+     at the big places: paper-weighted, 77% were above 400 and 26% above 1400.
+     A mark that appears on three rows in four is not a mark, it is a texture.
 
-     These are cut points on a continuum and nothing more. The label is the
-     short form; the tooltip always carries the actual number, so the reader can
-     disagree with where the line was drawn. */
+     So the thresholds are read off the paper-weighted spread, and only the top
+     two buckets carry a label at all:
+
+       h >= 2000   top tenth of papers here
+       h >= 1400   top quarter
+       below       sorts, but says nothing on the row
+
+     The tooltip always carries the actual number, so the reader can disagree
+     with where the line was drawn. These are cut points on a continuum and the
+     labels are the short form, never a ranking. */
   const TIERS = [
-    {key: 'exceptional', floor: 1400, label: '최상위', note: '기관 전체 h-index 1400 이상 (상위 약 10%)'},
-    {key: 'high', floor: 800, label: '상위', note: '기관 전체 h-index 800 이상 (상위 약 3분의 1)'},
-    {key: 'established', floor: 400, label: '중상위', note: '기관 전체 h-index 400 이상'},
-    {key: 'other', floor: 0, label: '', note: ''}
+    {key: 't1', floor: 2000, label: 'T1', note: '기관 전체 h-index 2000 이상 (이 라이브러리 논문 상위 약 10%)'},
+    {key: 't2', floor: 1400, label: 'T2', note: '기관 전체 h-index 1400 이상 (상위 약 25%)'},
+    {key: 't3', floor: 400, label: 'T3', note: '기관 전체 h-index 400 이상'},
+    {key: 't4', floor: 0, label: 'T4', note: '기관 전체 h-index 400 미만'}
   ];
 
   function tierOf(hIndex) {
@@ -86,7 +90,7 @@
       country: text(person.country).toUpperCase(),
       flag: flag(person.country),
       hIndex: record?.hIndex ?? null,
-      tier: tier && tier.key !== 'other' ? tier : null
+      tier: tier || null
     };
   }
 

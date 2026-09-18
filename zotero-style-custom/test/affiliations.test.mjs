@@ -37,13 +37,21 @@ test("a sole author is not also reported as their own corresponding author", () 
 test("standing is read off the institution's own figure, not off a list of famous names", () => {
   // A hand-written list of universities is an opinion wearing a badge. The
   // h-index of an institution's whole corpus is the same number for everybody.
-  assert.equal(affiliations.tierOf(2281).key, "exceptional", "MIT");
-  assert.equal(affiliations.tierOf(860).key, "high");
-  assert.equal(affiliations.tierOf(420).key, "established");
-  assert.equal(affiliations.tierOf(120).key, "other");
+  assert.equal(affiliations.tierOf(2281).key, "t1", "MIT");
+  assert.equal(affiliations.tierOf(1500).key, "t2");
+  assert.equal(affiliations.tierOf(860).key, "t3");
+  assert.equal(affiliations.tierOf(120).key, "t4");
   // The first attempt at these cut points put 39% of the 510 institutions
   // behind this library in the top bucket, which is a label that says nothing.
-  assert.ok(affiliations.TIERS[0].floor > 1000);
+  /* Calibrated twice, because the first calibration measured the wrong thing.
+     Counting institutions, 61% of the 510 behind this library are above 400;
+     but a badge is worn by a paper, and papers pile up at the big places, so
+     paper-weighted that threshold marked 77% of rows. A mark on three rows in
+     four is not a mark, it is a texture. */
+  assert.ok(affiliations.TIERS[0].floor >= 2000);
+  assert.equal(affiliations.tierOf(860).label, "", "the middle bucket sorts but says nothing on the row");
+  assert.equal(affiliations.TIERS.filter(tier => tier.label).length, 2,
+    "only the top two buckets are worth drawing");
   assert.equal(affiliations.tierOf(0), null, "no figure is not a low figure");
   assert.equal(affiliations.tierOf(null), null);
   // And every label says what the number is rather than implying a ranking.
@@ -57,11 +65,11 @@ test("a paper's provenance reads as two people, two labs and two countries", () 
   const summary = affiliations.summarise([
     person("Jae Yoon Sung", "first", {ror: "R1", country: "KR", institution: "Yonsei"}),
     person("Senior", "last", {ror: "R2", country: "US", institution: "MIT", corresponding: true})
-  ], {R1: {name: "Yonsei University", hIndex: 698}, R2: {name: "MIT", hIndex: 2281}});
+  ], {R1: {name: "Yonsei University", hIndex: 1500}, R2: {name: "MIT", hIndex: 2281}});
   assert.equal(summary.first.institution, "Yonsei University", "the looked-up name wins over the inline one");
-  assert.equal(summary.first.tier.key, "established");
-  assert.equal(summary.corresponding.tier.key, "exceptional");
-  assert.equal(summary.tier.key, "exceptional", "the stronger of the two stands for the paper");
+  assert.equal(summary.first.tier.key, "t2");
+  assert.equal(summary.corresponding.tier.key, "t1");
+  assert.equal(summary.tier.key, "t1", "the stronger of the two stands for the paper");
   assert.deepEqual(summary.countries, ["KR", "US"]);
   assert.equal(summary.international, true, "the two ends of the paper are in different countries");
 });

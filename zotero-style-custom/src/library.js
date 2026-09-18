@@ -221,6 +221,34 @@
       const note=await Z.EditorInstance.createNoteFromAnnotations(input,{parentID:parent.id,noSave:true});note.libraryID=parent.libraryID;note.parentID=parent.id;
       await mutate([parent,...atts,...input],()=>note.save());return String(note.id);
     }
+    /* A note on one annotation, written where Zotero already keeps one.
+
+       The comment field on an annotation is the memo: it travels with the
+       highlight, it shows in the reader, and it syncs. Writing these into a
+       separate store would have made a second place to look. */
+    const commentRevisions=new Map();
+    async function setAnnotationComment(annotationID,text) {
+      const annotation=await get(annotationID);
+      if(!annotation?.isAnnotation?.())throw new Error('주석이 아닙니다.');
+      guard([annotation]);
+      const value=String(text??'');
+      const prior=annotation.annotationComment||'';
+      if(prior===value)return value;
+      const revision=(commentRevisions.get(String(annotationID))||0)+1;
+      commentRevisions.set(String(annotationID),revision);
+      annotation.annotationComment=value;
+      try{await annotation.saveTx({skipSelect:true});}
+      catch(error){
+        // A failed save must not leave the reader showing text that was never
+        // written, and must not undo a later edit that did land.
+        if(commentRevisions.get(String(annotationID))===revision){
+          annotation.annotationComment=prior;
+        }
+        throw error;
+      }
+      return value;
+    }
+
     async function setRemark(itemID,text) {
       const item=await get(itemID);guard([item]);if(!runtime?.entry||!runtime.flush)throw new Error('Remark storage is unavailable');
       const entry=runtime.entry(item),prior=entry.remark,value=String(text??'');
@@ -428,7 +456,7 @@
       }
       return output;
     }
-    return {snapshot,graph,tagTree,notes,annotations,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,renameTagBranch,recolorAnnotations,mergeAnnotations,relate,unrelate,openItem,collectionItems,collections};
+    return {snapshot,graph,tagTree,notes,annotations,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

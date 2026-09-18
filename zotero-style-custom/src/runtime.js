@@ -127,7 +127,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(existing){this.Z.ItemTreeManager.unregisterColumn(existing);this.columns=this.columns.filter(key=>key!==existing);this.featureColumns.delete(dataKey);}continue;
       }
       if(existing)continue;
-      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label,width,minWidth:50,enabledTreeIDs:['main'],hidden:!['if','citations','status','rating','time','tags','files'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
+      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label,width,minWidth:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time','tags','files','firstInstitution','correspondingInstitution','institutionTier'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
       if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
     }
   }
@@ -159,7 +159,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     this.rebuildJournals();
     this.labels = { unread: "unread", reading: "reading", done: "done" };
-    this.columnDefinitions = [["if", "IF", "90"], ["citations", "Cited Count", "120"],
+    this.columnDefinitions = [["journalMark", "Journal", "64"], ["if", "IF", "90"], ["citations", "Cited Count", "120"],
       ["status", "Status", "100"], ["rating", "Rating", "100"],
       ["time", "Read Time", "120"], ["tags", "Tags", "140"],
       ["files", "Files", "110"],
@@ -169,7 +169,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       ["lastRead","Last Read","130"],["tagCount","#Tags","70"],
       ["translatedTitle","Translated Title","220"],["summary","Summary","220"],
       ["annotationCount","Annotations","90"],["noteCount","Notes","70"],["venue","Publication","170"],
-      ["signals","Signals","160"],["affiliation","Affiliation","210"]];
+      ["signals","Signals","160"],["affiliation","Affiliation","210"],
+      // The same facts as Affiliation, one to a column, so each can be sorted and
+      // read on its own: who did the work, who answers for it, and how their lab stands.
+      ["firstInstitution","1st Author Inst.","170"],["correspondingInstitution","Corresponding Inst.","170"],["institutionTier","Tier","80"]];
     this.syncFeatureColumns();
     try{this.setCustomFields(this.pref('customFields',''),{persist:false});}catch(error){this.Z.logError(error);}
     this.prefPane = await this.Z.PreferencePanes.register({ pluginID: id, src: rootURI + "content/preferences.xhtml", label: "Style Custom",image:rootURI+"content/icons/style-custom.svg",scripts:[rootURI+"src/settings.js"],stylesheets:[rootURI+"content/preferences.css"] });
@@ -261,6 +264,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     try {
       const state = this.state(item);
       if (key === "if") return state.impactFactor == null ? "" : String(state.impactFactor);
+      if (key === "journalMark") return this.journalIdentityOf(item)?.identity.mark || "";
       if (key === "citations") return state.citations == null ? "" : String(state.citations);
       if (key === "status") return String({unread:0,reading:1,done:2}[state.status]);
       if (key === "rating") return String(state.rating);
@@ -275,6 +279,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         return [where.first?.institution, where.corresponding && where.corresponding.institution !== where.first?.institution
           ? where.corresponding.institution : '', where.countries.join('/')]
           .filter(Boolean).join(' · ');
+      }
+      if (key === "firstInstitution" || key === "correspondingInstitution") {
+        // When the first author is also the corresponding author, the column
+        // says so by naming the same lab again, not by pointing sideways.
+        const where = this.affiliationOf(item);
+        const row = key === "firstInstitution" ? where?.first : (where?.corresponding || where?.first);
+        return row ? [row.institution || row.name, row.country].filter(Boolean).join(' · ') : "";
+      }
+      if (key === "institutionTier") {
+        // Sorted by the figure behind the label, so the column orders labs by
+        // standing rather than by the alphabet of the tier names.
+        const where = this.affiliationOf(item);
+        const h = where?.hIndex ?? Math.max(where?.first?.hIndex || 0, where?.corresponding?.hIndex || 0);
+        return h > 0 ? String(h).padStart(5, "0") : "";
       }
       if (key === "publication") return this.publicationTags(item).join(' · ');
       if (key === "venue") return ['publicationTitle','proceedingsTitle','university','publisher'].map(field=>item.getField(field)).find(Boolean)||'';
@@ -539,21 +557,32 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      "Cell Press" at a glance in a way that a purple 56.1 never conveyed. The
      number goes back to plain ink with weight carrying how high it is, which
      ends the five-hue rainbow down a single column. */
-  paintJournal(cell, item, doc, P, {figure, estimate, name} = {}) {
+  // The journal a paper is in, as the mark module identifies it, with the title
+  // the identification was made from.
+  journalIdentityOf(item) {
     const title = this.isRegular(item)
       ? String(item.getField('publicationTitle') || item.getField('proceedingsTitle') || '') : '';
     const identity = title ? this.journalIdentity.identify(title) : null;
-    if (identity) {
-      const tone = this.journalIdentity.colours(identity, {dark: P.dark});
-      const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
-      mark.textContent = identity.mark;
-      mark.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;`
-        + `min-width:22px;height:14px;padding:0 3px;border-radius:3px;`
-        + `background:${tone.fill};color:${tone.ink};box-shadow:inset 0 0 0 .5px ${tone.edge};`
-        + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
-      mark.title = identity.label ? `${title} · ${identity.label}` : title;
-      cell.appendChild(mark);
-    }
+    return identity ? {title, identity} : null;
+  }
+  // The publisher's lettermark in its colour. Its own column now: beside the IF
+  // it crowded the number, and the colour belongs on the journal's name anyway.
+  journalMarkNode(doc, item, P) {
+    const found = this.journalIdentityOf(item);
+    if (!found) return null;
+    const tone = this.journalIdentity.colours(found.identity, {dark: P.dark});
+    const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+    mark.textContent = found.identity.mark;
+    mark.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;`
+      + `min-width:22px;height:14px;padding:0 3px;border-radius:3px;`
+      + `background:${tone.fill};color:${tone.ink};box-shadow:inset 0 0 0 .5px ${tone.edge};`
+      + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
+    mark.title = found.identity.label ? `${found.title} · ${found.identity.label}` : found.title;
+    return mark;
+  }
+  paintJournal(cell, item, doc, P, {figure, estimate, name} = {}) {
+    const title = this.journalIdentityOf(item)?.title
+      || (this.isRegular(item) ? String(item.getField('publicationTitle') || item.getField('proceedingsTitle') || '') : '');
     const number = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     const value = Number(figure);
     number.textContent = figure == null ? '—' : (estimate ? '~' : '') + figure;
@@ -594,6 +623,52 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (!(count > 0)) return 0;
     return Math.min(1, Math.log10(count + 1) / Math.log10(1001));
   }
+  // One person's lab as a row reads it: the flag, then the name of the institution.
+  affiliationLine(doc, row, role, P) {
+    if (!row) return null;
+    const wrap = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+    wrap.style.cssText = "display:inline-flex;align-items:center;gap:3px;min-width:0;";
+    if (row.flag) {
+      const flag = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      flag.textContent = row.flag;
+      flag.style.cssText = "font-size:11px;line-height:1;flex:none;";
+      wrap.appendChild(flag);
+    }
+    const name = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+    name.textContent = row.institution || row.name || "—";
+    name.style.cssText = `font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`
+      + `color:${role === "first" ? P.text : P.muted};`;
+    wrap.appendChild(name);
+    return wrap;
+  }
+  // The tier as a pill. The three buckets step down in colour -- blue, teal,
+  // grey -- so a column of them reads as a scale rather than as a list of words.
+  tierPill(doc, where, P) {
+    const tier = where?.tier;
+    // A tier with no label is one that sorts but is not worth drawing: the
+    // middle bucket sat on three rows in four, which is a texture, not a mark.
+    if (!tier || !tier.label) return null;
+    const tone = {t1: P.blue, t2: P.teal, t3: P.gray, t4: P.faint}[tier.key] || P.blue;
+    const badge = this.pill(doc, tier.label, tone, P);
+    badge.style.fontWeight = "600";
+    const h = where.hIndex ?? Math.max(where.first?.hIndex || 0, where.corresponding?.hIndex || 0);
+    badge.title = tier.note + (h > 0 ? ` · 기관 h-index ${h}` : "");
+    return badge;
+  }
+  // Everything the affiliation columns know, for a tooltip.
+  affiliationNote(where) {
+    return [
+      where.first ? `1저자 ${where.first.name} · ${where.first.institution || "소속 미상"}`
+        + (where.first.country ? ` (${where.first.country})` : "")
+        + (where.first.hIndex ? ` · 기관 h-index ${where.first.hIndex}` : "") : null,
+      where.corresponding ? `교신저자 ${where.corresponding.name} · ${where.corresponding.institution || "소속 미상"}`
+        + (where.corresponding.country ? ` (${where.corresponding.country})` : "")
+        + (where.corresponding.hIndex ? ` · 기관 h-index ${where.corresponding.hIndex}` : "") : null,
+      where.correspondingKnown ? null : "교신저자 표시가 없어 마지막 저자를 교신저자로 간주했습니다.",
+      where.extraCorresponding ? `교신저자가 ${where.extraCorresponding + 1}명입니다.` : null,
+      where.international ? "국제 공동연구" : null
+    ].filter(Boolean).join("\n");
+  }
   renderCell(key, index, value, column, doc) {
     const cell = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
     cell.className = "cell " + (column.className || "");
@@ -632,6 +707,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.title = this.signalTools.bareDOI(this.citationRecord(item).doi)
           ? "철회·공개접근 신호를 아직 조회하지 않았습니다. 문헌 목록 오른쪽 클릭 메뉴에서 조회하세요."
           : "DOI가 없어 철회 여부를 확인할 수 없습니다.";
+      }
+      // "Not looked up" and "no lab" are different answers, and a single-author
+      // paper has a first author but nobody else to answer for it.
+      if (["affiliation", "firstInstitution", "correspondingInstitution", "institutionTier"].includes(key) && this.isRegular(item)) {
+        const where = this.affiliationOf(item);
+        cell.textContent = "—";
+        cell.style.color = P.faint;
+        cell.title = where ? this.affiliationNote(where) : "아직 조회하지 않았습니다. 연구 작업 → 관계 → 인용 관계 → 인용 목록 가져오기";
       }
       return cell;
     }
@@ -773,6 +856,37 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
       cell.title = signals ? `${signals.status} · 확인 ${signals.checkedAt}` : "";
       return cell;
+    } else if (["firstInstitution", "correspondingInstitution", "institutionTier"].includes(key) && this.isRegular(item)) {
+      const where = this.affiliationOf(item);
+      if (!where) {
+        cell.textContent = "—";
+        cell.style.color = P.faint;
+        cell.title = "아직 조회하지 않았습니다. 연구 작업 → 관계 → 인용 관계 → 인용 목록 가져오기";
+        return cell;
+      }
+      if (key === "institutionTier") {
+        const pill = this.tierPill(doc, where, P);
+        if (pill) cell.appendChild(pill);
+        else { cell.textContent = "—"; cell.style.color = P.faint; }
+        cell.title = this.affiliationNote(where);
+        return cell;
+      }
+      const role = key === "firstInstitution" ? "first" : "corresponding";
+      const row = where[role] || (role === "corresponding" ? where.first : null);
+      if (!row) {
+        cell.textContent = "—";
+        cell.style.color = P.faint;
+        cell.title = this.affiliationNote(where);
+        return cell;
+      }
+      const line = this.affiliationLine(doc, row, "first", P);
+      if (line) cell.appendChild(line);
+      if (row.tier) {
+        const pill = this.tierPill(doc, {tier: row.tier, hIndex: row.hIndex}, P);
+        if (pill) cell.appendChild(pill);
+      }
+      cell.title = this.affiliationNote(where);
+      return cell;
     } else if (key === "affiliation" && this.isRegular(item)) {
       const where = this.affiliationOf(item);
       if (!where) {
@@ -781,23 +895,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.title = "아직 조회하지 않았습니다. 연구 작업 → 관계 → 인용 관계 → 인용 목록 가져오기";
         return cell;
       }
-      const line = (row, role) => {
-        if (!row) return null;
-        const wrap = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        wrap.style.cssText = "display:inline-flex;align-items:center;gap:3px;min-width:0;";
-        if (row.flag) {
-          const flag = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-          flag.textContent = row.flag;
-          flag.style.cssText = "font-size:11px;line-height:1;flex:none;";
-          wrap.appendChild(flag);
-        }
-        const name = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        name.textContent = row.institution || row.name || "—";
-        name.style.cssText = `font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`
-          + `color:${role === "first" ? P.text : P.muted};`;
-        wrap.appendChild(name);
-        return wrap;
-      };
+      const line = (row, role) => this.affiliationLine(doc, row, role, P);
       const first = line(where.first, "first");
       if (first) cell.appendChild(first);
       // Only when it is a different lab: repeating one name twice says nothing.
@@ -810,22 +908,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (second) cell.appendChild(second);
       }
       if (where.tier) {
-        const badge = this.pill(doc, where.tier.label, P.blue, P);
-        badge.style.fontWeight = "600";
-        badge.title = where.tier.note;
-        cell.appendChild(badge);
+        const badge = this.tierPill(doc, where, P);
+        if (badge) cell.appendChild(badge);
       }
-      cell.title = [
-        where.first ? `1저자 ${where.first.name} · ${where.first.institution || "소속 미상"}`
-          + (where.first.country ? ` (${where.first.country})` : "")
-          + (where.first.hIndex ? ` · 기관 h-index ${where.first.hIndex}` : "") : null,
-        where.corresponding ? `교신저자 ${where.corresponding.name} · ${where.corresponding.institution || "소속 미상"}`
-          + (where.corresponding.country ? ` (${where.corresponding.country})` : "")
-          + (where.corresponding.hIndex ? ` · 기관 h-index ${where.corresponding.hIndex}` : "") : null,
-        where.correspondingKnown ? null : "교신저자 표시가 없어 마지막 저자를 교신저자로 간주했습니다.",
-        where.extraCorresponding ? `교신저자가 ${where.extraCorresponding + 1}명입니다.` : null,
-        where.international ? "국제 공동연구" : null
-      ].filter(Boolean).join("\n");
+      cell.title = this.affiliationNote(where);
+      return cell;
+    } else if (key === "journalMark" && this.isRegular(item)) {
+      const mark = this.journalMarkNode(doc, item, P);
+      if (mark) cell.appendChild(mark);
+      cell.title = mark?.title || "";
       return cell;
     } else if (key === "if") {
       this.paintJournal(cell, item, doc, P, {figure: label, estimate: false});
@@ -1114,6 +1205,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     for(const row of win.document.querySelectorAll('#zotero-items-tree .row')) {
       const item=win.ZoteroPane?.itemsView?.getRow(Number(row.id.match(/-row-(\d+)$/)?.[1]))?.ref;
       if(!this.isRegular(item))continue;
+      this.paintVenue(row,item,state,win);
       const cell=row.querySelector('.cell.title');if(!cell)continue;
       const titleText=cell.querySelector('.cell-text');
       if(titleText){
@@ -1135,6 +1227,27 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     this.paintHighlights(win,state);
     for(const n of [...state.titleNodes])if(!n.isConnected)state.titleNodes.delete(n);
+  }
+  // The journal's own name, in its publisher's colour: Science reads red and
+  // Cell blue in Zotero's own Publication column, with no second column needed.
+  // The previous colour is kept so the cell can be given back as it was.
+  paintVenue(row,item,state,win) {
+    const cell=row.querySelector('.cell.publicationTitle');
+    const text=cell?.querySelector('.cell-text')||cell;
+    if(!text)return;
+    state.venueColors||=new Map();
+    const found=this.featureEnabled('publicationColumn')!==false?this.journalIdentityOf(item):null;
+    if(found){
+      const P=this.palette(win.document);
+      const tone=this.journalIdentity.colours(found.identity,{dark:P.dark});
+      if(!state.venueColors.has(text))state.venueColors.set(text,[text.style.color,text.style.fontWeight]);
+      text.style.color=tone.ink;
+      text.style.fontWeight=found.identity.known?'600':'500';
+      text.dataset.styleCustomVenue=found.identity.family;
+    }
+    else if(state.venueColors.has(text)){
+      const[color,weight]=state.venueColors.get(text);text.style.color=color;text.style.fontWeight=weight;delete text.dataset.styleCustomVenue;state.venueColors.delete(text);
+    }
   }
   // Europe PMC hands back every supplementary file of an article as one zip.
   // Nothing is written until the archive is open and its entries are triaged.
@@ -2854,6 +2967,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     for(const node of state.titleNodes||[])cleanup(()=>node.remove());
     for(const[cell,position]of state.titlePositions||[])cleanup(()=>{if(cell.style.position==='relative'){if(position)cell.style.position=position;else cell.style.removeProperty('position');}});
     for(const[node,weight]of state.titleWeights||[])cleanup(()=>{if(node.style.fontWeight==='700')node.style.fontWeight=weight;});
+    for(const[node,[color,weight]]of state.venueColors||[])cleanup(()=>{node.style.color=color;node.style.fontWeight=weight;delete node.dataset.styleCustomVenue;});
     for(const[target,name,callback,capture]of state.listeners||[])cleanup(()=>target.removeEventListener(name,callback,capture||false));
     for(const node of state.nodes||[])cleanup(()=>node.remove());
     cleanup(()=>state.readingCleanup?.());
