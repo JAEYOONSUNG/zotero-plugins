@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 const require = createRequire(import.meta.url);
 const S = require("../content/sources.js");
 const M = require("../content/metrics.js");
@@ -276,4 +277,65 @@ live("citation check merges OpenAlex, Crossref and Semantic Scholar", async (t) 
 	assert.equal(rec.citations, Math.max(...counts), "the merged count is the highest reported");
 	assert.ok(["openalex", "crossref", "semanticscholar"].includes(rec.citationSource));
 	if (r.openalex != null) assert.ok(rec.journalIF > 5, "journal IF filled from check: " + rec.journalIF);
+});
+
+test("a preprint and the article it became are kept apart but told about each other", () => {
+  /* Two records, two DOIs: merging them would be wrong, because somebody may
+     want either. But a real search returned the Research Square preprint and
+     the Biotechnology for Biofuels article one after the other, differing only
+     in the case of one letter, with nothing to say they were the same work. */
+  const rows = [
+    {title: "Hi-TARGET: A fast tool for a thermophilic acetogen", doi: "10.21203/rs.3.rs-5676099/v1",
+     itemType: "preprint", venue: "Research Square", year: 2025},
+    {title: "Hi-TARGET: a fast tool for a thermophilic acetogen", doi: "10.1186/s13068-025-02647-0",
+     itemType: "journalArticle", venue: "Biotechnology for Biofuels", year: 2025},
+    {title: "Something else entirely", doi: "10.1038/s41586-000-00000-0", itemType: "journalArticle", venue: "Nature"}
+  ];
+  S.linkPreprintVersions(rows);
+  assert.equal(rows[0].publishedAs.doi, "10.1186/s13068-025-02647-0");
+  assert.equal(rows[0].publishedAs.venue, "Biotechnology for Biofuels");
+  assert.equal(rows[1].preprintOf.doi, "10.21203/rs.3.rs-5676099/v1");
+  assert.equal(rows[2].publishedAs, undefined, "an unrelated paper is left alone");
+  // They stay two records: the whole point is that they are not the same object.
+  assert.equal(rows.length, 3);
+
+  // One record seen twice is not a preprint pair.
+  const same = [
+    {title: "One paper", doi: "10.1038/s41586-024-07270-x", itemType: "preprint", venue: "bioRxiv"},
+    {title: "One paper", doi: "10.1038/s41586-024-07270-x", itemType: "journalArticle", venue: "Nature"}
+  ];
+  S.linkPreprintVersions(same);
+  assert.equal(same[0].publishedAs, undefined, "the same DOI is one record, not two versions");
+
+  // normalizeDOI returns null for anything it does not recognise, and a guard
+  // that only compared the normalised form called these two versions.
+  const odd = [
+    {title: "Odd identifiers", doi: "internal-id-7", itemType: "preprint", venue: "Local"},
+    {title: "Odd identifiers", doi: "Internal-ID-7", itemType: "journalArticle", venue: "Nature"}
+  ];
+  S.linkPreprintVersions(odd);
+  assert.equal(odd[0].publishedAs, undefined);
+
+  // And a pair of preprints with no published version has nothing to report.
+  const both = [
+    {title: "Only preprints", doi: "10.1101/2024.01.01.111111", itemType: "preprint", venue: "bioRxiv"},
+    {title: "Only preprints", doi: "10.21203/rs.3.rs-999999/v1", itemType: "preprint", venue: "Research Square"}
+  ];
+  S.linkPreprintVersions(both);
+  assert.equal(both[0].publishedAs, undefined);
+});
+
+test("a combined search asks each source for more than it will show", () => {
+  /* Asking each for exactly the number to be shown made the combined search no
+     better than three lists stapled together: measured on a real query,
+     OpenAlex, Crossref and Europe PMC returned twenty each and sixty distinct
+     DOIs -- not one paper in common, so rank fusion had nothing to fuse. */
+  const source = readFileSync(new URL("../content/sources.js", import.meta.url), "utf8");
+  assert.match(source, /const poolFor = max =>/);
+  assert.match(source, /source\.search\(subQuery, http, sub\)/,
+    "each source is asked with the widened query, not the caller's");
+  const poolFor = new Function("return " + /const poolFor = (max => [^;]+);/.exec(source)[1])();
+  assert.equal(poolFor(20), 60);
+  assert.equal(poolFor(5), 30, "a small request still gets a pool worth fusing");
+  assert.equal(poolFor(100), 200, "and it is capped, because this is bandwidth");
 });

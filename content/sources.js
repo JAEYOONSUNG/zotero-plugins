@@ -1704,6 +1704,46 @@ var ZotPoPSources = (function () {
 		return entries.filter(e => !e.mergedInto).map(e => e.record);
 	}
 
+	/* A preprint and the journal article it became.
+
+	   These are two records with two DOIs, and merging them would be wrong: they
+	   are distinct objects and somebody may want either. But showing both with
+	   nothing to say they are the same work is how a result list looks broken.
+	   A real search returned the Research Square preprint and the Biotechnology
+	   for Biofuels article one after the other, differing only in the case of
+	   one letter.
+
+	   So they are left as two records and each is told about the other. */
+	function linkPreprintVersions(records) {
+		let byTitle = new Map();
+		for (let r of records) {
+			let key = normalizedText(r.title);
+			if (!key) continue;
+			if (!byTitle.has(key)) byTitle.set(key, []);
+			byTitle.get(key).push(r);
+		}
+		for (let group of byTitle.values()) {
+			if (group.length < 2) continue;
+			let published = group.find(r => r.itemType !== "preprint" && r.venue);
+			let preprints = group.filter(r => r !== published && r.itemType === "preprint");
+			if (!published || !preprints.length) continue;
+			for (let pre of preprints) {
+				/* Only when they really are two records, not one seen twice.
+
+				   Compared raw as well as normalised: normalizeDOI returns null
+				   for anything it does not recognise, and a guard that only
+				   looked at the normalised form treated two records carrying the
+				   same unrecognised string as different versions. */
+				let a = normalizeDOI(pre.doi), b = normalizeDOI(published.doi);
+				let raw = value => String(value == null ? "" : value).trim().toLowerCase();
+				if ((a && a === b) || (raw(pre.doi) && raw(pre.doi) === raw(published.doi))) continue;
+				pre.publishedAs = { doi: published.doi || null, venue: published.venue || null, year: published.year || null };
+				published.preprintOf = { doi: pre.doi || null, venue: pre.venue || null };
+			}
+		}
+		return records;
+	}
+
 	const MULTI_SOURCES = ["openalex", "crossref", "europepmc", "arxiv"];
 
 	/* How many each source is asked for, when several are being combined.
@@ -1727,7 +1767,7 @@ var ZotPoPSources = (function () {
 		let snapshot = () => {
 			let records = matchingRecords(mergeRecords(lists), q);
 			if (preprintsOnly) for (let r of records) r.itemType = "preprint";
-			return sortSearchResults(records, q, true).slice(0, q.maxResults || 200);
+			return linkPreprintVersions(sortSearchResults(records, q, true).slice(0, q.maxResults || 200));
 		};
 		let publish = () => publishResults(snapshot(), q, ctx);
 		await Promise.allSettled(sources.map(async (source, index) => {
@@ -1761,7 +1801,7 @@ var ZotPoPSources = (function () {
 		// For relevance/date it cannot, so enrich only the chosen results there.
 		if (q.sort !== "citations") merged = sortSearchResults(merged, q, true).slice(0, q.maxResults || 200);
 		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(merged, http, ctx);
-		return sortSearchResults(merged, q, true).slice(0, q.maxResults || 200);
+		return linkPreprintVersions(sortSearchResults(merged, q, true).slice(0, q.maxResults || 200));
 	}
 
 	async function searchMulti(q, http, ctx) {
@@ -1828,7 +1868,7 @@ var ZotPoPSources = (function () {
 	}
 
 	return {
-		SOURCES, search, dedupe, mergeRecords, pubmedYear, searchableSurname, interleave, openAlexAbstract, isPlainAuthorQuery, openAlexAuthorFilter, openAlexAuth, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
+		SOURCES, search, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, isPlainAuthorQuery, openAlexAuthorFilter, openAlexAuth, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();

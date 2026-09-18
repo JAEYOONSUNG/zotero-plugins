@@ -1344,6 +1344,18 @@
 		for (let s of r.sources || [r.source]) sourceChip(s);
 		if (r.inLibrary) chip(t("badgeInLibrary"), "lib");
 		if (hasPDF(r)) chip(t("badgeHasPdf"));
+		/* A preprint and the article it became are two records with two DOIs, so
+		   they are not merged -- but a list that shows both and says nothing
+		   looks broken. A real search returned the Research Square preprint and
+		   the Biotechnology for Biofuels article one after the other, differing
+		   only in the case of one letter. */
+		if (r.publishedAs) {
+			chip(t("badgePublishedAs", r.publishedAs.venue || r.publishedAs.year || ""), "ver")
+				.title = t("publishedAsTip", r.publishedAs.doi || "");
+		}
+		else if (r.preprintOf) {
+			chip(t("badgeHasPreprint"), "ver").title = t("preprintOfTip", r.preprintOf.doi || "");
+		}
 
 		$("d-authors").textContent = r.authorString || t("noAuthors");
 		let whereBox = $("d-where");

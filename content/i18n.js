@@ -164,6 +164,10 @@ var ZotPoPI18N = (function () {
 
 			badgeCites: n => `${n} cites`,
 			badgePerYear: v => `${v}/yr`,
+			badgePublishedAs: where => "Published" + (where ? " in " + where : ""),
+			publishedAsTip: doi => "This preprint was later published" + (doi ? " as " + doi : "") + ". Both are listed because they are separate records with separate DOIs.",
+			badgeHasPreprint: "Preprint exists",
+			preprintOfTip: doi => "A preprint of this paper is also in these results" + (doi ? ": " + doi : "") + ".",
 			badgeInLibrary: "In library",
 			badgeHasPdf: "PDF available",
 			citeSource: label => "Source: " + label,
@@ -411,6 +415,10 @@ var ZotPoPI18N = (function () {
 
 			badgeCites: n => `인용 ${n}`,
 			badgePerYear: v => `연간 ${v}`,
+			badgePublishedAs: where => "정식 게재" + (where ? " · " + where : ""),
+			publishedAsTip: doi => "이 프리프린트는 이후 정식 게재되었습니다" + (doi ? " (" + doi + ")" : "") + ". DOI가 서로 달라 각각 별개의 기록이므로 둘 다 표시합니다.",
+			badgeHasPreprint: "프리프린트 있음",
+			preprintOfTip: doi => "이 논문의 프리프린트도 결과에 있습니다" + (doi ? ": " + doi : "") + ".",
 			badgeInLibrary: "보유 중",
 			badgeHasPdf: "PDF 있음",
 			citeSource: label => "출처: " + label,
