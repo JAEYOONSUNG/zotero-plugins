@@ -84,7 +84,9 @@ var ZotPoPHistory = (function () {
 			return run;
 		}
 
+		// Reads wait for writes in flight, so a search saved a moment ago is already listed.
 		async function list() {
+			await writes;
 			let entries = await load();
 			return entries.slice().sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
 		}
@@ -110,6 +112,7 @@ var ZotPoPHistory = (function () {
 
 		async function find(source, query) {
 			let id = signature(source, query);
+			await writes;
 			return (await load()).find(e => e.id === id) || null;
 		}
 

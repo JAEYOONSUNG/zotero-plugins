@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { deferred, paper, uiHarness } from "./helpers/search-ui-harness.mjs";
+import { deferred, mockElement, paper, uiHarness } from "./helpers/search-ui-harness.mjs";
 import Sources from "../content/sources.js";
 
 for (const sort of ["relevance", "date", "citations"]) {
@@ -131,14 +131,15 @@ test("opening a restored Scholar query loads and labels its snapshot through the
 });
 
 test("a completed live search cannot be overwritten by an earlier delayed cached restore", async () => {
-	const pending = deferred();
+	const pending = deferred(), called = deferred();
 	let signal;
 	const ui = uiHarness({
 		search: (...args) => args[3].popCacheOnly ? Sources.search(...args) : Promise.resolve([paper("fresh")]),
-		popBridge: { async search(_query, ctx) { signal = ctx.signal; return pending.promise; } }
+		popBridge: { async search(_query, ctx) { signal = ctx.signal; called.resolve(); return pending.promise; } }
 	});
 	ui.get("source").value = "scholar";
 	const restoring = ui.restoreCachedSearch();
+	await called.promise;
 	await ui.runSearch();
 	assert.equal(signal.aborted, true);
 	pending.resolve(savedRows());
@@ -198,4 +199,133 @@ test("an HTTP error never throws while reading the response body", () => {
 	const safe = make({ status: 500, xmlhttp: hostile }, "https://x/y");
 	assert.equal(safe.body, "");
 	assert.match(safe.message, /HTTP 500/);
+});
+
+test("scrolling inside an open menu keeps it open, so a long collection list can be picked from", () => {
+	const ui = uiHarness();
+	const container = mockElement(), select = mockElement("select"), button = mockElement("button"), menu = mockElement();
+	button.className = "sel-btn"; button.setAttribute("aria-expanded", "true");
+	container.appendChild(select); container.appendChild(button); container.appendChild(menu);
+	const option = mockElement(); menu.appendChild(option);
+	ui.setOpenSelectForTest({ sel: select, menu });
+	ui.onDocumentScroll({ target: menu });
+	ui.onDocumentScroll({ target: option });
+	assert.equal(menu.parentNode, container, "the menu scrolling to the current collection must not close it");
+	assert.equal(button.getAttribute("aria-expanded"), "true");
+	ui.onDocumentScroll({ target: ui.get("table-wrap") });
+	assert.equal(menu.parentNode, null);
+});
+
+test("a finished search is kept on disk and reopens at startup without asking any API", async () => {
+	const files = new Map();
+	let searches = 0;
+	const first = uiHarness({ historyFiles: files, search: async () => { searches++; return [paper("saved", { title: "Saved paper", doi: "10.1/saved" })]; } });
+	first.get("keywords").value = "Geobacillus";
+	await first.runSearch();
+	assert.equal(searches, 1);
+	const entries = await first.history.list();
+	assert.equal(entries.length, 1);
+	assert.equal(entries[0].source, "openalex");
+	assert.equal(entries[0].count, 1);
+	assert.equal(entries[0].partial, false);
+
+	// A new window over the same files, same query typed in: the answer is already there.
+	const second = uiHarness({ historyFiles: files, search: async () => assert.fail("a saved search must not be searched again"),
+		request: () => assert.fail("startup restore must not issue HTTP") });
+	second.get("keywords").value = "  geobacillus";
+	await second.restoreCachedSearch();
+	assert.equal(second.state.records.length, 1);
+	assert.equal(second.state.records[0].title, "Saved paper");
+	assert.equal(second.state.records[0].rank, 1);
+	assert.equal(second.get("status").textContent, "historyRestored|1");
+	assert.match(second.get("banner-text").textContent, /^historyRestoredNotice\|.*\|false$/);
+	assert.equal(second.get("banner").hidden, false);
+	assert.equal(second.state.searching, false);
+	assert.notEqual(second.get("search-btn").disabled, true, "a live search stays one click away");
+});
+
+test("a stopped search is kept as incomplete, and a different query or source is not confused with it", async () => {
+	const files = new Map();
+	const finish = deferred();
+	let ctx;
+	const ui = uiHarness({ historyFiles: files, search: async (_s, _q, _h, context) => { ctx = context; return finish.promise; } });
+	const running = ui.runSearch();
+	ctx.onResults([paper("early")], { final: false });
+	ui.stopOperation();
+	finish.reject(Object.assign(new Error("Search cancelled"), { name: "AbortError" }));
+	await running;
+	await new Promise(r => setTimeout(r, 0));
+	const [entry] = await ui.history.list();
+	assert.equal(entry.partial, true);
+	assert.equal(entry.count, 1);
+
+	const other = uiHarness({ historyFiles: files });
+	other.get("keywords").value = "something else";
+	await other.restoreCachedSearch();
+	assert.equal(other.state.records.length, 0);
+	other.get("keywords").value = "genome editing";
+	other.get("source").value = "crossref";
+	await other.restoreCachedSearch();
+	assert.equal(other.state.records.length, 0, "the same words on another source are another search");
+	other.get("source").value = "openalex";
+	await other.restoreCachedSearch();
+	assert.equal(other.state.records.length, 1);
+	assert.match(other.get("banner-text").textContent, /\|true$/, "the notice says the search had been stopped");
+});
+
+test("picking a recent search from the menu refills the boxes and shows its results", async () => {
+	const files = new Map();
+	const ui = uiHarness({ historyFiles: files, search: async () => [paper("hit", { title: "Menu paper" })] });
+	ui.get("keywords").value = "thermophile";
+	ui.get("yearFrom").value = "2019";
+	await ui.runSearch();
+	const [entry] = await ui.history.list();
+	ui.clearAll();
+	assert.equal(ui.get("keywords").value, "");
+	await ui.openHistoryEntry(entry.id);
+	assert.equal(ui.get("keywords").value, "thermophile");
+	assert.equal(ui.get("yearFrom").value, "2019");
+	assert.equal(ui.state.records[0].title, "Menu paper");
+	assert.equal(ui.get("status").textContent, "historyRestored|1");
+	await ui.openHistoryEntry("0000000000000000");
+	assert.equal(ui.get("status").textContent, "historyMissing");
+	// The menu itself lists the entry with its source, count and time, and a way to forget all.
+	await ui.openHistoryMenu();
+	const menu = ui.get("histmenu");
+	assert.equal(menu.hidden, false);
+	const items = menu.querySelectorAll("div.histopt");
+	assert.equal(items.length, 1);
+	assert.equal(items[0].querySelector("span.h-label").textContent, "thermophile · 2019–");
+	assert.match(items[0].querySelector("span.h-meta").textContent, /^historyEntryMeta\|OpenAlex\|1\|/);
+	assert.ok(menu.querySelector("div.histclear"));
+	ui.closeHistoryMenu();
+	assert.equal(menu.hidden, true);
+});
+
+test("affiliation columns sort, filter and export from the people a source supplied", async () => {
+	const people = (inst, country, h, name = "A") => [{ name, position: "first", corresponding: false, institution: inst, institutionId: "I", country, institutionH: h }];
+	const ui = uiHarness({ realRows: true, search: async () => [
+		paper("kr", { people: people("KAIST", "KR", 900) }),
+		paper("us", { people: people("MIT", "US", 1800) }),
+		paper("none", { venue: "Somewhere" })
+	] });
+	await ui.runSearch();
+	assert.equal(ui.sortValue(ui.state.records[0], "tier"), 900);
+	assert.equal(ui.sortValue(ui.state.records[1], "affiliation"), "mit");
+	assert.equal(ui.sortValue(ui.state.records[2], "tier"), -1);
+	assert.equal(ui.sortValue(ui.state.records[1], "country"), "US");
+	ui.state.sortKey = "tier"; ui.state.sortDir = "desc";
+	ui.render();
+	assert.deepEqual(ui.state.visible.map(r => r.key), ["us", "kr", "none"]);
+	assert.equal(ui.matchesFilter(ui.state.records[0], "kaist"), true);
+	assert.equal(ui.matchesFilter(ui.state.records[0], "us"), false);
+	assert.equal(ui.matchesFilter(ui.state.records[1], "us"), true);
+	const row = ui.get("results-body").firstChild;
+	assert.equal(row.querySelector("td.aff").textContent, "MIT");
+	assert.equal(row.querySelector("td.country").textContent, "🇺🇸 US");
+	assert.equal(row.querySelector("span.tier").textContent, "tierExceptional");
+	assert.match(row.querySelector("td.aff").title, /^affFirst: A · MIT · 🇺🇸 US · affHIndex\|1800 · tierExceptional$/);
+	const csv = ui.csvText().split("\n");
+	assert.match(csv[1], /"MIT","US","1800"/);
+	assert.match(csv[3], /"","",""/);
 });

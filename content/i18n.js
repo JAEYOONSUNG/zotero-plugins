@@ -207,7 +207,7 @@ var ZotPoPI18N = (function () {
 			prefOpenAlexNote: "Without a key OpenAlex allows roughly ten searches per day and then refuses every request until midnight UTC. Sign in at openalex.org with an e-mail address and the account page shows a free key, which raises the allowance about a hundredfold. No payment method is asked for. Crossref, Europe PMC, PubMed and arXiv need no key at all.",
 			notJSON: where => "The server did not return JSON — " + where,
 			columnResetTip: "Drag to resize · double-click to reset",
-			csvHead: ["Cites", "CitesPerYear", "Rank", "Authors", "Title", "Year", "Publication", "IF", "Publisher", "DOI", "URL", "PDF", "Source", "InLibrary"],
+			csvHead: ["Cites", "CitesPerYear", "Rank", "Authors", "Title", "Year", "Publication", "IF", "FirstAuthorInstitution", "Country", "InstitutionHIndex", "Publisher", "DOI", "URL", "PDF", "Source", "InLibrary"],
 			csvYes: "yes",
 			csvNo: "no",
 			thIF: "IF",
@@ -226,7 +226,33 @@ var ZotPoPI18N = (function () {
 			srcMulti: "Combined (OpenAlex + Crossref + Europe PMC + arXiv)",
 			srcPreprint: "Preprints (bioRxiv · medRxiv · Research Square · arXiv)",
 			srcEuropePMC: "Europe PMC (articles + preprints)",
-			srcScholar: "Google Scholar"
+			srcScholar: "Google Scholar",
+
+			history: "Recent",
+			historyTip: "Reopen a recent search with the results it fetched — nothing is asked of the APIs again",
+			historyEmpty: "No saved searches yet. Every finished search is kept here with its results.",
+			historyEntryMeta: (source, n, when, partial) => `${source} · ${n} result${n === 1 ? "" : "s"} · ${when}${partial ? " · stopped early" : ""}`,
+			historyClear: "Forget saved searches",
+			historyCleared: "Saved searches cleared.",
+			historyMissing: "That saved search is no longer on disk.",
+			historyRestored: n => `Showing ${n} saved results — no API budget spent.`,
+			historyRestoredNotice: (when, partial) => `These results were saved ${when}${partial ? " from a search that was stopped early" : ""}. Press Search to fetch them afresh.`,
+
+			thInst: "1st author inst.",
+			thInstTip: "Institution of the first author. Hover a cell for the corresponding author's as well.",
+			thCountry: "Country",
+			thCountryTip: "Country of the first and corresponding authors' institutions",
+			thTier: "Tier",
+			thTierTip: "Standing of the first or corresponding author's institution, from the OpenAlex h-index of everything it has published: Top ≥ 1400, High ≥ 800, Mid ≥ 400. A cut point, not a ranking.",
+			tierExceptional: "Top",
+			tierHigh: "High",
+			tierEstablished: "Mid",
+			affFirst: "First author",
+			affCorresponding: "Corresponding author",
+			affLast: "Last author (no corresponding author flagged)",
+			affHIndex: h => `institution h-index ${h}`,
+			affUnknown: "affiliation unknown",
+			prefInstitutions: "Look up the first and corresponding authors' institutions (country, standing) on OpenAlex"
 		},
 
 		ko: {
@@ -430,7 +456,7 @@ var ZotPoPI18N = (function () {
 			prefOpenAlexNote: "키가 없으면 OpenAlex는 하루 약 10회 검색 후 자정(UTC)까지 모든 요청을 거부합니다. openalex.org에 이메일로 로그인하면 계정 페이지에서 무료 키를 받을 수 있고, 한도가 약 100배가 됩니다. 결제수단은 요구하지 않습니다. Crossref·Europe PMC·PubMed·arXiv는 키 자체가 필요 없습니다.",
 			notJSON: where => "서버가 JSON을 반환하지 않았습니다 — " + where,
 			columnResetTip: "끌어서 너비 조절 · 더블클릭하면 초기화",
-			csvHead: ["인용", "연간인용", "순위", "저자", "제목", "연도", "저널", "IF", "출판사", "DOI", "URL", "PDF", "소스", "보유"],
+			csvHead: ["인용", "연간인용", "순위", "저자", "제목", "연도", "저널", "IF", "1저자기관", "국가", "기관h-index", "출판사", "DOI", "URL", "PDF", "소스", "보유"],
 			csvYes: "예",
 			csvNo: "아니오",
 			thIF: "IF",
@@ -449,7 +475,33 @@ var ZotPoPI18N = (function () {
 			srcMulti: "통합 검색 (OpenAlex + Crossref + Europe PMC + arXiv)",
 			srcPreprint: "프리프린트 (bioRxiv · medRxiv · Research Square · arXiv)",
 			srcEuropePMC: "Europe PMC (논문 + 프리프린트)",
-			srcScholar: "Google Scholar"
+			srcScholar: "Google Scholar",
+
+			history: "최근 검색",
+			historyTip: "최근 검색을 저장된 결과 그대로 다시 엽니다 — API 사용량을 쓰지 않습니다",
+			historyEmpty: "저장된 검색이 아직 없습니다. 검색이 끝날 때마다 결과와 함께 여기에 남습니다.",
+			historyEntryMeta: (source, n, when, partial) => `${source} · ${n}건 · ${when}${partial ? " · 중간에 중지됨" : ""}`,
+			historyClear: "저장된 검색 모두 지우기",
+			historyCleared: "저장된 검색을 지웠습니다.",
+			historyMissing: "그 검색 기록이 더 이상 디스크에 없습니다.",
+			historyRestored: n => `저장된 결과 ${n}건을 표시합니다 — API 사용량을 쓰지 않았습니다.`,
+			historyRestoredNotice: (when, partial) => `${when}에 저장된 결과입니다${partial ? " (중간에 중지된 검색)" : ""}. 최신 결과를 받으려면 검색을 누르세요.`,
+
+			thInst: "1저자 기관",
+			thInstTip: "1저자의 소속 기관. 셀에 마우스를 올리면 교신저자 소속도 보입니다.",
+			thCountry: "국가",
+			thCountryTip: "1저자·교신저자 소속 기관의 국가",
+			thTier: "티어",
+			thTierTip: "1저자 또는 교신저자 기관의 위상. 그 기관이 낸 전체 논문의 OpenAlex h-index 기준: 최상위 1400 이상, 상위 800 이상, 중상위 400 이상. 순위가 아니라 구간입니다.",
+			tierExceptional: "최상위",
+			tierHigh: "상위",
+			tierEstablished: "중상위",
+			affFirst: "1저자",
+			affCorresponding: "교신저자",
+			affLast: "마지막 저자 (교신저자 표시 없음)",
+			affHIndex: h => `기관 h-index ${h}`,
+			affUnknown: "소속 미상",
+			prefInstitutions: "1저자·교신저자 소속 기관(국가, 위상)을 OpenAlex에서 조회"
 		}
 	};
 

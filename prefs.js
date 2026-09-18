@@ -18,3 +18,7 @@ pref("extensions.zotpop.skipDuplicates", true);
 pref("extensions.zotpop.citationsInExtra", true);
 pref("extensions.zotpop.enrichCitations", true);
 pref("extensions.zotpop.journalMetrics", true);
+// First and corresponding author labs, their country and standing, from OpenAlex.
+pref("extensions.zotpop.institutionMetrics", true);
+// Finished searches kept on disk with their results, so a repeat costs no API budget.
+pref("extensions.zotpop.historySize", 30);

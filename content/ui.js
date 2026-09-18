@@ -343,7 +343,7 @@
 	// The <select> stays as the value model; an opaque in-page menu drives it.
 	let openSel = null;
 
-	function selButton(sel) { return sel.parentNode.querySelector(".sel-btn"); }
+	function selButton(sel) { return sel.parentNode?.querySelector?.(".sel-btn") || null; }
 
 	function syncSel(sel) {
 		let btn = selButton(sel);
@@ -527,47 +527,42 @@
 		let active = () => cacheRestoreController === controller && !controller.signal.aborted
 			&& !state.searching && !state.importing && originalSignature === signature();
 		try {
-			let saved = history && await history.find($("source").value, query);
-			let entry = saved && await history.get(saved.id);
-			if (!active()) return;
-			if (entry?.records?.length) {
-				await showHistoryEntry(entry, active);
-				return;
+			try {
+				let saved = history && await history.find($("source").value, query);
+				let entry = saved && await history.get(saved.id);
+				if (!active()) return;
+				if (entry?.records?.length && await showHistoryEntry(entry, active)) return;
 			}
-		}
-		catch (e) { log("history restore failed: " + e.message); }
-		finally { if (cacheRestoreController === controller && !active()) cacheRestoreController = null; }
-		if ($("source").value !== "scholar" || typeof ZotPoPPoPBridge === "undefined" || !active()) {
-			if (cacheRestoreController === controller) cacheRestoreController = null;
-			return;
-		}
-		let noNetwork = async () => { throw new Error("Network is disabled while restoring a cached search"); };
-		let ctx = {
-			signal: controller.signal, isCancelled: () => controller.signal.aborted,
-			popCacheOnly: true, recoveryMaxResults: query.maxResults, errors: [],
-			enrichCitations: false, journalMetrics: false,
-			popSearch: async (q, context) => {
-				let rows = await ZotPoPPoPBridge.search(q, { ...context, popCacheOnly: true });
-				if (!rows?.cached || !rows?.partial) throw new Error("No cached search snapshot is available");
-				metadata = { capturedAt: rows.capturedAt };
-				return rows;
+			catch (e) { log("history restore failed: " + e.message); }
+			if (!active() || $("source").value !== "scholar" || typeof ZotPoPPoPBridge === "undefined") return;
+			let noNetwork = async () => { throw new Error("Network is disabled while restoring a cached search"); };
+			let ctx = {
+				signal: controller.signal, isCancelled: () => controller.signal.aborted,
+				popCacheOnly: true, recoveryMaxResults: query.maxResults, errors: [],
+				enrichCitations: false, journalMetrics: false, institutionMetrics: false,
+				popSearch: async (q, context) => {
+					let rows = await ZotPoPPoPBridge.search(q, { ...context, popCacheOnly: true });
+					if (!rows?.cached || !rows?.partial) throw new Error("No cached search snapshot is available");
+					metadata = { capturedAt: rows.capturedAt };
+					return rows;
+				}
+			};
+			try {
+				let records = await ZotPoPSources.search("scholar", query, { getJSON: noNetwork, getText: noNetwork }, ctx);
+				if (!active() || !records.length) return;
+				await refreshLibraryFlags();
+				if (!active()) return;
+				state.sortKey = "rank";
+				state.sortDir = "asc";
+				displaySearchResults(records);
+				let captured = new Date(metadata.capturedAt).toLocaleString(t.locale || undefined);
+				setStatus(t("cacheRestored", records.length));
+				showBanner(t("cacheRestoredNotice", captured));
 			}
-		};
-		try {
-			let records = await ZotPoPSources.search("scholar", query, { getJSON: noNetwork, getText: noNetwork }, ctx);
-			if (!active() || !records.length) return;
-			await refreshLibraryFlags();
-			if (!active()) return;
-			state.sortKey = "rank";
-			state.sortDir = "asc";
-			displaySearchResults(records);
-			let captured = new Date(metadata.capturedAt).toLocaleString(t.locale || undefined);
-			setStatus(t("cacheRestored", records.length));
-			showBanner(t("cacheRestoredNotice", captured));
-		}
-		catch (_) {
-			// No recent matching snapshot is a normal startup condition. A live
-			// search remains available and receives its own error reporting.
+			catch (_) {
+				// No recent matching snapshot is a normal startup condition. A live
+				// search remains available and receives its own error reporting.
+			}
 		}
 		finally { if (cacheRestoreController === controller) cacheRestoreController = null; }
 	}
@@ -611,7 +606,7 @@
 		for (let f of QUERY_FIELDS) $(f).value = query[f] == null ? "" : String(query[f]);
 		syncSel($("sort"));
 		let source = $("source");
-		if (entry.source && [...source.options].some(o => o.value === entry.source)) {
+		if (entry.source && Array.from(source.options || []).some(o => o.value === entry.source)) {
 			source.value = entry.source;
 			syncSel(source);
 			sourceHint();

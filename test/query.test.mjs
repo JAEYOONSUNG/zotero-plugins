@@ -32,6 +32,18 @@ test("author matching accepts initials, given/family order and punctuation", () 
 test("author matching keeps surname boundaries and conflicting full names", () => {
 	for (const query of ["Li", "Daniel R Liu", "David Q Liu", "Liu DP", "Sung JY"]) assert.equal(Q.matchesAuthor(query, [liu]), false, query);
 	assert.equal(Q.matchesAuthor("David", [liu]), false, "a given name alone is not a surname match");
+	// An unfinished name is still that person: "Sheila Ingemann" and "Ingemann Jensen" are both
+	// Sheila Ingemann Jensen, written the way people actually type a Danish name.
+	const jensen = { firstName: "Sheila Ingemann", lastName: "Jensen", name: "Sheila Ingemann Jensen" };
+	for (const query of ["Sheila Ingemann", "sheila ingemann jensen", "Ingemann Jensen", "S Ingemann Jensen", "Sheila I Jensen", "Jensen SI"]) {
+		assert.equal(Q.matchesAuthor(query, [jensen]), true, query);
+	}
+	assert.equal(Q.matchesAuthor("Ingemann", [jensen]), false, "one word stays a surname");
+	assert.equal(Q.matchesAuthor("Sheila Jensen", [jensen]), true, "a dropped middle name is fine");
+	assert.equal(Q.matchesAuthor("Ingemann Sheila", [jensen]), false, "out of order is somebody else");
+	assert.equal(Q.matchesAuthor("Sheila Ingemann", [{ firstName: "Sheila", lastName: "Ingemann-Larsen" }]), true, "a compound surname begins with the name typed");
+	assert.equal(Q.matchesAuthor("Jin Lee", [{ firstName: "Ha Jin", lastName: "Lee", name: "Ha Jin Lee" }]), true);
+	assert.equal(Q.matchesAuthor("S I", [jensen]), false, "initials alone do not pick anyone out");
 	assert.equal(Q.matchesAuthor("JOHN Smith", [{ firstName: "Jane", lastName: "Smith" }]), false);
 	assert.equal(Q.matchesAuthor("David Liu", [{ lastName: "Liu" }]), false, "missing given metadata cannot verify it");
 	assert.equal(Q.matchesAuthor("DR Liu", [{ firstName: "David", lastName: "Liu" }]), false, "an explicitly requested middle initial needs evidence");

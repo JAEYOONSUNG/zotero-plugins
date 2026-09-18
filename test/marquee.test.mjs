@@ -232,7 +232,7 @@ test("real result rows mark only text columns and retain title links, focus and 
 		search: async () => [paper("result", { title: "An entire title", url: "https://example.test/paper", venue: "A journal", doi: "10.1234/example", authors: [{ name: "A Researcher" }] })] });
 	await ui.runSearch();
 	const row = ui.get("results-body").firstChild;
-	assert.deepEqual(row.children.filter(cell => cell.dataset.marquee).map(cell => cell.dataset.marquee), ["authors", "title", "venue", "doi", "status"]);
+	assert.deepEqual(row.children.filter(cell => cell.dataset.marquee).map(cell => cell.dataset.marquee), ["authors", "title", "venue", "affiliation", "doi", "status"]);
 	const link = row.querySelector("a"); let prevented = false, stopped = false;
 	link.emit("click", { preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } });
 	assert.deepEqual(opened, ["https://example.test/paper"]);

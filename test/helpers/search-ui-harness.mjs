@@ -2,6 +2,8 @@ import fs from "node:fs";
 import vm from "node:vm";
 import Sources from "../../content/sources.js";
 import Preview from "../../content/preview.js";
+import History from "../../content/history.js";
+import Affiliations from "../../content/affiliations.js";
 
 export const paper = (key, extra = {}) => ({
 	key, title: key, citations: 1, year: 2026, authors: [], ...extra
@@ -76,7 +78,7 @@ export function mockElement(tagName = "div") {
 	return node;
 }
 
-export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, openDialog, marquee, realRows = false, launchURL = () => {} } = {}) {
+export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, openDialog, marquee, realRows = false, launchURL = () => {}, historyFiles = new Map(), prefs = {} } = {}) {
 	const elements = new Map(), errors = [], events = new Map();
 	const get = id => {
 		if (!elements.has(id)) { const node = mockElement(); node.connected = true; elements.set(id, node); }
@@ -100,13 +102,15 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		AbortController,
 		window: { addEventListener(name, fn) { events.set(name, fn); }, openDialog },
 		document,
-		Zotero: { Prefs: { get: () => true, set() {} }, debug() {}, logError: e => errors.push(e), launchURL,
+		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set() {} }, debug() {}, logError: e => errors.push(e), launchURL,
 			HTTP: { request: request || (() => { throw new Error("Unexpected HTTP request"); }) } },
-		ZotPoPI18N: { make: () => (key, ...args) => [key, ...args].join("|") },
+		ZotPoPI18N: { make: () => (key, ...args) => key === "csvHead" ? ["head"] : [key, ...args].join("|") },
 		ZotPoPSources: { SOURCES: { openalex: { label: "OpenAlex" } }, normalizeDOI: Sources.normalizeDOI,
 			search: search || (async (_source, query) => query.sort === "citations" ? [...apiRecords].reverse() : [...apiRecords]) },
 		ZotPoPPoPBridge: popBridge,
 		ZotPoPPreview: Preview,
+		ZotPoPHistory: { ...History, memoryIO: () => History.memoryIO(historyFiles) },
+		ZotPoPAffiliations: Affiliations,
 		ZotPoPMarquee: marquee || { attach: () => ({ refresh() {}, refreshCell() {} }) },
 		ZotPoPMetrics: { citesPerYear: () => 1 },
 		CSS: { escape: value => value },
@@ -119,7 +123,10 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		refreshLibraryFlags = globalThis.refreshFlags;
 		${realRows ? "" : 'buildRow = () => document.createElement("tr");'}
 		renderMetrics = renderDetail = () => {};
+		cacheIO = setupStorage();
 		globalThis.harness = { state, runSearch, render, http, stopOperation, onKeyDown, clearAll, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
+			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText,
+			get history() { return history; },
 			setOpenSelectForTest: value => { openSel = value; } };
 	`);
 	vm.runInContext(code, context);
