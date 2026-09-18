@@ -30,6 +30,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.metadataIDs = new Set();
     this.metadataQueue = Promise.resolve();
     this.activityQueue=Promise.resolve();this.tabItems=new Map();
+    this.i18n=typeof CustomStyleI18N!=='undefined'?CustomStyleI18N:require('./i18n.js');
+    try{this.i18n.load((typeof CustomStyleStrings!=='undefined'?CustomStyleStrings:require('./strings.js')).en);}catch(error){}
     this.settingsTools=typeof CustomStyleSettingsSchema!=='undefined'?CustomStyleSettingsSchema:require('./settings-schema.js');this.settingsSchema=this.settingsTools.schema;
     this.workspaceTools=typeof CustomStyleWorkspace!=="undefined"?CustomStyleWorkspace:require("./workspace.js");
     this.Workbench=typeof CustomStyleWorkbench!=="undefined"?CustomStyleWorkbench:require("./workbench.js");
@@ -61,6 +63,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const found = await this.Z.Items.getAll(id);
     return Array.isArray(found) ? found : [];
   }
+  // One place to ask for a string, so nothing has to reach for the module.
+  t(value) { return this.i18n ? this.i18n.t(value) : value; }
+
+  // Which language the panel speaks. `auto` follows Zotero's own locale, which
+  // is the honest default: somebody running Zotero in English wants this in
+  // English without having to be asked.
+  applyLocale() {
+    if (!this.i18n) return 'ko-KR';
+    let choice = 'auto';
+    try { choice = this.pref('language', 'auto'); } catch (error) { }
+    return this.i18n.use(choice, this.Z);
+  }
+
   featureEnabled(id) { return this.pref('feature.'+id,true)!==false; }
   // The schema is a list of 117 entries and this walked it on every lookup.
   // The read-time column calls it for every cell, so a viewport scanned it
@@ -87,6 +102,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // Anything remembered from a preference is dropped the moment one is set.
     this.timeFormatMemo = null;
     this.bumpState();
+    if (key === 'language') { this.applyLocale(); }
     this.settingWriteDepth=(this.settingWriteDepth||0)+1;
     try{if(key==='customFields')this.setCustomFields(value);else if(key==='panelCSS')this.setPanelCSS(value);else this.Z.Prefs.set('extensions.style-custom.'+key,value,true);}finally{this.settingWriteDepth--; }
     if(key==='workbenchDensity'){this.cache.workbenchUI={...(this.cache.workbenchUI||{}),density:value};this.dirty=true;}
@@ -140,7 +156,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(existing){this.Z.ItemTreeManager.unregisterColumn(existing);this.columns=this.columns.filter(key=>key!==existing);this.featureColumns.delete(dataKey);}continue;
       }
       if(existing)continue;
-      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label,width,minWidth:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time','tags','files','firstInstitution','correspondingInstitution','institutionTier'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
+      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time','tags','files','firstInstitution','correspondingInstitution','institutionTier'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
       if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
     }
   }
@@ -177,6 +193,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Invalid Style Custom item cache");
       if (entry.citationPending) { delete entry.citationPending; this.dirty=true; }
     }
+    this.applyLocale();
     this.rebuildJournals();
     this.labels = { unread: "unread", reading: "reading", done: "done" };
     this.columnDefinitions = [["journalMark", "Journal", "110"], ["if", "IF", "90"], ["citations", "Cited Count", "120"],

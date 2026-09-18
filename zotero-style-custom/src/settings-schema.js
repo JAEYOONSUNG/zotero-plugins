@@ -863,6 +863,28 @@
       "default": false
     },
     {
+      "key": "language",
+      "category": "menus",
+      "label": "언어 / Language",
+      "help": "자동은 Zotero 자체 언어를 따릅니다. English follows Zotero's own language when set to Auto.",
+      "type": "select",
+      "default": "auto",
+      "options": [
+        {
+          "value": "auto",
+          "label": "자동 (Zotero 설정을 따름) / Auto"
+        },
+        {
+          "value": "ko-KR",
+          "label": "한국어"
+        },
+        {
+          "value": "en-US",
+          "label": "English"
+        }
+      ]
+    },
+    {
       "key": "tagDisplayMode",
       "category": "tags",
       "label": "태그 열 표시 대상",

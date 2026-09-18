@@ -146,6 +146,39 @@
     // code can answer about itself.
     // What is actually in that toolbar, in order, so the button can be placed
     // beside the other tools rather than guessed at.
+    // The language toggle, proved against the running application rather than
+    // against the table on its own.
+    results.push(await attempt('the panel speaks the chosen language', () => {
+      const chosen = runtime.pref('language', 'auto');
+      const active = runtime.applyLocale();
+      const samples = ['보유 문헌', '관계 그래프', '주석', '문헌을 하나 선택하세요.'];
+      const shown = samples.map(text => runtime.t(text));
+      if (active === 'en-US' && shown.every((text, i) => text === samples[i])) {
+        throw new Error('English is selected but nothing is being translated');
+      }
+      if (active === 'ko-KR' && shown.some((text, i) => text !== samples[i])) {
+        throw new Error('Korean is selected but text is being translated anyway');
+      }
+      const table = runtime.i18n._table();
+      const size = Object.keys(table).length;
+      const covered = samples.filter(text => table[text] !== undefined).length;
+      return `설정 ${chosen} → ${active} · 사전 ${size}개 · 예: ${shown.slice(0, 2).join(' / ')}`
+        + ` · 표본 ${covered}/${samples.length}`;
+    }));
+
+    // And how much of the interface the table actually reaches, counted rather
+    // than guessed: an untranslated string still reads in Korean, so coverage
+    // is a number to improve, not a breakage.
+    results.push(await attempt('how much of the interface is translated', () => {
+      const table = runtime.i18n._table();
+      const labels = (runtime.columnDefinitions || []).map(row => row[1]);
+      const tabs = (root.CustomStyleWorkbench?.TABS || []).map(row => row[1]);
+      const wanted = [...labels, ...tabs].filter(Boolean);
+      const missing = wanted.filter(text => /[가-힣]/.test(text) && table[text] === undefined);
+      return `사전 ${Object.keys(table).length}개 · 열·탭 ${wanted.length}개 중 미번역 ${missing.length}`
+        + (missing.length ? ` (${missing.slice(0, 4).join(', ')})` : '');
+    }));
+
     results.push(await attempt('where the toolbar button sits', () => {
       if (!doc) throw new Error('no main window');
       const bar = doc.getElementById('zotero-items-toolbar');

@@ -34,13 +34,18 @@
   }
   const hiddenTabs=()=>new Set([...(Array.isArray(runtime.cache.hiddenWorkbenchTabs)?runtime.cache.hiddenWorkbenchTabs:[]).filter(id=>id!=='appearance'&&TABS.some(([key])=>key===id)),...Object.entries(tabFeature).filter(([,feature])=>!enabled(feature)).map(([id])=>id)]);
   const listeners=[];
-  const node=(tag,text,parent,attrs={})=>{const n=doc.createElementNS(HTML,tag);if(text!==null&&text!==undefined)n.textContent=text;for(const[k,v]of Object.entries(attrs))n.setAttribute(k,String(v));parent?.appendChild(n);if(draftContext&&['input','textarea'].includes(tag)&&attrs['aria-label']){const label=attrs['aria-label'],index=draftCounters.get(label)||0;draftCounters.set(label,index+1);n.dataset.draftKey=draftContext+'|'+label+'|'+index;}return n;};
+  const i18n=runtime.i18n||{t:value=>value};
+  const T=value=>i18n.t(value);
+  // The attributes that carry text a person reads. Everything else is passed
+  // through untouched: translating a class name or an id would be a bug.
+  const TEXT_ATTRS=new Set(['title','placeholder','aria-label','tooltiptext','label','alt','value']);
+  const node=(tag,text,parent,attrs={})=>{const n=doc.createElementNS(HTML,tag);if(text!==null&&text!==undefined)n.textContent=T(text);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,TEXT_ATTRS.has(k)&&tag!=='input'?String(T(v)):k==='placeholder'||k==='aria-label'||k==='title'?String(T(v)):String(v));parent?.appendChild(n);if(draftContext&&['input','textarea'].includes(tag)&&attrs['aria-label']){const label=attrs['aria-label'],index=draftCounters.get(label)||0;draftCounters.set(label,index+1);n.dataset.draftKey=draftContext+'|'+label+'|'+index;}return n;};
   const panel=node('section',null,doc.documentElement,{id:'style-custom-workbench','aria-label':'Style Custom 연구 작업 패널'});panel.hidden=true;
   const sheet=node('link',null,doc.documentElement,{rel:'stylesheet',href:runtime.rootURI+'content/workbench.css'});
   panel.dataset.density=ui.density==='compact'?'compact':'comfortable';panel.setAttribute('role','region');
   const head=node('header',null,panel,{class:'sc-header'}),brand=node('div',null,head,{class:'sc-brand'});node('img',null,brand,{src:runtime.rootURI+'content/icons/style-custom.svg',width:24,height:24,alt:'','aria-hidden':'true'});node('strong','Style Custom',brand);node('span','연구 작업 패널',brand,{class:'sc-subtitle'});const headerActions=node('div',null,head,{class:'sc-header-actions'});
   const status=node('div','준비',panel,{class:'sc-status',role:'status','aria-live':'polite'});
-  function message(value,error=false){if(disposed)return;status.textContent=String(value);status.dataset.error=String(error);}
+  function message(value,error=false){if(disposed)return;status.textContent=String(T(value));status.dataset.error=String(error);}
   // The last three features shipped and then sat empty because they waited on a
   // context-menu item nobody had a reason to look for. Putting the new one in
   // the same place would repeat that, so the panel says what is missing, where
