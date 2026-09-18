@@ -28,6 +28,37 @@
 
 	// Source labels that should follow the UI language rather than the API's own name
 	const SOURCE_LABEL_KEYS = { multi: "srcMulti", preprint: "srcPreprint", europepmc: "srcEuropePMC", scholar: "srcScholar" };
+	const SVG_NS = "http://www.w3.org/2000/svg";
+	// innerHTML is not available on createElementNS elements in Gecko, so each
+	// shape is built as a node.
+	function brandMark(key, size) {
+		let lib = typeof ZotPoPBrandIcons !== "undefined" ? ZotPoPBrandIcons : null;
+		if (!lib) return null;
+		let drawn = lib.shape(lib.iconFor(key));
+		if (!drawn) return null;
+		let svg = document.createElementNS(SVG_NS, "svg");
+		svg.setAttribute("viewBox", drawn.viewBox);
+		svg.setAttribute("width", String(size || 12));
+		svg.setAttribute("height", String(size || 12));
+		svg.setAttribute("aria-hidden", "true");
+		svg.setAttribute("focusable", "false");
+		svg.setAttribute("class", "brand-mark");
+		if (drawn.kind === "fill") svg.setAttribute("fill", "currentColor");
+		else {
+			svg.setAttribute("fill", "none");
+			svg.setAttribute("stroke", "currentColor");
+			svg.setAttribute("stroke-width", "1.5");
+			svg.setAttribute("stroke-linecap", "round");
+			svg.setAttribute("stroke-linejoin", "round");
+		}
+		for (let [tag, attrs] of drawn.parts) {
+			let node = document.createElementNS(SVG_NS, tag);
+			for (let [name, value] of Object.entries(attrs)) node.setAttribute(name, String(value));
+			svg.appendChild(node);
+		}
+		return svg;
+	}
+
 	function sourceLabel(key) {
 		let k = SOURCE_LABEL_KEYS[key];
 		return k ? t(k) : (ZotPoPSources.SOURCES[key]?.label || key);
@@ -1017,12 +1048,22 @@
 			s.className = "badge" + (cls ? " " + cls : "");
 			s.textContent = text;
 			badges.appendChild(s);
+			return s;
+		};
+		// A source badge carries its own mark. Nine academic services all
+		// rendered as grey text is a list you read one word at a time; the
+		// marks are what make "this came from bioRxiv" a glance.
+		let sourceChip = key => {
+			let s = chip(sourceLabel(key), "src");
+			let mark = brandMark(key, 12);
+			if (mark) s.insertBefore(mark, s.firstChild);
+			return s;
 		};
 		if (r.citations != null) chip(t("badgeCites", r.citations), "cite");
 		if (r.journalIF != null) chip(t("badgeIF", fmt(r.journalIF, 1)), "if");
 		let cpy = ZotPoPMetrics.citesPerYear(r);
 		if (cpy != null) chip(t("badgePerYear", fmt(cpy)));
-		for (let s of r.sources || [r.source]) chip(sourceLabel(s));
+		for (let s of r.sources || [r.source]) sourceChip(s);
 		if (r.inLibrary) chip(t("badgeInLibrary"), "lib");
 		if (hasPDF(r)) chip(t("badgeHasPdf"));
 

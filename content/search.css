@@ -265,3 +265,8 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 .pl-intro { margin: 0; padding: 9px 13px; color: var(--muted); line-height: 1.5; border-bottom: 1px solid var(--border); }
 #pl-browser-host { flex: 1 1 auto; display: flex; min-height: 0; }
 #pl-browser { flex: 1 1 auto; border: none; }
+
+/* A source badge wears its own mark: nine services rendered as identical grey
+   text is a list you read one word at a time. */
+.badge.src { display: inline-flex; align-items: center; gap: 5px; }
+.badge .brand-mark { flex: none; width: 12px; height: 12px; opacity: .85; }

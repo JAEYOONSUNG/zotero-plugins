@@ -137,6 +137,37 @@
       return `${got.length} items · ${needing.length} need signals · ${stragglers.length} rating tags · ${stars.length} star tags`;
     }));
 
+    // Both plugins claim a place in the items toolbar. Whether either one is
+    // actually there, and whether they can be told apart, is not something the
+    // code can answer about itself.
+    results.push(await attempt('both plugins have their own toolbar shortcut', () => {
+      if (!doc) throw new Error('no main window');
+      const bar = doc.getElementById('zotero-items-toolbar');
+      if (!bar) throw new Error('no items toolbar');
+      const ours = doc.getElementById('style-custom-workbench-button');
+      const theirs = doc.getElementById('zotpop-toolbar-button');
+      const missing = [!ours && 'Style Custom', !theirs && 'ZotPoP'].filter(Boolean);
+      if (missing.length) throw new Error('no toolbar button for ' + missing.join(' and '));
+      const image = button => String(button.getAttribute('image') || '');
+      if (image(ours) === image(theirs)) throw new Error('both buttons use the same icon');
+      const hidden = [ours, theirs].filter(button => button.hidden
+        || (win.getComputedStyle && win.getComputedStyle(button).display === 'none'));
+      if (hidden.length) throw new Error(`${hidden.length} toolbar button(s) are present but not visible`);
+      return `${image(ours).split('/').pop()} + ${image(theirs).split('/').pop()}`;
+    }));
+
+    results.push(await attempt('a failed request is reported as a sentence, not a URL', () => {
+      const failures = root.CustomStyleFailures;
+      if (!failures) throw new Error('the failure translator did not load');
+      const budget = Object.assign(new Error(
+        'HTTP GET https://api.openalex.org/works?per_page=25&filter=author.id%3AA1 failed with status code 429'),
+        {status: 429});
+      const said = failures.describe(budget);
+      if (/https?:\/\//.test(said)) throw new Error('still printing the URL: ' + said);
+      if (!/OpenAlex/.test(said)) throw new Error('does not say which service: ' + said);
+      return said.slice(0, 60) + '…';
+    }));
+
     results.push(await attempt('the panel reports what is still empty', async () => {
       const pending = await runtime.backfillPending(library);
       return `signals ${pending.signals} · journals ${pending.journals} · authors ${pending.authors}`;

@@ -51,15 +51,32 @@ async function mountDemo(win,Workbench,Model){
   },
   backfillSummary:()=>'철회·공개접근 신호: 1145편 확인 · 1편은 기록 없음\n저널 지표: 160종 확인 · 9종은 OpenAlex에도 없음\n관심 저자: 2명이 새 논문 3편',
   watchedAuthors:()=>watched,
+  coauthorsOf:()=>[
+   {id:'A21',name:'Samuel H. Sternberg',institution:'Columbia University',papers:9,last:2026,titles:['A shared paper']},
+   {id:'A22',name:'Martin Jinek',institution:'University of Zurich',papers:6,last:2025,titles:[]},
+   {id:'A23',name:'Krzysztof Chylinski',institution:'IMBA',papers:4,last:2024,titles:[]},
+   {id:'A24',name:'Emmanuelle Charpentier',institution:'Max Planck',papers:3,last:2023,titles:[]},
+   {id:'A25',name:'Benjamin Oakes',institution:'Scribe Therapeutics',papers:2,last:2026,titles:[]},
+   {id:'A26',name:'Addison Wright',institution:'UC Berkeley',papers:1,last:2022,titles:[]}],
+  portraitOf:()=>null,
+  fetchPortrait:async()=>null,
+  journalRecord:()=>({name:'Example',issn:''}),
+  fetchJournalMetric:async()=>({citedness:12.3,name:'Example Journal'}),
   watchedAuthorsByNews:()=>watched.slice().sort((a,b)=>(b.news?.length||0)-(a.news?.length||0)),
   sweepWatchedAuthors:async()=>({authors:watched.length,withNews:2,works:3,requests:1,budgetGone:false,remaining:0}),
   clearAuthorNews:demoAction,watchAuthor:demoAction,unwatchAuthor:demoAction,markAuthorSeen:demoAction,
   authorsOfCached:async()=>[],
-  authorUpdates:async()=>({profile:null,works:[],fresh:[],watching:true,checkedAt:null}),selected:()=>[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,pageProgress:()=>({total:8,visited:4,percent:50,pages:{0:140,1:600,3:100,5:400},attachmentID:'9'})};
+  authorUpdates:async()=>({profile:{name:'Jennifer A. Doudna',hIndex:178,works:512,citations:198432,
+    institutions:['UC Berkeley'],topics:[{name:'CRISPR',count:212},{name:'RNA biology',count:88},{name:'Genome editing',count:64}],
+    orcid:'https://orcid.org/0000-0001-0000-0000'},
+   works:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna','S. Sternberg']},
+    {id:'W2',title:'Structural basis of a compact RNA-guided nuclease',venue:'Nature',year:2026,citations:4,openAccess:false,authors:['J. Doudna']}],
+   fresh:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna']}],
+   watching:true,checkedAt:'2026-09-18'}),selected:()=>[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,pageProgress:()=>({total:8,visited:4,percent:50,pages:{0:140,1:600,3:100,5:400},attachmentID:'9'})};
  runtime.Z={Items:{get:id=>refs.get(id),getAsync:async id=>refs.get(id)},Libraries:{userLibraryID:1},Prefs:{set:()=>{}},Utilities:{Internal:{copyTextToClipboard:()=>hint('예시 CSV를 만들었습니다. 이 미리보기에서는 클립보드를 변경하지 않습니다.')}},logError:error=>hint(String(error.message||error))};
  const notes=[{id:'10',title:'연구 질문과 후속 확인',text:'핵심 결과를 재현할 수 있는가?\n비교할 문헌과 연결해 검토합니다.',modified:'2026-09-15'}];
  const annotations=[{id:'11',text:'예시 하이라이트 — 근거와 해석을 분리해 기록합니다.',comment:'후속 문헌과 비교',color:'#ffd400',pageLabel:'3',pageIndex:2,type:'highlight'}];
- const library={snapshot:async()=>papers,graph:rows=>({nodes:rows.map(p=>({id:p.id,label:p.title})),edges:[{source:'1',target:'2'}]}),tagTree:rows=>[...new Set(rows.flatMap(p=>p.tags))].map(tag=>({name:tag,path:tag,count:1,children:[]})),notes:async()=>notes,annotations:async()=>annotations,backlinks:async()=>notes.map(n=>({...n,kind:'note'})),attachments:async()=>[],collections:async()=>[{id:'1',name:'읽을 문헌',count:3}],collectionItems:async()=>papers.map(p=>p.id),openItem:demoAction,relate:demoAction,unrelate:async()=>0,addTags:demoAction,removeTags:demoAction,renameTagBranch:async()=>({updatedItems:0,mergedTags:0}),recolorAnnotations:async()=>0,mergeAnnotations:async()=>{await demoAction();return '11';},setRemark:async(id,text)=>{runtime.entry(refs.get(Number(id))).remark=text;},createNote:async(id,text)=>{notes.push({id:String(20+notes.length),title:'예시 새 노트',text});return notes.at(-1).id;},noteFromAnnotations:async()=>{await demoAction();return '10';}};
+ const library={snapshot:async()=>papers,graph:rows=>({nodes:rows.map(p=>({id:p.id,label:p.title})),edges:[{source:'1',target:'2'}]}),tagTree:rows=>[...new Set(rows.flatMap(p=>p.tags))].map(tag=>({name:tag,path:tag,count:1,children:[]})),notes:async()=>notes,annotations:async()=>annotations,backlinks:async()=>notes.map(n=>({...n,kind:'note'})),attachments:async()=>[],collections:async()=>[{id:'1',name:'Aeribacillus',count:0},{id:'2',name:'Anaylsis',count:4},{id:'3',name:'Antiphage',count:8},{id:'4',name:'ASR',count:6},{id:'5',name:'Bacillus coagulans',count:0},{id:'6',name:'Bio-containment',count:1},{id:'7',name:'Bioinformatics',count:0},{id:'8',name:'Book chapter',count:1},{id:'9',name:'BREX',count:13}],collectionItems:async()=>papers.map(p=>p.id),openItem:demoAction,relate:demoAction,unrelate:async()=>0,addTags:demoAction,removeTags:demoAction,renameTagBranch:async()=>({updatedItems:0,mergedTags:0}),recolorAnnotations:async()=>0,mergeAnnotations:async()=>{await demoAction();return '11';},setRemark:async(id,text)=>{runtime.entry(refs.get(Number(id))).remark=text;},createNote:async(id,text)=>{notes.push({id:String(20+notes.length),title:'예시 새 노트',text});return notes.at(-1).id;},noteFromAnnotations:async()=>{await demoAction();return '10';}};
  const reader={annotationPalettes:()=>[],tabs:()=>[{id:'library',title:'라이브러리'},{id:'paper',title:papers[0].title,itemID:1,selected:true}],tabGroups:()=>[],viewGroups:()=>[],marginOptions:()=>({width:210,side:'right',textLimit:1500})};
  for(const name of ['applyTheme','resetAppearance','setMarginOptions','setMarginAnnotations','setColorLabel','setSidebar','setVerticalTabs','applyAnnotationPalette','deleteAnnotationPalette','saveTabGroup','restoreTabGroup','deleteTabGroup','selectTab','closeTab','moveTab','renameTabGroup','updateTabGroup','saveView','applyView','deleteView','renameView','updateView'])reader[name]=demoAction;
  reader.saveAnnotationPalette=async()=>({id:'demo'});reader.closeOtherTabs=()=>({closed:0});

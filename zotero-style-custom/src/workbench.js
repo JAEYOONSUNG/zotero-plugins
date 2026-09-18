@@ -69,7 +69,11 @@
    }),act);
    button('나중에',()=>{notice.hidden=true;},act);
   }
-  async function run(fn){try{return await fn();}catch(error){if(!disposed)message(error.message||error,true);return null;}}
+  // A transport failure is not a sentence. The panel used to print the whole
+  // OpenAlex URL with "failed with status code 429" on the end.
+  const failures=root.CustomStyleFailures||{describe:error=>error?.message||String(error)};
+  const readable=error=>failures.describe(error)||String(error?.message||error||'');
+  async function run(fn){try{return await fn();}catch(error){if(!disposed)message(readable(error),true);return null;}}
   const button=(label,fn,parent,attrs={})=>{
    const b=node('button',label,parent,{type:'button',...attrs}),key=attrs['data-action-key'];
    const busy=(element,on)=>{element.disabled=on;if(on){element.dataset.busy='true';element.setAttribute('aria-busy','true');}else{delete element.dataset.busy;element.removeAttribute('aria-busy');}};
@@ -126,6 +130,60 @@
    for(const [name,value] of Object.entries(attrs))shape.setAttribute(name,String(value));
    parent.appendChild(shape);
    return shape;
+  }
+  // A brand mark, drawn node by node because innerHTML does not exist on
+  // createElementNS elements in Gecko. Fill marks come from Academicons and
+  // carry their own viewBox; stroke marks are this plugin's own glyphs.
+  const brands=root.CustomStyleBrandIcons||null;
+  function brandIcon(source,{size=14,title=''}={}){
+   const name=brands?brands.iconFor(source):'';
+   const drawn=name?brands.shape(name):null;
+   if(!drawn)return null;
+   const svg=doc.createElementNS(SVG,'svg');
+   svg.setAttribute('viewBox',drawn.viewBox);
+   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
+   svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
+   if(drawn.kind==='fill'){svg.setAttribute('fill','currentColor');}
+   else{svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');
+    svg.setAttribute('stroke-width','1.5');svg.setAttribute('stroke-linecap','round');
+    svg.setAttribute('stroke-linejoin','round');}
+   for(const [tag,attrs] of drawn.parts)svgShape(svg,tag,attrs);
+   if(title)svg.setAttribute('aria-label',title);
+   return svg;
+  }
+  // The mark plus the name, because a logo alone is a quiz for anyone who has
+  // not memorised nine academic brands.
+  function sourceChip(source,label,parent){
+   const chip=node('span',null,parent,{class:'sc-source'});
+   const mark=brandIcon(source,{title:label||source});
+   if(mark)chip.appendChild(mark);
+   node('span',label||source,chip,{class:'sc-source-name'});
+   chip.title=label||source;
+   return chip;
+  }
+  // Initials are what stands in for a face until one is found, and what stands
+  // in permanently for someone who has no public portrait.
+  function initials(name){
+   const parts=String(name||'').trim().split(/\s+/).filter(Boolean);
+   if(!parts.length)return '?';
+   const first=parts[0][0]||'';
+   const last=parts.length>1?parts[parts.length-1][0]:'';
+   return (first+last).toUpperCase();
+  }
+  async function paintPortrait(face,person){
+   if(!runtime.fetchPortrait||!person?.id)return;
+   const known=runtime.portraitOf?.(person.id);
+   const draw=found=>{
+    if(disposed||!face.isConnected||!found?.url)return;
+    const img=doc.createElementNS(HTML,'img');
+    img.src=found.url;img.alt='';img.setAttribute('aria-hidden','true');
+    img.addEventListener('error',()=>img.remove());
+    img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});
+    face.appendChild(img);
+    face.title=found.page?`사진 출처: ${found.page}`:'';
+   };
+   if(known){draw(known);return;}
+   try{draw(await runtime.fetchPortrait(person));}catch(error){runtime.Z.logError?.(error);}
   }
   function setIcon(element,name){
    element.textContent='';
@@ -255,7 +313,16 @@
 
   function empty(text){node('p',text,body,{class:'sc-empty'});}
   function bar(parent=body){return node('div',null,parent,{class:'sc-actions'});}
-  function card(title,subtitle,parent=body){const c=node('article',null,parent,{class:'sc-card'});node('h3',title||'제목 없음',c);if(subtitle)node('p',subtitle,c,{class:'sc-muted'});return c;}
+  // The headline and its detail go in their own block so that everything a
+  // caller appends afterwards -- buttons, checkboxes, selects -- lands in one
+  // row beside them instead of stacking into a ninety-pixel card.
+  function card(title,subtitle,parent=body){
+   const c=node('article',null,parent,{class:'sc-card'});
+   const text=node('div',null,c,{class:'sc-card-text'});
+   node('h3',title||'제목 없음',text);
+   if(subtitle)node('p',subtitle,text,{class:'sc-muted'});
+   return c;
+  }
   function copy(value){runtime.Z.Utilities.Internal.copyTextToClipboard(value);message('클립보드에 복사했습니다.');}
   const scopeContext=()=>JSON.stringify([win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID,state.scope,state.scope.startsWith('collection')?(win.ZoteroPane?.getSelectedCollection?.()?.id??null):null]);
   async function load(){const token=++loadEpoch,context=scopeContext();if(observedContext!==context){state.collectionIDs=[];epoch++;clear();}observedContext=context;message('문헌을 읽는 중…');const libraryID=win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID;
@@ -567,16 +634,26 @@
     const {profile,works,fresh,watching,checkedAt}=await runtime.authorUpdates(person.id);
     if(token!==epoch||disposed||state.tab!=='authors')return;
     list.replaceChildren();
-    node('h3',profile?.name||person.name,list);
-    const stats=node('p',null,list,{class:'sc-profile'});
+    // The face, the name and the numbers on one line. A person is easier to
+    // hold in mind than a row of statistics, which is the whole point of
+    // following people rather than papers.
+    const head=node('div',null,list,{class:'sc-person'});
+    const face=node('div',null,head,{class:'sc-face'});
+    node('span',initials(profile?.name||person.name),face,{class:'sc-face-text'});
+    const who=node('div',null,head,{class:'sc-person-who'});
+    node('h3',profile?.name||person.name,who);
+    const stats=node('p',null,who,{class:'sc-profile'});
     for(const [label,value] of [['소속',person.institution||profile?.institutions?.[0]],['h-index',profile?.hIndex],['논문',profile?.works],['총 인용',profile?.citations]]){
      if(value==null||value==='')continue;
      const span=node('span',label+' ',stats);node('b',String(value),span);
     }
     if(profile?.topics?.length){
-     const chips=node('div',null,list,{class:'sc-chips'});
+     const chips=node('div',null,who,{class:'sc-chips'});
      for(const topic of profile.topics)node('span',topic.name+(topic.count?` ${topic.count}`:''),chips,{class:'sc-chip'});
     }
+    // A portrait is a nice-to-have on a metered budget, so it is fetched only
+    // for the author actually being looked at, and remembered either way.
+    paintPortrait(face,{...person,name:profile?.name||person.name,orcid:profile?.orcid});
     const follow=bar(list);
     if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),follow);
     if(watching){
@@ -600,6 +677,28 @@
     if(watching&&fresh.length){
      node('h3',`마지막 확인 이후 새 논문 ${fresh.length}`,list,{class:'sc-hit-group'});
      hitList(fresh,list);
+    }
+    // The circle of colleagues, out of the works already in hand: no request of
+    // its own, and an edge exists because two names are on the same paper.
+    const circle=runtime.coauthorsOf?.(person.id,works)||[];
+    if(circle.length){
+     node('h3',`함께 낸 저자 ${circle.length}`,list,{class:'sc-hit-group'});
+     const net=node('div',null,list,{class:'sc-network'});
+     const most=circle[0].papers||1;
+     for(const mate of circle){
+      const chip=node('div',null,net,{class:'sc-node'});
+      chip.setAttribute('role','button');chip.tabIndex=0;
+      const go=()=>run(()=>show({id:mate.id,name:mate.name,institution:mate.institution}));
+      chip.addEventListener('click',go);
+      chip.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}});
+      // Thickness stands for how often, which is the only quantity here.
+      chip.style.setProperty('--sc-tie',String(Math.max(0.18,mate.papers/most)));
+      node('span',initials(mate.name),chip,{class:'sc-node-face'});
+      const body=node('span',null,chip,{class:'sc-node-body'});
+      node('span',mate.name,body,{class:'sc-node-name'});
+      node('span',`${mate.papers}편${mate.last?` · ${mate.last}`:''}`,body,{class:'sc-node-meta'});
+      chip.title=[mate.name,mate.institution,`공저 ${mate.papers}편`,...(mate.titles||[])].filter(Boolean).join('\n');
+     }
     }
     node('h3',`최근 논문 ${works.length}`,list,{class:'sc-hit-group'});
     if(!works.length)node('p','최근 논문을 찾지 못했습니다.',list,{class:'sc-muted'});
@@ -741,7 +840,29 @@
    node('p',facts.join(' · '),c,{class:'sc-hit-meta'});
    const source=item.impactSource||'출처 정보 없음';
    node('p',source.replace(/https?:\/\/[^\s·]+/,m=>m.replace(/^https?:\/\/(www\.)?/,'').split('/')[0]),c,{class:'sc-hit-authors',title:source});
-   const actions=node('div',null,c,{class:'sc-hit-actions'});button('저널 등급 조회',async()=>{await runtime.refreshPublicationRanks([runtime.Z.Items.get(Number(item.id))]);await load();message('저널 등급 조회를 마쳤습니다.');},actions);button('공식 값 새로고침',async()=>{const result=await runtime.refreshJournalMetrics([runtime.Z.Items.get(Number(item.id))],win.DOMParser);message(`확인 ${result.updated} · 미확인 ${result.failed+result.unknown}`);await load();},actions);}}
+   const actions=node('div',null,c,{class:'sc-hit-actions'});
+   // The route that needs nothing comes first. easyScholar wants a key the user
+   // may never have had, and leading with it made the tab look broken.
+   button('지표 조회',async()=>{
+    const ref=runtime.Z.Items.get(Number(item.id));
+    const hit=await runtime.fetchJournalMetric(runtime.journalRecord(ref));
+    await load();
+    message(hit&&hit.citedness!=null
+     ?`${hit.name||item.venue}: 2년 평균 피인용 ~${hit.citedness} (OpenAlex 추정치, 공식 JIF 아님)`
+     :`${item.venue}: OpenAlex에 이 저널의 지표가 없습니다.`);
+   },actions);
+   button('공식 값 새로고침',async()=>{const result=await runtime.refreshJournalMetrics([runtime.Z.Items.get(Number(item.id))],win.DOMParser);message(`확인 ${result.updated} · 미확인 ${result.failed+result.unknown}`);await load();},actions);
+   // Shown only once a key exists, so the tab never offers something that can
+   // only fail.
+   if(String(runtime.pref?.('journalRankKey','')||'').trim()){
+    button('등급 조회',async()=>{await runtime.refreshPublicationRanks([runtime.Z.Items.get(Number(item.id))]);await load();message('저널 등급 조회를 마쳤습니다.');},actions);
+   }
+  }
+  if(!seen.size)return;
+  if(!String(runtime.pref?.('journalRankKey','')||'').trim()){
+   node('p','JCR 분위·CAS 등급은 easyScholar 무료 키가 있어야 조회됩니다. 설정에서 키를 넣으면 이 목록에 등급 조회 버튼이 생깁니다. 키 없이도 위의 지표 조회는 동작합니다.',
+    body,{class:'sc-muted'});
+  }}
   function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. 설정에서 AI endpoint와 모델을 연결할 수 있습니다.');return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
    for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');const request=++aiEpoch;const result=await assist.run(task,item,{language:language.value});if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);
    button('요청 중지',()=>{aiEpoch++;assist.cancel?.();message('AI 요청을 중지했습니다.');},b);
@@ -760,7 +881,7 @@
   async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';const token=++epoch;clear();draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();refreshNotice().catch(()=>{});try{
    switch(state.tab){case'explore':await paperList(rows());break;case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();
-  }catch(error){if(token===epoch&&!disposed)message(error.message||error,true);}}
+  }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
   function refreshMetrics(){
    if(disposed||panel.hidden)return;
    for(const item of state.items){const ref=runtime.Z.Items.get(Number(item.id));if(ref)Object.assign(item,runtime.state(ref));}

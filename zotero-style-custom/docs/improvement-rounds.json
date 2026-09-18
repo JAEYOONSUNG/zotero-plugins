@@ -1,5 +1,5 @@
 {
- "version": "0.18.7",
+ "version": "0.19.1",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1044,6 +1044,148 @@
    "status": "verified",
    "review": "It found the bug no unit test could: Zotero.Items.getAll returns a Promise, and six library-wide sweeps iterated it directly, so each threw on its first line. The fixtures handed back a plain array, which is why all of them passed. The fixtures are shaped like the real API now. It also caught reading the repair flags after clearing them, and eight rating tags stranded on attachments that isRegular walked straight past.",
    "verification": "Run inside the user's own Zotero against their own library: 20 of 23 checks pass, the three failures being a missing mailto and OpenAlex's spent daily budget.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R35",
+   "title": "조회 실패를 URL이 아니라 문장으로",
+   "gap": "A spent daily quota reached the panel as a 300-character OpenAlex URL ending in 'failed with status code 429'. It told the reader nothing they could act on and made a rate limit look like a broken plugin.",
+   "entryPoint": "연구 작업 패널 상태줄",
+   "sources": [
+    {
+     "file": "src/failures.js",
+     "marker": "function describe"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/failures.test.mjs",
+     "name": "a spent quota says which service, how long, and that nothing was lost"
+    },
+    {
+     "file": "test/failures.test.mjs",
+     "name": "the reset time is converted into the reader's own clock"
+    }
+   ],
+   "status": "verified",
+   "review": "Every message says what happened and what to do, in that order, and the reset time is converted into the reader's own clock so they do not have to do UTC arithmetic while deciding whether to wait. A message already written for this plugin's user is left alone; only a URL-shaped transport error is replaced.",
+   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R36",
+   "title": "탭마다 제각각이던 카드 크기를 하나로",
+   "gap": "A collections card was ninety pixels tall to say 'Aeribacillus, 0 papers': a 14px title here and a 13px one there, a 30px button beside a 24px one, and the controls stacked under the text instead of beside it.",
+   "entryPoint": "연구 작업 패널 · 모든 탭의 카드",
+   "sources": [
+    {
+     "file": "content/workbench.css",
+     "marker": "--sc-card-title"
+    },
+    {
+     "file": "src/workbench.js",
+     "marker": "sc-card-text"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "all tabs expose functional primary actions and use library service contracts"
+    }
+   ],
+   "status": "verified",
+   "review": "One type and control scale declared once as tokens, so a card in the collections tab and a card in the tabs tab cannot disagree. The headline and its detail go in their own block, so anything a caller appends lands in one row beside them. Height fell from about 90px to about 46px.",
+   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R37",
+   "title": "논문 출처마다 진짜 로고",
+   "gap": "Nine academic services all rendered as identical grey text. A source is something you should recognise at a glance, not read one word at a time.",
+   "entryPoint": "ZotPoP 검색 결과 배지 · 연구 작업 패널",
+   "sources": [
+    {
+     "file": "src/brand-icons.js",
+     "marker": "const BRANDS"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/brand-icons.test.mjs",
+     "name": "every source this plugin can search has a mark"
+    },
+    {
+     "file": "test/brand-icons.test.mjs",
+     "name": "the licence that lets these ship is in the package"
+    }
+   ],
+   "status": "verified",
+   "review": "Seventeen real brand marks from Academicons 1.9.4 under SIL OFL 1.1, with the licence shipped in LICENSES.md and the reserved name unused, as that licence requires. The six services Academicons does not cover -- OpenAlex, Europe PMC, medRxiv, ChemRxiv, Lens.org, Harzing -- are drawn here in the same stroke family and are deliberately not imitations of anyone's trademark. Each mark keeps its own viewBox, because these come from a font and forcing them into one box would squash every non-square one.",
+   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R38",
+   "title": "저자를 통계 한 줄이 아니라 사람으로",
+   "gap": "A followed author was a name and four numbers. PostGrabbit already showed the user a face and the people around each PI, and that is what makes a person easier to hold in mind than a row of statistics.",
+   "entryPoint": "연구 작업 패널 → 저자 추적 → 저자 열기",
+   "sources": [
+    {
+     "file": "src/author-portrait.js",
+     "marker": "function choose"
+    },
+    {
+     "file": "src/author-portrait.js",
+     "marker": "function coauthors"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/author-portrait.test.mjs",
+     "name": "a colleague's headshot on the same page is not taken for the author"
+    },
+    {
+     "file": "test/author-portrait.test.mjs",
+     "name": "two equally good candidates are refused rather than guessed"
+    },
+    {
+     "file": "test/author-portrait.test.mjs",
+     "name": "the plugin can never be talked into fetching something off this machine"
+    },
+    {
+     "file": "test/author-portrait.test.mjs",
+     "name": "a co-author network is the people actually on the papers, ranked by how often"
+    },
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "an author is shown as a person, with the people they publish with"
+    }
+   ],
+   "status": "verified",
+   "review": "The portrait rules are PostGrabbit's, kept rather than reinvented: a candidate must be named on the page, a logo or banner is never a person, and an ambiguous winner is refused outright. One hole was closed on the way over -- on a lab page under /people/, an image whose own alt text names a colleague could win the weakest rule and be served up as the author. The co-author network costs no request at all: the works the tab already fetched carry every authorship, and an edge exists because two names are on the same paper.",
+   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R39",
+   "title": "키가 없으면 실패할 수밖에 없는 버튼을 먼저 내밀지 않기",
+   "gap": "The journals tab led with an easyScholar grade lookup. The user never had that key -- it is in neither the Zotero profile nor their Aside vault -- so the first button offered could only produce an error.",
+   "entryPoint": "연구 작업 패널 → 저널 지표",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "지표 조회"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "all tabs expose functional primary actions and use library service contracts"
+    }
+   ],
+   "status": "verified",
+   "review": "The route that needs no key comes first, and the easyScholar button appears only once a key exists. Without one the tab says what the key would add rather than offering a control that cannot work.",
+   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
    "nativeActivationVerified": true
   }
  ],

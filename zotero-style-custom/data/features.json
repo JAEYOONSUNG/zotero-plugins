@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "version": "0.18.7",
+ "version": "0.19.1",
  "baseline": "Installed Ethereal Style 6.0.76: all 50 simple and dotted preference feature IDs plus requested workflows",
  "sourceFeatureIDs": [
   "AIGenerateRemark",
@@ -1134,6 +1134,51 @@
     "test/runtime.test.mjs"
    ],
    "entryPoint": "extensions.style-custom.selfCheck 설정 후 재시작",
+   "condition": "",
+   "status": "implemented"
+  },
+  {
+   "id": "sourceBrandMarks",
+   "origin": "additional requested workflow",
+   "name": "논문 출처 로고",
+   "implementation": {
+    "file": "src/brand-icons.js",
+    "marker": "const BRANDS"
+   },
+   "tests": [
+    "test/brand-icons.test.mjs"
+   ],
+   "entryPoint": "검색 결과 · 출처 배지",
+   "condition": "",
+   "status": "implemented"
+  },
+  {
+   "id": "authorPortrait",
+   "origin": "additional requested workflow",
+   "name": "저자 사진과 공저자 네트워크",
+   "implementation": {
+    "file": "src/author-portrait.js",
+    "marker": "function choose"
+   },
+   "tests": [
+    "test/author-portrait.test.mjs"
+   ],
+   "entryPoint": "연구 작업 패널 → 저자 추적",
+   "condition": "",
+   "status": "implemented"
+  },
+  {
+   "id": "readableFailures",
+   "origin": "additional requested workflow",
+   "name": "조회 실패를 사람이 읽는 문장으로",
+   "implementation": {
+    "file": "src/failures.js",
+    "marker": "function describe"
+   },
+   "tests": [
+    "test/failures.test.mjs"
+   ],
+   "entryPoint": "연구 작업 패널 상태줄",
    "condition": "",
    "status": "implemented"
   }

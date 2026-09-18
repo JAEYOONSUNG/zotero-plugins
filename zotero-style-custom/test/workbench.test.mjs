@@ -33,6 +33,10 @@ function fixture(initialCache){
    institutions:['Somewhere'],topics:[{name:'A topic',count:9}],orcid:'https://orcid.org/1'},
    works:[suggestion('W9','citing')]}),
   watchedAuthors:()=>watched,
+  coauthorsOf:(id,works)=>[{id:'A7',name:'Sam Okafor',institution:'MIT',papers:3,last:2026,titles:['A shared paper']},
+   {id:'A8',name:'Kim Nguyen',institution:'',papers:1,last:2024,titles:[]}],
+  portraitOf:()=>null,
+  fetchPortrait:async()=>null,
   // The panel sorts by news; the real runtime owns that order, so the fake
   // delegates to it rather than inventing a second one that could disagree.
   watchedAuthorsByNews:()=>watched.slice().sort((a,b)=>(b.news?.length||0)-(a.news?.length||0)),
@@ -87,7 +91,16 @@ test('all tabs expose functional primary actions and use library service contrac
  await f.bench.show('canvas');f.input('보드 이름','Board');await f.click('보드 만들기');await f.click('선택 문헌 추가');assert.equal(f.runtime.cache.boards[0].nodes[0].itemID,'1');
  await f.bench.show('matrix');await f.click('CSV 복사');assert.ok(f.calls.find(c=>c[0]==='copy'&&c[1].includes('Paper Alpha')));
  await f.bench.show('collections');await f.click('컬렉션 열기');assert.ok(f.calls.find(c=>c[0]==='collection'&&c[1]===4));
- await f.bench.show('journals');await f.click('공식 값 새로고침');assert.ok(f.calls.find(c=>c[0]==='journal'));await f.click('저널 등급 조회');assert.ok(f.calls.find(c=>c[0]==='ranks'));
+ await f.bench.show('journals');await f.click('공식 값 새로고침');assert.ok(f.calls.find(c=>c[0]==='journal'));
+ // The easyScholar grade lookup appears only once a key exists; without one the
+ // tab used to offer a button whose only possible outcome was an error.
+ assert.equal(f.bench.panel.querySelector('[data-action-key], button'), f.bench.panel.querySelector('button'));
+ assert.ok(![...f.body().querySelectorAll('button')].some(b=>b.textContent==='등급 조회'),
+  'no grade button without a key');
+ assert.match(f.body().textContent,/easyScholar 무료 키/);
+ f.runtime.pref=(key,fallback)=>key==='journalRankKey'?'a-key':fallback;
+ await f.bench.show('journals');
+ await f.click('등급 조회');assert.ok(f.calls.find(c=>c[0]==='ranks'));
  await f.bench.show('assist');await f.click('제목 번역');await f.click('선택 문헌에 적용');assert.equal(f.runtime.entry(f.refs.get(1)).translatedTitle,'Generated result');
  await f.bench.show('appearance');f.input('Custom 패널 CSS','.sc-card { color: red; }');await f.click('패널 CSS 적용');assert.ok(f.calls.find(c=>c[0]==='css'));f.input('추가 문헌 열','DOI, language');await f.click('추가 열 적용');assert.ok(f.calls.find(c=>c[0]==='customFields'&&c[1]==='DOI, language'));f.bench.destroy();
 });
@@ -546,6 +559,34 @@ test('a panel talking to an older runtime simply shows no notice', async () => {
  delete f.runtime.backfillPending;
  await f.bench.show('explore');
  assert.equal(f.bench.panel.querySelector('.sc-notice').hidden,true);
+ f.bench.destroy();
+});
+
+test('an author is shown as a person, with the people they publish with', async () => {
+ const f=fixture();
+ await f.bench.show('authors');
+ await f.click('최근 논문');
+ // A face stands in with initials until a portrait is found, and permanently
+ // for anyone who has no public one.
+ assert.equal(f.body().querySelector('.sc-face-text').textContent,'AA');
+ const names=[...f.body().querySelectorAll('.sc-node-name')].map(n=>n.textContent);
+ assert.deepEqual(names,['Sam Okafor','Kim Nguyen']);
+ const meta=[...f.body().querySelectorAll('.sc-node-meta')].map(n=>n.textContent);
+ assert.deepEqual(meta,['3편 · 2026','1편 · 2024']);
+ // Thickness of the tie is how often they publish together, and nothing else.
+ const ties=[...f.body().querySelectorAll('.sc-node')].map(n=>n.style.getPropertyValue('--sc-tie'));
+ assert.deepEqual(ties,['1','0.3333333333333333']);
+ f.bench.destroy();
+});
+
+test('a co-author is one click away, without leaving the tab', async () => {
+ const f=fixture();
+ await f.bench.show('authors');
+ await f.click('최근 논문');
+ f.calls.length=0;
+ f.body().querySelector('.sc-node').dispatchEvent(new f.win.Event('click',{bubbles:true}));
+ await new Promise(r=>setTimeout(r,0));
+ assert.equal(f.calls.find(c=>c[0]==='authorUpdates')?.[1],'A7');
  f.bench.destroy();
 });
 

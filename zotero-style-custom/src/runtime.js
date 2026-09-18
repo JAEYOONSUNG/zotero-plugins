@@ -17,6 +17,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.signalTools = typeof CustomStylePaperSignals !== "undefined" ? CustomStylePaperSignals : require("./paper-signals.js");
     this.legacyReading = typeof CustomStyleLegacyReading !== "undefined" ? CustomStyleLegacyReading : require("./legacy-reading.js");
     this.journalTools2 = typeof CustomStyleJournalMetrics !== "undefined" ? CustomStyleJournalMetrics : require("./journal-metrics.js");
+    this.portraitTools = typeof CustomStyleAuthorPortrait !== "undefined" ? CustomStyleAuthorPortrait : require("./author-portrait.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
     this.DISCOVER_CACHE_LIMIT = 60;
@@ -1320,6 +1321,70 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.dirty = true;
     await this.flush();
     return true;
+  }
+
+  // --- A face and a circle of colleagues for a followed author ---
+
+  portraitCache() {
+    const store = this.cache.authorPortraits;
+    return store && typeof store === 'object' && !Array.isArray(store)
+      ? store : (this.cache.authorPortraits = {});
+  }
+
+  portraitOf(authorID) {
+    const hit = this.portraitCache()[this.discoverTools.shortID(authorID)];
+    return hit && hit.url ? hit : null;
+  }
+
+  async fetchText(url, {signal, limit = 1_000_000} = {}) {
+    const response = await this.Z.HTTP.request('GET', url,
+      {responseType: 'text', timeout: 12000, successCodes: false,
+       headers: {Accept: 'text/html,application/xhtml+xml'}});
+    signal?.throwIfAborted?.();
+    if (response?.status !== 200) return null;
+    const type = String(response.getResponseHeader?.('Content-Type') || '');
+    if (type && !/text\/html|application\/xhtml/i.test(type)) return null;
+    const body = String(response.responseText || response.response || '');
+    return body.length > limit ? body.slice(0, limit) : body;
+  }
+
+  // On demand only, and remembered for two months either way: a portrait is a
+  // nice-to-have, and nobody should pay for it on every panel open. A miss is
+  // cached too, or an author with no homepage costs three requests every time.
+  async fetchPortrait(person, {signal, refresh = false} = {}) {
+    const id = this.discoverTools.shortID(person?.id);
+    if (!id.startsWith('A')) return null;
+    const store = this.portraitCache();
+    const known = store[id];
+    if (!refresh && known && !this.portraitTools.stale(known.checkedAt)) return known.url ? known : null;
+
+    const record = {url: '', source: '', page: '', checkedAt: new Date().toISOString()};
+    const listURL = this.portraitTools.orcidURL(person?.orcid);
+    let pages = [];
+    if (listURL) {
+      try {
+        const payload = await this.discoverJSON(listURL, {signal});
+        pages = this.portraitTools.readResearcherURLs(payload);
+      } catch (error) { this.Z.logError(error); }
+    }
+    for (const page of pages.slice(0, 2)) {
+      let markup = null;
+      try { markup = await this.fetchText(page, {signal}); }
+      catch (error) { this.Z.logError(error); continue; }
+      if (!markup) continue;
+      const found = this.portraitTools.choose(markup, page, person.name);
+      if (found) { record.url = found.url; record.source = found.source; record.page = page; break; }
+    }
+    store[id] = record;
+    this.dirty = true;
+    await this.flush();
+    return record.url ? record : null;
+  }
+
+  // No extra requests: the works the author tab already fetched carry every
+  // authorship, so the circle of colleagues is already in hand.
+  coauthorsOf(authorID, works) {
+    return this.portraitTools.coauthors(works, authorID);
   }
 
   // What this author has published since the user last looked.
