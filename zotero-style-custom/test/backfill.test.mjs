@@ -26,6 +26,10 @@ function host({items = [], fetched = new Map(), budgetAt = null} = {}) {
     pause: () => Promise.resolve(),
     itemsNeedingSignals: Runtime.prototype.itemsNeedingSignals,
     libraryItems: Runtime.prototype.libraryItems,
+    // Reading files needs no network, so it is the first stage of the backfill.
+    attachmentKinds: () => [],
+    scanAttachmentKinds: async () => ({items: 0, files: 0, article: 0, supplementary: 0,
+      duplicate: 0, foreign: 0, unknown: 0, unread: 0}),
     refreshPaperSignals: Runtime.prototype.refreshPaperSignals,
     backfill: Runtime.prototype.backfill,
     runBackfill: Runtime.prototype.runBackfill,
@@ -81,6 +85,8 @@ test("running out of budget stops the whole backfill rather than sweeping on bli
 test("the stages run cheapest and highest-stakes first", async () => {
   const order = [];
   const h = host({items: [paper(1)]});
+  h.scanAttachmentKinds = async () => { order.push("files"); return {items: 1, files: 1, article: 1, supplementary: 0, duplicate: 0, foreign: 0, unknown: 0, unread: 0}; };
+  h.attachmentKinds = () => [{read: false}];
   h.refreshJournalCitedness = async () => { order.push("journals"); return {journals: 0, found: 0, missing: 0, failed: 0, remaining: 0, budgetGone: false}; };
   h.sweepWatchedAuthors = async () => { order.push("authors"); return {authors: 0, withNews: 0, works: 0, requests: 0, budgetGone: false, remaining: 0}; };
   const inner = h.fetchPaperSignals.bind(h);
@@ -88,7 +94,10 @@ test("the stages run cheapest and highest-stakes first", async () => {
   await h.backfill({});
   // A retracted paper is the one fact worth interrupting someone for, so it is
   // never behind a 255-journal sweep in the queue.
-  assert.deepEqual(order, ["signals", "journals", "authors"]);
+  // Reading a file costs nothing, so it goes first and finishes even when the
+  // day's API budget is already spent. A retracted paper is the one fact worth
+  // interrupting someone for, so it is never behind a 255-journal sweep.
+  assert.deepEqual(order, ["files", "signals", "journals", "authors"]);
 });
 
 test("cancelling stops at the next paper and keeps what was already learned", async () => {

@@ -50,10 +50,11 @@
    // Zotero; doing it synchronously is what broke every sweep in this plugin.
    try{pending=await runtime.backfillPending();}catch(error){return;}
    if(disposed)return;
-   const total=(pending?.signals||0)+(pending?.journals||0)+(pending?.authors||0);
+   const total=(pending?.signals||0)+(pending?.journals||0)+(pending?.authors||0)+(pending?.files||0);
    if(!total||runtime.backfilling){notice.hidden=true;return;}
    notice.hidden=false;notice.replaceChildren();
    const parts=[];
+   if(pending.files)parts.push(`종류 미판별 첨부 ${pending.files}편`);
    if(pending.signals)parts.push(`철회 여부 미확인 ${pending.signals}편`);
    if(pending.journals)parts.push(`지표 없는 저널 ${pending.journals}종`);
    if(pending.authors)parts.push(`확인 안 한 관심 저자 ${pending.authors}명`);

@@ -1,5 +1,5 @@
 {
- "version": "0.19.1",
+ "version": "0.20.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1186,6 +1186,48 @@
    "status": "verified",
    "review": "The route that needs no key comes first, and the easyScholar button appears only once a key exists. Without one the tab says what the key would add rather than offering a control that cannot work.",
    "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R40",
+   "title": "보충자료 판별을 파일 이름이 아니라 내용으로",
+   "gap": "The rule looked at filenames -- mmc1.pdf, MOESM1_ESM.pdf, s1.pdf. Measured against this library it flagged 1 attachment out of 1,229, because ZotMoov has renamed every file to 'Author - Year - Title.pdf' and the publisher's name is gone. The badge showed 7 items; the library actually has 29 supplementary files, 17 duplicates and 6 papers filed under the wrong item.",
+   "entryPoint": "Files 열 · 우클릭 → 첨부파일 종류 판별",
+   "sources": [
+    {
+     "file": "src/attachment-kinds.js",
+     "marker": "function classifyGroup"
+    },
+    {
+     "file": "src/runtime.js",
+     "marker": "scanAttachmentKinds"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "a supplementary file is recognised by what it says, not what it is called"
+    },
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "the same document attached twice is a duplicate, not a second supplement"
+    },
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "a different paper filed under this item is called out"
+    },
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "markup in a Zotero title does not turn a correctly filed paper into somebody else's"
+    },
+    {
+     "file": "test/runtime.test.mjs",
+     "name": "the files cell tells a supplement, a duplicate and a mis-filed paper apart"
+    }
+   ],
+   "status": "verified",
+   "review": "Zotero already extracts every PDF's text for its own search index, so reading the first page costs nothing and needs no PDF parser. A supplementary file says so in its opening words; an article carries a masthead, a section label or a DOI line. Three things turn up as 'an extra PDF' and they are not the same -- a supplement, the same file twice, and a different paper filed here by mistake -- and calling all three 'SI x2' is what made the badge not worth looking at. Two measured corrections: the title check reads the whole document rather than page one, because a first page often opens with the abstract and never repeats the title (a Nature Chemical Biology review scored 43% and was called foreign); and Zotero titles carry markup, so <span style=\"font-variant:small-caps;\">BREX</span> made twelve correctly filed papers look like somebody else's. The 0.70 threshold is read off the distribution over all 1,211 attachments with text: 1,186 use every word of their title, everything below 0.70 is a real filing mistake, and nothing sits in between.",
+   "verification": "Run live in Zotero over the user's own 1,223 attachments: 1,170 article, 29 supplementary, 17 duplicate, 6 different-paper, 1 unknown -- matching the offline prediction exactly.",
    "nativeActivationVerified": true
   }
  ],

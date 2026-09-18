@@ -7,7 +7,7 @@ function uninstall() {}
 async function startup({ id, version, rootURI }) {
   try {
     await Zotero.initializationPromise;
-    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "author-portrait", "failures", "brand-icons", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "runtime"]) {
+    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "author-portrait", "attachment-kinds", "failures", "brand-icons", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "runtime"]) {
       Services.scriptloader.loadSubScript(rootURI + "src/" + name + ".js", globalThis);
     }
     const path = PathUtils.join(Zotero.DataDirectory.dir, "style-custom.json");
@@ -18,7 +18,7 @@ async function startup({ id, version, rootURI }) {
     } catch (error) { Zotero.logError(error); }
     const catalogResponse = await Zotero.HTTP.request("GET", rootURI + "data/if-catalog.json", { responseType: "json" });
     const catalog = catalogResponse.response;
-    customStyle = new globalThis.CustomStyleRuntime({ Zotero, catalog,
+    customStyle = new globalThis.CustomStyleRuntime({ Zotero, catalog, io: IOUtils, paths: PathUtils,
       model: globalThis.CustomStyleData, marquee: globalThis.CustomStyleMarquee,
       reading: globalThis.CustomStyleReading, legacy,
       storage: {

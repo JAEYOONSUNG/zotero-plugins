@@ -467,7 +467,29 @@ test('an item with only a main PDF says so rather than leaving the supplementary
  ref.getAttachments=()=>[1];Z.Items={get:()=>({id:1,attachmentFilename:'paper.pdf',isFileAttachment:()=>true})};
  window.ZoteroPane={itemsView:{getRow:()=>({ref})}};
  const cell=plugin.renderCell('files',0,'',{},document);
- assert.deepEqual([...cell.children].map(el=>el.textContent),['PDF']);assert.equal(cell.title,'보충자료 없음');
+ assert.deepEqual([...cell.children].map(el=>el.textContent),['PDF']);
+ assert.match(cell.title,/본문 1개/);
+ // Nothing has read the file yet, and the cell says which question is still open
+ // rather than claiming there is no supplementary file.
+ assert.match(cell.title,/아직 내용을 읽어보지 않았습니다/);
+});
+
+test('the files cell tells a supplement, a duplicate and a mis-filed paper apart',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');
+ const {plugin,item,Z}=fixture();const ref=item(1);
+ ref.getAttachments=()=>[1,2,3,4];
+ const files={1:'article.pdf',2:'si.pdf',3:'again.pdf',4:'other.pdf'};
+ Z.Items={get:id=>({id,attachmentFilename:files[id],isFileAttachment:()=>true})};
+ plugin.cache.fileKinds={
+  '1':{kind:'article'},'2':{kind:'supplementary',why:'says so in its opening words'},
+  '3':{kind:'duplicate',duplicateOf:'1'},'4':{kind:'foreign',why:'never uses the title'}};
+ window.ZoteroPane={itemsView:{getRow:()=>({ref})}};
+ const cell=plugin.renderCell('files',0,'',{},document);
+ // Three different things used to render as "SI x3", which is what made the
+ // badge not worth looking at.
+ assert.deepEqual([...cell.children].map(el=>el.textContent),['PDF','SI','중복','다른 논문']);
+ assert.match(cell.title,/본문 1개 · 보충자료 1개 · 중복 1개 · 다른 논문 1개/);
+ assert.equal(plugin.value('files',ref),'PDF×1 · SI×1 · 중복×1 · 다른논문×1');
 });
 
 test('status rating and impact cells carry colour that tracks the value instead of one flat style',async()=>{

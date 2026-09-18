@@ -1,8 +1,8 @@
 /* global module */
 "use strict";
 var CustomStyleRuntime = class CustomStyleRuntime {
-  constructor({ Zotero, model, marquee, reading, storage, legacy = {}, catalog = [], citations }) {
-    Object.assign(this, { Z: Zotero, model, marquee, reading, storage, legacy });
+  constructor({ Zotero, model, marquee, reading, storage, legacy = {}, catalog = [], citations, io, paths }) {
+    Object.assign(this, { Z: Zotero, model, marquee, reading, storage, legacy, io, paths });
     this.windows = new Map(); this.columns = []; this.observers = [];
     this.queue = Promise.resolve(); this.writeQueue = Promise.resolve();
     this.cache = { schema: 1, items: {} }; this.active = false; this.dirty = false;
@@ -18,6 +18,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.legacyReading = typeof CustomStyleLegacyReading !== "undefined" ? CustomStyleLegacyReading : require("./legacy-reading.js");
     this.journalTools2 = typeof CustomStyleJournalMetrics !== "undefined" ? CustomStyleJournalMetrics : require("./journal-metrics.js");
     this.portraitTools = typeof CustomStyleAuthorPortrait !== "undefined" ? CustomStyleAuthorPortrait : require("./author-portrait.js");
+    this.fileTools = typeof CustomStyleAttachmentKinds !== "undefined" ? CustomStyleAttachmentKinds : require("./attachment-kinds.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
     this.DISCOVER_CACHE_LIMIT = 60;
@@ -275,8 +276,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // paper is never mistaken for a clean one.
       if (key === "signals")return this.signalTools.sortKey(this.signalsOf(item));
       if (key === "files") {const kinds=this.attachmentKinds(item);if(!kinds.length)return "";
-        const si=kinds.filter(k=>k.supplementary).length;
-        return [kinds.length-si?`PDF×${kinds.length-si}`:"",si?`SI×${si}`:""].filter(Boolean).join(" · ");}
+        const of=want=>kinds.filter(k=>k.kind===want).length;
+        // The sort key is the text, so it has to name every kind the cell draws.
+        return [of('article')?`PDF×${of('article')}`:"",of('supplementary')?`SI×${of('supplementary')}`:"",
+          of('duplicate')?`중복×${of('duplicate')}`:"",of('foreign')?`다른논문×${of('foreign')}`:""]
+          .filter(Boolean).join(" · ");}
       if (key === "annotationCount")return String((item.getAttachments?.()||[]).reduce((n,id)=>n+(this.Z.Items.get(id)?.deleted?0:(this.Z.Items.get(id)?.getAnnotations?.()||[]).filter(annotation=>!annotation.deleted).length),0));
       if (key.startsWith('field-'))return String(item.getField(key.slice(6))||'');
       return item.getTags().map(t => t.tag).filter(t => !/^\/(unread|reading|done)$/.test(t) && !/^style-custom:/.test(t) && !/^[★⭐]+$/.test(t)).join(" · ");
@@ -295,16 +299,80 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const stems = [attachment?.attachmentFilename, attachment?.getField?.('title'), attachment?.getDisplayTitle?.()];
     return stems.filter(Boolean).some(text => this.supplementaryTools.looksSupplementary(String(text)));
   }
+  // Verdicts read from a document's own first page, stored per attachment after
+  // a scan. The filename rule stays as a fallback, but on this library it found
+  // one supplementary file in 1,229 because every attachment had been renamed.
+  fileVerdicts() {
+    const store = this.cache.fileKinds;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.fileKinds = {});
+  }
+
   attachmentKinds(item) {
     const kinds = [];
+    const read = this.fileVerdicts();
     for (const id of item.getAttachments?.() || []) {
       const attachment = this.Z.Items.get(id);
       if (!attachment || attachment.deleted || !attachment.isFileAttachment?.()) continue;
       const name = String(attachment.attachmentFilename || attachment.getDisplayTitle?.() || '');
       const pdf = /\.pdf$/i.test(name) || attachment.attachmentContentType === 'application/pdf';
-      kinds.push({id, supplementary: this.isSupplementary(attachment), pdf, name});
+      const verdict = read[String(id)] || null;
+      // A verdict from reading the file wins; the filename is what is left when
+      // nothing has read it yet.
+      const kind = verdict ? verdict.kind
+        : this.isSupplementary(attachment) ? 'supplementary' : 'article';
+      kinds.push({id, kind, why: verdict?.why || '', read: !!verdict,
+        supplementary: kind === 'supplementary', pdf, name});
     }
     return kinds;
+  }
+
+  // Zotero extracts every PDF's text for its own search index and leaves it in
+  // the storage folder. Reading that costs nothing and needs no PDF parser.
+  async attachmentText(attachment, {limit = 60000} = {}) {
+    // Injected rather than reached for: PathUtils and IOUtils are bootstrap
+    // globals, absent under test, and a sweep that quietly reads nothing is
+    // exactly the failure this class has already shipped once.
+    const io = this.io || (typeof IOUtils !== 'undefined' ? IOUtils : null);
+    const paths = this.paths || (typeof PathUtils !== 'undefined' ? PathUtils : null);
+    try {
+      const key = attachment?.key;
+      if (!key || !io || !paths) return '';
+      const path = paths.join(this.Z.DataDirectory.dir, 'storage', key, '.zotero-ft-cache');
+      if (!await io.exists(path)) return '';
+      const raw = await io.readUTF8(path);
+      return String(raw).slice(0, limit).replace(/\s+/g, ' ').trim();
+    } catch (error) { return ''; }
+  }
+
+  async scanAttachmentKinds(items, {signal, onProgress} = {}) {
+    const store = this.fileVerdicts();
+    const result = {items: 0, files: 0, article: 0, supplementary: 0, duplicate: 0, foreign: 0, unknown: 0, unread: 0};
+    const list = [...new Set(items)].filter(item => this.isRegular(item));
+    for (const [index, item] of list.entries()) {
+      if (signal?.aborted || !this.active || this.stopping) break;
+      onProgress?.(index, list.length);
+      const files = [];
+      for (const id of item.getAttachments?.() || []) {
+        const attachment = this.Z.Items.get(id);
+        if (!attachment || attachment.deleted || !attachment.isFileAttachment?.()) continue;
+        const name = String(attachment.attachmentFilename || attachment.getDisplayTitle?.() || '');
+        if (!(/\.pdf$/i.test(name) || attachment.attachmentContentType === 'application/pdf')) continue;
+        files.push({id: String(id), name, text: await this.attachmentText(attachment)});
+      }
+      if (!files.length) continue;
+      result.items++;
+      result.files += files.length;
+      if (files.every(file => !file.text)) { result.unread += files.length; continue; }
+      const verdicts = this.fileTools.classifyGroup(files, {title: String(item.getField('title') || '')});
+      for (const verdict of verdicts) {
+        store[String(verdict.id)] = {kind: verdict.kind, why: verdict.why,
+          duplicateOf: verdict.duplicateOf || null, checkedAt: new Date().toISOString()};
+        result[verdict.kind] = (result[verdict.kind] || 0) + 1;
+      }
+      this.dirty = true;
+    }
+    if (result.items) { await this.flush(); await this.refreshWindows(); }
+    return result;
   }
   annotationDistribution(item) {
     const pages=new Map();
@@ -462,26 +530,56 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       cell.textContent=p.percent+'%';cell.style.backgroundImage=`linear-gradient(90deg,#245c7830 ${p.percent}%,transparent ${p.percent}%)`;
       cell.title=p.total?`${p.visited}/${p.total} pages read`:cell.textContent;
     } else if (key === "files" && this.isRegular(item)) {
+      // Three different things turn up as "an extra PDF", and they are not the
+      // same: a supplementary file, the same file twice, and a different paper
+      // filed here by mistake. Calling all three "SI x2" is what made this
+      // badge not worth looking at.
       const kinds = this.attachmentKinds(item);
-      const main = kinds.filter(k => !k.supplementary), si = kinds.filter(k => k.supplementary);
-      if (main.length) {
+      const of = want => kinds.filter(k => k.kind === want);
+      const article = of('article'), si = of('supplementary');
+      const duplicate = of('duplicate'), foreign = of('foreign'), unsure = of('unknown');
+      const unread = kinds.filter(k => !k.read).length;
+      if (article.length) {
         const plain = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        plain.textContent = main.length > 1 ? `PDF ×${main.length}` : "PDF";
+        plain.textContent = article.length > 1 ? `PDF ×${article.length}` : "PDF";
         plain.style.cssText = `font-size:11px;color:${P.muted};`;
-        plain.title = main.map(k => k.name).join("\n");
+        plain.title = article.map(k => k.name).join("\n");
         cell.appendChild(plain);
       }
-      if (si.length) {
-        const pill = this.pill(doc, si.length > 1 ? `SI ×${si.length}` : "SI", P.purple, P);
-        pill.title = "보충자료(supplementary) — 클릭하면 열립니다\n" + si.map(k => k.name).join("\n");
+      const badge = (label, tone, files, note) => {
+        const pill = this.pill(doc, label, tone, P);
         pill.style.cursor = "pointer";
+        pill.title = note + "\n" + files.map(k => `${k.name}${k.why ? ` — ${k.why}` : ""}`).join("\n");
         pill.addEventListener("click", event => {
           event.stopPropagation();
-          this.libraryService.openItem(si[0].id).catch(error => this.Z.logError(error));
+          this.libraryService.openItem(files[0].id).catch(error => this.Z.logError(error));
         });
         cell.appendChild(pill);
+      };
+      if (si.length) badge(si.length > 1 ? `SI ×${si.length}` : "SI", P.purple, si,
+        "보충자료 — 클릭하면 열립니다");
+      // A duplicate is clutter the user can act on, and saying so is the only
+      // way they ever find out.
+      if (duplicate.length) badge(duplicate.length > 1 ? `중복 ×${duplicate.length}` : "중복", P.gray, duplicate,
+        "이 문헌에 같은 파일이 두 번 붙어 있습니다 — 클릭하면 열립니다");
+      // A different paper filed here is a real error, not a nuance.
+      if (foreign.length) badge("다른 논문", P.red, foreign,
+        "첨부된 문서가 이 문헌의 제목을 전혀 쓰지 않습니다 — 클릭해서 확인하세요");
+      if (unsure.length && !si.length && !foreign.length) {
+        const mark = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        mark.textContent = "?";
+        mark.style.cssText = `font-size:11px;color:${P.faint};`;
+        mark.title = "첫 페이지만으로는 종류를 판단하지 못한 파일입니다.";
+        cell.appendChild(mark);
       }
-      cell.title = si.length ? `보충자료 ${si.length}개 포함` : main.length ? "보충자료 없음" : "첨부파일 없음";
+      cell.title = [
+        article.length ? `본문 ${article.length}개` : null,
+        si.length ? `보충자료 ${si.length}개` : null,
+        duplicate.length ? `중복 ${duplicate.length}개` : null,
+        foreign.length ? `다른 논문 ${foreign.length}개` : null,
+        !kinds.length ? "첨부파일 없음" : null,
+        unread ? `${unread}개는 아직 내용을 읽어보지 않았습니다 (우클릭 → 첨부파일 종류 판별)` : null
+      ].filter(Boolean).join(" · ");
       return cell;
     } else if (key === "signals" && this.isRegular(item)) {
       const signals = this.signalsOf(item);
@@ -1646,7 +1744,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   stopBackfill() { this.backfillController?.abort(); }
 
   showBackfillProgress(win, stage, done, total) {
-    const label = {signals: '철회·공개접근 신호', journals: '저널 지표', authors: '관심 저자 새 논문'}[stage] || stage;
+    const label = {files: '첨부파일 종류', signals: '철회·공개접근 신호', journals: '저널 지표', authors: '관심 저자 새 논문'}[stage] || stage;
     const text = `${label} 채우는 중 ${done + 1}/${total}`;
     for (const [target, state] of this.windows) {
       if (target.closed) continue;
@@ -1656,6 +1754,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   backfillSummary(report) {
     const lines = [];
+    if (report.files) {
+      lines.push(`첨부파일: 본문 ${report.files.article} · 보충자료 ${report.files.supplementary}`
+        + (report.files.duplicate ? ` · 중복 ${report.files.duplicate}` : '')
+        + (report.files.foreign ? ` · 다른 논문 ${report.files.foreign}` : ''));
+    }
     if (report.signals) {
       lines.push(`철회·공개접근 신호: ${report.signals.ok}편 확인`
         + (report.signals['not-found'] ? ` · ${report.signals['not-found']}편은 기록 없음` : '')
@@ -1701,10 +1804,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // What the panel needs to say there is work to do, counted without asking
   // the network anything.
   async backfillPending(libraryID) {
-    let signals = 0;
+    let signals = 0, files = 0;
     const journals = new Set();
     for (const item of await this.libraryItems(libraryID)) {
       if (!this.isRegular(item)) continue;
+      if (this.attachmentKinds(item).some(kind => !kind.read)) files++;
       const known = this.entry(item).signals;
       if ((!known || known.partial) && this.signalTools.bareDOI(this.citationRecord(item).doi)) signals++;
       const record = this.journalRecord(item);
@@ -1715,12 +1819,25 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!this.journalCache()[key]) journals.add(key);
     }
     const authors = this.watchedAuthors().filter(row => !row.sweptAt).length;
-    return {signals, journals: journals.size, authors};
+    return {signals, journals: journals.size, authors, files};
   }
 
   async backfill({libraryID, signal, onProgress, pace = 250} = {}) {
-    const report = {signals: null, journals: null, authors: null, budgetGone: false, stage: null};
+    const report = {files: null, signals: null, journals: null, authors: null, budgetGone: false, stage: null};
     const note = (stage, done, total) => onProgress?.({stage, done, total});
+
+    // Reading files costs no request, so it goes first and finishes even when
+    // the day's API budget is already gone.
+    report.stage = 'files';
+    const unread = (await this.libraryItems(libraryID)).filter(item => {
+      if (!this.isRegular(item)) return false;
+      return this.attachmentKinds(item).some(kind => !kind.read);
+    });
+    if (unread.length) {
+      report.files = await this.scanAttachmentKinds(unread,
+        {signal, onProgress: (done, total) => note('files', done, total)});
+    }
+    if (signal?.aborted || !this.active || this.stopping) return report;
 
     report.stage = 'signals';
     const papers = await this.itemsNeedingSignals(libraryID);
@@ -2203,6 +2320,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         this.Z.alert(win,"Style Custom",`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
       });
       action("인용 수 조회 중지",()=>this.citationJob?.controller.abort());
+      action("첨부파일 종류 판별 (본문 · 보충자료 · 중복 · 다른 논문)",async()=>{
+        const chosen=this.selected(win);
+        const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
+        const result=await this.scanAttachmentKinds(items,
+          {onProgress:(done,total)=>this.showBackfillProgress(win,'files',done,total)});
+        this.Z.alert(win,"Style Custom",
+          `문헌 ${result.items}개 · PDF ${result.files}개를 첫 페이지로 판별했습니다.\n`
+          +`본문 ${result.article} · 보충자료 ${result.supplementary} · 중복 ${result.duplicate} · 다른 논문 ${result.foreign}`
+          +(result.unknown?` · 판단 불가 ${result.unknown}`:"")
+          +(result.unread?`\n${result.unread}개는 Zotero가 아직 본문을 추출하지 않아 판별하지 못했습니다.`:""));
+      });
       action("빈 칸 채우기 (철회 신호 · 저널 지표 · 새 논문)",async()=>{
         if(this.backfilling){this.stopBackfill();this.Z.alert(win,"Style Custom","채우기를 중지했습니다. 지금까지 받은 값은 저장했습니다.");return;}
         const report=await this.runBackfill({libraryID:win.ZoteroPane?.getSelectedLibraryID?.(),

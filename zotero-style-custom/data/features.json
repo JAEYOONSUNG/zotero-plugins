@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "version": "0.19.1",
+ "version": "0.20.0",
  "baseline": "Installed Ethereal Style 6.0.76: all 50 simple and dotted preference feature IDs plus requested workflows",
  "sourceFeatureIDs": [
   "AIGenerateRemark",
@@ -1179,6 +1179,21 @@
     "test/failures.test.mjs"
    ],
    "entryPoint": "연구 작업 패널 상태줄",
+   "condition": "",
+   "status": "implemented"
+  },
+  {
+   "id": "attachmentKinds",
+   "origin": "additional requested workflow",
+   "name": "첨부파일 종류 판별 (본문 · 보충자료 · 중복 · 다른 논문)",
+   "implementation": {
+    "file": "src/attachment-kinds.js",
+    "marker": "function classifyGroup"
+   },
+   "tests": [
+    "test/attachment-kinds.test.mjs"
+   ],
+   "entryPoint": "Files 열 · 우클릭 → 첨부파일 종류 판별",
    "condition": "",
    "status": "implemented"
   }
