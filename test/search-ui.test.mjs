@@ -351,3 +351,60 @@ test("the journal cell carries the publisher's mark in its colour, and so does t
 	ui.state.detailKey = "sci";
 	ui.state.records[0].journalAbbrev = "Science";
 });
+
+test("the window follows Zotero's own language unless told otherwise", async () => {
+  const fs = await import("node:fs");
+  const read = name => fs.readFileSync(new URL("../" + name, import.meta.url), "utf8");
+  /* Auto was supported but was not the default, so a Korean Zotero still got an
+     English window until somebody went looking for the menu. */
+  assert.match(read("prefs.js"), /extensions\.zotpop\.language",\s*"auto"/);
+  // An unset preference must land on auto too, not on English.
+  for (const file of ["content/ui.js", "content/proxylogin.js"]) {
+    assert.doesNotMatch(read(file), /PREF\("language"\)\s*\|\|\s*"en"/, file);
+    assert.match(read(file), /PREF\("language"\)\s*\|\|\s*"auto"/, file);
+  }
+  // And "auto" must never reach anything that expects a real language.
+  assert.doesNotMatch(read("content/ui.js"), /language:\s*t\.locale\s*\|\|\s*PREF/);
+  // And it is offered first, because it is what most people want.
+  const menu = read("content/preferences.xhtml");
+  assert.ok(menu.indexOf('value="auto"') < menu.indexOf('value="en"'),
+    "auto comes before the fixed languages");
+});
+
+test("a paper already on the shelf without a DOI is still recognised", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+  const rows = [];
+  const sandbox = {
+    Zotero: {
+      logError() {},
+      DB: { queryAsync: async () => rows }
+    },
+    ZotPoPSources: { normalizeDOI: v => String(v || "").toLowerCase() || null },
+    module: { exports: {} }
+  };
+  sandbox.globalThis = sandbox;
+  const vm = await import("node:vm");
+  vm.createContext(sandbox);
+  vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+  const api = sandbox.__api;
+
+  /* Duplicate detection was DOI-only, which in a library like this one leaves
+     sixty-eight items unmatchable: a result whose DOI was resolved still finds
+     nothing, because the copy on the shelf has no DOI field at all. */
+  rows.push({ itemID: 7, title: "A thermostable type I-B CRISPR-Cas system", date: "2023-10-05" });
+  assert.equal(await api.findByTitle(1, "A thermostable type I-B CRISPR–Cas system!", "2023"), 7,
+    "punctuation and case do not make it a different paper");
+  assert.equal(await api.findByTitle(1, "A thermostable type I-B CRISPR-Cas system", "2019"), null,
+    "the same name in a different year is a different paper");
+
+  // A wrong match silently withholds a paper somebody asked for, so a short
+  // title is not evidence: "Erratum" would match half a library.
+  rows.length = 0;
+  rows.push({ itemID: 9, title: "Erratum", date: "2020" });
+  assert.equal(await api.findByTitle(1, "Erratum", "2020"), null);
+
+  // A database that cannot be read is not an answer either way.
+  sandbox.Zotero.DB.queryAsync = async () => { throw new Error("locked"); };
+  assert.equal(await api.findByTitle(1, "A thermostable type I-B CRISPR-Cas system", "2023"), null);
+});

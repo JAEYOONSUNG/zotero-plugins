@@ -222,7 +222,7 @@
 
 	// ------------------------------------------------------------ init
 	function init() {
-		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "en", Zotero.locale || Services.locale?.appLocaleAsBCP47);
+		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "auto", Zotero.locale || Services.locale?.appLocaleAsBCP47);
 		t = ZotPoPI18N.make(locale);
 		document.documentElement.setAttribute("lang", locale);
 		ZotPoPI18N.apply(document, t);
@@ -1293,7 +1293,10 @@
 			"chrome://zotpop/content/preview.xhtml", "zotpop-preview",
 			"chrome,centerscreen,resizable=yes,dialog=no,width=860,height=960", payload
 		));
-		return previewManager.open(record, { Zotero, language: t.locale || PREF("language") || "en" });
+		// t.locale is the already-resolved language. The old fallback passed the
+		// raw preference on, which would hand "auto" to the preview as if that
+		// were a language; English is the safe answer when there is no locale.
+		return previewManager.open(record, { Zotero, language: t.locale || "en" });
 	}
 	function detailRecord() { return state.records.find(r => r.key === state.detailKey) || null; }
 

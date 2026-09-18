@@ -57,6 +57,63 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
+	/* The same paper, when neither copy has a DOI to match on.
+
+	   Duplicate detection was DOI-only. In a library like this one that leaves
+	   sixty-eight items unmatchable: a search result whose DOI was resolved
+	   still finds nothing, because the copy already on the shelf has no DOI
+	   field at all, and a second copy is imported.
+
+	   A wrong match here is worse than a missed one -- it silently withholds a
+	   paper somebody asked for -- so this is deliberately strict: the titles
+	   have to be identical once punctuation and case are stripped, and the
+	   years have to agree. Two papers that pass both tests and are not the same
+	   paper are rare enough to accept. */
+	const flatTitle = value => String(value == null ? "" : value)
+		.replace(/<[^>]*>/g, " ")
+		.toLowerCase()
+		.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+		.replace(/[^a-z0-9]+/g, " ")
+		.trim();
+
+	async function findByTitle(libraryID, title, year) {
+		let wanted = flatTitle(title);
+		// A short title is not evidence: "Introduction" or "Erratum" would match
+		// half a library.
+		if (wanted.split(" ").filter(w => w.length > 2).length < 4) return null;
+		try {
+			let sql = "SELECT I.itemID, IDV.value AS title, "
+				+ "(SELECT IDV2.value FROM itemData ID2 "
+				+ " JOIN itemDataValues IDV2 ON ID2.valueID = IDV2.valueID "
+				+ " JOIN fields F2 ON ID2.fieldID = F2.fieldID AND F2.fieldName = 'date' "
+				+ " WHERE ID2.itemID = I.itemID) AS date "
+				+ "FROM items I "
+				+ "JOIN itemData ID ON I.itemID = ID.itemID "
+				+ "JOIN itemDataValues IDV ON ID.valueID = IDV.valueID "
+				+ "JOIN fields F ON ID.fieldID = F.fieldID "
+				+ "WHERE F.fieldName = 'title' AND I.libraryID = ? "
+				+ "AND I.itemID NOT IN (SELECT itemID FROM deletedItems) "
+				+ "AND I.itemID NOT IN (SELECT itemID FROM itemAttachments) "
+				+ "AND I.itemID NOT IN (SELECT itemID FROM itemNotes)";
+			let rows = await Zotero.DB.queryAsync(sql, [libraryID]);
+			let wantedYear = String(year || "").match(/\b(1[5-9]|20)\d{2}\b/);
+			for (let row of rows) {
+				if (flatTitle(row.title) !== wanted) continue;
+				if (wantedYear) {
+					let theirs = String(row.date || "").match(/\b(1[5-9]|20)\d{2}\b/);
+					// A year on both sides that disagrees means two different
+					// papers with one name, which does happen.
+					if (theirs && theirs[0] !== wantedYear[0]) continue;
+				}
+				return row.itemID;
+			}
+		}
+		catch (e) {
+			Zotero.logError(e);
+		}
+		return null;
+	}
+
 	function identifierFor(rec) {
 		if (rec.doi) return { DOI: rec.doi };
 		if (rec.pmid) return { PMID: String(rec.pmid) };
@@ -208,8 +265,11 @@ var ZotPoPImporter = (function () {
 			if (!rec.doi && !rec.pmid && !rec.arxiv && http) {
 				try { await ZotPoPSources.resolveDOIByTitle(rec, http, { email }); } catch (e) { log?.("DOI lookup failed: " + e.message); }
 			}
-			if (rec.doi) {
-				let existingID = await findByDOI(libraryID, rec.doi);
+			{
+				// The DOI is the reliable answer; the title is what is left when
+				// one side has no DOI to compare.
+				let existingID = rec.doi ? await findByDOI(libraryID, rec.doi) : null;
+				if (!existingID && skipDuplicates) existingID = await findByTitle(libraryID, rec.title, rec.year);
 				if (existingID) {
 					let existing = await Zotero.Items.getAsync(existingID);
 					if (skipDuplicates) {
@@ -291,5 +351,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { importRecord, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI };
+	return { importRecord, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle };
 })();

@@ -377,12 +377,23 @@
       return `added and removed at ${runtime.watchedAuthors().length} followed`;
     }));
 
+    /* What the outside services are told about this caller.
+
+       Leaving the address blank used to fail this check, which made it
+       permanently red for anyone who had decided not to give one -- and a check
+       that is always red is a check nobody reads. Supplying an address is a
+       choice about publishing it, not a setting that is wrong when unset, so an
+       empty one is reported rather than complained about. A key that is missing
+       is a different matter: the daily allowance without one is about ten
+       requests, which does stop the sweeps working. */
     results.push(await attempt('contact details reach the APIs', () => {
       const options = runtime.discoverOptions();
       const bits = [];
       bits.push(options.apiKey ? `OpenAlex key ok (${String(options.apiKey).length} chars)` : 'NO OPENALEX KEY');
-      bits.push(options.email ? `mailto ${options.email}` : 'NO MAILTO -- requests go to the slow anonymous pool');
-      if (!options.apiKey || !options.email) throw new Error(bits.join(' · '));
+      bits.push(options.email
+        ? `mailto set (polite pool)`
+        : 'mailto 없음 — 익명 대기열을 씁니다. 설정 → 연락 이메일에 주소를 넣으면 빨라집니다.');
+      if (!options.apiKey) throw new Error(bits.join(' · ') + ' · 키 없이는 하루 약 10건입니다');
       return bits.join(' · ');
     }));
 

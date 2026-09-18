@@ -23,7 +23,7 @@
 	}
 
 	function init() {
-		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "en", Zotero.locale);
+		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "auto", Zotero.locale);
 		t = ZotPoPI18N.make(locale);
 		document.title = t("loginTitle");
 		$("pl-check").textContent = t("loginCheck");
