@@ -142,3 +142,20 @@ test('every badge colour lands on the same contrast, so no one of them shouts', 
     }
   }
 });
+
+test('nothing is left at a radius that reads as a square corner', async () => {
+  const fs = await import('node:fs');
+  for (const file of ['content/workbench.css', 'content/citation.css']) {
+    const text = fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+    for (const [, value] of text.matchAll(/border-radius:\s*([0-9.]+)px/g)) {
+      // 100px is a pill, which is round on purpose. Anything else literal has to
+      // clear the smallest step of the scale.
+      const px = Number(value);
+      assert.ok(px >= 7, `${file} has a ${px}px corner`);
+    }
+  }
+  // And the scale itself stays ordered.
+  const css = fs.readFileSync(new URL('../content/workbench.css', import.meta.url), 'utf8');
+  const step = name => Number(css.match(new RegExp(`--sc-radius${name}:\\s*([0-9.]+)px`))[1]);
+  assert.ok(step('-sm') < step('') && step('') < step('-card') && step('-card') < step('-panel'));
+});

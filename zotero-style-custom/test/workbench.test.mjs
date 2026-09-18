@@ -5,8 +5,20 @@ import Workbench from '../src/workbench.js';
 import Model from '../src/workspace.js';
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));};
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
-function fixture(initialCache){
+// toolbar: the ids and element names already in the items toolbar, in order, so
+// a test can check where the button is placed among them.
+function fixture(initialCache,toolbar){
  const {window:win,document:doc}=parseHTML('<html><head></head><body><div id="zotero-items-toolbar"></div></body></html>');
+ if(toolbar){
+  const bar=doc.getElementById('zotero-items-toolbar');
+  for(const [id,name] of toolbar){
+   const child=doc.createElement(name);
+   if(id)child.id=id;
+   Object.defineProperty(child,'localName',{value:name});
+   bar.appendChild(child);
+  }
+ }
+ doc.createXULElement=tag=>{const el=doc.createElement(tag);Object.defineProperty(el,'localName',{value:tag});return el;};
  // linkedom intentionally has only a select getter; Gecko supplies both.
  Object.defineProperty(win.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this._value??this.querySelector('option')?.getAttribute('value')??'';},set(value){this._value=String(value);}});
  Object.defineProperty(doc,'activeElement',{configurable:true,get(){return this._focusedElement||this.body;}});
@@ -694,4 +706,36 @@ test('an empty watchlist with nothing selected explains what to do',async()=>{
  assert.match(f.body().textContent,/아직 관심 저자가 없습니다/);
  assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error,'true');
  f.bench.destroy();
+});
+
+test('the toolbar button sits with the other tools, not off at the far edge', async () => {
+  // The real order, read out of a running Zotero. Appended, the button landed
+  // past the spacer, the search box and the item-pane toggle, alone at the edge
+  // with nothing around it.
+  const f = fixture(undefined, [
+    ['zotero-tb-add', 'toolbarbutton'], ['zotero-tb-lookup', 'toolbarbutton'],
+    ['zotpop-toolbar-button', 'toolbarbutton'], ['zotero-lookup-panel', 'panel'],
+    ['zotero-tb-attachment-add', 'toolbarbutton'], ['zotero-tb-note-add', 'toolbarbutton'],
+    ['', 'spacer'], ['zotero-tb-search', 'searchbox'],
+    ['zotero-tb-toggle-item-pane-stacked', 'toolbarbutton']]);
+  const bar = f.doc.getElementById('zotero-items-toolbar');
+  const ids = [...bar.children].map(child => child.id || child.localName);
+  assert.ok(ids.includes('style-custom-workbench-button'), 'the button is in the toolbar');
+  assert.equal(ids[ids.indexOf('zotero-tb-note-add') + 1], 'style-custom-workbench-button',
+    'immediately after the last tool');
+  assert.ok(ids.indexOf('style-custom-workbench-button') < ids.indexOf('spacer'),
+    'and before the spacer, rather than past the search box');
+  f.bench.destroy();
+});
+
+test('a toolbar with nothing to anchor to still gets the button', async () => {
+  // A button nobody can reach is worse than one badly placed.
+  const f = fixture();
+  assert.ok(f.doc.getElementById('style-custom-workbench-button'));
+  f.bench.destroy();
+  const g = fixture(undefined, [['', 'spacer'], ['zotero-tb-search', 'searchbox']]);
+  const ids = [...g.doc.getElementById('zotero-items-toolbar').children].map(c => c.id || c.localName);
+  assert.ok(ids.indexOf('style-custom-workbench-button') < ids.indexOf('zotero-tb-search'),
+    'with no tools to follow, it goes before the spacer');
+  g.bench.destroy();
 });

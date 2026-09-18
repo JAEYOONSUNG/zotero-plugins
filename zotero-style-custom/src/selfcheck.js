@@ -144,6 +144,16 @@
     // Both plugins claim a place in the items toolbar. Whether either one is
     // actually there, and whether they can be told apart, is not something the
     // code can answer about itself.
+    // What is actually in that toolbar, in order, so the button can be placed
+    // beside the other tools rather than guessed at.
+    results.push(await attempt('where the toolbar button sits', () => {
+      if (!doc) throw new Error('no main window');
+      const bar = doc.getElementById('zotero-items-toolbar');
+      if (!bar) throw new Error('no items toolbar');
+      return [...bar.children].map(child =>
+        `${child.id || child.localName}${child.id === 'style-custom-workbench-button' ? '*' : ''}`).join(' > ');
+    }));
+
     results.push(await attempt('both plugins have their own toolbar shortcut', () => {
       if (!doc) throw new Error('no main window');
       const bar = doc.getElementById('zotero-items-toolbar');

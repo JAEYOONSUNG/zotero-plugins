@@ -265,6 +265,24 @@
    else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeCommands();}
    else if(event.key==='Tab'){event.preventDefault();commandSearch.focus?.();}
   });
+  /* Where the button goes in the items toolbar.
+
+     Appended, it landed at the very end -- past the spacer, the search box and
+     the item-pane toggle -- sitting on its own at the far edge with nothing
+     around it. It belongs with the other tools: new item, lookup, attachment,
+     note. So it goes after the last of those and before the spacer, which is
+     also where the other plugin's button already sits. */
+  function placeInToolbar(bar,button){
+    const anchor=bar.querySelector('#zotero-tb-note-add')
+      || bar.querySelector('#zotero-tb-attachment-add')
+      || [...bar.children].reverse().find(child=>child.localName==='toolbarbutton');
+    const spacer=[...bar.children].find(child=>child.localName==='spacer'||child.localName==='toolbarspacer');
+    // After the last tool; failing that, before the spacer; failing both, at the
+    // end, because a button nobody can reach is worse than one badly placed.
+    if(anchor&&anchor.parentNode===bar)bar.insertBefore(button,anchor.nextSibling);
+    else if(spacer)bar.insertBefore(button,spacer);
+    else bar.appendChild(button);
+  }
   let toolbar;
   const target=doc.getElementById('zotero-items-toolbar');
   if(target){toolbar=doc.createXULElement?doc.createXULElement('toolbarbutton'):node('button');toolbar.id='style-custom-workbench-button';toolbar.className='zotero-tb-button';toolbar.setAttribute('image',runtime.rootURI+'content/icons/style-custom-toolbar.svg');
@@ -272,7 +290,8 @@
    // own colour through, which is why the button drew as an empty gap.
    toolbar.style.setProperty('-moz-context-properties','fill, fill-opacity');
    toolbar.style.fill='currentColor';
-   toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.setAttribute('label','워크벤치');toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});target.appendChild(toolbar);}
+   toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.setAttribute('label','워크벤치');toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});
+   placeInToolbar(target,toolbar);}
   const selected=()=>state.items.filter(i=>state.selected.has(String(i.id)));
   function bindAI(itemID){if(state.aiItemID!==itemID){aiEpoch++;state.aiItemID=itemID;state.aiTask=null;state.aiOutput=null;}}
   const scoped=()=>state.scope==='selected'?selected():state.scope.startsWith('collection')?state.items.filter(i=>(state.collectionIDs||[]).includes(String(i.id))):state.items;

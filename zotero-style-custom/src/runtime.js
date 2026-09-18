@@ -512,8 +512,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // another was hard to read, which is what made the row look loud.
     // The pill tint is raised instead, so the softness lives in the fills.
     return dark
-      ? {blue:'#809DD0',green:'#41AF7C',orange:'#C69164',red:'#D3888A',purple:'#B38DD5',teal:'#49A9BC',gold:'#B89944',amber:'#E0A868',star:'#E8B657',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.26,dark:true}
-      : {blue:'#6484BA',green:'#42926C',orange:'#AA784C',red:'#BD6C6E',purple:'#9B71BF',teal:'#468D9B',gold:'#978144',amber:'#C98A3E',star:'#D9A02F',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.20,dark:false};
+      ? {blue:'#809DD0',green:'#41AF7C',orange:'#C69164',red:'#D3888A',purple:'#B38DD5',teal:'#49A9BC',gold:'#B89944',amber:'#E0A868',star:'#E8B657',reading:'#7FC3A3',done:'#3FA372',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.26,dark:true}
+      : {blue:'#6484BA',green:'#42926C',orange:'#AA784C',red:'#BD6C6E',purple:'#9B71BF',teal:'#468D9B',gold:'#978144',amber:'#C98A3E',star:'#D9A02F',reading:'#6AA98C',done:'#2E7A55',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.20,dark:false};
   }
   tint(hex, alpha) {
     const n = parseInt(hex.slice(1), 16);
@@ -628,9 +628,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (key === "status") {
       label = ["unread", "reading", "done"][Number(value)] || "unread";
       // An empty, half and full circle reads as progress; one dot does not.
-      // Amber goes brown as it darkens, so "reading" gets its own lighter ink
-      // rather than the column-wide orange, which read as mud at 11px.
-      const tone = {unread: P.muted, reading: P.amber, done: P.green}[label];
+      // One hue deepening as the paper progresses, rather than three unrelated
+      // colours: nothing started is neutral, in progress is a light sage, and
+      // finished is the full green. The glyph carries the same progression, so
+      // the two reinforce each other instead of each saying something else.
+      const tone = {unread: P.muted, reading: P.reading, done: P.done}[label];
       const dot = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       dot.textContent = {unread: "○", reading: "◐", done: "●"}[label];
       dot.style.cssText = `font-size:10px;line-height:1;color:${tone};`;

@@ -497,10 +497,13 @@ test('status rating and impact cells carry colour that tracks the value instead 
  window.ZoteroPane={itemsView:{getRow:()=>({ref})}};
  const P=plugin.palette(document);
  const status=label=>{plugin.value=(key)=>key==='status'?String({unread:0,reading:1,done:2}[label]):'';return plugin.renderCell('status',0,'',{},document).firstChild.style.color;};
- // Amber goes brown as it darkens, so "reading" carries its own lighter ink
- // rather than the column-wide orange, which read as mud at 11px.
- assert.deepEqual([status('unread'),status('reading'),status('done')],[P.muted,P.amber,P.green]);
- assert.notEqual(P.amber,P.orange);
+ // One hue deepening as the paper progresses, rather than three unrelated
+ // colours: nothing started is neutral, in progress a light sage, finished the
+ // full green. The glyph runs the same progression, so the two agree.
+ assert.deepEqual([status('unread'),status('reading'),status('done')],[P.muted,P.reading,P.done]);
+ const light=hex=>{const n=parseInt(hex.slice(1),16);return (n>>16&255)+(n>>8&255)+(n&255);};
+ assert.ok(light(P.reading)>light(P.done),'in progress is the lighter of the two');
+ assert.notEqual(P.reading,P.done);
  // The tier still exists, for the tooltip and for sorting; what changed is that
  // it no longer paints the number, which said the same thing twice.
  const tier=value=>plugin.impactTier(value,P)?.color;
