@@ -133,3 +133,91 @@ test("nothing to draw is answered with nothing, not an error", () => {
   assert.deepEqual(graph.build(null).edges, []);
   assert.equal(graph.coupling(new Set(), new Set(["a"])), 0);
 });
+
+test("the work that cites yours joins the map, and the long tail does not", () => {
+  /* References point backwards: they say what a paper was built on. Who built
+     on it afterwards is the other half, and the half that says whether a thread
+     is still moving. A paper citing one of yours is the long tail -- thousands
+     of them, almost all noise on a map of your own field. */
+  const papers = [paper(1, "W1", ["a", "b", "c"]), paper(2, "W2", ["a", "b", "c"]), paper(3, "W3", ["z"])];
+  const citedBy = {
+    1: [{id: "X1", title: "Builds on three", year: 2025, citations: 40},
+        {id: "X2", title: "Cites one only", year: 2024, citations: 3}],
+    2: [{id: "X1", title: "Builds on three", year: 2025, citations: 40}],
+    3: [{id: "X1", title: "Builds on three", year: 2025, citations: 40}]
+  };
+  const built = graph.build(papers, {citedBy});
+  assert.deepEqual(built.external.map(n => n.label), ["Builds on three"]);
+  assert.equal(built.external[0].kind, "external");
+  assert.equal(built.external[0].inLibrary, false);
+  assert.equal(built.counted.incoming, 3, "one edge per paper of mine that it cites");
+
+  // A paper of mine that nothing on my shelf touches is not isolated if later
+  // work sits under it.
+  assert.ok(built.nodes.some(n => n.id === "3"), "paper 3 is connected through its citer");
+  assert.deepEqual(built.isolated.map(n => n.id), []);
+});
+
+test("size is centrality in this collection, not fame in the world", () => {
+  /* A citation count is the same number whether you hold one paper or a
+     thousand, and in a library of one field almost everything famous is famous.
+     PageRank over your own citation edges says how much of your structure runs
+     through a paper. */
+  const nodes = [{id: "hub"}, {id: "a"}, {id: "b"}, {id: "c"}];
+  const edges = [
+    {source: "a", target: "hub", kind: "cites"},
+    {source: "b", target: "hub", kind: "cites"},
+    {source: "c", target: "hub", kind: "cites"},
+    {source: "a", target: "b", kind: "coupled"}
+  ];
+  const rank = graph.pagerank(nodes, edges);
+  assert.equal(rank.get("hub"), 1, "the most-depended-on is the top of the scale");
+  assert.ok(rank.get("hub") > rank.get("a"));
+  // A shared-reading thread is an inference about similarity, not a vote.
+  const without = graph.pagerank(nodes, edges.filter(e => e.kind === "cites"));
+  assert.equal(rank.get("hub"), without.get("hub"));
+  // A paper citing nothing in the collection must not leak its rank away.
+  const sum = [...graph.pagerank([{id: "x"}, {id: "y"}], []).values()].every(v => v > 0);
+  assert.ok(sum, "with no edges at all, everything still has a rank");
+});
+
+test("nothing to fold is not an error", () => {
+  const papers = [paper(1, "W1", ["a", "b", "c"]), paper(2, "W2", ["a", "b", "c"])];
+  assert.deepEqual(graph.build(papers, {citedBy: {}}).external, []);
+  assert.deepEqual(graph.build(papers, {citedBy: null}).external, []);
+  // A citer that is already in the library is not also drawn as an outsider.
+  const mine = graph.build(papers, {citedBy: {1: [{id: "W2", title: "Mine B"}]}});
+  assert.deepEqual(mine.external, []);
+});
+
+test("a label is drawn when it fits, not when a number clears a threshold", () => {
+  /* Showing a label for everything above a threshold put forty of them on top
+     of each other in the middle of a real graph, which is worse than showing
+     none: overlapping text is not readable and it hides the nodes underneath. */
+  const crowd = [];
+  for (let i = 0; i < 12; i++) {
+    crowd.push({id: "n" + i, x: 100 + i * 2, y: 100 + i * 2, r: 5, degree: 5, rank: 0.5,
+      labelText: "A fairly long journal label " + i});
+  }
+  const shown = graph.placeLabels(crowd);
+  assert.ok(shown.size >= 1, "something is labelled");
+  assert.ok(shown.size < crowd.length, "and the ones that would collide are not");
+
+  // Spread out, they all fit.
+  const spread = crowd.map((n, i) => ({...n, x: 50, y: 40 + i * 40}));
+  assert.equal(graph.placeLabels(spread).size, spread.length);
+
+  // Work you do not hold is the payoff of the map, so it is offered a label
+  // before a paper already on the shelf.
+  const mixed = [
+    {id: "mine", x: 100, y: 100, r: 5, degree: 9, rank: 1, kind: "paper", labelText: "Mine here"},
+    {id: "theirs", x: 104, y: 102, r: 5, degree: 1, rank: 0.1, kind: "external", labelText: "Theirs here"}
+  ];
+  const picked = graph.placeLabels(mixed);
+  assert.ok(picked.has("theirs"), "the outside paper wins the contested spot");
+  assert.equal(picked.has("mine"), false);
+
+  // Nothing to label is not an error.
+  assert.equal(graph.placeLabels([]).size, 0);
+  assert.equal(graph.placeLabels([{id: "x", x: 0, y: 0, labelText: ""}]).size, 0);
+});

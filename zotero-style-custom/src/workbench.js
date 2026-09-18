@@ -473,9 +473,20 @@
     return;
    }
    const W=860,H=540;
-   const graph=graphTools.layout(graphTools.build(papers),{width:W,height:H});
+   const items=chosen.map(paper=>runtime.Z.Items.get(Number(paper.id))).filter(Boolean);
+   const citedBy=typeof runtime.citedByFor==='function'?runtime.citedByFor(items):null;
+   const withCiters=Object.keys(citedBy||{}).length;
+   button(`인용한 논문 가져오기 (${papers.length-withCiters}편 남음)`,()=>run(async()=>{
+    const report=await runtime.sweepCitedBy(items,{onProgress:(d,t)=>message(`인용한 논문 ${d+1}/${t}`)});
+    message(`${report.found}편에서 인용 ${report.citers}건`
+     +(report.noWork?` · 인용 목록 먼저 필요 ${report.noWork}`:'')+(report.errors?` · 실패 ${report.errors}`:''));
+    await render();
+   }),b);
+   const graph=graphTools.layout(graphTools.build(papers,{citedBy}),{width:W,height:H});
    const counted=graph.counted||{direct:0,coupled:0,isolated:0};
-   node('p',`이어진 논문 ${graph.nodes.length} · 인용 ${counted.direct}건 · 공통 참고문헌으로 이어진 쌍 ${counted.coupled}`
+   node('p',`이어진 논문 ${graph.nodes.filter(n=>n.kind==='paper').length} · 인용 ${counted.direct}건`
+    +` · 공통 참고문헌으로 이어진 쌍 ${counted.coupled}`
+    +(counted.external?` · 내 논문을 인용한 바깥 논문 ${counted.external}`:'')
     +(counted.isolated?` · 연결 없음 ${counted.isolated}`:'')
     +(withRefs<papers.length?` · 인용 목록 없음 ${papers.length-withRefs}`:''),body,{class:'sc-muted'});
    if(!graph.nodes.length){
@@ -512,33 +523,61 @@
     lines.push(line);group.appendChild(line);
    }
    const marks=new Map();
+   // What each label will say, before deciding which ones fit.
+   for(const n of graph.nodes){
+    const id=n.kind!=='external'&&n.venue?identity.identify(n.venue):null;
+    n.labelText=n.kind==='external'
+     ?String(n.label).slice(0,34)
+     :[id?id.mark:null,n.year].filter(Boolean).join(' ')||String(n.label).slice(0,30);
+   }
+   const labelled=graphTools.placeLabels(graph.nodes);
    for(const n of graph.nodes){
     const g=doc.createElementNS(SVG,'g');
     g.setAttribute('transform',`translate(${n.x} ${n.y})`);
     g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',n.label);
     const id=n.venue?identity.identify(n.venue):null;
     const tone=id?identity.colours(id,{dark:darkScheme()}):null;
-    const circle=doc.createElementNS(SVG,'circle');
-    const r=graphTools.radiusOf(n.citations);
-    circle.setAttribute('r',r);
-    circle.setAttribute('fill',tone?tone.fill:'var(--sc-fill)');
-    circle.setAttribute('stroke',tone?tone.ink:'var(--sc-muted)');
+    /* Size is how central the paper is here, not how famous it is anywhere.
+
+       A citation count is the same number whether you hold one paper or a
+       thousand, and in a library of one field almost everything famous is
+       famous. PageRank over your own citation edges says instead how much of
+       your structure runs through a paper. */
+    const r=graphTools.radiusOf(n.citations)*(0.7+0.6*(n.rank||0));
+    const external=n.kind==='external';
+    const circle=doc.createElementNS(SVG,external?'rect':'circle');
+    if(external){
+     // A square for work you do not hold, so the thing you could go and read is
+     // never mistaken for something already on the shelf.
+     for(const[k,v]of Object.entries({x:-r,y:-r,width:r*2,height:r*2,rx:2}))circle.setAttribute(k,v);
+    } else circle.setAttribute('r',r);
+    circle.setAttribute('fill',external?'var(--sc-bg)':(tone?tone.fill:'var(--sc-fill)'));
+    circle.setAttribute('stroke',external?'var(--sc-faint)':(tone?tone.ink:'var(--sc-muted)'));
     circle.setAttribute('stroke-width',state.selected.has(n.id)?2.4:1);
+    if(external)circle.setAttribute('stroke-dasharray','2 2');
     g.appendChild(circle);
     // A label on every node at this density is a grey smear, so only the papers
     // worth reading first carry one: the most cited and the best connected.
     const label=doc.createElementNS(SVG,'text');
     label.setAttribute('x',r+4);label.setAttribute('y','3.5');
     label.setAttribute('class','sc-graph-label');
-    label.textContent=String(n.label).slice(0,38);
-    if(!(n.citations>=60||n.degree>=5||state.selected.has(n.id)))label.setAttribute('opacity','0');
+    label.textContent=n.labelText;
+    if(n.kind==='external')label.setAttribute('fill','var(--sc-orange, #B8823C)');
+    // A label is drawn when it fits, not when a number clears a threshold:
+    // forty of them piled up in the middle is worse than showing none.
+    if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('opacity','0');
     g.appendChild(label);
     const title=doc.createElementNS(SVG,'title');
-    title.textContent=`${n.label}\n${[n.venue,n.year,`인용 ${n.citations}`,`참고문헌 ${n.references}`,`연결 ${n.degree}`].filter(Boolean).join(' · ')}`;
+    title.textContent=`${n.label}\n`+[n.venue,n.year,
+     n.kind==='external'?'내 라이브러리에 없음':null,
+     `인용 ${n.citations}`,n.references?`참고문헌 ${n.references}`:null,`연결 ${n.degree}`,
+     n.rank!=null?`중심성 ${(n.rank*100).toFixed(0)}%`:null].filter(Boolean).join(' · ');
     g.appendChild(title);
     const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);render();};
     g.addEventListener('click',activate);
-    g.addEventListener('dblclick',()=>run(()=>library.openItem(n.id)));
+    g.addEventListener('dblclick',()=>run(()=>n.kind==='external'
+     ?runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${n.openalex}`)
+     :library.openItem(n.id)));
     g.addEventListener('keydown',e=>{if(e.key==='Enter')activate();});
     // Hovering brings one paper's neighbourhood forward instead of leaving the
     // reader to trace a line across a thousand of them.
@@ -558,13 +597,13 @@
      const near=!id||key===id||neighbours.get(id).has(key);
      mark.g.setAttribute('opacity',near?1:0.22);
      if(id&&near)mark.label.setAttribute('opacity','1');
-     else if(!id&&!(mark.n.citations>=60||mark.n.degree>=5||state.selected.has(key)))mark.label.setAttribute('opacity','0');
+     else if(!id&&!(labelled.has(key)||state.selected.has(key)))mark.label.setAttribute('opacity','0');
     }
    }
    const zoomBar=bar();let zoom=1;
    button('확대',()=>{zoom=Math.min(3,zoom+.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},zoomBar);
    button('축소',()=>{zoom=Math.max(.5,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},zoomBar);
-   node('span','실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 크기는 피인용 수 · 색은 출판사',zoomBar,{class:'sc-muted'});
+   node('span','실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 네모는 내가 갖고 있지 않은 논문 · 크기는 이 라이브러리 안에서의 중심성 · 색은 출판사',zoomBar,{class:'sc-muted'});
    // The one thing a citation map tells you that reading your own shelf cannot.
    if(graph.missing.length){
     node('h3',`내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문 ${graph.missing.length}`,body,{class:'sc-hit-group'});

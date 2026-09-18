@@ -43,12 +43,60 @@
     return {shared, score: shared / Math.sqrt(a.size * b.size)};
   }
 
+  /* The work that cites yours, which your own shelf cannot tell you.
+
+     References point backwards: they say what a paper was built on. Who built
+     on it afterwards is the other half, and it is the half that says whether a
+     thread is still moving. It cannot be derived from a library -- the citing
+     papers are by definition ones you may not hold -- so it is fetched, and
+     folded in here as a third kind of node.
+
+     citedBy: {paperID: [{id, title, year, citations, venue}]}, from outside. */
+  function foldCitedBy(nodes, edges, citedBy, {minCiters = 2, maxNodes = 120} = {}) {
+    const byWork = new Map();
+    for (const node of nodes) if (node.openalex) byWork.set(node.openalex, node);
+    const outside = new Map();
+    for (const [paperID, list] of Object.entries(citedBy || {})) {
+      for (const citer of Array.isArray(list) ? list : []) {
+        const id = text(citer && citer.id);
+        if (!id || byWork.has(id)) continue;
+        const row = outside.get(id) || {
+          id: 'W:' + id, openalex: id, kind: 'external',
+          label: text(citer.title) || id, year: Number(citer.year) || null,
+          citations: Number(citer.citations) || 0, venue: text(citer.venue),
+          inLibrary: false, degree: 0, cites: []
+        };
+        row.cites.push(String(paperID));
+        outside.set(id, row);
+      }
+    }
+    /* Only work that cites more than one of your papers.
+
+       A paper that cites one of yours is the long tail -- thousands of them,
+       and almost all noise on a map of your own field. A paper that cites two
+       or three is working on your problem, which is the thing worth seeing. */
+    const kept = [...outside.values()]
+      .filter(row => new Set(row.cites).size >= minCiters)
+      .sort((a, b) => new Set(b.cites).size - new Set(a.cites).size || b.citations - a.citations)
+      .slice(0, maxNodes);
+    const added = [];
+    for (const row of kept) {
+      const {cites, ...node} = row;
+      added.push(node);
+      for (const paperID of new Set(cites)) {
+        edges.push({source: node.id, target: String(paperID), kind: 'cites', weight: 1, shared: 0, external: true});
+      }
+    }
+    return added;
+  }
+
   /* papers: [{id, title, year, citations, venue, openalex, references: [...]}]
 
      minShared guards against two papers that happen to share one methods
      citation being drawn as neighbours; minScore against a pair that overlaps
      only because both cite everything. */
-  function build(papers, {minShared = 3, minScore = 0.06, maxEdges = 900, missingFloor = 3} = {}) {
+  function build(papers, {minShared = 3, minScore = 0.06, maxEdges = 900, missingFloor = 3,
+      citedBy = null, minCiters = 2, maxCiters = 120} = {}) {
     const list = (Array.isArray(papers) ? papers : []).filter(paper => paper && paper.id != null);
     const nodes = list.map(paper => ({
       id: String(paper.id),
@@ -142,16 +190,76 @@
        and that ring is most of the ink while carrying none of the structure.
        They are counted and named instead, which is the useful form of the same
        fact: these are the papers your library has nothing else about. */
-    const shaped = nodes.map(node => Object.assign({}, node, {references: node.references.size}));
-    const connected = shaped.filter(node => node.degree > 0);
+    const shaped = nodes.map(node => Object.assign({}, node,
+      {references: node.references.size, kind: 'paper', inLibrary: true}));
+    // The work that cites yours joins before the connectedness is decided: a
+    // paper of yours that nothing on your shelf touches may still sit under
+    // three later papers, and that is not an isolated paper.
+    const external = citedBy ? foldCitedBy(shaped, kept, citedBy, {minCiters, maxCiters}) : [];
+    const byID2 = new Map([...shaped, ...external].map(node => [node.id, node]));
+    for (const edge of kept) {
+      if (!edge.external) continue;
+      const a = byID2.get(edge.source), b = byID2.get(edge.target);
+      if (a) a.degree++;
+      if (b) b.degree++;
+    }
+    const everything = [...shaped, ...external];
+    const rank = pagerank(everything, kept);
+    for (const node of everything) node.rank = rank.get(node.id) || 0;
+    const connected = everything.filter(node => node.degree > 0);
     const isolated = shaped.filter(node => !node.degree);
     return {
-      nodes: connected, isolated, edges: kept, missing,
+      nodes: connected, isolated, edges: kept, missing, external,
       truncated: edges.length > kept.length,
-      counted: {direct: kept.filter(edge => edge.kind === 'cites').length,
+      counted: {direct: kept.filter(edge => edge.kind === 'cites' && !edge.external).length,
         coupled: kept.filter(edge => edge.kind === 'coupled').length,
+        incoming: kept.filter(edge => edge.external).length,
+        external: external.length,
         isolated: isolated.length}
     };
+  }
+
+  /* How central a paper is inside this collection, rather than in the world.
+
+     Citation count answers "how famous is this"; it is the same number whether
+     you hold one paper or a thousand, and in a library of one field almost
+     everything famous is famous. What a map of your own reading should size by
+     is how much of *your* structure runs through a paper -- the review everyone
+     on your shelf cites, the method three of your threads depend on.
+
+     PageRank over the citation edges answers that. A paper gains weight from
+     being cited by papers that are themselves cited, and the damping factor is
+     the usual 0.85: with probability 0.15 a reader jumps somewhere at random
+     rather than following a reference. */
+  function pagerank(nodes, edges, {damping = 0.85, iterations = 40} = {}) {
+    const index = new Map(nodes.map((node, i) => [node.id, i]));
+    const n = nodes.length;
+    if (!n) return new Map();
+    const out = new Array(n).fill(0);
+    const links = [];
+    for (const edge of edges) {
+      // Only stated citations carry rank. A shared-reading thread is an
+      // inference about similarity, not a vote.
+      if (edge.kind !== 'cites') continue;
+      const from = index.get(String(edge.source)), to = index.get(String(edge.target));
+      if (from == null || to == null || from === to) continue;
+      links.push([from, to]);
+      out[from]++;
+    }
+    let rank = new Array(n).fill(1 / n);
+    for (let step = 0; step < iterations; step++) {
+      const next = new Array(n).fill((1 - damping) / n);
+      let sunk = 0;
+      for (let i = 0; i < n; i++) if (!out[i]) sunk += rank[i];
+      // A paper that cites nothing in the collection would otherwise leak its
+      // rank out of the graph entirely.
+      const spill = damping * sunk / n;
+      for (let i = 0; i < n; i++) next[i] += spill;
+      for (const [from, to] of links) next[to] += damping * rank[from] / out[from];
+      rank = next;
+    }
+    const top = Math.max(...rank);
+    return new Map(nodes.map((node, i) => [node.id, top > 0 ? rank[i] / top : 0]));
   }
 
   // A repeatable pseudo-random source: the same library has to lay out the same
@@ -267,6 +375,8 @@
       node.x = pad + (node.x - minX) * scale;
       node.y = pad + (node.y - minY) * scale;
       delete node.vx; delete node.vy;
+      // Kept, because label placement has to know how far out to start.
+      node.r = radiusOf(node.citations) * (0.7 + 0.6 * (node.rank || 0));
     }
     return {nodes, edges: (graph && graph.edges) || [], missing: (graph && graph.missing) || [],
       isolated: (graph && graph.isolated) || [],
@@ -293,6 +403,45 @@
     }
   }
 
+  /* Which nodes get a label, decided by whether the label fits.
+
+     Showing a label for everything above a threshold put forty of them on top
+     of each other in the middle of a real graph, which is worse than showing
+     none: overlapping text is not readable and it hides the nodes underneath.
+
+     So labels are placed in order of what matters most and each is kept only if
+     its box misses everything already placed. The result is that the busiest
+     part of the picture -- where the labels would collide -- shows the few that
+     earned it, and the sparse edges show many. */
+  function placeLabels(nodes, {charWidth = 5.2, lineHeight = 11, limit = 60, pad = 2} = {}) {
+    const wanted = [...nodes]
+      // Work you do not hold is the payoff of the whole map, so it is offered a
+      // label before a paper already on the shelf.
+      .sort((a, b) => (b.kind === 'external') - (a.kind === 'external')
+        || (b.rank || 0) - (a.rank || 0) || b.degree - a.degree);
+    const placed = [];
+    const shown = new Set();
+    for (const node of wanted) {
+      if (shown.size >= limit) break;
+      const text = String(node.labelText == null ? node.label : node.labelText);
+      if (!text) continue;
+      const r = node.r || 6;
+      const box = {
+        x: node.x + r + 3 - pad,
+        y: node.y - lineHeight / 2 - pad,
+        w: text.length * charWidth + pad * 2,
+        h: lineHeight + pad * 2
+      };
+      const clash = placed.some(other =>
+        box.x < other.x + other.w && box.x + box.w > other.x
+        && box.y < other.y + other.h && box.y + box.h > other.y);
+      if (clash) continue;
+      placed.push(box);
+      shown.add(node.id);
+    }
+    return shown;
+  }
+
   // Node size: citation counts span orders of magnitude, so the radius follows
   // the log, and a paper with none is still a dot rather than a point.
   function radiusOf(citations, {min = 3.5, max = 13} = {}) {
@@ -300,7 +449,7 @@
     return min + (max - min) * Math.min(1, Math.log10(value + 1) / Math.log10(2001));
   }
 
-  const api = {build, layout, coupling, radiusOf, seeded};
+  const api = {build, layout, coupling, radiusOf, seeded, pagerank, foldCitedBy, placeLabels};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStylePaperGraph = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

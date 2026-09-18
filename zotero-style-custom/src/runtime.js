@@ -2197,6 +2197,64 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return report;
   }
 
+  citedByStore() {
+    const store = this.cache.citedBy;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.citedBy = {});
+  }
+
+  /* Who cited each paper, which the shelf cannot say.
+
+     References point backwards. Who built on a paper afterwards is the other
+     half, and the half that says whether a thread is still moving -- but the
+     citing papers are by definition ones the library may not hold, so they have
+     to be asked for. One request per paper, so this is scoped to what the user
+     is actually looking at rather than run over everything. */
+  async sweepCitedBy(items, {signal, onProgress, limit = 40, refetch = false} = {}) {
+    const store = this.citedByStore();
+    const works = this.paperWorks();
+    const report = {asked: 0, found: 0, citers: 0, already: 0, noWork: 0, errors: 0};
+    const options = this.discoverOptions();
+    const list = [...new Set(items)].filter(item => this.isRegular(item));
+    for (const [index, item] of list.entries()) {
+      if (signal?.aborted || !this.active || this.stopping) break;
+      onProgress?.(index, list.length);
+      const key = this.identity(item);
+      if (!refetch && store[key]) { report.already++; continue; }
+      const work = works[key];
+      if (!work?.openalex) { report.noWork++; continue; }
+      const url = this.discoverTools.citingURL(work.openalex, {...options, limit});
+      if (!url) { report.noWork++; continue; }
+      try {
+        const citing = this.discoverTools.readWorks(await this.discoverJSON(url, {signal}));
+        report.asked++;
+        if (citing.length) report.found++;
+        report.citers += citing.length;
+        store[key] = {
+          openalex: work.openalex,
+          // Only what the map draws. A citing work's own reference list would
+          // multiply the cache by a hundred for something never shown.
+          citers: citing.map(row => ({id: row.id, title: row.title, year: row.year,
+            citations: row.citations, venue: row.venue})),
+          checkedAt: new Date().toISOString()
+        };
+        this.dirty = true;
+      } catch (error) { this.Z.logError(error); report.errors++; }
+    }
+    if (report.asked) { await this.flush(); await this.refreshWindows(); }
+    return report;
+  }
+
+  // Shaped for the graph: paper id -> the works that cite it.
+  citedByFor(items) {
+    const store = this.citedByStore();
+    const out = {};
+    for (const item of items) {
+      const row = store[this.identity(item)];
+      if (row?.citers?.length) out[String(item.id)] = row.citers;
+    }
+    return out;
+  }
+
   // Every institution the stored works mention, looked up once.
   async sweepInstitutions({signal} = {}) {
     const known = this.institutionTable();

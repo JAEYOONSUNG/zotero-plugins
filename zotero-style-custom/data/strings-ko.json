@@ -645,6 +645,13 @@
    ]
   },
   {
+   "ko": "인용 {0}",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "확대",
    "n": 2,
    "files": [
@@ -2129,6 +2136,20 @@
    ]
   },
   {
+   "ko": "mailto 없음 — 익명 대기열을 씁니다. 설정 → 연락 이메일에 주소를 넣으면 빨라집니다.",
+   "n": 1,
+   "files": [
+    "src/selfcheck.js"
+   ]
+  },
+  {
+   "ko": " · 키 없이는 하루 약 10건입니다",
+   "n": 1,
+   "files": [
+    "src/selfcheck.js"
+   ]
+  },
+  {
    "ko": "열 표시",
    "n": 1,
    "files": [
@@ -3278,6 +3299,13 @@
   },
   {
    "ko": "연락 이메일 (선택)",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
+   "ko": "계정이 아닙니다. OpenAlex와 Crossref는 요청 URL에 ?mailto=주소를 붙이면 익명 요청보다 빠른 대기열(polite pool)에 넣어 줍니다. 대신 입력한 주소가 두 서비스의 서버 기록에 매 요청마다 남습니다. 비워 두면 아무것도 보내지 않고, 조회는 그대로 동작하되 느린 쪽 대기열을 씁니다. Zotero 로그인 계정을 대신 쓰는 일은 없습니다.",
    "n": 1,
    "files": [
     "src/settings-schema.js"
@@ -4509,7 +4537,56 @@
    ]
   },
   {
-   "ko": "이어진 논문 {0} · 인용 {1}건 · 공통 참고문헌으로 이어진 쌍 {2}",
+   "ko": "인용한 논문 가져오기 ({0}편 남음)",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "인용한 논문 {0}/{1}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}편에서 인용 {1}건",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": " · 인용 목록 먼저 필요 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": " · 실패 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이어진 논문 {0} · 인용 {1}건",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": " · 공통 참고문헌으로 이어진 쌍 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": " · 내 논문을 인용한 바깥 논문 {0}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -4544,7 +4621,35 @@
    ]
   },
   {
-   "ko": "실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 크기는 피인용 수 · 색은 출판사",
+   "ko": "내 라이브러리에 없음",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "참고문헌 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "연결 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "중심성 {0}%",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 네모는 내가 갖고 있지 않은 논문 · 크기는 이 라이브러리 안에서의 중심성 · 색은 출판사",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5847,13 +5952,6 @@
   },
   {
    "ko": "연도 미상",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "인용 {0}",
    "n": 1,
    "files": [
     "src/workbench.js"
