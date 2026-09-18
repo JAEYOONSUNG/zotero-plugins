@@ -1027,6 +1027,7 @@
       "key": "citationEmail",
       "category": "metrics",
       "label": "연락 이메일 (선택)",
+      "help": "계정이 아닙니다. OpenAlex와 Crossref는 요청 URL에 ?mailto=주소를 붙이면 익명 요청보다 빠른 대기열(polite pool)에 넣어 줍니다. 대신 입력한 주소가 두 서비스의 서버 기록에 매 요청마다 남습니다. 비워 두면 아무것도 보내지 않고, 조회는 그대로 동작하되 느린 쪽 대기열을 씁니다. Zotero 로그인 계정을 대신 쓰는 일은 없습니다.",
       "type": "email",
       "default": ""
     },

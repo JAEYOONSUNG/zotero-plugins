@@ -27,6 +27,8 @@ var ZotPoPSources = (function () {
 		: typeof require === "function" ? require("./query.js") : null;
 	const Affiliations = typeof ZotPoPAffiliations !== "undefined" ? ZotPoPAffiliations
 		: typeof require === "function" ? require("./affiliations.js") : null;
+	const JCR = typeof ZotPoPJCR !== "undefined" ? ZotPoPJCR
+		: typeof require === "function" ? require("./jcr.js") : null;
 
 	function abortError() { let e = new Error("Search cancelled"); e.name = "AbortError"; return e; }
 	function throwIfCancelled(ctx = {}) {
@@ -457,7 +459,8 @@ var ZotPoPSources = (function () {
 
 	function applyJournal(r, st) {
 		if (!st) return;
-		r.journalIF = st.if2y;
+		// The JCR figure, when there is one, is never overwritten by the estimate.
+		if (r.journalIFSource !== JCR?.EDITION) { r.journalIF = st.if2y; r.journalIFEstimate = st.if2y != null; }
 		r.journalH = st.h;
 		if (!r.journalAbbrev && st.abbrev) r.journalAbbrev = st.abbrev;
 		if (!r.journalId) r.journalId = st.id;
@@ -480,9 +483,14 @@ var ZotPoPSources = (function () {
 	async function enrichJournalMetrics(records, http, ctx = {}) {
 		const SELECT = "select=id,display_name,issn_l,issn,summary_stats,works_count,is_oa,is_in_doaj,abbreviated_title,alternate_titles";
 		let mailto = openAlexAuth(ctx);
+		// The Journal Impact Factor itself first, from the JCR table shipped with the
+		// plugin. OpenAlex is then asked only for the journal's h-index and for an
+		// estimate where the JCR does not list the journal.
+		if (JCR && ctx.jcr !== false) JCR.apply(records);
 		let byId = new Map(), byIssn = new Map(), byName = new Map();
 		for (let r of records) {
-			if (r.journalIF != null) continue;
+			if (r.journalIF != null && r.journalIFSource !== JCR?.EDITION) continue;
+			if (r.journalIFSource === JCR?.EDITION && r.journalH != null) continue;
 			if (r.journalId) {
 				if (JOURNAL_CACHE.has(r.journalId)) applyJournal(r, JOURNAL_CACHE.get(r.journalId));
 				else { if (!byId.has(r.journalId)) byId.set(r.journalId, []); byId.get(r.journalId).push(r); }

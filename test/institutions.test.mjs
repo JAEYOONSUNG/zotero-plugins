@@ -42,7 +42,7 @@ test("OpenAlex authorships become people with lab, country and role; institution
 		}
 		throw new Error("unexpected " + url);
 	} };
-	const records = await S.search("openalex", { keywords: "ingemann", maxResults: 10 }, http, { enrichCitations: false });
+	const records = await S.search("openalex", { keywords: "ingemann", maxResults: 10 }, http, { enrichCitations: false, jcr: false });
 	assert.equal(records.length, 2);
 	const [a, b] = records;
 	assert.equal(a.people.length, 3);
@@ -107,7 +107,7 @@ test("a journal known only by name is looked up by that name, matched exactly, a
 		{ title: "c", venue: "Obscure Bulletin", journalId: null, issn: null, journalIF: null, journalH: null, itemType: "journalArticle" },
 		{ title: "d", venue: "arXiv", journalId: null, issn: null, journalIF: null, journalH: null, itemType: "preprint", preprintServer: "arXiv" }
 	];
-	await S.enrichJournalMetrics(records, http, {});
+	await S.enrichJournalMetrics(records, http, { jcr: false });
 	assert.equal(records[0].journalIF, 50, "the exact name, not the first search hit");
 	assert.equal(records[0].journalId, "S1");
 	assert.equal(records[1].journalIF, 50, "case does not make a second journal");
@@ -115,7 +115,7 @@ test("a journal known only by name is looked up by that name, matched exactly, a
 	assert.equal(records[3].journalIF, null, "a preprint server has no IF");
 	assert.equal(urls.length, 2);
 	// Asked again, both answers -- including the miss -- come from memory.
-	await S.enrichJournalMetrics(records.map(r => ({ ...r, journalIF: null, journalId: null })), http, {});
+	await S.enrichJournalMetrics(records.map(r => ({ ...r, journalIF: null, journalId: null })), http, { jcr: false });
 	assert.equal(urls.length, 2);
 });
 
@@ -128,7 +128,7 @@ test("the lookup caches round-trip through a snapshot so a new session pays noth
 	} };
 	const rec = { title: "x", journalId: "S1", issn: null, journalIF: null, journalH: null,
 		people: [{ name: "A", position: "first", corresponding: false, institution: "", institutionId: "I1", country: null, institutionH: null }] };
-	await S.enrichJournalMetrics([rec], http, {});
+	await S.enrichJournalMetrics([rec], http, { jcr: false });
 	await S.enrichInstitutions([rec], http, {});
 	const snapshot = JSON.parse(JSON.stringify(S.exportCaches()));
 	assert.equal(snapshot.version, 1);
@@ -140,7 +140,7 @@ test("the lookup caches round-trip through a snapshot so a new session pays noth
 	assert.equal(T.importCaches({ version: 2 }), 0);
 	assert.equal(T.importCaches({ version: 1, journals: [["bad", "string"], [1, {}]] }), 0, "malformed lines are skipped");
 	const again = { ...rec, journalIF: null, journalH: null, people: [{ ...rec.people[0], institutionH: null, institution: "" }] };
-	await T.enrichJournalMetrics([again], { getJSON: () => assert.fail("must not fetch") }, {});
+	await T.enrichJournalMetrics([again], { getJSON: () => assert.fail("must not fetch") }, { jcr: false });
 	await T.enrichInstitutions([again], { getJSON: () => assert.fail("must not fetch") }, {});
 	assert.equal(again.journalIF, 2);
 	assert.equal(again.people[0].institutionH, 900);

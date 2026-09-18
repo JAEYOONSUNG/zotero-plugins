@@ -212,6 +212,7 @@ td.status.err { color: var(--err); }
 .badge.lib { background: var(--ok); color: #fff; }
 .badge.if { background: var(--warn); color: #fff; font-weight: 650; }
 td.if { color: var(--warn); font-weight: 600; }
+td.if.estimate { color: var(--muted); font-weight: 500; }
 
 /* ---------------------------------------------------------------- journal mark */
 /* The publisher's lettermark, in its colour, ahead of the journal's name. The

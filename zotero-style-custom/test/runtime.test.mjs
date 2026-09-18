@@ -1428,7 +1428,7 @@ test('the open-access link is offered only to a shelf that cannot already open t
   assert.equal(oaBadge().style.cursor, '');
 });
 
-test('a caller identifies itself, falling back to the Zotero account address', () => {
+test('a caller identifies itself only with an address that was offered', () => {
   const {plugin, Z} = fixture();
   // The preference was read but never shipped, so this was always empty and
   // every request went to the anonymous pool -- which is what got rate limited.
@@ -1440,11 +1440,15 @@ test('a caller identifies itself, falling back to the Zotero account address', (
   Z.Prefs.set('extensions.zotpop.email', 'shared@lab.org', true);
   assert.equal(plugin.contactEmail(), 'shared@lab.org');
 
+  /* The Zotero sync login is not a stand-in, though it used to be. Plenty of
+     people sign in with their email, so for them this would have put their
+     address in the URL of every request to two outside services, and in those
+     services' logs, without ever saying so. Setting up sync is not consent to
+     publish the address you signed in with. */
   Z.Prefs.set('extensions.zotpop.email', '', true);
   Z.Prefs.set('sync.server.username', 'account@example.edu', true);
-  assert.equal(plugin.contactEmail(), 'account@example.edu', 'the Zotero account stands in');
+  assert.equal(plugin.contactEmail(), '', 'a sync login is not consent');
 
-  // A Zotero username is often not an address; sending rubbish is worse than nothing.
   Z.Prefs.set('sync.server.username', 'jaeyoon', true);
   assert.equal(plugin.contactEmail(), '');
   Z.Prefs.set('extensions.style-custom.citationEmail', 'not an email', true);
@@ -1692,3 +1696,4 @@ test('the settings schema is looked up by key, not walked', () => {
   assert.ok(plugin.settingIndex instanceof Map);
   assert.ok(plugin.settingIndex.size > 100);
 });
+

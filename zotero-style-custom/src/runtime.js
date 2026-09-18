@@ -2052,14 +2052,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // faster pool. This read a key that was never shipped, so it was always empty
   // and every request went to the anonymous pool -- which is where the rate
   // limiting came from. One accessor now, over the key the schema declares.
+  /* The address sent to OpenAlex and Crossref to join their polite pool.
+
+     It used to fall back to the Zotero sync username when that looked like an
+     email. Plenty of people sign in to Zotero with their email, so for them
+     this plugin would have started putting their address in the URL of every
+     request to two outside services, and in those services' logs, without ever
+     saying so. Nobody agreed to that by setting up sync.
+
+     Only an address the person typed into this setting is used, and it is only
+     ever theirs to give. */
   contactEmail() {
     const clean = value => String(value == null ? '' : value).trim();
     const set = clean(this.pref('citationEmail', '')) || clean(this.Z.Prefs.get('extensions.zotpop.email', true));
-    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(set)) return set;
-    let account = '';
-    try { account = String(this.Z.Prefs.get('sync.server.username', true) || '').trim(); }
-    catch (ignored) { }
-    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(account) ? account : '';
+    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(set) ? set : '';
   }
 
   // The schema key is all lower case. A capitalised misspelling is not a

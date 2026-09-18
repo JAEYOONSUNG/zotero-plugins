@@ -1,8 +1,11 @@
 /* Verified journal-level JIF data. This module never infers JIF from citations. */
 (function(root) {
   'use strict';
-  const hosts = /(^|\.)(nature\.com|springer\.com|springernature\.com|academic\.oup\.com|science\.org|pnas\.org|asm\.org|cell\.com|sciencedirect\.com|elsevier\.com|wiley\.com|acs\.org|frontiersin\.org|plos\.org|microbiologyresearch\.org|mdpi\.com|annualreviews\.org|royalsocietypublishing\.org|jmb\.or\.kr|biomedcentral\.com|embopress\.org)$/i;
-  function name(value) { return String(value || '').normalize('NFKC').toLowerCase().replace(/&/g,' and ').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' '); }
+  const hosts = /(^|\.)(nature\.com|springer\.com|springernature\.com|academic\.oup\.com|science\.org|pnas\.org|asm\.org|cell\.com|sciencedirect\.com|elsevier\.com|wiley\.com|acs\.org|frontiersin\.org|plos\.org|microbiologyresearch\.org|mdpi\.com|annualreviews\.org|royalsocietypublishing\.org|jmb\.or\.kr|biomedcentral\.com|embopress\.org|clarivate\.com)$/i;
+  // A leading article is not part of a journal's name ("The ISME Journal" is
+  // "ISME Journal" in the JCR), and the JCR spells out what Zotero abbreviates.
+  const SPELLED={'proceedings of the national academy of sciences':'proceedings of the national academy of sciences of the united states of america','pnas':'proceedings of the national academy of sciences of the united states of america'};
+  function name(value) { const key=String(value || '').normalize('NFKC').toLowerCase().replace(/&/g,' and ').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ').replace(/^the /,''); return SPELLED[key]||key; }
   function issn(value) {
     const s=String(value||'').toUpperCase().replace(/[^0-9X]/g,'');
     if(!/^\d{7}[\dX]$/.test(s))return null;
@@ -29,7 +32,10 @@
       for(const id of r.issns)put(ids,issn(id),r);
     }
     function choose(matches) {
-      const unique=[...new Set(matches)];if(!unique.length)return null;
+      let unique=[...new Set(matches)];if(!unique.length)return null;
+      // The JCR export is the authority: when it names the journal, a number read
+      // off a publisher page months earlier is not allowed to contradict it.
+      const jcr=unique.filter(r=>r.authority==='jcr');if(jcr.length)unique=jcr;
       if(new Set(unique.map(r=>name(r.title))).size>1)return null;
       const newest=Math.max(...unique.map(r=>r.year||0));const candidates=unique.filter(r=>(r.year||0)===newest);
       if(new Set(candidates.map(r=>r.impactFactor)).size>1)return null;

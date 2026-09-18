@@ -1194,7 +1194,8 @@
 		let venueCell = td("venue", r.venue, r.publisher ? r.venue + " · " + r.publisher : r.venue);
 		venueCell.dataset.marquee = "venue";
 		paintVenue(venueCell, r);
-		td("num if", r.journalIF == null ? "" : fmt(r.journalIF, 1), r.journalIF == null ? "" : t("ifTip", fmt(r.journalIF, 1), r.journalH));
+		td("num if" + (r.journalIFEstimate ? " estimate" : ""), r.journalIF == null ? "" : (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1),
+			r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
 		let where = affiliationOf(r);
 		td("aff", where?.first?.institution || "", affiliationTip(where)).dataset.marquee = "affiliation";
 		td("mini country", where ? where.countries.map(c => (ZotPoPAffiliations.flag(c) + " " + c).trim()).join(" ") : "", affiliationTip(where));
@@ -1324,7 +1325,7 @@
 		let mark = journalMark(r);
 		if (mark) badges.appendChild(mark);
 		if (r.citations != null) chip(t("badgeCites", r.citations), "cite");
-		if (r.journalIF != null) chip(t("badgeIF", fmt(r.journalIF, 1)), "if");
+		if (r.journalIF != null) chip(t("badgeIF", (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1)), "if").title = r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH);
 		let cpy = ZotPoPMetrics.citesPerYear(r);
 		if (cpy != null) chip(t("badgePerYear", fmt(cpy)));
 		for (let s of r.sources || [r.source]) sourceChip(s);
