@@ -1604,7 +1604,12 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   plugin.windows.set(win, state);
   plugin.enhanceTitles(win, state, [ref]);
   const venue = document.querySelector('.cell.publicationTitle .cell-text');
-  assert.match(venue.style.color, /^hsl\(4 81% 36%\)$/, "the journal's name is written in its publisher's colour, dark enough to read");
+  /* The name is written in the brand colour itself whenever that already reads
+     on the page. The old rule re-saturated and pinned every brand at 36%
+     lightness, which is why the name never quite matched the badge beside it:
+     a near-black navy became a vivid blue. Science's red reads at 5.6:1 as
+     printed, so it is used as printed. */
+  assert.equal(venue.style.color.toLowerCase(), "#ca2015", "the journal's name is the badge's own colour when that reads");
   assert.equal(venue.style.fontWeight, '600');
   assert.equal(venue.dataset.styleCustomVenue, 'science');
   await plugin.removeWindow(win);

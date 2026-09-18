@@ -680,6 +680,30 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     mark.title = found.identity.label ? `${found.title} · ${found.identity.label}` : found.title;
     return mark;
   }
+  /* The same publisher mark, from a venue name alone.
+
+     journalMarkNode needs an item; the related-papers, watched-author and
+     recent lists only have a venue string off a search result. One row of
+     "2023 · Nature Reviews Microbiology · 인용 707" reads; forty of them in a
+     row are a wall of grey, and the publisher was the one thing in each that a
+     reader recognises at a glance. */
+  journalMarkForVenue(doc, venue, P) {
+    const title = String(venue || '').trim();
+    if (!title) return null;
+    const identity = this.journalIdentity.identify(title);
+    if (!identity) return null;
+    const tone = this.journalIdentity.colours(identity, {dark: P.dark});
+    const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+    mark.textContent = this.journalIdentity.ABBREVIATIONS[title] || this.journalIdentity.abbreviate(title) || identity.mark;
+    const bg = tone.badge || tone.fill, ink = tone.badge ? tone.badgeInk : tone.ink, edge = tone.badge ? 'transparent' : tone.edge;
+    mark.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;`
+      + `min-width:22px;height:14px;padding:0 4px;border-radius:3px;white-space:nowrap;vertical-align:middle;`
+      + `background:${bg};color:${ink};box-shadow:inset 0 0 0 .5px ${edge};`
+      + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
+    mark.title = identity.label ? `${title} · ${identity.label}` : title;
+    return mark;
+  }
+
   paintJournal(cell, item, doc, P, {figure, estimate, name} = {}) {
     const title = this.journalIdentityOf(item)?.title
       || (this.isRegular(item) ? String(item.getField('publicationTitle') || item.getField('proceedingsTitle') || '') : '');
@@ -1030,10 +1054,16 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       number.style.cssText = `font-variant-numeric:tabular-nums;min-width:3.4em;text-align:right;`
         + `flex:none;font-weight:${count >= 100 ? 590 : 400};color:${count > 0 ? P.text : P.faint};`;
       cell.appendChild(number);
+      /* The bar turns blue at a hundred citations. Two pixels tall, that
+         change was easy to miss, and nothing said what it meant -- the user
+         had to ask. Four pixels reads at a glance and the rule is in the
+         tooltip, so the answer is on the row rather than in a conversation. */
+      const wellCited = count >= 100;
       const track = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-      track.style.cssText = `flex:1;min-width:14px;max-width:56px;height:2px;border-radius:100px;overflow:hidden;background:${this.tint(P.gray, 0.16)};`;
+      track.style.cssText = `flex:1;min-width:14px;max-width:56px;height:4px;border-radius:100px;overflow:hidden;background:${this.tint(P.gray, 0.16)};`;
       const fill = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-      fill.style.cssText = `display:block;height:100%;border-radius:100px;width:${(this.citationShare(count) * 100).toFixed(1)}%;background:${this.tint(count >= 100 ? P.blue : P.gray, 0.85)};`;
+      fill.style.cssText = `display:block;height:100%;border-radius:100px;width:${(this.citationShare(count) * 100).toFixed(1)}%;background:${this.tint(wellCited ? P.blue : P.gray, wellCited ? 0.9 : 0.7)};`;
+      track.title = wellCited ? '피인용 100회 이상 (파란 막대)' : '피인용 100회 미만 (회색 막대) · 길이는 로그 눈금';
       track.appendChild(fill); cell.appendChild(track);
     } else { cell.textContent = label; }
     if (!["time","progress","annotationCount"].includes(key)) cell.title = label;

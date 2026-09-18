@@ -380,22 +380,63 @@
     const c = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
     return 0.2126 * c(n >> 16 & 255) + 0.7152 * c(n >> 8 & 255) + 0.0722 * c(n & 255);
   }
+  /* From one exact brand colour to ink and fill that read on the page.
+
+     The old rule re-saturated every brand to at least 45% and pinned the ink
+     at 36% lightness. That is why the venue text never quite matched the
+     badge beside it: Nucleic Acids Research is a near-black navy (#011e41),
+     and pinning it at 36% made a vivid mid-blue; anything achromatic became a
+     dark red, because a saturation floor of 45% has to pick some hue and it
+     picks zero. Two colours in one row that are almost the same is worse
+     than two that are clearly different.
+
+     Now the brand colour is used as the ink verbatim whenever it already reads
+     on the page -- most journal colours are dark enough -- and only pulled
+     along its own hue, at its own saturation, when it does not. Black stays
+     black. The fill is the same hue washed nearly out. */
+  const WHITE = '#ffffff', DARK_BG = '#1c1c1f';
+  function contrast(a, b) {
+    const la = luminance(a), lb = luminance(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  }
+  function hslToHex(h, s, l) {
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+      : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    const to = v => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+    return '#' + to(r) + to(g) + to(b);
+  }
+  // Walk the lightness until the colour clears the contrast it needs, keeping
+  // hue and saturation exactly as the brand has them.
+  function readable(hex, dark) {
+    const behind = dark ? DARK_BG : WHITE;
+    if (contrast(hex, behind) >= 4.2) return hex;
+    const {h, s, l} = hexToHsl(hex);
+    let light = l;
+    for (let step = 0; step < 40; step++) {
+      light += dark ? 0.02 : -0.02;
+      if (light <= 0.04 || light >= 0.96) break;
+      const candidate = hslToHex(h, s, light);
+      if (contrast(candidate, behind) >= 4.2) return candidate;
+    }
+    return dark ? '#e8e8ed' : '#1c1c1e';
+  }
   function tonesFor(hex, dark) {
     if (!hex) return dark
       ? {ink: 'hsl(0 0% 88%)', fill: 'hsl(0 0% 24%)', edge: 'hsl(0 0% 36%)'}
       : {ink: 'hsl(0 0% 12%)', fill: 'hsl(0 0% 93%)', edge: 'hsl(0 0% 84%)'};
     const {h, s} = hexToHsl(hex);
-    const sat = Math.round(Math.max(45, Math.min(95, s * 100)));
+    const sat = Math.round(s * 100);
     // The badge wears the exact code, with black or white lettering by luminance,
     // so the colour the journal actually prints is the colour on the row.
     const badge = {badge: hex, badgeInk: luminance(hex) > 0.42 ? '#111111' : '#ffffff'};
+    const ink = readable(hex, dark);
     return dark
-      ? {...badge, ink: hsl(h, sat, 72), fill: hsl(h, Math.round(sat * 0.7), 24), edge: hsl(h, Math.round(sat * 0.7), 36)}
-      : {...badge, ink: hsl(h, sat, 36), fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84)};
+      ? {...badge, ink, fill: hsl(h, Math.round(sat * 0.7), 24), edge: hsl(h, Math.round(sat * 0.7), 36)}
+      : {...badge, ink, fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84)};
   }
 
-
-  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, tonesFor, FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
+  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

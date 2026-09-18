@@ -13,7 +13,7 @@
   let observedContext=null;let draftContext='',draftCounters=new Map();const drafts=new Map(),visibleAnnotationIDs=new Set(),pageRanges=new Map(),deletedCardSelections=new Map();
   const ui=runtime.cache.workbenchUI&&typeof runtime.cache.workbenchUI==='object'?runtime.cache.workbenchUI:{};
   let returnFocus=null,commandFocus=null,commandIndex=0,commandMatches=[],navigationEpoch=0;const pendingActions=new Set();
-  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'related',boardID:null,cardIDs:new Set(),color:'',transpose:false,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null};
+  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:false,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null};
   const enabled=id=>runtime.featureEnabled?.(id)!==false;
   const setting=(key,fallback)=>runtime.getSetting?runtime.getSetting(key):runtime.pref(key,fallback);
   const tabFeature={explore:'explore',recent:'Recent',graph:'graphView',tags:'tags',notes:'noteManager',annotations:'annotationManager',backlinks:'backlinks',attachments:'attachmentPreview',tabs:'tabManager',views:'viewManager',canvas:'canvas'};
@@ -469,7 +469,11 @@
     await render();
    }),b);
    if(!withRefs){
-    empty('아직 인용 목록이 없습니다. “인용 목록 가져오기”를 눌러 OpenAlex에서 참고문헌을 받아오세요.');
+    // Nothing fetched yet is not nothing to show. The related-items graph
+    // stands in until the reference lists arrive, so the tab is never a blank
+    // panel with one button on it.
+    node('p','아직 인용 목록이 없습니다. “인용 목록 가져오기”를 누르면 실제 인용 관계로 바뀝니다. 그때까지는 관련 문헌 연결을 보여줍니다.',body,{class:'sc-muted'});
+    drawLegacyGraph(b);
     return;
    }
    const W=860,H=540;
@@ -632,14 +636,81 @@
    if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다.`,body,{class:'sc-muted'});
   }
 
+  /* The tag, author and related-item modes, drawn with the citation map's
+     layout rather than the old one.
+
+     They used a separate placer that stacked nodes into vertical columns and
+     labelled every one of them, so a hundred titles overlapped into a grey
+     band. The graph is a different question in each mode, but "how do you draw
+     a graph so it can be read" has one answer. */
   function drawLegacyGraph(b){
-   const data=model.layout(library.graph(rows().slice(0,setting('graphNodeLimit',180)),{mode:state.graphMode==='citations'?'related':state.graphMode}),760,480);
-   if(!data.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
-   const svg=doc.createElementNS(SVG,'svg');svg.setAttribute('viewBox','0 0 760 480');svg.setAttribute('class','sc-graph');svg.setAttribute('aria-label','문헌 관계 그래프');body.appendChild(svg);let zoom=1;
-   const group=doc.createElementNS(SVG,'g');svg.appendChild(group);const positions=new Map(data.nodes.map(n=>[n.id,n]));
-   for(const e of data.edges){const a=positions.get(String(e.source)),c=positions.get(String(e.target));if(!a||!c)continue;const line=doc.createElementNS(SVG,'line');for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2:c.x,y2:c.y}))line.setAttribute(k,v);line.setAttribute('stroke','var(--sc-graph-line)');group.appendChild(line);}
-   for(const n of data.nodes){const g=doc.createElementNS(SVG,'g');g.setAttribute('transform',`translate(${n.x} ${n.y})`);g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',n.label);const circle=doc.createElementNS(SVG,'circle');circle.setAttribute('r',state.selected.has(n.id)?8:5);circle.setAttribute('fill',state.selected.has(n.id)?'var(--sc-accent)':'var(--sc-muted)');g.appendChild(circle);const label=doc.createElementNS(SVG,'text');label.setAttribute('x','9');label.setAttribute('y','4');label.setAttribute('class','sc-graph-label');label.textContent=String(n.label).slice(0,34);g.appendChild(label);const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);};g.addEventListener('click',activate);g.addEventListener('dblclick',()=>run(()=>library.openItem(n.id)));g.addEventListener('keydown',e=>{if(e.key==='Enter')activate();});group.appendChild(g);}
-   button('확대',()=>{zoom=Math.min(3,zoom+.25);svg.setAttribute('viewBox',`0 0 ${760/zoom} ${480/zoom}`);},b);button('축소',()=>{zoom=Math.max(.5,zoom-.25);svg.setAttribute('viewBox',`0 0 ${760/zoom} ${480/zoom}`);},b);if(data.truncated||rows().length>setting('graphNodeLimit',180))node('p',`그래프는 최대 ${setting('graphNodeLimit',180)}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body);
+   const limit=setting('graphNodeLimit',180);
+   const raw=library.graph(rows().slice(0,limit),{mode:state.graphMode==='citations'?'related':state.graphMode});
+   if(!raw.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
+   const W=860,H=540;
+   /* The good layout when it is there, the old placer when it is not.
+
+      The layout lives on the runtime as an optional module. Reaching for it
+      unconditionally made the whole graph tab die -- caught, logged, and drawn
+      as an empty panel -- in any host that had not loaded it, which is a worse
+      outcome than a plainer graph. */
+   const tools=runtime.graphTools||null;
+   const built={
+    nodes:raw.nodes.map(n=>({id:String(n.id),label:n.label,citations:0,degree:0,rank:0,kind:'paper',venue:''})),
+    edges:raw.edges.map(e=>({source:String(e.source),target:String(e.target),kind:'coupled',weight:0.5})),
+    missing:[],isolated:[],counted:{}
+   };
+   const degree=new Map();
+   for(const e of built.edges){degree.set(e.source,(degree.get(e.source)||0)+1);degree.set(e.target,(degree.get(e.target)||0)+1);}
+   for(const n of built.nodes)n.degree=degree.get(n.id)||0;
+   const top=Math.max(1,...built.nodes.map(n=>n.degree));
+   for(const n of built.nodes)n.rank=n.degree/top;
+   const laid=tools?tools.layout(built,{width:W,height:H}):(()=>{
+    const old=model.layout(raw,W,H);
+    return {nodes:old.nodes.map(n=>({...n,id:String(n.id),r:5,degree:degree.get(String(n.id))||0}))};
+   })();
+   node('p',`문헌 ${laid.nodes.length} · 연결 ${built.edges.length}`,body,{class:'sc-muted'});
+   const svg=doc.createElementNS(SVG,'svg');
+   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
+   svg.setAttribute('aria-label','문헌 관계 그래프');body.appendChild(svg);
+   const group=doc.createElementNS(SVG,'g');svg.appendChild(group);
+   const pos=new Map(laid.nodes.map(n=>[n.id,n]));
+   for(const e of built.edges){
+    const a=pos.get(e.source),c=pos.get(e.target);if(!a||!c)continue;
+    const line=doc.createElementNS(SVG,'line');
+    for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2:c.x,y2:c.y}))line.setAttribute(k,v);
+    line.setAttribute('stroke','var(--sc-graph-line)');
+    line.setAttribute('stroke-opacity','0.4');
+    group.appendChild(line);
+   }
+   for(const n of laid.nodes)n.labelText=String(n.label).slice(0,34);
+   const labelled=tools?tools.placeLabels(laid.nodes):new Set(laid.nodes.map(n=>n.id));
+   for(const n of laid.nodes){
+    const g=doc.createElementNS(SVG,'g');
+    g.setAttribute('transform',`translate(${n.x} ${n.y})`);
+    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',n.label);
+    const circle=doc.createElementNS(SVG,'circle');
+    circle.setAttribute('r',n.r||5);
+    circle.setAttribute('fill',state.selected.has(n.id)?'var(--sc-accent)':'var(--sc-fill)');
+    circle.setAttribute('stroke',state.selected.has(n.id)?'var(--sc-accent)':'var(--sc-muted)');
+    g.appendChild(circle);
+    const label=doc.createElementNS(SVG,'text');
+    label.setAttribute('x',(n.r||5)+4);label.setAttribute('y','3.5');
+    label.setAttribute('class','sc-graph-label');
+    label.textContent=n.labelText;
+    if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('opacity','0');
+    g.appendChild(label);
+    const title=doc.createElementNS(SVG,'title');title.textContent=`${n.label}\n연결 ${n.degree}`;g.appendChild(title);
+    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);};
+    g.addEventListener('click',activate);
+    g.addEventListener('dblclick',()=>run(()=>library.openItem(n.id)));
+    g.addEventListener('keydown',e=>{if(e.key==='Enter')activate();});
+    group.appendChild(g);
+   }
+   let zoom=1;
+   button('확대',()=>{zoom=Math.min(3,zoom+.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
+   button('축소',()=>{zoom=Math.max(.5,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
+   if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body,{class:'sc-muted'});
   }
   function drawTags(){const b=bar(),value=node('input',null,b,{placeholder:'추가·제거할 정확한 태그 (쉼표로 구분)','aria-label':'추가할 태그'});button('선택 문헌에 태그 추가',async()=>{await library.addTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('선택 문헌에서 태그 제거',async()=>{await library.removeTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('태그 필터 해제',()=>{state.tag='';render();},b);
    const rename=bar(),from=node('input',null,rename,{'aria-label':'기존 태그 경로',placeholder:'기존 태그 경로'}),to=node('input',null,rename,{'aria-label':'새 태그 경로',placeholder:'새 태그 경로'});let subtree=true;
@@ -663,6 +734,16 @@
      as an editable memo, and the actions only on hover. */
   async function drawAnnotations(token){
    const tools=bar();
+   // The panel-wide search box already narrows annotations by their text and
+   // comment, but nothing here said so. A box of its own makes that plain and
+   // keeps the query where the eye is.
+   const find=node('input',null,tools,{type:'search',placeholder:'주석 본문·메모 검색','aria-label':'주석 검색',class:'sc-annot-search'});
+   find.value=state.query;
+   let findTimer=null;
+   find.addEventListener('input',()=>{
+    if(findTimer)win.clearTimeout(findTimer);
+    findTimer=win.setTimeout(()=>{state.query=find.value.trim();render();},250);
+   });
    const color=node('input',null,tools,{placeholder:'#ffd400 또는 비워두면 전체','aria-label':'주석 색상 필터'});
    color.value=state.color;
    button('색상 적용',()=>{state.color=color.value.trim();render();},tools);
@@ -1077,7 +1158,13 @@
   function hitRow(work,parent){
    const row=node('div',null,parent||null,{class:'sc-hit'});
    node('p',work.title||'제목 없음',row,{class:'sc-hit-title'});
-   node('p',[work.year||'연도 미상',work.venue,work.citations==null?null:`인용 ${work.citations}`,work.openAccess?'오픈액세스':null].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
+   const meta=node('p',null,row,{class:'sc-hit-meta'});
+   // The publisher mark leads the line: it is the one thing in a row of grey
+   // metadata a reader recognises at a glance.
+   const P=runtime.palette?.(doc);
+   const mark=P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,work.venue,P):null;
+   if(mark){mark.style.marginInlineEnd='6px';meta.appendChild(mark);}
+   meta.appendChild(doc.createTextNode([work.year||'연도 미상',work.venue,work.citations==null?null:`인용 ${work.citations}`,work.openAccess?'오픈액세스':null].filter(Boolean).join(' · ')));
    if(work.authors?.length)node('p',work.authors.slice(0,4).join(', ')+(work.authors.length>4?` 외 ${work.authors.length-4}명`:''),row,{class:'sc-hit-authors'});
    if(work.inLibrary){node('span','보유 중',row,{class:'sc-hit-owned'});return row;}
    const actions=node('div',null,row,{class:'sc-hit-actions'});
@@ -1339,7 +1426,11 @@
 
   function drawJournals(){const seen=new Set();const list=node('div',null,body,{class:'sc-hits'});for(const item of rows()){if(!item.venue||seen.has(item.venue))continue;seen.add(item.venue);
    const c=node('div',null,list,{class:'sc-hit sc-journal'});
-   node('p',item.venue,c,{class:'sc-hit-title'});
+   const head=node('p',null,c,{class:'sc-hit-title'});
+   const P=runtime.palette?.(doc);
+   const mark=P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,item.venue,P):null;
+   if(mark){mark.style.marginInlineEnd='8px';head.appendChild(mark);}
+   head.appendChild(doc.createTextNode(item.venue));
    // publicationTags already carries "IF 56.1 (2025)" and the rank grades, so the
    // impact factor was being printed twice; say it once, with its provenance.
    const tags=runtime.publicationTags?.(runtime.Z.Items.get(Number(item.id)))||[];
