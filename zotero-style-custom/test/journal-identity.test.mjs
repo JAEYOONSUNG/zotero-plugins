@@ -49,7 +49,7 @@ test("a one-word title keeps a name, not two letters", () => {
 test("a curated family reads stronger than a derived one, in both schemes", () => {
   const parse = value => value.match(/hsl\((\d+) (\d+)% (\d+)%\)/).slice(1).map(Number);
   for (const dark of [false, true]) {
-    const known = journals.colours(journals.identify("Nature"), {dark});
+    const known = journals.colours(journals.identify("Nature Reviews Cancer"), {dark});
     const other = journals.colours(journals.identify("Journal of Unknown Things"), {dark});
     assert.ok(parse(known.ink)[1] > parse(other.ink)[1], `${dark ? "dark" : "light"}: a recognised publisher reads first`);
     // A fill is a tint under light ink and a shade under dark ink, and the ink
@@ -70,11 +70,12 @@ test("no title means no mark, rather than a mark for nothing", () => {
 test("every Nature sister journal keeps its own cover colour", () => {
   const hue = title => journals.identify(title).hue;
   assert.notEqual(hue("Nature Biotechnology"), hue("Nature Methods"));
-  assert.equal(hue("Nature Communications"), 30, "Nature Communications is orange");
-  assert.equal(hue("Nature Biotechnology"), 50, "Nature Biotechnology is yellow");
+  assert.equal(journals.identify("Nature Communications").hex, "#e63323", "the rule under the nature.com header");
+  assert.equal(journals.identify("Nature Biotechnology").hex, "#efd600", "Nature Biotechnology is yellow");
+  assert.equal(journals.colours(journals.identify("Nature Biotechnology")).badge, "#efd600");
   assert.equal(journals.JOURNAL_HUES["molecular cell"], 200, "measured off the PDFs in the library");
-  assert.equal(hue("Nature Chemical Biology"), 190);
-  assert.equal(hue("Nature Medicine"), 5);
-  assert.equal(journals.identify("Nature Microbiology").hue, 200);
+  assert.equal(journals.identify("Nature Chemical Biology").hex, "#0094a4");
+  assert.equal(journals.identify("Nature Medicine").hex, "#e40428");
+  assert.equal(journals.identify("Nature Microbiology").hex, "#964091");
   assert.equal(journals.identify("Nature Something New").hue, 168, "an unlisted sister falls back to the house colour");
 });

@@ -1,7 +1,7 @@
 /* Verified journal-level JIF data. This module never infers JIF from citations. */
 (function(root) {
   'use strict';
-  const hosts = /(^|\.)(nature\.com|springer\.com|springernature\.com|academic\.oup\.com|science\.org|pnas\.org|asm\.org|cell\.com|sciencedirect\.com|elsevier\.com|wiley\.com|acs\.org|frontiersin\.org|plos\.org|microbiologyresearch\.org|mdpi\.com)$/i;
+  const hosts = /(^|\.)(nature\.com|springer\.com|springernature\.com|academic\.oup\.com|science\.org|pnas\.org|asm\.org|cell\.com|sciencedirect\.com|elsevier\.com|wiley\.com|acs\.org|frontiersin\.org|plos\.org|microbiologyresearch\.org|mdpi\.com|annualreviews\.org|royalsocietypublishing\.org|jmb\.or\.kr|biomedcentral\.com|embopress\.org)$/i;
   function name(value) { return String(value || '').normalize('NFKC').toLowerCase().replace(/&/g,' and ').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' '); }
   function issn(value) {
     const s=String(value||'').toUpperCase().replace(/[^0-9X]/g,'');

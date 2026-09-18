@@ -78,6 +78,105 @@ var ZotPoPJournalMarks = (function () {
     "trends in microbiology": 200
 };
 
+	/* Exact colour codes, read off each journal's own website on 2026-09-19 with a
+	   real browser: on nature.com the coloured rule under the header is the
+	   journal's identity (Nature Communications #e63323, Nature Biotechnology
+	   #efd600); Cell Press, ASM, ACS, PLOS, Frontiers, Oxford and Springer Nature
+	   Link carry theirs in the masthead or header. null means the journal's
+	   masthead is black and it has no colour of its own (Nature, Scientific
+	   Reports). These take precedence over the hue tables below. */
+	const JOURNAL_COLOURS = {
+	    "acs synthetic biology": "#0039a6",
+	    "applied microbiology and biotechnology": "#bfff00",
+	    "applied and environmental microbiology": "#6e101c",
+	    "bioinformatics": "#167da4",
+	    "biotechnology advances": "#8a752f",
+	    "biotechnology and bioengineering": "#180d43",
+	    "cell": "#007dbc",
+	    "cell host and microbe": "#007dbc",
+	    "cell reports": "#007dbc",
+	    "cell systems": "#007dbc",
+	    "chemical science": "#004976",
+	    "communications biology": "#e30613",
+	    "current biology": "#007dbc",
+	    "embo journal": "#ff0095",
+	    "environmental microbiology": "#180d43",
+	    "extremophiles": "#bfff00",
+	    "fems microbiology letters": "#204d39",
+	    "fems microbiology reviews": "#204d39",
+	    "frontiers in microbiology": "#001991",
+	    "genome biology": "#0015ff",
+	    "journal of bacteriology": "#6e101c",
+	    "journal of molecular biology": "#0272b1",
+	    "journal of the american chemical society": "#0039a6",
+	    "metabolic engineering": "#e87224",
+	    "microbial biotechnology": "#180d43",
+	    "microbial cell factories": "#0070a8",
+	    "microbiology and molecular biology reviews": "#6e101c",
+	    "molecular cell": "#007dbc",
+	    "molecular microbiology": "#180d43",
+	    "molecular systems biology": "#ffbf00",
+	    "nature": null,
+	    "nature aging": "#006eb7",
+	    "nature biomedical engineering": "#964091",
+	    "nature biotechnology": "#efd600",
+	    "nature cancer": "#e40428",
+	    "nature cardiovascular research": "#e5005b",
+	    "nature catalysis": "#006eb7",
+	    "nature cell biology": "#0085c8",
+	    "nature chemical biology": "#0094a4",
+	    "nature chemical engineering": "#00928c",
+	    "nature chemistry": "#6c4796",
+	    "nature climate change": "#0095bb",
+	    "nature communications": "#e63323",
+	    "nature ecology and evolution": "#c7d530",
+	    "nature energy": "#eb5b25",
+	    "nature food": "#fbba00",
+	    "nature genetics": "#008b68",
+	    "nature human behaviour": "#1951a0",
+	    "nature immunology": "#1951a0",
+	    "nature machine intelligence": "#0095bb",
+	    "nature materials": "#e40428",
+	    "nature medicine": "#e40428",
+	    "nature mental health": "#229863",
+	    "nature metabolism": "#eb5b25",
+	    "nature methods": "#eb5b25",
+	    "nature microbiology": "#964091",
+	    "nature nanotechnology": "#f7a70a",
+	    "nature neuroscience": "#00928c",
+	    "nature photonics": "#006eb7",
+	    "nature physics": "#494495",
+	    "nature plants": "#299751",
+	    "nature protocols": "#494495",
+	    "nature reviews chemistry": "#008b68",
+	    "nature reviews drug discovery": "#f7a70a",
+	    "nature reviews genetics": "#e40428",
+	    "nature reviews immunology": "#6c4796",
+	    "nature reviews methods primers": "#fbba00",
+	    "nature reviews microbiology": "#e5005b",
+	    "nature reviews molecular cell biology": "#1951a0",
+	    "nature reviews neuroscience": "#3fa535",
+	    "nature structural and molecular biology": "#6c4796",
+	    "nature sustainability": "#e63323",
+	    "nature synthesis": "#c82285",
+	    "nature water": "#0094a4",
+	    "nucleic acids research": "#011e41",
+	    "plos biology": "#0523a2",
+	    "plos one": "#cc00a6",
+	    "pnas": "#1f75b9",
+	    "proceedings of the national academy of sciences": "#1f75b9",
+	    "science": "#ca2015",
+	    "science advances": "#ca2015",
+	    "scientific reports": null,
+	    "the embo journal": "#ff0095",
+	    "trends in biochemical sciences": "#007dbc",
+	    "trends in microbiology": "#007dbc",
+	    "elife": "#083d87",
+	    "mbio": "#6e101c",
+	    "npj biofilms and microbiomes": "#e30613"
+	};
+
+
 	const NATURE_TITLES = [
 		[/^nature$/, 168], [/^nature communications/, 30], [/^nature biotechnology/, 50],
 		[/^nature methods/, 350], [/^nature chemical biology/, 190], [/^nature genetics/, 40],
@@ -217,11 +316,13 @@ var ZotPoPJournalMarks = (function () {
 
 	// The mark is the journal's standard abbreviation; the monogram only stands in
 	// when even that comes back empty.
+	function exactOf(key) { return Object.prototype.hasOwnProperty.call(JOURNAL_COLOURS, key) ? JOURNAL_COLOURS[key] : undefined; }
 	function fromFamily(family, name) {
-		let measured = JOURNAL_HUES[flat(name)];
+		let key = flat(name), measured = JOURNAL_HUES[key], exact = exactOf(key);
 		return {
 			family: family.key, label: family.label,
-			hue: measured ?? (typeof family.hue === "function" ? family.hue(name) : family.hue),
+			hue: exact ? Math.round(hexToHsl(exact).h) : measured ?? (typeof family.hue === "function" ? family.hue(name) : family.hue),
+			hex: exact, exact: exact !== undefined,
 			mark: abbreviate(name) || (typeof family.mark === "function" ? family.mark(name) : family.mark),
 			known: true
 		};
@@ -239,14 +340,49 @@ var ZotPoPJournalMarks = (function () {
 			if (family) return fromFamily(family, name);
 		}
 		// A journal the patterns do not know but the PDFs do is still a known colour.
-		let measured = JOURNAL_HUES[key];
-		return { family: "other", label: "", hue: measured ?? derivedHue(name), mark: abbreviate(name) || monogram(name), known: measured != null };
+		let measured = JOURNAL_HUES[key], exact = exactOf(key);
+		return { family: "other", label: "", hue: exact ? Math.round(hexToHsl(exact).h) : measured ?? derivedHue(name), hex: exact, exact: exact !== undefined,
+			mark: abbreviate(name) || monogram(name), known: exact !== undefined || measured != null };
 	}
 
 	// The mark's ink and its fill, from one hue so every tile in the column is built
 	// the same way. A curated family sits a little stronger than a derived one.
 	const hsl = (h, s, l) => `hsl(${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%)`;
+	/* From one exact brand colour to ink and fill that read on the page. A
+	   yellow like #efd600 is the journal"s colour but not legible as text on
+	   white, so the ink is the same hue pulled down to a readable lightness and
+	   the fill is the same hue washed nearly out; in dark mode the ink is lifted
+	   instead. The hue is never changed, only how light it is drawn. */
+	function hexToHsl(hex) {
+	  const n = parseInt(String(hex).slice(1), 16);
+	  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+	  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+	  if (max === min) return {h: 0, s: 0, l};
+	  const d = max - min, s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+	  const h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+	  return {h: h * 60, s, l};
+	}
+	function luminance(hex) {
+		const n = parseInt(String(hex).slice(1), 16);
+		const c = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+		return 0.2126 * c(n >> 16 & 255) + 0.7152 * c(n >> 8 & 255) + 0.0722 * c(n & 255);
+	}
+	function tonesFor(hex, dark) {
+		if (!hex) return dark
+			? { ink: "hsl(0 0% 88%)", fill: "hsl(0 0% 24%)", edge: "hsl(0 0% 36%)" }
+			: { ink: "hsl(0 0% 12%)", fill: "hsl(0 0% 93%)", edge: "hsl(0 0% 84%)" };
+		const { h, s } = hexToHsl(hex);
+		const sat = Math.round(Math.max(45, Math.min(95, s * 100)));
+		// The badge wears the exact code, with black or white lettering by luminance,
+		// so the colour the journal actually prints is the colour on the row.
+		const badge = { badge: hex, badgeInk: luminance(hex) > 0.42 ? "#111111" : "#ffffff" };
+		return dark
+			? { ...badge, ink: hsl(h, sat, 72), fill: hsl(h, Math.round(sat * 0.7), 24), edge: hsl(h, Math.round(sat * 0.7), 36) }
+			: { ...badge, ink: hsl(h, sat, 36), fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84) };
+	}
+
 	function colours(identity, { dark = false } = {}) {
+		if (identity?.exact) return tonesFor(identity.hex, dark);
 		let hue = identity?.hue ?? 0;
 		let known = Boolean(identity?.known);
 		return dark
@@ -254,7 +390,7 @@ var ZotPoPJournalMarks = (function () {
 			: { ink: hsl(hue, known ? 62 : 40, 40), fill: hsl(hue, known ? 62 : 36, 93), edge: hsl(hue, known ? 52 : 30, 84) };
 	}
 
-	return { identify, colours, monogram, abbreviate, derivedHue, natureHue, FAMILIES, PUBLISHERS, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES };
+	return { identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, tonesFor, FAMILIES, PUBLISHERS, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPJournalMarks;

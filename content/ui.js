@@ -1073,9 +1073,10 @@
 		let mark = document.createElement("span");
 		mark.className = "jmark" + (found.identity.known ? " known" : "");
 		mark.textContent = found.abbrev;
-		mark.style.background = found.tone.fill;
-		mark.style.color = found.tone.ink;
-		mark.style.boxShadow = "inset 0 0 0 .5px " + found.tone.edge;
+		// An exact brand code is worn as-is; a derived colour is a tinted chip.
+		mark.style.background = found.tone.badge || found.tone.fill;
+		mark.style.color = found.tone.badge ? found.tone.badgeInk : found.tone.ink;
+		mark.style.boxShadow = found.tone.badge ? "none" : "inset 0 0 0 .5px " + found.tone.edge;
 		mark.title = found.identity.label ? r.venue + " · " + found.identity.label : r.venue;
 		return mark;
 	}

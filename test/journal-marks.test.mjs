@@ -11,7 +11,10 @@ test("loads in Gecko without CommonJS", () => {
 });
 
 test("the flagships wear their own colours: Science red, Cell blue, Nature green", () => {
-	assert.deepEqual([J.identify("Science").hue, J.identify("Cell").hue, J.identify("Nature").hue], [0, 200, 8]);
+	// Exact codes read off the journals' own sites: Science #ca2015, Cell Press #007dbc; Nature's masthead is black.
+	assert.deepEqual([J.identify("Science").hex, J.identify("Cell").hex, J.identify("Nature").hex], ["#ca2015", "#007dbc", null]);
+	assert.deepEqual([J.identify("Science").hue, J.identify("Cell").hue], [4, 200]);
+	assert.equal(J.identify("Nature").exact, true, "no colour is itself an exact answer");
 	assert.equal(J.identify("Science").mark, "Science");
 	assert.equal(J.identify("Cell").mark, "Cell");
 	assert.equal(J.identify("Nature Communications").mark, "Nat Commun");
@@ -36,31 +39,42 @@ test("a publisher name settles a title the patterns do not know; nothing known s
 	assert.equal(J.identify("arXiv (Cornell University)").family, "other");
 });
 
-test("ink and fill come from one hue, a little stronger for a curated family, and the mirror mirrors Style Custom", () => {
-	const known = J.colours(J.identify("Science"));
+test("an exact code is worn as-is on the badge and pulled to a readable lightness for the name", () => {
+	const nbt = J.colours(J.identify("Nature Biotechnology"));
+	assert.equal(nbt.badge, "#efd600");
+	assert.equal(nbt.badgeInk, "#111111", "dark lettering on a light yellow");
+	assert.match(nbt.ink, /^hsl\(54 95% 36%\)$/, "the same hue, dark enough to read as text on white");
+	assert.match(J.colours(J.identify("Nature Biotechnology"), { dark: true }).ink, /^hsl\(54 95% 72%\)$/);
+	const asm = J.colours(J.identify("mBio"));
+	assert.equal(asm.badgeInk, "#ffffff", "white lettering on a dark red");
+	const none = J.colours(J.identify("Nature"));
+	assert.equal(none.badge, undefined);
+	assert.match(none.ink, /^hsl\(0 0% 12%\)$/, "a black masthead stays black");
 	const derived = J.colours(J.identify("Some Obscure Bulletin"));
-	assert.match(known.ink, /^hsl\(0 62% 40%\)$/);
+	assert.equal(derived.badge, undefined);
 	assert.match(derived.fill, /^hsl\(\d+ 36% 93%\)$/);
-	assert.match(J.colours(J.identify("Science"), { dark: true }).ink, /^hsl\(0 62% 74%\)$/);
 	const theirs = fs.readFileSync(new URL("../zotero-style-custom/src/journal-identity.js", import.meta.url), "utf8");
 	for (const family of J.FAMILIES) assert.ok(theirs.includes(`key: '${family.key}'`) && (typeof family.hue === "function" || theirs.includes(`hue: ${family.hue}`)), family.key + " must match Style Custom");
 	assert.equal(J.NATURE_TITLES.length, JSON.parse(JSON.stringify(theirs.match(/NATURE_TITLES = \[([\s\S]*?)\];/)[1].match(/\[\/\^/g))).length, "the same sister journals in both plugins");
+	const theirColours = JSON.parse(theirs.match(/JOURNAL_COLOURS = (\{[\s\S]*?\});/)[1].replace(/'/g, "\""));
+	assert.deepEqual(theirColours, J.JOURNAL_COLOURS, "the same exact codes in both plugins");
 });
 
 test("every Nature sister journal keeps its own cover colour", () => {
 	const hue = title => J.identify(title).hue;
 	assert.notEqual(hue("Nature Biotechnology"), hue("Nature Methods"));
-	assert.equal(hue("Nature Communications"), 30, "Nature Communications is orange");
-	assert.equal(hue("Nature Biotechnology"), 50, "Nature Biotechnology is yellow");
-	assert.equal(hue("Nature Chemical Biology"), 190, "Nature Chemical Biology is teal, as its page band is");
+	assert.equal(J.identify("Nature Communications").hex, "#e63323", "the rule under the nature.com header");
+	assert.equal(J.identify("Nature Biotechnology").hex, "#efd600", "Nature Biotechnology is yellow");
+	assert.equal(J.identify("Nature Chemical Biology").hex, "#0094a4", "Nature Chemical Biology is teal");
+	assert.equal(J.identify("Nature Medicine").hex, "#e40428");
 	assert.equal(J.JOURNAL_HUES["molecular cell"], 200, "measured off the PDFs in the library");
 	assert.equal(J.identify("Microbial Cell Factories").known, true, "a measured journal counts as known even without a family");
-	assert.notEqual(hue("Nature Communications"), hue("Nature"));
+	assert.notEqual(J.identify("Nature Communications").hex, J.identify("Nature").hex);
 	assert.equal(new Set(J.FAMILIES.map(f => f.key)).size, J.FAMILIES.length);
-	assert.equal(hue("Nature Medicine"), 5);
-	assert.equal(J.identify("Nature Reviews Microbiology").hue, 330);
+	assert.equal(J.identify("Nature Reviews Microbiology").hex, "#e5005b");
 	assert.equal(J.identify("Nature Reviews Microbiology").mark, "Nat Rev Microbiol");
 	assert.equal(J.identify("Nature Biotechnology").family, "nature-portfolio", "still one family for the label");
 	assert.equal(J.identify("Nature Something New").hue, 168, "an unlisted sister falls back to the house colour");
+	assert.equal(J.identify("Nature Something New").exact, false);
 	assert.equal(J.identify("Scientific Reports").hue, 0);
 });

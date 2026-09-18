@@ -87,10 +87,15 @@ async function startup({ id, version, rootURI }) {
 }
 function onMainWindowLoad({ window }) { customStyle?.addWindow(window); }
 function onMainWindowUnload({ window }) { customStyle?.removeWindow(window).catch(error=>Zotero.logError(error)); }
-async function shutdown() {
+// Zotero calls this with the reason. On APP_SHUTDOWN the item tree is about to
+// write its column layout to disk, and a column unregistered here is dropped
+// from that file -- which is how every width and order the user set was lost at
+// each quit. The columns are left registered on quit; Zotero removes a plugin's
+// columns itself on disable and uninstall.
+async function shutdown(data, reason) {
   if (readerWindowObserver) { Services.obs.removeObserver(readerWindowObserver, "domwindowopened"); readerWindowObserver = null; }
   const runtime = customStyle;
   customStyle = null;
   if (Zotero.StyleCustom === runtime) delete Zotero.StyleCustom;
-  await runtime?.stop();
+  await runtime?.stop({ keepColumns: reason === 'APP_SHUTDOWN' || reason === 2 });
 }

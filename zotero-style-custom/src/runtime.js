@@ -590,9 +590,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const tone = this.journalIdentity.colours(found.identity, {dark: P.dark});
     const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     mark.textContent = this.journalAbbreviationOf(item);
+    const bg = tone.badge || tone.fill, ink = tone.badge ? tone.badgeInk : tone.ink, edge = tone.badge ? 'transparent' : tone.edge;
     mark.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;`
       + `min-width:22px;height:14px;padding:0 4px;border-radius:3px;white-space:nowrap;`
-      + `background:${tone.fill};color:${tone.ink};box-shadow:inset 0 0 0 .5px ${tone.edge};`
+      + `background:${bg};color:${ink};box-shadow:inset 0 0 0 .5px ${edge};`
       + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
     mark.title = found.identity.label ? `${found.title} · ${found.identity.label}` : found.title;
     return mark;
@@ -3023,7 +3024,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     await Promise.all(pending);
     if(errors.length)throw errors[0];
   }
-  async stop() {
+  async stop({keepColumns=false}={}) {
     if(this.stopPromise)return this.stopPromise;
     this.stopping=true;
     this.stopPromise=(async()=>{
@@ -3041,7 +3042,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       this.active=false;
       await attempt(()=>this.queue);await attempt(()=>this.flush());
       for(const observer of this.observers.splice(0))await attempt(()=>this.Z.Prefs.unregisterObserver(observer));
-      for(const column of this.columns.splice(0))await attempt(()=>this.Z.ItemTreeManager.unregisterColumn(column));
+      // Unregistering a column while Zotero quits deletes its saved width and
+      // order from treePrefs.json; on quit the columns stay and Zotero drops them
+      // itself with the plugin.
+      if(!keepColumns)for(const column of this.columns.splice(0))await attempt(()=>this.Z.ItemTreeManager.unregisterColumn(column));
       if(this.prefPane){const pane=this.prefPane;this.prefPane=null;await attempt(()=>this.Z.PreferencePanes.unregister(pane));}
       this.tabItems.clear();
       if(errors.length){for(const error of errors.slice(1))this.Z.logError(error);throw errors[0];}

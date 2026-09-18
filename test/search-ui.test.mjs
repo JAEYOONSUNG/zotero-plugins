@@ -340,7 +340,7 @@ test("the journal cell carries the publisher's mark in its colour, and so does t
 	const rows = ui.get("results-body").children;
 	const venue = rows[0].querySelector("td.venue");
 	assert.equal(venue.textContent, "Science", "the name itself carries the colour; no chip crowds it");
-	assert.match(venue.style.color, /^hsl\(0 /);
+	assert.match(venue.style.color, /^hsl\(4 81% 36%\)$/);
 	assert.equal(venue.style.fontWeight, "600");
 	assert.equal(venue.title, "Science · Science · American Association for the Advancement of Science (AAAS)");
 	assert.equal(venue.dataset.marquee, "venue");

@@ -1587,7 +1587,8 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   ref.getField = name => name === 'publicationTitle' ? 'Frontiers in Genetics' : name === 'journalAbbreviation' ? 'Front. Genet.' : getField(name);
   assert.equal(plugin.value('journalMark', ref), 'Front Genet', 'periods are dropped so the column reads in one style');
   ref.getField = name => name === 'publicationTitle' ? 'Science' : getField(name);
-  assert.match(mark.firstChild.style.color, /^hsl\(0 /, 'Science is red');
+  assert.match(mark.firstChild.style.cssText, /background:\s*#ca2015/, 'the badge wears the exact AAAS red #ca2015');
+  assert.equal(mark.firstChild.style.color, '#ffffff', 'white lettering on it');
   assert.equal(mark.title, 'Science · Science');
   plugin.value = (key, target) => key === 'if' ? '56.1' : '';
   const cell = plugin.renderCell('if', 0, '56.1', {}, document);
@@ -1599,7 +1600,7 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   plugin.windows.set(win, state);
   plugin.enhanceTitles(win, state, [ref]);
   const venue = document.querySelector('.cell.publicationTitle .cell-text');
-  assert.match(venue.style.color, /^hsl\(0 /, "the journal's name is written in its publisher's colour");
+  assert.match(venue.style.color, /^hsl\(4 81% 36%\)$/, "the journal's name is written in its publisher's colour, dark enough to read");
   assert.equal(venue.style.fontWeight, '600');
   assert.equal(venue.dataset.styleCustomVenue, 'science');
   await plugin.removeWindow(win);
@@ -1622,4 +1623,17 @@ test('a tall Extra field gets a row as tall as itself, and the row is given back
   values.r1 = 40; rows.r1 = 111;
   plugin.fixItemPaneRows(document);
   assert.equal(document.getElementById('r1').style.minHeight, '', 'a value that shrank releases the row');
+});
+
+test('quitting Zotero leaves the columns registered, so their saved widths and order survive', async () => {
+  const {plugin, columns} = fixture();
+  await plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+  const before = columns.size;
+  assert.ok(before > 0);
+  await plugin.stop({keepColumns: true});
+  assert.equal(columns.size, before, 'APP_SHUTDOWN must not unregister: the item tree writes its layout after this and would drop them');
+  const again = fixture();
+  await again.plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+  await again.plugin.stop();
+  assert.equal(again.columns.size, 0, 'a disable or uninstall still cleans up');
 });
