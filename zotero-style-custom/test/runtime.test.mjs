@@ -497,8 +497,12 @@ test('status rating and impact cells carry colour that tracks the value instead 
  window.ZoteroPane={itemsView:{getRow:()=>({ref})}};
  const P=plugin.palette(document);
  const status=label=>{plugin.value=(key)=>key==='status'?String({unread:0,reading:1,done:2}[label]):'';return plugin.renderCell('status',0,'',{},document).firstChild.style.color;};
- assert.deepEqual([status('unread'),status('reading'),status('done')],[P.muted,P.orange,P.green]);
- // A 16.6 and a 56.1 must not read as the same journal.
+ // Amber goes brown as it darkens, so "reading" carries its own lighter ink
+ // rather than the column-wide orange, which read as mud at 11px.
+ assert.deepEqual([status('unread'),status('reading'),status('done')],[P.muted,P.amber,P.green]);
+ assert.notEqual(P.amber,P.orange);
+ // The tier still exists, for the tooltip and for sorting; what changed is that
+ // it no longer paints the number, which said the same thing twice.
  const tier=value=>plugin.impactTier(value,P)?.color;
  assert.notEqual(tier(16.6),tier(56.1));
  assert.deepEqual([tier(0),tier(1.2),tier(3),tier(6),tier(16.6),tier(56.1)],[undefined,P.gray,P.green,P.teal,P.blue,P.purple]);
@@ -1082,9 +1086,12 @@ test('filled stars use gold with enough area to read, empty ones are plainly emp
   plugin.value = key => key === 'rating' ? '3' : '';
   const stars = [...plugin.renderCell('rating', 0, '', {}, document).children];
   assert.deepEqual(stars.map(s => s.textContent), ['★', '★', '★', '☆', '☆']);
-  assert.deepEqual(stars.map(s => s.style.color), [P.gold, P.gold, P.gold, P.faint, P.faint]);
+  // A filled star is a mark, not text, so it can be the light warm colour a
+  // star is supposed to be rather than the dark ochre that read as dirt.
+  assert.deepEqual(stars.map(s => s.style.color), [P.star, P.star, P.star, P.faint, P.faint]);
   assert.equal(stars[0].style.fontSize, '13px');
-  assert.notEqual(P.gold, P.faint);
+  assert.notEqual(P.star, P.faint);
+  assert.notEqual(P.star, P.gold);
 });
 
 test('cleaning up star tags moves the rating first, so nothing is lost', async () => {

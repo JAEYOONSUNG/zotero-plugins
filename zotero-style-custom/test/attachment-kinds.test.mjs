@@ -256,3 +256,132 @@ test("a supplement that was just downloaded is badged without waiting for a scan
   assert.deepEqual(attachment.tags, ["style-custom:supplementary"]);
   assert.deepEqual(saved, [42]);
 });
+
+test("a supplement's home paper is suggested only when the answer is not a guess", () => {
+  const library = [
+    {id: "1", title: "Mechanism of DNA entrapment by a loop-extruding Wadjet SMC motor"},
+    {id: "2", title: "Structural basis for plasmid restriction by SMC JET nuclease"},
+    {id: "3", title: "Cell-free gene expression"}
+  ];
+  // The title route: the stub says what it is, minus the marker.
+  const named = kinds.findHome(
+    {id: "9", title: "[Supplementary] Mechanism of DNA entrapment by a loop-extruding Wadjet SMC motor", text: ""},
+    library);
+  assert.equal(named.id, "1");
+  assert.equal(named.viaTitle, true);
+
+  // A three-word title made of common words matches almost any document, and
+  // matching one is not evidence of anything.
+  assert.equal(kinds.findHome({id: "9", title: "", text: "cell free gene expression in a tube " + "x ".repeat(40)},
+    library), null, "a short generic title is not a candidate at all");
+
+  // Two candidates that fit equally well means the library holds a pair, and
+  // picking one at random is the mistake this whole feature exists to find.
+  const pair = kinds.findHome({id: "9", title: "Cell-free gene expression [Supplementary]", text: ""},
+    [{id: "1", title: "Mechanism of DNA entrapment by a loop-extruding Wadjet SMC motor"},
+     {id: "2", title: "Mechanism of DNA entrapment by a loop-extruding Wadjet SMC motor"}]);
+  assert.equal(pair, null, "nothing matches, so nothing is suggested");
+
+  const twins = kinds.findHome(
+    {id: "9", title: "Structural basis for plasmid restriction by SMC JET nuclease", text: ""},
+    [{id: "1", title: "Structural basis for plasmid restriction by SMC JET nuclease"},
+     {id: "2", title: "Structural basis for plasmid restriction by SMC JET nuclease"}]);
+  assert.equal(twins.id, null);
+  assert.equal(twins.ambiguous.length, 2, "both are offered, and the user picks");
+
+  // Body text is weaker evidence than a title: a supplement cites its
+  // neighbours, and one here matched a different paper by the same group on the
+  // same enzyme, fully, from a sentence in its methods.
+  const cited = kinds.findHome({id: "9", title: "",
+    text: "Supplementary Information " + "filler ".repeat(120)
+      + " see also Protein Engineering of Tagatose 4-Epimerase for D-Tagatose Production"},
+    [{id: "1", title: "Protein Engineering of Tagatose 4-Epimerase for D-Tagatose Production"}]);
+  assert.equal(cited, null, "a mention below the title block does not count");
+});
+
+test("the supplement marker comes off a title without taking the title with it", () => {
+  assert.equal(kinds.withoutMarker("Supplementrary_Landscape profiling of PET depolymerases"),
+    "Landscape profiling of PET depolymerases", "an underscore separates words; a greedy \\w* ate both");
+  assert.equal(kinds.withoutMarker("[Supplementary] An Orthogonal T7 Replisome"), "An Orthogonal T7 Replisome");
+  assert.equal(kinds.withoutMarker("Cell-free gene expression [Supplementary]"), "Cell-free gene expression");
+  assert.equal(kinds.withoutMarker("A paper about silicon si chips"), "A paper about silicon chips");
+});
+
+test("rehoming a supplement moves it and retires only an empty stub", async () => {
+  const { createRequire } = await import("node:module");
+  const Runtime = createRequire(import.meta.url)("../src/runtime.js");
+  const make = (id, children = []) => ({id, deleted: false, parentItemID: null,
+    getAttachments: () => children, async saveTx() { saved.push(id); }});
+  const saved = [];
+  const stub = make(10, [11]);
+  const file = {id: 11, parentItemID: 10, async saveTx() { saved.push(11); }};
+  const paper = make(20);
+  const items = new Map([[10, stub], [11, file], [20, paper]]);
+  const host = {cache: {}, dirty: false, Z: {Items: {get: id => items.get(id)}},
+    isRegular: item => item !== file, rehomeSupplement: Runtime.prototype.rehomeSupplement,
+    async flush() {}, async refreshWindows() {}};
+
+  const result = await host.rehomeSupplement(11, 20);
+  assert.equal(file.parentItemID, 20);
+  assert.equal(result.moved, 1);
+  assert.equal(result.trashed, 1, "the stub had nothing else on it");
+  assert.equal(stub.deleted, true, "trashed, which Zotero can undo; no file is deleted");
+
+  // A stub that still holds its own article is a real paper that happened to
+  // carry someone else's supplement, and it stays.
+  const keeper = make(30, [31]);
+  const other = {id: 31, parentItemID: 30, async saveTx() {}};
+  items.set(30, keeper); items.set(31, other);
+  items.set(32, {id: 32, parentItemID: 30, async saveTx() {}});
+  keeper.getAttachments = () => [31, 32];
+  const second = await host.rehomeSupplement(32, 20);
+  assert.equal(second.trashed, 0);
+  assert.equal(keeper.deleted, false);
+});
+
+test("the download is counted before it is started, and closed articles are not attempted", async () => {
+  const { createRequire } = await import("node:module");
+  const Runtime = createRequire(import.meta.url)("../src/runtime.js");
+  const supplementary = createRequire(import.meta.url)("../src/supplementary.js");
+  // Measured over this library: 1,146 papers have a DOI, 697 are in PMC, 506 of
+  // those say they have supplementary material, and only 336 are open access --
+  // the only set whose archive the endpoint will hand over.
+  const answers = {
+    "10.1/open": {resultList: {result: [{doi: "10.1/open", pmcid: "PMC1", hasSuppl: "Y", isOpenAccess: "Y", source: "PMC"}]}},
+    "10.1/closed": {resultList: {result: [{doi: "10.1/closed", pmcid: "PMC2", hasSuppl: "Y", isOpenAccess: "N", source: "PMC"}]}},
+    "10.1/plain": {resultList: {result: [{doi: "10.1/plain", pmcid: "PMC3", hasSuppl: "N", isOpenAccess: "Y", source: "PMC"}]}},
+    "10.1/elsewhere": {resultList: {result: [{doi: "10.1/elsewhere", id: "MED9", source: "MED"}]}},
+    "10.1/unknown": {resultList: {result: []}}
+  };
+  let requests = 0;
+  const item = (id, doi, kinds = []) => ({id, doi, kinds});
+  const items = [item(1, "10.1/open"), item(2, "10.1/closed"), item(3, "10.1/plain"),
+    item(4, "10.1/elsewhere"), item(5, "10.1/unknown"), item(6, ""),
+    item(7, "10.1/open", [{kind: "supplementary"}]), item(8, "")];
+  // Item 6 has no DOI but does have a title, and Europe PMC is searched by
+  // title in that case; item 8 has neither, and cannot be looked up at all.
+  items[7].noTitle = true;
+  const host = {
+    active: true, stopping: false, supplementaryTools: supplementary,
+    Z: {logError() {}, HTTP: {async request(method, url) {
+      requests++;
+      const doi = decodeURIComponent(url).match(/DOI:"([^"]+)"/)?.[1];
+      return {response: answers[doi] || {resultList: {result: []}}};
+    }}},
+    isRegular: () => true, contactEmail: () => "",
+    attachmentKinds: it => it.kinds,
+    bibliographyRecord: it => ({DOI: it.doi, title: it.noTitle ? "" : "Paper " + it.id}),
+    previewSupplementary: Runtime.prototype.previewSupplementary
+  };
+  const report = await host.previewSupplementary(items);
+  assert.deepEqual(report.available.map(row => row.id), ["1"]);
+  assert.equal(report.closed, 1, "an article that is not open access answers with an XML error, not an archive");
+  assert.equal(report.noSupplement, 1);
+  assert.equal(report.notArchived, 1);
+  assert.equal(report.notFound, 2, "the one with no DOI is still searched by title, and is not there");
+  assert.equal(report.noIdentifier, 1, "the one with neither DOI nor title cannot be looked up");
+  assert.equal(report.already, 1);
+  // The two it could answer without asking cost nothing.
+  assert.equal(requests, 6);
+  assert.equal(report.errors, 0);
+});

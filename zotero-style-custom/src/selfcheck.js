@@ -204,8 +204,11 @@
 
     results.push(await attempt('what the attachment scan found', async () => {
       const found = await runtime.attachmentFindings(library);
+      const orphan = found.orphan || [];
+      const placed = orphan.filter(row => row.home && row.home.id).length;
       return `보충자료 ${found.supplementary.length} · 중복 ${found.duplicate.length}`
         + ` · 다른 논문 ${found.foreign.length} · 첨부 없음 ${found.missing.length}`
+        + ` · 보충자료만 ${orphan.length} (원논문 찾음 ${placed})`
         + (found.unread ? ` · 미판별 ${found.unread}` : '');
     }));
 

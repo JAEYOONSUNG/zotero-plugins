@@ -425,7 +425,8 @@
    const total=found.supplementary.length+found.duplicate.length+found.foreign.length+found.missing.length;
    if(!total&&!found.unread)return false;
    const bar0=bar();
-   node('span',`보충자료 ${found.supplementary.length} · 중복 ${found.duplicate.length} · 다른 논문 ${found.foreign.length} · 첨부 없음 ${found.missing.length}`,
+   node('span',`보충자료 ${found.supplementary.length} · 중복 ${found.duplicate.length} · 다른 논문 ${found.foreign.length}`
+    +` · 보충자료만 ${(found.orphan||[]).length} · 첨부 없음 ${found.missing.length}`,
     bar0,{class:'sc-muted'});
    if(found.unread){
     button(`아직 안 읽은 ${found.unread}개 판별`,()=>run(async()=>{
@@ -458,6 +459,33 @@
     }),actions);
    });
    section('다른 논문이 붙어 있음',found.foreign,'alert');
+   // A supplement filed as its own bibliography entry. The paper it belongs to
+   // is a suggestion the user confirms one at a time, never a bulk action: two
+   // papers by one group on one molecule look alike enough that guessing is how
+   // a supplement lands on the wrong paper in the first place.
+   section('보충자료만 있는 문헌',found.orphan||[],'warn',(row,actions)=>{
+    const home=row.home;
+    if(home&&home.id){
+     button('원논문에 붙이기',()=>run(async()=>{
+      const result=await runtime.rehomeSupplement(row.fileID,home.id);
+      message(result.moved?`보충자료를 원논문으로 옮겼습니다${result.trashed?' · 빈 항목은 휴지통으로':''}. Zotero에서 되돌릴 수 있습니다.`:'옮길 것이 없었습니다.');
+      await render();
+     }),actions);
+     button('원논문 보기',()=>library.openItem(home.id),actions);
+     node('p',`원논문으로 보이는 문헌: ${home.title}`,actions.parentNode,{class:'sc-hit-meta'});
+    } else if(home&&home.ambiguous){
+     node('p',`후보가 둘입니다 — 직접 고르세요: ${home.ambiguous.map(a=>a.title).join('  |  ')}`,
+      actions.parentNode,{class:'sc-hit-meta'});
+     for(const candidate of home.ambiguous)
+      button(`«${String(candidate.title).slice(0,18)}»에 붙이기`,()=>run(async()=>{
+       const result=await runtime.rehomeSupplement(row.fileID,candidate.id);
+       message(result.moved?'보충자료를 옮겼습니다. Zotero에서 되돌릴 수 있습니다.':'옮길 것이 없었습니다.');
+       await render();
+      }),actions);
+    } else {
+     node('p','원논문을 라이브러리에서 찾지 못했습니다.',actions.parentNode,{class:'sc-hit-meta'});
+    }
+   });
    section('첨부파일 없음',found.missing,'');
    return true;
   }

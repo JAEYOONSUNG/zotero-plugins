@@ -19,6 +19,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.journalTools2 = typeof CustomStyleJournalMetrics !== "undefined" ? CustomStyleJournalMetrics : require("./journal-metrics.js");
     this.portraitTools = typeof CustomStyleAuthorPortrait !== "undefined" ? CustomStyleAuthorPortrait : require("./author-portrait.js");
     this.fileTools = typeof CustomStyleAttachmentKinds !== "undefined" ? CustomStyleAttachmentKinds : require("./attachment-kinds.js");
+    this.journalIdentity = typeof CustomStyleJournalIdentity !== "undefined" ? CustomStyleJournalIdentity : require("./journal-identity.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
     this.DISCOVER_CACHE_LIMIT = 60;
@@ -347,20 +348,65 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // Everything the scan found that the user can act on, gathered once so the
   // panel can list it. Detection with nowhere to go is half a feature.
   async attachmentFindings(libraryID) {
-    const found = {supplementary: [], duplicate: [], foreign: [], unknown: [], missing: [], unread: 0};
+    const found = {supplementary: [], duplicate: [], foreign: [], unknown: [], missing: [], orphan: [], unread: 0};
+    const papers = [], orphans = [];
     for (const item of await this.libraryItems(libraryID)) {
       if (!this.isRegular(item)) continue;
       const kinds = this.attachmentKinds(item);
       const paper = {id: String(item.id), title: String(item.getField('title') || ''),
         year: String(item.getField('date') || '').slice(0, 4)};
+      papers.push(paper);
       if (!kinds.length) { found.missing.push(paper); continue; }
       found.unread += kinds.filter(kind => !kind.read).length;
+      // An item whose every file is a supplement is a supplement that was filed
+      // as its own bibliography entry -- twenty-two of them here, and only five
+      // say so in the title.
+      if (kinds.every(kind => kind.kind === 'supplementary')) orphans.push({item, paper, kinds});
       for (const kind of kinds) {
         if (!found[kind.kind]) continue;
         found[kind.kind].push({...paper, fileID: kind.id, file: kind.name, why: kind.why});
       }
     }
+    for (const {item, paper, kinds} of orphans) {
+      const first = this.Z.Items.get(Number(kinds[0].id));
+      const text = first ? await this.attachmentText(first, {limit: 4000}) : '';
+      const home = this.fileTools.findHome({id: paper.id, title: paper.title, text}, papers);
+      found.orphan.push({...paper, fileID: kinds[0].id, file: kinds[0].name, home});
+    }
     return found;
+  }
+
+  /* Moving a supplement onto the paper it belongs to, and retiring the stub
+     entry that was holding it. Zotero's trash makes this undoable; nothing is
+     deleted and no file on disk is touched. */
+  async rehomeSupplement(fileID, homeID, {trashStub = true} = {}) {
+    const attachment = this.Z.Items.get(Number(fileID));
+    const home = this.Z.Items.get(Number(homeID));
+    if (!attachment || !home) throw new Error('문헌을 찾지 못했습니다.');
+    if (!this.isRegular(home)) throw new Error('보충자료를 붙일 대상이 일반 문헌이 아닙니다.');
+    const stub = attachment.parentItemID ? this.Z.Items.get(attachment.parentItemID) : null;
+    if (stub && stub.id === home.id) return {moved: 0, trashed: 0};
+    attachment.parentItemID = home.id;
+    await attachment.saveTx();
+    let trashed = 0;
+    // Only a stub with nothing left on it goes: an entry that still holds its
+    // own article is a real paper that happened to carry someone's supplement.
+    // The file that was just moved is excluded by id rather than by trusting the
+    // stub's own list to have been refreshed by the save.
+    const left = (stub?.getAttachments?.() || []).filter(id => {
+      if (Number(id) === Number(fileID)) return false;
+      const child = this.Z.Items.get(id);
+      return child && !child.deleted;
+    });
+    if (trashStub && stub && !left.length) {
+      stub.deleted = true;
+      await stub.saveTx();
+      trashed = 1;
+    }
+    this.dirty = true;
+    await this.flush();
+    await this.refreshWindows();
+    return {moved: 1, trashed};
   }
 
   // Sending a duplicate to the trash, which Zotero can undo. Nothing here
@@ -466,8 +512,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // another was hard to read, which is what made the row look loud.
     // The pill tint is raised instead, so the softness lives in the fills.
     return dark
-      ? {blue:'#809DD0',green:'#41AF7C',orange:'#C69164',red:'#D3888A',purple:'#B38DD5',teal:'#49A9BC',gold:'#B89944',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.26,dark:true}
-      : {blue:'#6484BA',green:'#42926C',orange:'#AA784C',red:'#BD6C6E',purple:'#9B71BF',teal:'#468D9B',gold:'#978144',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.20,dark:false};
+      ? {blue:'#809DD0',green:'#41AF7C',orange:'#C69164',red:'#D3888A',purple:'#B38DD5',teal:'#49A9BC',gold:'#B89944',amber:'#E0A868',star:'#E8B657',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.26,dark:true}
+      : {blue:'#6484BA',green:'#42926C',orange:'#AA784C',red:'#BD6C6E',purple:'#9B71BF',teal:'#468D9B',gold:'#978144',amber:'#C98A3E',star:'#D9A02F',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.20,dark:false};
   }
   tint(hex, alpha) {
     const n = parseInt(hex.slice(1), 16);
@@ -475,6 +521,46 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   // Impact-factor bands. Chosen so the common 2-10 range stays calm and only a
   // genuinely exceptional journal earns the strongest colour.
+  /* The journal cell: the publisher's mark, then the figure in readable ink.
+
+     The mark is where the colour lives. It is the one thing in the row that is
+     not written anywhere else, and a reader recognises "Nature portfolio" or
+     "Cell Press" at a glance in a way that a purple 56.1 never conveyed. The
+     number goes back to plain ink with weight carrying how high it is, which
+     ends the five-hue rainbow down a single column. */
+  paintJournal(cell, item, doc, P, {figure, estimate, name} = {}) {
+    const title = this.isRegular(item)
+      ? String(item.getField('publicationTitle') || item.getField('proceedingsTitle') || '') : '';
+    const identity = title ? this.journalIdentity.identify(title) : null;
+    if (identity) {
+      const tone = this.journalIdentity.colours(identity, {dark: P.dark});
+      const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      mark.textContent = identity.mark;
+      mark.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;`
+        + `min-width:22px;height:14px;padding:0 3px;border-radius:3px;`
+        + `background:${tone.fill};color:${tone.ink};box-shadow:inset 0 0 0 .5px ${tone.edge};`
+        + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
+      mark.title = identity.label ? `${title} · ${identity.label}` : title;
+      cell.appendChild(mark);
+    }
+    const number = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+    const value = Number(figure);
+    number.textContent = figure == null ? '—' : (estimate ? '~' : '') + figure;
+    number.style.cssText = `font-variant-numeric:tabular-nums;`
+      // Only how high the figure is, and only in weight. The tier used to be
+      // said twice: once by a colour and once by the number right beside it.
+      + `font-weight:${value >= 10 ? 640 : value >= 5 ? 560 : 400};`
+      + `color:${figure == null ? P.faint : estimate ? P.muted : P.text};`;
+    cell.appendChild(number);
+    const tier = this.impactTier(value, P);
+    cell.title = figure == null
+      ? (title ? `${title} · 공식 IF를 아직 확인하지 못했습니다.` : '저널 정보가 없습니다.')
+      : estimate
+        ? `≈ ${figure} · OpenAlex 2년 평균 피인용 · ${name || title}\n공식 JIF가 아니라 추정치입니다.`
+        : `${title}${tier ? ' · ' + tier.name : ''} · IF ${figure}`;
+    return cell;
+  }
+
   impactTier(value, p) {
     if (!(value > 0)) return null;
     if (value >= 30) return {color: p.purple, name: '최상위'};
@@ -513,15 +599,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         // from a Clarivate JIF, so it is marked and never presented as one.
         const estimate = this.journalCitedness(item);
         if (estimate) {
-          const tier = this.impactTier(estimate.citedness, P);
-          cell.textContent = "~" + estimate.citedness;
-          cell.style.color = tier ? tier.color : P.muted;
-          cell.style.fontWeight = "400";
-          cell.title = `≈ ${estimate.citedness} · OpenAlex 2년 평균 피인용 · ${estimate.name || ""}`
-            + `\n공식 JIF가 아니라 추정치입니다.`;
+          this.paintJournal(cell, item, doc, P, {figure: String(estimate.citedness), estimate: true, name: estimate.name});
           return cell;
         }
-        cell.textContent = "—";
+        this.paintJournal(cell, item, doc, P, {figure: null, estimate: false});
         cell.style.color = P.faint;
         cell.title = item.getField("publicationTitle") ? "이 저널의 공식 IF를 아직 확인하지 못했습니다. 저널명과 ISSN을 확인하세요." : "저널 정보가 없습니다. 프리프린트·책·데이터셋에는 저널 IF가 적용되지 않을 수 있습니다.";
       }
@@ -547,7 +628,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (key === "status") {
       label = ["unread", "reading", "done"][Number(value)] || "unread";
       // An empty, half and full circle reads as progress; one dot does not.
-      const tone = {unread: P.muted, reading: P.orange, done: P.green}[label];
+      // Amber goes brown as it darkens, so "reading" gets its own lighter ink
+      // rather than the column-wide orange, which read as mud at 11px.
+      const tone = {unread: P.muted, reading: P.amber, done: P.green}[label];
       const dot = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       dot.textContent = {unread: "○", reading: "◐", done: "●"}[label];
       dot.style.cssText = `font-size:10px;line-height:1;color:${tone};`;
@@ -561,7 +644,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       for (let n=1;n<=5;n++) {
         const star = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
         star.textContent = n<=rating ? "★" : "☆"; star.title = `${n}/5`;
-        star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.gold:P.faint};`;
+        // A filled star is a mark, not text: it can be the light warm colour a
+        // star is supposed to be instead of the dark ochre that reads as dirt.
+        star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.star:P.faint};`;
         star.addEventListener("click", event => { event.stopPropagation(); if (this.canEdit(item)) this.edit([item], {rating:n===rating?0:n}).catch(e=>this.Z.logError(e)); });
         cell.appendChild(star);
       }
@@ -676,9 +761,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       cell.title = signals ? `${signals.status} · 확인 ${signals.checkedAt}` : "";
       return cell;
     } else if (key === "if") {
-      const tier = this.impactTier(Number(value), P);
-      cell.textContent = label;
-      if (tier) { cell.style.color = tier.color; cell.style.fontWeight = "590"; cell.title = `${label} · ${tier.name}`; }
+      this.paintJournal(cell, item, doc, P, {figure: label, estimate: false});
     } else if (key === "citations") {
       const count = Number(value);
       const number = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -1120,6 +1203,41 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (file) attachment.setField('title', this.supplementaryTools.attachmentTitle(file));
       await attachment.saveTx({skipSelect: true, skipDateModifiedUpdate: true});
     } catch (error) { this.Z.logError(error); }
+  }
+
+  /* What a download would actually get, before one is started.
+
+     Measured over this library: of 1,146 papers with a DOI, 697 are in PMC,
+     506 of those have supplementary material, and 336 of those are open access
+     -- which is the only set whose archive the endpoint will hand over. A sweep
+     over everything therefore spends a thousand requests to fetch a few hundred
+     files, and says nothing about which. One search request per paper answers
+     that first, and costs no downloads at all. */
+  async previewSupplementary(items, {signal, onProgress} = {}) {
+    const report = {checked: 0, already: 0, noIdentifier: 0, notFound: 0,
+      notArchived: 0, noSupplement: 0, closed: 0, available: [], errors: 0};
+    const list = [...new Set(items)].filter(item => this.isRegular(item));
+    for (const [index, item] of list.entries()) {
+      if (signal?.aborted || !this.active || this.stopping) break;
+      onProgress?.(index, list.length);
+      if (this.attachmentKinds(item).some(kind => kind.kind === 'supplementary')) { report.already++; continue; }
+      const record = this.bibliographyRecord(item);
+      const url = this.supplementaryTools.searchURL(record, {email: this.contactEmail()});
+      if (!url) { report.noIdentifier++; continue; }
+      try {
+        const search = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 20000});
+        report.checked++;
+        const article = this.supplementaryTools.pickArticle(search?.response, record);
+        if (!article) { report.notFound++; continue; }
+        if (article.source !== 'PMC') { report.notArchived++; continue; }
+        if (!article.hasSupplementary) { report.noSupplement++; continue; }
+        // Europe PMC hands over the archive only for open-access articles; the
+        // rest answer 200 with an XML error, which is a wasted download.
+        if (!article.openAccess) { report.closed++; continue; }
+        report.available.push({id: String(item.id), title: record.title, pmcid: article.id});
+      } catch (error) { this.Z.logError(error); report.errors++; }
+    }
+    return report;
   }
 
   async downloadSupplementary(items, {pdfOnly = false, refetch = false, onProgress} = {}) {
@@ -2348,6 +2466,18 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         this.Z.alert(win,"Style Custom",`${changed}개의 표시를 해제했습니다.`);
       },suppl);
       make("menuseparator",null,suppl);
+      action("먼저 확인만 (받을 수 있는 논문 세기)",async()=>{
+        const chosen=this.selected(win);
+        const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
+        const report=await this.previewSupplementary(items,
+          {onProgress:(done,total)=>this.showBackfillProgress(win,'files',done,total)});
+        this.Z.alert(win,"Style Custom",
+          `받을 수 있는 논문 ${report.available.length}편\n\n`
+          +`이미 있음 ${report.already} · 식별자 없음 ${report.noIdentifier}\n`
+          +`PMC에 없음 ${report.notFound+report.notArchived} · 보충자료 없음 ${report.noSupplement}\n`
+          +`오픈액세스가 아니라 받을 수 없음 ${report.closed}`
+          +(report.errors?`\n조회 실패 ${report.errors}`:""));
+      },suppl);
       for(const [label,pdfOnly] of [["PDF만",true],["모든 파일",false]])action(label,async()=>{
         const items=this.selected(win);
         if(!items.length)throw new Error("문헌을 먼저 선택하세요.");

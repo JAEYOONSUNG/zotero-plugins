@@ -254,6 +254,58 @@
     return out;
   }
 
+  // A title with the supplement marker taken off it. Twenty-two items in this
+  // library are a supplement filed as its own bibliography entry, and five of
+  // them say so in the title: "[Supplementary] Mechanism of DNA entrapment...".
+  // Letters only, not \w: an underscore is a word separator here, and a greedy
+  // \w* swallowed "Supplementrary_Landscape" whole, taking the title with it.
+  const MARKER = /(^|[\s\[(_-])(supplement[a-z]*|supple|supporting\s+informations?|si|esm|보충자료|부록)([\s\])_:-]|$)/gi;
+  const withoutMarker = title => text(title).replace(/<[^>]*>/g, ' ').replace(MARKER, ' ').trim();
+
+  /* Which paper in the library does this supplement belong to?
+
+     The answer is a suggestion, never an instruction. Two things make a wrong
+     guess easy: a short generic title ("Cell-free gene expression") matches
+     almost any document, and a library often holds two papers by the same group
+     on the same molecule. So a candidate has to be specific enough to mean
+     something, and has to beat the runner-up clearly; otherwise this says it
+     does not know, which is the honest answer and the safe one. */
+  function findHome(supplement, candidates, {need = 0.85, gap = 0.2, minWords = 5, window = 600} = {}) {
+    // Only the title block at the very top, not the first page. Further down, a
+    // supplement cites its neighbours: one here matched a different paper by the
+    // same group on the same enzyme, fully, from a sentence in its methods.
+    const opening = new Set(flat(supplement?.text).slice(0, window).split(' '));
+    const ownTitle = flat(withoutMarker(supplement?.title));
+    const ownWords = new Set(ownTitle.split(' ').filter(word => word.length > 3));
+    if (!opening.size && !ownWords.size) return null;
+
+    const scored = [];
+    for (const candidate of Array.isArray(candidates) ? candidates : []) {
+      if (!candidate || String(candidate.id) === String(supplement?.id)) continue;
+      const words = [...new Set(flat(candidate.title).split(' ').filter(word => word.length > 3))];
+      // A three-word title made of common words is not evidence of anything.
+      if (words.length < minWords) continue;
+      // The title route is the trustworthy one; body text is a weaker signal and
+      // is held to a higher bar rather than being treated as equal evidence.
+      const inText = words.filter(word => opening.has(word)).length / words.length;
+      const inTitle = ownWords.size ? words.filter(word => ownWords.has(word)).length / words.length : 0;
+      const viaTitle = inTitle >= inText;
+      scored.push({id: candidate.id, title: candidate.title, viaTitle,
+        share: viaTitle ? inTitle : inText * 0.95});
+    }
+    if (!scored.length) return null;
+    scored.sort((a, b) => b.share - a.share);
+    const [best, next] = scored;
+    if (best.share < need) return null;
+    // Two candidates that fit equally well means the library holds a pair, and
+    // picking one of them at random is how a supplement ends up on the wrong
+    // paper -- exactly the mistake this whole feature exists to find.
+    if (next && best.share - next.share < gap) {
+      return {id: null, share: best.share, ambiguous: [best, next].map(row => ({id: row.id, title: row.title}))};
+    }
+    return {id: best.id, title: best.title, share: best.share, viaTitle: best.viaTitle, ambiguous: null};
+  }
+
   // What the column should say about an item, in one short label.
   function summarise(verdicts) {
     const rows = Array.isArray(verdicts) ? verdicts : [];
@@ -268,7 +320,7 @@
     };
   }
 
-  const api = {openingKind, sameDocument, namesTitle, classifyGroup, summarise, flat, OPENING, STRONG_WINDOW};
+  const api = {openingKind, sameDocument, namesTitle, classifyGroup, summarise, findHome, withoutMarker, flat, OPENING, STRONG_WINDOW};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleAttachmentKinds = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

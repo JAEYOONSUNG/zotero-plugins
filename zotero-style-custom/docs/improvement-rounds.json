@@ -1,5 +1,5 @@
 {
- "version": "0.21.1",
+ "version": "0.23.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1284,6 +1284,88 @@
    "status": "verified",
    "review": "The hue stays, the saturation drops to about a third, and the lightness of every colour is chosen so they all land within 0.5 of the same contrast against the surface behind them -- evenness is the point. The softness lives in the fills: the pill tint is raised from 0.13 to 0.20 in light and 0.20 to 0.26 in dark, rather than the ink being washed out. Three colours had to stay deeper than the family because they carry text on themselves: the accent under a white label, and the error ink on its own wash. A dead rule matching a colour nothing has emitted for a long time went with it.",
    "verification": "Contrast measured numerically for every colour in both schemes, rendered offline from the real stylesheet, and checked live in Zotero.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R43",
+   "title": "이미 가진 보충자료를 다시 받지 않기",
+   "gap": "The downloader decided 'already have it' by comparing publisher filenames against what was attached. A file mover renames those away, so all twenty-nine supplements in this library looked absent and would have been fetched again as duplicates.",
+   "entryPoint": "우클릭 → 보충자료 내려받기",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "이미 보충자료"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "a paper whose supplement is already on the shelf is not fetched again"
+    },
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "a supplement that was just downloaded is badged without waiting for a scan"
+    }
+   ],
+   "status": "verified",
+   "review": "It asks the content scan instead, which knows what each file is whatever it is called, and skips the paper without spending a request. A file that arrives from the supplementary endpoint records its verdict as it lands, so the badge is right immediately rather than after the next sweep.",
+   "verification": "Verified live: the scan holds 29 supplements, every one of which the downloader now skips.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R44",
+   "title": "보충자료만 들어 있는 문헌 찾아 원논문에 붙이기",
+   "gap": "Twenty-two items in this library are a supplement filed as its own bibliography entry, disconnected from the paper it belongs to. Only five say so in the title; the rest are invisible without reading the file.",
+   "entryPoint": "연구 작업 → 첨부 → 보충자료만 있는 문헌",
+   "sources": [
+    {
+     "file": "src/attachment-kinds.js",
+     "marker": "function findHome"
+    },
+    {
+     "file": "src/runtime.js",
+     "marker": "async rehomeSupplement"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "a supplement's home paper is suggested only when the answer is not a guess"
+    },
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "the supplement marker comes off a title without taking the title with it"
+    },
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "rehoming a supplement moves it and retires only an empty stub"
+    }
+   ],
+   "status": "verified",
+   "review": "The pairing is a suggestion the user confirms one at a time, never a bulk action. Two things make a wrong guess easy: a short generic title ('Cell-free gene expression') matches almost any document, and a library often holds two papers by one group on one molecule. So a candidate needs five distinct long words to count at all, has to beat the runner-up by a clear margin, and a match found in body text is held to a higher bar than one found in the title -- a supplement cites its neighbours, and one here matched a different paper by the same group on the same enzyme, fully, from a sentence in its methods. Tightening that turned three wrong confident answers into one honest 'I don't know'. Moving a supplement retires the stub only when nothing else is left on it, and only into Zotero's trash.",
+   "verification": "Verified live: 22 orphans found, 11 with a confident home.",
+   "nativeActivationVerified": true
+  },
+  {
+   "round": "R45",
+   "title": "받기 전에 몇 편이나 받을 수 있는지 먼저 세기",
+   "gap": "The download was a blind sweep. Measured over this library: of 1,146 papers with a DOI, 697 are in PMC, 506 of those have supplementary material, and only 336 are open access -- the only set whose archive the endpoint hands over. A sweep over everything spends a thousand requests to fetch a few hundred files and says nothing about which.",
+   "entryPoint": "우클릭 → 보충자료 → 먼저 확인만",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "async previewSupplementary"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/attachment-kinds.test.mjs",
+     "name": "the download is counted before it is started, and closed articles are not attempted"
+    }
+   ],
+   "status": "verified",
+   "review": "One search request per paper answers the question first and costs no downloads at all. A paper that already has its supplement, and one with neither DOI nor title, are answered without asking anything.",
+   "verification": "Coverage measured directly against Europe PMC for all 1,146 DOIs in the library.",
    "nativeActivationVerified": true
   }
  ],
