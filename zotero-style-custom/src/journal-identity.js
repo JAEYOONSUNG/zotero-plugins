@@ -31,19 +31,70 @@
      works in the field knows them: Biotechnology blue, Methods green, Chemical
      Biology purple, Genetics amber, Medicine red. The portfolio is one family
      but the marks are not one colour. Hues approximate the covers. */
+  /* Colours measured, not guessed: the first page of every PDF in this library
+     was rendered and the dominant saturated colour of its masthead band read
+     off, then tallied per journal. A journal enters this table when at least
+     three of its PDFs agree on the same hue. Blue that came only from a few
+     DOI links was discarded. Hues are 0-359 on the colour wheel. */
+  const JOURNAL_HUES = {
+    'acs catalysis': 210,
+    'acs synthetic biology': 230,
+    'annual review of genetics': 0,
+    'applied and environmental microbiology': 0,
+    'biotechnology advances': 160,
+    'biotechnology and bioengineering': 30,
+    'biotechnology for biofuels': 0,
+    'cell': 200,
+    'cell host and microbe': 200,
+    'cell reports': 200,
+    'communications biology': 0,
+    'environmental microbiology': 30,
+    'fems microbiology reviews': 200,
+    'frontiers in bioengineering and biotechnology': 30,
+    'frontiers in microbiology': 90,
+    'genome biology': 180,
+    'international journal of biological macromolecules': 200,
+    'journal of agricultural and food chemistry': 220,
+    'journal of bacteriology': 0,
+    'metabolic engineering': 30,
+    'metabolic engineering communications': 180,
+    'microbial biotechnology': 140,
+    'microbial cell factories': 60,
+    'microorganisms': 100,
+    'molecular cell': 200,
+    'molecular systems biology': 210,
+    'nature': 8,
+    'nature biotechnology': 50,
+    'nature chemical biology': 190,
+    'nature communications': 30,
+    'nature methods': 350,
+    'nature microbiology': 200,
+    'nature protocols': 350,
+    'nature reviews genetics': 0,
+    'nature reviews microbiology': 330,
+    'nature structural and molecular biology': 200,
+    'plos one': 200,
+    'plos genetics': 200,
+    'proceedings of the national academy of sciences': 240,
+    'science': 0,
+    'scientific reports': 0,
+    'trends in biotechnology': 200,
+    'trends in microbiology': 200
+};
+
   const NATURE_TITLES = [
-    [/^nature$/, 168], [/^nature communications/, 22], [/^nature biotechnology/, 50],
-    [/^nature methods/, 95], [/^nature chemical biology/, 285], [/^nature genetics/, 40],
+    [/^nature$/, 168], [/^nature communications/, 30], [/^nature biotechnology/, 50],
+    [/^nature methods/, 350], [/^nature chemical biology/, 190], [/^nature genetics/, 40],
     [/^nature cell biology/, 200], [/^nature immunology/, 350], [/^nature neuroscience/, 25],
-    [/^nature medicine/, 5], [/^nature structural/, 260], [/^nature microbiology/, 140],
+    [/^nature medicine/, 5], [/^nature structural/, 200], [/^nature microbiology/, 200],
     [/^nature chemistry/, 320], [/^nature materials/, 30], [/^nature physics/, 230],
-    [/^nature nanotechnology/, 15], [/^nature photonics/, 42], [/^nature catalysis/, 20],
+    [/^nature nanotechnology/, 15], [/^nature photonics/, 42], [/^nature catalysis/, 210],
     [/^nature energy/, 60], [/^nature ecology/, 120], [/^nature plants/, 110],
     [/^nature metabolism/, 300], [/^nature machine intelligence/, 250], [/^nature sustainability/, 150],
     [/^nature climate change/, 190], [/^nature human behaviour/, 340], [/^nature aging/, 275],
     [/^nature cancer/, 355], [/^nature synthesis/, 35], [/^nature food/, 80], [/^nature water/, 205],
-    [/^nature cardiovascular/, 10], [/^nature mental health/, 330], [/^nature protocols/, 100],
-    [/^nature reviews/, 175], [/^scientific reports/, 160], [/^npj\b/, 165], [/^communications /, 180]
+    [/^nature cardiovascular/, 10], [/^nature mental health/, 330], [/^nature protocols/, 350],
+    [/^nature reviews/, 330], [/^scientific reports/, 0], [/^npj\b/, 165], [/^communications /, 0]
   ];
   function natureHue(title) {
     const key = flat(title);
@@ -53,7 +104,7 @@
 
   const FAMILIES = [
     // --- Nature portfolio: the house colour, with the flagship darker ---
-    {key: 'nature', label: 'Nature', mark: 'N', hue: 168, test: /^nature$/},
+    {key: 'nature', label: 'Nature', mark: 'N', hue: 8, test: /^nature$/},
     {key: 'nature-portfolio', label: 'Nature Portfolio', hue: natureHue,
      // Scientific Reports and the Communications titles are Nature portfolio
      // too, and a reader knows it even though the name does not say so.
@@ -63,7 +114,7 @@
     {key: 'science', label: 'Science', mark: 'S', hue: 358, test: /^science$/},
     {key: 'aaas', label: 'AAAS', hue: 358, test: /^science\b(advances|immunology|robotics|signaling|translational)?/,
      mark: title => monogram(title, 'S')},
-    {key: 'pnas', label: 'PNAS', mark: 'PN', hue: 220,
+    {key: 'pnas', label: 'PNAS', mark: 'PN', hue: 240,
      test: /^proceedings of the national academy|^pnas\b/},
     {key: 'cell-press', label: 'Cell Press', hue: 200,
      test: /^(cell|molecular cell|developmental cell|cancer cell|immunity|neuron|chem|joule|matter|one earth|med|current biology|structure|trends in)\b/,
@@ -158,18 +209,20 @@
     const name = text(title);
     if (!name) return null;
     const key = flat(name);
+    const measured = JOURNAL_HUES[key];
     for (const family of FAMILIES) {
       if (!family.test.test(key)) continue;
       // The mark is the journal's standard abbreviation; the monogram only stands
       // in when even that comes back empty.
       return {
         family: family.key, label: family.label,
-        hue: typeof family.hue === 'function' ? family.hue(name) : family.hue,
+        hue: measured ?? (typeof family.hue === 'function' ? family.hue(name) : family.hue),
         mark: abbreviate(name) || (typeof family.mark === 'function' ? family.mark(name) : family.mark),
         known: true
       };
     }
-    return {family: 'other', label: '', hue: derivedHue(name), mark: abbreviate(name) || monogram(name), known: false};
+    // A journal the patterns do not know but the PDFs do is still a known colour.
+    return {family: 'other', label: '', hue: measured ?? derivedHue(name), mark: abbreviate(name) || monogram(name), known: measured != null};
   }
 
   // The mark's ink and its fill, derived from one hue so every tile in the
@@ -185,7 +238,7 @@
 
   const hsl = (h, s, l) => `hsl(${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%)`;
 
-  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, FAMILIES, NATURE_TITLES, ABBREVIATIONS};
+  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

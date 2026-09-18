@@ -1587,7 +1587,7 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   ref.getField = name => name === 'publicationTitle' ? 'Frontiers in Genetics' : name === 'journalAbbreviation' ? 'Front. Genet.' : getField(name);
   assert.equal(plugin.value('journalMark', ref), 'Front Genet', 'periods are dropped so the column reads in one style');
   ref.getField = name => name === 'publicationTitle' ? 'Science' : getField(name);
-  assert.match(mark.firstChild.style.color, /^hsl\(358 /, 'Science is red');
+  assert.match(mark.firstChild.style.color, /^hsl\(0 /, 'Science is red');
   assert.equal(mark.title, 'Science · Science');
   plugin.value = (key, target) => key === 'if' ? '56.1' : '';
   const cell = plugin.renderCell('if', 0, '56.1', {}, document);
@@ -1599,7 +1599,7 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   plugin.windows.set(win, state);
   plugin.enhanceTitles(win, state, [ref]);
   const venue = document.querySelector('.cell.publicationTitle .cell-text');
-  assert.match(venue.style.color, /^hsl\(358 /, "the journal's name is written in its publisher's colour");
+  assert.match(venue.style.color, /^hsl\(0 /, "the journal's name is written in its publisher's colour");
   assert.equal(venue.style.fontWeight, '600');
   assert.equal(venue.dataset.styleCustomVenue, 'science');
   await plugin.removeWindow(win);

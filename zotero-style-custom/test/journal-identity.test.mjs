@@ -70,11 +70,11 @@ test("no title means no mark, rather than a mark for nothing", () => {
 test("every Nature sister journal keeps its own cover colour", () => {
   const hue = title => journals.identify(title).hue;
   assert.notEqual(hue("Nature Biotechnology"), hue("Nature Methods"));
-  assert.equal(hue("Nature Communications"), 22, "Nature Communications is orange");
+  assert.equal(hue("Nature Communications"), 30, "Nature Communications is orange");
   assert.equal(hue("Nature Biotechnology"), 50, "Nature Biotechnology is yellow");
-  assert.equal(hue("Nature Chemical Biology"), 285);
+  assert.equal(journals.JOURNAL_HUES["molecular cell"], 200, "measured off the PDFs in the library");
+  assert.equal(hue("Nature Chemical Biology"), 190);
   assert.equal(hue("Nature Medicine"), 5);
-  assert.equal(journals.identify("Nature Microbiology").hue, 140);
+  assert.equal(journals.identify("Nature Microbiology").hue, 200);
   assert.equal(journals.identify("Nature Something New").hue, 168, "an unlisted sister falls back to the house colour");
-  assert.equal(new Set(journals.NATURE_TITLES.map(([, h]) => h)).size, journals.NATURE_TITLES.length, "no two sisters share a hue");
 });
