@@ -63,8 +63,13 @@ test("every translation is for a string that is actually in the source", () => {
   /* A templated string never appears whole in the source: `문헌 ${n}개` is
      written with the expression in the middle. So the check is on the longest
      run of literal text between the placeholders, which does appear verbatim. */
+  /* A templated string never appears whole in the source: `문헌 ${n}개` is
+     written with the expression in the middle, and a line break is written as
+     the two characters \ and n rather than as an actual newline. So the check
+     is on the longest run of literal text between those, which does appear
+     verbatim. */
   const orphans = Object.keys(strings.en).filter(key => {
-    const longest = key.split(/\{\d+\}/).map(part => part.trim())
+    const longest = key.split(/\{\d+\}|\n/).map(part => part.trim())
       .sort((a, b) => b.length - a.length)[0] || "";
     return longest.length > 4 && !source.includes(longest);
   });

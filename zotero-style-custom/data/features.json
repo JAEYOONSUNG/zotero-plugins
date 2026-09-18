@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "version": "0.35.1",
+ "version": "0.36.0",
  "baseline": "Installed Ethereal Style 6.0.76: all 50 simple and dotted preference feature IDs plus requested workflows",
  "sourceFeatureIDs": [
   "AIGenerateRemark",
