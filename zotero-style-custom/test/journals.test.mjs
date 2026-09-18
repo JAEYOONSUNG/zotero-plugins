@@ -1,4 +1,5 @@
 import test from 'node:test';
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {DOMParser} from 'linkedom';
 import J from '../src/journals.js';
@@ -43,4 +44,13 @@ test('official CSV uses impact_factor and if_year rather than adjacent five-year
  assert.deepEqual(J.parsePage(csv,record,DOMParser),{impactFactor:42.5,year:2024});
  assert.equal(J.parsePage(csv.replace('impact_factor,','other,'),record,DOMParser),null);
  assert.equal(J.parsePage(csv+'\nCell,45,50,70,2025',record,DOMParser),null);
+});
+
+test("a renamed journal is found under the title the JCR lists now", () => {
+  const j = J.create(JSON.parse(fs.readFileSync(new URL("../data/if-jcr-2025.json", import.meta.url), "utf8")));
+  const item = f => ({getField: k => f[k] || ""});
+  assert.equal(j.lookup(item({publicationTitle: "Biotechnology for Biofuels"})).title, "Biotechnology for Biofuels and Bioproducts");
+  assert.equal(j.lookup(item({publicationTitle: "European Journal of Biochemistry"})).title, "FEBS Journal");
+  assert.equal(j.lookup(item({publicationTitle: "Angewandte Chemie"})).impactFactor, 17.6);
+  assert.equal(j.lookup(item({publicationTitle: "Science of The Total Environment"})), null, "not in the 2026 release, so no figure");
 });

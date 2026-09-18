@@ -15,11 +15,28 @@ var ZotPoPJCR = (function () {
 	const EDITION = "JCR 2026 (JIF 2025)";
 	const flat = value => String(value == null ? "" : value).normalize("NFKC").toLowerCase()
 		.replace(/&/g, " and ").replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/^the /, "");
-	// Titles Zotero writes one way and the JCR another.
+	// Titles Zotero writes one way and the JCR another, and journals the JCR lists
+	// only under the name they carry now: an old paper's old title is sent there.
 	const ALIASES = {
+		"biotechnology for biofuels": "biotechnology for biofuels and bioproducts",
+		"bmc evolutionary biology": "bmc ecology and evolution",
+		"molecular and general genetics mgg": "molecular genetics and genomics",
+		"molecular and general genetics": "molecular genetics and genomics",
+		"journal of general microbiology": "microbiology sgm",
+		"european journal of biochemistry": "febs journal",
+		"journal of applied bacteriology": "journal of applied microbiology",
+		"genome announcements": "microbiology resource announcements",
+		"agricultural and biological chemistry": "bioscience biotechnology and biochemistry",
+		"biotechnology techniques": "biotechnology letters",
+		"standards in genomic sciences": "environmental microbiome",
+		"current protocols in molecular biology": "current protocols",
+		"bioelectrochemistry and bioenergetics": "bioelectrochemistry",
+		"angewandte chemie": "angewandte chemie international edition",
+		"acta crystallographica section f structural biology and crystallization communications": "acta crystallographica section f structural biology communications",
+		"acta crystallographica section f": "acta crystallographica section f structural biology communications",
+		"frontiers in bioscience": "frontiers in bioscience landmark",
 		"proceedings of the national academy of sciences": "proceedings of the national academy of sciences of the united states of america",
-		"pnas": "proceedings of the national academy of sciences of the united states of america",
-		"plos one": "plos one", "plos biology": "plos biology", "embo journal": "embo journal"
+		"pnas": "proceedings of the national academy of sciences of the united states of america"
 	};
 	const issnKey = value => {
 		let s = String(value || "").toUpperCase().replace(/[^0-9X]/g, "");

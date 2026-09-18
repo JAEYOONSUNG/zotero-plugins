@@ -24,6 +24,9 @@ test("the shipped table is the JCR 2026 release and answers by ISSN, title, abbr
 	assert.equal(t.find({ venue: "Proceedings of the National Academy of Sciences" }).jif, 9.5, "Zotero's short PNAS title");
 	assert.equal(t.find({ venue: "The ISME Journal" }).jif, 10.2, "a leading article is not part of the name");
 	assert.equal(t.find({ venue: "eLife" }), null, "eLife left the JCR; no number is invented");
+	assert.equal(t.find({ venue: "Biotechnology for Biofuels" }).name, "Biotechnology for Biofuels and Bioproducts", "a renamed journal answers under its current title");
+	assert.equal(t.find({ venue: "Journal of General Microbiology" }).jif, 4.3);
+	assert.equal(t.find({ venue: "Angewandte Chemie" }).jif, 17.6, "the German edition shares the International Edition's figure");
 	assert.equal(t.find({ venue: "Some Obscure Bulletin" }), null);
 	assert.equal(t.find(null), null);
 });

@@ -1706,8 +1706,24 @@ var ZotPoPSources = (function () {
 
 	const MULTI_SOURCES = ["openalex", "crossref", "europepmc", "arxiv"];
 
+	/* How many each source is asked for, when several are being combined.
+
+	   Asking each for exactly the number to be shown is what made the combined
+	   search no better than three lists stapled together. Measured on a real
+	   query, OpenAlex, Crossref and Europe PMC returned twenty results each and
+	   sixty distinct DOIs -- not one paper in common. Reciprocal rank fusion
+	   rewards agreement between sources, and there was no room for agreement to
+	   appear: a paper both engines rank twenty-fifth is invisible to both.
+
+	   Widening the pool costs bandwidth, not round trips -- it is the same one
+	   request per source -- so each is asked for three times the final count. */
+	const poolFor = max => Math.min(200, Math.max(30, (max || 20) * 3));
+
 	async function searchCombined(q, http, ctx, sources, preprintsOnly = false) {
 		let lists = sources.map(() => []), errors = [], done = 0, succeeded = 0;
+		// Citation and date ordering are decided over the whole pool too, so the
+		// wider pool helps them for the same reason.
+		let subQuery = Object.assign({}, q, { maxResults: poolFor(q.maxResults) });
 		let snapshot = () => {
 			let records = matchingRecords(mergeRecords(lists), q);
 			if (preprintsOnly) for (let r of records) r.itemType = "preprint";
@@ -1721,7 +1737,7 @@ var ZotPoPSources = (function () {
 				onProgress: msg => ctx.onProgress?.(`${done}/${sources.length} · ${msg}`, done, sources.length)
 			});
 			try {
-				lists[index] = await source.search(q, http, sub);
+				lists[index] = await source.search(subQuery, http, sub);
 				succeeded++;
 			}
 			catch (e) {
