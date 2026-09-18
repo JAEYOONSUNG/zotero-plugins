@@ -541,8 +541,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // another was hard to read, which is what made the row look loud.
     // The pill tint is raised instead, so the softness lives in the fills.
     return dark
-      ? {blue:'#809DD0',green:'#41AF7C',orange:'#C69164',red:'#D3888A',purple:'#B38DD5',teal:'#49A9BC',gold:'#B89944',amber:'#E0A868',star:'#E8B657',reading:'#7FC3A3',done:'#3FA372',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.26,dark:true}
-      : {blue:'#6484BA',green:'#42926C',orange:'#AA784C',red:'#BD6C6E',purple:'#9B71BF',teal:'#468D9B',gold:'#978144',amber:'#C98A3E',star:'#D9A02F',reading:'#6AA98C',done:'#2E7A55',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.20,dark:false};
+      // Lifted a step in saturation from the first pastel set, which read as
+      // muddy on a white ground; the evenness across hues is kept.
+      ? {blue:'#7EA3E1',green:'#2BB771',orange:'#D79256',red:'#E3888B',purple:'#BC8EE5',teal:'#2FB0C9',gold:'#C09D2D',amber:'#D1963D',star:'#F3C33F',reading:'#7FC3A3',done:'#3FA372',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.28,dark:true}
+      : {blue:'#497CD4',green:'#218F58',orange:'#B66B2B',red:'#D65054',purple:'#9D5AD8',teal:'#25899C',gold:'#957B23',amber:'#A67327',star:'#F0B019',reading:'#5FAE8A',done:'#2E7A55',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.18,dark:false};
   }
   tint(hex, alpha) {
     const n = parseInt(hex.slice(1), 16);
@@ -569,11 +571,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // one, otherwise the abbreviation the mark module derives from the title.
   journalAbbreviationOf(item) {
     const found = this.journalIdentityOf(item);
+    // A title the curated table knows always gets the table's form, so the
+    // column reads in one style ("Nat Commun", never "Nat. Commun." beside it).
+    if (found && this.journalIdentity.ABBREVIATIONS[found.title]) return this.journalIdentity.ABBREVIATIONS[found.title];
     const own = this.isRegular(item) ? String(item.getField('journalAbbreviation') || '').trim() : '';
     // Some translators file the full title in the abbreviation field; that is
-    // not an abbreviation, so the derived one is used instead.
+    // not an abbreviation, so the derived one is used instead. Trailing periods
+    // ("Front. Genet.") are dropped for the same one-style reason.
     const same = value => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    if (own && (!found || same(own) !== same(found.title))) return own;
+    if (own && (!found || same(own) !== same(found.title))) return own.replace(/\.(?=\s|$)/g, '');
     return found?.identity.mark || '';
   }
   // The abbreviation in the publisher's colour. Its own column now: beside the IF
@@ -1282,7 +1288,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const tone=this.journalIdentity.colours(found.identity,{dark:P.dark});
       if(!state.venueColors.has(text))state.venueColors.set(text,[text.style.color,text.style.fontWeight]);
       text.style.color=tone.ink;
-      text.style.fontWeight=found.identity.known?'600':'500';
+      text.style.fontWeight='600';
       text.dataset.styleCustomVenue=found.identity.family;
     }
     else if(state.venueColors.has(text)){

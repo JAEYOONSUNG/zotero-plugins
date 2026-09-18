@@ -1554,7 +1554,7 @@ test('first author, corresponding author and tier each get a column of their own
   const tier = plugin.renderCell('institutionTier', 0, '', {}, document);
   assert.equal(tier.textContent, 'T1');
   assert.match(tier.firstChild.title, /2000 이상.*기관 h-index 2281/);
-  assert.match(tier.firstChild.style.color, /#6484BA|#809DD0/i, 'the top bucket is blue');
+  assert.match(tier.firstChild.style.color, /#497CD4|#7EA3E1/i, 'the top bucket is blue');
 
   // When the first author answers for the paper too, the column names the same
   // lab again rather than pointing at the other column.
@@ -1576,12 +1576,16 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   const mark = plugin.renderCell('journalMark', 0, '', {}, document);
   assert.equal(mark.textContent, 'Science');
   // Zotero's own abbreviation field wins over the derived one when the record has it.
-  ref.getField = name => name === 'publicationTitle' ? 'Nature Communications' : name === 'journalAbbreviation' ? 'Nat. Commun.' : getField(name);
-  assert.equal(plugin.value('journalMark', ref), 'Nat. Commun.');
+  ref.getField = name => name === 'publicationTitle' ? 'Journal of Thermophilic Enzyme Engineering' : name === 'journalAbbreviation' ? 'J. Thermophil. Enzyme Eng.' : getField(name);
+  assert.equal(plugin.value('journalMark', ref), 'J Thermophil Enzyme Eng', "Zotero's own field, minus its periods, when the table does not know the title");
   ref.getField = name => name === 'publicationTitle' ? 'Nature Communications' : getField(name);
   assert.equal(plugin.value('journalMark', ref), 'Nat Commun', 'derived from the title when the field is empty');
   ref.getField = name => name === 'publicationTitle' ? 'Molecular Cell' : name === 'journalAbbreviation' ? 'Molecular Cell' : getField(name);
   assert.equal(plugin.value('journalMark', ref), 'Mol Cell', 'a full title filed as the abbreviation is not one');
+  ref.getField = name => name === 'publicationTitle' ? 'Proceedings of the National Academy of Sciences' : name === 'journalAbbreviation' ? 'Proc. Natl. Acad. Sci. U.S.A.' : getField(name);
+  assert.equal(plugin.value('journalMark', ref), 'PNAS', 'a curated title takes the table form over the field');
+  ref.getField = name => name === 'publicationTitle' ? 'Frontiers in Genetics' : name === 'journalAbbreviation' ? 'Front. Genet.' : getField(name);
+  assert.equal(plugin.value('journalMark', ref), 'Front Genet', 'periods are dropped so the column reads in one style');
   ref.getField = name => name === 'publicationTitle' ? 'Science' : getField(name);
   assert.match(mark.firstChild.style.color, /^hsl\(358 /, 'Science is red');
   assert.equal(mark.title, 'Science · Science');

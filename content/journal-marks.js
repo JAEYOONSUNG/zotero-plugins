@@ -196,8 +196,8 @@ var ZotPoPJournalMarks = (function () {
 		let hue = identity?.hue ?? 0;
 		let known = Boolean(identity?.known);
 		return dark
-			? { ink: hsl(hue, known ? 46 : 26, 72), fill: hsl(hue, known ? 34 : 18, 24), edge: hsl(hue, known ? 34 : 18, 34) }
-			: { ink: hsl(hue, known ? 42 : 22, 38), fill: hsl(hue, known ? 46 : 26, 94), edge: hsl(hue, known ? 40 : 22, 86) };
+			? { ink: hsl(hue, known ? 62 : 40, 74), fill: hsl(hue, known ? 44 : 26, 24), edge: hsl(hue, known ? 44 : 26, 36) }
+			: { ink: hsl(hue, known ? 62 : 40, 40), fill: hsl(hue, known ? 62 : 36, 93), edge: hsl(hue, known ? 52 : 30, 84) };
 	}
 
 	return { identify, colours, monogram, abbreviate, derivedHue, natureHue, FAMILIES, PUBLISHERS, NATURE_TITLES, ABBREVIATIONS };

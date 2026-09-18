@@ -39,9 +39,9 @@ test("a publisher name settles a title the patterns do not know; nothing known s
 test("ink and fill come from one hue, a little stronger for a curated family, and the mirror mirrors Style Custom", () => {
 	const known = J.colours(J.identify("Science"));
 	const derived = J.colours(J.identify("Some Obscure Bulletin"));
-	assert.match(known.ink, /^hsl\(358 42% 38%\)$/);
-	assert.match(derived.fill, /^hsl\(\d+ 26% 94%\)$/);
-	assert.match(J.colours(J.identify("Science"), { dark: true }).ink, /^hsl\(358 46% 72%\)$/);
+	assert.match(known.ink, /^hsl\(358 62% 40%\)$/);
+	assert.match(derived.fill, /^hsl\(\d+ 36% 93%\)$/);
+	assert.match(J.colours(J.identify("Science"), { dark: true }).ink, /^hsl\(358 62% 74%\)$/);
 	const theirs = fs.readFileSync(new URL("../zotero-style-custom/src/journal-identity.js", import.meta.url), "utf8");
 	for (const family of J.FAMILIES) assert.ok(theirs.includes(`key: '${family.key}'`) && (typeof family.hue === "function" || theirs.includes(`hue: ${family.hue}`)), family.key + " must match Style Custom");
 	assert.equal(J.NATURE_TITLES.length, JSON.parse(JSON.stringify(theirs.match(/NATURE_TITLES = \[([\s\S]*?)\];/)[1].match(/\[\/\^/g))).length, "the same sister journals in both plugins");

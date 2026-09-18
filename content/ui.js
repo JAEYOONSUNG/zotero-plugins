@@ -1084,7 +1084,7 @@
 		let found = journalIdentity(r);
 		if (!found) return;
 		cell.style.color = found.tone.ink;
-		cell.style.fontWeight = found.identity.known ? "600" : "500";
+		cell.style.fontWeight = "600";
 		cell.classList.add("venue-known");
 		cell.title = [r.venue, found.abbrev !== r.venue ? found.abbrev : "", found.identity.label, r.publisher].filter(Boolean).join(" · ");
 	}
