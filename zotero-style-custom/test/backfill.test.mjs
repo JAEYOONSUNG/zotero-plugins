@@ -30,6 +30,8 @@ function host({items = [], fetched = new Map(), budgetAt = null} = {}) {
     attachmentKinds: () => [],
     scanAttachmentKinds: async () => ({items: 0, files: 0, article: 0, supplementary: 0,
       duplicate: 0, foreign: 0, unknown: 0, unread: 0}),
+    sweepPaperWorks: async () => ({asked: 0, found: 0, noDOI: 0, missing: 0, already: 0,
+      references: 0, errors: 0, institutions: 0}),
     refreshPaperSignals: Runtime.prototype.refreshPaperSignals,
     backfill: Runtime.prototype.backfill,
     runBackfill: Runtime.prototype.runBackfill,
@@ -85,6 +87,7 @@ test("running out of budget stops the whole backfill rather than sweeping on bli
 test("the stages run cheapest and highest-stakes first", async () => {
   const order = [];
   const h = host({items: [paper(1)]});
+  h.sweepPaperWorks = async () => { order.push("works"); return {asked: 1, found: 1, noDOI: 0, missing: 0, already: 0, references: 40, errors: 0, institutions: 2}; };
   h.scanAttachmentKinds = async () => { order.push("files"); return {items: 1, files: 1, article: 1, supplementary: 0, duplicate: 0, foreign: 0, unknown: 0, unread: 0}; };
   h.attachmentKinds = () => [{read: false}];
   h.refreshJournalCitedness = async () => { order.push("journals"); return {journals: 0, found: 0, missing: 0, failed: 0, remaining: 0, budgetGone: false}; };
@@ -97,7 +100,7 @@ test("the stages run cheapest and highest-stakes first", async () => {
   // Reading a file costs nothing, so it goes first and finishes even when the
   // day's API budget is already spent. A retracted paper is the one fact worth
   // interrupting someone for, so it is never behind a 255-journal sweep.
-  assert.deepEqual(order, ["files", "signals", "journals", "authors"]);
+  assert.deepEqual(order, ["files", "works", "signals", "journals", "authors"]);
 });
 
 test("cancelling stops at the next paper and keeps what was already learned", async () => {

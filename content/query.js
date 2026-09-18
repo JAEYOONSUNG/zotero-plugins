@@ -233,6 +233,33 @@ var ZotPoPQuery = (function () {
 		return false;
 	}
 
+	// Every token of a name, in the order it is written, with compact initials ("JY")
+	// broken into letters so "J Y" and "JY" read the same.
+	function nameSequence(value) {
+		return nameTokens(value).flatMap(token => compactInitials(token) ? [...token.toLowerCase()] : [token.toLowerCase()]);
+	}
+
+	function tokenAgrees(a, b) {
+		return a === b || ((a.length === 1 || b.length === 1) && a[0] === b[0]);
+	}
+
+	// "Sheila Ingemann" is an unfinished "Sheila Ingemann Jensen", and "Ingemann Jensen" is
+	// the same person written without a first name. Neither ends in the family name the
+	// surname rule wants, yet both are how people actually type a Danish or Spanish name.
+	// A query of two or more tokens therefore also matches when it appears, in order and
+	// unbroken, anywhere in the full written name. One token alone stays a surname, so
+	// "David" still does not collect every David.
+	function partialNameMatches(query, family, given) {
+		let wanted = nameSequence(query);
+		if (wanted.length < 2 || wanted.every(token => token.length === 1)) return false;
+		let full = [...nameSequence(given), ...nameSequence(family)];
+		if (wanted.length > full.length) return false;
+		for (let start = 0; start + wanted.length <= full.length; start++) {
+			if (wanted.every((token, i) => tokenAgrees(token, full[start + i]))) return true;
+		}
+		return false;
+	}
+
 	function authorMatches(query, author) {
 		let { family, given } = nameParts(author);
 		// CJK names are commonly written without a space between family and given name.
@@ -255,7 +282,7 @@ var ZotPoPQuery = (function () {
 					&& givenMatches(terms.slice(0, -length).join(" "), given)) return true;
 			}
 		}
-		return false;
+		return partialNameMatches(query, family, given);
 	}
 
 	function matchesAuthor(query, authors) {

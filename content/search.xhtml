@@ -9,6 +9,8 @@
 	<script src="chrome://zotpop/content/query.js"></script>
 	<script src="chrome://zotpop/content/pop.js"></script>
 	<script src="chrome://zotpop/content/brand-icons.js"></script>
+	<script src="chrome://zotpop/content/affiliations.js"></script>
+	<script src="chrome://zotpop/content/history.js"></script>
 	<script src="chrome://zotpop/content/sources.js"></script>
 	<script src="chrome://zotpop/content/metrics.js"></script>
 	<script src="chrome://zotpop/content/importer.js"></script>
@@ -31,6 +33,7 @@
 	<symbol id="ic-pdf" viewBox="0 0 16 16"><path d="M4 2.5h5l3 3v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z"/><path d="M9 2.5v3h3"/><path d="M5.4 11.6V8.9h1a.9.9 0 0 1 0 1.8h-1"/></symbol>
 	<symbol id="ic-library" viewBox="0 0 16 16"><path d="M2.5 13.5h11M3.5 13.5V6.2M6.5 13.5V6.2M9.5 13.5V6.2M12.5 13.5V6.2M8 2.2l5.5 3.2h-11z"/></symbol>
 	<symbol id="ic-plus" viewBox="0 0 16 16"><path d="M8 3.2v9.6M3.2 8h9.6"/></symbol>
+	<symbol id="ic-history" viewBox="0 0 16 16"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8M2.6 2.8v3h3M8 5.2V8l2 1.4"/></symbol>
 	<symbol id="ic-quote" viewBox="0 0 16 16"><path d="M6.3 4.5C4.6 5.3 3.5 6.8 3.5 8.6c0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2zM12.6 4.5c-1.7.8-2.8 2.3-2.8 4.1 0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2z"/></symbol>
 </svg>
 
@@ -82,6 +85,7 @@
 				<button id="search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="search"></span></button>
 				<button id="stop-btn" type="button" class="icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop"/></svg><span data-i18n="stop"></span></button>
 				<button id="clear-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-clear"/></svg><span data-i18n="clear"></span></button>
+				<button id="history-btn" type="button" class="icon-text" data-i18n-title="historyTip" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history"/></svg><span data-i18n="history"></span></button>
 			</div>
 		</div>
 	</form>
@@ -133,6 +137,7 @@
 					<colgroup id="cols">
 						<col data-k="chk"/><col data-k="citations"/><col data-k="cpy"/><col data-k="rank"/>
 						<col data-k="authorString"/><col data-k="title"/><col data-k="year"/><col data-k="venue"/><col data-k="journalIF"/>
+							<col data-k="affiliation"/><col data-k="country"/><col data-k="tier"/>
 						<col data-k="doi"/><col data-k="pdf"/><col data-k="inLibrary"/><col data-k="status"/>
 					</colgroup>
 					<thead>
@@ -146,6 +151,9 @@
 							<th data-sort="year" class="num"><span data-i18n="thYear"></span><span class="rz"></span></th>
 							<th data-sort="venue"><span data-i18n="thVenue"></span><span class="rz"></span></th>
 							<th data-sort="journalIF" class="num" data-i18n-title="thIFTip"><span data-i18n="thIF"></span><span class="rz"></span></th>
+							<th data-sort="affiliation" data-i18n-title="thInstTip"><span data-i18n="thInst"></span><span class="rz"></span></th>
+							<th data-sort="country" class="mini" data-i18n-title="thCountryTip"><span data-i18n="thCountry"></span><span class="rz"></span></th>
+							<th data-sort="tier" class="mini" data-i18n-title="thTierTip"><span data-i18n="thTier"></span><span class="rz"></span></th>
 							<th data-sort="doi"><span data-i18n="thDoi"></span><span class="rz"></span></th>
 							<th data-sort="pdf" class="mini" data-i18n-title="thPdfTip"><span data-i18n="thPdf"></span><span class="rz"></span></th>
 							<th data-sort="inLibrary" class="mini" data-i18n-title="thLibTip"><span data-i18n="thLib"></span><span class="rz"></span></th>
@@ -166,6 +174,7 @@
 						<div id="d-badges" class="badges"></div>
 					</div>
 					<div id="d-authors" class="d-authors"></div>
+						<div id="d-where" class="d-where"></div>
 					<div id="d-meta" class="d-meta"></div>
 					<div class="d-actions">
 						<button id="d-open" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-external"/></svg><span data-i18n="dOpen"></span></button>
@@ -201,6 +210,7 @@
 	</div>
 
 	<div id="ctxmenu" class="ctxmenu" hidden="hidden"></div>
+	<div id="histmenu" class="selmenu histmenu" role="menu" hidden="hidden"></div>
 </div>
 </body>
 </html>

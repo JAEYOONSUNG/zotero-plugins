@@ -1,4 +1,4 @@
-/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee */
+/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee, ZotPoPHistory, ZotPoPAffiliations */
 "use strict";
 
 (function () {
@@ -14,10 +14,11 @@
 	// Title has no fixed width: it absorbs whatever is left, so keep these lean.
 	const DEFAULT_COLS = {
 		chk: 28, citations: 56, cpy: 64, rank: 46, authorString: 150,
-		year: 46, venue: 140, journalIF: 48, doi: 135, pdf: 46, inLibrary: 46, status: 100
+		year: 46, venue: 140, journalIF: 48, affiliation: 150, country: 62, tier: 62,
+		doi: 135, pdf: 46, inLibrary: 46, status: 100
 	};
 
-	const COL_VERSION = 4;
+	const COL_VERSION = 5;
 	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~40px)
 	const MIN_COL = 40;
 	// An unbounded drag used to persist a column wider than the window
@@ -82,6 +83,42 @@
 		colWidths: Object.assign({}, DEFAULT_COLS)
 	};
 	let marquee = null;
+	let history = null;
+
+	// ------------------------------------------------------------ files
+	// Where ZotPoP keeps what it learned: recent searches with their results, and the
+	// journal and institution figures every search would otherwise ask OpenAlex for again.
+	function diskIO() {
+		if (typeof IOUtils === "undefined" || typeof PathUtils === "undefined" || !Zotero.DataDirectory?.dir) return null;
+		return {
+			readText: path => IOUtils.readUTF8(path),
+			writeText: (path, text) => IOUtils.writeUTF8(path, text),
+			remove: path => IOUtils.remove(path, { ignoreAbsent: true }),
+			exists: path => IOUtils.exists(path),
+			makeDir: dir => IOUtils.makeDirectory(dir, { ignoreExisting: true, createAncestors: true })
+		};
+	}
+	function dataPath(...parts) {
+		return typeof PathUtils !== "undefined" && Zotero.DataDirectory?.dir ? PathUtils.join(Zotero.DataDirectory.dir, "zotpop", ...parts) : parts.join("/");
+	}
+	function setupStorage() {
+		let io = diskIO() || ZotPoPHistory.memoryIO();
+		let size = parseInt(PREF("historySize"), 10);
+		history = ZotPoPHistory.create({ io, dir: dataPath("history"), join: typeof PathUtils !== "undefined" ? PathUtils.join : undefined,
+			max: size > 0 ? size : 30 });
+		return io;
+	}
+	let cacheIO = null;
+	async function loadCaches() {
+		if (!cacheIO || !ZotPoPSources.importCaches) return;
+		try { ZotPoPSources.importCaches(JSON.parse(await cacheIO.readText(dataPath("cache.json")))); }
+		catch (_) { /* first run, or a damaged file: the lookups simply happen again */ }
+	}
+	async function saveCaches() {
+		if (!cacheIO || !ZotPoPSources.exportCaches) return;
+		try { await cacheIO.writeText(dataPath("cache.json"), JSON.stringify(ZotPoPSources.exportCaches())); }
+		catch (e) { log("saving lookup cache failed: " + e.message); }
+	}
 
 	// ------------------------------------------------------------ HTTP adapter
 	function abortError() {
@@ -218,6 +255,7 @@
 
 		restoreLayout();
 		populateTargets();
+		cacheIO = setupStorage();
 		wireEvents();
 		sourceHint();
 		applyColumnWidths();
@@ -225,7 +263,7 @@
 		setStatus(t("ready"));
 		render();
 		$("keywords").focus();
-		restoreCachedSearch();
+		loadCaches().finally(restoreCachedSearch);
 	}
 
 	function wireEvents() {
@@ -234,6 +272,7 @@
 		$("query-form").addEventListener("change", cancelCacheRestore);
 		$("stop-btn").addEventListener("click", stopOperation);
 		$("clear-btn").addEventListener("click", clearAll);
+		$("history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(); });
 		$("banner-close").addEventListener("click", hideBanner);
 		$("filter").addEventListener("input", () => { state.focusKey = null; render(); });
 		$("chk-all").addEventListener("change", e => selectVisible(e.target.checked));
@@ -257,7 +296,7 @@
 				if (e.target.classList.contains("rz")) return;
 				let k = th.dataset.sort;
 				if (state.sortKey === k) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-				else { state.sortKey = k; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf", "journalIF"].includes(k) ? "desc" : "asc"; }
+				else { state.sortKey = k; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf", "journalIF", "tier"].includes(k) ? "desc" : "asc"; }
 				render();
 			});
 		}
@@ -287,9 +326,9 @@
 		setupSplitters();
 		setupColumnResize();
 		document.addEventListener("keydown", onKeyDown);
-		document.addEventListener("click", () => { hideCtxMenu(); closeSelMenu(); });
-		window.addEventListener("blur", closeSelMenu);
-		window.addEventListener("resize", closeSelMenu);
+		document.addEventListener("click", () => { hideCtxMenu(); closeSelMenu(); closeHistoryMenu(); });
+		window.addEventListener("blur", () => { closeSelMenu(); closeHistoryMenu(); });
+		window.addEventListener("resize", () => { closeSelMenu(); closeHistoryMenu(); });
 		document.addEventListener("scroll", onDocumentScroll, true);
 		window.addEventListener("unload", saveLayout);
 		window.addEventListener("unload", () => state.searchController?.abort());
@@ -326,7 +365,14 @@
 
 	function onDocumentScroll(event) {
 		// Reading a narrow result cell must not dismiss the open source/sort menu.
-		if (!event.target?.classList?.contains("marquee-text")) closeSelMenu();
+		if (event.target?.classList?.contains("marquee-text")) return;
+		// Nor may the menu's own scrolling: a library with more collections than fit
+		// the list scrolls to the current one as it opens, and closing on that left
+		// the "Add to" menu unable to open at all.
+		if (openSel && (event.target === openSel.menu || openSel.menu?.contains?.(event.target))) return;
+		if (!$("histmenu").hidden && (event.target === $("histmenu") || $("histmenu").contains?.(event.target))) return;
+		closeSelMenu();
+		closeHistoryMenu();
 	}
 
 	function openSelMenu(sel) {
@@ -468,8 +514,10 @@
 		cacheRestoreController = null;
 	}
 
+	// The query the window opened with may already have an answer on disk. Show it,
+	// say when it was captured, and leave Search to fetch a fresh one on request.
 	async function restoreCachedSearch() {
-		if ($("source").value !== "scholar" || typeof ZotPoPPoPBridge === "undefined" || state.searching || state.importing) return;
+		if (state.searching || state.importing) return;
 		let query = readQuery();
 		if (![query.authors, query.venue, query.title, query.keywords].some(value => value.trim())) return;
 		cancelCacheRestore();
@@ -478,6 +526,21 @@
 		let originalSignature = signature();
 		let active = () => cacheRestoreController === controller && !controller.signal.aborted
 			&& !state.searching && !state.importing && originalSignature === signature();
+		try {
+			let saved = history && await history.find($("source").value, query);
+			let entry = saved && await history.get(saved.id);
+			if (!active()) return;
+			if (entry?.records?.length) {
+				await showHistoryEntry(entry, active);
+				return;
+			}
+		}
+		catch (e) { log("history restore failed: " + e.message); }
+		finally { if (cacheRestoreController === controller && !active()) cacheRestoreController = null; }
+		if ($("source").value !== "scholar" || typeof ZotPoPPoPBridge === "undefined" || !active()) {
+			if (cacheRestoreController === controller) cacheRestoreController = null;
+			return;
+		}
 		let noNetwork = async () => { throw new Error("Network is disabled while restoring a cached search"); };
 		let ctx = {
 			signal: controller.signal, isCancelled: () => controller.signal.aborted,
@@ -507,6 +570,127 @@
 			// search remains available and receives its own error reporting.
 		}
 		finally { if (cacheRestoreController === controller) cacheRestoreController = null; }
+	}
+
+	// ------------------------------------------------------------ recent searches
+	function stripDisplayFields(records) {
+		return records.map(({ rank, authorString, status, statusClass, statusTitle, inLibrary, ...rest }) => rest);
+	}
+
+	// Every finished search is kept, so that typing it again costs nothing. A stopped
+	// search is kept too, marked as incomplete, since what it did fetch was paid for.
+	async function rememberSearch(sourceKey, query, records, partial) {
+		if (!history || !records?.length) return;
+		try { await history.save({ source: sourceKey, query, records: stripDisplayFields(records), partial }); }
+		catch (e) { log("saving search history failed: " + e.message); }
+	}
+
+	async function showHistoryEntry(entry, active = () => true) {
+		let records = entry.records || [];
+		if (!records.length) return false;
+		await refreshLibraryFlags();
+		if (!active()) return false;
+		state.sortKey = "rank";
+		state.sortDir = "asc";
+		$("filter").value = "";
+		displaySearchResults(records);
+		let captured = new Date(entry.savedAt).toLocaleString(t.locale || undefined);
+		setStatus(t("historyRestored", records.length));
+		showBanner(t("historyRestoredNotice", captured, Boolean(entry.partial)));
+		return true;
+	}
+
+	// Bring a recent search back: its boxes, its source, and its results, from disk.
+	async function openHistoryEntry(id) {
+		if (state.searching || state.importing || !history) return;
+		cancelCacheRestore();
+		let entry = await history.get(id);
+		if (!entry) { setStatus(t("historyMissing"), "err"); return; }
+		if (state.searching || state.importing) return;
+		let query = entry.query || {};
+		for (let f of QUERY_FIELDS) $(f).value = query[f] == null ? "" : String(query[f]);
+		syncSel($("sort"));
+		let source = $("source");
+		if (entry.source && [...source.options].some(o => o.value === entry.source)) {
+			source.value = entry.source;
+			syncSel(source);
+			sourceHint();
+		}
+		saveQuery();
+		state.selected.clear();
+		state.focusKey = null;
+		state.detailKey = null;
+		await showHistoryEntry(entry);
+	}
+
+	function closeHistoryMenu() {
+		let menu = $("histmenu");
+		if (menu.hidden) return;
+		menu.hidden = true;
+		menu.textContent = "";
+		$("history-btn").setAttribute("aria-expanded", "false");
+	}
+
+	async function toggleHistoryMenu() {
+		if (!$("histmenu").hidden) { closeHistoryMenu(); return; }
+		closeSelMenu();
+		hideCtxMenu();
+		await openHistoryMenu();
+	}
+
+	async function openHistoryMenu() {
+		let menu = $("histmenu");
+		menu.textContent = "";
+		let entries = [];
+		try { entries = history ? await history.list() : []; }
+		catch (e) { log("listing history failed: " + e.message); }
+		if (!entries.length) {
+			let d = document.createElement("div");
+			d.className = "histempty";
+			d.textContent = t("historyEmpty");
+			menu.appendChild(d);
+		}
+		for (let e of entries) {
+			let d = document.createElement("div");
+			d.className = "histopt";
+			d.setAttribute("role", "menuitem");
+			d.dataset.id = e.id;
+			let label = document.createElement("span");
+			label.className = "h-label";
+			label.textContent = e.label || history.describe(e.query);
+			let meta = document.createElement("span");
+			meta.className = "h-meta";
+			let when = new Date(e.savedAt).toLocaleString(t.locale || undefined);
+			meta.textContent = t("historyEntryMeta", sourceLabel(e.source), e.count, when, Boolean(e.partial));
+			d.appendChild(label);
+			d.appendChild(meta);
+			d.title = label.textContent;
+			d.addEventListener("click", ev => { ev.stopPropagation(); closeHistoryMenu(); openHistoryEntry(e.id); });
+			menu.appendChild(d);
+		}
+		if (entries.length) {
+			menu.appendChild(document.createElement("hr"));
+			let clear = document.createElement("div");
+			clear.className = "histclear";
+			clear.setAttribute("role", "menuitem");
+			clear.textContent = t("historyClear");
+			clear.addEventListener("click", async ev => {
+				ev.stopPropagation();
+				closeHistoryMenu();
+				try { await history.clear(); setStatus(t("historyCleared")); }
+				catch (e) { log("clearing history failed: " + e.message); }
+			});
+			menu.appendChild(clear);
+		}
+		menu.hidden = false;
+		$("history-btn").setAttribute("aria-expanded", "true");
+		let btn = $("history-btn");
+		if (typeof btn.getBoundingClientRect !== "function") return;
+		let r = btn.getBoundingClientRect();
+		let below = window.innerHeight - r.bottom - 8;
+		menu.style.maxHeight = Math.max(120, below) + "px";
+		menu.style.top = (r.bottom + 3) + "px";
+		menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - menu.offsetWidth - 6)) + "px";
 	}
 
 	// ------------------------------------------------------------ layout persistence
@@ -761,6 +945,7 @@
 			openAlexApiKey: PREF("openAlexApiKey") || "",
 			enrichCitations: PREF("enrichCitations") !== false,
 			journalMetrics: PREF("journalMetrics") !== false,
+			institutionMetrics: PREF("institutionMetrics") !== false,
 			DOMParser: window.DOMParser,
 			popSearch: typeof ZotPoPPoPBridge !== "undefined" ? (query, context) => ZotPoPPoPBridge.search(query, context) : undefined,
 			signal: controller.signal,
@@ -779,6 +964,7 @@
 			await refreshLibraryFlags();
 			if (!active()) throw abortError();
 			setStatus(t("resultCount", label, recs.length, false));
+			rememberSearch(sourceKey, q, recs, false);
 			if (ctx.errors?.length) {
 				// A bare "HTTP 429" from OpenAlex is its exhausted daily budget, which the user
 				// can actually fix; say so instead of showing the status code alone.
@@ -797,6 +983,7 @@
 			if (controller.signal.aborted || e?.name === "AbortError") {
 				state.cancelled = true;
 				setStatus(t("searchStopped", state.records.length));
+				rememberSearch(sourceKey, q, state.records, true);
 			}
 			else {
 				Zotero.logError(e);
@@ -816,6 +1003,7 @@
 			$("busy").hidden = true;
 			setProgress(null);
 			render();
+			saveCaches();
 		}
 	}
 
@@ -851,12 +1039,17 @@
 	// ------------------------------------------------------------ render
 	function matchesFilter(r, f) {
 		if (!f) return true;
-		let hay = (r.title + " " + r.authorString + " " + r.venue + " " + (r.doi || "") + " " + (r.year || "")).toLowerCase();
+		let where = affiliationOf(r);
+		let hay = (r.title + " " + r.authorString + " " + r.venue + " " + (r.doi || "") + " " + (r.year || "")
+			+ " " + (where ? [where.first?.institution, where.corresponding?.institution, ...where.countries].filter(Boolean).join(" ") : "")).toLowerCase();
 		return f.split(/\s+/).every(w => hay.includes(w));
 	}
 
 	function sortValue(r, k) {
 		if (k === "cpy") return ZotPoPMetrics.citesPerYear(r) ?? -1;
+		if (k === "affiliation") return (affiliationOf(r)?.first?.institution || "").toLowerCase();
+		if (k === "country") return (affiliationOf(r)?.countries || []).join("/");
+		if (k === "tier") return affiliationOf(r)?.hIndex ?? -1;
 		if (k === "inLibrary") return r.inLibrary ? 1 : 0;
 		if (k === "pdf") return hasPDF(r) ? 1 : 0;
 		let v = r[k];
@@ -865,6 +1058,36 @@
 	}
 
 	function hasPDF(r) { return Boolean((r.pdfUrls || []).length || r.pdfUrl || r.pmcid || r.arxiv); }
+
+	// ------------------------------------------------------------ affiliation
+	function affiliationOf(r) {
+		return typeof ZotPoPAffiliations !== "undefined" && r?.people ? ZotPoPAffiliations.summarise(r.people) : null;
+	}
+	function tierLabel(key) {
+		return key ? t({ exceptional: "tierExceptional", high: "tierHigh", established: "tierEstablished" }[key] || key) : "";
+	}
+	function personLine(role, p) {
+		if (!p) return "";
+		let bits = [p.name, p.institution || t("affUnknown")];
+		if (p.country) bits.push(p.flag ? p.flag + " " + p.country : p.country);
+		if (p.hIndex != null) bits.push(t("affHIndex", p.hIndex) + (p.tier ? " · " + tierLabel(p.tier) : ""));
+		return role + ": " + bits.join(" · ");
+	}
+	function affiliationTip(where) {
+		if (!where) return "";
+		return [
+			personLine(t("affFirst"), where.first),
+			personLine(where.correspondingKnown ? t("affCorresponding") : t("affLast"), where.corresponding)
+		].filter(Boolean).join("\n");
+	}
+	function tierChip(where) {
+		if (!where?.tier) return null;
+		let s = document.createElement("span");
+		s.className = "tier tier-" + where.tier;
+		s.textContent = tierLabel(where.tier);
+		s.title = t("thTierTip") + (where.hIndex != null ? "\n" + t("affHIndex", where.hIndex) : "");
+		return s;
+	}
 
 	function render() {
 		let f = $("filter").value.trim().toLowerCase();
@@ -939,6 +1162,12 @@
 		td("num", r.year == null ? "" : String(r.year));
 		td("", r.venue, r.venue).dataset.marquee = "venue";
 		td("num if", r.journalIF == null ? "" : fmt(r.journalIF, 1), r.journalIF == null ? "" : t("ifTip", fmt(r.journalIF, 1), r.journalH));
+		let where = affiliationOf(r);
+		td("aff", where?.first?.institution || "", affiliationTip(where)).dataset.marquee = "affiliation";
+		td("mini country", where ? where.countries.map(c => (ZotPoPAffiliations.flag(c) + " " + c).trim()).join(" ") : "", affiliationTip(where));
+		let tierCell = td("mini tiercell", null, "");
+		let chip = tierChip(where);
+		if (chip) tierCell.appendChild(chip);
 		td("", r.doi || "", r.doi || "").dataset.marquee = "doi";
 		td("mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfTip") : "");
 		td("mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibTip") : "");
@@ -1068,6 +1297,25 @@
 		if (hasPDF(r)) chip(t("badgeHasPdf"));
 
 		$("d-authors").textContent = r.authorString || t("noAuthors");
+		let whereBox = $("d-where");
+		whereBox.textContent = "";
+		let where = affiliationOf(r);
+		if (where) {
+			for (let [role, p] of [[t("affFirst"), where.first], [where.correspondingKnown ? t("affCorresponding") : t("affLast"), where.corresponding]]) {
+				if (!p) continue;
+				let line = document.createElement("div");
+				line.textContent = personLine(role, { ...p, hIndex: null });
+				if (p.hIndex != null) {
+					let h = document.createElement("span");
+					h.textContent = " · " + t("affHIndex", p.hIndex);
+					line.appendChild(h);
+				}
+				let chip = p.tier ? tierChip({ tier: p.tier, hIndex: p.hIndex }) : null;
+				if (chip) line.appendChild(chip);
+				whereBox.appendChild(line);
+			}
+		}
+		whereBox.hidden = !whereBox.firstChild;
 		let bits = [];
 		if (r.venue) bits.push(r.venue);
 		if (r.year) bits.push(String(r.year));
@@ -1170,6 +1418,7 @@
 		let mod = e.metaKey || e.ctrlKey;
 		if (e.key === "Escape") {
 			if (openSel) { closeSelMenu(); return; }
+			if (!$("histmenu").hidden) { closeHistoryMenu(); return; }
 			if (!$("ctxmenu").hidden) { hideCtxMenu(); return; }
 			if (state.searching || state.importing) { stopOperation(); return; }
 			return;
@@ -1223,7 +1472,9 @@
 		for (let r of state.visible) {
 			lines.push([
 				r.citations ?? "", fmt(ZotPoPMetrics.citesPerYear(r)), r.rank, r.authorString, r.title,
-				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2), r.publisher, r.doi ?? "", r.url ?? "",
+				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2),
+				affiliationOf(r)?.first?.institution ?? "", (affiliationOf(r)?.countries || []).join("/"), affiliationOf(r)?.hIndex ?? "",
+				r.publisher, r.doi ?? "", r.url ?? "",
 				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo")
 			].map(esc).join(","));
 		}

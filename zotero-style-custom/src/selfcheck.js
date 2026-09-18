@@ -212,6 +212,31 @@
       return said.join(' · ');
     }));
 
+    // The citation map and the affiliation column share one sweep, so one check
+    // reports how far it has got.
+    results.push(await attempt('the citation record behind the map', async () => {
+      const works = Object.values(runtime.paperWorks());
+      const withRefs = works.filter(work => Array.isArray(work.references) && work.references.length);
+      const references = withRefs.reduce((n, work) => n + work.references.length, 0);
+      const institutions = Object.values(runtime.institutionTable());
+      const ranked = institutions.filter(row => row.hIndex > 0);
+      return `조회한 논문 ${works.length} · 참고문헌 있는 논문 ${withRefs.length} · 참고문헌 ${references}건`
+        + ` · 기관 ${institutions.length} (h-index 있음 ${ranked.length})`;
+    }));
+
+    results.push(await attempt('the affiliation column has something to say', async () => {
+      if (!doc) throw new Error('no main window');
+      const all = await runtime.libraryItems(library);
+      const papers = all.filter(item => runtime.isRegular(item));
+      const known = papers.map(item => runtime.affiliationOf(item)).filter(Boolean);
+      if (!known.length) return '아직 조회 전 (인용 목록 가져오기를 실행하세요)';
+      const international = known.filter(row => row.international).length;
+      const tiered = known.filter(row => row.tier).length;
+      const sample = known.find(row => row.first && row.first.institution);
+      return `${known.length}편 · 국제공동 ${international} · 기관 등급 있음 ${tiered}`
+        + (sample ? ` · 예: ${sample.first.institution}${sample.first.country ? ' (' + sample.first.country + ')' : ''}` : '');
+    }));
+
     results.push(await attempt('what the attachment scan found', async () => {
       const found = await runtime.attachmentFindings(library);
       const orphan = found.orphan || [];

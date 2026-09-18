@@ -159,3 +159,28 @@ test('nothing is left at a radius that reads as a square corner', async () => {
   const step = name => Number(css.match(new RegExp(`--sc-radius${name}:\\s*([0-9.]+)px`))[1]);
   assert.ok(step('-sm') < step('') && step('') < step('-card') && step('-card') < step('-panel'));
 });
+
+test('the toolbar icons carry their own colour rather than the toolbar ink', async () => {
+  const fs = await import('node:fs');
+  const svg = fs.readFileSync(new URL('../content/icons/style-custom-toolbar.svg', import.meta.url), 'utf8');
+  // A context-fill glyph is painted in the toolbar's text colour, which made
+  // the button one more grey outline among Zotero's own tools.
+  assert.doesNotMatch(svg, /context-fill/, 'nothing is left taking its colour from the toolbar');
+  const fills = [...svg.matchAll(/fill="(#[0-9A-Fa-f]{6})"/g)].map(m => m[1]);
+  assert.ok(fills.length >= 3, 'the mark is drawn in more than one colour');
+  const luminance = hex => {
+    const n = parseInt(hex.slice(1), 16);
+    const channel = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * channel(n >> 16 & 255) + 0.7152 * channel(n >> 8 & 255) + 0.0722 * channel(n & 255);
+  };
+  const ratio = (a, b) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  // It has to read on the light chrome and on the dark one; 3:1 is the bar for
+  // a mark rather than for text.
+  for (const fill of new Set(fills)) {
+    assert.ok(ratio(fill, '#F2F2F4') >= 2.9, `${fill} on the light toolbar`);
+    assert.ok(ratio(fill, '#2B2B2E') >= 2.9, `${fill} on the dark toolbar`);
+  }
+});

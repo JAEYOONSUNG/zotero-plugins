@@ -66,7 +66,7 @@ function fixture() {
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
   const { plugin, columns, observers } = fixture();
   await plugin.start({ id: 'test@focus', version: '0.1', rootURI: 'file:///focus/' });
-  assert.equal(columns.size, 21);
+  assert.equal(columns.size, 22);
   assert.equal(observers.size, 7);
   await plugin.stop();
   assert.equal(columns.size, 0);
@@ -367,9 +367,9 @@ test('legacy unbound progress is not assigned to a PDF or another library',()=>{
 });
 test('custom columns are validated and registration failure keeps previous fields intact',async()=>{
  const {plugin,Z,columns,item}=fixture();await plugin.start({id:'custom',version:'0.5',rootURI:'file:///custom/'});
- Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,23);
+ Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,24);
  const original=Z.ItemTreeManager.registerColumn;Z.ItemTreeManager.registerColumn=options=>options.dataKey==='field-pages'?false:original(options);
- assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,23);assert.ok(plugin.dynamicFieldMap.has('issue'));
+ assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,24);assert.ok(plugin.dynamicFieldMap.has('issue'));
  assert.throws(()=>plugin.setCustomFields('unknown'));const ref=item(1);ref.getField=key=>key==='volume'?'12':'';assert.equal(plugin.value('field-volume',ref),'12');await plugin.stop();
 });
 test('panel CSS is scoped and cannot load remote content or escape its rules',()=>{
@@ -1173,7 +1173,7 @@ test('a library-wide sweep awaits Zotero rather than iterating the promise', asy
   assert.deepEqual(await plugin.libraryItems(1), []);
 });
 
-test('the toolbar button uses a monochrome glyph, never the coloured app icon', async () => {
+test('the toolbar button uses the flat toolbar mark, in its own colours', async () => {
   const {readFileSync} = await import('node:fs');
   const workbench = readFileSync(new URL('../src/workbench.js', import.meta.url), 'utf8');
   const image = /toolbar\.setAttribute\('image',runtime\.rootURI\+'([^']+)'\)/.exec(workbench);
@@ -1182,8 +1182,14 @@ test('the toolbar button uses a monochrome glyph, never the coloured app icon', 
   assert.equal(image[1], 'content/icons/style-custom-toolbar.svg');
   const glyph = readFileSync(new URL('../' + image[1], import.meta.url), 'utf8');
   assert.match(glyph, /viewBox="0 0 20 20"/, 'Zotero draws its toolbar icons on a 20px grid');
-  assert.match(glyph, /fill="context-fill"/, 'the glyph must take its colour from the theme');
-  assert.doesNotMatch(glyph, /#[0-9a-f]{3,6}/i, 'a hard-coded colour would not follow dark mode');
+  // It was a context-fill glyph, painted in the toolbar's own text colour, which
+  // left it indistinguishable from Zotero's tools at a glance. The colours are
+  // now the plugin's, picked to read on the light chrome and the dark one alike.
+  assert.doesNotMatch(glyph, /context-fill/, 'nothing takes its colour from the toolbar any more');
+  assert.ok((glyph.match(/fill="#[0-9A-Fa-f]{6}"/g) || []).length >= 3, 'drawn in more than one colour');
+  // Still the flat mark rather than the app icon: a filled colour squircle in a
+  // toolbar looks like a sticker.
+  assert.doesNotMatch(glyph, /<rect[^>]*rx="[4-9]/, 'not the rounded app tile');
 });
 
 function legacyFixture() {

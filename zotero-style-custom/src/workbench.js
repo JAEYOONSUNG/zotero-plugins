@@ -273,7 +273,10 @@
      note. So it goes after the last of those and before the spacer, which is
      also where the other plugin's button already sits. */
   function placeInToolbar(bar,button){
-    const anchor=bar.querySelector('#zotero-tb-note-add')
+    // After the other plugin's button when it is there, so the two keep a fixed
+    // order instead of trading places depending on which loaded first.
+    const anchor=bar.querySelector('#zotpop-toolbar-button')
+      || bar.querySelector('#zotero-tb-note-add')
       || bar.querySelector('#zotero-tb-attachment-add')
       || [...bar.children].reverse().find(child=>child.localName==='toolbarbutton');
     const spacer=[...bar.children].find(child=>child.localName==='spacer'||child.localName==='toolbarspacer');
@@ -286,10 +289,6 @@
   let toolbar;
   const target=doc.getElementById('zotero-items-toolbar');
   if(target){toolbar=doc.createXULElement?doc.createXULElement('toolbarbutton'):node('button');toolbar.id='style-custom-workbench-button';toolbar.className='zotero-tb-button';toolbar.setAttribute('image',runtime.rootURI+'content/icons/style-custom-toolbar.svg');
-   // A context-fill icon paints nothing unless the button opts into passing its
-   // own colour through, which is why the button drew as an empty gap.
-   toolbar.style.setProperty('-moz-context-properties','fill, fill-opacity');
-   toolbar.style.fill='currentColor';
    toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.setAttribute('label','워크벤치');toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});
    placeInToolbar(target,toolbar);}
   const selected=()=>state.items.filter(i=>state.selected.has(String(i.id)));
@@ -407,12 +406,192 @@
    node('p','마지막 읽기·수정·추가 시각이 최근인 순서입니다.',body,{class:'sc-muted'});
    await paperList(recent);
   }
-  function drawGraph(){const b=bar();for(const[mode,label]of [['related','관련 문헌'],['tags','공통 태그'],['authors','공통 저자']])button(label,()=>{state.graphMode=mode;render();},b,{'aria-pressed':state.graphMode===mode});
-   const data=model.layout(library.graph(rows().slice(0,setting('graphNodeLimit',180)),{mode:state.graphMode}),760,480);if(!data.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
+  /* The citation map.
+
+     The old graph joined papers that shared a tag or an author and drew every
+     node as the same grey dot at the same size. Sharing a tag is a fact about
+     how the library was filed, not about the papers, so the picture told you
+     what you had already typed.
+
+     This one is built from the citation record, the way the field's paper-map
+     tools build one: a solid arrow where one paper cites another, a faint
+     thread where two cite many of the same works, node size by how often the
+     paper has been cited, and node colour by publisher, which is the same
+     coding the journal column uses. */
+  // The panel follows the system scheme unless the user has pinned one, and the
+  // graph's marks have to be built for whichever is actually showing.
+  function darkScheme(){
+   const pinned=panel.getAttribute('data-theme');
+   if(pinned==='dark')return true;
+   if(pinned==='light')return false;
+   try{return !!win.matchMedia&&win.matchMedia('(prefers-color-scheme: dark)').matches;}catch(error){return false;}
+  }
+
+  function drawGraph(){
+   const b=bar();
+   for(const[mode,label]of [['citations','인용 관계'],['related','관련 문헌'],['tags','공통 태그'],['authors','공통 저자']])
+    button(label,()=>{state.graphMode=mode;render();},b,{'aria-pressed':state.graphMode===mode});
+   if(state.graphMode==='citations')return drawCitationGraph(b);
+   return drawLegacyGraph(b);
+  }
+
+  function drawCitationGraph(b){
+   const graphTools=runtime.graphTools,identity=runtime.journalIdentity;
+   if(!graphTools||typeof runtime.paperWorks!=='function'){drawLegacyGraph(b);return;}
+   const works=runtime.paperWorks();
+   const limit=setting('graphNodeLimit',180);
+   const chosen=rows().slice(0,limit);
+   const papers=chosen.map(paper=>{
+    const work=works[paper.libraryID+':'+paper.key]||works[String(paper.id)]||null;
+    return {id:String(paper.id),title:paper.title,year:Number(paper.year)||null,
+     citations:Number(paper.citations)||0,venue:paper.venue,
+     openalex:work&&work.openalex||'',references:work&&Array.isArray(work.references)?work.references:[]};
+   });
+   const withRefs=papers.filter(paper=>paper.references.length).length;
+   button(`인용 목록 가져오기 (${papers.length-withRefs}편 남음)`,()=>run(async()=>{
+    const wanted=[];
+    for(const paper of chosen){
+     const found=await runtime.Z.Items.getAsync(Number(paper.id));
+     if(found)wanted.push(found);
+    }
+    const report=await runtime.sweepPaperWorks(wanted,
+     {onProgress:(done,total)=>message(`인용 목록 ${done}/${total}`)});
+    message(`${report.found}편에서 참고문헌 ${report.references}건 · 기관 ${report.institutions}곳`
+     +(report.missing?` · OpenAlex에 없음 ${report.missing}`:'')+(report.noDOI?` · DOI 없음 ${report.noDOI}`:''));
+    await render();
+   }),b);
+   if(!withRefs){
+    empty('아직 인용 목록이 없습니다. “인용 목록 가져오기”를 눌러 OpenAlex에서 참고문헌을 받아오세요.');
+    return;
+   }
+   const W=860,H=540;
+   const graph=graphTools.layout(graphTools.build(papers),{width:W,height:H});
+   const counted=graph.counted||{direct:0,coupled:0,isolated:0};
+   node('p',`이어진 논문 ${graph.nodes.length} · 인용 ${counted.direct}건 · 공통 참고문헌으로 이어진 쌍 ${counted.coupled}`
+    +(counted.isolated?` · 연결 없음 ${counted.isolated}`:'')
+    +(withRefs<papers.length?` · 인용 목록 없음 ${papers.length-withRefs}`:''),body,{class:'sc-muted'});
+   if(!graph.nodes.length){
+    empty('이 범위에서는 서로 인용하거나 참고문헌을 공유하는 논문이 없습니다. 범위를 넓혀보세요.');
+    return;
+   }
+   const svg=doc.createElementNS(SVG,'svg');
+   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
+   svg.setAttribute('aria-label','인용 관계 그래프');body.appendChild(svg);
+   const defs=doc.createElementNS(SVG,'defs');
+   const marker=doc.createElementNS(SVG,'marker');
+   for(const[k,v]of Object.entries({id:'sc-arrow',viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'5',markerHeight:'5',orient:'auto-start-reverse'}))marker.setAttribute(k,v);
+   const head=doc.createElementNS(SVG,'path');head.setAttribute('d','M0 0 L8 4 L0 8 z');head.setAttribute('fill','var(--sc-graph-line)');
+   marker.appendChild(head);defs.appendChild(marker);svg.appendChild(defs);
+   const group=doc.createElementNS(SVG,'g');svg.appendChild(group);
+   const positions=new Map(graph.nodes.map(n=>[n.id,n]));
+   const neighbours=new Map(graph.nodes.map(n=>[n.id,new Set()]));
+   const lines=[];
+   for(const e of graph.edges){
+    const a=positions.get(String(e.source)),c=positions.get(String(e.target));
+    if(!a||!c)continue;
+    neighbours.get(a.id).add(c.id);neighbours.get(c.id).add(a.id);
+    const line=doc.createElementNS(SVG,'line');
+    const cited=e.kind==='cites';
+    for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2:c.x,y2:c.y}))line.setAttribute(k,v);
+    line.setAttribute('stroke','var(--sc-graph-line)');
+    // A stated citation is solid and carries an arrow; a shared-reading thread
+    // is faint and has no direction, because it is an inference, not a fact.
+    line.setAttribute('stroke-width',cited?1.4:Math.min(2.2,0.5+e.weight*4));
+    line.setAttribute('stroke-opacity',cited?0.75:Math.min(0.5,0.12+e.weight));
+    if(cited)line.setAttribute('marker-end','url(#sc-arrow)');
+    else line.setAttribute('stroke-dasharray','2 3');
+    line.setAttribute('data-a',a.id);line.setAttribute('data-b',c.id);
+    lines.push(line);group.appendChild(line);
+   }
+   const marks=new Map();
+   for(const n of graph.nodes){
+    const g=doc.createElementNS(SVG,'g');
+    g.setAttribute('transform',`translate(${n.x} ${n.y})`);
+    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',n.label);
+    const id=n.venue?identity.identify(n.venue):null;
+    const tone=id?identity.colours(id,{dark:darkScheme()}):null;
+    const circle=doc.createElementNS(SVG,'circle');
+    const r=graphTools.radiusOf(n.citations);
+    circle.setAttribute('r',r);
+    circle.setAttribute('fill',tone?tone.fill:'var(--sc-fill)');
+    circle.setAttribute('stroke',tone?tone.ink:'var(--sc-muted)');
+    circle.setAttribute('stroke-width',state.selected.has(n.id)?2.4:1);
+    g.appendChild(circle);
+    // A label on every node at this density is a grey smear, so only the papers
+    // worth reading first carry one: the most cited and the best connected.
+    const label=doc.createElementNS(SVG,'text');
+    label.setAttribute('x',r+4);label.setAttribute('y','3.5');
+    label.setAttribute('class','sc-graph-label');
+    label.textContent=String(n.label).slice(0,38);
+    if(!(n.citations>=60||n.degree>=5||state.selected.has(n.id)))label.setAttribute('opacity','0');
+    g.appendChild(label);
+    const title=doc.createElementNS(SVG,'title');
+    title.textContent=`${n.label}\n${[n.venue,n.year,`인용 ${n.citations}`,`참고문헌 ${n.references}`,`연결 ${n.degree}`].filter(Boolean).join(' · ')}`;
+    g.appendChild(title);
+    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);render();};
+    g.addEventListener('click',activate);
+    g.addEventListener('dblclick',()=>run(()=>library.openItem(n.id)));
+    g.addEventListener('keydown',e=>{if(e.key==='Enter')activate();});
+    // Hovering brings one paper's neighbourhood forward instead of leaving the
+    // reader to trace a line across a thousand of them.
+    g.addEventListener('mouseenter',()=>focusNode(n.id));
+    g.addEventListener('mouseleave',()=>focusNode(null));
+    g.addEventListener('focus',()=>focusNode(n.id));
+    g.addEventListener('blur',()=>focusNode(null));
+    marks.set(n.id,{g,label,circle,n});
+    group.appendChild(g);
+   }
+   function focusNode(id){
+    for(const line of lines){
+     const on=!id||line.getAttribute('data-a')===id||line.getAttribute('data-b')===id;
+     line.setAttribute('stroke-opacity',on?(line.getAttribute('marker-end')?0.85:0.42):0.05);
+    }
+    for(const[key,mark]of marks){
+     const near=!id||key===id||neighbours.get(id).has(key);
+     mark.g.setAttribute('opacity',near?1:0.22);
+     if(id&&near)mark.label.setAttribute('opacity','1');
+     else if(!id&&!(mark.n.citations>=60||mark.n.degree>=5||state.selected.has(key)))mark.label.setAttribute('opacity','0');
+    }
+   }
+   const zoomBar=bar();let zoom=1;
+   button('확대',()=>{zoom=Math.min(3,zoom+.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},zoomBar);
+   button('축소',()=>{zoom=Math.max(.5,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},zoomBar);
+   node('span','실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 크기는 피인용 수 · 색은 출판사',zoomBar,{class:'sc-muted'});
+   // The one thing a citation map tells you that reading your own shelf cannot.
+   if(graph.missing.length){
+    node('h3',`내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문 ${graph.missing.length}`,body,{class:'sc-hit-group'});
+    const list=node('div',null,body,{class:'sc-hits'});
+    for(const row of graph.missing.slice(0,25)){
+     const c=node('div',null,list,{class:'sc-hit'});
+     node('p',row.id,c,{class:'sc-hit-title'});
+     node('p',`내 논문 ${row.citedBy.length}편이 인용합니다`,c,{class:'sc-hit-meta'});
+     const actions=node('div',null,c,{class:'sc-hit-actions'});
+     button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${row.id}`),actions);
+    }
+   }
+   // The papers nothing connects to are named rather than drawn: as a ring round
+   // the outside they were most of the ink and none of the structure.
+   if(graph.isolated&&graph.isolated.length){
+    node('h3',`이 범위에서 연결이 없는 논문 ${graph.isolated.length}`,body,{class:'sc-hit-group'});
+    const list=node('div',null,body,{class:'sc-hits'});
+    for(const n of graph.isolated.slice(0,30)){
+     const c=node('div',null,list,{class:'sc-hit'});
+     node('p',n.label,c,{class:'sc-hit-title'});
+     node('p',[n.venue,n.year,n.references?`참고문헌 ${n.references}건`:'인용 목록 없음'].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
+     button('열기',()=>library.openItem(n.id),node('div',null,c,{class:'sc-hit-actions'}));
+    }
+   }
+   if(graph.truncated)node('p','연결이 너무 많아 강한 것부터 그렸습니다. 검색으로 범위를 좁히면 전부 보입니다.',body,{class:'sc-muted'});
+   if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다.`,body,{class:'sc-muted'});
+  }
+
+  function drawLegacyGraph(b){
+   const data=model.layout(library.graph(rows().slice(0,setting('graphNodeLimit',180)),{mode:state.graphMode==='citations'?'related':state.graphMode}),760,480);
+   if(!data.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
    const svg=doc.createElementNS(SVG,'svg');svg.setAttribute('viewBox','0 0 760 480');svg.setAttribute('class','sc-graph');svg.setAttribute('aria-label','문헌 관계 그래프');body.appendChild(svg);let zoom=1;
    const group=doc.createElementNS(SVG,'g');svg.appendChild(group);const positions=new Map(data.nodes.map(n=>[n.id,n]));
-   for(const e of data.edges){const a=positions.get(String(e.source)),b=positions.get(String(e.target));if(!a||!b)continue;const line=doc.createElementNS(SVG,'line');for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#a9bcc9'}))line.setAttribute(k,v);group.appendChild(line);}
-   for(const n of data.nodes){const g=doc.createElementNS(SVG,'g');g.setAttribute('transform',`translate(${n.x} ${n.y})`);g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',n.label);const circle=doc.createElementNS(SVG,'circle');circle.setAttribute('r',state.selected.has(n.id)?8:5);circle.setAttribute('fill',state.selected.has(n.id)?'var(--sc-accent)':'var(--sc-muted)');g.appendChild(circle);const label=doc.createElementNS(SVG,'text');label.setAttribute('x','9');label.setAttribute('y','4');label.textContent=String(n.label).slice(0,34);g.appendChild(label);const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);};g.addEventListener('click',activate);g.addEventListener('dblclick',()=>run(()=>library.openItem(n.id)));g.addEventListener('keydown',e=>{if(e.key==='Enter')activate();});group.appendChild(g);}
+   for(const e of data.edges){const a=positions.get(String(e.source)),c=positions.get(String(e.target));if(!a||!c)continue;const line=doc.createElementNS(SVG,'line');for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2:c.x,y2:c.y}))line.setAttribute(k,v);line.setAttribute('stroke','var(--sc-graph-line)');group.appendChild(line);}
+   for(const n of data.nodes){const g=doc.createElementNS(SVG,'g');g.setAttribute('transform',`translate(${n.x} ${n.y})`);g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',n.label);const circle=doc.createElementNS(SVG,'circle');circle.setAttribute('r',state.selected.has(n.id)?8:5);circle.setAttribute('fill',state.selected.has(n.id)?'var(--sc-accent)':'var(--sc-muted)');g.appendChild(circle);const label=doc.createElementNS(SVG,'text');label.setAttribute('x','9');label.setAttribute('y','4');label.setAttribute('class','sc-graph-label');label.textContent=String(n.label).slice(0,34);g.appendChild(label);const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);};g.addEventListener('click',activate);g.addEventListener('dblclick',()=>run(()=>library.openItem(n.id)));g.addEventListener('keydown',e=>{if(e.key==='Enter')activate();});group.appendChild(g);}
    button('확대',()=>{zoom=Math.min(3,zoom+.25);svg.setAttribute('viewBox',`0 0 ${760/zoom} ${480/zoom}`);},b);button('축소',()=>{zoom=Math.max(.5,zoom-.25);svg.setAttribute('viewBox',`0 0 ${760/zoom} ${480/zoom}`);},b);if(data.truncated||rows().length>setting('graphNodeLimit',180))node('p',`그래프는 최대 ${setting('graphNodeLimit',180)}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body);
   }
   function drawTags(){const b=bar(),value=node('input',null,b,{placeholder:'추가·제거할 정확한 태그 (쉼표로 구분)','aria-label':'추가할 태그'});button('선택 문헌에 태그 추가',async()=>{await library.addTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('선택 문헌에서 태그 제거',async()=>{await library.removeTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('태그 필터 해제',()=>{state.tag='';render();},b);

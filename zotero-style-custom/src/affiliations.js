@@ -18,16 +18,23 @@
 
   /* The buckets, in h-index of the institution's whole corpus.
 
-     The thresholds are read off the distribution rather than chosen: across the
-     institutions in a library like this one, the very large multi-faculty
-     universities and national academies sit above 700, the strong research
-     universities between 400 and 700, and the long tail of departments,
-     institutes and companies below that. The labels say what the number means,
-     never "better". */
+     The thresholds are read off the real distribution, not guessed. Over the
+     510 institutions behind this library the first attempt -- 700, 400, 200 --
+     put 39% of them in the top bucket and 85% in some bucket at all, which is a
+     label that says nothing. Taken from the measured spread instead, they mark
+     roughly the top tenth, third and two-thirds:
+
+       h >= 1400   the global research heavyweights (Harvard, MIT, CNRS, NIH)
+       h >=  800   the strong research universities (Kyushu, KAIST, Technion)
+       h >=  400   research-active institutes and departments
+
+     These are cut points on a continuum and nothing more. The label is the
+     short form; the tooltip always carries the actual number, so the reader can
+     disagree with where the line was drawn. */
   const TIERS = [
-    {key: 'exceptional', floor: 700, label: '최상위', note: '기관 전체 h-index 700 이상'},
-    {key: 'high', floor: 400, label: '상위', note: '기관 전체 h-index 400 이상'},
-    {key: 'established', floor: 200, label: '중상위', note: '기관 전체 h-index 200 이상'},
+    {key: 'exceptional', floor: 1400, label: '최상위', note: '기관 전체 h-index 1400 이상 (상위 약 10%)'},
+    {key: 'high', floor: 800, label: '상위', note: '기관 전체 h-index 800 이상 (상위 약 3분의 1)'},
+    {key: 'established', floor: 400, label: '중상위', note: '기관 전체 h-index 400 이상'},
     {key: 'other', floor: 0, label: '', note: ''}
   ];
 

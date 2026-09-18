@@ -573,3 +573,10 @@
 #style-custom-workbench .sc-hit-warn { box-shadow: inset 2px 0 0 var(--sc-faint); padding-inline-start: 8px; }
 #style-custom-workbench .sc-hit-alert { box-shadow: inset 2px 0 0 var(--sc-error); padding-inline-start: 8px; }
 #style-custom-workbench .sc-hit-alert .sc-hit-meta { color: var(--sc-error); }
+
+/* The citation map: labels are part of the drawing, not a caption on it. */
+#style-custom-workbench .sc-graph-label { fill: var(--sc-muted); font: 10px var(--sc-font); pointer-events: none; }
+#style-custom-workbench .sc-graph g[role=button]:hover .sc-graph-label,
+#style-custom-workbench .sc-graph g[role=button]:focus-visible .sc-graph-label { fill: var(--sc-text); font-weight: 600; }
+#style-custom-workbench .sc-graph g[role=button] { transition: opacity .12s ease; }
+#style-custom-workbench .sc-graph line { transition: stroke-opacity .12s ease; }

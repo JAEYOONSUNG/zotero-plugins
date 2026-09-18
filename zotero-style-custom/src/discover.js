@@ -571,7 +571,42 @@
     return names;
   }
 
+  /* Several works by DOI in one request. A citation sweep over a whole library
+     is one request per paper otherwise, and OpenAlex takes fifty at a time. */
+  function worksByDOIsURL(dois, options = {}) {
+    const list = [...new Set((Array.isArray(dois) ? dois : []).map(bareDOI).filter(Boolean))].slice(0, 50);
+    if (!list.length) return null;
+    return `${API}works?filter=doi:${encodeURIComponent(list.join('|'))}`
+      + `&select=${WORK_FIELDS}&per-page=${list.length}${credentials(options)}`;
+  }
+
+  // An institution's own standing, as OpenAlex measures it. Asked once per
+  // institution rather than once per paper: a library of a thousand papers has
+  // a few hundred distinct labs behind it.
+  function institutionsURL(rors, options = {}) {
+    const list = [...new Set((Array.isArray(rors) ? rors : [])
+      .map(value => text(value).replace(/^https?:\/\/ror\.org\//i, '')).filter(Boolean))].slice(0, 50);
+    if (!list.length) return null;
+    return `${API}institutions?filter=ror:${encodeURIComponent(list.join('|'))}`
+      + `&select=id,ror,display_name,country_code,type,summary_stats,works_count,cited_by_count`
+      + `&per-page=${list.length}${credentials(options)}`;
+  }
+
+  function readInstitutions(payload) {
+    return (Array.isArray(payload?.results) ? payload.results : []).map(raw => ({
+      ror: text(raw?.ror).replace(/^https?:\/\/ror\.org\//i, ''),
+      name: text(raw?.display_name),
+      country: text(raw?.country_code).toUpperCase(),
+      type: text(raw?.type),
+      // h-index over everything the institution has published. A measurable
+      // claim about output, the same number for everybody, and not a ranking.
+      hIndex: Number.isFinite(raw?.summary_stats?.h_index) ? raw.summary_stats.h_index : null,
+      works: Number.isInteger(raw?.works_count) ? raw.works_count : null
+    })).filter(row => row.ror);
+  }
+
   const api = {API, GROUPS, scoreAuthor, pickAuthor, authorQueries, institutionAgrees, topicsAgree,
+    worksByDOIsURL, institutionsURL, readInstitutions,
     workURL, worksByIDsURL, citingURL, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials,
     watchedWorksURL, authorBatches, attribute, AUTHOR_BATCH};

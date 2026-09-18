@@ -7,9 +7,9 @@ var ZotPoPI18N = (function () {
 
 	const STRINGS = {
 		en: {
-			windowTitle: "ZotPoP — Search & Import Papers",
-			menuLabel: "Search & Import Papers (Publish or Perish)…",
-			toolbarTip: "Search & Import Papers (Publish or Perish)",
+			windowTitle: "ZotPoP — Find papers and add them to your library",
+			menuLabel: "ZotPoP — Find papers…",
+			toolbarTip: "ZotPoP — Find papers and add them to your library",
 
 			source: "Source",
 			authors: "Authors",
@@ -230,9 +230,9 @@ var ZotPoPI18N = (function () {
 		},
 
 		ko: {
-			windowTitle: "ZotPoP — 논문 검색 & 가져오기",
-			menuLabel: "논문 검색 & 가져오기 (Publish or Perish)…",
-			toolbarTip: "논문 검색 & 가져오기 (Publish or Perish)",
+			windowTitle: "ZotPoP — 논문 찾아서 라이브러리에 넣기",
+			menuLabel: "ZotPoP — 논문 찾기…",
+			toolbarTip: "ZotPoP — 논문 찾아서 라이브러리에 넣기",
 
 			source: "검색 소스",
 			authors: "저자",

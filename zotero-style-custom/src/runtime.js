@@ -20,6 +20,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.portraitTools = typeof CustomStyleAuthorPortrait !== "undefined" ? CustomStyleAuthorPortrait : require("./author-portrait.js");
     this.fileTools = typeof CustomStyleAttachmentKinds !== "undefined" ? CustomStyleAttachmentKinds : require("./attachment-kinds.js");
     this.journalIdentity = typeof CustomStyleJournalIdentity !== "undefined" ? CustomStyleJournalIdentity : require("./journal-identity.js");
+    this.affiliationTools = typeof CustomStyleAffiliations !== "undefined" ? CustomStyleAffiliations : require("./affiliations.js");
+    this.graphTools = typeof CustomStylePaperGraph !== "undefined" ? CustomStylePaperGraph : require("./paper-graph.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
     this.DISCOVER_CACHE_LIMIT = 60;
@@ -167,7 +169,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       ["lastRead","Last Read","130"],["tagCount","#Tags","70"],
       ["translatedTitle","Translated Title","220"],["summary","Summary","220"],
       ["annotationCount","Annotations","90"],["noteCount","Notes","70"],["venue","Publication","170"],
-      ["signals","Signals","160"]];
+      ["signals","Signals","160"],["affiliation","Affiliation","210"]];
     this.syncFeatureColumns();
     try{this.setCustomFields(this.pref('customFields',''),{persist:false});}catch(error){this.Z.logError(error);}
     this.prefPane = await this.Z.PreferencePanes.register({ pluginID: id, src: rootURI + "content/preferences.xhtml", label: "Style Custom",image:rootURI+"content/icons/style-custom.svg",scripts:[rootURI+"src/settings.js"],stylesheets:[rootURI+"content/preferences.css"] });
@@ -265,6 +267,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (key === "time") return String(state.seconds);
       if (key === "progress") {const p=this.pageProgress(item);return p.percent===null?"":String(p.percent);}
       if (["remark","translatedTitle","summary"].includes(key)) return String(this.entry(item)[key]||"");
+      if (key === "affiliation") {
+        const where = this.affiliationOf(item);
+        if (!where) return "";
+        // The sort key is the text, so it names the lab and the country the
+        // badge draws, and nothing the badge does not.
+        return [where.first?.institution, where.corresponding && where.corresponding.institution !== where.first?.institution
+          ? where.corresponding.institution : '', where.countries.join('/')]
+          .filter(Boolean).join(' · ');
+      }
       if (key === "publication") return this.publicationTags(item).join(' · ');
       if (key === "venue") return ['publicationTitle','proceedingsTitle','university','publisher'].map(field=>item.getField(field)).find(Boolean)||'';
       if (key === "authors") return (item.getCreators?.()||[]).map(c=>[c.firstName,c.lastName||c.name].filter(Boolean).join(' ')).join('; ');
@@ -761,6 +772,60 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.appendChild(chip);
       }
       cell.title = signals ? `${signals.status} · 확인 ${signals.checkedAt}` : "";
+      return cell;
+    } else if (key === "affiliation" && this.isRegular(item)) {
+      const where = this.affiliationOf(item);
+      if (!where) {
+        cell.textContent = "—";
+        cell.style.color = P.faint;
+        cell.title = "아직 조회하지 않았습니다. 연구 작업 → 관계 → 인용 관계 → 인용 목록 가져오기";
+        return cell;
+      }
+      const line = (row, role) => {
+        if (!row) return null;
+        const wrap = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        wrap.style.cssText = "display:inline-flex;align-items:center;gap:3px;min-width:0;";
+        if (row.flag) {
+          const flag = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+          flag.textContent = row.flag;
+          flag.style.cssText = "font-size:11px;line-height:1;flex:none;";
+          wrap.appendChild(flag);
+        }
+        const name = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        name.textContent = row.institution || row.name || "—";
+        name.style.cssText = `font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`
+          + `color:${role === "first" ? P.text : P.muted};`;
+        wrap.appendChild(name);
+        return wrap;
+      };
+      const first = line(where.first, "first");
+      if (first) cell.appendChild(first);
+      // Only when it is a different lab: repeating one name twice says nothing.
+      if (where.corresponding && where.corresponding.institution !== where.first?.institution) {
+        const arrow = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        arrow.textContent = "→";
+        arrow.style.cssText = `font-size:10px;color:${P.faint};flex:none;`;
+        cell.appendChild(arrow);
+        const second = line(where.corresponding, "corresponding");
+        if (second) cell.appendChild(second);
+      }
+      if (where.tier) {
+        const badge = this.pill(doc, where.tier.label, P.blue, P);
+        badge.style.fontWeight = "600";
+        badge.title = where.tier.note;
+        cell.appendChild(badge);
+      }
+      cell.title = [
+        where.first ? `1저자 ${where.first.name} · ${where.first.institution || "소속 미상"}`
+          + (where.first.country ? ` (${where.first.country})` : "")
+          + (where.first.hIndex ? ` · 기관 h-index ${where.first.hIndex}` : "") : null,
+        where.corresponding ? `교신저자 ${where.corresponding.name} · ${where.corresponding.institution || "소속 미상"}`
+          + (where.corresponding.country ? ` (${where.corresponding.country})` : "")
+          + (where.corresponding.hIndex ? ` · 기관 h-index ${where.corresponding.hIndex}` : "") : null,
+        where.correspondingKnown ? null : "교신저자 표시가 없어 마지막 저자를 교신저자로 간주했습니다.",
+        where.extraCorresponding ? `교신저자가 ${where.extraCorresponding + 1}명입니다.` : null,
+        where.international ? "국제 공동연구" : null
+      ].filter(Boolean).join("\n");
       return cell;
     } else if (key === "if") {
       this.paintJournal(cell, item, doc, P, {figure: label, estimate: false});
@@ -1800,6 +1865,102 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return this.discoverCached('authors:' + this.identity(item), () => this.authorsOf(item, options));
   }
 
+  /* One sweep for the citation map and the affiliations alike.
+
+     Both come off the same OpenAlex record, so asking twice would be asking the
+     same question twice. Fifty papers per request, and a paper already answered
+     is skipped, so a second run over a library costs almost nothing. */
+  paperWorks() {
+    const store = this.cache.works;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.works = {});
+  }
+
+  institutionTable() {
+    const store = this.cache.institutions;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.institutions = {});
+  }
+
+  async sweepPaperWorks(items, {signal, onProgress, refetch = false} = {}) {
+    const store = this.paperWorks();
+    const report = {asked: 0, found: 0, noDOI: 0, missing: 0, already: 0, references: 0, errors: 0, institutions: 0};
+    const options = this.discoverOptions();
+    const wanted = [];
+    for (const item of [...new Set(items)]) {
+      if (!this.isRegular(item)) continue;
+      const key = this.identity(item);
+      if (!refetch && store[key]) { report.already++; continue; }
+      const doi = this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI);
+      if (!doi) { report.noDOI++; store[key] = {doi: '', missing: true, checkedAt: new Date().toISOString()}; continue; }
+      wanted.push({key, doi, item});
+    }
+    for (let start = 0; start < wanted.length; start += 50) {
+      if (signal?.aborted || !this.active || this.stopping) break;
+      const batch = wanted.slice(start, start + 50);
+      onProgress?.(start, wanted.length);
+      const url = this.discoverTools.worksByDOIsURL(batch.map(row => row.doi), options);
+      if (!url) continue;
+      try {
+        const works = this.discoverTools.readWorks(await this.discoverJSON(url, {signal}));
+        report.asked += batch.length;
+        const byDOI = new Map(works.map(work => [this.discoverTools.bareDOI(work.doi), work]));
+        for (const row of batch) {
+          const work = byDOI.get(row.doi);
+          if (!work) { report.missing++; store[row.key] = {doi: row.doi, missing: true, checkedAt: new Date().toISOString()}; continue; }
+          report.found++;
+          report.references += work.references.length;
+          store[row.key] = {
+            doi: row.doi, openalex: work.id, year: work.year, citations: work.citations,
+            venue: work.venue, references: work.references,
+            // Only the two authorships the row will show. A consortium paper has
+            // hundreds, and none of the rest is ever read.
+            people: this.affiliationTools.principals(work.people)
+              ? [work.people.find(person => person.position === 'first') || work.people[0],
+                 ...work.people.filter(person => person.corresponding)].filter(Boolean).slice(0, 4)
+              : [],
+            checkedAt: new Date().toISOString()
+          };
+        }
+        this.dirty = true;
+      } catch (error) { this.Z.logError(error); report.errors++; }
+    }
+    report.institutions = await this.sweepInstitutions({signal});
+    if (report.found || report.noDOI || report.missing) { await this.flush(); await this.refreshWindows(); }
+    return report;
+  }
+
+  // Every institution the stored works mention, looked up once.
+  async sweepInstitutions({signal} = {}) {
+    const known = this.institutionTable();
+    const works = Object.values(this.paperWorks());
+    const wanted = this.affiliationTools.institutionsNeeded(works.map(work => ({people: work?.people})), known);
+    if (!wanted.length) return 0;
+    const options = this.discoverOptions();
+    let added = 0;
+    for (let start = 0; start < wanted.length; start += 50) {
+      if (signal?.aborted || !this.active || this.stopping) break;
+      const url = this.discoverTools.institutionsURL(wanted.slice(start, start + 50), options);
+      if (!url) continue;
+      try {
+        for (const row of this.discoverTools.readInstitutions(await this.discoverJSON(url, {signal}))) {
+          known[row.ror] = row;
+          added++;
+        }
+        this.dirty = true;
+      } catch (error) { this.Z.logError(error); }
+    }
+    // A ROR nobody answered for is recorded as asked, so the sweep does not
+    // keep asking the same unanswerable question every run.
+    for (const ror of wanted) if (!known[ror]) known[ror] = {ror, name: '', hIndex: null, unknown: true};
+    return added;
+  }
+
+  // What the row should say about where this paper came from.
+  affiliationOf(item) {
+    const work = this.paperWorks()[this.identity(item)];
+    if (!work || !Array.isArray(work.people) || !work.people.length) return null;
+    return this.affiliationTools.summarise(work.people, this.institutionTable());
+  }
+
   async relatedWorks(item, {limit = 40, signal, have} = {}) {
     const options = this.discoverOptions();
     const url = this.discoverTools.workURL(this.bibliographyRecord(item), options);
@@ -1952,7 +2113,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   stopBackfill() { this.backfillController?.abort(); }
 
   showBackfillProgress(win, stage, done, total) {
-    const label = {files: '첨부파일 종류', signals: '철회·공개접근 신호', journals: '저널 지표', authors: '관심 저자 새 논문'}[stage] || stage;
+    const label = {files: '첨부파일 종류', works: '인용 목록·소속', signals: '철회·공개접근 신호', journals: '저널 지표', authors: '관심 저자 새 논문'}[stage] || stage;
     const text = `${label} 채우는 중 ${done + 1}/${total}`;
     for (const [target, state] of this.windows) {
       if (target.closed) continue;
@@ -1966,6 +2127,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       lines.push(`첨부파일: 본문 ${report.files.article} · 보충자료 ${report.files.supplementary}`
         + (report.files.duplicate ? ` · 중복 ${report.files.duplicate}` : '')
         + (report.files.foreign ? ` · 다른 논문 ${report.files.foreign}` : ''));
+    }
+    if (report.works) {
+      lines.push(`인용 목록: ${report.works.found}편 · 참고문헌 ${report.works.references}건`
+        + ` · 기관 ${report.works.institutions}곳`
+        + (report.works.missing ? ` · OpenAlex에 없음 ${report.works.missing}` : '')
+        + (report.works.noDOI ? ` · DOI 없음 ${report.works.noDOI}` : ''));
     }
     if (report.signals) {
       lines.push(`철회·공개접근 신호: ${report.signals.ok}편 확인`
@@ -2031,7 +2198,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
 
   async backfill({libraryID, signal, onProgress, pace = 250} = {}) {
-    const report = {files: null, signals: null, journals: null, authors: null, budgetGone: false, stage: null};
+    const report = {files: null, works: null, signals: null, journals: null, authors: null, budgetGone: false, stage: null};
     const note = (stage, done, total) => onProgress?.({stage, done, total});
 
     // Reading files costs no request, so it goes first and finishes even when
@@ -2045,6 +2212,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       report.files = await this.scanAttachmentKinds(unread,
         {signal, onProgress: (done, total) => note('files', done, total)});
     }
+    if (signal?.aborted || !this.active || this.stopping) return report;
+
+    // Fifty papers per request, so the whole library's citation record and every
+    // affiliation behind it cost about as much as one page of search results.
+    report.stage = 'works';
+    report.works = await this.sweepPaperWorks(await this.libraryItems(libraryID),
+      {signal, onProgress: (done, total) => note('works', done, total)});
     if (signal?.aborted || !this.active || this.stopping) return report;
 
     report.stage = 'signals';

@@ -107,10 +107,17 @@ Zotero.ZotPoP = {
 		btn.className = "zotero-tb-button";
 		btn.setAttribute("tooltiptext", this.t("toolbarTip"));
 		btn.setAttribute("image", "chrome://zotpop/content/icons/zotpop-toolbar.svg");
-		btn.style.setProperty("-moz-context-properties", "fill, fill-opacity");
-		btn.style.fill = "currentColor";
+		// The icon carries its own colours now, so it must not be repainted in
+		// the toolbar's text colour the way a context-fill glyph is.
 		btn.addEventListener("command", () => this.openSearch(window));
-		let anchor = doc.getElementById("zotero-tb-lookup");
+		/* At the right-hand end of the tools, after the note button.
+
+		   It used to sit second, between Zotero's lookup and its attachment
+		   button, which put a plugin in the middle of the program's own tools.
+		   Both plugins now group at the end, in a fixed order. */
+		let anchor = doc.getElementById("zotero-tb-note-add")
+			|| doc.getElementById("zotero-tb-attachment-add")
+			|| doc.getElementById("zotero-tb-lookup");
 		if (anchor && anchor.parentElement === toolbar) anchor.after(btn);
 		else toolbar.appendChild(btn);
 		return "ok";

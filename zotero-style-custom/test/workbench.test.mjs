@@ -519,16 +519,19 @@ test('the toolbar button survives a document that rejects innerHTML on SVG',asyn
  }
 });
 
-test('the toolbar button lets its own colour through, or a context-fill icon paints nothing',async()=>{
- const f=fixture();
- const toolbarButton=f.doc.getElementById('style-custom-workbench-button');
- assert.ok(toolbarButton);
- // Zotero's toolbar icons are context-fill; without these the glyph is transparent.
- assert.match(toolbarButton.style.getPropertyValue('-moz-context-properties'),/fill/);
- assert.equal(toolbarButton.style.fill,'currentColor');
- assert.equal(toolbarButton.className,'zotero-tb-button','it should be styled like Zotero’s own');
- assert.ok(toolbarButton.getAttribute('tooltiptext'),'an icon-only button needs a tooltip');
- f.bench.destroy();
+test('the toolbar button does not repaint its icon in the toolbar ink', async () => {
+  // The icon carries its own colours now. Passing fill: currentColor through
+  // would flatten all three of them back to one grey.
+  const {readFileSync} = await import('node:fs');
+  const source = readFileSync(new URL('../src/workbench.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /-moz-context-properties/,
+    'a context-fill glyph was replaced by a coloured one');
+  assert.doesNotMatch(source, /toolbar\.style\.fill\s*=/);
+  const f = fixture();
+  const button = f.doc.getElementById('style-custom-workbench-button');
+  assert.ok(button);
+  assert.match(button.getAttribute('image') || '', /style-custom-toolbar\.svg$/);
+  f.bench.destroy();
 });
 
 test('the library tab is not named as though it searched the literature',async()=>{
@@ -714,15 +717,18 @@ test('the toolbar button sits with the other tools, not off at the far edge', as
   // with nothing around it.
   const f = fixture(undefined, [
     ['zotero-tb-add', 'toolbarbutton'], ['zotero-tb-lookup', 'toolbarbutton'],
-    ['zotpop-toolbar-button', 'toolbarbutton'], ['zotero-lookup-panel', 'panel'],
+    ['zotero-lookup-panel', 'panel'],
     ['zotero-tb-attachment-add', 'toolbarbutton'], ['zotero-tb-note-add', 'toolbarbutton'],
+    ['zotpop-toolbar-button', 'toolbarbutton'],
     ['', 'spacer'], ['zotero-tb-search', 'searchbox'],
     ['zotero-tb-toggle-item-pane-stacked', 'toolbarbutton']]);
   const bar = f.doc.getElementById('zotero-items-toolbar');
   const ids = [...bar.children].map(child => child.id || child.localName);
   assert.ok(ids.includes('style-custom-workbench-button'), 'the button is in the toolbar');
-  assert.equal(ids[ids.indexOf('zotero-tb-note-add') + 1], 'style-custom-workbench-button',
-    'immediately after the last tool');
+  // Both plugin buttons group at the end, in a fixed order, rather than trading
+  // places depending on which one loaded first.
+  assert.equal(ids[ids.indexOf('zotpop-toolbar-button') + 1], 'style-custom-workbench-button',
+    'after the other plugin, which itself sits after the last Zotero tool');
   assert.ok(ids.indexOf('style-custom-workbench-button') < ids.indexOf('spacer'),
     'and before the spacer, rather than past the search box');
   f.bench.destroy();

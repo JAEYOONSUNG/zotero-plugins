@@ -25,6 +25,8 @@ var ZotPoPSources = (function () {
 	const PAGE_WALK_LIMIT = 10000;
 	const Query = typeof ZotPoPQuery !== "undefined" ? ZotPoPQuery
 		: typeof require === "function" ? require("./query.js") : null;
+	const Affiliations = typeof ZotPoPAffiliations !== "undefined" ? ZotPoPAffiliations
+		: typeof require === "function" ? require("./affiliations.js") : null;
 
 	function abortError() { let e = new Error("Search cancelled"); e.name = "AbortError"; return e; }
 	function throwIfCancelled(ctx = {}) {
@@ -162,13 +164,40 @@ var ZotPoPSources = (function () {
 		return parts?.length ? parts.slice(0, 3).map((v, i) => String(v).padStart(i ? 2 : 4, "0")).join("-") : null;
 	}
 
+	// Who did the work and where, as far as a source says. OpenAlex names the lab, its
+	// country and which author answers for the paper; Crossref and Europe PMC carry an
+	// affiliation string at best. Kept per author so the first and corresponding author
+	// can be picked later without going back to the source.
+	function openAlexId(value) { return String(value || "").replace("https://openalex.org/", "") || null; }
+	function openAlexPeople(authorships) {
+		let people = (authorships || []).map(a => {
+			let inst = (a.institutions || [])[0] || {};
+			return {
+				name: a.author?.display_name || a.raw_author_name || "",
+				position: a.author_position || "",
+				corresponding: Boolean(a.is_corresponding),
+				institution: inst.display_name || (a.raw_affiliation_strings || [])[0] || "",
+				institutionId: openAlexId(inst.id),
+				country: String(inst.country_code || (a.countries || [])[0] || "").toUpperCase() || null,
+				institutionH: null
+			};
+		}).filter(p => p.name);
+		return people.length ? people : null;
+	}
+	// A bare affiliation string, when the source has one at all. Null otherwise, so a
+	// merge never trades OpenAlex's lab and country for a list of names alone.
+	function affiliatedPeople(entries) {
+		let people = entries.filter(p => p.name);
+		return people.some(p => p.institution) ? people : null;
+	}
+
 	function makeRecord(r) {
 		let doi = normalizeDOI(r.doi);
 		let rec = Object.assign({
 			source: "", sourceId: "", title: "", authors: [], year: null, publicationDate: null, venue: "", publisher: "",
 			doi: null, pmid: null, pmcid: null, arxiv: null, url: null, pdfUrl: null, pdfUrls: [], citations: null, citationSource: null, sources: null,
 			journalId: null, issn: null, journalIF: null, journalH: null,
-			preprintServer: null, publishedDoi: null, publishedPmid: null,
+			preprintServer: null, publishedDoi: null, publishedPmid: null, people: null,
 			volume: "", issue: "", pages: "", abstract: "", itemType: "journalArticle"
 		}, r, { doi });
 		rec.publishedDoi = normalizeDOI(rec.publishedDoi);
@@ -338,6 +367,7 @@ var ZotPoPSources = (function () {
 					sourceId: (w.id || "").replace("https://openalex.org/", ""),
 					title: w.title || w.display_name || "",
 					authors: (w.authorships || []).map(a => parseName(a.author?.display_name || a.raw_author_name)),
+					people: openAlexPeople(w.authorships),
 					year: w.publication_year || null,
 					publicationDate: w.publication_date || null,
 					venue: src.display_name || "",
@@ -432,11 +462,23 @@ var ZotPoPSources = (function () {
 		if (!r.issn) r.issn = st.issn;
 	}
 
-	// Fill journalIF / journalH on records from their OpenAlex source id or ISSN. Mutates records.
+	// A journal known only by name -- Google Scholar and Semantic Scholar hits carry no
+	// ISSN -- is looked up by that name, one request per distinct journal, and the
+	// answer is kept so the next search pays nothing for it. Preprint servers are
+	// skipped: OpenAlex has an h-index for arXiv, and printing it as an IF would mislead.
+	const NAME_LOOKUPS_PER_SEARCH = 60;
+	function journalNameKey(r) {
+		if (r.itemType === "preprint" || r.preprintServer || !r.venue) return null;
+		let name = normalizedText(r.venue);
+		return name.length >= 3 ? "name:" + name : null;
+	}
+
+	// Fill journalIF / journalH on records from their OpenAlex source id, ISSN or, failing
+	// both, the journal's name. Mutates records.
 	async function enrichJournalMetrics(records, http, ctx = {}) {
-		const SELECT = "select=id,display_name,issn_l,issn,summary_stats,works_count,is_oa,is_in_doaj";
+		const SELECT = "select=id,display_name,issn_l,issn,summary_stats,works_count,is_oa,is_in_doaj,abbreviated_title,alternate_titles";
 		let mailto = openAlexAuth(ctx);
-		let byId = new Map(), byIssn = new Map();
+		let byId = new Map(), byIssn = new Map(), byName = new Map();
 		for (let r of records) {
 			if (r.journalIF != null) continue;
 			if (r.journalId) {
@@ -448,8 +490,16 @@ var ZotPoPSources = (function () {
 				if (JOURNAL_CACHE.has(k)) applyJournal(r, JOURNAL_CACHE.get(k));
 				else { if (!byIssn.has(r.issn)) byIssn.set(r.issn, []); byIssn.get(r.issn).push(r); }
 			}
+			else if (journalNameKey(r)) {
+				let k = journalNameKey(r);
+				if (JOURNAL_CACHE.has(k)) applyJournal(r, JOURNAL_CACHE.get(k));
+				else if (byName.has(k) || byName.size < NAME_LOOKUPS_PER_SEARCH) {
+					if (!byName.has(k)) byName.set(k, []);
+					byName.get(k).push(r);
+				}
+			}
 		}
-		let total = byId.size + byIssn.size, done = 0;
+		let total = byId.size + byIssn.size + byName.size, done = 0;
 		let fetchChunks = async (map, filterName, keysOf) => {
 			let keys = [...map.keys()];
 			for (let i = 0; i < keys.length; i += 50) {
@@ -481,7 +531,120 @@ var ZotPoPSources = (function () {
 		};
 		await fetchChunks(byId, "ids.openalex", s => [(s.id || "").replace("https://openalex.org/", "")]);
 		await fetchChunks(byIssn, "issn", s => s.issn || []);
+		for (let [key, group] of byName) {
+			throwIfCancelled(ctx);
+			let name = key.slice("name:".length);
+			let url = "https://api.openalex.org/sources?search=" + enc(group[0].venue.trim()) + "&per-page=5&" + SELECT + mailto;
+			try {
+				let data = await withRetry(() => http.getJSON(url), {}, ctx);
+				// The journal must be the one asked for: "Nature" is not "Nature Communications".
+				let hit = (data.results || []).find(s => [s.display_name, s.abbreviated_title, ...(s.alternate_titles || [])]
+					.some(v => v && normalizedText(v) === name));
+				let st = hit ? journalStats(hit) : null;
+				if (st) {
+					JOURNAL_CACHE.set(st.id, st);
+					for (let issn of hit.issn || []) JOURNAL_CACHE.set("issn:" + issn, st);
+				}
+				JOURNAL_CACHE.set(key, st);
+				for (let r of group) applyJournal(r, st);
+			}
+			catch (e) {
+				if (e.name === "AbortError") throw e;
+				ctx.log?.("Journal lookup by name failed: " + e.message);
+			}
+			done++;
+			ctx.onProgress?.(`Journal metrics: ${done} / ${total}`, done, total);
+		}
 		return records;
+	}
+
+	// ---------------------------------------------------------------- institutions
+	// An institution's standing as OpenAlex measures it: the h-index of everything it has
+	// published. Asked once per lab, not once per paper, and remembered across searches.
+	const INSTITUTION_CACHE = new Map(); // "I123" -> { id, name, country, hIndex } | null
+
+	function institutionStats(i) {
+		return {
+			id: openAlexId(i.id),
+			name: i.display_name || "",
+			country: String(i.country_code || "").toUpperCase() || null,
+			hIndex: toInt(i.summary_stats?.h_index)
+		};
+	}
+
+	function applyInstitution(p, st) {
+		if (!st) return;
+		p.institutionH = st.hIndex;
+		if (!p.institution) p.institution = st.name;
+		if (!p.country) p.country = st.country;
+	}
+
+	// Only the first and corresponding authors are shown, so only their labs are looked up.
+	function principalPeople(record) {
+		let picked = Affiliations?.principals(record.people);
+		return picked ? [picked.first, picked.corresponding].filter(Boolean) : [];
+	}
+
+	async function enrichInstitutions(records, http, ctx = {}) {
+		let byId = new Map();
+		for (let r of records) {
+			for (let p of principalPeople(r)) {
+				if (!p.institutionId || p.institutionH != null) continue;
+				if (INSTITUTION_CACHE.has(p.institutionId)) applyInstitution(p, INSTITUTION_CACHE.get(p.institutionId));
+				else {
+					if (!byId.has(p.institutionId)) byId.set(p.institutionId, []);
+					byId.get(p.institutionId).push(p);
+				}
+			}
+		}
+		let ids = [...byId.keys()];
+		for (let i = 0; i < ids.length; i += 50) {
+			throwIfCancelled(ctx);
+			let chunk = ids.slice(i, i + 50);
+			let url = "https://api.openalex.org/institutions?filter=ids.openalex:" + chunk.join("|")
+				+ "&per-page=50&select=id,display_name,country_code,summary_stats" + openAlexAuth(ctx);
+			try {
+				let data = await withRetry(() => http.getJSON(url), {}, ctx);
+				let seen = new Set();
+				for (let raw of data.results || []) {
+					let st = institutionStats(raw);
+					if (!st.id) continue;
+					INSTITUTION_CACHE.set(st.id, st);
+					seen.add(st.id);
+					for (let p of byId.get(st.id) || []) applyInstitution(p, st);
+				}
+				// A lab nobody answered for is recorded as asked, so the next search does
+				// not keep asking the same unanswerable question.
+				for (let id of chunk) if (!seen.has(id)) INSTITUTION_CACHE.set(id, null);
+			}
+			catch (e) {
+				if (e.name === "AbortError") throw e;
+				ctx.log?.("Institution lookup failed: " + e.message);
+			}
+			ctx.onProgress?.(`Institutions: ${Math.min(i + 50, ids.length)} / ${ids.length}`, i + 50, ids.length);
+		}
+		return records;
+	}
+
+	// The journal and institution answers, for the caller to keep on disk between sessions:
+	// every one of them cost a metered request, and none of them changes week to week.
+	const CACHE_EXPORT_LIMIT = 6000;
+	function exportCaches() {
+		let tail = map => [...map.entries()].slice(-CACHE_EXPORT_LIMIT);
+		return { version: 1, savedAt: new Date().toISOString(), journals: tail(JOURNAL_CACHE), institutions: tail(INSTITUTION_CACHE) };
+	}
+	function importCaches(snapshot) {
+		if (!snapshot || snapshot.version !== 1) return 0;
+		let n = 0;
+		for (let [map, entries] of [[JOURNAL_CACHE, snapshot.journals], [INSTITUTION_CACHE, snapshot.institutions]]) {
+			for (let entry of Array.isArray(entries) ? entries : []) {
+				if (!Array.isArray(entry) || typeof entry[0] !== "string" || map.has(entry[0])) continue;
+				if (entry[1] !== null && (typeof entry[1] !== "object" || Array.isArray(entry[1]))) continue;
+				map.set(entry[0], entry[1]);
+				n++;
+			}
+		}
+		return n;
 	}
 
 	// Live citation counts for one record from every free source that knows it.
@@ -630,6 +793,13 @@ var ZotPoPSources = (function () {
 					sourceId: w.DOI,
 					title: (w.title || [])[0] || "",
 					authors: (w.author || []).map(a => a.family ? fromFamilyGiven(a.family, a.given) : parseName(a.name)),
+					people: affiliatedPeople((w.author || []).map((a, i) => ({
+						name: a.family ? fromFamilyGiven(a.family, a.given).name : a.name || "",
+						position: a.sequence === "first" || i === 0 ? "first" : i === (w.author || []).length - 1 ? "last" : "middle",
+						corresponding: false,
+						institution: (a.affiliation || []).map(x => x.name).find(Boolean) || "",
+						institutionId: null, country: null, institutionH: null
+					}))),
 					year: dated?.[0] || null,
 					publicationDate: dateFromParts(dated),
 					venue: (w["container-title"] || [])[0] || server || "",
@@ -1026,11 +1196,19 @@ var ZotPoPSources = (function () {
 				return m ? { firstName: m[2], lastName: m[1], name: n.trim() } : parseName(n);
 			});
 		}
+		let epmcAuthors = r.authorList?.author || [];
 		return makeRecord({
 			source: "europepmc",
 			sourceId: r.id,
 			title: r.title || "",
 			authors,
+			people: affiliatedPeople(epmcAuthors.map((a, i) => ({
+				name: authors[i]?.name || a.fullName || "",
+				position: i === 0 ? "first" : i === epmcAuthors.length - 1 ? "last" : "middle",
+				corresponding: false,
+				institution: (a.authorAffiliationDetailsList?.authorAffiliation || []).map(x => x.affiliation).find(Boolean) || "",
+				institutionId: null, country: null, institutionH: null
+			}))),
 			year: toInt(r.pubYear) || yearOf(r.firstPublicationDate),
 			publicationDate: r.firstPublicationDate || null,
 			venue: r.journalInfo?.journal?.title || r.journalTitle || publisher || (isPreprint ? "Preprint" : ""),
@@ -1460,6 +1638,10 @@ var ZotPoPSources = (function () {
 		if (!a.pages && b.pages) a.pages = b.pages;
 		if ((b.abstract || "").length > (a.abstract || "").length) a.abstract = b.abstract;
 		if ((b.authors || []).length > (a.authors || []).length) a.authors = b.authors;
+		// The source that knows the labs and countries wins; a longer list of bare
+		// affiliation strings is not a richer one.
+		let placed = people => (people || []).some(p => p.institutionId || p.country);
+		if (b.people && (!a.people || (placed(b.people) && !placed(a.people)))) a.people = b.people;
 		if (b.citations != null && (a.citations == null || b.citations > a.citations)) {
 			a.citations = b.citations;
 			a.citationSource = b.citationSource || b.source;
@@ -1613,13 +1795,14 @@ var ZotPoPSources = (function () {
 		recs = recs.slice(0, query.maxResults);
 		publishResults(recs, query, ctx);
 		if (ctx.journalMetrics !== false) await enrichJournalMetrics(recs, transport, ctx);
+		if (ctx.institutionMetrics !== false) await enrichInstitutions(recs, transport, ctx);
 		throwIfCancelled(ctx);
 		publishResults(recs, query, ctx, true);
 		return recs;
 	}
 
 	return {
-		SOURCES, search, dedupe, mergeRecords, pubmedYear, searchableSurname, interleave, openAlexAbstract, isPlainAuthorQuery, openAlexAuthorFilter, openAlexAuth, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, checkCitations, journalStats, pdfCandidates,
+		SOURCES, search, dedupe, mergeRecords, pubmedYear, searchableSurname, interleave, openAlexAbstract, isPlainAuthorQuery, openAlexAuthorFilter, openAlexAuth, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();
