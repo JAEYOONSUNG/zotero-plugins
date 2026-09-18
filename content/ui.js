@@ -1,4 +1,4 @@
-/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee, ZotPoPHistory, ZotPoPAffiliations */
+/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee, ZotPoPHistory, ZotPoPAffiliations, ZotPoPJournalMarks */
 "use strict";
 
 (function () {
@@ -1054,12 +1054,31 @@
 
 	function hasPDF(r) { return Boolean((r.pdfUrls || []).length || r.pdfUrl || r.pmcid || r.arxiv); }
 
+	// ------------------------------------------------------------ journal mark
+	// The publisher's lettermark in its own colour, before the journal's name: a
+	// reader knows "Science is red, Cell is blue" long before reading the title.
+	function journalMark(r) {
+		if (typeof ZotPoPJournalMarks === "undefined" || !r?.venue) return null;
+		let identity = ZotPoPJournalMarks.identify(r.venue, r.publisher);
+		if (!identity) return null;
+		let dark = Boolean(window.matchMedia?.("(prefers-color-scheme: dark)")?.matches);
+		let tone = ZotPoPJournalMarks.colours(identity, { dark });
+		let mark = document.createElement("span");
+		mark.className = "jmark" + (identity.known ? " known" : "");
+		mark.textContent = identity.mark;
+		mark.style.background = tone.fill;
+		mark.style.color = tone.ink;
+		mark.style.boxShadow = "inset 0 0 0 .5px " + tone.edge;
+		mark.title = identity.label ? r.venue + " · " + identity.label : r.venue;
+		return mark;
+	}
+
 	// ------------------------------------------------------------ affiliation
 	function affiliationOf(r) {
 		return typeof ZotPoPAffiliations !== "undefined" && r?.people ? ZotPoPAffiliations.summarise(r.people) : null;
 	}
 	function tierLabel(key) {
-		return key ? t({ exceptional: "tierExceptional", high: "tierHigh", established: "tierEstablished" }[key] || key) : "";
+		return key ? key.toUpperCase() : "";
 	}
 	function personLine(role, p) {
 		if (!p) return "";
@@ -1155,7 +1174,13 @@
 		tt.appendChild(a);
 
 		td("num", r.year == null ? "" : String(r.year));
-		td("", r.venue, r.venue).dataset.marquee = "venue";
+		// The mark travels inside the marquee with the name, so a long journal title
+		// still rolls and the mark stays where the eye lands first.
+		let venueCell = td("venue", null, r.publisher ? r.venue + " · " + r.publisher : r.venue);
+		venueCell.dataset.marquee = "venue";
+		let mark = journalMark(r);
+		if (mark) venueCell.appendChild(mark);
+		venueCell.appendChild(document.createTextNode(r.venue || ""));
 		td("num if", r.journalIF == null ? "" : fmt(r.journalIF, 1), r.journalIF == null ? "" : t("ifTip", fmt(r.journalIF, 1), r.journalH));
 		let where = affiliationOf(r);
 		td("aff", where?.first?.institution || "", affiliationTip(where)).dataset.marquee = "affiliation";
@@ -1283,6 +1308,8 @@
 			if (mark) s.insertBefore(mark, s.firstChild);
 			return s;
 		};
+		let mark = journalMark(r);
+		if (mark) badges.appendChild(mark);
 		if (r.citations != null) chip(t("badgeCites", r.citations), "cite");
 		if (r.journalIF != null) chip(t("badgeIF", fmt(r.journalIF, 1)), "if");
 		let cpy = ZotPoPMetrics.citesPerYear(r);

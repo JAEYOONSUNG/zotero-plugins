@@ -26,10 +26,35 @@
 
      The hues are the families' own, pulled toward each other in saturation so
      that a column of them reads as one set rather than as a paint chart. */
+
+  /* Every Nature sister journal wears its own cover colour, and a reader who
+     works in the field knows them: Biotechnology blue, Methods green, Chemical
+     Biology purple, Genetics amber, Medicine red. The portfolio is one family
+     but the marks are not one colour. Hues approximate the covers. */
+  const NATURE_TITLES = [
+    [/^nature$/, 168], [/^nature communications/, 195], [/^nature biotechnology/, 215],
+    [/^nature methods/, 95], [/^nature chemical biology/, 285], [/^nature genetics/, 40],
+    [/^nature cell biology/, 200], [/^nature immunology/, 350], [/^nature neuroscience/, 25],
+    [/^nature medicine/, 5], [/^nature structural/, 260], [/^nature microbiology/, 140],
+    [/^nature chemistry/, 320], [/^nature materials/, 30], [/^nature physics/, 230],
+    [/^nature nanotechnology/, 15], [/^nature photonics/, 45], [/^nature catalysis/, 20],
+    [/^nature energy/, 60], [/^nature ecology/, 120], [/^nature plants/, 110],
+    [/^nature metabolism/, 300], [/^nature machine intelligence/, 250], [/^nature sustainability/, 150],
+    [/^nature climate change/, 190], [/^nature human behaviour/, 340], [/^nature aging/, 275],
+    [/^nature cancer/, 355], [/^nature synthesis/, 35], [/^nature food/, 80], [/^nature water/, 205],
+    [/^nature cardiovascular/, 10], [/^nature mental health/, 330], [/^nature protocols/, 100],
+    [/^nature reviews/, 175], [/^scientific reports/, 160], [/^npj\b/, 165], [/^communications /, 180]
+  ];
+  function natureHue(title) {
+    const key = flat(title);
+    const hit = NATURE_TITLES.find(([test]) => test.test(key));
+    return hit ? hit[1] : 168;
+  }
+
   const FAMILIES = [
     // --- Nature portfolio: the house colour, with the flagship darker ---
     {key: 'nature', label: 'Nature', mark: 'N', hue: 168, test: /^nature$/},
-    {key: 'nature-portfolio', label: 'Nature Portfolio', hue: 168,
+    {key: 'nature-portfolio', label: 'Nature Portfolio', hue: natureHue,
      // Scientific Reports and the Communications titles are Nature portfolio
      // too, and a reader knows it even though the name does not say so.
      test: /^(nature|npj|scientific reports|communications (biology|chemistry|physics|materials|earth|engineering|medicine))\b/,
@@ -108,7 +133,8 @@
     for (const family of FAMILIES) {
       if (!family.test.test(key)) continue;
       return {
-        family: family.key, label: family.label, hue: family.hue,
+        family: family.key, label: family.label,
+        hue: typeof family.hue === 'function' ? family.hue(name) : family.hue,
         mark: typeof family.mark === 'function' ? family.mark(name) : family.mark,
         known: true
       };
@@ -129,7 +155,7 @@
 
   const hsl = (h, s, l) => `hsl(${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%)`;
 
-  const api = {identify, colours, monogram, derivedHue, FAMILIES};
+  const api = {identify, colours, monogram, derivedHue, natureHue, FAMILIES, NATURE_TITLES};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

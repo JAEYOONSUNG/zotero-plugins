@@ -1546,20 +1546,20 @@ test('first author, corresponding author and tier each get a column of their own
   const first = plugin.renderCell('firstInstitution', 0, '', {}, document);
   // 640 sorts, but draws nothing: paper-weighted, the bucket it falls in covered
   // three rows in four, which is a texture rather than a mark.
-  assert.equal(first.textContent, '🇩🇰Technical University of Denmark');
+  assert.equal(first.textContent, '🇩🇰Technical University of DenmarkT3');
   assert.match(first.title, /1저자 Sheila Ingemann Jensen · Technical University of Denmark \(DK\) · 기관 h-index 640/);
   assert.match(first.title, /교신저자 P I Boss · MIT \(US\) · 기관 h-index 2281/);
   const corresponding = plugin.renderCell('correspondingInstitution', 0, '', {}, document);
-  assert.equal(corresponding.textContent, '🇺🇸MIT최상위');
+  assert.equal(corresponding.textContent, '🇺🇸MITT1');
   const tier = plugin.renderCell('institutionTier', 0, '', {}, document);
-  assert.equal(tier.textContent, '최상위');
+  assert.equal(tier.textContent, 'T1');
   assert.match(tier.firstChild.title, /2000 이상.*기관 h-index 2281/);
   assert.match(tier.firstChild.style.color, /#6484BA|#809DD0/i, 'the top bucket is blue');
 
   // When the first author answers for the paper too, the column names the same
   // lab again rather than pointing at the other column.
   plugin.cache.works[plugin.identity(ref)].people.splice(1);
-  assert.equal(plugin.renderCell('correspondingInstitution', 0, '', {}, document).textContent, '🇩🇰Technical University of Denmark');
+  assert.equal(plugin.renderCell('correspondingInstitution', 0, '', {}, document).textContent, '🇩🇰Technical University of DenmarkT3');
   assert.equal(plugin.value('correspondingInstitution', ref), 'Technical University of Denmark · DK');
   assert.equal(plugin.value('institutionTier', ref), '00640');
 });

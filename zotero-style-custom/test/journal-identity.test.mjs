@@ -27,7 +27,7 @@ test("the more specific pattern is tested first, or every Nature title is just N
   assert.equal(journals.identify("Nature Microbiology").family, "nature-portfolio");
   assert.equal(journals.identify("Science").family, "science");
   // Both share the house hue: the family is what the colour says.
-  assert.equal(journals.identify("Nature").hue, journals.identify("Nature Microbiology").hue);
+  assert.notEqual(journals.identify("Nature").hue, journals.identify("Nature Microbiology").hue, "a sister journal keeps its own cover colour");
 });
 
 test("a journal nobody curated still gets a mark and a colour of its own", () => {
@@ -65,4 +65,14 @@ test("no title means no mark, rather than a mark for nothing", () => {
   assert.equal(journals.identify(""), null);
   assert.equal(journals.identify(null), null);
   assert.equal(journals.monogram(""), "?");
+});
+
+test("every Nature sister journal keeps its own cover colour", () => {
+  const hue = title => journals.identify(title).hue;
+  assert.notEqual(hue("Nature Biotechnology"), hue("Nature Methods"));
+  assert.equal(hue("Nature Chemical Biology"), 285);
+  assert.equal(hue("Nature Medicine"), 5);
+  assert.equal(journals.identify("Nature Microbiology").hue, 140);
+  assert.equal(journals.identify("Nature Something New").hue, 168, "an unlisted sister falls back to the house colour");
+  assert.equal(new Set(journals.NATURE_TITLES.map(([, h]) => h)).size, journals.NATURE_TITLES.length, "no two sisters share a hue");
 });

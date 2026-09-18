@@ -22,9 +22,10 @@ var ZotPoPAffiliations = (function () {
 	// Cut points on a continuum, taken from the measured spread of institution
 	// h-indexes rather than guessed: roughly the top tenth, third and two-thirds.
 	const TIERS = [
-		{ key: "exceptional", floor: 1400 },
-		{ key: "high", floor: 800 },
-		{ key: "established", floor: 400 }
+		{ key: "t1", floor: 1400 },
+		{ key: "t2", floor: 800 },
+		{ key: "t3", floor: 400 },
+		{ key: "t4", floor: 0 }
 	];
 
 	function tierOf(hIndex) {

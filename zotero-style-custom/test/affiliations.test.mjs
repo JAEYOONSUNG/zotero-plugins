@@ -49,9 +49,10 @@ test("standing is read off the institution's own figure, not off a list of famou
      paper-weighted that threshold marked 77% of rows. A mark on three rows in
      four is not a mark, it is a texture. */
   assert.ok(affiliations.TIERS[0].floor >= 2000);
-  assert.equal(affiliations.tierOf(860).label, "", "the middle bucket sorts but says nothing on the row");
-  assert.equal(affiliations.TIERS.filter(tier => tier.label).length, 2,
-    "only the top two buckets are worth drawing");
+  // Four buckets, four plain codes: the user asked for every row to carry one,
+  // and for none of them to be a Korean word that reads as a verdict.
+  assert.equal(affiliations.tierOf(860).label, "T3");
+  assert.deepEqual(affiliations.TIERS.map(tier => tier.label), ["T1", "T2", "T3", "T4"]);
   assert.equal(affiliations.tierOf(0), null, "no figure is not a low figure");
   assert.equal(affiliations.tierOf(null), null);
   // And every label says what the number is rather than implying a ranking.

@@ -323,9 +323,29 @@ test("affiliation columns sort, filter and export from the people a source suppl
 	const row = ui.get("results-body").firstChild;
 	assert.equal(row.querySelector("td.aff").textContent, "MIT");
 	assert.equal(row.querySelector("td.country").textContent, "🇺🇸 US");
-	assert.equal(row.querySelector("span.tier").textContent, "tierExceptional");
-	assert.match(row.querySelector("td.aff").title, /^affFirst: A · MIT · 🇺🇸 US · affHIndex\|1800 · tierExceptional$/);
+	assert.equal(row.querySelector("span.tier").textContent, "T1");
+	assert.match(row.querySelector("td.aff").title, /^affFirst: A · MIT · 🇺🇸 US · affHIndex\|1800 · T1$/);
 	const csv = ui.csvText().split("\n");
 	assert.match(csv[1], /"MIT","US","1800"/);
 	assert.match(csv[3], /"","",""/);
+});
+
+test("the journal cell carries the publisher's mark in its colour, and so does the detail pane", async () => {
+	const ui = uiHarness({ realRows: true, search: async () => [
+		paper("sci", { venue: "Science", publisher: "American Association for the Advancement of Science (AAAS)" }),
+		paper("unk", { venue: "Journal of Cleaner Production", publisher: "Elsevier BV" }),
+		paper("none", { venue: "" })
+	] });
+	await ui.runSearch();
+	const rows = ui.get("results-body").children;
+	const mark = rows[0].querySelector("td.venue").querySelector("span.jmark");
+	assert.equal(mark.textContent, "S");
+	assert.equal(mark.classList.contains("known"), true);
+	assert.match(mark.style.color, /^hsl\(358 /);
+	assert.equal(mark.title, "Science · Science");
+	assert.equal(rows[0].querySelector("td.venue").textContent, "SScience");
+	assert.equal(rows[0].querySelector("td.venue").dataset.marquee, "venue");
+	assert.equal(rows[1].querySelector("span.jmark").textContent, "JCP");
+	assert.equal(rows[1].querySelector("span.jmark").classList.contains("known"), true, "the publisher placed it");
+	assert.equal(rows[2].querySelector("span.jmark"), null);
 });

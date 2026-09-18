@@ -4,6 +4,7 @@ import Sources from "../../content/sources.js";
 import Preview from "../../content/preview.js";
 import History from "../../content/history.js";
 import Affiliations from "../../content/affiliations.js";
+import JournalMarks from "../../content/journal-marks.js";
 
 export const paper = (key, extra = {}) => ({
 	key, title: key, citations: 1, year: 2026, authors: [], ...extra
@@ -86,6 +87,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 	};
 	const document = {
 		getElementById: get, querySelectorAll: () => [], createElement: mockElement,
+		createTextNode(value) { const node = mockElement("#text"); node.textContent = value; return node; },
 		createDocumentFragment: () => mockElement("#fragment"),
 		querySelector(selector) {
 			const match = selector.match(/^#([\w-]+)\s+(.+)$/);
@@ -111,6 +113,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPPreview: Preview,
 		ZotPoPHistory: { ...History, memoryIO: () => History.memoryIO(historyFiles) },
 		ZotPoPAffiliations: Affiliations,
+		ZotPoPJournalMarks: JournalMarks,
 		ZotPoPMarquee: marquee || { attach: () => ({ refresh() {}, refreshCell() {} }) },
 		ZotPoPMetrics: { citesPerYear: () => 1 },
 		CSS: { escape: value => value },
