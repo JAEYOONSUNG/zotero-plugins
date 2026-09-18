@@ -988,8 +988,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   // Europe PMC hands back every supplementary file of an article as one zip.
   // Nothing is written until the archive is open and its entries are triaged.
-  async fetchSupplementary(item, {pdfOnly = false, signal, maxBytes = 200 * 1024 * 1024} = {}) {
+  async fetchSupplementary(item, {pdfOnly = false, signal, refetch = false, maxBytes = 200 * 1024 * 1024} = {}) {
     const record = this.bibliographyRecord(item);
+    // A paper whose supplement is already on the shelf needs no request. The
+    // old check compared publisher filenames, which a file mover renames away,
+    // so the twenty-nine supplements this library already holds would all have
+    // been fetched again as duplicates.
+    if (!refetch) {
+      const held = this.attachmentKinds(item).filter(kind => kind.kind === 'supplementary');
+      if (held.length) {
+        return {status: 'already', added: 0, skipped: held.length,
+          reason: `이미 보충자료 ${held.length}개가 있습니다`};
+      }
+    }
     const url = this.supplementaryTools.searchURL(record, {email: this.contactEmail()});
     if (!url) return {status: 'unsupported', reason: '식별자가 없어 조회할 수 없습니다', added: 0};
     const search = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 20000});
@@ -1092,6 +1103,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // tag selector the way a manual tag would.
   async markSupplementary(attachment, file) {
     if (!attachment?.addTag) return;
+    // A file fetched from the supplementary endpoint needs no scan to know what
+    // it is: record the verdict now, so the badge is right the moment it lands
+    // rather than after the next sweep.
+    if (attachment.id != null) {
+      this.fileVerdicts()[String(attachment.id)] = {kind: 'supplementary',
+        why: '출판사의 보충자료 파일로 내려받았습니다', duplicateOf: null,
+        checkedAt: new Date().toISOString()};
+      this.dirty = true;
+    }
     try {
       attachment.addTag(this.SUPPLEMENTARY_TAG, 1);
       // Zotero's auto-rename gives every child the parent's title, which makes
@@ -1102,13 +1122,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     } catch (error) { this.Z.logError(error); }
   }
 
-  async downloadSupplementary(items, {pdfOnly = false, onProgress} = {}) {
+  async downloadSupplementary(items, {pdfOnly = false, refetch = false, onProgress} = {}) {
     const totals = {ok: 0, added: 0, none: 0, 'not-found': 0, unsupported: 0, error: 0, already: 0};
     const failures = [];
     for (const [index, item] of items.entries()) {
       onProgress?.(index, items.length, item);
       try {
-        const result = await this.fetchSupplementary(item, {pdfOnly});
+        const result = await this.fetchSupplementary(item, {pdfOnly, refetch});
         totals[result.status] = (totals[result.status] || 0) + 1;
         totals.added += result.added || 0;
         if (result.status === 'error') failures.push(this.bibliographyRecord(item).title + ': ' + result.reason);

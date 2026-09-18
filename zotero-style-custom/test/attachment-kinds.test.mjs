@@ -209,3 +209,50 @@ test("a scan can be told not to index, and then simply reports what it could not
   assert.equal(result.unread, 1);
   assert.equal(result.indexed, 0);
 });
+
+test("a paper whose supplement is already on the shelf is not fetched again", async () => {
+  const { createRequire } = await import("node:module");
+  const Runtime = createRequire(import.meta.url)("../src/runtime.js");
+  let requests = 0;
+  const host = {
+    cache: {fileKinds: {"7": {kind: "supplementary"}}},
+    Z: {HTTP: {request() { requests++; throw new Error("should not have asked"); }}, Items: {get: () => null}},
+    supplementaryTools: {searchURL: () => "https://example.invalid/"},
+    contactEmail: () => "",
+    bibliographyRecord: () => ({DOI: "10.1/x", title: "A paper"}),
+    fileVerdicts: Runtime.prototype.fileVerdicts,
+    fetchSupplementary: Runtime.prototype.fetchSupplementary,
+    attachmentKinds: () => [{id: "7", kind: "supplementary", read: true, name: "si.pdf"}]
+  };
+  const result = await host.fetchSupplementary({id: 1});
+  // The old check compared publisher filenames, which a file mover renames
+  // away; every one of this library's twenty-nine supplements would have been
+  // downloaded a second time.
+  assert.equal(result.status, "already");
+  assert.equal(result.skipped, 1);
+  assert.equal(requests, 0, "and it costs no request at all");
+
+  // Asking for it again explicitly still goes out to the network.
+  await assert.rejects(() => host.fetchSupplementary({id: 1}, {refetch: true}));
+  assert.equal(requests, 1);
+});
+
+test("a supplement that was just downloaded is badged without waiting for a scan", async () => {
+  const { createRequire } = await import("node:module");
+  const Runtime = createRequire(import.meta.url)("../src/runtime.js");
+  const saved = [];
+  const attachment = {id: 42, tags: [], addTag(tag) { this.tags.push(tag); },
+    setField() {}, async saveTx() { saved.push(this.id); }};
+  const host = {
+    cache: {fileKinds: {}}, dirty: false, SUPPLEMENTARY_TAG: "style-custom:supplementary",
+    Z: {logError() {}},
+    supplementaryTools: {attachmentTitle: file => "Supplementary: " + file.name},
+    fileVerdicts: Runtime.prototype.fileVerdicts,
+    markSupplementary: Runtime.prototype.markSupplementary
+  };
+  await host.markSupplementary(attachment, {name: "mmc1.pdf"});
+  assert.equal(host.cache.fileKinds["42"].kind, "supplementary");
+  assert.match(host.cache.fileKinds["42"].why, /내려받았습니다/);
+  assert.deepEqual(attachment.tags, ["style-custom:supplementary"]);
+  assert.deepEqual(saved, [42]);
+});
