@@ -404,6 +404,26 @@ var ZotPoPJournalMarks = (function () {
 		const c = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
 		return 0.2126 * c(n >> 16 & 255) + 0.7152 * c(n >> 8 & 255) + 0.0722 * c(n & 255);
 	}
+	/* One lightness for every hue leaves the yellows and light greens short of
+	   the contrast a reader needs, so the ink walks its own hue until it clears
+	   4.5:1 against the row it is drawn on. */
+	const ROW_DARK = 0.0176, ROW_LIGHT = 1;
+	function hslLuminance(h, s, l) {
+		const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+		const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+		const f = v => { v += m; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+		return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+	}
+	function readableL(h, satPercent, startL, dark) {
+		const behind = dark ? ROW_DARK : ROW_LIGHT, s = satPercent / 100;
+		const ratio = l => { const a = hslLuminance(h, s, l), hi = Math.max(a, behind), lo = Math.min(a, behind); return (hi + 0.05) / (lo + 0.05); };
+		let l = startL / 100;
+		for (let step = 0; step < 45 && ratio(l) < 4.5; step++) {
+			l += dark ? 0.02 : -0.02;
+			if (l <= 0.05 || l >= 0.95) break;
+		}
+		return Math.round(l * 100);
+	}
 	function tonesFor(hex, dark) {
 		if (!hex) return dark
 			? { ink: "hsl(0 0% 88%)", fill: "hsl(0 0% 24%)", edge: "hsl(0 0% 36%)" }
@@ -412,19 +432,23 @@ var ZotPoPJournalMarks = (function () {
 		const sat = Math.round(Math.max(45, Math.min(95, s * 100)));
 		// The badge wears the exact code, with black or white lettering by luminance,
 		// so the colour the journal actually prints is the colour on the row.
-		const badge = { badge: hex, badgeInk: luminance(hex) > 0.42 ? "#111111" : "#ffffff" };
+		// Whichever of black or white the code itself reads better against, rather
+		// than a luminance line that puts white on a mid yellow.
+		const onBadge = ink => { const a = luminance(hex), b = ink === "#111111" ? luminance("#111111") : 1; const hi = Math.max(a, b), lo = Math.min(a, b); return (hi + 0.05) / (lo + 0.05); };
+		const badge = { badge: hex, badgeInk: onBadge("#111111") >= onBadge("#ffffff") ? "#111111" : "#ffffff" };
 		return dark
-			? { ...badge, ink: hsl(h, sat, 72), fill: hsl(h, Math.round(sat * 0.7), 24), edge: hsl(h, Math.round(sat * 0.7), 36) }
-			: { ...badge, ink: hsl(h, sat, 36), fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84) };
+			? { ...badge, ink: hsl(h, sat, readableL(h, sat, 72, true)), fill: hsl(h, Math.round(sat * 0.7), 24), edge: hsl(h, Math.round(sat * 0.7), 36) }
+			: { ...badge, ink: hsl(h, sat, readableL(h, sat, 36, false)), fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84) };
 	}
 
 	function colours(identity, { dark = false } = {}) {
 		if (identity?.exact) return tonesFor(identity.hex, dark);
 		let hue = identity?.hue ?? 0;
 		let known = Boolean(identity?.known);
+		const sat = known ? 62 : 40;
 		return dark
-			? { ink: hsl(hue, known ? 62 : 40, 74), fill: hsl(hue, known ? 44 : 26, 24), edge: hsl(hue, known ? 44 : 26, 36) }
-			: { ink: hsl(hue, known ? 62 : 40, 40), fill: hsl(hue, known ? 62 : 36, 93), edge: hsl(hue, known ? 52 : 30, 84) };
+			? { ink: hsl(hue, sat, readableL(hue, sat, 74, true)), fill: hsl(hue, known ? 44 : 26, 24), edge: hsl(hue, known ? 44 : 26, 36) }
+			: { ink: hsl(hue, sat, readableL(hue, sat, 40, false)), fill: hsl(hue, known ? 62 : 36, 93), edge: hsl(hue, known ? 52 : 30, 84) };
 	}
 
 	return { identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, tonesFor, loadRegistry, registryLookup, registryByIssn, registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, PUBLISHERS, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS };

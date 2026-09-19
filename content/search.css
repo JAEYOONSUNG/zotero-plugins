@@ -10,15 +10,15 @@
 	--border-strong: rgba(0, 0, 0, 0.20);
 	--text: #17171a;
 	--muted: #6a6a72;
-	--accent: #6484BA;
-	--accent-soft: rgba(100, 132, 186, 0.20);
+	--accent: #5477B3;
+	--accent-soft: rgba(84, 119, 179, 0.20);
 	--accent-text: #ffffff;
 	--row-alt: rgba(0, 0, 0, 0.022);
 	--row-hover: rgba(47, 111, 208, 0.09);
 	--row-sel: rgba(47, 111, 208, 0.17);
-	--ok: #42926C;
-	--warn: #AA784C;
-	--err: #BD6C6E;
+	--ok: #3B8361;
+	--warn: #9B6D45;
+	--err: #B55B5E;
 	--chip: rgba(0, 0, 0, 0.06);
 	--shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 20px rgba(0, 0, 0, 0.07);
 	font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Helvetica, Arial, sans-serif;
@@ -36,6 +36,7 @@
 		--text: #ebebf0;
 		--muted: #9c9ca6;
 		--accent: #809DD0;
+		--accent-text: #10131a;
 		--accent-soft: rgba(128, 157, 208, 0.26);
 		--row-alt: rgba(255, 255, 255, 0.028);
 		--row-hover: rgba(92, 155, 245, 0.14);
@@ -214,8 +215,8 @@ td.status.err { color: var(--err); }
 .badges { display: flex; gap: 4px; flex-wrap: wrap; }
 .badge { background: var(--chip); color: var(--muted); border-radius: 999px; padding: 1.5px 9px; font-size: 10.5px; white-space: nowrap; }
 .badge.cite { background: var(--accent); color: var(--accent-text); font-weight: 650; }
-.badge.lib { background: var(--ok); color: #fff; }
-.badge.if { background: var(--warn); color: #fff; font-weight: 650; }
+.badge.lib { background: var(--ok); color: var(--accent-text); }
+.badge.if { background: var(--warn); color: var(--accent-text); font-weight: 650; }
 td.if { color: var(--warn); font-weight: 600; }
 td.if.estimate { color: var(--muted); font-weight: 500; }
 

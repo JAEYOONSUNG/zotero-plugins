@@ -634,8 +634,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return dark
       // Lifted a step in saturation from the first pastel set, which read as
       // muddy on a white ground; the evenness across hues is kept.
-      ? {blue:'#7EA3E1',green:'#2BB771',orange:'#D79256',red:'#E3888B',purple:'#BC8EE5',teal:'#2FB0C9',gold:'#C09D2D',amber:'#D1963D',star:'#F3C33F',reading:'#7FC3A3',done:'#3FA372',gray:'#98989D',faint:'#4A4A50',muted:'#A0A0A6',text:'#E8E8ED',tint:0.28,dark:true}
-      : {blue:'#497CD4',green:'#218F58',orange:'#B66B2B',red:'#D65054',purple:'#9D5AD8',teal:'#25899C',gold:'#957B23',amber:'#A67327',star:'#F0B019',reading:'#5FAE8A',done:'#2E7A55',gray:'#8E8E93',faint:'#D3D7DC',muted:'#6E6E73',text:'#1C1C1E',tint:0.18,dark:false};
+      ? {blue:'#7EA3E1',green:'#2BB771',orange:'#D79256',red:'#E3888B',purple:'#BC8EE5',teal:'#2FB0C9',gold:'#C09D2D',amber:'#D1963D',star:'#F3C33F',reading:'#7FC3A3',done:'#3FA372',gray:'#98989D',faint:'#676770',muted:'#A0A0A6',text:'#E8E8ED',tint:0.28,dark:true}
+      : {blue:'#3068CA',green:'#1C7A4B',orange:'#9D5C25',red:'#C92F34',purple:'#9043D3',teal:'#207585',gold:'#7E681E',amber:'#8F6322',star:'#C08A0E',reading:'#3C775C',done:'#2D7854',gray:'#6A6A6F',faint:'#8B95A2',muted:'#6E6E73',text:'#1C1C1E',tint:0.18,dark:false};
   }
   tint(hex, alpha) {
     const n = parseInt(hex.slice(1), 16);

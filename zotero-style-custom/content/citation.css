@@ -32,7 +32,7 @@
 }
 #style-custom-cite .sc-cite-row + .sc-cite-row { border-top: 1px solid var(--sc-cite-line, rgba(0,0,0,.06)); }
 #style-custom-cite .sc-cite-row:focus-visible { outline: 2px solid #6484BA; outline-offset: -2px; border-radius: 10px; }
-#style-custom-cite .sc-cite-row[aria-disabled=true] { cursor: default; opacity: .5; }
+#style-custom-cite .sc-cite-row[aria-disabled=true] { cursor: default; opacity: .62; }
 #style-custom-cite .sc-cite-row:hover { background: #f5f5f7; }
 #style-custom-cite .sc-cite-row[data-copied] { background: #e8f3ec; }
 #style-custom-cite .sc-cite-label { color: #6e6e73; text-align: end; font-size: 12px; padding-top: 1px; }
@@ -50,7 +50,7 @@
   color: #4B6DA7; font: inherit;
 }
 #style-custom-cite .sc-cite-exports button:hover { text-decoration: underline; }
-#style-custom-cite .sc-cite-exports button[data-copied] { color: #42926C; }
+#style-custom-cite .sc-cite-exports button[data-copied] { color: #2D7854; }
 
 @media (prefers-color-scheme: dark) {
   #style-custom-cite:not([data-theme="light"]) { color: #e8e8ed; --sc-cite-line: rgba(255,255,255,.09); }
@@ -64,4 +64,9 @@
   #style-custom-cite:not([data-theme="light"]) .sc-cite-note,
   #style-custom-cite:not([data-theme="light"]) .sc-cite-close { color: #a0a0a6; }
   #style-custom-cite:not([data-theme="light"]) .sc-cite-exports button { color: #809DD0; }
+}
+
+@media (prefers-color-scheme: dark) {
+  /* The green that says "copied" was mixed against white paper. */
+  #style-custom-cite:not([data-theme="light"]) .sc-cite-exports button[data-copied] { color: #4DAB7E; }
 }

@@ -98,7 +98,7 @@ test('the page strip shades five steps from the fill to the done colour, with no
  assert.match(source,/sc-page-cell/);
  for(const level of [1,2,3,4])assert.ok(rule(`#style-custom-workbench .sc-page-cell[data-level="${level}"]`),'level '+level);
  assert.equal(rule('#style-custom-workbench .sc-page-cell[data-level="4"]').getPropertyValue('background').trim(),'var(--sc-done)');
- assert.match(rule('#style-custom-workbench .sc-page-cell[data-level="1"]').getPropertyValue('background'),/--sc-done\) 30%/);
+ assert.match(rule('#style-custom-workbench .sc-page-cell[data-level="1"]').getPropertyValue('background'),/--sc-done\) 45%/);
 });
 
 test('every badge colour lands on the same contrast, so no one of them shouts', async () => {
@@ -187,4 +187,27 @@ test('the toolbar icons carry their own colour rather than the toolbar ink', asy
     assert.ok(ratio(fill, '#F2F2F4') >= 2.9, `${fill} on the light toolbar`);
     assert.ok(ratio(fill, '#2B2B2E') >= 2.9, `${fill} on the dark toolbar`);
   }
+});
+
+test('every ink token reads against the surface it is drawn on, in both themes', () => {
+ const css = fs.readFileSync(new URL('../content/workbench.css', import.meta.url), 'utf8');
+ const lum = hex => { const h = hex.replace('#', ''); const p = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+   .map(c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)); return 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]; };
+ const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+ const tokensIn = block => Object.fromEntries([...block.matchAll(/--(sc-[a-z-]+):\s*(#[0-9a-fA-F]{6})/g)].map(m => [m[1], m[2]]));
+ const darkStart = css.indexOf('@media (prefers-color-scheme: dark)');
+ const light = tokensIn(css.slice(0, darkStart)), dark = tokensIn(css.slice(darkStart));
+ // Text a reader has to read: 4.5:1 against the plainest fill it sits on.
+ const inks = ['sc-text', 'sc-muted', 'sc-accent', 'sc-reading-ink', 'sc-external', 'sc-done', 'sc-error',
+  'sc-tone-top', 'sc-tone-high', 'sc-tone-mid', 'sc-tone-low'];
+ for (const [name, tokens] of [['light', light], ['dark', dark]]) {
+  for (const ink of inks) {
+   assert.ok(tokens[ink], `${name}: ${ink} is defined`);
+   assert.ok(ratio(tokens[ink], tokens['sc-fill']) >= 4.4,
+    `${name} ${ink} ${tokens[ink]} on ${tokens['sc-fill']} is ${ratio(tokens[ink], tokens['sc-fill']).toFixed(2)}:1`);
+  }
+  // The faintest tier is for things that are barely there, but it is still seen.
+  assert.ok(ratio(tokens['sc-faint'], tokens['sc-fill']) >= 3,
+   `${name} faint ${tokens['sc-faint']} is ${ratio(tokens['sc-faint'], tokens['sc-fill']).toFixed(2)}:1`);
+ }
 });

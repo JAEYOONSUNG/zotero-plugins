@@ -41,7 +41,7 @@
 #style-custom-settings-root .scs-reading-label{font-size:12px;margin-top:8px}
 #style-custom-settings-root .scs-reading-value{display:block;font-size:26px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums;margin-block:3px 8px;color:CanvasText}
 
-#style-custom-settings-root .scs-setting[data-error=true] .scs-feedback{color:#B34E51;font-weight:600}
+#style-custom-settings-root .scs-setting[data-error=true] .scs-feedback{color:#B04C4F;font-weight:600}
 #style-custom-settings-root .scs-setting[data-error=true] input,#style-custom-settings-root .scs-setting[data-error=true] textarea,#style-custom-settings-root .scs-setting[data-error=true] select{border-color:#B34E51}
 #style-custom-settings-root .scs-setting[data-dirty=true] .scs-feedback{color:GrayText}
 #style-custom-settings-root .scs-setting[data-type=boolean]{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px;align-items:center}
@@ -56,3 +56,9 @@
 #style-custom-settings-root .scs-first-list{display:flex;flex-wrap:wrap;gap:6px}
 #style-custom-settings-root .scs-first-list button{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;min-height:38px;padding:5px 10px;text-align:start}
 #style-custom-settings-root .scs-first-why{font-size:11px;color:GrayText}
+
+@media (prefers-color-scheme: dark){
+ /* A red mixed for white paper turns to mud on a dark pane. */
+ #style-custom-settings-root .scs-setting[data-error=true] .scs-feedback{color:#E0989A}
+ #style-custom-settings-root .scs-first{background:color-mix(in srgb,SelectedItem 16%,transparent)}
+}

@@ -54,8 +54,26 @@ test("an exact code is worn as-is on the badge and pulled to a readable lightnes
 	const nbt = J.colours(J.identify("Nature Biotechnology"));
 	assert.equal(nbt.badge, "#efd600");
 	assert.equal(nbt.badgeInk, "#111111", "dark lettering on a light yellow");
-	assert.match(nbt.ink, /^hsl\(54 95% 36%\)$/, "the same hue, dark enough to read as text on white");
-	assert.match(J.colours(J.identify("Nature Biotechnology"), { dark: true }).ink, /^hsl\(54 95% 72%\)$/);
+	// The lightness is whatever that hue needs: a yellow has to go further down
+	// than a blue, so the test asks for the contrast, not for a number.
+	const ratio = (h, s, l, behind) => {
+		const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+		const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+		const f = v => { v += m; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+		const lum = 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+		return (Math.max(lum, behind) + 0.05) / (Math.min(lum, behind) + 0.05);
+	};
+	const parse = ink => ink.match(/hsl\((\d+) (\d+)% (\d+)%\)/).slice(1).map(Number);
+	{
+		const [h, s, l] = parse(nbt.ink);
+		assert.equal(h, 54, "the same hue the journal prints");
+		assert.ok(ratio(h, s / 100, l / 100, 1) >= 4.5, "dark enough to read as text on white: " + nbt.ink);
+	}
+	{
+		const [h, s, l] = parse(J.colours(J.identify("Nature Biotechnology"), { dark: true }).ink);
+		assert.equal(h, 54);
+		assert.ok(ratio(h, s / 100, l / 100, 0.0176) >= 4.5, "and on a dark row");
+	}
 	const asm = J.colours(J.identify("mBio"));
 	assert.equal(asm.badgeInk, "#ffffff", "white lettering on a dark red");
 	const none = J.colours(J.identify("Nature"));

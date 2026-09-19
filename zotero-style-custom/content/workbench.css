@@ -8,21 +8,21 @@
   --sc-fill-hover: #e4e4e8;
   --sc-fill-active: #d9d9df;
   --sc-text: #1c1c1e;
-  --sc-muted: #6e6e73;
-  --sc-faint: #a0a0a6;
-  --sc-accent: #4B6DA7;
+  --sc-muted: #6A6A6F;
+  --sc-faint: #7C7C85;
+  --sc-accent: #4A6CA5;
   --sc-accent-soft: #EDF1F7;
-  --sc-selection: #4B6DA7;
+  --sc-selection: #4A6CA5;
   --sc-border: rgba(0, 0, 0, .07);
   --sc-border-strong: rgba(0, 0, 0, .13);
   --sc-reading: #6AA98C;
-  --sc-reading-ink: #2E7A55;
-  --sc-external: #AA784C;
-  --sc-tone-top: #8A5DB0; --sc-tone-high: #5573AB; --sc-tone-mid: #3A7D8B; --sc-tone-low: #36805D;
-  --sc-done: #2E7A55;
-  --sc-error: #B34E51;
+  --sc-reading-ink: #2D7854;
+  --sc-external: #8C633F;
+  --sc-tone-top: #8556AD; --sc-tone-high: #4F6B9F; --sc-tone-mid: #357380; --sc-tone-low: #327756;
+  --sc-done: #2D7854;
+  --sc-error: #B04C4F;
   --sc-error-bg: #FAF2F2;
-  --sc-graph-line: #b8bcc4;
+  --sc-graph-line: #828997;
   --sc-shadow: 0 18px 48px rgba(0, 0, 0, .18), 0 0 0 .5px rgba(0, 0, 0, .1);
   --sc-font: -apple-system, system-ui, sans-serif;
   --sc-title-font: -apple-system, system-ui, sans-serif;
@@ -120,7 +120,7 @@
 }
 #style-custom-workbench button:hover { background: var(--sc-fill-hover); }
 #style-custom-workbench button:active { background: var(--sc-fill-active); }
-#style-custom-workbench button:disabled { opacity: .48; cursor: default; }
+#style-custom-workbench button:disabled { opacity: .6; cursor: default; }
 #style-custom-workbench button[aria-busy=true] { opacity: 1; cursor: progress; color: var(--sc-accent); background: var(--sc-accent-soft); border-color: var(--sc-accent); border-block-end: 2px solid var(--sc-accent); }
 #style-custom-workbench input::placeholder,
 #style-custom-workbench textarea::placeholder { color: var(--sc-muted); opacity: 1; }
@@ -295,7 +295,7 @@
 #style-custom-workbench .sc-page-row { color: var(--sc-faint); font: 9px/1 var(--sc-font); text-align: end; padding-inline-end: 2px; font-variant-numeric: tabular-nums; }
 #style-custom-workbench button.sc-page-cell, #style-custom-workbench .sc-page-cell { width: 100%; max-width: 11px; aspect-ratio: 1; height: auto; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 25%; background: var(--sc-fill); box-shadow: inset 0 0 0 1px var(--sc-border); cursor: pointer; }
 #style-custom-workbench .sc-page-cell:disabled { cursor: default; }
-#style-custom-workbench .sc-page-cell[data-level="1"] { background: color-mix(in srgb, var(--sc-done) 30%, var(--sc-fill)); }
+#style-custom-workbench .sc-page-cell[data-level="1"] { background: color-mix(in srgb, var(--sc-done) 45%, var(--sc-fill)); }
 #style-custom-workbench .sc-page-cell[data-level="2"] { background: color-mix(in srgb, var(--sc-done) 55%, var(--sc-fill)); }
 #style-custom-workbench .sc-page-cell[data-level="3"] { background: color-mix(in srgb, var(--sc-done) 80%, var(--sc-fill)); }
 #style-custom-workbench .sc-page-cell[data-level="4"] { background: var(--sc-done); }
@@ -355,7 +355,7 @@
     --sc-fill-active: #45454d;
     --sc-text: #e8e8ed;
     --sc-muted: #a8a8ae;
-    --sc-faint: #75757b;
+    --sc-faint: #86868C;
     --sc-accent: #809DD0;
     --sc-accent-soft: #2B3140;
     --sc-selection: #809DD0;
@@ -364,11 +364,11 @@
     --sc-reading: #7FC3A3;
     --sc-reading-ink: #7FC3A3;
     --sc-external: #C9975F;
-    --sc-tone-top: #B38DD5; --sc-tone-high: #809DD0; --sc-tone-mid: #49A9BC; --sc-tone-low: #41AF7C;
-    --sc-done: #3FA372;
+    --sc-tone-top: #B38DD5; --sc-tone-high: #809DD0; --sc-tone-mid: #57A4B3; --sc-tone-low: #4DAB7E;
+    --sc-done: #43AC78;
     --sc-error: #D3888A;
     --sc-error-bg: #3A2A2C;
-    --sc-graph-line: #5a5a62;
+    --sc-graph-line: #797983;
     --sc-shadow: 0 18px 48px rgba(0, 0, 0, .6), 0 0 0 .5px rgba(255, 255, 255, .12);
     color-scheme: dark;
   }
@@ -530,11 +530,14 @@
 
 @media (prefers-color-scheme: dark) {
   #style-custom-workbench .sc-quartile[data-q="1"], #style-custom-workbench .sc-quartile[data-q="2"], #style-custom-workbench .sc-quartile[data-q="3"] { color: #10131a; }
-  #style-custom-workbench .sc-page-cell[data-level="1"] { background: color-mix(in srgb, var(--sc-done) 42%, var(--sc-fill)); }
+  #style-custom-workbench .sc-page-cell[data-level="1"] { background: color-mix(in srgb, var(--sc-done) 55%, var(--sc-fill)); }
   #style-custom-workbench .sc-page-cell[data-level="2"] { background: color-mix(in srgb, var(--sc-done) 64%, var(--sc-fill)); }
   #style-custom-workbench .sc-page-cell[data-level="3"] { background: color-mix(in srgb, var(--sc-done) 84%, var(--sc-fill)); }
   #style-custom-workbench .sc-watch-badge, #style-custom-workbench .sc-signal-retracted { color: #10131a; }
-  #style-custom-workbench .sc-journal-if[data-tone=top], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=top],   #style-custom-workbench .sc-journal-if[data-tone=high], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=high],   #style-custom-workbench .sc-journal-if[data-tone=mid], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=mid],   #style-custom-workbench .sc-journal-if[data-tone=low], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=low],   #style-custom-workbench .sc-chip-on, #style-custom-workbench .sc-chip-button[aria-pressed=true] { color: #10131a; }
+  /* Only the filled chips take a dark ink here: the IF figure is bare coloured
+     text, and #10131a on a dark surface is invisible. It keeps its tone token. */
+  #style-custom-workbench .sc-chip-on, #style-custom-workbench .sc-chip-button[aria-pressed=true] { color: #10131a; }
+  #style-custom-workbench { --sc-accent-ink: #10131a; }
   #style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #D48A8C; }
   #style-custom-workbench .sc-paper-card[data-mark=orange] { --sc-mark: #C9975F; }
   #style-custom-workbench .sc-paper-card[data-mark=gold]   { --sc-mark: #B89944; }
@@ -717,7 +720,7 @@
 #style-custom-workbench .sc-quartile[data-q="1"] { background: var(--sc-done); }
 #style-custom-workbench .sc-quartile[data-q="2"] { background: var(--sc-accent); }
 #style-custom-workbench .sc-quartile[data-q="3"] { background: var(--sc-muted); }
-#style-custom-workbench .sc-quartile[data-q="4"] { background: var(--sc-faint); color: var(--sc-text); }
+#style-custom-workbench .sc-quartile[data-q="4"] { background: var(--sc-faint); color: var(--sc-surface); }
 
 /* An unrefereed manuscript, said in one word before the venue. */
 #style-custom-workbench .sc-tag, #style-custom-workbench .sc-preprint, #style-custom-workbench .sc-new { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 9px/14px var(--sc-font); letter-spacing: .02em; vertical-align: middle; }
@@ -809,9 +812,6 @@
 #style-custom-workbench .sc-journal-table .sc-journal-profile-row td { padding: 0 8px 10px 34px; white-space: normal; overflow: visible; }
 #style-custom-workbench .sc-journal-table .sc-journal-profile { margin: 4px 0 0; }
 #style-custom-workbench .sc-chip-on-text { color: var(--sc-accent); }
-#style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=top]  { color: #9B71BF; }
-#style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=mid]  { color: #468D9B; }
-#style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=low]  { color: #42926C; }
 
 #style-custom-workbench .sc-chip b { margin-inline-start: 4px; font-weight: 600; color: var(--sc-faint); font-variant-numeric: tabular-nums; }
 
@@ -829,7 +829,7 @@
 #style-custom-workbench .sc-matrix td:last-child, #style-custom-workbench .sc-matrix th:last-child { border-inline-end: 0; }
 #style-custom-workbench .sc-matrix td[data-field=abstract], #style-custom-workbench .sc-matrix td[data-field=summary], #style-custom-workbench .sc-matrix td[data-field=remark] { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 #style-custom-workbench .sc-lang { flex: 0 0 auto !important; max-width: 110px; }
-#style-custom-workbench button[data-variant=primary] { background: var(--sc-accent); color: #fff; }
+#style-custom-workbench button[data-variant=primary] { background: var(--sc-accent); color: var(--sc-accent-ink, #fff); }
 #style-custom-workbench button[data-variant=primary]:hover { background: color-mix(in srgb, var(--sc-accent) 88%, black); }
 #style-custom-workbench .sc-note-text { font-size: 12px; color: var(--sc-text); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 #style-custom-workbench .sc-annot-search { flex: 1 1 200px; max-width: 320px; }

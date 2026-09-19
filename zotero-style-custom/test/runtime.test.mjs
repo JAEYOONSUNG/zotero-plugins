@@ -1559,7 +1559,7 @@ test('first author, corresponding author and tier each get a column of their own
   const tier = plugin.renderCell('institutionTier', 0, '', {}, document);
   assert.equal(tier.textContent, 'T1');
   assert.match(tier.firstChild.title, /2000 이상.*기관 h-index 2281/);
-  assert.match(tier.firstChild.style.color, /#497CD4|#7EA3E1/i, 'the top bucket is blue');
+  assert.match(tier.firstChild.style.color, /#3068CA|#7EA3E1/i, 'the top bucket is blue');
 
   // When the first author answers for the paper too, the column names the same
   // lab again rather than pointing at the other column.

@@ -579,17 +579,18 @@
     return '#' + to(r) + to(g) + to(b);
   }
   // Walk the lightness until the colour clears the contrast it needs, keeping
-  // hue and saturation exactly as the brand has them.
+  // hue and saturation exactly as the brand has them. The bar is 4.5, what a
+  // reader needs for a journal name at list size, not the 3:1 of a swatch.
   function readable(hex, dark) {
     const behind = dark ? DARK_BG : WHITE;
-    if (contrast(hex, behind) >= 4.2) return hex;
+    if (contrast(hex, behind) >= 4.5) return hex;
     const {h, s, l} = hexToHsl(hex);
     let light = l;
     for (let step = 0; step < 40; step++) {
       light += dark ? 0.02 : -0.02;
       if (light <= 0.04 || light >= 0.96) break;
       const candidate = hslToHex(h, s, light);
-      if (contrast(candidate, behind) >= 4.2) return candidate;
+      if (contrast(candidate, behind) >= 4.5) return candidate;
     }
     return dark ? '#e8e8ed' : '#1c1c1e';
   }

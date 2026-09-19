@@ -1,5 +1,5 @@
 {
- "version": "0.48.4",
+ "version": "0.48.5",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1268,7 +1268,7 @@
     },
     {
      "file": "content/workbench.css",
-     "marker": "--sc-accent: #4B6DA7"
+     "marker": "--sc-accent: #4A6CA5"
     }
    ],
    "tests": [
@@ -1955,6 +1955,34 @@
    ],
    "status": "verified",
    "review": "우클릭 메뉴의 'Style Custom'과 도구 메뉴의 두 항목에 패널 모양 표식을 붙였다. 자기 점검의 버튼 일괄 누르기는 노트 제목처럼 동사가 없는 버튼까지 눌러 빈 노트 창을 쌓았다. 창을 여는 버튼은 이제 data-opens로 스스로를 밝히고, 점검은 그런 버튼을 건너뛴다. ZotPoP의 도구 메뉴 항목에도 돋보기 표식을 넣었다."
+  },
+  {
+   "round": "R70",
+   "title": "어두운 화면에서 읽히는 색",
+   "gap": "Measured every ink against the surface it is drawn on. Twenty-five colours missed the 4.5:1 a reader needs, and one dark-mode rule painted the impact factor in near-black on a dark panel.",
+   "entryPoint": "밝은 테마·어두운 테마 전체",
+   "sources": [
+    {
+     "file": "content/workbench.css",
+     "marker": "--sc-tone-top: #8556AD"
+    },
+    {
+     "file": "content/journal-marks.js",
+     "marker": "the ink walks its own hue until it clears"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/styles.test.mjs",
+     "name": "every ink token reads against the surface it is drawn on, in both themes"
+    },
+    {
+     "file": "test/journal-marks.test.mjs",
+     "name": "an exact code is worn as-is on the badge and pulled to a readable lightness for the name"
+    }
+   ],
+   "status": "verified",
+   "review": "어두운 테마에서 저널 표의 JIF 숫자는 거의 검은색으로 칠해져 보이지 않았다. 그 규칙을 지우고 색조 토큰이 두 테마 모두에 적용되게 했다. 밝은 테마의 잉크 21개, 어두운 테마의 6개를 같은 색상을 유지한 채 명도만 움직여 4.5:1을 넘겼다. 채운 버튼과 배지는 배경의 밝기에 따라 흰 글자 또는 검은 글자를 고른다. 저널 마크의 잉크는 고정 명도 대신 색상별로 대비를 걸어 노란 계열도 읽힌다. 토큰 대비는 이제 테스트가 지킨다."
   }
  ],
  "introducedInVersion": "0.6.0"
