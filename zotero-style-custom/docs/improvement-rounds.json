@@ -1,2093 +1,2121 @@
 {
- "version": "0.49.0",
- "minimumRequestedRounds": 10,
- "rounds": [
-  {
-   "round": "R01",
-   "title": "Scoped nested tag branch rename and merge",
-   "gap": "Maps exact prefix boundaries once, preserves descendant suffixes and tag types; existing destination metadata wins merges; protects status/rating tags and rejects cross-library selections.",
-   "entryPoint": "중첩 태그 → 선택 문헌 태그 이름 변경",
-   "sources": [
-    {
-     "file": "src/library.js",
-     "marker": "renameTagBranch"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/library.test.mjs",
-     "name": "R01 branch rename merges existing destinations without losing types or sibling tags"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R01 exact rename and scoped guards prevent subtree and cross-library changes"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R01 moving a branch below itself maps each original suffix once and rolls back batch failure"
-    }
-   ],
-   "status": "verified",
-   "review": "Tested descendant-target rename without cascading, target collision metadata, and later-item save failure rolling earlier changes back.",
-   "evidence": [
-    {
-     "file": "docs/rounds-data.json",
-     "round": "R01"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R02",
-   "title": "Guarded bulk annotation recoloring",
-   "gap": "Validates six-digit colors and library identity, checks clean/editable annotation attachment and parent, skips unchanged colors, and saves transactionally.",
-   "entryPoint": "주석 → 선택 주석 색상 변경",
-   "sources": [
-    {
-     "file": "src/library.js",
-     "marker": "recolorAnnotations"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/library.test.mjs",
-     "name": "R02 recolor validates complete parent chain before changing annotation color"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R02 failed bulk recolor preserves newer annotation comments and user colors"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R02 a parent becoming dirty mid-batch aborts later recolors without discarding parent edits"
-    }
-   ],
-   "status": "verified",
-   "review": "Later save failure preserves concurrently edited comments/colors; a parent becoming dirty between saves aborts and rolls back annotations without touching parent drafts.",
-   "evidence": [
-    {
-     "file": "docs/rounds-data.json",
-     "round": "R02"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R03",
-   "title": "Symmetric selected related-link removal",
-   "gap": "Deletes only selected-item URI links under Zotero related-item predicate; preserves links to other papers and all other relation predicates. Handles one-sided links, requires same-library editable clean regular items.",
-   "entryPoint": "패널 하단 → 선택 문헌끼리 연결 해제",
-   "sources": [
-    {
-     "file": "src/library.js",
-     "marker": "unrelate"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/library.test.mjs",
-     "name": "R03 selected relation removal is symmetric and preserves other links and predicates"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R03 relation removal rejects cross-library input and restores links after later failure"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R03 unlink handles one-sided edges and retains concurrent unrelated edits on rollback"
-    }
-   ],
-   "status": "verified",
-   "review": "Verified one-sided edge removal and concurrent unrelated relation additions survive a later unlink-save failure.",
-   "evidence": [
-    {
-     "file": "docs/rounds-data.json",
-     "round": "R03"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R04",
-   "title": "Explicit direct and recursive collection scope",
-   "gap": "Requires explicit chosen library, returns regular undeleted collection members, deduplicates recursive descendants, yields between chunks and never changes default library scope.",
-   "entryPoint": "표시 범위 → 현재 컬렉션·하위 컬렉션",
-   "sources": [
-    {
-     "file": "src/library.js",
-     "marker": "collectionItems"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/library.test.mjs",
-     "name": "R04 collection scope returns deduplicated direct or recursive regular item IDs"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R04 collection scope rejects foreign descendants and terminates cycles"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R04 querying another library collection does not change default note scope"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "collection changes during pending membership lookup discard the old scope and follow the current collection"
-    }
-   ],
-   "status": "verified",
-   "review": "Rejects foreign descendant/membership corruption, terminates cycles, excludes deleted/attachment records and preserves other-library note scope. Final integration review reproduced and fixed async scope/lost-update regression.",
-   "evidence": [
-    {
-     "file": "docs/rounds-data.json",
-     "round": "R04"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R05",
-   "title": "Tab ordering and close other tabs",
-   "gap": "Tab list previously only selected and closed individual tabs.",
-   "entryPoint": "탭 관리·세로 탭 → 순서 이동·다른 탭 닫기",
-   "sources": [
-    {
-     "file": "src/reader-tools.js",
-     "marker": "moveTab"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R05 tab reorder uses final positions and close-others protects the library and non-reader tabs"
-    }
-   ],
-   "status": "verified",
-   "review": "Reject stale IDs, invalid destinations and library movement before mutation; unrelated note tabs remain.",
-   "evidence": [
-    {
-     "file": "docs/rounds-reader.json",
-     "round": "R05"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R06",
-   "title": "Saved tab group rename and update",
-   "gap": "Saved sessions could be created/restored/deleted, but could not be renamed or updated in place.",
-   "entryPoint": "탭 관리 → 그룹 이름 변경·현재 탭으로 갱신",
-   "sources": [
-    {
-     "file": "src/reader-tools.js",
-     "marker": "updateTabGroup"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R06 saved tab groups rename and update current order/pages without changing identity or unrelated groups"
-    }
-   ],
-   "status": "verified",
-   "review": "Empty names, stale group ID and empty document snapshot reject without cache changes; other groups retain prior pages.",
-   "evidence": [
-    {
-     "file": "docs/rounds-reader.json",
-     "round": "R06"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R07",
-   "title": "Saved view rename and update",
-   "gap": "Saved column layouts could not be revised without deleting/recreating a group.",
-   "entryPoint": "뷰 그룹 → 이름 변경·현재 배치로 갱신",
-   "sources": [
-    {
-     "file": "src/reader-tools.js",
-     "marker": "updateView"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R07 saved views rename and update layout in place and reject stale or unavailable targets"
-    }
-   ],
-   "status": "verified",
-   "review": "Stale IDs, empty names and closed target windows reject; update affects only chosen group; reapplication restores updated width.",
-   "evidence": [
-    {
-     "file": "docs/rounds-reader.json",
-     "round": "R07"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R08",
-   "title": "Restore reader appearance and configure annotation margins",
-   "gap": "Users could apply styles but could not restore original appearance while keeping the plugin active; cards had fixed width/side/text length.",
-   "entryPoint": "읽기 진행 / PDF Style → 모양 복원·여백 설정",
-   "sources": [
-    {
-     "file": "src/reader-tools.js",
-     "marker": "resetAppearance"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R08 margin width side and text limit change actual cards with typed validation"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R08 appearance reset restores original native settings while retaining palettes and display preferences"
-    }
-   ],
-   "status": "verified",
-   "review": "Reject invalid CSS/width/type before persistence; text uses textContent; reset does not reapply on next poll and preserves saved palettes.",
-   "evidence": [
-    {
-     "file": "docs/rounds-reader.json",
-     "round": "R08"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R09",
-   "title": "읽기 상태·별점·연도 필터와 문헌 정렬",
-   "gap": "filters existed only partially in the model; no matching user controls",
-   "entryPoint": "워크벤치 상단 상세 필터",
-   "sources": [
-    {
-     "file": "src/workspace.js",
-     "marker": "sortItems"
-    },
-    {
-     "file": "src/workbench.js",
-     "marker": "최소 별점"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workspace.test.mjs",
-     "name": "combined status year and rating filters sort known zero citations before unknown values without mutating input"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "visible status year rating and sort controls filter exploration and reset together"
-    }
-   ],
-   "status": "verified",
-   "review": "Combined filters, inverse year range, missing metrics versus actual zero and sort stability checked.",
-   "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R10",
-   "title": "200개 제한을 넘는 탐색과 명시적 일괄 선택",
-   "gap": "The first 200 papers were reachable; later results required narrowing a search.",
-   "entryPoint": "문헌 탐색 → 이전/다음 페이지·검색 결과 전체 선택",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "검색 결과 전체 선택"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "exploration pages past the old 200 item limit and selects exactly the requested page or results"
-    }
-   ],
-   "status": "verified",
-   "review": "251-paper fixture reaches last page; page and whole-result selections verified separately and search resets stale page.",
-   "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R11",
-   "title": "비교 항목 선택·저장과 전체 결과 CSV",
-   "gap": "Comparison fields were fixed; fallback silently used only 20 papers.",
-   "entryPoint": "논문 비교 → 비교 항목 선택·CSV 복사",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "비교 항목 선택"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "comparison field choices persist and CSV exports all rows while the table pages without losing zero values"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "rapid comparison field changes compose while persistence is still pending"
-    }
-   ],
-   "status": "verified",
-   "review": "61-paper fixture, persistent fields, 50-row pages, complete CSV, real zero metrics and transposed row headers verified. Final integration review reproduced and fixed async scope/lost-update regression.",
-   "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R12",
-   "title": "캔버스 이름·카드 색상·제목·연결 편집",
-   "gap": "Boards/cards could not be renamed/recolored and connections could not be removed independently.",
-   "entryPoint": "캔버스 → 보드 이름 변경·카드 편집·카드 연결 해제",
-   "sources": [
-    {
-     "file": "src/workspace.js",
-     "marker": "unlinkCards"
-    },
-    {
-     "file": "src/workbench.js",
-     "marker": "카드 모양 저장"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workspace.test.mjs",
-     "name": "canvas can rename boards edit card appearance and unlink without removing either document"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "canvas exposes board and card appearance editing and reversible relation removal"
-    }
-   ],
-   "status": "verified",
-   "review": "Invalid color rejects before label mutation; link removal preserves document IDs/cards; stable per-board/card draft keys.",
-   "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R13",
-   "title": "Exact annotation-to-note backlinks",
-   "gap": "Matches native data-annotation attachmentURI+annotationKey pairs and scoped select/open-pdf annotation links, decoding escaped/URI-encoded attributes. Does not confuse different annotations sharing a PDF.",
-   "entryPoint": "주석 → 참조 노트 보기",
-   "sources": [
-    {
-     "file": "src/library.js",
-     "marker": "async function backlinks"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/library.test.mjs",
-     "name": "R13 annotation backlinks distinguish two highlights in the same attachment"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R13 annotation backlinks accept escaped metadata and reject group or annotation-key collisions"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R13 malformed or ambiguous annotation references and quoted markup do not create backlinks"
-    }
-   ],
-   "status": "verified",
-   "review": "Rejects wrong-group/same-key links, same-PDF different annotation references, conflicting query parameters, invalid JSON and markup quoted as note text.",
-   "evidence": [
-    {
-     "file": "docs/rounds-data.json",
-     "round": "R13"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R14",
-   "title": "Native annotation-to-note backlinks",
-   "gap": "Only paper-level backlinks were exposed; native annotation headers had no referring-note count.",
-   "entryPoint": "PDF 주석 머리글 → 참조 노트 개수·노트 열기",
-   "sources": [
-    {
-     "file": "src/reader-tools.js",
-     "marker": "backlinkHook"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R14 native annotation header resolves library-scoped identity and opens exact referring notes"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R14 stale annotation headers and wrong PDF identities never publish late backlinks"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R14 repeated headers share pending and completed lookups and distinct scans are serialized"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R14 note modifications invalidate cached counts on next poll without reacting to unrelated paper updates"
-    }
-   ],
-   "status": "verified",
-   "review": "Wrong parent and library rejected before note lookup; disposal removes menus/listeners and ignores late results. Final lifecycle pass verifies request deduplication, single scan concurrency, note invalidation and notifier cleanup; each distinct first-time annotation still uses the library exact-match scan.",
-   "evidence": [
-    {
-     "file": "docs/rounds-reader.json",
-     "round": "R14"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R15",
-   "title": "Geometry-preserving selected annotation paragraph merge (library service)",
-   "gap": "Retains first annotation in page/sortIndex order, combines all rectangle positions across same or two adjacent pages via native nextPageRects, joins paragraph text/comments and merges tags; soft-deletes extras only after survivor save inside one DB transaction. Rejects external/read-only/dirty/mixed-PDF/mixed-type/mixed-color/malformed selections.",
-   "entryPoint": "PDF 주석 우클릭·Style 메뉴 / 주석 → 선택 주석 병합",
-   "sources": [
-    {
-     "file": "src/library.js",
-     "marker": "mergeAnnotations"
-    },
-    {
-     "file": "src/reader-tools.js",
-     "marker": "mergeSelectedAnnotations"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/library.test.mjs",
-     "name": "R15 adjacent-page merge preserves geometry, paragraphs, comments and tags in reading order"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R15 merge rejects stale, external, mismatched or unsupported selections without writes"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R15 failure trashing an extra annotation rolls back survivor geometry and recoverable deletion"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R15 combines existing next-page rectangles and refuses three-page or malformed geometry"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R15 rollback preserves edits made to the survivor while an extra save fails"
-    },
-    {
-     "file": "test/library.test.mjs",
-     "name": "R15 reader change after survivor save rolls back before deleting the other annotation"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R15 native merge resolves selected keys and delegates guarded transactional mutation"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R15 merge rejects readonly wrong-PDF and stale reader selections before mutation"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R15 reader validation and native menu enforce the same fifty-annotation limit as library merge"
-    }
-   ],
-   "status": "verified",
-   "review": "Tests invalid geometry/three-page spans, reversed input order, existing two-page source rectangles, stale reader after survivor save, later deletion failure and concurrent survivor comment/tag edits.",
-   "evidence": [
-    {
-     "file": "docs/rounds-data.json",
-     "round": "R15"
-    },
-    {
-     "file": "docs/rounds-reader.json",
-     "round": "R15"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R16",
-   "title": "Attachment-version listing and switching",
-   "gap": "Baseline dotted reader.attachmentVersionSwitch feature was missing from initial inventory and native toolbar.",
-   "entryPoint": "PDF Style → Switch PDF version",
-   "sources": [
-    {
-     "file": "src/reader-tools.js",
-     "marker": "switchAttachmentVersion"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R16 attachment versions include only same-parent same-library locally readable PDFs and switch explicitly"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R16 stale reader during file check prevents version switching and original tab is retained on open failure"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R16 native toolbar version listing exposes working user-triggered PDF choices"
-    },
-    {
-     "file": "test/reader-tools.test.mjs",
-     "name": "R16 parent deletion reparenting and library changes during file checks reject stale version choices"
-    }
-   ],
-   "status": "verified",
-   "review": "Wrong parent/library, missing file and changed active reader reject; tests cover explicit toolbar interaction and failed open. PDF siblings only, matching requested scope. Final consistency pass snapshots attachment/parent identity and library; deletion, reparenting or library changes during file checks abort before opening.",
-   "evidence": [
-    {
-     "file": "docs/rounds-reader.json",
-     "round": "R16"
-    }
-   ],
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R17",
-   "title": "문헌 상세에 메타데이터·노트·주석 직접 표시",
-   "gap": "Status disappeared when IF and citations were both unknown; notes and annotations required separate tabs.",
-   "entryPoint": "문헌 탐색 → 자세히",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "주석 원문 열기"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "paper detail displays status without available metrics and includes scoped notes and annotations inline"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "late detail notes never leak into a different paper or tab"
-    }
-   ],
-   "status": "verified",
-   "review": "Separate failed note/annotation loads cannot blank the other section. Scoped IDs, textContent and generation guards checked.",
-   "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R18",
-   "title": "주석 열의 페이지·색상 분포와 원문 이동",
-   "gap": "The original distribution feature was previously reduced to a numeric annotation count.",
-   "entryPoint": "Annotations · Custom 색 막대",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "annotationDistribution"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "annotation column maps colors to real attachment pages without inventing total pages and navigates clicked markers"
-    },
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "annotation distribution includes both pages of a merged highlight without double-counting the annotation total"
-    }
-   ],
-   "status": "verified",
-   "review": "Multiple PDFs and nextPageRects remain distinct. Invalid colors cannot inject CSS; annotation totals and distribution pages counted independently.",
-   "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R19",
-   "title": "인용 수를 실제 출처에서 받아오기",
-   "gap": "The Cited Count column showed a cached number with no way to tell an unchecked paper from one cited zero times.",
-   "entryPoint": "Cited Count 열 · 우클릭 → 선택한 문헌 인용 수 새로고침",
-   "sources": [
-    {
-     "file": "src/citations.js",
-     "marker": "function identity"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/citations.test.mjs",
-     "name": "batched DOI lookups deduplicate requests, preserve zero and original order, persist progressively"
-    },
-    {
-     "file": "test/citations.test.mjs",
-     "name": "optional OpenAlex key goes only in Authorization; email goes to Crossref query"
-    }
-   ],
-   "status": "verified",
-   "review": "Zero and 'not checked' are stored and drawn differently. A failed lookup keeps the previous number rather than overwriting it with a blank.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R20",
-   "title": "구글 스콜라처럼 여러 형식으로 인용 복사",
-   "gap": "Copying a citation meant leaving Zotero for a formatting site.",
-   "entryPoint": "우클릭 → 인용…",
-   "sources": [
-    {
-     "file": "src/citation-formats.js",
-     "marker": "function format("
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/citation-formats.test.mjs",
-     "name": "each offered style orders author, year and source the way that style requires"
-    },
-    {
-     "file": "test/citation-formats.test.mjs",
-     "name": "missing metadata degrades to a shorter citation instead of printing empty punctuation"
-    }
-   ],
-   "status": "verified",
-   "review": "Gecko does not grow a <button> around wrapped content, so each row is a div[role=button] with Enter/Space handling.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R21",
-   "title": "보충자료(SI)를 표시만 하지 않고 실제로 내려받기",
-   "gap": "Supplementary files were only badged; the user still had to open the publisher's page to fetch them.",
-   "entryPoint": "우클릭 → 보충자료 내려받기",
-   "sources": [
-    {
-     "file": "src/supplementary.js",
-     "marker": "function classifyEntries"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/supplementary.test.mjs",
-     "name": "the files endpoint takes the PMCID alone; a source segment answers 404"
-    },
-    {
-     "file": "test/supplementary.test.mjs",
-     "name": "a result for a different DOI is rejected rather than downloaded as this paper"
-    }
-   ],
-   "status": "verified",
-   "review": "ScienceDirect main PDFs (1-s2.0-S00...-main.pdf) matched a bare-number token rule; tokens are now only read immediately before the extension, with an explicit -main deny rule. Ten flagged files fell to six, all real.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R22",
-   "title": "다음에 읽을 논문 추천",
-   "gap": "Finding what to read next meant a search engine and a fresh set of tabs.",
-   "entryPoint": "연구 작업 패널 → 관련 논문",
-   "sources": [
-    {
-     "file": "src/discover.js",
-     "marker": "function mergeSuggestions"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/discover.test.mjs",
-     "name": "a DOI is looked up directly; only a paper without one falls back to a title search"
-    }
-   ],
-   "status": "verified",
-   "review": "Papers that cite this one rank above its own bibliography, and OpenAlex's computed 'related' last. Suggestions already in the library are marked rather than offered.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R23",
-   "title": "철회·공개접근·프리프린트 신호",
-   "gap": "Nothing in the library distinguished a retracted paper from a sound one.",
-   "entryPoint": "Signals 열",
-   "sources": [
-    {
-     "file": "src/paper-signals.js",
-     "marker": "function classify"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/paper-signals.test.mjs",
-     "name": "a paper carrying no notices is reported as standing, distinctly from never having been asked"
-    },
-    {
-     "file": "test/paper-signals.test.mjs",
-     "name": "the retraction notice itself is not reported as a retracted paper"
-    }
-   ],
-   "status": "verified",
-   "review": "Crossref carries updated-by on the retracted paper and update-to on the notice. Reading the wrong one would have cleared retracted papers and flagged the notices.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R24",
-   "title": "다른 플러그인에만 있던 읽기 기록 가져오기",
-   "gap": "Sixty-two hours of reading history existed only inside another plugin's notes and was one cache rebuild from being lost.",
-   "entryPoint": "우클릭 → 읽기 기록 가져오기",
-   "sources": [
-    {
-     "file": "src/legacy-reading.js",
-     "marker": "function parseNote"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/legacy-reading.test.mjs",
-     "name": "a note a person wrote is never mistaken for bookkeeping"
-    },
-    {
-     "file": "test/legacy-reading.test.mjs",
-     "name": "nonsense in the payload is dropped rather than trusted"
-    }
-   ],
-   "status": "verified",
-   "review": "This plugin's own tracking always wins: a longer total here means it has been counting since and must not be replaced.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R25",
-   "title": "카탈로그 밖 저널의 지표",
-   "gap": "The curated catalogue covers 86 journals; the library spans 255, so two thirds of the IF column was blank and had to be looked up elsewhere.",
-   "entryPoint": "IF 열 · 우클릭 → 라이브러리 저널 지표 채우기",
-   "sources": [
-    {
-     "file": "src/journal-metrics.js",
-     "marker": "function pickSource"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/journal-metrics.test.mjs",
-     "name": "a near-miss from the title search is refused; only an exact journal counts"
-    },
-    {
-     "file": "test/journal-metrics.test.mjs",
-     "name": "Zotero records both ISSNs in one field, and that must still be an ISSN lookup"
-    }
-   ],
-   "status": "verified",
-   "review": "Shown as ~N and labelled OpenAlex two-year mean citedness, never as a JIF, and never allowed to overwrite a curated value. 252 of 255 journals resolve by ISSN, which costs a tenth of a name search.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R26",
-   "title": "관심 저자 109명의 새 논문을 한 번에 확인",
-   "gap": "Every watchlist row read the same 'last checked' date, so learning who had published meant opening all 109.",
-   "entryPoint": "연구 작업 패널 → 저자 추적 → 새 논문 한 번에 확인",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "sweepWatchedAuthors"
-    },
-    {
-     "file": "src/discover.js",
-     "marker": "function watchedWorksURL"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/author-watch.test.mjs",
-     "name": "a hundred followed authors are answered in three requests, not a hundred"
-    },
-    {
-     "file": "test/author-watch.test.mjs",
-     "name": "running out of budget leaves the unchecked authors unmarked, not falsely quiet"
-    },
-    {
-     "file": "test/author-watch.test.mjs",
-     "name": "following someone still works past a hundred, which is where the user already is"
-    }
-   ],
-   "status": "verified",
-   "review": "Fifty author ids per filter with cursor paging. A batch that never ran leaves its authors unmarked rather than writing 'nothing new' over people nobody asked about. The old hundred-author cap had already locked the user out at 109.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R27",
-   "title": "탭 열아홉 개에 각각 아이콘",
-   "gap": "Nineteen identical lines of text is a list you read rather than one you recognise.",
-   "entryPoint": "연구 작업 패널 왼쪽 탭 목록",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "leadIcon"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "every tab in the sidebar carries its own drawn icon"
-    }
-   ],
-   "status": "verified",
-   "review": "Labels are kept: nineteen unlabelled glyphs would be a guessing game. Shapes are built node by node because innerHTML is unavailable on createElementNS SVG elements in Gecko.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R28",
-   "title": "평점 태그를 태그 목록에서 숨기기",
-   "gap": "style-custom:rating:1..4 appeared in the tag selector among the user's own subjects.",
-   "entryPoint": "우클릭 → 태그 목록에서 평점 태그 숨기기",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "hideRatingTags"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/data.test.mjs",
-     "name": "test("
-    }
-   ],
-   "status": "verified",
-   "review": "A bare string tag is stored by Zotero as type 0, a manual tag, which the selector always shows. The rating tag is now always written as an object with type 1, and existing items are repaired by rewriting the rating through the normal path.",
-   "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R29",
-   "title": "평점을 태그에서 Extra로",
-   "gap": "This library has sixteen distinct tags and the user chose five of them; the rest were the plugin's bookkeeping, including eighty style-custom:rating:N rows sitting among their subjects.",
-   "entryPoint": "우클릭 → 평점 태그를 Extra로 옮기기",
-   "sources": [
-    {
-     "file": "src/data.js",
-     "marker": "function updateExtra"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "hideRatingTags"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/data.test.mjs",
-     "name": "the tag and the Extra line are written together, so they can never disagree"
-    },
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "a rating written into Extra leaves every other line of it alone"
-    },
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "the rating tags already in the library move to Extra in one pass per rating"
-    }
-   ],
-   "status": "verified",
-   "review": "Marking the tag automatic did not hide it: Zotero's tagSelector.showAutomatic defaults to true, verified in the shipped defaults. Extra syncs, is editable by hand and never appears in the selector, and readState already read it. Only the Rating line is rewritten; every other line keeps its spelling and its position. The tag is dropped in the same transaction that writes Extra, so a rating can never exist in neither.",
-   "verification": "Targeted Node/DOM tests plus the integrated suite; the rating migration was sized against the user's real library (16 distinct tags, 81 rating tags, 109 watched authors) rather than against a guess.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R30",
-   "title": "완성도 원장을 다시 살리기",
-   "gap": "Both completeness ledgers stopped at 0.8.0 and stayed there through eight releases, so twenty features and ten rounds went unrecorded. The version check only ran from a CLI entry point that nothing in npm test invoked.",
-   "entryPoint": "npm test · npm run verify:features · npm run verify:improvements",
-   "sources": [
-    {
-     "file": "test/feature-inventory.test.mjs",
-     "marker": "both completeness ledgers describe the version actually being shipped"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/feature-inventory.test.mjs",
-     "name": "both completeness ledgers describe the version actually being shipped"
-    },
-    {
-     "file": "test/feature-inventory.test.mjs",
-     "name": "every round in the ledger names a source marker and a test that exist"
-    }
-   ],
-   "status": "verified",
-   "review": "Each ledger entry names a source marker and a test by name, and the suite now fails if either goes missing or the version falls behind the manifest.",
-   "verification": "Targeted Node/DOM tests plus the integrated suite; the rating migration was sized against the user's real library (16 distinct tags, 81 rating tags, 109 watched authors) rather than against a guess.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R31",
-   "title": "실제 라이브러리 크기에 맞지 않던 한계값",
-   "gap": "watchAuthor refused to add anyone past 100 while the user already followed 109, so the feature was closed to exactly the person using it. The sweep also reached for Zotero.Promise, a bootstrap-scope global the class otherwise abstracts.",
-   "entryPoint": "연구 작업 패널 → 저자 추적",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "get WATCH_LIMIT"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "pause(ms)"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "the watchlist refuses a work id and will not grow without bound"
-    },
-    {
-     "file": "test/author-watch.test.mjs",
-     "name": "following someone still works past a hundred, which is where the user already is"
-    },
-    {
-     "file": "test/author-watch.test.mjs",
-     "name": "the lookback reaches back to when each author was last checked, not a fixed window"
-    }
-   ],
-   "status": "verified",
-   "review": "The cap was chosen when each author cost a request of their own; fifty share one now, so it sits where the stored news starts to matter. The lookback floor comes from each author's own last-checked date, capped at six years, so following someone two years ago and sweeping today does not skip the two years between.",
-   "verification": "Targeted Node/DOM tests plus the integrated suite; the rating migration was sized against the user's real library (16 distinct tags, 81 rating tags, 109 watched authors) rather than against a guess.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R32",
-   "title": "만들어만 두고 비어 있던 세 기능을 채우기",
-   "gap": "Not one of the user's 1,214 papers had a retraction check, not one of their 255 journals had a figure, and not one of their 109 followed authors had been swept. Each waited on a context-menu item nobody had a reason to go looking for, so the columns showed a dash and the panel showed nothing.",
-   "entryPoint": "우클릭 → 빈 칸 채우기 (철회 신호 · 저널 지표 · 새 논문)",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "async backfill("
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "itemsNeedingSignals"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/backfill.test.mjs",
-     "name": "the stages run cheapest and highest-stakes first"
-    },
-    {
-     "file": "test/backfill.test.mjs",
-     "name": "running out of budget stops the whole backfill rather than sweeping on blind"
-    },
-    {
-     "file": "test/backfill.test.mjs",
-     "name": "a spent OpenAlex budget still records the retraction, which is the point of the column"
-    },
-    {
-     "file": "test/backfill.test.mjs",
-     "name": "cancelling stops at the next paper and keeps what was already learned"
-    }
-   ],
-   "status": "verified",
-   "review": "Retraction first, because it is the one fact worth interrupting someone for, and Crossref answers it free and unmetered: 30 of 30 real library DOIs resolved on Crossref alone. A 429 from OpenAlex used to read as 'no notices found', so a sweep during an outage would have walked the whole library and reported a clean bill of health; it now keeps Crossref's verdict, marks the entry partial, and asks again next time. One run at a time, cancellable, resumable.",
-   "verification": "Targeted Node/DOM tests plus a live Crossref check over real library DOIs.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R33",
-   "title": "비어 있는 것을 사용자가 있는 자리에서 알리기",
-   "gap": "The last three features shipped and then sat empty because they waited on a context-menu item nobody had a reason to look for. Leaving the backfill in that same place would have repeated it exactly.",
-   "entryPoint": "연구 작업 패널 상단 알림 → 지금 채우기",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "refreshNotice"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "backfillPending"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the panel says what has never been filled in, and offers to fill it"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "a panel talking to an older runtime simply shows no notice"
-    }
-   ],
-   "status": "verified",
-   "review": "The counts are read from the cache, not the network, so opening the panel costs nothing. A runtime without backfillPending simply shows no notice, so an older pairing degrades rather than throwing. Live Crossref sweep of all 1,072 distinct library DOIs: 1 retracted, 29 corrected or errata, 1,041 clean, 1 not in Crossref -- twenty-nine papers carrying corrections that were invisible in Zotero.",
-   "verification": "Node/DOM tests plus a full live Crossref sweep of the user's own library.",
-   "nativeActivationVerified": false
-  },
-  {
-   "round": "R34",
-   "title": "진짜 Zotero 안에서 돌려보는 자체 점검",
-   "gap": "486 Node tests pass against linkedom and a fixture. Every bug that actually shipped was one only the real runtime could show, and there was no way to run anything inside Zotero without clicking it.",
-   "entryPoint": "prefs.js에 extensions.style-custom.selfCheck=true 후 실행 → Zotero 데이터 폴더의 style-custom-selfcheck.json",
-   "sources": [
-    {
-     "file": "src/selfcheck.js",
-     "marker": "async function run("
-    },
-    {
-     "file": "bootstrap.js",
-     "marker": "selfCheckRepair"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "a library-wide sweep awaits Zotero rather than iterating the promise"
-    },
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "a rating stranded on a PDF is lifted to the paper it belongs to"
-    }
-   ],
-   "status": "verified",
-   "review": "It found the bug no unit test could: Zotero.Items.getAll returns a Promise, and six library-wide sweeps iterated it directly, so each threw on its first line. The fixtures handed back a plain array, which is why all of them passed. The fixtures are shaped like the real API now. It also caught reading the repair flags after clearing them, and eight rating tags stranded on attachments that isRegular walked straight past.",
-   "verification": "Run inside the user's own Zotero against their own library: 20 of 23 checks pass, the three failures being a missing mailto and OpenAlex's spent daily budget.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R35",
-   "title": "조회 실패를 URL이 아니라 문장으로",
-   "gap": "A spent daily quota reached the panel as a 300-character OpenAlex URL ending in 'failed with status code 429'. It told the reader nothing they could act on and made a rate limit look like a broken plugin.",
-   "entryPoint": "연구 작업 패널 상태줄",
-   "sources": [
-    {
-     "file": "src/failures.js",
-     "marker": "function describe"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/failures.test.mjs",
-     "name": "a spent quota says which service, how long, and that nothing was lost"
-    },
-    {
-     "file": "test/failures.test.mjs",
-     "name": "the reset time is converted into the reader's own clock"
-    }
-   ],
-   "status": "verified",
-   "review": "Every message says what happened and what to do, in that order, and the reset time is converted into the reader's own clock so they do not have to do UTC arithmetic while deciding whether to wait. A message already written for this plugin's user is left alone; only a URL-shaped transport error is replaced.",
-   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R36",
-   "title": "탭마다 제각각이던 카드 크기를 하나로",
-   "gap": "A collections card was ninety pixels tall to say 'Aeribacillus, 0 papers': a 14px title here and a 13px one there, a 30px button beside a 24px one, and the controls stacked under the text instead of beside it.",
-   "entryPoint": "연구 작업 패널 · 모든 탭의 카드",
-   "sources": [
-    {
-     "file": "content/workbench.css",
-     "marker": "--sc-card-title"
-    },
-    {
-     "file": "src/workbench.js",
-     "marker": "sc-card-text"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "all tabs expose functional primary actions and use library service contracts"
-    }
-   ],
-   "status": "verified",
-   "review": "One type and control scale declared once as tokens, so a card in the collections tab and a card in the tabs tab cannot disagree. The headline and its detail go in their own block, so anything a caller appends lands in one row beside them. Height fell from about 90px to about 46px.",
-   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R37",
-   "title": "논문 출처마다 진짜 로고",
-   "gap": "Nine academic services all rendered as identical grey text. A source is something you should recognise at a glance, not read one word at a time.",
-   "entryPoint": "ZotPoP 검색 결과 배지 · 연구 작업 패널",
-   "sources": [
-    {
-     "file": "src/brand-icons.js",
-     "marker": "const BRANDS"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/brand-icons.test.mjs",
-     "name": "every source this plugin can search has a mark"
-    },
-    {
-     "file": "test/brand-icons.test.mjs",
-     "name": "the licence that lets these ship is in the package"
-    }
-   ],
-   "status": "verified",
-   "review": "Seventeen real brand marks from Academicons 1.9.4 under SIL OFL 1.1, with the licence shipped in LICENSES.md and the reserved name unused, as that licence requires. The six services Academicons does not cover -- OpenAlex, Europe PMC, medRxiv, ChemRxiv, Lens.org, Harzing -- are drawn here in the same stroke family and are deliberately not imitations of anyone's trademark. Each mark keeps its own viewBox, because these come from a font and forcing them into one box would squash every non-square one.",
-   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R38",
-   "title": "저자를 통계 한 줄이 아니라 사람으로",
-   "gap": "A followed author was a name and four numbers. PostGrabbit already showed the user a face and the people around each PI, and that is what makes a person easier to hold in mind than a row of statistics.",
-   "entryPoint": "연구 작업 패널 → 저자 추적 → 저자 열기",
-   "sources": [
-    {
-     "file": "src/author-portrait.js",
-     "marker": "function choose"
-    },
-    {
-     "file": "src/author-portrait.js",
-     "marker": "function coauthors"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/author-portrait.test.mjs",
-     "name": "a colleague's headshot on the same page is not taken for the author"
-    },
-    {
-     "file": "test/author-portrait.test.mjs",
-     "name": "two equally good candidates are refused rather than guessed"
-    },
-    {
-     "file": "test/author-portrait.test.mjs",
-     "name": "the plugin can never be talked into fetching something off this machine"
-    },
-    {
-     "file": "test/author-portrait.test.mjs",
-     "name": "a co-author network is the people actually on the papers, ranked by how often"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "an author is shown as a person, with the people they publish with"
-    }
-   ],
-   "status": "verified",
-   "review": "The portrait rules are PostGrabbit's, kept rather than reinvented: a candidate must be named on the page, a logo or banner is never a person, and an ambiguous winner is refused outright. One hole was closed on the way over -- on a lab page under /people/, an image whose own alt text names a colleague could win the weakest rule and be served up as the author. The co-author network costs no request at all: the works the tab already fetched carry every authorship, and an edge exists because two names are on the same paper.",
-   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R39",
-   "title": "키가 없으면 실패할 수밖에 없는 버튼을 먼저 내밀지 않기",
-   "gap": "The journals tab led with an easyScholar grade lookup. The user never had that key -- it is in neither the Zotero profile nor their Aside vault -- so the first button offered could only produce an error.",
-   "entryPoint": "연구 작업 패널 → 저널 지표",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "지표 조회"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "all tabs expose functional primary actions and use library service contracts"
-    }
-   ],
-   "status": "verified",
-   "review": "The route that needs no key comes first, and the easyScholar button appears only once a key exists. Without one the tab says what the key would add rather than offering a control that cannot work.",
-   "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R40",
-   "title": "보충자료 판별을 파일 이름이 아니라 내용으로",
-   "gap": "The rule looked at filenames -- mmc1.pdf, MOESM1_ESM.pdf, s1.pdf. Measured against this library it flagged 1 attachment out of 1,229, because ZotMoov has renamed every file to 'Author - Year - Title.pdf' and the publisher's name is gone. The badge showed 7 items; the library actually has 29 supplementary files, 17 duplicates and 6 papers filed under the wrong item.",
-   "entryPoint": "Files 열 · 우클릭 → 첨부파일 종류 판별",
-   "sources": [
-    {
-     "file": "src/attachment-kinds.js",
-     "marker": "function classifyGroup"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "scanAttachmentKinds"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "a supplementary file is recognised by what it says, not what it is called"
-    },
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "the same document attached twice is a duplicate, not a second supplement"
-    },
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "a different paper filed under this item is called out"
-    },
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "markup in a Zotero title does not turn a correctly filed paper into somebody else's"
-    },
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "the files cell tells a supplement, a duplicate and a mis-filed paper apart"
-    }
-   ],
-   "status": "verified",
-   "review": "Zotero already extracts every PDF's text for its own search index, so reading the first page costs nothing and needs no PDF parser. A supplementary file says so in its opening words; an article carries a masthead, a section label or a DOI line. Three things turn up as 'an extra PDF' and they are not the same -- a supplement, the same file twice, and a different paper filed here by mistake -- and calling all three 'SI x2' is what made the badge not worth looking at. Two measured corrections: the title check reads the whole document rather than page one, because a first page often opens with the abstract and never repeats the title (a Nature Chemical Biology review scored 43% and was called foreign); and Zotero titles carry markup, so <span style=\"font-variant:small-caps;\">BREX</span> made twelve correctly filed papers look like somebody else's. The 0.70 threshold is read off the distribution over all 1,211 attachments with text: 1,186 use every word of their title, everything below 0.70 is a real filing mistake, and nothing sits in between.",
-   "verification": "Run live in Zotero over the user's own 1,223 attachments: 1,170 article, 29 supplementary, 17 duplicate, 6 different-paper, 1 unknown -- matching the offline prediction exactly.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R41",
-   "title": "Zotero가 아직 읽지 않은 첨부는 색인부터",
-   "gap": "Eleven attachments had no extracted text, so the scan could not judge them at all and simply reported them as unknown.",
-   "entryPoint": "우클릭 → 첨부파일 종류 판별",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "async indexAttachments"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "a file Zotero has not indexed is indexed first, not written off"
-    },
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "a scan can be told not to index, and then simply reports what it could not read"
-    }
-   ],
-   "status": "verified",
-   "review": "Asking Zotero to index them is the same extraction its own search does, and turns 'cannot tell' into an answer. The option to skip it was called `index`, which the enclosing loop counter shadowed -- 0 !== false, so every scan indexed regardless of what the caller asked; the test that was written to prove the option worked is what found it.",
-   "verification": "Contrast measured numerically for every colour in both schemes, rendered offline from the real stylesheet, and checked live in Zotero.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R42",
-   "title": "전체 색감을 파스텔로",
-   "gap": "The colours were loud and uneven: against white, gold sat at 2.1 contrast and blue at 4.7, so one badge shouted while another was hard to read. That unevenness is what made a row look garish rather than the hues themselves.",
-   "entryPoint": "문헌 목록의 모든 열 · 연구 작업 패널 · ZotPoP 검색 창",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "palette(doc)"
-    },
-    {
-     "file": "content/workbench.css",
-     "marker": "--sc-accent: #4A6CA5"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/styles.test.mjs",
-     "name": "every badge colour lands on the same contrast, so no one of them shouts"
-    },
-    {
-     "file": "test/styles.test.mjs",
-     "name": "light and dark semantic text, muted metadata and selected navigation meet normal-text contrast"
-    }
-   ],
-   "status": "verified",
-   "review": "The hue stays, the saturation drops to about a third, and the lightness of every colour is chosen so they all land within 0.5 of the same contrast against the surface behind them -- evenness is the point. The softness lives in the fills: the pill tint is raised from 0.13 to 0.20 in light and 0.20 to 0.26 in dark, rather than the ink being washed out. Three colours had to stay deeper than the family because they carry text on themselves: the accent under a white label, and the error ink on its own wash. A dead rule matching a colour nothing has emitted for a long time went with it.",
-   "verification": "Contrast measured numerically for every colour in both schemes, rendered offline from the real stylesheet, and checked live in Zotero.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R43",
-   "title": "이미 가진 보충자료를 다시 받지 않기",
-   "gap": "The downloader decided 'already have it' by comparing publisher filenames against what was attached. A file mover renames those away, so all twenty-nine supplements in this library looked absent and would have been fetched again as duplicates.",
-   "entryPoint": "우클릭 → 보충자료 내려받기",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "이미 보충자료"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "a paper whose supplement is already on the shelf is not fetched again"
-    },
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "a supplement that was just downloaded is badged without waiting for a scan"
-    }
-   ],
-   "status": "verified",
-   "review": "It asks the content scan instead, which knows what each file is whatever it is called, and skips the paper without spending a request. A file that arrives from the supplementary endpoint records its verdict as it lands, so the badge is right immediately rather than after the next sweep.",
-   "verification": "Verified live: the scan holds 29 supplements, every one of which the downloader now skips.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R44",
-   "title": "보충자료만 들어 있는 문헌 찾아 원논문에 붙이기",
-   "gap": "Twenty-two items in this library are a supplement filed as its own bibliography entry, disconnected from the paper it belongs to. Only five say so in the title; the rest are invisible without reading the file.",
-   "entryPoint": "연구 작업 → 첨부 → 보충자료만 있는 문헌",
-   "sources": [
-    {
-     "file": "src/attachment-kinds.js",
-     "marker": "function findHome"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "async rehomeSupplement"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "a supplement's home paper is suggested only when the answer is not a guess"
-    },
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "the supplement marker comes off a title without taking the title with it"
-    },
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "rehoming a supplement moves it and retires only an empty stub"
-    }
-   ],
-   "status": "verified",
-   "review": "The pairing is a suggestion the user confirms one at a time, never a bulk action. Two things make a wrong guess easy: a short generic title ('Cell-free gene expression') matches almost any document, and a library often holds two papers by one group on one molecule. So a candidate needs five distinct long words to count at all, has to beat the runner-up by a clear margin, and a match found in body text is held to a higher bar than one found in the title -- a supplement cites its neighbours, and one here matched a different paper by the same group on the same enzyme, fully, from a sentence in its methods. Tightening that turned three wrong confident answers into one honest 'I don't know'. Moving a supplement retires the stub only when nothing else is left on it, and only into Zotero's trash.",
-   "verification": "Verified live: 22 orphans found, 11 with a confident home.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R45",
-   "title": "받기 전에 몇 편이나 받을 수 있는지 먼저 세기",
-   "gap": "The download was a blind sweep. Measured over this library: of 1,146 papers with a DOI, 697 are in PMC, 506 of those have supplementary material, and only 336 are open access -- the only set whose archive the endpoint hands over. A sweep over everything spends a thousand requests to fetch a few hundred files and says nothing about which.",
-   "entryPoint": "우클릭 → 보충자료 → 먼저 확인만",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "async previewSupplementary"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/attachment-kinds.test.mjs",
-     "name": "the download is counted before it is started, and closed articles are not attempted"
-    }
-   ],
-   "status": "verified",
-   "review": "One search request per paper answers the question first and costs no downloads at all. A paper that already has its supplement, and one with neither DOI nor title, are answered without asking anything.",
-   "verification": "Coverage measured directly against Europe PMC for all 1,146 DOIs in the library.",
-   "nativeActivationVerified": true
-  },
-  {
-   "round": "R46",
-   "title": "관심 저자의 이동은 논문이 아니라 저자 기록에서 읽기",
-   "gap": "A move was read off the papers: first the institution on the newest authorship, then every institution across the window. Live, that reported seven, then six, moves among 109 followed authors, and not one was a move -- a second appointment (Harvard and the Broad), an institute inside the university (QB3 in Berkeley), a school named after it (Harvard Medical School), the same place spelled two ways (DTU, 'UC berkely', 'MIT chemistry').",
-   "entryPoint": "관심 저자 → 카드의 소속 줄 · 백필의 관심 저자 단계",
-   "sources": [
-    {
-     "file": "src/discover.js",
-     "marker": "function watchedProfilesURL"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "const profile = profiles.get(row.id);"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "retireLooseMoves()"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/author-watch.test.mjs",
-     "name": "a move is read from the author record, so a second appointment or a renamed place is not one"
-    },
-    {
-     "file": "test/author-watch.test.mjs",
-     "name": "moves recorded by the first rule are retired when the store loads"
-    }
-   ],
-   "status": "verified",
-   "review": "One request per fifty authors reads OpenAlex's own list of current appointments, each with a ROR and the years it was signed. The first sweep adopts OpenAlex's name for the place the author was followed with and keeps the typed text; a move is when every remembered appointment has left that list, dated from the record. Live after the change: 109 records read, 0 moves, 73 authors with more than one appointment, 69 typed places replaced by canonical ones. Moves made by the earlier rules are retired when the store loads."
-  },
-  {
-   "round": "R47",
-   "title": "저널 프로필: JCR 페이지처럼, 로그인 없이",
-   "gap": "The journals tab was a list of names with a figure, and the user asked for what JCR's journal page shows -- each fact with its own sign, and the list by field. JCR's site needs an institutional login, so nothing could be read from it here; the registry shipped with the plugin knows the figure, quartile, abbreviation, publisher and ISSN, and OpenAlex knows the subject fields, h-index, output, open-access status, fee, country and homepage.",
-   "entryPoint": "작업 패널 → 저널 → 저널 이름 클릭",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "function journalProfile(j,card)"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "async refreshJournalProfiles"
-    },
-    {
-     "file": "src/journal-metrics.js",
-     "marker": "function profilesURL"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
-    },
-    {
-     "file": "test/journal-profiles.test.mjs",
-     "name": "cached figures are given their profiles fifty at a time, and the rest marked as asked"
-    }
-   ],
-   "status": "verified",
-   "review": "The profile fields ride on the request the figure already costs; journals cached before them are filled fifty at a time by ISSN -- 258 journals in this library in six requests, every one with a subject field afterwards. On the tab: the figure in its own column, quartile chip, field chips that filter, a grouped-by-field view with ranks, and a profile under any name with twelve signed facts and a button to the JCR page itself."
-  },
-  {
-   "round": "R48",
-   "title": "관심 저자의 특허, 키가 있을 때만",
-   "gap": "The user chose patents as the third tier of watching an author: a filing is the earliest public sign of where a lab is heading, often a year before the paper. PatentsView, which answered without a key, was retired into the USPTO Open Data Portal in 2025; Europe PMC's patent index stops in 2012; EPO and Lens need keys too. So the tier needs a free USPTO key, and without one it must say so rather than fail.",
-   "entryPoint": "설정 → 지표 → USPTO Open Data Portal 키 · 관심 저자 카드의 특허 배지",
-   "sources": [
-    {
-     "file": "src/patents.js",
-     "marker": "function matchesInventor"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "async sweepWatchedPatents"
-    },
-    {
-     "file": "src/selfcheck.js",
-     "marker": "patents: the USPTO key, if any, is accepted"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/patents.test.mjs",
-     "name": "patents are read from the portal's shape and from PatentsView's, and namesakes are told apart"
-    },
-    {
-     "file": "test/author-watch.test.mjs",
-     "name": "patents run only with a USPTO key, take the first look as the baseline, and mark what appears later"
-    }
-   ],
-   "status": "verified",
-   "review": "One request per followed author, at most weekly, the key sent to api.uspto.gov only. The reader accepts the portal's field names and PatentsView's, so a rename degrades to nothing found; namesakes are told apart by the LAST; FIRST form the portal writes. The first look is the baseline; later ones badge the card with what is new, and the detail lists each patent with a link to its public page. No key was available in this session, so the live response shape is unverified: the self-check's patents entry runs one real query the moment a key is entered and reports what came back."
-  },
-  {
-   "round": "R49",
-   "title": "종류별로 한 번에 가르기: 특허·학위논문·프리프린트",
-   "gap": "Patents and theses sat among the papers with only a chip on the tree row; the user asked for them to be a layer of their own. Zotero's tree cannot group, and the panel's type filter was a select of raw itemType names.",
-   "entryPoint": "작업 패널 → 검색줄 아래 종류 칩",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "function drawKindChips"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the library splits by kind with one chip: patents and theses apart from the papers"
-    }
-   ],
-   "status": "verified",
-   "review": "A row of chips under the search line counts the library by kind -- 논문 1167 · 프리프린트 26 · 학위논문 6 -- and one click shows only that kind; the select says the same in the same words, and each card names its kind unless it is a plain paper. The journal figure takes the same colour bands as the IF column in the tree."
-  },
-  {
-   "round": "R50",
-   "title": "지도의 범례와 카드의 저널 표식",
-   "gap": "The citation map paints every node in its journal's colour, and a reader new to it has no way to know that lilac is Nature and coral is Cell. The explore cards named the journal in plain grey text while the tree, the related list and the journals tab all showed its mark.",
-   "entryPoint": "작업 패널 → 관계 그래프 · 보유 문헌 카드",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "function drawJournalLegend"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the map names its commonest journals in their own colours, and a card wears its journal mark"
-    }
-   ],
-   "status": "verified",
-   "review": "Under the map's summary line, the six commonest journals in it, each in its own mark with how many nodes it accounts for; the older tag/author graph now carries venues too, so it is coloured and legended alike. Every explore card wears its journal's mark before the venue, the same mark the tree and the map use."
-  },
-  {
-   "round": "R51",
-   "title": "전체 화면 토글과 제목 마크업",
-   "gap": "The panel floats at a dragged-out size, which on a laptop leaves the list in a letterbox; the user asked for full screen. Titles with Zotero's inline markup showed \"<i>Bacillus subtilis</i>\" as text.",
-   "entryPoint": "패널 머리줄의 전체 화면 버튼 · 제목줄 더블클릭",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "function setMaximized"
-    },
-    {
-     "file": "src/workbench.js",
-     "marker": "function rich(parent,text)"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "one press fills the window, the next puts the panel back, and the choice is remembered"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "markup in a title is drawn as italics and subscripts, not shown as tags"
-    }
-   ],
-   "status": "verified",
-   "review": "One press fills the window edge to edge, the next puts the panel back, double-clicking the title bar does the same, and the choice is remembered. Six inline tags (i, b, em, strong, sub, sup) are drawn as what they mean wherever the panel writes text; anything else stays literal, and attributes get the plain words."
-  },
-  {
-   "round": "R52",
-   "title": "분야를 큰 것부터 층층이 고르기",
-   "gap": "Twenty-six field chips lay flat in one row, unordered by size. The user asked for the hierarchy arranged large to small and picked level by level.",
-   "entryPoint": "작업 패널 → 저널 → 대분류·분야·세부 분야 칩",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "const LEVELS=[['domain','대분류'],['field','분야'],['subfield','세부 분야']];"
-    },
-    {
-     "file": "src/journal-metrics.js",
-     "marker": "subfield: text(t?.subfield?.display_name)"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
-    }
-   ],
-   "status": "verified",
-   "review": "OpenAlex's topic hierarchy (domain > field > subfield) is kept on each journal's profile; profiles filled before it are asked once more. One chip row per level, largest first; a chosen row folds to its choice with the way back beside it, and the next level opens beneath. Grouping follows the level under the choice."
-  },
-  {
-   "round": "R53",
-   "title": "논문 함께 읽기: 주장·논리 흐름·논쟁 여지",
-   "gap": "The comparison table put papers side by side as fields. The user wanted the model to read them together: each one's claim and the chain it argues along, and where they pull against each other.",
-   "entryPoint": "작업 패널 → 논문 비교 → 함께 읽기",
-   "sources": [
-    {
-     "file": "src/assist.js",
-     "marker": "prompts.compare="
-    },
-    {
-     "file": "src/workbench.js",
-     "marker": "function drawCompareInsight"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/assist.test.mjs",
-     "name": "reading papers together sends two to six abstracts with their notes, and refuses less or more"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the comparison table reads its papers together and keeps the reading as a note"
-    }
-   ],
-   "status": "verified",
-   "review": "Two to six selected papers -- titles, abstracts, the reader's own notes -- go to the configured AI service with a fixed outline: core claim, line of argument as an arrow chain, strength and limits of the evidence, common ground, every point of contention with the evidence that would settle it, open questions. It is asked not to invent and to say where abstracts are silent. The outline comes back editable, copyable, and can be kept as a note on the first paper."
-  },
-  {
-   "round": "R54",
-   "title": "관심 저자 목록 관리",
-   "gap": "A hundred cards are for noticing news, not for tending the list: nothing let the user find one author, sort by who was checked longest ago, or let one go without opening the card.",
-   "entryPoint": "작업 패널 → 저자 추적 → 목록 관리",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "function drawWatchManager"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the followed list can be tended as a table: found, sorted, let go"
-    }
-   ],
-   "status": "verified",
-   "review": "A table of the followed authors: name, place (with what was typed when followed in the tooltip, shaded when they moved), last check, new papers, patents, and an unfollow button on each row; found by name or place, sorted by news, name, place, longest unchecked or most recently followed; the whole list copyable."
-  },
-  {
-   "round": "R55",
-   "title": "문헌 트리와 ZotPoP에서도 제목의 기울기",
-   "gap": "The panel drew a title's markup, but the tree column and ZotPoP's list still printed \"<i>Bacillus subtilis</i>\" as text, and ZotPoP imported the plain words, losing the italics for good.",
-   "entryPoint": "문헌 트리 제목 열 · ZotPoP 결과 목록",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "paintTitleMarkup(titleText, item, win)"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "the tree draws the italics and subscripts of a title instead of its tags"
-    }
-   ],
-   "status": "verified",
-   "review": "The tree's title cell is rebuilt with the six inline tags drawn whenever the tree prints them again; ZotPoP keeps the source's markup beside the plain title, draws it in the list and the detail, and imports it as Zotero itself would."
-  },
-  {
-   "round": "R56",
-   "title": "함께 읽기 지시문과 새 소식만 보기",
-   "gap": "The read-together outline was fixed, while the remark and tag prompts could be changed; and a hundred quiet author cards hid the ten with news.",
-   "entryPoint": "설정 → 번역·AI → 함께 읽기 지시문 · 저자 추적 → 새 소식만",
-   "sources": [
-    {
-     "file": "src/assist.js",
-     "marker": "aiComparePrompt"
-    },
-    {
-     "file": "src/workbench.js",
-     "marker": "state.watchFreshOnly"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/assist.test.mjs",
-     "name": "the reader can replace the outline for reading together; the language and the no-invention rule stay"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "one chip keeps only the followed authors with something new"
-    }
-   ],
-   "status": "verified",
-   "review": "A setting replaces the outline; the output language and the no-invention rule are always appended. A chip on the followed list keeps only the people with a new paper, a new patent or a move."
-  },
-  {
-   "round": "R57",
-   "title": "패널을 Zotero 탭에 넣기",
-   "gap": "The panel floated over the window; the user asked whether it could sit in a tab like a reader.",
-   "entryPoint": "패널 머리줄의 탭 버튼",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "function dock({save=true}={})"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the panel can live in a Zotero tab, remembers it, and comes back when the tab closes"
-    }
-   ],
-   "status": "verified",
-   "review": "Zotero_Tabs.add gives a tab and a container; the same panel element moves into it and fills it, with the tab bar as its handle. Closing the tab hides the panel, opening the panel selects the tab, and the choice is remembered so the next open goes straight to a tab. The float button brings it back over the window."
-  },
-  {
-   "round": "R58",
-   "title": "분야 선택을 한 줄의 세 메뉴로",
-   "gap": "The chip rows for the subject hierarchy were still hard to read, and a field could not be picked until a domain was.",
-   "entryPoint": "작업 패널 → 저널 → 대분류 › 분야 › 세부 분야 메뉴",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "class:'sc-field-line'"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
-    }
-   ],
-   "status": "verified",
-   "review": "One line, three menus, large to small, each listing what lies under the choice to its left with counts, largest first; a smaller level can be picked on its own and the levels above it follow; menus not yet narrowed group their options under the parent, biggest parent first. Each journal's fields sit on one line, each field once with its subfields after it."
-  },
-  {
-   "round": "R59",
-   "title": "카드 위에 손을 올렸을 때 덜 붙어 보이게",
-   "gap": "On hover the checkbox, its word and the two buttons crowded together under the status dot, and the buttons wrapped under the checkbox.",
-   "entryPoint": "보유 문헌 카드에 마우스 올리기",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "const actions=bar(heading);"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
-    }
-   ],
-   "status": "verified",
-   "review": "The buttons take the figures' place at the far right of the title row while the pointer is on the card; the checkbox keeps its word for the screen reader only; the dot sits further in and the row has more air."
-  },
-  {
-   "round": "R60",
-   "title": "저널을 표로: 이름은 제 색의 글자로, 열 이름과 검색",
-   "gap": "Journal rows were three-line cards, the controls sat far above the field menus, and journals could not be searched apart from the paper search.",
-   "entryPoint": "작업 패널 → 저널",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "class:'sc-journal-table'"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
-    }
-   ],
-   "status": "verified",
-   "review": "A real table: rank, the name in the journal's own colour as text (no box), quartile, abbreviation, house, papers here, fields, and the figure at the edge, with the column names once at the top and the two lookups laid over the row on hover. Facts are gathered once per set of items and typing redraws only the list a beat after the last key, which removed the lag; a title-rule journal now carries its registry quartile too. A search box finds journals by name, abbreviation, publisher or field."
-  },
-  {
-   "round": "R61",
-   "title": "읽은 페이지를 잔디처럼",
-   "gap": "The reading tab drew a numbered circle per page, a line of them per paper, that said nothing until read; the user pointed at GitHub's contribution graph.",
-   "entryPoint": "작업 패널 → 읽기 진행",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "class:'sc-page-cell'"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the pages of a paper read as a strip of shaded squares, with the number and the seconds in the tooltip"
-    }
-   ],
-   "status": "verified",
-   "review": "A strip of small squares, one per page, shaded in five steps from the fill to the done green by time spent, the page number and seconds in the tooltip, a click opening the page, and a key from little to much."
-  },
-  {
-   "round": "R62",
-   "title": "항목 메뉴의 모든 동사에 표식",
-   "gap": "The Style Custom submenu was twenty lines of text; the user asked for icons so it could be scanned.",
-   "entryPoint": "문헌 우클릭 → Style Custom",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "get MENU_ICONS()"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "every entry of the item menu carries a drawn sign"
-    }
-   ],
-   "status": "verified",
-   "review": "Every entry carries a small drawn sign inlined as a data URI, the same strokes the panel's sidebar uses, and the menu is cut into groups by separators: reading state, search, rating and files, the panel, the sweeps."
-  },
-  {
-   "round": "R63",
-   "title": "다섯 곳의 디자인 리뷰를 받아 반영",
-   "gap": "The user asked for design completeness and for review agents to be used. Five read-throughs -- chrome and cards, journals table, authors tab, reading/map/compare/notes, settings and the citation dialog -- returned 69 findings.",
-   "entryPoint": "패널 전체 · 설정 창 · 인용 대화상자",
-   "sources": [
-    {
-     "file": "src/settings.js",
-     "marker": "const t=text=>typeof text==='string'&&runtime.t?runtime.t(text):text;"
-    },
-    {
-     "file": "content/workbench.css",
-     "marker": "--sc-tone-top"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "panel.setAttribute('aria-modal', 'true');"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the followed list can be tended as a table: found, sorted, let go"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the pages of a paper read as a strip of shaded squares, with the number and the seconds in the tooltip"
-    }
-   ],
-   "status": "verified",
-   "review": "Applied across four commits: tone and reading-ink tokens with dark variants; one table style for journals and the followed list; the map's CSS fill override removed so journal colours show; square page cells in fixed rows; row-height-stable card hover; kind chips in the context row; blank instead of dashed figures; the settings pane translated, its help text rendered, errors marked, keys explained with a reveal button, number ranges stated, boolean rows on one line, a confirm before a category reset; the citation dialog modal with a focus trap, multi-item previews on separate lines, the hint restored after a copy."
-  },
-  {
-   "round": "R64",
-   "title": "저널 지표에 JCR 전체 목록과 등수",
-   "gap": "The journals tab listed only the 255 journals the library holds; the user wanted every JCR journal, with each one's place among all of them, including journals they do not hold.",
-   "entryPoint": "작업 패널 → 저널 → 내 서재 / 전체 JCR",
-   "sources": [
-    {
-     "file": "src/journal-identity.js",
-     "marker": "function registryRanked()"
-    },
-    {
-     "file": "src/workbench.js",
-     "marker": "function registryFacts(row,items)"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the journals tab can show every JCR journal, ranked, with the ones the library lacks marked"
-    },
-    {
-     "file": "test/journal-identity.test.mjs",
-     "name": "the registry can be read in one order, JIF first, with the place of each journal in it"
-    }
-   ],
-   "status": "verified",
-   "review": "The registry is read once in JIF order and each journal carries its rank; the rank column shows that place in both views. A toggle switches between the library's journals and all 22,594, a hundred a page, searchable; a journal the library lacks is present but quieter, its profile shows the registry facts and offers a ZotPoP search."
-  },
-  {
-   "round": "R65",
-   "title": "영어로도 전부: 메뉴와 대화상자",
-   "gap": "The panel and settings spoke the chosen language, but the item menu's labels and every alert the plugin raised were Korean literals, so an English-locale user met Korean the moment they right-clicked.",
-   "entryPoint": "문헌 우클릭 → Style Custom · 플러그인의 모든 알림",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "say(win, message) {"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/i18n.test.mjs",
-     "name": "every translation is for a string that is actually in the source"
-    }
-   ],
-   "status": "verified",
-   "review": "Menu labels pass through the dictionary as they are made; every alert goes through one method that translates a line at a time, so a report of figures reads in either language."
-  },
-  {
-   "round": "R66",
-   "title": "주석·컬렉션·관련 논문 탭 다시 그리기",
-   "gap": "Annotations were loose cards with a hex filter box duplicating the swatches; collections were boxed cards with a button and a checkbox each; the related tab, with nothing selected, showed one line that read as an error.",
-   "entryPoint": "작업 패널 → 주석 · 컬렉션 · 관련 논문",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "class:'sc-collection-tree'"
-    },
-    {
-     "file": "src/workbench.js",
-     "marker": "const GROUP_NOTES="
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the annotation list reads as a pass through the paper"
-    }
-   ],
-   "status": "verified",
-   "review": "Annotations carry their colour down the card's edge, name their kind in words, set the quote apart and keep the memo as a quiet line; the selection's three actions sit with the selection. Collections are a tree with a bar per row for what it holds, a search box, a hide-empty switch and a count line; a name is the way in. The related tab explains its three lists and how to start, and each list carries a line saying what it is."
-  },
-  {
-   "round": "R67",
-   "title": "막다른 클릭 20건과 좁은 패널 18건",
-   "gap": "The user asked for every control that cannot be clicked and every layout with no way out. Two read-throughs found twenty dead ends and eighteen widths where something was clipped, stranded or unreadable.",
-   "entryPoint": "패널 전체, 340–1400px",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "if(event.target!==row)return; // Space and Enter typed in the memo stay in the memo."
-    },
-    {
-     "file": "content/workbench.css",
-     "marker": "Narrow panels: what folds, what hides, what wraps"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "every button on every tab survives a press without throwing, and the tab still draws"
-    },
-    {
-     "file": "test/styles.test.mjs",
-     "name": "resizable panel has container-based width/height adaptation and small-viewport scroll escape"
-    }
-   ],
-   "status": "verified",
-   "review": "Dead ends: keys typed in memos and checkboxes no longer toggle their rows; a colour filter, a news filter and a field pick each show their state and offer a way out; searches keep focus; empty tabs offer the button that fills them; map nodes select in place and take Space; Escape leaves a field, not the panel; menu entries report. Widths: the nav wraps instead of scrolling off-screen; card figures drop under the title and empty ones vanish; the journal table's hover buttons escape the clipped cell and the name takes the room; the map keeps a readable size and scrolls; the manager table, the selection tools, the footer, the watch tools, the collections rows and the segmented toggles fold instead of spilling; the reading strip is fluid; the two viewport media blocks that fought the container rules are gone."
-  },
-  {
-   "round": "R68",
-   "title": "처음 여는 사람이 보는 것",
-   "gap": "The plugin assumed a filled library, a key and a reader who already knew the vocabulary. A first-open read-through found the panel, the search window and the preferences all silent about what to do first.",
-   "entryPoint": "패널 첫 실행, ZotPoP 첫 실행, 설정 첫 화면",
-   "sources": [
-    {
-     "file": "src/workbench.js",
-     "marker": "처음 여셨네요. 왼쪽 탭이 기능이고"
-    },
-    {
-     "file": "src/settings.js",
-     "marker": "const FIRST=['citationEmail','openalexApiKey','aiEndpoint']"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "the first open explains the panel once and never again"
-    },
-    {
-     "file": "test/settings.test.mjs",
-     "name": "the start-here block lists only the blank keys and sends each to its field"
-    }
-   ],
-   "status": "verified",
-   "review": "첫 실행: 패널 맨 위에 한 줄 안내가 뜨고 '알겠어요'를 누르면 다시 나오지 않는다. 빈 서재·주석 없음·문헌 없음 탭은 그 자리에서 채울 버튼을 준다. 설정 첫 화면에는 비어 있는 키 세 개만 '먼저 할 것'으로 올라오고, 채우면 사라진다. ZotPoP은 키 없는 OpenAlex에 배너와 200건 상한을 걸고, 검색 전 지표 칸은 대시 대신 무엇이 뜰지 한 줄로 말한다. 읽기 0초는 기본으로 숨기고, 인용 수 배경 조회는 키가 있을 때만 돈다. 남아 있던 한국어 문자열 여덟 개를 번역 경로에 넣었다."
-  },
-  {
-   "round": "R69",
-   "title": "메뉴의 표식과 자기 점검이 연 창들",
-   "gap": "The user found Style Custom the only unmarked line among the other plugins' item-menu entries, and found four empty note windows stacked on the screen after a self-check run.",
-   "entryPoint": "문헌 우클릭 메뉴, 도구 메뉴, 자기 점검",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "The parent entry sits among other plugins' entries"
-    },
-    {
-     "file": "src/selfcheck.js",
-     "marker": "A note title is a button label, so the verb list cannot catch it"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "every button that opens a Zotero window is marked so a sweep can leave it alone"
-    }
-   ],
-   "status": "verified",
-   "review": "우클릭 메뉴의 'Style Custom'과 도구 메뉴의 두 항목에 패널 모양 표식을 붙였다. 자기 점검의 버튼 일괄 누르기는 노트 제목처럼 동사가 없는 버튼까지 눌러 빈 노트 창을 쌓았다. 창을 여는 버튼은 이제 data-opens로 스스로를 밝히고, 점검은 그런 버튼을 건너뛴다. ZotPoP의 도구 메뉴 항목에도 돋보기 표식을 넣었다."
-  },
-  {
-   "round": "R70",
-   "title": "어두운 화면에서 읽히는 색",
-   "gap": "Measured every ink against the surface it is drawn on. Twenty-five colours missed the 4.5:1 a reader needs, and one dark-mode rule painted the impact factor in near-black on a dark panel.",
-   "entryPoint": "밝은 테마·어두운 테마 전체",
-   "sources": [
-    {
-     "file": "content/workbench.css",
-     "marker": "--sc-tone-top: #8556AD"
-    },
-    {
-     "file": "src/journal-identity.js",
-     "marker": "The bar is 4.5, what a"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/styles.test.mjs",
-     "name": "every ink token reads against the surface it is drawn on, in both themes"
-    }
-   ],
-   "status": "verified",
-   "review": "어두운 테마에서 저널 표의 JIF 숫자는 거의 검은색으로 칠해져 보이지 않았다. 그 규칙을 지우고 색조 토큰이 두 테마 모두에 적용되게 했다. 밝은 테마의 잉크 21개, 어두운 테마의 6개를 같은 색상을 유지한 채 명도만 움직여 4.5:1을 넘겼다. 채운 버튼과 배지는 배경의 밝기에 따라 흰 글자 또는 검은 글자를 고른다. 저널 마크의 잉크는 고정 명도 대신 색상별로 대비를 걸어 노란 계열도 읽힌다. 토큰 대비는 이제 테스트가 지킨다."
-  },
-  {
-   "round": "R71",
-   "title": "초당 한 번의 디스크 쓰기와 조용한 실패들",
-   "gap": "A reading tick wrote the whole store and rebuilt the item tree once a second, a failed write said nothing, a failed duplicate check read as \"not in the library\", and the journal menus walked 22,594 rows six times per keystroke.",
-   "entryPoint": "PDF 읽는 중, 저널 탭, 가져오기",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "The cells are already repainted in place"
-    },
-    {
-     "file": "src/runtime.js",
-     "marker": "A disk that will not take the file loses reading time"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "a write that fails says so once in the panel, and says it again only after a write succeeds"
-    },
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "rows for papers that have left the library are dropped, and a small store is left alone"
-    }
-   ],
-   "status": "verified",
-   "review": "읽는 중에는 셀만 다시 그리고, 저장은 30초에 한 번과 종료 시로 미룬다. 동기화 중에는 알림을 받지 않는다. 저장 실패는 패널에 한 번 말하고, 성공 전까지 반복하지 않는다. 라이브러리에서 사라진 항목의 기록은 시작할 때 한 번 정리한다. 참고문헌 목록은 500개까지만 보관한다. 관심 저자 신호 조회는 5건씩 병렬로 돈다. ZotPoP의 중복 검사는 실패를 삼키지 않고 알리며, 제목 색인은 가져오기 1회당 한 번만 읽는다. 저널 검색은 행마다 검색 문자열을 미리 만들고 분야 메뉴 결과를 재사용한다."
-  },
-  {
-   "round": "R72",
-   "title": "말이 통하는 문구",
-   "gap": "The plugin spoke in the vocabulary of the people who built it: endpoint, Bearer, component, index, midnight UTC. Menu entries carried their whole scope in brackets, and the same thing had two names in each language.",
-   "entryPoint": "메뉴·설정·오류 메시지 전체",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "A menu entry is a verb, not a sentence"
-    },
-    {
-     "file": "src/failures.js",
-     "marker": "The reader's own clock"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "a menu verb stays short and says the rest in its tooltip"
-    }
-   ],
-   "status": "verified",
-   "review": "endpoint는 'AI 서버 주소', Bearer 헤더는 '인증 헤더', 컴포넌트는 '기능', 'Zotero 색인'은 '본문을 읽어 둠'으로 바꿨다. 'UTC 자정'은 한국 시간으로 적고, 영어권 사용자에게는 자기 시계의 시각이 보인다. 괄호 안에 범위를 늘어놓던 메뉴 8개는 동사만 남기고 설명을 툴팁으로 옮겼다. 영어 쪽에서 한 기능에 두 이름을 쓰던 곳(citation map, followed)을 하나로 모았다. 메뉴 동사 길이는 테스트가 지킨다."
-  },
-  {
-   "round": "R73",
-   "title": "막다른 오류 메시지 33건",
-   "gap": "Thirty-three errors named what went wrong and stopped there. A reader who hit one had to guess whether to wait, to fix something, or to give up.",
-   "entryPoint": "오류가 나는 모든 자리",
-   "sources": [
-    {
-     "file": "src/runtime.js",
-     "marker": "ZotPoP이 설치되어 있지 않습니다. 도구 → 부가 기능에서 설치한 뒤 다시 시도하세요."
-    },
-    {
-     "file": "src/library.js",
-     "marker": "역링크 기능이 꺼져 있습니다. 설정 → Style Custom → 보기에서 켜세요."
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/runtime.test.mjs",
-     "name": "an error message tells the reader what to do next"
-    }
-   ],
-   "status": "verified",
-   "review": "오류 메시지 33건에 다음 행동을 붙였다. 기능이 꺼져 있으면 어느 설정에서 켜는지, 값이 모자라면 무엇을 채우는지, 한도에 걸리면 몇 개까지인지 말한다. 할 일이 정말 없는 네 건만 예외로 두고, 나머지는 모두 '-세요'로 끝나야 한다는 규칙을 테스트가 지킨다."
-  },
-  {
-   "round": "R74",
-   "title": "저널 22,594종의 분야, 그리고 주석 탭의 무게",
-   "gap": "The journals tab could group by subject only for the journals the library already held and had an OpenAlex profile for: 206 of 22,594. Every other row showed an empty subject cell, and the three subject menus counted in the tens. The annotations tab drew a textarea under every highlight, so a library with six hundred of them spent most of its drawing on empty memo boxes.",
-   "entryPoint": "연구 작업 패널 → 저널, 주석",
-   "sources": [
-    {
-     "file": "scripts/build-journal-fields.py",
-     "marker": "distinct domain/field/subfield triples that its top topics belong to"
-    },
-    {
-     "file": "src/journal-identity.js",
-     "marker": "function registryLevels(title)"
-    },
-    {
-     "file": "src/workbench.js",
-     "marker": "const unknownLabel=T('분야 미상');"
-    }
-   ],
-   "tests": [
-    {
-     "file": "test/journal-identity.test.mjs",
-     "name": "the registry carries each journal’s subjects, packed against one table of names"
-    },
-    {
-     "file": "test/workbench.test.mjs",
-     "name": "a memo saves itself, says so, and is not lost when the panel closes"
-    }
-   ],
-   "status": "verified",
-   "review": "OpenAlex의 topic 계층을 등재 저널 전체에 쓸어 담아 레지스트리에 함께 실었다. 이름표 하나를 공유하고 행마다 색인만 두어 파일이 크게 늘지 않는다. 분야를 모르는 저널은 메뉴에서 '분야 미상'으로 따로 고를 수 있다. 주석 탭은 메모가 있는 주석에만 상자를 그리고, 나머지는 '메모' 버튼을 누를 때 만든다. 한 번에 그리는 수도 설정에서 바꾼다."
-  }
- ],
- "introducedInVersion": "0.6.0"
+  "version": "0.49.1",
+  "minimumRequestedRounds": 10,
+  "rounds": [
+    {
+      "round": "R01",
+      "title": "Scoped nested tag branch rename and merge",
+      "gap": "Maps exact prefix boundaries once, preserves descendant suffixes and tag types; existing destination metadata wins merges; protects status/rating tags and rejects cross-library selections.",
+      "entryPoint": "중첩 태그 → 선택 문헌 태그 이름 변경",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "renameTagBranch"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R01 branch rename merges existing destinations without losing types or sibling tags"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R01 exact rename and scoped guards prevent subtree and cross-library changes"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R01 moving a branch below itself maps each original suffix once and rolls back batch failure"
+        }
+      ],
+      "status": "verified",
+      "review": "Tested descendant-target rename without cascading, target collision metadata, and later-item save failure rolling earlier changes back.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R01"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R02",
+      "title": "Guarded bulk annotation recoloring",
+      "gap": "Validates six-digit colors and library identity, checks clean/editable annotation attachment and parent, skips unchanged colors, and saves transactionally.",
+      "entryPoint": "주석 → 선택 주석 색상 변경",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "recolorAnnotations"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R02 recolor validates complete parent chain before changing annotation color"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R02 failed bulk recolor preserves newer annotation comments and user colors"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R02 a parent becoming dirty mid-batch aborts later recolors without discarding parent edits"
+        }
+      ],
+      "status": "verified",
+      "review": "Later save failure preserves concurrently edited comments/colors; a parent becoming dirty between saves aborts and rolls back annotations without touching parent drafts.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R02"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R03",
+      "title": "Symmetric selected related-link removal",
+      "gap": "Deletes only selected-item URI links under Zotero related-item predicate; preserves links to other papers and all other relation predicates. Handles one-sided links, requires same-library editable clean regular items.",
+      "entryPoint": "패널 하단 → 선택 문헌끼리 연결 해제",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "unrelate"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R03 selected relation removal is symmetric and preserves other links and predicates"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R03 relation removal rejects cross-library input and restores links after later failure"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R03 unlink handles one-sided edges and retains concurrent unrelated edits on rollback"
+        }
+      ],
+      "status": "verified",
+      "review": "Verified one-sided edge removal and concurrent unrelated relation additions survive a later unlink-save failure.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R03"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R04",
+      "title": "Explicit direct and recursive collection scope",
+      "gap": "Requires explicit chosen library, returns regular undeleted collection members, deduplicates recursive descendants, yields between chunks and never changes default library scope.",
+      "entryPoint": "표시 범위 → 현재 컬렉션·하위 컬렉션",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "collectionItems"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R04 collection scope returns deduplicated direct or recursive regular item IDs"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R04 collection scope rejects foreign descendants and terminates cycles"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R04 querying another library collection does not change default note scope"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "collection changes during pending membership lookup discard the old scope and follow the current collection"
+        }
+      ],
+      "status": "verified",
+      "review": "Rejects foreign descendant/membership corruption, terminates cycles, excludes deleted/attachment records and preserves other-library note scope. Final integration review reproduced and fixed async scope/lost-update regression.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R04"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R05",
+      "title": "Tab ordering and close other tabs",
+      "gap": "Tab list previously only selected and closed individual tabs.",
+      "entryPoint": "탭 관리·세로 탭 → 순서 이동·다른 탭 닫기",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "moveTab"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R05 tab reorder uses final positions and close-others protects the library and non-reader tabs"
+        }
+      ],
+      "status": "verified",
+      "review": "Reject stale IDs, invalid destinations and library movement before mutation; unrelated note tabs remain.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R05"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R06",
+      "title": "Saved tab group rename and update",
+      "gap": "Saved sessions could be created/restored/deleted, but could not be renamed or updated in place.",
+      "entryPoint": "탭 관리 → 그룹 이름 변경·현재 탭으로 갱신",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "updateTabGroup"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R06 saved tab groups rename and update current order/pages without changing identity or unrelated groups"
+        }
+      ],
+      "status": "verified",
+      "review": "Empty names, stale group ID and empty document snapshot reject without cache changes; other groups retain prior pages.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R06"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R07",
+      "title": "Saved view rename and update",
+      "gap": "Saved column layouts could not be revised without deleting/recreating a group.",
+      "entryPoint": "뷰 그룹 → 이름 변경·현재 배치로 갱신",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "updateView"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R07 saved views rename and update layout in place and reject stale or unavailable targets"
+        }
+      ],
+      "status": "verified",
+      "review": "Stale IDs, empty names and closed target windows reject; update affects only chosen group; reapplication restores updated width.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R07"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R08",
+      "title": "Restore reader appearance and configure annotation margins",
+      "gap": "Users could apply styles but could not restore original appearance while keeping the plugin active; cards had fixed width/side/text length.",
+      "entryPoint": "읽기 진행 / PDF Style → 모양 복원·여백 설정",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "resetAppearance"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R08 margin width side and text limit change actual cards with typed validation"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R08 appearance reset restores original native settings while retaining palettes and display preferences"
+        }
+      ],
+      "status": "verified",
+      "review": "Reject invalid CSS/width/type before persistence; text uses textContent; reset does not reapply on next poll and preserves saved palettes.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R08"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R09",
+      "title": "읽기 상태·별점·연도 필터와 문헌 정렬",
+      "gap": "filters existed only partially in the model; no matching user controls",
+      "entryPoint": "워크벤치 상단 상세 필터",
+      "sources": [
+        {
+          "file": "src/workspace.js",
+          "marker": "sortItems"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "최소 별점"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "combined status year and rating filters sort known zero citations before unknown values without mutating input"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "visible status year rating and sort controls filter exploration and reset together"
+        }
+      ],
+      "status": "verified",
+      "review": "Combined filters, inverse year range, missing metrics versus actual zero and sort stability checked.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R10",
+      "title": "200개 제한을 넘는 탐색과 명시적 일괄 선택",
+      "gap": "The first 200 papers were reachable; later results required narrowing a search.",
+      "entryPoint": "문헌 탐색 → 이전/다음 페이지·검색 결과 전체 선택",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "검색 결과 전체 선택"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "exploration pages past the old 200 item limit and selects exactly the requested page or results"
+        }
+      ],
+      "status": "verified",
+      "review": "251-paper fixture reaches last page; page and whole-result selections verified separately and search resets stale page.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R11",
+      "title": "비교 항목 선택·저장과 전체 결과 CSV",
+      "gap": "Comparison fields were fixed; fallback silently used only 20 papers.",
+      "entryPoint": "논문 비교 → 비교 항목 선택·CSV 복사",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "비교 항목 선택"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "comparison field choices persist and CSV exports all rows while the table pages without losing zero values"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "rapid comparison field changes compose while persistence is still pending"
+        }
+      ],
+      "status": "verified",
+      "review": "61-paper fixture, persistent fields, 50-row pages, complete CSV, real zero metrics and transposed row headers verified. Final integration review reproduced and fixed async scope/lost-update regression.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R12",
+      "title": "캔버스 이름·카드 색상·제목·연결 편집",
+      "gap": "Boards/cards could not be renamed/recolored and connections could not be removed independently.",
+      "entryPoint": "캔버스 → 보드 이름 변경·카드 편집·카드 연결 해제",
+      "sources": [
+        {
+          "file": "src/workspace.js",
+          "marker": "unlinkCards"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "카드 모양 저장"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "canvas can rename boards edit card appearance and unlink without removing either document"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "canvas exposes board and card appearance editing and reversible relation removal"
+        }
+      ],
+      "status": "verified",
+      "review": "Invalid color rejects before label mutation; link removal preserves document IDs/cards; stable per-board/card draft keys.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R13",
+      "title": "Exact annotation-to-note backlinks",
+      "gap": "Matches native data-annotation attachmentURI+annotationKey pairs and scoped select/open-pdf annotation links, decoding escaped/URI-encoded attributes. Does not confuse different annotations sharing a PDF.",
+      "entryPoint": "주석 → 참조 노트 보기",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "async function backlinks"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R13 annotation backlinks distinguish two highlights in the same attachment"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R13 annotation backlinks accept escaped metadata and reject group or annotation-key collisions"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R13 malformed or ambiguous annotation references and quoted markup do not create backlinks"
+        }
+      ],
+      "status": "verified",
+      "review": "Rejects wrong-group/same-key links, same-PDF different annotation references, conflicting query parameters, invalid JSON and markup quoted as note text.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R13"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R14",
+      "title": "Native annotation-to-note backlinks",
+      "gap": "Only paper-level backlinks were exposed; native annotation headers had no referring-note count.",
+      "entryPoint": "PDF 주석 머리글 → 참조 노트 개수·노트 열기",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "backlinkHook"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R14 native annotation header resolves library-scoped identity and opens exact referring notes"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R14 stale annotation headers and wrong PDF identities never publish late backlinks"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R14 repeated headers share pending and completed lookups and distinct scans are serialized"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R14 note modifications invalidate cached counts on next poll without reacting to unrelated paper updates"
+        }
+      ],
+      "status": "verified",
+      "review": "Wrong parent and library rejected before note lookup; disposal removes menus/listeners and ignores late results. Final lifecycle pass verifies request deduplication, single scan concurrency, note invalidation and notifier cleanup; each distinct first-time annotation still uses the library exact-match scan.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R14"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R15",
+      "title": "Geometry-preserving selected annotation paragraph merge (library service)",
+      "gap": "Retains first annotation in page/sortIndex order, combines all rectangle positions across same or two adjacent pages via native nextPageRects, joins paragraph text/comments and merges tags; soft-deletes extras only after survivor save inside one DB transaction. Rejects external/read-only/dirty/mixed-PDF/mixed-type/mixed-color/malformed selections.",
+      "entryPoint": "PDF 주석 우클릭·Style 메뉴 / 주석 → 선택 주석 병합",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "mergeAnnotations"
+        },
+        {
+          "file": "src/reader-tools.js",
+          "marker": "mergeSelectedAnnotations"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 adjacent-page merge preserves geometry, paragraphs, comments and tags in reading order"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 merge rejects stale, external, mismatched or unsupported selections without writes"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 failure trashing an extra annotation rolls back survivor geometry and recoverable deletion"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 combines existing next-page rectangles and refuses three-page or malformed geometry"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 rollback preserves edits made to the survivor while an extra save fails"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "R15 reader change after survivor save rolls back before deleting the other annotation"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R15 native merge resolves selected keys and delegates guarded transactional mutation"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R15 merge rejects readonly wrong-PDF and stale reader selections before mutation"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R15 reader validation and native menu enforce the same fifty-annotation limit as library merge"
+        }
+      ],
+      "status": "verified",
+      "review": "Tests invalid geometry/three-page spans, reversed input order, existing two-page source rectangles, stale reader after survivor save, later deletion failure and concurrent survivor comment/tag edits.",
+      "evidence": [
+        {
+          "file": "docs/rounds-data.json",
+          "round": "R15"
+        },
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R15"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R16",
+      "title": "Attachment-version listing and switching",
+      "gap": "Baseline dotted reader.attachmentVersionSwitch feature was missing from initial inventory and native toolbar.",
+      "entryPoint": "PDF Style → Switch PDF version",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "switchAttachmentVersion"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R16 attachment versions include only same-parent same-library locally readable PDFs and switch explicitly"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R16 stale reader during file check prevents version switching and original tab is retained on open failure"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R16 native toolbar version listing exposes working user-triggered PDF choices"
+        },
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "R16 parent deletion reparenting and library changes during file checks reject stale version choices"
+        }
+      ],
+      "status": "verified",
+      "review": "Wrong parent/library, missing file and changed active reader reject; tests cover explicit toolbar interaction and failed open. PDF siblings only, matching requested scope. Final consistency pass snapshots attachment/parent identity and library; deletion, reparenting or library changes during file checks abort before opening.",
+      "evidence": [
+        {
+          "file": "docs/rounds-reader.json",
+          "round": "R16"
+        }
+      ],
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R17",
+      "title": "문헌 상세에 메타데이터·노트·주석 직접 표시",
+      "gap": "Status disappeared when IF and citations were both unknown; notes and annotations required separate tabs.",
+      "entryPoint": "문헌 탐색 → 자세히",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "주석 원문 열기"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "paper detail displays status without available metrics and includes scoped notes and annotations inline"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "late detail notes never leak into a different paper or tab"
+        }
+      ],
+      "status": "verified",
+      "review": "Separate failed note/annotation loads cannot blank the other section. Scoped IDs, textContent and generation guards checked.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R18",
+      "title": "주석 열의 페이지·색상 분포와 원문 이동",
+      "gap": "The original distribution feature was previously reduced to a numeric annotation count.",
+      "entryPoint": "Annotations · Custom 색 막대",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "annotationDistribution"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "annotation column maps colors to real attachment pages without inventing total pages and navigates clicked markers"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "annotation distribution includes both pages of a merged highlight without double-counting the annotation total"
+        }
+      ],
+      "status": "verified",
+      "review": "Multiple PDFs and nextPageRects remain distinct. Invalid colors cannot inject CSS; annotation totals and distribution pages counted independently.",
+      "verification": "Each feature was followed by its targeted Node/DOM tests; integrated suite must also pass before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R19",
+      "title": "인용 수를 실제 출처에서 받아오기",
+      "gap": "The Cited Count column showed a cached number with no way to tell an unchecked paper from one cited zero times.",
+      "entryPoint": "Cited Count 열 · 우클릭 → 선택한 문헌 인용 수 새로고침",
+      "sources": [
+        {
+          "file": "src/citations.js",
+          "marker": "function identity"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/citations.test.mjs",
+          "name": "batched DOI lookups deduplicate requests, preserve zero and original order, persist progressively"
+        },
+        {
+          "file": "test/citations.test.mjs",
+          "name": "optional OpenAlex key goes only in Authorization; email goes to Crossref query"
+        }
+      ],
+      "status": "verified",
+      "review": "Zero and 'not checked' are stored and drawn differently. A failed lookup keeps the previous number rather than overwriting it with a blank.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R20",
+      "title": "구글 스콜라처럼 여러 형식으로 인용 복사",
+      "gap": "Copying a citation meant leaving Zotero for a formatting site.",
+      "entryPoint": "우클릭 → 인용…",
+      "sources": [
+        {
+          "file": "src/citation-formats.js",
+          "marker": "function format("
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/citation-formats.test.mjs",
+          "name": "each offered style orders author, year and source the way that style requires"
+        },
+        {
+          "file": "test/citation-formats.test.mjs",
+          "name": "missing metadata degrades to a shorter citation instead of printing empty punctuation"
+        }
+      ],
+      "status": "verified",
+      "review": "Gecko does not grow a <button> around wrapped content, so each row is a div[role=button] with Enter/Space handling.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R21",
+      "title": "보충자료(SI)를 표시만 하지 않고 실제로 내려받기",
+      "gap": "Supplementary files were only badged; the user still had to open the publisher's page to fetch them.",
+      "entryPoint": "우클릭 → 보충자료 내려받기",
+      "sources": [
+        {
+          "file": "src/supplementary.js",
+          "marker": "function classifyEntries"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/supplementary.test.mjs",
+          "name": "the files endpoint takes the PMCID alone; a source segment answers 404"
+        },
+        {
+          "file": "test/supplementary.test.mjs",
+          "name": "a result for a different DOI is rejected rather than downloaded as this paper"
+        }
+      ],
+      "status": "verified",
+      "review": "ScienceDirect main PDFs (1-s2.0-S00...-main.pdf) matched a bare-number token rule; tokens are now only read immediately before the extension, with an explicit -main deny rule. Ten flagged files fell to six, all real.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R22",
+      "title": "다음에 읽을 논문 추천",
+      "gap": "Finding what to read next meant a search engine and a fresh set of tabs.",
+      "entryPoint": "연구 작업 패널 → 관련 논문",
+      "sources": [
+        {
+          "file": "src/discover.js",
+          "marker": "function mergeSuggestions"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/discover.test.mjs",
+          "name": "a DOI is looked up directly; only a paper without one falls back to a title search"
+        }
+      ],
+      "status": "verified",
+      "review": "Papers that cite this one rank above its own bibliography, and OpenAlex's computed 'related' last. Suggestions already in the library are marked rather than offered.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R23",
+      "title": "철회·공개접근·프리프린트 신호",
+      "gap": "Nothing in the library distinguished a retracted paper from a sound one.",
+      "entryPoint": "Signals 열",
+      "sources": [
+        {
+          "file": "src/paper-signals.js",
+          "marker": "function classify"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/paper-signals.test.mjs",
+          "name": "a paper carrying no notices is reported as standing, distinctly from never having been asked"
+        },
+        {
+          "file": "test/paper-signals.test.mjs",
+          "name": "the retraction notice itself is not reported as a retracted paper"
+        }
+      ],
+      "status": "verified",
+      "review": "Crossref carries updated-by on the retracted paper and update-to on the notice. Reading the wrong one would have cleared retracted papers and flagged the notices.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R24",
+      "title": "다른 플러그인에만 있던 읽기 기록 가져오기",
+      "gap": "Sixty-two hours of reading history existed only inside another plugin's notes and was one cache rebuild from being lost.",
+      "entryPoint": "우클릭 → 읽기 기록 가져오기",
+      "sources": [
+        {
+          "file": "src/legacy-reading.js",
+          "marker": "function parseNote"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/legacy-reading.test.mjs",
+          "name": "a note a person wrote is never mistaken for bookkeeping"
+        },
+        {
+          "file": "test/legacy-reading.test.mjs",
+          "name": "nonsense in the payload is dropped rather than trusted"
+        }
+      ],
+      "status": "verified",
+      "review": "This plugin's own tracking always wins: a longer total here means it has been counting since and must not be replaced.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R25",
+      "title": "카탈로그 밖 저널의 지표",
+      "gap": "The curated catalogue covers 86 journals; the library spans 255, so two thirds of the IF column was blank and had to be looked up elsewhere.",
+      "entryPoint": "IF 열 · 우클릭 → 라이브러리 저널 지표 채우기",
+      "sources": [
+        {
+          "file": "src/journal-metrics.js",
+          "marker": "function pickSource"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/journal-metrics.test.mjs",
+          "name": "a near-miss from the title search is refused; only an exact journal counts"
+        },
+        {
+          "file": "test/journal-metrics.test.mjs",
+          "name": "Zotero records both ISSNs in one field, and that must still be an ISSN lookup"
+        }
+      ],
+      "status": "verified",
+      "review": "Shown as ~N and labelled OpenAlex two-year mean citedness, never as a JIF, and never allowed to overwrite a curated value. 252 of 255 journals resolve by ISSN, which costs a tenth of a name search.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R26",
+      "title": "관심 저자 109명의 새 논문을 한 번에 확인",
+      "gap": "Every watchlist row read the same 'last checked' date, so learning who had published meant opening all 109.",
+      "entryPoint": "연구 작업 패널 → 저자 추적 → 새 논문 한 번에 확인",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "sweepWatchedAuthors"
+        },
+        {
+          "file": "src/discover.js",
+          "marker": "function watchedWorksURL"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "a hundred followed authors are answered in three requests, not a hundred"
+        },
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "running out of budget leaves the unchecked authors unmarked, not falsely quiet"
+        },
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "following someone still works past a hundred, which is where the user already is"
+        }
+      ],
+      "status": "verified",
+      "review": "Fifty author ids per filter with cursor paging. A batch that never ran leaves its authors unmarked rather than writing 'nothing new' over people nobody asked about. The old hundred-author cap had already locked the user out at 109.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R27",
+      "title": "탭 열아홉 개에 각각 아이콘",
+      "gap": "Nineteen identical lines of text is a list you read rather than one you recognise.",
+      "entryPoint": "연구 작업 패널 왼쪽 탭 목록",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "leadIcon"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "every tab in the sidebar carries its own drawn icon"
+        }
+      ],
+      "status": "verified",
+      "review": "Labels are kept: nineteen unlabelled glyphs would be a guessing game. Shapes are built node by node because innerHTML is unavailable on createElementNS SVG elements in Gecko.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R28",
+      "title": "평점 태그를 태그 목록에서 숨기기",
+      "gap": "style-custom:rating:1..4 appeared in the tag selector among the user's own subjects.",
+      "entryPoint": "우클릭 → 태그 목록에서 평점 태그 숨기기",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "hideRatingTags"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/data.test.mjs",
+          "name": "test("
+        }
+      ],
+      "status": "verified",
+      "review": "A bare string tag is stored by Zotero as type 0, a manual tag, which the selector always shows. The rating tag is now always written as an object with type 1, and existing items are repaired by rewriting the rating through the normal path.",
+      "verification": "Targeted Node/DOM tests, plus an offline render of the real workbench DOM and CSS; the integrated suite passes before release.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R29",
+      "title": "평점을 태그에서 Extra로",
+      "gap": "This library has sixteen distinct tags and the user chose five of them; the rest were the plugin's bookkeeping, including eighty style-custom:rating:N rows sitting among their subjects.",
+      "entryPoint": "우클릭 → 평점 태그를 Extra로 옮기기",
+      "sources": [
+        {
+          "file": "src/data.js",
+          "marker": "function updateExtra"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "hideRatingTags"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/data.test.mjs",
+          "name": "the tag and the Extra line are written together, so they can never disagree"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a rating written into Extra leaves every other line of it alone"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "the rating tags already in the library move to Extra in one pass per rating"
+        }
+      ],
+      "status": "verified",
+      "review": "Marking the tag automatic did not hide it: Zotero's tagSelector.showAutomatic defaults to true, verified in the shipped defaults. Extra syncs, is editable by hand and never appears in the selector, and readState already read it. Only the Rating line is rewritten; every other line keeps its spelling and its position. The tag is dropped in the same transaction that writes Extra, so a rating can never exist in neither.",
+      "verification": "Targeted Node/DOM tests plus the integrated suite; the rating migration was sized against the user's real library (16 distinct tags, 81 rating tags, 109 watched authors) rather than against a guess.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R30",
+      "title": "완성도 원장을 다시 살리기",
+      "gap": "Both completeness ledgers stopped at 0.8.0 and stayed there through eight releases, so twenty features and ten rounds went unrecorded. The version check only ran from a CLI entry point that nothing in npm test invoked.",
+      "entryPoint": "npm test · npm run verify:features · npm run verify:improvements",
+      "sources": [
+        {
+          "file": "test/feature-inventory.test.mjs",
+          "marker": "both completeness ledgers describe the version actually being shipped"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/feature-inventory.test.mjs",
+          "name": "both completeness ledgers describe the version actually being shipped"
+        },
+        {
+          "file": "test/feature-inventory.test.mjs",
+          "name": "every round in the ledger names a source marker and a test that exist"
+        }
+      ],
+      "status": "verified",
+      "review": "Each ledger entry names a source marker and a test by name, and the suite now fails if either goes missing or the version falls behind the manifest.",
+      "verification": "Targeted Node/DOM tests plus the integrated suite; the rating migration was sized against the user's real library (16 distinct tags, 81 rating tags, 109 watched authors) rather than against a guess.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R31",
+      "title": "실제 라이브러리 크기에 맞지 않던 한계값",
+      "gap": "watchAuthor refused to add anyone past 100 while the user already followed 109, so the feature was closed to exactly the person using it. The sweep also reached for Zotero.Promise, a bootstrap-scope global the class otherwise abstracts.",
+      "entryPoint": "연구 작업 패널 → 저자 추적",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "get WATCH_LIMIT"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "pause(ms)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "the watchlist refuses a work id and will not grow without bound"
+        },
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "following someone still works past a hundred, which is where the user already is"
+        },
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "the lookback reaches back to when each author was last checked, not a fixed window"
+        }
+      ],
+      "status": "verified",
+      "review": "The cap was chosen when each author cost a request of their own; fifty share one now, so it sits where the stored news starts to matter. The lookback floor comes from each author's own last-checked date, capped at six years, so following someone two years ago and sweeping today does not skip the two years between.",
+      "verification": "Targeted Node/DOM tests plus the integrated suite; the rating migration was sized against the user's real library (16 distinct tags, 81 rating tags, 109 watched authors) rather than against a guess.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R32",
+      "title": "만들어만 두고 비어 있던 세 기능을 채우기",
+      "gap": "Not one of the user's 1,214 papers had a retraction check, not one of their 255 journals had a figure, and not one of their 109 followed authors had been swept. Each waited on a context-menu item nobody had a reason to go looking for, so the columns showed a dash and the panel showed nothing.",
+      "entryPoint": "우클릭 → 빈 칸 채우기 (철회 신호 · 저널 지표 · 새 논문)",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "async backfill("
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "itemsNeedingSignals"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/backfill.test.mjs",
+          "name": "the stages run cheapest and highest-stakes first"
+        },
+        {
+          "file": "test/backfill.test.mjs",
+          "name": "running out of budget stops the whole backfill rather than sweeping on blind"
+        },
+        {
+          "file": "test/backfill.test.mjs",
+          "name": "a spent OpenAlex budget still records the retraction, which is the point of the column"
+        },
+        {
+          "file": "test/backfill.test.mjs",
+          "name": "cancelling stops at the next paper and keeps what was already learned"
+        }
+      ],
+      "status": "verified",
+      "review": "Retraction first, because it is the one fact worth interrupting someone for, and Crossref answers it free and unmetered: 30 of 30 real library DOIs resolved on Crossref alone. A 429 from OpenAlex used to read as 'no notices found', so a sweep during an outage would have walked the whole library and reported a clean bill of health; it now keeps Crossref's verdict, marks the entry partial, and asks again next time. One run at a time, cancellable, resumable.",
+      "verification": "Targeted Node/DOM tests plus a live Crossref check over real library DOIs.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R33",
+      "title": "비어 있는 것을 사용자가 있는 자리에서 알리기",
+      "gap": "The last three features shipped and then sat empty because they waited on a context-menu item nobody had a reason to look for. Leaving the backfill in that same place would have repeated it exactly.",
+      "entryPoint": "연구 작업 패널 상단 알림 → 지금 채우기",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "refreshNotice"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "backfillPending"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the panel says what has never been filled in, and offers to fill it"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a panel talking to an older runtime simply shows no notice"
+        }
+      ],
+      "status": "verified",
+      "review": "The counts are read from the cache, not the network, so opening the panel costs nothing. A runtime without backfillPending simply shows no notice, so an older pairing degrades rather than throwing. Live Crossref sweep of all 1,072 distinct library DOIs: 1 retracted, 29 corrected or errata, 1,041 clean, 1 not in Crossref -- twenty-nine papers carrying corrections that were invisible in Zotero.",
+      "verification": "Node/DOM tests plus a full live Crossref sweep of the user's own library.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R34",
+      "title": "진짜 Zotero 안에서 돌려보는 자체 점검",
+      "gap": "486 Node tests pass against linkedom and a fixture. Every bug that actually shipped was one only the real runtime could show, and there was no way to run anything inside Zotero without clicking it.",
+      "entryPoint": "prefs.js에 extensions.style-custom.selfCheck=true 후 실행 → Zotero 데이터 폴더의 style-custom-selfcheck.json",
+      "sources": [
+        {
+          "file": "src/selfcheck.js",
+          "marker": "async function run("
+        },
+        {
+          "file": "bootstrap.js",
+          "marker": "selfCheckRepair"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a library-wide sweep awaits Zotero rather than iterating the promise"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a rating stranded on a PDF is lifted to the paper it belongs to"
+        }
+      ],
+      "status": "verified",
+      "review": "It found the bug no unit test could: Zotero.Items.getAll returns a Promise, and six library-wide sweeps iterated it directly, so each threw on its first line. The fixtures handed back a plain array, which is why all of them passed. The fixtures are shaped like the real API now. It also caught reading the repair flags after clearing them, and eight rating tags stranded on attachments that isRegular walked straight past.",
+      "verification": "Run inside the user's own Zotero against their own library: 20 of 23 checks pass, the three failures being a missing mailto and OpenAlex's spent daily budget.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R35",
+      "title": "조회 실패를 URL이 아니라 문장으로",
+      "gap": "A spent daily quota reached the panel as a 300-character OpenAlex URL ending in 'failed with status code 429'. It told the reader nothing they could act on and made a rate limit look like a broken plugin.",
+      "entryPoint": "연구 작업 패널 상태줄",
+      "sources": [
+        {
+          "file": "src/failures.js",
+          "marker": "function describe"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/failures.test.mjs",
+          "name": "a spent quota says which service, how long, and that nothing was lost"
+        },
+        {
+          "file": "test/failures.test.mjs",
+          "name": "the reset time is converted into the reader's own clock"
+        }
+      ],
+      "status": "verified",
+      "review": "Every message says what happened and what to do, in that order, and the reset time is converted into the reader's own clock so they do not have to do UTC arithmetic while deciding whether to wait. A message already written for this plugin's user is left alone; only a URL-shaped transport error is replaced.",
+      "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R36",
+      "title": "탭마다 제각각이던 카드 크기를 하나로",
+      "gap": "A collections card was ninety pixels tall to say 'Aeribacillus, 0 papers': a 14px title here and a 13px one there, a 30px button beside a 24px one, and the controls stacked under the text instead of beside it.",
+      "entryPoint": "연구 작업 패널 · 모든 탭의 카드",
+      "sources": [
+        {
+          "file": "content/workbench.css",
+          "marker": "--sc-card-title"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "sc-card-text"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "all tabs expose functional primary actions and use library service contracts"
+        }
+      ],
+      "status": "verified",
+      "review": "One type and control scale declared once as tokens, so a card in the collections tab and a card in the tabs tab cannot disagree. The headline and its detail go in their own block, so anything a caller appends lands in one row beside them. Height fell from about 90px to about 46px.",
+      "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R37",
+      "title": "논문 출처마다 진짜 로고",
+      "gap": "Nine academic services all rendered as identical grey text. A source is something you should recognise at a glance, not read one word at a time.",
+      "entryPoint": "ZotPoP 검색 결과 배지 · 연구 작업 패널",
+      "sources": [
+        {
+          "file": "src/brand-icons.js",
+          "marker": "const BRANDS"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/brand-icons.test.mjs",
+          "name": "every source this plugin can search has a mark"
+        },
+        {
+          "file": "test/brand-icons.test.mjs",
+          "name": "the licence that lets these ship is in the package"
+        }
+      ],
+      "status": "verified",
+      "review": "Seventeen real brand marks from Academicons 1.9.4 under SIL OFL 1.1, with the licence shipped in LICENSES.md and the reserved name unused, as that licence requires. The six services Academicons does not cover -- OpenAlex, Europe PMC, medRxiv, ChemRxiv, Lens.org, Harzing -- are drawn here in the same stroke family and are deliberately not imitations of anyone's trademark. Each mark keeps its own viewBox, because these come from a font and forcing them into one box would squash every non-square one.",
+      "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R38",
+      "title": "저자를 통계 한 줄이 아니라 사람으로",
+      "gap": "A followed author was a name and four numbers. PostGrabbit already showed the user a face and the people around each PI, and that is what makes a person easier to hold in mind than a row of statistics.",
+      "entryPoint": "연구 작업 패널 → 저자 추적 → 저자 열기",
+      "sources": [
+        {
+          "file": "src/author-portrait.js",
+          "marker": "function choose"
+        },
+        {
+          "file": "src/author-portrait.js",
+          "marker": "function coauthors"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/author-portrait.test.mjs",
+          "name": "a colleague's headshot on the same page is not taken for the author"
+        },
+        {
+          "file": "test/author-portrait.test.mjs",
+          "name": "two equally good candidates are refused rather than guessed"
+        },
+        {
+          "file": "test/author-portrait.test.mjs",
+          "name": "the plugin can never be talked into fetching something off this machine"
+        },
+        {
+          "file": "test/author-portrait.test.mjs",
+          "name": "a co-author network is the people actually on the papers, ranked by how often"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "an author is shown as a person, with the people they publish with"
+        }
+      ],
+      "status": "verified",
+      "review": "The portrait rules are PostGrabbit's, kept rather than reinvented: a candidate must be named on the page, a logo or banner is never a person, and an ambiguous winner is refused outright. One hole was closed on the way over -- on a lab page under /people/, an image whose own alt text names a colleague could win the weakest rule and be served up as the author. The co-author network costs no request at all: the works the tab already fetched carry every authorship, and an edge exists because two names are on the same paper.",
+      "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R39",
+      "title": "키가 없으면 실패할 수밖에 없는 버튼을 먼저 내밀지 않기",
+      "gap": "The journals tab led with an easyScholar grade lookup. The user never had that key -- it is in neither the Zotero profile nor their Aside vault -- so the first button offered could only produce an error.",
+      "entryPoint": "연구 작업 패널 → 저널 지표",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "지표 조회"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "all tabs expose functional primary actions and use library service contracts"
+        }
+      ],
+      "status": "verified",
+      "review": "The route that needs no key comes first, and the easyScholar button appears only once a key exists. Without one the tab says what the key would add rather than offering a control that cannot work.",
+      "verification": "Node/DOM tests, an offline render of the real workbench DOM and CSS, and the in-Zotero self-check against the user's own library.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R40",
+      "title": "보충자료 판별을 파일 이름이 아니라 내용으로",
+      "gap": "The rule looked at filenames -- mmc1.pdf, MOESM1_ESM.pdf, s1.pdf. Measured against this library it flagged 1 attachment out of 1,229, because ZotMoov has renamed every file to 'Author - Year - Title.pdf' and the publisher's name is gone. The badge showed 7 items; the library actually has 29 supplementary files, 17 duplicates and 6 papers filed under the wrong item.",
+      "entryPoint": "Files 열 · 우클릭 → 첨부파일 종류 판별",
+      "sources": [
+        {
+          "file": "src/attachment-kinds.js",
+          "marker": "function classifyGroup"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "scanAttachmentKinds"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "a supplementary file is recognised by what it says, not what it is called"
+        },
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "the same document attached twice is a duplicate, not a second supplement"
+        },
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "a different paper filed under this item is called out"
+        },
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "markup in a Zotero title does not turn a correctly filed paper into somebody else's"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "the files cell tells a supplement, a duplicate and a mis-filed paper apart"
+        }
+      ],
+      "status": "verified",
+      "review": "Zotero already extracts every PDF's text for its own search index, so reading the first page costs nothing and needs no PDF parser. A supplementary file says so in its opening words; an article carries a masthead, a section label or a DOI line. Three things turn up as 'an extra PDF' and they are not the same -- a supplement, the same file twice, and a different paper filed here by mistake -- and calling all three 'SI x2' is what made the badge not worth looking at. Two measured corrections: the title check reads the whole document rather than page one, because a first page often opens with the abstract and never repeats the title (a Nature Chemical Biology review scored 43% and was called foreign); and Zotero titles carry markup, so <span style=\"font-variant:small-caps;\">BREX</span> made twelve correctly filed papers look like somebody else's. The 0.70 threshold is read off the distribution over all 1,211 attachments with text: 1,186 use every word of their title, everything below 0.70 is a real filing mistake, and nothing sits in between.",
+      "verification": "Run live in Zotero over the user's own 1,223 attachments: 1,170 article, 29 supplementary, 17 duplicate, 6 different-paper, 1 unknown -- matching the offline prediction exactly.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R41",
+      "title": "Zotero가 아직 읽지 않은 첨부는 색인부터",
+      "gap": "Eleven attachments had no extracted text, so the scan could not judge them at all and simply reported them as unknown.",
+      "entryPoint": "우클릭 → 첨부파일 종류 판별",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "async indexAttachments"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "a file Zotero has not indexed is indexed first, not written off"
+        },
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "a scan can be told not to index, and then simply reports what it could not read"
+        }
+      ],
+      "status": "verified",
+      "review": "Asking Zotero to index them is the same extraction its own search does, and turns 'cannot tell' into an answer. The option to skip it was called `index`, which the enclosing loop counter shadowed -- 0 !== false, so every scan indexed regardless of what the caller asked; the test that was written to prove the option worked is what found it.",
+      "verification": "Contrast measured numerically for every colour in both schemes, rendered offline from the real stylesheet, and checked live in Zotero.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R42",
+      "title": "전체 색감을 파스텔로",
+      "gap": "The colours were loud and uneven: against white, gold sat at 2.1 contrast and blue at 4.7, so one badge shouted while another was hard to read. That unevenness is what made a row look garish rather than the hues themselves.",
+      "entryPoint": "문헌 목록의 모든 열 · 연구 작업 패널 · ZotPoP 검색 창",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "palette(doc)"
+        },
+        {
+          "file": "content/workbench.css",
+          "marker": "--sc-accent: #4A6CA5"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/styles.test.mjs",
+          "name": "every badge colour lands on the same contrast, so no one of them shouts"
+        },
+        {
+          "file": "test/styles.test.mjs",
+          "name": "light and dark semantic text, muted metadata and selected navigation meet normal-text contrast"
+        }
+      ],
+      "status": "verified",
+      "review": "The hue stays, the saturation drops to about a third, and the lightness of every colour is chosen so they all land within 0.5 of the same contrast against the surface behind them -- evenness is the point. The softness lives in the fills: the pill tint is raised from 0.13 to 0.20 in light and 0.20 to 0.26 in dark, rather than the ink being washed out. Three colours had to stay deeper than the family because they carry text on themselves: the accent under a white label, and the error ink on its own wash. A dead rule matching a colour nothing has emitted for a long time went with it.",
+      "verification": "Contrast measured numerically for every colour in both schemes, rendered offline from the real stylesheet, and checked live in Zotero.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R43",
+      "title": "이미 가진 보충자료를 다시 받지 않기",
+      "gap": "The downloader decided 'already have it' by comparing publisher filenames against what was attached. A file mover renames those away, so all twenty-nine supplements in this library looked absent and would have been fetched again as duplicates.",
+      "entryPoint": "우클릭 → 보충자료 내려받기",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "이미 보충자료"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "a paper whose supplement is already on the shelf is not fetched again"
+        },
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "a supplement that was just downloaded is badged without waiting for a scan"
+        }
+      ],
+      "status": "verified",
+      "review": "It asks the content scan instead, which knows what each file is whatever it is called, and skips the paper without spending a request. A file that arrives from the supplementary endpoint records its verdict as it lands, so the badge is right immediately rather than after the next sweep.",
+      "verification": "Verified live: the scan holds 29 supplements, every one of which the downloader now skips.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R44",
+      "title": "보충자료만 들어 있는 문헌 찾아 원논문에 붙이기",
+      "gap": "Twenty-two items in this library are a supplement filed as its own bibliography entry, disconnected from the paper it belongs to. Only five say so in the title; the rest are invisible without reading the file.",
+      "entryPoint": "연구 작업 → 첨부 → 보충자료만 있는 문헌",
+      "sources": [
+        {
+          "file": "src/attachment-kinds.js",
+          "marker": "function findHome"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "async rehomeSupplement"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "a supplement's home paper is suggested only when the answer is not a guess"
+        },
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "the supplement marker comes off a title without taking the title with it"
+        },
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "rehoming a supplement moves it and retires only an empty stub"
+        }
+      ],
+      "status": "verified",
+      "review": "The pairing is a suggestion the user confirms one at a time, never a bulk action. Two things make a wrong guess easy: a short generic title ('Cell-free gene expression') matches almost any document, and a library often holds two papers by one group on one molecule. So a candidate needs five distinct long words to count at all, has to beat the runner-up by a clear margin, and a match found in body text is held to a higher bar than one found in the title -- a supplement cites its neighbours, and one here matched a different paper by the same group on the same enzyme, fully, from a sentence in its methods. Tightening that turned three wrong confident answers into one honest 'I don't know'. Moving a supplement retires the stub only when nothing else is left on it, and only into Zotero's trash.",
+      "verification": "Verified live: 22 orphans found, 11 with a confident home.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R45",
+      "title": "받기 전에 몇 편이나 받을 수 있는지 먼저 세기",
+      "gap": "The download was a blind sweep. Measured over this library: of 1,146 papers with a DOI, 697 are in PMC, 506 of those have supplementary material, and only 336 are open access -- the only set whose archive the endpoint hands over. A sweep over everything spends a thousand requests to fetch a few hundred files and says nothing about which.",
+      "entryPoint": "우클릭 → 보충자료 → 먼저 확인만",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "async previewSupplementary"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/attachment-kinds.test.mjs",
+          "name": "the download is counted before it is started, and closed articles are not attempted"
+        }
+      ],
+      "status": "verified",
+      "review": "One search request per paper answers the question first and costs no downloads at all. A paper that already has its supplement, and one with neither DOI nor title, are answered without asking anything.",
+      "verification": "Coverage measured directly against Europe PMC for all 1,146 DOIs in the library.",
+      "nativeActivationVerified": true
+    },
+    {
+      "round": "R46",
+      "title": "관심 저자의 이동은 논문이 아니라 저자 기록에서 읽기",
+      "gap": "A move was read off the papers: first the institution on the newest authorship, then every institution across the window. Live, that reported seven, then six, moves among 109 followed authors, and not one was a move -- a second appointment (Harvard and the Broad), an institute inside the university (QB3 in Berkeley), a school named after it (Harvard Medical School), the same place spelled two ways (DTU, 'UC berkely', 'MIT chemistry').",
+      "entryPoint": "관심 저자 → 카드의 소속 줄 · 백필의 관심 저자 단계",
+      "sources": [
+        {
+          "file": "src/discover.js",
+          "marker": "function watchedProfilesURL"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "const profile = profiles.get(row.id);"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "retireLooseMoves()"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "a move is read from the author record, so a second appointment or a renamed place is not one"
+        },
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "moves recorded by the first rule are retired when the store loads"
+        }
+      ],
+      "status": "verified",
+      "review": "One request per fifty authors reads OpenAlex's own list of current appointments, each with a ROR and the years it was signed. The first sweep adopts OpenAlex's name for the place the author was followed with and keeps the typed text; a move is when every remembered appointment has left that list, dated from the record. Live after the change: 109 records read, 0 moves, 73 authors with more than one appointment, 69 typed places replaced by canonical ones. Moves made by the earlier rules are retired when the store loads."
+    },
+    {
+      "round": "R47",
+      "title": "저널 프로필: JCR 페이지처럼, 로그인 없이",
+      "gap": "The journals tab was a list of names with a figure, and the user asked for what JCR's journal page shows -- each fact with its own sign, and the list by field. JCR's site needs an institutional login, so nothing could be read from it here; the registry shipped with the plugin knows the figure, quartile, abbreviation, publisher and ISSN, and OpenAlex knows the subject fields, h-index, output, open-access status, fee, country and homepage.",
+      "entryPoint": "작업 패널 → 저널 → 저널 이름 클릭",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "function journalProfile(j,card)"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "async refreshJournalProfiles"
+        },
+        {
+          "file": "src/journal-metrics.js",
+          "marker": "function profilesURL"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+        },
+        {
+          "file": "test/journal-profiles.test.mjs",
+          "name": "cached figures are given their profiles fifty at a time, and the rest marked as asked"
+        }
+      ],
+      "status": "verified",
+      "review": "The profile fields ride on the request the figure already costs; journals cached before them are filled fifty at a time by ISSN -- 258 journals in this library in six requests, every one with a subject field afterwards. On the tab: the figure in its own column, quartile chip, field chips that filter, a grouped-by-field view with ranks, and a profile under any name with twelve signed facts and a button to the JCR page itself."
+    },
+    {
+      "round": "R48",
+      "title": "관심 저자의 특허, 키가 있을 때만",
+      "gap": "The user chose patents as the third tier of watching an author: a filing is the earliest public sign of where a lab is heading, often a year before the paper. PatentsView, which answered without a key, was retired into the USPTO Open Data Portal in 2025; Europe PMC's patent index stops in 2012; EPO and Lens need keys too. So the tier needs a free USPTO key, and without one it must say so rather than fail.",
+      "entryPoint": "설정 → 지표 → USPTO Open Data Portal 키 · 관심 저자 카드의 특허 배지",
+      "sources": [
+        {
+          "file": "src/patents.js",
+          "marker": "function matchesInventor"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "async sweepWatchedPatents"
+        },
+        {
+          "file": "src/selfcheck.js",
+          "marker": "patents: the USPTO key, if any, is accepted"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/patents.test.mjs",
+          "name": "patents are read from the portal's shape and from PatentsView's, and namesakes are told apart"
+        },
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "patents run only with a USPTO key, take the first look as the baseline, and mark what appears later"
+        }
+      ],
+      "status": "verified",
+      "review": "One request per followed author, at most weekly, the key sent to api.uspto.gov only. The reader accepts the portal's field names and PatentsView's, so a rename degrades to nothing found; namesakes are told apart by the LAST; FIRST form the portal writes. The first look is the baseline; later ones badge the card with what is new, and the detail lists each patent with a link to its public page. No key was available in this session, so the live response shape is unverified: the self-check's patents entry runs one real query the moment a key is entered and reports what came back."
+    },
+    {
+      "round": "R49",
+      "title": "종류별로 한 번에 가르기: 특허·학위논문·프리프린트",
+      "gap": "Patents and theses sat among the papers with only a chip on the tree row; the user asked for them to be a layer of their own. Zotero's tree cannot group, and the panel's type filter was a select of raw itemType names.",
+      "entryPoint": "작업 패널 → 검색줄 아래 종류 칩",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "function drawKindChips"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the library splits by kind with one chip: patents and theses apart from the papers"
+        }
+      ],
+      "status": "verified",
+      "review": "A row of chips under the search line counts the library by kind -- 논문 1167 · 프리프린트 26 · 학위논문 6 -- and one click shows only that kind; the select says the same in the same words, and each card names its kind unless it is a plain paper. The journal figure takes the same colour bands as the IF column in the tree."
+    },
+    {
+      "round": "R50",
+      "title": "지도의 범례와 카드의 저널 표식",
+      "gap": "The citation map paints every node in its journal's colour, and a reader new to it has no way to know that lilac is Nature and coral is Cell. The explore cards named the journal in plain grey text while the tree, the related list and the journals tab all showed its mark.",
+      "entryPoint": "작업 패널 → 관계 그래프 · 보유 문헌 카드",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "function drawJournalLegend"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the map names its commonest journals in their own colours, and a card wears its journal mark"
+        }
+      ],
+      "status": "verified",
+      "review": "Under the map's summary line, the six commonest journals in it, each in its own mark with how many nodes it accounts for; the older tag/author graph now carries venues too, so it is coloured and legended alike. Every explore card wears its journal's mark before the venue, the same mark the tree and the map use."
+    },
+    {
+      "round": "R51",
+      "title": "전체 화면 토글과 제목 마크업",
+      "gap": "The panel floats at a dragged-out size, which on a laptop leaves the list in a letterbox; the user asked for full screen. Titles with Zotero's inline markup showed \"<i>Bacillus subtilis</i>\" as text.",
+      "entryPoint": "패널 머리줄의 전체 화면 버튼 · 제목줄 더블클릭",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "function setMaximized"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "function rich(parent,text)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "one press fills the window, the next puts the panel back, and the choice is remembered"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "markup in a title is drawn as italics and subscripts, not shown as tags"
+        }
+      ],
+      "status": "verified",
+      "review": "One press fills the window edge to edge, the next puts the panel back, double-clicking the title bar does the same, and the choice is remembered. Six inline tags (i, b, em, strong, sub, sup) are drawn as what they mean wherever the panel writes text; anything else stays literal, and attributes get the plain words."
+    },
+    {
+      "round": "R52",
+      "title": "분야를 큰 것부터 층층이 고르기",
+      "gap": "Twenty-six field chips lay flat in one row, unordered by size. The user asked for the hierarchy arranged large to small and picked level by level.",
+      "entryPoint": "작업 패널 → 저널 → 대분류·분야·세부 분야 칩",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "const LEVELS=[['domain','대분류'],['field','분야'],['subfield','세부 분야']];"
+        },
+        {
+          "file": "src/journal-metrics.js",
+          "marker": "subfield: text(t?.subfield?.display_name)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+        }
+      ],
+      "status": "verified",
+      "review": "OpenAlex's topic hierarchy (domain > field > subfield) is kept on each journal's profile; profiles filled before it are asked once more. One chip row per level, largest first; a chosen row folds to its choice with the way back beside it, and the next level opens beneath. Grouping follows the level under the choice."
+    },
+    {
+      "round": "R53",
+      "title": "논문 함께 읽기: 주장·논리 흐름·논쟁 여지",
+      "gap": "The comparison table put papers side by side as fields. The user wanted the model to read them together: each one's claim and the chain it argues along, and where they pull against each other.",
+      "entryPoint": "작업 패널 → 논문 비교 → 함께 읽기",
+      "sources": [
+        {
+          "file": "src/assist.js",
+          "marker": "prompts.compare="
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "function drawCompareInsight"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/assist.test.mjs",
+          "name": "reading papers together sends two to six abstracts with their notes, and refuses less or more"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the comparison table reads its papers together and keeps the reading as a note"
+        }
+      ],
+      "status": "verified",
+      "review": "Two to six selected papers -- titles, abstracts, the reader's own notes -- go to the configured AI service with a fixed outline: core claim, line of argument as an arrow chain, strength and limits of the evidence, common ground, every point of contention with the evidence that would settle it, open questions. It is asked not to invent and to say where abstracts are silent. The outline comes back editable, copyable, and can be kept as a note on the first paper."
+    },
+    {
+      "round": "R54",
+      "title": "관심 저자 목록 관리",
+      "gap": "A hundred cards are for noticing news, not for tending the list: nothing let the user find one author, sort by who was checked longest ago, or let one go without opening the card.",
+      "entryPoint": "작업 패널 → 저자 추적 → 목록 관리",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "function drawWatchManager"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the followed list can be tended as a table: found, sorted, let go"
+        }
+      ],
+      "status": "verified",
+      "review": "A table of the followed authors: name, place (with what was typed when followed in the tooltip, shaded when they moved), last check, new papers, patents, and an unfollow button on each row; found by name or place, sorted by news, name, place, longest unchecked or most recently followed; the whole list copyable."
+    },
+    {
+      "round": "R55",
+      "title": "문헌 트리와 ZotPoP에서도 제목의 기울기",
+      "gap": "The panel drew a title's markup, but the tree column and ZotPoP's list still printed \"<i>Bacillus subtilis</i>\" as text, and ZotPoP imported the plain words, losing the italics for good.",
+      "entryPoint": "문헌 트리 제목 열 · ZotPoP 결과 목록",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "paintTitleMarkup(titleText, item, win)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "the tree draws the italics and subscripts of a title instead of its tags"
+        }
+      ],
+      "status": "verified",
+      "review": "The tree's title cell is rebuilt with the six inline tags drawn whenever the tree prints them again; ZotPoP keeps the source's markup beside the plain title, draws it in the list and the detail, and imports it as Zotero itself would."
+    },
+    {
+      "round": "R56",
+      "title": "함께 읽기 지시문과 새 소식만 보기",
+      "gap": "The read-together outline was fixed, while the remark and tag prompts could be changed; and a hundred quiet author cards hid the ten with news.",
+      "entryPoint": "설정 → 번역·AI → 함께 읽기 지시문 · 저자 추적 → 새 소식만",
+      "sources": [
+        {
+          "file": "src/assist.js",
+          "marker": "aiComparePrompt"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "state.watchFreshOnly"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/assist.test.mjs",
+          "name": "the reader can replace the outline for reading together; the language and the no-invention rule stay"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "one chip keeps only the followed authors with something new"
+        }
+      ],
+      "status": "verified",
+      "review": "A setting replaces the outline; the output language and the no-invention rule are always appended. A chip on the followed list keeps only the people with a new paper, a new patent or a move."
+    },
+    {
+      "round": "R57",
+      "title": "패널을 Zotero 탭에 넣기",
+      "gap": "The panel floated over the window; the user asked whether it could sit in a tab like a reader.",
+      "entryPoint": "패널 머리줄의 탭 버튼",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "function dock({save=true}={})"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the panel can live in a Zotero tab, remembers it, and comes back when the tab closes"
+        }
+      ],
+      "status": "verified",
+      "review": "Zotero_Tabs.add gives a tab and a container; the same panel element moves into it and fills it, with the tab bar as its handle. Closing the tab hides the panel, opening the panel selects the tab, and the choice is remembered so the next open goes straight to a tab. The float button brings it back over the window."
+    },
+    {
+      "round": "R58",
+      "title": "분야 선택을 한 줄의 세 메뉴로",
+      "gap": "The chip rows for the subject hierarchy were still hard to read, and a field could not be picked until a domain was.",
+      "entryPoint": "작업 패널 → 저널 → 대분류 › 분야 › 세부 분야 메뉴",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "class:'sc-field-line'"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+        }
+      ],
+      "status": "verified",
+      "review": "One line, three menus, large to small, each listing what lies under the choice to its left with counts, largest first; a smaller level can be picked on its own and the levels above it follow; menus not yet narrowed group their options under the parent, biggest parent first. Each journal's fields sit on one line, each field once with its subfields after it."
+    },
+    {
+      "round": "R59",
+      "title": "카드 위에 손을 올렸을 때 덜 붙어 보이게",
+      "gap": "On hover the checkbox, its word and the two buttons crowded together under the status dot, and the buttons wrapped under the checkbox.",
+      "entryPoint": "보유 문헌 카드에 마우스 올리기",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "const actions=bar(heading);"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+        }
+      ],
+      "status": "verified",
+      "review": "The buttons take the figures' place at the far right of the title row while the pointer is on the card; the checkbox keeps its word for the screen reader only; the dot sits further in and the row has more air."
+    },
+    {
+      "round": "R60",
+      "title": "저널을 표로: 이름은 제 색의 글자로, 열 이름과 검색",
+      "gap": "Journal rows were three-line cards, the controls sat far above the field menus, and journals could not be searched apart from the paper search.",
+      "entryPoint": "작업 패널 → 저널",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "class:'sc-journal-table'"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+        }
+      ],
+      "status": "verified",
+      "review": "A real table: rank, the name in the journal's own colour as text (no box), quartile, abbreviation, house, papers here, fields, and the figure at the edge, with the column names once at the top and the two lookups laid over the row on hover. Facts are gathered once per set of items and typing redraws only the list a beat after the last key, which removed the lag; a title-rule journal now carries its registry quartile too. A search box finds journals by name, abbreviation, publisher or field."
+    },
+    {
+      "round": "R61",
+      "title": "읽은 페이지를 잔디처럼",
+      "gap": "The reading tab drew a numbered circle per page, a line of them per paper, that said nothing until read; the user pointed at GitHub's contribution graph.",
+      "entryPoint": "작업 패널 → 읽기 진행",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "class:'sc-page-cell'"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the pages of a paper read as a strip of shaded squares, with the number and the seconds in the tooltip"
+        }
+      ],
+      "status": "verified",
+      "review": "A strip of small squares, one per page, shaded in five steps from the fill to the done green by time spent, the page number and seconds in the tooltip, a click opening the page, and a key from little to much."
+    },
+    {
+      "round": "R62",
+      "title": "항목 메뉴의 모든 동사에 표식",
+      "gap": "The Style Custom submenu was twenty lines of text; the user asked for icons so it could be scanned.",
+      "entryPoint": "문헌 우클릭 → Style Custom",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "get MENU_ICONS()"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "every entry of the item menu carries a drawn sign"
+        }
+      ],
+      "status": "verified",
+      "review": "Every entry carries a small drawn sign inlined as a data URI, the same strokes the panel's sidebar uses, and the menu is cut into groups by separators: reading state, search, rating and files, the panel, the sweeps."
+    },
+    {
+      "round": "R63",
+      "title": "다섯 곳의 디자인 리뷰를 받아 반영",
+      "gap": "The user asked for design completeness and for review agents to be used. Five read-throughs -- chrome and cards, journals table, authors tab, reading/map/compare/notes, settings and the citation dialog -- returned 69 findings.",
+      "entryPoint": "패널 전체 · 설정 창 · 인용 대화상자",
+      "sources": [
+        {
+          "file": "src/settings.js",
+          "marker": "const t=text=>typeof text==='string'&&runtime.t?runtime.t(text):text;"
+        },
+        {
+          "file": "content/workbench.css",
+          "marker": "--sc-tone-top"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "panel.setAttribute('aria-modal', 'true');"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the followed list can be tended as a table: found, sorted, let go"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the pages of a paper read as a strip of shaded squares, with the number and the seconds in the tooltip"
+        }
+      ],
+      "status": "verified",
+      "review": "Applied across four commits: tone and reading-ink tokens with dark variants; one table style for journals and the followed list; the map's CSS fill override removed so journal colours show; square page cells in fixed rows; row-height-stable card hover; kind chips in the context row; blank instead of dashed figures; the settings pane translated, its help text rendered, errors marked, keys explained with a reveal button, number ranges stated, boolean rows on one line, a confirm before a category reset; the citation dialog modal with a focus trap, multi-item previews on separate lines, the hint restored after a copy."
+    },
+    {
+      "round": "R64",
+      "title": "저널 지표에 JCR 전체 목록과 등수",
+      "gap": "The journals tab listed only the 255 journals the library holds; the user wanted every JCR journal, with each one's place among all of them, including journals they do not hold.",
+      "entryPoint": "작업 패널 → 저널 → 내 서재 / 전체 JCR",
+      "sources": [
+        {
+          "file": "src/journal-identity.js",
+          "marker": "function registryRanked()"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "function registryFacts(row,items)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the journals tab can show every JCR journal, ranked, with the ones the library lacks marked"
+        },
+        {
+          "file": "test/journal-identity.test.mjs",
+          "name": "the registry can be read in one order, JIF first, with the place of each journal in it"
+        }
+      ],
+      "status": "verified",
+      "review": "The registry is read once in JIF order and each journal carries its rank; the rank column shows that place in both views. A toggle switches between the library's journals and all 22,594, a hundred a page, searchable; a journal the library lacks is present but quieter, its profile shows the registry facts and offers a ZotPoP search."
+    },
+    {
+      "round": "R65",
+      "title": "영어로도 전부: 메뉴와 대화상자",
+      "gap": "The panel and settings spoke the chosen language, but the item menu's labels and every alert the plugin raised were Korean literals, so an English-locale user met Korean the moment they right-clicked.",
+      "entryPoint": "문헌 우클릭 → Style Custom · 플러그인의 모든 알림",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "say(win, message) {"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/i18n.test.mjs",
+          "name": "every translation is for a string that is actually in the source"
+        }
+      ],
+      "status": "verified",
+      "review": "Menu labels pass through the dictionary as they are made; every alert goes through one method that translates a line at a time, so a report of figures reads in either language."
+    },
+    {
+      "round": "R66",
+      "title": "주석·컬렉션·관련 논문 탭 다시 그리기",
+      "gap": "Annotations were loose cards with a hex filter box duplicating the swatches; collections were boxed cards with a button and a checkbox each; the related tab, with nothing selected, showed one line that read as an error.",
+      "entryPoint": "작업 패널 → 주석 · 컬렉션 · 관련 논문",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "class:'sc-collection-tree'"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "const GROUP_NOTES="
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the annotation list reads as a pass through the paper"
+        }
+      ],
+      "status": "verified",
+      "review": "Annotations carry their colour down the card's edge, name their kind in words, set the quote apart and keep the memo as a quiet line; the selection's three actions sit with the selection. Collections are a tree with a bar per row for what it holds, a search box, a hide-empty switch and a count line; a name is the way in. The related tab explains its three lists and how to start, and each list carries a line saying what it is."
+    },
+    {
+      "round": "R67",
+      "title": "막다른 클릭 20건과 좁은 패널 18건",
+      "gap": "The user asked for every control that cannot be clicked and every layout with no way out. Two read-throughs found twenty dead ends and eighteen widths where something was clipped, stranded or unreadable.",
+      "entryPoint": "패널 전체, 340–1400px",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "if(event.target!==row)return; // Space and Enter typed in the memo stay in the memo."
+        },
+        {
+          "file": "content/workbench.css",
+          "marker": "Narrow panels: what folds, what hides, what wraps"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "every button on every tab survives a press without throwing, and the tab still draws"
+        },
+        {
+          "file": "test/styles.test.mjs",
+          "name": "resizable panel has container-based width/height adaptation and small-viewport scroll escape"
+        }
+      ],
+      "status": "verified",
+      "review": "Dead ends: keys typed in memos and checkboxes no longer toggle their rows; a colour filter, a news filter and a field pick each show their state and offer a way out; searches keep focus; empty tabs offer the button that fills them; map nodes select in place and take Space; Escape leaves a field, not the panel; menu entries report. Widths: the nav wraps instead of scrolling off-screen; card figures drop under the title and empty ones vanish; the journal table's hover buttons escape the clipped cell and the name takes the room; the map keeps a readable size and scrolls; the manager table, the selection tools, the footer, the watch tools, the collections rows and the segmented toggles fold instead of spilling; the reading strip is fluid; the two viewport media blocks that fought the container rules are gone."
+    },
+    {
+      "round": "R68",
+      "title": "처음 여는 사람이 보는 것",
+      "gap": "The plugin assumed a filled library, a key and a reader who already knew the vocabulary. A first-open read-through found the panel, the search window and the preferences all silent about what to do first.",
+      "entryPoint": "패널 첫 실행, ZotPoP 첫 실행, 설정 첫 화면",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "처음 여셨네요. 왼쪽 탭이 기능이고"
+        },
+        {
+          "file": "src/settings.js",
+          "marker": "const FIRST=['citationEmail','openalexApiKey','aiEndpoint']"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the first open explains the panel once and never again"
+        },
+        {
+          "file": "test/settings.test.mjs",
+          "name": "the start-here block lists only the blank keys and sends each to its field"
+        }
+      ],
+      "status": "verified",
+      "review": "첫 실행: 패널 맨 위에 한 줄 안내가 뜨고 '알겠어요'를 누르면 다시 나오지 않는다. 빈 서재·주석 없음·문헌 없음 탭은 그 자리에서 채울 버튼을 준다. 설정 첫 화면에는 비어 있는 키 세 개만 '먼저 할 것'으로 올라오고, 채우면 사라진다. ZotPoP은 키 없는 OpenAlex에 배너와 200건 상한을 걸고, 검색 전 지표 칸은 대시 대신 무엇이 뜰지 한 줄로 말한다. 읽기 0초는 기본으로 숨기고, 인용 수 배경 조회는 키가 있을 때만 돈다. 남아 있던 한국어 문자열 여덟 개를 번역 경로에 넣었다."
+    },
+    {
+      "round": "R69",
+      "title": "메뉴의 표식과 자기 점검이 연 창들",
+      "gap": "The user found Style Custom the only unmarked line among the other plugins' item-menu entries, and found four empty note windows stacked on the screen after a self-check run.",
+      "entryPoint": "문헌 우클릭 메뉴, 도구 메뉴, 자기 점검",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "The parent entry sits among other plugins' entries"
+        },
+        {
+          "file": "src/selfcheck.js",
+          "marker": "A note title is a button label, so the verb list cannot catch it"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "every button that opens a Zotero window is marked so a sweep can leave it alone"
+        }
+      ],
+      "status": "verified",
+      "review": "우클릭 메뉴의 'Style Custom'과 도구 메뉴의 두 항목에 패널 모양 표식을 붙였다. 자기 점검의 버튼 일괄 누르기는 노트 제목처럼 동사가 없는 버튼까지 눌러 빈 노트 창을 쌓았다. 창을 여는 버튼은 이제 data-opens로 스스로를 밝히고, 점검은 그런 버튼을 건너뛴다. ZotPoP의 도구 메뉴 항목에도 돋보기 표식을 넣었다."
+    },
+    {
+      "round": "R70",
+      "title": "어두운 화면에서 읽히는 색",
+      "gap": "Measured every ink against the surface it is drawn on. Twenty-five colours missed the 4.5:1 a reader needs, and one dark-mode rule painted the impact factor in near-black on a dark panel.",
+      "entryPoint": "밝은 테마·어두운 테마 전체",
+      "sources": [
+        {
+          "file": "content/workbench.css",
+          "marker": "--sc-tone-top: #8556AD"
+        },
+        {
+          "file": "src/journal-identity.js",
+          "marker": "The bar is 4.5, what a"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/styles.test.mjs",
+          "name": "every ink token reads against the surface it is drawn on, in both themes"
+        }
+      ],
+      "status": "verified",
+      "review": "어두운 테마에서 저널 표의 JIF 숫자는 거의 검은색으로 칠해져 보이지 않았다. 그 규칙을 지우고 색조 토큰이 두 테마 모두에 적용되게 했다. 밝은 테마의 잉크 21개, 어두운 테마의 6개를 같은 색상을 유지한 채 명도만 움직여 4.5:1을 넘겼다. 채운 버튼과 배지는 배경의 밝기에 따라 흰 글자 또는 검은 글자를 고른다. 저널 마크의 잉크는 고정 명도 대신 색상별로 대비를 걸어 노란 계열도 읽힌다. 토큰 대비는 이제 테스트가 지킨다."
+    },
+    {
+      "round": "R71",
+      "title": "초당 한 번의 디스크 쓰기와 조용한 실패들",
+      "gap": "A reading tick wrote the whole store and rebuilt the item tree once a second, a failed write said nothing, a failed duplicate check read as \"not in the library\", and the journal menus walked 22,594 rows six times per keystroke.",
+      "entryPoint": "PDF 읽는 중, 저널 탭, 가져오기",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "The cells are already repainted in place"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "A disk that will not take the file loses reading time"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a write that fails says so once in the panel, and says it again only after a write succeeds"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "rows for papers that have left the library are dropped, and a small store is left alone"
+        }
+      ],
+      "status": "verified",
+      "review": "읽는 중에는 셀만 다시 그리고, 저장은 30초에 한 번과 종료 시로 미룬다. 동기화 중에는 알림을 받지 않는다. 저장 실패는 패널에 한 번 말하고, 성공 전까지 반복하지 않는다. 라이브러리에서 사라진 항목의 기록은 시작할 때 한 번 정리한다. 참고문헌 목록은 500개까지만 보관한다. 관심 저자 신호 조회는 5건씩 병렬로 돈다. ZotPoP의 중복 검사는 실패를 삼키지 않고 알리며, 제목 색인은 가져오기 1회당 한 번만 읽는다. 저널 검색은 행마다 검색 문자열을 미리 만들고 분야 메뉴 결과를 재사용한다."
+    },
+    {
+      "round": "R72",
+      "title": "말이 통하는 문구",
+      "gap": "The plugin spoke in the vocabulary of the people who built it: endpoint, Bearer, component, index, midnight UTC. Menu entries carried their whole scope in brackets, and the same thing had two names in each language.",
+      "entryPoint": "메뉴·설정·오류 메시지 전체",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "A menu entry is a verb, not a sentence"
+        },
+        {
+          "file": "src/failures.js",
+          "marker": "The reader's own clock"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a menu verb stays short and says the rest in its tooltip"
+        }
+      ],
+      "status": "verified",
+      "review": "endpoint는 'AI 서버 주소', Bearer 헤더는 '인증 헤더', 컴포넌트는 '기능', 'Zotero 색인'은 '본문을 읽어 둠'으로 바꿨다. 'UTC 자정'은 한국 시간으로 적고, 영어권 사용자에게는 자기 시계의 시각이 보인다. 괄호 안에 범위를 늘어놓던 메뉴 8개는 동사만 남기고 설명을 툴팁으로 옮겼다. 영어 쪽에서 한 기능에 두 이름을 쓰던 곳(citation map, followed)을 하나로 모았다. 메뉴 동사 길이는 테스트가 지킨다."
+    },
+    {
+      "round": "R73",
+      "title": "막다른 오류 메시지 33건",
+      "gap": "Thirty-three errors named what went wrong and stopped there. A reader who hit one had to guess whether to wait, to fix something, or to give up.",
+      "entryPoint": "오류가 나는 모든 자리",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "ZotPoP이 설치되어 있지 않습니다. 도구 → 부가 기능에서 설치한 뒤 다시 시도하세요."
+        },
+        {
+          "file": "src/library.js",
+          "marker": "역링크 기능이 꺼져 있습니다. 설정 → Style Custom → 보기에서 켜세요."
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "an error message tells the reader what to do next"
+        }
+      ],
+      "status": "verified",
+      "review": "오류 메시지 33건에 다음 행동을 붙였다. 기능이 꺼져 있으면 어느 설정에서 켜는지, 값이 모자라면 무엇을 채우는지, 한도에 걸리면 몇 개까지인지 말한다. 할 일이 정말 없는 네 건만 예외로 두고, 나머지는 모두 '-세요'로 끝나야 한다는 규칙을 테스트가 지킨다."
+    },
+    {
+      "round": "R74",
+      "title": "저널 22,594종의 분야, 그리고 주석 탭의 무게",
+      "gap": "The journals tab could group by subject only for the journals the library already held and had an OpenAlex profile for: 206 of 22,594. Every other row showed an empty subject cell, and the three subject menus counted in the tens. The annotations tab drew a textarea under every highlight, so a library with six hundred of them spent most of its drawing on empty memo boxes.",
+      "entryPoint": "연구 작업 패널 → 저널, 주석",
+      "sources": [
+        {
+          "file": "scripts/build-journal-fields.py",
+          "marker": "distinct domain/field/subfield triples that its top topics belong to"
+        },
+        {
+          "file": "src/journal-identity.js",
+          "marker": "function registryLevels(title)"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "const unknownLabel=T('분야 미상');"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/journal-identity.test.mjs",
+          "name": "the registry carries each journal’s subjects, packed against one table of names"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a memo saves itself, says so, and is not lost when the panel closes"
+        }
+      ],
+      "status": "verified",
+      "review": "OpenAlex의 topic 계층을 등재 저널 전체에 쓸어 담아 레지스트리에 함께 실었다. 이름표 하나를 공유하고 행마다 색인만 두어 파일이 크게 늘지 않는다. 분야를 모르는 저널은 메뉴에서 '분야 미상'으로 따로 고를 수 있다. 주석 탭은 메모가 있는 주석에만 상자를 그리고, 나머지는 '메모' 버튼을 누를 때 만든다. 한 번에 그리는 수도 설정에서 바꾼다."
+    },
+    {
+      "round": "R75",
+      "title": "우클릭에서 바로 가는 관련 논문과 책임저자",
+      "gap": "Both the related-papers tab and author tracking start from one paper, and the paper was already selected when the menu opened. Reaching either meant opening the panel, finding the tab, and pressing 「현재 선택 가져오기」 to hand it the selection it could have read. Author tracking then listed every name and left the reader to guess which one was the lab.",
+      "entryPoint": "문헌 우클릭 → Style Custom",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "action(\"이 논문 책임저자 추적\""
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "const wanted=state.focus==='pi'?"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "the item menu opens the panel on the paper under the pointer, not on an empty tab"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "asking for the paper’s senior author opens that person, and keeps the other authors one click away"
+        }
+      ],
+      "status": "verified",
+      "review": "문헌 우클릭 메뉴에 「이 논문의 관련 논문」과 「이 논문 책임저자 추적」을 넣었다. 패널이 선택된 문헌을 그대로 읽어 해당 탭을 연다. 책임저자는 OpenAlex 저자 목록의 마지막 이름으로 보고 곧장 그 사람을 연다. 나머지 저자는 한 번 눌러 돌아간다. 둘 다 문헌이 하나일 때만 열리고, 여럿이면 하나만 고르라고 말한다."
+    }
+  ],
+  "introducedInVersion": "0.6.0"
 }

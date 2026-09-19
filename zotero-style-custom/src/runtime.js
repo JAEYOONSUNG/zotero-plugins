@@ -3445,6 +3445,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       half:[['circle',{cx:8,cy:8,r:5}],['path',{d:'M8 3a5 5 0 010 10z',fill:'currentColor',stroke:'none'}]],
       disc:[['circle',{cx:8,cy:8,r:5,fill:'currentColor'}]],
       search:[['circle',{cx:7.25,cy:7.25,r:4.25}],['line',{x1:10.5,y1:10.5,x2:13.5,y2:13.5}]],
+      related:[['circle',{cx:4.4,cy:11.4,r:2.1}],['circle',{cx:11.5,cy:4.6,r:2.1}],['line',{x1:6,y1:9.9,x2:10,y2:6.1}]],
+      authors:[['circle',{cx:8,cy:5.6,r:2.5}],['path',{d:'M3.3 13.1c.7-2.5 2.5-3.8 4.7-3.8s4 1.3 4.7 3.8'}]],
       star:[['path',{d:'M8 2.6l1.7 3.6 3.9.5-2.8 2.7.7 3.9L8 11.4l-3.5 1.9.7-3.9L2.4 6.7l3.9-.5z'}]],
       journals:[['line',{x1:4,y1:12.6,x2:4,y2:8.6}],['line',{x1:8,y1:12.6,x2:8,y2:5}],['line',{x1:12,y1:12.6,x2:12,y2:10}],['line',{x1:2.4,y1:12.6,x2:13.6,y2:12.6}]],
       reading:[['path',{d:'M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z'}],['line',{x1:8,y1:4.8,x2:8,y2:13.4}]],
@@ -3673,6 +3675,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       action("커스텀 열로 전환",()=>this.useColumns(win),body,"columns");
       action("연구 작업 패널",()=>state.workbench?.toggle(true),body,"panel");
       action("관계 그래프 열기",()=>state.workbench?.show('graph'),body,"graph");
+      /* The paper under the pointer is already the question. Both of these
+         used to mean opening the panel, finding the tab and pressing 「현재
+         선택 가져오기」 to hand it the paper that was selected all along. */
+      action("이 논문의 관련 논문",()=>{
+        if(this.selected(win).length!==1)throw new Error("관련 논문은 문헌 하나를 기준으로 찾습니다. 문헌을 하나만 선택하세요.");
+        state.workbench?.show('related');
+      },body,"related","이 논문을 인용한 논문, 이 논문이 인용한 문헌, 주제가 가까운 논문을 OpenAlex에서 찾습니다.");
+      action("이 논문 책임저자 추적",()=>{
+        if(this.selected(win).length!==1)throw new Error("책임저자는 문헌 하나에서 찾습니다. 문헌을 하나만 선택하세요.");
+        state.workbench?.show('authors','pi');
+      },body,"authors","마지막에 이름을 올린 저자를 이 논문의 책임저자로 보고, 그 사람의 최근 논문·소속 이동·특허를 엽니다.");
       make("menuseparator",null,body);
       action("지표·읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();},body,"refresh","저장된 값을 다시 읽어 열을 새로 그립니다. 네트워크는 쓰지 않습니다.");
       action("선택한 문헌 인용 수 새로고침",async()=>{

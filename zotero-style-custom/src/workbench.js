@@ -13,7 +13,7 @@
   let observedContext=null;let draftContext='',draftCounters=new Map();const drafts=new Map(),visibleAnnotationIDs=new Set(),pageRanges=new Map(),deletedCardSelections=new Map();
   const ui=runtime.cache.workbenchUI&&typeof runtime.cache.workbenchUI==='object'?runtime.cache.workbenchUI:{};
   let returnFocus=null,commandFocus=null,commandIndex=0,commandMatches=[],navigationEpoch=0;const pendingActions=new Set();
-  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:false,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null};
+  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:false,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null,focus:''};
   const enabled=id=>runtime.featureEnabled?.(id)!==false;
   const setting=(key,fallback)=>runtime.getSetting?runtime.getSetting(key):runtime.pref(key,fallback);
   const tabFeature={explore:'explore',recent:'Recent',graph:'graphView',tags:'tags',notes:'noteManager',annotations:'annotationManager',backlinks:'backlinks',attachments:'attachmentPreview',tabs:'tabManager',views:'viewManager',canvas:'canvas'};
@@ -1766,6 +1766,20 @@
     list.replaceChildren();
     refreshWatched();
     if(!people.length){message('OpenAlex에서 이 논문의 저자를 찾지 못했습니다.',true);return;}
+    /* Arrived from the item menu asking for this paper's senior author: the
+       last-listed author is the lab's, which is who "track the PI" means. The
+       list is one click away rather than a step to walk through. */
+    const wanted=state.focus==='pi'?(people.find(p=>p.position==='last')||people.find(p=>p.position==='first')||people[0]):null;
+    state.focus='';
+    if(wanted){
+     await show(wanted);
+     if(token!==epoch||disposed||state.tab!=='authors')return;
+     const back=node('div',null,null,{class:'sc-actions sc-focus-back'});
+     node('span',`${item.title} · ${T(wanted.position==='last'?'책임저자':'제1저자')}`,back,{class:'sc-muted'});
+     button(`이 논문의 저자 ${people.length}명 모두 보기`,()=>run(loadAuthors),back);
+     list.insertBefore(back,list.firstChild);
+     return;
+    }
     node('h3',`이 논문의 저자 ${people.length}`,list,{class:'sc-hit-group'});
     message(`저자 ${people.length}명. 이름을 눌러 최근 작업을 확인하세요.`);
     const authors=node('div',null,list,{class:'sc-hits'});
@@ -2210,7 +2224,7 @@
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};
-  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async tab=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
+  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

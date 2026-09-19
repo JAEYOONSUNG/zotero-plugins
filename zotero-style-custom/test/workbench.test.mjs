@@ -412,6 +412,32 @@ test('a single author is opened directly rather than offered as a choice of one'
  f.bench.destroy();
 });
 
+test('asking for the paper’s senior author opens that person, and keeps the other authors one click away',async()=>{
+ /* The item menu asks for this by name: the last-listed author is the lab's,
+    which is who "track the PI" means. Landing on a list of five names and
+    making the reader guess which one is the lab would answer nothing. */
+ const f=fixture();
+ await f.bench.show('authors','pi');
+ assert.equal(f.calls.find(c=>c[0]==='authorUpdates')?.[1],'A2','the last author, not the first');
+ assert.match(f.body().textContent,/B Author/);
+ // The other authors are still reachable without going back to the library.
+ await f.click('이 논문의 저자 2명 모두 보기');
+ const names=[...f.body().querySelectorAll('.sc-hit-title')].map(n=>n.textContent);
+ assert.deepEqual(names,['A Author','B Author']);
+ // And the request is spent: drawing the tab again leaves the reader where they are.
+ await f.bench.render();
+ assert.deepEqual([...f.body().querySelectorAll('.sc-hit-title')].map(n=>n.textContent),['A Author','B Author']);
+ f.bench.destroy();
+});
+
+test('a paper whose authors OpenAlex lists without a senior one still opens somebody',async()=>{
+ const f=fixture();
+ f.runtime.authorsOfCached=async()=>[{id:'A1',name:'Only Author',institution:'Somewhere',position:'first'}];
+ await f.bench.show('authors','pi');
+ assert.equal(f.calls.find(c=>c[0]==='authorUpdates')?.[1],'A1');
+ f.bench.destroy();
+});
+
 test('two authors are listed for the user to choose between',async()=>{
  const f=fixture();
  await f.bench.show('authors');

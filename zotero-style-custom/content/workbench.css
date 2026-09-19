@@ -966,3 +966,8 @@
 /* The first-open line: the notice's look, its own class so nothing mistakes it for the backfill notice. */
 #style-custom-workbench .sc-welcome { flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 16px; border-block-end: 1px solid var(--sc-border); background: var(--sc-accent-soft); color: var(--sc-text); font: 11.5px/1.5 var(--sc-font); }
 #style-custom-workbench .sc-welcome button { min-height: 24px; padding: 2px 10px; font-size: 11px; margin-inline-start: auto; }
+
+/* Arrived from the item menu on one person: the paper they came from, and the
+   way back to the rest of its authors. */
+#style-custom-workbench .sc-focus-back { margin-block-end: 8px; align-items: baseline; }
+#style-custom-workbench .sc-focus-back button { min-height: 24px; padding: 2px 9px; font-size: 11px; }

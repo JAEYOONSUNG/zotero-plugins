@@ -1866,13 +1866,14 @@ test('the tree draws the italics and subscripts of a title instead of its tags',
 test('every entry of the item menu carries a drawn sign', () => {
   const {plugin} = fixture();
   const icons = plugin.MENU_ICONS;
-  for (const name of ['circle', 'half', 'disc', 'search', 'star', 'journals', 'reading', 'quote', 'columns', 'panel', 'graph', 'refresh', 'citations', 'stop', 'attachments', 'fill', 'signal', 'download', 'palette']) {
+  for (const name of ['circle', 'half', 'disc', 'search', 'star', 'journals', 'reading', 'quote', 'columns', 'panel', 'graph', 'refresh', 'citations', 'stop', 'attachments', 'fill', 'signal', 'download', 'palette', 'related', 'authors']) {
     assert.ok(Array.isArray(icons[name]) && icons[name].length, name);
   }
   // Each verb in the menu names one of those signs as its last argument.
   const source = plugin.constructor.toString();
   const expected = {'ZotPoP에서 이 논문 검색': 'search', '라이브러리 저널 지표 채우기': 'journals', '인용…': 'quote', '커스텀 열로 전환': 'columns', '연구 작업 패널': 'panel',
-    '관계 그래프 열기': 'graph', '지표·읽기 기록 새로고침': 'refresh', '인용 수 조회 중지': 'stop', '철회·공개접근 확인': 'signal'};
+    '관계 그래프 열기': 'graph', '지표·읽기 기록 새로고침': 'refresh', '인용 수 조회 중지': 'stop', '철회·공개접근 확인': 'signal',
+    '이 논문의 관련 논문': 'related', '이 논문 책임저자 추적': 'authors'};
   for (const [label, icon] of Object.entries(expected)) {
     const at = source.indexOf('action("' + label + '"');
     assert.ok(at >= 0, label);
@@ -1880,6 +1881,22 @@ test('every entry of the item menu carries a drawn sign', () => {
     const call = source.slice(at, next < 0 ? undefined : next);
     assert.ok(call.includes('"' + icon + '")') || call.includes('"' + icon + '",'), `${label} carries ${icon}`);
     assert.ok(Array.isArray(icons[icon]), icon);
+  }
+});
+
+test('the item menu opens the panel on the paper under the pointer, not on an empty tab', () => {
+  /* Both entries used to mean: open the panel, find the tab, then press
+     「현재 선택 가져오기」 to hand it the paper that was already selected. */
+  const {plugin} = fixture();
+  const source = plugin.constructor.toString();
+  for (const [label, tab, focus] of [['이 논문의 관련 논문', "'related'", ''], ['이 논문 책임저자 추적', "'authors'", "'pi'"]]) {
+    const at = source.indexOf('action("' + label + '"');
+    assert.ok(at >= 0, label);
+    const call = source.slice(at, source.indexOf('action("', at + 8));
+    assert.ok(call.includes('show(' + tab + (focus ? ',' + focus : '') + ')'), `${label} opens ${tab}`);
+    // One paper, or the question has no subject; the message says which to fix.
+    assert.match(call, /selected\(win\)\.length!==1/, `${label} asks for exactly one paper`);
+    assert.match(call, /문헌을 하나만 선택하세요/, `${label} says what to do about it`);
   }
 });
 
