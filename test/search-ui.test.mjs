@@ -457,7 +457,7 @@ test("a title's italics are drawn in the list and the detail, and kept for the i
 	   organism is in italics, and the imported item carries the markup the
 	   way a native Zotero import would. */
 	const ui = uiHarness({ realRows: true, search: async () => [
-		paper("bs", { title: "Establishing a Bacillus subtilis CO2 route", titleMarkup: "Establishing a <i>Bacillus subtilis</i> CO<sub>2</sub> route" }),
+		paper("bs", { title: "Establishing a Bacillus subtilis CO2 route", titleMarkup: "Establishing a <i>Bacillus subtilis</i> CO<sub>2</sub> route", url: "https://example.test/bs" }),
 		paper("plain", { title: "No markup" })
 	] });
 	await ui.runSearch();
@@ -466,7 +466,9 @@ test("a title's italics are drawn in the list and the detail, and kept for the i
 	assert.equal(link.querySelector("i").textContent, "Bacillus subtilis");
 	assert.equal(link.querySelector("sub").textContent, "2");
 	assert.equal(link.textContent, "Establishing a Bacillus subtilis CO2 route");
-	assert.equal(rows[1].querySelector("td.title").querySelector("a").textContent, "No markup");
+	// Without a URL the title is plain text, not a link that goes nowhere.
+	assert.equal(rows[1].querySelector("td.title").querySelector("a"), null);
+	assert.equal(rows[1].querySelector("td.title").querySelector("span").textContent, "No markup");
 	// (The detail pane draws the same way; the harness stubs it out.)
 	// The source normaliser keeps the markup beside the plain title, and only the six tags.
 	const made = Sources.makeRecord({ source: "crossref", title: "A <i>Bacillus</i> <span class=\"x\">study</span> &amp; more", doi: "10.1/x" });

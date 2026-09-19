@@ -276,7 +276,11 @@
 		$("clear-btn").addEventListener("click", clearAll);
 		$("history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(); });
 		$("banner-close").addEventListener("click", hideBanner);
-		$("filter").addEventListener("input", () => { state.focusKey = null; render(); syncFilterClear(); });
+		// A beat after the last key, not per key: with a thousand rows every
+		// keystroke rebuilt the table, and Hangul composition fires one per jamo.
+		let filterTimer = null;
+		$("filter").addEventListener("input", () => { syncFilterClear(); clearTimeout(filterTimer); filterTimer = setTimeout(() => { filterTimer = null; render(); }, 120); });
+		$("filter").addEventListener("keydown", e => { if (e.key === "ArrowDown") { e.preventDefault(); $("table-wrap").focus(); } });
 		$("filter-clear")?.addEventListener("click", () => { clearFilter(); $("filter").focus(); });
 		syncFilterClear();
 		$("chk-all").addEventListener("change", e => selectVisible(e.target.checked));
@@ -290,6 +294,9 @@
 		$("copy-csv").addEventListener("click", copyCSV);
 		$("save-csv").addEventListener("click", saveCSV);
 		$("toggle-detail").addEventListener("click", toggleDetail);
+		$("toggle-metrics")?.addEventListener("click", toggleMetrics);
+		// An in-page select menu closes when focus leaves it, so Tab does not leave it floating.
+		if (typeof document.addEventListener === "function") document.addEventListener("focusin", e => { if (openSel && !openSel.menu?.contains?.(e.target) && e.target !== selButton(openSel.sel)) closeSelMenu(); });
 		$("preview-btn").addEventListener("click", () => openPreview());
 		$("import-btn").addEventListener("click", () => importRecords(state.records.filter(r => state.selected.has(r.key))));
 		$("target").addEventListener("change", () => { state.doiMap.clear(); refreshLibraryFlags(); });
@@ -606,6 +613,7 @@
 		let entry = await history.get(id);
 		if (!entry) { setStatus(t("historyMissing"), "err"); return; }
 		if (state.searching || state.importing) return;
+		let stillMine = () => !state.searching && !state.importing;
 		let query = entry.query || {};
 		for (let f of QUERY_FIELDS) $(f).value = query[f] == null ? "" : String(query[f]);
 		syncSel($("sort"));
@@ -619,7 +627,7 @@
 		state.selected.clear();
 		state.focusKey = null;
 		state.detailKey = null;
-		await showHistoryEntry(entry);
+		await showHistoryEntry(entry, stillMine);
 	}
 
 	function closeHistoryMenu() {
@@ -664,7 +672,12 @@
 			d.appendChild(label);
 			d.appendChild(meta);
 			d.title = label.textContent;
+			d.tabIndex = 0;
 			d.addEventListener("click", ev => { ev.stopPropagation(); closeHistoryMenu(); openHistoryEntry(e.id); });
+			d.addEventListener("keydown", ev => {
+				if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); d.click(); }
+				else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); (ev.key === "ArrowDown" ? d.nextElementSibling : d.previousElementSibling)?.focus?.(); }
+			});
 			menu.appendChild(d);
 		}
 		if (entries.length) {
@@ -694,12 +707,15 @@
 
 	// ------------------------------------------------------------ layout persistence
 	function restoreLayout() {
+		// Sizes saved on a large screen are clamped to this window, so a wide
+		// sidebar or a tall detail pane cannot swallow the table on a laptop.
 		let w = parseInt(PREF("metricsWidth"), 10);
-		if (w >= 140 && w <= 500) $("metrics").style.width = w + "px";
+		if (w >= 140) $("metrics").style.width = Math.min(w, metricsCap()) + "px";
 		let h = parseInt(PREF("detailHeight"), 10);
 		// A stored 0 used to come back as a dead strip with no way to grab the splitter
-		if (h >= 60 && h <= 700) $("detail").style.height = h + "px";
+		if (h >= 60) $("detail").style.height = Math.min(h, detailCap()) + "px";
 		if (PREF("detailHidden") === true) setDetailVisible(false);
+		if (PREF("metricsHidden") === true) setMetricsVisible(false);
 		// COL_VERSION guards against stale widths after the defaults change
 		if (PREF("colWidthsVersion") === COL_VERSION) {
 			try {
@@ -715,6 +731,7 @@
 			// offsetHeight is 0 for a hidden pane; saving that brings it back as a dead strip
 			if (!$("detail").hidden) PREF("detailHeight", $("detail").offsetHeight);
 			PREF("detailHidden", $("detail").hidden === true);
+			PREF("metricsHidden", $("metrics").hidden === true);
 			PREF("colWidths", JSON.stringify(state.colWidths));
 			PREF("colWidthsVersion", COL_VERSION);
 			PREF("winWidth", window.outerWidth);
@@ -725,6 +742,14 @@
 		catch (e) { log("saveLayout failed: " + e.message); }
 	}
 
+	const metricsCap = () => Math.max(140, Math.floor((window.innerWidth || 1200) * 0.3));
+	const detailCap = () => Math.max(60, Math.floor((window.innerHeight || 800) * 0.5));
+	function setMetricsVisible(on) {
+		$("metrics").hidden = !on;
+		$("vsplit").hidden = !on;
+		let b = $("toggle-metrics"); if (b) b.setAttribute("aria-pressed", String(!!on));
+	}
+	function toggleMetrics() { setMetricsVisible($("metrics").hidden); saveLayout(); }
 	function setDetailVisible(on) {
 		$("detail").hidden = !on;
 		$("hsplit").hidden = !on;
@@ -738,12 +763,12 @@
 	function setupSplitters() {
 		drag($("vsplit"), "col-resize", (dx) => {
 			let el = $("metrics");
-			let w = Math.max(140, Math.min(500, el.offsetWidth + dx));
+			let w = Math.max(140, Math.min(metricsCap(), el.offsetWidth + dx));
 			el.style.width = w + "px";
 		});
 		drag($("hsplit"), "row-resize", (dx, dy) => {
 			let el = $("detail");
-			let h = Math.max(60, Math.min(600, el.offsetHeight - dy));
+			let h = Math.max(60, Math.min(detailCap(), el.offsetHeight - dy));
 			el.style.height = h + "px";
 		});
 	}
@@ -1210,7 +1235,7 @@
 
 		let c0 = td("chk");
 		let cb = document.createElement("input");
-		cb.type = "checkbox";
+		cb.type = "checkbox"; cb.tabIndex = -1;
 		cb.checked = state.selected.has(r.key);
 		cb.addEventListener("change", () => toggleSelect(r, cb.checked));
 		c0.appendChild(cb);
@@ -1222,10 +1247,9 @@
 
 		let tt = td("title", null, r.title);
 		tt.dataset.marquee = "title";
-		let a = document.createElement("a");
+		let a = document.createElement(r.url ? "a" : "span");
 		if (r.titleMarkup) rich(a, r.titleMarkup); else a.textContent = r.title;
-		a.href = "#";
-		a.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); if (r.url) Zotero.launchURL(r.url); });
+		if (r.url) { a.href = "#"; a.tabIndex = -1; a.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); Zotero.launchURL(r.url); }); }
 		tt.appendChild(a);
 
 		td("num", r.year == null ? "" : String(r.year));
@@ -1430,7 +1454,7 @@
 		$("d-preview").disabled = false;
 		$("d-pdf").disabled = !((r.pdfUrls || [])[0] || r.pdfUrl);
 		$("d-copy-doi").disabled = !r.doi;
-		$("d-proxy").disabled = !proxyLanding(r);
+		$("d-proxy").disabled = !(r.doi || r.url);
 		$("d-add").disabled = state.importing || state.searching;
 		$("d-check").disabled = state.checking || !(r.doi || r.arxiv || r.pmid || (r.source === "openalex" && r.sourceId));
 	}
@@ -1499,7 +1523,7 @@
 		add(t("ctxOpen"), () => Zotero.launchURL(r.url), !r.url);
 		add(t("previewAction"), () => openPreview(r));
 		add(t("ctxPdf"), () => Zotero.launchURL((r.pdfUrls || [])[0] || r.pdfUrl), !((r.pdfUrls || [])[0] || r.pdfUrl));
-		add(t("ctxProxy"), () => openViaProxy(r), !proxyLanding(r));
+		add(t("ctxProxy"), () => openViaProxy(r), !(r.doi || r.url));
 		menu.appendChild(document.createElement("hr"));
 		add(t("ctxCopyTitle"), () => copyText(r.title, t("copiedTitle")));
 		add(t("ctxCopyDoi"), () => copyText(r.doi, t("copiedDoi")), !r.doi);
@@ -1522,6 +1546,7 @@
 			if (!$("ctxmenu").hidden) { hideCtxMenu(); return; }
 			if (state.searching || state.importing) { stopOperation(); return; }
 			if (document.activeElement === $("filter") && $("filter").value) { clearFilter(); return; }
+			if (state.detailKey) { state.detailKey = null; paintRows(); renderDetail(); return; }
 			return;
 		}
 		if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); $("filter").focus(); $("filter").select(); return; }

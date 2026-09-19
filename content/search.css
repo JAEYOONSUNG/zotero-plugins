@@ -146,7 +146,7 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 
 #results { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 7px 11px; border-bottom: 1px solid var(--border); }
-.searchbox { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; width: 250px;
+.searchbox { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; flex: 1 1 140px; width: auto; max-width: 250px;
 	border: 1px solid var(--border-strong); border-radius: 999px; background: var(--bg-tint); }
 .searchbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .searchbox input { border: none; background: transparent; padding: 1px 0; width: 100%; }
@@ -310,3 +310,11 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
    text is a list you read one word at a time. */
 .badge.src { display: inline-flex; align-items: center; gap: 5px; }
 .badge .brand-mark { flex: none; width: 12px; height: 12px; opacity: .85; }
+
+/* Narrow windows: the toolbar and the detail actions keep their icons and drop their words (tooltips remain). */
+@media (max-width: 1000px) {
+	.toolbar .ghost span, .d-actions button span { display: none; }
+	.d-actions button { padding: 4px 7px; }
+}
+#toggle-metrics[aria-pressed="false"] { color: var(--muted); }
+.table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
