@@ -29,14 +29,17 @@ test("cached figures are given their profiles fifty at a time, and the rest mark
     "name:science": {citedness: 9.9, issn: "00368075", name: "Science"},
     "name:no issn anywhere": {citedness: 1.1, name: "Obscure"},
     "issn:11112222": {citedness: 2.0, issn: "11112222", name: "Unanswered"},
-    "issn:99990000": {citedness: 5.0, issn: "99990000", name: "Done", profileAt: "2026-09-01T00:00:00Z"},
+    "issn:99990000": {citedness: 5.0, issn: "99990000", name: "Done", profileAt: "2026-09-20T00:00:00Z", topics: [{name: "T", field: "F", subfield: "", domain: "", count: 1}]},
+    // Filled before the topic hierarchy was kept: asked once more, and only once.
+    "issn:77770000": {citedness: 4.0, issn: "77770000", name: "Old profile", profileAt: "2026-09-01T00:00:00Z", topics: [{name: "T", field: "F", count: 1}]},
     "name:missing": {citedness: null}
   };
   const h = host(store, [{results: [raw("Nature", "1476-4687"), raw("Science", "0036-8075", {is_oa: true, apc_usd: 0})]}]);
   const result = await h.refreshJournalProfiles();
   assert.equal(h.calls.length, 1, "one request for the three ISSNs");
-  assert.match(decodeURIComponent(h.calls[0]), /issn:1476-4687\|0036-8075\|1111-2222/);
-  assert.deepEqual({journals: result.journals, filled: result.filled, requests: result.requests}, {journals: 4, filled: 2, requests: 1});
+  assert.match(decodeURIComponent(h.calls[0]), /issn:1476-4687\|0036-8075\|1111-2222\|7777-0000/);
+  assert.deepEqual({journals: result.journals, filled: result.filled, requests: result.requests}, {journals: 5, filled: 2, requests: 1});
+  assert.ok(store["issn:77770000"].profileAt > "2026-09-19T03:00:00Z", "the old profile was asked again and is now marked");
   assert.deepEqual({publisher: store["issn:14764687"].publisher, country: store["issn:14764687"].country, fields: store["issn:14764687"].fields, hIndex: store["issn:14764687"].hIndex},
     {publisher: "House", country: "NL", fields: ["Chemistry"], hIndex: 50});
   assert.equal(store["name:science"].isOA, true);
@@ -44,7 +47,7 @@ test("cached figures are given their profiles fifty at a time, and the rest mark
   assert.ok(store["name:no issn anywhere"].profileAt, "no ISSN: marked, never asked");
   assert.ok(store["issn:11112222"].profileAt, "asked and unanswered: marked, so it is not asked again");
   assert.equal(store["issn:11112222"].publisher, undefined);
-  assert.equal(store["issn:99990000"].profileAt, "2026-09-01T00:00:00Z", "already filled: untouched");
+  assert.equal(store["issn:99990000"].profileAt, "2026-09-20T00:00:00Z", "already filled: untouched");
   assert.equal(store["name:missing"].profileAt, undefined, "a miss has no figure to profile");
   assert.equal(h.flushed, true);
   // A second run has nothing to do and costs nothing.

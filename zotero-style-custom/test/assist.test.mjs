@@ -13,3 +13,18 @@ test('cancel settles immediately even when the HTTP transport never settles and 
  assert.notEqual(winner,'timeout');assert.match(winner,/중지/);deliver();assert.equal(cancelled,1);
  h.respond({status:200,response:{choices:[{message:{content:'Next'}}]}});assert.equal(await h.api.run('translate',{title:'Next'}),'Next');h.api.stop();
 });
+
+test('reading papers together sends two to six abstracts with their notes, and refuses less or more',async()=>{
+ const h=harness();
+ const paper=(n,over={})=>({id:String(n),title:'Paper '+n,year:'202'+n,venue:'J',abstract:'Abstract '+n,...over});
+ await assert.rejects(h.api.run('compare',[paper(1)]),/둘 이상/);
+ await assert.rejects(h.api.run('compare',Array.from({length:7},(_,i)=>paper(i))),/여섯/);
+ await assert.rejects(h.api.run('compare',[paper(1),paper(2,{abstract:''})]),/초록이 없는/);
+ assert.equal(await h.api.run('compare',[paper(1,{remark:'my note'}),paper(2)],{language:'English'}),'Result');
+ const body=JSON.parse(h.requests[0].options.body);
+ assert.match(body.messages[0].content,/Points of contention|contention/);
+ assert.match(body.messages[0].content,/write in English/);
+ const sent=JSON.parse(body.messages[1].content);
+ assert.deepEqual(sent.map(p=>[p.n,p.title,p.abstract,p.notes]),[[1,'Paper 1','Abstract 1','my note'],[2,'Paper 2','Abstract 2',undefined]]);
+ h.api.stop();
+});

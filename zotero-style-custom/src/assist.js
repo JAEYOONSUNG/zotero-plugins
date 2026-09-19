@@ -7,14 +7,38 @@
   async function run(task,item,{language='Korean'}={}){
    if(!active)throw new Error('플러그인이 비활성화되어 있습니다.');
    const prompts={translate:`Translate the supplied title into ${language}. Preserve scientific names, identifiers, negation and numbers. Return only the translation.`,summary:`Summarize only the supplied abstract in ${language}, up to 5 short bullet points. Preserve uncertainty and do not invent findings.`,tags:'Suggest 3-6 concise topical tags for this abstract. Return only a JSON array of strings.',remark:`Write a concise research reading remark in ${language}, based solely on the provided title and abstract. Separate findings from limitations.`};
+   /* Several papers side by side: what each one claims, how it gets there,
+      and where they pull against each other. The model is asked to keep to
+      the abstracts given, to mark what it is unsure of, and to name the
+      evidence that would settle each dispute -- an outline for the reader's
+      own judgement, not a verdict. */
+   prompts.compare=`You are helping a researcher read ${Array.isArray(item)?item.length:'several'} papers together. Using ONLY the supplied titles, abstracts and notes, write in ${language} (translate the section headings too), in Markdown:
+## Each paper
+For each paper (its number and a short title): **Core claim** (1-2 lines) · **Line of argument** (premise → evidence/method → conclusion, as an arrow chain) · **Strength and limits of the evidence** (be specific: sample, model system, controls, what the abstract does not show).
+## Common ground
+What the papers agree on or build on together.
+## Points of contention
+Every point where they conflict or would conflict: claim vs claim, assumption vs assumption, interpretation vs interpretation. For each: which papers, what each side rests on, and **the deciding evidence** — the experiment or data that would settle it.
+## Open questions
+What none of them answers.
+Do not invent findings; where the abstracts are silent, say so. Preserve numbers, organisms, identifiers and negation.`;
    if(!prompts[task])throw new Error('Unknown assistance task');
    const capability={tags:'AIGenerateTags',remark:'AIGenerateRemark',summary:'tldr'}[task];if(capability&&runtime.featureEnabled?.(capability)===false)throw new Error('설정에서 이 기능을 켜세요.');
    if(task==='tags')prompts.tags=String(runtime.pref('aiTagsPrompt',prompts.tags)||prompts.tags);
    if(task==='remark')prompts.remark=String(runtime.pref('aiRemarkPrompt',prompts.remark)||prompts.remark)+'\nOutput language: '+language;
    const model=String(runtime.pref('aiModel','')).trim();if(!model)throw new Error('설정에서 AI 모델을 지정하세요.');
    const url=endpoint(runtime.pref('aiEndpoint',''));
-   const content=task==='translate'?String(item.title||''):JSON.stringify({title:item.title||'',abstract:item.abstract||''});
-   if(!content||task!=='translate'&&!String(item.abstract||'').trim())throw new Error('먼저 논문의 제목과 초록을 가져오세요.');
+   if(task==='compare'){
+    const list=Array.isArray(item)?item:[];
+    if(list.length<2)throw new Error('비교하려면 문헌을 둘 이상 선택하세요.');
+    if(list.length>6)throw new Error('한 번에 여섯 편까지 비교할 수 있습니다.');
+    const missing=list.filter(paper=>!String(paper.abstract||'').trim());
+    if(missing.length)throw new Error(`초록이 없는 문헌이 있습니다: ${missing.map(paper=>String(paper.title||'').slice(0,40)).join(' · ')}`);
+   }
+   const content=task==='translate'?String(item.title||'')
+    :task==='compare'?JSON.stringify(item.map((paper,index)=>({n:index+1,title:paper.title||'',year:paper.year||'',venue:paper.venue||'',abstract:paper.abstract||'',notes:[paper.remark,paper.summary].filter(Boolean).join('\n')||undefined})))
+    :JSON.stringify({title:item.title||'',abstract:item.abstract||''});
+   if(!content||task!=='translate'&&task!=='compare'&&!String(item.abstract||'').trim())throw new Error('먼저 논문의 제목과 초록을 가져오세요.');
    if(content.length>50000)throw new Error('선택한 텍스트가 너무 깁니다. 50,000자 이하로 줄이세요.');
    const headers={'Content-Type':'application/json'},key=runtime.pref('aiKey','');if(key)headers.Authorization='Bearer '+key;
    const job={cancel:null,cancelled:false,transportCancelled:false};jobs.add(job);

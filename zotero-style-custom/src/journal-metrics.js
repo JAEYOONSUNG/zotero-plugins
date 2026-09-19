@@ -88,7 +88,7 @@
   // are what "which subject is this journal in" is answered with.
   function profileOf(raw) {
     const topics = (Array.isArray(raw?.topics) ? raw.topics : [])
-      .map(t => ({name: text(t?.display_name), field: text(t?.field?.display_name), count: Number.isInteger(t?.count) ? t.count : 0}))
+      .map(t => ({name: text(t?.display_name), field: text(t?.field?.display_name), subfield: text(t?.subfield?.display_name), domain: text(t?.domain?.display_name), count: Number.isInteger(t?.count) ? t.count : 0}))
       .filter(t => t.name).slice(0, 6);
     const fields = [];
     for (const t of topics) if (t.field && !fields.includes(t.field)) fields.push(t.field);

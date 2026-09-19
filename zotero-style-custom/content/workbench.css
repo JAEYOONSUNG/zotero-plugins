@@ -719,3 +719,20 @@
 #style-custom-workbench .sc-legend-count { color: var(--sc-faint); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 #style-custom-workbench .sc-paper-meta { display: flex; align-items: center; }
+
+/* The subject tree: one row per level, the chosen chip folded with its way back. */
+#style-custom-workbench .sc-field-tree { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 8px; }
+#style-custom-workbench .sc-field-tree .sc-field-chips { margin: 0; align-items: center; }
+#style-custom-workbench .sc-field-level { min-width: 52px; color: var(--sc-faint); font: 600 10px/1.6 var(--sc-font); letter-spacing: .4px; text-transform: uppercase; }
+#style-custom-workbench .sc-chip-chosen { font-weight: 600; }
+#style-custom-workbench .sc-chip-back { background: transparent; color: var(--sc-muted); box-shadow: inset 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-field-tree [data-level=field] .sc-field-level::before,
+#style-custom-workbench .sc-field-tree [data-level=subfield] .sc-field-level::before { content: '└ '; color: var(--sc-border-strong); }
+#style-custom-workbench .sc-field-tree [data-level=subfield] { padding-inline-start: 14px; }
+
+/* Tending the followed list: a table, tight rows, the place shaded when it moved. */
+#style-custom-workbench .sc-watch-table td, #style-custom-workbench .sc-watch-table th { padding: 4px 8px; font-size: 12px; vertical-align: middle; }
+#style-custom-workbench .sc-watch-table td.sc-watch-moved { color: var(--sc-reading); }
+#style-custom-workbench .sc-watch-table .sc-journal-name { font-weight: 600; }
+#style-custom-workbench .sc-compare-insight { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-compare-output { min-height: 220px; font-size: 12.5px; }

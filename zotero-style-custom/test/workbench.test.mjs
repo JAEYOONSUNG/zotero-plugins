@@ -826,11 +826,12 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  const f=fixture();
  f.runtime.journalIdentity={identify:venue=>venue==='Science'?{quartile:1,abbreviation:'SCIENCE',issns:['0036-8075'],impactFactor:44.7,year:2025,publisher:'AAAS'}:{quartile:1,abbreviation:'NATURE',issns:['0028-0836'],impactFactor:50.5,year:2025,publisher:'Springer Nature'}};
  f.runtime.journalRecord=ref=>({name:String(ref.id)==='1'?'Science':'Nature',issn:''});
- f.runtime.journalProfile=ref=>String(ref.id)==='1'?{citedness:7.0,fields:['Multidisciplinary','Engineering'],topics:[{name:'Everything',field:'Multidisciplinary',count:9}],hIndex:1200,works:250000,isOA:false,inDoaj:false,apc:4000,country:'US',homepage:'https://www.science.org/',openAlexID:'S3880285'}:null;
+ f.runtime.journalProfile=ref=>String(ref.id)==='1'?{citedness:7.0,fields:['Multidisciplinary','Engineering'],topics:[{name:'Everything',domain:'Life Sciences',field:'Multidisciplinary',subfield:'General',count:9},{name:'Bio eng',domain:'Physical Sciences',field:'Engineering',subfield:'Biomedical Engineering',count:4}],hIndex:1200,works:250000,isOA:false,inDoaj:false,apc:4000,country:'US',homepage:'https://www.science.org/',openAlexID:'S3880285'}:null;
  await f.bench.show('journals');
- // The field chips come from the profiles that exist.
- const chips=[...f.body().querySelectorAll('.sc-field-chips .sc-chip-button')].map(b=>b.textContent);
- assert.deepEqual(chips,['전체 2','Multidisciplinary 1','Engineering 1']);
+ // The subject tree opens at the top level only, largest first.
+ const chipsAt=level=>[...f.body().querySelectorAll(`.sc-field-chips[data-level=${level}] .sc-chip-button`)].map(b=>b.textContent);
+ assert.deepEqual(chipsAt('domain'),['전체 2','Life Sciences 1','Physical Sciences 1']);
+ assert.deepEqual(chipsAt('field'),[],'the next level waits for a choice');
  // Nothing is open yet; opening a journal lays out its facts.
  assert.equal(f.body().querySelector('.sc-facts'),null);
  await f.click('Science');
@@ -844,14 +845,21 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  assert.equal(value('국가'),'미국');
  assert.match(value('내 서재'),/^1편 · 읽음 0 · 평균 피인용 3 · 2025$/);
  assert.ok([...f.body().querySelectorAll('button')].some(b=>b.textContent==='JCR에서 보기'),'the JCR page is one click away');
- // A field chip narrows the list; the same chip again widens it.
- await f.click('Engineering 1');
+ // Choosing a domain folds the row to the choice and opens the fields beneath it.
+ await f.click('Physical Sciences 1');
+ assert.deepEqual(chipsAt('domain'),['Physical Sciences 1','전체']);
+ assert.deepEqual(chipsAt('field'),['전체 1','Engineering 1']);
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science']);
  await f.click('Engineering 1');
- assert.equal(f.body().querySelectorAll('.sc-journal').length,2);
+ assert.deepEqual(chipsAt('subfield'),['전체 1','Biomedical Engineering 1']);
+ // The chosen chip again lets go of that level and everything beneath it.
+ await f.click('Engineering 1');
+ assert.deepEqual(chipsAt('subfield'),[]);
+ await f.click('Physical Sciences 1');
+ assert.equal(f.body().querySelectorAll('.sc-journal').length,2,'back to every journal');
  // Grouped by field, the journal without a profile sits under "field unknown".
  await f.click('분야별로 묶기');
- assert.deepEqual([...f.body().querySelectorAll('.sc-hit-group')].map(h=>h.textContent),['Multidisciplinary · 1종','분야 미확인 · 1종']);
+ assert.deepEqual([...f.body().querySelectorAll('.sc-hit-group')].map(h=>h.textContent),['Life Sciences › Multidisciplinary · 1종','분야 미확인 · 1종']);
  f.bench.destroy();
 });
 
@@ -922,4 +930,50 @@ test('one press fills the window, the next puts the panel back, and the choice i
  await again.bench.show('explore');
  assert.equal(again.bench.panel.dataset.maximized,'true','restored from the saved choice');
  again.bench.destroy();
+});
+
+test('the comparison table reads its papers together and keeps the reading as a note',async()=>{
+ const f=fixture();
+ await f.bench.show('matrix');await f.bench.load();
+ // Both papers in the table: two is enough to read together.
+ f.bench.state.selected=new Set(['1','2']);await f.bench.render();
+ assert.ok(f.findButton('함께 읽기'));
+ assert.equal(f.findButton('함께 읽기').disabled,false);
+ await f.click('함께 읽기');
+ const ai=f.calls.find(c=>c[0]==='ai');
+ assert.equal(ai[1],'compare');
+ assert.deepEqual(ai[2].map(p=>p.id),['1','2']);
+ const box=f.body().querySelector('.sc-compare-output');
+ assert.equal(box.hidden,false);assert.equal(box.value,'Generated result');
+ await f.click('첫 문헌의 노트로 저장');
+ const note=f.calls.find(c=>c[0]==='createNote');
+ assert.equal(note[1],'1');assert.match(note[2],/^함께 읽기 \(Paper Alpha · Paper Beta\)\n\nGenerated result$/);
+ f.bench.destroy();
+});
+
+test('the followed list can be tended as a table: found, sorted, let go',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'Ada',institution:'MIT',institutionGiven:'MIT chemistry',sweptAt:'2026-09-01T00:00:00Z',news:[{id:'W1'}],seen:[]},
+  {id:'A2',name:'Bo',institution:'Broad Institute',moved:{from:'Harvard University',to:'Broad Institute',rule:2},sweptAt:'2026-08-01T00:00:00Z',news:[],seen:[]},
+  {id:'A3',name:'Cy',institution:'',news:[],seen:[]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ f.runtime.unwatchAuthor=async id=>{f.calls.push(['unwatchAuthor',id]);const i=rows.findIndex(r=>r.id===id);if(i>=0)rows.splice(i,1);};
+ await f.bench.show('authors');
+ await f.click('목록 관리');
+ const names=()=>[...f.body().querySelectorAll('.sc-watch-table td:first-child button')].map(b=>b.textContent);
+ assert.deepEqual(names(),['Ada','Bo','Cy'],'news first');
+ const place=f.body().querySelector('.sc-watch-table tr:nth-child(2) td:nth-child(2)');
+ assert.equal(place.getAttribute('title'),'등록 당시: MIT chemistry');
+ assert.ok(f.body().querySelector('.sc-watch-table tr:nth-child(3) td.sc-watch-moved'),'a move is shaded');
+ f.input('관심 저자 찾기','bo');
+ assert.deepEqual(names(),['Bo']);
+ f.input('관심 저자 찾기','');
+ const sort=f.body().querySelector('select[aria-label="관심 저자 정렬"]');sort.value='checked';sort.dispatchEvent(new f.win.Event('change',{bubbles:true}));
+ assert.deepEqual(names(),['Cy','Bo','Ada'],'longest unchecked first');
+ await f.click('해제');
+ assert.ok(f.calls.find(c=>c[0]==='unwatchAuthor'&&c[1]==='A3'));
+ assert.deepEqual(names(),['Bo','Ada']);
+ await f.click('카드로 보기');
+ assert.equal(f.body().querySelector('.sc-watch-table'),null);
+ f.bench.destroy();
 });

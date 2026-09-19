@@ -1211,6 +1211,41 @@
    const shown=model.matrix(values.slice(state.matrixPage*pageSize,(state.matrixPage+1)*pageSize),fields,state.transpose);
    const table=node('table',null,body,{class:'sc-matrix'});
    shown.forEach((row,i)=>{const tr=node('tr',null,table);row.forEach((value,j)=>{const heading=state.transpose?j===0:i===0;const cell=node(heading?'th':'td',String(value),tr);if(heading)cell.setAttribute('scope',state.transpose?'row':'col');});});
+   drawCompareInsight(values);
+  }
+  /* The papers in the table, read together by the model: what each claims,
+     the chain it argues along, and where they pull against each other, with
+     the evidence that would settle each dispute. Two to six papers, their
+     abstracts and the reader's own notes go in; the outline comes back into
+     a box the reader can edit, copy, or keep as a note on the first paper. */
+  function drawCompareInsight(values){
+   const chosen=values.slice(0,6);
+   const key=JSON.stringify(chosen.map(paper=>paper.id));
+   const section=node('section',null,body,{class:'sc-compare-insight','aria-label':'AI 논지·논쟁 분석'});
+   node('h3','주장·논리 흐름·논쟁 여지',section,{class:'sc-hit-group'});
+   const b=bar(section);
+   const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어'});
+   const ready=chosen.length>=2&&chosen.length<=6&&values.length<=6;
+   node('span',values.length>6?`${values.length}편은 너무 많습니다. 둘에서 여섯 편을 선택하세요.`:chosen.length<2?'문헌을 둘 이상 선택하면 함께 읽습니다.':`${chosen.length}편 · 초록 있음 ${chosen.filter(paper=>String(paper.abstract||'').trim()).length}`,b,{class:'sc-muted'});
+   const go=button('함께 읽기',()=>run(async()=>{
+    message('선택한 문헌의 제목·초록·메모를 설정된 AI 서비스에 요청 중…');
+    const request=++aiEpoch;
+    const result=await assist.run('compare',chosen,{language:language.value});
+    if(disposed||panel.hidden||state.tab!=='matrix'||request!==aiEpoch)return;
+    state.compareOutput=result;state.compareKey=key;
+    const box=body.querySelector('.sc-compare-output');
+    if(box){box.value=result;box.hidden=false;}
+    message('분석이 왔습니다. 초록만 읽고 쓴 밑그림이니 본문과 대조해 판단하세요.');
+   }),b);
+   go.disabled=!ready;
+   button('요청 중지',()=>{aiEpoch++;assist.cancel?.();message('AI 요청을 중지했습니다.');},b);
+   const output=node('textarea',null,section,{class:'sc-ai-output sc-compare-output','aria-label':'AI 논지·논쟁 분석 결과 — 초록 기준 밑그림'});
+   const have=state.compareKey===key&&state.compareOutput;
+   output.hidden=!have;if(have)output.value=state.compareOutput;
+   const actions=bar(section);
+   button('결과 복사',()=>copy(output.value),actions);
+   button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 분석을 받으세요.');await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
+   if(!String(runtime.pref('aiEndpoint','')||'').trim())node('p','번역·AI 설정에 endpoint와 모델을 연결하면 켜집니다.',section,{class:'sc-muted'});
   }
   async function drawCollections(token){const collections=await library.collections(win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID);if(token!==epoch||disposed)return;const b=bar();const sort=node('select',null,b,{'aria-label':'컬렉션 정렬'});sort.hidden=!enabled('sortCollectionItem');for(const[v,l]of [['name','이름순'],['count','문헌 많은 순'],['favorite','즐겨찾기 먼저']])node('option',l,sort,{value:v});const list=node('div',null,body);function draw(){list.replaceChildren();const favorites=runtime.cache.favoriteCollections||[];const rows=[...collections].sort((a,b)=>!enabled('sortCollectionItem')?0:sort.value==='count'?b.count-a.count:sort.value==='favorite'?Number(favorites.includes(b.id))-Number(favorites.includes(a.id))||a.name.localeCompare(b.name):a.name.localeCompare(b.name));for(const c of rows){const row=card(c.name,enabled('collectionItemCount')?c.count+'개 문헌':'',list);button('컬렉션 열기',()=>win.ZoteroPane.collectionsView.selectCollection(Number(c.id)),row);if(enabled('favoriteCollections'))check('즐겨찾기',favorites.includes(c.id),on=>run(async()=>{runtime.cache.favoriteCollections=on?[...new Set([...favorites,c.id])]:favorites.filter(id=>id!==c.id);runtime.dirty=true;await runtime.flush();draw();}),row);}}sort.value='name';sort.addEventListener('change',draw);draw();}
   const GROUP_LABELS={citing:'이 논문을 인용한 논문',reference:'이 논문이 인용한 문헌',related:'주제가 가까운 논문'};
@@ -1432,6 +1467,8 @@
     }),tools);
     if(fresh.length)node('span',`새 논문 ${fresh.reduce((n,p)=>n+p.news.length,0)}편 · ${fresh.length}명`,tools,{class:'sc-watch-count'});
     else if(swept)node('span','새 논문 없음',tools,{class:'sc-watch-quiet'});
+    const manage=button(state.watchManage?'카드로 보기':'목록 관리',()=>{state.watchManage=!state.watchManage;refreshWatched();},tools,{'aria-pressed':String(!!state.watchManage)});
+    if(state.watchManage){drawWatchManager(watched,parent);return;}
     // A grid, not a column: at this panel width one name per row turned a
     // hundred people into a scroll, and the whole point is to see them at once.
     const rows=node('div',null,parent,{class:'sc-watch-grid'});
@@ -1463,6 +1500,38 @@
       :person.sweptAt?`${person.name} · 새 논문 없음 (확인 ${person.sweptAt.slice(0,10)})`
       :`${person.name} · 아직 확인하지 않음`;
     }
+   }
+   /* The followed authors as a list to keep in order: find one by name or
+      place, sort by who has news or who was checked longest ago, let one go
+      with a click, copy the whole list out. A hundred cards are for
+      noticing; this is for tending. */
+   function drawWatchManager(watched,parent){
+    const q=String(state.watchQuery||'').toLowerCase();
+    const sort=state.watchSort||'news';
+    const order={news:(a,b)=>((b.news?.length||0)+(b.newPatents?.length||0))-((a.news?.length||0)+(a.newPatents?.length||0))||a.name.localeCompare(b.name),name:(a,b)=>a.name.localeCompare(b.name),place:(a,b)=>String(a.institution||'').localeCompare(String(b.institution||''))||a.name.localeCompare(b.name),checked:(a,b)=>String(a.sweptAt||'').localeCompare(String(b.sweptAt||''))||a.name.localeCompare(b.name),added:(a,b)=>String(b.checkedAt||'').localeCompare(String(a.checkedAt||''))}[sort];
+    const shown=watched.filter(p=>!q||`${p.name} ${p.institution||''} ${p.institutionGiven||''}`.toLowerCase().includes(q)).sort(order);
+    const tools=bar(parent);
+    const search=node('input',null,tools,{type:'search',placeholder:'이름·소속으로 찾기','aria-label':'관심 저자 찾기'});search.value=state.watchQuery||'';
+    search.addEventListener('input',()=>{state.watchQuery=search.value;refreshWatched();const again=watchArea.querySelector('input[type=search]');again?.focus?.();if(again)again.setSelectionRange?.(again.value.length,again.value.length);});
+    const pick=node('select',null,tools,{'aria-label':'관심 저자 정렬'});
+    for(const [value,label] of [['news','새 소식 순'],['name','이름순'],['place','소속순'],['checked','오래 안 본 순'],['added','최근 등록 순']]){const o=node('option',label,pick,{value});if(sort===value)o.selected=true;}
+    pick.addEventListener('change',()=>{state.watchSort=pick.value;refreshWatched();});
+    node('span',`${shown.length}/${watched.length}명`,tools,{class:'sc-muted'});
+    button('목록 복사',()=>copy(watched.map(p=>[p.name,p.institution||'',p.id].join('\t')).join('\n')),tools,{title:'이름 · 소속 · OpenAlex id, 탭으로 구분'});
+    const table=node('table',null,parent,{class:'sc-matrix sc-watch-table'});
+    const head=node('tr',null,table);for(const label of ['이름','소속','마지막 확인','새 논문','특허',''])node('th',label,head,{scope:'col'});
+    for(const person of shown){
+     const tr=node('tr',null,table);
+     const nameCell=node('td',null,tr);const open=node('button',person.name,nameCell,{class:'sc-journal-name',type:'button',title:'상세 보기'});open.addEventListener('click',()=>run(()=>show(person)));
+     const place=node('td',person.institution||'소속 미확인',tr);if(person.institutionGiven&&person.institutionGiven!==person.institution)place.title=`등록 당시: ${person.institutionGiven}`;
+     if(person.moved&&person.moved.to)place.classList.add('sc-watch-moved');
+     node('td',person.sweptAt?person.sweptAt.slice(0,10):'아직 없음',tr);
+     node('td',String(person.news?.length||0),tr,{class:(person.news?.length?'sc-watch-count':'')});
+     node('td',person.patents?.length?String(person.patents.length)+(person.newPatents?.length?` (+${person.newPatents.length})`:''):'—',tr);
+     const act=node('td',null,tr);
+     button('해제',()=>run(async()=>{await runtime.unwatchAuthor(person.id);message(`${person.name}을(를) 관심 저자에서 뺐습니다.`);refreshWatched();}),act,{title:'관심 저자에서 빼기'});
+    }
+    if(!shown.length)node('p','찾는 저자가 없습니다.',parent,{class:'sc-muted'});
    }
    function refreshWatched(){
     watchArea.replaceChildren();
@@ -1589,7 +1658,8 @@
    parent.appendChild(svg);
    return svg;
   }
-  const journalView=state.journalView||(state.journalView={sort:'if',field:'',grouped:false,open:new Set()});
+  const journalView=state.journalView||(state.journalView={sort:'if',field:'',pick:{domain:'',field:'',subfield:''},grouped:false,open:new Set()});
+  journalView.pick=journalView.pick||{domain:'',field:'',subfield:''};
   const COUNTRY_NAMES={US:'미국',GB:'영국',DE:'독일',NL:'네덜란드',CH:'스위스',KR:'한국',JP:'일본',CN:'중국',FR:'프랑스',IT:'이탈리아',ES:'스페인',CA:'캐나다',AU:'호주',SE:'스웨덴',DK:'덴마크',SG:'싱가포르',IN:'인도',BR:'브라질',IE:'아일랜드',AT:'오스트리아',BE:'벨기에',PL:'폴란드',NZ:'뉴질랜드',TW:'대만',HK:'홍콩',NO:'노르웨이',FI:'핀란드',IL:'이스라엘',RU:'러시아'};
   const compact=n=>n==null?'':n>=1e6?(n/1e6).toFixed(1).replace(/\.0$/,'')+'M':n>=1e4?Math.round(n/1e3)+'k':n>=1e3?(n/1e3).toFixed(1).replace(/\.0$/,'')+'k':String(n);
   /* Everything known about one journal, gathered from the three places it
@@ -1610,6 +1680,8 @@
    const years=items.map(i=>Number(i.year)).filter(Number.isFinite);
    return {venue,items,id,profile,impact,year,quartile:id?.quartile??null,abbreviation:id?.abbreviation||'',
     publisher:profile?.publisher||id?.label||id?.publisher||'',issns,fields:profile?.fields||[],topics:profile?.topics||[],
+    // The subject hierarchy OpenAlex keeps for its topics: domain > field > subfield, from the two commonest topics.
+    levels:(profile?.topics||[]).slice(0,2).map(t=>({domain:t.domain||'',field:t.field||'',subfield:t.subfield||''})),
     hIndex:profile?.hIndex??null,works:profile?.works??null,citedness:profile?.citedness??null,isOA:!!profile?.isOA,inDoaj:!!profile?.inDoaj,apc:profile?.apc??null,
     country:profile?.country||'',homepage:profile?.homepage||'',openAlexID:profile?.openAlexID||'',
     papers:items.length,read,avgCited:cited.length?Math.round(cited.reduce((a,b)=>a+b,0)/cited.length):0,
@@ -1620,34 +1692,51 @@
    for(const item of rows()){if(!item.venue)continue;const list=byVenue.get(item.venue)||[];list.push(item);byVenue.set(item.venue,list);}
    if(!byVenue.size){empty('저널이 있는 문헌이 없습니다.');return;}
    const all=[...byVenue].map(([venue,items])=>journalFacts(venue,items));
-   /* The subject fields across the library's journals, as chips: one click
-      narrows the list to a field, the way JCR's category pages do. */
-   const fieldCount=new Map();
-   for(const j of all)for(const f of j.fields.slice(0,2))fieldCount.set(f,(fieldCount.get(f)||0)+1);
-   const fields=[...fieldCount].sort((a,b)=>b[1]-a[1]);
+   /* The subject hierarchy, one row per level, large to small: the four
+      domains OpenAlex keeps, then the fields inside the chosen domain, then
+      the subfields inside the chosen field. A row collapses to its chosen
+      chip once picked, so the path reads as a breadcrumb and the next level
+      opens beneath it; the chip again, or 전체, lets go. The user asked for
+      the fields to be arranged by size and picked level by level rather than
+      spread flat in twenty-six chips. */
+   const pick=journalView.pick;
+   const matches=j=>['domain','field','subfield'].every(level=>!pick[level]||j.levels.some(l=>l[level]===pick[level]));
    const controls=bar();
    const sortPick=node('select',null,controls,{'aria-label':'저널 정렬'});
    for(const [value,label] of [['if','IF 높은 순'],['name','이름순'],['papers','내 문헌 많은 순'],['quartile','사분위 순']]){const o=node('option',label,sortPick,{value});if(journalView.sort===value)o.selected=true;}
    sortPick.addEventListener('change',()=>{journalView.sort=sortPick.value;render();});
    const grouped=button(journalView.grouped?'목록으로':'분야별로 묶기',()=>{journalView.grouped=!journalView.grouped;render();},controls,{'aria-pressed':String(journalView.grouped)});
    grouped.classList.add('sc-journal-toggle');
-   const known=all.filter(j=>j.fields.length).length;
+   const known=all.filter(j=>j.levels.length).length;
    node('span',`${all.length}종 · IF 있음 ${all.filter(j=>j.impact!=null).length} · 분야 확인 ${known}`,controls,{class:'sc-muted sc-journal-count'});
-   if(fields.length){
-    const chips=node('div',null,body,{class:'sc-chips sc-field-chips'});
-    const allChip=node('button',`전체 ${all.length}`,chips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(!journalView.field)});
-    allChip.addEventListener('click',()=>{journalView.field='';render();});
-    for(const [field,count] of fields){
-     const chip=node('button',`${field} ${count}`,chips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(journalView.field===field),title:`${field} 분야 저널 ${count}종`});
-     chip.addEventListener('click',()=>{journalView.field=journalView.field===field?'':field;render();});
+   const LEVELS=[['domain','대분류'],['field','분야'],['subfield','세부 분야']];
+   const tree=node('div',null,body,{class:'sc-field-tree'});
+   for(const [index,[level,label]] of LEVELS.entries()){
+    const above=LEVELS.slice(0,index).map(([l])=>l);
+    if(above.some(l=>!pick[l]))break;
+    const counts=new Map();
+    for(const j of all){if(!above.every(l=>j.levels.some(x=>x[l]===pick[l])))continue;for(const value of new Set(j.levels.filter(x=>above.every(l=>x[l]===pick[l])).map(x=>x[level]).filter(Boolean)))counts.set(value,(counts.get(value)||0)+1);}
+    if(!counts.size)break;
+    const row=node('div',null,tree,{class:'sc-chips sc-field-chips','data-level':level,'aria-label':label});
+    node('span',label,row,{class:'sc-field-level'});
+    const chip=(text,value,count,on)=>{const b=node('button',null,row,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(on),title:value?`${value} · 저널 ${count}종`:`모든 ${label}`});b.textContent=count!=null?`${text} ${count}`:text;b.dataset.value=value;b.addEventListener('click',()=>{const was=pick[level]===value;for(const [l] of LEVELS.slice(index))pick[l]='';if(!was)pick[level]=value;journalView.field=pick.field;render();});return b;};
+    if(pick[level]){
+     // Chosen: the row folds to its choice, with the way back beside it.
+     chip(pick[level],pick[level],counts.get(pick[level])||0,true).classList.add('sc-chip-chosen');
+     chip('전체','',null,false).classList.add('sc-chip-back');
+    }else{
+     chip('전체','',[...counts.values()].reduce((a,b)=>a+b,0),true);
+     for(const [value,count] of [...counts].sort((x,y)=>y[1]-x[1]))chip(value,value,count,false);
     }
    }
    const order={if:(a,b)=>(b.impact??-1)-(a.impact??-1)||a.venue.localeCompare(b.venue),name:(a,b)=>a.venue.localeCompare(b.venue),papers:(a,b)=>b.papers-a.papers||(b.impact??-1)-(a.impact??-1),quartile:(a,b)=>(a.quartile??9)-(b.quartile??9)||(b.impact??-1)-(a.impact??-1)}[journalView.sort]||((a,b)=>0);
-   const shown=all.filter(j=>!journalView.field||j.fields.slice(0,2).includes(journalView.field)).sort(order);
+   const shown=all.filter(matches).sort(order);
    if(!shown.length){empty('이 분야의 저널이 없습니다.');return;}
    if(journalView.grouped){
     const groups=new Map();
-    for(const j of shown){const key=j.fields[0]||'분야 미확인';const list=groups.get(key)||[];list.push(j);groups.set(key,list);}
+    // Grouped by the level beneath the one chosen: fields by default, subfields once a field is picked.
+    const groupLevel=pick.field?'subfield':pick.domain?'field':'field';
+    for(const j of shown){const l=j.levels.find(x=>['domain','field'].every(k=>!pick[k]||x[k]===pick[k]))||j.levels[0];const key=l?(groupLevel==='field'&&l.domain&&!pick.domain?`${l.domain} › ${l.field}`:l[groupLevel])||'분야 미확인':'분야 미확인';const list=groups.get(key)||[];list.push(j);groups.set(key,list);}
     const sections=[...groups].sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0]));
     for(const [field,list] of sections){
      node('h3',`${field} · ${list.length}종`,body,{class:'sc-hit-group'});
@@ -1685,7 +1774,7 @@
    if(j.publisher)bits.push(j.publisher);
    bits.push(`내 문헌 ${j.papers}편`);
    meta.appendChild(doc.createTextNode(bits.join(' · ')));
-   if(j.fields.length){const line=node('p',null,c,{class:'sc-hit-authors sc-journal-fields'});for(const f of j.fields.slice(0,2)){const chip=node('span',f,line,{class:'sc-chip sc-chip-tiny'});if(journalView.field===f)chip.classList.add('sc-chip-on');}}
+   if(j.levels.length){const line=node('p',null,c,{class:'sc-hit-authors sc-journal-fields'});const seen=new Set();for(const l of j.levels){const text=[l.field,l.subfield].filter(Boolean).join(' › ');if(!text||seen.has(text))continue;seen.add(text);const chip=node('span',text,line,{class:'sc-chip sc-chip-tiny',title:l.domain||''});if(journalView.pick.field&&l.field===journalView.pick.field)chip.classList.add('sc-chip-on');}}
    const actions=node('div',null,c,{class:'sc-hit-actions'});
    button('지표 조회',async()=>{
     const ref=runtime.Z.Items.get(Number(j.items[0].id));

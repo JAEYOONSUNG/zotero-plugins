@@ -1,5 +1,5 @@
 {
- "version": "0.43.3",
+ "version": "0.44.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1531,6 +1531,78 @@
    ],
    "status": "verified",
    "review": "One press fills the window edge to edge, the next puts the panel back, double-clicking the title bar does the same, and the choice is remembered. Six inline tags (i, b, em, strong, sub, sup) are drawn as what they mean wherever the panel writes text; anything else stays literal, and attributes get the plain words."
+  },
+  {
+   "round": "R52",
+   "title": "분야를 큰 것부터 층층이 고르기",
+   "gap": "Twenty-six field chips lay flat in one row, unordered by size. The user asked for the hierarchy arranged large to small and picked level by level.",
+   "entryPoint": "작업 패널 → 저널 → 대분류·분야·세부 분야 칩",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "const LEVELS=[['domain','대분류'],['field','분야'],['subfield','세부 분야']];"
+    },
+    {
+     "file": "src/journal-metrics.js",
+     "marker": "subfield: text(t?.subfield?.display_name)"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+    }
+   ],
+   "status": "verified",
+   "review": "OpenAlex's topic hierarchy (domain > field > subfield) is kept on each journal's profile; profiles filled before it are asked once more. One chip row per level, largest first; a chosen row folds to its choice with the way back beside it, and the next level opens beneath. Grouping follows the level under the choice."
+  },
+  {
+   "round": "R53",
+   "title": "논문 함께 읽기: 주장·논리 흐름·논쟁 여지",
+   "gap": "The comparison table put papers side by side as fields. The user wanted the model to read them together: each one's claim and the chain it argues along, and where they pull against each other.",
+   "entryPoint": "작업 패널 → 논문 비교 → 함께 읽기",
+   "sources": [
+    {
+     "file": "src/assist.js",
+     "marker": "prompts.compare="
+    },
+    {
+     "file": "src/workbench.js",
+     "marker": "function drawCompareInsight"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/assist.test.mjs",
+     "name": "reading papers together sends two to six abstracts with their notes, and refuses less or more"
+    },
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the comparison table reads its papers together and keeps the reading as a note"
+    }
+   ],
+   "status": "verified",
+   "review": "Two to six selected papers -- titles, abstracts, the reader's own notes -- go to the configured AI service with a fixed outline: core claim, line of argument as an arrow chain, strength and limits of the evidence, common ground, every point of contention with the evidence that would settle it, open questions. It is asked not to invent and to say where abstracts are silent. The outline comes back editable, copyable, and can be kept as a note on the first paper."
+  },
+  {
+   "round": "R54",
+   "title": "관심 저자 목록 관리",
+   "gap": "A hundred cards are for noticing news, not for tending the list: nothing let the user find one author, sort by who was checked longest ago, or let one go without opening the card.",
+   "entryPoint": "작업 패널 → 저자 추적 → 목록 관리",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "function drawWatchManager"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the followed list can be tended as a table: found, sorted, let go"
+    }
+   ],
+   "status": "verified",
+   "review": "A table of the followed authors: name, place (with what was typed when followed in the tooltip, shaded when they moved), last check, new papers, patents, and an unfollow button on each row; found by name or place, sorted by news, name, place, longest unchecked or most recently followed; the whole list copyable."
   }
  ],
  "introducedInVersion": "0.6.0"

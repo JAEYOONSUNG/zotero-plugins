@@ -70,6 +70,14 @@
    ]
   },
   {
+   "ko": "특허",
+   "n": 3,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "보유 문헌",
    "n": 3,
    "files": [
@@ -123,7 +131,22 @@
    ]
   },
   {
+   "ko": "출력 언어",
+   "n": 3,
+   "files": [
+    "src/settings-schema.js",
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "Style Custom 연구 작업 패널",
+   "n": 3,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "전체",
    "n": 3,
    "files": [
     "src/workbench.js"
@@ -138,6 +161,13 @@
   },
   {
    "ko": "읽기 메모",
+   "n": 3,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이름순",
    "n": 3,
    "files": [
     "src/workbench.js"
@@ -279,14 +309,6 @@
   },
   {
    "ko": " · DOI 없음 {0}",
-   "n": 2,
-   "files": [
-    "src/runtime.js",
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "특허",
    "n": 2,
    "files": [
     "src/runtime.js",
@@ -450,14 +472,6 @@
   },
   {
    "ko": "Custom 패널 CSS",
-   "n": 2,
-   "files": [
-    "src/settings-schema.js",
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "출력 언어",
    "n": 2,
    "files": [
     "src/settings-schema.js",
@@ -823,7 +837,21 @@
    ]
   },
   {
-   "ko": "이름순",
+   "ko": "요청 중지",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "AI 요청을 중지했습니다.",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "결과 복사",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -844,6 +872,13 @@
    ]
   },
   {
+   "ko": "소속",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "특허 {0}",
    "n": 2,
    "files": [
@@ -852,6 +887,27 @@
   },
   {
    "ko": "{0}편{1}",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "소속 미확인",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "분야",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "분야 미확인",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -922,6 +978,27 @@
   },
   {
    "ko": "설정에서 AI 모델을 지정하세요.",
+   "n": 1,
+   "files": [
+    "src/assist.js"
+   ]
+  },
+  {
+   "ko": "비교하려면 문헌을 둘 이상 선택하세요.",
+   "n": 1,
+   "files": [
+    "src/assist.js"
+   ]
+  },
+  {
+   "ko": "한 번에 여섯 편까지 비교할 수 있습니다.",
+   "n": 1,
+   "files": [
+    "src/assist.js"
+   ]
+  },
+  {
+   "ko": "초록이 없는 문헌이 있습니다: {0}",
    "n": 1,
    "files": [
     "src/assist.js"
@@ -4365,13 +4442,6 @@
    ]
   },
   {
-   "ko": "전체",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "모든 종류",
    "n": 1,
    "files": [
@@ -6227,6 +6297,104 @@
    ]
   },
   {
+   "ko": "AI 논지·논쟁 분석",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "주장·논리 흐름·논쟁 여지",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}편은 너무 많습니다. 둘에서 여섯 편을 선택하세요.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "문헌을 둘 이상 선택하면 함께 읽습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}편 · 초록 있음 {1}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "함께 읽기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "선택한 문헌의 제목·초록·메모를 설정된 AI 서비스에 요청 중…",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "분석이 왔습니다. 초록만 읽고 쓴 밑그림이니 본문과 대조해 판단하세요.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "AI 논지·논쟁 분석 결과 — 초록 기준 밑그림",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "첫 문헌의 노트로 저장",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "먼저 분석을 받으세요.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "함께 읽기 ({0})\n\n",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "첫 문헌 아래에 노트로 저장했습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "번역·AI 설정에 endpoint와 모델을 연결하면 켜집니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "컬렉션 정렬",
    "n": 1,
    "files": [
@@ -6396,13 +6564,6 @@
   },
   {
    "ko": "{0}의 최근 작업을 불러오는 중…",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "소속",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6619,6 +6780,20 @@
    ]
   },
   {
+   "ko": "카드로 보기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "목록 관리",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "마지막 확인 이후 새 논문 {0}편",
    "n": 1,
    "files": [
@@ -6627,13 +6802,6 @@
   },
   {
    "ko": "마지막 확인 이후 새 특허 {0}건",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "소속 미확인",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6669,6 +6837,146 @@
   },
   {
    "ko": "{0} · 아직 확인하지 않음",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이름·소속으로 찾기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "관심 저자 찾기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "관심 저자 정렬",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "새 소식 순",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "소속순",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "오래 안 본 순",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "최근 등록 순",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}/{1}명",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "목록 복사",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이름 · 소속 · OpenAlex id, 탭으로 구분",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이름",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "마지막 확인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "새 논문",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "상세 보기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "등록 당시: {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "아직 없음",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "해제",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}을(를) 관심 저자에서 뺐습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "관심 저자에서 빼기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "찾는 저자가 없습니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6990,14 +7298,28 @@
    ]
   },
   {
-   "ko": "전체 {0}",
+   "ko": "대분류",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": "{0} 분야 저널 {1}종",
+   "ko": "세부 분야",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0} · 저널 {1}종",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "모든 {0}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7005,13 +7327,6 @@
   },
   {
    "ko": "이 분야의 저널이 없습니다.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "분야 미확인",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7145,13 +7460,6 @@
   },
   {
    "ko": "출판사",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "분야",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7306,27 +7614,6 @@
   },
   {
    "ko": "AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "요청 중지",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "AI 요청을 중지했습니다.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "결과 복사",
    "n": 1,
    "files": [
     "src/workbench.js"

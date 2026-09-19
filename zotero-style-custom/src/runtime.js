@@ -1740,7 +1740,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      repeat itself. */
   async refreshJournalProfiles({signal, onProgress} = {}) {
     const store = this.journalCache();
-    const stale = Object.entries(store).filter(([, hit]) => hit && hit.citedness != null && !hit.profileAt);
+    // Profiles filled before the topic hierarchy (domain, subfield) was kept
+    // are asked once more; the date is when that shipped.
+    const HIERARCHY_SINCE = '2026-09-19T03:00:00Z';
+    const stale = Object.entries(store).filter(([, hit]) => hit && hit.citedness != null && (!hit.profileAt || hit.profileAt < HIERARCHY_SINCE));
     const result = {journals: stale.length, filled: 0, requests: 0, budgetGone: false};
     if (!stale.length) return result;
     const byISSN = new Map();
@@ -1770,7 +1773,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           }
         }
         // Journals the batch did not answer for are marked as asked.
-        for (const code of batch) for (const key of byISSN.get(code) || []) if (!store[key].profileAt) store[key].profileAt = now;
+        for (const code of batch) for (const key of byISSN.get(code) || []) if (!store[key].profileAt || store[key].profileAt < HIERARCHY_SINCE) store[key].profileAt = now;
         this.dirty = true;
       } catch (error) {
         if (this.outOfBudget(error)) { result.budgetGone = true; break; }
