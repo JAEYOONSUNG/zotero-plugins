@@ -893,3 +893,8 @@
 #style-custom-workbench .sc-hit-group-note { margin: -4px 0 6px; font-size: 11px; }
 
 #style-custom-workbench .sc-scope-back { min-height: 24px; padding: 2px 10px; font-size: 11px; margin-inline-start: 8px; }
+
+#style-custom-workbench .sc-annot-swatch[aria-pressed=true] { background: var(--sc-accent-soft); box-shadow: inset 0 0 0 1px var(--sc-accent); }
+#style-custom-workbench .sc-tag-name { margin-inline-end: 8px; }
+#style-custom-workbench .sc-tag-only { min-height: 22px; padding: 1px 8px; font-size: 11px; opacity: 0; }
+#style-custom-workbench summary:hover .sc-tag-only, #style-custom-workbench summary:focus-within .sc-tag-only { opacity: 1; }
