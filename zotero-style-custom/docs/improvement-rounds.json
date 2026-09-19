@@ -1,5 +1,5 @@
 {
- "version": "0.41.1",
+ "version": "0.42.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1399,6 +1399,38 @@
    ],
    "status": "verified",
    "review": "One request per fifty authors reads OpenAlex's own list of current appointments, each with a ROR and the years it was signed. The first sweep adopts OpenAlex's name for the place the author was followed with and keeps the typed text; a move is when every remembered appointment has left that list, dated from the record. Live after the change: 109 records read, 0 moves, 73 authors with more than one appointment, 69 typed places replaced by canonical ones. Moves made by the earlier rules are retired when the store loads."
+  },
+  {
+   "round": "R47",
+   "title": "저널 프로필: JCR 페이지처럼, 로그인 없이",
+   "gap": "The journals tab was a list of names with a figure, and the user asked for what JCR's journal page shows -- each fact with its own sign, and the list by field. JCR's site needs an institutional login, so nothing could be read from it here; the registry shipped with the plugin knows the figure, quartile, abbreviation, publisher and ISSN, and OpenAlex knows the subject fields, h-index, output, open-access status, fee, country and homepage.",
+   "entryPoint": "작업 패널 → 저널 → 저널 이름 클릭",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "function journalProfile(j,card)"
+    },
+    {
+     "file": "src/runtime.js",
+     "marker": "async refreshJournalProfiles"
+    },
+    {
+     "file": "src/journal-metrics.js",
+     "marker": "function profilesURL"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+    },
+    {
+     "file": "test/journal-profiles.test.mjs",
+     "name": "cached figures are given their profiles fifty at a time, and the rest marked as asked"
+    }
+   ],
+   "status": "verified",
+   "review": "The profile fields ride on the request the figure already costs; journals cached before them are filled fifty at a time by ISSN -- 258 journals in this library in six requests, every one with a subject field afterwards. On the tab: the figure in its own column, quartile chip, field chips that filter, a grouped-by-field view with ranks, and a profile under any name with twelve signed facts and a button to the JCR page itself."
   }
  ],
  "introducedInVersion": "0.6.0"

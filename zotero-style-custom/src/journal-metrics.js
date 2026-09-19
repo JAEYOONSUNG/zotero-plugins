@@ -12,7 +12,12 @@
 
   const API = 'https://api.openalex.org/';
   const text = value => String(value == null ? '' : value).trim();
-  const SELECT = 'id,display_name,issn_l,issn,type,summary_stats,works_count,alternate_titles';
+  // The profile fields ride on the same request the metric already costs:
+  // publisher, country, homepage, open-access status, the fee, the subjects
+  // it publishes in. JCR's journal page shows these, and its site needs an
+  // institutional login; OpenAlex answers them without one.
+  const SELECT = 'id,display_name,issn_l,issn,type,summary_stats,works_count,cited_by_count,alternate_titles,'
+    + 'host_organization_name,country_code,homepage_url,is_oa,is_in_doaj,apc_usd,topics';
 
   const credentials = ({email, apiKey} = {}) =>
     (apiKey ? '&api_key=' + encodeURIComponent(apiKey) : '')
@@ -73,8 +78,43 @@
       citedness: Number.isFinite(metric) && metric >= 0 ? Math.round(metric * 10) / 10 : null,
       hIndex: Number.isInteger(stats.h_index) ? stats.h_index : null,
       titles: [text(raw.display_name), ...(Array.isArray(raw.alternate_titles) ? raw.alternate_titles.map(text) : [])]
-        .filter(Boolean)
+        .filter(Boolean),
+      ...profileOf(raw)
     };
+  }
+
+  // What a journal's page says beyond its figure. Topics come ranked by how
+  // many of the journal's papers fall in each; the fields those topics sit in
+  // are what "which subject is this journal in" is answered with.
+  function profileOf(raw) {
+    const topics = (Array.isArray(raw?.topics) ? raw.topics : [])
+      .map(t => ({name: text(t?.display_name), field: text(t?.field?.display_name), count: Number.isInteger(t?.count) ? t.count : 0}))
+      .filter(t => t.name).slice(0, 6);
+    const fields = [];
+    for (const t of topics) if (t.field && !fields.includes(t.field)) fields.push(t.field);
+    const apc = Number(raw?.apc_usd);
+    return {
+      publisher: text(raw?.host_organization_name),
+      country: text(raw?.country_code).toUpperCase(),
+      homepage: /^https?:\/\//i.test(text(raw?.homepage_url)) ? text(raw.homepage_url) : '',
+      isOA: raw?.is_oa === true, inDoaj: raw?.is_in_doaj === true,
+      apc: Number.isFinite(apc) && apc >= 0 ? apc : null,
+      cited: Number.isInteger(raw?.cited_by_count) ? raw.cited_by_count : null,
+      topics, fields
+    };
+  }
+
+  // Fifty journals in one request, by ISSN, for filling in the profiles of
+  // journals whose figure is already cached.
+  function profilesURL(issns, options = {}) {
+    const codes = [...new Set((Array.isArray(issns) ? issns : []).map(cleanISSN).filter(code => code.length === 8))].slice(0, 50);
+    if (!codes.length) return null;
+    const filter = 'issn:' + codes.map(code => code.slice(0, 4) + '-' + code.slice(4)).join('|');
+    return `${API}sources?per_page=50&filter=${encodeURIComponent(filter)}&select=${SELECT}${credentials(options)}`;
+  }
+
+  function readSources(payload) {
+    return (Array.isArray(payload?.results) ? payload.results : []).map(shapeSource).filter(Boolean);
   }
 
   // A search returns near-misses ("Nature" also brings "Nature Reviews ..."),
@@ -102,7 +142,7 @@
     return code.length === 8 ? 'issn:' + code : 'name:' + normalise(name);
   };
 
-  const api = {API, lookupURL, pickSource, shapeSource, cacheKey, normalise, cleanISSN, issnList, credentials};
+  const api = {API, lookupURL, pickSource, shapeSource, profileOf, profilesURL, readSources, cacheKey, normalise, cleanISSN, issnList, credentials};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalMetrics = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

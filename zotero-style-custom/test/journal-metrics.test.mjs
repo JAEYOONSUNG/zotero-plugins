@@ -75,3 +75,28 @@ test("a journal found by its print ISSN is accepted when OpenAlex links the elec
     {issn_l: "2041-6539", issn: ["2041-6520", "2041-6539"]})]};
   assert.ok(metrics.pickSource(payload, {name: "Chemical Science", issn: "2041-6520, 2041-6539"}));
 });
+
+test("a source carries its profile: publisher, country, access, fee, and the fields its topics fall in", () => {
+  const shaped = metrics.shapeSource(source("Bioresource Technology", {
+    host_organization_name: "Elsevier BV", country_code: "gb", homepage_url: "http://journals.elsevier.com/x", is_oa: false, is_in_doaj: false, apc_usd: 4880,
+    cited_by_count: 2542085,
+    topics: [{display_name: "Biofuel production", field: {display_name: "Engineering"}, count: 7794},
+      {display_name: "Wastewater", field: {display_name: "Environmental Science"}, count: 6239},
+      {display_name: "Anaerobic digestion", field: {display_name: "Engineering"}, count: 5132}]
+  }));
+  assert.deepEqual({publisher: shaped.publisher, country: shaped.country, homepage: shaped.homepage, isOA: shaped.isOA, apc: shaped.apc, cited: shaped.cited, fields: shaped.fields},
+    {publisher: "Elsevier BV", country: "GB", homepage: "http://journals.elsevier.com/x", isOA: false, apc: 4880, cited: 2542085, fields: ["Engineering", "Environmental Science"]});
+  assert.equal(shaped.topics.length, 3);
+  // A record with none of it still shapes, with the profile empty.
+  const bare = metrics.shapeSource(source("Nature"));
+  assert.deepEqual({publisher: bare.publisher, fields: bare.fields, apc: bare.apc, homepage: bare.homepage}, {publisher: "", fields: [], apc: null, homepage: ""});
+  assert.match(metrics.lookupURL({issn: "1476-4687"}), /host_organization_name/);
+});
+
+test("fifty journals are asked for in one request, by ISSN", () => {
+  const url = metrics.profilesURL(["1476-4687", "0036-8075", "bad", "1476-4687"]);
+  assert.match(url, /per_page=50/);
+  assert.match(decodeURIComponent(url), /filter=issn:1476-4687\|0036-8075&/);
+  assert.equal(metrics.profilesURL([]), null);
+  assert.equal(metrics.readSources({results: [source("Nature"), null]}).length, 1);
+});

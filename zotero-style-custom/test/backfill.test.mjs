@@ -45,6 +45,7 @@ function host({items = [], fetched = new Map(), budgetAt = null} = {}) {
       return fetched.get(item.id) || {signals: null, reason: "not-found"};
     },
     async refreshJournalCitedness() { return {journals: 3, found: 2, missing: 1, failed: 0, remaining: 0, budgetGone: false}; },
+    async refreshJournalProfiles() { return {journals: 0, filled: 0, requests: 0, budgetGone: false}; },
     async sweepWatchedAuthors() { return {authors: 0, withNews: 0, works: 0, requests: 0, budgetGone: false, remaining: 0}; },
     async flush() {}, async refreshWindows() {},
     get asked() { return asked; }

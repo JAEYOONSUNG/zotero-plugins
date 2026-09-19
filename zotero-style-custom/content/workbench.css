@@ -432,10 +432,41 @@
 #style-custom-workbench .sc-icon-button:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
 #style-custom-workbench .sc-icon-button[aria-pressed=true] { background: var(--sc-accent-soft); color: var(--sc-accent); }
 
-/* A journal says one thing: its impact factor and where that came from. */
-#style-custom-workbench .sc-journal { grid-template-columns: 1fr auto; padding: 9px 2px; }
-#style-custom-workbench .sc-journal .sc-hit-title { font-size: 13px; }
-#style-custom-workbench .sc-journal .sc-hit-authors { color: var(--sc-faint); }
+/* A journal row: the name with its mark and quartile, the figure in a column
+   of its own, and under it the profile when the name is opened. */
+#style-custom-workbench .sc-journal { grid-template-columns: 1fr auto auto; grid-template-areas: "title if actions" "meta if actions" "fields if actions" "profile profile profile"; padding: 9px 2px; }
+#style-custom-workbench .sc-journal .sc-hit-title { grid-area: title; font-size: 13px; display: flex; align-items: center; flex-wrap: wrap; gap: 2px 0; }
+#style-custom-workbench .sc-journal .sc-hit-meta { grid-area: meta; }
+#style-custom-workbench .sc-journal .sc-hit-authors { grid-area: fields; color: var(--sc-faint); }
+#style-custom-workbench .sc-journal .sc-hit-actions { grid-area: actions; grid-row: auto; }
+#style-custom-workbench .sc-journal-name { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; min-height: 0; }
+#style-custom-workbench .sc-journal-name:hover { text-decoration: underline; }
+#style-custom-workbench .sc-journal-rank { display: inline-block; min-width: 1.8em; margin-inline-end: 4px; color: var(--sc-faint); font: 600 11px/1 var(--sc-mono); text-align: end; }
+#style-custom-workbench .sc-journal-if { grid-area: if; align-self: start; min-width: 3.4em; padding-top: 2px; color: var(--sc-text); font: 600 13px/1.45 var(--sc-mono); font-variant-numeric: tabular-nums; text-align: end; }
+#style-custom-workbench .sc-journal-if-none { color: var(--sc-faint); font-weight: 400; }
+#style-custom-workbench .sc-journal-fields { display: flex; gap: 4px; flex-wrap: wrap; white-space: normal; }
+#style-custom-workbench .sc-chip-tiny { padding: 0 6px; font-size: 10px; line-height: 16px; }
+#style-custom-workbench .sc-chip-on { background: var(--sc-accent); color: #fff; }
+#style-custom-workbench .sc-chip-button { border: 0; cursor: pointer; min-height: 0; font: inherit; font-size: 11px; line-height: 18px; }
+#style-custom-workbench .sc-chip-button:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
+#style-custom-workbench .sc-chip-button[aria-pressed=true] { background: var(--sc-accent); color: #fff; }
+#style-custom-workbench .sc-field-chips { margin: 6px 0 8px; }
+#style-custom-workbench .sc-journal-count { font-size: 11px; }
+/* The profile: a two-column list of facts, a sign before each. */
+#style-custom-workbench .sc-journal-profile { grid-area: profile; margin: 6px 0 2px; padding: 10px 12px; border-radius: var(--sc-radius); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 16px; margin: 0; }
+#style-custom-workbench .sc-fact { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: baseline; min-width: 0; }
+#style-custom-workbench .sc-fact dt { display: inline-flex; align-items: center; gap: 5px; margin: 0; color: var(--sc-muted); font: 600 10px/1.6 var(--sc-font); letter-spacing: .3px; white-space: nowrap; }
+#style-custom-workbench .sc-fact dt svg { opacity: .7; }
+#style-custom-workbench .sc-fact dd { margin: 0; color: var(--sc-text); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-fact[data-tone=top]  dd { color: #9B71BF; font-weight: 600; }
+#style-custom-workbench .sc-fact[data-tone=high] dd { color: #6484BA; font-weight: 600; }
+#style-custom-workbench .sc-fact[data-tone=mid]  dd { color: #468D9B; }
+#style-custom-workbench .sc-fact[data-tone=low]  dd { color: #42926C; }
+#style-custom-workbench .sc-fact a { color: var(--sc-accent); text-decoration: none; }
+#style-custom-workbench .sc-fact a:hover { text-decoration: underline; }
+#style-custom-workbench .sc-journal-profile .sc-actions { margin-top: 8px; }
+@media (max-width: 520px) { #style-custom-workbench .sc-facts { grid-template-columns: 1fr; } }
 
 /* Figures sit in a fixed column so they can be compared down the list, each
    with its own mark so the row reads without a header above it. */

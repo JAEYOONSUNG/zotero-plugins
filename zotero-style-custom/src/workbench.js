@@ -1455,56 +1455,181 @@
    return span;
   }
 
-  function drawJournals(){const seen=new Set();const list=node('div',null,body,{class:'sc-hits'});for(const item of rows()){if(!item.venue||seen.has(item.venue))continue;seen.add(item.venue);
-   const c=node('div',null,list,{class:'sc-hit sc-journal'});
+  /* The journals tab, read the way JCR's journal page reads: the figure and
+     the quartile on the row, and beneath any row the profile -- abbreviation,
+     publisher, ISSN, subject fields, h-index, output, open access, country,
+     homepage -- each fact behind a small drawn sign so the eye can find one
+     without reading the others. The subject fields also filter and group the
+     list, which is how JCR's own category view works. JCR's site needs an
+     institutional login; the figures here come from the registry shipped with
+     the plugin and from OpenAlex, and a button opens the JCR page itself. */
+  const JOURNAL_ICONS={
+   impact:[['line',{x1:3,y1:12.6,x2:3,y2:8.6}],['line',{x1:8,y1:12.6,x2:8,y2:4.6}],['line',{x1:13,y1:12.6,x2:13,y2:7}]],
+   quartile:[['circle',{cx:8,cy:6.4,r:3.4}],['path',{d:'M5.8 9.2L4.8 13.4l3.2-1.6 3.2 1.6-1-4.2'}]],
+   abbreviation:[['path',{d:'M8.4 2.6H13v4.6l-6 6a1.1 1.1 0 01-1.6 0L2.8 10.2a1.1 1.1 0 010-1.6z'}],['circle',{cx:10.5,cy:5.1,r:.95}]],
+   publisher:[['rect',{x:3,y:4.4,width:10,height:8.6,rx:.8}],['path',{d:'M6 4.4V2.8h4v1.6'}],['line',{x1:6,y1:7.6,x2:6,y2:9.6}],['line',{x1:10,y1:7.6,x2:10,y2:9.6}]],
+   issn:[['line',{x1:3.2,y1:4,x2:3.2,y2:12}],['line',{x1:5.6,y1:4,x2:5.6,y2:12}],['line',{x1:7.6,y1:4,x2:7.6,y2:12}],['line',{x1:10.2,y1:4,x2:10.2,y2:12}],['line',{x1:12.8,y1:4,x2:12.8,y2:12}]],
+   field:[['path',{d:'M2.7 12.6V4.2h3.9l1.4 1.7h5.3v6.7z'}]],
+   hindex:[['path',{d:'M3 12l3.2-3.6 2.6 2 4.2-5'}],['line',{x1:2.6,y1:13,x2:13.4,y2:13}]],
+   works:[['rect',{x:2.75,y:3,width:3,height:10,rx:.8}],['rect',{x:7.25,y:3,width:3,height:10,rx:.8}],['path',{d:'M11.9 3.6l1.9.5-2.2 9.1-1.2-.3'}]],
+   access:[['rect',{x:3.4,y:7.2,width:9.2,height:6,rx:1}],['path',{d:'M5.6 7.2V5.4a2.4 2.4 0 014.8 0'}]],
+   country:[['circle',{cx:8,cy:8,r:5.4}],['path',{d:'M2.6 8h10.8M8 2.6c1.7 1.6 2.5 3.4 2.5 5.4S9.7 11.8 8 13.4M8 2.6C6.3 4.2 5.5 6 5.5 8s.8 3.8 2.5 5.4'}]],
+   link:[['path',{d:'M6.8 9.2a2.6 2.6 0 003.7 0l2-2a2.6 2.6 0 00-3.7-3.7l-.9.9'}],['path',{d:'M9.2 6.8a2.6 2.6 0 00-3.7 0l-2 2a2.6 2.6 0 003.7 3.7l.9-.9'}]],
+   library:[['path',{d:'M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z'}],['line',{x1:8,y1:4.8,x2:8,y2:13.4}]]
+  };
+  function journalIcon(name,parent){
+   const svg=doc.createElementNS(SVG_NS,'svg');
+   svg.setAttribute('viewBox','0 0 16 16');svg.setAttribute('width','13');svg.setAttribute('height','13');
+   svg.setAttribute('aria-hidden','true');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');
+   svg.setAttribute('stroke-width','1.4');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');
+   for(const [tag,attrs] of JOURNAL_ICONS[name]||[])svgShape(svg,tag,attrs);
+   parent.appendChild(svg);
+   return svg;
+  }
+  const journalView=state.journalView||(state.journalView={sort:'if',field:'',grouped:false,open:new Set()});
+  const COUNTRY_NAMES={US:'미국',GB:'영국',DE:'독일',NL:'네덜란드',CH:'스위스',KR:'한국',JP:'일본',CN:'중국',FR:'프랑스',IT:'이탈리아',ES:'스페인',CA:'캐나다',AU:'호주',SE:'스웨덴',DK:'덴마크',SG:'싱가포르',IN:'인도',BR:'브라질',IE:'아일랜드',AT:'오스트리아',BE:'벨기에',PL:'폴란드',NZ:'뉴질랜드',TW:'대만',HK:'홍콩',NO:'노르웨이',FI:'핀란드',IL:'이스라엘',RU:'러시아'};
+  const compact=n=>n==null?'':n>=1e6?(n/1e6).toFixed(1).replace(/\.0$/,'')+'M':n>=1e4?Math.round(n/1e3)+'k':n>=1e3?(n/1e3).toFixed(1).replace(/\.0$/,'')+'k':String(n);
+  /* Everything known about one journal, gathered from the three places it
+     lives: the registry (JIF, quartile, abbreviation, publisher, ISSN), the
+     OpenAlex cache (subjects, h-index, output, access, country, homepage),
+     and this library (how many papers, how many read, how they are cited). */
+  function journalFacts(venue,items){
+   const ref=runtime.Z.Items.get(Number(items[0].id));
+   const id=runtime.journalIdentity?.identify?.(venue)||null;
+   const profile=ref&&typeof runtime.journalProfile==='function'?runtime.journalProfile(ref):null;
+   const record=ref&&typeof runtime.journalRecord==='function'?runtime.journalRecord(ref):{name:venue,issn:''};
+   const issns=[...new Set([...(id?.issns||[]),...String(record.issn||'').split(/[,;\s]+/).map(x=>x.trim()).filter(x=>/^\d{4}-?\d{3}[\dXx]$/.test(x)).map(x=>x.length===8?x.slice(0,4)+'-'+x.slice(4):x.toUpperCase())])];
+   const first=items[0];
+   const impact=first.impactFactor!=null?Number(first.impactFactor):(id?.impactFactor??null);
+   const year=first.impactYear||id?.year||null;
+   const read=items.filter(i=>i.status==='done').length;
+   const cited=items.map(i=>Number(i.citations)||0);
+   const years=items.map(i=>Number(i.year)).filter(Number.isFinite);
+   return {venue,items,id,profile,impact,year,quartile:id?.quartile??null,abbreviation:id?.abbreviation||'',
+    publisher:profile?.publisher||id?.label||id?.publisher||'',issns,fields:profile?.fields||[],topics:profile?.topics||[],
+    hIndex:profile?.hIndex??null,works:profile?.works??null,citedness:profile?.citedness??null,isOA:!!profile?.isOA,inDoaj:!!profile?.inDoaj,apc:profile?.apc??null,
+    country:profile?.country||'',homepage:profile?.homepage||'',openAlexID:profile?.openAlexID||'',
+    papers:items.length,read,avgCited:cited.length?Math.round(cited.reduce((a,b)=>a+b,0)/cited.length):0,
+    span:years.length?[Math.min(...years),Math.max(...years)]:null,source:first.impactSource||''};
+  }
+  function drawJournals(){
+   const byVenue=new Map();
+   for(const item of rows()){if(!item.venue)continue;const list=byVenue.get(item.venue)||[];list.push(item);byVenue.set(item.venue,list);}
+   if(!byVenue.size){empty('저널이 있는 문헌이 없습니다.');return;}
+   const all=[...byVenue].map(([venue,items])=>journalFacts(venue,items));
+   /* The subject fields across the library's journals, as chips: one click
+      narrows the list to a field, the way JCR's category pages do. */
+   const fieldCount=new Map();
+   for(const j of all)for(const f of j.fields.slice(0,2))fieldCount.set(f,(fieldCount.get(f)||0)+1);
+   const fields=[...fieldCount].sort((a,b)=>b[1]-a[1]);
+   const controls=bar();
+   const sortPick=node('select',null,controls,{'aria-label':'저널 정렬'});
+   for(const [value,label] of [['if','IF 높은 순'],['name','이름순'],['papers','내 문헌 많은 순'],['quartile','사분위 순']]){const o=node('option',label,sortPick,{value});if(journalView.sort===value)o.selected=true;}
+   sortPick.addEventListener('change',()=>{journalView.sort=sortPick.value;render();});
+   const grouped=button(journalView.grouped?'목록으로':'분야별로 묶기',()=>{journalView.grouped=!journalView.grouped;render();},controls,{'aria-pressed':String(journalView.grouped)});
+   grouped.classList.add('sc-journal-toggle');
+   const known=all.filter(j=>j.fields.length).length;
+   node('span',`${all.length}종 · IF 있음 ${all.filter(j=>j.impact!=null).length} · 분야 확인 ${known}`,controls,{class:'sc-muted sc-journal-count'});
+   if(fields.length){
+    const chips=node('div',null,body,{class:'sc-chips sc-field-chips'});
+    const allChip=node('button',`전체 ${all.length}`,chips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(!journalView.field)});
+    allChip.addEventListener('click',()=>{journalView.field='';render();});
+    for(const [field,count] of fields){
+     const chip=node('button',`${field} ${count}`,chips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(journalView.field===field),title:`${field} 분야 저널 ${count}종`});
+     chip.addEventListener('click',()=>{journalView.field=journalView.field===field?'':field;render();});
+    }
+   }
+   const order={if:(a,b)=>(b.impact??-1)-(a.impact??-1)||a.venue.localeCompare(b.venue),name:(a,b)=>a.venue.localeCompare(b.venue),papers:(a,b)=>b.papers-a.papers||(b.impact??-1)-(a.impact??-1),quartile:(a,b)=>(a.quartile??9)-(b.quartile??9)||(b.impact??-1)-(a.impact??-1)}[journalView.sort]||((a,b)=>0);
+   const shown=all.filter(j=>!journalView.field||j.fields.slice(0,2).includes(journalView.field)).sort(order);
+   if(!shown.length){empty('이 분야의 저널이 없습니다.');return;}
+   if(journalView.grouped){
+    const groups=new Map();
+    for(const j of shown){const key=j.fields[0]||'분야 미확인';const list=groups.get(key)||[];list.push(j);groups.set(key,list);}
+    const sections=[...groups].sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0]));
+    for(const [field,list] of sections){
+     node('h3',`${field} · ${list.length}종`,body,{class:'sc-hit-group'});
+     const box=node('div',null,body,{class:'sc-hits'});
+     list.sort(order.name?order:order).forEach((j,index)=>journalRow(j,box,journalView.sort==='if'?index+1:null));
+    }
+   }else{
+    const box=node('div',null,body,{class:'sc-hits'});
+    shown.forEach((j,index)=>journalRow(j,box,journalView.sort==='if'?index+1:null));
+   }
+   if(!String(runtime.pref?.('journalRankKey','')||'').trim()){
+    node('p','JCR 분위·CAS 등급은 easyScholar 무료 키가 있어야 조회됩니다. 설정에서 키를 넣으면 이 목록에 등급 조회 버튼이 생깁니다. 키 없이도 위의 지표 조회는 동작합니다.',
+     body,{class:'sc-muted'});
+   }
+  }
+  function journalRow(j,list,rank){
+   const c=node('div',null,list,{class:'sc-hit sc-journal','data-venue':j.venue});
+   if(journalView.open.has(j.venue))c.classList.add('sc-journal-open');
    const head=node('p',null,c,{class:'sc-hit-title'});
    const P=runtime.palette?.(doc);
-   const mark=P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,item.venue,P):null;
+   if(rank!=null)node('span',String(rank),head,{class:'sc-journal-rank','aria-label':`${rank}위`});
+   const mark=P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,j.venue,P):null;
    if(mark){mark.style.marginInlineEnd='8px';head.appendChild(mark);}
-   head.appendChild(doc.createTextNode(item.venue));
-   // publicationTags already carries "IF 56.1 (2025)" and the rank grades, so the
-   // impact factor was being printed twice; say it once, with its provenance.
-   const tags=runtime.publicationTags?.(runtime.Z.Items.get(Number(item.id)))||[];
-   const facts=tags.length?tags:[item.impactFactor==null?'IF 미확인':`IF ${item.impactFactor}`];
+   const title=node('button',j.venue,head,{class:'sc-journal-name',type:'button','aria-expanded':String(journalView.open.has(j.venue)),title:'프로필 펼치기·접기'});
+   title.addEventListener('click',()=>{if(journalView.open.has(j.venue))journalView.open.delete(j.venue);else journalView.open.add(j.venue);render();});
+   if(j.quartile){const q=node('span',`Q${j.quartile}`,head,{class:'sc-quartile','data-q':String(j.quartile),title:`JCR 사분위 Q${j.quartile}`});q.style.marginInlineStart='6px';}
+   /* The figure in its own column, one decimal, right-aligned, so a list of
+      journals can be compared down the page the way the IF column is. */
+   const figure=node('span',j.impact!=null?j.impact.toFixed(1):'—',c,{class:'sc-journal-if',title:j.impact!=null?`JIF ${j.impact.toFixed(1)}${j.year?' ('+j.year+')':''}`:'IF 미확인'});
+   if(j.impact==null)figure.classList.add('sc-journal-if-none');
    const meta=node('p',null,c,{class:'sc-hit-meta'});
-   /* What the registry knows about the journal, on the row: its JCR quartile
-      as a chip whose shade follows the quartile, its JCR abbreviation, and the
-      house that publishes it. This is the list the user asked to read the way
-      the IF list reads. */
-   const id=runtime.journalIdentity?.identify?.(item.venue);
-   if(id&&id.quartile){
-    const q=node('span',`Q${id.quartile}`,meta,{class:'sc-quartile','data-q':String(id.quartile),title:`JCR 사분위 Q${id.quartile}`});
-    q.style.marginInlineEnd='6px';
-   }
-   const bits=[...facts];
-   if(id&&id.abbreviation)bits.push(id.abbreviation);
-   if(id&&(id.label||id.publisher))bits.push(id.label||id.publisher);
+   const bits=[];
+   if(j.abbreviation)bits.push(j.abbreviation);
+   if(j.publisher)bits.push(j.publisher);
+   bits.push(`내 문헌 ${j.papers}편`);
    meta.appendChild(doc.createTextNode(bits.join(' · ')));
-   const source=item.impactSource||'출처 정보 없음';
-   node('p',source.replace(/https?:\/\/[^\s·]+/,m=>m.replace(/^https?:\/\/(www\.)?/,'').split('/')[0]),c,{class:'sc-hit-authors',title:source});
+   if(j.fields.length){const line=node('p',null,c,{class:'sc-hit-authors sc-journal-fields'});for(const f of j.fields.slice(0,2)){const chip=node('span',f,line,{class:'sc-chip sc-chip-tiny'});if(journalView.field===f)chip.classList.add('sc-chip-on');}}
    const actions=node('div',null,c,{class:'sc-hit-actions'});
-   // The route that needs nothing comes first. easyScholar wants a key the user
-   // may never have had, and leading with it made the tab look broken.
    button('지표 조회',async()=>{
-    const ref=runtime.Z.Items.get(Number(item.id));
+    const ref=runtime.Z.Items.get(Number(j.items[0].id));
     const hit=await runtime.fetchJournalMetric(runtime.journalRecord(ref));
     await load();
     message(hit&&hit.citedness!=null
-     ?`${hit.name||item.venue}: 2년 평균 피인용 ~${hit.citedness} (OpenAlex 추정치, 공식 JIF 아님)`
-     :`${item.venue}: OpenAlex에 이 저널의 지표가 없습니다.`);
+     ?`${hit.name||j.venue}: 2년 평균 피인용 ~${hit.citedness} (OpenAlex 추정치, 공식 JIF 아님)`
+     :`${j.venue}: OpenAlex에 이 저널의 지표가 없습니다.`);
    },actions);
-   button('공식 값 새로고침',async()=>{const result=await runtime.refreshJournalMetrics([runtime.Z.Items.get(Number(item.id))],win.DOMParser);message(`확인 ${result.updated} · 미확인 ${result.failed+result.unknown}`);await load();},actions);
-   // Shown only once a key exists, so the tab never offers something that can
-   // only fail.
+   button('공식 값 새로고침',async()=>{const result=await runtime.refreshJournalMetrics([runtime.Z.Items.get(Number(j.items[0].id))],win.DOMParser);message(`확인 ${result.updated} · 미확인 ${result.failed+result.unknown}`);await load();},actions);
    if(String(runtime.pref?.('journalRankKey','')||'').trim()){
-    button('등급 조회',async()=>{await runtime.refreshPublicationRanks([runtime.Z.Items.get(Number(item.id))]);await load();message('저널 등급 조회를 마쳤습니다.');},actions);
+    button('등급 조회',async()=>{await runtime.refreshPublicationRanks([runtime.Z.Items.get(Number(j.items[0].id))]);await load();message('저널 등급 조회를 마쳤습니다.');},actions);
    }
+   if(journalView.open.has(j.venue))journalProfile(j,c);
   }
-  if(!seen.size)return;
-  if(!String(runtime.pref?.('journalRankKey','')||'').trim()){
-   node('p','JCR 분위·CAS 등급은 easyScholar 무료 키가 있어야 조회됩니다. 설정에서 키를 넣으면 이 목록에 등급 조회 버튼이 생깁니다. 키 없이도 위의 지표 조회는 동작합니다.',
-    body,{class:'sc-muted'});
-  }}
+  function journalProfile(j,card){
+   const box=node('div',null,card,{class:'sc-journal-profile'});
+   const grid=node('dl',null,box,{class:'sc-facts'});
+   const fact=(icon,label,value,{title='',tone=''}={})=>{
+    if(value===null||value===undefined||value==='')return null;
+    const row=node('div',null,grid,{class:'sc-fact',title:title||label});
+    if(tone)row.dataset.tone=tone;
+    const dt=node('dt',null,row);journalIcon(icon,dt);node('span',label,dt);
+    const dd=node('dd',null,row);
+    if(value instanceof win.Node||typeof value==='object')dd.appendChild(value);else dd.textContent=String(T(value));
+    return row;
+   };
+   fact('impact','JIF',j.impact!=null?`${j.impact.toFixed(1)}${j.year?' · '+j.year:''}`:'미확인',{title:j.source||'등재 JCR 목록',tone:j.impact==null?'':j.impact>=10?'top':j.impact>=5?'high':j.impact>=2?'mid':'low'});
+   fact('quartile','사분위',j.quartile?`Q${j.quartile}`:'미확인',{tone:j.quartile===1?'top':j.quartile===2?'high':''});
+   fact('abbreviation','약어',j.abbreviation||null,{title:'JCR 표준 약어'});
+   fact('publisher','출판사',j.publisher||null);
+   fact('issn','ISSN',j.issns.length?j.issns.join(' · '):null);
+   if(j.fields.length){const span=doc.createElementNS(HTML,'span');j.fields.forEach((f,i)=>{node('span',f,span,{class:'sc-chip sc-chip-tiny'});});fact('field','분야',span,{title:j.topics.slice(0,4).map(t=>`${t.name} (${t.count})`).join('\n')||'OpenAlex 주제 기준'});}
+   fact('hindex','h-index',j.hIndex!=null?String(j.hIndex):null,{title:'OpenAlex 기준 저널 h-index'});
+   fact('works','발행·피인용',j.works!=null?`${compact(j.works)}편${j.citedness!=null?' · 2년 평균 피인용 '+j.citedness:''}`:null,{title:'OpenAlex 기준 누적 논문 수와 2년 평균 피인용 (공식 JIF 아님)'});
+   const access=!j.profile?null:[T(j.isOA?'전면 OA':'구독형'),j.inDoaj?T('DOAJ 등재'):'',j.apc!=null?T(j.isOA?'APC ${0}':'OA 선택 시 APC ${0}').replace('{0}',j.apc.toLocaleString()):''].filter(Boolean).join(' · ');
+   fact('access','오픈액세스',access,{tone:j.isOA?'low':''});
+   fact('country','국가',j.country?`${COUNTRY_NAMES[j.country]||j.country}`:null);
+   if(j.homepage){const a=node('a',j.homepage.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),null,{href:'#',title:j.homepage});a.addEventListener('click',e=>{e.preventDefault();runtime.Z.launchURL&&runtime.Z.launchURL(j.homepage);});fact('link','홈페이지',a);}
+   fact('library','내 서재',`${j.papers}편 · 읽음 ${j.read} · 평균 피인용 ${j.avgCited}${j.span?' · '+(j.span[0]===j.span[1]?j.span[0]:j.span[0]+'–'+j.span[1]):''}`,{title:'이 서재에서 이 저널의 문헌'});
+   const actions=bar(box);
+   button('이 저널 문헌 보기',()=>{state.query=j.venue;state.tab='explore';render();},actions);
+   if(j.abbreviation){
+    button('JCR에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://jcr.clarivate.com/jcr-jp/journal-profile?journal=${encodeURIComponent(j.abbreviation)}&year=${j.year||new Date().getFullYear()-1}`),actions,{title:'Journal Citation Reports의 저널 페이지 · 기관 로그인이 필요합니다'});
+   }
+   if(j.openAlexID)button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions);
+   if(!j.profile)node('p','OpenAlex 프로필(분야·h-index·오픈액세스)은 백필의 저널 단계에서 채워집니다.',box,{class:'sc-muted'});
+  }
   function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. 설정에서 AI endpoint와 모델을 연결할 수 있습니다.');return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
    for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');const request=++aiEpoch;const result=await assist.run(task,item,{language:language.value});if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);
    button('요청 중지',()=>{aiEpoch++;assist.cancel?.();message('AI 요청을 중지했습니다.');},b);

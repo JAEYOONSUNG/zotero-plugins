@@ -468,9 +468,10 @@ test('a journal is listed once, and its impact factor is stated once',async()=>{
   const text=row.textContent;
   assert.equal((text.match(/IF 56\.1/g)||[]).length<=1,true,'the impact factor was printed twice: '+text);
  }
- // The source is kept but shortened; the full value stays in the tooltip.
- const source=rows[0].querySelector('.sc-hit-authors');
- assert.ok(source.getAttribute('title'),'the full provenance must remain available');
+ // The figure sits in its own column, one decimal, with its provenance in the tooltip.
+ const figure=rows[0].querySelector('.sc-journal-if');
+ assert.match(figure.textContent,/^\d+\.\d$/);
+ assert.ok(figure.getAttribute('title'),'the provenance must remain available');
  // Actions live in the hover group, not inline in the card.
  assert.ok(rows[0].querySelector('.sc-hit-actions button'));
  f.bench.destroy();
@@ -816,4 +817,40 @@ test('the annotation list reads as a pass through the paper', async () => {
   await settle();
   assert.ok(f.bench.state.color, 'clicking a colour narrows to it');
   f.bench.destroy();
+});
+
+test('a journal opens into a profile of signed facts, and the fields filter the list',async()=>{
+ /* JCR's journal page, without its login: figure, quartile, abbreviation,
+    publisher, ISSN, subject, h-index, output, access, country, homepage, and
+    what this library holds from it -- each behind a drawn sign. */
+ const f=fixture();
+ f.runtime.journalIdentity={identify:venue=>venue==='Science'?{quartile:1,abbreviation:'SCIENCE',issns:['0036-8075'],impactFactor:44.7,year:2025,publisher:'AAAS'}:{quartile:1,abbreviation:'NATURE',issns:['0028-0836'],impactFactor:50.5,year:2025,publisher:'Springer Nature'}};
+ f.runtime.journalRecord=ref=>({name:String(ref.id)==='1'?'Science':'Nature',issn:''});
+ f.runtime.journalProfile=ref=>String(ref.id)==='1'?{citedness:7.0,fields:['Multidisciplinary','Engineering'],topics:[{name:'Everything',field:'Multidisciplinary',count:9}],hIndex:1200,works:250000,isOA:false,inDoaj:false,apc:4000,country:'US',homepage:'https://www.science.org/',openAlexID:'S3880285'}:null;
+ await f.bench.show('journals');
+ // The field chips come from the profiles that exist.
+ const chips=[...f.body().querySelectorAll('.sc-field-chips .sc-chip-button')].map(b=>b.textContent);
+ assert.deepEqual(chips,['전체 2','Multidisciplinary 1','Engineering 1']);
+ // Nothing is open yet; opening a journal lays out its facts.
+ assert.equal(f.body().querySelector('.sc-facts'),null);
+ await f.click('Science');
+ const facts=[...f.body().querySelectorAll('.sc-fact dt')].map(dt=>dt.textContent);
+ assert.deepEqual(facts,['JIF','사분위','약어','출판사','ISSN','분야','h-index','발행·피인용','오픈액세스','국가','홈페이지','내 서재']);
+ for(const dt of f.body().querySelectorAll('.sc-fact dt'))assert.ok(dt.querySelector('svg'),'each fact carries its sign: '+dt.textContent);
+ const value=label=>[...f.body().querySelectorAll('.sc-fact')].find(r=>r.querySelector('dt').textContent===label).querySelector('dd').textContent;
+ assert.equal(value('JIF'),'4.0 · 2025');
+ assert.equal(value('ISSN'),'0036-8075');
+ assert.equal(value('오픈액세스'),'구독형 · OA 선택 시 APC $4,000');
+ assert.equal(value('국가'),'미국');
+ assert.match(value('내 서재'),/^1편 · 읽음 0 · 평균 피인용 3 · 2025$/);
+ assert.ok([...f.body().querySelectorAll('button')].some(b=>b.textContent==='JCR에서 보기'),'the JCR page is one click away');
+ // A field chip narrows the list; the same chip again widens it.
+ await f.click('Engineering 1');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science']);
+ await f.click('Engineering 1');
+ assert.equal(f.body().querySelectorAll('.sc-journal').length,2);
+ // Grouped by field, the journal without a profile sits under "field unknown".
+ await f.click('분야별로 묶기');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-hit-group')].map(h=>h.textContent),['Multidisciplinary · 1종','분야 미확인 · 1종']);
+ f.bench.destroy();
 });

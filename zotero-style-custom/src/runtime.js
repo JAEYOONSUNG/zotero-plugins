@@ -1707,10 +1707,78 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     store[key] = {
       citedness: source.citedness, name: source.name, issn: source.issn,
-      openAlexID: source.id, checkedAt: new Date().toISOString()
+      openAlexID: source.id, checkedAt: new Date().toISOString(),
+      ...this.journalProfileFields(source), profileAt: new Date().toISOString()
     };
     this.dirty = true;
     return store[key];
+  }
+
+  journalProfileFields(source) {
+    return {
+      hIndex: source.hIndex ?? null, works: source.works ?? null, cited: source.cited ?? null,
+      publisher: source.publisher || '', country: source.country || '', homepage: source.homepage || '',
+      isOA: !!source.isOA, inDoaj: !!source.inDoaj, apc: source.apc ?? null,
+      topics: Array.isArray(source.topics) ? source.topics : [], fields: Array.isArray(source.fields) ? source.fields : []
+    };
+  }
+
+  // What is known about the journal a paper is in, from the cache alone: the
+  // OpenAlex figures and profile when they have been fetched, nothing otherwise.
+  journalProfile(item) {
+    const record = this.journalRecord(item);
+    if (!record.name && !record.issn) return null;
+    const hit = this.journalCache()[this.journalTools2.cacheKey(record)];
+    return hit && hit.citedness != null ? hit : null;
+  }
+
+  /* Journals cached before the profile fields existed have a figure and
+     nothing else. Fifty at a time, by ISSN, they are filled in once: 255
+     journals in this library cost six requests. A journal without an ISSN
+     anywhere keeps its figure and is marked as asked, so the sweep does not
+     repeat itself. */
+  async refreshJournalProfiles({signal, onProgress} = {}) {
+    const store = this.journalCache();
+    const stale = Object.entries(store).filter(([, hit]) => hit && hit.citedness != null && !hit.profileAt);
+    const result = {journals: stale.length, filled: 0, requests: 0, budgetGone: false};
+    if (!stale.length) return result;
+    const byISSN = new Map();
+    const now = new Date().toISOString();
+    for (const [key, hit] of stale) {
+      const code = this.journalTools2.cleanISSN(hit.issn || (key.startsWith('issn:') ? key.slice(5) : ''));
+      if (code.length === 8) byISSN.set(code, [...(byISSN.get(code) || []), key]);
+      else { hit.profileAt = now; this.dirty = true; }
+    }
+    const codes = [...byISSN.keys()];
+    for (let start = 0; start < codes.length; start += 50) {
+      if (signal?.aborted) break;
+      const batch = codes.slice(start, start + 50);
+      onProgress?.(start, codes.length);
+      const url = this.journalTools2.profilesURL(batch, this.discoverOptions());
+      if (!url) break;
+      try {
+        const payload = await this.discoverJSON(url, {signal});
+        result.requests++;
+        for (const source of this.journalTools2.readSources(payload)) {
+          const keys = new Set();
+          for (const code of source.issns) for (const key of byISSN.get(code) || []) keys.add(key);
+          for (const key of keys) {
+            Object.assign(store[key], this.journalProfileFields(source), {profileAt: now});
+            if (!store[key].openAlexID && source.id) store[key].openAlexID = source.id;
+            result.filled++;
+          }
+        }
+        // Journals the batch did not answer for are marked as asked.
+        for (const code of batch) for (const key of byISSN.get(code) || []) if (!store[key].profileAt) store[key].profileAt = now;
+        this.dirty = true;
+      } catch (error) {
+        if (this.outOfBudget(error)) { result.budgetGone = true; break; }
+        this.Z.logError(error);
+      }
+      if (start + 50 < codes.length) await this.pause(150);
+    }
+    await this.flush();
+    return result;
   }
 
   // The catalogue's JIF always wins; this only fills what it does not cover.
@@ -2806,6 +2874,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     report.journals = await this.refreshJournalCitedness(all.filter(item => this.isRegular(item)),
       {signal, onProgress: (done, total) => note('journals', done, total)});
     if (report.journals.budgetGone) { report.budgetGone = true; return report; }
+    report.journals.profiles = await this.refreshJournalProfiles({signal, onProgress: (done, total) => note('journals', done, total)});
+    if (report.journals.profiles.budgetGone) { report.budgetGone = true; return report; }
     if (signal?.aborted || !this.active || this.stopping) return report;
 
     report.stage = 'authors';

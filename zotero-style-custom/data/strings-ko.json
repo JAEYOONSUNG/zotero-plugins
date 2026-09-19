@@ -159,6 +159,38 @@
    ]
   },
   {
+   "ko": "미국",
+   "n": 2,
+   "files": [
+    "src/item-kinds.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "한국",
+   "n": 2,
+   "files": [
+    "src/item-kinds.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "일본",
+   "n": 2,
+   "files": [
+    "src/item-kinds.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "중국",
+   "n": 2,
+   "files": [
+    "src/item-kinds.js",
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "철회된 논문입니다. 인용하기 전에 철회 사유를 확인하세요.",
    "n": 2,
    "files": [
@@ -690,6 +722,13 @@
    ]
   },
   {
+   "ko": "OpenAlex에서 보기",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "기존 태그 경로",
    "n": 2,
    "files": [
@@ -746,7 +785,35 @@
    ]
   },
   {
+   "ko": "이름순",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "오픈액세스",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "{0}편 · 이미 보유 {1}편",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}편{1}",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "미확인",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -956,35 +1023,7 @@
    ]
   },
   {
-   "ko": "미국",
-   "n": 1,
-   "files": [
-    "src/item-kinds.js"
-   ]
-  },
-  {
    "ko": "유럽",
-   "n": 1,
-   "files": [
-    "src/item-kinds.js"
-   ]
-  },
-  {
-   "ko": "한국",
-   "n": 1,
-   "files": [
-    "src/item-kinds.js"
-   ]
-  },
-  {
-   "ko": "일본",
-   "n": 1,
-   "files": [
-    "src/item-kinds.js"
-   ]
-  },
-  {
-   "ko": "중국",
    "n": 1,
    "files": [
     "src/item-kinds.js"
@@ -4764,13 +4803,6 @@
    ]
   },
   {
-   "ko": "OpenAlex에서 보기",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "이 범위에서 연결이 없는 논문 {0}",
    "n": 1,
    "files": [
@@ -6017,13 +6049,6 @@
    ]
   },
   {
-   "ko": "이름순",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "문헌 많은 순",
    "n": 1,
    "files": [
@@ -6109,13 +6134,6 @@
   },
   {
    "ko": "연도 미상",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "오픈액세스",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6284,13 +6302,6 @@
   },
   {
    "ko": "함께 낸 저자 {0}",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "{0}편{1}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6521,7 +6532,287 @@
    ]
   },
   {
-   "ko": "IF 미확인",
+   "ko": "영국",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "독일",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "네덜란드",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "스위스",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "프랑스",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이탈리아",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "스페인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "캐나다",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "호주",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "스웨덴",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "덴마크",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "싱가포르",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "인도",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "브라질",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "아일랜드",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "오스트리아",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "벨기에",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "폴란드",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "뉴질랜드",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "대만",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "홍콩",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "노르웨이",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "핀란드",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이스라엘",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "러시아",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "저널이 있는 문헌이 없습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "저널 정렬",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "IF 높은 순",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "내 문헌 많은 순",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "사분위 순",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "목록으로",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "분야별로 묶기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}종 · IF 있음 {1} · 분야 확인 {2}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "전체 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0} 분야 저널 {1}종",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이 분야의 저널이 없습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "분야 미확인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0} · {1}종",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "JCR 분위·CAS 등급은 easyScholar 무료 키가 있어야 조회됩니다. 설정에서 키를 넣으면 이 목록에 등급 조회 버튼이 생깁니다. 키 없이도 위의 지표 조회는 동작합니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}위",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "프로필 펼치기·접기",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6535,7 +6826,14 @@
    ]
   },
   {
-   "ko": "출처 정보 없음",
+   "ko": "IF 미확인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "내 문헌 {0}편",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6591,7 +6889,161 @@
    ]
   },
   {
-   "ko": "JCR 분위·CAS 등급은 easyScholar 무료 키가 있어야 조회됩니다. 설정에서 키를 넣으면 이 목록에 등급 조회 버튼이 생깁니다. 키 없이도 위의 지표 조회는 동작합니다.",
+   "ko": "등재 JCR 목록",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "사분위",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "약어",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "JCR 표준 약어",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "출판사",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "분야",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "OpenAlex 주제 기준",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "OpenAlex 기준 저널 h-index",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "발행·피인용",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "OpenAlex 기준 누적 논문 수와 2년 평균 피인용 (공식 JIF 아님)",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "전면 OA",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "구독형",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "DOAJ 등재",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "OA 선택 시 APC ${0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "국가",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "홈페이지",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "내 서재",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}편 · 읽음 {1} · 평균 피인용 {2}{3}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이 서재에서 이 저널의 문헌",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이 저널 문헌 보기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "JCR에서 보기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "Journal Citation Reports의 저널 페이지 · 기관 로그인이 필요합니다",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "OpenAlex 프로필(분야·h-index·오픈액세스)은 백필의 저널 단계에서 채워집니다.",
    "n": 1,
    "files": [
     "src/workbench.js"

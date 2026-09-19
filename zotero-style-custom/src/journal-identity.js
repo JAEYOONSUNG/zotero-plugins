@@ -462,10 +462,12 @@
     if (info) {
       return {family, label: info.label, hue: info.hue, known: true, viaPublisher: true,
         mark: abbreviate(name) || monogram(row.abbreviation || name),
-        publisher: row.publisher, quartile: row.quartile, abbreviation: row.abbreviation};
+        publisher: row.publisher, quartile: row.quartile, abbreviation: row.abbreviation,
+        issns: row.issns || [], impactFactor: row.impactFactor ?? null, year: row.year ?? null};
     }
     return {family: 'other', label: '', hue: derivedHue(name), mark: abbreviate(name) || monogram(name), known: false,
-      publisher: row ? row.publisher : '', quartile: row ? row.quartile : null, abbreviation: row ? row.abbreviation : ''};
+      publisher: row ? row.publisher : '', quartile: row ? row.quartile : null, abbreviation: row ? row.abbreviation : '',
+      issns: row ? (row.issns || []) : [], impactFactor: row ? (row.impactFactor ?? null) : null, year: row ? (row.year ?? null) : null};
   }
 
   /* The registry: one row per JCR journal, loaded once, looked up by the same
