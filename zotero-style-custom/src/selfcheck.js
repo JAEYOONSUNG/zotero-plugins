@@ -129,7 +129,7 @@
       if (!win.Zotero_Tabs || typeof win.Zotero_Tabs.add !== 'function') return 'this window has no tab bar';
       const before = win.Zotero_Tabs.selectedID;
       await bench.show('explore');
-      if (!bench.dock()) throw new Error('Zotero_Tabs.add refused');
+      if (!bench.docked() && !bench.dock()) throw new Error('Zotero_Tabs.add refused: ' + (bench.dockError?.() || 'no reason given'));
       try {
         await new Promise(resolve => win.setTimeout(resolve, 250));
         const inTab = !!bench.panel.closest('#tabs-deck, .tab-container, [id^="zotero-tabs"], deck') || bench.panel.parentNode !== win.document.documentElement;

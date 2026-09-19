@@ -246,13 +246,16 @@
   let tabID=null,closingSelf=false;
   const canDock=()=>!!(win.Zotero_Tabs&&typeof win.Zotero_Tabs.add==='function');
   function moveBack(){if(panel.parentNode!==doc.documentElement)doc.documentElement.appendChild(panel);delete panel.dataset.docked;syncDock();}
+  let dockError='';
   function dock({save=true}={}){
-   if(tabID||!canDock())return false;
+   dockError='';
+   if(tabID)return true;
+   if(!canDock()){dockError='no tab bar';return false;}
    let added;
    try{added=win.Zotero_Tabs.add({type:'style-custom-workbench',title:T('연구 작업 패널'),data:{icon:'journalArticle'},select:true,
     onClose:()=>{tabID=null;moveBack();if(!closingSelf&&!panel.hidden)toggle(false);}});}
-   catch(error){runtime.Z.logError?.(error);return false;}
-   if(!added||!added.container){return false;}
+   catch(error){dockError=String(error?.message||error);runtime.Z.logError?.(error);return false;}
+   if(!added||!added.container){dockError='Zotero_Tabs.add returned no container';return false;}
    tabID=added.id;
    added.container.appendChild(panel);
    panel.dataset.docked='tab';
@@ -1936,7 +1939,7 @@
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};
-  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,show:async tab=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;await toggle(true);}};
+  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async tab=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;await toggle(true);}};
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
