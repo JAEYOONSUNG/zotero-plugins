@@ -4148,6 +4148,27 @@
    ]
   },
   {
+   "ko": "전체 화면 전환",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "원래 크기로",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "전체 화면",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "기능 찾기",
    "n": 1,
    "files": [

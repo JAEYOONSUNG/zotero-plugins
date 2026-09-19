@@ -1059,5 +1059,8 @@
  "모든 종류": "Every kind",
  "{0}만 보기": "Only {0}",
  "저널별 색": "Colour by journal",
- "{0} · {1}편": "{0} · {1} papers"
+ "{0} · {1}편": "{0} · {1} papers",
+ "전체 화면 전환": "Toggle full window",
+ "원래 크기로": "Back to its size",
+ "전체 화면": "Fill the window"
 }

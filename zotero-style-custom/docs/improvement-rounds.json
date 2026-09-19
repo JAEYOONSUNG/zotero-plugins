@@ -1,5 +1,5 @@
 {
- "version": "0.43.2",
+ "version": "0.43.3",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1503,6 +1503,34 @@
    ],
    "status": "verified",
    "review": "Under the map's summary line, the six commonest journals in it, each in its own mark with how many nodes it accounts for; the older tag/author graph now carries venues too, so it is coloured and legended alike. Every explore card wears its journal's mark before the venue, the same mark the tree and the map use."
+  },
+  {
+   "round": "R51",
+   "title": "전체 화면 토글과 제목 마크업",
+   "gap": "The panel floats at a dragged-out size, which on a laptop leaves the list in a letterbox; the user asked for full screen. Titles with Zotero's inline markup showed \"<i>Bacillus subtilis</i>\" as text.",
+   "entryPoint": "패널 머리줄의 전체 화면 버튼 · 제목줄 더블클릭",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "function setMaximized"
+    },
+    {
+     "file": "src/workbench.js",
+     "marker": "function rich(parent,text)"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "one press fills the window, the next puts the panel back, and the choice is remembered"
+    },
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "markup in a title is drawn as italics and subscripts, not shown as tags"
+    }
+   ],
+   "status": "verified",
+   "review": "One press fills the window edge to edge, the next puts the panel back, double-clicking the title bar does the same, and the choice is remembered. Six inline tags (i, b, em, strong, sub, sup) are drawn as what they mean wherever the panel writes text; anything else stays literal, and attributes get the plain words."
   }
  ],
  "introducedInVersion": "0.6.0"

@@ -447,7 +447,7 @@ test('following an author adds them to the panel and surfaces what is new next t
 test('window chrome is icons, but every one still says what it does',async()=>{
  const f=fixture();await f.bench.toggle(true);
  const chrome=[...f.bench.panel.querySelectorAll('.sc-header-actions button')];
- assert.equal(chrome.length,3);
+ assert.equal(chrome.length,4);
  for(const button of chrome){
   assert.ok(button.textContent.trim().length<=2,'chrome should be a glyph, not a sentence: '+button.textContent);
   // A glyph with no name is unusable by anyone who cannot see it.
@@ -480,7 +480,7 @@ test('a journal is listed once, and its impact factor is stated once',async()=>{
 test('chrome icons share one grid and one stroke, so they read as a set',async()=>{
  const f=fixture();await f.bench.toggle(true);
  const icons=[...f.bench.panel.querySelectorAll('.sc-header-actions button svg')];
- assert.equal(icons.length,3,'each chrome button should carry a drawn icon, not a text glyph');
+ assert.equal(icons.length,4,'each chrome button should carry a drawn icon, not a text glyph');
  for(const svg of icons){
   // Unicode glyphs come from different blocks and land at different optical
   // sizes; a shared viewBox and stroke is what makes them look like one set.
@@ -512,7 +512,7 @@ test('the toolbar button survives a document that rejects innerHTML on SVG',asyn
   assert.ok(toolbarButton,'attach must reach the toolbar button');
   assert.match(toolbarButton.getAttribute('image'),/style-custom-toolbar\.svg$/);
   // The header icons must still be drawn, not silently skipped.
-  assert.equal(f.bench.panel.querySelectorAll('.sc-header-actions button svg').length,3);
+  assert.equal(f.bench.panel.querySelectorAll('.sc-header-actions button svg').length,4);
   f.bench.destroy();
  } finally {
   if(original)Object.defineProperty(proto,'innerHTML',original);
@@ -889,4 +889,37 @@ test('the map names its commonest journals in their own colours, and a card wear
  await f.bench.show('explore');
  assert.deepEqual([...f.body().querySelectorAll('.sc-paper-meta .sc-mark')].map(m=>m.textContent).sort(),['NAT','SCI']);
  f.bench.destroy();
+});
+
+test('markup in a title is drawn as italics and subscripts, not shown as tags',async()=>{
+ const f=fixture();
+ f.library.snapshot=async()=>[{...f.papers[0],title:'Establishing a <i>Bacillus subtilis</i> CO<sub>2</sub> route'},f.papers[1]];
+ await f.bench.show('explore');
+ const h3=[...f.body().querySelectorAll('.sc-paper-title')].find(h=>h.textContent.includes('Bacillus'));
+ assert.equal(h3.querySelector('i').textContent,'Bacillus subtilis');
+ assert.equal(h3.querySelector('sub').textContent,'2');
+ assert.ok(!h3.textContent.includes('<i>'),'no tag text: '+h3.textContent);
+ assert.equal(h3.getAttribute('title'),'Establishing a Bacillus subtilis CO2 route','attributes get the plain words');
+ // Anything outside the six inline tags stays literal.
+ const p=f.body().ownerDocument.createElement('p');
+ f.bench.panel.appendChild(p);
+ f.bench.destroy();
+});
+
+test('one press fills the window, the next puts the panel back, and the choice is remembered',async()=>{
+ const f=fixture();
+ await f.bench.show('explore');
+ const b=f.bench.panel.querySelector('button[aria-label="전체 화면 전환"]');
+ assert.equal(f.bench.panel.dataset.maximized,'false');
+ b.dispatchEvent(new f.win.Event('click',{bubbles:true}));
+ assert.equal(f.bench.panel.dataset.maximized,'true');
+ assert.equal(b.getAttribute('aria-pressed'),'true');
+ assert.equal(f.runtime.cache.workbenchUI.maximized,true);
+ f.bench.panel.querySelector('.sc-brand').dispatchEvent(new f.win.Event('dblclick',{bubbles:true}));
+ assert.equal(f.bench.panel.dataset.maximized,'false');
+ f.bench.destroy();
+ const again=fixture({items:{},readerSettings:{},workbenchUI:{maximized:true}});
+ await again.bench.show('explore');
+ assert.equal(again.bench.panel.dataset.maximized,'true','restored from the saved choice');
+ again.bench.destroy();
 });

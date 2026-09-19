@@ -39,7 +39,26 @@
   // The attributes that carry text a person reads. Everything else is passed
   // through untouched: translating a class name or an id would be a bug.
   const TEXT_ATTRS=new Set(['title','placeholder','aria-label','tooltiptext','label','alt','value']);
-  const node=(tag,text,parent,attrs={})=>{const n=doc.createElementNS(HTML,tag);if(text!==null&&text!==undefined)n.textContent=T(text);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,TEXT_ATTRS.has(k)&&tag!=='input'?String(T(v)):k==='placeholder'||k==='aria-label'||k==='title'?String(T(v)):String(v));parent?.appendChild(n);if(draftContext&&['input','textarea'].includes(tag)&&attrs['aria-label']){const label=attrs['aria-label'],index=draftCounters.get(label)||0;draftCounters.set(label,index+1);n.dataset.draftKey=draftContext+'|'+label+'|'+index;}return n;};
+  /* Titles arrive with the markup Zotero keeps in the field -- "<i>Bacillus
+     subtilis</i>", "CO<sub>2</sub>" -- and used to show the tags as text.
+     Six inline tags are drawn as what they mean; anything else stays
+     literal, so a note with "<script>" in it prints "<script>". Attributes
+     get the plain words. */
+  const RICH=/<\/?(i|b|em|strong|sub|sup)>/i;
+  const plain=value=>String(value).replace(/<\/?(i|b|em|strong|sub|sup)>/gi,'');
+  function rich(parent,text){
+   const parts=String(text).split(/(<\/?(?:i|b|em|strong|sub|sup)>)/i);
+   const stack=[parent];
+   for(const part of parts){
+    if(!part)continue;
+    const m=part.match(/^<(\/?)(i|b|em|strong|sub|sup)>$/i);
+    if(!m){stack[stack.length-1].appendChild(doc.createTextNode(part));continue;}
+    const tag=m[2].toLowerCase();
+    if(m[1]){if(stack.length>1&&stack[stack.length-1].localName===tag)stack.pop();continue;}
+    const el=doc.createElementNS(HTML,tag);stack[stack.length-1].appendChild(el);stack.push(el);
+   }
+  }
+  const node=(tag,text,parent,attrs={})=>{const n=doc.createElementNS(HTML,tag);if(text!==null&&text!==undefined){const t=T(text);if(RICH.test(String(t)))rich(n,t);else n.textContent=t;}for(const[k,v]of Object.entries(attrs))n.setAttribute(k,TEXT_ATTRS.has(k)&&tag!=='input'?plain(T(v)):k==='placeholder'||k==='aria-label'||k==='title'?plain(T(v)):String(v));parent?.appendChild(n);if(draftContext&&['input','textarea'].includes(tag)&&attrs['aria-label']){const label=attrs['aria-label'],index=draftCounters.get(label)||0;draftCounters.set(label,index+1);n.dataset.draftKey=draftContext+'|'+label+'|'+index;}return n;};
   const panel=node('section',null,doc.documentElement,{id:'style-custom-workbench','aria-label':'Style Custom 연구 작업 패널'});panel.hidden=true;
   const sheet=node('link',null,doc.documentElement,{rel:'stylesheet',href:runtime.rootURI+'content/workbench.css'});
   panel.dataset.density=ui.density==='compact'?'compact':'comfortable';panel.setAttribute('role','region');
@@ -100,6 +119,8 @@
    density:[['line',{x1:3,y1:5,x2:13,y2:5}],['line',{x1:3,y1:8,x2:13,y2:8}],['line',{x1:3,y1:11,x2:13,y2:11}]],
    search:[['circle',{cx:7.25,cy:7.25,r:4.25}],['line',{x1:10.5,y1:10.5,x2:13.5,y2:13.5}]],
    close:[['line',{x1:4,y1:4,x2:12,y2:12}],['line',{x1:12,y1:4,x2:4,y2:12}]],
+   maximize:[['path',{d:'M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4'}]],
+   restore:[['path',{d:'M13 7H9V3M9 7l4-4M3 9h4v4M7 9l-4 4'}]],
    // One drawn shape per tab. Nineteen identical lines of text is a list you
    // read; nineteen distinct silhouettes is a list you recognise, which is the
    // difference between finding a tab and scanning for it every time.
@@ -210,6 +231,20 @@
   const density=button('',()=>{panel.dataset.density=panel.dataset.density==='compact'?'comfortable':'compact';syncDensity();return saveUI({density:panel.dataset.density});},headerActions,{'aria-label':'화면 밀도 전환',class:'sc-icon-button'});
   setIcon(density,'density');
   function syncDensity(){const compact=panel.dataset.density==='compact';density.title=compact?'간격 넓게':'간격 좁게';density.setAttribute('aria-pressed',String(compact));}syncDensity();
+  /* The panel floats over the window at a size the user dragged out; on a
+     laptop that leaves the list in a letterbox. One press fills the window
+     edge to edge, the next puts it back where it was, and the choice is
+     remembered. Double-clicking the title bar does the same, as windows do. */
+  const maximize=button('',()=>setMaximized(panel.dataset.maximized!=='true'),headerActions,{'aria-label':'전체 화면 전환',class:'sc-icon-button','aria-pressed':'false'});
+  function setMaximized(on,{save=true}={}){
+   panel.dataset.maximized=String(!!on);
+   maximize.setAttribute('aria-pressed',String(!!on));
+   maximize.title=on?'원래 크기로':'전체 화면';
+   maximize.replaceChildren();setIcon(maximize,on?'restore':'maximize');
+   return save?saveUI({maximized:!!on}):undefined;
+  }
+  setMaximized(ui.maximized===true,{save:false});
+  brand.addEventListener('dblclick',()=>setMaximized(panel.dataset.maximized!=='true'));
   setIcon(button('',()=>openCommands(),headerActions,{'aria-keyshortcuts':'Meta+K Control+K','aria-label':'기능 찾기',title:'기능 찾기 · ⌘/Ctrl K',class:'sc-icon-button'}),'search');
   setIcon(button('',()=>toggle(false),headerActions,{'aria-label':'작업 패널 닫기',title:'닫기',class:'sc-icon-button'}),'close');
   const controls=node('div',null,panel,{class:'sc-controls sc-search-row'});
@@ -399,7 +434,7 @@
    const identity=node('div',null,heading,{class:'sc-paper-identity'});
    const h3=node('h3',null,identity,{class:'sc-paper-title',title:item.title||''});
    if(item.itemType&&item.itemType!=='journalArticle'&&KIND_LABELS[item.itemType])node('span',kindLabel(item.itemType),h3,{class:'sc-preprint sc-kind',title:kindLabel(item.itemType)});
-   h3.appendChild(doc.createTextNode(item.title||T('제목 없음')));
+   rich(h3,item.title||T('제목 없음'));
    const meta=node('span',null,identity,{class:'sc-paper-meta',title:[item.authors,item.venue].filter(Boolean).join(' · ')});
    // The journal's mark before its name, the same mark the tree and the map use.
    const P=runtime.palette?.(doc);
@@ -557,14 +592,14 @@
    for(const n of graph.nodes){
     const id=n.kind!=='external'&&n.venue?identity.identify(n.venue):null;
     n.labelText=n.kind==='external'
-     ?String(n.label).slice(0,34)
-     :[id?id.mark:null,n.year].filter(Boolean).join(' ')||String(n.label).slice(0,30);
+     ?plain(n.label).slice(0,34)
+     :[id?id.mark:null,n.year].filter(Boolean).join(' ')||plain(n.label).slice(0,30);
    }
    const labelled=graphTools.placeLabels(graph.nodes);
    for(const n of graph.nodes){
     const g=doc.createElementNS(SVG,'g');
     g.setAttribute('transform',`translate(${n.x} ${n.y})`);
-    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',n.label);
+    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',plain(n.label));
     const id=n.venue?identity.identify(n.venue):null;
     const tone=id?identity.colours(id,{dark:darkScheme()}):null;
     /* Size is how central the paper is here, not how famous it is anywhere.
@@ -598,7 +633,7 @@
     if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('opacity','0');
     g.appendChild(label);
     const title=doc.createElementNS(SVG,'title');
-    title.textContent=`${n.label}\n`+[n.venue,n.year,
+    title.textContent=`${plain(n.label)}\n`+[n.venue,n.year,
      n.kind==='external'?'내 라이브러리에 없음':null,
      `인용 ${n.citations}`,n.references?`참고문헌 ${n.references}`:null,`연결 ${n.degree}`,
      n.rank!=null?`중심성 ${(n.rank*100).toFixed(0)}%`:null].filter(Boolean).join(' · ');
@@ -715,7 +750,7 @@
    for(const n of laid.nodes){
     const g=doc.createElementNS(SVG,'g');
     g.setAttribute('transform',`translate(${n.x} ${n.y})`);
-    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',n.label);
+    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',plain(n.label));
     const circle=doc.createElementNS(SVG,'circle');
     circle.setAttribute('r',n.r||5);
     circle.setAttribute('fill',state.selected.has(n.id)?'var(--sc-accent)':'var(--sc-fill)');
