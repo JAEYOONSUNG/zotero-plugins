@@ -61,7 +61,7 @@
       "label": "AI 읽기 메모 제안 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "description": "번역·AI 분류의 endpoint·모델·API 키가 있어야 켜집니다. 요청은 사용자가 버튼을 눌렀을 때만 보냅니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -70,7 +70,7 @@
       "label": "AI 태그 제안 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "description": "번역·AI 분류의 endpoint·모델·API 키가 있어야 켜집니다. 요청은 사용자가 버튼을 눌렀을 때만 보냅니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -448,7 +448,7 @@
       "label": "초록 요약 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+      "description": "번역·AI 분류의 endpoint·모델·API 키가 있어야 켜집니다. 요청은 사용자가 버튼을 눌렀을 때만 보냅니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -1037,7 +1037,8 @@
       "label": "OpenAlex API 키 (선택)",
       "type": "password",
       "default": "",
-      "secret": true
+      "secret": true,
+      "description": "api.openalex.org에만 Authorization 헤더로 보냅니다. openalex.org 계정에서 무료 발급되며, 비워 두면 키 없이 조회합니다."
     },
     {
       "key": "usptoApiKey",
@@ -1077,7 +1078,8 @@
       "label": "API 키",
       "type": "password",
       "default": "",
-      "secret": true
+      "secret": true,
+      "description": "위 endpoint에만 Bearer 헤더로 보냅니다. 다른 곳으로는 보내지 않습니다."
     },
     {
       "key": "aiLanguage",

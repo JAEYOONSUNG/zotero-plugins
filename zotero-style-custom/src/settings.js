@@ -9,7 +9,11 @@
   if(!runtime?.settingsSchema)throw new Error('Style Custom이 준비되지 않았습니다. 설정을 다시 여세요.');
   const win=doc.defaultView,schema=runtime.settingsSchema,states=new Map(),sections=new Map(),categories=new Map();
   let destroyed=false,active=schema.categories[0]?.id||'',poll=null,observer=null,statusPending=false;
-  const node=(tag,text,parent,attrs={})=>{const element=doc.createElementNS(HTML,tag);if(text!==null)element.textContent=text;for(const [name,value]of Object.entries(attrs))element.setAttribute(name,String(value));parent?.appendChild(element);return element;};
+  // Every string the pane shows passes through the runtime's dictionary, so an
+  // English-locale Zotero reads the pane in English; keys stay Korean.
+  const t=text=>typeof text==='string'&&runtime.t?runtime.t(text):text;
+  const TEXT_ATTRS=new Set(['aria-label','placeholder','title']);
+  const node=(tag,text,parent,attrs={})=>{const element=doc.createElementNS(HTML,tag);if(text!==null)element.textContent=t(text);for(const [name,value]of Object.entries(attrs))element.setAttribute(name,TEXT_ATTRS.has(name)?String(t(value)):String(value));parent?.appendChild(element);return element;};
   host.replaceChildren();
   const heading=node('div',null,host,{class:'scs-heading'});node('h2','Style Custom 설정',heading);node('p','항목별 설명을 확인하고 값을 적용하세요. 텍스트 입력은 적용을 눌러야 저장됩니다.',heading);
   const message=node('p','설정을 불러오는 중…',host,{role:'status','aria-live':'polite',class:'scs-message'});
@@ -18,7 +22,7 @@
   const clearSearch=node('button','검색 지우기',searchBar,{type:'button'});const resultCount=node('span','',searchBar,{role:'status'});
   const layout=node('div',null,host,{class:'scs-layout'}),nav=node('nav',null,layout,{'aria-label':'설정 분류',class:'scs-nav'}),content=node('div',null,layout,{class:'scs-content'});
   const empty=node('p','검색에 맞는 설정이 없습니다. 검색어를 바꾸거나 지우세요.',content,{class:'scs-empty'});empty.hidden=true;
-  const notify=(text,error=false)=>{if(destroyed)return;message.textContent=text;message.dataset.error=String(error);};
+  const notify=(text,error=false)=>{if(destroyed)return;message.textContent=t(text);message.dataset.error=String(error);};
   const secret=spec=>!!spec.secret||spec.type==='password';
   const valueOf=state=>state.spec.type==='boolean'?state.input.checked:state.input.value;
   function display(state,value){if(state.spec.type==='boolean')state.input.checked=!!value;else state.input.value=String(value??'');}
@@ -27,8 +31,10 @@
    state.input.disabled=!!busy||state.loading;
    if(state.apply){state.apply.disabled=!!busy||state.loading||!state.dirty;state.apply.hidden=['boolean','select'].includes(state.spec.type)&&!state.error;}
    state.row.setAttribute('aria-busy',String(!!busy||state.loading));
+   state.row.dataset.error=String(!!state.error);state.row.dataset.dirty=String(!!state.dirty);
+   state.input.setAttribute('aria-invalid',String(!!state.error));
   }
-  function changed(state){state.revision++;state.dirty=state.spec.type==='boolean'?state.input.checked!==state.original:String(state.input.value)!==String(state.original??'');state.error=false;state.feedback.textContent=state.dirty?'아직 적용하지 않았습니다.':'';sync(state);}
+  function changed(state){state.revision++;state.dirty=state.spec.type==='boolean'?state.input.checked!==state.original:String(state.input.value)!==String(state.original??'');state.error=false;state.feedback.textContent=state.dirty?t('아직 적용하지 않았습니다.'):'';sync(state);}
   function parse(state){
    const spec=state.spec;
    if(spec.type==='boolean')return !!state.input.checked;
@@ -49,37 +55,39 @@
     const value=await runtime.getSetting(state.spec.key);if(destroyed)return;
     state.original=value===undefined?state.spec.default:value;
     if(state.revision===expectedRevision&&(force||!state.dirty)){display(state,state.original);state.dirty=false;state.error=false;state.feedback.textContent='';}
-   }catch(error){if(!destroyed){state.error=true;state.feedback.textContent='값을 읽지 못했습니다: '+(error.message||error);}}
+   }catch(error){if(!destroyed){state.error=true;state.feedback.textContent=t('값을 읽지 못했습니다: {0}').replace('{0}',error.message||error);}}
    finally{state.loading=false;if(!destroyed)sync(state);}
   }
   async function save(state){
    if(destroyed||state.pending||categories.get(state.spec.category)?.pending)return;
    let value;try{value=parse(state);}catch(error){state.error=true;state.feedback.textContent=error.message;sync(state);return;}
-   const revision=state.revision;state.pending=true;state.feedback.textContent='적용하는 중…';sync(state);
+   const revision=state.revision;state.pending=true;state.feedback.textContent=t('적용하는 중…');sync(state);
    try{
     const result=await runtime.setSetting(state.spec.key,value);if(destroyed)return;const committed=['string','number','boolean'].includes(typeof result)?result:value;state.original=committed;
     if(state.revision===revision)display(state,committed);
     state.dirty=state.spec.type==='boolean'?state.input.checked!==committed:String(state.input.value)!==String(committed??'');state.error=false;
-    state.feedback.textContent=state.revision===revision||!state.dirty?'적용했습니다.':'이전 값을 적용했습니다. 새 입력은 아직 적용하지 않았습니다.';
+    state.feedback.textContent=t(state.revision===revision||!state.dirty?'적용했습니다.':'이전 값을 적용했습니다. 새 입력은 아직 적용하지 않았습니다.');
     await refreshStatus();
-   }catch(error){if(!destroyed){state.error=true;state.dirty=true;state.feedback.textContent='적용하지 못했습니다: '+(error.message||error);}}
+   }catch(error){if(!destroyed){state.error=true;state.dirty=true;state.feedback.textContent=t('적용하지 못했습니다: {0}').replace('{0}',error.message||error);}}
    finally{state.pending=false;if(!destroyed)sync(state);}
   }
   async function reset(category){
    const section=categories.get(category);if(section.pending||destroyed)return;
+   // Twenty values change at once and there is no undo: ask first when the window can.
+   if(typeof win.confirm==='function'&&!win.confirm(t('{0} 분류의 설정을 모두 기본값으로 되돌릴까요? API 키·비밀번호는 유지됩니다.').replace('{0}',t(section.label))))return;
    const members=[...states.values()].filter(state=>state.spec.category===category);
    if(members.some(state=>state.pending)){notify('진행 중인 적용이 끝난 뒤 기본값으로 되돌리세요.',true);return;}
    const revisions=new Map(members.map(state=>[state,state.revision]));section.pending=true;section.reset.disabled=true;members.forEach(sync);notify(section.label+' 기본값을 적용하는 중…');
    try{
     await runtime.resetSettings(category);if(destroyed)return;
     await Promise.all(members.filter(state=>!secret(state.spec)).map(state=>hydrate(state,{force:true,expectedRevision:revisions.get(state)})));
-    notify(section.label+' 설정을 기본값으로 되돌렸습니다. API 키·비밀번호는 유지했습니다.');await refreshStatus();
+    notify(t('{0} 설정을 기본값으로 되돌렸습니다. API 키·비밀번호는 유지했습니다.').replace('{0}',t(section.label)));if(section.status)section.status.textContent=t('기본값으로 되돌렸습니다.');await refreshStatus();
    }catch(error){notify('기본값으로 되돌리지 못했습니다: '+(error.message||error),true);}
    finally{section.pending=false;section.reset.disabled=false;if(!destroyed)members.forEach(sync);}
   }
   function filter(){
    const query=search.value.trim().toLocaleLowerCase();let count=0;
-   for(const [id,section]of sections){let visible=0;for(const state of states.values())if(state.spec.category===id){const hay=[state.spec.label,state.spec.description,categories.get(id).label,...(state.spec.options||[]).map(option=>option.label)].join(' ').toLocaleLowerCase();const matches=!query||hay.includes(query);state.row.hidden=!matches;if(matches)visible++;}section.hidden=query?!visible:id!==active;if(!section.hidden)count+=visible;}
+   for(const [id,section]of sections){let visible=0;for(const state of states.values())if(state.spec.category===id){const hay=[state.spec.label,state.spec.description,state.spec.help,categories.get(id).label,...(state.spec.options||[]).map(option=>option.label)].map(t).join(' ').toLocaleLowerCase();const matches=!query||hay.includes(query);state.row.hidden=!matches;if(matches)visible++;}section.hidden=query?!visible:id!==active;if(!section.hidden)count+=visible;}
    for(const [id,category]of categories){category.button.setAttribute('aria-current',!query&&id===active?'page':'false');category.button.classList.toggle('active',!query&&id===active);}
    empty.hidden=count>0;resultCount.textContent=query?`${count}개 설정 검색됨`:'';
   }
@@ -88,30 +96,37 @@
    const button=node('button',category.label,nav,{type:'button','data-category':category.id});button.addEventListener('click',()=>selectCategory(category.id));
    const section=node('section',null,content,{class:'scs-category','data-category':category.id}),title=node('div',null,section,{class:'scs-category-heading'});node('h3',category.label,title);if(category.description)node('p',category.description,section,{class:'scs-help'});
    const resetButton=node('button','이 분류 기본값 복원',title,{type:'button','aria-label':category.label+' 기본값 복원'});resetButton.addEventListener('click',()=>reset(category.id));
-   categories.set(category.id,{label:category.label,button,reset:resetButton,pending:false});sections.set(category.id,section);
+   const sectionStatus=node('p','',title,{class:'scs-feedback scs-section-status',role:'status','aria-live':'polite'});
+   categories.set(category.id,{label:category.label,button,reset:resetButton,status:sectionStatus,pending:false});sections.set(category.id,section);
   }
   for(const spec of schema.settings){
    const section=sections.get(spec.category);if(!section||!spec.key||states.has(spec.key))throw new Error('Invalid settings schema');
-   const id='scs-'+encodeURIComponent(spec.key),row=node('div',null,section,{class:'scs-setting','data-setting':spec.key});
+   const id='scs-'+encodeURIComponent(spec.key),row=node('div',null,section,{class:'scs-setting','data-setting':spec.key,'data-type':spec.type});
    const state={spec,row,revision:0,original:spec.default,dirty:false,pending:false,loading:spec.type!=='action',error:false};
    const descriptionID=id+'-help',feedbackID=id+'-feedback';
    const label=node('label',spec.label,row,{for:id,class:'scs-label'});const line=node('div',null,row,{class:'scs-value'});
    if(spec.type==='action'){
     state.input=node('button',spec.label,line,{type:'button',id});label.hidden=true;
-    state.input.addEventListener('click',async()=>{if(state.pending||destroyed)return;state.pending=true;state.feedback.textContent='실행하는 중…';sync(state);try{await runtime.runSettingAction(spec.action);if(!destroyed){state.feedback.textContent='실행했습니다.';await refreshStatus();}}catch(error){if(!destroyed){state.error=true;state.feedback.textContent='실행하지 못했습니다: '+(error.message||error);}}finally{state.pending=false;if(!destroyed)sync(state);}});
+    state.input.addEventListener('click',async()=>{if(state.pending||destroyed)return;state.pending=true;state.feedback.textContent=t('실행하는 중…');sync(state);try{await runtime.runSettingAction(spec.action);if(!destroyed){state.feedback.textContent=t('실행했습니다.');await refreshStatus();}}catch(error){if(!destroyed){state.error=true;state.feedback.textContent='실행하지 못했습니다: '+(error.message||error);}}finally{state.pending=false;if(!destroyed)sync(state);}});
    }else{
     if(spec.type==='select'){state.input=node('select',null,line,{id});for(const option of spec.options||[])node('option',option.label,state.input,{value:option.value});}
     else if(spec.type==='textarea'){state.input=node('textarea',null,line,{id,rows:spec.rows||4});}
     else if(['boolean','number','color','text','password','email','url'].includes(spec.type)){state.input=node('input',null,line,{id,type:secret(spec)?'password':spec.type==='boolean'?'checkbox':spec.type});}
     else throw new Error('Unsupported settings type: '+spec.type);
-    if(secret(spec)){state.input.type='password';state.input.setAttribute('autocomplete','off');state.input.setAttribute('spellcheck','false');}
+    if(secret(spec)){state.input.type='password';state.input.setAttribute('autocomplete','off');state.input.setAttribute('spellcheck','false');
+     const reveal=node('button','표시',line,{type:'button','aria-pressed':'false'});reveal.setAttribute('aria-label',t('{0} 표시').replace('{0}',t(spec.label)));
+     reveal.addEventListener('click',()=>{const show=state.input.type==='password';state.input.type=show?'text':'password';reveal.textContent=t(show?'가리기':'표시');reveal.setAttribute('aria-pressed',String(show));});}
+    if(spec.unit)node('span',spec.unit,line,{class:'scs-unit'});
     for(const key of ['min','max','step'])if(spec[key]!==undefined)state.input.setAttribute(key,spec[key]);
     display(state,spec.default);state.apply=node('button','적용',line,{type:'button','aria-label':spec.label+' 적용'});state.apply.addEventListener('click',()=>save(state));
     state.input.addEventListener('input',()=>changed(state));state.input.addEventListener('change',()=>{changed(state);if(['boolean','select'].includes(spec.type))void save(state);});
     state.input.addEventListener('keydown',event=>{if(event.key==='Enter'&&spec.type!=='textarea'){event.preventDefault();void save(state);}});
    }
    state.input.setAttribute('aria-describedby',descriptionID+' '+feedbackID);
-   node('p',spec.description|| (secret(spec)?'비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.':'이 값은 해당 기능에 적용됩니다.'),row,{id:descriptionID,class:'scs-help'});
+   const helpText=[spec.description,spec.help].filter(Boolean).map(t).join(' ')
+    ||(spec.type==='number'?t('기본 {0} · 허용 {1}–{2}').replace('{0}',String(spec.default)).replace('{1}',spec.min??'∞').replace('{2}',spec.max??'∞')+(spec.step&&spec.step!==1&&spec.step!=='any'?' · '+t('{0} 단위').replace('{0}',String(spec.step)):'')
+    :secret(spec)?t('비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.'):t('이 값은 해당 기능에 적용됩니다.'));
+   const help=node('p',null,row,{id:descriptionID,class:'scs-help'});help.textContent=helpText;
    state.feedback=node('p','',row,{id:feedbackID,class:'scs-feedback',role:'status','aria-live':'polite'});states.set(spec.key,state);sync(state);
   }
   async function refreshStatus(){
@@ -120,8 +135,8 @@
     if(!value){readTime.textContent='—';liveText.textContent='현재 동작 정보를 제공하지 않습니다.';return;}
     const seconds=typeof value.readSeconds==='number'&&Number.isFinite(value.readSeconds)&&value.readSeconds>=0?Math.floor(value.readSeconds):null;
     readTime.textContent=seconds===null?'—':seconds+'초';
-    const parts=[value.version?'버전 '+value.version:null,'읽기 기록 '+(value.recordReading?'켜짐':'꺼짐'),value.selectedTitle?'선택: '+value.selectedTitle:'선택한 문헌 없음','누적 읽기 '+(seconds===null?'—':seconds+'초'),value.citationStatus?'인용 조회: '+value.citationStatus:null,value.storagePath?'저장 위치: '+value.storagePath:null];
-    liveText.textContent=parts.filter(Boolean).join(' · ');
+    const parts=[value.version?t('버전 {0}').replace('{0}',value.version):null,t('읽기 기록 {0}').replace('{0}',t(value.recordReading?'켜짐':'꺼짐')),value.selectedTitle?t('선택: {0}').replace('{0}',value.selectedTitle):t('선택한 문헌 없음'),value.citationStatus?t('인용 조회: {0}').replace('{0}',t(value.citationStatus)):null,value.storagePath?t('저장 위치: {0}').replace('{0}',value.storagePath):null];
+    liveText.replaceChildren();for(const part of parts.filter(Boolean))node('span',null,liveText,{class:'scs-live-part'}).textContent=part;
    }catch(error){if(!destroyed){readTime.textContent='—';liveText.textContent='현재 동작을 확인하지 못했습니다.';}}
    finally{statusPending=false;}
   }

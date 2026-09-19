@@ -1,5 +1,5 @@
 {
- "version": "0.46.3",
+ "version": "0.46.4",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1771,6 +1771,38 @@
    ],
    "status": "verified",
    "review": "Every entry carries a small drawn sign inlined as a data URI, the same strokes the panel's sidebar uses, and the menu is cut into groups by separators: reading state, search, rating and files, the panel, the sweeps."
+  },
+  {
+   "round": "R63",
+   "title": "다섯 곳의 디자인 리뷰를 받아 반영",
+   "gap": "The user asked for design completeness and for review agents to be used. Five read-throughs -- chrome and cards, journals table, authors tab, reading/map/compare/notes, settings and the citation dialog -- returned 69 findings.",
+   "entryPoint": "패널 전체 · 설정 창 · 인용 대화상자",
+   "sources": [
+    {
+     "file": "src/settings.js",
+     "marker": "const t=text=>typeof text==='string'&&runtime.t?runtime.t(text):text;"
+    },
+    {
+     "file": "content/workbench.css",
+     "marker": "--sc-tone-top"
+    },
+    {
+     "file": "src/runtime.js",
+     "marker": "panel.setAttribute('aria-modal', 'true');"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the followed list can be tended as a table: found, sorted, let go"
+    },
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the pages of a paper read as a strip of shaded squares, with the number and the seconds in the tooltip"
+    }
+   ],
+   "status": "verified",
+   "review": "Applied across four commits: tone and reading-ink tokens with dark variants; one table style for journals and the followed list; the map's CSS fill override removed so journal colours show; square page cells in fixed rows; row-height-stable card hover; kind chips in the context row; blank instead of dashed figures; the settings pane translated, its help text rendered, errors marked, keys explained with a reveal button, number ranges stated, boolean rows on one line, a confirm before a category reset; the citation dialog modal with a focus trap, multi-item previews on separate lines, the hint restored after a copy."
   }
  ],
  "introducedInVersion": "0.6.0"

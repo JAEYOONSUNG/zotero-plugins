@@ -2990,8 +2990,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const close = html('button');
     close.type = 'button';
     close.className = 'sc-cite-close';
-    close.textContent = '\u2715';
     close.setAttribute('aria-label', '\uB2EB\uAE30');
+    close.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
     head.append(title, close);
     panel.appendChild(head);
 
@@ -3005,15 +3005,26 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     panel.appendChild(note);
 
     const dismiss = () => { backdrop.remove(); win.removeEventListener('keydown', onKey, true); };
-    const onKey = event => { if (event.key === 'Escape') { event.stopPropagation(); dismiss(); } };
+    // Escape closes; Tab stays inside the dialog, wrapping at either end.
+    const onKey = event => {
+      if (event.key === 'Escape') { event.stopPropagation(); dismiss(); return; }
+      if (event.key !== 'Tab') return;
+      const stops = [...panel.querySelectorAll('button,[tabindex="0"]')].filter(el => !el.disabled && el.getAttribute('aria-disabled') !== 'true');
+      if (!stops.length) return;
+      const first = stops[0], last = stops[stops.length - 1], current = doc.activeElement;
+      if (event.shiftKey && (current === first || !panel.contains(current))) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (current === last || !panel.contains(current))) { event.preventDefault(); first.focus(); }
+    };
+    panel.setAttribute('aria-modal', 'true');
     close.addEventListener('click', dismiss);
     backdrop.addEventListener('mousedown', event => { if (event.target === backdrop) dismiss(); });
     win.addEventListener('keydown', onKey, true);
 
+    const hint = note.textContent;
     const flash = (element, text) => {
       note.textContent = text;
       element.dataset.copied = 'true';
-      win.setTimeout(() => { delete element.dataset.copied; }, 900);
+      win.setTimeout(() => { delete element.dataset.copied; note.textContent = hint; }, 900);
     };
 
     const activate = (element, run) => {

@@ -2,7 +2,7 @@
  "strings": [
   {
    "ko": "초",
-   "n": 6,
+   "n": 5,
    "files": [
     "src/runtime.js",
     "src/settings.js",
@@ -110,7 +110,7 @@
    ]
   },
   {
-   "ko": "워크벤치 → 번역 · AI · 사용자 설정 endpoint·모델 필요; 실제 서비스 호출은 이번 검증에서 실행하지 않음",
+   "ko": "번역·AI 분류의 endpoint·모델·API 키가 있어야 켜집니다. 요청은 사용자가 버튼을 눌렀을 때만 보냅니다.",
    "n": 3,
    "files": [
     "src/settings-schema.js"
@@ -480,6 +480,13 @@
   },
   {
    "ko": "현재 선택 문헌 누적 읽기",
+   "n": 2,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "표시",
    "n": 2,
    "files": [
     "src/settings.js"
@@ -3574,6 +3581,13 @@
    ]
   },
   {
+   "ko": "api.openalex.org에만 Authorization 헤더로 보냅니다. openalex.org 계정에서 무료 발급되며, 비워 두면 키 없이 조회합니다.",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
    "ko": "USPTO Open Data Portal 키 (선택)",
    "n": 1,
    "files": [
@@ -3610,6 +3624,13 @@
   },
   {
    "ko": "API 키",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
+   "ko": "위 endpoint에만 Bearer 헤더로 보냅니다. 다른 곳으로는 보내지 않습니다.",
    "n": 1,
    "files": [
     "src/settings-schema.js"
@@ -3840,7 +3861,7 @@
    ]
   },
   {
-   "ko": "값을 읽지 못했습니다: ",
+   "ko": "값을 읽지 못했습니다: {0}",
    "n": 1,
    "files": [
     "src/settings.js"
@@ -3868,7 +3889,14 @@
    ]
   },
   {
-   "ko": "적용하지 못했습니다: ",
+   "ko": "적용하지 못했습니다: {0}",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "{0} 분류의 설정을 모두 기본값으로 되돌릴까요? API 키·비밀번호는 유지됩니다.",
    "n": 1,
    "files": [
     "src/settings.js"
@@ -3889,7 +3917,14 @@
    ]
   },
   {
-   "ko": " 설정을 기본값으로 되돌렸습니다. API 키·비밀번호는 유지했습니다.",
+   "ko": "{0} 설정을 기본값으로 되돌렸습니다. API 키·비밀번호는 유지했습니다.",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "기본값으로 되돌렸습니다.",
    "n": 1,
    "files": [
     "src/settings.js"
@@ -3945,7 +3980,35 @@
    ]
   },
   {
+   "ko": "{0} 표시",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "가리기",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
    "ko": " 적용",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "기본 {0} · 허용 {1}–{2}",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "{0} 단위",
    "n": 1,
    "files": [
     "src/settings.js"
@@ -3973,14 +4036,14 @@
    ]
   },
   {
-   "ko": "버전 ",
+   "ko": "버전 {0}",
    "n": 1,
    "files": [
     "src/settings.js"
    ]
   },
   {
-   "ko": "읽기 기록 ",
+   "ko": "읽기 기록 {0}",
    "n": 1,
    "files": [
     "src/settings.js"
@@ -4001,28 +4064,21 @@
    ]
   },
   {
-   "ko": "선택: ",
+   "ko": "선택: {0}",
    "n": 1,
    "files": [
     "src/settings.js"
    ]
   },
   {
-   "ko": "누적 읽기 ",
+   "ko": "인용 조회: {0}",
    "n": 1,
    "files": [
     "src/settings.js"
    ]
   },
   {
-   "ko": "인용 조회: ",
-   "n": 1,
-   "files": [
-    "src/settings.js"
-   ]
-  },
-  {
-   "ko": "저장 위치: ",
+   "ko": "저장 위치: {0}",
    "n": 1,
    "files": [
     "src/settings.js"
