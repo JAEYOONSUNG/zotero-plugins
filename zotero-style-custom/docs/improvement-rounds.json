@@ -1,5 +1,5 @@
 {
- "version": "0.40.0",
+ "version": "0.41.1",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1367,6 +1367,38 @@
    "review": "One search request per paper answers the question first and costs no downloads at all. A paper that already has its supplement, and one with neither DOI nor title, are answered without asking anything.",
    "verification": "Coverage measured directly against Europe PMC for all 1,146 DOIs in the library.",
    "nativeActivationVerified": true
+  },
+  {
+   "round": "R46",
+   "title": "관심 저자의 이동은 논문이 아니라 저자 기록에서 읽기",
+   "gap": "A move was read off the papers: first the institution on the newest authorship, then every institution across the window. Live, that reported seven, then six, moves among 109 followed authors, and not one was a move -- a second appointment (Harvard and the Broad), an institute inside the university (QB3 in Berkeley), a school named after it (Harvard Medical School), the same place spelled two ways (DTU, 'UC berkely', 'MIT chemistry').",
+   "entryPoint": "관심 저자 → 카드의 소속 줄 · 백필의 관심 저자 단계",
+   "sources": [
+    {
+     "file": "src/discover.js",
+     "marker": "function watchedProfilesURL"
+    },
+    {
+     "file": "src/runtime.js",
+     "marker": "const profile = profiles.get(row.id);"
+    },
+    {
+     "file": "src/runtime.js",
+     "marker": "retireLooseMoves()"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/author-watch.test.mjs",
+     "name": "a move is read from the author record, so a second appointment or a renamed place is not one"
+    },
+    {
+     "file": "test/author-watch.test.mjs",
+     "name": "moves recorded by the first rule are retired when the store loads"
+    }
+   ],
+   "status": "verified",
+   "review": "One request per fifty authors reads OpenAlex's own list of current appointments, each with a ROR and the years it was signed. The first sweep adopts OpenAlex's name for the place the author was followed with and keeps the typed text; a move is when every remembered appointment has left that list, dated from the record. Live after the change: 109 records read, 0 moves, 73 authors with more than one appointment, 69 typed places replaced by canonical ones. Moves made by the earlier rules are retired when the store loads."
   }
  ],
  "introducedInVersion": "0.6.0"

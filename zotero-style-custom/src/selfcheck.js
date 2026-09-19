@@ -475,7 +475,7 @@
         const bits = [];
         if (report.signals) bits.push(`signals ok ${report.signals.ok} · none ${report.signals['not-found']} · err ${report.signals.error}` + (report.signals.partialOnly ? ` · partial ${report.signals.partialOnly}` : ''));
         if (report.journals) bits.push(`journals found ${report.journals.found} · missing ${report.journals.missing}`);
-        if (report.authors) bits.push(`authors ${report.authors.authors} · with news ${report.authors.withNews} · works ${report.authors.works}`);
+        if (report.authors) bits.push(`authors ${report.authors.authors} · with news ${report.authors.withNews} · works ${report.authors.works} · records ${report.authors.profiles ?? '-'}`);
         if (report.budgetGone) bits.push('stopped: OpenAlex budget spent');
         return bits.join(' | ') || 'nothing to do';
       }));

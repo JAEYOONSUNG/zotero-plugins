@@ -76,8 +76,14 @@
     // wrong person: "Eugene Kim" matches a surgeon before the biophysicist.
     const people = (Array.isArray(raw.authorships) ? raw.authorships : [])
       .map(a => {
-        const affiliation = (Array.isArray(a?.institutions) ? a.institutions : [])[0];
+        const all = (Array.isArray(a?.institutions) ? a.institutions : []);
+        const affiliation = all[0];
         return {
+          // Every place signed from, not just the first: someone appointed
+          // at Harvard and the Broad signs from both, and reading only the
+          // first made that look like a move.
+          institutions: all.map(i => ({institution: text(i?.display_name),
+            ror: text(i?.ror).replace(/^https?:\/\/ror\.org\//i, '')})).filter(i => i.institution),
           id: shortID(a?.author?.id),
           name: text(a?.author?.display_name),
           institution: text(affiliation?.display_name),
@@ -532,6 +538,35 @@
       + `&sort=publication_date:desc&select=${WATCH_FIELDS}${credentials(options)}`;
   }
 
+  // Where OpenAlex currently places an author. Its author record carries
+  // `last_known_institutions` -- every current appointment, each with a ROR
+  // -- and `affiliations` with the years each one was signed. That is the
+  // one place a move can be read without guessing from paper to paper.
+  function watchedProfilesURL(authorIDs, options = {}) {
+    const ids = [...new Set((Array.isArray(authorIDs) ? authorIDs : [])
+      .map(shortID).filter(id => id.startsWith('A')))].slice(0, AUTHOR_BATCH);
+    if (!ids.length) return null;
+    return `${API}authors?per_page=${AUTHOR_BATCH}&filter=${encodeURIComponent('ids.openalex:' + ids.join('|'))}`
+      + `&select=id,display_name,last_known_institutions,affiliations${credentials(options)}`;
+  }
+
+  function readProfiles(payload) {
+    const place = i => ({name: text(i?.display_name), ror: text(i?.ror).replace(/^https?:\/\/ror\.org\//i, '')});
+    return (Array.isArray(payload?.results) ? payload.results : []).map(a => {
+      const id = shortID(a?.id);
+      if (!id) return null;
+      const affiliations = (Array.isArray(a?.affiliations) ? a.affiliations : [])
+        .map(x => ({...place(x?.institution), years: (Array.isArray(x?.years) ? x.years : []).filter(Number.isInteger).sort((m, n) => n - m)}))
+        .filter(x => x.name);
+      const places = (Array.isArray(a?.last_known_institutions) ? a.last_known_institutions : []).map(place).filter(x => x.name)
+        .map(x => {
+          const years = affiliations.find(y => (y.ror && y.ror === x.ror) || y.name === x.name)?.years || [];
+          return {...x, since: years.length ? years[years.length - 1] : null, until: years.length ? years[0] : null};
+        });
+      return {id, name: text(a?.display_name), places, affiliations};
+    }).filter(Boolean);
+  }
+
   const authorBatches = authorIDs => {
     const ids = [...new Set((Array.isArray(authorIDs) ? authorIDs : [])
       .map(shortID).filter(id => id.startsWith('A')))];
@@ -609,7 +644,7 @@
     worksByDOIsURL, institutionsURL, readInstitutions,
     workURL, worksByIDsURL, citingURL, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials,
-    watchedWorksURL, authorBatches, attribute, AUTHOR_BATCH};
+    watchedWorksURL, watchedProfilesURL, readProfiles, authorBatches, attribute, AUTHOR_BATCH};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleDiscover = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

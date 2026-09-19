@@ -159,6 +159,30 @@
    ]
   },
   {
+   "ko": "철회된 논문입니다. 인용하기 전에 철회 사유를 확인하세요.",
+   "n": 2,
+   "files": [
+    "src/paper-signals.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "우려 표명(expression of concern)이 게시된 논문입니다.",
+   "n": 2,
+   "files": [
+    "src/paper-signals.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "정정·정오표가 게시된 논문입니다.",
+   "n": 2,
+   "files": [
+    "src/paper-signals.js",
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "중복",
    "n": 2,
    "files": [
@@ -999,27 +1023,6 @@
    "n": 1,
    "files": [
     "src/paper-graph.js"
-   ]
-  },
-  {
-   "ko": "철회된 논문입니다. 인용하기 전에 철회 사유를 확인하세요.",
-   "n": 1,
-   "files": [
-    "src/paper-signals.js"
-   ]
-  },
-  {
-   "ko": "우려 표명(expression of concern)이 게시된 논문입니다.",
-   "n": 1,
-   "files": [
-    "src/paper-signals.js"
-   ]
-  },
-  {
-   "ko": "정정·정오표가 게시된 논문입니다.",
-   "n": 1,
-   "files": [
-    "src/paper-signals.js"
    ]
   },
   {
@@ -6070,6 +6073,41 @@
    ]
   },
   {
+   "ko": "프리프린트",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "아직 심사 전 원고입니다. 정식 게재본은 나중에 따로 나올 수 있습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "철회",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "우려 표명",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "정정",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "연도 미상",
    "n": 1,
    "files": [
@@ -6224,6 +6262,27 @@
    ]
   },
   {
+   "ko": "처음 함께 낸 저자 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "마지막 확인 이후 처음 같이 낸 저자",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "소속: {0} → {1} ({2} 확인)",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "함께 낸 저자 {0}",
    "n": 1,
    "files": [
@@ -6351,6 +6410,20 @@
   },
   {
    "ko": "소속 미확인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "소속이 바뀐 것으로 보입니다 · {0}년부터 · {1} 확인 · OpenAlex 저자 기록의 현재 소속 기준",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "소속이 바뀐 것으로 보입니다 · {0} 확인 · OpenAlex 저자 기록의 현재 소속 기준",
    "n": 1,
    "files": [
     "src/workbench.js"

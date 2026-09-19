@@ -1164,6 +1164,18 @@
    const P=runtime.palette?.(doc);
    const mark=P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,work.venue,P):null;
    if(mark){mark.style.marginInlineEnd='6px';meta.appendChild(mark);}
+   /* A preprint is six to twelve months ahead of the paper it becomes, and it
+      used to sit in the list looking like one more journal article. */
+   const preprint=work.preprint||/preprint/i.test(String(work.type||''))||/rxiv|research square|ssrn/i.test(String(work.venue||''));
+   if(preprint){const chip=node('span','프리프린트',meta,{class:'sc-preprint',title:'아직 심사 전 원고입니다. 정식 게재본은 나중에 따로 나올 수 있습니다.'});chip.style.marginInlineEnd='6px';}
+   // Worst news first, in the row: a withdrawn paper must not read like a paper.
+   const rank=Number(work.signals&&work.signals.rank)||0;
+   if(rank>=1){
+    const word=rank>=3?'철회':rank>=2?'우려 표명':'정정';
+    const chip=node('span',word,meta,{class:'sc-signal sc-signal-'+(rank>=3?'retracted':rank>=2?'concern':'corrected'),
+     title:rank>=3?'철회된 논문입니다. 인용하기 전에 철회 사유를 확인하세요.':rank>=2?'우려 표명(expression of concern)이 게시된 논문입니다.':'정정·정오표가 게시된 논문입니다.'});
+    chip.style.marginInlineEnd='6px';
+   }
    meta.appendChild(doc.createTextNode([work.year||'연도 미상',work.venue,work.citations==null?null:`인용 ${work.citations}`,work.openAccess?'오픈액세스':null].filter(Boolean).join(' · ')));
    if(work.authors?.length)node('p',work.authors.slice(0,4).join(', ')+(work.authors.length>4?` 외 ${work.authors.length-4}명`:''),row,{class:'sc-hit-authors'});
    if(work.inLibrary){node('span','보유 중',row,{class:'sc-hit-owned'});return row;}
@@ -1237,7 +1249,7 @@
     const who=node('div',null,head,{class:'sc-person-who'});
     node('h3',profile?.name||person.name,who);
     const stats=node('p',null,who,{class:'sc-profile'});
-    for(const [label,value] of [['소속',person.institution||profile?.institutions?.[0]],['h-index',profile?.hIndex],['논문',profile?.works],['총 인용',profile?.citations]]){
+    for(const [label,value] of [['소속',(person.places&&person.places.length>1?person.places.map(p=>p.name).join(' · '):person.institution)||profile?.institutions?.[0]],['h-index',profile?.hIndex],['논문',profile?.works],['총 인용',profile?.citations]]){
      if(value==null||value==='')continue;
      const span=node('span',label+' ',stats);node('b',String(value),span);
     }
@@ -1271,6 +1283,19 @@
     if(watching&&fresh.length){
      node('h3',`마지막 확인 이후 새 논문 ${fresh.length}`,list,{class:'sc-hit-group'});
      hitList(fresh,list);
+    }
+    const stored=(runtime.watchedAuthors?.()||[]).find(row=>row.id===person.id);
+    if(stored&&stored.newCoauthors&&stored.newCoauthors.length){
+     /* A name not on any of their earlier papers is a collaboration starting,
+        which tends to come before the topic shift it produces. */
+     node('h3',`처음 함께 낸 저자 ${stored.newCoauthors.length}`,list,{class:'sc-hit-group'});
+     const fresh=node('div',null,list,{class:'sc-network'});
+     for(const name of stored.newCoauthors){
+      const chip=node('span',name,fresh,{class:'sc-network-node sc-network-fresh',title:'마지막 확인 이후 처음 같이 낸 저자'});
+     }
+    }
+    if(stored&&stored.moved&&stored.moved.to){
+     node('p',`소속: ${stored.moved.from||'?'} → ${stored.moved.to} (${stored.moved.at||''} 확인)`,list,{class:'sc-muted'});
     }
     // The circle of colleagues, out of the works already in hand: no request of
     // its own, and an edge exists because two names are on the same paper.
@@ -1343,9 +1368,15 @@
      if(count)node('span',String(count),line,{class:'sc-watch-badge',title:`마지막 확인 이후 새 논문 ${count}편`});
      // With news, the line says what the news is; without it, who they are.
      const latest=count?person.news[0]:null;
-     const sub=node('span',latest?`${latest.date?latest.date.slice(0,7)+' · ':''}${latest.venue||latest.title||''}`
-      :(person.institution||'소속 미확인'),row,{class:'sc-watch-sub'});
-     sub.title=latest?`${latest.title||''}${latest.venue?' · '+latest.venue:''}`
+     /* A move outranks a paper on the card: a lab relocating or a postdoc going
+        independent is the news a person watching someone most wants, and it
+        is read off the same records with no request of its own. */
+     const moved=person.moved&&person.moved.to?person.moved:null;
+     const sub=node('span',moved?`${moved.from||'?'} → ${moved.to}`
+      :latest?`${latest.date?latest.date.slice(0,7)+' · ':''}${latest.venue||latest.title||''}`
+      :(person.institution||'소속 미확인'),row,{class:'sc-watch-sub'+(moved?' sc-watch-moved':'')});
+     sub.title=moved?(moved.since?`소속이 바뀐 것으로 보입니다 · ${moved.since}년부터 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`:`소속이 바뀐 것으로 보입니다 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`)
+      :latest?`${latest.title||''}${latest.venue?' · '+latest.venue:''}`
       :(person.institution||'');
      row.title=count?`${person.name} · 새 논문 ${count}편`
       :person.sweptAt?`${person.name} · 새 논문 없음 (확인 ${person.sweptAt.slice(0,10)})`

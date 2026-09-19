@@ -765,6 +765,7 @@ test('authors are resolved from the paper itself, carrying their OpenAlex ids', 
   // Where the work was done and who answers for it come along with the name:
   // neither is anywhere in a Zotero record, and both are on every authorship.
   assert.deepEqual(people, [{id: 'A1', name: 'A Zongo', institution: 'Institut Pasteur',
+    institutions: [{institution: 'Institut Pasteur', ror: ''}],
     ror: '', country: '', corresponding: false, position: 'first'}]);
 });
 

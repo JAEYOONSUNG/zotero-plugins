@@ -19,7 +19,7 @@ const work = (id, authorIDs, over = {}) => ({
 
 // A stand-in for the plugin: the sweep only needs the watchlist, a fetcher and
 // somewhere to save, so this exercises the real method without a whole Zotero.
-function host({rows, pages}) {
+function host({rows, pages, profiles = []}) {
   const calls = [];
   return {
     calls, saved: null,
@@ -36,8 +36,14 @@ function host({rows, pages}) {
     watchedAuthorsByNews: Runtime.prototype.watchedAuthorsByNews,
     watchAuthor: Runtime.prototype.watchAuthor,
     sweepWatchedAuthors: Runtime.prototype.sweepWatchedAuthors,
+    retireLooseMoves: Runtime.prototype.retireLooseMoves,
     clearAuthorNews: Runtime.prototype.clearAuthorNews,
-    async discoverJSON(url) { calls.push(url); const next = pages.shift(); if (next instanceof Error) throw next; return next; },
+    async discoverJSON(url) {
+      calls.push(url);
+      const next = /\/authors\?/.test(url) ? profiles.shift() : pages.shift();
+      if (next instanceof Error) throw next;
+      return next;
+    },
     async flush() { this.saved = JSON.parse(JSON.stringify(this.cache.watchedAuthors)); }
   };
 }
@@ -49,10 +55,12 @@ test("a hundred followed authors are answered in three requests, not a hundred",
   const page = works => ({results: works, meta: {next_cursor: null}});
   const h = host({rows, pages: [page([work("W1", ["A1"])]), page([]), page([])]});
   const result = await h.sweepWatchedAuthors();
-  // 109 authors / 50 per filter = 3 batches. One request each, because each
-  // first page came back short of the limit.
-  assert.equal(result.requests, 3);
-  assert.equal(h.calls.length, 3);
+  // 109 authors / 50 per filter = 3 batches. One request each for the works,
+  // because each first page came back short of the limit, and one each for
+  // the author records that say where everyone is now.
+  assert.equal(result.requests, 6);
+  assert.equal(h.calls.filter(url => /\/works\?/.test(url)).length, 3);
+  assert.equal(h.calls.filter(url => /\/authors\?/.test(url)).length, 3);
   assert.equal(result.authors, 109);
   assert.equal(result.withNews, 1);
   assert.equal(result.works, 1);
@@ -105,8 +113,8 @@ test("paging continues while the server offers a cursor", async () => {
     {results: many(3).map(w => ({...w, id: w.id + "b"})), meta: {next_cursor: null}}
   ]});
   const result = await h.sweepWatchedAuthors();
-  assert.equal(result.requests, 2);
-  assert.match(h.calls[1], /cursor=c2/);
+  assert.equal(result.requests, 3, "one for the author record, two for the works");
+  assert.match(h.calls.filter(url => /\/works\?/.test(url))[1], /cursor=c2/);
 });
 
 test("the list puts the answer at the top: news first, newest first, then by name", () => {
@@ -161,7 +169,7 @@ test("the lookback reaches back to when each author was last checked, not a fixe
   const old = new Date(Date.now() - 900 * 24 * 3600 * 1000).toISOString();
   const h = host({rows: [person("A1", {checkedAt: old})], pages: [{results: [], meta: {}}]});
   await h.sweepWatchedAuthors();
-  const asked = decodeURIComponent(h.calls[0]).match(/from_publication_date:(\d{4}-\d{2}-\d{2})/)[1];
+  const asked = decodeURIComponent(h.calls.find(url => /\/works\?/.test(url))).match(/from_publication_date:(\d{4}-\d{2}-\d{2})/)[1];
   // Following someone two and a half years ago and sweeping today must not skip
   // the two years in between just because the default window is eighteen months.
   assert.ok(Date.parse(asked) < Date.now() - 880 * 24 * 3600 * 1000, "asked from " + asked);
@@ -170,14 +178,185 @@ test("the lookback reaches back to when each author was last checked, not a fixe
 test("a stale entry cannot ask OpenAlex for a whole career", async () => {
   const h = host({rows: [person("A1", {checkedAt: "1998-01-01T00:00:00Z"})], pages: [{results: [], meta: {}}]});
   await h.sweepWatchedAuthors();
-  const asked = decodeURIComponent(h.calls[0]).match(/from_publication_date:(\d{4}-\d{2}-\d{2})/)[1];
+  const asked = decodeURIComponent(h.calls.find(url => /\/works\?/.test(url))).match(/from_publication_date:(\d{4}-\d{2}-\d{2})/)[1];
   assert.ok(Date.parse(asked) > Date.now() - 6.1 * 365 * 24 * 3600 * 1000, "asked from " + asked);
 });
 
 test("an author who has never been checked uses the default window", async () => {
   const h = host({rows: [{id: "A1", name: "Fresh", seen: []}], pages: [{results: [], meta: {}}]});
   await h.sweepWatchedAuthors({months: 18});
-  const asked = decodeURIComponent(h.calls[0]).match(/from_publication_date:(\d{4}-\d{2}-\d{2})/)[1];
+  const asked = decodeURIComponent(h.calls.find(url => /\/works\?/.test(url))).match(/from_publication_date:(\d{4}-\d{2}-\d{2})/)[1];
   const days = (Date.now() - Date.parse(asked)) / (24 * 3600 * 1000);
   assert.ok(days > 530 && days < 560, "asked from " + asked);
+});
+
+test("a sweep notices a lab move and a first-time co-author, and drops repository deposits", async () => {
+  const signed = (author, place) => ({author: {id: "https://openalex.org/" + author, display_name: author},
+    author_position: "first", institutions: place ? [{display_name: place}] : []});
+  const rows = [{id: "A1", name: "Ada", institution: "MIT", institutionRor: "042nb2s44", places: [{name: "Massachusetts Institute of Technology", ror: "042nb2s44"}], seen: ["W0"], coauthorsSeen: ["Old Friend"], sweptAt: "2026-07-01T00:00:00Z"}];
+  const pages = [{
+    results: [
+      // Signed from Stanford now, with someone never seen before.
+      {...work("W1", []), authorships: [signed("A1", "Stanford University"), signed("New Face", "Stanford University"), signed("Old Friend", "MIT")]},
+      // A second paper signed without MIT: one could be a visiting stint.
+      {...work("W4", []), authorships: [signed("A1", "Stanford University")]},
+      // And the paper before those, from MIT, already seen.
+      {...work("W0", []), publication_date: "2025-01-05", authorships: [signed("A1", "MIT")]},
+      // A repository deposit, which OpenAlex types as a dataset.
+      {...work("W2", ["A1"]), type: "dataset", primary_location: {source: {display_name: "PNNL Repository"}}},
+      // A preprint, which should be flagged as one.
+      {...work("W3", ["A1"]), type: "preprint", primary_location: {source: {display_name: "bioRxiv (Cold Spring Harbor Laboratory)"}}}
+    ],
+    meta: {next_cursor: ""}
+  }];
+  const profiles = [{results: [{id: "https://openalex.org/A1", display_name: "Ada",
+    last_known_institutions: [{display_name: "Stanford University", ror: "https://ror.org/00f54p054"}],
+    affiliations: [{institution: {display_name: "Stanford University", ror: "https://ror.org/00f54p054"}, years: [2026]},
+      {institution: {display_name: "Massachusetts Institute of Technology", ror: "https://ror.org/042nb2s44"}, years: [2025, 2024]}]}]}];
+  const h = host({rows, pages, profiles});
+  h.active = true;
+  // The signals sweep runs at the end; give it nothing to do here.
+  h.sweepWatchedSignals = async () => ({checked: 0, flagged: 0, total: 0});
+  await h.sweepWatchedAuthors();
+  const row = h.saved[0];
+  assert.ok(h.calls.some(url => /\/authors\?.*ids\.openalex/.test(url)), "the author records were asked for");
+  /* Of 64 "new papers" across 109 watched authors, 15 were PNNL repository
+     deposits typed dataset; the type used to be fetched and thrown away. */
+  assert.deepEqual(row.news.map(n => n.id).sort(), ["W1", "W3", "W4"], "the papers, without the deposit or the seen one");
+  assert.ok(!row.news.some(n => n.id === "W2"), "the deposit is gone");
+  assert.equal(row.news.find(n => n.id === "W3").preprint, true, "the preprint is marked as one");
+  assert.equal(row.news.find(n => n.id === "W1").preprint, false);
+  assert.deepEqual(row.news.find(n => n.id === "W1").people, ["A1", "New Face", "Old Friend"], "names ride along for later");
+  // OpenAlex now lists the author somewhere else: a move, dated from the record.
+  assert.deepEqual({from: row.moved.from, to: row.moved.to, since: row.moved.since, rule: row.moved.rule}, {from: "MIT", to: "Stanford University", since: 2026, rule: 2});
+  assert.equal(row.institution, "Stanford University");
+  assert.equal(row.institutionRor, "00f54p054");
+  assert.equal(row.previousInstitution, "MIT");
+  // And a name not on any earlier paper is a collaboration starting.
+  assert.deepEqual(row.newCoauthors, ["New Face"], "Old Friend was already known; the author is not their own co-author");
+  assert.ok(row.coauthorsSeen.includes("New Face"), "and is remembered, so it is not new twice");
+});
+
+test("the first sweep does not call every colleague new, and the same lab is not a move", async () => {
+  const signed = (author, place) => ({author: {id: "https://openalex.org/" + author, display_name: author},
+    author_position: "first", institutions: place ? [{display_name: place}] : []});
+  const rows = [{id: "A1", name: "Ada", institution: "Massachusetts Institute of Technology", seen: []}];
+  const pages = [{results: [{...work("W1", []), authorships: [signed("A1", "MIT"), signed("Colleague", "MIT")]}], meta: {next_cursor: ""}}];
+  const h = host({rows, pages});
+  h.active = true;
+  h.sweepWatchedSignals = async () => ({checked: 0, flagged: 0, total: 0});
+  await h.sweepWatchedAuthors();
+  const row = h.saved[0];
+  assert.deepEqual(row.newCoauthors, [], "no history to compare against yet");
+  assert.deepEqual(row.coauthorsSeen, ["Colleague"], "but the history starts now");
+  assert.equal(row.moved, undefined, "MIT within Massachusetts Institute of Technology is the same place");
+});
+
+test("a move is read from the author record, so a second appointment or a renamed place is not one", async () => {
+  /* Read off the papers, the sweep reported seven, then six, moves among
+     109 authors -- "Harvard → Broad Institute" for someone appointed at
+     both, "UC Berkeley → QB3" for an institute inside Berkeley, "DTU →
+     Technical University of Denmark", "Harvard Medical School → Harvard
+     University", "MIT chemistry → Massachusetts Institute of Technology".
+     None was a move. OpenAlex's author record lists every current
+     appointment with a ROR; a move is when all of the ones remembered are
+     gone from it. */
+  const inst = (name, ror) => ({display_name: name, ror: ror ? "https://ror.org/" + ror : ""});
+  const record = (places, affiliations = []) => ({results: [{id: "https://openalex.org/A1", display_name: "Ada",
+    last_known_institutions: places.map(([n, r]) => inst(n, r)),
+    affiliations: affiliations.map(([n, r, years]) => ({institution: inst(n, r), years}))}]});
+  const run = async (row, profile) => {
+    const h = host({rows: [row], pages: [{results: [], meta: {next_cursor: ""}}], profiles: profile ? [profile] : []});
+    h.active = true;
+    h.sweepWatchedSignals = async () => ({checked: 0, flagged: 0, total: 0});
+    await h.sweepWatchedAuthors();
+    return h.saved[0];
+  };
+  // First sight: the text typed when following is replaced by OpenAlex's name for the same place.
+  let row = await run({id: "A1", name: "Ada", institution: "MIT chemistry", seen: []},
+    record([["Broad Institute", "05a0ya142"], ["Massachusetts Institute of Technology", "042nb2s44"]]));
+  assert.equal(row.moved, undefined, "a baseline is adopted, not a move");
+  assert.deepEqual({name: row.institution, ror: row.institutionRor, given: row.institutionGiven},
+    {name: "Massachusetts Institute of Technology", ror: "042nb2s44", given: "MIT chemistry"});
+  assert.deepEqual(row.places.map(p => p.name), ["Broad Institute", "Massachusetts Institute of Technology"]);
+  for (const [given, canonical] of [["DTU", "Technical University of Denmark"], ["UC berkely", "University of California, Berkeley"],
+      ["University of Illinois at Urbana-Champaign", "University of Illinois Urbana-Champaign"], ["Harvard Medical School", "Harvard University"]]) {
+    row = await run({id: "A1", name: "Ada", institution: given, seen: []}, record([["Elsewhere", "x1"], [canonical, "x2"]]));
+    assert.equal(row.institution, canonical, given + " is " + canonical);
+  }
+  // Nothing listed resembles the text: the current appointment is the baseline, quietly.
+  row = await run({id: "A1", name: "Ada", institution: "Somewhere Typed", seen: []}, record([["Tsinghua University", "03cve4549"]]));
+  assert.equal(row.moved, undefined);
+  assert.deepEqual({name: row.institution, given: row.institutionGiven}, {name: "Tsinghua University", given: "Somewhere Typed"});
+  // A second appointment appears: still there.
+  row = await run({id: "A1", name: "Ada", institution: "Harvard University", institutionRor: "03vek6s52", places: [{name: "Harvard University", ror: "03vek6s52"}], seen: []},
+    record([["Broad Institute", "05a0ya142"], ["Harvard University", "03vek6s52"]]));
+  assert.equal(row.moved, undefined, "Harvard is still listed");
+  assert.equal(row.institution, "Harvard University");
+  assert.equal(row.places.length, 2, "and the second appointment is remembered");
+  // Every remembered appointment gone: a move, to the newest place listed.
+  row = await run({id: "A1", name: "Ada", institution: "Harvard University", institutionRor: "03vek6s52", places: [{name: "Harvard University", ror: "03vek6s52"}], seen: []},
+    record([["Howard Hughes Medical Institute", "006w34k90"], ["Broad Institute", "05a0ya142"]],
+      [["Howard Hughes Medical Institute", "006w34k90", [2026, 2025, 2024, 2023]], ["Broad Institute", "05a0ya142", [2026, 2025]], ["Harvard University", "03vek6s52", [2024, 2023]]]));
+  assert.deepEqual({from: row.moved.from, to: row.moved.to, since: row.moved.since}, {from: "Harvard University", to: "Broad Institute", since: 2025});
+  assert.equal(row.institutionRor, "05a0ya142");
+  // The place shown drops off while another remembered one remains: no move, the other is shown.
+  row = await run({id: "A1", name: "Ada", institution: "Harvard University", institutionRor: "03vek6s52", places: [{name: "Harvard University", ror: "03vek6s52"}, {name: "Broad Institute", ror: "05a0ya142"}], seen: []},
+    record([["Broad Institute", "05a0ya142"]]));
+  assert.equal(row.moved, undefined);
+  assert.equal(row.institution, "Broad Institute");
+  // A move on record is taken back when the old place is listed again.
+  row = await run({id: "A1", name: "Ada", institution: "QB3", institutionRor: "04n1n3n22", places: [{name: "QB3", ror: "04n1n3n22"}], previousInstitution: "University of California, Berkeley", previousInstitutionRor: "01an7q238", moved: {from: "University of California, Berkeley", to: "QB3", rule: 2}, seen: []},
+    record([["QB3", "04n1n3n22"], ["University of California, Berkeley", "01an7q238"]]));
+  assert.equal(row.moved, undefined, "the move is withdrawn");
+  assert.deepEqual({name: row.institution, ror: row.institutionRor}, {name: "University of California, Berkeley", ror: "01an7q238"});
+  // No record came back: nothing is claimed and nothing is changed.
+  row = await run({id: "A1", name: "Ada", institution: "Harvard University", institutionRor: "03vek6s52", places: [{name: "Harvard University", ror: "03vek6s52"}], seen: []}, null);
+  assert.equal(row.moved, undefined);
+  assert.equal(row.institution, "Harvard University");
+});
+
+test("moves recorded by the first rule are retired when the store loads", async () => {
+  const h = host({rows: [
+    {id: "A1", name: "Ada", institution: "Technical University of Denmark", previousInstitution: "DTU", institutionRor: "04qtj9h94", moved: {from: "DTU", to: "Technical University of Denmark", at: "2026-09-19"}, seen: []},
+    {id: "A2", name: "Bo", institution: "Broad Institute", previousInstitution: "Harvard University", moved: {from: "Harvard University", to: "Broad Institute", at: "2026-09-19", rule: 2}, seen: []}
+  ], pages: []});
+  h.dirty = false;
+  h.retireLooseMoves();
+  const [a, b] = h.cache.watchedAuthors;
+  assert.deepEqual({institution: a.institution, moved: a.moved, prev: a.previousInstitution, ror: a.institutionRor}, {institution: "DTU", moved: undefined, prev: undefined, ror: undefined});
+  assert.equal(b.moved.rule, 2, "a move read from the author record stays");
+  assert.equal(h.dirty, true);
+});
+
+test("a watched author's new papers are checked for retraction through Crossref alone", async () => {
+  /* A retraction on a paper you are reading is the fact the signals column
+     exists for; one on a paper by someone you follow is the same fact a step
+     out. Crossref is free and unmetered, so this touches no OpenAlex budget. */
+  const rows = [{id: "A1", name: "Ada", news: [
+    {id: "W1", doi: "10.1/fine", title: "Fine"},
+    {id: "W2", doi: "10.1/pulled", title: "Pulled"},
+    {id: "W3", doi: "", title: "No DOI"},
+    {id: "W4", doi: "10.1/done", title: "Already", signals: {rank: 0, status: "clean"}}
+  ]}];
+  const asked = [];
+  const h = {
+    active: true, stopping: false, dirty: false, cache: {watchedAuthors: rows}, saved: null,
+    Z: {logError() {}},
+    watchedAuthors: Runtime.prototype.watchedAuthors,
+    sweepWatchedSignals: Runtime.prototype.sweepWatchedSignals,
+    async fetchPaperSignals(item, {crossrefOnly, record}) {
+      asked.push({item, crossrefOnly, doi: record && record.DOI});
+      return {signals: record.DOI === "10.1/pulled" ? {status: "retracted", rank: 3, checkedAt: "2026-09-19"} : {status: "clean", rank: 0, checkedAt: "2026-09-19"}};
+    },
+    async flush() { this.saved = JSON.parse(JSON.stringify(this.cache.watchedAuthors)); }
+  };
+  const result = await h.sweepWatchedSignals();
+  assert.deepEqual(asked.map(a => a.doi), ["10.1/fine", "10.1/pulled"], "only DOIs not yet checked; nothing without a DOI");
+  assert.ok(asked.every(a => a.item === null && a.crossrefOnly === true), "a bare record, Crossref only");
+  assert.deepEqual(result, {checked: 2, flagged: 1, total: 2});
+  const news = h.saved[0].news;
+  assert.equal(news[1].signals.rank, 3, "the withdrawn paper carries its verdict on the row");
+  assert.equal(news[0].signals.rank, 0);
+  assert.equal(news[3].signals.status, "clean", "an earlier verdict is left alone");
 });

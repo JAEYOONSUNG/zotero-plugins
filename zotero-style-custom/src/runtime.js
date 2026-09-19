@@ -190,6 +190,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       throw new Error("Style Custom cache has an unsupported format; existing file was preserved");
     }
     this.cache = loaded; this.active = true;
+    this.retireLooseMoves();
     for (const entry of Object.values(loaded.items)) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Invalid Style Custom item cache");
       if (entry.citationPending) { delete entry.citationPending; this.dirty=true; }
@@ -1860,6 +1861,23 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  // Moves recorded by the earlier rules -- read off the papers, first from
+  // the newest authorship alone, then across the window -- are taken back.
+  // Every one found live was a second appointment, an institute inside the
+  // university, or the same place under two names. A move made from the
+  // author record itself carries `rule: 2`.
+  retireLooseMoves() {
+    for (const row of this.watchedAuthors()) {
+      if (!row.moved || row.moved.rule === 2) continue;
+      if (row.previousInstitution) row.institution = row.previousInstitution;
+      delete row.previousInstitution;
+      delete row.moved;
+      // The ROR was taken from the place the row was wrongly moved to.
+      delete row.institutionRor;
+      this.dirty = true;
+    }
+  }
+
   watchedAuthors() {
     const saved = this.cache.watchedAuthors;
     return Array.isArray(saved) ? saved.filter(row => row && typeof row.id === 'string') : [];
@@ -1899,6 +1917,36 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // published was to open all 109 of them one by one. That is exactly the cost
   // this plugin is meant to remove. One sweep answers it for everyone at once,
   // and stores the answer so the list itself shows who has news.
+  /* Whether a watched author's new papers are still standing.
+
+     A retraction on a paper you are reading is the fact the signals column
+     exists for; a retraction on a paper by someone you follow is the same
+     fact one step out. Crossref answers it free and unmetered, so this asks
+     Crossref alone and touches no OpenAlex budget, once per DOI, and records
+     the verdict on the news item so the row can carry it. */
+  async sweepWatchedSignals({signal, onProgress} = {}) {
+    const rows = this.watchedAuthors();
+    const jobs = [];
+    for (const row of rows) for (const work of row.news || []) {
+      if (work.doi && !work.signals) jobs.push(work);
+    }
+    let checked = 0, flagged = 0;
+    for (const [index, work] of jobs.entries()) {
+      if (signal?.aborted || !this.active || this.stopping) break;
+      onProgress?.(index, jobs.length);
+      try {
+        const {signals} = await this.fetchPaperSignals(null, {signal, crossrefOnly: true, record: {DOI: work.doi, title: work.title}});
+        if (!signals) continue;
+        work.signals = {status: signals.status, rank: signals.rank, checkedAt: signals.checkedAt};
+        checked++;
+        if (signals.rank >= 1) flagged++;
+        this.dirty = true;
+      } catch (error) { this.Z.logError(error); }
+    }
+    if (checked) { this.cache.watchedAuthors = rows; await this.flush(); }
+    return {checked, flagged, total: jobs.length};
+  }
+
   async sweepWatchedAuthors({months = 18, onProgress, signal} = {}) {
     const rows = this.watchedAuthors();
     const result = {authors: rows.length, withNews: 0, works: 0, requests: 0, budgetGone: false, remaining: 0};
@@ -1926,6 +1974,30 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const start = Math.max(cap, Math.min(floor, (oldest ?? floor) - 7 * 24 * 3600 * 1000));
       return new Date(start).toISOString().slice(0, 10);
     };
+    /* One request per fifty authors answers where each of them is now:
+       OpenAlex's own list of current appointments, with RORs. Reading a
+       move off the papers instead -- first institution on the newest
+       authorship, then every institution across the window -- produced
+       seven, then six, "moves" in 109 authors, and not one was a move: a
+       second appointment, an institute inside the university, a school
+       named after it, the same place spelled two ways. */
+    const profiles = new Map();
+    result.profiles = 0;
+    for (const batch of batches) {
+      if (signal?.aborted) break;
+      const url = this.discoverTools.watchedProfilesURL(batch, options);
+      if (!url) continue;
+      try {
+        const payload = await this.discoverJSON(url, {signal});
+        result.requests++;
+        for (const profile of this.discoverTools.readProfiles(payload)) { profiles.set(profile.id, profile); result.profiles++; }
+      } catch (error) {
+        if (this.outOfBudget(error)) { result.budgetGone = true; result.remaining = batches.length; break; }
+        this.Z.logError(error);
+      }
+      await this.pause(150);
+    }
+    if (result.budgetGone) return result;
     for (const [index, batch] of batches.entries()) {
       if (signal?.aborted) { result.remaining = batches.length - index; break; }
       onProgress?.(index, batches.length);
@@ -1971,14 +2043,131 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         type: String(work.type || ''),
         preprint: /preprint/i.test(String(work.type || '')) || /rxiv|research square|preprints?\b|ssrn/i.test(String(work.venue || '')),
         date: work.date || (work.year ? String(work.year) : ''),
-        inLibrary: !!work.doi && owned.has(work.doi)
+        inLibrary: !!work.doi && owned.has(work.doi),
+        // The first few names, so a new collaborator can be spotted later
+        // without another request.
+        people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean)
       }));
+      /* Two things the same records say for free.
+
+         Where the author signs from now. The watched row remembers the lab it
+         was added with; a new paper signed from somewhere else is a move --
+         a lab relocating, a postdoc going independent -- and that is the
+         kind of news a person watching someone actually wants. Only the
+         author's own authorship counts, and only when it names a place.
+
+         Who they publish with for the first time. A name not seen on any of
+         their earlier papers is a collaboration starting, which tends to
+         come before the topic shift it produces. */
+      /* A move is claimed only when the old place has stopped appearing.
+
+         The first version took the first institution on the newest authorship
+         and called any difference a move. Run live, that produced
+         "Harvard University → Broad Institute" for someone appointed at both,
+         "UC Berkeley → QB3" for an institute inside Berkeley, and
+         "DTU → Technical University of Denmark" for one place under two
+         names. OpenAlex lists every institution an author signs with, in no
+         fixed order, and a person watching someone would have read each of
+         those as news. So: every institution on every new paper is collected;
+         if the remembered one is still among them, nothing has changed; a
+         move needs at least two new papers signed without it, and "to" is the
+         place that appears most. */
+      /* The same place under two names is not a move. OpenAlex names are
+         canonical, but a watched row may have been added with "MIT" by hand;
+         so a ROR match settles it when both sides have one, and otherwise a
+         name that is the other's initials, or contained in it, is the same
+         institution. Anything left is a real change of address. */
+      const initials = name => String(name || '').split(/[\s-]+/).filter(w => w && !/^(of|the|and|for|at|de|du|des|la|le)$/i.test(w)).map(w => w[0]).join('').toUpperCase();
+      const lower = v => String(v || '').toLowerCase().trim();
+      const samePlace = (a, b, rorA, rorB) => {
+        if (rorA && rorB) return rorA === rorB;
+        if (!a || !b) return false;
+        if (lower(a) === lower(b) || lower(a).includes(lower(b)) || lower(b).includes(lower(a))) return true;
+        // "University of Illinois at Urbana-Champaign" and the same without
+        // "at" are one campus written two ways.
+        const bare = name => lower(name).replace(/[,.]/g, '').split(/\s+/).filter(w => w && !/^(of|the|and|for|at|in|de|du|des|la|le)$/.test(w)).join(' ');
+        if (bare(a) && bare(a) === bare(b)) return true;
+        if (initials(a) === lower(b).toUpperCase() || initials(b) === lower(a).toUpperCase()) return true;
+        // "UC Berkeley" for "University of California, Berkeley": the
+        // leading words shortened, the campus kept.
+        const headed = name => { const w = String(name).replace(/[,.]/g, '').split(/\s+/).filter(Boolean); return w.length > 2 ? (initials(w.slice(0, -1).join(' ')) + ' ' + w[w.length - 1]).toLowerCase() : ''; };
+        // One letter off is a typo, not another university: the remembered
+        // place is typed by hand when an author is followed ("UC berkely").
+        const near = (x, y) => { if (!x || !y || Math.abs(x.length - y.length) > 1 || x.length < 8) return false; let i = 0, j = 0, slips = 0; while (i < x.length && j < y.length) { if (x[i] === y[j]) { i++; j++; continue; } if (++slips > 1) return false; if (x.length > y.length) i++; else if (y.length > x.length) j++; else { i++; j++; } } return slips + (x.length - i) + (y.length - j) <= 1; };
+        const plainA = lower(a).replace(/[,.]/g, ''), plainB = lower(b).replace(/[,.]/g, '');
+        if ((headed(a) && (headed(a) === plainB || near(headed(a), plainB))) || (headed(b) && (headed(b) === plainA || near(headed(b), plainA))) || near(plainA, plainB)) return true;
+        // "Harvard Medical School" is inside "Harvard University": a unit
+        // named after its university, which OpenAlex files under the
+        // university. The first word has to be the proper name, not a
+        // generic like "University" or "National".
+        const UNIT = /\b(school|institute|center|centre|laboratory|laboratories|lab|hospital|college|faculty|department|division|clinic|medical)\b/;
+        const GENERIC = /^(university|national|institute|the|state|college|school|center|centre|royal|federal|medical|general|technical|academy|hospital|max|mass)$/;
+        const first = name => (bare(name).split(' ')[0] || '');
+        if (first(a) && first(a) === first(b) && !GENERIC.test(first(a)) && (UNIT.test(plainA) || UNIT.test(plainB))) return true;
+        // "DTU" for "Technical University of Denmark": an acronym written in
+        // the local order, so its letters are compared as a set.
+        const acronym = name => { const m = String(name).trim().match(/^([A-Z]{2,5})(?:\s|$)/); return m ? m[1].split('').sort().join('') : ''; };
+        const letters = name => initials(name).split('').sort().join('');
+        return (!!acronym(a) && acronym(a) === letters(b)) || (!!acronym(b) && acronym(b) === letters(a));
+      };
+      const profile = profiles.get(row.id);
+      const now = profile ? profile.places : [];
+      if (now.length) {
+        const had = Array.isArray(row.places) ? row.places : null;
+        const same = (h, pl) => (h.ror && pl.ror) ? h.ror === pl.ror : samePlace(h.name, pl.name, '', '');
+        if (!had) {
+          /* First sight of the record: adopt OpenAlex's own name for the
+             place the author was followed with -- "MIT chemistry" becomes
+             "Massachusetts Institute of Technology" -- keeping the text
+             given. When nothing listed resembles it, the current
+             appointment is the baseline, and that is not news either. */
+          const match = now.find(pl => samePlace(row.institution, pl.name, row.institutionRor, pl.ror)) || now[0];
+          if (row.institution && match.name !== row.institution) row.institutionGiven = row.institution;
+          row.institution = match.name;
+          row.institutionRor = match.ror;
+        } else {
+          const still = now.filter(pl => had.some(h => same(h, pl)));
+          if (!still.length) {
+            // Every appointment on record has gone from the list: a move,
+            // to the newest of the places now listed.
+            const to = [...now].sort((m, n) => (n.until || 0) - (m.until || 0) || (n.since || 0) - (m.since || 0))[0];
+            row.moved = {from: row.institution, to: to.name, at: checkedAt.slice(0, 10), rule: 2, since: to.since || null};
+            row.previousInstitution = row.institution;
+            row.previousInstitutionRor = row.institutionRor;
+            row.institution = to.name;
+            row.institutionRor = to.ror;
+          } else if (row.moved && row.previousInstitution && now.some(pl => samePlace(row.previousInstitution, pl.name, row.previousInstitutionRor || '', pl.ror))) {
+            // The old place is listed again: the move was a stint.
+            row.institution = row.previousInstitution;
+            row.institutionRor = row.previousInstitutionRor || '';
+            delete row.previousInstitution; delete row.previousInstitutionRor; delete row.moved;
+          } else if (!still.some(pl => (pl.ror && pl.ror === row.institutionRor) || pl.name === row.institution)) {
+            // The place shown has dropped off while another appointment
+            // remains: show the one still listed.
+            row.institution = still[0].name;
+            row.institutionRor = still[0].ror;
+          }
+        }
+        row.places = now.map(pl => ({name: pl.name, ror: pl.ror, since: pl.since || null}));
+      }
+      const seenNames = new Set(row.coauthorsSeen || []);
+      const fresherNames = [];
+      for (const work of papers) for (const p of work.people || []) {
+        if (!p.name || p.id === row.id) continue;
+        if (!seenNames.has(p.name) && !fresherNames.includes(p.name)) fresherNames.push(p.name);
+      }
+      // Only meaningful once there is a history to compare against: the very
+      // first sweep would otherwise call every colleague new.
+      row.newCoauthors = seenNames.size ? fresherNames.slice(0, 8) : [];
+      for (const name of fresherNames) seenNames.add(name);
+      row.coauthorsSeen = [...seenNames].slice(-400);
       row.sweptAt = checkedAt;
       if (fresh.length) result.withNews++;
       result.works += fresh.length;
     }
     this.cache.watchedAuthors = rows;
     this.dirty = true;
+    try { result.signals = await this.sweepWatchedSignals({signal}); } catch (error) { this.Z.logError(error); }
     await this.flush();
     return result;
   }
@@ -2405,11 +2594,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return response?.status === 200 ? response.response : null;
   }
 
-  async fetchPaperSignals(item, {signal} = {}) {
-    const record = this.bibliographyRecord(item);
+  async fetchPaperSignals(item, {signal, crossrefOnly = false, record: given = null} = {}) {
+    // An item from the library, or -- passed explicitly -- a bare record with
+    // a DOI: a watched author's new paper is the second kind, and nothing
+    // else about it is known. Explicit, because guessing from the object's
+    // shape misread every test double that stubs bibliographyRecord.
+    const record = given || this.bibliographyRecord(item);
     const options = this.discoverOptions();
     const crossrefURL = this.signalTools.crossrefURL(record, options);
-    const openAlexURL = this.signalTools.openAlexURL(record, options);
+    const openAlexURL = crossrefOnly ? null : this.signalTools.openAlexURL(record, options);
     if (!crossrefURL && !openAlexURL) return {signals: null, reason: "unsupported"};
     // Crossref answers the retraction question and is free and unmetered;
     // OpenAlex adds open-access and preprint-to-published and is not. When the
