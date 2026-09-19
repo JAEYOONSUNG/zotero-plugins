@@ -513,7 +513,7 @@
    const stars=node('span',null,metrics,{class:'sc-metric sc-stars',title:item.rating?`별점 ${item.rating}/5`:'별점 없음'});stars.dataset.metric='rating';
    node('span',item.rating?'\u2605'.repeat(item.rating)+'\u2606'.repeat(5-item.rating):'',stars,{class:'sc-metric-value'});
    metric(metrics,{icon:'time',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
-   const actions=bar(heading);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-variant':'primary'});button('자세히',()=>{state.selected=new Set([item.id]);state.scope='selected';scope.value='selected';render();},actions);
+   const actions=bar(heading);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-opens':'window','data-variant':'primary'});button('자세히',()=>{state.selected=new Set([item.id]);state.scope='selected';scope.value='selected';render();},actions);
    if(state.scope==='selected'){node('p',item.abstract||'초록이 없습니다.',c);const ref=runtime.Z.Items.get(Number(item.id));const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);message('메모를 저장했습니다.');},c);}
    if(state.scope==='selected'&&items.length===1)details.push((async()=>{
     const results=await Promise.allSettled([library.notes([item.id]),library.annotations([item.id])]);
@@ -753,7 +753,7 @@
      const c=node('div',null,list,{class:'sc-hit'});
      node('p',n.label,c,{class:'sc-hit-title'});
      node('p',[n.venue,n.year,n.references?`참고문헌 ${n.references}건`:'인용 목록 없음'].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
-     button('열기',()=>library.openItem(n.id),node('div',null,c,{class:'sc-hit-actions'}));
+     button('열기',()=>library.openItem(n.id),node('div',null,c,{class:'sc-hit-actions'}),{'data-opens':'window'});
     }
    }
    if(graph.truncated)node('p','연결이 너무 많아 강한 것부터 그렸습니다. 검색으로 범위를 좁히면 전부 보입니다.',body,{class:'sc-muted'});
@@ -844,7 +844,7 @@
    const tree=library.tagTree(rows());function branch(nodes,parent){for(const n of nodes){const details=node('details',null,parent);const summary=node('summary',null,details);node('span',`${n.name} (${n.count})`,summary,{class:'sc-tag-name'});const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},summary,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(n.children.length)branch(n.children,details);}}branch(tree,body);if(!tree.length)empty('태그가 없습니다. 문헌을 선택하고 태그를 추가하세요.');
   }
   async function drawNotes(token){const draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar();button('새 노트 저장',async()=>{const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
-   if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions);}
+   if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions,{'data-opens':'window'});}
    const notes=await library.notes(ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>!state.query||(n.title+' '+n.text).toLowerCase().includes(state.query.toLowerCase()));for(const n of matching){const c=card(n.title,String(n.modified||'').slice(0,10));node('p',n.text.slice(0,1200),c,{class:'sc-note-text'});button('노트 편집',()=>library.openItem(n.id),c);button('내용 복사',()=>copy(n.text),c);}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':'이 범위에 노트가 없습니다. 문헌을 선택해 새 노트를 작성하세요.');}
   /* Reading back through what you marked up.
 
@@ -955,7 +955,7 @@
      node('span',`p.${a.pageLabel||((a.pageIndex??0)+1)}`,head,{class:'sc-annot-page'});
      node('span',({highlight:'하이라이트',underline:'밑줄',note:'메모',image:'그림',ink:'필기',text:'텍스트'})[a.type]||a.type,head,{class:'sc-annot-kind'});
      const actions=node('div',null,head,{class:'sc-annot-actions'});
-     button('원문',()=>library.openItem(a.id),actions);
+     button('원문',()=>library.openItem(a.id),actions,{'data-opens':'window'});
      button('참조 노트',async()=>{
       const mark=epoch,links=await library.backlinks(a.id);
       if(disposed||mark!==epoch||!row.isConnected)return;
@@ -964,7 +964,7 @@
       box.replaceChildren();
       const notes=links.filter(link=>link.kind==='note');
       node('span',notes.length?`참조 노트 ${notes.length}개`:'이 주석을 인용한 노트가 없습니다.',box,{class:'sc-muted'});
-      for(const note of notes)button(note.title||'제목 없는 노트',()=>library.openItem(note.id),box);
+      for(const note of notes)button(note.title||'제목 없는 노트',()=>library.openItem(note.id),box,{'data-opens':'window'});
      },actions);
      if(a.text)node('p',a.text,row,{class:'sc-annot-text'});
      // The annotation's own comment is the memo: it travels with the highlight,
@@ -1083,8 +1083,8 @@
      node('p',row.title||'제목 없음',c,{class:'sc-hit-title'});
      node('p',[row.year,row.file,row.why].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
      const actions=node('div',null,c,{class:'sc-hit-actions'});
-     if(row.fileID)button('파일 열기',()=>library.openItem(row.fileID),actions);
-     button('문헌 보기',()=>library.openItem(row.id),actions);
+     if(row.fileID)button('파일 열기',()=>library.openItem(row.fileID),actions,{'data-opens':'window'});
+     button('문헌 보기',()=>library.openItem(row.id),actions,{'data-opens':'window'});
      if(act)act(row,actions);
     }
    };
@@ -1109,7 +1109,7 @@
       message(result.moved?`보충자료를 원논문으로 옮겼습니다${result.trashed?' · 빈 항목은 휴지통으로':''}. Zotero에서 되돌릴 수 있습니다.`:'옮길 것이 없었습니다.');
       await render();
      }),actions);
-     button('원논문 보기',()=>library.openItem(home.id),actions);
+     button('원논문 보기',()=>library.openItem(home.id),actions,{'data-opens':'window'});
      node('p',`원논문으로 보이는 문헌: ${home.title}`,actions.parentNode,{class:'sc-hit-meta'});
     } else if(home&&home.ambiguous){
      node('p',`후보가 둘입니다 — 직접 고르세요: ${home.ambiguous.map(a=>a.title).join('  |  ')}`,
@@ -1136,7 +1136,7 @@
    if(token!==epoch||disposed)return;
    if(list.length)node('h3','선택한 문헌의 첨부파일',body,{class:'sc-hit-group'});
    const matching=list.filter(a=>!state.query||(a.title+' '+a.contentType).toLowerCase().includes(state.query.toLowerCase()));
-   for(const a of matching){const c=card(a.title,a.contentType);button('열기',()=>library.openItem(a.id),c);
+   for(const a of matching){const c=card(a.title,a.contentType);button('열기',()=>library.openItem(a.id),c,{'data-opens':'window'});
     const supported=['application/pdf','application/epub+zip','application/epub','text/html'].includes(a.contentType)||/^(image|audio|video)\//.test(a.contentType||'');
     if(!supported||a.path===null){node('p','이 첨부는 미리보기를 지원하지 않습니다. 열기로 확인하세요.',c,{class:'sc-muted'});continue;}
     button('미리보기',async()=>{

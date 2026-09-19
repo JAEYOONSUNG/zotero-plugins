@@ -3504,6 +3504,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const glyph=name=>{const shapes=this.MENU_ICONS[name];if(!shapes)return '';const body=shapes.map(([tag,attrs])=>`<${tag} ${Object.entries(attrs).map(([k,v])=>`${k}="${v}"`).join(' ')}/>`).join('');return 'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="${ink}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`);};
       const action=(label,callback,parent=body,icon='')=>{ const node=make("menuitem",label,parent);if(icon&&this.MENU_ICONS[icon]){node.classList.add("menuitem-iconic");node.setAttribute("image",glyph(icon));}node.addEventListener("command",()=>Promise.resolve().then(callback).catch(e=>{this.Z.logError(e);this.say(win,e.message);}));return node; };
       const iconic=(node,icon)=>{if(node&&this.MENU_ICONS[icon]){node.classList.add(node.localName==="menu"?"menu-iconic":"menuitem-iconic");node.setAttribute("image",glyph(icon));}return node;};
+      /* The parent entry sits among other plugins' entries, which carry signs;
+         without one, Style Custom is the only unmarked line in the menu. */
+      iconic(menu,"panel");iconic(doc.getElementById("style-custom-tools-item"),"panel");
       for(const status of ["unread","reading","done"]) action(({unread:"안 읽음",reading:"읽는 중",done:"읽음"})[status],()=>this.edit(this.selected(win),{status}),body,{unread:"circle",reading:"half",done:"disc"}[status]);
       /* The paper you are looking at is the best query you have. The search
          tab used to open empty and ask you to type in what was already on the

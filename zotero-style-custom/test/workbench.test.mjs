@@ -1159,3 +1159,17 @@ test('the first open explains the panel once and never again',async()=>{
  assert.equal(seen.bench.panel.querySelector('.sc-welcome').hidden,true,'a returning user never sees it');
  seen.bench.destroy();
 });
+
+test('every button that opens a Zotero window is marked so a sweep can leave it alone',async()=>{
+ const f=fixture();
+ const marked=[];
+ for(const tab of ['papers','notes','annotations','backlinks','attachments']){
+  await f.bench.show(tab);
+  for(const b of f.bench.panel.querySelectorAll('.sc-body button'))if(b.hasAttribute('data-opens'))marked.push(b.textContent);
+ }
+ await f.bench.show('papers');
+ const open=[...f.bench.panel.querySelectorAll('.sc-body button')].find(b=>b.textContent==='열기');
+ assert.ok(open,'the paper card still offers to open the item');
+ assert.equal(open.getAttribute('data-opens'),'window','and declares that it opens a window');
+ f.bench.destroy();
+});

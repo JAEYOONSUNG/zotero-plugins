@@ -1,5 +1,5 @@
 {
- "version": "0.48.3",
+ "version": "0.48.4",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1931,6 +1931,30 @@
    ],
    "status": "verified",
    "review": "첫 실행: 패널 맨 위에 한 줄 안내가 뜨고 '알겠어요'를 누르면 다시 나오지 않는다. 빈 서재·주석 없음·문헌 없음 탭은 그 자리에서 채울 버튼을 준다. 설정 첫 화면에는 비어 있는 키 세 개만 '먼저 할 것'으로 올라오고, 채우면 사라진다. ZotPoP은 키 없는 OpenAlex에 배너와 200건 상한을 걸고, 검색 전 지표 칸은 대시 대신 무엇이 뜰지 한 줄로 말한다. 읽기 0초는 기본으로 숨기고, 인용 수 배경 조회는 키가 있을 때만 돈다. 남아 있던 한국어 문자열 여덟 개를 번역 경로에 넣었다."
+  },
+  {
+   "round": "R69",
+   "title": "메뉴의 표식과 자기 점검이 연 창들",
+   "gap": "The user found Style Custom the only unmarked line among the other plugins' item-menu entries, and found four empty note windows stacked on the screen after a self-check run.",
+   "entryPoint": "문헌 우클릭 메뉴, 도구 메뉴, 자기 점검",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "The parent entry sits among other plugins' entries"
+    },
+    {
+     "file": "src/selfcheck.js",
+     "marker": "A note title is a button label, so the verb list cannot catch it"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "every button that opens a Zotero window is marked so a sweep can leave it alone"
+    }
+   ],
+   "status": "verified",
+   "review": "우클릭 메뉴의 'Style Custom'과 도구 메뉴의 두 항목에 패널 모양 표식을 붙였다. 자기 점검의 버튼 일괄 누르기는 노트 제목처럼 동사가 없는 버튼까지 눌러 빈 노트 창을 쌓았다. 창을 여는 버튼은 이제 data-opens로 스스로를 밝히고, 점검은 그런 버튼을 건너뛴다. ZotPoP의 도구 메뉴 항목에도 돋보기 표식을 넣었다."
   }
  ],
  "introducedInVersion": "0.6.0"

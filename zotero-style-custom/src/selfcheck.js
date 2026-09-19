@@ -137,7 +137,10 @@
       for (const tab of tabs) {
         try { await bench.show(tab); } catch (error) { broken.push(tab + ' · show → ' + (error.message || error)); continue; }
         const seen = new Set();
-        const buttons = [...bench.panel.querySelectorAll('.sc-body button')].filter(b => !b.disabled && !b.hidden && b.textContent.trim() && !skip.test(b.textContent) && !seen.has(b.textContent.trim()));
+        /* A note title is a button label, so the verb list cannot catch it:
+           anything that opens a Zotero window says so with data-opens, and the
+           sweep leaves those alone instead of stacking empty note editors. */
+        const buttons = [...bench.panel.querySelectorAll('.sc-body button')].filter(b => !b.disabled && !b.hidden && !b.hasAttribute('data-opens') && b.textContent.trim() && !skip.test(b.textContent) && !seen.has(b.textContent.trim()));
         for (const b of buttons.slice(0, 12)) {
           const label = b.textContent.trim(); seen.add(label);
           if (!b.isConnected) continue;

@@ -103,6 +103,12 @@ Zotero.ZotPoP = {
 		let item = doc.createXULElement("menuitem");
 		item.id = "zotpop-menuitem";
 		item.setAttribute("label", this.t("menuLabel"));
+		// Every other plugin's entry in this menu carries a sign; an unmarked
+		// line reads as a separator between them.
+		item.classList.add("menuitem-iconic");
+		item.setAttribute("image", "data:image/svg+xml;utf8," + encodeURIComponent(
+			'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">'
+			+ '<circle cx="7" cy="7" r="4.2"/><line x1="10.1" y1="10.1" x2="13.4" y2="13.4"/></svg>'));
 		item.addEventListener("command", () => this.openSearch(window));
 		popup.appendChild(item);
 		return "ok";
