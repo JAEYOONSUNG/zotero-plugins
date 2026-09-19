@@ -1147,7 +1147,7 @@
      p.classList.add('sc-native-preview');c.appendChild(p);preview=p;
      try{
       const item=await runtime.Z.Items.getAsync(Number(a.id));if(!current()){await discardPreview(p);return;}
-      p.item=item;if(p.isValidType===false)throw new Error('이 첨부는 미리보기를 지원하지 않습니다. 열기로 확인하세요.');if(typeof p.render!=='function')throw new Error('현재 Zotero에서 첨부 미리보기를 지원하지 않습니다.');
+      p.item=item;if(p.isValidType===false)throw new Error('이 첨부는 미리보기를 지원하지 않습니다. 열기로 확인하세요.');if(typeof p.render!=='function')throw new Error('이 Zotero 버전은 첨부 미리보기를 지원하지 않습니다. 「열기」로 파일을 여세요.');
       await p.render();if(!current())await discardPreview(p);
      }catch(error){await discardPreview(p);if(current())throw error;}
     },c);
@@ -1180,7 +1180,7 @@
      const sec=Number(p.pages[n])||0;
      const level=sec<5?0:sec>=most*0.75?4:sec>=most*0.4?3:sec>=most*0.15?2:1;
      const cell=node('button','',cells,{class:'sc-page-cell',type:'button','data-level':String(level),'aria-label':`${n+1}페이지, ${Math.round(sec)}초`,title:`${n+1}페이지 · ${Math.round(sec)}초`});
-     cell.addEventListener('click',()=>run(()=>{if(!p.attachmentID)throw new Error('기록된 첨부파일 정보를 찾지 못했습니다.');return library.openItem(p.attachmentID,{pageIndex:n});}));
+     cell.addEventListener('click',()=>run(()=>{if(!p.attachmentID)throw new Error('어느 파일의 몇 쪽인지 기록이 없습니다. 그 PDF를 한 번 열어 읽은 뒤 다시 보세요.');return library.openItem(p.attachmentID,{pageIndex:n});}));
      cell.disabled=!p.attachmentID;
     }
     drewStrip=true;
@@ -1251,7 +1251,7 @@
   }
   function drawCanvas(){const b=bar(),name=node('input',null,b,{placeholder:'새 보드 이름','aria-label':'보드 이름'});button('보드 만들기',async()=>{const board=model.createBoard(runtime.cache,name.value);state.boardID=board.id;runtime.dirty=true;await runtime.flush();render();},b);const select=node('select',null,b,{'aria-label':'캔버스 선택'});node('option','보드 선택',select,{value:''});for(const board of runtime.cache.boards||[])node('option',board.name,select,{value:board.id});select.value=state.boardID||'';select.addEventListener('change',()=>{state.boardID=select.value;state.cardIDs.clear();render();});const board=(runtime.cache.boards||[]).find(b=>b.id===state.boardID);
    button('보드 삭제',async()=>{if(!board)throw new Error('삭제할 보드를 선택하세요.');deletedCardSelections.set(board.id,[...state.cardIDs]);model.deleteBoard(runtime.cache,board.id);state.boardID=null;state.cardIDs.clear();runtime.dirty=true;await runtime.flush();render();},b);
-   button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('복원할 보드가 없습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b);
+   button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b);
    if(!board){empty('보드를 만들고 선택한 문헌을 카드로 추가하세요.');return;}
    const save=async()=>{runtime.dirty=true;await runtime.flush();render();};button('선택 문헌 추가',async()=>{model.addToBoard(runtime.cache,board,selected());await save();},b);button('메모 카드 추가',async()=>{model.addBoardNote(runtime.cache,board,'새 메모');await save();},b);button('카드 연결',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('두 카드를 선택하세요.');model.linkCards(board,...ids);await save();},b);button('선택 카드 삭제',async()=>{for(const id of state.cardIDs)model.removeCard(board,id);state.cardIDs.clear();await save();},b);
    const boardName=node('input',null,b,{'aria-label':'현재 보드 이름'});boardName.value=board.name;boardName.dataset.draftKey=JSON.stringify(['board-name',board.id]);
@@ -1278,7 +1278,7 @@
    for(const[key,label]of available)check('비교 항목: '+label,fields.includes(key),on=>run(async()=>{
     const latest=Array.isArray(runtime.cache.matrixFields)?[...new Set(runtime.cache.matrixFields.filter(field=>available.some(([id])=>id===field)))]:fields;
     const next=on?[...new Set([...latest,key])]:latest.filter(field=>field!==key);
-    if(!next.length){render();throw new Error('비교 항목을 하나 이상 남겨 두세요.');}
+    if(!next.length){render();throw new Error('비교하려면 최소 한 편은 남아 있어야 합니다.');}
     runtime.cache.matrixFields=next;runtime.dirty=true;await runtime.flush();render();
    }),options);
    const values=(selected().length?model.sortItems(selected(),state.sort):rows()).map(item=>{
@@ -1336,7 +1336,7 @@
    output.hidden=!have;if(have)output.value=state.compareOutput;
    const actions=bar(section);actions.classList.add('sc-compare-actions');actions.hidden=!have;
    button('결과 복사',()=>copy(output.value),actions);
-   button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 분석을 받으세요.');await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
+   button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 「비교 분석」을 눌러 결과를 받으세요.');await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
   }
   /* Collections as a tree, each with a bar for how much it holds. A list of
      boxed cards, one per collection with a button and a checkbox, said no

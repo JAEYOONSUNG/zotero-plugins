@@ -1172,7 +1172,7 @@
   if(setting.type==='boolean'){if(typeof value!=='boolean')throw new Error('참/거짓 값을 선택하세요.');}
   else if(setting.type==='number'){if(typeof value!=='number'||!Number.isFinite(value)||value<setting.min||value>setting.max||setting.step&&!Number.isInteger((value-setting.min)/setting.step))throw new Error(`${setting.min}–${setting.max} 범위의 값을 입력하세요.`);}
   else if(setting.type==='select'){if(!setting.options.some(option=>option.value===value))throw new Error('목록의 값을 선택하세요.');}
-  else {if(typeof value!=='string'||value.length>50000)throw new Error('설정 문자열이 너무 깁니다.');if(setting.type==='color'&&!/^#[a-f0-9]{6}$/i.test(value))throw new Error('#RRGGBB 색상을 입력하세요.');}
+  else {if(typeof value!=='string'||value.length>50000)throw new Error('입력한 값이 너무 깁니다. 짧게 줄여서 다시 저장하세요.');if(setting.type==='color'&&!/^#[a-f0-9]{6}$/i.test(value))throw new Error('#RRGGBB 색상을 입력하세요.');}
   return value;
  }
  const api={schema,validate};root.CustomStyleSettingsSchema=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;

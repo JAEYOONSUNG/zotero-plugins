@@ -1,5 +1,5 @@
 {
- "version": "0.48.7",
+ "version": "0.48.8",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -2031,6 +2031,30 @@
    ],
    "status": "verified",
    "review": "endpoint는 'AI 서버 주소', Bearer 헤더는 '인증 헤더', 컴포넌트는 '기능', 'Zotero 색인'은 '본문을 읽어 둠'으로 바꿨다. 'UTC 자정'은 한국 시간으로 적고, 영어권 사용자에게는 자기 시계의 시각이 보인다. 괄호 안에 범위를 늘어놓던 메뉴 8개는 동사만 남기고 설명을 툴팁으로 옮겼다. 영어 쪽에서 한 기능에 두 이름을 쓰던 곳(citation map, followed)을 하나로 모았다. 메뉴 동사 길이는 테스트가 지킨다."
+  },
+  {
+   "round": "R73",
+   "title": "막다른 오류 메시지 33건",
+   "gap": "Thirty-three errors named what went wrong and stopped there. A reader who hit one had to guess whether to wait, to fix something, or to give up.",
+   "entryPoint": "오류가 나는 모든 자리",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "ZotPoP이 설치되어 있지 않습니다. 도구 → 부가 기능에서 설치한 뒤 다시 시도하세요."
+    },
+    {
+     "file": "src/library.js",
+     "marker": "역링크 기능이 꺼져 있습니다. 설정 → Style Custom → 보기에서 켜세요."
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/runtime.test.mjs",
+     "name": "an error message tells the reader what to do next"
+    }
+   ],
+   "status": "verified",
+   "review": "오류 메시지 33건에 다음 행동을 붙였다. 기능이 꺼져 있으면 어느 설정에서 켜는지, 값이 모자라면 무엇을 채우는지, 한도에 걸리면 몇 개까지인지 말한다. 할 일이 정말 없는 네 건만 예외로 두고, 나머지는 모두 '-세요'로 끝나야 한다는 규칙을 테스트가 지킨다."
   }
  ],
  "introducedInVersion": "0.6.0"

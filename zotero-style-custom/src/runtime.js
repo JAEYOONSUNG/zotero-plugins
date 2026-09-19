@@ -528,8 +528,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async rehomeSupplement(fileID, homeID, {trashStub = true} = {}) {
     const attachment = this.Z.Items.get(Number(fileID));
     const home = this.Z.Items.get(Number(homeID));
-    if (!attachment || !home) throw new Error('문헌을 찾지 못했습니다.');
-    if (!this.isRegular(home)) throw new Error('보충자료를 붙일 대상이 일반 문헌이 아닙니다.');
+    if (!attachment || !home) throw new Error('문헌을 찾지 못했습니다. 목록에서 다시 선택한 뒤 실행하세요.');
+    if (!this.isRegular(home)) throw new Error('보충자료는 일반 문헌에만 붙일 수 있습니다. 첨부파일이나 노트 말고 문헌을 고르세요.');
     const stub = attachment.parentItemID ? this.Z.Items.get(attachment.parentItemID) : null;
     if (stub && stub.id === home.id) return {moved: 0, trashed: 0};
     attachment.parentItemID = home.id;
@@ -1176,7 +1176,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   async refreshPublicationRanks(items) {
     const secret=String(this.pref('journalRankKey','')).trim();if(!secret)throw new Error('설정에서 본인의 easyScholar API 키를 입력하세요.');
-    const win=this.Z.getMainWindow?.();if(!win?.fetch)throw new Error('현재 환경에서 저널 지표를 조회할 수 없습니다.');
+    const win=this.Z.getMainWindow?.();if(!win?.fetch)throw new Error('이 창에서는 저널 지표를 조회할 수 없습니다. Zotero 기본 창에서 다시 실행하세요.');
     const names=[...new Set(items.map(item=>String(item.getField('publicationTitle')||'').trim()).filter(Boolean))];
     if(names.length>20)throw new Error('한 번에 20개 이하의 저널을 선택하세요.');
     const result={updated:0,missing:0};
@@ -1686,21 +1686,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const translate = new this.Z.Translate.Search();
     translate.setIdentifier(identifier);
     const translators = await translate.getTranslators();
-    if (!translators?.length) throw new Error('이 식별자를 읽을 수 있는 번역기가 없습니다.');
+    if (!translators?.length) throw new Error('이 식별자를 읽을 수 있는 번역기가 없습니다. DOI·PMID·arXiv 번호 중 하나로 다시 시도하세요.');
     translate.setTranslator(translators);
     const saved = await translate.translate({
       libraryID: libraryID ?? this.Z.Libraries.userLibraryID,
       collections: collections?.length ? collections : undefined,
       saveAttachments: true
     });
-    if (!saved?.length) throw new Error('가져오지 못했습니다.');
+    if (!saved?.length) throw new Error('가져오지 못했습니다. 잠시 뒤 다시 시도하세요.');
     return saved;
   }
 
   // Newly imported papers should inherit the reading state a fresh item has,
   // and land beside whatever the user was looking at.
   async importWork(work, win) {
-    if (!work?.doi) throw new Error('DOI가 없어 자동으로 가져올 수 없습니다.');
+    if (!work?.doi) throw new Error('DOI가 없어 자동으로 가져올 수 없습니다. 문헌 정보에 DOI를 넣은 뒤 다시 실행하세요.');
     const collection = win?.ZoteroPane?.getSelectedCollection?.();
     const saved = await this.importByIdentifier({DOI: work.doi}, {
       libraryID: win?.ZoteroPane?.getSelectedLibraryID?.(),
@@ -1990,7 +1990,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   async watchAuthor(person) {
     const id = this.discoverTools.shortID(person?.id);
-    if (!id.startsWith('A')) throw new Error('저자 식별자가 올바르지 않습니다.');
+    if (!id.startsWith('A')) throw new Error('저자 식별자가 올바르지 않습니다. 관심 저자 목록에서 저자를 다시 고르세요.');
     const rest = this.watchedAuthors().filter(row => row.id !== id);
     // The old cap was 100 because each author used to cost a request of their
     // own. The user already follows 109, so adding anyone simply failed. One
@@ -2688,7 +2688,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async relatedWorks(item, {limit = 40, signal, have} = {}) {
     const options = this.discoverOptions();
     const url = this.discoverTools.workURL(this.bibliographyRecord(item), options);
-    if (!url) throw new Error('이 문헌에는 DOI나 제목이 없어 조회할 수 없습니다.');
+    if (!url) throw new Error('이 문헌에는 DOI나 제목이 없어 조회할 수 없습니다. 둘 중 하나를 채운 뒤 다시 실행하세요.');
     const work = this.discoverTools.readWork(await this.discoverJSON(url, {signal}));
     if (!work) return {work: null, suggestions: []};
     const ids = [...work.references, ...work.related].slice(0, 50);
@@ -2717,7 +2717,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async authorActivity(authorID, {limit = 25, signal} = {}) {
     const options = this.discoverOptions();
     const worksURL = this.discoverTools.authorWorksURL(authorID, {...options, limit});
-    if (!worksURL) throw new Error('저자 식별자가 올바르지 않습니다.');
+    if (!worksURL) throw new Error('저자 식별자가 올바르지 않습니다. 관심 저자 목록에서 저자를 다시 고르세요.');
     const profileURL = `${this.discoverTools.API}authors/${this.discoverTools.shortID(authorID)}`
       + `?select=id,display_name,works_count,cited_by_count,summary_stats,last_known_institutions,topics,orcid`
       + this.discoverTools.credentials(options);
@@ -3120,7 +3120,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const items = this.selected(win);
     if (!items.length) throw new Error('문헌을 먼저 선택하세요.');
     const output = await this.citationText(items, style);
-    if (!output.trim()) throw new Error('이 문헌에서 인용문을 만들 메타데이터가 부족합니다.');
+    if (!output.trim()) throw new Error('인용문을 만들 정보가 모자랍니다. 저자·연도·제목을 채운 뒤 다시 실행하세요.');
     this.Z.Utilities.Internal.copyTextToClipboard(output);
     return output;
   }
@@ -3583,7 +3583,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const items=this.selected(win);
         if(!items.length)throw new Error("문헌을 먼저 선택하세요.");
         const zotpop=this.Z.ZotPoP;
-        if(!zotpop||typeof zotpop.openSearch!=='function')throw new Error("ZotPoP이 설치되어 있지 않습니다.");
+        if(!zotpop||typeof zotpop.openSearch!=='function')throw new Error("ZotPoP이 설치되어 있지 않습니다. 도구 → 부가 기능에서 설치한 뒤 다시 시도하세요.");
         const item=items[0], record=this.bibliographyRecord(item);
         const authors=(record.creators||[]).slice(0,2).map(c=>c.lastName||c.name).filter(Boolean).join(' ');
         zotpop.openSearch(win,{title:record.title||'',authors,year:record.year||'',doi:record.DOI||''});
@@ -3679,7 +3679,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const result=await this.refreshCitations(this.selected(win),{force:true});
         this.say(win,`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
       },body,"citations");
-      action("인용 수 조회 중지",()=>{if(!this.citationJob)throw new Error("진행 중인 인용 수 조회가 없습니다.");this.citationJob.controller.abort();this.say(win,"인용 수 조회를 중지했습니다. 지금까지 받은 값은 저장했습니다.");},body,"stop");
+      action("인용 수 조회 중지",()=>{if(!this.citationJob)throw new Error("진행 중인 인용 수 조회가 없습니다. 중지할 것이 없습니다.");this.citationJob.controller.abort();this.say(win,"인용 수 조회를 중지했습니다. 지금까지 받은 값은 저장했습니다.");},body,"stop");
       action("첨부파일 종류 판별",async()=>{
         const chosen=this.selected(win);
         const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
@@ -3750,7 +3750,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     catch (error) { return Promise.reject(error); }
     const change = { ...patch };
     const work = this.queue.then(async () => {
-      if (!this.active) throw new Error(this.text("Plugin is disabled.", "플러그인이 비활성화되어 있습니다."));
+      if (!this.active) throw new Error(this.text("Plugin is disabled.", "플러그인이 꺼져 있습니다. 도구 → 부가 기능에서 Style Custom을 켜세요."));
       if (!selection.length) throw new Error(this.text("Select a reference first.", "먼저 문헌을 선택하세요."));
       if (selection.some(item => !this.canEdit(item))) throw new Error(this.text("This selection is not editable.", "선택한 문헌을 편집할 수 없습니다."));
       if (selection.some(item => item.hasChanged?.())) throw new Error(this.text("Wait for pending item changes to save, then try again.", "문헌의 다른 변경 사항이 저장된 뒤 다시 시도하세요."));

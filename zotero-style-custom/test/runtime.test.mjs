@@ -177,7 +177,7 @@ test('rollback preserves a concurrent tag edit on a previously saved item withou
 test('invalid patch and disabled plugin cannot write data', async () => {
   const { plugin, item, records } = fixture();
   const reference = item(1);
-  await assert.rejects(plugin.edit([reference], { rating: 3 }), /비활성/);
+  await assert.rejects(plugin.edit([reference], { rating: 3 }), /꺼져 있습니다/);
   plugin.active = true;
   await assert.rejects(plugin.edit([reference], { rating: 6 }), /Rating/);
   assert.deepEqual(records.get(1), [{ tag: '#method/CRISPR', type: 1 }]);
@@ -1940,4 +1940,24 @@ test('a menu verb stays short and says the rest in its tooltip', () => {
   const next = source.indexOf('action("', at + 8);
   assert.match(source.slice(at, next < 0 ? undefined : next), /,"[^"]{10,}"\);\s*$/m, `${label} explains itself in a tooltip`);
  }
+});
+
+test('an error message tells the reader what to do next', () => {
+ const fs = require('node:fs');
+ const files = ['src/runtime.js', 'src/assist.js', 'src/library.js', 'src/workbench.js', 'src/workspace.js'];
+ const dead = [];
+ for (const file of files) {
+  const source = fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+  for (const match of source.matchAll(/throw new Error\((['"])([^'"]{8,})\1\)/g)) {
+   const text = match[2];
+   if (!/[가-힣]/.test(text)) continue;
+   // An error ends by telling the reader what to do, which in Korean means an
+   // imperative. The two exceptions are messages where there is nothing to do.
+   if (/(세요|십시오)\.?$/.test(text)) continue;
+   if (['요청이 중지되었습니다.', '되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.',
+        '비교하려면 최소 한 편은 남아 있어야 합니다.', '진행 중인 인용 수 조회가 없습니다. 중지할 것이 없습니다.'].includes(text)) continue;
+   dead.push(`${file}: ${text}`);
+  }
+ }
+ assert.deepEqual(dead, [], 'every error ends with what to do about it');
 });

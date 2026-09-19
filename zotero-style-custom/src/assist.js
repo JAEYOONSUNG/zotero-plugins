@@ -5,7 +5,7 @@
  function create({Zotero,runtime}){
   let active=true;const jobs=new Set();
   async function run(task,item,{language='Korean'}={}){
-   if(!active)throw new Error('플러그인이 비활성화되어 있습니다.');
+   if(!active)throw new Error('플러그인이 꺼져 있습니다. 도구 → 부가 기능에서 Style Custom을 켜세요.');
    const prompts={translate:`Translate the supplied title into ${language}. Preserve scientific names, identifiers, negation and numbers. Return only the translation.`,summary:`Summarize only the supplied abstract in ${language}, up to 5 short bullet points. Preserve uncertainty and do not invent findings.`,tags:'Suggest 3-6 concise topical tags for this abstract. Return only a JSON array of strings.',remark:`Write a concise research reading remark in ${language}, based solely on the provided title and abstract. Separate findings from limitations.`};
    /* Several papers side by side: what each one claims, how it gets there,
       and where they pull against each other. The model is asked to keep to
@@ -34,7 +34,7 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
    if(task==='compare'){
     const list=Array.isArray(item)?item:[];
     if(list.length<2)throw new Error('비교하려면 문헌을 둘 이상 선택하세요.');
-    if(list.length>6)throw new Error('한 번에 여섯 편까지 비교할 수 있습니다.');
+    if(list.length>6)throw new Error('한 번에 여섯 편까지 비교할 수 있습니다. 몇 편을 빼고 다시 실행하세요.');
     const missing=list.filter(paper=>!String(paper.abstract||'').trim());
     if(missing.length)throw new Error(`초록이 없는 문헌이 있습니다: ${missing.map(paper=>String(paper.title||'').slice(0,40)).join(' · ')}`);
    }
@@ -58,9 +58,9 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
     });
     if(!active||job.cancelled)throw new Error('요청이 중지되었습니다.');
     if(result.status<200||result.status>=300)throw new Error('AI 서비스 응답 오류: HTTP '+result.status);
-    const output=result.response?.choices?.[0]?.message?.content;if(typeof output!=='string'||!output.trim())throw new Error('AI 서비스가 텍스트를 반환하지 않았습니다.');
-    if(output.length>100000)throw new Error('AI 서비스 응답이 너무 깁니다.');
-    if(task==='tags'){let parsed;try{parsed=JSON.parse(output.replace(/^```(?:json)?\s*|\s*```$/g,''));}catch(_){throw new Error('태그 응답이 JSON 목록이 아닙니다.');}if(!Array.isArray(parsed)||!parsed.length||parsed.length>20||parsed.some(t=>typeof t!=='string'||!t.trim()||t.length>100||/[\r\n]/.test(t)))throw new Error('올바른 태그 목록이 아닙니다.');return [...new Set(parsed.map(t=>t.trim()))];}
+    const output=result.response?.choices?.[0]?.message?.content;if(typeof output!=='string'||!output.trim())throw new Error('AI 서버가 아무 내용도 보내지 않았습니다. 모델 이름을 확인하고 다시 시도하세요.');
+    if(output.length>100000)throw new Error('AI 서버 응답이 너무 깁니다. 더 짧은 글을 고르거나 모델을 바꾸세요.');
+    if(task==='tags'){let parsed;try{parsed=JSON.parse(output.replace(/^```(?:json)?\s*|\s*```$/g,''));}catch(_){throw new Error('AI가 태그를 목록으로 주지 않았습니다. 다시 시도하거나 다른 모델을 쓰세요.');}if(!Array.isArray(parsed)||!parsed.length||parsed.length>20||parsed.some(t=>typeof t!=='string'||!t.trim()||t.length>100||/[\r\n]/.test(t)))throw new Error('태그 목록으로 읽을 수 없는 답이 왔습니다. 다시 시도하세요.');return [...new Set(parsed.map(t=>t.trim()))];}
     return output.trim();
    }catch(error){if(/^AI 서비스|요청|태그|올바른/.test(error.message))throw error;throw new Error('AI 요청을 완료하지 못했습니다. 연결 설정을 확인하세요.');}
    finally{jobs.delete(job);}

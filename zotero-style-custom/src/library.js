@@ -185,7 +185,7 @@
       return false;
     }
     async function backlinks(itemID) {
-      if(runtime?.featureEnabled?.('backlinks')===false)throw new Error('역링크 기능이 꺼져 있습니다.');
+      if(runtime?.featureEnabled?.('backlinks')===false)throw new Error('역링크 기능이 꺼져 있습니다. 설정 → Style Custom → 보기에서 켜세요.');
       const target=await get(itemID),items=await all(target.libraryID),out=[];
       const keys=new Set([target.key]);if(target.isRegularItem?.())for(const id of target.getAttachments())keys.add((await get(id)).key);
       const route=target.libraryID===Z.Libraries.userLibraryID?'library':'groups/'+safe(()=>Z.Groups.getGroupIDFromLibraryID(target.libraryID),'unavailable');
@@ -229,7 +229,7 @@
     const commentRevisions=new Map();
     async function setAnnotationComment(annotationID,text) {
       const annotation=await get(annotationID);
-      if(!annotation?.isAnnotation?.())throw new Error('주석이 아닙니다.');
+      if(!annotation?.isAnnotation?.())throw new Error('주석이 아닌 항목입니다. 주석을 고른 뒤 다시 실행하세요.');
       guard([annotation]);
       const value=String(text??'');
       const prior=annotation.annotationComment||'';
@@ -304,7 +304,7 @@
       },['tags']);
     }
     async function recolorAnnotations(ids,color) {
-      if(runtime?.featureEnabled?.('annotationColors')===false)throw new Error('주석 색상 기능이 꺼져 있습니다.');
+      if(runtime?.featureEnabled?.('annotationColors')===false)throw new Error('주석 색상 기능이 꺼져 있습니다. 설정 → Style Custom → 리더에서 켜세요.');
       if(!Array.isArray(ids)||!ids.length)throw new Error('Select annotations explicitly');
       if(typeof color!=='string'||!/^#[0-9a-f]{6}$/i.test(color))throw new Error('Use a six-digit annotation color');color=color.toLowerCase();
       const annotations=await selected(ids);
@@ -335,7 +335,7 @@
       }
     }
     async function mergeAnnotations(ids,{isCurrent}={}) {
-      if(runtime?.featureEnabled?.('reader.mergeAnnotations')===false)throw new Error('주석 병합 기능이 꺼져 있습니다.');
+      if(runtime?.featureEnabled?.('reader.mergeAnnotations')===false)throw new Error('주석 병합 기능이 꺼져 있습니다. 설정 → Style Custom → 리더에서 켜세요.');
       if(!Array.isArray(ids)||ids.length<2)throw new Error('Select at least two annotations');
       if(isCurrent!==undefined&&typeof isCurrent!=='function')throw new TypeError('Invalid reader guard');
       const current=()=>{if(isCurrent&&!isCurrent())throw new Error('The active reader or selection changed');};current();

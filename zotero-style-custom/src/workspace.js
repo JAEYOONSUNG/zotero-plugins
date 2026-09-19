@@ -47,24 +47,24 @@
   return {total,visited,percent:total?Math.round(visited/total*100):null,pages};
  }
  function id(cache,prefix){cache.workspaceSequence=(Number(cache.workspaceSequence)||0)+1;return prefix+'-'+cache.workspaceSequence+'-'+Date.now().toString(36);}
- function createBoard(cache,name){if(!text(name).trim())throw new Error('보드 이름을 입력하세요.');cache.boards||=[];if(cache.boards.length>=100)throw new Error('보드는 최대 100개입니다.');const b={id:id(cache,'board'),name:text(name).trim().slice(0,200),nodes:[],edges:[]};cache.boards.push(b);return b;}
- function addToBoard(cache,board,items){if(board.nodes.length+items.length>500)throw new Error('보드 항목은 최대 500개입니다.');for(const item of items){if(board.nodes.some(n=>n.itemID===String(item.id)))continue;const i=board.nodes.length;board.nodes.push({id:id(cache,'card'),itemID:String(item.id),label:text(item.title),note:'',color:'#ffffff',x:25+(i%3)*220,y:25+Math.floor(i/3)*130});}return board;}
- function addBoardNote(cache,board,value){if(board.nodes.length>=500)throw new Error('보드 항목은 최대 500개입니다.');const n={id:id(cache,'note'),itemID:null,label:'메모',note:text(value).slice(0,50000),color:'#f3f4f6',x:40,y:40};board.nodes.push(n);return n;}
+ function createBoard(cache,name){if(!text(name).trim())throw new Error('보드 이름을 입력하세요.');cache.boards||=[];if(cache.boards.length>=100)throw new Error('보드는 100개까지 만들 수 있습니다. 쓰지 않는 보드를 지우세요.');const b={id:id(cache,'board'),name:text(name).trim().slice(0,200),nodes:[],edges:[]};cache.boards.push(b);return b;}
+ function addToBoard(cache,board,items){if(board.nodes.length+items.length>500)throw new Error('보드 하나에 항목은 500개까지입니다. 몇 개를 빼고 다시 넣으세요.');for(const item of items){if(board.nodes.some(n=>n.itemID===String(item.id)))continue;const i=board.nodes.length;board.nodes.push({id:id(cache,'card'),itemID:String(item.id),label:text(item.title),note:'',color:'#ffffff',x:25+(i%3)*220,y:25+Math.floor(i/3)*130});}return board;}
+ function addBoardNote(cache,board,value){if(board.nodes.length>=500)throw new Error('보드 하나에 항목은 500개까지입니다. 몇 개를 빼고 다시 넣으세요.');const n={id:id(cache,'note'),itemID:null,label:'메모',note:text(value).slice(0,50000),color:'#f3f4f6',x:40,y:40};board.nodes.push(n);return n;}
  function moveCard(board,id,x,y){const n=board.nodes.find(n=>n.id===id);if(!n||![x,y].every(Number.isFinite))return false;n.x=Math.max(0,Math.min(10000,x));n.y=Math.max(0,Math.min(10000,y));return true;}
  function linkCards(board,from,to){if(from===to||![from,to].every(id=>board.nodes.some(n=>n.id===id)))throw new Error('서로 다른 두 카드를 선택하세요.');if(!board.edges.some(e=>(e.source===from&&e.target===to)||(e.source===to&&e.target===from)))board.edges.push({source:from,target:to});}
  function removeCard(board,id){board.nodes=board.nodes.filter(n=>n.id!==id);board.edges=board.edges.filter(e=>e.source!==id&&e.target!==id);}
  function renameBoard(board,name){name=text(name).trim();if(!name)throw new Error('보드 이름을 입력하세요.');board.name=name.slice(0,200);return board;}
  function updateCard(board,id,changes){
-  const card=board.nodes.find(n=>n.id===id);if(!card)throw new Error('카드를 찾지 못했습니다.');
+  const card=board.nodes.find(n=>n.id===id);if(!card)throw new Error('카드를 찾지 못했습니다. 보드를 새로 고친 뒤 다시 시도하세요.');
   const next={};
   if('label' in changes){next.label=text(changes.label).trim().slice(0,500);if(!next.label)throw new Error('카드 제목을 입력하세요.');}
-  if('color' in changes){if(!/^#[a-f\d]{6}$/i.test(changes.color))throw new Error('카드 색상은 #RRGGBB 형식이어야 합니다.');next.color=changes.color.toLowerCase();}
+  if('color' in changes){if(!/^#[a-f\d]{6}$/i.test(changes.color))throw new Error('카드 색상은 #RRGGBB 형식으로 적으세요.');next.color=changes.color.toLowerCase();}
   if('note' in changes)next.note=text(changes.note).slice(0,50000);
   Object.assign(card,next);return card;
  }
  function unlinkCards(board,from,to){const before=board.edges.length;board.edges=board.edges.filter(e=>!((e.source===from&&e.target===to)||(e.source===to&&e.target===from)));return before-board.edges.length;}
  function deleteBoard(cache,id){const board=(cache.boards||[]).find(b=>b.id===id);if(!board)return null;cache.boards=cache.boards.filter(b=>b.id!==id);cache.boardTrash=[...(cache.boardTrash||[]),board].slice(-20);return board;}
- function restoreBoard(cache){const board=cache.boardTrash?.at(-1);if(!board)return null;if((cache.boards||[]).some(b=>b.id===board.id))throw new Error('같은 ID의 보드가 이미 있습니다.');cache.boardTrash.pop();cache.boards=[...(cache.boards||[]),board];return board;}
+ function restoreBoard(cache){const board=cache.boardTrash?.at(-1);if(!board)return null;if((cache.boards||[]).some(b=>b.id===board.id))throw new Error('같은 이름의 보드가 이미 있습니다. 다른 이름을 쓰세요.');cache.boardTrash.pop();cache.boards=[...(cache.boards||[]),board];return board;}
  const api={filter,sortItems,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
  root.CustomStyleWorkspace=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
