@@ -689,6 +689,17 @@
       "default": false
     },
     {
+      "key": "annotationPageSize",
+      "category": "views",
+      "label": "주석 탭에 한 번에 그릴 개수",
+      "type": "number",
+      "default": 150,
+      "min": 20,
+      "max": 2000,
+      "step": 10,
+      "description": "이 수를 넘는 주석은 「더 보기」를 누를 때 이어서 그립니다. 주석이 수백 개인 서재에서 탭이 빨리 열립니다."
+    },
+    {
       "key": "annotationPreferComment",
       "category": "views",
       "label": "주석 텍스트보다 메모를 우선 표시",

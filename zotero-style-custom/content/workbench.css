@@ -660,10 +660,17 @@
    list boxed each annotation, ran a 4px colour bar down its side and kept a
    checkbox and two buttons showing, so six of them filled the window and the
    chrome outweighed the text. */
-#style-custom-workbench .sc-annots { display: flex; flex-direction: column; }
+/* Six hundred quotations, most of them one line long, in a single column left
+   half the panel empty and made the list twice as long as it needed to be. The
+   cards flow into as many columns as the panel is wide enough for, and a card
+   is never broken across a column boundary. */
+#style-custom-workbench .sc-annots { display: block; columns: 3; column-gap: 14px; }
+@container sc-workbench (max-width: 1240px) { #style-custom-workbench .sc-annots { columns: 2; } }
+@container sc-workbench (max-width: 780px) { #style-custom-workbench .sc-annots { columns: 1; } }
+#style-custom-workbench .sc-annots > .sc-annot { break-inside: avoid; -webkit-column-break-inside: avoid; }
 #style-custom-workbench .sc-annot {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 10px 12px; border-radius: var(--sc-radius);
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 7px 10px; margin-block-end: 6px; border-radius: var(--sc-radius);
   border-inline-start: 2px solid transparent;
   cursor: default;
 }
@@ -672,7 +679,7 @@
 #style-custom-workbench .sc-annot[data-selected=true] {
   background: var(--sc-accent-soft); border-inline-start-color: var(--sc-accent);
 }
-#style-custom-workbench .sc-annot-head { display: flex; align-items: center; gap: 7px; min-height: 20px; }
+#style-custom-workbench .sc-annot-head { display: flex; align-items: center; gap: 6px; min-height: 18px; }
 #style-custom-workbench .sc-annot-dot {
   flex: none; width: 9px; height: 9px; border-radius: 100px;
   box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .18);
@@ -681,13 +688,34 @@
 #style-custom-workbench .sc-annot-kind { font-size: 10px; color: var(--sc-faint); }
 /* The actions appear when the pointer or the keyboard is on the annotation,
    rather than two buttons standing under every line of quoted text. */
-#style-custom-workbench .sc-annot-actions { margin-inline-start: auto; display: flex; gap: 4px; opacity: 0; }
+#style-custom-workbench .sc-annot-actions {
+  margin-inline-start: auto; display: flex; gap: 4px; opacity: 0;
+  position: absolute; inset-block-start: 4px; inset-inline-end: 6px;
+  padding: 2px; border-radius: var(--sc-radius-sm); background: var(--sc-surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
+}
+#style-custom-workbench .sc-annot { position: relative; }
 #style-custom-workbench .sc-annot:hover .sc-annot-actions,
 #style-custom-workbench .sc-annot:focus-within .sc-annot-actions { opacity: 1; }
 #style-custom-workbench .sc-annot-actions button { min-height: 22px; padding: 2px 8px; font-size: 11px; }
 #style-custom-workbench .sc-annot-text {
-  margin: 0; font: 13px/1.55 var(--sc-font); color: var(--sc-text); overflow-wrap: anywhere;
+  margin: 0; font: 13px/1.5 var(--sc-font); color: var(--sc-text); overflow-wrap: anywhere;
 }
+/* The paper the quotations come from, kept in view while they scroll past. */
+#style-custom-workbench .sc-annot-group {
+  position: sticky; top: 0; z-index: 2; margin: 16px 0 6px; padding: 5px 0 5px 2px;
+  display: flex; align-items: baseline; gap: 8px;
+  background: linear-gradient(var(--sc-bg) 72%, transparent);
+  font: 600 12px/1.4 var(--sc-font); color: var(--sc-text);
+}
+#style-custom-workbench .sc-annot-group:first-child { margin-top: 2px; }
+#style-custom-workbench .sc-annot-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-annot-group-count {
+  flex: none; padding: 0 7px; border-radius: 100px; background: var(--sc-fill);
+  color: var(--sc-muted); font: 600 10px/16px var(--sc-mono);
+}
+#style-custom-workbench .sc-annot-more { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 0 4px; }
+#style-custom-workbench .sc-annot-add-memo { min-height: 22px; padding: 2px 8px; font-size: 11px; }
 #style-custom-workbench .sc-annot-links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 /* A memo saves itself, and says so: an edit that vanished without a word would
@@ -845,14 +873,18 @@
 #style-custom-workbench .sc-metric .sc-metric-value:empty::before { content: ""; }
 
 /* Annotations: the colour down the card's edge, the quote set apart, the memo a quiet line. */
-#style-custom-workbench .sc-annot { border-inline-start: 3px solid var(--sc-annot, var(--sc-faint)); padding-inline-start: 12px; }
-#style-custom-workbench .sc-annots { gap: 2px; }
+#style-custom-workbench .sc-annot { border-inline-start: 3px solid var(--sc-annot, var(--sc-faint)); padding-inline-start: 10px; }
 #style-custom-workbench .sc-annot-kind { padding: 0 6px; border-radius: 100px; background: var(--sc-fill); color: var(--sc-muted); font-size: 10px; line-height: 16px; }
 #style-custom-workbench .sc-annot-text { margin: 4px 0 2px; font-size: 13px; line-height: 1.5; color: var(--sc-text); }
-#style-custom-workbench .sc-annot-memo { border: 0; background: transparent; padding: 2px 0; color: var(--sc-muted); font-size: 12px; box-shadow: none; }
+#style-custom-workbench .sc-annot-memo { border: 0; background: transparent; padding: 1px 0; color: var(--sc-muted); font-size: 12px; box-shadow: none; min-height: 20px; }
 #style-custom-workbench .sc-annot-memo::placeholder { color: var(--sc-faint); }
 #style-custom-workbench .sc-annot-memo:focus, #style-custom-workbench .sc-annot-memo:hover { background: var(--sc-fill); padding-inline: 6px; }
 #style-custom-workbench .sc-annot-selection { display: inline-flex; flex-wrap: wrap; max-width: 100%; align-items: center; gap: 4px; margin-inline-start: auto; }
+/* Until something is selected these three verbs have nothing to act on, so
+   they say what they are waiting for rather than failing when pressed. */
+#style-custom-workbench .sc-annot-selection[data-armed=false] { opacity: .72; }
+#style-custom-workbench .sc-annot-chosen { font-size: 11px; color: var(--sc-muted); margin-inline-end: 2px; }
+#style-custom-workbench .sc-annot-selection[data-armed=true] .sc-annot-chosen { color: var(--sc-accent); font-weight: 600; }
 #style-custom-workbench .sc-annot-selection button { min-height: 24px; padding: 2px 9px; font-size: 11px; }
 
 /* Collections: a tree, each row with a bar for what it holds. */

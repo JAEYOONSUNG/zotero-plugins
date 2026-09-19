@@ -491,8 +491,18 @@
   let REGISTRY = null;
   function loadRegistry(payload) {
     const list = Array.isArray(payload) ? payload : (payload && payload.journals) || [];
-    REGISTRY = {byTitle: new Map(), byIssn: new Map(), size: list.length};
+    /* Each row's subjects are indexes into one table of names, because the
+       same two hundred subject names repeat across 22,594 journals. They are
+       unpacked here so nothing downstream has to know how they are stored. */
+    const names = (payload && payload.subjects) || [];
+    REGISTRY = {byTitle: new Map(), byIssn: new Map(), size: list.length, subjects: names};
     for (const row of list) {
+      if (Array.isArray(row.levels) && row.levels.length && Array.isArray(row.levels[0])) {
+        row.levels = row.levels
+          .map(([domain, field, subfield]) => ({domain: names[domain] || '', field: names[field] || '', subfield: names[subfield] || ''}))
+          .filter(level => level.domain || level.field || level.subfield);
+      }
+      else if (!Array.isArray(row.levels)) row.levels = [];
       const key = flat(row.title);
       if (key && !REGISTRY.byTitle.has(key)) REGISTRY.byTitle.set(key, row);
       const abbr = flat(row.abbreviation);
@@ -518,6 +528,11 @@
   }
   function registryRank(title) { registryRanked(); return REGISTRY && REGISTRY.rankByKey ? (REGISTRY.rankByKey.get(flat(title)) || null) : null; }
   function registryLookup(flatTitle) { return REGISTRY ? (REGISTRY.byTitle.get(flatTitle) || null) : null; }
+  // The subjects the registry knows for a journal, by its printed name.
+  function registryLevels(title) {
+    const row = REGISTRY ? REGISTRY.byTitle.get(flat(title)) : null;
+    return row && Array.isArray(row.levels) ? row.levels : [];
+  }
   function registryByIssn(issn) { return REGISTRY ? (REGISTRY.byIssn.get(String(issn || '').toUpperCase()) || null) : null; }
 
   // The mark's ink and its fill, derived from one hue so every tile in the
@@ -609,7 +624,7 @@
       : {...badge, ink, fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84)};
   }
 
-  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, registryRanked, registryRank, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
+  const api = {registryLevels, identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, registryRanked, registryRank, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

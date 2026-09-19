@@ -47,6 +47,14 @@
    ]
   },
   {
+   "ko": "메모",
+   "n": 4,
+   "files": [
+    "src/workbench.js",
+    "src/workspace.js"
+   ]
+  },
+  {
    "ko": "선택한 문헌 없음",
    "n": 3,
    "files": [
@@ -835,14 +843,6 @@
    "n": 2,
    "files": [
     "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "메모",
-   "n": 2,
-   "files": [
-    "src/workbench.js",
-    "src/workspace.js"
    ]
   },
   {
@@ -3408,6 +3408,20 @@
    ]
   },
   {
+   "ko": "주석 탭에 한 번에 그릴 개수",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
+   "ko": "이 수를 넘는 주석은 「더 보기」를 누를 때 이어서 그립니다. 주석이 수백 개인 서재에서 탭이 빨리 열립니다.",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
    "ko": "주석 텍스트보다 메모를 우선 표시",
    "n": 1,
    "files": [
@@ -5613,6 +5627,13 @@
    ]
   },
   {
+   "ko": "선택 주석에 칠할 색",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "{0}개 주석의 색상을 변경했습니다.",
    "n": 1,
    "files": [
@@ -5690,7 +5711,21 @@
    ]
   },
   {
-   "ko": "{0} · {1}개",
+   "ko": "선택 {0}개",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "주석을 눌러 선택하세요",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "첨부파일",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5760,13 +5795,6 @@
    ]
   },
   {
-   "ko": "메모…",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "이 주석의 메모",
    "n": 1,
    "files": [
@@ -5775,6 +5803,20 @@
   },
   {
    "ko": "주석 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}개 문헌의 주석 {1}개가 더 있습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "더 보기",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7902,7 +7944,7 @@
    ]
   },
   {
-   "ko": "JCR 등재 {0}종 · 내 서재에 있는 저널 {1}",
+   "ko": "JCR 등재 {0}종 · 분야 있는 저널 {1} · 내 서재에 있는 저널 {2}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7931,6 +7973,13 @@
   },
   {
    "ko": "분야 고르기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "분야 미상",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8029,6 +8078,13 @@
   },
   {
    "ko": "내 서재에 없는 저널",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "OpenAlex에 이 저널의 분야 정보가 없습니다.",
    "n": 1,
    "files": [
     "src/workbench.js"

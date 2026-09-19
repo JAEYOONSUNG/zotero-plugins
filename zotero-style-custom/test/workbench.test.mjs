@@ -770,8 +770,13 @@ test('a memo saves itself, says so, and is not lost when the panel closes', asyn
   await f.bench.show('annotations');
   // Scoped to the annotation: the paper's own memo shares the class and is
   // drawn first, so an unscoped query picks up the wrong one.
+  /* A textarea under every one of six hundred highlights, each showing the
+     word "memo", was most of what the tab drew. It appears for an annotation
+     that has one, and for any annotation the reader asks. */
+  assert.equal(f.body().querySelector('.sc-annot .sc-annot-memo'), null, 'nothing written yet, nothing drawn');
+  await f.click('메모');
   const memo = f.body().querySelector('.sc-annot .sc-annot-memo');
-  assert.ok(memo, 'the annotation carries an editable memo');
+  assert.ok(memo, 'asking for one gives an editable memo');
 
   // Writing a note used to mean making a whole note item and pressing a button.
   memo.value = 'this is the claim to check';
@@ -793,6 +798,7 @@ test('a failure to save a memo is said out loud, not swallowed', async () => {
     [{id: '3', text: 'Text', comment: '', color: '#ffd400', type: 'highlight', pageIndex: 0, attachmentID: '9'}]);
   f.library.setAnnotationComment = async () => { throw new Error('read-only library'); };
   await f.bench.show('annotations');
+  await f.click('메모');
   const memo = f.body().querySelector('.sc-annot .sc-annot-memo');
   memo.value = 'x';
   memo.dispatchEvent(new f.win.Event('blur', {bubbles: true}));
@@ -833,8 +839,8 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  const menu=level=>f.body().querySelector(`.sc-field-line select[data-level=${level}]`);
  const optionsOf=level=>[...menu(level).querySelectorAll('option')].map(o=>o.textContent);
  const choose=(level,value)=>{const m=menu(level);m.value=value;m.dispatchEvent(new f.win.Event('change',{bubbles:true}));};
- assert.deepEqual(optionsOf('domain'),['전체 · 2','Life Sciences 1','Physical Sciences 1']);
- assert.deepEqual(optionsOf('field'),['전체 · 2','Multidisciplinary 1','Engineering 1'],'fields are offered before a domain is chosen');
+ assert.deepEqual(optionsOf('domain'),['전체 · 1','분야 미상 · 1','Life Sciences 1','Physical Sciences 1']);
+ assert.deepEqual(optionsOf('field'),['전체 · 1','Multidisciplinary 1','Engineering 1'],'fields are offered before a domain is chosen');
  assert.deepEqual([...f.body().querySelectorAll('.sc-field-line .sc-field-level')].map(x=>x.textContent),['대분류','분야','세부 분야'],'each menu has its caption beside it');
  assert.deepEqual([...menu('field').querySelectorAll('optgroup')].map(g=>g.getAttribute('label')),['Life Sciences','Physical Sciences'],'grouped under their domains');
  // Nothing is open yet; opening a journal lays out its facts.
@@ -1081,7 +1087,7 @@ test('the journals tab can show every JCR journal, ranked, with the ones the lib
  assert.equal(rows[2].classList.contains('sc-journal-absent'),true,'Cell is not in this library');
  assert.equal(rows[2].querySelector('.sc-col-n').textContent,'—');
  assert.equal(rows[0].querySelector('.sc-col-n').textContent,'1');
- assert.match(f.body().querySelector('.sc-journal-count').textContent,/JCR 등재 3종 · 내 서재에 있는 저널 2/);
+ assert.match(f.body().querySelector('.sc-journal-count').textContent,/JCR 등재 3종 · 분야 있는 저널 \d+ · 내 서재에 있는 저널 2/);
  // Opening an absent journal still shows its registry facts and its rank.
  await f.click('Cell');
  const value=label=>[...f.body().querySelectorAll('.sc-fact')].find(r=>r.querySelector('dt').textContent===label)?.querySelector('dd').textContent;
@@ -1171,5 +1177,65 @@ test('every button that opens a Zotero window is marked so a sweep can leave it 
  const open=[...f.bench.panel.querySelectorAll('.sc-body button')].find(b=>b.textContent==='열기');
  assert.ok(open,'the paper card still offers to open the item');
  assert.equal(open.getAttribute('data-opens'),'window','and declares that it opens a window');
+ f.bench.destroy();
+});
+
+test('a journal the library does not hold is still placed in the subject hierarchy', async () => {
+ /* The three subject menus used to count only the journals the library held
+    and had a profile for, so "전체 · 22594" sat above menus totalling a couple
+    of hundred. The registry carries a subject for each row, and a row without
+    one can be asked for on its own. */
+ const f = fixture();
+ const registry = [
+  {title: 'Nature', rank: 1, key: 'nature', issns: ['0028-0836'], abbreviation: 'NATURE', impactFactor: 50.5, year: 2025, quartile: 1, publisher: 'Nature Portfolio',
+   levels: [{domain: 'Life Sciences', field: 'Biochemistry, Genetics and Molecular Biology', subfield: 'Molecular Biology'}]},
+  {title: 'Cell', rank: 2, key: 'cell', issns: ['0092-8674'], abbreviation: 'CELL', impactFactor: 42.5, year: 2025, quartile: 1, publisher: 'Cell Press',
+   levels: [{domain: 'Life Sciences', field: 'Biochemistry, Genetics and Molecular Biology', subfield: 'Cell Biology'}]},
+  {title: 'Some Bulletin', rank: 3, key: 'some bulletin', issns: ['1111-2222'], abbreviation: 'SOME BULL', impactFactor: 0.4, year: 2025, quartile: 4, publisher: 'Elsevier BV'}
+ ];
+ f.runtime.journalIdentity = {
+  identify: venue => registry.find(x => x.title === venue) || null,
+  registryRanked: () => registry,
+  registryRank: title => registry.find(x => x.title === title)?.rank || null,
+  registryLevels: title => registry.find(x => x.title === title)?.levels || []
+ };
+ await f.bench.show('journals');
+ await f.click('전체 JCR 3');
+ const menu = level => f.body().querySelector(`.sc-field-line select[data-level="${level}"]`);
+ const options = level => [...menu(level).querySelectorAll('option')].map(o => o.textContent);
+ assert.deepEqual(options('domain'), ['전체 · 2', '분야 미상 · 1', 'Life Sciences 2'],
+  'two of the three can be placed, and the third says so');
+ assert.deepEqual(options('subfield').slice(1).sort(), ['Cell Biology 1', 'Molecular Biology 1'],
+  'a journal the library does not hold reaches the smallest level');
+ const venues = () => [...f.body().querySelectorAll('tr.sc-journal')].map(r => r.dataset.venue);
+ menu('subfield').value = 'Cell Biology';
+ menu('subfield').dispatchEvent(new f.win.Event('change', {bubbles: true}));
+ await settle();
+ assert.deepEqual(venues(), ['Cell'], 'picking a subfield filters the whole registry');
+ const domain = menu('domain');
+ domain.value = '\u0000none';
+ domain.dispatchEvent(new f.win.Event('change', {bubbles: true}));
+ await settle();
+ assert.deepEqual(venues(), ['Some Bulletin'], 'and the ones with no subject can be found on their own');
+ f.bench.destroy();
+});
+
+test('the three annotation verbs wait until something is selected', async () => {
+ const f = fixture();
+ f.library.annotations = f.record('annotations', [
+  {id: '3', text: 'First', comment: '', color: '#ffd400', type: 'highlight', pageIndex: 0, attachmentID: '9'},
+  {id: '4', text: 'Second', comment: 'a memo', color: '#ff6666', type: 'underline', pageIndex: 1, attachmentID: '9'}
+ ]);
+ await f.bench.show('annotations');
+ const tools = f.body().querySelector('.sc-annot-selection');
+ assert.equal(tools.dataset.armed, 'false', 'nothing selected yet');
+ assert.match(tools.querySelector('.sc-annot-chosen').textContent, /선택하세요/);
+ assert.ok([...tools.querySelectorAll('button')].every(b => b.disabled), 'a verb with nothing to act on is not pressable');
+ f.body().querySelector('.sc-annot').dispatchEvent(new f.win.Event('click', {bubbles: true}));
+ assert.equal(tools.dataset.armed, 'true');
+ assert.equal(tools.querySelector('.sc-annot-chosen').textContent, '선택 1개');
+ assert.ok([...tools.querySelectorAll('button')].every(b => !b.disabled));
+ // The memo that exists is drawn; the one that does not is a button away.
+ assert.equal(f.body().querySelectorAll('.sc-annot .sc-annot-memo').length, 1, 'one memo written, one memo drawn');
  f.bench.destroy();
 });

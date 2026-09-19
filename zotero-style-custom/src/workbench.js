@@ -873,7 +873,8 @@
    // list's summary; the colour swatches there filter by colour, so the hex
    // box and its button are gone.
    const selectionTools=node('div',null,null,{class:'sc-annot-selection'});
-   const colorEdit=node('input',null,selectionTools,{type:'color',value:'#ffd400','aria-label':'선택 주석 새 색상'});
+   const chosenCount=node('span','',selectionTools,{class:'sc-annot-chosen',role:'status'});
+   const colorEdit=node('input',null,selectionTools,{type:'color',value:'#ffd400','aria-label':'선택 주석 새 색상',title:'선택 주석에 칠할 색'});
    button('선택 주석 색 바꾸기',async()=>{
     const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
     if(!chosen.length)throw new Error('현재 범위의 주석을 선택하세요.');
@@ -928,6 +929,14 @@
    }
    button('보이는 주석 전체 선택',()=>{state.annotationIDs=new Set(visibleAnnotationIDs);render();},summary);
    if(state.annotationIDs.size)button(`선택 해제 (${state.annotationIDs.size})`,()=>{state.annotationIDs=new Set();render();},summary,{'data-role':'annot-clear'});
+   // The three verbs act on the selection, so they wait for one.
+   const syncChosen=()=>{
+    const n=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id)).length;
+    chosenCount.textContent=n?`선택 ${n}개`:T('주석을 눌러 선택하세요');
+    selectionTools.dataset.armed=String(n>0);
+    for(const btn of selectionTools.querySelectorAll('button'))btn.disabled=!n;
+    colorEdit.disabled=!n;
+   };
    summary.appendChild(selectionTools);
 
    // Grouped by document and read in page order, which is the order they were
@@ -941,9 +950,17 @@
    const titles=new Map((await library.attachments(ids())).map(a=>[a.id,a.title]));
    if(token!==epoch||disposed)return;
 
+   let budget=state.annotationBudget||setting('annotationPageSize',150);
+   const rest=[];
    for(const [attachmentID,group] of byDocument){
+    if(budget<=0){rest.push([attachmentID,group]);continue;}
     group.sort((a,b)=>(a.pageIndex??1e9)-(b.pageIndex??1e9));
-    if(byDocument.size>1)node('h3',`${titles.get(attachmentID)||T('첨부파일')} · ${group.length}개`,body,{class:'sc-hit-group'});
+    budget-=group.length;
+    if(byDocument.size>1){
+     const head=node('h3',null,body,{class:'sc-annot-group'});
+     node('span',titles.get(attachmentID)||T('첨부파일'),head,{class:'sc-annot-group-name'});
+     node('span',`${group.length}`,head,{class:'sc-annot-group-count'});
+    }
     const stack=node('div',null,body,{class:'sc-annots'});
     for(const a of group){
      visibleAnnotationIDs.add(a.id);
@@ -969,11 +986,19 @@
      if(a.text)node('p',a.text,row,{class:'sc-annot-text'});
      // The annotation's own comment is the memo: it travels with the highlight,
      // shows in the reader and syncs, so there is no second place to look.
-     const memo=node('textarea',null,row,{class:'sc-annot-memo',rows:'1',
-      placeholder:'메모…','aria-label':'이 주석의 메모'});
-     memo.value=a.comment||'';
-     autoGrow(memo);
-     bindMemo(memo,value=>library.setAnnotationComment(a.id,value),`주석 ${a.pageLabel||''}`);
+     const writeMemo=(focus)=>{
+      const memo=node('textarea',null,row,{class:'sc-annot-memo',rows:'1',
+       placeholder:'메모','aria-label':'이 주석의 메모'});
+      memo.value=a.comment||'';
+      autoGrow(memo);
+      bindMemo(memo,value=>library.setAnnotationComment(a.id,value),`주석 ${a.pageLabel||''}`);
+      if(focus)memo.focus();
+      return memo;
+     };
+     if(a.comment)writeMemo(false);
+     else{
+      const add=button('메모',()=>{add.remove();writeMemo(true);},actions,{class:'sc-annot-add-memo'});
+     }
      // Clicking the card selects it; the checkbox that used to do this carried a
      // label longer than most of the annotations.
      row.addEventListener('click',event=>{
@@ -983,12 +1008,20 @@
       row.dataset.selected=String(state.annotationIDs.has(a.id));
       const clear=body.querySelector('[data-role=annot-clear]');
       if(clear)clear.textContent=`선택 해제 (${state.annotationIDs.size})`;
+      syncChosen();
      });
      row.addEventListener('keydown',event=>{
       if(event.target!==row)return; // Space and Enter typed in the memo stay in the memo.
       if(event.key===' '||event.key==='Enter'){event.preventDefault();row.click();}
      });
     }
+   }
+   syncChosen();
+   if(rest.length){
+    const more=rest.reduce((sum,[,group])=>sum+group.length,0);
+    const wrap=node('div',null,body,{class:'sc-annot-more'});
+    node('span',`${rest.length}개 문헌의 주석 ${more}개가 더 있습니다.`,wrap,{class:'sc-muted'});
+    button('더 보기',()=>{state.annotationBudget=(state.annotationBudget||setting('annotationPageSize',150))+300;render();},wrap,{'data-variant':'primary'});
    }
    node('p','병합은 같은 PDF·유형·색상에, 같은 페이지 또는 인접한 두 페이지에서만 됩니다. 기존 참조 노트의 링크는 바뀌지 않습니다.',
     body,{class:'sc-muted'});
@@ -1869,8 +1902,11 @@
    const globalRank=runtime.journalIdentity?.registryRank?.(venue)||null;
    return {venue,items,id,profile,impact,year,quartile:id?.quartile??null,abbreviation:id?.abbreviation||'',globalRank,
     publisher:profile?.publisher||id?.label||id?.publisher||'',issns,fields:profile?.fields||[],topics:profile?.topics||[],
-    // The subject hierarchy OpenAlex keeps for its topics: domain > field > subfield, from the two commonest topics.
-    levels:(profile?.topics||[]).slice(0,2).map(t=>({domain:t.domain||'',field:t.field||'',subfield:t.subfield||''})),
+    // The subject hierarchy OpenAlex keeps for its topics: domain > field > subfield.
+    // From the paper's own profile when there is one, from the registry otherwise.
+    levels:(profile?.topics||[]).length
+     ?(profile.topics||[]).slice(0,2).map(t=>({domain:t.domain||'',field:t.field||'',subfield:t.subfield||''}))
+     :(runtime.journalIdentity?.registryLevels?.(venue)||[]),
     hIndex:profile?.hIndex??null,works:profile?.works??null,citedness:profile?.citedness??null,isOA:!!profile?.isOA,inDoaj:!!profile?.inDoaj,apc:profile?.apc??null,
     country:profile?.country||'',homepage:profile?.homepage||'',openAlexID:profile?.openAlexID||'',
     papers:items.length,read,avgCited:cited.length?Math.round(cited.reduce((a,b)=>a+b,0)/cited.length):0,
@@ -1882,7 +1918,8 @@
   function registryFacts(row,items){
    const id=runtime.journalIdentity?.identify?.(row.title)||null;
    return {venue:row.title,items:items||[],id,profile:null,impact:row.impactFactor??null,year:row.year??null,quartile:row.quartile??null,abbreviation:row.abbreviation||'',
-    globalRank:row.rank,publisher:row.publisher||'',issns:(row.issns||[]).map(x=>String(x).length===8?String(x).slice(0,4)+'-'+String(x).slice(4):String(x)),fields:[],topics:[],levels:[],
+    globalRank:row.rank,publisher:row.publisher||'',issns:(row.issns||[]).map(x=>String(x).length===8?String(x).slice(0,4)+'-'+String(x).slice(4):String(x)),fields:[],topics:[],
+    levels:Array.isArray(row.levels)?row.levels:[],
     hIndex:null,works:null,citedness:null,isOA:false,inDoaj:false,apc:null,country:'',homepage:'',openAlexID:'',
     papers:(items||[]).length,read:(items||[]).filter(i=>i.status==='done').length,avgCited:0,span:null,source:'등재 JCR 목록',registryOnly:true};
   }
@@ -1915,7 +1952,9 @@
       the fields to be arranged by size and picked level by level rather than
       spread flat in twenty-six chips. */
    const pick=journalView.pick;
-   const matches=j=>['domain','field','subfield'].every(level=>!pick[level]||j.levels.some(l=>l[level]===pick[level]));
+   const matches=j=>pick.domain==='\u0000none'
+    ?!j.levels.length
+    :['domain','field','subfield'].every(level=>!pick[level]||j.levels.some(l=>l[level]===pick[level]));
    const controls=bar();controls.classList.add('sc-journal-controls');
    /* Two views: the journals this library holds, and every journal in the
       registry -- 22,594 of them -- so a journal the user does not hold can be
@@ -1935,7 +1974,7 @@
    const grouped=button(journalView.grouped?'목록으로':'분야별로 묶기',()=>{journalView.grouped=!journalView.grouped;render();},controls,{'aria-pressed':String(journalView.grouped)});
    grouped.classList.add('sc-journal-toggle');
    const known=all.filter(j=>j.levels.length).length;
-   node('span',journalView.scope==='all'?`JCR 등재 ${all.length.toLocaleString()}종 · 내 서재에 있는 저널 ${all.filter(j=>j.papers).length}`:`저널 ${all.length}종 · JIF 있는 저널 ${all.filter(j=>j.impact!=null).length} · 분야 알려진 저널 ${known}`,controls,{class:'sc-muted sc-journal-count'});
+   node('span',journalView.scope==='all'?`JCR 등재 ${all.length.toLocaleString()}종 · 분야 있는 저널 ${known.toLocaleString()} · 내 서재에 있는 저널 ${all.filter(j=>j.papers).length}`:`저널 ${all.length}종 · JIF 있는 저널 ${all.filter(j=>j.impact!=null).length} · 분야 알려진 저널 ${known}`,controls,{class:'sc-muted sc-journal-count'});
    /* One line, three menus, large to small: 대분류 › 분야 › 세부 분야. Each
       menu lists what is under the choice to its left, largest first, with
       its count; a smaller level can be picked on its own, and the levels
@@ -1957,8 +1996,12 @@
     const options=under(level,index);
     node('span',label,line,{class:'sc-field-level'});
     const select=node('select',null,line,{'aria-label':label,'data-level':level});
-    const total=all.filter(j=>LEVELS.slice(0,index).every(([l])=>!pick[l]||j.levels.some(x=>x[l]===pick[l]))).length;
-    node('option',`${T('전체')} · ${total}`,select,{value:''});
+    const under_=all.filter(j=>LEVELS.slice(0,index).every(([l])=>!pick[l]||j.levels.some(x=>x[l]===pick[l])));
+    const placed=under_.filter(j=>j.levels.length).length;
+    node('option',`${T('전체')} · ${placed}`,select,{value:''});
+    const unplaced=index===0?all.length-all.filter(j=>j.levels.length).length:0;
+    const unknownLabel=T('분야 미상');
+    if(unplaced)node('option',unknownLabel+' · '+unplaced,select,{value:'\u0000none'});
     // Groups in the order of their own size, so the biggest domain's fields come first.
     const parentOrder=index>0?under(LEVELS[index-1][0],index-1).map(o=>o.value):[];
     const parents=[...new Set(options.map(o=>o.parent))].sort((x,y)=>(parentOrder.indexOf(x)+1||1e9)-(parentOrder.indexOf(y)+1||1e9));
@@ -1977,7 +2020,7 @@
      for(const [l] of LEVELS.slice(index))pick[l]='';
      pick[level]=value;
      // A smaller level chosen on its own: the levels above it follow.
-     if(value)for(const j of all)for(const x of j.levels)if(x[level]===value){for(const [l] of LEVELS.slice(0,index))if(!pick[l])pick[l]=x[l];break;}
+     if(value&&value!=='\u0000none')for(const j of all)for(const x of j.levels)if(x[level]===value){for(const [l] of LEVELS.slice(0,index))if(!pick[l])pick[l]=x[l];break;}
      journalView.field=pick.field;render();
     });
     if(index<LEVELS.length-1)node('span','›',line,{class:'sc-field-sep','aria-hidden':'true'});
@@ -2051,10 +2094,14 @@
    node('td',j.publisher||'',tr,{class:'sc-col-pub',title:j.publisher||''});
    node('td',j.papers?String(j.papers):'—',tr,{class:'sc-col-n'+(j.papers?'':' sc-none'),title:j.papers?`내 문헌 ${j.papers}편`:'내 서재에 없는 저널'});
    const fieldsCell=node('td',null,tr,{class:'sc-col-fields'});
+   if(!j.levels.length){fieldsCell.textContent='—';fieldsCell.classList.add('sc-journal-if-none');fieldsCell.title=T('OpenAlex에 이 저널의 분야 정보가 없습니다.');}
    if(j.levels.length){
     const byField=new Map();for(const l of j.levels){if(!l.field)continue;const subs=byField.get(l.field)||[];if(l.subfield&&!subs.includes(l.subfield))subs.push(l.subfield);byField.set(l.field,subs);}
     const parts=[...byField].map(([field,subs])=>subs.length?`${field} › ${subs.join(' · ')}`:field);
-    fieldsCell.textContent=parts.join(' | ');fieldsCell.title=parts.join('\n');
+    // Two fields fill the column; a journal that spans more says how many, and
+    // the tooltip has all of them.
+    fieldsCell.textContent=parts.length>2?parts.slice(0,2).join(' | ')+` +${parts.length-2}`:parts.join(' | ');
+    fieldsCell.title=parts.join('\n');
     if(journalView.pick.field&&byField.has(journalView.pick.field))fieldsCell.classList.add('sc-chip-on-text');
    }
    const figure=node('td',j.impact!=null?j.impact.toFixed(1):'—',tr,{class:'sc-col-if sc-journal-if',title:j.impact!=null?`JIF ${j.impact.toFixed(1)}${j.year?' ('+j.year+')':''}${j.source?' · '+j.source:''}`:'IF 미확인'});

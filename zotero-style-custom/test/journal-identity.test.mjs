@@ -147,3 +147,26 @@ test('the registry can be read in one order, JIF first, with the place of each j
   assert.equal(journals.registryRank('Nowhere Journal'), null);
   assert.equal(journals.registryRanked(), ranked, 'built once');
 });
+
+test('the registry carries each journal’s subjects, packed against one table of names', () => {
+  /* The journals tab could group by subject only for journals the library held
+     and had an OpenAlex profile for: 206 of 22,594. The registry now ships the
+     subject of every journal, as indexes into one shared table of names. */
+  journals.loadRegistry({
+    subjects: ['Life Sciences', 'Biochemistry, Genetics and Molecular Biology', 'Molecular Biology', 'Cell Biology'],
+    journals: [
+      {title: 'Cell', issns: ['0092-8674'], impactFactor: 45.5, levels: [[0, 1, 2], [0, 1, 3]]},
+      {title: 'Some Bulletin', issns: ['1111-2222'], impactFactor: 0.4}
+    ]
+  });
+  const cell = journals.registryLevels('Cell');
+  assert.equal(cell.length, 2, 'both subjects survive the unpacking');
+  assert.deepEqual(cell[0], {domain: 'Life Sciences', field: 'Biochemistry, Genetics and Molecular Biology', subfield: 'Molecular Biology'});
+  assert.equal(cell[1].subfield, 'Cell Biology');
+  assert.deepEqual(journals.registryLevels('Some Bulletin'), [], 'a journal OpenAlex has no topics for stays empty');
+  assert.deepEqual(journals.registryLevels('Not A Journal'), [], 'and so does one that is not in the registry');
+  // The ranked view carries them too, because that is what the tab reads.
+  const ranked = journals.registryRanked();
+  assert.equal(ranked[0].title, 'Cell');
+  assert.equal(ranked[0].levels[0].domain, 'Life Sciences');
+});
