@@ -288,6 +288,7 @@
  "내 논문 {0}편이 인용합니다": "{0} of my papers cite it",
  "내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문 {0}": "Papers my library cites often but does not hold {0}",
  "내 라이브러리에 없음": "not in my library",
+ "내 문헌": "My papers",
  "내 문헌 {0}편": "{0} of my papers",
  "내 문헌 많은 순": "Most of my papers first",
  "내 서재": "In my library",

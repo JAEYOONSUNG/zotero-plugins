@@ -424,6 +424,21 @@
     const cached = seen.get(name);
     if (cached !== undefined) return cached;
     const found = classify(name);
+    /* Whatever branch named the colour, the registry's facts ride along:
+       a journal matched by a title rule (Nature, Cell, Science) used to come
+       back without its quartile or abbreviation, so the list showed Q1 on
+       Chemical Reviews and nothing on Nature. */
+    if (found) {
+      const row = registryLookup(flat(name));
+      if (row) {
+        if (found.quartile == null) found.quartile = row.quartile ?? null;
+        if (!found.abbreviation) found.abbreviation = row.abbreviation || '';
+        if (!found.publisher) found.publisher = row.publisher || '';
+        if (!found.issns) found.issns = row.issns || [];
+        if (found.impactFactor == null) found.impactFactor = row.impactFactor ?? null;
+        if (found.year == null) found.year = row.year ?? null;
+      }
+    }
     // A library has hundreds of journals, not thousands; the cap is there so a
     // pathological caller cannot grow this without bound.
     if (seen.size >= SEEN_LIMIT) seen.clear();

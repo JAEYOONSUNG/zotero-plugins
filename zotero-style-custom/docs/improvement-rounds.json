@@ -1,5 +1,5 @@
 {
- "version": "0.45.3",
+ "version": "0.45.4",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1714,13 +1714,13 @@
   },
   {
    "round": "R60",
-   "title": "저널 한 줄씩, 저널 검색, 위쪽 여백 줄이기",
+   "title": "저널을 표로: 이름은 제 색의 글자로, 열 이름과 검색",
    "gap": "Journal rows were three-line cards, the controls sat far above the field menus, and journals could not be searched apart from the paper search.",
    "entryPoint": "작업 패널 → 저널",
    "sources": [
     {
      "file": "src/workbench.js",
-     "marker": "class:'sc-hit-meta sc-journal-inline'"
+     "marker": "class:'sc-journal-table'"
     }
    ],
    "tests": [
@@ -1730,7 +1730,7 @@
     }
    ],
    "status": "verified",
-   "review": "One line per journal -- name, then in grey the abbreviation, the house, papers here, and the fields, trimmed at the end -- with the figure at the right; a search box for journals by name, abbreviation, publisher or field; the controls and the field menus close together."
+   "review": "A real table: rank, the name in the journal's own colour as text (no box), quartile, abbreviation, house, papers here, fields, and the figure at the edge, with the column names once at the top and the two lookups laid over the row on hover. Facts are gathered once per set of items and typing redraws only the list a beat after the last key, which removed the lag; a title-rule journal now carries its registry quartile too. A search box finds journals by name, abbreviation, publisher or field."
   }
  ],
  "introducedInVersion": "0.6.0"

@@ -466,7 +466,13 @@
 
 /* A journal row: the name with its mark and quartile, the figure in a column
    of its own, and under it the profile when the name is opened. */
-#style-custom-workbench .sc-journal { grid-template-columns: 1fr auto auto; grid-template-areas: "title if actions" "profile profile profile"; padding: 6px 2px; row-gap: 0; }
+/* Rows with air between them; the figure at the very edge, and the hover
+   buttons laid over the row's right side instead of holding a column open. */
+#style-custom-workbench .sc-journal { position: relative; grid-template-columns: 1fr auto; grid-template-areas: "title if" "profile profile"; padding: 10px 6px 10px 2px; row-gap: 0; }
+#style-custom-workbench .sc-journal .sc-hit-actions { grid-area: auto; position: absolute; inset-inline-end: 5.2em; inset-block-start: 50%; transform: translateY(-50%); padding: 2px 4px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+#style-custom-workbench .sc-journal-open .sc-hit-actions { inset-block-start: 20px; }
+#style-custom-workbench .sc-journal-head { display: flex; justify-content: space-between; padding: 4px 6px 4px 2px; color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; }
+#style-custom-workbench .sc-journal-head-if { min-width: 3.4em; text-align: end; }
 #style-custom-workbench .sc-journal .sc-hit-title { grid-area: title; font-size: 13px; display: flex; align-items: center; flex-wrap: nowrap; gap: 0 8px; min-width: 0; white-space: nowrap; }
 #style-custom-workbench .sc-journal .sc-journal-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-journal .sc-journal-inline { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
@@ -767,3 +773,34 @@
 #style-custom-workbench .sc-watch-table .sc-journal-name { font-weight: 600; }
 #style-custom-workbench .sc-compare-insight { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-compare-output { min-height: 220px; font-size: 12.5px; }
+
+/* The journals table: tight rows, hairlines between them, the name in its
+   own colour as text, the figure at the edge, the hover buttons laid over. */
+#style-custom-workbench .sc-journal-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+#style-custom-workbench .sc-journal-table th { position: sticky; top: 0; z-index: 1; padding: 6px 8px; background: var(--sc-bg); color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; text-align: start; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-journal-table td { padding: 7px 8px; border-block-end: 1px solid var(--sc-border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-journal-table tr.sc-journal { position: relative; }
+#style-custom-workbench .sc-journal-table tr.sc-journal:hover td { background: var(--sc-surface); }
+#style-custom-workbench .sc-journal-table .sc-col-rank { width: 34px; text-align: end; color: var(--sc-faint); font: 600 11px/1 var(--sc-mono); }
+#style-custom-workbench .sc-journal-table .sc-col-name { width: 26%; }
+#style-custom-workbench .sc-journal-table .sc-col-q { width: 40px; }
+#style-custom-workbench .sc-journal-table .sc-col-abbr { width: 12%; font: 11px/1.5 var(--sc-mono); }
+#style-custom-workbench .sc-journal-table .sc-col-pub { width: 14%; }
+#style-custom-workbench .sc-journal-table .sc-col-n { width: 52px; text-align: end; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-journal-table .sc-col-fields { color: var(--sc-faint); }
+#style-custom-workbench .sc-journal-table .sc-col-if { width: 78px; text-align: end; position: relative; font: 600 13px/1.45 var(--sc-mono); font-variant-numeric: tabular-nums; overflow: visible; }
+#style-custom-workbench .sc-journal-table th.sc-col-if, #style-custom-workbench .sc-journal-table th.sc-col-n, #style-custom-workbench .sc-journal-table th.sc-col-rank { text-align: end; }
+#style-custom-workbench .sc-journal-table .sc-journal-name { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 13px; text-align: start; cursor: pointer; min-height: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+#style-custom-workbench .sc-journal-table .sc-journal-name:hover { text-decoration: underline; }
+#style-custom-workbench .sc-journal-table .sc-col-name { position: relative; overflow: visible; }
+#style-custom-workbench .sc-journal-table .sc-hit-actions { position: absolute; inset-inline-start: 100%; inset-block-start: 50%; transform: translateY(-50%); margin-inline-start: 8px; z-index: 2; padding: 2px 4px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: 0 1px 4px rgba(0,0,0,.08); white-space: nowrap; opacity: 0; display: flex; gap: 4px; }
+#style-custom-workbench .sc-journal-table tr.sc-journal:hover .sc-hit-actions, #style-custom-workbench .sc-journal-table tr.sc-journal:focus-within .sc-hit-actions { opacity: 1; }
+#style-custom-workbench .sc-journal-table .sc-hit-actions button { min-height: 22px; padding: 1px 8px; font-size: 11px; }
+#style-custom-workbench .sc-journal-table .sc-journal-group th { padding-top: 14px; color: var(--sc-muted); border-block-end: 0; }
+#style-custom-workbench .sc-journal-table .sc-journal-profile-row td { padding: 0 0 8px; white-space: normal; overflow: visible; }
+#style-custom-workbench .sc-journal-table .sc-journal-profile { margin: 4px 0 0; }
+#style-custom-workbench .sc-chip-on-text { color: var(--sc-accent); }
+#style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=top]  { color: #9B71BF; }
+#style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=high] { color: #6484BA; }
+#style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=mid]  { color: #468D9B; }
+#style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=low]  { color: #42926C; }

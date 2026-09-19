@@ -128,3 +128,10 @@ test("a journal no rule knows still gets its publisher's colour from the registr
   assert.equal(journals.identify("Journal of Obscure Thermophile Studies").known, false);
   assert.equal(journals._registrySize(), 0);
 });
+
+test('a journal named by a title rule still carries the registry\'s quartile and abbreviation', () => {
+  journals.loadRegistry({journals: [{title: 'Nature', issns: ['0028-0836'], abbreviation: 'NATURE', impactFactor: 56.1, year: 2025, quartile: 1, publisher: 'Nature Portfolio'}]});
+  const id = journals.identify('Nature');
+  assert.equal(id.family !== 'other' || id.exact, true, 'Nature is named by a rule or a measured colour');
+  assert.deepEqual({quartile: id.quartile, abbreviation: id.abbreviation, impactFactor: id.impactFactor}, {quartile: 1, abbreviation: 'NATURE', impactFactor: 56.1});
+});

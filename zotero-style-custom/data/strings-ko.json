@@ -175,6 +175,13 @@
    ]
   },
   {
+   "ko": "분야",
+   "n": 3,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "플러그인이 비활성화되어 있습니다.",
    "n": 2,
    "files": [
@@ -837,6 +844,13 @@
    ]
   },
   {
+   "ko": "저널",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "요청 중지",
    "n": 2,
    "files": [
@@ -900,7 +914,14 @@
    ]
   },
   {
-   "ko": "분야",
+   "ko": "약어",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "출판사",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -6248,13 +6269,6 @@
    ]
   },
   {
-   "ko": "저널",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "읽기 상태",
    "n": 1,
    "files": [
@@ -7410,6 +7424,13 @@
    ]
   },
   {
+   "ko": "내 문헌",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "{0} · {1}종",
    "n": 1,
    "files": [
@@ -7418,13 +7439,6 @@
   },
   {
    "ko": "JCR 분위·CAS 등급은 easyScholar 무료 키가 있어야 조회됩니다. 설정에서 키를 넣으면 이 목록에 등급 조회 버튼이 생깁니다. 키 없이도 위의 지표 조회는 동작합니다.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "{0}위",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7445,14 +7459,14 @@
    ]
   },
   {
-   "ko": "IF 미확인",
+   "ko": "내 문헌 {0}편",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": "내 문헌 {0}편",
+   "ko": "IF 미확인",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7522,21 +7536,7 @@
    ]
   },
   {
-   "ko": "약어",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "JCR 표준 약어",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "출판사",
    "n": 1,
    "files": [
     "src/workbench.js"
