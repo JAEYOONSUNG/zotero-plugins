@@ -24,6 +24,7 @@
 
   function load(table) {
     TABLE = table && typeof table === 'object' ? table : {};
+    patterns = null; misses.clear();
     return Object.keys(TABLE).length;
   }
 
@@ -58,11 +59,53 @@
      Korean in, Korean out when Korean is the language: no table walk, no cost
      on the path every cell in the item tree takes. In English, the table is
      consulted and the original returned when it holds nothing. */
+  /* Keys with {0}, {1} in them stand for strings the code fills in -- "문헌
+     {0}개" for "문헌 12개". An exact lookup misses those, and the panel writes
+     hundreds of them, so a miss falls through to the patterns: each such key
+     is compiled once into a regular expression whose captures are put back
+     into the English value in order. Misses are remembered so a string that
+     matches nothing costs one walk, not one per redraw. */
+  let patterns = null, patternTable = null;
+  const misses = new Set();
+  function compilePatterns() {
+    if (patterns && patternTable === TABLE) return patterns;
+    patternTable = TABLE; misses.clear();
+    patterns = [];
+    for (const key of Object.keys(TABLE)) {
+      if (!/\{\d+\}/.test(key)) continue;
+      const order = [];
+      const source = key.split(/(\{\d+\})/).map(part => {
+        const m = part.match(/^\{(\d+)\}$/);
+        if (m) { order.push(Number(m[1])); return '([\\s\\S]*?)'; }
+        return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }).join('');
+      patterns.push({key, order, re: new RegExp('^' + source + '$'), value: TABLE[key], weight: key.replace(/\{\d+\}/g, '').length});
+    }
+    // Longest fixed text first, so "문헌 {0}개 · 읽음 {1}" beats "{0}개".
+    patterns.sort((a, b) => b.weight - a.weight);
+    return patterns;
+  }
+  function byPattern(text) {
+    if (misses.has(text)) return undefined;
+    for (const p of compilePatterns()) {
+      const m = text.match(p.re);
+      if (!m) continue;
+      const fills = new Map();
+      p.order.forEach((n, i) => { if (!fills.has(n)) fills.set(n, m[i + 1]); });
+      return p.value.replace(/\{(\d+)\}/g, (_, n) => (fills.has(Number(n)) ? fills.get(Number(n)) : ''));
+    }
+    if (misses.size > 4000) misses.clear();
+    misses.add(text);
+    return undefined;
+  }
   function t(text) {
     if (current === 'ko-KR') return text;
     if (typeof text !== 'string' || !text) return text;
     const found = TABLE[text];
-    return found === undefined ? text : found;
+    if (found !== undefined) return found;
+    if (!/[가-힣]/.test(text)) return text;
+    const fitted = byPattern(text);
+    return fitted === undefined ? text : fitted;
   }
 
   // A string with numbers or names already substituted into it will not be in

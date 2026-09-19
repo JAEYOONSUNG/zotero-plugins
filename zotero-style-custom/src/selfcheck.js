@@ -157,7 +157,16 @@
       if (signed.length < 15) throw new Error(`${signed.length} of ${top.length} entries carry a sign · bare: ${bare.join(' · ')}`);
       const sample = signed[0].getAttribute('image');
       if (!/^data:image\/svg\+xml/.test(sample)) throw new Error('the sign is not an inline SVG: ' + sample.slice(0, 40));
-      return `${signed.length}/${top.length} entries signed · ${menu.querySelectorAll('menuseparator').length} separators`;
+      // And every label has English waiting for it, so the menu is not the one place a distributed copy speaks Korean.
+      // In Korean the labels are the keys; ask the dictionary for each one as English would.
+      const i18n = runtime.i18n;
+      const labels = top.map(node => node.getAttribute('label')).filter(Boolean);
+      const before = i18n.locale();
+      let untranslated = [];
+      try { i18n.use('en-US'); untranslated = labels.filter(label => /[가-힣]/.test(i18n.t(label))); }
+      finally { i18n.use(before); }
+      if (untranslated.length) throw new Error(`${untranslated.length} menu labels have no English: ${untranslated.slice(0, 4).join(' · ')}`);
+      return `${signed.length}/${top.length} entries signed · ${menu.querySelectorAll('menuseparator').length} separators · English for all ${labels.length}`;
     }));
 
     results.push(await attempt('the sidebar shows an icon for every tab', () => {

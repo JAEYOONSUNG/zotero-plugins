@@ -86,3 +86,17 @@ test("no translation is left as its own Korean original", () => {
     assert.equal(holes(en), holes(ko), `placeholders differ for ${JSON.stringify(ko)}`);
   }
 });
+
+test('a string the code filled in still finds its English through the pattern keys', () => {
+  const saved = i18n._table();
+  i18n.load({'문헌 {0}개': '{0} papers', '읽은 시간 {0} · 전체 {1}쪽 중 {2}쪽': 'Read {0} · {2} of {1} pages', '{0}개': '{0}', '저널': 'Journal'});
+  i18n.use('en-US');
+  assert.equal(i18n.t('문헌 12개'), '12 papers');
+  assert.equal(i18n.t('읽은 시간 5m 40s · 전체 38쪽 중 8쪽'), 'Read 5m 40s · 8 of 38 pages', 'captures go back in their own order');
+  assert.equal(i18n.t('저널'), 'Journal', 'an exact hit still wins');
+  assert.equal(i18n.t('아무 데도 없는 문장'), '아무 데도 없는 문장', 'a miss returns the original');
+  assert.equal(i18n.t('Plain English 3'), 'Plain English 3', 'no Korean, no walk');
+  i18n.use('ko-KR');
+  assert.equal(i18n.t('문헌 12개'), '문헌 12개');
+  i18n.load(saved);
+});
