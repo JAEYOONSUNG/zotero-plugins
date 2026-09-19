@@ -430,3 +430,23 @@ test("a restored or freshly displayed result gets the JCR impact factor, and an 
 	assert.equal(again.state.records.find(r => r.key === "nc").journalIF, 18.1);
 	assert.equal(again.state.records.find(r => r.key === "odd").journalIFEstimate, true);
 });
+
+test("a paper handed over from the item list opens the search already filled in and running", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../content/ui.js", import.meta.url), "utf8");
+  /* The search tab used to open empty and ask you to type in what was already
+     on the row under the pointer. The main window hands the row over; the
+     form reads it once, fills title and authors, brackets the year, and runs. */
+  assert.match(source, /function applyPrefill\(\)/);
+  assert.match(source, /Zotero\.ZotPoP\.takePrefill/);
+  assert.match(source, /window\.addEventListener\("load", init\);/, "the harness keys on this exact line; it must stay");
+  assert.match(source, /window\.addEventListener\("load", applyPrefill\);/, "registered after init, so it runs after init");
+  assert.match(source, /window\.addEventListener\("zotpop-prefill", applyPrefill\);/, "an already-open tab is told to run the new one");
+  // Year is bracketed by one on either side, so a preprint from the year before still matches.
+  assert.match(source, /\$\("yearFrom"\)\.value = String\(year - 1\)/);
+  assert.match(source, /\$\("yearTo"\)\.value = String\(year \+ 1\)/);
+  // And the sender side: openSearch stores what it was given and takePrefill consumes it once.
+  const plugin = readFileSync(new URL("../src/zotpop.js", import.meta.url), "utf8");
+  assert.match(plugin, /openSearch\(mainWindow, prefill\)/);
+  assert.match(plugin, /takePrefill\(\) \{ let p = this\._prefill; this\._prefill = null; return p; \}/);
+});

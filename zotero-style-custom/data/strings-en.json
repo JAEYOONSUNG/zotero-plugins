@@ -944,5 +944,17 @@
 "주석 검색": "Search annotations",
 "주석 본문·메모 검색": "Search annotation text and notes",
 "출판 3년 이내 ({0}) — 아직 인용이 쌓이는 중이라 회색 · 길이는 로그 눈금": "Published within the last three years ({0}) — grey because citations are still accumulating · length is on a log scale",
-"피인용 수 · 길이는 로그 눈금": "Citation count · length is on a log scale"
+"피인용 수 · 길이는 로그 눈금": "Citation count · length is on a log scale",
+"특허": "Patent",
+"학위논문": "Thesis",
+"학위논문 · {0}": "Thesis · {0}",
+"미국": "US",
+"유럽": "EP",
+"한국": "KR",
+"일본": "JP",
+"중국": "CN",
+"ZotPoP에서 이 논문 검색": "Search this paper in ZotPoP",
+"ZotPoP이 설치되어 있지 않습니다.": "ZotPoP is not installed.",
+"JCR 사분위 Q{0}": "JCR quartile Q{0}",
+"등록 저널 {0} · 이 라이브러리 저널 {1}종: 브랜드색 {2} · 규칙 {3} · 출판사색 {4} · 유도색 {5}": "{0} journals in the registry · {1} journals in this library: brand colour {2} · rule {3} · publisher colour {4} · derived {5}"
 }

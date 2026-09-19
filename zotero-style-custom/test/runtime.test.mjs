@@ -1755,3 +1755,86 @@ test('impact factors read to one decimal and sit on the right, so the points lin
   assert.equal(number.style.marginInlineStart, 'auto', 'pushed to the right edge whatever the mark beside it is');
   assert.match(number.style.fontVariantNumeric, /tabular-nums/);
 });
+
+test('a watched author\'s "new papers" leave out repository deposits and say which are preprints', () => {
+  const {plugin} = fixture();
+  /* Of 64 new items across 109 watched authors, 15 were PNNL repository
+     deposits and one a Zenodo record -- copies of published work, typed
+     dataset by OpenAlex. The type used to be fetched and thrown away. */
+  const fresh = [
+    {id: 'W1', title: 'Real paper', venue: 'Nature Communications', type: 'article', date: '2026-08-01'},
+    {id: 'W2', title: 'Data for EMSL Project 50414', venue: 'PNNL Repository', type: 'dataset', date: '2026-08-02'},
+    {id: 'W3', title: 'Early version', venue: 'bioRxiv (Cold Spring Harbor Laboratory)', type: 'preprint', date: '2026-08-03'},
+    {id: 'W4', title: 'Zenodo record', venue: 'Zenodo', type: 'other', date: '2026-08-04'}
+  ];
+  const owned = new Set();
+  const row = {id: 'A1', seen: []};
+  // The same shaping the sweep applies, isolated: type kept, deposits dropped.
+  const papers = fresh.filter(work => !/^(dataset|other|paratext|peer-review|grant|libguides|supplementary-materials)$/i.test(String(work.type || '')));
+  row.news = papers.map(work => ({id: work.id, type: work.type,
+    preprint: /preprint/i.test(work.type) || /rxiv|research square|preprints?\b|ssrn/i.test(work.venue || ''),
+    inLibrary: !!work.doi && owned.has(work.doi)}));
+  assert.deepEqual(row.news.map(n => n.id), ['W1', 'W3'], 'the dataset and the record are gone');
+  assert.deepEqual(row.news.map(n => n.preprint), [false, true], 'and the preprint is marked as one');
+  // The same regex the runtime uses, so this test breaks if it drifts.
+  const source = plugin.constructor.toString();
+  assert.match(source, /dataset\|other\|paratext\|peer-review\|grant\|libguides\|supplementary-materials/);
+});
+
+test('a patent PDF sitting as a bare attachment gets a chip in the title cell', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body><div class="row"><span class="cell title"><span class="cell-text">US20240352440A1.pdf</span></span></div></body></html>');
+  const {plugin} = fixture();
+  const state = {titleNodes: new Set()};
+  const attachment = {itemType: 'attachment', attachmentFilename: 'US20240352440A1.pdf', parentItemID: null,
+    isAttachment: () => true, isRegularItem: () => false, getField: key => key === 'title' ? 'US20240352440A1.pdf' : ''};
+  const row = document.querySelector('.row');
+  plugin.paintKind(row, attachment, state, window);
+  const chip = row.querySelector('.style-custom-kind');
+  assert.ok(chip, 'a chip is drawn before the title');
+  assert.equal(chip.textContent, '특허');
+  assert.match(chip.title, /미국 특허 US20240352440A1/);
+  assert.match(chip.title, /파일 이름으로 판별/);
+  assert.equal(row.querySelector('.cell.title').firstChild, chip, 'and it leads the cell');
+  // A thesis by its item type.
+  const thesis = {itemType: 'thesis', isAttachment: () => false, isRegularItem: () => true, getField: key => key === 'title' ? 'Acetate metabolism' : ''};
+  plugin.paintKind(row, thesis, state, window);
+  assert.equal(row.querySelector('.style-custom-kind').textContent, '학위논문');
+  // A paper takes the chip away again when the row is recycled.
+  const paper = {itemType: 'journalArticle', isAttachment: () => false, isRegularItem: () => true, getField: key => key === 'title' ? 'Structure of a SMC complex' : ''};
+  plugin.paintKind(row, paper, state, window);
+  assert.equal(row.querySelector('.style-custom-kind'), null);
+});
+
+test('double-clicking a column resizer fits the column to its widest visible cell', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML(`<html><body><div id="tbl">
+    <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="resizer title"></div><div class="cell year"><span>Year</span></div></div>
+    <div class="virtualized-table-body"><div class="row"><span class="cell title">short</span></div><div class="row"><span class="cell title">a much longer title text</span></div></div>
+  </div></body></html>`);
+  const {plugin} = fixture();
+  const resized = [];
+  const columns = [{dataKey: 'title', minWidth: 50}, {dataKey: 'year', minWidth: 20}];
+  window.ZoteroPane = {itemsView: {tree: {props: {id: 'tbl'}, _getVisibleColumns: () => columns,
+    _columns: {onResize: (widths, store) => resized.push([widths, store])}}}};
+  window.CSS = {escape: s => s};
+  // linkedom has no layout: give the cells the widths a browser would measure.
+  for (const el of document.querySelectorAll('.cell.title')) Object.defineProperty(el, 'scrollWidth', {value: el.textContent.length * 7});
+  Object.defineProperty(document.querySelector('.cell-text'), 'scrollWidth', {value: 30});
+  const head = document.querySelector('.virtualized-table-header .cell.title');
+  const next = document.querySelector('.virtualized-table-header .cell.year');
+  head.getBoundingClientRect = () => ({width: 120}); next.getBoundingClientRect = () => ({width: 80});
+  const state = {listeners: []};
+  plugin.attachColumnFit(window, state);
+  const event = new window.Event('dblclick', {bubbles: true});
+  document.querySelector('.resizer.title').dispatchEvent(event);
+  assert.equal(resized.length, 1, 'one resize, applied through the table\'s own onResize');
+  const [widths, store] = resized[0];
+  assert.equal(store, true, 'stored, so it persists like a drag');
+  // widest cell = 24 chars * 7 = 168, plus 16 padding = 184 -- but the pair
+  // shares 200 and the neighbour keeps its minimum (20 + 16), so 164 is the
+  // most the title can take. A fit never squeezes the next column to nothing.
+  assert.equal(widths.title, 164);
+  assert.equal(widths.year, 36, 'the neighbour keeps its minimum');
+  assert.equal(state.listeners.length, 1, 'and the listener is registered for cleanup');
+});

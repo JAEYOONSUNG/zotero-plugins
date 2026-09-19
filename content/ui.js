@@ -1654,5 +1654,23 @@
 		else if (proxyLoginNeeded) showBanner(t("loginNeeded"));
 	}
 
+	/* A query handed over from the item list. Title first: it is the most
+	   specific thing on the row. The year narrows a common title without
+	   excluding a preprint from the year before. */
+	function applyPrefill() {
+		let pre = Zotero.ZotPoP && typeof Zotero.ZotPoP.takePrefill === "function" ? Zotero.ZotPoP.takePrefill() : null;
+		if (!pre) return false;
+		if (pre.title) $("title").value = String(pre.title).replace(/<[^>]*>/g, "");
+		if (pre.authors) $("authors").value = String(pre.authors);
+		let year = parseInt(pre.year, 10);
+		if (year) { $("yearFrom").value = String(year - 1); $("yearTo").value = String(year + 1); }
+		$("keywords").value = "";
+		setStatus(t("prefilledFrom"));
+		runSearch().catch(e => log("prefilled search failed: " + e.message));
+		return true;
+	}
 	window.addEventListener("load", init);
+	// Registered after init, so it runs after init on the same event.
+	window.addEventListener("load", applyPrefill);
+	window.addEventListener("zotpop-prefill", applyPrefill);
 })();

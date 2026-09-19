@@ -2,6 +2,8 @@
 "use strict";
 
 Zotero.ZotPoP = {
+	_prefill: null,
+	takePrefill() { let p = this._prefill; this._prefill = null; return p; },
 	id: null,
 	version: null,
 	rootURI: null,
@@ -138,7 +140,11 @@ Zotero.ZotPoP = {
 		window.document.getElementById("zotpop-toolbar-button")?.remove();
 	},
 
-	openSearch(mainWindow) {
+	/* prefill: {title, authors, year, doi} from a row in the item list, so the
+	   tab opens on that paper's search rather than empty. The form reads it
+	   once and clears it; a second open with nothing passed is a plain open. */
+	openSearch(mainWindow, prefill) {
+		if (prefill && typeof prefill === "object") this._prefill = prefill;
 		let win = mainWindow || Zotero.getMainWindow();
 		let Tabs = win && win.Zotero_Tabs;
 		// Older builds have no tab API; a window is better than nothing.
@@ -146,6 +152,12 @@ Zotero.ZotPoP = {
 		let doc = win.document;
 		if (this._tabID && doc.getElementById(this._tabID)) {
 			Tabs.select(this._tabID);
+			// The tab is already open: tell it there is a new query to run.
+			try {
+				let browser = doc.getElementById(this._tabID)?.querySelector("browser");
+				browser?.contentWindow?.dispatchEvent(new browser.contentWindow.CustomEvent("zotpop-prefill"));
+			}
+			catch (e) { Zotero.logError(e); }
 			return this._tabID;
 		}
 		let added;

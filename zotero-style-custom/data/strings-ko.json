@@ -18,6 +18,13 @@
    ]
   },
   {
+   "ko": "문헌을 먼저 선택하세요.",
+   "n": 4,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
    "ko": "읽는 중",
    "n": 4,
    "files": [
@@ -57,13 +64,6 @@
   },
   {
    "ko": "아직 조회하지 않았습니다. 연구 작업 → 관계 → 인용 관계 → 인용 목록 가져오기",
-   "n": 3,
-   "files": [
-    "src/runtime.js"
-   ]
-  },
-  {
-   "ko": "문헌을 먼저 선택하세요.",
    "n": 3,
    "files": [
     "src/runtime.js"
@@ -932,6 +932,41 @@
    ]
   },
   {
+   "ko": "미국",
+   "n": 1,
+   "files": [
+    "src/item-kinds.js"
+   ]
+  },
+  {
+   "ko": "유럽",
+   "n": 1,
+   "files": [
+    "src/item-kinds.js"
+   ]
+  },
+  {
+   "ko": "한국",
+   "n": 1,
+   "files": [
+    "src/item-kinds.js"
+   ]
+  },
+  {
+   "ko": "일본",
+   "n": 1,
+   "files": [
+    "src/item-kinds.js"
+   ]
+  },
+  {
+   "ko": "중국",
+   "n": 1,
+   "files": [
+    "src/item-kinds.js"
+   ]
+  },
+  {
    "ko": "역링크 기능이 꺼져 있습니다.",
    "n": 1,
    "files": [
@@ -1667,7 +1702,42 @@
    ]
   },
   {
+   "ko": "특허",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "학위논문",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "학위논문 · {0}",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
    "ko": "읽음",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "ZotPoP에서 이 논문 검색",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "ZotPoP이 설치되어 있지 않습니다.",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -2081,6 +2151,13 @@
   },
   {
    "ko": "사전 {0}개 · 열·탭 {1}개 중 미번역 {2}",
+   "n": 1,
+   "files": [
+    "src/selfcheck.js"
+   ]
+  },
+  {
+   "ko": "등록 저널 {0} · 이 라이브러리 저널 {1}종: 브랜드색 {2} · 규칙 {3} · 출판사색 {4} · 유도색 {5}",
    "n": 1,
    "files": [
     "src/selfcheck.js"
@@ -6372,6 +6449,13 @@
   },
   {
    "ko": "IF 미확인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "JCR 사분위 Q{0}",
    "n": 1,
    "files": [
     "src/workbench.js"

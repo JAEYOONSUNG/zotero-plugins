@@ -19,6 +19,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.journalTools2 = typeof CustomStyleJournalMetrics !== "undefined" ? CustomStyleJournalMetrics : require("./journal-metrics.js");
     this.portraitTools = typeof CustomStyleAuthorPortrait !== "undefined" ? CustomStyleAuthorPortrait : require("./author-portrait.js");
     this.fileTools = typeof CustomStyleAttachmentKinds !== "undefined" ? CustomStyleAttachmentKinds : require("./attachment-kinds.js");
+    this.itemKinds = typeof CustomStyleItemKinds !== "undefined" ? CustomStyleItemKinds : require("./item-kinds.js");
     this.journalIdentity = typeof CustomStyleJournalIdentity !== "undefined" ? CustomStyleJournalIdentity : require("./journal-identity.js");
     this.affiliationTools = typeof CustomStyleAffiliations !== "undefined" ? CustomStyleAffiliations : require("./affiliations.js");
     this.graphTools = typeof CustomStylePaperGraph !== "undefined" ? CustomStylePaperGraph : require("./paper-graph.js");
@@ -1368,6 +1369,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   enhanceTitles(win,state,records) {
     for(const row of win.document.querySelectorAll('#zotero-items-tree .row')) {
       const item=win.ZoteroPane?.itemsView?.getRow(Number(row.id.match(/-row-(\d+)$/)?.[1]))?.ref;
+      this.paintKind(row,item,state,win);
       if(!this.isRegular(item))continue;
       this.paintVenue(row,item,state,win);
       const cell=row.querySelector('.cell.title');if(!cell)continue;
@@ -1958,8 +1960,16 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const fresh = (found.get(row.id) || [])
         .filter(work => !seen.has(work.id))
         .sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
-      row.news = fresh.slice(0, 8).map(work => ({
+      /* Only papers. Of 64 "new papers" across 109 watched authors, 15 were
+         PNNL repository deposits and one a Zenodo record -- copies of work
+         already published, filed as datasets. OpenAlex types them; the type
+         used to be fetched and thrown away, so a bioRxiv preprint could not
+         be shown as one either. */
+      const papers = fresh.filter(work => !/^(dataset|other|paratext|peer-review|grant|libguides|supplementary-materials)$/i.test(String(work.type || '')));
+      row.news = papers.slice(0, 8).map(work => ({
         id: work.id, title: work.title, venue: work.venue, doi: work.doi,
+        type: String(work.type || ''),
+        preprint: /preprint/i.test(String(work.type || '')) || /rxiv|research square|preprints?\b|ssrn/i.test(String(work.venue || '')),
         date: work.date || (work.year ? String(work.year) : ''),
         inLibrary: !!work.doi && owned.has(work.doi)
       }));
@@ -2969,6 +2979,92 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
     }
   }
+  /* Double-clicking a column's resizer fits the column to its content.
+
+     Zotero's header lets you drag a resizer and nothing else; every desktop
+     table fits on double-click and people reach for it. The table is
+     virtualised, so "content" is the rows currently drawn -- which is what a
+     reader is looking at, and what every spreadsheet fits to as well.
+
+     A resize in Zotero is a trade between a column and its right-hand
+     neighbour, so the fit gives or takes the difference from that neighbour
+     the same way a drag does, and stores the result through the table's own
+     onResize so it persists like a drag would. */
+  /* A patent or a thesis, marked where the eye lands.
+
+     A row called US20240352440A1.pdf sat in the list like any other PDF, and
+     a thesis was one more journalArticle without a journal. Neither is a
+     paper: no impact factor applies, no journal colour, a different reason
+     to be on the shelf. A small chip before the title says which it is, on
+     a regular item by its type or title and on a bare attachment by the file
+     name -- the case the user actually hit. */
+  paintKind(row, item, state, win) {
+    const cell = row.querySelector('.cell.title');
+    if (!cell || !item) return;
+    let chip = cell.querySelector('.style-custom-kind');
+    const found = this.itemKinds.kindOf({
+      itemType: item.itemType,
+      title: item.getField?.('title'),
+      filename: item.isAttachment?.() && !item.parentItemID ? (item.attachmentFilename || item.getField?.('title')) : ''
+    });
+    if (!found) { chip?.remove(); return; }
+    const P = this.palette(win.document);
+    const label = found.kind === 'patent' ? '특허' : '학위논문';
+    const tone = found.kind === 'patent' ? P.amber : P.purple;
+    if (!chip) {
+      chip = win.document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
+      chip.className = 'style-custom-kind';
+      chip.style.cssText = `display:inline-block;margin-inline-end:6px;padding:0 5px;border-radius:3px;font-size:9px;font-weight:700;line-height:14px;vertical-align:middle;pointer-events:none;`;
+      cell.insertBefore(chip, cell.firstChild);
+      state.titleNodes.add(chip);
+    }
+    chip.textContent = label;
+    chip.style.background = this.tint(tone, 0.16);
+    chip.style.color = tone;
+    chip.title = found.kind === 'patent'
+      ? `${found.number ? this.itemKinds.office(found.number) + ' 특허 ' + found.number : '특허'} · ${found.why === 'file name' ? '파일 이름으로 판별' : found.why === 'title' ? '제목으로 판별' : '항목 유형'}`
+      : `학위논문 · ${found.why === 'title' ? '제목으로 판별' : '항목 유형'}`;
+  }
+
+  attachColumnFit(win, state) {
+    const doc = win.document;
+    // A host without a real document (tests, some headless windows) has no
+    // header to fit; register nothing rather than fail the whole window setup.
+    if (typeof doc?.addEventListener !== 'function') return;
+    const onDouble = event => {
+      const resizer = event.target?.closest?.('.virtualized-table-header .resizer');
+      if (!resizer) return;
+      const tree = win.ZoteroPane?.itemsView?.tree;
+      if (!tree?._columns?.onResize || !tree.props?.id) return;
+      const dataKey = [...resizer.classList].find(name => name !== 'resizer' && name !== 'react-draggable' && !name.startsWith('react-draggable-'));
+      if (!dataKey) return;
+      const visible = tree._getVisibleColumns?.() || [];
+      const index = visible.findIndex(column => column.dataKey === dataKey);
+      const column = visible[index], neighbour = visible[index + 1];
+      if (!column || !neighbour) return;
+      event.stopPropagation(); event.preventDefault();
+      const escape = win.CSS.escape(dataKey);
+      const head = doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${escape}`);
+      const next = doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(neighbour.dataKey)}`);
+      if (!head || !next) return;
+      let widest = 0;
+      for (const cell of doc.querySelectorAll(`#${tree.props.id} .virtualized-table-body .cell.${escape}`)) {
+        // scrollWidth is the content's width even where overflow is clipped.
+        widest = Math.max(widest, cell.scrollWidth, ...[...cell.children].map(child => child.scrollWidth + child.offsetLeft));
+      }
+      const label = head.querySelector('.cell-text, span');
+      widest = Math.max(widest, label ? label.scrollWidth + 22 : 0);
+      const PAD = 16, MIN = 20;
+      const sum = head.getBoundingClientRect().width + next.getBoundingClientRect().width;
+      const want = Math.max((column.minWidth || MIN) + PAD, widest + PAD);
+      const neighbourMin = (neighbour.minWidth || MIN) + PAD;
+      const width = Math.min(want, sum - neighbourMin);
+      tree._columns.onResize({[dataKey]: width, [neighbour.dataKey]: sum - width}, true);
+    };
+    doc.addEventListener('dblclick', onDouble, true);
+    state.listeners.push([doc, 'dblclick', onDouble, true]);
+  }
+
   attachMotion(win, state, {marquee=true,reading=true}={}) {
     if(marquee){state.marqueeCleanup?.(); state.marqueeCleanup = null;
     if (this.pref("marquee",true)) state.marqueeCleanup = this.marquee.attach(win, {
@@ -2987,6 +3083,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     win.addEventListener("unload", unload, { once: true });
     state.listeners.push([win, "unload", unload]);
     this.attachMotion(win,state);
+    this.attachColumnFit(win,state);
     this.watchItemPane(win,state);
     state.readerCleanup=this.readerTools.attach(win);
     for(const tab of this.readerTools.tabs(win))if(tab.itemID)this.tabItems.set(tab.id,tab.itemID);
@@ -2998,6 +3095,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const body=make("menupopup",null,menu);
       const action=(label,callback,parent=body)=>{ const node=make("menuitem",label,parent);node.addEventListener("command",()=>Promise.resolve().then(callback).catch(e=>{this.Z.logError(e);this.Z.alert(win,"Style Custom",e.message);}));return node; };
       for(const status of ["unread","reading","done"]) action(({unread:"안 읽음",reading:"읽는 중",done:"읽음"})[status],()=>this.edit(this.selected(win),{status}));
+      /* The paper you are looking at is the best query you have. The search
+         tab used to open empty and ask you to type in what was already on the
+         row under the pointer. */
+      action("ZotPoP에서 이 논문 검색",()=>{
+        const items=this.selected(win);
+        if(!items.length)throw new Error("문헌을 먼저 선택하세요.");
+        const zotpop=this.Z.ZotPoP;
+        if(!zotpop||typeof zotpop.openSearch!=='function')throw new Error("ZotPoP이 설치되어 있지 않습니다.");
+        const item=items[0], record=this.bibliographyRecord(item);
+        const authors=(record.creators||[]).slice(0,2).map(c=>c.lastName||c.name).filter(Boolean).join(' ');
+        zotpop.openSearch(win,{title:record.title||'',authors,year:record.year||'',doi:record.DOI||''});
+      });
+      make("menuseparator",null,body);
       const ratings=make("menupopup",null,make("menu","별점",body));
       for(let rating=0;rating<=5;rating++)action(rating?"★".repeat(rating):"별점 지우기",()=>this.edit(this.selected(win),{rating}),ratings);
       make("menuseparator",null,body);
