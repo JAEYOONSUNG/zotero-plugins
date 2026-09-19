@@ -147,6 +147,19 @@
       }
     }));
 
+    results.push(await attempt('the item menu shows a sign on every verb', () => {
+      const menu = win.document.getElementById('style-custom-itemmenu');
+      if (!menu) throw new Error('menu not attached');
+      const items = [...menu.querySelectorAll('menuitem, menu')].filter(node => node.closest('menupopup')?.parentNode === menu || node.parentNode?.parentNode === menu);
+      const top = [...menu.querySelector('menupopup').children].filter(node => node.localName === 'menuitem' || node.localName === 'menu');
+      const signed = top.filter(node => node.getAttribute('image') && /iconic/.test(node.className));
+      const bare = top.filter(node => !node.getAttribute('image')).map(node => node.getAttribute('label'));
+      if (signed.length < 15) throw new Error(`${signed.length} of ${top.length} entries carry a sign · bare: ${bare.join(' · ')}`);
+      const sample = signed[0].getAttribute('image');
+      if (!/^data:image\/svg\+xml/.test(sample)) throw new Error('the sign is not an inline SVG: ' + sample.slice(0, 40));
+      return `${signed.length}/${top.length} entries signed · ${menu.querySelectorAll('menuseparator').length} separators`;
+    }));
+
     results.push(await attempt('the sidebar shows an icon for every tab', () => {
       const state = runtime.windows.get(win);
       const bench = state && state.workbench;
