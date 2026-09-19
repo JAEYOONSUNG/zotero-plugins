@@ -1143,11 +1143,21 @@
      for(let offset=0;offset<total;offset+=rangeSize)node('option',`${offset+1}–${Math.min(total,offset+rangeSize)}`,range,{value:offset});
      range.value=String(start);range.addEventListener('change',()=>{pageRanges.set(item.id,Number(range.value));refreshReading();});
     }
-    const cells=node('div',null,c,{class:'sc-page-strip'});
+    /* The pages as a strip of small squares, each shaded by the time spent
+       on it -- the way a year of commits reads on GitHub -- instead of a row
+       of numbered circles that took a line each and said nothing until read.
+       The number and the seconds are in the tooltip; a click opens the page. */
+    const cells=node('div',null,c,{class:'sc-page-strip',role:'group','aria-label':`${item.title} 페이지별 읽은 시간`});
+    const most=Math.max(1,...Object.values(p.pages||{}).map(Number).filter(Number.isFinite));
     for(let n=start;n<Math.min(total,start+rangeSize);n++){
-     const sec=Number(p.pages[n])||0;const btn=button(String(n+1),()=>{if(!p.attachmentID)throw new Error('기록된 첨부파일 정보를 찾지 못했습니다.');return library.openItem(p.attachmentID,{pageIndex:n});},cells,{'aria-label':`${n+1}페이지, ${Math.round(sec)}초`});
-     btn.disabled=!p.attachmentID;btn.style.background=sec?`rgba(36,92,120,${Math.min(.60,.15+Math.log1p(sec)/8)})`:'#edf1f4';btn.title=`${n+1}페이지 · ${Math.round(sec)}초`;
+     const sec=Number(p.pages[n])||0;
+     const level=!sec?0:sec>=most*0.75?4:sec>=most*0.4?3:sec>=most*0.15?2:1;
+     const cell=node('button','',cells,{class:'sc-page-cell',type:'button','data-level':String(level),'aria-label':`${n+1}페이지, ${Math.round(sec)}초`,title:`${n+1}페이지 · ${Math.round(sec)}초`});
+     cell.addEventListener('click',()=>run(()=>{if(!p.attachmentID)throw new Error('기록된 첨부파일 정보를 찾지 못했습니다.');return library.openItem(p.attachmentID,{pageIndex:n});}));
+     cell.disabled=!p.attachmentID;
     }
+    const legend=node('div',null,c,{class:'sc-page-legend','aria-hidden':'true'});
+    node('span','적게',legend);for(const level of [0,1,2,3,4])node('span','',legend,{class:'sc-page-cell sc-page-key','data-level':String(level)});node('span','많이',legend);
    }
   }
   function drawReading(){const b=bar();for(const theme of ['light','dark','sepia'])button(({light:'밝은 PDF',dark:'어두운 PDF',sepia:'세피아 PDF'})[theme],()=>reader.applyTheme(win,theme),b);

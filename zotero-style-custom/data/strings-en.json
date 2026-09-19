@@ -1117,5 +1117,8 @@
  "저널·약어·출판사·분야 검색": "Search journals by name, abbreviation, publisher or field",
  "저널 검색": "Search journals",
  "검색에 맞는 저널이 없습니다.": "No journal matches the search.",
- "내 문헌": "My papers"
+ "내 문헌": "My papers",
+ "{0} 페이지별 읽은 시간": "{0}: time read per page",
+ "적게": "Less",
+ "많이": "More"
 }

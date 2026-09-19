@@ -5723,7 +5723,7 @@
    ]
   },
   {
-   "ko": "기록된 첨부파일 정보를 찾지 못했습니다.",
+   "ko": "{0} 페이지별 읽은 시간",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5738,6 +5738,27 @@
   },
   {
    "ko": "{0}페이지 · {1}초",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "기록된 첨부파일 정보를 찾지 못했습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "적게",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "많이",
    "n": 1,
    "files": [
     "src/workbench.js"

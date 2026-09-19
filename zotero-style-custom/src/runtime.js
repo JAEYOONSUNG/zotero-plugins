@@ -3350,6 +3350,30 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return true;
   }
 
+  get MENU_ICONS() {
+    return {
+      circle:[['circle',{cx:8,cy:8,r:5}]],
+      half:[['circle',{cx:8,cy:8,r:5}],['path',{d:'M8 3a5 5 0 010 10z',fill:'currentColor',stroke:'none'}]],
+      disc:[['circle',{cx:8,cy:8,r:5,fill:'currentColor'}]],
+      search:[['circle',{cx:7.25,cy:7.25,r:4.25}],['line',{x1:10.5,y1:10.5,x2:13.5,y2:13.5}]],
+      star:[['path',{d:'M8 2.6l1.7 3.6 3.9.5-2.8 2.7.7 3.9L8 11.4l-3.5 1.9.7-3.9L2.4 6.7l3.9-.5z'}]],
+      journals:[['line',{x1:4,y1:12.6,x2:4,y2:8.6}],['line',{x1:8,y1:12.6,x2:8,y2:5}],['line',{x1:12,y1:12.6,x2:12,y2:10}],['line',{x1:2.4,y1:12.6,x2:13.6,y2:12.6}]],
+      reading:[['path',{d:'M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z'}],['line',{x1:8,y1:4.8,x2:8,y2:13.4}]],
+      quote:[['path',{d:'M6.5 4.5C4.6 4.9 3.4 6.2 3.4 8.4V11.5h3.4V8.4H5.2c0-1.2.6-2 1.7-2.4zM12.6 4.5c-1.9.4-3.1 1.7-3.1 3.9V11.5h3.4V8.4h-1.6c0-1.2.6-2 1.7-2.4z'}]],
+      columns:[['rect',{x:2.6,y:3.2,width:10.8,height:9.6,rx:1.2}],['line',{x1:6.2,y1:3.2,x2:6.2,y2:12.8}],['line',{x1:9.8,y1:3.2,x2:9.8,y2:12.8}]],
+      panel:[['rect',{x:2.6,y:3.2,width:10.8,height:9.6,rx:1.2}],['line',{x1:6.4,y1:3.2,x2:6.4,y2:12.8}],['line',{x1:8.4,y1:6,x2:11.2,y2:6}],['line',{x1:8.4,y1:8.4,x2:11.2,y2:8.4}]],
+      graph:[['circle',{cx:8,cy:3.6,r:1.7}],['circle',{cx:3.7,cy:11.8,r:1.7}],['circle',{cx:12.3,cy:11.8,r:1.7}],['line',{x1:6.9,y1:5.1,x2:4.6,y2:10.2}],['line',{x1:9.1,y1:5.1,x2:11.4,y2:10.2}],['line',{x1:5.4,y1:11.8,x2:10.6,y2:11.8}]],
+      refresh:[['path',{d:'M12.8 8a4.8 4.8 0 01-8.4 3.2M3.2 8a4.8 4.8 0 018.4-3.2'}],['path',{d:'M11.6 2.4v2.6H9M4.4 13.6V11h2.6'}]],
+      citations:[['path',{d:'M5.5 4.5C3.8 4.5 2.5 5.8 2.5 7.5S3.8 10.5 5.5 10.5c.3 0 .6 0 .8-.1-.4 1-1.3 1.7-2.3 2v1.1c2.3-.4 4-2.4 4-4.8V7.5c0-1.7-1.3-3-3-3zM12.5 4.5c-1.7 0-3 1.3-3 3s1.3 3 3 3c.3 0 .6 0 .8-.1-.4 1-1.3 1.7-2.3 2v1.1c2.3-.4 4-2.4 4-4.8V7.5c0-1.7-1.3-3-3-3z',fill:'currentColor',stroke:'none'}]],
+      stop:[['rect',{x:3.5,y:3.5,width:9,height:9,rx:1.5}]],
+      attachments:[['path',{d:'M11.5 7.2l-4.6 4.6a2.4 2.4 0 01-3.4-3.4l5.4-5.4a1.7 1.7 0 012.4 2.4l-5.2 5.2a.9.9 0 01-1.3-1.3l4.5-4.5'}]],
+      fill:[['rect',{x:2.6,y:3.2,width:10.8,height:9.6,rx:1.2}],['path',{d:'M2.6 8.6l3.2-2.4 2.6 2 2.2-1.6 2.8 2.2V12.8H2.6z',fill:'currentColor',stroke:'none',opacity:'.6'}]],
+      signal:[['path',{d:'M8 2.8l5.4 9.6H2.6z'}],['line',{x1:8,y1:6.4,x2:8,y2:9.2}],['circle',{cx:8,cy:10.9,r:.5,fill:'currentColor'}]],
+      download:[['path',{d:'M8 2.8v7.2M4.8 7.2L8 10.4l3.2-3.2'}],['path',{d:'M3 12.8h10'}]],
+      palette:[['circle',{cx:8,cy:8,r:5.4}],['circle',{cx:5.6,cy:7,r:.9,fill:'currentColor'}],['circle',{cx:8.4,cy:5.2,r:.9,fill:'currentColor'}],['circle',{cx:10.6,cy:7.6,r:.9,fill:'currentColor'}],['path',{d:'M8 13.4c-1-1.2-.4-2.6.8-2.8 1.3-.2 1.9-1.3 1.4-2.2'}]]
+    };
+  }
+
   paintKind(row, item, state, win) {
     const cell = row.querySelector('.cell.title');
     if (!cell || !item) return;
@@ -3445,8 +3469,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const make = (tag,label,parent) => { const node=doc.createXULElement(tag); if(label)node.setAttribute("label",label);parent?.appendChild(node);return node; };
       const menu=make("menu","Style Custom",popup);menu.id="style-custom-itemmenu";state.nodes.push(menu);
       const body=make("menupopup",null,menu);
-      const action=(label,callback,parent=body)=>{ const node=make("menuitem",label,parent);node.addEventListener("command",()=>Promise.resolve().then(callback).catch(e=>{this.Z.logError(e);this.Z.alert(win,"Style Custom",e.message);}));return node; };
-      for(const status of ["unread","reading","done"]) action(({unread:"안 읽음",reading:"읽는 중",done:"읽음"})[status],()=>this.edit(this.selected(win),{status}));
+      /* Every entry carries a small drawn sign, so a list of twenty verbs
+         can be scanned by shape; the signs are the same strokes the panel's
+         sidebar uses, inlined as data URIs because a menuitem takes an image
+         URL and nothing else. */
+      const ink=this.palette(doc).text||'#1c1c1e';
+      const glyph=name=>{const shapes=this.MENU_ICONS[name];if(!shapes)return '';const body=shapes.map(([tag,attrs])=>`<${tag} ${Object.entries(attrs).map(([k,v])=>`${k}="${v}"`).join(' ')}/>`).join('');return 'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="${ink}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`);};
+      const action=(label,callback,parent=body,icon='')=>{ const node=make("menuitem",label,parent);if(icon&&this.MENU_ICONS[icon]){node.classList.add("menuitem-iconic");node.setAttribute("image",glyph(icon));}node.addEventListener("command",()=>Promise.resolve().then(callback).catch(e=>{this.Z.logError(e);this.Z.alert(win,"Style Custom",e.message);}));return node; };
+      const iconic=(node,icon)=>{if(node&&this.MENU_ICONS[icon]){node.classList.add(node.localName==="menu"?"menu-iconic":"menuitem-iconic");node.setAttribute("image",glyph(icon));}return node;};
+      for(const status of ["unread","reading","done"]) action(({unread:"안 읽음",reading:"읽는 중",done:"읽음"})[status],()=>this.edit(this.selected(win),{status}),body,{unread:"circle",reading:"half",done:"disc"}[status]);
       /* The paper you are looking at is the best query you have. The search
          tab used to open empty and ask you to type in what was already on the
          row under the pointer. */
@@ -3458,12 +3489,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const item=items[0], record=this.bibliographyRecord(item);
         const authors=(record.creators||[]).slice(0,2).map(c=>c.lastName||c.name).filter(Boolean).join(' ');
         zotpop.openSearch(win,{title:record.title||'',authors,year:record.year||'',doi:record.DOI||''});
-      });
+      },body,"search");
       make("menuseparator",null,body);
-      const ratings=make("menupopup",null,make("menu","별점",body));
+      const ratings=make("menupopup",null,iconic(make("menu","별점",body),"star"));
       for(let rating=0;rating<=5;rating++)action(rating?"★".repeat(rating):"별점 지우기",()=>this.edit(this.selected(win),{rating}),ratings);
       make("menuseparator",null,body);
-      const suppl=make("menupopup",null,make("menu","보충자료 내려받기",body));
+      const suppl=make("menupopup",null,iconic(make("menu","보충자료 내려받기",body),"download"));
       action("선택한 파일을 보충자료로 표시",async()=>{
         const files=this.selectedAttachments(win);
         if(!files.length)throw new Error("첨부파일을 선택하세요.");
@@ -3497,7 +3528,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           `보충자료 ${result.added}개 추가 · 이미 있음 ${result.already} · 없음 ${result.none} · 미확인 ${result["not-found"]} · 실패 ${result.error}`
           +(result.failures.length?"\n\n"+result.failures.slice(0,5).join("\n"):""));
       },suppl);
-      const marks=make("menupopup",null,make("menu","색 표시",body));
+      const marks=make("menupopup",null,iconic(make("menu","색 표시",body),"palette"));
       for(const colour of this.highlightColours())action(colour.label,async()=>{
         const changed=await this.setHighlight(this.selected(win),colour.key);
         if(!changed)throw new Error("문헌을 먼저 선택하세요.");
@@ -3514,20 +3545,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(result.budgetGone) lines.push(`OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}종이 남았고, 한도는 UTC 자정에 초기화됩니다.\n지금까지 받은 값은 저장됐으니 내일 다시 실행하면 남은 것부터 이어서 채웁니다.`);
         else lines.push("공식 JIF가 있는 저널은 그대로 두고, 없는 저널만 ~추정치로 채웁니다.");
         this.Z.alert(win,"Style Custom",lines.join("\n"));
-      });
+      },body,"journals");
       action("읽기 기록 가져오기 (이전 플러그인 노트에서)",async()=>{
         const preview=await this.importLegacyReading({dryRun:true});
         if(!preview.imported){this.Z.alert(win,"Style Custom",`가져올 읽기 기록이 없습니다. (노트 ${preview.notes}개 · 이미 보유 ${preview.skipped}개 · 대상 불명 ${preview.unresolved}개)`);return;}
         const hours=(preview.seconds/3600).toFixed(1);
         const result=await this.importLegacyReading();
         this.Z.alert(win,"Style Custom",`읽기 기록 ${result.imported}편 · ${hours}시간을 가져왔습니다.\n이미 더 많이 기록된 ${result.skipped}편은 그대로 두었습니다.`+(result.unresolved?`\n대상 문헌을 찾지 못한 노트 ${result.unresolved}개`:""));
-      });
+      },body,"reading");
       action("제목 앞 별 태그 정리",async()=>{
         const found=await this.starTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
         if(!found.length){this.Z.alert(win,"Style Custom","정리할 별 태그가 없습니다.");return;}
         const {moved,skipped}=await this.migrateStarTags(found);
         this.Z.alert(win,"Style Custom",`${moved}개 항목의 별 태그를 정리했습니다. 평점은 그대로 유지됩니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:""));
-      });
+      },body,"star");
       action("평점 태그를 Extra로 옮기기",async()=>{
         const found=await this.visibleRatingTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
         if(!found.length){this.Z.alert(win,"Style Custom","태그로 남은 평점이 없습니다.");return;}
@@ -3538,17 +3569,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(stray.orphans)lines.push(`독립 첨부파일 ${stray.orphans}개는 본 문헌이 없어 태그를 그대로 두었습니다.`);
         lines.push("Extra는 동기화되고 직접 고칠 수 있으며, 태그 목록에는 나타나지 않습니다.");
         this.Z.alert(win,"Style Custom",lines.join("\n"));
-      });
-      action("인용…",()=>this.citationPanel(win,this.selected(win)));
-      action("커스텀 열로 전환",()=>this.useColumns(win));
-      action("연구 작업 패널",()=>state.workbench?.toggle(true));
-      action("그래프 · 태그 · 노트 · 주석",()=>state.workbench?.show('explore'));
-      action("저장된 지표와 읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();});
+      },body,"star");
+      make("menuseparator",null,body);
+      action("인용…",()=>this.citationPanel(win,this.selected(win)),body,"quote");
+      action("커스텀 열로 전환",()=>this.useColumns(win),body,"columns");
+      action("연구 작업 패널",()=>state.workbench?.toggle(true),body,"panel");
+      action("그래프 · 태그 · 노트 · 주석",()=>state.workbench?.show('explore'),body,"graph");
+      make("menuseparator",null,body);
+      action("저장된 지표와 읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();},body,"refresh");
       action("선택한 문헌 인용 수 새로고침",async()=>{
         const result=await this.refreshCitations(this.selected(win),{force:true});
         this.Z.alert(win,"Style Custom",`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
-      });
-      action("인용 수 조회 중지",()=>this.citationJob?.controller.abort());
+      },body,"citations");
+      action("인용 수 조회 중지",()=>this.citationJob?.controller.abort(),body,"stop");
       action("첨부파일 종류 판별 (본문 · 보충자료 · 중복 · 다른 논문)",async()=>{
         const chosen=this.selected(win);
         const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
@@ -3560,22 +3593,22 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           +(result.unknown?` · 판단 불가 ${result.unknown}`:"")
           +(result.indexed?`\n본문이 없던 ${result.indexed}개는 Zotero 색인을 먼저 만들었습니다.`:"")
           +(result.unread?`\n${result.unread}개는 색인을 만든 뒤에도 본문을 읽지 못했습니다(스캔 PDF일 수 있습니다).`:""));
-      });
+      },body,"attachments");
       action("빈 칸 채우기 (철회 신호 · 저널 지표 · 새 논문)",async()=>{
         if(this.backfilling){this.stopBackfill();this.Z.alert(win,"Style Custom","채우기를 중지했습니다. 지금까지 받은 값은 저장했습니다.");return;}
         const report=await this.runBackfill({libraryID:win.ZoteroPane?.getSelectedLibraryID?.(),
           onProgress:({stage,done,total})=>this.showBackfillProgress(win,stage,done,total)});
         this.Z.alert(win,"Style Custom",this.backfillSummary(report));
-      });
+      },body,"fill");
       action("선택한 문헌 철회·공개접근 신호 조회",async()=>{
         const result=await this.refreshPaperSignals(this.selected(win));
         this.Z.alert(win,"Style Custom",`신호 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · DOI 없음 ${result.unsupported}개 · 조회 오류 ${result.error}개`);
-      });
-      action("현재 라이브러리 인용 수 조회·메타데이터 저장",()=>this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID));
+      },body,"signal");
+      action("현재 라이브러리 인용 수 조회·메타데이터 저장",()=>this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID),body,"citations");
       action("선택한 저널 IF를 공식 페이지에서 새로고침",async()=>{
         const result = await this.refreshJournalMetrics(this.selected(win), win.DOMParser);
         this.Z.alert(win,"Style Custom",`IF 확인 ${result.updated}개 · 조회 실패 ${result.failed}개 · 미등록 저널 ${result.unknown}개. 기존 확인된 값은 유지됩니다.`);
-      });
+      },body,"journals");
     }
     const poll = async () => {
       if (!this.active || win.closed || state.polling) return;

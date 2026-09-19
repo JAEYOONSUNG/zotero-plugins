@@ -89,12 +89,13 @@ test('selected papers preserve status rails and busy controls use visible non-an
  assert.equal(rule('#style-custom-workbench .sc-paper-identity').getPropertyValue('min-width'),'0');
  const busy=rule('#style-custom-workbench button[aria-busy=true]');assert.equal(busy.getPropertyValue('cursor'),'progress');assert.equal(busy.getPropertyValue('opacity'),'1');assert.equal(busy.getPropertyValue('animation'),'');
 });
-test('actual JavaScript-generated heatmap colors retain readable labels over the CSS backing surface',()=>{
+test('the page strip shades five steps from the fill to the done colour, with nothing written on a square',()=>{
  const source=fs.readFileSync(fileURLToPath(new URL('../src/workbench.js',import.meta.url)),'utf8');
- const match=source.match(/rgba\(36,92,120,\$\{Math\.min\((\.\d+)/);assert.ok(match,'locate actual heatmap opacity cap');const cap=Number(match[1]);assert.ok(cap>0&&cap<=.60);
- assert.equal(rule('#style-custom-workbench .sc-page-strip').getPropertyValue('background'),'#ffffff');
- const ink=rule('#style-custom-workbench .sc-page-strip button').getPropertyValue('color');
- for(const alpha of [0,.15,cap]){const backdrop='#'+[36,92,120].map(c=>Math.round(c*alpha+255*(1-alpha)).toString(16).padStart(2,'0')).join('');assert.ok(contrast(ink,backdrop)>=4.5,`heatmap alpha ${alpha}`);}
+ assert.ok(!/rgba\(36,92,120/.test(source),'no inline heatmap colours remain in the script');
+ assert.match(source,/sc-page-cell/);
+ for(const level of [1,2,3,4])assert.ok(rule(`#style-custom-workbench .sc-page-cell[data-level="${level}"]`),'level '+level);
+ assert.equal(rule('#style-custom-workbench .sc-page-cell[data-level="4"]').getPropertyValue('background').trim(),'var(--sc-done)');
+ assert.match(rule('#style-custom-workbench .sc-page-cell[data-level="1"]').getPropertyValue('background'),/--sc-done\) 30%/);
 });
 
 test('every badge colour lands on the same contrast, so no one of them shouts', async () => {

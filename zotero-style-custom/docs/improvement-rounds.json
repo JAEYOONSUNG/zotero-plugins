@@ -1,5 +1,5 @@
 {
- "version": "0.45.4",
+ "version": "0.46.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1731,6 +1731,46 @@
    ],
    "status": "verified",
    "review": "A real table: rank, the name in the journal's own colour as text (no box), quartile, abbreviation, house, papers here, fields, and the figure at the edge, with the column names once at the top and the two lookups laid over the row on hover. Facts are gathered once per set of items and typing redraws only the list a beat after the last key, which removed the lag; a title-rule journal now carries its registry quartile too. A search box finds journals by name, abbreviation, publisher or field."
+  },
+  {
+   "round": "R61",
+   "title": "읽은 페이지를 잔디처럼",
+   "gap": "The reading tab drew a numbered circle per page, a line of them per paper, that said nothing until read; the user pointed at GitHub's contribution graph.",
+   "entryPoint": "작업 패널 → 읽기 진행",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "class:'sc-page-cell'"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the pages of a paper read as a strip of shaded squares, with the number and the seconds in the tooltip"
+    }
+   ],
+   "status": "verified",
+   "review": "A strip of small squares, one per page, shaded in five steps from the fill to the done green by time spent, the page number and seconds in the tooltip, a click opening the page, and a key from little to much."
+  },
+  {
+   "round": "R62",
+   "title": "항목 메뉴의 모든 동사에 표식",
+   "gap": "The Style Custom submenu was twenty lines of text; the user asked for icons so it could be scanned.",
+   "entryPoint": "문헌 우클릭 → Style Custom",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "get MENU_ICONS()"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/runtime.test.mjs",
+     "name": "every entry of the item menu carries a drawn sign"
+    }
+   ],
+   "status": "verified",
+   "review": "Every entry carries a small drawn sign inlined as a data URI, the same strokes the panel's sidebar uses, and the menu is cut into groups by separators: reading state, search, rating and files, the panel, the sweeps."
   }
  ],
  "introducedInVersion": "0.6.0"

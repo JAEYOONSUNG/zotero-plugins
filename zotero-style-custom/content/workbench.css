@@ -290,8 +290,17 @@
 #style-custom-workbench .sc-graph line { stroke: var(--sc-graph-line); }
 #style-custom-workbench .sc-graph circle { fill: var(--sc-accent); }
 #style-custom-workbench .sc-graph g[role=button] { cursor: pointer; }
-#style-custom-workbench .sc-page-strip { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; border-radius: var(--sc-radius-sm); background: #ffffff; }
-#style-custom-workbench .sc-page-strip button { min-width: 28px; min-height: 28px; padding: 3px !important; color: #252a31; font: 11px var(--sc-mono) !important; border-color: #89919c; }
+#style-custom-workbench .sc-page-strip { display: flex; flex-wrap: wrap; gap: 3px; padding: 4px 0 2px; }
+#style-custom-workbench .sc-page-cell { width: 11px; height: 11px; min-width: 0; min-height: 0; padding: 0 !important; border: 0; border-radius: 25%; background: var(--sc-fill); box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); cursor: pointer; }
+#style-custom-workbench .sc-page-cell:disabled { cursor: default; }
+#style-custom-workbench .sc-page-cell[data-level="1"] { background: color-mix(in srgb, var(--sc-done) 30%, var(--sc-fill)); }
+#style-custom-workbench .sc-page-cell[data-level="2"] { background: color-mix(in srgb, var(--sc-done) 55%, var(--sc-fill)); }
+#style-custom-workbench .sc-page-cell[data-level="3"] { background: color-mix(in srgb, var(--sc-done) 80%, var(--sc-fill)); }
+#style-custom-workbench .sc-page-cell[data-level="4"] { background: var(--sc-done); }
+#style-custom-workbench .sc-page-cell:hover { box-shadow: inset 0 0 0 1px var(--sc-text); }
+#style-custom-workbench .sc-page-legend { display: flex; align-items: center; gap: 3px; margin-top: 4px; color: var(--sc-faint); font-size: 10px; }
+#style-custom-workbench .sc-page-legend span:first-child { margin-inline-end: 3px; }
+#style-custom-workbench .sc-page-legend span:last-child { margin-inline-start: 3px; }
 #style-custom-workbench .sc-canvas { position: relative; height: 520px; min-height: 240px; overflow: auto; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background-color: var(--sc-surface-alt); background-image: none; }
 #style-custom-workbench .sc-canvas-lines { position: absolute; inset: 0; pointer-events: none; }
 #style-custom-workbench .sc-canvas-lines line { stroke: var(--sc-graph-line); }

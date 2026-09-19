@@ -154,7 +154,7 @@ test('native previews cannot resume after tab switch or overwrite a newer previe
 
 test('reading refresh preserves controls and offers all pages of the recorded attachment',async()=>{
  const f=fixture();await f.bench.show('reading');const margin=f.body().querySelector('[aria-label="PDF 여백에 주석 표시"]');assert.equal(margin.checked,true);
- f.input('색상 이름','Important');const savedControl=f.body().querySelector('[aria-label="색상 이름"]');const range=f.body().querySelector('[aria-label="Paper Alpha 페이지 범위"]');assert.equal(range.querySelectorAll('option').length,7);range.value='500';range.dispatchEvent(new f.win.Event('change'));await settle();await f.click('551');assert.ok(f.calls.find(c=>c[0]==='open'&&c[1]==='99'&&c[2].pageIndex===550));
+ f.input('색상 이름','Important');const savedControl=f.body().querySelector('[aria-label="색상 이름"]');const range=f.body().querySelector('[aria-label="Paper Alpha 페이지 범위"]');assert.equal(range.querySelectorAll('option').length,7);range.value='500';range.dispatchEvent(new f.win.Event('change'));await settle();{const cell=f.body().querySelector('.sc-page-cell[aria-label^="551페이지"]');assert.ok(cell,'page 551 square');cell.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();}assert.ok(f.calls.find(c=>c[0]==='open'&&c[1]==='99'&&c[2].pageIndex===550));
  f.bench.refreshReading();assert.equal(f.body().querySelector('[aria-label="색상 이름"]'),savedControl);assert.equal(savedControl.value,'Important');assert.equal(f.body().querySelector('[aria-label="Paper Alpha 페이지 범위"]').value,'500');
  for(const [label,method] of [['리더 사이드바 표시','sidebar'],['세로 탭 목록 표시','vertical']]){const c=f.body().querySelector('[aria-label="'+label+'"]');c.checked=true;c.dispatchEvent(new f.win.Event('change'));await settle();assert.ok(f.calls.find(x=>x[0]===method));}
  f.bench.destroy();
@@ -1043,5 +1043,17 @@ test('the panel can live in a Zotero tab, remembers it, and comes back when the 
  assert.equal(f.bench.panel.dataset.docked,undefined);
  assert.equal(f.bench.panel.hidden,false,'still open, floating');
  assert.equal(f.runtime.cache.workbenchUI.docked,false);
+ f.bench.destroy();
+});
+
+test('the pages of a paper read as a strip of shaded squares, with the number and the seconds in the tooltip',async()=>{
+ const f=fixture();
+ await f.bench.show('reading');
+ const cells=[...f.body().querySelector('.sc-page-strip').querySelectorAll('.sc-page-cell')];
+ assert.equal(cells.length,100,'one square per page of the first hundred');
+ assert.equal(cells[0].dataset.level,'2','2 of 7 seconds: a light square');assert.equal(cells[1].dataset.level,'0');
+ assert.equal(cells[0].getAttribute('title'),'1페이지 · 2초');
+ assert.equal(cells[0].textContent,'','no number on the square');
+ assert.ok(f.body().querySelector('.sc-page-legend'),'a key from little to much');
  f.bench.destroy();
 });

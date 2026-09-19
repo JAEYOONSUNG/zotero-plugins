@@ -1862,3 +1862,23 @@ test('the tree draws the italics and subscripts of a title instead of its tags',
   text.textContent = 'No markup here';
   assert.equal(plugin.paintTitleMarkup(text, plain, window), false);
 });
+
+test('every entry of the item menu carries a drawn sign', () => {
+  const {plugin} = fixture();
+  const icons = plugin.MENU_ICONS;
+  for (const name of ['circle', 'half', 'disc', 'search', 'star', 'journals', 'reading', 'quote', 'columns', 'panel', 'graph', 'refresh', 'citations', 'stop', 'attachments', 'fill', 'signal', 'download', 'palette']) {
+    assert.ok(Array.isArray(icons[name]) && icons[name].length, name);
+  }
+  // Each verb in the menu names one of those signs as its last argument.
+  const source = plugin.constructor.toString();
+  const expected = {'ZotPoP에서 이 논문 검색': 'search', '라이브러리 저널 지표 채우기': 'journals', '인용…': 'quote', '커스텀 열로 전환': 'columns', '연구 작업 패널': 'panel',
+    '그래프 · 태그 · 노트 · 주석': 'graph', '저장된 지표와 읽기 기록 새로고침': 'refresh', '인용 수 조회 중지': 'stop', '선택한 문헌 철회·공개접근 신호 조회': 'signal'};
+  for (const [label, icon] of Object.entries(expected)) {
+    const at = source.indexOf('action("' + label + '"');
+    assert.ok(at >= 0, label);
+    const next = source.indexOf('action("', at + 8);
+    const call = source.slice(at, next < 0 ? undefined : next);
+    assert.ok(call.includes('"' + icon + '")'), `${label} carries ${icon}`);
+    assert.ok(Array.isArray(icons[icon]), icon);
+  }
+});
