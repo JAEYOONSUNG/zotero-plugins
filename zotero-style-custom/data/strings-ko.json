@@ -6724,6 +6724,20 @@
    ]
   },
   {
+   "ko": "저널별 색",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0} · {1}편",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "영국",
    "n": 1,
    "files": [

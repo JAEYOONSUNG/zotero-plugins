@@ -400,7 +400,12 @@
    const h3=node('h3',null,identity,{class:'sc-paper-title',title:item.title||''});
    if(item.itemType&&item.itemType!=='journalArticle'&&KIND_LABELS[item.itemType])node('span',kindLabel(item.itemType),h3,{class:'sc-preprint sc-kind',title:kindLabel(item.itemType)});
    h3.appendChild(doc.createTextNode(item.title||T('제목 없음')));
-   node('span',[item.year,item.venue,item.authors].filter(Boolean).join(' · '),identity,{class:'sc-paper-meta',title:[item.authors,item.venue].filter(Boolean).join(' · ')});
+   const meta=node('span',null,identity,{class:'sc-paper-meta',title:[item.authors,item.venue].filter(Boolean).join(' · ')});
+   // The journal's mark before its name, the same mark the tree and the map use.
+   const P=runtime.palette?.(doc);
+   const venueMark=item.venue&&P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,item.venue,P):null;
+   if(venueMark){venueMark.style.marginInlineEnd='5px';meta.appendChild(venueMark);}
+   meta.appendChild(doc.createTextNode([item.year,item.venue,item.authors].filter(Boolean).join(' · ')));
    const metrics=node('div',null,heading,{class:'sc-metrics'});
    metric(metrics,{icon:'impact',name:'impact',text:item.impactFactor??'—',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
    metric(metrics,{icon:'citations',name:'citations',text:item.citations??'—',label:'인용 수'});
@@ -513,6 +518,7 @@
     +(counted.external?` · 내 논문을 인용한 바깥 논문 ${counted.external}`:'')
     +(counted.isolated?` · 연결 없음 ${counted.isolated}`:'')
     +(withRefs<papers.length?` · 인용 목록 없음 ${papers.length-withRefs}`:''),body,{class:'sc-muted'});
+   drawJournalLegend(graph.nodes.filter(n=>n.kind==='paper'),body);
    if(!graph.nodes.length){
     empty('이 범위에서는 서로 인용하거나 참고문헌을 공유하는 논문이 없습니다. 범위를 넓혀보세요.');
     return;
@@ -676,13 +682,14 @@
       outcome than a plainer graph. */
    const tools=runtime.graphTools||null;
    const built={
-    nodes:raw.nodes.map(n=>({id:String(n.id),label:n.label,citations:0,degree:0,rank:0,kind:'paper',venue:''})),
+    nodes:raw.nodes.map(n=>({id:String(n.id),label:n.label,citations:0,degree:0,rank:0,kind:'paper',venue:state.items.find(i=>String(i.id)===String(n.id))?.venue||''})),
     edges:raw.edges.map(e=>({source:String(e.source),target:String(e.target),kind:'coupled',weight:0.5})),
     missing:[],isolated:[],counted:{}
    };
    const degree=new Map();
    for(const e of built.edges){degree.set(e.source,(degree.get(e.source)||0)+1);degree.set(e.target,(degree.get(e.target)||0)+1);}
    for(const n of built.nodes)n.degree=degree.get(n.id)||0;
+   drawJournalLegend(built.nodes,body);
    const top=Math.max(1,...built.nodes.map(n=>n.degree));
    for(const n of built.nodes)n.rank=n.degree/top;
    const laid=tools?tools.layout(built,{width:W,height:H}):(()=>{
@@ -1494,6 +1501,28 @@
    return span;
   }
 
+  /* Which colour is which journal. The map paints every node in its journal's
+     colour, and a reader new to it has no way to know that lilac is Nature
+     and coral is Cell; the six commonest journals in the map are named, each
+     in its own mark, with how many nodes it accounts for. */
+  function drawJournalLegend(nodes,parent){
+   const identity=runtime.journalIdentity;
+   if(!identity?.identify||!identity.colours)return;
+   const counts=new Map();
+   for(const n of nodes)if(n.venue)counts.set(n.venue,(counts.get(n.venue)||0)+1);
+   const top=[...counts].sort((a,b)=>b[1]-a[1]).slice(0,6).filter(([venue])=>identity.identify(venue));
+   if(top.length<2)return;
+   const legend=node('div',null,parent,{class:'sc-graph-legend','aria-label':'저널별 색'});
+   const P=runtime.palette?.(doc);
+   for(const [venue,count] of top){
+    const entry=node('span',null,legend,{class:'sc-legend-entry',title:`${venue} · ${count}편`});
+    const mark=P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,venue,P):null;
+    if(mark)entry.appendChild(mark);
+    else{const tone=identity.colours(identity.identify(venue),{dark:darkScheme()});const dot=node('span',null,entry,{class:'sc-legend-dot'});dot.style.background=tone.fill;dot.style.boxShadow=`inset 0 0 0 1px ${tone.ink}`;}
+    node('span',venue,entry,{class:'sc-legend-name'});
+    node('span',String(count),entry,{class:'sc-legend-count'});
+   }
+  }
   /* The journals tab, read the way JCR's journal page reads: the figure and
      the quartile on the row, and beneath any row the profile -- abbreviation,
      publisher, ISSN, subject fields, h-index, output, open access, country,

@@ -704,3 +704,11 @@
 #style-custom-workbench .sc-watch-patent { background: color-mix(in srgb, var(--sc-reading) 18%, transparent); color: var(--sc-reading); }
 #style-custom-workbench .sc-patent .sc-preprint { margin-inline-end: 6px; }
 #style-custom-workbench .sc-patent-fresh .sc-hit-title { color: var(--sc-text); }
+
+/* The map's legend: the commonest journals in it, each in its own mark. */
+#style-custom-workbench .sc-graph-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 8px; font-size: 11px; color: var(--sc-muted); }
+#style-custom-workbench .sc-legend-entry { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
+#style-custom-workbench .sc-legend-name { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-legend-count { color: var(--sc-faint); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+#style-custom-workbench .sc-paper-meta { display: flex; align-items: center; }

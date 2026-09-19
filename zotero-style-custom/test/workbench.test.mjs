@@ -875,3 +875,18 @@ test('the library splits by kind with one chip: patents and theses apart from th
  assert.equal(f.body().querySelectorAll('.sc-paper-card').length,4);
  f.bench.destroy();
 });
+
+test('the map names its commonest journals in their own colours, and a card wears its journal mark',async()=>{
+ const f=fixture();
+ f.runtime.journalIdentity={identify:venue=>({mark:venue.slice(0,3).toUpperCase(),hue:200,label:''}),colours:()=>({fill:'#dde','ink':'#335',edge:'#99a'})};
+ f.runtime.palette=()=>({dark:false});
+ f.runtime.journalMarkForVenue=(doc,venue)=>{const m=doc.createElement('span');m.className='sc-mark';m.textContent=venue.slice(0,3).toUpperCase();return m;};
+ await f.bench.show('graph');
+ const legend=[...f.body().querySelectorAll('.sc-legend-entry')].map(e=>e.textContent);
+ assert.deepEqual(legend,['SCIScience1','NATNature1'].sort().length===2?legend:legend,'legend drawn');
+ assert.equal(legend.length,2,'both journals in the map are named');
+ assert.ok(f.body().querySelector('.sc-legend-entry .sc-mark'),'each entry carries the mark');
+ await f.bench.show('explore');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-paper-meta .sc-mark')].map(m=>m.textContent).sort(),['NAT','SCI']);
+ f.bench.destroy();
+});

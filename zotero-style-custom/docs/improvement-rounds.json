@@ -1,5 +1,5 @@
 {
- "version": "0.43.1",
+ "version": "0.43.2",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1483,6 +1483,26 @@
    ],
    "status": "verified",
    "review": "A row of chips under the search line counts the library by kind -- 논문 1167 · 프리프린트 26 · 학위논문 6 -- and one click shows only that kind; the select says the same in the same words, and each card names its kind unless it is a plain paper. The journal figure takes the same colour bands as the IF column in the tree."
+  },
+  {
+   "round": "R50",
+   "title": "지도의 범례와 카드의 저널 표식",
+   "gap": "The citation map paints every node in its journal's colour, and a reader new to it has no way to know that lilac is Nature and coral is Cell. The explore cards named the journal in plain grey text while the tree, the related list and the journals tab all showed its mark.",
+   "entryPoint": "작업 패널 → 관계 그래프 · 보유 문헌 카드",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "function drawJournalLegend"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the map names its commonest journals in their own colours, and a card wears its journal mark"
+    }
+   ],
+   "status": "verified",
+   "review": "Under the map's summary line, the six commonest journals in it, each in its own mark with how many nodes it accounts for; the older tag/author graph now carries venues too, so it is coloured and legended alike. Every explore card wears its journal's mark before the venue, the same mark the tree and the map use."
   }
  ],
  "introducedInVersion": "0.6.0"

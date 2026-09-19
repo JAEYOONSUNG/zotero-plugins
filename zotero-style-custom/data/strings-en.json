@@ -1057,5 +1057,7 @@
  "문헌 종류": "Kinds of item",
  "전체": "All",
  "모든 종류": "Every kind",
- "{0}만 보기": "Only {0}"
+ "{0}만 보기": "Only {0}",
+ "저널별 색": "Colour by journal",
+ "{0} · {1}편": "{0} · {1} papers"
 }
