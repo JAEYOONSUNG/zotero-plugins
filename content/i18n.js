@@ -84,7 +84,8 @@ var ZotPoPI18N = (function () {
 			chkAllTip: "Select every visible result",
 
 			emptyInitial: "Enter a query above and press Search.",
-			emptyFiltered: "No results match the filter.",
+			emptyFiltered: "No results match the filter. Press Esc or × to clear it.",
+			filterClear: "Clear the filter",
 			busySearching: "Searching…",
 			detailEmpty: "Click a row to see its details.",
 
@@ -336,7 +337,8 @@ var ZotPoPI18N = (function () {
 			chkAllTip: "보이는 결과 전체 선택",
 
 			emptyInitial: "위에 조건을 입력하고 검색을 누르세요.",
-			emptyFiltered: "필터와 일치하는 결과가 없습니다.",
+			emptyFiltered: "필터와 일치하는 결과가 없습니다. Esc나 ×로 필터를 지우세요.",
+			filterClear: "필터 지우기",
 			busySearching: "검색 중…",
 			detailEmpty: "행을 클릭하면 상세 정보가 표시됩니다.",
 

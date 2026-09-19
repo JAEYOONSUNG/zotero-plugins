@@ -129,7 +129,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		${realRows ? "" : 'buildRow = () => document.createElement("tr");'}
 		renderMetrics = renderDetail = () => {};
 		cacheIO = setupStorage();
-		globalThis.harness = { state, runSearch, render, http, stopOperation, onKeyDown, clearAll, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
+		globalThis.harness = { state, runSearch, render, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText,
 			get history() { return history; },
 			setOpenSelectForTest: value => { openSel = value; } };

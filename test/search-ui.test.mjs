@@ -474,3 +474,17 @@ test("a title's italics are drawn in the list and the detail, and kept for the i
 	assert.equal(made.titleMarkup, "A <i>Bacillus</i> study & more");
 	assert.equal(Sources.makeRecord({ source: "crossref", title: "Plain", doi: "10.1/y" }).titleMarkup, null);
 });
+
+test("the × clears the results filter and hides itself when there is nothing to clear", async () => {
+	const ui = uiHarness({ realRows: true, search: async () => [paper("a", { title: "Alpha" }), paper("b", { title: "Beta" })] });
+	await ui.runSearch();
+	ui.syncFilterClear();
+	assert.equal(ui.get("filter-clear").hidden, true, "nothing to clear yet");
+	ui.get("filter").value = "zzz"; ui.render(); ui.syncFilterClear();
+	assert.equal(ui.state.visible.length, 0);
+	assert.equal(ui.get("filter-clear").hidden, false, "the × shows once there is something to clear");
+	ui.clearFilter();
+	assert.equal(ui.get("filter").value, "");
+	assert.equal(ui.state.visible.length, 2, "every result is back");
+	assert.equal(ui.get("filter-clear").hidden, true);
+});

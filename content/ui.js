@@ -15,12 +15,12 @@
 	// Wider text columns: at the old widths a title showed eight words and an
 	// author list two names, and every one of them rolled at once.
 	const DEFAULT_COLS = {
-		chk: 28, citations: 56, cpy: 60, rank: 44, authorString: 190,
+		chk: 28, citations: 56, cpy: 60, rank: 44, authorString: 190, title: 320,
 		year: 46, venue: 170, journalIF: 48, affiliation: 170, country: 62, tier: 56,
 		doi: 150, pdf: 44, inLibrary: 44, status: 96
 	};
 
-	const COL_VERSION = 6;
+	const COL_VERSION = 7;
 	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~40px)
 	const MIN_COL = 40;
 	// An unbounded drag used to persist a column wider than the window
@@ -276,7 +276,9 @@
 		$("clear-btn").addEventListener("click", clearAll);
 		$("history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(); });
 		$("banner-close").addEventListener("click", hideBanner);
-		$("filter").addEventListener("input", () => { state.focusKey = null; render(); });
+		$("filter").addEventListener("input", () => { state.focusKey = null; render(); syncFilterClear(); });
+		$("filter-clear")?.addEventListener("click", () => { clearFilter(); $("filter").focus(); });
+		syncFilterClear();
 		$("chk-all").addEventListener("change", e => selectVisible(e.target.checked));
 		$("select-all").addEventListener("click", () => selectVisible(true));
 		$("select-none").addEventListener("click", () => { state.selected.clear(); render(); });
@@ -771,7 +773,9 @@
 	function applyColumnWidths() {
 		for (let col of document.querySelectorAll("#cols col")) {
 			let k = col.dataset.k;
-			if (k === "title") { col.style.width = ""; continue; }
+			// The title used to take whatever was left, which below ~1470px was
+			// nothing: fifteen fixed columns ate the width and the title was a strip
+			// of padding. It has a width of its own now, and a grip like the rest.
 			col.style.width = (state.colWidths[k] || DEFAULT_COLS[k]) + "px";
 		}
 	}
@@ -782,7 +786,7 @@
 			let rz = th.querySelector(".rz");
 			if (!rz) continue;
 			let key = th.dataset.sort;
-			if (!key || key === "title") continue;
+			if (!key) continue;
 			rz.addEventListener("mousedown", e => {
 				e.preventDefault();
 				e.stopPropagation();
@@ -912,7 +916,11 @@
 	}
 
 	async function runSearch() {
-		if (state.searching || state.importing) return;
+		if (state.importing) return;
+		// A second request while one runs used to vanish, prefill included: the
+		// running one is stopped and waited out, and the new one goes.
+		if (state.searching) { state.searchController?.abort(); state.cancelled = true; try { await state.searchDone; } catch (e) {} }
+		if (state.searching) return;
 		cancelCacheRestore();
 		let q = readQuery();
 		if (![q.authors, q.venue, q.title, q.keywords].some(x => x.trim())) {
@@ -926,6 +934,7 @@
 		let label = sourceLabel(sourceKey);
 		state.searching = true;
 		state.cancelled = false;
+		let searchDone; state.searchDone = new Promise(res => { searchDone = res; });
 		let controller = new AbortController();
 		state.searchController = controller;
 		let active = () => state.searchController === controller && !controller.signal.aborted;
@@ -1005,6 +1014,7 @@
 		finally {
 			state.searching = false;
 			state.searchController = null;
+			searchDone?.();
 			$("search-btn").disabled = false;
 			$("stop-btn").disabled = true;
 			$("busy").hidden = true;
@@ -1131,6 +1141,10 @@
 		s.title = t("thTierTip") + (where.hIndex != null ? "\n" + t("affHIndex", where.hIndex) : "");
 		return s;
 	}
+
+	// The results filter can always be let go of: Escape in the box, the × beside it.
+	function syncFilterClear() { let b = $("filter-clear"); if (b) b.hidden = !$("filter").value; }
+	function clearFilter() { $("filter").value = ""; state.focusKey = null; render(); syncFilterClear(); }
 
 	function render() {
 		let f = $("filter").value.trim().toLowerCase();
@@ -1507,6 +1521,7 @@
 			if (!$("histmenu").hidden) { closeHistoryMenu(); return; }
 			if (!$("ctxmenu").hidden) { hideCtxMenu(); return; }
 			if (state.searching || state.importing) { stopOperation(); return; }
+			if (document.activeElement === $("filter") && $("filter").value) { clearFilter(); return; }
 			return;
 		}
 		if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); $("filter").focus(); $("filter").select(); return; }

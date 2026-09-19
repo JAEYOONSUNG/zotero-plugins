@@ -151,6 +151,8 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 .searchbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .searchbox input { border: none; background: transparent; padding: 1px 0; width: 100%; }
 .searchbox input:focus { box-shadow: none; border: none; }
+.filter-clear { border: 0; background: transparent; color: var(--muted); padding: 0 2px; line-height: 1; cursor: pointer; font-size: 14px; }
+.filter-clear:hover { color: var(--text); }
 
 /* ---------------------------------------------------------------- table */
 .table-wrap { flex: 1 1 auto; overflow: auto; position: relative; }
