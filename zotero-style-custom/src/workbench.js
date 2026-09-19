@@ -686,12 +686,13 @@
      `인용 ${n.citations}`,n.references?`참고문헌 ${n.references}`:null,`연결 ${n.degree}`,
      n.rank!=null?`중심성 ${(n.rank*100).toFixed(0)}%`:null].filter(Boolean).join(' · ');
     g.appendChild(title);
-    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);render();};
+    // Selecting a node marks it in place: a redraw would reset the zoom and the hover.
+    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);for(const [key,m] of marks)m.circle.setAttribute('stroke-width',key===n.id?2.4:1);};
     g.addEventListener('click',activate);
     g.addEventListener('dblclick',()=>run(()=>n.kind==='external'
      ?runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${n.openalex}`)
      :library.openItem(n.id)));
-    g.addEventListener('keydown',e=>{if(e.key==='Enter')activate();});
+    g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate();}});
     // Hovering brings one paper's neighbourhood forward instead of leaving the
     // reader to trace a line across a thousand of them.
     g.addEventListener('mouseenter',()=>focusNode(n.id));
@@ -811,10 +812,10 @@
     if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('opacity','0');
     g.appendChild(label);
     const title=doc.createElementNS(SVG,'title');title.textContent=`${n.label}\n연결 ${n.degree}`;g.appendChild(title);
-    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);};
+    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);for(const other of group.querySelectorAll('circle[data-picked]')){other.removeAttribute('data-picked');other.setAttribute('fill','var(--sc-fill)');other.setAttribute('stroke','var(--sc-muted)');}circle.setAttribute('data-picked','1');circle.setAttribute('fill','var(--sc-accent)');circle.setAttribute('stroke','var(--sc-accent)');};
     g.addEventListener('click',activate);
     g.addEventListener('dblclick',()=>run(()=>library.openItem(n.id)));
-    g.addEventListener('keydown',e=>{if(e.key==='Enter')activate();});
+    g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate();}});
     group.appendChild(g);
    }
    let zoom=1;
@@ -1151,7 +1152,7 @@
     if(start>=total)start=0;pageRanges.set(item.id,start);
     if(total>rangeSize){const range=node('select',null,c,{'aria-label':item.title+' 페이지 범위'});
      for(let offset=0;offset<total;offset+=rangeSize)node('option',`${offset+1}–${Math.min(total,offset+rangeSize)}`,range,{value:offset});
-     range.value=String(start);range.addEventListener('change',()=>{pageRanges.set(item.id,Number(range.value));refreshReading();});
+     range.value=String(start);range.addEventListener('change',()=>{pageRanges.set(item.id,Number(range.value));refreshReading();const again=[...body.querySelectorAll('select')].find(x=>x.getAttribute('aria-label')===range.getAttribute('aria-label'));again?.focus?.();});
     }
     /* The pages as a strip of small squares, each shaded by the time spent
        on it -- the way a year of commits reads on GitHub -- instead of a row
@@ -1301,10 +1302,10 @@
    let stop;
    const go=button('함께 읽기',()=>run(async()=>{
     message('선택한 문헌의 제목·초록·메모를 설정된 AI 서비스에 요청 중…');
-    const request=++aiEpoch;stop.hidden=false;
+    const request=++aiEpoch,mark=epoch;stop.hidden=false;
     try{
      const result=await assist.run('compare',chosen,{language:language.value});
-     if(disposed||panel.hidden||state.tab!=='matrix'||request!==aiEpoch)return;
+     if(disposed||panel.hidden||state.tab!=='matrix'||request!==aiEpoch||mark!==epoch)return;
      state.compareOutput=result;state.compareKey=key;
      const box=body.querySelector('.sc-compare-output');
      if(box){box.value=result;box.hidden=false;}
@@ -1354,7 +1355,8 @@
       drawn++;
       const row=node('div',null,list,{class:'sc-collection'+(c.count?'':' sc-collection-empty'),role:'button',tabindex:'0','data-depth':String(depth),'data-id':c.id});
       row.style.setProperty('--sc-depth',String(depth));
-      const open=()=>win.ZoteroPane.collectionsView.selectCollection(Number(c.id));
+      // The tree moves behind a floating panel; the panel follows, and says so.
+      const open=()=>{win.ZoteroPane.collectionsView.selectCollection(Number(c.id));state.scope='collection';scope.value='collection';message(`${c.name} 컬렉션으로 이동했습니다.`);run(load);};
       row.addEventListener('click',event=>{if(event.target.closest('button,input,label'))return;open();});
       row.addEventListener('keydown',event=>{if(event.target!==row)return;if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
       const nameLine=node('div',null,row,{class:'sc-collection-line'});
@@ -1409,6 +1411,7 @@
    if(work.authors?.length)node('p',work.authors.slice(0,4).join(', ')+(work.authors.length>4?` 외 ${work.authors.length-4}명`:''),row,{class:'sc-hit-authors'});
    if(work.inLibrary){node('span','보유 중',row,{class:'sc-hit-owned'});return row;}
    const actions=node('div',null,row,{class:'sc-hit-actions'});
+   if(!work.doi&&!work.inLibrary&&typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 찾기',()=>runtime.Z.ZotPoP.openSearch(win,{title:work.title||'',year:work.year||''}),actions);
    if(work.doi)button('추가',()=>run(async()=>{
     message('가져오는 중… ' + (work.title||work.doi).slice(0,50));
     const saved=await runtime.importWork(work,win);
@@ -1617,6 +1620,7 @@
     }),tools);
     if(!fresh.length&&swept)node('span','새 논문 없음',tools,{class:'sc-watch-quiet'});
     // One chip keeps only the people with something new; a hundred quiet cards hide the ten that matter.
+    if(state.watchFreshOnly&&!fresh.length)state.watchFreshOnly=false; // nothing new: an empty grid would say nothing
     if(fresh.length&&fresh.length<watched.length)button(state.watchFreshOnly?'모두 보기':'새 소식만',()=>{state.watchFreshOnly=!state.watchFreshOnly;refreshWatched();},tools,{'aria-pressed':String(!!state.watchFreshOnly)});
     const manage=button(state.watchManage?'카드로 보기':'목록 관리',()=>{state.watchManage=!state.watchManage;refreshWatched();},tools,{'aria-pressed':String(!!state.watchManage)});
     if(state.watchManage){drawWatchManager(watched,parent);return;}
@@ -1943,7 +1947,9 @@
      const holder=grouped?node('optgroup',null,select,{label:parent}):select;
      for(const o of options){if(grouped&&o.parent!==parent)continue;if(!grouped&&seen.has(o.value))continue;seen.add(o.value);const opt=node('option',null,holder,{value:o.value});opt.textContent=`${o.value} ${o.count}`;if(pick[level]===o.value)opt.selected=true;}
     }
-    if(!options.length)select.disabled=true;
+    // A pick the current scope has no journal for still shows, at zero, so the menus do not lie.
+    if(pick[level]&&!options.some(o=>o.value===pick[level])){const o=node('option',null,select,{value:pick[level]});o.textContent=`${pick[level]} 0`;}
+    if(!options.length&&!pick[level])select.disabled=true;
     select.value=pick[level]||'';
     select.addEventListener('change',()=>{
      const value=select.value;
@@ -2073,7 +2079,7 @@
    fact('library','내 서재',j.papers?`${j.papers}편 · 읽음 ${j.read} · 평균 피인용 ${j.avgCited}${j.span?' · '+(j.span[0]===j.span[1]?j.span[0]:j.span[0]+'–'+j.span[1]):''}`:'없음',{title:'이 서재에서 이 저널의 문헌'});
    if(!j.profile)node('p','OpenAlex 프로필(분야·h-index·오픈액세스)은 백필의 저널 단계에서 채워집니다.',box,{class:'sc-muted sc-fact-note'});
    const actions=bar(box);
-   if(j.papers)button('이 저널 문헌 보기',()=>{state.query=j.venue;state.tab='explore';render();},actions);
+   if(j.papers)button('이 저널 문헌 보기',()=>{state.query=search.value=j.venue;navigate('explore');},actions);
    else if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 이 저널 검색',()=>runtime.Z.ZotPoP.openSearch(win,{venue:j.venue}),actions);
    if(j.abbreviation){
     {const b=button('JCR에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://jcr.clarivate.com/jcr-jp/journal-profile?journal=${encodeURIComponent(j.abbreviation)}&year=${j.year||new Date().getFullYear()-1}`),actions,{title:'Journal Citation Reports의 저널 페이지 · 기관 로그인이 필요합니다'});journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
@@ -2115,7 +2121,7 @@
    if(!commands.hidden)return;
    const editing=e.target?.closest?.('input,textarea,select,[contenteditable=true]');
    if((e.key==='/'&&!editing)||((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='f')){if(!controls.hidden){e.preventDefault();search.focus?.();search.select?.();}}
-   else if(e.key==='Escape'){e.stopPropagation();toggle(false);}
+   else if(e.key==='Escape'){if(e.target?.closest?.('input,textarea')){e.target.blur();return;}e.stopPropagation();toggle(false);}
   };panel.addEventListener('keydown',keyboard);
   if(runtime.Z.Notifier){notifier=runtime.Z.Notifier.registerObserver({notify:()=>{if(disposed||panel.hidden)return;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(()=>run(load),200);}},['item','item-tag','collection','tab'],'style-custom-workbench');}
   const selectionTimer=win.setInterval(()=>{if(!disposed&&!win.closed&&!panel.hidden&&scopeContext()!==observedContext)run(load);},500);
@@ -2130,7 +2136,7 @@
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};
-  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async tab=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;await toggle(true);}};
+  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async tab=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

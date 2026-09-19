@@ -3552,7 +3552,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(!changed)throw new Error("문헌을 먼저 선택하세요.");
       },marks);
       make("menuseparator",null,marks);
-      action("색 지우기",async()=>{await this.setHighlight(this.selected(win),null);},marks);
+      action("색 지우기",async()=>{const n=await this.setHighlight(this.selected(win),null);this.say(win,`${n}개 문헌의 색을 지웠습니다.`);},marks);
       action("라이브러리 저널 지표 채우기",async()=>{
         const items=await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
         const papers=items.filter(item=>this.isRegular(item));
@@ -3592,14 +3592,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       action("인용…",()=>this.citationPanel(win,this.selected(win)),body,"quote");
       action("커스텀 열로 전환",()=>this.useColumns(win),body,"columns");
       action("연구 작업 패널",()=>state.workbench?.toggle(true),body,"panel");
-      action("그래프 · 태그 · 노트 · 주석",()=>state.workbench?.show('explore'),body,"graph");
+      action("관계 그래프 열기",()=>state.workbench?.show('graph'),body,"graph");
       make("menuseparator",null,body);
       action("저장된 지표와 읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();},body,"refresh");
       action("선택한 문헌 인용 수 새로고침",async()=>{
         const result=await this.refreshCitations(this.selected(win),{force:true});
         this.say(win,`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
       },body,"citations");
-      action("인용 수 조회 중지",()=>this.citationJob?.controller.abort(),body,"stop");
+      action("인용 수 조회 중지",()=>{if(!this.citationJob)throw new Error("진행 중인 인용 수 조회가 없습니다.");this.citationJob.controller.abort();this.say(win,"인용 수 조회를 중지했습니다. 지금까지 받은 값은 저장했습니다.");},body,"stop");
       action("첨부파일 종류 판별 (본문 · 보충자료 · 중복 · 다른 논문)",async()=>{
         const chosen=this.selected(win);
         const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
@@ -3622,7 +3622,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const result=await this.refreshPaperSignals(this.selected(win));
         this.say(win,`신호 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · DOI 없음 ${result.unsupported}개 · 조회 오류 ${result.error}개`);
       },body,"signal");
-      action("현재 라이브러리 인용 수 조회·메타데이터 저장",()=>this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID),body,"citations");
+      action("현재 라이브러리 인용 수 조회·메타데이터 저장",async()=>{const r=await this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID);this.say(win,r.cancelled?`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개 · 중지됨`:`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개`);},body,"citations");
       action("선택한 저널 IF를 공식 페이지에서 새로고침",async()=>{
         const result = await this.refreshJournalMetrics(this.selected(win), win.DOMParser);
         this.say(win,`IF 확인 ${result.updated}개 · 조회 실패 ${result.failed}개 · 미등록 저널 ${result.unknown}개. 기존 확인된 값은 유지됩니다.`);

@@ -621,7 +621,6 @@
  "정정·정오표가 게시된 논문입니다.": "A correction or erratum has been published for this paper.",
  "이미 보충자료 {0}개가 있습니다": "It already has {0} supplementary files",
  "식별자가 없어 조회할 수 없습니다": "There is no identifier to look it up by",
- "그래프 · 태그 · 노트 · 주석": "Graph · tags · notes · annotations",
  "저장된 지표와 읽기 기록 새로고침": "Refresh the stored metrics and reading history",
  "주석별 참조 노트 수·역링크 사용": "Enable per-annotation linked-note counts and backlinks",
  "문헌 상세에 주석 직접 표시 사용": "Show annotations directly in the item detail",
@@ -1167,5 +1166,14 @@
  "이 색의 주석이 없습니다. 색 필터가 켜져 있습니다.": "No annotations in this colour. A colour filter is on.",
  "색 필터 해제": "Clear the colour filter",
  "{0} · {1}개 · 다시 눌러 색 필터 해제": "{0} · {1} · press again to clear the colour filter",
- "이 태그만": "Only this tag"
+ "이 태그만": "Only this tag",
+ "{0} 컬렉션으로 이동했습니다.": "Moved to the {0} collection.",
+ "ZotPoP에서 찾기": "Find in ZotPoP",
+ "숨겨진 탭입니다. 스타일 편집에서 켜세요.": "This tab is hidden. Turn it on under Appearance.",
+ "{0}개 문헌의 색을 지웠습니다.": "Cleared the colour on {0} papers.",
+ "관계 그래프 열기": "Open the citation map",
+ "진행 중인 인용 수 조회가 없습니다.": "No citation lookup is running.",
+ "인용 수 조회를 중지했습니다. 지금까지 받은 값은 저장했습니다.": "Stopped the citation lookup. What was received is saved.",
+ "인용 수 저장 {0}개 · 확인 불가 {1}개": "Citations saved {0} · unavailable {1}",
+ "인용 수 저장 {0}개 · 확인 불가 {1}개 · 중지됨": "Citations saved {0} · unavailable {1} · stopped"
 }

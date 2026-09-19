@@ -103,6 +103,7 @@ test('all tabs expose functional primary actions and use library service contrac
  await f.bench.show('canvas');f.input('보드 이름','Board');await f.click('보드 만들기');await f.click('선택 문헌 추가');assert.equal(f.runtime.cache.boards[0].nodes[0].itemID,'1');
  await f.bench.show('matrix');await f.click('CSV 복사');assert.ok(f.calls.find(c=>c[0]==='copy'&&c[1].includes('Paper Alpha')));
  await f.bench.show('collections');await f.click('컬렉션 열기');assert.ok(f.calls.find(c=>c[0]==='collection'&&c[1]===4));
+ assert.equal(f.bench.state.scope,'collection','the panel follows the tree into the collection');f.bench.state.scope='library';
  await f.bench.show('journals');await f.click('공식 값 새로고침');assert.ok(f.calls.find(c=>c[0]==='journal'));
  // The easyScholar grade lookup appears only once a key exists; without one the
  // tab used to offer a button whose only possible outcome was an error.
