@@ -78,6 +78,14 @@
    ]
   },
   {
+   "ko": "연구 작업 패널",
+   "n": 3,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "보유 문헌",
    "n": 3,
    "files": [
@@ -343,14 +351,6 @@
    "n": 2,
    "files": [
     "src/runtime.js"
-   ]
-  },
-  {
-   "ko": "연구 작업 패널",
-   "n": 2,
-   "files": [
-    "src/runtime.js",
-    "src/workbench.js"
    ]
   },
   {
@@ -4233,6 +4233,34 @@
   },
   {
    "ko": "화면 밀도 전환",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이 창에서는 탭을 열 수 없습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "탭으로 열기 / 창으로 띄우기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "창으로 띄우기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "탭으로 열기",
    "n": 1,
    "files": [
     "src/workbench.js"

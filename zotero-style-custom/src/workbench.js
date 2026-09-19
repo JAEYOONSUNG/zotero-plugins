@@ -120,6 +120,8 @@
    search:[['circle',{cx:7.25,cy:7.25,r:4.25}],['line',{x1:10.5,y1:10.5,x2:13.5,y2:13.5}]],
    close:[['line',{x1:4,y1:4,x2:12,y2:12}],['line',{x1:12,y1:4,x2:4,y2:12}]],
    maximize:[['path',{d:'M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4'}]],
+   tab:[['rect',{x:2.6,y:4.6,width:10.8,height:8.4,rx:1.2}],['path',{d:'M2.6 7.4h10.8M5.2 4.6V3h4.4v1.6'}]],
+   window:[['rect',{x:2.8,y:3,width:10.4,height:10,rx:1.2}],['path',{d:'M2.8 6h10.4'}],['circle',{cx:4.6,cy:4.5,r:.5}]],
    restore:[['path',{d:'M13 7H9V3M9 7l4-4M3 9h4v4M7 9l-4 4'}]],
    // One drawn shape per tab. Nineteen identical lines of text is a list you
    // read; nineteen distinct silhouettes is a list you recognise, which is the
@@ -235,7 +237,42 @@
      laptop that leaves the list in a letterbox. One press fills the window
      edge to edge, the next puts it back where it was, and the choice is
      remembered. Double-clicking the title bar does the same, as windows do. */
-  const maximize=button('',()=>setMaximized(panel.dataset.maximized!=='true'),headerActions,{'aria-label':'전체 화면 전환',class:'sc-icon-button','aria-pressed':'false'});
+  /* The panel can live in a Zotero tab instead of floating over the
+     window: the same element, moved into the tab's container, with the
+     tab bar as its handle. The user asked for this from the start; it needs
+     only Zotero_Tabs.add, which the main window has and the tests mock.
+     Closing the tab hides the panel; opening the panel again selects the
+     tab; the choice is remembered, so the next open goes straight to a tab. */
+  let tabID=null,closingSelf=false;
+  const canDock=()=>!!(win.Zotero_Tabs&&typeof win.Zotero_Tabs.add==='function');
+  function moveBack(){if(panel.parentNode!==doc.documentElement)doc.documentElement.appendChild(panel);delete panel.dataset.docked;syncDock();}
+  function dock({save=true}={}){
+   if(tabID||!canDock())return false;
+   let added;
+   try{added=win.Zotero_Tabs.add({type:'style-custom-workbench',title:T('연구 작업 패널'),data:{icon:'journalArticle'},select:true,
+    onClose:()=>{tabID=null;moveBack();if(!closingSelf&&!panel.hidden)toggle(false);}});}
+   catch(error){runtime.Z.logError?.(error);return false;}
+   if(!added||!added.container){return false;}
+   tabID=added.id;
+   added.container.appendChild(panel);
+   panel.dataset.docked='tab';
+   panel.hidden=false;
+   syncDock();
+   if(save)saveUI({docked:true});
+   return true;
+  }
+  function undock({save=true}={}){
+   if(!tabID)return;
+   const id=tabID;tabID=null;closingSelf=true;
+   moveBack();
+   try{win.Zotero_Tabs.close(id);}catch(error){runtime.Z.logError?.(error);}
+   closingSelf=false;
+   if(save)saveUI({docked:false});
+  }
+  const dockButton=button('',()=>{if(tabID)undock();else if(!dock())message('이 창에서는 탭을 열 수 없습니다.',true);},headerActions,{'aria-label':'탭으로 열기 / 창으로 띄우기',class:'sc-icon-button sc-dock','aria-pressed':'false'});
+  function syncDock(){const docked=!!tabID;dockButton.setAttribute('aria-pressed',String(docked));dockButton.title=docked?'창으로 띄우기':'탭으로 열기';dockButton.replaceChildren();setIcon(dockButton,docked?'window':'tab');dockButton.hidden=!canDock();}
+  syncDock();
+  const maximize=button('',()=>setMaximized(panel.dataset.maximized!=='true'),headerActions,{'aria-label':'전체 화면 전환',class:'sc-icon-button sc-maximize','aria-pressed':'false'});
   function setMaximized(on,{save=true}={}){
    panel.dataset.maximized=String(!!on);
    maximize.setAttribute('aria-pressed',String(!!on));
@@ -414,7 +451,11 @@
    type.replaceChildren();node('option','모든 유형',type,{value:''});for(const t of [...new Set(state.items.map(i=>i.itemType))].filter(Boolean).sort())node('option',kindLabel(t),type,{value:t});type.value=state.type;drawKindChips();
    message(state.items.length+'개 문헌');await render();
   }
-  async function toggle(show){const wasHidden=panel.hidden,open=show===undefined?wasHidden:!!show;if(open&&wasHidden)returnFocus=doc.activeElement;panel.hidden=!open;if(open){state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));await load();if(!disposed&&!panel.hidden)(controls.hidden?body:search).focus?.();}else{navigationEpoch++;closeCommands(false);epoch++;loadEpoch++;aiEpoch++;clear();if(returnFocus?.isConnected&&!win.closed)returnFocus.focus?.();returnFocus=null;}}
+  async function toggle(show){const wasHidden=panel.hidden,open=show===undefined?wasHidden:!!show;
+   if(open&&wasHidden){syncDock();if(!tabID&&runtime.cache.workbenchUI?.docked===true&&canDock())dock({save:false});}
+   if(tabID&&open){try{win.Zotero_Tabs.select(tabID);}catch(error){runtime.Z.logError?.(error);}}
+   if(tabID&&!open){const id=tabID;tabID=null;closingSelf=true;moveBack();try{win.Zotero_Tabs.close(id);}catch(error){runtime.Z.logError?.(error);}closingSelf=false;}
+   if(open&&wasHidden)returnFocus=doc.activeElement;panel.hidden=!open;if(open){state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));await load();if(!disposed&&!panel.hidden)(controls.hidden?body:search).focus?.();}else{navigationEpoch++;closeCommands(false);epoch++;loadEpoch++;aiEpoch++;clear();if(returnFocus?.isConnected&&!win.closed)returnFocus.focus?.();returnFocus=null;}}
   async function paperList(items){if(!items.length){empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');return;}
    const pageSize=setting('explorePageSize',100),key=JSON.stringify([state.tab,state.scope,items.map(i=>i.id)]);
    if(state.pageKey!==key){state.pageKey=key;state.pageIndex=0;}
@@ -1860,6 +1901,7 @@
   if(runtime.Z.Notifier){notifier=runtime.Z.Notifier.registerObserver({notify:()=>{if(disposed||panel.hidden)return;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(()=>run(load),200);}},['item','item-tag','collection','tab'],'style-custom-workbench');}
   const selectionTimer=win.setInterval(()=>{if(!disposed&&!win.closed&&!panel.hidden&&scopeContext()!==observedContext)run(load);},500);
   function destroy(){if(disposed)return;
+   if(tabID){const id=tabID;tabID=null;closingSelf=true;moveBack();try{win.Zotero_Tabs.close(id);}catch(_){}closingSelf=false;}
    // An edit typed a moment ago is still waiting out its timer. Closing the
    // panel must write it, not discard it.
    for(const flush of memoFields)Promise.resolve(flush()).catch(error=>runtime.Z.logError?.(error));

@@ -1,5 +1,5 @@
 {
- "version": "0.44.3",
+ "version": "0.45.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1651,6 +1651,26 @@
    ],
    "status": "verified",
    "review": "A setting replaces the outline; the output language and the no-invention rule are always appended. A chip on the followed list keeps only the people with a new paper, a new patent or a move."
+  },
+  {
+   "round": "R57",
+   "title": "패널을 Zotero 탭에 넣기",
+   "gap": "The panel floated over the window; the user asked whether it could sit in a tab like a reader.",
+   "entryPoint": "패널 머리줄의 탭 버튼",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "function dock({save=true}={})"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the panel can live in a Zotero tab, remembers it, and comes back when the tab closes"
+    }
+   ],
+   "status": "verified",
+   "review": "Zotero_Tabs.add gives a tab and a container; the same panel element moves into it and fills it, with the tab bar as its handle. Closing the tab hides the panel, opening the panel selects the tab, and the choice is remembered so the next open goes straight to a tab. The float button brings it back over the window."
   }
  ],
  "introducedInVersion": "0.6.0"

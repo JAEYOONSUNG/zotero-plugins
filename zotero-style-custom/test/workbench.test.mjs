@@ -447,7 +447,7 @@ test('following an author adds them to the panel and surfaces what is new next t
 test('window chrome is icons, but every one still says what it does',async()=>{
  const f=fixture();await f.bench.toggle(true);
  const chrome=[...f.bench.panel.querySelectorAll('.sc-header-actions button')];
- assert.equal(chrome.length,4);
+ assert.equal(chrome.length,5);
  for(const button of chrome){
   assert.ok(button.textContent.trim().length<=2,'chrome should be a glyph, not a sentence: '+button.textContent);
   // A glyph with no name is unusable by anyone who cannot see it.
@@ -480,7 +480,7 @@ test('a journal is listed once, and its impact factor is stated once',async()=>{
 test('chrome icons share one grid and one stroke, so they read as a set',async()=>{
  const f=fixture();await f.bench.toggle(true);
  const icons=[...f.bench.panel.querySelectorAll('.sc-header-actions button svg')];
- assert.equal(icons.length,4,'each chrome button should carry a drawn icon, not a text glyph');
+ assert.equal(icons.length,5,'each chrome button should carry a drawn icon, not a text glyph');
  for(const svg of icons){
   // Unicode glyphs come from different blocks and land at different optical
   // sizes; a shared viewBox and stroke is what makes them look like one set.
@@ -512,7 +512,7 @@ test('the toolbar button survives a document that rejects innerHTML on SVG',asyn
   assert.ok(toolbarButton,'attach must reach the toolbar button');
   assert.match(toolbarButton.getAttribute('image'),/style-custom-toolbar\.svg$/);
   // The header icons must still be drawn, not silently skipped.
-  assert.equal(f.bench.panel.querySelectorAll('.sc-header-actions button svg').length,4);
+  assert.equal(f.bench.panel.querySelectorAll('.sc-header-actions button svg').length,5);
   f.bench.destroy();
  } finally {
   if(original)Object.defineProperty(proto,'innerHTML',original);
@@ -989,5 +989,41 @@ test('one chip keeps only the followed authors with something new',async()=>{
  assert.deepEqual(names(),['Ada','Cy'],'news or a move counts; a quiet card does not');
  await f.click('모두 보기');
  assert.deepEqual(names(),['Ada','Bo','Cy']);
+ f.bench.destroy();
+});
+
+test('the panel can live in a Zotero tab, remembers it, and comes back when the tab closes',async()=>{
+ const f=fixture();
+ const tabs=[];let onClose=null;
+ f.win.Zotero_Tabs={add(spec){const container=f.doc.createElement('div');container.className='tab-container';tabs.push(['add',spec.type,spec.title]);onClose=spec.onClose;return {id:'tab-9',container};},select(id){tabs.push(['select',id]);},close(id){tabs.push(['close',id]);const fn=onClose;onClose=null;fn?.();}};
+ await f.bench.show('explore');
+ const dockButton=f.bench.panel.querySelector('.sc-dock');
+ assert.equal(dockButton.hidden,false,'offered when the window has tabs');
+ dockButton.dispatchEvent(new f.win.Event('click',{bubbles:true}));
+ assert.deepEqual(tabs[0].slice(0,2),['add','style-custom-workbench']);
+ assert.equal(f.bench.panel.parentNode.className,'tab-container','the same element, moved into the tab');
+ assert.equal(f.bench.panel.dataset.docked,'tab');
+ assert.equal(f.runtime.cache.workbenchUI.docked,true,'remembered');
+ // Opening again while docked selects the tab; closing the panel closes the tab.
+ await f.bench.show('graph');
+ assert.ok(tabs.some(t=>t[0]==='select'&&t[1]==='tab-9'));
+ await f.bench.toggle(false);
+ assert.ok(tabs.some(t=>t[0]==='close'&&t[1]==='tab-9'));
+ assert.equal(f.bench.panel.parentNode,f.doc.documentElement,'back over the window');
+ assert.equal(f.bench.panel.hidden,true);
+ // The next open goes straight to a tab, because that is what was chosen.
+ await f.bench.show('explore');
+ assert.equal(f.bench.panel.dataset.docked,'tab');
+ assert.equal(tabs.filter(t=>t[0]==='add').length,2);
+ // The user closes the tab from the tab bar: the panel hides and waits.
+ f.win.Zotero_Tabs.close('tab-9');
+ assert.equal(f.bench.panel.hidden,true);
+ assert.equal(f.bench.panel.dataset.docked,undefined);
+ // Floating again on request, and that is remembered too.
+ await f.bench.show('explore');
+ f.bench.panel.querySelector('.sc-dock').dispatchEvent(new f.win.Event('click',{bubbles:true}));
+ assert.equal(f.bench.panel.dataset.docked,undefined);
+ assert.equal(f.bench.panel.hidden,false,'still open, floating');
+ assert.equal(f.runtime.cache.workbenchUI.docked,false);
  f.bench.destroy();
 });
