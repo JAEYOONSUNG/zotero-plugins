@@ -122,6 +122,37 @@
       return `${tabs.length} tabs, ${errorsBefore.length} errors`;
     }));
 
+    results.push(await attempt('every safe button on every tab survives a press', async () => {
+      /* The real DOM, not the fixture: XUL quirks, missing globals and stale
+         handlers show up here. Buttons that reach the network, write to the
+         library or let go of something are skipped by their verbs; the rest
+         are pressed once, and a status line naming a JavaScript error fails. */
+      const state = runtime.windows.get(win);
+      const bench = state && state.workbench;
+      if (!bench) throw new Error('workbench not attached');
+      const skip = /가져오기|조회|새로고침|확인|함께 읽기|검색|내려받기|채우기|저장|복사|열기|이동|해제|병합|휴지통|초기화|복원|삭제|중지|등록|전환|만들기|추가|연결|적용|다시|찾기|가리기|표시|보기|JCR|OpenAlex|ZotPoP|번역|요약|제안|정리|옮기기|지우기|되돌리기/;
+      const jsError = /TypeError|ReferenceError|RangeError|is not a function|Cannot read|Cannot set|undefined|NaN/;
+      const tabs = (root.CustomStyleWorkbench && root.CustomStyleWorkbench.TABS || []).map(row => row[0]);
+      const broken = []; let pressed = 0;
+      for (const tab of tabs) {
+        try { await bench.show(tab); } catch (error) { broken.push(tab + ' · show → ' + (error.message || error)); continue; }
+        const seen = new Set();
+        const buttons = [...bench.panel.querySelectorAll('.sc-body button')].filter(b => !b.disabled && !b.hidden && b.textContent.trim() && !skip.test(b.textContent) && !seen.has(b.textContent.trim()));
+        for (const b of buttons.slice(0, 12)) {
+          const label = b.textContent.trim(); seen.add(label);
+          if (!b.isConnected) continue;
+          try { b.click(); pressed++; } catch (error) { broken.push(`${tab} · ${label} → ${error.message || error}`); continue; }
+          await new Promise(resolve => win.setTimeout(resolve, 60));
+          const status = bench.panel.querySelector('.sc-status');
+          if (status && status.dataset.error === 'true' && jsError.test(status.textContent)) broken.push(`${tab} · ${label} → ${status.textContent.slice(0, 80)}`);
+          if (bench.state.tab !== tab) { try { await bench.show(tab); } catch (ignored) {} }
+        }
+      }
+      try { await bench.toggle(false); } catch (ignored) {}
+      if (broken.length) throw new Error(broken.join(' | '));
+      return `${pressed} buttons pressed across ${tabs.length} tabs, none threw`;
+    }));
+
     results.push(await attempt('the panel can sit in a Zotero tab and fill it', async () => {
       const state = runtime.windows.get(win);
       const bench = state && state.workbench;

@@ -1106,3 +1106,38 @@ test('a selection scope with nothing selected falls back to the library, and the
  assert.ok(!f.findButton('전체 목록으로'),'the way back is gone once the list is whole');
  f.bench.destroy();
 });
+
+test('every button on every tab survives a press without throwing, and the tab still draws',async()=>{
+ /* The user asked for the things that cannot be clicked. In this fixture the
+    library and the network are stubs, so nearly every button can be pressed;
+    only the ones that let go of something are skipped. A handler that
+    throws surfaces as a status line naming a JavaScript error, which is the
+    one message a user must never read. */
+ const f=fixture();
+ f.runtime.journalIdentity={identify:()=>({quartile:1,abbreviation:'X',issns:[],impactFactor:1,year:2025}),colours:()=>({fill:'#eee',ink:'#333',edge:'#999'}),registryRanked:()=>[],registryRank:()=>null};
+ const skip=/휴지통|정말|해제 \(|병합|삭제/;
+ const jsError=/TypeError|ReferenceError|RangeError|is not a function|Cannot read|Cannot set|undefined|null|NaN/;
+ const pressed=[],broken=[];
+ const tabs=f.bench.constructor?.TABS||[['explore'],['recent'],['related'],['authors'],['collections'],['journals'],['reading'],['notes'],['annotations'],['attachments'],['backlinks'],['tags'],['graph'],['canvas'],['matrix'],['tabs'],['views'],['assist'],['appearance']];
+ for(const [tab] of tabs){
+  await f.bench.show(tab);await f.bench.load();
+  const seen=new Set();
+  for(let round=0;round<3;round++){
+   const buttons=[...f.body().querySelectorAll('button')].filter(b=>!b.disabled&&!b.hidden&&b.textContent.trim()&&!skip.test(b.textContent)&&!seen.has(b.textContent.trim()));
+   if(!buttons.length)break;
+   for(const b of buttons){
+    const label=b.textContent.trim();seen.add(label);
+    if(!b.isConnected)continue;
+    b.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+    pressed.push(tab+': '+label);
+    const status=f.bench.panel.querySelector('.sc-status');
+    if(status&&status.dataset.error==='true'&&jsError.test(status.textContent))broken.push(`${tab} · ${label} → ${status.textContent}`);
+    if(f.bench.state.tab!==tab){await f.bench.show(tab);await f.bench.load();}
+   }
+  }
+ }
+ assert.deepEqual(broken,[],'a press must never surface a JavaScript error');
+ assert.deepEqual(f.errors,[],'nothing reached logError');
+ assert.ok(pressed.length>25,'the sweep pressed '+pressed.length+' buttons');
+ f.bench.destroy();
+});
