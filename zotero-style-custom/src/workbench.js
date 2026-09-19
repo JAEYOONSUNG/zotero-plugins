@@ -489,7 +489,7 @@
    node('span',[item.year,item.venue,item.authors].filter(Boolean).join(' · '),meta,{class:'sc-paper-meta-text'});
    const metrics=node('div',null,heading,{class:'sc-metrics'});
    metric(metrics,{icon:'impact',name:'impact',text:item.impactFactor??'',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
-   metric(metrics,{icon:'citations',name:'citations',text:item.citations??'',label:'인용 수 · '+(item.citationSource||'출처 미확인')});
+   metric(metrics,{icon:'citations',name:'citations',text:item.citations??'',label:`인용 수 · ${item.citationSource||T('출처 미확인')}`});
    // Stars only once a paper has been rated: five hollow stars on every row were noise.
    if(item.rating){const stars=node('span',null,metrics,{class:'sc-metric sc-stars',title:`별점 ${item.rating}/5`});stars.dataset.metric='rating';node('span','\u2605'.repeat(item.rating)+'\u2606'.repeat(5-item.rating),stars,{class:'sc-metric-value'});}
    metric(metrics,{icon:'time',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
@@ -540,8 +540,9 @@
 
   function drawGraph(){
    const b=bar();
+   const modes=node('div',null,b,{class:'sc-segmented',role:'group','aria-label':'그래프 종류'});
    for(const[mode,label]of [['citations','인용 관계'],['related','관련 문헌'],['tags','공통 태그'],['authors','공통 저자']])
-    button(label,()=>{state.graphMode=mode;render();},b,{'aria-pressed':state.graphMode===mode});
+    button(label,()=>{state.graphMode=mode;render();},modes,{'aria-pressed':state.graphMode===mode});
    if(state.graphMode==='citations')return drawCitationGraph(b);
    return drawLegacyGraph(b);
   }
@@ -670,7 +671,7 @@
     label.setAttribute('x',r+4);label.setAttribute('y','3.5');
     label.setAttribute('class','sc-graph-label');
     label.textContent=n.labelText;
-    if(n.kind==='external')label.setAttribute('fill','var(--sc-orange, #B8823C)');
+    if(n.kind==='external')label.dataset.kind='external';
     // A label is drawn when it fits, not when a number clears a threshold:
     // forty of them piled up in the middle is worse than showing none.
     if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('opacity','0');
@@ -1128,6 +1129,7 @@
   }
   function refreshReading(){
    if(disposed||panel.hidden||state.tab!=='reading')return;
+   let drewStrip=false;
    const list=body.querySelector('[data-reading-progress]');if(!list)return;list.replaceChildren();
    for(const item of rows()){
     const ref=runtime.Z.Items.get(Number(item.id));if(!ref)continue;
@@ -1146,15 +1148,16 @@
     const cells=node('div',null,c,{class:'sc-page-strip',role:'group','aria-label':`${item.title} 페이지별 읽은 시간`});
     const most=Math.max(1,...Object.values(p.pages||{}).map(Number).filter(Number.isFinite));
     for(let n=start;n<Math.min(total,start+rangeSize);n++){
+     if((n-start)%20===0)node('span',String(n+1),cells,{class:'sc-page-row','aria-hidden':'true'});
      const sec=Number(p.pages[n])||0;
      const level=!sec?0:sec>=most*0.75?4:sec>=most*0.4?3:sec>=most*0.15?2:1;
      const cell=node('button','',cells,{class:'sc-page-cell',type:'button','data-level':String(level),'aria-label':`${n+1}페이지, ${Math.round(sec)}초`,title:`${n+1}페이지 · ${Math.round(sec)}초`});
      cell.addEventListener('click',()=>run(()=>{if(!p.attachmentID)throw new Error('기록된 첨부파일 정보를 찾지 못했습니다.');return library.openItem(p.attachmentID,{pageIndex:n});}));
      cell.disabled=!p.attachmentID;
     }
-    const legend=node('div',null,c,{class:'sc-page-legend','aria-hidden':'true'});
-    node('span','적게',legend);for(const level of [0,1,2,3,4])node('span','',legend,{class:'sc-page-cell sc-page-key','data-level':String(level)});node('span','많이',legend);
+    drewStrip=true;
    }
+   if(drewStrip){const legend=node('div',null,list,{class:'sc-page-legend','aria-hidden':'true'});node('span','적게',legend);for(const level of [0,1,2,3,4])node('span','',legend,{class:'sc-page-cell sc-page-key','data-level':String(level)});node('span','많이',legend);}
   }
   function drawReading(){const b=bar();for(const theme of ['light','dark','sepia'])button(({light:'밝은 PDF',dark:'어두운 PDF',sepia:'세피아 PDF'})[theme],()=>reader.applyTheme(win,theme),b);
    button('리더 모양 원래대로',async()=>{await reader.resetAppearance(win);render();},b);
@@ -1394,6 +1397,7 @@
     // hold in mind than a row of statistics, which is the whole point of
     // following people rather than papers.
     const head=node('div',null,list,{class:'sc-person'});
+    list.scrollIntoView?.({block:'start',behavior:'smooth'});
     const face=node('div',null,head,{class:'sc-face'});
     node('span',initials(profile?.name||person.name),face,{class:'sc-face-text'});
     const who=node('div',null,head,{class:'sc-person-who'});
@@ -1405,7 +1409,7 @@
     }
     if(profile?.topics?.length){
      const chips=node('div',null,who,{class:'sc-chips'});
-     for(const topic of profile.topics)node('span',topic.name+(topic.count?` ${topic.count}`:''),chips,{class:'sc-chip'});
+     for(const topic of profile.topics){const chip=node('span',topic.name,chips,{class:'sc-chip'});if(topic.count)node('b',String(topic.count),chip);}
     }
     // A portrait is a nice-to-have on a metered budget, so it is fetched only
     // for the author actually being looked at, and remembered either way.
@@ -1445,7 +1449,8 @@
      }
     }
     if(stored&&stored.moved&&stored.moved.to){
-     node('p',`소속: ${stored.moved.from||'?'} → ${stored.moved.to} (${stored.moved.at||''} 확인)`,list,{class:'sc-muted'});
+     const callout=node('div',null,list,{class:'sc-watch-callout'});setIcon(callout,'backlinks');node('span',stored.moved.since?`소속 이동 · ${stored.moved.from||'?'} → ${stored.moved.to} · ${stored.moved.since}년부터 · ${stored.moved.at||''} 확인`:`소속 이동 · ${stored.moved.from||'?'} → ${stored.moved.to} · ${stored.moved.at||''} 확인`,callout);
+     head.insertAdjacentElement('afterend',callout);
     }
     if(stored&&stored.patents&&stored.patents.length){
      /* A filing is the earliest public sign of where a lab is heading, often
@@ -1455,7 +1460,7 @@
      for(const patent of stored.patents){
       const c=node('div',null,box,{class:'sc-hit sc-patent'+(patent.fresh?' sc-patent-fresh':'')});
       const head=node('p',null,c,{class:'sc-hit-title'});
-      if(patent.fresh)node('span','NEW',head,{class:'sc-preprint',title:'마지막 확인 이후 새로 보인 특허'});
+      if(patent.fresh)node('span','새',head,{class:'sc-tag sc-new',title:'마지막 확인 이후 새로 보인 특허'});
       node('span',patent.title,head);
       node('p',[patent.id,patent.granted?`등록 ${patent.granted}`:patent.filed?`출원 ${patent.filed}`:'',patent.applicants?.[0]||'',patent.status||''].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
       const actions=node('div',null,c,{class:'sc-hit-actions'});
@@ -1503,7 +1508,8 @@
     const swept=watched.some(person=>person.sweptAt);
     const fresh=watched.filter(person=>person.news?.length);
     const head=node('div',null,parent,{class:'sc-watch-head'});
-    node('h3',`관심 저자 ${watched.length}`,head,{class:'sc-hit-group'});
+    const heading=node('h3',`관심 저자 ${watched.length}`,head,{class:'sc-hit-group'});
+    if(fresh.length)node('span',` · 새 논문 ${fresh.reduce((n,p)=>n+p.news.length,0)}편 · ${fresh.length}명`,heading,{class:'sc-watch-count'});
     const tools=node('div',null,head,{class:'sc-watch-tools'});
     button(swept?'새 논문 다시 확인':'새 논문 한 번에 확인',()=>run(async()=>{
      message(`관심 저자 ${watched.length}명의 새 논문을 확인하는 중…`);
@@ -1518,8 +1524,7 @@
        : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`,
       result.budgetGone);
     }),tools);
-    if(fresh.length)node('span',`새 논문 ${fresh.reduce((n,p)=>n+p.news.length,0)}편 · ${fresh.length}명`,tools,{class:'sc-watch-count'});
-    else if(swept)node('span','새 논문 없음',tools,{class:'sc-watch-quiet'});
+    if(!fresh.length&&swept)node('span','새 논문 없음',tools,{class:'sc-watch-quiet'});
     // One chip keeps only the people with something new; a hundred quiet cards hide the ten that matter.
     if(fresh.length&&fresh.length<watched.length)button(state.watchFreshOnly?'모두 보기':'새 소식만',()=>{state.watchFreshOnly=!state.watchFreshOnly;refreshWatched();},tools,{'aria-pressed':String(!!state.watchFreshOnly)});
     const manage=button(state.watchManage?'카드로 보기':'목록 관리',()=>{state.watchManage=!state.watchManage;refreshWatched();},tools,{'aria-pressed':String(!!state.watchManage)});
@@ -1560,33 +1565,49 @@
       place, sort by who has news or who was checked longest ago, let one go
       with a click, copy the whole list out. A hundred cards are for
       noticing; this is for tending. */
+   /* The followed list as a table to tend. The toolbar is built once and
+      only the rows are redrawn as the reader types, so Korean composition is
+      not cut off mid-syllable by a rebuilt input. */
    function drawWatchManager(watched,parent){
+    const tools=bar(parent);
+    const search=node('input',null,tools,{type:'search',placeholder:'이름·소속으로 찾기','aria-label':'관심 저자 찾기'});search.value=state.watchQuery||'';
+    const pick=node('select',null,tools,{'aria-label':'관심 저자 정렬'});
+    for(const [value,label] of [['news','새 소식 순'],['name','이름순'],['place','소속순'],['checked','오래 안 본 순'],['added','최근 등록 순']]){const o=node('option',label,pick,{value});if((state.watchSort||'news')===value)o.selected=true;}
+    const count=node('span','',tools,{class:'sc-muted'});
+    button('목록 복사',()=>copy(watched.map(p=>[p.name,p.institution||'',p.id].join('\t')).join('\n')),tools,{title:'이름 · 소속 · OpenAlex id, 탭으로 구분'});
+    const host=node('div',null,parent,{class:'sc-watch-table-host'});
+    const redraw=()=>{host.replaceChildren();drawWatchTable(watched,host,count);};
+    search.addEventListener('input',()=>{state.watchQuery=search.value;redraw();});
+    search.addEventListener('compositionend',()=>{state.watchQuery=search.value;redraw();});
+    pick.addEventListener('change',()=>{state.watchSort=pick.value;redraw();});
+    redraw();
+   }
+   function drawWatchTable(watched,host,count){
     const q=String(state.watchQuery||'').toLowerCase();
     const sort=state.watchSort||'news';
     const order={news:(a,b)=>((b.news?.length||0)+(b.newPatents?.length||0))-((a.news?.length||0)+(a.newPatents?.length||0))||a.name.localeCompare(b.name),name:(a,b)=>a.name.localeCompare(b.name),place:(a,b)=>String(a.institution||'').localeCompare(String(b.institution||''))||a.name.localeCompare(b.name),checked:(a,b)=>String(a.sweptAt||'').localeCompare(String(b.sweptAt||''))||a.name.localeCompare(b.name),added:(a,b)=>String(b.checkedAt||'').localeCompare(String(a.checkedAt||''))}[sort];
     const shown=watched.filter(p=>!q||`${p.name} ${p.institution||''} ${p.institutionGiven||''}`.toLowerCase().includes(q)).sort(order);
-    const tools=bar(parent);
-    const search=node('input',null,tools,{type:'search',placeholder:'이름·소속으로 찾기','aria-label':'관심 저자 찾기'});search.value=state.watchQuery||'';
-    search.addEventListener('input',()=>{state.watchQuery=search.value;refreshWatched();const again=watchArea.querySelector('input[type=search]');again?.focus?.();if(again)again.setSelectionRange?.(again.value.length,again.value.length);});
-    const pick=node('select',null,tools,{'aria-label':'관심 저자 정렬'});
-    for(const [value,label] of [['news','새 소식 순'],['name','이름순'],['place','소속순'],['checked','오래 안 본 순'],['added','최근 등록 순']]){const o=node('option',label,pick,{value});if(sort===value)o.selected=true;}
-    pick.addEventListener('change',()=>{state.watchSort=pick.value;refreshWatched();});
-    node('span',`${shown.length}/${watched.length}명`,tools,{class:'sc-muted'});
-    button('목록 복사',()=>copy(watched.map(p=>[p.name,p.institution||'',p.id].join('\t')).join('\n')),tools,{title:'이름 · 소속 · OpenAlex id, 탭으로 구분'});
-    const table=node('table',null,parent,{class:'sc-matrix sc-watch-table'});
-    const head=node('tr',null,table);for(const label of ['이름','소속','마지막 확인','새 논문','특허',''])node('th',label,head,{scope:'col'});
+    count.textContent=`${shown.length}/${watched.length}`+T('명');
+    const table=node('table',null,host,{class:'sc-watch-table'});
+    const thead=node('thead',null,table);const head=node('tr',null,thead);
+    for(const [label,cls] of [['이름',''],['소속',''],['마지막 확인','sc-col-date'],['새 논문','sc-col-n'],['특허','sc-col-n'],['','sc-col-act']])node('th',label,head,{scope:'col',class:cls});
+    const tbody=node('tbody',null,table);
     for(const person of shown){
-     const tr=node('tr',null,table);
+     const tr=node('tr',null,tbody);
      const nameCell=node('td',null,tr);const open=node('button',person.name,nameCell,{class:'sc-journal-name',type:'button',title:'상세 보기'});open.addEventListener('click',()=>run(()=>show(person)));
-     const place=node('td',person.institution||'소속 미확인',tr);if(person.institutionGiven&&person.institutionGiven!==person.institution)place.title=`등록 당시: ${person.institutionGiven}`;
+     const place=node('td',person.institution||'소속 미확인',tr,{title:person.institution||''});if(person.institutionGiven&&person.institutionGiven!==person.institution)place.title=`등록 당시: ${person.institutionGiven}`;
      if(person.moved&&person.moved.to)place.classList.add('sc-watch-moved');
-     node('td',person.sweptAt?person.sweptAt.slice(0,10):'아직 없음',tr);
-     node('td',String(person.news?.length||0),tr,{class:(person.news?.length?'sc-watch-count':'')});
-     node('td',person.patents?.length?String(person.patents.length)+(person.newPatents?.length?` (+${person.newPatents.length})`:''):'—',tr);
-     const act=node('td',null,tr);
-     button('해제',()=>run(async()=>{await runtime.unwatchAuthor(person.id);message(`${person.name}을(를) 관심 저자에서 뺐습니다.`);refreshWatched();}),act,{title:'관심 저자에서 빼기'});
+     node('td',person.sweptAt?person.sweptAt.slice(0,10):'아직 없음',tr,{class:'sc-col-date'});
+     const news=person.news?.length||0;node('td',news?String(news):'—',tr,{class:'sc-col-n'+(news?' sc-watch-count':' sc-none')});
+     const patents=person.patents?.length||0;node('td',patents?String(patents)+(person.newPatents?.length?` (+${person.newPatents.length})`:''):'—',tr,{class:'sc-col-n'+(patents?'':' sc-none')});
+     const act=node('td',null,tr,{class:'sc-col-act'});
+     // Letting someone go drops their baseline and news: the first press only arms the button.
+     const off=button('해제',()=>{
+      if(!off.dataset.armed){off.dataset.armed='1';off.textContent=T('정말 해제');win.setTimeout(()=>{if(off.isConnected){delete off.dataset.armed;off.textContent=T('해제');}},3000);return;}
+      return run(async()=>{await runtime.unwatchAuthor(person.id);message(`${person.name}을(를) 관심 저자에서 뺐습니다.`);refreshWatched();});
+     },act,{title:'관심 저자에서 빼기',class:'sc-unwatch'});
     }
-    if(!shown.length)node('p','찾는 저자가 없습니다.',parent,{class:'sc-muted'});
+    if(!shown.length)node('p','찾는 저자가 없습니다.',host,{class:'sc-muted'});
    }
    function refreshWatched(){
     watchArea.replaceChildren();
@@ -1860,7 +1881,7 @@
    const title=node('button',j.venue,nameCell,{class:'sc-journal-name',type:'button','aria-expanded':String(open),title:'프로필 펼치기·접기'});
    title.addEventListener('click',()=>{if(journalView.open.has(j.venue))journalView.open.delete(j.venue);else journalView.open.add(j.venue);journalView.redraw?.();});
    const identity=runtime.journalIdentity;
-   if(j.id&&identity?.colours){try{const tone=identity.colours(j.id,{dark:darkScheme()});const ink=tone.badge||tone.ink;if(ink){title.style.color=ink;title.style.fontWeight='600';}}catch(_){}}
+   if(j.id&&identity?.colours){try{const tone=identity.colours(j.id,{dark:darkScheme()});const ink=tone.ink;if(ink){title.style.color=ink;title.style.fontWeight='600';}}catch(_){}}
    const qCell=node('td',null,tr,{class:'sc-col-q'});
    if(j.quartile)node('span',`Q${j.quartile}`,qCell,{class:'sc-quartile','data-q':String(j.quartile),title:`JCR 사분위 Q${j.quartile}`});
    node('td',j.abbreviation||'',tr,{class:'sc-col-abbr sc-hit-meta',title:j.abbreviation||''});
@@ -1877,7 +1898,7 @@
    if(j.impact==null)figure.classList.add('sc-journal-if-none');
    else figure.dataset.tone=j.impact>=10?'top':j.impact>=5?'high':j.impact>=2?'mid':'low';
    // The two lookups, laid over the row's right side while the pointer is on it.
-   const actions=node('div',null,nameCell,{class:'sc-hit-actions'});
+   const actions=node('div',null,fieldsCell,{class:'sc-hit-actions'});
    button('지표 조회',async()=>{
     const ref=runtime.Z.Items.get(Number(j.items[0].id));
     const hit=await runtime.fetchJournalMetric(runtime.journalRecord(ref));

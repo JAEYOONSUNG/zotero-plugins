@@ -16,6 +16,8 @@
   --sc-border: rgba(0, 0, 0, .07);
   --sc-border-strong: rgba(0, 0, 0, .13);
   --sc-reading: #6AA98C;
+  --sc-reading-ink: #2E7A55;
+  --sc-external: #AA784C;
   --sc-done: #2E7A55;
   --sc-error: #B34E51;
   --sc-error-bg: #FAF2F2;
@@ -283,19 +285,23 @@
 
 /* Existing scientific views stay usable in both color schemes. */
 #style-custom-workbench .sc-graph { display: block; width: 100%; height: 480px; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
-#style-custom-workbench .sc-graph text { fill: var(--sc-muted); font: 10px var(--sc-font); }
+#style-custom-workbench .sc-graph text { font: 10px var(--sc-font); }
+#style-custom-workbench .sc-graph-label[data-kind=external] { fill: var(--sc-external); }
+#style-custom-workbench .sc-segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--sc-radius); background: var(--sc-fill); }
+#style-custom-workbench .sc-segmented button { min-height: 26px; padding: 3px 10px; border-radius: var(--sc-radius-sm); background: transparent; color: var(--sc-muted); font-size: 12px; }
+#style-custom-workbench .sc-segmented button[aria-pressed=true] { background: var(--sc-surface); color: var(--sc-text); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 0 0 .5px var(--sc-border); }
 #style-custom-workbench .sc-graph line { stroke: var(--sc-graph-line); }
-#style-custom-workbench .sc-graph circle { fill: var(--sc-accent); }
 #style-custom-workbench .sc-graph g[role=button] { cursor: pointer; }
-#style-custom-workbench .sc-page-strip { display: flex; flex-wrap: wrap; gap: 3px; padding: 4px 0 2px; }
-#style-custom-workbench .sc-page-cell { width: 11px; height: 11px; min-width: 0; min-height: 0; padding: 0 !important; border: 0; border-radius: 25%; background: var(--sc-fill); box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); cursor: pointer; }
+#style-custom-workbench .sc-page-strip { display: grid; grid-template-columns: 2.6em repeat(20, 11px); gap: 3px; align-items: center; padding: 6px 0 2px; }
+#style-custom-workbench .sc-page-row { color: var(--sc-faint); font: 9px/1 var(--sc-font); text-align: end; padding-inline-end: 2px; font-variant-numeric: tabular-nums; }
+#style-custom-workbench button.sc-page-cell, #style-custom-workbench .sc-page-cell { width: 11px; height: 11px; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 25%; background: var(--sc-fill); box-shadow: inset 0 0 0 1px var(--sc-border); cursor: pointer; }
 #style-custom-workbench .sc-page-cell:disabled { cursor: default; }
 #style-custom-workbench .sc-page-cell[data-level="1"] { background: color-mix(in srgb, var(--sc-done) 30%, var(--sc-fill)); }
 #style-custom-workbench .sc-page-cell[data-level="2"] { background: color-mix(in srgb, var(--sc-done) 55%, var(--sc-fill)); }
 #style-custom-workbench .sc-page-cell[data-level="3"] { background: color-mix(in srgb, var(--sc-done) 80%, var(--sc-fill)); }
 #style-custom-workbench .sc-page-cell[data-level="4"] { background: var(--sc-done); }
 #style-custom-workbench .sc-page-cell:hover { box-shadow: inset 0 0 0 1px var(--sc-text); }
-#style-custom-workbench .sc-page-legend { display: flex; align-items: center; gap: 3px; margin-top: 4px; color: var(--sc-faint); font-size: 10px; }
+#style-custom-workbench .sc-page-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; margin-top: 6px; color: var(--sc-faint); font-size: 10px; }
 #style-custom-workbench .sc-page-legend span:first-child { margin-inline-end: 3px; }
 #style-custom-workbench .sc-page-legend span:last-child { margin-inline-start: 3px; }
 #style-custom-workbench .sc-canvas { position: relative; height: 520px; min-height: 240px; overflow: auto; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background-color: var(--sc-surface-alt); background-image: none; }
@@ -357,6 +363,8 @@
     --sc-border: rgba(255, 255, 255, .09);
     --sc-border-strong: rgba(255, 255, 255, .18);
     --sc-reading: #7FC3A3;
+    --sc-reading-ink: #7FC3A3;
+    --sc-external: #C9975F;
     --sc-done: #3FA372;
     --sc-error: #D3888A;
     --sc-error-bg: #3A2A2C;
@@ -474,19 +482,8 @@
    of its own, and under it the profile when the name is opened. */
 /* Rows with air between them; the figure at the very edge, and the hover
    buttons laid over the row's right side instead of holding a column open. */
-#style-custom-workbench .sc-journal { position: relative; grid-template-columns: 1fr auto; grid-template-areas: "title if" "profile profile"; padding: 10px 6px 10px 2px; row-gap: 0; }
-#style-custom-workbench .sc-journal .sc-hit-actions { grid-area: auto; position: absolute; inset-inline-end: 5.2em; inset-block-start: 50%; transform: translateY(-50%); padding: 2px 4px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-#style-custom-workbench .sc-journal-open .sc-hit-actions { inset-block-start: 20px; }
-#style-custom-workbench .sc-journal .sc-hit-title { grid-area: title; font-size: 13px; display: flex; align-items: center; flex-wrap: nowrap; gap: 0 8px; min-width: 0; white-space: nowrap; }
-#style-custom-workbench .sc-journal .sc-journal-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#style-custom-workbench .sc-journal .sc-journal-inline { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
-#style-custom-workbench .sc-journal .sc-journal-fields { flex: 1 1 0; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#style-custom-workbench .sc-journal .sc-quartile { margin-inline-start: 0 !important; }
-#style-custom-workbench .sc-journal .sc-hit-actions { grid-area: actions; grid-row: auto; }
 #style-custom-workbench .sc-journal-name { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; min-height: 0; }
 #style-custom-workbench .sc-journal-name:hover { text-decoration: underline; }
-#style-custom-workbench .sc-journal-rank { display: inline-block; min-width: 1.8em; margin-inline-end: 4px; color: var(--sc-faint); font: 600 11px/1 var(--sc-mono); text-align: end; }
-#style-custom-workbench .sc-journal-if { grid-area: if; align-self: start; min-width: 3.4em; padding-top: 2px; color: var(--sc-text); font: 600 13px/1.45 var(--sc-mono); font-variant-numeric: tabular-nums; text-align: end; }
 #style-custom-workbench .sc-journal-if-none { color: var(--sc-faint); font-weight: 400; }
 #style-custom-workbench .sc-journal-fields { display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-chip-tiny { padding: 0 6px; font-size: 10px; line-height: 16px; }
@@ -548,6 +545,8 @@
 #style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions { display: flex; opacity: 1; }
 
 @media (prefers-color-scheme: dark) {
+  #style-custom-workbench .sc-quartile[data-q="1"], #style-custom-workbench .sc-quartile[data-q="2"], #style-custom-workbench .sc-quartile[data-q="3"] { color: #10131a; }
+  #style-custom-workbench .sc-watch-badge, #style-custom-workbench .sc-signal-retracted { color: #10131a; }
   #style-custom-workbench .sc-journal-if[data-tone=top], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=top], #style-custom-workbench .sc-fact[data-tone=top] dd { color: #B38DD5; }
   #style-custom-workbench .sc-journal-if[data-tone=high], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=high], #style-custom-workbench .sc-fact[data-tone=high] dd { color: #809DD0; }
   #style-custom-workbench .sc-journal-if[data-tone=mid], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=mid], #style-custom-workbench .sc-fact[data-tone=mid] dd { color: #49A9BC; }
@@ -572,7 +571,7 @@
 #style-custom-workbench .sc-watch-head .sc-hit-group { margin-bottom: 0; padding-bottom: 0; }
 #style-custom-workbench .sc-watch-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 #style-custom-workbench .sc-watch-tools button { min-height: 24px; padding: 2px 10px; font-size: 11px; }
-#style-custom-workbench .sc-watch-count { color: var(--sc-reading); font: 650 11px/1 var(--sc-font); }
+#style-custom-workbench .sc-watch-count { color: var(--sc-reading-ink); font: 650 11px/1 var(--sc-font); }
 #style-custom-workbench .sc-watch-quiet { color: var(--sc-faint); font: 400 11px/1 var(--sc-font); }
 /* auto-fill, so a wide panel shows more people rather than more empty space */
 #style-custom-workbench .sc-watch-grid {
@@ -581,9 +580,10 @@
 }
 #style-custom-workbench .sc-watch {
   display: flex; flex-direction: column; gap: 1px; padding: 5px 8px;
-  border-radius: var(--sc-radius); cursor: default; min-width: 0;
+  border-radius: var(--sc-radius); cursor: pointer; min-width: 0;
 }
 #style-custom-workbench .sc-watch:hover { background: var(--sc-fill); }
+#style-custom-workbench .sc-watch:active, #style-custom-workbench .sc-node:active { background: var(--sc-fill-active); }
 #style-custom-workbench .sc-watch:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--sc-accent), 0 0 0 3px var(--sc-accent-soft); }
 #style-custom-workbench .sc-watch-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 #style-custom-workbench .sc-watch-name {
@@ -594,14 +594,17 @@
 /* The only row that should catch the eye is one with something new on it. */
 #style-custom-workbench .sc-watch-badge {
   flex: none; min-width: 16px; padding: 0 5px; border-radius: 100px;
-  background: var(--sc-reading); color: #fff;
+  background: var(--sc-done); color: #fff;
   font: 650 10px/16px var(--sc-font); text-align: center;
 }
 #style-custom-workbench .sc-watch-sub {
   color: var(--sc-faint); font-size: 10.5px; line-height: 1.4;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-#style-custom-workbench .sc-watch-new .sc-watch-sub { color: var(--sc-reading); }
+#style-custom-workbench .sc-watch-new .sc-watch-sub { color: var(--sc-reading-ink); }
+#style-custom-workbench .sc-watch-tools button[aria-pressed=true] { background: var(--sc-accent-soft); color: var(--sc-accent); box-shadow: inset 0 0 0 1px var(--sc-accent); }
+#style-custom-workbench .sc-watch-callout { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; padding: 7px 12px; border-radius: var(--sc-radius); background: var(--sc-accent-soft); color: var(--sc-accent); font: 500 12px/1.4 var(--sc-font); }
+#style-custom-workbench .sc-watch-callout svg { flex: none; }
 
 /* --- What is missing, said where the user already is --- */
 #style-custom-workbench .sc-notice {
@@ -635,7 +638,7 @@
   gap: 4px 8px; margin: 6px 0 0;
 }
 #style-custom-workbench .sc-node {
-  --sc-tie: .4;
+  --sc-tie: .4; cursor: pointer;
   display: flex; align-items: center; gap: 7px; min-width: 0;
   padding: 4px 8px 4px 5px; border-radius: 100px;
   background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border);
@@ -738,22 +741,25 @@
 #style-custom-workbench .sc-quartile[data-q="4"] { background: var(--sc-faint); color: var(--sc-text); }
 
 /* An unrefereed manuscript, said in one word before the venue. */
-#style-custom-workbench .sc-preprint { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 9px/14px var(--sc-font); letter-spacing: .02em; color: var(--sc-reading); background: color-mix(in srgb, var(--sc-reading) 14%, transparent); vertical-align: middle; }
+#style-custom-workbench .sc-tag, #style-custom-workbench .sc-preprint, #style-custom-workbench .sc-new { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 9px/14px var(--sc-font); letter-spacing: .02em; vertical-align: middle; }
+#style-custom-workbench .sc-hit-meta > .sc-tag, #style-custom-workbench .sc-hit-meta > .sc-preprint, #style-custom-workbench .sc-hit-meta > .sc-quartile { margin-inline-end: 6px; }
+#style-custom-workbench .sc-new { color: var(--sc-accent); background: var(--sc-accent-soft); }
+#style-custom-workbench .sc-preprint { color: var(--sc-reading-ink); background: color-mix(in srgb, var(--sc-reading) 14%, transparent); vertical-align: middle; }
 
 /* A lab move on the watched-author card, and a first-time co-author. */
 #style-custom-workbench .sc-watch-moved { color: var(--sc-accent); font-weight: 600; }
+#style-custom-workbench .sc-network-node { display: inline-flex; align-items: center; min-width: 0; padding: 4px 10px; border-radius: 100px; background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border); font: 500 11.5px/1.3 var(--sc-title-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-network-fresh { box-shadow: inset 0 0 0 1.5px var(--sc-accent); }
 
 /* A notice on a paper, worst first: solid red for withdrawn, so it cannot read as a paper. */
 #style-custom-workbench .sc-signal { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 9px/14px var(--sc-font); vertical-align: middle; }
 #style-custom-workbench .sc-signal-retracted { background: var(--sc-error); color: #fff; }
-#style-custom-workbench .sc-signal-concern { color: var(--sc-reading); background: color-mix(in srgb, var(--sc-reading) 16%, transparent); }
+#style-custom-workbench .sc-signal-concern { color: var(--sc-reading-ink); background: color-mix(in srgb, var(--sc-reading) 16%, transparent); }
 #style-custom-workbench .sc-signal-corrected { color: var(--sc-muted); background: var(--sc-fill); }
 
 /* A patent among the papers: the same row, a filing mark before its title. */
-#style-custom-workbench .sc-watch-patent { background: color-mix(in srgb, var(--sc-reading) 18%, transparent); color: var(--sc-reading); }
+#style-custom-workbench .sc-watch-patent { background: color-mix(in srgb, var(--sc-reading) 18%, transparent); color: var(--sc-reading-ink); }
 #style-custom-workbench .sc-patent .sc-preprint { margin-inline-end: 6px; }
-#style-custom-workbench .sc-patent-fresh .sc-hit-title { color: var(--sc-text); }
 
 /* The map's legend: the commonest journals in it, each in its own mark. */
 #style-custom-workbench .sc-graph-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 8px; font-size: 11px; color: var(--sc-muted); }
@@ -785,32 +791,47 @@
 #style-custom-workbench .sc-field-tree [data-level=subfield] { padding-inline-start: 14px; }
 
 /* Tending the followed list: a table, tight rows, the place shaded when it moved. */
-#style-custom-workbench .sc-watch-table td, #style-custom-workbench .sc-watch-table th { padding: 4px 8px; font-size: 12px; vertical-align: middle; }
-#style-custom-workbench .sc-watch-table td.sc-watch-moved { color: var(--sc-reading); }
+#style-custom-workbench .sc-watch-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+#style-custom-workbench .sc-watch-table th, #style-custom-workbench .sc-watch-table td { box-sizing: border-box; min-width: 0; max-width: none; padding: 6px 8px; border-inline-end: 0; border-block-end: 1px solid var(--sc-border); background: transparent; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; }
+#style-custom-workbench .sc-watch-table th { position: sticky; top: 0; z-index: 1; background: var(--sc-bg); color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; }
+#style-custom-workbench .sc-watch-table tr:hover td { background: var(--sc-surface); }
+#style-custom-workbench .sc-watch-table .sc-col-n { width: 64px; text-align: end; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-watch-table .sc-col-date { width: 96px; font-variant-numeric: tabular-nums; color: var(--sc-muted); }
+#style-custom-workbench .sc-watch-table .sc-col-act { width: 64px; text-align: end; }
+#style-custom-workbench .sc-watch-table td.sc-none { color: var(--sc-faint); }
 #style-custom-workbench .sc-watch-table .sc-journal-name { font-weight: 600; }
+#style-custom-workbench .sc-watch-table .sc-unwatch { min-height: 22px; padding: 1px 8px; font-size: 11px; background: transparent; color: var(--sc-muted); opacity: 0; }
+#style-custom-workbench .sc-watch-table tr:hover .sc-unwatch, #style-custom-workbench .sc-watch-table tr:focus-within .sc-unwatch, #style-custom-workbench .sc-watch-table .sc-unwatch[data-armed] { opacity: 1; }
+#style-custom-workbench .sc-watch-table .sc-unwatch:hover, #style-custom-workbench .sc-watch-table .sc-unwatch[data-armed] { color: var(--sc-error); background: var(--sc-error-bg); }
 #style-custom-workbench .sc-compare-insight { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-compare-output { min-height: 220px; font-size: 12.5px; }
 
 /* The journals table: tight rows, hairlines between them, the name in its
    own colour as text, the figure at the edge, the hover buttons laid over. */
 #style-custom-workbench .sc-journal-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
-#style-custom-workbench .sc-journal-table th { position: sticky; top: 0; z-index: 1; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--sc-bg); color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; text-align: start; border-block-end: 1px solid var(--sc-border); }
-#style-custom-workbench .sc-journal-table td { padding: 7px 8px; border-block-end: 1px solid var(--sc-border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-journal-table th, #style-custom-workbench .sc-journal-table td { box-sizing: border-box; }
+#style-custom-workbench .sc-journal-table thead th { position: sticky; top: 0; z-index: 1; }
+#style-custom-workbench .sc-journal-table th { padding: 6px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--sc-bg); color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; text-align: start; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-journal-table td { padding: 7px 6px; border-block-end: 1px solid var(--sc-border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-journal-table tr.sc-journal { position: relative; }
 #style-custom-workbench .sc-journal-table tr.sc-journal:hover td { background: var(--sc-surface); }
-#style-custom-workbench .sc-journal-table .sc-col-rank { width: 34px; text-align: end; color: var(--sc-faint); font: 600 11px/1 var(--sc-mono); }
-#style-custom-workbench .sc-journal-table .sc-col-name { width: 26%; }
-#style-custom-workbench .sc-journal-table .sc-col-q { width: 40px; }
-#style-custom-workbench .sc-journal-table .sc-col-abbr { width: 12%; font: 11px/1.5 var(--sc-mono); }
-#style-custom-workbench .sc-journal-table .sc-col-pub { width: 14%; }
-#style-custom-workbench .sc-journal-table .sc-col-n { width: 52px; text-align: end; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-journal-table .sc-col-rank { width: 28px; text-align: end; }
+#style-custom-workbench .sc-journal-table td.sc-col-rank { color: var(--sc-faint); font: 600 11px/1 var(--sc-mono); }
+#style-custom-workbench .sc-journal-table .sc-col-name { width: 24%; }
+#style-custom-workbench .sc-journal-table .sc-col-q { width: 34px; }
+#style-custom-workbench .sc-journal-table .sc-col-abbr { width: 10%; }
+#style-custom-workbench .sc-journal-table td.sc-col-abbr { font: 11px/1.5 var(--sc-mono); }
+#style-custom-workbench .sc-journal-table .sc-col-pub { width: 12%; }
+#style-custom-workbench .sc-journal-table .sc-col-n { width: 44px; text-align: end; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-journal-table .sc-col-fields { color: var(--sc-faint); }
-#style-custom-workbench .sc-journal-table .sc-col-if { width: 78px; text-align: end; position: relative; font: 600 13px/1.45 var(--sc-mono); font-variant-numeric: tabular-nums; overflow: visible; }
+#style-custom-workbench .sc-journal-table .sc-col-if { width: 62px; text-align: end; }
+#style-custom-workbench .sc-journal-table td.sc-col-if { font: 600 13px/1.45 var(--sc-mono); font-variant-numeric: tabular-nums; }
+@container sc-workbench (max-width: 760px) { #style-custom-workbench .sc-journal-table .sc-col-abbr, #style-custom-workbench .sc-journal-table .sc-col-pub { display: none; } }
 #style-custom-workbench .sc-journal-table th.sc-col-if, #style-custom-workbench .sc-journal-table th.sc-col-n, #style-custom-workbench .sc-journal-table th.sc-col-rank { text-align: end; }
 #style-custom-workbench .sc-journal-table .sc-journal-name { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 13px; text-align: start; cursor: pointer; min-height: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 #style-custom-workbench .sc-journal-table .sc-journal-name:hover { text-decoration: underline; }
-#style-custom-workbench .sc-journal-table .sc-col-name { position: relative; overflow: visible; }
-#style-custom-workbench .sc-journal-table .sc-hit-actions { position: absolute; inset-inline-start: 100%; inset-block-start: 50%; transform: translateY(-50%); margin-inline-start: 8px; z-index: 2; padding: 2px 4px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: 0 1px 4px rgba(0,0,0,.08); white-space: nowrap; opacity: 0; display: flex; gap: 4px; }
+#style-custom-workbench .sc-journal-table .sc-col-fields { position: relative; }
+#style-custom-workbench .sc-journal-table .sc-hit-actions { position: absolute; inset-inline-end: 4px; inset-inline-start: auto; inset-block-start: 50%; transform: translateY(-50%); z-index: 2; padding: 2px 4px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: 0 1px 4px rgba(0,0,0,.08); white-space: nowrap; opacity: 0; display: flex; gap: 4px; }
 #style-custom-workbench .sc-journal-table tr.sc-journal:hover .sc-hit-actions, #style-custom-workbench .sc-journal-table tr.sc-journal:focus-within .sc-hit-actions { opacity: 1; }
 #style-custom-workbench .sc-journal-table .sc-hit-actions button { min-height: 22px; padding: 1px 8px; font-size: 11px; }
 #style-custom-workbench .sc-journal-table .sc-journal-group th { padding-top: 14px; color: var(--sc-muted); border-block-end: 0; }
@@ -821,3 +842,5 @@
 #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=high] { color: #6484BA; }
 #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=mid]  { color: #468D9B; }
 #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=low]  { color: #42926C; }
+
+#style-custom-workbench .sc-chip b { margin-inline-start: 4px; font-weight: 600; color: var(--sc-faint); font-variant-numeric: tabular-nums; }

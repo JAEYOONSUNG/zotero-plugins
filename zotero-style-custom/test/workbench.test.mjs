@@ -980,15 +980,19 @@ test('the followed list can be tended as a table: found, sorted, let go',async()
  await f.click('목록 관리');
  const names=()=>[...f.body().querySelectorAll('.sc-watch-table td:first-child button')].map(b=>b.textContent);
  assert.deepEqual(names(),['Ada','Bo','Cy'],'news first');
- const place=f.body().querySelector('.sc-watch-table tr:nth-child(2) td:nth-child(2)');
+ const place=f.body().querySelector('.sc-watch-table tbody tr:nth-child(1) td:nth-child(2)');
  assert.equal(place.getAttribute('title'),'등록 당시: MIT chemistry');
- assert.ok(f.body().querySelector('.sc-watch-table tr:nth-child(3) td.sc-watch-moved'),'a move is shaded');
+ assert.ok(f.body().querySelector('.sc-watch-table tbody tr:nth-child(2) td.sc-watch-moved'),'a move is shaded');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-watch-table thead th')].map(t=>t.textContent),['이름','소속','마지막 확인','새 논문','특허','']);
  f.input('관심 저자 찾기','bo');
  assert.deepEqual(names(),['Bo']);
  f.input('관심 저자 찾기','');
  const sort=f.body().querySelector('select[aria-label="관심 저자 정렬"]');sort.value='checked';sort.dispatchEvent(new f.win.Event('change',{bubbles:true}));
  assert.deepEqual(names(),['Cy','Bo','Ada'],'longest unchecked first');
+ // Letting someone go takes two presses: the first only arms the button.
  await f.click('해제');
+ assert.ok(!f.calls.find(c=>c[0]==='unwatchAuthor'),'one press does nothing yet');
+ await f.click('정말 해제');
  assert.ok(f.calls.find(c=>c[0]==='unwatchAuthor'&&c[1]==='A3'));
  assert.deepEqual(names(),['Bo','Ada']);
  await f.click('카드로 보기');

@@ -893,6 +893,13 @@
    ]
   },
   {
+   "ko": "해제",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "약어",
    "n": 2,
    "files": [
@@ -4827,14 +4834,7 @@
    ]
   },
   {
-   "ko": "인용 수 · ",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "출처 미확인",
+   "ko": "인용 수 · {0}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -4926,6 +4926,13 @@
   },
   {
    "ko": "마지막 읽기·수정·추가 시각이 최근인 순서입니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "그래프 종류",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6710,7 +6717,14 @@
    ]
   },
   {
-   "ko": "소속: {0} → {1} ({2} 확인)",
+   "ko": "소속 이동 · {0} → {1} · {2}년부터 · {3} 확인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "소속 이동 · {0} → {1} · {2} 확인",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6718,6 +6732,13 @@
   },
   {
    "ko": "특허 {0} · 새 {1}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "새",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6801,6 +6822,13 @@
    ]
   },
   {
+   "ko": " · 새 논문 {0}편 · {1}명",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "새 논문 다시 확인",
    "n": 1,
    "files": [
@@ -6844,13 +6872,6 @@
   },
   {
    "ko": "새 논문은 없습니다. 저자 {0}명을 요청 {1}회로 확인했습니다.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "새 논문 {0}편 · {1}명",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6990,13 +7011,6 @@
    ]
   },
   {
-   "ko": "{0}/{1}명",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "목록 복사",
    "n": 1,
    "files": [
@@ -7005,6 +7019,13 @@
   },
   {
    "ko": "이름 · 소속 · OpenAlex id, 탭으로 구분",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "명",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7053,7 +7074,7 @@
    ]
   },
   {
-   "ko": "해제",
+   "ko": "정말 해제",
    "n": 1,
    "files": [
     "src/workbench.js"
