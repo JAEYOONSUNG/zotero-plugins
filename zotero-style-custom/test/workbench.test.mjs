@@ -1091,3 +1091,18 @@ test('the journals tab can show every JCR journal, ranked, with the ones the lib
  assert.equal(f.body().querySelectorAll('tr.sc-journal').length,2);
  f.bench.destroy();
 });
+
+test('a selection scope with nothing selected falls back to the library, and the way back is a button',async()=>{
+ const f=fixture();
+ await f.bench.show('explore');
+ await f.click('자세히');
+ assert.equal(f.bench.state.scope,'selected');
+ assert.ok(f.findButton('전체 목록으로'),'the way back is offered while narrowed');
+ // The selection goes away (a click elsewhere in the tree): the list must not stay empty.
+ f.bench.state.selected=new Set();await f.bench.render();
+ assert.equal(f.bench.state.scope,'library');
+ assert.equal(f.bench.panel.querySelector('[aria-label="표시 범위"]').value,'library');
+ assert.equal(f.body().querySelectorAll('.sc-paper-card').length,2);
+ assert.ok(!f.findButton('전체 목록으로'),'the way back is gone once the list is whole');
+ f.bench.destroy();
+});

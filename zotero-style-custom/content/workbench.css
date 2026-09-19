@@ -891,3 +891,5 @@
 #style-custom-workbench .sc-guide-list { margin: 8px 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; line-height: 1.5; }
 #style-custom-workbench .sc-guide-list strong { color: var(--sc-text); }
 #style-custom-workbench .sc-hit-group-note { margin: -4px 0 6px; font-size: 11px; }
+
+#style-custom-workbench .sc-scope-back { min-height: 24px; padding: 2px 10px; font-size: 11px; margin-inline-start: 8px; }

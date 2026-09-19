@@ -885,6 +885,7 @@
  "전체 JCR {0}": "All JCR {0}",
  "전체 {0}개 · {1}/{2} 페이지 · CSV는 전체 문헌": "{0} in all · page {1}/{2} · the CSV holds every item",
  "전체 내용 보기": "Show the whole thing",
+ "전체 목록으로": "Back to the whole list",
  "전체 화면": "Fill the window",
  "전체 화면 전환": "Toggle full window",
  "접두사와 일치하는 태그": "Tags matching a prefix",
