@@ -1872,13 +1872,13 @@ test('every entry of the item menu carries a drawn sign', () => {
   // Each verb in the menu names one of those signs as its last argument.
   const source = plugin.constructor.toString();
   const expected = {'ZotPoP에서 이 논문 검색': 'search', '라이브러리 저널 지표 채우기': 'journals', '인용…': 'quote', '커스텀 열로 전환': 'columns', '연구 작업 패널': 'panel',
-    '관계 그래프 열기': 'graph', '저장된 지표와 읽기 기록 새로고침': 'refresh', '인용 수 조회 중지': 'stop', '선택한 문헌 철회·공개접근 신호 조회': 'signal'};
+    '관계 그래프 열기': 'graph', '지표·읽기 기록 새로고침': 'refresh', '인용 수 조회 중지': 'stop', '철회·공개접근 확인': 'signal'};
   for (const [label, icon] of Object.entries(expected)) {
     const at = source.indexOf('action("' + label + '"');
     assert.ok(at >= 0, label);
     const next = source.indexOf('action("', at + 8);
     const call = source.slice(at, next < 0 ? undefined : next);
-    assert.ok(call.includes('"' + icon + '")'), `${label} carries ${icon}`);
+    assert.ok(call.includes('"' + icon + '")') || call.includes('"' + icon + '",'), `${label} carries ${icon}`);
     assert.ok(Array.isArray(icons[icon]), icon);
   }
 });
@@ -1922,4 +1922,22 @@ test('a write that fails says so once in the panel, and says it again only after
  await assert.rejects(() => plugin.flush(), /read-only/);
  assert.equal(said.length, 2, 'a failure after a good write is news again');
  plugin.cancelScheduledFlush();
+});
+
+test('a menu verb stays short and says the rest in its tooltip', () => {
+ const {plugin} = fixture();
+ const source = plugin.constructor.toString();
+ const labels = [...source.matchAll(/action\("([^"]+)"/g)].map(m => m[1]);
+ assert.ok(labels.length > 15, 'the menu was read');
+ // A menu is as wide as its longest line; what a verb covers belongs in the
+ // tooltip, not in brackets after the verb.
+ for (const label of labels) {
+  assert.ok(label.length <= 22, `menu verb too long: ${label} (${label.length})`);
+  assert.ok(!/\(.*·.*\)/.test(label), `menu verb carries a list in brackets: ${label}`);
+ }
+ for (const label of ['빈 칸 채우기', '첨부파일 종류 판별', '철회·공개접근 확인']) {
+  const at = source.indexOf('action("' + label + '"');
+  const next = source.indexOf('action("', at + 8);
+  assert.match(source.slice(at, next < 0 ? undefined : next), /,"[^"]{10,}"\);\s*$/m, `${label} explains itself in a tooltip`);
+ }
 });

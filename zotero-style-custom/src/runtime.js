@@ -2877,7 +2877,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         : `관심 저자: ${report.authors.authors}명 확인, 새 논문 없음`);
     }
     if (report.budgetGone) {
-      lines.push('', 'OpenAlex 하루 한도를 다 썼습니다. UTC 자정에 초기화되고, 다시 실행하면 남은 것부터 이어서 채웁니다.');
+      lines.push('', 'OpenAlex 하루 한도를 다 썼습니다. 한국 시간 오전 9시에 초기화되고, 다시 실행하면 남은 것부터 이어서 채웁니다.');
     }
     return lines.join('\n');
   }
@@ -3568,7 +3568,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          URL and nothing else. */
       const ink=this.palette(doc).text||'#1c1c1e';
       const glyph=name=>{const shapes=this.MENU_ICONS[name];if(!shapes)return '';const body=shapes.map(([tag,attrs])=>`<${tag} ${Object.entries(attrs).map(([k,v])=>`${k}="${v}"`).join(' ')}/>`).join('');return 'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="${ink}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`);};
-      const action=(label,callback,parent=body,icon='')=>{ const node=make("menuitem",label,parent);if(icon&&this.MENU_ICONS[icon]){node.classList.add("menuitem-iconic");node.setAttribute("image",glyph(icon));}node.addEventListener("command",()=>Promise.resolve().then(callback).catch(e=>{this.Z.logError(e);this.say(win,e.message);}));return node; };
+      /* A menu entry is a verb, not a sentence. What each one covers moves to
+         the tooltip, so the menu stays the width of its longest verb. */
+      const action=(label,callback,parent=body,icon='',hint='')=>{ const node=make("menuitem",label,parent);if(hint)node.setAttribute("tooltiptext",this.t(hint));if(icon&&this.MENU_ICONS[icon]){node.classList.add("menuitem-iconic");node.setAttribute("image",glyph(icon));}node.addEventListener("command",()=>Promise.resolve().then(callback).catch(e=>{this.Z.logError(e);this.say(win,e.message);}));return node; };
       const iconic=(node,icon)=>{if(node&&this.MENU_ICONS[icon]){node.classList.add(node.localName==="menu"?"menu-iconic":"menuitem-iconic");node.setAttribute("image",glyph(icon));}return node;};
       /* The parent entry sits among other plugins' entries, which carry signs;
          without one, Style Custom is the only unmarked line in the menu. */
@@ -3604,7 +3606,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         this.say(win,`${changed}개의 표시를 해제했습니다.`);
       },suppl);
       make("menuseparator",null,suppl);
-      action("먼저 확인만 (받을 수 있는 논문 세기)",async()=>{
+      action("먼저 세어만 보기",async()=>{
         const chosen=this.selected(win);
         const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
         const report=await this.previewSupplementary(items,
@@ -3615,7 +3617,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           +`PMC에 없음 ${report.notFound+report.notArchived} · 보충자료 없음 ${report.noSupplement}\n`
           +`오픈액세스가 아니라 받을 수 없음 ${report.closed}`
           +(report.errors?`\n조회 실패 ${report.errors}`:""));
-      },suppl);
+      },suppl,"","받을 수 있는 논문이 몇 편인지만 세고, 내려받지는 않습니다.");
       for(const [label,pdfOnly] of [["PDF만",true],["모든 파일",false]])action(label,async()=>{
         const items=this.selected(win);
         if(!items.length)throw new Error("문헌을 먼저 선택하세요.");
@@ -3638,17 +3640,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const result=await this.refreshJournalCitedness(papers);
         const lines=[`저널 ${result.journals}종 중 ${result.found}종 지표 확인 · ${result.missing}종은 OpenAlex에도 없음`];
         if(result.failed) lines.push(`${result.failed}종 조회 실패`);
-        if(result.budgetGone) lines.push(`OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}종이 남았고, 한도는 UTC 자정에 초기화됩니다.\n지금까지 받은 값은 저장됐으니 내일 다시 실행하면 남은 것부터 이어서 채웁니다.`);
+        if(result.budgetGone) lines.push(`OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}종이 남았고, 한국 시간 오전 9시에 초기화됩니다.\n지금까지 받은 값은 저장했으니 내일 다시 실행하면 남은 것부터 이어서 채웁니다.`);
         else lines.push("공식 JIF가 있는 저널은 그대로 두고, 없는 저널만 ~추정치로 채웁니다.");
         this.say(win,lines.join("\n"));
       },body,"journals");
-      action("읽기 기록 가져오기 (이전 플러그인 노트에서)",async()=>{
+      action("읽기 기록 가져오기",async()=>{
         const preview=await this.importLegacyReading({dryRun:true});
         if(!preview.imported){this.say(win,`가져올 읽기 기록이 없습니다. (노트 ${preview.notes}개 · 이미 보유 ${preview.skipped}개 · 대상 불명 ${preview.unresolved}개)`);return;}
         const hours=(preview.seconds/3600).toFixed(1);
         const result=await this.importLegacyReading();
         this.say(win,`읽기 기록 ${result.imported}편 · ${hours}시간을 가져왔습니다.\n이미 더 많이 기록된 ${result.skipped}편은 그대로 두었습니다.`+(result.unresolved?`\n대상 문헌을 찾지 못한 노트 ${result.unresolved}개`:""));
-      },body,"reading");
+      },body,"reading","이전 플러그인이 노트에 남긴 읽기 시간을 찾아 옮깁니다.");
       action("제목 앞 별 태그 정리",async()=>{
         const found=await this.starTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
         if(!found.length){this.say(win,"정리할 별 태그가 없습니다.");return;}
@@ -3672,13 +3674,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       action("연구 작업 패널",()=>state.workbench?.toggle(true),body,"panel");
       action("관계 그래프 열기",()=>state.workbench?.show('graph'),body,"graph");
       make("menuseparator",null,body);
-      action("저장된 지표와 읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();},body,"refresh");
+      action("지표·읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();},body,"refresh","저장된 값을 다시 읽어 열을 새로 그립니다. 네트워크는 쓰지 않습니다.");
       action("선택한 문헌 인용 수 새로고침",async()=>{
         const result=await this.refreshCitations(this.selected(win),{force:true});
         this.say(win,`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
       },body,"citations");
       action("인용 수 조회 중지",()=>{if(!this.citationJob)throw new Error("진행 중인 인용 수 조회가 없습니다.");this.citationJob.controller.abort();this.say(win,"인용 수 조회를 중지했습니다. 지금까지 받은 값은 저장했습니다.");},body,"stop");
-      action("첨부파일 종류 판별 (본문 · 보충자료 · 중복 · 다른 논문)",async()=>{
+      action("첨부파일 종류 판별",async()=>{
         const chosen=this.selected(win);
         const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
         const result=await this.scanAttachmentKinds(items,
@@ -3687,24 +3689,24 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           `문헌 ${result.items}개 · PDF ${result.files}개를 첫 페이지로 판별했습니다.\n`
           +`본문 ${result.article} · 보충자료 ${result.supplementary} · 중복 ${result.duplicate} · 다른 논문 ${result.foreign}`
           +(result.unknown?` · 판단 불가 ${result.unknown}`:"")
-          +(result.indexed?`\n본문이 없던 ${result.indexed}개는 Zotero 색인을 먼저 만들었습니다.`:"")
+          +(result.indexed?`\n본문이 없던 ${result.indexed}개는 Zotero가 먼저 본문을 읽어 두었습니다.`:"")
           +(result.unread?`\n${result.unread}개는 색인을 만든 뒤에도 본문을 읽지 못했습니다(스캔 PDF일 수 있습니다).`:""));
-      },body,"attachments");
-      action("빈 칸 채우기 (철회 신호 · 저널 지표 · 새 논문)",async()=>{
+      },body,"attachments","본문·보충자료·중복·다른 논문으로 나눕니다.");
+      action("빈 칸 채우기",async()=>{
         if(this.backfilling){this.stopBackfill();this.say(win,"채우기를 중지했습니다. 지금까지 받은 값은 저장했습니다.");return;}
         const report=await this.runBackfill({libraryID:win.ZoteroPane?.getSelectedLibraryID?.(),
           onProgress:({stage,done,total})=>this.showBackfillProgress(win,stage,done,total)});
         this.say(win,this.backfillSummary(report));
-      },body,"fill");
-      action("선택한 문헌 철회·공개접근 신호 조회",async()=>{
+      },body,"fill","철회 신호·저널 지표·관심 저자의 새 논문을 한 번에 채웁니다.");
+      action("철회·공개접근 확인",async()=>{
         const result=await this.refreshPaperSignals(this.selected(win));
         this.say(win,`신호 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · DOI 없음 ${result.unsupported}개 · 조회 오류 ${result.error}개`);
-      },body,"signal");
-      action("현재 라이브러리 인용 수 조회·메타데이터 저장",async()=>{const r=await this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID);this.say(win,r.cancelled?`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개 · 중지됨`:`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개`);},body,"citations");
-      action("선택한 저널 IF를 공식 페이지에서 새로고침",async()=>{
+      },body,"signal","선택한 문헌이 철회됐는지, 공개접근본이 있는지 확인합니다.");
+      action("라이브러리 전체 인용 수 조회",async()=>{const r=await this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID);this.say(win,r.cancelled?`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개 · 중지됨`:`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개`);},body,"citations","이 라이브러리의 모든 문헌에 인용 수를 채우고 Extra에 기록합니다.");
+      action("저널 IF 공식 값 새로고침",async()=>{
         const result = await this.refreshJournalMetrics(this.selected(win), win.DOMParser);
         this.say(win,`IF 확인 ${result.updated}개 · 조회 실패 ${result.failed}개 · 미등록 저널 ${result.unknown}개. 기존 확인된 값은 유지됩니다.`);
-      },body,"journals");
+      },body,"journals","선택한 문헌의 저널 IF를 공식 페이지에서 다시 읽습니다.");
     }
     const poll = async () => {
       if (!this.active || win.closed || state.polling) return;

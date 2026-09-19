@@ -1143,7 +1143,7 @@
      const generation=++previewEpoch,previous=preview;preview=null;
      const current=()=>!disposed&&!panel.hidden&&token===epoch&&generation===previewEpoch&&c.isConnected;
      await discardPreview(previous);if(!current())return;
-     const p=doc.createXULElement?.('attachment-preview');if(!p)throw new Error('Zotero 첨부 미리보기 컴포넌트를 사용할 수 없습니다. 열기를 사용하세요.');
+     const p=doc.createXULElement?.('attachment-preview');if(!p)throw new Error('Zotero의 첨부 미리보기를 쓸 수 없습니다. 「열기」로 파일을 여세요.');
      p.classList.add('sc-native-preview');c.appendChild(p);preview=p;
      try{
       const item=await runtime.Z.Items.getAsync(Number(a.id));if(!current()){await discardPreview(p);return;}
@@ -1310,7 +1310,7 @@
    const section=node('section',null,body,{class:'sc-compare-insight','aria-label':'AI 논지·논쟁 분석'});
    node('h3','주장·논리 흐름·논쟁 여지',section,{class:'sc-hit-group'});
    const b=bar(section);
-   if(!String(runtime.pref('aiEndpoint','')||'').trim())node('p','번역·AI 설정에 endpoint와 모델을 연결하면 켜집니다.',section,{class:'sc-muted'});
+   if(!String(runtime.pref('aiEndpoint','')||'').trim())node('p','번역·AI 설정에 AI 서버 주소와 모델을 넣으면 켜집니다.',section,{class:'sc-muted'});
    node('span','언어',b,{class:'sc-muted'});
    const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});
    const ready=chosen.length>=2&&chosen.length<=6&&values.length<=6;
@@ -1628,7 +1628,7 @@
      if(token!==epoch||disposed||state.tab!=='authors')return;
      refreshWatched();
      message(result.budgetGone
-      ? `OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}묶음이 남았고 UTC 자정에 초기화됩니다. 지금까지 확인한 결과는 저장했습니다.`
+      ? `OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}묶음이 남았고, 한국 시간 오전 9시에 초기화됩니다. 지금까지 확인한 결과는 저장했습니다.`
       : result.withNews
        ? `${result.withNews}명이 새 논문 ${result.works}편을 냈습니다. 요청 ${result.requests}회.`
        : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`,
@@ -2111,9 +2111,9 @@
    }
    if(j.openAlexID){const b=button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions);journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
   }
-  function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. 설정에서 AI endpoint와 모델을 연결할 수 있습니다.');pickOne();return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
+  function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.');pickOne();return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
    const aiReady=!!(String(runtime.pref('aiEndpoint','')||'').trim()&&String(runtime.pref('aiModel','')||'').trim());
-   if(!aiReady)node('p','Zotero 설정 → Style Custom → 번역·AI에 endpoint·모델·API 키를 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.',body,{class:'sc-muted'});
+   if(!aiReady)node('p','Zotero 설정 → Style Custom → 번역·AI에 AI 서버 주소·모델·API 키를 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.',body,{class:'sc-muted'});
    for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');const request=++aiEpoch;const result=await assist.run(task,item,{language:language.value});if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);
    button('요청 중지',()=>{aiEpoch++;assist.cancel?.();message('AI 요청을 중지했습니다.');},b);
    const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions);

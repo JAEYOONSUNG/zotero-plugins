@@ -1,5 +1,5 @@
 {
- "version": "0.48.6",
+ "version": "0.48.7",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -2007,6 +2007,30 @@
    ],
    "status": "verified",
    "review": "읽는 중에는 셀만 다시 그리고, 저장은 30초에 한 번과 종료 시로 미룬다. 동기화 중에는 알림을 받지 않는다. 저장 실패는 패널에 한 번 말하고, 성공 전까지 반복하지 않는다. 라이브러리에서 사라진 항목의 기록은 시작할 때 한 번 정리한다. 참고문헌 목록은 500개까지만 보관한다. 관심 저자 신호 조회는 5건씩 병렬로 돈다. ZotPoP의 중복 검사는 실패를 삼키지 않고 알리며, 제목 색인은 가져오기 1회당 한 번만 읽는다. 저널 검색은 행마다 검색 문자열을 미리 만들고 분야 메뉴 결과를 재사용한다."
+  },
+  {
+   "round": "R72",
+   "title": "말이 통하는 문구",
+   "gap": "The plugin spoke in the vocabulary of the people who built it: endpoint, Bearer, component, index, midnight UTC. Menu entries carried their whole scope in brackets, and the same thing had two names in each language.",
+   "entryPoint": "메뉴·설정·오류 메시지 전체",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "A menu entry is a verb, not a sentence"
+    },
+    {
+     "file": "src/failures.js",
+     "marker": "The reader's own clock"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/runtime.test.mjs",
+     "name": "a menu verb stays short and says the rest in its tooltip"
+    }
+   ],
+   "status": "verified",
+   "review": "endpoint는 'AI 서버 주소', Bearer 헤더는 '인증 헤더', 컴포넌트는 '기능', 'Zotero 색인'은 '본문을 읽어 둠'으로 바꿨다. 'UTC 자정'은 한국 시간으로 적고, 영어권 사용자에게는 자기 시계의 시각이 보인다. 괄호 안에 범위를 늘어놓던 메뉴 8개는 동사만 남기고 설명을 툴팁으로 옮겼다. 영어 쪽에서 한 기능에 두 이름을 쓰던 곳(citation map, followed)을 하나로 모았다. 메뉴 동사 길이는 테스트가 지킨다."
   }
  ],
  "introducedInVersion": "0.6.0"

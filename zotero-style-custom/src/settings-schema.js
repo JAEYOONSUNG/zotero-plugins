@@ -61,7 +61,7 @@
       "label": "AI 읽기 메모 제안 사용",
       "type": "boolean",
       "default": true,
-      "description": "번역·AI 분류의 endpoint·모델·API 키가 있어야 켜집니다. 요청은 사용자가 버튼을 눌렀을 때만 보냅니다.",
+      "description": "번역·AI 분류의 AI 서버 주소·모델·API 키가 있어야 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -70,7 +70,7 @@
       "label": "AI 태그 제안 사용",
       "type": "boolean",
       "default": true,
-      "description": "번역·AI 분류의 endpoint·모델·API 키가 있어야 켜집니다. 요청은 사용자가 버튼을 눌렀을 때만 보냅니다.",
+      "description": "번역·AI 분류의 AI 서버 주소·모델·API 키가 있어야 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -151,7 +151,7 @@
       "label": "첨부 미리보기 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 첨부 미리보기 · Zotero 9 attachment-preview 컴포넌트",
+      "description": "연구 작업 패널 → 첨부 미리보기 · Zotero 9의 첨부 미리보기 기능",
       "consumer": "featureEnabled"
     },
     {
@@ -448,7 +448,7 @@
       "label": "초록 요약 사용",
       "type": "boolean",
       "default": true,
-      "description": "번역·AI 분류의 endpoint·모델·API 키가 있어야 켜집니다. 요청은 사용자가 버튼을 눌렀을 때만 보냅니다.",
+      "description": "번역·AI 분류의 AI 서버 주소·모델·API 키가 있어야 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -1069,7 +1069,7 @@
     {
       "key": "aiEndpoint",
       "category": "ai",
-      "label": "Chat Completions endpoint",
+      "label": "AI 서버 주소 (Chat Completions)",
       "type": "url",
       "default": ""
     },
@@ -1087,7 +1087,7 @@
       "type": "password",
       "default": "",
       "secret": true,
-      "description": "위 endpoint에만 Bearer 헤더로 보냅니다. 다른 곳으로는 보내지 않습니다."
+      "description": "위에 입력한 AI 서버 주소에만 인증 헤더로 보냅니다. 다른 곳으로는 보내지 않습니다."
     },
     {
       "key": "aiLanguage",

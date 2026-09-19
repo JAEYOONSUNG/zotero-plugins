@@ -1,7 +1,7 @@
 /* Explicit, user-requested model assistance. Never runs from notifier hooks. */
 (function(root){
  'use strict';
- function endpoint(value){const s=String(value||'').trim();if(!/^https:\/\/[a-z0-9.-]+(?::\d+)?\/[^\s]*$/i.test(s)&&!/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/[^\s]*$/i.test(s))throw new Error('설정에서 HTTPS AI endpoint 또는 localhost 주소를 입력하세요.');return s;}
+ function endpoint(value){const s=String(value||'').trim();if(!/^https:\/\/[a-z0-9.-]+(?::\d+)?\/[^\s]*$/i.test(s)&&!/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/[^\s]*$/i.test(s))throw new Error('설정에서 https로 시작하는 AI 서버 주소나 localhost 주소를 입력하세요.');return s;}
  function create({Zotero,runtime}){
   let active=true;const jobs=new Set();
   async function run(task,item,{language='Korean'}={}){
@@ -28,7 +28,7 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
    const capability={tags:'AIGenerateTags',remark:'AIGenerateRemark',summary:'tldr'}[task];if(capability&&runtime.featureEnabled?.(capability)===false)throw new Error('설정에서 이 기능을 켜세요.');
    if(task==='tags')prompts.tags=String(runtime.pref('aiTagsPrompt',prompts.tags)||prompts.tags);
    if(task==='remark')prompts.remark=String(runtime.pref('aiRemarkPrompt',prompts.remark)||prompts.remark)+'\nOutput language: '+language;
-   if(!String(runtime.pref('aiEndpoint','')||'').trim())throw new Error('설정에서 AI endpoint와 모델을 먼저 입력하세요.');
+   if(!String(runtime.pref('aiEndpoint','')||'').trim())throw new Error('설정에서 AI 서버 주소와 모델을 먼저 입력하세요.');
    const model=String(runtime.pref('aiModel','')).trim();if(!model)throw new Error('설정에서 AI 모델을 지정하세요.');
    const url=endpoint(runtime.pref('aiEndpoint',''));
    if(task==='compare'){
