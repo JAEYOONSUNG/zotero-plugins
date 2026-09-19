@@ -262,7 +262,7 @@
 		sourceHint();
 		applyColumnWidths();
 		setDetailVisible(!$("detail").hidden);
-		setStatus(t("ready"));
+		setStatus(PREF("hintShown") ? t("ready") : t("welcome"));
 		render();
 		$("keywords").focus();
 		loadCaches().finally(restoreCachedSearch);
@@ -498,6 +498,7 @@
 	function sourceHint() {
 		let key = $("source").value;
 		if (key === "semanticscholar" && !(PREF("s2ApiKey") || "").trim()) showBanner(t("bannerS2"));
+		else if (key === "openalex" && !String(PREF("openAlexApiKey") || "").trim()) showBanner(t("bannerNoKey"));
 		else if (key === "scholar") showBanner(t("bannerScholar"));
 		else if (key === "preprint") showBanner(t("bannerPreprint"));
 		else if (key === "multi") showBanner(t("bannerMulti"));
@@ -948,6 +949,9 @@
 		if (state.searching) return;
 		cancelCacheRestore();
 		let q = readQuery();
+		// Without a key OpenAlex gives about ten searches a day; a 1000-row page
+		// would spend most of that budget on one query.
+		if (["openalex", "multi"].includes($("source").value) && !String(PREF("openAlexApiKey") || "").trim() && q.maxResults > 200) q.maxResults = 200;
 		if (![q.authors, q.venue, q.title, q.keywords].some(x => x.trim())) {
 			setStatus(t("needCriteria"), "err");
 			$("keywords").focus();
@@ -1327,6 +1331,7 @@
 	function renderMetrics(list) {
 		let m = ZotPoPMetrics.compute(list);
 		let set = (id, v) => { $(id).textContent = v; };
+		let hint = $("metrics-hint"); if (hint) { hint.hidden = list.length > 0; $("metrics-table").hidden = !list.length; }
 		set("m-years", m.minYear ? `${m.minYear}–${m.maxYear}` : "–");
 		set("m-cyears", m.minYear ? String(m.citationYears) : "–");
 		set("m-papers", String(m.papers));

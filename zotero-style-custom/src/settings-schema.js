@@ -510,7 +510,7 @@
       "category": "columns",
       "label": "기록이 없어도 0초 표시",
       "type": "boolean",
-      "default": true
+      "default": false
     },
     {
       "key": "titleHeatmap",
@@ -1039,6 +1039,14 @@
       "default": "",
       "secret": true,
       "description": "api.openalex.org에만 Authorization 헤더로 보냅니다. openalex.org 계정에서 무료 발급되며, 비워 두면 키 없이 조회합니다."
+    },
+    {
+      "key": "authorPortraits",
+      "category": "views",
+      "label": "저자 사진 찾기",
+      "type": "boolean",
+      "default": true,
+      "description": "ORCID에 등록된 개인 홈페이지에서 사진을 찾습니다. 저자를 열 때만 요청합니다."
     },
     {
       "key": "usptoApiKey",

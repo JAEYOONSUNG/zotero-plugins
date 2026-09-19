@@ -28,6 +28,7 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
    const capability={tags:'AIGenerateTags',remark:'AIGenerateRemark',summary:'tldr'}[task];if(capability&&runtime.featureEnabled?.(capability)===false)throw new Error('설정에서 이 기능을 켜세요.');
    if(task==='tags')prompts.tags=String(runtime.pref('aiTagsPrompt',prompts.tags)||prompts.tags);
    if(task==='remark')prompts.remark=String(runtime.pref('aiRemarkPrompt',prompts.remark)||prompts.remark)+'\nOutput language: '+language;
+   if(!String(runtime.pref('aiEndpoint','')||'').trim())throw new Error('설정에서 AI endpoint와 모델을 먼저 입력하세요.');
    const model=String(runtime.pref('aiModel','')).trim();if(!model)throw new Error('설정에서 AI 모델을 지정하세요.');
    const url=endpoint(runtime.pref('aiEndpoint',''));
    if(task==='compare'){

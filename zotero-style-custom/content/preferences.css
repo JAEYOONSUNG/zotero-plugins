@@ -49,3 +49,10 @@
 #style-custom-settings-root .scs-setting[data-type=boolean] .scs-value{grid-column:2;grid-row:1}
 #style-custom-settings-root .scs-setting[data-type=boolean] .scs-help,#style-custom-settings-root .scs-setting[data-type=boolean] .scs-feedback{grid-column:1}
 #style-custom-settings-root .scs-unit{align-self:center;color:GrayText;font-size:12px}
+
+#style-custom-settings-root .scs-first{margin-block:4px 14px;padding:10px 12px;border:1px solid color-mix(in srgb,GrayText 30%,transparent);border-radius:8px;background:color-mix(in srgb,SelectedItem 8%,transparent)}
+#style-custom-settings-root .scs-first strong{display:block;font-size:12.5px;margin-block-end:2px}
+#style-custom-settings-root .scs-first .scs-help{margin:0 0 8px}
+#style-custom-settings-root .scs-first-list{display:flex;flex-wrap:wrap;gap:6px}
+#style-custom-settings-root .scs-first-list button{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;min-height:38px;padding:5px 10px;text-align:start}
+#style-custom-settings-root .scs-first-why{font-size:11px;color:GrayText}

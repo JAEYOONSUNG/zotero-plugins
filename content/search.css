@@ -318,3 +318,6 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 }
 #toggle-metrics[aria-pressed="false"] { color: var(--muted); }
 .table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* The metrics sidebar before any search: one line saying what will appear, not a column of dashes. */
+.metrics-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }

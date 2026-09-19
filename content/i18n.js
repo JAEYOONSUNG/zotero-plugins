@@ -151,6 +151,9 @@ var ZotPoPI18N = (function () {
 			proxyOpened: "Opened through the library proxy. You need to be logged in there in your browser.",
 
 			bannerS2: "Semantic Scholar rate-limits unauthenticated use (HTTP 429). Add a free API key in Settings → ZotPoP.",
+			bannerNoKey: "OpenAlex without a key allows about ten searches a day and this window keeps each to 200 rows. A free key in Settings → ZotPoP lifts both.",
+			welcome: "Type a keyword, author or journal above and press Enter. Results appear here; the checkbox on a row selects it for import.",
+			metricsHint: "Once a search returns, the years, citation counts and h-index of the result set appear here.",
 			bannerScholar: "Google Scholar uses the installed Publish or Perish engine when available. Web fallback may require a CAPTCHA.",
 			bannerMulti: "The combined search queries several sources at once and merges them by DOI and title. It is slower than a single source.",
 			bannerPreprint: "The preprint search covers bioRxiv, medRxiv and Research Square (via Europe PMC) together with arXiv.",
@@ -177,7 +180,7 @@ var ZotPoPI18N = (function () {
 			citeSource: label => "Source: " + label,
 
 			prefTitle: "ZotPoP — Search & Import Papers",
-			prefOpenHint: "Open it from the magnifier button in the items toolbar, or Tools → Search & Import Papers.",
+			prefOpenHint: "Open it from the magnifier button in the items toolbar, or Tools → ZotPoP — Find papers…",
 			prefLanguage: "Language",
 			prefLangEn: "English",
 			prefLangKo: "한국어 (Korean)",
@@ -406,6 +409,9 @@ var ZotPoPI18N = (function () {
 			proxyOpened: "도서관 프록시로 열었습니다. 브라우저에서 로그인되어 있어야 합니다.",
 
 			bannerS2: "Semantic Scholar는 API 키 없이 쓰면 요청 제한(429)에 자주 걸립니다. 설정 → ZotPoP에서 무료 키를 넣으면 안정적입니다.",
+			bannerNoKey: "OpenAlex는 키 없이 하루 약 10회 검색까지만 되고, 이 창은 한 번에 200건까지만 가져옵니다. 설정 → ZotPoP에 무료 키를 넣으면 둘 다 풀립니다.",
+			welcome: "위에 키워드·저자·저널을 넣고 Enter를 누르세요. 결과가 여기에 표시되고, 행의 체크박스로 가져올 논문을 고릅니다.",
+			metricsHint: "검색 결과가 오면 결과 집합의 연도·인용 수·h-index가 여기에 표시됩니다.",
 			bannerScholar: "Google Scholar는 설치된 Publish or Perish 검색 엔진을 우선 사용합니다. 웹 검색 경로에서는 CAPTCHA가 필요할 수 있습니다.",
 			bannerMulti: "통합 검색은 여러 소스를 동시에 조회한 뒤 DOI와 제목으로 중복을 합칩니다. 한 소스만 쓸 때보다 느립니다.",
 			bannerPreprint: "프리프린트 검색은 bioRxiv·medRxiv·Research Square(Europe PMC 경유)와 arXiv를 함께 조회합니다.",
@@ -432,7 +438,7 @@ var ZotPoPI18N = (function () {
 			citeSource: label => "출처: " + label,
 
 			prefTitle: "ZotPoP — 논문 검색 & 가져오기",
-			prefOpenHint: "아이템 툴바의 돋보기 버튼 또는 도구 → 논문 검색 & 가져오기로 엽니다.",
+			prefOpenHint: "아이템 툴바의 돋보기 버튼 또는 도구 → ZotPoP — 논문 찾기…로 엽니다.",
 			prefLanguage: "언어",
 			prefLangEn: "English",
 			prefLangKo: "한국어",

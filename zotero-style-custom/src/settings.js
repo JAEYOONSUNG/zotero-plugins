@@ -20,13 +20,18 @@
   const live=node('section',null,host,{class:'scs-live','aria-label':'현재 동작 상태'});node('strong','현재 동작',live);node('p','현재 선택 문헌 누적 읽기',live,{class:'scs-reading-label'});const readTime=node('output','—',live,{class:'scs-reading-value','aria-label':'현재 선택 문헌 누적 읽기','aria-live':'polite'});const liveText=node('p','현재 상태를 확인하는 중…',live);
   const searchBar=node('div',null,host,{class:'scs-search'});const search=node('input',null,searchBar,{type:'search',placeholder:'설정 이름·설명 검색','aria-label':'Style Custom 설정 검색'});
   const clearSearch=node('button','검색 지우기',searchBar,{type:'button'});const resultCount=node('span','',searchBar,{role:'status'});
+  const first=node('section',null,host,{class:'scs-first','aria-label':'먼저 할 것'});first.hidden=true;
   const layout=node('div',null,host,{class:'scs-layout'}),nav=node('nav',null,layout,{'aria-label':'설정 분류',class:'scs-nav'}),content=node('div',null,layout,{class:'scs-content'});
   const empty=node('p','검색에 맞는 설정이 없습니다. 검색어를 바꾸거나 지우세요.',content,{class:'scs-empty'});empty.hidden=true;
   const notify=(text,error=false)=>{if(destroyed)return;message.textContent=t(text);message.dataset.error=String(error);};
   const secret=spec=>!!spec.secret||spec.type==='password';
+  // Three fields decide what the plugin can reach; a new user should see them
+  // before the category list, and only while they are still blank.
+  const FIRST=['citationEmail','openalexApiKey','aiEndpoint'];let refreshFirst=()=>{};
   const valueOf=state=>state.spec.type==='boolean'?state.input.checked:state.input.value;
   function display(state,value){if(state.spec.type==='boolean')state.input.checked=!!value;else state.input.value=String(value??'');}
   function sync(state){
+   if(FIRST.includes(state.spec.key))refreshFirst();
    const busy=state.pending||categories.get(state.spec.category)?.pending;
    state.input.disabled=!!busy||state.loading;
    if(state.apply){state.apply.disabled=!!busy||state.loading||!state.dirty;state.apply.hidden=['boolean','select'].includes(state.spec.type)&&!state.error;}
@@ -41,7 +46,7 @@
    const raw=state.input.value;
    if(spec.type==='number'){
     if(!raw.trim())throw new Error('숫자를 입력하세요.');const value=Number(raw);
-    if(!Number.isFinite(value)||(spec.min!==undefined&&value<spec.min)||(spec.max!==undefined&&value>spec.max))throw new Error(`범위에 맞는 숫자를 입력하세요${spec.min!==undefined||spec.max!==undefined?' ('+(spec.min??'제한 없음')+'–'+(spec.max??'제한 없음')+')':''}.`);
+    if(!Number.isFinite(value)||(spec.min!==undefined&&value<spec.min)||(spec.max!==undefined&&value>spec.max))throw new Error(`범위에 맞는 숫자를 입력하세요${spec.min!==undefined||spec.max!==undefined?' ('+(spec.min??t('제한 없음'))+'–'+(spec.max??t('제한 없음'))+')':''}.`);
     if(spec.step&&spec.step!=='any'){const steps=(value-(spec.min??0))/Number(spec.step);if(Math.abs(steps-Math.round(steps))>1e-8)throw new Error('설정된 간격에 맞는 숫자를 입력하세요.');}
     return value;
    }
@@ -141,6 +146,13 @@
    finally{statusPending=false;}
   }
   search.addEventListener('input',filter);clearSearch.addEventListener('click',()=>{search.value='';filter();search.focus();});
+  {
+   const heading=node('strong','먼저 할 것',first);node('p','비워 두어도 동작하지만, 채우면 인용 수·저널 정보·AI 기능이 열립니다.',first,{class:'scs-help'});
+   const list=node('div',null,first,{class:'scs-first-list'}),rows=new Map();
+   for(const key of FIRST){const state=states.get(key);if(!state)continue;const row=node('button',null,list,{type:'button','data-first':key});node('span',state.spec.label,row);node('span',state.spec.category==='ai'?'AI 요약·비교':key==='citationEmail'?'빠른 조회 대기열':'인용 수·저널 정보',row,{class:'scs-first-why'});row.addEventListener('click',()=>{selectCategory(state.spec.category);state.input.focus();});rows.set(key,row);}
+   refreshFirst=()=>{if(destroyed)return;let open=0;for(const [key,row]of rows){const state=states.get(key);const blank=!String(valueOf(state)??'').trim();row.hidden=!blank;if(blank)open++;}first.hidden=!open;heading.textContent=t(open>1?'먼저 할 것':'아직 비어 있는 것');};
+   refreshFirst();
+  }
   nav.addEventListener('keydown',event=>{if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...nav.querySelectorAll('button')],index=buttons.indexOf(doc.activeElement);if(index<0)return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:Math.max(0,Math.min(buttons.length-1,index+(event.key==='ArrowDown'?1:-1)));buttons[next].focus();selectCategory(buttons[next].dataset.category);});
   function destroy(){if(destroyed)return;destroyed=true;if(poll!==null)win.clearInterval(poll);observer?.disconnect();win.removeEventListener('unload',destroy);instances.delete(host);}
   async function loadValues(){

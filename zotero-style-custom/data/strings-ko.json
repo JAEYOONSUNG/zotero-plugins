@@ -63,7 +63,7 @@
    ]
   },
   {
-   "ko": "아직 조회하지 않았습니다. 연구 작업 → 관계 → 인용 관계 → 인용 목록 가져오기",
+   "ko": "아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기",
    "n": 3,
    "files": [
     "src/runtime.js"
@@ -71,6 +71,14 @@
   },
   {
    "ko": "특허",
+   "n": 3,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "Style Custom 연구 작업 패널",
    "n": 3,
    "files": [
     "src/runtime.js",
@@ -147,10 +155,10 @@
    ]
   },
   {
-   "ko": "Style Custom 연구 작업 패널",
+   "ko": "먼저 할 것",
    "n": 3,
    "files": [
-    "src/workbench.js"
+    "src/settings.js"
    ]
   },
   {
@@ -760,6 +768,13 @@
    ]
   },
   {
+   "ko": "문헌을 가져오면 관계 그래프가 나타납니다.",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "내 라이브러리에 없음",
    "n": 2,
    "files": [
@@ -1035,6 +1050,13 @@
   },
   {
    "ko": "설정에서 이 기능을 켜세요.",
+   "n": 1,
+   "files": [
+    "src/assist.js"
+   ]
+  },
+  {
+   "ko": "설정에서 AI endpoint와 모델을 먼저 입력하세요.",
    "n": 1,
    "files": [
     "src/assist.js"
@@ -1399,20 +1421,6 @@
   },
   {
    "ko": "일반",
-   "n": 1,
-   "files": [
-    "src/runtime.js"
-   ]
-  },
-  {
-   "ko": "1저자 {0} · {1}",
-   "n": 1,
-   "files": [
-    "src/runtime.js"
-   ]
-  },
-  {
-   "ko": "교신저자 {0} · {1}",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -1930,7 +1938,7 @@
    ]
   },
   {
-   "ko": "학위논문 · {0}",
+   "ko": "인용 수를 Extra 필드에 'Citations: N (출처, 날짜)' 한 줄로 기록합니다. 원하지 않으면 설정 → Style Custom → 인용 수·IF → '논문 추가·수정 시 인용 수 조회 후 Extra 저장'을 끄세요.",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -3666,6 +3674,20 @@
    ]
   },
   {
+   "ko": "저자 사진 찾기",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
+   "ko": "ORCID에 등록된 개인 홈페이지에서 사진을 찾습니다. 저자를 열 때만 요청합니다.",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
    "ko": "USPTO Open Data Portal 키 (선택)",
    "n": 1,
    "files": [
@@ -4164,6 +4186,41 @@
   },
   {
    "ko": "현재 동작을 확인하지 못했습니다.",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "비워 두어도 동작하지만, 채우면 인용 수·저널 정보·AI 기능이 열립니다.",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "AI 요약·비교",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "빠른 조회 대기열",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "인용 수·저널 정보",
+   "n": 1,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "아직 비어 있는 것",
    "n": 1,
    "files": [
     "src/settings.js"
@@ -4891,6 +4948,34 @@
    ]
   },
   {
+   "ko": "처음 여셨네요. 왼쪽 탭이 기능이고, ⌘/Ctrl K로 기능을 찾습니다. 문헌은 목록에서 고른 뒤 「현재 선택 가져오기」로 넘기고, 열 경계를 두 번 클릭하면 너비가 내용에 맞춰집니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "알겠어요",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "라이브러리에 문헌이 없습니다. ZotPoP으로 논문을 찾아 추가하세요.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "ZotPoP 열기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.",
    "n": 1,
    "files": [
@@ -5108,7 +5193,7 @@
    ]
   },
   {
-   "ko": "인용 목록 가져오기 ({0}편 남음)",
+   "ko": "인용 목록 가져오기 · OpenAlex ({0}편 남음)",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5291,13 +5376,6 @@
   },
   {
    "ko": "그래프는 최대 {0}개 문헌을 표시합니다.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "문헌을 가져오면 관계 그래프가 나타납니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5928,6 +6006,13 @@
   },
   {
    "ko": "기록된 첨부파일 정보를 찾지 못했습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "읽은 시간과 페이지는 PDF를 열어 읽는 동안 자동으로 기록됩니다. 아직 기록이 없습니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7460,6 +7545,13 @@
    ]
   },
   {
+   "ko": "문헌을 하나 고르면 OpenAlex에서 그 논문의 저자를 찾고, 관심 저자로 등록하면 새 논문·소속 이동·특허를 알려줍니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "저널별 색",
    "n": 1,
    "files": [
@@ -7824,7 +7916,7 @@
    ]
   },
   {
-   "ko": "JCR 분위·CAS 등급은 easyScholar 무료 키가 있어야 조회됩니다. 설정에서 키를 넣으면 이 목록에 등급 조회 버튼이 생깁니다. 키 없이도 위의 지표 조회는 동작합니다.",
+   "ko": "JCR 사분위와 JIF는 키 없이 표시됩니다. CAS 등급 등 추가 등급은 easyScholar 키(선택)를 설정에 넣으면 이 목록에 등급 조회 버튼이 생깁니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8055,7 +8147,7 @@
    ]
   },
   {
-   "ko": "OpenAlex 프로필(분야·h-index·오픈액세스)은 백필의 저널 단계에서 채워집니다.",
+   "ko": "분야·h-index·오픈액세스는 「빈 칸 채우기」(패널 위 알림, 또는 문헌 우클릭 → Style Custom)를 실행하면 OpenAlex에서 채워집니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8098,6 +8190,13 @@
   },
   {
    "ko": "AI 생성 결과 — 적용 전 확인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "Zotero 설정 → Style Custom → 번역·AI에 endpoint·모델·API 키를 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
    "n": 1,
    "files": [
     "src/workbench.js"

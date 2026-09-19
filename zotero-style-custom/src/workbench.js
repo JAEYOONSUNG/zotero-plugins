@@ -69,9 +69,12 @@
   // context-menu item nobody had a reason to look for. Putting the new one in
   // the same place would repeat that, so the panel says what is missing, where
   // the user already is, and offers to fill it.
+  const welcome=node('div',null,panel,{class:'sc-welcome',hidden:'hidden'});
   const notice=node('div',null,panel,{class:'sc-notice',hidden:'hidden'});
+  let noticeDismissed=false;
   async function refreshNotice(){
    if(disposed||typeof runtime.backfillPending!=='function')return;
+   if(noticeDismissed){notice.hidden=true;return;}
    let pending=null;
    // Counting means reading every item, and reading items is asynchronous in
    // Zotero; doing it synchronously is what broke every sweep in this plugin.
@@ -95,7 +98,7 @@
     message(runtime.backfillSummary(report),!!report.budgetGone);
     await refreshNotice();
    }),act);
-   button('나중에',()=>{notice.hidden=true;},act);
+   button('나중에',()=>{notice.hidden=true;noticeDismissed=true;},act);
   }
   // A transport failure is not a sentence. The panel used to print the whole
   // OpenAlex URL with "failed with status code 429" on the end.
@@ -204,6 +207,7 @@
   }
   async function paintPortrait(face,person){
    if(!runtime.fetchPortrait||!person?.id)return;
+   if(runtime.pref?.('authorPortraits',true)===false)return;
    const known=runtime.portraitOf?.(person.id);
    const draw=found=>{
     if(disposed||!face.isConnected||!found?.url)return;
@@ -390,7 +394,7 @@
   let toolbar;
   const target=doc.getElementById('zotero-items-toolbar');
   if(target){toolbar=doc.createXULElement?doc.createXULElement('toolbarbutton'):node('button');toolbar.id='style-custom-workbench-button';toolbar.className='zotero-tb-button';toolbar.setAttribute('image',runtime.rootURI+'content/icons/style-custom-toolbar.svg');
-   toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.setAttribute('label','워크벤치');toolbar.setAttribute('tooltiptext','Style Custom 연구 작업 패널');toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});
+   toolbar.setAttribute('tooltiptext',T('Style Custom 연구 작업 패널'));toolbar.setAttribute('label',T('워크벤치'));toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});
    placeInToolbar(target,toolbar);}
   const selected=()=>state.items.filter(i=>state.selected.has(String(i.id)));
   function bindAI(itemID){if(state.aiItemID!==itemID){aiEpoch++;state.aiItemID=itemID;state.aiTask=null;state.aiOutput=null;}}
@@ -462,8 +466,17 @@
    if(open&&wasHidden){syncDock();if(!tabID&&runtime.cache.workbenchUI?.docked===true&&canDock())dock({save:false});}
    if(tabID&&open){try{win.Zotero_Tabs.select(tabID);}catch(error){runtime.Z.logError?.(error);}}
    if(tabID&&!open){const id=tabID;tabID=null;closingSelf=true;moveBack();try{win.Zotero_Tabs.close(id);}catch(error){runtime.Z.logError?.(error);}closingSelf=false;}
-   if(open&&wasHidden)returnFocus=doc.activeElement;panel.hidden=!open;if(open){state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));await load();if(!disposed&&!panel.hidden)(controls.hidden?body:search).focus?.();}else{navigationEpoch++;closeCommands(false);epoch++;loadEpoch++;aiEpoch++;clear();if(returnFocus?.isConnected&&!win.closed)returnFocus.focus?.();returnFocus=null;}}
-  async function paperList(items){if(!items.length){empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');return;}
+   if(open&&wasHidden)returnFocus=doc.activeElement;panel.hidden=!open;if(open){state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));await load();
+    if(!disposed&&!runtime.cache.workbenchUI?.welcomed&&!welcome.childNodes.length){
+     // One line, once, on the first open: where the features are and how a paper gets in.
+     node('span','처음 여셨네요. 왼쪽 탭이 기능이고, ⌘/Ctrl K로 기능을 찾습니다. 문헌은 목록에서 고른 뒤 「현재 선택 가져오기」로 넘기고, 열 경계를 두 번 클릭하면 너비가 내용에 맞춰집니다.',welcome);
+     button('알겠어요',()=>{welcome.hidden=true;welcome.replaceChildren();saveUI({welcomed:true});},welcome);welcome.hidden=false;
+    }if(!disposed&&!panel.hidden)(controls.hidden?body:search).focus?.();}else{navigationEpoch++;closeCommands(false);epoch++;loadEpoch++;aiEpoch++;clear();if(returnFocus?.isConnected&&!win.closed)returnFocus.focus?.();returnFocus=null;}}
+  async function paperList(items){
+   if(!items.length){
+    if(!state.items.length){empty('라이브러리에 문헌이 없습니다. ZotPoP으로 논문을 찾아 추가하세요.');if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP 열기',()=>runtime.Z.ZotPoP.openSearch(win),bar(),{'data-variant':'primary'});return;}
+    empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');return;
+   }
    const pageSize=setting('explorePageSize',100),key=JSON.stringify([state.tab,state.scope,items.map(i=>i.id)]);
    if(state.pageKey!==key){state.pageKey=key;state.pageIndex=0;}
    state.pageIndex=Math.max(0,Math.min(state.pageIndex||0,Math.ceil(items.length/pageSize)-1));
@@ -567,7 +580,8 @@
      openalex:work&&work.openalex||'',references:work&&Array.isArray(work.references)?work.references:[]};
    });
    const withRefs=papers.filter(paper=>paper.references.length).length;
-   button(`인용 목록 가져오기 (${papers.length-withRefs}편 남음)`,()=>run(async()=>{
+   if(!papers.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
+   button(`인용 목록 가져오기 · OpenAlex (${papers.length-withRefs}편 남음)`,()=>run(async()=>{
     const wanted=[];
     for(const paper of chosen){
      const found=await runtime.Z.Items.getAsync(Number(paper.id));
@@ -890,6 +904,7 @@
    state.annotationIDs=new Set([...state.annotationIDs].filter(id=>filtered.some(a=>a.id===id)));
 
    if(!filtered.length){
+    selectionTools.hidden=true;
     empty(state.color?'이 색의 주석이 없습니다. 색 필터가 켜져 있습니다.':'조건에 맞는 주석이 없습니다. PDF에서 하이라이트나 메모를 추가하세요.');
     if(state.color)button('색 필터 해제',()=>{state.color='';render();},body,{'data-variant':'primary'});
     return;
@@ -906,7 +921,7 @@
    node('span',`주석 ${filtered.length}개`,summary,{class:'sc-muted'});
    for(const [hex,n] of [...counts].sort((a,b)=>b[1]-a[1])){
     const chip=node('button',null,summary,{class:'sc-annot-swatch',type:'button','aria-pressed':String(state.color===hex),
-     title:state.color===hex?`${hex} · ${n}개 · 다시 눌러 색 필터 해제`:`${hex||'색 없음'} · ${n}개 · 눌러서 이 색만 보기`});
+     title:state.color===hex?`${hex} · ${n}개 · 다시 눌러 색 필터 해제`:`${hex||T('색 없음')} · ${n}개 · 눌러서 이 색만 보기`});
     node('span',null,chip,{class:'sc-annot-dot',style:`background:${/^#[0-9a-f]{6}$/i.test(hex)?hex:'var(--sc-faint)'}`});
     node('span',String(n),chip);
     chip.addEventListener('click',()=>{state.color=state.color===hex?'':hex;render();});
@@ -928,7 +943,7 @@
 
    for(const [attachmentID,group] of byDocument){
     group.sort((a,b)=>(a.pageIndex??1e9)-(b.pageIndex??1e9));
-    if(byDocument.size>1)node('h3',`${titles.get(attachmentID)||'첨부파일'} · ${group.length}개`,body,{class:'sc-hit-group'});
+    if(byDocument.size>1)node('h3',`${titles.get(attachmentID)||T('첨부파일')} · ${group.length}개`,body,{class:'sc-hit-group'});
     const stack=node('div',null,body,{class:'sc-annots'});
     for(const a of group){
      visibleAnnotationIDs.add(a.id);
@@ -1170,6 +1185,7 @@
     }
     drewStrip=true;
    }
+   if(!drewStrip&&!list.childNodes.length)node('p','읽은 시간과 페이지는 PDF를 열어 읽는 동안 자동으로 기록됩니다. 아직 기록이 없습니다.',list,{class:'sc-empty'});
    if(drewStrip){const legend=node('div',null,list,{class:'sc-page-legend','aria-hidden':'true'});node('span','적게',legend);for(const level of [0,1,2,3,4])node('span','',legend,{class:'sc-page-cell sc-page-key','data-level':String(level)});node('span','많이',legend);}
   }
   function drawReading(){const b=bar();for(const theme of ['light','dark','sepia'])button(({light:'밝은 PDF',dark:'어두운 PDF',sepia:'세피아 PDF'})[theme],()=>reader.applyTheme(win,theme),b);
@@ -1733,6 +1749,7 @@
    refreshWatched();
    if(!item){
     message(`관심 저자 ${runtime.watchedAuthors().length}명. 새 저자를 등록하려면 문헌을 하나 선택하세요.`);
+    node('p','문헌을 하나 고르면 OpenAlex에서 그 논문의 저자를 찾고, 관심 저자로 등록하면 새 논문·소속 이동·특허를 알려줍니다.',body,{class:'sc-muted'});pickOne();
     return;
    }
    node('h2',item.title,body);
@@ -2005,7 +2022,7 @@
    function redrawJournalList(){if(disposed||state.tab!=='journals'||!listArea.isConnected)return;journalView.redraw();}
    journalView.redraw();
    if(!String(runtime.pref?.('journalRankKey','')||'').trim()){
-    node('p','JCR 분위·CAS 등급은 easyScholar 무료 키가 있어야 조회됩니다. 설정에서 키를 넣으면 이 목록에 등급 조회 버튼이 생깁니다. 키 없이도 위의 지표 조회는 동작합니다.',
+    node('p','JCR 사분위와 JIF는 키 없이 표시됩니다. CAS 등급 등 추가 등급은 easyScholar 키(선택)를 설정에 넣으면 이 목록에 등급 조회 버튼이 생깁니다.',
      body,{class:'sc-muted'});
    }
   }
@@ -2077,7 +2094,7 @@
    if(j.homepage){const a=node('a',j.homepage.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),null,{href:'#',title:j.homepage});a.addEventListener('click',e=>{e.preventDefault();runtime.Z.launchURL&&runtime.Z.launchURL(j.homepage);});fact('link','홈페이지',a);}
    if(j.globalRank)fact('quartile','JCR 순위',`${j.globalRank.toLocaleString()}위 / ${(runtime.journalIdentity?.registryRanked?.()||[]).length.toLocaleString()}`,{title:'JIF 순, 등재 저널 전체'});
    fact('library','내 서재',j.papers?`${j.papers}편 · 읽음 ${j.read} · 평균 피인용 ${j.avgCited}${j.span?' · '+(j.span[0]===j.span[1]?j.span[0]:j.span[0]+'–'+j.span[1]):''}`:'없음',{title:'이 서재에서 이 저널의 문헌'});
-   if(!j.profile)node('p','OpenAlex 프로필(분야·h-index·오픈액세스)은 백필의 저널 단계에서 채워집니다.',box,{class:'sc-muted sc-fact-note'});
+   if(!j.profile)node('p','분야·h-index·오픈액세스는 「빈 칸 채우기」(패널 위 알림, 또는 문헌 우클릭 → Style Custom)를 실행하면 OpenAlex에서 채워집니다.',box,{class:'sc-muted sc-fact-note'});
    const actions=bar(box);
    if(j.papers)button('이 저널 문헌 보기',()=>{state.query=search.value=j.venue;navigate('explore');},actions);
    else if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 이 저널 검색',()=>runtime.Z.ZotPoP.openSearch(win,{venue:j.venue}),actions);
@@ -2087,6 +2104,8 @@
    if(j.openAlexID){const b=button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions);journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
   }
   function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. 설정에서 AI endpoint와 모델을 연결할 수 있습니다.');pickOne();return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
+   const aiReady=!!(String(runtime.pref('aiEndpoint','')||'').trim()&&String(runtime.pref('aiModel','')||'').trim());
+   if(!aiReady)node('p','Zotero 설정 → Style Custom → 번역·AI에 endpoint·모델·API 키를 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.',body,{class:'sc-muted'});
    for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');const request=++aiEpoch;const result=await assist.run(task,item,{language:language.value});if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);
    button('요청 중지',()=>{aiEpoch++;assist.cancel?.();message('AI 요청을 중지했습니다.');},b);
    const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions);

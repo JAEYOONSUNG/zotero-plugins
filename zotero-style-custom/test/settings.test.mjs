@@ -79,3 +79,19 @@ test('category keyboard navigation moves visible content and keeps a stable focu
 test('Apply displays the backend canonical value without losing a newer draft',async()=>{
  const f=fixture(),pane=f.mount();await pane.ready;f.runtime.setSetting=async(key,value)=>value.trim();f.edit('label','  normalized  ');await f.click('이름 적용');assert.equal(f.input('label').value,'normalized');assert.equal(f.row('label').querySelector('button').disabled,true);pane.destroy();
 });
+
+test('the start-here block lists only the blank keys and sends each to its field',async()=>{
+ const f=fixture(Schema.schema),pane=f.mount();await pane.ready;
+ const block=f.doc.querySelector('.scs-first');
+ assert.ok(block&&!block.hidden,'a fresh profile is told what to fill first');
+ const shown=()=>[...f.doc.querySelectorAll('.scs-first-list button')].filter(b=>!b.hidden).map(b=>b.dataset.first);
+ assert.deepEqual(shown(),['citationEmail','openalexApiKey','aiEndpoint']);
+ assert.ok(block.textContent.includes('인용 수·저널 정보'),'each one says what it unlocks');
+ const row=f.doc.querySelector('[data-first="aiEndpoint"]');
+ row.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.doc.querySelector('.scs-category[data-category="ai"]').hidden,false,'it opens the category');
+ assert.equal(f.doc.activeElement,f.input('aiEndpoint'),'and lands in the field');
+ f.edit('citationEmail','someone@example.org');await f.click('연락 이메일 (선택) 적용');await settle();
+ assert.ok(!shown().includes('citationEmail'),'a filled key leaves the block');
+ pane.destroy();
+});

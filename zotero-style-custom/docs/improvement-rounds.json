@@ -1,5 +1,5 @@
 {
- "version": "0.48.2",
+ "version": "0.48.3",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1903,6 +1903,34 @@
    ],
    "status": "verified",
    "review": "Dead ends: keys typed in memos and checkboxes no longer toggle their rows; a colour filter, a news filter and a field pick each show their state and offer a way out; searches keep focus; empty tabs offer the button that fills them; map nodes select in place and take Space; Escape leaves a field, not the panel; menu entries report. Widths: the nav wraps instead of scrolling off-screen; card figures drop under the title and empty ones vanish; the journal table's hover buttons escape the clipped cell and the name takes the room; the map keeps a readable size and scrolls; the manager table, the selection tools, the footer, the watch tools, the collections rows and the segmented toggles fold instead of spilling; the reading strip is fluid; the two viewport media blocks that fought the container rules are gone."
+  },
+  {
+   "round": "R68",
+   "title": "처음 여는 사람이 보는 것",
+   "gap": "The plugin assumed a filled library, a key and a reader who already knew the vocabulary. A first-open read-through found the panel, the search window and the preferences all silent about what to do first.",
+   "entryPoint": "패널 첫 실행, ZotPoP 첫 실행, 설정 첫 화면",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "처음 여셨네요. 왼쪽 탭이 기능이고"
+    },
+    {
+     "file": "src/settings.js",
+     "marker": "const FIRST=['citationEmail','openalexApiKey','aiEndpoint']"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the first open explains the panel once and never again"
+    },
+    {
+     "file": "test/settings.test.mjs",
+     "name": "the start-here block lists only the blank keys and sends each to its field"
+    }
+   ],
+   "status": "verified",
+   "review": "첫 실행: 패널 맨 위에 한 줄 안내가 뜨고 '알겠어요'를 누르면 다시 나오지 않는다. 빈 서재·주석 없음·문헌 없음 탭은 그 자리에서 채울 버튼을 준다. 설정 첫 화면에는 비어 있는 키 세 개만 '먼저 할 것'으로 올라오고, 채우면 사라진다. ZotPoP은 키 없는 OpenAlex에 배너와 200건 상한을 걸고, 검색 전 지표 칸은 대시 대신 무엇이 뜰지 한 줄로 말한다. 읽기 0초는 기본으로 숨기고, 인용 수 배경 조회는 키가 있을 때만 돈다. 남아 있던 한국어 문자열 여덟 개를 번역 경로에 넣었다."
   }
  ],
  "introducedInVersion": "0.6.0"

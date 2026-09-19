@@ -164,7 +164,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(existing){this.Z.ItemTreeManager.unregisterColumn(existing);this.columns=this.columns.filter(key=>key!==existing);this.featureColumns.delete(dataKey);}continue;
       }
       if(existing)continue;
-      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time','tags','files','firstInstitution','correspondingInstitution','institutionTier'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
+      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
       if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
     }
   }
@@ -284,7 +284,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (journal) {
       merged.impactFactor = journal.impactFactor;
       merged.impactYear = journal.year;
-      merged.impactSource = `${journal.title} · JIF ${journal.year ?? "연도 미표기"} · ${journal.sourceURL} · checked ${journal.checkedAt}`;
+      merged.impactSource = `${journal.title} · JIF ${journal.year ?? this.t("연도 미표기")} · ${journal.sourceURL} · checked ${journal.checkedAt}`;
     }
     merged.impactKey = impactKey;
     const lookup=old.citationLookup;
@@ -797,10 +797,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // Everything the affiliation columns know, for a tooltip.
   affiliationNote(where) {
     return [
-      where.first ? `1저자 ${where.first.name} · ${where.first.institution || "소속 미상"}`
+      where.first ? `${this.t("1저자")} ${where.first.name} · ${where.first.institution || this.t("소속 미상")}`
         + (where.first.country ? ` (${where.first.country})` : "")
         + (where.first.hIndex ? ` · 기관 h-index ${where.first.hIndex}` : "") : null,
-      where.corresponding ? `교신저자 ${where.corresponding.name} · ${where.corresponding.institution || "소속 미상"}`
+      where.corresponding ? `${this.t("교신저자")} ${where.corresponding.name} · ${where.corresponding.institution || this.t("소속 미상")}`
         + (where.corresponding.country ? ` (${where.corresponding.country})` : "")
         + (where.corresponding.hIndex ? ` · 기관 h-index ${where.corresponding.hIndex}` : "") : null,
       where.correspondingKnown ? null : "교신저자 표시가 없어 마지막 저자를 교신저자로 간주했습니다.",
@@ -853,7 +853,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const where = this.affiliationOf(item);
         cell.textContent = "—";
         cell.style.color = P.faint;
-        cell.title = where ? this.affiliationNote(where) : "아직 조회하지 않았습니다. 연구 작업 → 관계 → 인용 관계 → 인용 목록 가져오기";
+        cell.title = where ? this.affiliationNote(where) : "아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기";
       }
       return cell;
     }
@@ -1000,7 +1000,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!where) {
         cell.textContent = "—";
         cell.style.color = P.faint;
-        cell.title = "아직 조회하지 않았습니다. 연구 작업 → 관계 → 인용 관계 → 인용 목록 가져오기";
+        cell.title = "아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기";
         return cell;
       }
       if (key === "institutionTier") {
@@ -1033,7 +1033,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!where) {
         cell.textContent = "—";
         cell.style.color = P.faint;
-        cell.title = "아직 조회하지 않았습니다. 연구 작업 → 관계 → 인용 관계 → 인용 목록 가져오기";
+        cell.title = "아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기";
         return cell;
       }
       const line = (row, role) => this.affiliationLine(doc, row, role, P);
@@ -3132,6 +3132,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   async persistCitation(item,result,{flush=true}={}) {
     if(!this.active||this.stopping||!this.canEdit(item)||item.hasChanged?.()||result?.status!=="ok"||!Number.isSafeInteger(result.count)||result.count<0)return false;
+    if(!this.cache.citationExtraNoticeShown){
+      // The first time the plugin writes into a field the user can see, it says so, once.
+      this.cache.citationExtraNoticeShown=true;this.dirty=true;
+      const win=this.Z.getMainWindow?.();
+      if(win)try{this.say(win,"인용 수를 Extra 필드에 'Citations: N (출처, 날짜)' 한 줄로 기록합니다. 원하지 않으면 설정 → Style Custom → 인용 수·IF → '논문 추가·수정 시 인용 수 조회 후 Extra 저장'을 끄세요.");}catch(_){}
+    }
     if(!["OpenAlex","Crossref"].includes(result.source)||result.identity!==this.citationTools.identity(this.citationRecord(item)))return false;
     if(!Number.isFinite(Date.parse(result.checkedAt)))return false;
     const before=String(item.getField("extra")||"");
@@ -3415,8 +3421,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     chip.style.background = this.tint(tone, 0.16);
     chip.style.color = tone;
     chip.title = found.kind === 'patent'
-      ? `${found.number ? this.itemKinds.office(found.number) + ' 특허 ' + found.number : '특허'} · ${found.why === 'file name' ? '파일 이름으로 판별' : found.why === 'title' ? '제목으로 판별' : '항목 유형'}`
-      : `학위논문 · ${found.why === 'title' ? '제목으로 판별' : '항목 유형'}`;
+      ? `${found.number ? this.itemKinds.office(found.number) + ' ' + this.t('특허') + ' ' + found.number : this.t('특허')} · ${this.t(found.why === 'file name' ? '파일 이름으로 판별' : found.why === 'title' ? '제목으로 판별' : '항목 유형')}`
+      : `${this.t('학위논문')} · ${this.t(found.why === 'title' ? '제목으로 판별' : '항목 유형')}`;
   }
 
   attachColumnFit(win, state) {
@@ -3486,6 +3492,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // Menu labels pass through the dictionary like everything the panel writes.
       const make = (tag,label,parent) => { const node=doc.createXULElement(tag); if(label)node.setAttribute("label",this.t(label));parent?.appendChild(node);return node; };
       const menu=make("menu","Style Custom",popup);menu.id="style-custom-itemmenu";state.nodes.push(menu);
+      // A door that needs no paper selected: the Tools menu, beside ZotPoP's.
+      const tools=doc.getElementById("menu_ToolsPopup");
+      if(tools&&!doc.getElementById("style-custom-tools-item")){const entry=make("menuitem","Style Custom 연구 작업 패널",tools);entry.id="style-custom-tools-item";entry.addEventListener("command",()=>state.workbench?.toggle(true));state.nodes.push(entry);}
       const body=make("menupopup",null,menu);
       /* Every entry carries a small drawn sign, so a list of twenty verbs
          can be scanned by shape; the signs are the same strokes the panel's
@@ -3639,7 +3648,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(state.signature!==null && signature!==state.signature) await view?.refreshAndMaintainSelection();
         state.signature=signature;this.enhanceTitles(win,state,records); await this.flush();
         if(this.featureEnabled("citedCountColumn")&&this.pref("autoCitations",true)&&!this.citationJob&&!this.stopping) {
-          this.refreshCitations(records,{background:true}).catch(error=>this.Z.logError(error));
+          // Without a key, OpenAlex list requests come out of a budget of about
+          // ten a day shared with ZotPoP's searches; the background job waits
+          // for a key rather than spending them before the user has searched once.
+          if(this.openAlexKey())this.refreshCitations(records,{background:true}).catch(error=>this.Z.logError(error));
         }
       } catch(error){this.Z.logError(error);} finally{state.polling=false;}
     };

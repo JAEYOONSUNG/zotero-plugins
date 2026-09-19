@@ -110,7 +110,7 @@ test('all tabs expose functional primary actions and use library service contrac
  assert.equal(f.bench.panel.querySelector('[data-action-key], button'), f.bench.panel.querySelector('button'));
  assert.ok(![...f.body().querySelectorAll('button')].some(b=>b.textContent==='등급 조회'),
   'no grade button without a key');
- assert.match(f.body().textContent,/easyScholar 무료 키/);
+ assert.match(f.body().textContent,/easyScholar 키/);
  f.runtime.pref=(key,fallback)=>key==='journalRankKey'?'a-key':fallback;
  await f.bench.show('journals');
  await f.click('등급 조회');assert.ok(f.calls.find(c=>c[0]==='ranks'));
@@ -1141,4 +1141,21 @@ test('every button on every tab survives a press without throwing, and the tab s
  assert.deepEqual(f.errors,[],'nothing reached logError');
  assert.ok(pressed.length>25,'the sweep pressed '+pressed.length+' buttons');
  f.bench.destroy();
+});
+
+test('the first open explains the panel once and never again',async()=>{
+ const f=fixture();await f.bench.toggle(true);
+ const welcome=f.bench.panel.querySelector('.sc-welcome');
+ assert.ok(welcome&&!welcome.hidden,'the first open says what the panel is');
+ assert.match(welcome.textContent,/처음 여셨네요/);
+ assert.equal(f.bench.panel.querySelectorAll('.sc-notice:not(.sc-welcome)').length,1,'the welcome line is not the backfill notice');
+ const ok=[...welcome.querySelectorAll('button')].find(b=>b.textContent==='알겠어요');
+ assert.ok(ok,'it can be dismissed');ok.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(welcome.hidden,true);assert.equal(f.runtime.cache.workbenchUI.welcomed,true,'the dismissal is remembered');
+ await f.bench.toggle(false);await f.bench.toggle(true);
+ assert.equal(f.bench.panel.querySelector('.sc-welcome').hidden,true,'a later open stays quiet');
+ f.bench.destroy();
+ const seen=fixture({items:{},readerSettings:{},workbenchUI:{welcomed:true}});await seen.bench.toggle(true);
+ assert.equal(seen.bench.panel.querySelector('.sc-welcome').hidden,true,'a returning user never sees it');
+ seen.bench.destroy();
 });
