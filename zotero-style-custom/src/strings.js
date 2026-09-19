@@ -900,6 +900,7 @@
  "저장된 지표와 읽기 기록 새로고침": "Refresh the stored metrics and reading history",
  "저장된 탭 그룹": "Saved tab groups",
  "저장된 탭 그룹 이름": "Saved tab group name",
+ "저장하지 못했습니다. 디스크 공간과 Zotero 폴더 권한을 확인하세요. 지금까지의 기록은 창을 닫기 전까지 남아 있습니다.": "Could not save. Check the disk space and the permissions on your Zotero folder. What you have done so far is held until this window closes.",
  "저장한 노트 열기": "Open the saved note",
  "적게": "Less",
  "적용": "Apply",

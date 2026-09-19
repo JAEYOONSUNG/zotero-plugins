@@ -55,6 +55,24 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   identity(item) { return `${item.libraryID}:${item.key}`; }
   entry(item) { return this.cache.items[this.identity(item)] ||= {}; }
+  /* Rows for papers that are no longer in any library. Deleting a paper left
+     its reading time, ratings and citation counts in the store, where they were
+     re-read and re-written on every save. Run once per start, never during one. */
+  async pruneDeletedItems() {
+    const store = this.cache.items;
+    if (!store || typeof store !== 'object') return 0;
+    const keys = Object.keys(store);
+    if (keys.length < 200) return 0;
+    const alive = new Set();
+    for (const library of this.Z.Libraries?.getAll?.() || []) {
+      for (const item of await this.libraryItems(library.libraryID) || []) alive.add(this.identity(item));
+    }
+    if (!alive.size) return 0;
+    let removed = 0;
+    for (const key of keys) if (!alive.has(key)) { delete store[key]; removed++; }
+    if (removed) { this.dirty = true; this.scheduleFlush(5000); }
+    return removed;
+  }
   // Zotero.Items.getAll returns a Promise. Six call sites iterated it directly,
   // which throws, so every library-wide sweep in this plugin failed on the first
   // line and no unit test could see it: the fixture handed back a plain array.
@@ -231,7 +249,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }, true));
     }
     if (this.Z.Notifier) this.itemObserver = this.Z.Notifier.registerObserver({notify:(event,type,ids,extraData)=>{
-      if(type === "item" && (event === "add" || event === "modify")) this.scheduleMetadataCitations((ids||[]).filter(id=>!extraData?.[id]?.styleCustomCitations));
+      /* A sync rewrites every item it touches. Answering each one queues a
+         lookup per paper, so the queue is left alone while a sync runs and the
+         plugin's own writes are never treated as news. */
+      if(this.Z.Sync?.Runner?.syncInProgress) return;
+      if(type === "item" && (event === "add" || event === "modify"))
+        this.scheduleMetadataCitations((ids||[]).filter(id=>!extraData?.[id]?.styleCustomCitations&&!extraData?.[id]?.styleCustomActivity));
       if(type==='tab') {
         const itemIDs=(ids||[]).map(id=>extraData?.[id]?.itemID||this.Z.Reader?.getByTabID?.(id)?.itemID||this.tabItems.get(id)).filter(Boolean);
         if(['add','select','close'].includes(event)&&this.pref('touchDateOnRead',false))for(const id of new Set(itemIDs))this.activityQueue=this.activityQueue.then(()=>this.touchReadingItem(id)).catch(error=>this.Z.logError(error));
@@ -240,6 +263,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
     }},["item","tab"],"style-custom-citations");
     this.Z.debug("Style Custom " + version + " ready");
+    // Off the start path: a library sweep must not delay a window opening.
+    this.scheduleFlush(60000);
+    Promise.resolve().then(() => this.pruneDeletedItems()).catch(error => this.Z.logError(error));
   }
   metrics(item) {
     const old = this.entry(item);
@@ -2010,17 +2036,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (work.doi && !work.signals) jobs.push(work);
     }
     let checked = 0, flagged = 0;
-    for (const [index, work] of jobs.entries()) {
+    // Five at a time: Crossref answers a polite request in about a second, and
+    // one at a time turned a long watchlist into a sweep nobody waited for.
+    for (let start = 0; start < jobs.length; start += 5) {
       if (signal?.aborted || !this.active || this.stopping) break;
-      onProgress?.(index, jobs.length);
-      try {
-        const {signals} = await this.fetchPaperSignals(null, {signal, crossrefOnly: true, record: {DOI: work.doi, title: work.title}});
-        if (!signals) continue;
-        work.signals = {status: signals.status, rank: signals.rank, checkedAt: signals.checkedAt};
-        checked++;
-        if (signals.rank >= 1) flagged++;
-        this.dirty = true;
-      } catch (error) { this.Z.logError(error); }
+      onProgress?.(start, jobs.length);
+      await Promise.all(jobs.slice(start, start + 5).map(async work => {
+        try {
+          const {signals} = await this.fetchPaperSignals(null, {signal, crossrefOnly: true, record: {DOI: work.doi, title: work.title}});
+          if (!signals) return;
+          work.signals = {status: signals.status, rank: signals.rank, checkedAt: signals.checkedAt};
+          checked++;
+          if (signals.rank >= 1) flagged++;
+          this.dirty = true;
+        } catch (error) { this.Z.logError(error); }
+      }));
     }
     if (checked) { this.cache.watchedAuthors = rows; await this.flush(); }
     return {checked, flagged, total: jobs.length};
@@ -2546,7 +2576,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           report.references += work.references.length;
           store[row.key] = {
             doi: row.doi, openalex: work.id, year: work.year, citations: work.citations,
-            venue: work.venue, references: work.references,
+            venue: work.venue, references: (work.references||[]).slice(0, 500),
             // Only the two authorships the row will show. A consortium paper has
             // hundreds, and none of the rest is ever read.
             people: this.affiliationTools.principals(work.people)
@@ -3293,18 +3323,54 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     record.lastRead=new Date().toISOString();
     if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0&&Number.isInteger(location.pageIndex)&&location.pageIndex>=0&&location.pageIndex<100000&&Number.isInteger(location.totalPages)&&location.totalPages>location.pageIndex&&location.totalPages<=100000){record.readingAttachments||={};const bucket=record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:location.totalPages};bucket.pageTimes||={};bucket.pageTimes[location.pageIndex]=(Number(bucket.pageTimes[location.pageIndex])||0)+seconds;bucket.totalPages=location.totalPages;bucket.lastRead=record.lastRead;record.readingAttachmentID=location.attachmentID;}
     this.refreshReadingDisplays();
-    await this.flush();
-    await this.refreshWindows();
+    /* The cells are already repainted in place. A full store write and an item
+       tree rebuild every second was the rest of this method; the seconds are
+       now written at most twice a minute, and on stop. */
+    this.scheduleFlush(30000);
+  }
+  /* A write that can wait. Anything that must be on disk now calls flush(). */
+  scheduleFlush(delay = 30000) {
+    if (this.flushTimer || this.stopping) return;
+    // A window supplies the clock; during startup there may not be one yet, and
+    // the plugin's own sandbox has no timers at all. Then the write simply waits
+    // for the next explicit flush.
+    const host = this.Z.getMainWindow?.() || (typeof globalThis.setTimeout === 'function' ? globalThis : null);
+    if (typeof host?.setTimeout !== 'function') return;
+    const timer = host.setTimeout(() => {
+      this.flushTimer = null;
+      if (this.dirty) this.flush().catch(error => this.Z.logError(error));
+    }, delay);
+    if (typeof timer === 'object' && typeof timer.unref === 'function') timer.unref();
+    this.flushTimer = timer;
+  }
+  cancelScheduledFlush() {
+    if (!this.flushTimer) return;
+    const host = this.Z.getMainWindow?.() || (typeof globalThis.clearTimeout === 'function' ? globalThis : null);
+    if (typeof host?.clearTimeout === 'function') host.clearTimeout(this.flushTimer);
+    this.flushTimer = null;
   }
   flush() {
+    this.cancelScheduledFlush();
     // A write is a change, whether or not a window is refreshed after it.
     this.bumpState();
     const work = this.writeQueue.then(async () => {
       if (!this.dirty) return;
       const snapshot = JSON.parse(JSON.stringify(this.cache));
       this.dirty = false;
-      try { await this.storage.write(snapshot); }
-      catch (error) { this.dirty = true; throw error; }
+      try { await this.storage.write(snapshot); this.writeFailed = false; }
+      catch (error) {
+        this.dirty = true;
+        /* A disk that will not take the file loses reading time, ratings and
+           citation counts silently. Say it once, in the panel, and not again
+           until a write succeeds. */
+        if (!this.writeFailed) {
+          this.writeFailed = true;
+          for (const [, state] of this.windows) {
+            try { state.workbench?.setStatus?.('저장하지 못했습니다. 디스크 공간과 Zotero 폴더 권한을 확인하세요. 지금까지의 기록은 창을 닫기 전까지 남아 있습니다.'); } catch (ignored) {}
+          }
+        }
+        throw error;
+      }
     });
     this.writeQueue = work.catch(error => this.Z.logError(error));
     return work;

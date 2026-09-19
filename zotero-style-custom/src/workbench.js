@@ -1943,11 +1943,15 @@
       for one line that can be picked at any level. */
    const LEVELS=[['domain','대분류'],['field','분야'],['subfield','세부 분야']];
    const line=node('div',null,body,{class:'sc-field-line','aria-label':'분야 고르기'});
+   const underMemo=new Map();
    const under=(level,index)=>{
+    const memoKey=level+'|'+index;
+    if(underMemo.has(memoKey))return underMemo.get(memoKey);
     const above=LEVELS.slice(0,index).map(([l])=>l);
     const counts=new Map();
-    for(const j of all){const mine=new Set();for(const x of j.levels){if(!above.every(l=>!pick[l]||x[l]===pick[l]))continue;if(x[level])mine.add(JSON.stringify([x[level],index?x[LEVELS[index-1][0]]:'']));}for(const key of mine){counts.set(key,(counts.get(key)||0)+1);}}
-    return [...counts].map(([key,count])=>{const [value,parent]=JSON.parse(key);return {value,parent,count};}).sort((x,y)=>y.count-x.count||x.value.localeCompare(y.value));
+    for(const j of all){const mine=new Set();for(const x of j.levels){if(!above.every(l=>!pick[l]||x[l]===pick[l]))continue;if(x[level])mine.add(x[level]+'\u0000'+(index?x[LEVELS[index-1][0]]||'':''));}for(const key of mine){counts.set(key,(counts.get(key)||0)+1);}}
+    const list=[...counts].map(([key,count])=>{const [value,parent]=key.split('\u0000');return {value,parent,count};}).sort((x,y)=>y.count-x.count||x.value.localeCompare(y.value));
+    underMemo.set(memoKey,list);return list;
    };
    for(const [index,[level,label]] of LEVELS.entries()){
     const options=under(level,index);
@@ -1985,7 +1989,11 @@
    journalView.redraw=()=>{
    listArea.replaceChildren();
    const q=String(journalView.query||'').trim().toLowerCase();
-   const found=j=>!q||[j.venue,j.abbreviation,j.publisher,...j.levels.flatMap(l=>[l.domain,l.field,l.subfield])].some(v=>String(v||'').toLowerCase().includes(q));
+   const found=j=>{
+    if(!q)return true;
+    if(j.haystack===undefined)j.haystack=[j.venue,j.abbreviation,j.publisher,...j.levels.flatMap(l=>[l.domain,l.field,l.subfield])].map(v=>String(v||'').toLowerCase()).join('\u0000');
+    return j.haystack.includes(q);
+   };
    const shownAll=all.filter(j=>matches(j)&&found(j)).sort(order);
    if(!shownAll.length){node('p',q?'검색에 맞는 저널이 없습니다.':'이 분야의 저널이 없습니다.',listArea,{class:'sc-empty'});return;}
    // A page at a time past a hundred rows: the registry is twenty-two thousand.

@@ -52,8 +52,10 @@ var ZotPoPImporter = (function () {
 			return rows.length ? rows[0].itemID : null;
 		}
 		catch (e) {
+			// Answering "no" here imports a second copy of a paper already on the
+			// shelf. The caller has to hear that the question could not be asked.
 			Zotero.logError(e);
-			return null;
+			throw new Error("Could not check the library for duplicates: " + (e.message || e));
 		}
 	}
 
@@ -76,29 +78,46 @@ var ZotPoPImporter = (function () {
 		.replace(/[^a-z0-9]+/g, " ")
 		.trim();
 
+	/* The scan below reads every title in the library. Importing eighty papers
+	   ran it eighty times; it is read once and kept for the run. */
+	const titleRuns = new Map();
+	function forgetTitleIndex(libraryID) { if (libraryID == null) titleRuns.clear(); else titleRuns.delete(libraryID); }
+	async function titleIndex(libraryID) {
+		let held = titleRuns.get(libraryID);
+		if (held && Date.now() - held.at < 120000) return held.rows;
+		let sql = "SELECT I.itemID, IDV.value AS title, "
+			+ "(SELECT IDV2.value FROM itemData ID2 "
+			+ " JOIN itemDataValues IDV2 ON ID2.valueID = IDV2.valueID "
+			+ " JOIN fields F2 ON ID2.fieldID = F2.fieldID AND F2.fieldName = 'date' "
+			+ " WHERE ID2.itemID = I.itemID) AS date "
+			+ "FROM items I "
+			+ "JOIN itemData ID ON I.itemID = ID.itemID "
+			+ "JOIN itemDataValues IDV ON ID.valueID = IDV.valueID "
+			+ "JOIN fields F ON ID.fieldID = F.fieldID "
+			+ "WHERE F.fieldName = 'title' AND I.libraryID = ? "
+			+ "AND I.itemID NOT IN (SELECT itemID FROM deletedItems) "
+			+ "AND I.itemID NOT IN (SELECT itemID FROM itemAttachments) "
+			+ "AND I.itemID NOT IN (SELECT itemID FROM itemNotes)";
+		let rows = await Zotero.DB.queryAsync(sql, [libraryID]);
+		let byTitle = new Map();
+		for (let row of rows) {
+			let key = flatTitle(row.title);
+			if (!key) continue;
+			let list = byTitle.get(key); if (!list) byTitle.set(key, list = []);
+			list.push(row);
+		}
+		titleRuns.set(libraryID, {at: Date.now(), rows: byTitle});
+		return byTitle;
+	}
 	async function findByTitle(libraryID, title, year) {
 		let wanted = flatTitle(title);
 		// A short title is not evidence: "Introduction" or "Erratum" would match
 		// half a library.
 		if (wanted.split(" ").filter(w => w.length > 2).length < 4) return null;
 		try {
-			let sql = "SELECT I.itemID, IDV.value AS title, "
-				+ "(SELECT IDV2.value FROM itemData ID2 "
-				+ " JOIN itemDataValues IDV2 ON ID2.valueID = IDV2.valueID "
-				+ " JOIN fields F2 ON ID2.fieldID = F2.fieldID AND F2.fieldName = 'date' "
-				+ " WHERE ID2.itemID = I.itemID) AS date "
-				+ "FROM items I "
-				+ "JOIN itemData ID ON I.itemID = ID.itemID "
-				+ "JOIN itemDataValues IDV ON ID.valueID = IDV.valueID "
-				+ "JOIN fields F ON ID.fieldID = F.fieldID "
-				+ "WHERE F.fieldName = 'title' AND I.libraryID = ? "
-				+ "AND I.itemID NOT IN (SELECT itemID FROM deletedItems) "
-				+ "AND I.itemID NOT IN (SELECT itemID FROM itemAttachments) "
-				+ "AND I.itemID NOT IN (SELECT itemID FROM itemNotes)";
-			let rows = await Zotero.DB.queryAsync(sql, [libraryID]);
+			let rows = (await titleIndex(libraryID)).get(wanted) || [];
 			let wantedYear = String(year || "").match(/\b(1[5-9]|20)\d{2}\b/);
 			for (let row of rows) {
-				if (flatTitle(row.title) !== wanted) continue;
 				if (wantedYear) {
 					let theirs = String(row.date || "").match(/\b(1[5-9]|20)\d{2}\b/);
 					// A year on both sides that disagrees means two different
@@ -110,6 +129,7 @@ var ZotPoPImporter = (function () {
 		}
 		catch (e) {
 			Zotero.logError(e);
+			throw new Error("Could not check the library for duplicates: " + (e.message || e));
 		}
 		return null;
 	}
@@ -353,5 +373,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { importRecord, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle };
+	return { importRecord, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
 })();

@@ -1882,3 +1882,44 @@ test('every entry of the item menu carries a drawn sign', () => {
     assert.ok(Array.isArray(icons[icon]), icon);
   }
 });
+
+test('rows for papers that have left the library are dropped, and a small store is left alone', async () => {
+ const {plugin, Z, item} = fixture(); Z.Libraries.userLibraryID = 1;
+ plugin.active = true;
+ const alive = item(42, {});
+ Z.Libraries.getAll = () => [{libraryID: 1}];
+ Z.Items = {...(Z.Items || {}), getAll: async () => [alive]};
+ plugin.cache.items = {};
+ for (let n = 0; n < 250; n++) plugin.cache.items['1:GONE' + n] = {seconds: 5};
+ plugin.cache.items[plugin.identity(alive)] = {seconds: 99};
+ assert.equal(await plugin.pruneDeletedItems(), 250, 'every key with no item behind it goes');
+ assert.equal(plugin.cache.items[plugin.identity(alive)].seconds, 99, 'the paper that is still here keeps its reading time');
+ // A store this small is not worth a library sweep.
+ plugin.cache.items = {'1:ONLY': {seconds: 1}};
+ assert.equal(await plugin.pruneDeletedItems(), 0);
+ assert.deepEqual(Object.keys(plugin.cache.items), ['1:ONLY']);
+ plugin.cancelScheduledFlush();
+});
+
+test('a write that fails says so once in the panel, and says it again only after a write succeeds', async () => {
+ const {plugin, Z, item} = fixture(); Z.Libraries.userLibraryID = 1;
+ plugin.active = true;
+ const said = [];
+ plugin.windows.set({closed: false}, {workbench: {setStatus: text => said.push(text)}});
+ plugin.storage = {write: async () => { throw new Error('read-only volume'); }};
+ plugin.dirty = true;
+ await assert.rejects(() => plugin.flush(), /read-only/);
+ assert.equal(said.length, 1, 'the panel is told');
+ assert.match(said[0], /저장하지 못했습니다/);
+ assert.equal(plugin.dirty, true, 'and nothing is treated as saved');
+ plugin.dirty = true;
+ await assert.rejects(() => plugin.flush(), /read-only/);
+ assert.equal(said.length, 1, 'the same failure is not repeated at every tick');
+ plugin.storage = {write: async () => {}};
+ plugin.dirty = true; await plugin.flush();
+ plugin.storage = {write: async () => { throw new Error('read-only volume'); }};
+ plugin.dirty = true;
+ await assert.rejects(() => plugin.flush(), /read-only/);
+ assert.equal(said.length, 2, 'a failure after a good write is news again');
+ plugin.cancelScheduledFlush();
+});

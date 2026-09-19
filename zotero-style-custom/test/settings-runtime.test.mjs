@@ -24,7 +24,11 @@ test('typed settings reset restores real defaults and preserves provider credent
 });
 test('reading time starts at zero and live cell updates before a delayed cache save completes',async()=>{
  const f=fixture();await f.start();const {document,window}=parseHTML('<html><body></body></html>');window.ZoteroPane={itemsView:{getRow:()=>({ref:f.paper})}};let refreshes=0;f.runtime.windows.set(window,{workbench:{refreshMetrics:()=>refreshes++}});
- const cell=f.runtime.renderCell('time',0,'',{},document);document.body.appendChild(cell);assert.equal(cell.textContent,'','nothing read yet: the cell stays blank by default');let finish;f.storage.write=()=>new Promise(resolve=>{finish=resolve;});const recording=f.runtime.addReading(f.paper,1,{attachmentID:9,pageIndex:0,totalPages:10});assert.equal(cell.textContent,'1s');assert.equal(refreshes,1);await settle();finish();await recording;
+ const cell=f.runtime.renderCell('time',0,'',{},document);document.body.appendChild(cell);assert.equal(cell.textContent,'','nothing read yet: the cell stays blank by default');let writes=0;f.storage.write=async()=>{writes++;};await f.runtime.addReading(f.paper,1,{attachmentID:9,pageIndex:0,totalPages:10});assert.equal(cell.textContent,'1s','the cell is repainted on the tick itself');assert.equal(refreshes,1);await settle();
+ // A tick a second must not rewrite the whole store: the seconds are held and
+ // written by the scheduled flush, or by stop().
+ assert.equal(writes,0,'the tick does not write to disk');assert.equal(f.runtime.dirty,true,'but it is remembered as unsaved');
+ f.runtime.cancelScheduledFlush();await f.runtime.flush();assert.equal(writes,1,'an explicit flush writes once');
  f.storage.write=async()=>{};f.runtime.windows.clear();await f.runtime.setSetting('timeFormat','clock');assert.equal(f.runtime.formatReadTime(3661),'01:01:01');await f.runtime.setSetting('timeFormat','seconds');assert.equal(f.runtime.formatReadTime(0),'','zero stays blank by default');await f.runtime.setSetting('showZeroReadTime',true);assert.equal(f.runtime.formatReadTime(0),'0초');await f.runtime.setSetting('showZeroReadTime',false);assert.equal(f.runtime.formatReadTime(0),'');await f.runtime.stop();
 });
 test('recording interval and idle settings reconfigure the clock while unrelated settings do not restart it',async()=>{

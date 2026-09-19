@@ -402,11 +402,24 @@ test("a paper already on the shelf without a DOI is still recognised", async () 
   // title is not evidence: "Erratum" would match half a library.
   rows.length = 0;
   rows.push({ itemID: 9, title: "Erratum", date: "2020" });
+  api.forgetTitleIndex();
   assert.equal(await api.findByTitle(1, "Erratum", "2020"), null);
 
-  // A database that cannot be read is not an answer either way.
+  /* Every title in the library is read once per run, not once per paper: eighty
+     imported papers used to mean eighty full scans. */
+  let scans = 0;
+  const seen = sandbox.Zotero.DB.queryAsync;
+  sandbox.Zotero.DB.queryAsync = async (...args) => { scans++; return seen(...args); };
+  api.forgetTitleIndex();
+  for (let n = 0; n < 5; n++) await api.findByTitle(1, "Some other paper title entirely here", "2020");
+  assert.equal(scans, 1, "five lookups, one scan");
+
+  // A database that cannot be read is not an answer either way: saying "not
+  // here" would import a second copy of a paper already on the shelf.
   sandbox.Zotero.DB.queryAsync = async () => { throw new Error("locked"); };
-  assert.equal(await api.findByTitle(1, "A thermostable type I-B CRISPR-Cas system", "2023"), null);
+  api.forgetTitleIndex();
+  await assert.rejects(() => api.findByTitle(1, "A thermostable type I-B CRISPR-Cas system", "2023"), /duplicates/);
+  await assert.rejects(() => api.findByDOI(1, "10.1/x"), /duplicates/);
 });
 
 test("a restored or freshly displayed result gets the JCR impact factor, and an OpenAlex-only figure is marked as an estimate", async () => {

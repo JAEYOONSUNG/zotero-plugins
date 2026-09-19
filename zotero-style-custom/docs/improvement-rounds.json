@@ -1,5 +1,5 @@
 {
- "version": "0.48.5",
+ "version": "0.48.6",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1967,22 +1967,46 @@
      "marker": "--sc-tone-top: #8556AD"
     },
     {
-     "file": "content/journal-marks.js",
-     "marker": "the ink walks its own hue until it clears"
+     "file": "src/journal-identity.js",
+     "marker": "The bar is 4.5, what a"
     }
    ],
    "tests": [
     {
      "file": "test/styles.test.mjs",
      "name": "every ink token reads against the surface it is drawn on, in both themes"
-    },
-    {
-     "file": "test/journal-marks.test.mjs",
-     "name": "an exact code is worn as-is on the badge and pulled to a readable lightness for the name"
     }
    ],
    "status": "verified",
    "review": "어두운 테마에서 저널 표의 JIF 숫자는 거의 검은색으로 칠해져 보이지 않았다. 그 규칙을 지우고 색조 토큰이 두 테마 모두에 적용되게 했다. 밝은 테마의 잉크 21개, 어두운 테마의 6개를 같은 색상을 유지한 채 명도만 움직여 4.5:1을 넘겼다. 채운 버튼과 배지는 배경의 밝기에 따라 흰 글자 또는 검은 글자를 고른다. 저널 마크의 잉크는 고정 명도 대신 색상별로 대비를 걸어 노란 계열도 읽힌다. 토큰 대비는 이제 테스트가 지킨다."
+  },
+  {
+   "round": "R71",
+   "title": "초당 한 번의 디스크 쓰기와 조용한 실패들",
+   "gap": "A reading tick wrote the whole store and rebuilt the item tree once a second, a failed write said nothing, a failed duplicate check read as \"not in the library\", and the journal menus walked 22,594 rows six times per keystroke.",
+   "entryPoint": "PDF 읽는 중, 저널 탭, 가져오기",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "The cells are already repainted in place"
+    },
+    {
+     "file": "src/runtime.js",
+     "marker": "A disk that will not take the file loses reading time"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/runtime.test.mjs",
+     "name": "a write that fails says so once in the panel, and says it again only after a write succeeds"
+    },
+    {
+     "file": "test/runtime.test.mjs",
+     "name": "rows for papers that have left the library are dropped, and a small store is left alone"
+    }
+   ],
+   "status": "verified",
+   "review": "읽는 중에는 셀만 다시 그리고, 저장은 30초에 한 번과 종료 시로 미룬다. 동기화 중에는 알림을 받지 않는다. 저장 실패는 패널에 한 번 말하고, 성공 전까지 반복하지 않는다. 라이브러리에서 사라진 항목의 기록은 시작할 때 한 번 정리한다. 참고문헌 목록은 500개까지만 보관한다. 관심 저자 신호 조회는 5건씩 병렬로 돈다. ZotPoP의 중복 검사는 실패를 삼키지 않고 알리며, 제목 색인은 가져오기 1회당 한 번만 읽는다. 저널 검색은 행마다 검색 문자열을 미리 만들고 분야 메뉴 결과를 재사용한다."
   }
  ],
  "introducedInVersion": "0.6.0"

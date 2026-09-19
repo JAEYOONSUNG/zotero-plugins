@@ -1192,5 +1192,6 @@
  "비워 두어도 동작하지만, 채우면 인용 수·저널 정보·AI 기능이 열립니다.": "Everything works with these blank; filling them unlocks citation counts, journal facts and the AI features.",
  "AI 요약·비교": "AI summaries and comparisons",
  "빠른 조회 대기열": "Faster lookup queue",
- "인용 수·저널 정보": "Citation counts and journal facts"
+ "인용 수·저널 정보": "Citation counts and journal facts",
+ "저장하지 못했습니다. 디스크 공간과 Zotero 폴더 권한을 확인하세요. 지금까지의 기록은 창을 닫기 전까지 남아 있습니다.": "Could not save. Check the disk space and the permissions on your Zotero folder. What you have done so far is held until this window closes."
 }
