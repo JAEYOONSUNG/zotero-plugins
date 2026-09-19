@@ -2,7 +2,7 @@
  "strings": [
   {
    "ko": "초",
-   "n": 5,
+   "n": 6,
    "files": [
     "src/runtime.js",
     "src/settings.js",
@@ -733,6 +733,13 @@
   },
   {
    "ko": "관련 문헌",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "내 라이브러리에 없음",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -4841,6 +4848,13 @@
    ]
   },
   {
+   "ko": "인용 수 · 출처 미확인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "별점 {0}/5",
    "n": 1,
    "files": [
@@ -5023,35 +5037,35 @@
    ]
   },
   {
-   "ko": "이어진 논문 {0} · 인용 {1}건",
+   "ko": "이어진 논문 {0} · 인용 {1}건 · 공통 참고문헌 쌍 {2}",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": " · 공통 참고문헌으로 이어진 쌍 {0}",
+   "ko": "연결 없음 {0}",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": " · 내 논문을 인용한 바깥 논문 {0}",
+   "ko": "인용 목록 없음 {0}",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": " · 연결 없음 {0}",
+   "ko": "바깥 논문 {0}",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": " · 인용 목록 없음 {0}",
+   "ko": "그리지 않음: {0}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5066,13 +5080,6 @@
   },
   {
    "ko": "인용 관계 그래프",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "내 라이브러리에 없음",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5702,14 +5709,14 @@
    ]
   },
   {
-   "ko": "{0}/{1} 페이지 · {2}%",
+   "ko": "읽은 시간 {0} · 전체 {1}쪽 중 {2}쪽",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": "아직 페이지 기록 없음",
+   "ko": "읽은 시간 {0} · 아직 페이지 기록 없음",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6395,6 +6402,20 @@
    ]
   },
   {
+   "ko": "번역·AI 설정에 endpoint와 모델을 연결하면 켜집니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "언어",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "{0}편은 너무 많습니다. 둘에서 여섯 편을 선택하세요.",
    "n": 1,
    "files": [
@@ -6466,13 +6487,6 @@
   },
   {
    "ko": "첫 문헌 아래에 노트로 저장했습니다.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "번역·AI 설정에 endpoint와 모델을 연결하면 켜집니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7186,6 +7200,13 @@
    ]
   },
   {
+   "ko": "공통 참고문헌",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "영국",
    "n": 1,
    "files": [
@@ -7424,7 +7445,7 @@
    ]
   },
   {
-   "ko": "{0}종 · IF 있음 {1} · 분야 확인 {2}",
+   "ko": "저널 {0}종 · JIF 있는 저널 {1} · 분야 알려진 저널 {2}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7683,6 +7704,13 @@
    ]
   },
   {
+   "ko": "OpenAlex 프로필(분야·h-index·오픈액세스)은 백필의 저널 단계에서 채워집니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "이 저널 문헌 보기",
    "n": 1,
    "files": [
@@ -7698,13 +7726,6 @@
   },
   {
    "ko": "Journal Citation Reports의 저널 페이지 · 기관 로그인이 필요합니다",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "OpenAlex 프로필(분야·h-index·오픈액세스)은 백필의 저널 단계에서 채워집니다.",
    "n": 1,
    "files": [
     "src/workbench.js"

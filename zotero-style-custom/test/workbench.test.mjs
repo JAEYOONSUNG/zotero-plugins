@@ -832,8 +832,9 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  const menu=level=>f.body().querySelector(`.sc-field-line select[data-level=${level}]`);
  const optionsOf=level=>[...menu(level).querySelectorAll('option')].map(o=>o.textContent);
  const choose=(level,value)=>{const m=menu(level);m.value=value;m.dispatchEvent(new f.win.Event('change',{bubbles:true}));};
- assert.deepEqual(optionsOf('domain'),['대분류 · 전체 2','Life Sciences 1','Physical Sciences 1']);
-assert.deepEqual(optionsOf('field'),['분야 · 전체 2','Multidisciplinary 1','Engineering 1'],'fields are offered before a domain is chosen');
+ assert.deepEqual(optionsOf('domain'),['전체 · 2','Life Sciences 1','Physical Sciences 1']);
+ assert.deepEqual(optionsOf('field'),['전체 · 2','Multidisciplinary 1','Engineering 1'],'fields are offered before a domain is chosen');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-field-line .sc-field-level')].map(x=>x.textContent),['대분류','분야','세부 분야'],'each menu has its caption beside it');
  assert.deepEqual([...menu('field').querySelectorAll('optgroup')].map(g=>g.getAttribute('label')),['Life Sciences','Physical Sciences'],'grouped under their domains');
  // Nothing is open yet; opening a journal lays out its facts.
  assert.equal(f.body().querySelector('.sc-facts'),null);
@@ -850,10 +851,10 @@ assert.deepEqual(optionsOf('field'),['분야 · 전체 2','Multidisciplinary 1',
  assert.ok([...f.body().querySelectorAll('button')].some(b=>b.textContent==='JCR에서 보기'),'the JCR page is one click away');
  // Choosing a domain narrows the menus to its right.
  choose('domain','Physical Sciences');await settle();
- assert.deepEqual(optionsOf('field'),['분야 · 전체 1','Engineering 1']);
+ assert.deepEqual(optionsOf('field'),['전체 · 1','Engineering 1']);
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science']);
  choose('field','Engineering');await settle();
- assert.deepEqual(optionsOf('subfield'),['세부 분야 · 전체 1','Biomedical Engineering 1']);
+ assert.deepEqual(optionsOf('subfield'),['전체 · 1','Biomedical Engineering 1']);
  // A subfield chosen on its own pulls the levels above it along.
  await f.click('전체');await settle();
  choose('subfield','General');await settle();
@@ -909,9 +910,9 @@ test('the map names its commonest journals in their own colours, and a card wear
  f.runtime.journalMarkForVenue=(doc,venue)=>{const m=doc.createElement('span');m.className='sc-mark';m.textContent=venue.slice(0,3).toUpperCase();return m;};
  await f.bench.show('graph');
  const legend=[...f.body().querySelectorAll('.sc-legend-entry')].map(e=>e.textContent);
- assert.deepEqual(legend,['SCIScience1','NATNature1'].sort().length===2?legend:legend,'legend drawn');
- assert.equal(legend.length,2,'both journals in the map are named');
- assert.ok(f.body().querySelector('.sc-legend-entry .sc-mark'),'each entry carries the mark');
+ assert.deepEqual(legend,['Science1','Nature1','내 라이브러리에 없음','공통 참고문헌'],'both journals, then the two shapes the map uses');
+ assert.equal(f.body().querySelectorAll('.sc-legend-entry .sc-legend-dot').length,3,'a swatch in the node\'s own paint, plus the dashed outside square');
+ assert.ok(f.body().querySelector('.sc-legend-line'),'and the dashed tie');
  await f.bench.show('explore');
  assert.deepEqual([...f.body().querySelectorAll('.sc-paper-meta .sc-mark')].map(m=>m.textContent).sort(),['NAT','SCI']);
  f.bench.destroy();
@@ -1055,7 +1056,8 @@ test('the pages of a paper read as a strip of shaded squares, with the number an
  await f.bench.show('reading');
  const cells=[...f.body().querySelector('.sc-page-strip').querySelectorAll('.sc-page-cell')];
  assert.equal(cells.length,100,'one square per page of the first hundred');
- assert.equal(cells[0].dataset.level,'2','2 of 7 seconds: a light square');assert.equal(cells[1].dataset.level,'0');
+ assert.equal(cells[0].dataset.level,'0','two seconds is a glance, not reading');assert.equal(cells[1].dataset.level,'0');
+ assert.equal([...f.body().querySelectorAll('.sc-page-strip .sc-page-row')].slice(0,5).map(r=>r.textContent).join(','),'1,21,41,61,81','a row label every twenty pages');
  assert.equal(cells[0].getAttribute('title'),'1페이지 · 2초');
  assert.equal(cells[0].textContent,'','no number on the square');
  assert.ok(f.body().querySelector('.sc-page-legend'),'a key from little to much');
