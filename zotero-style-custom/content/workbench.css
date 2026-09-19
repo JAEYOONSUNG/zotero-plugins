@@ -480,8 +480,6 @@
 #style-custom-workbench .sc-journal { position: relative; grid-template-columns: 1fr auto; grid-template-areas: "title if" "profile profile"; padding: 10px 6px 10px 2px; row-gap: 0; }
 #style-custom-workbench .sc-journal .sc-hit-actions { grid-area: auto; position: absolute; inset-inline-end: 5.2em; inset-block-start: 50%; transform: translateY(-50%); padding: 2px 4px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
 #style-custom-workbench .sc-journal-open .sc-hit-actions { inset-block-start: 20px; }
-#style-custom-workbench .sc-journal-head { display: flex; justify-content: space-between; padding: 4px 6px 4px 2px; color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; }
-#style-custom-workbench .sc-journal-head-if { min-width: 3.4em; text-align: end; }
 #style-custom-workbench .sc-journal .sc-hit-title { grid-area: title; font-size: 13px; display: flex; align-items: center; flex-wrap: nowrap; gap: 0 8px; min-width: 0; white-space: nowrap; }
 #style-custom-workbench .sc-journal .sc-journal-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-journal .sc-journal-inline { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
@@ -786,7 +784,7 @@
 /* The journals table: tight rows, hairlines between them, the name in its
    own colour as text, the figure at the edge, the hover buttons laid over. */
 #style-custom-workbench .sc-journal-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
-#style-custom-workbench .sc-journal-table th { position: sticky; top: 0; z-index: 1; padding: 6px 8px; background: var(--sc-bg); color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; text-align: start; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-journal-table th { position: sticky; top: 0; z-index: 1; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--sc-bg); color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; text-align: start; border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-journal-table td { padding: 7px 8px; border-block-end: 1px solid var(--sc-border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-journal-table tr.sc-journal { position: relative; }
 #style-custom-workbench .sc-journal-table tr.sc-journal:hover td { background: var(--sc-surface); }
