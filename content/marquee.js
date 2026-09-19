@@ -1,4 +1,4 @@
-/* Automatic, visibility-aware reading of overflowing ZotPoP result cells. */
+/* Hover-driven, visibility-aware reading of overflowing ZotPoP result cells. */
 var ZotPoPMarquee = (function () {
 	"use strict";
 	const controllers = new WeakMap();
@@ -13,7 +13,7 @@ var ZotPoPMarquee = (function () {
 		/* "hover": a cell rolls only while the pointer rests on it, once out and
 		   back, then stands still showing its start. A table of twenty rolling
 		   cells is unreadable; one, under the pointer, is a request. */
-		const mode = options.mode === "hover" ? "hover" : "auto";
+		const mode = options.mode === "auto" ? "auto" : "hover";
 		const media = win.matchMedia?.("(prefers-reduced-motion: reduce)");
 		const states = new Map(), byViewport = new Map(), visible = new Set(), active = new Set(), removers = [];
 		let disposed = false, frame = null, timer = null, blurred = false, pointerDown = false;
@@ -75,15 +75,16 @@ var ZotPoPMarquee = (function () {
 				if (!current(state)) { release(state); continue; }
 				if (state.stamp != null) state.elapsed += Math.max(0, timestamp - state.stamp);
 				state.stamp = timestamp;
+				// A delayed frame can skip the return phase, so use elapsed time
+				// rather than a phase transition to stop after one complete pass.
+				if (mode === "hover" && state.elapsed >= 2 * pause + 2 * state.distance / speed * 1000) {
+					state.done = true; state.viewport.scrollLeft = 0; state.phase = "start"; state.cell.dataset.marqueePhase = "start";
+					active.delete(state); state.cell.classList.remove("marquee-active");
+					continue;
+				}
 				let next = position(state.elapsed, state.distance);
 				state.viewport.scrollLeft = state.direction * Math.max(0, Math.min(state.distance, next.offset));
 				if (state.phase !== next.phase) {
-					// One pass under the pointer: back at the start, the cell stands still.
-					if (mode === "hover" && state.phase === "back" && next.phase === "start") {
-						state.done = true; state.viewport.scrollLeft = 0; state.phase = "start"; state.cell.dataset.marqueePhase = "start";
-						active.delete(state); state.cell.classList.remove("marquee-active");
-						continue;
-					}
 					state.phase = next.phase;
 					state.cell.dataset.marqueePhase = next.phase;
 				}

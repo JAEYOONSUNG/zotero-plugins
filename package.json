@@ -1,6 +1,6 @@
 {
   "name": "zotpop",
-  "version": "0.36.5",
+  "version": "0.36.6",
   "private": true,
   "description": "Publish or Perish-style literature search and import for Zotero",
   "scripts": {

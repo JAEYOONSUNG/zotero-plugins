@@ -70,7 +70,7 @@ const viewport = cell => cell.querySelector(".marquee-text");
 
 test("overflow rolls automatically at42px/s, pauses at both ends, and returns without jumping", () => {
 	const env = environment(), long = env.cell(), short = env.cell({ text: "Short", full: 50 });
-	const controller = Marquee.attach(env.win, env.root);
+	const controller = Marquee.attach(env.win, env.root, { mode: "auto" });
 	env.show([long, short]); env.at(0);
 	assert.equal(viewport(long).scrollLeft, 0);
 	assert.equal(env.frames.size, 0, "endpoint pause does not spin animation frames");
@@ -97,7 +97,7 @@ test("overflow rolls automatically at42px/s, pauses at both ends, and returns wi
 test("a thousand offscreen cells share one scheduler and only visible viewports are resized", () => {
 	const env = environment();
 	const cells = Array.from({ length: 1000 }, (_, i) => env.cell({ offscreen: i > 1 }));
-	const controller = Marquee.attach(env.win, env.root);
+	const controller = Marquee.attach(env.win, env.root, { mode: "auto" });
 	env.show(cells.slice(0, 2)); env.at(0); env.at(1000); env.at(2000);
 	assert.equal(controller.getMetrics().tracked, 1000);
 	assert.equal(controller.getMetrics().active, 2);
@@ -116,7 +116,7 @@ test("a thousand offscreen cells share one scheduler and only visible viewports 
 
 test("column resizing stops newly fitting text and starts new overflow from its beginning", () => {
 	const env = environment(), cell = env.cell();
-	const controller = Marquee.attach(env.win, env.root);
+	const controller = Marquee.attach(env.win, env.root, { mode: "auto" });
 	env.show([cell]); env.at(0); env.at(1000); env.at(2000);
 	cell.clientWidth = 200; env.resizes[0].notify();
 	assert.equal(controller.getMetrics().active, 0);
@@ -134,7 +134,7 @@ test("redraw and status replacement discard old viewports and preserve links/too
 	const env = environment(), cell = env.cell({ text: "", tooltip: "Open the article" });
 	const link = env.create("a"); link.textContent = "The complete linked article title"; link.href = "https://example.test/paper";
 	let clicks = 0; link.addEventListener("click", () => clicks++); cell.appendChild(link);
-	const controller = Marquee.attach(env.win, env.root);
+	const controller = Marquee.attach(env.win, env.root, { mode: "auto" });
 	env.show([cell]); env.at(0); env.at(1000); env.at(2000);
 	assert.equal(viewport(cell).firstChild, link);
 	link.emit("click"); assert.equal(clicks, 1);
@@ -156,7 +156,7 @@ test("redraw and status replacement discard old viewports and preserve links/too
 test("reduced motion stays static and restores readable original nodes on cleanup", () => {
 	const env = environment({ reduced: true }), cell = env.cell({ tooltip: "A custom original tooltip" });
 	const originalText = cell.firstChild;
-	const controller = Marquee.attach(env.win, env.root);
+	const controller = Marquee.attach(env.win, env.root, { mode: "auto" });
 	env.show([cell]); env.at(5000);
 	assert.equal(env.frames.size + env.timers.size, 0);
 	assert.equal(viewport(cell).scrollLeft, 0);
@@ -177,7 +177,7 @@ test("reduced motion stays static and restores readable original nodes on cleanu
 
 test("hidden windows and text selection pause motion without moving text under a drag", () => {
 	const env = environment(), cell = env.cell();
-	const controller = Marquee.attach(env.win, env.root);
+	const controller = Marquee.attach(env.win, env.root, { mode: "auto" });
 	env.show([cell]); env.at(0); env.at(1000); env.at(2000);
 	env.root.emit("mousedown"); env.at(10000);
 	assert.equal(viewport(cell).scrollLeft, 42);
@@ -199,7 +199,7 @@ test("hidden windows and text selection pause motion without moving text under a
 test("RTL scrolling reaches the opposite edge and fallback visibility excludes offscreen cells", () => {
 	const env = environment({ intersection: false });
 	const rtl = env.cell({ direction: "rtl" }), offscreen = env.cell({ offscreen: true });
-	const controller = Marquee.attach(env.win, env.root);
+	const controller = Marquee.attach(env.win, env.root, { mode: "auto" });
 	env.at(0); env.at(1000); env.at(2000);
 	assert.equal(viewport(rtl).scrollLeft, -42);
 	assert.equal(viewport(offscreen).scrollLeft, 0);
@@ -211,7 +211,7 @@ test("RTL scrolling reaches the opposite edge and fallback visibility excludes o
 
 test("unload cancels shared work, removes listeners and ignores delayed observers", () => {
 	const env = environment(), cell = env.cell();
-	const controller = Marquee.attach(env.win, env.root);
+	const controller = Marquee.attach(env.win, env.root, { mode: "auto" });
 	assert.equal(Marquee.attach(env.win, env.root), controller, "reattachment cannot multiply observers or schedulers");
 	env.show([cell]); env.at(0);
 	const oldViewport = viewport(cell);
@@ -228,7 +228,7 @@ test("real result rows mark only text columns and retain title links, focus and 
 	const calls = [], opened = [];
 	const controller = { refresh: () => calls.push("refresh"), refreshCell: cell => calls.push(cell) };
 	const ui = uiHarness({ realRows: true, launchURL: url => opened.push(url),
-		marquee: { attach: () => { calls.push("attach"); return controller; } },
+		marquee: { attach: (win, root, options) => { assert.equal(options.mode, "hover"); calls.push("attach"); return controller; } },
 		search: async () => [paper("result", { title: "An entire title", url: "https://example.test/paper", venue: "A journal", doi: "10.1234/example", authors: [{ name: "A Researcher" }] })] });
 	await ui.runSearch();
 	const row = ui.get("results-body").firstChild;
@@ -293,5 +293,41 @@ test("in hover mode a cell rolls only under the pointer, once out and back, then
 	env.root.emit("mouseover", { target: long });
 	env.at(9000); env.at(10000); env.at(11000);
 	assert.equal(viewport(long).scrollLeft, 42);
+	controller.cleanup();
+});
+
+
+test("default attachment stays still and leaving stops only the hovered cell immediately", () => {
+	const env = environment(), first = env.cell(), second = env.cell();
+	const controller = Marquee.attach(env.win, env.root);
+	env.show([first, second]); env.at(10000);
+	assert.equal(controller.getMetrics().mode, "hover");
+	assert.equal(controller.getMetrics().active, 0);
+	assert.equal(env.frames.size + env.timers.size, 0);
+	assert.equal(viewport(first).scrollLeft, 0);
+	assert.equal(viewport(second).scrollLeft, 0);
+	env.root.emit("mouseover", { target: first });
+	env.at(10000); env.at(11000); env.at(12000);
+	assert.equal(viewport(first).scrollLeft, 42);
+	assert.equal(viewport(second).scrollLeft, 0);
+	env.root.emit("mouseout", { target: first, relatedTarget: second });
+	assert.equal(viewport(first).scrollLeft, 0);
+	assert.equal(controller.getMetrics().active, 0);
+	assert.equal(env.frames.size + env.timers.size, 0);
+	env.root.emit("mouseover", { target: second });
+	env.at(12000); env.at(13000); env.at(14000);
+	assert.equal(viewport(first).scrollLeft, 0);
+	assert.equal(viewport(second).scrollLeft, 42);
+	controller.cleanup();
+});
+
+test("a delayed frame cannot restart the single hover pass", () => {
+	const env = environment(), cell = env.cell();
+	const controller = Marquee.attach(env.win, env.root, { mode: "hover" });
+	env.show([cell]); env.root.emit("mouseover", { target: cell });
+	env.at(0); env.at(1000); env.at(7000);
+	assert.equal(viewport(cell).scrollLeft, 0);
+	assert.equal(controller.getMetrics().active, 0);
+	assert.equal(env.frames.size + env.timers.size, 0);
 	controller.cleanup();
 });

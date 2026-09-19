@@ -10,8 +10,9 @@ translators and the PDF fetched automatically.
 Korean selectable in Settings → ZotPoP, resizable columns and panes that persist, a detail pane with
 the abstract and per-paper actions, a right-click menu, filtering, CSV copy/export, and keyboard
 control (↑/↓ to move, Space to select, Enter to open, ⌘F to filter, ⌘A to select all, Esc to stop).
-Long text that overflows a result cell rolls automatically, pausing at either end. Short values
-stay still. Motion is limited to visible cells and respects the system's reduced-motion setting.
+Long text that overflows a result cell rolls only while the pointer is over that cell, once out
+and back. Leaving the cell restores its start. Other cells stay still, and motion respects the
+system's reduced-motion setting.
 
 **First-page preview** — select a paper and choose Preview or press P to open a separate window.
 Once opened, the preview follows result selection without stealing focus. Zotero's bundled PDF
