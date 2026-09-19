@@ -1297,6 +1297,23 @@
     if(stored&&stored.moved&&stored.moved.to){
      node('p',`소속: ${stored.moved.from||'?'} → ${stored.moved.to} (${stored.moved.at||''} 확인)`,list,{class:'sc-muted'});
     }
+    if(stored&&stored.patents&&stored.patents.length){
+     /* A filing is the earliest public sign of where a lab is heading, often
+        a year before the paper; the new ones since the last look are marked. */
+     node('h3',stored.newPatents?.length?`특허 ${stored.patents.length} · 새 ${stored.newPatents.length}`:`특허 ${stored.patents.length}`,list,{class:'sc-hit-group'});
+     const box=node('div',null,list,{class:'sc-hits'});
+     for(const patent of stored.patents){
+      const c=node('div',null,box,{class:'sc-hit sc-patent'+(patent.fresh?' sc-patent-fresh':'')});
+      const head=node('p',null,c,{class:'sc-hit-title'});
+      if(patent.fresh)node('span','NEW',head,{class:'sc-preprint',title:'마지막 확인 이후 새로 보인 특허'});
+      node('span',patent.title,head);
+      node('p',[patent.id,patent.granted?`등록 ${patent.granted}`:patent.filed?`출원 ${patent.filed}`:'',patent.applicants?.[0]||'',patent.status||''].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
+      const actions=node('div',null,c,{class:'sc-hit-actions'});
+      if(patent.link)button('열기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(patent.link),actions);
+     }
+    }else if(stored&&typeof runtime.patentsKey==='function'&&!runtime.patentsKey()){
+     node('p','특허 확인은 설정에 USPTO Open Data Portal 키를 넣으면 켜집니다 (무료).',list,{class:'sc-muted'});
+    }
     // The circle of colleagues, out of the works already in hand: no request of
     // its own, and an edge exists because two names are on the same paper.
     const circle=runtime.coauthorsOf?.(person.id,works)||[];
@@ -1366,6 +1383,8 @@
      const line=node('div',null,row,{class:'sc-watch-line'});
      node('span',person.name,line,{class:'sc-watch-name'});
      if(count)node('span',String(count),line,{class:'sc-watch-badge',title:`마지막 확인 이후 새 논문 ${count}편`});
+     const patents=person.newPatents?.length||0;
+     if(patents)node('span',`특허 ${patents}`,line,{class:'sc-watch-badge sc-watch-patent',title:`마지막 확인 이후 새 특허 ${patents}건`});
      // With news, the line says what the news is; without it, who they are.
      const latest=count?person.news[0]:null;
      /* A move outranks a paper on the card: a lab relocating or a postdoc going

@@ -418,6 +418,18 @@
       return bits.join(' · ');
     }));
 
+    results.push(await attempt('patents: the USPTO key, if any, is accepted', async () => {
+      const key = runtime.patentsKey();
+      if (!key) return 'no USPTO key set — the patents tier is off. Free at data.uspto.gov (MyUSPTO).';
+      if (!network) return `key set (${key.length} chars) · not tried offline`;
+      const [row] = runtime.watchedAuthors();
+      if (!row) return `key set (${key.length} chars) · no followed author to try`;
+      const payload = await runtime.discoverJSON(runtime.patentTools.searchURL(row.name), {headers: runtime.patentTools.headers(key)});
+      const found = runtime.patentTools.readPatents(payload);
+      const mine = found.filter(patent => runtime.patentTools.matchesInventor(patent, row.name));
+      return `${row.name}: ${found.length} answered · ${mine.length} match the inventor` + (mine[0] ? ` · e.g. ${mine[0].id} ${mine[0].title.slice(0, 50)}` : '');
+    }));
+
     if (network) {
       results.push(await attempt('Crossref answers for real papers', async () => {
         const sample = withDOI.slice(0, 3);
@@ -476,6 +488,7 @@
         if (report.signals) bits.push(`signals ok ${report.signals.ok} · none ${report.signals['not-found']} · err ${report.signals.error}` + (report.signals.partialOnly ? ` · partial ${report.signals.partialOnly}` : ''));
         if (report.journals) bits.push(`journals found ${report.journals.found} · missing ${report.journals.missing}` + (report.journals.profiles ? ` · profiles filled ${report.journals.profiles.filled}/${report.journals.profiles.journals}` : ''));
         if (report.authors) bits.push(`authors ${report.authors.authors} · with news ${report.authors.withNews} · works ${report.authors.works} · records ${report.authors.profiles ?? '-'}`);
+        if (report.patents) bits.push(report.patents.skipped === 'no-key' ? 'patents skipped (no USPTO key)' : `patents checked ${report.patents.checked} · with patents ${report.patents.withPatents} · new ${report.patents.fresh}` + (report.patents.unauthorized ? ' · KEY REFUSED' : ''));
         if (report.budgetGone) bits.push('stopped: OpenAlex budget spent');
         return bits.join(' | ') || 'nothing to do';
       }));

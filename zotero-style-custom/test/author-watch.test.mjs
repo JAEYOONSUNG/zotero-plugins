@@ -36,6 +36,8 @@ function host({rows, pages, profiles = []}) {
     watchedAuthorsByNews: Runtime.prototype.watchedAuthorsByNews,
     watchAuthor: Runtime.prototype.watchAuthor,
     sweepWatchedAuthors: Runtime.prototype.sweepWatchedAuthors,
+    sweepWatchedPatents: Runtime.prototype.sweepWatchedPatents,
+    patentTools: require("../src/patents.js"), patentsKey() { return this.key || ""; }, active: true,
     retireLooseMoves: Runtime.prototype.retireLooseMoves,
     clearAuthorNews: Runtime.prototype.clearAuthorNews,
     async discoverJSON(url) {
@@ -359,4 +361,49 @@ test("a watched author's new papers are checked for retraction through Crossref 
   assert.equal(news[1].signals.rank, 3, "the withdrawn paper carries its verdict on the row");
   assert.equal(news[0].signals.rank, 0);
   assert.equal(news[3].signals.status, "clean", "an earlier verdict is left alone");
+});
+
+test("patents run only with a USPTO key, take the first look as the baseline, and mark what appears later", async () => {
+  /* A filing is the earliest public sign of where a lab is heading. The
+     portal needs a key; without one the sweep says so and touches nothing. */
+  const filing = (number, title, inventors, over = {}) => ({applicationNumberText: "18" + number, applicationMetaData: {
+    patentNumber: number, inventionTitle: title, grantDate: "2026-0" + (number % 9 + 1) + "-01", filingDate: "2024-01-01",
+    inventorBag: inventors.map(n => ({inventorNameText: n})), applicantBag: [{applicantNameText: "The Regents"}], ...over}});
+  const answer = (...rows) => ({count: rows.length, patentFileWrapperDataBag: rows});
+  let h = host({rows: [{id: "A1", name: "Jennifer A. Doudna", seen: []}], pages: []});
+  let result = await h.sweepWatchedPatents();
+  assert.deepEqual({skipped: result.skipped, requests: result.requests}, {skipped: "no-key", requests: 0});
+  assert.equal(h.saved, null, "nothing written without a key");
+  // With a key: one request, the header carries it, namesakes are dropped.
+  h = host({rows: [{id: "A1", name: "Jennifer A. Doudna", seen: []}], pages: [
+    answer(filing(1, "RNA-guided editing", ["DOUDNA; JENNIFER A.", "JINEK; MARTIN"]), filing(2, "Aldonolactonase", ["DOUDNA CATE; JAMES H."]))]});
+  h.key = "k";
+  h.discoverJSON = async function (url, {headers} = {}) { this.calls.push([url, headers]); const next = this.pages.shift(); if (next instanceof Error) throw next; return next; };
+  h.pages = [answer(filing(1, "RNA-guided editing", ["DOUDNA; JENNIFER A.", "JINEK; MARTIN"]), filing(2, "Aldonolactonase", ["DOUDNA CATE; JAMES H."]))];
+  result = await h.sweepWatchedPatents();
+  assert.equal(h.calls.length, 1);
+  assert.match(h.calls[0][0], /api\.uspto\.gov.*inventorNameText/);
+  assert.equal(h.calls[0][1]["X-Api-Key"], "k");
+  assert.deepEqual({checked: result.checked, withPatents: result.withPatents, fresh: result.fresh}, {checked: 1, withPatents: 1, fresh: 0});
+  let row = h.saved[0];
+  assert.deepEqual(row.patents.map(p => p.id), ["US1"], "the namesake is not hers");
+  assert.deepEqual(row.newPatents, [], "the first look is the baseline");
+  assert.deepEqual(row.patentsSeen, ["US1"]);
+  assert.ok(row.patentsAt);
+  // A week later a new filing shows: it is the news, the old one is not.
+  h.pages = [answer(filing(3, "Base editors", ["DOUDNA; JENNIFER A."]), filing(1, "RNA-guided editing", ["DOUDNA; JENNIFER A."]))];
+  h.cache.watchedAuthors[0].patentsAt = "2026-01-01T00:00:00Z";
+  result = await h.sweepWatchedPatents();
+  row = h.saved[0];
+  assert.deepEqual({fresh: result.fresh, news: row.newPatents}, {fresh: 1, news: ["US3"]});
+  assert.deepEqual(row.patents.map(p => [p.id, p.fresh]), [["US3", true], ["US1", false]]);
+  // Checked this week already: not asked again.
+  h.pages = [];
+  result = await h.sweepWatchedPatents();
+  assert.equal(result.requests, 0);
+  // A refused key stops the sweep at once instead of failing 109 times.
+  h.cache.watchedAuthors[0].patentsAt = "2026-01-01T00:00:00Z";
+  h.pages = [Object.assign(new Error("Unauthorized"), {status: 401})];
+  result = await h.sweepWatchedPatents();
+  assert.equal(result.unauthorized, true);
 });

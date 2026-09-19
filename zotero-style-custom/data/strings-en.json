@@ -1021,7 +1021,6 @@
  "전면 OA": "Fully open access",
  "구독형": "Subscription",
  "DOAJ 등재": "in DOAJ",
- "APC ${0}": "APC of ${0}",
  "OA 선택 시 APC ${0}": "APC ${0} when OA is chosen",
  "국가": "Country",
  "홈페이지": "Homepage",
@@ -1031,5 +1030,15 @@
  "이 저널 문헌 보기": "Show its papers",
  "JCR에서 보기": "Open in JCR",
  "Journal Citation Reports의 저널 페이지 · 기관 로그인이 필요합니다": "The journal\\u2019s page on Journal Citation Reports · needs an institutional login",
- "OpenAlex 프로필(분야·h-index·오픈액세스)은 백필의 저널 단계에서 채워집니다.": "The OpenAlex profile (field, h-index, open access) is filled in by the journal stage of the backfill."
+ "OpenAlex 프로필(분야·h-index·오픈액세스)은 백필의 저널 단계에서 채워집니다.": "The OpenAlex profile (field, h-index, open access) is filled in by the journal stage of the backfill.",
+ "특허 {0}": "Patents {0}",
+ "관심 저자 특허": "Patents of followed authors",
+ "USPTO Open Data Portal 키 (선택)": "USPTO Open Data Portal key (optional)",
+ "관심 저자의 특허 출원·등록을 찾는 데만 씁니다. data.uspto.gov에서 MyUSPTO 계정으로 무료 발급됩니다. 키는 api.uspto.gov에만 보내며, 비워 두면 특허 확인은 건너뜁니다.": "Used only to find patents filed or granted to followed authors. Free from data.uspto.gov with a MyUSPTO account. The key is sent to api.uspto.gov only; left empty, the patent check is skipped.",
+ "특허 {0} · 새 {1}": "Patents {0} · new {1}",
+ "마지막 확인 이후 새로 보인 특허": "A patent that appeared since the last check",
+ "등록 {0}": "granted {0}",
+ "출원 {0}": "filed {0}",
+ "특허 확인은 설정에 USPTO Open Data Portal 키를 넣으면 켜집니다 (무료).": "The patent check turns on once a USPTO Open Data Portal key is entered in Settings (free).",
+ "마지막 확인 이후 새 특허 {0}건": "{0} new patents since the last check"
 }

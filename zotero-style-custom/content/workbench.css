@@ -691,3 +691,8 @@
 #style-custom-workbench .sc-signal-retracted { background: var(--sc-error); color: #fff; }
 #style-custom-workbench .sc-signal-concern { color: var(--sc-reading); background: color-mix(in srgb, var(--sc-reading) 16%, transparent); }
 #style-custom-workbench .sc-signal-corrected { color: var(--sc-muted); background: var(--sc-fill); }
+
+/* A patent among the papers: the same row, a filing mark before its title. */
+#style-custom-workbench .sc-watch-patent { background: color-mix(in srgb, var(--sc-reading) 18%, transparent); color: var(--sc-reading); }
+#style-custom-workbench .sc-patent .sc-preprint { margin-inline-end: 6px; }
+#style-custom-workbench .sc-patent-fresh .sc-hit-title { color: var(--sc-text); }

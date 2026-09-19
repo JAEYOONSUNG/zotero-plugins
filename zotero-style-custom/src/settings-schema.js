@@ -1040,6 +1040,15 @@
       "secret": true
     },
     {
+      "key": "usptoApiKey",
+      "category": "metrics",
+      "label": "USPTO Open Data Portal 키 (선택)",
+      "type": "password",
+      "default": "",
+      "secret": true,
+      "description": "관심 저자의 특허 출원·등록을 찾는 데만 씁니다. data.uspto.gov에서 MyUSPTO 계정으로 무료 발급됩니다. 키는 api.uspto.gov에만 보내며, 비워 두면 특허 확인은 건너뜁니다."
+    },
+    {
       "key": "journalRankKey",
       "category": "metrics",
       "label": "easyScholar API 키",

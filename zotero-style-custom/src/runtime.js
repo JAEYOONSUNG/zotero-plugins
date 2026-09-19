@@ -20,6 +20,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.portraitTools = typeof CustomStyleAuthorPortrait !== "undefined" ? CustomStyleAuthorPortrait : require("./author-portrait.js");
     this.fileTools = typeof CustomStyleAttachmentKinds !== "undefined" ? CustomStyleAttachmentKinds : require("./attachment-kinds.js");
     this.itemKinds = typeof CustomStyleItemKinds !== "undefined" ? CustomStyleItemKinds : require("./item-kinds.js");
+    this.patentTools = typeof CustomStylePatents !== "undefined" ? CustomStylePatents : require("./patents.js");
     this.journalIdentity = typeof CustomStyleJournalIdentity !== "undefined" ? CustomStyleJournalIdentity : require("./journal-identity.js");
     this.affiliationTools = typeof CustomStyleAffiliations !== "undefined" ? CustomStyleAffiliations : require("./affiliations.js");
     this.graphTools = typeof CustomStylePaperGraph !== "undefined" ? CustomStylePaperGraph : require("./paper-graph.js");
@@ -2380,6 +2381,54 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // preference, it is always undefined, so the citation sweep ran anonymous and
   // spent OpenAlex's unauthenticated $0.01/day in about ten requests while a
   // perfectly good key sat in ZotPoP's prefs.
+  // The USPTO Open Data Portal key, if the user has one. Nothing patent-related
+  // runs without it, and the key is sent only to api.uspto.gov.
+  patentsKey() {
+    return String(this.pref('usptoApiKey', '') || '').trim();
+  }
+
+  /* Patents by the followed authors. A filing is the earliest public sign of
+     where a lab is heading, often a year before the paper. One request per
+     author, at most once a week each, newest first; the first look is the
+     baseline and later ones report what was not there before. */
+  async sweepWatchedPatents({signal, onProgress, maxAgeDays = 7} = {}) {
+    const key = this.patentsKey();
+    const rows = this.watchedAuthors();
+    const result = {authors: rows.length, checked: 0, withPatents: 0, fresh: 0, requests: 0, skipped: '', unauthorized: false, budgetGone: false};
+    if (!key) { result.skipped = 'no-key'; return result; }
+    const stale = Date.now() - maxAgeDays * 24 * 3600 * 1000;
+    const due = rows.filter(row => !row.patentsAt || Date.parse(row.patentsAt) < stale);
+    for (const [index, row] of due.entries()) {
+      if (signal?.aborted || !this.active || this.stopping) break;
+      onProgress?.(index, due.length);
+      const url = this.patentTools.searchURL(row.name);
+      if (!url) continue;
+      try {
+        const payload = await this.discoverJSON(url, {signal, headers: this.patentTools.headers(key)});
+        result.requests++;
+        const found = this.patentTools.readPatents(payload).filter(patent => this.patentTools.matchesInventor(patent, row.name));
+        const seen = new Set(row.patentsSeen || []);
+        const fresh = seen.size || row.patentsAt ? found.filter(patent => !seen.has(patent.id)) : [];
+        row.patents = found.slice(0, 8).map(patent => ({...patent, fresh: fresh.includes(patent)}));
+        row.newPatents = fresh.slice(0, 8).map(patent => patent.id);
+        row.patentsSeen = [...new Set([...seen, ...found.map(patent => patent.id)])].slice(-200);
+        row.patentsAt = new Date().toISOString();
+        result.checked++;
+        if (found.length) result.withPatents++;
+        result.fresh += fresh.length;
+        this.dirty = true;
+      } catch (error) {
+        const status = Number(error?.status || error?.xmlhttp?.status || 0);
+        if (status === 401 || status === 403) { result.unauthorized = true; break; }
+        if (this.outOfBudget(error) || status === 429) { result.budgetGone = true; break; }
+        this.Z.logError(error);
+      }
+      if (index + 1 < due.length) await this.pause(1000);
+    }
+    if (result.checked) { this.cache.watchedAuthors = rows; await this.flush(); }
+    return result;
+  }
+
   openAlexKey() {
     // Trim each candidate before choosing: a field holding only spaces is not a
     // key, but it is truthy, so it would shadow a real one stored elsewhere.
@@ -2396,8 +2445,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     };
   }
 
-  async discoverJSON(url, {signal} = {}) {
-    const response = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 30000});
+  async discoverJSON(url, {signal, headers} = {}) {
+    const response = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 30000, ...(headers ? {headers} : {})});
     signal?.throwIfAborted?.();
     return response?.response;
   }
@@ -2752,7 +2801,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   stopBackfill() { this.backfillController?.abort(); }
 
   showBackfillProgress(win, stage, done, total) {
-    const label = {files: '첨부파일 종류', works: '인용 목록·소속', signals: '철회·공개접근 신호', journals: '저널 지표', authors: '관심 저자 새 논문'}[stage] || stage;
+    const label = {files: '첨부파일 종류', works: '인용 목록·소속', signals: '철회·공개접근 신호', journals: '저널 지표', authors: '관심 저자 새 논문', patents: '관심 저자 특허'}[stage] || stage;
     const text = `${label} 채우는 중 ${done + 1}/${total}`;
     for (const [target, state] of this.windows) {
       if (target.closed) continue;
@@ -2837,7 +2886,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
 
   async backfill({libraryID, signal, onProgress, pace = 250} = {}) {
-    const report = {files: null, works: null, signals: null, journals: null, authors: null, budgetGone: false, stage: null};
+    const report = {files: null, works: null, signals: null, journals: null, authors: null, patents: null, budgetGone: false, stage: null};
     const note = (stage, done, total) => onProgress?.({stage, done, total});
 
     // Reading files costs no request, so it goes first and finishes even when
@@ -2882,7 +2931,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     report.authors = await this.sweepWatchedAuthors(
       {signal, onProgress: (done, total) => note('authors', done, total)});
     report.budgetGone = !!report.authors.budgetGone;
-    report.stage = report.budgetGone ? 'authors' : 'done';
+    if (report.budgetGone) { report.stage = 'authors'; return report; }
+    if (signal?.aborted || !this.active || this.stopping) return report;
+
+    // Only with a USPTO key; the sweep says so itself otherwise.
+    report.stage = 'patents';
+    report.patents = await this.sweepWatchedPatents({signal, onProgress: (done, total) => note('patents', done, total)});
+    report.stage = 'done';
     return report;
   }
 

@@ -1,5 +1,5 @@
 {
- "version": "0.42.0",
+ "version": "0.43.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1431,6 +1431,38 @@
    ],
    "status": "verified",
    "review": "The profile fields ride on the request the figure already costs; journals cached before them are filled fifty at a time by ISSN -- 258 journals in this library in six requests, every one with a subject field afterwards. On the tab: the figure in its own column, quartile chip, field chips that filter, a grouped-by-field view with ranks, and a profile under any name with twelve signed facts and a button to the JCR page itself."
+  },
+  {
+   "round": "R48",
+   "title": "관심 저자의 특허, 키가 있을 때만",
+   "gap": "The user chose patents as the third tier of watching an author: a filing is the earliest public sign of where a lab is heading, often a year before the paper. PatentsView, which answered without a key, was retired into the USPTO Open Data Portal in 2025; Europe PMC's patent index stops in 2012; EPO and Lens need keys too. So the tier needs a free USPTO key, and without one it must say so rather than fail.",
+   "entryPoint": "설정 → 지표 → USPTO Open Data Portal 키 · 관심 저자 카드의 특허 배지",
+   "sources": [
+    {
+     "file": "src/patents.js",
+     "marker": "function matchesInventor"
+    },
+    {
+     "file": "src/runtime.js",
+     "marker": "async sweepWatchedPatents"
+    },
+    {
+     "file": "src/selfcheck.js",
+     "marker": "patents: the USPTO key, if any, is accepted"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/patents.test.mjs",
+     "name": "patents are read from the portal's shape and from PatentsView's, and namesakes are told apart"
+    },
+    {
+     "file": "test/author-watch.test.mjs",
+     "name": "patents run only with a USPTO key, take the first look as the baseline, and mark what appears later"
+    }
+   ],
+   "status": "verified",
+   "review": "One request per followed author, at most weekly, the key sent to api.uspto.gov only. The reader accepts the portal's field names and PatentsView's, so a rename degrades to nothing found; namesakes are told apart by the LAST; FIRST form the portal writes. The first look is the baseline; later ones badge the card with what is new, and the detail lists each patent with a link to its public page. No key was available in this session, so the live response shape is unverified: the self-check's patents entry runs one real query the moment a key is entered and reports what came back."
   }
  ],
  "introducedInVersion": "0.6.0"
