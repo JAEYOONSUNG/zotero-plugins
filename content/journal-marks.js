@@ -333,7 +333,10 @@ var ZotPoPJournalMarks = (function () {
 		if (!name) return null;
 		let key = flat(name);
 		for (let family of FAMILIES) if (family.test.test(key)) return fromFamily(family, name);
-		let house = flat(publisher);
+		// A search result may not say who publishes it; the registry usually does.
+		let row = registryLookup(key);
+		let houseName = text(publisher) || (row ? text(row.publisher) : "");
+		let house = flat(houseName);
 		if (house) {
 			let hit = PUBLISHERS.find(p => p.test.test(house));
 			let family = hit && FAMILIES.find(f => f.key === hit.family);
@@ -341,9 +344,43 @@ var ZotPoPJournalMarks = (function () {
 		}
 		// A journal the patterns do not know but the PDFs do is still a known colour.
 		let measured = JOURNAL_HUES[key], exact = exactOf(key);
-		return { family: "other", label: "", hue: exact ? Math.round(hexToHsl(exact).h) : measured ?? derivedHue(name), hex: exact, exact: exact !== undefined,
-			mark: abbreviate(name) || monogram(name), known: exact !== undefined || measured != null };
+		if (exact !== undefined || measured != null) {
+			return { family: "other", label: "", hue: exact ? Math.round(hexToHsl(exact).h) : measured, hex: exact, exact: exact !== undefined,
+				mark: abbreviate(name) || monogram(name), known: true };
+		}
+		/* A publisher the sixteen-row table does not list still gets a family of
+		   its own, keyed on its name, so every journal of that house shares one
+		   colour -- which is what a publisher colour is for. Measured on the full
+		   JCR list this is what took the journals left to a title-derived hue
+		   from 97% to 10%. */
+		if (house) {
+			let slug = "pub:" + house.replace(/ /g, "-").slice(0, 48);
+			return { family: slug, label: houseName, hue: derivedHue(slug), known: true, viaPublisher: true,
+				mark: abbreviate(name) || monogram((row && row.abbreviation) || name),
+				quartile: row ? row.quartile : null, abbreviation: row ? row.abbreviation : "" };
+		}
+		return { family: "other", label: "", hue: derivedHue(name), exact: false, known: false,
+			mark: abbreviate(name) || monogram(name), quartile: row ? row.quartile : null, abbreviation: row ? row.abbreviation : "" };
 	}
+
+	/* The registry shared with Style Custom: one row per JCR journal, looked up
+	   by flattened title, by JCR abbreviation, and by ISSN. Absent under test
+	   or in an older build, every lookup simply misses. */
+	let REGISTRY = null;
+	function loadRegistry(payload) {
+		let list = Array.isArray(payload) ? payload : (payload && payload.journals) || [];
+		REGISTRY = { byTitle: new Map(), byIssn: new Map(), size: list.length };
+		for (let row of list) {
+			let k = flat(row.title);
+			if (k && !REGISTRY.byTitle.has(k)) REGISTRY.byTitle.set(k, row);
+			let a = flat(row.abbreviation);
+			if (a && !REGISTRY.byTitle.has(a)) REGISTRY.byTitle.set(a, row);
+			for (let issn of row.issns || []) if (issn) REGISTRY.byIssn.set(String(issn).toUpperCase(), row);
+		}
+		return REGISTRY.size;
+	}
+	function registryLookup(flatTitle) { return REGISTRY ? (REGISTRY.byTitle.get(flatTitle) || null) : null; }
+	function registryByIssn(issn) { return REGISTRY ? (REGISTRY.byIssn.get(String(issn || "").toUpperCase()) || null) : null; }
 
 	// The mark's ink and its fill, from one hue so every tile in the column is built
 	// the same way. A curated family sits a little stronger than a derived one.
@@ -390,7 +427,7 @@ var ZotPoPJournalMarks = (function () {
 			: { ink: hsl(hue, known ? 62 : 40, 40), fill: hsl(hue, known ? 62 : 36, 93), edge: hsl(hue, known ? 52 : 30, 84) };
 	}
 
-	return { identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, tonesFor, FAMILIES, PUBLISHERS, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS };
+	return { identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, tonesFor, loadRegistry, registryLookup, registryByIssn, registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, PUBLISHERS, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPJournalMarks;

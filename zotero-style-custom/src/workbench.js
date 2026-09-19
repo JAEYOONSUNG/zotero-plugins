@@ -1435,7 +1435,20 @@
    // impact factor was being printed twice; say it once, with its provenance.
    const tags=runtime.publicationTags?.(runtime.Z.Items.get(Number(item.id)))||[];
    const facts=tags.length?tags:[item.impactFactor==null?'IF 미확인':`IF ${item.impactFactor}`];
-   node('p',facts.join(' · '),c,{class:'sc-hit-meta'});
+   const meta=node('p',null,c,{class:'sc-hit-meta'});
+   /* What the registry knows about the journal, on the row: its JCR quartile
+      as a chip whose shade follows the quartile, its JCR abbreviation, and the
+      house that publishes it. This is the list the user asked to read the way
+      the IF list reads. */
+   const id=runtime.journalIdentity?.identify?.(item.venue);
+   if(id&&id.quartile){
+    const q=node('span',`Q${id.quartile}`,meta,{class:'sc-quartile','data-q':String(id.quartile),title:`JCR 사분위 Q${id.quartile}`});
+    q.style.marginInlineEnd='6px';
+   }
+   const bits=[...facts];
+   if(id&&id.abbreviation)bits.push(id.abbreviation);
+   if(id&&(id.label||id.publisher))bits.push(id.label||id.publisher);
+   meta.appendChild(doc.createTextNode(bits.join(' · ')));
    const source=item.impactSource||'출처 정보 없음';
    node('p',source.replace(/https?:\/\/[^\s·]+/,m=>m.replace(/^https?:\/\/(www\.)?/,'').split('/')[0]),c,{class:'sc-hit-authors',title:source});
    const actions=node('div',null,c,{class:'sc-hit-actions'});

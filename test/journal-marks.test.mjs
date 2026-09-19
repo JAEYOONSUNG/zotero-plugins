@@ -31,10 +31,21 @@ test("a publisher name settles a title the patterns do not know; nothing known s
 	assert.equal(J.identify("Biotechnology for Biofuels", "Springer Science and Business Media LLC").family, "springer");
 	assert.equal(J.identify("Journal of Cleaner Production", "Elsevier BV").family, "elsevier");
 	assert.equal(J.identify("Journal of Cleaner Production", "Elsevier BV").mark, "J Clean Prod");
+	/* A publisher the sixteen-row table does not list still gets a family of its
+	   own, keyed on its name, so every journal of that house shares one colour.
+	   Measured on the full JCR list this took the journals left to a
+	   title-derived hue from 97% to 10%. */
 	const other = J.identify("Some Obscure Bulletin", "Nobody Press");
-	assert.equal(other.known, false);
+	assert.equal(other.known, true);
+	assert.equal(other.viaPublisher, true);
+	assert.match(other.family, /^pub:nobody-press/);
+	assert.equal(other.label, "Nobody Press", "the house's own name is the label");
 	assert.equal(other.mark, "Some Obscure Bull", "unknown words are kept whole, never guessed");
-	assert.equal(other.hue, J.identify("some obscure  bulletin").hue, "the same name is always the same colour");
+	assert.equal(other.hue, J.identify("Another Obscure Bulletin", "Nobody Press").hue, "one house, one colour");
+	// Only a journal with no publisher at all is left to a hue from its title.
+	const alone = J.identify("Some Obscure Bulletin");
+	assert.equal(alone.known, false);
+	assert.equal(alone.hue, J.identify("some obscure  bulletin").hue, "the same name is always the same colour");
 	assert.equal(J.identify(""), null);
 	assert.equal(J.identify("arXiv (Cornell University)").family, "other");
 });

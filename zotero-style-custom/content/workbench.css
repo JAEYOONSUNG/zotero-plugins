@@ -640,3 +640,10 @@
   font: 11px var(--sc-font); color: var(--sc-muted); cursor: pointer;
 }
 #style-custom-workbench .sc-annot-swatch:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
+
+/* A JCR quartile, shaded by rank: Q1 reads as the strongest, Q4 the faintest. */
+#style-custom-workbench .sc-quartile { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: 100px; font: 700 10px/16px var(--sc-mono); text-align: center; color: #fff; }
+#style-custom-workbench .sc-quartile[data-q="1"] { background: var(--sc-done); }
+#style-custom-workbench .sc-quartile[data-q="2"] { background: var(--sc-accent); }
+#style-custom-workbench .sc-quartile[data-q="3"] { background: var(--sc-muted); }
+#style-custom-workbench .sc-quartile[data-q="4"] { background: var(--sc-faint); color: var(--sc-text); }

@@ -7,7 +7,7 @@ function uninstall() {}
 async function startup({ id, version, rootURI }) {
   try {
     await Zotero.initializationPromise;
-    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "journal-identity", "affiliations", "paper-graph", "failures", "brand-icons", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "runtime"]) {
+    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "journal-identity", "affiliations", "paper-graph", "failures", "brand-icons", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "runtime"]) {
       Services.scriptloader.loadSubScript(rootURI + "src/" + name + ".js", globalThis);
     }
     const path = PathUtils.join(Zotero.DataDirectory.dir, "style-custom.json");
@@ -18,6 +18,15 @@ async function startup({ id, version, rootURI }) {
     } catch (error) { Zotero.logError(error); }
     const catalogResponse = await Zotero.HTTP.request("GET", rootURI + "data/if-catalog.json", { responseType: "json" });
     const catalog = catalogResponse.response;
+    // The journal registry: every JCR journal with its abbreviation, quartile
+    // and publisher, so a journal no rule knows still gets its publisher's
+    // colour. Optional -- an older build without the file loses nothing but that.
+    try {
+      const registry = await Zotero.HTTP.request("GET", rootURI + "data/journal-registry.json", { responseType: "json" });
+      if (registry && registry.response && globalThis.CustomStyleJournalIdentity) {
+        globalThis.CustomStyleJournalIdentity.loadRegistry(registry.response);
+      }
+    } catch (error) { Zotero.debug("Style Custom: journal registry not loaded: " + (error && error.message)); }
     customStyle = new globalThis.CustomStyleRuntime({ Zotero, catalog, io: IOUtils, paths: PathUtils,
       model: globalThis.CustomStyleData, marquee: globalThis.CustomStyleMarquee,
       reading: globalThis.CustomStyleReading, legacy,

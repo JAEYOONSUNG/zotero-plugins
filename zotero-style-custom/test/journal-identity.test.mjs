@@ -79,3 +79,52 @@ test("every Nature sister journal keeps its own cover colour", () => {
   assert.equal(journals.identify("Nature Microbiology").hex, "#964091");
   assert.equal(journals.identify("Nature Something New").hue, 168, "an unlisted sister falls back to the house colour");
 });
+
+test("a journal no rule knows still gets its publisher's colour from the registry", () => {
+  /* Measured over every JCR journal, the title rules alone reached 3%: 84
+     exact colours, 559 by pattern, 21,951 left to a hue derived from the name.
+     OpenAlex knows the publisher of nearly all of them by ISSN, and a journal
+     nobody curated then gets the colour of the house that prints it. */
+  const loaded = journals.loadRegistry({journals: [
+    {title: "Journal of Obscure Thermophile Studies", issns: ["1234-5678"], abbreviation: "J OBSCURE THERMOPHILE STUD",
+     impactFactor: 2.1, year: 2025, quartile: 3, publisher: "Elsevier BV"},
+    {title: "Bulletin of Nowhere", issns: ["9999-0000"], abbreviation: "BULL NOWHERE",
+     impactFactor: 0.4, year: 2025, quartile: 4, publisher: "Some Regional Society"},
+    {title: "Bulletin of Nowhere Else", issns: ["9999-0001"], abbreviation: "BULL NOWHERE ELSE",
+     impactFactor: 0.3, year: 2025, quartile: 4, publisher: ""}
+  ]});
+  assert.equal(loaded, 3);
+  const known = journals.identify("Journal of Obscure Thermophile Studies");
+  assert.equal(known.family, "elsevier");
+  assert.equal(known.viaPublisher, true);
+  assert.equal(known.known, true, "a publisher family is a known colour, not a derived one");
+  assert.equal(known.quartile, 3, "and the registry's quartile rides along");
+  assert.equal(known.abbreviation, "J OBSCURE THERMOPHILE STUD");
+  // The JCR abbreviation is a key too, because a reference list writes it.
+  assert.equal(journals.identify("J OBSCURE THERMOPHILE STUD").family, "elsevier");
+  assert.equal(journals.registryByIssn("1234-5678").publisher, "Elsevier BV");
+
+  /* A publisher nobody listed still gets a family of its own, keyed on its
+     name, so every journal of that house shares one colour -- which is what a
+     publisher colour is for. Measured on the full JCR list this took the
+     journals left to a title-derived hue from 97% to 10%, and every one of
+     that 10% is a journal OpenAlex has no publisher for at all. */
+  const odd = journals.identify("Bulletin of Nowhere");
+  assert.equal(odd.known, true);
+  assert.equal(odd.viaPublisher, true);
+  assert.match(odd.family, /^pub:some-regional-society/);
+  assert.equal(odd.label, "Some Regional Society", "the house's own name is the label");
+  assert.equal(odd.hue, journals.identify("Bulletin of Nowhere").hue, "and the hue is stable");
+  // Only a journal with no publisher at all falls back to a hue from its title.
+  const none = journals.identify("Bulletin of Nowhere Else");
+  assert.equal(none.known, false);
+  assert.equal(none.family, "other");
+
+  // An exact brand colour still outranks a publisher family.
+  assert.equal(journals.identify("Nature").family, "nature");
+
+  // Unloaded, everything falls back to the old behaviour rather than failing.
+  journals.loadRegistry([]);
+  assert.equal(journals.identify("Journal of Obscure Thermophile Studies").known, false);
+  assert.equal(journals._registrySize(), 0);
+});

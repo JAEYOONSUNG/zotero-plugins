@@ -217,6 +217,27 @@
 
     // What the Files column actually says, for one item of each kind. A verdict
     // that never reaches the cell is a verdict nobody sees.
+    // How much of this library's own journal list gets a real colour, now that
+    // the registry knows a publisher for nearly every JCR journal.
+    results.push(await attempt('journal colours reach the library', async () => {
+      const identity = runtime.journalIdentity;
+      const size = identity._registrySize ? identity._registrySize() : 0;
+      const venues = new Set();
+      for (const item of await runtime.libraryItems(library)) {
+        if (!runtime.isRegular(item)) continue;
+        const venue = String(item.getField('publicationTitle') || '').trim();
+        if (venue) venues.add(venue);
+      }
+      let exact = 0, rule = 0, publisher = 0, derived = 0;
+      for (const venue of venues) {
+        const id = identity.identify(venue);
+        if (!id) { derived++; continue; }
+        if (id.exact) exact++; else if (id.viaPublisher) publisher++; else if (id.known) rule++; else derived++;
+      }
+      if (!size) throw new Error('journal registry did not load');
+      return `등록 저널 ${size} · 이 라이브러리 저널 ${venues.size}종: 브랜드색 ${exact} · 규칙 ${rule} · 출판사색 ${publisher} · 유도색 ${derived}`;
+    }));
+
     results.push(await attempt('the files column says what the scan found', async () => {
       if (!doc) throw new Error('no main window');
       const findings = await runtime.attachmentFindings(library);

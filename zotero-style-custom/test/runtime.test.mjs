@@ -1702,3 +1702,56 @@ test('the settings schema is looked up by key, not walked', () => {
   assert.ok(plugin.settingIndex.size > 100);
 });
 
+
+test('the citation bar is grey while a paper is too young to judge, not while its count is low', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const P = plugin.palette(document);
+  const bar = (year, citations) => {
+    const ref = item(1);
+    ref.getField = key => key === 'date' ? String(year) : '';
+    window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+    plugin.value = key => key === 'citations' ? String(citations) : '';
+    const cell = plugin.renderCell('citations', 0, '', {}, document);
+    const track = cell.lastChild;
+    return {colour: track.firstChild.style.background, title: track.title};
+  };
+  const thisYear = new Date().getFullYear();
+  /* Grey used to mean "under a hundred citations", which said the same thing
+     the number beside it said and punished every paper for being new. A paper
+     published within the last three years has not had time to be cited. */
+  const young = bar(thisYear - 1, 500);
+  const old = bar(thisYear - 10, 3);
+  assert.equal(young.colour, plugin.tint(P.gray, 0.7), 'a well-cited new paper is still grey: its count is not evidence yet');
+  assert.equal(old.colour, plugin.tint(P.blue, 0.9), 'a barely-cited old paper is blue: it has had its chance');
+  assert.match(young.title, /3년 이내/);
+  assert.match(young.title, new RegExp(String(thisYear - 1)));
+  // Exactly three years old is still young; four is not.
+  assert.equal(bar(thisYear - 2, 0).colour, plugin.tint(P.gray, 0.7));
+  assert.equal(bar(thisYear - 3, 0).colour, plugin.tint(P.blue, 0.9));
+  // No date at all is not "young".
+  assert.equal(bar('', 0).colour, plugin.tint(P.blue, 0.9));
+});
+
+test('impact factors read to one decimal and sit on the right, so the points line up', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  const shown = value => {
+    plugin.value = key => key === 'if' ? String(value) : '';
+    const cell = plugin.renderCell('if', 0, '', {}, document);
+    return cell.lastChild;
+  };
+  // "3", "15" and "56.1" in one column put the decimal points in three places.
+  assert.equal(shown(3).textContent, '3.0');
+  assert.equal(shown(15).textContent, '15.0');
+  assert.equal(shown(56.1).textContent, '56.1');
+  assert.equal(shown(104.6).textContent, '104.6');
+  const number = shown(3);
+  assert.equal(number.style.textAlign, 'right');
+  assert.equal(number.style.marginInlineStart, 'auto', 'pushed to the right edge whatever the mark beside it is');
+  assert.match(number.style.fontVariantNumeric, /tabular-nums/);
+});

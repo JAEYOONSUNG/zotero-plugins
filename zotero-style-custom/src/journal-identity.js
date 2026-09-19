@@ -251,6 +251,110 @@
      mark: title => monogram(title, 'W')}
   ];
 
+  /* Publisher name -> family, for the journals the title patterns never saw.
+
+     Measured over every JCR journal, the title rules reached 3%: 84 exact
+     colours, 559 by a pattern, and 21,951 left to a hue derived from the
+     name -- stable, but meaningless. OpenAlex knows the publisher of nearly
+     all of them by ISSN, and thirty publishers account for most of the list.
+     A journal nobody curated still gets the colour of the house that prints
+     it, which is the thing a reader recognises. Names here are the strings
+     OpenAlex actually returns, most frequent first. */
+  const PUBLISHER_FAMILY = [
+    [/elsevier/i, 'elsevier'],
+    [/springer|biomed central|bmc\b|adis/i, 'springer'],
+    [/wiley|blackwell/i, 'wiley'],
+    [/taylor\s*&\s*francis|routledge|informa/i, 'taylor-francis'],
+    [/\bsage\b/i, 'sage'],
+    [/oxford university press/i, 'oxford'],
+    [/cambridge university press/i, 'cambridge'],
+    [/nature portfolio|nature publishing/i, 'nature-portfolio'],
+    [/american chemical society/i, 'acs'],
+    [/royal society of chemistry/i, 'rsc'],
+    [/frontiers media/i, 'frontiers'],
+    [/multidisciplinary digital publishing|\bmdpi\b/i, 'mdpi'],
+    [/public library of science|\bplos\b/i, 'plos'],
+    [/american society for microbiology/i, 'asm'],
+    [/american association for the advancement of science/i, 'aaas'],
+    [/cell press/i, 'cell-press'],
+    [/\belife\b/i, 'elife'],
+    [/\bembo\b/i, 'embo'],
+    [/institute of electrical and electronics engineers|\bieee\b/i, 'ieee'],
+    [/association for computing machinery|\bacm\b/i, 'acm'],
+    [/emerald/i, 'emerald'],
+    [/lippincott|wolters kluwer/i, 'wolters-kluwer'],
+    [/annual reviews/i, 'annual-reviews'],
+    [/iop publishing|institute of physics/i, 'iop'],
+    [/american physical society/i, 'aps'],
+    [/hindawi/i, 'hindawi'],
+    [/\bbmj\b/i, 'bmj'],
+    [/karger/i, 'karger'],
+    [/american psychological association/i, 'apa'],
+    [/de gruyter/i, 'degruyter'],
+    [/bentham/i, 'bentham'],
+    [/dove medical/i, 'dove'],
+    [/mary ann liebert/i, 'liebert'],
+    [/thieme/i, 'thieme'],
+    [/american medical association/i, 'ama'],
+    [/massachusetts medical society/i, 'nejm'],
+    [/the lancet/i, 'lancet'],
+    [/proceedings of the national academy|national academy of sciences/i, 'pnas']
+  ];
+  // Families the title rules never needed, each with its own hue.
+  const PUBLISHER_HUES = {
+    'taylor-francis': 200, sage: 210, cambridge: 355, ieee: 208, acm: 210, emerald: 160,
+    'wolters-kluwer': 200, 'annual-reviews': 30, iop: 350, aps: 220, hindawi: 100, bmj: 214,
+    karger: 205, apa: 215, degruyter: 200, bentham: 20, dove: 150, liebert: 340, thieme: 220,
+    ama: 208, nejm: 10, lancet: 350
+  };
+  const PUBLISHER_LABELS = {
+    'taylor-francis': 'Taylor & Francis', sage: 'SAGE', cambridge: 'Cambridge', ieee: 'IEEE', acm: 'ACM',
+    emerald: 'Emerald', 'wolters-kluwer': 'Wolters Kluwer', 'annual-reviews': 'Annual Reviews', iop: 'IOP',
+    aps: 'APS', hindawi: 'Hindawi', bmj: 'BMJ', karger: 'Karger', apa: 'APA', degruyter: 'De Gruyter',
+    bentham: 'Bentham', dove: 'Dove', liebert: 'Liebert', thieme: 'Thieme', ama: 'AMA', nejm: 'NEJM', lancet: 'Lancet'
+  };
+  /* Publishers that were still unmapped after the big houses, with their own
+     hue so the family is stable across builds rather than hashed. Measured on
+     the full JCR list: these are the ones with the most journals each. */
+  const TAIL_PUBLISHERS = [
+    [/\bbrill\b/i, 'brill', 'Brill', 25], [/pleiades/i, 'pleiades', 'Pleiades', 205],
+    [/medknow/i, 'medknow', 'Medknow', 150], [/world scientific/i, 'world-scientific', 'World Scientific', 215],
+    [/inderscience/i, 'inderscience', 'Inderscience', 10], [/john benjamins/i, 'benjamins', 'John Benjamins', 40],
+    [/university of chicago press/i, 'uchicago', 'U Chicago Press', 350], [/johns hopkins university press/i, 'jhup', 'JHU Press', 215],
+    [/igi global/i, 'igi', 'IGI Global', 200], [/ios press/i, 'ios', 'IOS Press', 205],
+    [/palgrave/i, 'palgrave', 'Palgrave', 220], [/duke university press/i, 'duke', 'Duke UP', 220],
+    [/birkh/i, 'birkhauser', 'Birkhäuser', 214], [/institution of engineering and technology/i, 'iet', 'IET', 200],
+    [/american society of civil engineers/i, 'asce', 'ASCE', 210]
+  ];
+  // A stable key and hue for a publisher nobody listed, from its name. Every
+  // journal of that house then shares one colour, which is what a publisher
+  // colour is for; only a journal with no publisher at all falls back to a
+  // hue from its own title.
+  const publisherSlug = name => 'pub:' + flat(name).replace(/ /g, '-').slice(0, 48);
+  function familyForPublisher(publisher) {
+    const name = text(publisher);
+    if (!name) return null;
+    for (const [pattern, key] of PUBLISHER_FAMILY) if (pattern.test(name)) return key;
+    for (const [pattern, key] of TAIL_PUBLISHERS) if (pattern.test(name)) return key;
+    return publisherSlug(name);
+  }
+  // A family's hue and label whether it came from a title rule, a listed
+  // publisher, or a publisher known only by name.
+  const PUBLISHER_NAMES = new Map();
+  function familyInfo(key, publisherName) {
+    const titled = FAMILIES.find(family => family.key === key);
+    if (titled) return {hue: titled.hue, label: titled.label};
+    if (key in PUBLISHER_HUES) return {hue: PUBLISHER_HUES[key], label: PUBLISHER_LABELS[key] || key};
+    const tail = TAIL_PUBLISHERS.find(row => row[1] === key);
+    if (tail) return {hue: tail[3], label: tail[2]};
+    if (key.startsWith('pub:')) {
+      const label = text(publisherName) || PUBLISHER_NAMES.get(key) || key.slice(4);
+      if (publisherName) PUBLISHER_NAMES.set(key, label);
+      return {hue: derivedHue(key), label};
+    }
+    return null;
+  }
+
   // An initialism from the words that carry meaning, so an unknown journal still
   // gets a mark that means something: "Journal of Molecular Biology" -> JMB.
   const SKIP = new Set(['the', 'of', 'and', 'in', 'for', 'on', 'a', 'an', 'at', 'to', 'de', 'der']);
@@ -344,9 +448,45 @@
       };
     }
     // A journal the patterns do not know but the PDFs do is still a known colour.
-    return {family: 'other', label: '', hue: exact ? Math.round(hexToHsl(exact).h) : measured ?? derivedHue(name), hex: exact, exact: exact !== undefined,
-      mark: abbreviate(name) || monogram(name), known: exact !== undefined || measured != null};
+    if (exact !== undefined || measured != null) {
+      return {family: 'other', label: '', hue: exact ? Math.round(hexToHsl(exact).h) : measured, hex: exact, exact: exact !== undefined,
+        mark: abbreviate(name) || monogram(name), known: true};
+    }
+    /* Neither a title rule nor a measured colour. The registry may still know
+       who publishes it, and a journal nobody curated then gets the colour of
+       the house that prints it -- which is the thing a reader recognises.
+       Measured over every JCR journal, the rules alone reached 3%. */
+    const row = registryLookup(key);
+    const family = row ? familyForPublisher(row.publisher) : null;
+    const info = family ? familyInfo(family, row.publisher) : null;
+    if (info) {
+      return {family, label: info.label, hue: info.hue, known: true, viaPublisher: true,
+        mark: abbreviate(name) || monogram(row.abbreviation || name),
+        publisher: row.publisher, quartile: row.quartile, abbreviation: row.abbreviation};
+    }
+    return {family: 'other', label: '', hue: derivedHue(name), mark: abbreviate(name) || monogram(name), known: false,
+      publisher: row ? row.publisher : '', quartile: row ? row.quartile : null, abbreviation: row ? row.abbreviation : ''};
   }
+
+  /* The registry: one row per JCR journal, loaded once, looked up by the same
+     flattened title the rules use and by ISSN. Absent under test or before the
+     data file loads, every lookup simply misses and the old behaviour stands. */
+  let REGISTRY = null;
+  function loadRegistry(payload) {
+    const list = Array.isArray(payload) ? payload : (payload && payload.journals) || [];
+    REGISTRY = {byTitle: new Map(), byIssn: new Map(), size: list.length};
+    for (const row of list) {
+      const key = flat(row.title);
+      if (key && !REGISTRY.byTitle.has(key)) REGISTRY.byTitle.set(key, row);
+      const abbr = flat(row.abbreviation);
+      if (abbr && !REGISTRY.byTitle.has(abbr)) REGISTRY.byTitle.set(abbr, row);
+      for (const issn of row.issns || []) if (issn) REGISTRY.byIssn.set(String(issn).toUpperCase(), row);
+    }
+    seen.clear();
+    return REGISTRY.size;
+  }
+  function registryLookup(flatTitle) { return REGISTRY ? (REGISTRY.byTitle.get(flatTitle) || null) : null; }
+  function registryByIssn(issn) { return REGISTRY ? (REGISTRY.byIssn.get(String(issn || '').toUpperCase()) || null) : null; }
 
   // The mark's ink and its fill, derived from one hue so every tile in the
   // column is built the same way. A curated family sits a little stronger than
@@ -436,7 +576,7 @@
       : {...badge, ink, fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84)};
   }
 
-  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
+  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

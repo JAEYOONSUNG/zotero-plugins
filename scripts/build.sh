@@ -10,6 +10,12 @@ fi
 if ! node -p "require('./manifest.json').applications.zotero.update_url || ''" | grep -q .; then
 	echo "manifest.json has no applications.zotero.update_url; Zotero would skip the .xpi silently."; exit 1
 fi
+# The journal registry is generated once, in Style Custom, and copied here at
+# build time so both plugins colour a journal from one table rather than two
+# that drift. Missing means an older checkout; the plugin still runs.
+if [ -f zotero-style-custom/data/journal-registry.json ]; then
+	cp zotero-style-custom/data/journal-registry.json content/journal-registry.json
+fi
 VERSION=$(node -p "require('./manifest.json').version")
 mkdir -p build
 OUT="build/zotpop-${VERSION}.xpi"

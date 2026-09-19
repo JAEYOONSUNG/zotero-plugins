@@ -27,6 +27,16 @@ Zotero.ZotPoP = {
 		this.id = id;
 		this.version = version;
 		this.rootURI = rootURI;
+		// The journal registry shared with Style Custom: a publisher, JCR
+		// abbreviation and quartile for every JCR journal, so a result whose
+		// source says nothing about its publisher still gets the house colour.
+		try {
+			let registry = await Zotero.HTTP.request("GET", rootURI + "content/journal-registry.json", { responseType: "json" });
+			if (registry && registry.response && Zotero.ZotPoPJournalMarks && Zotero.ZotPoPJournalMarks.loadRegistry) {
+				Zotero.ZotPoPJournalMarks.loadRegistry(registry.response);
+			}
+		}
+		catch (e) { Zotero.debug("ZotPoP: journal registry not loaded: " + (e && e.message)); }
 		try {
 			this._prefPaneID = await Zotero.PreferencePanes.register({
 				pluginID: id,

@@ -709,8 +709,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       || (this.isRegular(item) ? String(item.getField('publicationTitle') || item.getField('proceedingsTitle') || '') : '');
     const number = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     const value = Number(figure);
-    number.textContent = figure == null ? '—' : (estimate ? '~' : '') + figure;
-    number.style.cssText = `font-variant-numeric:tabular-nums;`
+    /* One decimal, always, and the number pushed to the right edge.
+
+       "3", "15", "56.1" and "~6.2" mixed in one column put the decimal points
+       in four different places, so the eye could not run down it. Every
+       figure now reads to a tenth, in tabular digits, right-aligned, so the
+       points line up and the column can be scanned. */
+    number.textContent = figure == null ? '—' : (estimate ? '~' : '') + (Number.isFinite(value) ? value.toFixed(1) : String(figure));
+    number.style.cssText = `font-variant-numeric:tabular-nums;margin-inline-start:auto;text-align:right;min-width:3.2em;`
       // Only how high the figure is, and only in weight. The tier used to be
       // said twice: once by a colour and once by the number right beside it.
       + `font-weight:${value >= 10 ? 640 : value >= 5 ? 560 : 400};`
@@ -1054,16 +1060,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       number.style.cssText = `font-variant-numeric:tabular-nums;min-width:3.4em;text-align:right;`
         + `flex:none;font-weight:${count >= 100 ? 590 : 400};color:${count > 0 ? P.text : P.faint};`;
       cell.appendChild(number);
-      /* The bar turns blue at a hundred citations. Two pixels tall, that
-         change was easy to miss, and nothing said what it meant -- the user
-         had to ask. Four pixels reads at a glance and the rule is in the
-         tooltip, so the answer is on the row rather than in a conversation. */
-      const wellCited = count >= 100;
+      /* Grey means "too young to judge", not "few citations".
+
+         The bar used to turn grey below a hundred citations, which said the
+         same thing the number beside it said and punished every paper for
+         being new. A paper published within the last three years has not had
+         time to be cited; its count is not yet evidence of anything. So the
+         bar is grey while the paper is that young, blue once it has had its
+         chance, and the length is the count on a log scale either way. */
+      const year = Number(String(this.isRegular(item) ? item.getField('date') : '').match(/\b(1[5-9]|20)\d{2}\b/)?.[0]);
+      const young = Number.isFinite(year) && year >= new Date().getFullYear() - 2;
       const track = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       track.style.cssText = `flex:1;min-width:14px;max-width:56px;height:4px;border-radius:100px;overflow:hidden;background:${this.tint(P.gray, 0.16)};`;
       const fill = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-      fill.style.cssText = `display:block;height:100%;border-radius:100px;width:${(this.citationShare(count) * 100).toFixed(1)}%;background:${this.tint(wellCited ? P.blue : P.gray, wellCited ? 0.9 : 0.7)};`;
-      track.title = wellCited ? '피인용 100회 이상 (파란 막대)' : '피인용 100회 미만 (회색 막대) · 길이는 로그 눈금';
+      fill.style.cssText = `display:block;height:100%;border-radius:100px;width:${(this.citationShare(count) * 100).toFixed(1)}%;background:${this.tint(young ? P.gray : P.blue, young ? 0.7 : 0.9)};`;
+      track.title = young ? `출판 3년 이내 (${year}) — 아직 인용이 쌓이는 중이라 회색 · 길이는 로그 눈금` : '피인용 수 · 길이는 로그 눈금';
       track.appendChild(fill); cell.appendChild(track);
     } else { cell.textContent = label; }
     if (!["time","progress","annotationCount"].includes(key)) cell.title = label;

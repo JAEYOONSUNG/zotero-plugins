@@ -938,11 +938,11 @@
 "연결 {0}": "{0} connections",
 "중심성 {0}%": "centrality {0}%",
 "실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 네모는 내가 갖고 있지 않은 논문 · 크기는 이 라이브러리 안에서의 중심성 · 색은 출판사": "A solid arrow is a real citation · a dotted line means shared references · a square is a paper you do not hold · size is centrality within this library · colour is the publisher",
-"피인용 100회 이상 (파란 막대)": "Cited 100 or more times (blue bar)",
-"피인용 100회 미만 (회색 막대) · 길이는 로그 눈금": "Cited fewer than 100 times (grey bar) · length is on a log scale",
 "{0}\n연결 {1}": "{0}\n{1} connections",
 "문헌 {0} · 연결 {1}": "{0} items · {1} connections",
 "아직 인용 목록이 없습니다. “인용 목록 가져오기”를 누르면 실제 인용 관계로 바뀝니다. 그때까지는 관련 문헌 연결을 보여줍니다.": "No reference lists yet. Press “Fetch reference lists” to switch to real citations; until then this shows related-item links.",
 "주석 검색": "Search annotations",
-"주석 본문·메모 검색": "Search annotation text and notes"
+"주석 본문·메모 검색": "Search annotation text and notes",
+"출판 3년 이내 ({0}) — 아직 인용이 쌓이는 중이라 회색 · 길이는 로그 눈금": "Published within the last three years ({0}) — grey because citations are still accumulating · length is on a log scale",
+"피인용 수 · 길이는 로그 눈금": "Citation count · length is on a log scale"
 }
