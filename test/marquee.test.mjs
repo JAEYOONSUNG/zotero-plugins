@@ -271,3 +271,27 @@ test("the Gecko page loads marquee before UI and exposes measurable motion witho
 	assert.match(css, /\.marquee-text\s*\{[^}]*overflow:\s*hidden/);
 	assert.doesNotMatch(css, /\.marquee[^}]*animation:/);
 });
+
+test("in hover mode a cell rolls only under the pointer, once out and back, then stands still at its start", () => {
+	const env = environment(), long = env.cell(), other = env.cell({ text: "Another long title that also overflows its cell" });
+	const controller = Marquee.attach(env.win, env.root, { mode: "hover" });
+	env.show([long, other]); env.at(0);
+	assert.equal(controller.getMetrics().mode, "hover");
+	assert.equal(controller.getMetrics().active, 0, "nothing rolls on its own");
+	assert.equal(long.classList.contains("marquee-overflow"), true, "the overflow is still known, for the ellipsis");
+	env.root.emit("mouseover", { target: long });
+	env.at(0); env.at(1000); env.at(2000);
+	assert.equal(viewport(long).scrollLeft, 42, "rolling under the pointer");
+	assert.equal(viewport(other).scrollLeft, 0, "the neighbour does not");
+	env.at(3000); env.at(4000); env.at(5000); env.at(6000); env.at(6100);
+	assert.equal(viewport(long).scrollLeft, 0, "back at the start after one pass");
+	assert.equal(controller.getMetrics().active, 0, "and it stays there while the pointer rests");
+	env.at(9000);
+	assert.equal(viewport(long).scrollLeft, 0);
+	// Leaving and returning starts a fresh pass.
+	env.root.emit("mouseout", { target: long, relatedTarget: other });
+	env.root.emit("mouseover", { target: long });
+	env.at(9000); env.at(10000); env.at(11000);
+	assert.equal(viewport(long).scrollLeft, 42);
+	controller.cleanup();
+});

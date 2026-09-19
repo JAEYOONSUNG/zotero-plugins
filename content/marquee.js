@@ -10,6 +10,10 @@ var ZotPoPMarquee = (function () {
 		const doc = root.ownerDocument || win.document;
 		const speed = Number.isFinite(options.speed) ? Math.max(20, Math.min(120, options.speed)) : 42;
 		const pause = Number.isFinite(options.pause) ? Math.max(0, Math.min(5000, options.pause)) : 1000;
+		/* "hover": a cell rolls only while the pointer rests on it, once out and
+		   back, then stands still showing its start. A table of twenty rolling
+		   cells is unreadable; one, under the pointer, is a request. */
+		const mode = options.mode === "hover" ? "hover" : "auto";
 		const media = win.matchMedia?.("(prefers-reduced-motion: reduce)");
 		const states = new Map(), byViewport = new Map(), visible = new Set(), active = new Set(), removers = [];
 		let disposed = false, frame = null, timer = null, blurred = false, pointerDown = false;
@@ -31,7 +35,7 @@ var ZotPoPMarquee = (function () {
 		function metrics() {
 			return {
 				tracked: states.size, visible: visible.size, active: paused() ? 0 : active.size,
-				speed, pause, reducedMotion: Boolean(media?.matches), paused: paused(),
+				speed, pause, mode, reducedMotion: Boolean(media?.matches), paused: paused(),
 				pendingFrames: frame === null ? 0 : 1, pendingTimers: timer === null ? 0 : 1,
 				cells: [...active].map(state => ({ field: state.cell.dataset.marquee, phase: state.phase,
 					distance: state.distance, offset: state.viewport.scrollLeft, text: state.viewport.textContent }))
@@ -74,6 +78,12 @@ var ZotPoPMarquee = (function () {
 				let next = position(state.elapsed, state.distance);
 				state.viewport.scrollLeft = state.direction * Math.max(0, Math.min(state.distance, next.offset));
 				if (state.phase !== next.phase) {
+					// One pass under the pointer: back at the start, the cell stands still.
+					if (mode === "hover" && state.phase === "back" && next.phase === "start") {
+						state.done = true; state.viewport.scrollLeft = 0; state.phase = "start"; state.cell.dataset.marqueePhase = "start";
+						active.delete(state); state.cell.classList.remove("marquee-active");
+						continue;
+					}
 					state.phase = next.phase;
 					state.cell.dataset.marqueePhase = next.phase;
 				}
@@ -103,7 +113,7 @@ var ZotPoPMarquee = (function () {
 			}
 			state.distance = distance;
 			state.cell.classList.toggle("marquee-overflow", distance > 1);
-			if (distance > 1) active.add(state);
+			if (distance > 1 && (mode !== "hover" || (state.hovered && !state.done))) active.add(state);
 			else { active.delete(state); state.cell.classList.remove("marquee-active"); state.viewport.scrollLeft = 0; }
 		}
 		function measure() {
@@ -170,7 +180,7 @@ var ZotPoPMarquee = (function () {
 			if (tooltip) cell.setAttribute("title", tooltip);
 			cell.classList.add("marquee-managed");
 			let state = { cell, viewport, originalTitle, tooltip, width: 0, fullWidth: 0, distance: 0,
-				direction: 1, elapsed: 0, stamp: null, phase: "start" };
+				direction: 1, elapsed: 0, stamp: null, phase: "start", hovered: false, done: false };
 			states.set(cell, state); byViewport.set(viewport, state);
 			intersection?.observe(viewport);
 		}
@@ -230,6 +240,23 @@ var ZotPoPMarquee = (function () {
 				}
 				publishMetrics(); schedule();
 			}, { root, threshold: 0 });
+		}
+		if (mode === "hover") {
+			const cellOf = target => (target && target.closest ? target.closest(SELECTOR) : null);
+			listen(root, "mouseover", event => {
+				let cell = cellOf(event.target), state = cell && states.get(cell);
+				if (!state || state.hovered) return;
+				state.hovered = true; state.done = false;
+				restart(state); if (visible.has(state)) measureState(state);
+				publishMetrics(); schedule();
+			});
+			listen(root, "mouseout", event => {
+				let cell = cellOf(event.target), state = cell && states.get(cell);
+				if (!state || (event.relatedTarget && cell.contains(event.relatedTarget))) return;
+				state.hovered = false; state.done = false;
+				active.delete(state); state.cell.classList.remove("marquee-active"); restart(state);
+				publishMetrics(); schedule();
+			});
 		}
 		listen(root, "scroll", fallbackVisibility);
 		listen(root, "mousedown", () => { pointerDown = true; motionChange(); }, true);

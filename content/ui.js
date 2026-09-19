@@ -12,13 +12,15 @@
 		: Zotero.Prefs.set("extensions.zotpop." + k, v, true);
 
 	// Title has no fixed width: it absorbs whatever is left, so keep these lean.
+	// Wider text columns: at the old widths a title showed eight words and an
+	// author list two names, and every one of them rolled at once.
 	const DEFAULT_COLS = {
-		chk: 28, citations: 56, cpy: 64, rank: 46, authorString: 150,
-		year: 46, venue: 140, journalIF: 48, affiliation: 150, country: 62, tier: 62,
-		doi: 135, pdf: 46, inLibrary: 46, status: 100
+		chk: 28, citations: 56, cpy: 60, rank: 44, authorString: 190,
+		year: 46, venue: 170, journalIF: 48, affiliation: 170, country: 62, tier: 56,
+		doi: 150, pdf: 44, inLibrary: 44, status: 96
 	};
 
-	const COL_VERSION = 5;
+	const COL_VERSION = 6;
 	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~40px)
 	const MIN_COL = 40;
 	// An unbounded drag used to persist a column wider than the window
@@ -1154,7 +1156,7 @@
 		}
 		tbody.textContent = "";
 		tbody.appendChild(frag);
-		if (!marquee) marquee = ZotPoPMarquee.attach(window, $("table-wrap"));
+		if (!marquee) marquee = ZotPoPMarquee.attach(window, $("table-wrap"), { mode: "hover" });
 		else marquee.refresh();
 
 		$("empty").hidden = list.length > 0 || !$("busy").hidden;

@@ -157,7 +157,7 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 .table-wrap:focus { outline: none; }
 #results-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
 #results-table th, #results-table td {
-	padding: 4px 7px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+	padding: 6px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 	border-bottom: 1px solid var(--border);
 }
 #results-table th {
@@ -177,6 +177,9 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 #results-table td.title a { color: inherit; text-decoration: none; }
 #results-table td.title a:hover { text-decoration: underline; color: var(--accent); }
 .marquee-text { display: block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; scroll-behavior: auto; }
+/* At rest a cell shows its beginning with an ellipsis; the row under the pointer rolls once. */
+#results-table tbody tr:hover td { background: var(--row-hover); }
+#results-table td.title { font-weight: 500; }
 .marquee-overflow .marquee-text { text-overflow: ellipsis; }
 .marquee-overflow.marquee-active .marquee-text { text-overflow: clip; }
 .marquee-reduced .marquee-text { text-overflow: ellipsis; }
