@@ -7305,6 +7305,20 @@
    ]
   },
   {
+   "ko": "저널·약어·출판사·분야 검색",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "저널 검색",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "저널 정렬",
    "n": 1,
    "files": [
@@ -7376,6 +7390,13 @@
   },
   {
    "ko": "분야 선택 지우기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "검색에 맞는 저널이 없습니다.",
    "n": 1,
    "files": [
     "src/workbench.js"

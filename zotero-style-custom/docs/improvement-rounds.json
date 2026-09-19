@@ -1,5 +1,5 @@
 {
- "version": "0.45.2",
+ "version": "0.45.3",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1711,6 +1711,26 @@
    ],
    "status": "verified",
    "review": "The buttons take the figures' place at the far right of the title row while the pointer is on the card; the checkbox keeps its word for the screen reader only; the dot sits further in and the row has more air."
+  },
+  {
+   "round": "R60",
+   "title": "저널 한 줄씩, 저널 검색, 위쪽 여백 줄이기",
+   "gap": "Journal rows were three-line cards, the controls sat far above the field menus, and journals could not be searched apart from the paper search.",
+   "entryPoint": "작업 패널 → 저널",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "class:'sc-hit-meta sc-journal-inline'"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+    }
+   ],
+   "status": "verified",
+   "review": "One line per journal -- name, then in grey the abbreviation, the house, papers here, and the fields, trimmed at the end -- with the figure at the right; a search box for journals by name, abbreviation, publisher or field; the controls and the field menus close together."
   }
  ],
  "introducedInVersion": "0.6.0"

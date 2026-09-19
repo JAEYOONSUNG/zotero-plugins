@@ -1750,7 +1750,10 @@
       spread flat in twenty-six chips. */
    const pick=journalView.pick;
    const matches=j=>['domain','field','subfield'].every(level=>!pick[level]||j.levels.some(l=>l[level]===pick[level]));
-   const controls=bar();
+   const controls=bar();controls.classList.add('sc-journal-controls');
+   // Journals found by name, abbreviation, publisher or field, apart from the paper search above.
+   const find=node('input',null,controls,{type:'search',placeholder:'저널·약어·출판사·분야 검색','aria-label':'저널 검색'});find.value=journalView.query||'';
+   find.addEventListener('input',()=>{journalView.query=find.value;render().then(()=>{const again=body.querySelector('.sc-journal-controls input[type=search]');if(again){again.focus?.();again.setSelectionRange?.(again.value.length,again.value.length);}});});
    const sortPick=node('select',null,controls,{'aria-label':'저널 정렬'});
    for(const [value,label] of [['if','IF 높은 순'],['name','이름순'],['papers','내 문헌 많은 순'],['quartile','사분위 순']]){const o=node('option',label,sortPick,{value});if(journalView.sort===value)o.selected=true;}
    sortPick.addEventListener('change',()=>{journalView.sort=sortPick.value;render();});
@@ -1799,8 +1802,10 @@
    }
    if(pick.domain||pick.field||pick.subfield){const clear=button('전체',()=>{for(const [l] of LEVELS)pick[l]='';journalView.field='';render();},line,{class:'sc-field-clear',title:'분야 선택 지우기'});}
    const order={if:(a,b)=>(b.impact??-1)-(a.impact??-1)||a.venue.localeCompare(b.venue),name:(a,b)=>a.venue.localeCompare(b.venue),papers:(a,b)=>b.papers-a.papers||(b.impact??-1)-(a.impact??-1),quartile:(a,b)=>(a.quartile??9)-(b.quartile??9)||(b.impact??-1)-(a.impact??-1)}[journalView.sort]||((a,b)=>0);
-   const shown=all.filter(matches).sort(order);
-   if(!shown.length){empty('이 분야의 저널이 없습니다.');return;}
+   const q=String(journalView.query||'').trim().toLowerCase();
+   const found=j=>!q||[j.venue,j.abbreviation,j.publisher,...j.levels.flatMap(l=>[l.domain,l.field,l.subfield])].some(v=>String(v||'').toLowerCase().includes(q));
+   const shown=all.filter(j=>matches(j)&&found(j)).sort(order);
+   if(!shown.length){empty(q?'검색에 맞는 저널이 없습니다.':'이 분야의 저널이 없습니다.');return;}
    if(journalView.grouped){
     const groups=new Map();
     // Grouped by the level beneath the one chosen: fields by default, subfields once a field is picked.
@@ -1837,16 +1842,19 @@
    const figure=node('span',j.impact!=null?j.impact.toFixed(1):'—',c,{class:'sc-journal-if',title:j.impact!=null?`JIF ${j.impact.toFixed(1)}${j.year?' ('+j.year+')':''}`:'IF 미확인'});
    if(j.impact==null)figure.classList.add('sc-journal-if-none');
    else figure.dataset.tone=j.impact>=10?'top':j.impact>=5?'high':j.impact>=2?'mid':'low';
-   const meta=node('p',null,c,{class:'sc-hit-meta'});
+   /* One line per journal: after the name, in grey, the abbreviation, the
+      house, how many papers here, and the fields -- each field once with its
+      subfields after it -- with the end trimmed when the line runs out. The
+      user asked for the list to read as single rows, not three-line cards. */
+   const meta=node('span',null,head,{class:'sc-hit-meta sc-journal-inline'});
    const bits=[];
-   if(j.abbreviation)bits.push(j.abbreviation);
+   if(j.abbreviation&&j.abbreviation.toLowerCase()!==j.venue.toLowerCase())bits.push(j.abbreviation);
    if(j.publisher)bits.push(j.publisher);
    bits.push(`내 문헌 ${j.papers}편`);
    meta.appendChild(doc.createTextNode(bits.join(' · ')));
    if(j.levels.length){
-    // One line: each field once, its subfields after it, the chosen field marked.
     const byField=new Map();for(const l of j.levels){if(!l.field)continue;const subs=byField.get(l.field)||[];if(l.subfield&&!subs.includes(l.subfield))subs.push(l.subfield);byField.set(l.field,subs);}
-    const line=node('p',null,c,{class:'sc-hit-authors sc-journal-fields'});
+    const line=node('span',null,head,{class:'sc-journal-fields'});
     for(const [field,subs] of byField){const chip=node('span',subs.length?`${field} › ${subs.join(' · ')}`:field,line,{class:'sc-chip sc-chip-tiny',title:`${j.levels.find(l=>l.field===field)?.domain||''} › ${field}${subs.length?' › '+subs.join(' · '):''}`});if(journalView.pick.field&&field===journalView.pick.field)chip.classList.add('sc-chip-on');}
    }
    const actions=node('div',null,c,{class:'sc-hit-actions'});

@@ -466,17 +466,19 @@
 
 /* A journal row: the name with its mark and quartile, the figure in a column
    of its own, and under it the profile when the name is opened. */
-#style-custom-workbench .sc-journal { grid-template-columns: 1fr auto auto; grid-template-areas: "title if actions" "meta if actions" "fields if actions" "profile profile profile"; padding: 9px 2px; }
-#style-custom-workbench .sc-journal .sc-hit-title { grid-area: title; font-size: 13px; display: flex; align-items: center; flex-wrap: wrap; gap: 2px 0; }
-#style-custom-workbench .sc-journal .sc-hit-meta { grid-area: meta; }
-#style-custom-workbench .sc-journal .sc-hit-authors { grid-area: fields; color: var(--sc-faint); }
+#style-custom-workbench .sc-journal { grid-template-columns: 1fr auto auto; grid-template-areas: "title if actions" "profile profile profile"; padding: 6px 2px; row-gap: 0; }
+#style-custom-workbench .sc-journal .sc-hit-title { grid-area: title; font-size: 13px; display: flex; align-items: center; flex-wrap: nowrap; gap: 0 8px; min-width: 0; white-space: nowrap; }
+#style-custom-workbench .sc-journal .sc-journal-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-journal .sc-journal-inline { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+#style-custom-workbench .sc-journal .sc-journal-fields { flex: 1 1 0; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-journal .sc-quartile { margin-inline-start: 0 !important; }
 #style-custom-workbench .sc-journal .sc-hit-actions { grid-area: actions; grid-row: auto; }
 #style-custom-workbench .sc-journal-name { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; min-height: 0; }
 #style-custom-workbench .sc-journal-name:hover { text-decoration: underline; }
 #style-custom-workbench .sc-journal-rank { display: inline-block; min-width: 1.8em; margin-inline-end: 4px; color: var(--sc-faint); font: 600 11px/1 var(--sc-mono); text-align: end; }
 #style-custom-workbench .sc-journal-if { grid-area: if; align-self: start; min-width: 3.4em; padding-top: 2px; color: var(--sc-text); font: 600 13px/1.45 var(--sc-mono); font-variant-numeric: tabular-nums; text-align: end; }
 #style-custom-workbench .sc-journal-if-none { color: var(--sc-faint); font-weight: 400; }
-#style-custom-workbench .sc-journal-fields { display: flex; gap: 4px; flex-wrap: wrap; white-space: normal; }
+#style-custom-workbench .sc-journal-fields { display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-chip-tiny { padding: 0 6px; font-size: 10px; line-height: 16px; }
 #style-custom-workbench .sc-chip-on { background: var(--sc-accent); color: #fff; }
 #style-custom-workbench .sc-chip-button { border: 0; cursor: pointer; min-height: 0; font: inherit; font-size: 11px; line-height: 18px; }
@@ -741,11 +743,13 @@
 #style-custom-workbench .sc-paper-meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The subject line: three menus, large to small, on one line. */
-#style-custom-workbench .sc-field-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+#style-custom-workbench .sc-field-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+#style-custom-workbench .sc-journal-controls { margin-block-end: 4px; }
+#style-custom-workbench .sc-journal-controls input[type=search] { flex: 1 1 160px; min-width: 120px; max-width: 320px; }
 #style-custom-workbench .sc-field-line select { max-width: 320px; min-width: 120px; font-size: 12px; }
 #style-custom-workbench .sc-field-sep { color: var(--sc-faint); font-size: 14px; }
 #style-custom-workbench .sc-field-clear { min-height: 24px; padding: 2px 8px; font-size: 11px; }
-#style-custom-workbench .sc-journal-fields { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 #style-custom-workbench .sc-journal-fields .sc-chip { margin-inline-end: 4px; }
 /* The subject tree: one row per level, the chosen chip folded with its way back. */
 #style-custom-workbench .sc-field-tree { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 8px; }

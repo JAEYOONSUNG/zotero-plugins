@@ -861,6 +861,16 @@ assert.deepEqual(optionsOf('field'),['분야 · 전체 2','Multidisciplinary 1',
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science']);
  await f.click('전체');await settle();
  assert.equal(f.body().querySelectorAll('.sc-journal').length,2,'back to every journal');
+ // Each journal is one row: name, then the grey particulars and its fields on the same line.
+ const first=f.body().querySelector('.sc-journal');
+ assert.equal(first.querySelectorAll('p').length,1,'no second or third line');
+ assert.ok(first.querySelector('.sc-hit-title .sc-journal-inline'));
+ // The journals have a search of their own, by name, abbreviation, publisher or field.
+ f.input('저널 검색','biomedical');await settle();
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science'],'found by subfield');
+ f.input('저널 검색','nature');await settle();
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Nature']);
+ f.input('저널 검색','');await settle();
  // Grouped by field, the journal without a profile sits under "field unknown".
  await f.click('분야별로 묶기');
  assert.deepEqual([...f.body().querySelectorAll('.sc-hit-group')].map(h=>h.textContent),['Life Sciences › Multidisciplinary · 1종','분야 미확인 · 1종']);

@@ -1113,5 +1113,8 @@
  "탭으로 열기": "Open in a tab",
  "이 창에서는 탭을 열 수 없습니다.": "This window cannot open tabs.",
  "분야 고르기": "Choose a field",
- "분야 선택 지우기": "Clear the field choice"
+ "분야 선택 지우기": "Clear the field choice",
+ "저널·약어·출판사·분야 검색": "Search journals by name, abbreviation, publisher or field",
+ "저널 검색": "Search journals",
+ "검색에 맞는 저널이 없습니다.": "No journal matches the search."
 }
