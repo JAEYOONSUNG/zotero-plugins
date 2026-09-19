@@ -122,6 +122,31 @@
       return `${tabs.length} tabs, ${errorsBefore.length} errors`;
     }));
 
+    results.push(await attempt('the panel can sit in a Zotero tab and fill it', async () => {
+      const state = runtime.windows.get(win);
+      const bench = state && state.workbench;
+      if (!bench || typeof bench.dock !== 'function') throw new Error('workbench not attached');
+      if (!win.Zotero_Tabs || typeof win.Zotero_Tabs.add !== 'function') return 'this window has no tab bar';
+      const before = win.Zotero_Tabs.selectedID;
+      await bench.show('explore');
+      if (!bench.dock()) throw new Error('Zotero_Tabs.add refused');
+      try {
+        await new Promise(resolve => win.setTimeout(resolve, 250));
+        const inTab = !!bench.panel.closest('#tabs-deck, .tab-container, [id^="zotero-tabs"], deck') || bench.panel.parentNode !== win.document.documentElement;
+        const rect = bench.panel.getBoundingClientRect();
+        const tabID = win.Zotero_Tabs.selectedID;
+        const drawn = bench.panel.querySelector('.sc-paper-card, .sc-empty, .sc-hits');
+        if (!inTab) throw new Error('the panel did not move into the tab');
+        if (rect.width < 400 || rect.height < 300) throw new Error(`the panel measures ${Math.round(rect.width)}×${Math.round(rect.height)} in the tab`);
+        if (!drawn) throw new Error('nothing drawn inside the tab');
+        return `tab ${tabID} · ${Math.round(rect.width)}×${Math.round(rect.height)} · ${bench.docked() ? 'docked' : 'not docked'}`;
+      } finally {
+        try { bench.undock(); } catch (ignored) {}
+        try { await bench.toggle(false); } catch (ignored) {}
+        try { if (before) win.Zotero_Tabs.select(before); } catch (ignored) {}
+      }
+    }));
+
     results.push(await attempt('the sidebar shows an icon for every tab', () => {
       const state = runtime.windows.get(win);
       const bench = state && state.workbench;
