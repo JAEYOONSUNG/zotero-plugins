@@ -450,3 +450,27 @@ test("a paper handed over from the item list opens the search already filled in 
   assert.match(plugin, /openSearch\(mainWindow, prefill\)/);
   assert.match(plugin, /takePrefill\(\) \{ let p = this\._prefill; this\._prefill = null; return p; \}/);
 });
+
+test("a title's italics are drawn in the list and the detail, and kept for the import", async () => {
+	/* Crossref and OpenAlex hand titles over with the inline markup Zotero
+	   keeps in the field. The list used to show the plain words; now the
+	   organism is in italics, and the imported item carries the markup the
+	   way a native Zotero import would. */
+	const ui = uiHarness({ realRows: true, search: async () => [
+		paper("bs", { title: "Establishing a Bacillus subtilis CO2 route", titleMarkup: "Establishing a <i>Bacillus subtilis</i> CO<sub>2</sub> route" }),
+		paper("plain", { title: "No markup" })
+	] });
+	await ui.runSearch();
+	const rows = ui.get("results-body").children;
+	const link = rows[0].querySelector("td.title").querySelector("a");
+	assert.equal(link.querySelector("i").textContent, "Bacillus subtilis");
+	assert.equal(link.querySelector("sub").textContent, "2");
+	assert.equal(link.textContent, "Establishing a Bacillus subtilis CO2 route");
+	assert.equal(rows[1].querySelector("td.title").querySelector("a").textContent, "No markup");
+	// (The detail pane draws the same way; the harness stubs it out.)
+	// The source normaliser keeps the markup beside the plain title, and only the six tags.
+	const made = Sources.makeRecord({ source: "crossref", title: "A <i>Bacillus</i> <span class=\"x\">study</span> &amp; more", doi: "10.1/x" });
+	assert.equal(made.title, "A Bacillus study & more");
+	assert.equal(made.titleMarkup, "A <i>Bacillus</i> study & more");
+	assert.equal(Sources.makeRecord({ source: "crossref", title: "Plain", doi: "10.1/y" }).titleMarkup, null);
+});

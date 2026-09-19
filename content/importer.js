@@ -150,7 +150,9 @@ var ZotPoPImporter = (function () {
 			}
 			catch (e) { /* ignore invalid field */ }
 		};
-		setIf("title", rec.title);
+		// Zotero keeps inline markup in the title field; an italic organism
+		// name imported as plain text would be lost for good.
+		setIf("title", rec.titleMarkup || rec.title);
 		setIf("date", rec.year ? String(rec.year) : "");
 		setIf("publicationTitle", rec.venue);
 		setIf("proceedingsTitle", rec.itemType === "conferencePaper" ? rec.venue : "");

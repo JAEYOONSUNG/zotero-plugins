@@ -1,5 +1,5 @@
 {
- "version": "0.44.1",
+ "version": "0.44.2",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1603,6 +1603,26 @@
    ],
    "status": "verified",
    "review": "A table of the followed authors: name, place (with what was typed when followed in the tooltip, shaded when they moved), last check, new papers, patents, and an unfollow button on each row; found by name or place, sorted by news, name, place, longest unchecked or most recently followed; the whole list copyable."
+  },
+  {
+   "round": "R55",
+   "title": "문헌 트리와 ZotPoP에서도 제목의 기울기",
+   "gap": "The panel drew a title's markup, but the tree column and ZotPoP's list still printed \"<i>Bacillus subtilis</i>\" as text, and ZotPoP imported the plain words, losing the italics for good.",
+   "entryPoint": "문헌 트리 제목 열 · ZotPoP 결과 목록",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "paintTitleMarkup(titleText, item, win)"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/runtime.test.mjs",
+     "name": "the tree draws the italics and subscripts of a title instead of its tags"
+    }
+   ],
+   "status": "verified",
+   "review": "The tree's title cell is rebuilt with the six inline tags drawn whenever the tree prints them again; ZotPoP keeps the source's markup beside the plain title, draws it in the list and the detail, and imports it as Zotero itself would."
   }
  ],
  "introducedInVersion": "0.6.0"

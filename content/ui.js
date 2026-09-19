@@ -1171,6 +1171,18 @@
 		if (state.selected.has(r.key)) tr.classList.add("selected");
 		if (state.focusKey === r.key) tr.classList.add("focused");
 
+		/* Six inline tags a title may carry, drawn as what they mean. */
+		let rich = (parent, text) => {
+			let parts = String(text).split(/(<\/?(?:i|b|em|strong|sub|sup)>)/i), stack = [parent];
+			for (let part of parts) {
+				if (!part) continue;
+				let m = part.match(/^<(\/?)(i|b|em|strong|sub|sup)>$/i);
+				if (!m) { stack[stack.length - 1].appendChild(document.createTextNode(part)); continue; }
+				let tag = m[2].toLowerCase();
+				if (m[1]) { if (stack.length > 1 && String(stack[stack.length - 1].localName || stack[stack.length - 1].tagName || "").toLowerCase() === tag) stack.pop(); continue; }
+				let el = document.createElement(tag); stack[stack.length - 1].appendChild(el); stack.push(el);
+			}
+		};
 		let td = (cls, text, title) => {
 			let c = document.createElement("td");
 			if (cls) c.className = cls;
@@ -1195,7 +1207,7 @@
 		let tt = td("title", null, r.title);
 		tt.dataset.marquee = "title";
 		let a = document.createElement("a");
-		a.textContent = r.title;
+		if (r.titleMarkup) rich(a, r.titleMarkup); else a.textContent = r.title;
 		a.href = "#";
 		a.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); if (r.url) Zotero.launchURL(r.url); });
 		tt.appendChild(a);
@@ -1315,7 +1327,18 @@
 		$("detail-empty").hidden = Boolean(r);
 		$("detail-body").hidden = !r;
 		if (!r) return;
-		$("d-title").textContent = r.title;
+		$("d-title").textContent = "";
+		if (r.titleMarkup) {
+			let parts = String(r.titleMarkup).split(/(<\/?(?:i|b|em|strong|sub|sup)>)/i), stack = [$("d-title")];
+			for (let part of parts) {
+				if (!part) continue;
+				let m = part.match(/^<(\/?)(i|b|em|strong|sub|sup)>$/i);
+				if (!m) { stack[stack.length - 1].appendChild(document.createTextNode(part)); continue; }
+				let tag = m[2].toLowerCase();
+				if (m[1]) { if (stack.length > 1 && String(stack[stack.length - 1].localName || stack[stack.length - 1].tagName || "").toLowerCase() === tag) stack.pop(); continue; }
+				let el = document.createElement(tag); stack[stack.length - 1].appendChild(el); stack.push(el);
+			}
+		} else $("d-title").textContent = r.title;
 
 		let badges = $("d-badges");
 		badges.textContent = "";

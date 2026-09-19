@@ -1839,3 +1839,26 @@ test('double-clicking a column resizer fits the column to its widest visible cel
   assert.equal(widths.year, 36, 'the neighbour keeps its minimum');
   assert.equal(state.listeners.length, 1, 'and the listener is registered for cleanup');
 });
+
+test('the tree draws the italics and subscripts of a title instead of its tags', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body><div class="row"><span class="cell title"><span class="cell-text">x</span></span></div></body></html>');
+  const {plugin} = fixture();
+  const row = document.querySelector('.row');
+  const cell = row.querySelector('.cell.title');
+  let text = cell.querySelector('.cell-text');
+  if (!text) { text = document.createElement('span'); text.className = 'cell-text'; cell.appendChild(text); }
+  text.textContent = 'Establishing a <i>Bacillus subtilis</i> CO<sub>2</sub> route <script>x</script>';
+  const item = {itemType: 'journalArticle', isAttachment: () => false, isRegularItem: () => true,
+    getField: key => key === 'title' ? 'Establishing a <i>Bacillus subtilis</i> CO<sub>2</sub> route <script>x</script>' : ''};
+  assert.equal(plugin.paintTitleMarkup(text, item, window), true);
+  assert.equal(text.querySelector('i').textContent, 'Bacillus subtilis');
+  assert.equal(text.querySelector('sub').textContent, '2');
+  assert.equal(text.querySelector('script'), null, 'only the six inline tags are drawn');
+  assert.equal(text.textContent, 'Establishing a Bacillus subtilis CO2 route <script>x</script>');
+  // Already drawn: left alone until the tree prints the tags again.
+  assert.equal(plugin.paintTitleMarkup(text, item, window), false);
+  const plain = {itemType: 'journalArticle', getField: key => key === 'title' ? 'No markup here' : ''};
+  text.textContent = 'No markup here';
+  assert.equal(plugin.paintTitleMarkup(text, plain, window), false);
+});

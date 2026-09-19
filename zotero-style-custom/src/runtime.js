@@ -1377,6 +1377,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const cell=row.querySelector('.cell.title');if(!cell)continue;
       const titleText=cell.querySelector('.cell-text');
       if(titleText){
+        this.paintTitleMarkup(titleText,item,win);
         if(this.featureEnabled('titleColumn')&&this.featureEnabled('ReadUnreadStatus')&&this.pref('unreadBold',false)&&this.state(item).status==='unread'){if(!state.titleWeights.has(titleText))state.titleWeights.set(titleText,titleText.style.fontWeight);titleText.style.fontWeight='700';}
         else if(state.titleWeights.has(titleText)){if(titleText.style.fontWeight==='700')titleText.style.fontWeight=state.titleWeights.get(titleText);state.titleWeights.delete(titleText);}
       }
@@ -3319,6 +3320,36 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      to be on the shelf. A small chip before the title says which it is, on
      a regular item by its type or title and on a bare attachment by the file
      name -- the case the user actually hit. */
+  /* Zotero keeps a title's inline markup in the field and prints it as text
+     in the tree: "<i>Bacillus subtilis</i>". Six inline tags are drawn as
+     what they mean; anything else stays literal. The tree redraws its rows
+     on every refresh and this pass runs after each, so the cell is rebuilt
+     only while it still shows a tag. */
+  richText(doc, parent, text) {
+    const parts = String(text).split(/(<\/?(?:i|b|em|strong|sub|sup)>)/i);
+    const stack = [parent];
+    for (const part of parts) {
+      if (!part) continue;
+      const m = part.match(/^<(\/?)(i|b|em|strong|sub|sup)>$/i);
+      if (!m) { stack[stack.length - 1].appendChild(doc.createTextNode(part)); continue; }
+      const tag = m[2].toLowerCase();
+      if (m[1]) { if (stack.length > 1 && stack[stack.length - 1].localName === tag) stack.pop(); continue; }
+      const el = doc.createElementNS('http://www.w3.org/1999/xhtml', tag);
+      stack[stack.length - 1].appendChild(el); stack.push(el);
+    }
+  }
+
+  paintTitleMarkup(titleText, item, win) {
+    if (!titleText || !item) return false;
+    const title = String(item.getField?.('title') || '');
+    if (!/<\/?(i|b|em|strong|sub|sup)>/i.test(title)) return false;
+    // Drawn already: the cell's words no longer equal the raw field.
+    if (String(titleText.textContent || '') !== title) return false;
+    titleText.replaceChildren();
+    this.richText(win.document, titleText, title);
+    return true;
+  }
+
   paintKind(row, item, state, win) {
     const cell = row.querySelector('.cell.title');
     if (!cell || !item) return;

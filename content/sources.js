@@ -206,7 +206,13 @@ var ZotPoPSources = (function () {
 		// A preprint whose peer-reviewed version has the very DOI we are holding is not
 		// "also published elsewhere"; it is that article, and claiming both would double it.
 		if (rec.publishedDoi && rec.publishedDoi === rec.doi) rec.publishedDoi = null;
-		rec.title = stripTags(decodeEntities(rec.title));
+		// The title as the source wrote it, when it carries the inline markup
+		// Zotero keeps in the field ("<i>Bacillus subtilis</i>"): drawn as
+		// italics in the list and imported as is. rec.title stays plain for
+		// matching and display where markup cannot be drawn.
+		const decodedTitle = decodeEntities(rec.title);
+		rec.titleMarkup = /<\/?(i|b|em|strong|sub|sup)>/i.test(String(decodedTitle)) ? String(decodedTitle).replace(/<(?!\/?(?:i|b|em|strong|sub|sup)>)[^>]*>/gi, "").replace(/\s+/g, " ").trim() : null;
+		rec.title = stripTags(decodedTitle);
 		rec.key = rec.source + ":" + (rec.sourceId || rec.doi || rec.title.toLowerCase());
 		if (!rec.sources) rec.sources = [rec.source];
 		if (rec.citations != null && !rec.citationSource) rec.citationSource = rec.source;
@@ -1868,7 +1874,7 @@ var ZotPoPSources = (function () {
 	}
 
 	return {
-		SOURCES, search, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, isPlainAuthorQuery, openAlexAuthorFilter, openAlexAuth, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
+		SOURCES, search, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, isPlainAuthorQuery, openAlexAuthorFilter, openAlexAuth, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();
