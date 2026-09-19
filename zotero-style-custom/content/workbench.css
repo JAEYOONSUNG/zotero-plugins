@@ -140,7 +140,9 @@
   display: flex; align-items: center; gap: 12px; flex-shrink: 0;
   padding: 12px 16px; border-block-end: 1px solid var(--sc-border); background: var(--sc-surface);
 }
-#style-custom-workbench .sc-brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#style-custom-workbench .sc-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#style-custom-workbench .sc-brand img { flex: none; display: block; }
+#style-custom-workbench .sc-brand strong { line-height: 1; }
 #style-custom-workbench .sc-brand strong,
 #style-custom-workbench > header > strong { font: 600 15px/1.35 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; }
 #style-custom-workbench .sc-header-actions { display: flex; align-items: center; gap: 6px; margin-inline-start: auto; flex-shrink: 0; }
@@ -842,3 +844,12 @@
 #style-custom-workbench .sc-note-text { font-size: 12px; color: var(--sc-text); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 #style-custom-workbench .sc-annot-search { flex: 1 1 200px; max-width: 320px; }
 #style-custom-workbench .sc-card-text p { font-variant-numeric: tabular-nums; }
+
+/* A registry journal the library does not hold: present, but quieter. */
+#style-custom-workbench .sc-journal-table tr.sc-journal-absent .sc-journal-name { font-weight: 500; }
+#style-custom-workbench .sc-journal-paging { margin: 4px 0; }
+
+/* Figures as columns: every slot is present on every card, at a fixed width, right-aligned. */
+#style-custom-workbench .sc-paper-card .sc-metrics { margin-inline-start: auto; justify-content: flex-end; }
+#style-custom-workbench .sc-paper-identity { flex: 1 1 auto; min-width: 0; }
+#style-custom-workbench .sc-metric .sc-metric-value:empty::before { content: ""; }

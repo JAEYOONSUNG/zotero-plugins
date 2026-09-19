@@ -135,3 +135,15 @@ test('a journal named by a title rule still carries the registry\'s quartile and
   assert.equal(id.family !== 'other' || id.exact, true, 'Nature is named by a rule or a measured colour');
   assert.deepEqual({quartile: id.quartile, abbreviation: id.abbreviation, impactFactor: id.impactFactor}, {quartile: 1, abbreviation: 'NATURE', impactFactor: 56.1});
 });
+
+test('the registry can be read in one order, JIF first, with the place of each journal in it', () => {
+  journals.loadRegistry({journals: [
+    {title: 'Cell', issns: ['0092-8674'], abbreviation: 'CELL', impactFactor: 42.5, year: 2025, quartile: 1, publisher: 'Cell Press'},
+    {title: 'Nature', issns: ['0028-0836'], abbreviation: 'NATURE', impactFactor: 50.5, year: 2025, quartile: 1, publisher: 'Nature Portfolio'},
+    {title: 'Obscure Letters', issns: [], abbreviation: 'OBSC LETT', impactFactor: 0.4, year: 2025, quartile: 4, publisher: ''}]});
+  const ranked = journals.registryRanked();
+  assert.deepEqual(ranked.map(r => [r.rank, r.title]), [[1, 'Nature'], [2, 'Cell'], [3, 'Obscure Letters']]);
+  assert.equal(journals.registryRank('cell'), 2, 'looked up by the same flattened title the rules use');
+  assert.equal(journals.registryRank('Nowhere Journal'), null);
+  assert.equal(journals.registryRanked(), ranked, 'built once');
+});

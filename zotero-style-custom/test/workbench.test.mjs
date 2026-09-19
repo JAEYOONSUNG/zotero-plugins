@@ -865,7 +865,7 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  // Each journal is one table row: rank, name, quartile, abbreviation, house, papers, fields, figure.
  const first=f.body().querySelector('tr.sc-journal');
  assert.equal(first.querySelectorAll('td').length,8);
- assert.deepEqual([...f.body().querySelectorAll('.sc-journal-table thead th')].map(th=>th.textContent),['#','저널','Q','약어','출판사','내 문헌','분야','JIF 2025']);
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal-table thead th')].map(th=>th.textContent),['JCR 순위','저널','Q','약어','출판사','내 문헌','분야','JIF 2025']);
  assert.equal(first.querySelector('.sc-col-q .sc-quartile').textContent,'Q1');
  assert.equal(first.querySelector('.sc-col-abbr').textContent,'NATURE','sorted by IF, Nature first');
  // The journals have a search of their own, by name, abbreviation, publisher or field.
@@ -1061,5 +1061,33 @@ test('the pages of a paper read as a strip of shaded squares, with the number an
  assert.equal(cells[0].getAttribute('title'),'1페이지 · 2초');
  assert.equal(cells[0].textContent,'','no number on the square');
  assert.ok(f.body().querySelector('.sc-page-legend'),'a key from little to much');
+ f.bench.destroy();
+});
+
+test('the journals tab can show every JCR journal, ranked, with the ones the library lacks marked',async()=>{
+ const f=fixture();
+ const registry=[{title:'Nature',rank:1,key:'nature',issns:['0028-0836'],abbreviation:'NATURE',impactFactor:50.5,year:2025,quartile:1,publisher:'Nature Portfolio'},
+  {title:'Science',rank:2,key:'science',issns:['0036-8075'],abbreviation:'SCIENCE',impactFactor:44.7,year:2025,quartile:1,publisher:'AAAS'},
+  {title:'Cell',rank:3,key:'cell',issns:['0092-8674'],abbreviation:'CELL',impactFactor:42.5,year:2025,quartile:1,publisher:'Cell Press'}];
+ f.runtime.journalIdentity={identify:venue=>{const r=registry.find(x=>x.title===venue);return r?{quartile:r.quartile,abbreviation:r.abbreviation,issns:r.issns,impactFactor:r.impactFactor,year:r.year,publisher:r.publisher}:null;},
+  registryRanked:()=>registry,registryRank:title=>registry.find(x=>x.title===title)?.rank||null};
+ await f.bench.show('journals');
+ // The library view first: two journals, each with its place among all.
+ assert.deepEqual([...f.body().querySelectorAll('tr.sc-journal')].map(r=>[r.dataset.venue,r.querySelector('.sc-col-rank').textContent]),[['Nature','1'],['Science','2']]);
+ await f.click('전체 JCR 3');
+ const rows=[...f.body().querySelectorAll('tr.sc-journal')];
+ assert.deepEqual(rows.map(r=>r.dataset.venue),['Nature','Science','Cell'],'every registry journal, in JIF order');
+ assert.equal(rows[2].classList.contains('sc-journal-absent'),true,'Cell is not in this library');
+ assert.equal(rows[2].querySelector('.sc-col-n').textContent,'—');
+ assert.equal(rows[0].querySelector('.sc-col-n').textContent,'1');
+ assert.match(f.body().querySelector('.sc-journal-count').textContent,/JCR 등재 3종 · 내 서재에 있는 저널 2/);
+ // Opening an absent journal still shows its registry facts and its rank.
+ await f.click('Cell');
+ const value=label=>[...f.body().querySelectorAll('.sc-fact')].find(r=>r.querySelector('dt').textContent===label)?.querySelector('dd').textContent;
+ assert.equal(value('JIF'),'42.5 · 2025');
+ assert.equal(value('JCR 순위'),'3위 / 3');
+ assert.equal(value('내 서재'),'없음');
+ await f.click('내 서재 2');
+ assert.equal(f.body().querySelectorAll('tr.sc-journal').length,2);
  f.bench.destroy();
 });

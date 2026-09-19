@@ -914,6 +914,20 @@
    ]
   },
   {
+   "ko": "등재 JCR 목록",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "JCR 순위",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "약어",
    "n": 2,
    "files": [
@@ -4918,6 +4932,13 @@
    ]
   },
   {
+   "ko": "별점 없음",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "읽은 시간",
    "n": 1,
    "files": [
@@ -7445,6 +7466,27 @@
    ]
   },
   {
+   "ko": "저널 범위",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "내 서재 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "전체 JCR {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "저널·약어·출판사·분야 검색",
    "n": 1,
    "files": [
@@ -7501,6 +7543,13 @@
    ]
   },
   {
+   "ko": "JCR 등재 {0}종 · 내 서재에 있는 저널 {1}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "저널 {0}종 · JIF 있는 저널 {1} · 분야 알려진 저널 {2}",
    "n": 1,
    "files": [
@@ -7550,6 +7599,20 @@
    ]
   },
   {
+   "ko": "이전",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "다음",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "내 문헌",
    "n": 1,
    "files": [
@@ -7571,6 +7634,20 @@
    ]
   },
   {
+   "ko": "JCR 등재 저널 전체에서 {0}위 (JIF 순)",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "JCR 목록에 없음",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "프로필 펼치기·접기",
    "n": 1,
    "files": [
@@ -7586,6 +7663,13 @@
   },
   {
    "ko": "내 문헌 {0}편",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "내 서재에 없는 저널",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7642,13 +7726,6 @@
   },
   {
    "ko": "저널 등급 조회를 마쳤습니다.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "등재 JCR 목록",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7739,6 +7816,20 @@
    ]
   },
   {
+   "ko": "{0}위 / {1}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "JIF 순, 등재 저널 전체",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "내 서재",
    "n": 1,
    "files": [
@@ -7747,6 +7838,13 @@
   },
   {
    "ko": "{0}편 · 읽음 {1} · 평균 피인용 {2}{3}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "없음",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7768,6 +7866,13 @@
   },
   {
    "ko": "이 저널 문헌 보기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "ZotPoP에서 이 저널 검색",
    "n": 1,
    "files": [
     "src/workbench.js"

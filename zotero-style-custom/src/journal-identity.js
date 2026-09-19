@@ -502,6 +502,21 @@
     seen.clear();
     return REGISTRY.size;
   }
+  /* The whole registry in one order -- JIF descending, ties by name -- with
+     each row's place in it. The user wants to see where a journal stands
+     among all of them, and which journals they do not hold at all, not only
+     the 255 in the library. Built once on first use. */
+  function registryRanked() {
+    if (!REGISTRY) return [];
+    if (!REGISTRY.ranked) {
+      const rows = [...new Set(REGISTRY.byTitle.values())];
+      rows.sort((a, b) => (Number(b.impactFactor) || 0) - (Number(a.impactFactor) || 0) || String(a.title).localeCompare(String(b.title)));
+      REGISTRY.ranked = rows.map((row, index) => ({...row, rank: index + 1, key: flat(row.title)}));
+      REGISTRY.rankByKey = new Map(REGISTRY.ranked.map(row => [row.key, row.rank]));
+    }
+    return REGISTRY.ranked;
+  }
+  function registryRank(title) { registryRanked(); return REGISTRY && REGISTRY.rankByKey ? (REGISTRY.rankByKey.get(flat(title)) || null) : null; }
   function registryLookup(flatTitle) { return REGISTRY ? (REGISTRY.byTitle.get(flatTitle) || null) : null; }
   function registryByIssn(issn) { return REGISTRY ? (REGISTRY.byIssn.get(String(issn || '').toUpperCase()) || null) : null; }
 
@@ -593,7 +608,7 @@
       : {...badge, ink, fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84)};
   }
 
-  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
+  const api = {identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, registryRanked, registryRank, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

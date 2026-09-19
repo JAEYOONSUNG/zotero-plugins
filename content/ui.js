@@ -1686,6 +1686,7 @@
 		let pre = Zotero.ZotPoP && typeof Zotero.ZotPoP.takePrefill === "function" ? Zotero.ZotPoP.takePrefill() : null;
 		if (!pre) return false;
 		if (pre.title) $("title").value = String(pre.title).replace(/<[^>]*>/g, "");
+		if (pre.venue) $("venue").value = String(pre.venue);
 		if (pre.authors) $("authors").value = String(pre.authors);
 		let year = parseInt(pre.year, 10);
 		if (year) { $("yearFrom").value = String(year - 1); $("yearTo").value = String(year + 1); }

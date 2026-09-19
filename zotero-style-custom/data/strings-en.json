@@ -1132,5 +1132,20 @@
  "읽기 기록 {0}": "Reading record {0}",
  "선택: {0}": "Selected: {0}",
  "인용 조회: {0}": "Citation lookup: {0}",
- "저장 위치: {0}": "Stored at: {0}"
+ "저장 위치: {0}": "Stored at: {0}",
+ "JCR 순위": "JCR rank",
+ "저널 범위": "Which journals",
+ "내 서재 {0}": "My library {0}",
+ "전체 JCR {0}": "All JCR {0}",
+ "JCR 등재 {0}종 · 내 서재에 있는 저널 {1}": "{0} JCR journals · {1} in my library",
+ "이전": "Previous",
+ "다음": "Next",
+ "JCR 등재 저널 전체에서 {0}위 (JIF 순)": "Rank {0} among all JCR journals, by JIF",
+ "JCR 목록에 없음": "Not in the JCR list",
+ "내 서재에 없는 저널": "Not in my library",
+ "{0}위 / {1}": "{0} of {1}",
+ "JIF 순, 등재 저널 전체": "By JIF, among all listed journals",
+ "없음": "None",
+ "ZotPoP에서 이 저널 검색": "Search this journal in ZotPoP",
+ "별점 없음": "No rating"
 }

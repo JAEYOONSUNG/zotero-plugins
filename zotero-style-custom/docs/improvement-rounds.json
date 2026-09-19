@@ -1,5 +1,5 @@
 {
- "version": "0.46.4",
+ "version": "0.47.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1803,6 +1803,34 @@
    ],
    "status": "verified",
    "review": "Applied across four commits: tone and reading-ink tokens with dark variants; one table style for journals and the followed list; the map's CSS fill override removed so journal colours show; square page cells in fixed rows; row-height-stable card hover; kind chips in the context row; blank instead of dashed figures; the settings pane translated, its help text rendered, errors marked, keys explained with a reveal button, number ranges stated, boolean rows on one line, a confirm before a category reset; the citation dialog modal with a focus trap, multi-item previews on separate lines, the hint restored after a copy."
+  },
+  {
+   "round": "R64",
+   "title": "저널 지표에 JCR 전체 목록과 등수",
+   "gap": "The journals tab listed only the 255 journals the library holds; the user wanted every JCR journal, with each one's place among all of them, including journals they do not hold.",
+   "entryPoint": "작업 패널 → 저널 → 내 서재 / 전체 JCR",
+   "sources": [
+    {
+     "file": "src/journal-identity.js",
+     "marker": "function registryRanked()"
+    },
+    {
+     "file": "src/workbench.js",
+     "marker": "function registryFacts(row,items)"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the journals tab can show every JCR journal, ranked, with the ones the library lacks marked"
+    },
+    {
+     "file": "test/journal-identity.test.mjs",
+     "name": "the registry can be read in one order, JIF first, with the place of each journal in it"
+    }
+   ],
+   "status": "verified",
+   "review": "The registry is read once in JIF order and each journal carries its rank; the rank column shows that place in both views. A toggle switches between the library's journals and all 22,594, a hundred a page, searchable; a journal the library lacks is present but quieter, its profile shows the registry facts and offers a ZotPoP search."
   }
  ],
  "introducedInVersion": "0.6.0"
