@@ -850,29 +850,31 @@
     if(findTimer)win.clearTimeout(findTimer);
     findTimer=win.setTimeout(()=>{state.query=find.value.trim();render();},250);
    });
-   const color=node('input',null,tools,{placeholder:'#ffd400 또는 비워두면 전체','aria-label':'주석 색상 필터'});
-   color.value=state.color;
-   button('색상 적용',()=>{state.color=color.value.trim();render();},tools);
-   const colorEdit=node('input',null,tools,{type:'color',value:'#ffd400','aria-label':'선택 주석 새 색상'});
+   // The three things done to a selection sit with the selection, after the
+   // list's summary; the colour swatches there filter by colour, so the hex
+   // box and its button are gone.
+   const selectionTools=node('div',null,null,{class:'sc-annot-selection'});
+   const colorEdit=node('input',null,selectionTools,{type:'color',value:'#ffd400','aria-label':'선택 주석 새 색상'});
    button('선택 주석 색 바꾸기',async()=>{
     const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
     if(!chosen.length)throw new Error('현재 범위의 주석을 선택하세요.');
     const count=await library.recolorAnnotations(chosen,colorEdit.value);
     await render();message(`${count}개 주석의 색상을 변경했습니다.`);
-   },tools);
+   },selectionTools);
    button('선택 주석을 노트로',async()=>{
     const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
     if(!chosen.length)throw new Error('현재 범위의 주석을 선택하세요.');
     const id=await library.noteFromAnnotations(chosen);
     await library.openItem(id);message('출처 링크가 포함된 노트를 만들었습니다.');
-   },tools);
+   },selectionTools);
    button('선택 주석 병합',async()=>{
     const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
     const mark=epoch;
     const id=await library.mergeAnnotations(chosen,{isCurrent:()=>!disposed&&!panel.hidden&&epoch===mark});
     state.annotationIDs=new Set([String(id)]);
     await render();message('주석을 병합했습니다. 나머지 주석은 휴지통에서 복원할 수 있습니다.');
-   },tools);
+   },selectionTools);
+   body.appendChild(selectionTools);
 
    const list=await library.annotations(ids());
    if(token!==epoch||disposed)return;
@@ -904,7 +906,8 @@
     chip.addEventListener('click',()=>{state.color=state.color===hex?'':hex;render();});
    }
    button('보이는 주석 전체 선택',()=>{state.annotationIDs=new Set(visibleAnnotationIDs);render();},summary);
-   if(state.annotationIDs.size)button(`선택 해제 (${state.annotationIDs.size})`,()=>{state.annotationIDs=new Set();render();},summary);
+   if(state.annotationIDs.size)button(`선택 해제 (${state.annotationIDs.size})`,()=>{state.annotationIDs=new Set();render();},summary,{'data-role':'annot-clear'});
+   summary.appendChild(selectionTools);
 
    // Grouped by document and read in page order, which is the order they were
    // made in and the only order that reads as a pass through the paper.
@@ -923,12 +926,13 @@
     const stack=node('div',null,body,{class:'sc-annots'});
     for(const a of group){
      visibleAnnotationIDs.add(a.id);
+     const tint=/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'var(--sc-faint)';
      const row=node('article',null,stack,{class:'sc-annot',tabindex:'0','data-selected':String(state.annotationIDs.has(a.id))});
+     // The annotation's colour runs down the card's edge, as it does in the PDF.
+     row.style.setProperty('--sc-annot',tint);
      const head=node('div',null,row,{class:'sc-annot-head'});
-     node('span',null,head,{class:'sc-annot-dot',
-      style:`background:${/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'var(--sc-faint)'}`});
      node('span',`p.${a.pageLabel||((a.pageIndex??0)+1)}`,head,{class:'sc-annot-page'});
-     node('span',a.type,head,{class:'sc-annot-kind'});
+     node('span',({highlight:'하이라이트',underline:'밑줄',note:'메모',image:'그림',ink:'필기',text:'텍스트'})[a.type]||a.type,head,{class:'sc-annot-kind'});
      const actions=node('div',null,head,{class:'sc-annot-actions'});
      button('원문',()=>library.openItem(a.id),actions);
      button('참조 노트',async()=>{
@@ -1310,7 +1314,65 @@
    button('결과 복사',()=>copy(output.value),actions);
    button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 분석을 받으세요.');await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
   }
-  async function drawCollections(token){const collections=await library.collections(win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID);if(token!==epoch||disposed)return;const b=bar();const sort=node('select',null,b,{'aria-label':'컬렉션 정렬'});sort.hidden=!enabled('sortCollectionItem');for(const[v,l]of [['name','이름순'],['count','문헌 많은 순'],['favorite','즐겨찾기 먼저']])node('option',l,sort,{value:v});const list=node('div',null,body);function draw(){list.replaceChildren();const favorites=runtime.cache.favoriteCollections||[];const rows=[...collections].sort((a,b)=>!enabled('sortCollectionItem')?0:sort.value==='count'?b.count-a.count:sort.value==='favorite'?Number(favorites.includes(b.id))-Number(favorites.includes(a.id))||a.name.localeCompare(b.name):a.name.localeCompare(b.name));for(const c of rows){const row=card(c.name,enabled('collectionItemCount')?c.count+'개 문헌':'',list);button('컬렉션 열기',()=>win.ZoteroPane.collectionsView.selectCollection(Number(c.id)),row);if(enabled('favoriteCollections'))check('즐겨찾기',favorites.includes(c.id),on=>run(async()=>{runtime.cache.favoriteCollections=on?[...new Set([...favorites,c.id])]:favorites.filter(id=>id!==c.id);runtime.dirty=true;await runtime.flush();draw();}),row);}}sort.value='name';sort.addEventListener('change',draw);draw();}
+  /* Collections as a tree, each with a bar for how much it holds. A list of
+     boxed cards, one per collection with a button and a checkbox, said no
+     more than the sidebar already does; here the bars make the big and the
+     empty visible at a glance, subcollections sit under their parents, and
+     a name is the way in. */
+  async function drawCollections(token){
+   const collections=await library.collections(win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID);if(token!==epoch||disposed)return;
+   const b=bar();
+   const find=node('input',null,b,{type:'search',placeholder:'컬렉션 이름 검색','aria-label':'컬렉션 검색'});
+   const sort=node('select',null,b,{'aria-label':'컬렉션 정렬'});sort.hidden=!enabled('sortCollectionItem');
+   for(const[v,l]of [['name','이름순'],['count','문헌 많은 순'],['favorite','즐겨찾기 먼저']])node('option',l,sort,{value:v});
+   check('빈 컬렉션 숨기기',!!state.collectionsHideEmpty,on=>{state.collectionsHideEmpty=on;draw();},b);
+   const total=collections.reduce((n,c)=>n+c.count,0),most=Math.max(1,...collections.map(c=>c.count));
+   node('span',`컬렉션 ${collections.length}개 · 문헌 ${total}편 · 빈 컬렉션 ${collections.filter(c=>!c.count).length}개`,b,{class:'sc-muted'});
+   const list=node('div',null,body,{class:'sc-collection-tree'});
+   function draw(){
+    list.replaceChildren();
+    const favorites=runtime.cache.favoriteCollections||[];
+    const q=find.value.trim().toLowerCase();
+    const byParent=new Map();
+    for(const c of collections){const key=c.parentID||'';if(!byParent.has(key))byParent.set(key,[]);byParent.get(key).push(c);}
+    const order=(x,y)=>!enabled('sortCollectionItem')?0:sort.value==='count'?y.count-x.count:sort.value==='favorite'?Number(favorites.includes(y.id))-Number(favorites.includes(x.id))||x.name.localeCompare(y.name):x.name.localeCompare(y.name);
+    const matches=c=>!q||c.name.toLowerCase().includes(q);
+    const subtree=c=>[c,...(byParent.get(c.id)||[]).flatMap(subtree)];
+    let drawn=0;
+    const walk=(parent,depth)=>{
+     for(const c of [...(byParent.get(parent)||[])].sort(order)){
+      const family=subtree(c);
+      if(!family.some(matches))continue;
+      if(state.collectionsHideEmpty&&!family.some(x=>x.count))continue;
+      drawn++;
+      const row=node('div',null,list,{class:'sc-collection'+(c.count?'':' sc-collection-empty'),role:'button',tabindex:'0','data-depth':String(depth),'data-id':c.id});
+      row.style.setProperty('--sc-depth',String(depth));
+      const open=()=>win.ZoteroPane.collectionsView.selectCollection(Number(c.id));
+      row.addEventListener('click',event=>{if(event.target.closest('button,input,label'))return;open();});
+      row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
+      const nameLine=node('div',null,row,{class:'sc-collection-line'});
+      if(depth)node('span','└',nameLine,{class:'sc-collection-branch','aria-hidden':'true'});
+      setIcon(node('span',null,nameLine,{class:'sc-collection-icon'}),'collections');
+      node('span',c.name,nameLine,{class:'sc-collection-name',title:c.name});
+      const kids=(byParent.get(c.id)||[]).length;
+      if(kids)node('span',`하위 ${kids}`,nameLine,{class:'sc-collection-kids'});
+      if(enabled('collectionItemCount'))node('span',c.count?`${c.count}편`:'비어 있음',nameLine,{class:'sc-collection-count'});
+      const barBox=node('div',null,row,{class:'sc-collection-bar','aria-hidden':'true'});
+      const fill=node('span',null,barBox,{class:'sc-collection-fill'});fill.style.width=`${Math.round(100*c.count/most)}%`;
+      const actions=node('div',null,row,{class:'sc-collection-actions'});
+      button('컬렉션 열기',open,actions);
+      if(enabled('favoriteCollections'))check('즐겨찾기',favorites.includes(c.id),on=>run(async()=>{runtime.cache.favoriteCollections=on?[...new Set([...favorites,c.id])]:favorites.filter(id=>id!==c.id);runtime.dirty=true;await runtime.flush();draw();}),actions);
+      if(favorites.includes(c.id))row.classList.add('sc-collection-favorite');
+      walk(c.id,depth+1);
+     }
+    };
+    walk('',0);
+    if(!drawn)node('p',q?'검색에 맞는 컬렉션이 없습니다.':'컬렉션이 없습니다.',list,{class:'sc-empty'});
+   }
+   sort.value='name';sort.addEventListener('change',draw);
+   let typing=null;find.addEventListener('input',()=>{win.clearTimeout(typing);typing=win.setTimeout(draw,120);});
+   draw();
+  }
   const GROUP_LABELS={citing:'이 논문을 인용한 논문',reference:'이 논문이 인용한 문헌',related:'주제가 가까운 논문'};
 
   // One dense row per result: what it is, then the actions, which stay out of
@@ -1360,8 +1422,22 @@
    return list;
   }
 
+  const GROUP_NOTES={citing:'이 논문 이후에 나온 논문 중 이 논문을 참고문헌에 올린 것 — 후속 연구',reference:'이 논문이 참고문헌으로 든 문헌 — 바탕이 된 연구',related:'참고문헌을 많이 공유하거나 OpenAlex가 주제를 가깝게 본 논문 — 옆 연구'};
   async function drawRelated(token){
-   let item;try{item=one();}catch(_){empty('관련 논문을 찾을 문헌 하나를 선택하세요.');return;}
+   let item;try{item=one();}catch(_){
+    /* Nothing selected: say what the tab will do and how to start, instead
+       of a single line that read as an error. */
+    const guide=node('div',null,body,{class:'sc-guide'});
+    node('h2','관련 논문',guide);
+    node('p','문헌을 하나 고르면 OpenAlex에서 세 가지를 찾아 옵니다.',guide);
+    const steps=node('ul',null,guide,{class:'sc-guide-list'});
+    for(const [key,label] of Object.entries(GROUP_LABELS)){const li=node('li',null,steps);node('strong',label,li);node('span',' — '+T(GROUP_NOTES[key]),li);}
+    node('p','보유하지 않은 논문은 행의 버튼으로 ZotPoP에서 바로 찾거나 가져올 수 있습니다.',guide,{class:'sc-muted'});
+    const acts=bar(guide);
+    button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});
+    button('보유 문헌에서 고르기',()=>navigate('explore'),acts);
+    return;
+   }
    node('h2',item.title,body);
    const b=bar();
    const list=node('div',null,body);
@@ -1378,6 +1454,7 @@
      const rows=suggestions.filter(s=>s.source===group);
      if(!rows.length)continue;
      node('h3',`${GROUP_LABELS[group]} ${rows.length}`,list,{class:'sc-hit-group'});
+     node('p',GROUP_NOTES[group],list,{class:'sc-muted sc-hit-group-note'});
      hitList(rows,list);
     }
    }

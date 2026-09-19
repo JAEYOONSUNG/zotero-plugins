@@ -67,6 +67,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   // One place to ask for a string, so nothing has to reach for the module.
   t(value) { return this.i18n ? this.i18n.t(value) : value; }
+  // Every dialog the plugin raises, in the chosen language; multi-line
+  // messages are translated a line at a time so a report of figures reads.
+  say(win, message) {
+    const text = String(message == null ? '' : message).split('\n').map(line => this.t(line)).join('\n');
+    return this.Z.alert(win, 'Style Custom', text);
+  }
 
   // Which language the panel speaks. `auto` follows Zotero's own locale, which
   // is the honest default: somebody running Zotero in English wants this in
@@ -3477,7 +3483,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     state.workbench=this.Workbench.attach(win,{runtime:this,library:this.Library.create({Zotero:this.Z,runtime:this}),reader:this.readerTools,model:this.workspaceTools,assist:this.assist});
     const doc = win.document, popup = doc.getElementById("zotero-itemmenu");
     if (popup) {
-      const make = (tag,label,parent) => { const node=doc.createXULElement(tag); if(label)node.setAttribute("label",label);parent?.appendChild(node);return node; };
+      // Menu labels pass through the dictionary like everything the panel writes.
+      const make = (tag,label,parent) => { const node=doc.createXULElement(tag); if(label)node.setAttribute("label",this.t(label));parent?.appendChild(node);return node; };
       const menu=make("menu","Style Custom",popup);menu.id="style-custom-itemmenu";state.nodes.push(menu);
       const body=make("menupopup",null,menu);
       /* Every entry carries a small drawn sign, so a list of twenty verbs
@@ -3486,7 +3493,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          URL and nothing else. */
       const ink=this.palette(doc).text||'#1c1c1e';
       const glyph=name=>{const shapes=this.MENU_ICONS[name];if(!shapes)return '';const body=shapes.map(([tag,attrs])=>`<${tag} ${Object.entries(attrs).map(([k,v])=>`${k}="${v}"`).join(' ')}/>`).join('');return 'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="${ink}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`);};
-      const action=(label,callback,parent=body,icon='')=>{ const node=make("menuitem",label,parent);if(icon&&this.MENU_ICONS[icon]){node.classList.add("menuitem-iconic");node.setAttribute("image",glyph(icon));}node.addEventListener("command",()=>Promise.resolve().then(callback).catch(e=>{this.Z.logError(e);this.Z.alert(win,"Style Custom",e.message);}));return node; };
+      const action=(label,callback,parent=body,icon='')=>{ const node=make("menuitem",label,parent);if(icon&&this.MENU_ICONS[icon]){node.classList.add("menuitem-iconic");node.setAttribute("image",glyph(icon));}node.addEventListener("command",()=>Promise.resolve().then(callback).catch(e=>{this.Z.logError(e);this.say(win,e.message);}));return node; };
       const iconic=(node,icon)=>{if(node&&this.MENU_ICONS[icon]){node.classList.add(node.localName==="menu"?"menu-iconic":"menuitem-iconic");node.setAttribute("image",glyph(icon));}return node;};
       for(const status of ["unread","reading","done"]) action(({unread:"안 읽음",reading:"읽는 중",done:"읽음"})[status],()=>this.edit(this.selected(win),{status}),body,{unread:"circle",reading:"half",done:"disc"}[status]);
       /* The paper you are looking at is the best query you have. The search
@@ -3510,13 +3517,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const files=this.selectedAttachments(win);
         if(!files.length)throw new Error("첨부파일을 선택하세요.");
         const changed=await this.setSupplementary(files,true);
-        this.Z.alert(win,"Style Custom",`${changed}개를 보충자료로 표시했습니다.`);
+        this.say(win,`${changed}개를 보충자료로 표시했습니다.`);
       },suppl);
       action("보충자료 표시 해제",async()=>{
         const files=this.selectedAttachments(win);
         if(!files.length)throw new Error("첨부파일을 선택하세요.");
         const changed=await this.setSupplementary(files,false);
-        this.Z.alert(win,"Style Custom",`${changed}개의 표시를 해제했습니다.`);
+        this.say(win,`${changed}개의 표시를 해제했습니다.`);
       },suppl);
       make("menuseparator",null,suppl);
       action("먼저 확인만 (받을 수 있는 논문 세기)",async()=>{
@@ -3524,7 +3531,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
         const report=await this.previewSupplementary(items,
           {onProgress:(done,total)=>this.showBackfillProgress(win,'files',done,total)});
-        this.Z.alert(win,"Style Custom",
+        this.say(win,
           `받을 수 있는 논문 ${report.available.length}편\n\n`
           +`이미 있음 ${report.already} · 식별자 없음 ${report.noIdentifier}\n`
           +`PMC에 없음 ${report.notFound+report.notArchived} · 보충자료 없음 ${report.noSupplement}\n`
@@ -3535,7 +3542,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const items=this.selected(win);
         if(!items.length)throw new Error("문헌을 먼저 선택하세요.");
         const result=await this.downloadSupplementary(items,{pdfOnly});
-        this.Z.alert(win,"Style Custom",
+        this.say(win,
           `보충자료 ${result.added}개 추가 · 이미 있음 ${result.already} · 없음 ${result.none} · 미확인 ${result["not-found"]} · 실패 ${result.error}`
           +(result.failures.length?"\n\n"+result.failures.slice(0,5).join("\n"):""));
       },suppl);
@@ -3549,37 +3556,37 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       action("라이브러리 저널 지표 채우기",async()=>{
         const items=await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
         const papers=items.filter(item=>this.isRegular(item));
-        this.Z.alert(win,"Style Custom","저널 지표를 조회합니다. 저널마다 한 번만 조회하고 결과는 보관합니다.");
+        this.say(win,"저널 지표를 조회합니다. 저널마다 한 번만 조회하고 결과는 보관합니다.");
         const result=await this.refreshJournalCitedness(papers);
         const lines=[`저널 ${result.journals}종 중 ${result.found}종 지표 확인 · ${result.missing}종은 OpenAlex에도 없음`];
         if(result.failed) lines.push(`${result.failed}종 조회 실패`);
         if(result.budgetGone) lines.push(`OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}종이 남았고, 한도는 UTC 자정에 초기화됩니다.\n지금까지 받은 값은 저장됐으니 내일 다시 실행하면 남은 것부터 이어서 채웁니다.`);
         else lines.push("공식 JIF가 있는 저널은 그대로 두고, 없는 저널만 ~추정치로 채웁니다.");
-        this.Z.alert(win,"Style Custom",lines.join("\n"));
+        this.say(win,lines.join("\n"));
       },body,"journals");
       action("읽기 기록 가져오기 (이전 플러그인 노트에서)",async()=>{
         const preview=await this.importLegacyReading({dryRun:true});
-        if(!preview.imported){this.Z.alert(win,"Style Custom",`가져올 읽기 기록이 없습니다. (노트 ${preview.notes}개 · 이미 보유 ${preview.skipped}개 · 대상 불명 ${preview.unresolved}개)`);return;}
+        if(!preview.imported){this.say(win,`가져올 읽기 기록이 없습니다. (노트 ${preview.notes}개 · 이미 보유 ${preview.skipped}개 · 대상 불명 ${preview.unresolved}개)`);return;}
         const hours=(preview.seconds/3600).toFixed(1);
         const result=await this.importLegacyReading();
-        this.Z.alert(win,"Style Custom",`읽기 기록 ${result.imported}편 · ${hours}시간을 가져왔습니다.\n이미 더 많이 기록된 ${result.skipped}편은 그대로 두었습니다.`+(result.unresolved?`\n대상 문헌을 찾지 못한 노트 ${result.unresolved}개`:""));
+        this.say(win,`읽기 기록 ${result.imported}편 · ${hours}시간을 가져왔습니다.\n이미 더 많이 기록된 ${result.skipped}편은 그대로 두었습니다.`+(result.unresolved?`\n대상 문헌을 찾지 못한 노트 ${result.unresolved}개`:""));
       },body,"reading");
       action("제목 앞 별 태그 정리",async()=>{
         const found=await this.starTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
-        if(!found.length){this.Z.alert(win,"Style Custom","정리할 별 태그가 없습니다.");return;}
+        if(!found.length){this.say(win,"정리할 별 태그가 없습니다.");return;}
         const {moved,skipped}=await this.migrateStarTags(found);
-        this.Z.alert(win,"Style Custom",`${moved}개 항목의 별 태그를 정리했습니다. 평점은 그대로 유지됩니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:""));
+        this.say(win,`${moved}개 항목의 별 태그를 정리했습니다. 평점은 그대로 유지됩니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:""));
       },body,"star");
       action("평점 태그를 Extra로 옮기기",async()=>{
         const found=await this.visibleRatingTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
-        if(!found.length){this.Z.alert(win,"Style Custom","태그로 남은 평점이 없습니다.");return;}
+        if(!found.length){this.say(win,"태그로 남은 평점이 없습니다.");return;}
         const {fixed,skipped}=await this.hideRatingTags(found);
         const stray=await this.moveStrayRatingTags(win.ZoteroPane?.getSelectedLibraryID?.());
         const lines=[`${fixed}개 항목의 평점을 Extra의 "Rating: N"으로 옮기고 태그를 지웠습니다. 별점은 그대로입니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:"")];
         if(stray.moved||stray.alreadyRated)lines.push(`첨부파일에 붙어 있던 평점 ${stray.moved+stray.alreadyRated}개를 정리했습니다(${stray.moved}개는 본 문헌으로 옮김).`);
         if(stray.orphans)lines.push(`독립 첨부파일 ${stray.orphans}개는 본 문헌이 없어 태그를 그대로 두었습니다.`);
         lines.push("Extra는 동기화되고 직접 고칠 수 있으며, 태그 목록에는 나타나지 않습니다.");
-        this.Z.alert(win,"Style Custom",lines.join("\n"));
+        this.say(win,lines.join("\n"));
       },body,"star");
       make("menuseparator",null,body);
       action("인용…",()=>this.citationPanel(win,this.selected(win)),body,"quote");
@@ -3590,7 +3597,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       action("저장된 지표와 읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();},body,"refresh");
       action("선택한 문헌 인용 수 새로고침",async()=>{
         const result=await this.refreshCitations(this.selected(win),{force:true});
-        this.Z.alert(win,"Style Custom",`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
+        this.say(win,`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
       },body,"citations");
       action("인용 수 조회 중지",()=>this.citationJob?.controller.abort(),body,"stop");
       action("첨부파일 종류 판별 (본문 · 보충자료 · 중복 · 다른 논문)",async()=>{
@@ -3598,7 +3605,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
         const result=await this.scanAttachmentKinds(items,
           {onProgress:(done,total)=>this.showBackfillProgress(win,'files',done,total)});
-        this.Z.alert(win,"Style Custom",
+        this.say(win,
           `문헌 ${result.items}개 · PDF ${result.files}개를 첫 페이지로 판별했습니다.\n`
           +`본문 ${result.article} · 보충자료 ${result.supplementary} · 중복 ${result.duplicate} · 다른 논문 ${result.foreign}`
           +(result.unknown?` · 판단 불가 ${result.unknown}`:"")
@@ -3606,19 +3613,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           +(result.unread?`\n${result.unread}개는 색인을 만든 뒤에도 본문을 읽지 못했습니다(스캔 PDF일 수 있습니다).`:""));
       },body,"attachments");
       action("빈 칸 채우기 (철회 신호 · 저널 지표 · 새 논문)",async()=>{
-        if(this.backfilling){this.stopBackfill();this.Z.alert(win,"Style Custom","채우기를 중지했습니다. 지금까지 받은 값은 저장했습니다.");return;}
+        if(this.backfilling){this.stopBackfill();this.say(win,"채우기를 중지했습니다. 지금까지 받은 값은 저장했습니다.");return;}
         const report=await this.runBackfill({libraryID:win.ZoteroPane?.getSelectedLibraryID?.(),
           onProgress:({stage,done,total})=>this.showBackfillProgress(win,stage,done,total)});
-        this.Z.alert(win,"Style Custom",this.backfillSummary(report));
+        this.say(win,this.backfillSummary(report));
       },body,"fill");
       action("선택한 문헌 철회·공개접근 신호 조회",async()=>{
         const result=await this.refreshPaperSignals(this.selected(win));
-        this.Z.alert(win,"Style Custom",`신호 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · DOI 없음 ${result.unsupported}개 · 조회 오류 ${result.error}개`);
+        this.say(win,`신호 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · DOI 없음 ${result.unsupported}개 · 조회 오류 ${result.error}개`);
       },body,"signal");
       action("현재 라이브러리 인용 수 조회·메타데이터 저장",()=>this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID),body,"citations");
       action("선택한 저널 IF를 공식 페이지에서 새로고침",async()=>{
         const result = await this.refreshJournalMetrics(this.selected(win), win.DOMParser);
-        this.Z.alert(win,"Style Custom",`IF 확인 ${result.updated}개 · 조회 실패 ${result.failed}개 · 미등록 저널 ${result.unknown}개. 기존 확인된 값은 유지됩니다.`);
+        this.say(win,`IF 확인 ${result.updated}개 · 조회 실패 ${result.failed}개 · 미등록 저널 ${result.unknown}개. 기존 확인된 값은 유지됩니다.`);
       },body,"journals");
     }
     const poll = async () => {

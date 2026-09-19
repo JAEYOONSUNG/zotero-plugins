@@ -501,6 +501,13 @@
    ]
   },
   {
+   "ko": "관련 논문",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "노트",
    "n": 2,
    "files": [
@@ -669,6 +676,13 @@
    ]
   },
   {
+   "ko": "현재 선택 가져오기",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "새로고침",
    "n": 2,
    "files": [
@@ -806,6 +820,14 @@
    "n": 2,
    "files": [
     "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "메모",
+   "n": 2,
+   "files": [
+    "src/workbench.js",
+    "src/workspace.js"
    ]
   },
   {
@@ -4141,13 +4163,6 @@
    ]
   },
   {
-   "ko": "관련 논문",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "저자 추적",
    "n": 1,
    "files": [
@@ -4450,13 +4465,6 @@
   },
   {
    "ko": "문헌 유형 필터",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "현재 선택 가져오기",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5394,27 +5402,6 @@
    ]
   },
   {
-   "ko": "#ffd400 또는 비워두면 전체",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "주석 색상 필터",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "색상 적용",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "선택 주석 새 색상",
    "n": 1,
    "files": [
@@ -5479,6 +5466,41 @@
   },
   {
    "ko": "{0} · {1}개",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "하이라이트",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "밑줄",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "그림",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "필기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "텍스트",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6570,6 +6592,20 @@
    ]
   },
   {
+   "ko": "컬렉션 이름 검색",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "컬렉션 검색",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "컬렉션 정렬",
    "n": 1,
    "files": [
@@ -6591,7 +6627,35 @@
    ]
   },
   {
-   "ko": "개 문헌",
+   "ko": "빈 컬렉션 숨기기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "컬렉션 {0}개 · 문헌 {1}편 · 빈 컬렉션 {2}개",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "하위 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}편",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "비어 있음",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6606,6 +6670,20 @@
   },
   {
    "ko": "즐겨찾기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "검색에 맞는 컬렉션이 없습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "컬렉션이 없습니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6703,7 +6781,42 @@
    ]
   },
   {
-   "ko": "관련 논문을 찾을 문헌 하나를 선택하세요.",
+   "ko": "이 논문 이후에 나온 논문 중 이 논문을 참고문헌에 올린 것 — 후속 연구",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이 논문이 참고문헌으로 든 문헌 — 바탕이 된 연구",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "참고문헌을 많이 공유하거나 OpenAlex가 주제를 가깝게 본 논문 — 옆 연구",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "문헌을 하나 고르면 OpenAlex에서 세 가지를 찾아 옵니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "보유하지 않은 논문은 행의 버튼으로 ZotPoP에서 바로 찾거나 가져올 수 있습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "보유 문헌에서 고르기",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8048,13 +8161,6 @@
   },
   {
    "ko": "보드는 최대 100개입니다.",
-   "n": 1,
-   "files": [
-    "src/workspace.js"
-   ]
-  },
-  {
-   "ko": "메모",
    "n": 1,
    "files": [
     "src/workspace.js"

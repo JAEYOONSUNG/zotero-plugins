@@ -1,5 +1,5 @@
 {
- "version": "0.47.0",
+ "version": "0.48.0",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1831,6 +1831,50 @@
    ],
    "status": "verified",
    "review": "The registry is read once in JIF order and each journal carries its rank; the rank column shows that place in both views. A toggle switches between the library's journals and all 22,594, a hundred a page, searchable; a journal the library lacks is present but quieter, its profile shows the registry facts and offers a ZotPoP search."
+  },
+  {
+   "round": "R65",
+   "title": "영어로도 전부: 메뉴와 대화상자",
+   "gap": "The panel and settings spoke the chosen language, but the item menu's labels and every alert the plugin raised were Korean literals, so an English-locale user met Korean the moment they right-clicked.",
+   "entryPoint": "문헌 우클릭 → Style Custom · 플러그인의 모든 알림",
+   "sources": [
+    {
+     "file": "src/runtime.js",
+     "marker": "say(win, message) {"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/i18n.test.mjs",
+     "name": "every translation is for a string that is actually in the source"
+    }
+   ],
+   "status": "verified",
+   "review": "Menu labels pass through the dictionary as they are made; every alert goes through one method that translates a line at a time, so a report of figures reads in either language."
+  },
+  {
+   "round": "R66",
+   "title": "주석·컬렉션·관련 논문 탭 다시 그리기",
+   "gap": "Annotations were loose cards with a hex filter box duplicating the swatches; collections were boxed cards with a button and a checkbox each; the related tab, with nothing selected, showed one line that read as an error.",
+   "entryPoint": "작업 패널 → 주석 · 컬렉션 · 관련 논문",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "class:'sc-collection-tree'"
+    },
+    {
+     "file": "src/workbench.js",
+     "marker": "const GROUP_NOTES="
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the annotation list reads as a pass through the paper"
+    }
+   ],
+   "status": "verified",
+   "review": "Annotations carry their colour down the card's edge, name their kind in words, set the quote apart and keep the memo as a quiet line; the selection's three actions sit with the selection. Collections are a tree with a bar per row for what it holds, a search box, a hide-empty switch and a count line; a name is the way in. The related tab explains its three lists and how to start, and each list carries a line saying what it is."
   }
  ],
  "introducedInVersion": "0.6.0"
