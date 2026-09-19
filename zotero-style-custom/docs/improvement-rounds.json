@@ -1,5 +1,5 @@
 {
- "version": "0.45.0",
+ "version": "0.45.1",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1671,6 +1671,26 @@
    ],
    "status": "verified",
    "review": "Zotero_Tabs.add gives a tab and a container; the same panel element moves into it and fills it, with the tab bar as its handle. Closing the tab hides the panel, opening the panel selects the tab, and the choice is remembered so the next open goes straight to a tab. The float button brings it back over the window."
+  },
+  {
+   "round": "R58",
+   "title": "분야 선택을 한 줄의 세 메뉴로",
+   "gap": "The chip rows for the subject hierarchy were still hard to read, and a field could not be picked until a domain was.",
+   "entryPoint": "작업 패널 → 저널 → 대분류 › 분야 › 세부 분야 메뉴",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "class:'sc-field-line'"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+    }
+   ],
+   "status": "verified",
+   "review": "One line, three menus, large to small, each listing what lies under the choice to its left with counts, largest first; a smaller level can be picked on its own and the levels above it follow; menus not yet narrowed group their options under the parent, biggest parent first. Each journal's fields sit on one line, each field once with its subfields after it."
   }
  ],
  "introducedInVersion": "0.6.0"

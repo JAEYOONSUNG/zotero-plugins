@@ -730,6 +730,13 @@
 #style-custom-workbench .sc-paper-meta { display: flex; align-items: center; }
 #style-custom-workbench .sc-paper-meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* The subject line: three menus, large to small, on one line. */
+#style-custom-workbench .sc-field-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+#style-custom-workbench .sc-field-line select { max-width: 320px; min-width: 120px; font-size: 12px; }
+#style-custom-workbench .sc-field-sep { color: var(--sc-faint); font-size: 14px; }
+#style-custom-workbench .sc-field-clear { min-height: 24px; padding: 2px 8px; font-size: 11px; }
+#style-custom-workbench .sc-journal-fields { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-journal-fields .sc-chip { margin-inline-end: 4px; }
 /* The subject tree: one row per level, the chosen chip folded with its way back. */
 #style-custom-workbench .sc-field-tree { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 8px; }
 #style-custom-workbench .sc-field-tree .sc-field-chips { margin: 0; align-items: center; }

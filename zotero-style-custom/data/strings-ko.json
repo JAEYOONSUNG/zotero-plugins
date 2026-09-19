@@ -154,13 +154,6 @@
    ]
   },
   {
-   "ko": "전체",
-   "n": 3,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "완료",
    "n": 3,
    "files": [
@@ -691,6 +684,13 @@
   },
   {
    "ko": "프리프린트",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "전체",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -7368,14 +7368,14 @@
    ]
   },
   {
-   "ko": "{0} · 저널 {1}종",
+   "ko": "분야 고르기",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": "모든 {0}",
+   "ko": "분야 선택 지우기",
    "n": 1,
    "files": [
     "src/workbench.js"

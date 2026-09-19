@@ -1752,26 +1752,46 @@
    grouped.classList.add('sc-journal-toggle');
    const known=all.filter(j=>j.levels.length).length;
    node('span',`${all.length}종 · IF 있음 ${all.filter(j=>j.impact!=null).length} · 분야 확인 ${known}`,controls,{class:'sc-muted sc-journal-count'});
+   /* One line, three menus, large to small: 대분류 › 분야 › 세부 분야. Each
+      menu lists what is under the choice to its left, largest first, with
+      its count; a smaller level can be picked on its own, and the levels
+      above it follow. The user found the chip rows hard to read and asked
+      for one line that can be picked at any level. */
    const LEVELS=[['domain','대분류'],['field','분야'],['subfield','세부 분야']];
-   const tree=node('div',null,body,{class:'sc-field-tree'});
-   for(const [index,[level,label]] of LEVELS.entries()){
+   const line=node('div',null,body,{class:'sc-field-line','aria-label':'분야 고르기'});
+   const under=(level,index)=>{
     const above=LEVELS.slice(0,index).map(([l])=>l);
-    if(above.some(l=>!pick[l]))break;
     const counts=new Map();
-    for(const j of all){if(!above.every(l=>j.levels.some(x=>x[l]===pick[l])))continue;for(const value of new Set(j.levels.filter(x=>above.every(l=>x[l]===pick[l])).map(x=>x[level]).filter(Boolean)))counts.set(value,(counts.get(value)||0)+1);}
-    if(!counts.size)break;
-    const row=node('div',null,tree,{class:'sc-chips sc-field-chips','data-level':level,'aria-label':label});
-    node('span',label,row,{class:'sc-field-level'});
-    const chip=(text,value,count,on)=>{const b=node('button',null,row,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(on),title:value?`${value} · 저널 ${count}종`:`모든 ${label}`});b.textContent=count!=null?`${text} ${count}`:text;b.dataset.value=value;b.addEventListener('click',()=>{const was=pick[level]===value;for(const [l] of LEVELS.slice(index))pick[l]='';if(!was)pick[level]=value;journalView.field=pick.field;render();});return b;};
-    if(pick[level]){
-     // Chosen: the row folds to its choice, with the way back beside it.
-     chip(pick[level],pick[level],counts.get(pick[level])||0,true).classList.add('sc-chip-chosen');
-     chip('전체','',null,false).classList.add('sc-chip-back');
-    }else{
-     chip('전체','',[...counts.values()].reduce((a,b)=>a+b,0),true);
-     for(const [value,count] of [...counts].sort((x,y)=>y[1]-x[1]))chip(value,value,count,false);
+    for(const j of all){const mine=new Set();for(const x of j.levels){if(!above.every(l=>!pick[l]||x[l]===pick[l]))continue;if(x[level])mine.add(JSON.stringify([x[level],index?x[LEVELS[index-1][0]]:'']));}for(const key of mine){counts.set(key,(counts.get(key)||0)+1);}}
+    return [...counts].map(([key,count])=>{const [value,parent]=JSON.parse(key);return {value,parent,count};}).sort((x,y)=>y.count-x.count||x.value.localeCompare(y.value));
+   };
+   for(const [index,[level,label]] of LEVELS.entries()){
+    const options=under(level,index);
+    const select=node('select',null,line,{'aria-label':label,'data-level':level});
+    const total=all.filter(j=>LEVELS.slice(0,index).every(([l])=>!pick[l]||j.levels.some(x=>x[l]===pick[l]))).length;
+    node('option',`${T(label)} · ${T('전체')} ${total}`,select,{value:''});
+    // Groups in the order of their own size, so the biggest domain's fields come first.
+    const parentOrder=index>0?under(LEVELS[index-1][0],index-1).map(o=>o.value):[];
+    const parents=[...new Set(options.map(o=>o.parent))].sort((x,y)=>(parentOrder.indexOf(x)+1||1e9)-(parentOrder.indexOf(y)+1||1e9));
+    const grouped=index>0&&!pick[LEVELS[index-1][0]]&&parents.length>1;
+    let seen=new Set();
+    for(const parent of grouped?parents:['']){
+     const holder=grouped?node('optgroup',null,select,{label:parent}):select;
+     for(const o of options){if(grouped&&o.parent!==parent)continue;if(!grouped&&seen.has(o.value))continue;seen.add(o.value);const opt=node('option',null,holder,{value:o.value});opt.textContent=`${o.value} ${o.count}`;if(pick[level]===o.value)opt.selected=true;}
     }
+    if(!options.length)select.disabled=true;
+    select.value=pick[level]||'';
+    select.addEventListener('change',()=>{
+     const value=select.value;
+     for(const [l] of LEVELS.slice(index))pick[l]='';
+     pick[level]=value;
+     // A smaller level chosen on its own: the levels above it follow.
+     if(value)for(const j of all)for(const x of j.levels)if(x[level]===value){for(const [l] of LEVELS.slice(0,index))if(!pick[l])pick[l]=x[l];break;}
+     journalView.field=pick.field;render();
+    });
+    if(index<LEVELS.length-1)node('span','›',line,{class:'sc-field-sep','aria-hidden':'true'});
    }
+   if(pick.domain||pick.field||pick.subfield){const clear=button('전체',()=>{for(const [l] of LEVELS)pick[l]='';journalView.field='';render();},line,{class:'sc-field-clear',title:'분야 선택 지우기'});}
    const order={if:(a,b)=>(b.impact??-1)-(a.impact??-1)||a.venue.localeCompare(b.venue),name:(a,b)=>a.venue.localeCompare(b.venue),papers:(a,b)=>b.papers-a.papers||(b.impact??-1)-(a.impact??-1),quartile:(a,b)=>(a.quartile??9)-(b.quartile??9)||(b.impact??-1)-(a.impact??-1)}[journalView.sort]||((a,b)=>0);
    const shown=all.filter(matches).sort(order);
    if(!shown.length){empty('이 분야의 저널이 없습니다.');return;}
@@ -1817,7 +1837,12 @@
    if(j.publisher)bits.push(j.publisher);
    bits.push(`내 문헌 ${j.papers}편`);
    meta.appendChild(doc.createTextNode(bits.join(' · ')));
-   if(j.levels.length){const line=node('p',null,c,{class:'sc-hit-authors sc-journal-fields'});const seen=new Set();for(const l of j.levels){const text=[l.field,l.subfield].filter(Boolean).join(' › ');if(!text||seen.has(text))continue;seen.add(text);const chip=node('span',text,line,{class:'sc-chip sc-chip-tiny',title:l.domain||''});if(journalView.pick.field&&l.field===journalView.pick.field)chip.classList.add('sc-chip-on');}}
+   if(j.levels.length){
+    // One line: each field once, its subfields after it, the chosen field marked.
+    const byField=new Map();for(const l of j.levels){if(!l.field)continue;const subs=byField.get(l.field)||[];if(l.subfield&&!subs.includes(l.subfield))subs.push(l.subfield);byField.set(l.field,subs);}
+    const line=node('p',null,c,{class:'sc-hit-authors sc-journal-fields'});
+    for(const [field,subs] of byField){const chip=node('span',subs.length?`${field} › ${subs.join(' · ')}`:field,line,{class:'sc-chip sc-chip-tiny',title:`${j.levels.find(l=>l.field===field)?.domain||''} › ${field}${subs.length?' › '+subs.join(' · '):''}`});if(journalView.pick.field&&field===journalView.pick.field)chip.classList.add('sc-chip-on');}
+   }
    const actions=node('div',null,c,{class:'sc-hit-actions'});
    button('지표 조회',async()=>{
     const ref=runtime.Z.Items.get(Number(j.items[0].id));

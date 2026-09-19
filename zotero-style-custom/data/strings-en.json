@@ -1111,5 +1111,7 @@
  "탭으로 열기 / 창으로 띄우기": "Open in a tab / float as a window",
  "창으로 띄우기": "Float as a window",
  "탭으로 열기": "Open in a tab",
- "이 창에서는 탭을 열 수 없습니다.": "This window cannot open tabs."
+ "이 창에서는 탭을 열 수 없습니다.": "This window cannot open tabs.",
+ "분야 고르기": "Choose a field",
+ "분야 선택 지우기": "Clear the field choice"
 }

@@ -828,10 +828,13 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  f.runtime.journalRecord=ref=>({name:String(ref.id)==='1'?'Science':'Nature',issn:''});
  f.runtime.journalProfile=ref=>String(ref.id)==='1'?{citedness:7.0,fields:['Multidisciplinary','Engineering'],topics:[{name:'Everything',domain:'Life Sciences',field:'Multidisciplinary',subfield:'General',count:9},{name:'Bio eng',domain:'Physical Sciences',field:'Engineering',subfield:'Biomedical Engineering',count:4}],hIndex:1200,works:250000,isOA:false,inDoaj:false,apc:4000,country:'US',homepage:'https://www.science.org/',openAlexID:'S3880285'}:null;
  await f.bench.show('journals');
- // The subject tree opens at the top level only, largest first.
- const chipsAt=level=>[...f.body().querySelectorAll(`.sc-field-chips[data-level=${level}] .sc-chip-button`)].map(b=>b.textContent);
- assert.deepEqual(chipsAt('domain'),['전체 2','Life Sciences 1','Physical Sciences 1']);
- assert.deepEqual(chipsAt('field'),[],'the next level waits for a choice');
+ // One line, three menus, largest first; every level can be picked on its own.
+ const menu=level=>f.body().querySelector(`.sc-field-line select[data-level=${level}]`);
+ const optionsOf=level=>[...menu(level).querySelectorAll('option')].map(o=>o.textContent);
+ const choose=(level,value)=>{const m=menu(level);m.value=value;m.dispatchEvent(new f.win.Event('change',{bubbles:true}));};
+ assert.deepEqual(optionsOf('domain'),['대분류 · 전체 2','Life Sciences 1','Physical Sciences 1']);
+assert.deepEqual(optionsOf('field'),['분야 · 전체 2','Multidisciplinary 1','Engineering 1'],'fields are offered before a domain is chosen');
+ assert.deepEqual([...menu('field').querySelectorAll('optgroup')].map(g=>g.getAttribute('label')),['Life Sciences','Physical Sciences'],'grouped under their domains');
  // Nothing is open yet; opening a journal lays out its facts.
  assert.equal(f.body().querySelector('.sc-facts'),null);
  await f.click('Science');
@@ -845,17 +848,18 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  assert.equal(value('국가'),'미국');
  assert.match(value('내 서재'),/^1편 · 읽음 0 · 평균 피인용 3 · 2025$/);
  assert.ok([...f.body().querySelectorAll('button')].some(b=>b.textContent==='JCR에서 보기'),'the JCR page is one click away');
- // Choosing a domain folds the row to the choice and opens the fields beneath it.
- await f.click('Physical Sciences 1');
- assert.deepEqual(chipsAt('domain'),['Physical Sciences 1','전체']);
- assert.deepEqual(chipsAt('field'),['전체 1','Engineering 1']);
+ // Choosing a domain narrows the menus to its right.
+ choose('domain','Physical Sciences');await settle();
+ assert.deepEqual(optionsOf('field'),['분야 · 전체 1','Engineering 1']);
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science']);
- await f.click('Engineering 1');
- assert.deepEqual(chipsAt('subfield'),['전체 1','Biomedical Engineering 1']);
- // The chosen chip again lets go of that level and everything beneath it.
- await f.click('Engineering 1');
- assert.deepEqual(chipsAt('subfield'),[]);
- await f.click('Physical Sciences 1');
+ choose('field','Engineering');await settle();
+ assert.deepEqual(optionsOf('subfield'),['세부 분야 · 전체 1','Biomedical Engineering 1']);
+ // A subfield chosen on its own pulls the levels above it along.
+ await f.click('전체');await settle();
+ choose('subfield','General');await settle();
+ assert.equal(menu('domain').value,'Life Sciences');assert.equal(menu('field').value,'Multidisciplinary');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science']);
+ await f.click('전체');await settle();
  assert.equal(f.body().querySelectorAll('.sc-journal').length,2,'back to every journal');
  // Grouped by field, the journal without a profile sits under "field unknown".
  await f.click('분야별로 묶기');
