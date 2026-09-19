@@ -50,8 +50,11 @@ test('density changes spacing and control height without hiding functionality',(
 });
 test('resizable panel has container-based width/height adaptation and small-viewport scroll escape',()=>{
  const root=rule('#style-custom-workbench');assert.equal(root.getPropertyValue('container-type'),'size');assert.equal(root.getPropertyValue('container-name'),'sc-workbench');assert.match(root.getPropertyValue('min-width'),/100vw/);
- assert.ok(parsed.headers.includes('sc-workbench (max-width: 720px)'));assert.ok(parsed.headers.includes('sc-workbench (max-width: 440px)'));assert.ok(parsed.headers.includes('sc-workbench (max-height: 460px)'));
- const short=[...parsed.sheet.cssRules].find(r=>r.media?.mediaText==='(max-height: 480px)');assert.ok(short);const panel=[...short.cssRules].find(r=>r.selectorText==='#style-custom-workbench');assert.equal(panel.style.getPropertyValue('overflow'),'auto');assert.equal(panel.style.getPropertyValue('min-height'),'0');
+ // The nav folds where the journal table drops columns (760), the narrowest rules at 440, short panels at 460 tall.
+ assert.ok(parsed.headers.includes('sc-workbench (max-width: 760px)'));assert.ok(parsed.headers.includes('sc-workbench (max-width: 440px)'));assert.ok(parsed.headers.includes('sc-workbench (max-height: 460px)'));
+ assert.ok(!parsed.headers.includes('sc-workbench (max-width: 720px)'),'one breakpoint for the fold, not two');
+ // A short window sizes the floating panel only; the docked panel is the tab's, and the body keeps its own scroll.
+ const short=[...parsed.sheet.cssRules].find(r=>r.media?.mediaText==='(max-height: 480px)');assert.ok(short);const panel=[...short.cssRules].find(r=>r.selectorText==='#style-custom-workbench:not([data-docked="tab"])');assert.match(panel.style.getPropertyValue('max-height'),/100vh/);assert.equal(panel.style.getPropertyValue('overflow'),'');assert.equal(panel.style.getPropertyValue('min-height'),'0');
 });
 test('all existing data-view families and new interaction hooks retain explicit styling',()=>{
  for(const selector of ['.sc-native-preview','.sc-graph','.sc-canvas','.sc-canvas-lines','.sc-canvas-card','.sc-matrix','.sc-page-strip','.sc-ai-output','.sc-command-palette','.sc-command-results','.sc-filter-chips','.sc-filter-fields','.sc-paper-title','.sc-paper-actions','.sc-selection-bar','.sc-content'])assert.ok(rules.some(r=>r.selectorText?.includes(selector)),selector);

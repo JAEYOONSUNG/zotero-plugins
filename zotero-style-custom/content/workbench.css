@@ -283,7 +283,7 @@
 #style-custom-workbench summary { cursor: pointer; }
 
 /* Existing scientific views stay usable in both color schemes. */
-#style-custom-workbench .sc-graph { display: block; width: 100%; height: 480px; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
+#style-custom-workbench .sc-graph { display: block; width: 100%; height: auto; aspect-ratio: 860 / 540; max-height: 70cqh; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
 #style-custom-workbench .sc-graph text { font: 10px var(--sc-font); }
 #style-custom-workbench .sc-graph-label[data-kind=external] { fill: var(--sc-external); }
 #style-custom-workbench .sc-segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--sc-radius); background: var(--sc-fill); }
@@ -291,9 +291,9 @@
 #style-custom-workbench .sc-segmented button[aria-pressed=true] { background: var(--sc-surface); color: var(--sc-text); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 0 0 .5px var(--sc-border); }
 #style-custom-workbench .sc-graph line { stroke: var(--sc-graph-line); }
 #style-custom-workbench .sc-graph g[role=button] { cursor: pointer; }
-#style-custom-workbench .sc-page-strip { display: grid; grid-template-columns: 2.6em repeat(20, 11px); gap: 3px; align-items: center; padding: 6px 0 2px; }
+#style-custom-workbench .sc-page-strip { display: grid; grid-template-columns: 2.6em repeat(20, minmax(0, 1fr)); gap: 3px; align-items: center; padding: 6px 0 2px; max-width: 317px; min-width: 0; flex: 1 1 100%; }
 #style-custom-workbench .sc-page-row { color: var(--sc-faint); font: 9px/1 var(--sc-font); text-align: end; padding-inline-end: 2px; font-variant-numeric: tabular-nums; }
-#style-custom-workbench button.sc-page-cell, #style-custom-workbench .sc-page-cell { width: 11px; height: 11px; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 25%; background: var(--sc-fill); box-shadow: inset 0 0 0 1px var(--sc-border); cursor: pointer; }
+#style-custom-workbench button.sc-page-cell, #style-custom-workbench .sc-page-cell { width: 100%; max-width: 11px; aspect-ratio: 1; height: auto; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 25%; background: var(--sc-fill); box-shadow: inset 0 0 0 1px var(--sc-border); cursor: pointer; }
 #style-custom-workbench .sc-page-cell:disabled { cursor: default; }
 #style-custom-workbench .sc-page-cell[data-level="1"] { background: color-mix(in srgb, var(--sc-done) 30%, var(--sc-fill)); }
 #style-custom-workbench .sc-page-cell[data-level="2"] { background: color-mix(in srgb, var(--sc-done) 55%, var(--sc-fill)); }
@@ -379,12 +379,13 @@
 }
 
 /* The panel is resizable independently of the application viewport. */
-@container sc-workbench (max-width: 720px) {
+@container sc-workbench (max-width: 1000px) { #style-custom-workbench { --sc-nav-width: 148px; } #style-custom-workbench .sc-shell nav { padding-inline: 6px; } }
+@container sc-workbench (max-width: 760px) {
   #style-custom-workbench .sc-shell { flex-direction: column; }
-  #style-custom-workbench .sc-shell nav { display: flex; flex: 0 0 auto; gap: 12px; max-height: 108px; padding: 6px 10px; border-inline-end: 0; border-block-end: 1px solid var(--sc-border); }
-  #style-custom-workbench .sc-nav-group { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; margin: 0; }
-  #style-custom-workbench .sc-nav-heading { margin: 0 4px 0 0; writing-mode: vertical-rl; font-size: 10px; }
-  #style-custom-workbench .sc-shell nav button[data-tab] { width: auto; white-space: nowrap; min-height: 30px; margin: 0; }
+  #style-custom-workbench .sc-shell nav { display: flex; flex-wrap: wrap; flex: 0 0 auto; gap: 4px 12px; max-height: none; padding: 6px 10px; border-inline-end: 0; border-block-end: 1px solid var(--sc-border); }
+  #style-custom-workbench .sc-nav-group { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 0; }
+  #style-custom-workbench .sc-nav-heading { display: none; }
+  #style-custom-workbench .sc-shell nav button[data-tab] { width: auto; white-space: nowrap; min-height: 26px; padding: 3px 8px; font-size: 12px; gap: 6px; margin: 0; }
   #style-custom-workbench .sc-header { gap: 8px; padding-inline: 12px; }
   #style-custom-workbench .sc-header-actions { gap: 4px; }
   #style-custom-workbench .sc-subtitle { display: none; }
@@ -400,40 +401,29 @@
   #style-custom-workbench .sc-brand strong { font-size: 14px; }
   #style-custom-workbench .sc-context-detail { width: 100%; }
   #style-custom-workbench .sc-search-row select { flex: 1 1 100px; min-width: 0; max-width: 100%; }
-  #style-custom-workbench .sc-filter-fields label { flex: 1 1 120px; }
   #style-custom-workbench .sc-filter-fields select { min-width: 0; max-width: 100%; }
-  #style-custom-workbench .sc-paper-card { padding: 10px; }
   #style-custom-workbench .sc-paper-actions button { flex: 1 1 auto; }
+  #style-custom-workbench .sc-filter-fields select, #style-custom-workbench .sc-filter-fields input[type=number] { flex: 1 1 120px; min-width: 0; max-width: 100%; }
+  #style-custom-workbench .sc-filter-fields button { flex: 1 1 100%; }
+  #style-custom-workbench .sc-context { gap: 4px 8px; padding: 8px 12px; }
+  #style-custom-workbench .sc-context-detail { width: auto; flex: 1 1 auto; }
+  #style-custom-workbench .sc-scope-back { margin-inline-start: 0; }
+  #style-custom-workbench .sc-kind-chips { flex: 1 1 100%; margin-inline-start: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  #style-custom-workbench .sc-segmented { flex-wrap: wrap; max-width: 100%; }
 }
 @container sc-workbench (max-height: 460px) {
-  #style-custom-workbench .sc-header { padding-block: 6px; }
-  #style-custom-workbench .sc-status { padding-block: 2px; }
-  #style-custom-workbench .sc-search-row { padding-block: 6px; }
-  #style-custom-workbench .sc-filter-fields { max-height: 80px; }
-  #style-custom-workbench .sc-filter-chips { max-height: 36px; padding-block: 4px; flex-wrap: nowrap; }
-  #style-custom-workbench .sc-filter-chips button { flex-shrink: 0; }
+  #style-custom-workbench .sc-selection-bar { max-height: none; overflow: visible; padding-block: 6px; }
+  #style-custom-workbench .sc-selection-bar button { min-height: 24px; padding: 2px 8px; font-size: 11px; }
   #style-custom-workbench .sc-context { padding-block: 6px; }
   #style-custom-workbench .sc-context-detail { display: none; }
-  #style-custom-workbench .sc-selection-bar { max-height: 80px; overflow: auto; padding-block: 6px; }
 }
 /* Viewport fallback also supports renderers without container queries. */
+/* The floating panel on a narrow window: viewport, because the panel's own size is what is being set. */
 @media (max-width: 700px) {
-  #style-custom-workbench { inset-block-start: 16px; inset-inline-end: 8px; width: calc(100vw - 16px); height: calc(100vh - 32px); }
-  #style-custom-workbench .sc-shell { flex-direction: column; }
-  #style-custom-workbench .sc-shell nav { display: flex; flex: 0 0 auto; gap: 8px; max-height: 100px; border-inline-end: 0; border-block-end: 1px solid var(--sc-border); padding: 6px 8px; }
-  #style-custom-workbench .sc-nav-group { display: flex; flex: 0 0 auto; gap: 4px; margin: 0; }
-  #style-custom-workbench .sc-nav-heading { display: none; }
-  #style-custom-workbench .sc-shell nav button[data-tab] { width: auto; white-space: nowrap; }
-  #style-custom-workbench .sc-header { flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
-  #style-custom-workbench .sc-subtitle { display: none; }
-  #style-custom-workbench .sc-body { padding: 12px; }
+  #style-custom-workbench:not([data-docked="tab"]) { inset-block-start: 16px; inset-inline-end: 8px; width: calc(100vw - 16px); height: calc(100vh - 32px); }
 }
 @media (max-height: 480px) {
-  #style-custom-workbench { inset-block-start: 8px; height: calc(100vh - 16px); max-height: calc(100vh - 16px); min-height: 0; overflow: auto; }
-  #style-custom-workbench .sc-shell { flex: 0 0 auto; min-height: 160px; }
-  #style-custom-workbench .sc-shell nav { max-height: 220px; }
-  #style-custom-workbench .sc-body { max-height: 280px; }
-  #style-custom-workbench .sc-command-palette { position: fixed; inset-block-start: 12px; max-height: calc(100vh - 24px); }
+  #style-custom-workbench:not([data-docked="tab"]) { inset-block-start: 8px; height: calc(100vh - 16px); max-height: calc(100vh - 16px); min-height: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   #style-custom-workbench *,
@@ -835,7 +825,7 @@
 #style-custom-workbench .sc-legend-external { border-radius: 25%; border: 1px dashed var(--sc-external); background: var(--sc-bg); }
 #style-custom-workbench .sc-legend-line { display: inline-block; width: 16px; height: 0; border-top: 2px dashed var(--sc-faint); }
 #style-custom-workbench .sc-graph-summary { margin: 2px 0; font-variant-numeric: tabular-nums; }
-#style-custom-workbench .sc-matrix-scroll { max-height: 60vh; overflow: auto; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
+#style-custom-workbench .sc-matrix-scroll { max-height: min(60vh, calc(100cqh - 160px)); overflow: auto; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
 #style-custom-workbench .sc-matrix td:last-child, #style-custom-workbench .sc-matrix th:last-child { border-inline-end: 0; }
 #style-custom-workbench .sc-matrix td[data-field=abstract], #style-custom-workbench .sc-matrix td[data-field=summary], #style-custom-workbench .sc-matrix td[data-field=remark] { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 #style-custom-workbench .sc-lang { flex: 0 0 auto !important; max-width: 110px; }
@@ -862,7 +852,7 @@
 #style-custom-workbench .sc-annot-memo { border: 0; background: transparent; padding: 2px 0; color: var(--sc-muted); font-size: 12px; box-shadow: none; }
 #style-custom-workbench .sc-annot-memo::placeholder { color: var(--sc-faint); }
 #style-custom-workbench .sc-annot-memo:focus, #style-custom-workbench .sc-annot-memo:hover { background: var(--sc-fill); padding-inline: 6px; }
-#style-custom-workbench .sc-annot-selection { display: inline-flex; align-items: center; gap: 4px; margin-inline-start: auto; }
+#style-custom-workbench .sc-annot-selection { display: inline-flex; flex-wrap: wrap; max-width: 100%; align-items: center; gap: 4px; margin-inline-start: auto; }
 #style-custom-workbench .sc-annot-selection button { min-height: 24px; padding: 2px 9px; font-size: 11px; }
 
 /* Collections: a tree, each row with a bar for what it holds. */
@@ -898,3 +888,45 @@
 #style-custom-workbench .sc-tag-name { margin-inline-end: 8px; }
 #style-custom-workbench .sc-tag-only { min-height: 22px; padding: 1px 8px; font-size: 11px; opacity: 0; }
 #style-custom-workbench summary:hover .sc-tag-only, #style-custom-workbench summary:focus-within .sc-tag-only { opacity: 1; }
+
+/* --- Narrow panels: what folds, what hides, what wraps (from the responsive audit) --- */
+@container sc-workbench (max-width: 760px) {
+  #style-custom-workbench .sc-graph { width: max(100%, 640px); max-height: none; }
+  #style-custom-workbench .sc-journal-table .sc-col-fields { position: static; }
+  #style-custom-workbench .sc-journal-table .sc-hit-actions { inset-inline-end: 0; }
+}
+@container sc-workbench (max-width: 640px) {
+  #style-custom-workbench .sc-paper-heading { flex-wrap: wrap; }
+  #style-custom-workbench .sc-paper-identity { flex: 1 1 calc(100% - 23px); }
+  #style-custom-workbench .sc-paper-card .sc-metrics,
+  #style-custom-workbench .sc-paper-card .sc-paper-actions { flex: 1 1 100%; margin-inline-start: 23px; justify-content: flex-start; min-height: 20px; }
+  #style-custom-workbench .sc-journal-count { flex-basis: 100%; }
+  #style-custom-workbench .sc-journal-controls input[type=search] { flex-basis: 100%; max-width: none; }
+  #style-custom-workbench .sc-watch-table th:nth-child(5), #style-custom-workbench .sc-watch-table td:nth-child(5),
+  #style-custom-workbench .sc-watch-table .sc-col-date { display: none; }
+}
+@container sc-workbench (max-width: 520px) {
+  #style-custom-workbench .sc-journal-table .sc-col-n { display: none; }
+  #style-custom-workbench .sc-journal-table .sc-col-fields { width: 1px; padding: 0; color: transparent; }
+  #style-custom-workbench .sc-journal-table .sc-col-name { width: auto; }
+  #style-custom-workbench .sc-journal-table .sc-journal-profile-row td { padding-inline-start: 12px; }
+  #style-custom-workbench .sc-journal-count { display: none; }
+  #style-custom-workbench .sc-field-line { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; }
+  #style-custom-workbench .sc-field-line select { max-width: none; }
+  #style-custom-workbench .sc-field-sep { display: none; }
+  #style-custom-workbench .sc-field-clear { grid-column: 2; justify-self: start; }
+  #style-custom-workbench .sc-annot-selection { margin-inline-start: 0; flex-basis: 100%; }
+  #style-custom-workbench .sc-selection-bar > span:first-child { flex-basis: 100%; margin-inline-end: 0; }
+  #style-custom-workbench .sc-selection-bar button { flex: 1 1 auto; min-height: 26px; padding: 3px 8px; font-size: 12px; }
+  #style-custom-workbench .sc-watch-tools { flex-wrap: wrap; margin-left: 0; flex-basis: 100%; }
+  #style-custom-workbench .sc-collection { grid-template-columns: 1fr; grid-template-areas: "line" "bar"; padding-inline-start: calc(8px + var(--sc-depth, 0) * 10px); }
+  #style-custom-workbench .sc-collection-actions { position: absolute; inset-inline-end: 6px; inset-block-start: 4px; padding: 2px 4px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+}
+@container sc-workbench (max-width: 480px) {
+  #style-custom-workbench .sc-paper-identity { flex-direction: column; align-items: flex-start; gap: 0; }
+  #style-custom-workbench .sc-paper-title, #style-custom-workbench .sc-paper-meta { max-width: 100%; }
+  #style-custom-workbench .sc-metric-value { min-width: 0 !important; }
+  #style-custom-workbench .sc-metric:has(.sc-metric-value:empty) { display: none; }
+  #style-custom-workbench .sc-watch-table th:nth-child(2), #style-custom-workbench .sc-watch-table td:nth-child(2) { display: none; }
+  #style-custom-workbench .sc-watch-table .sc-unwatch { opacity: 1; }
+}

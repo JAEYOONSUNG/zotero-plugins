@@ -1,5 +1,5 @@
 {
- "version": "0.48.1",
+ "version": "0.48.2",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1875,6 +1875,34 @@
    ],
    "status": "verified",
    "review": "Annotations carry their colour down the card's edge, name their kind in words, set the quote apart and keep the memo as a quiet line; the selection's three actions sit with the selection. Collections are a tree with a bar per row for what it holds, a search box, a hide-empty switch and a count line; a name is the way in. The related tab explains its three lists and how to start, and each list carries a line saying what it is."
+  },
+  {
+   "round": "R67",
+   "title": "막다른 클릭 20건과 좁은 패널 18건",
+   "gap": "The user asked for every control that cannot be clicked and every layout with no way out. Two read-throughs found twenty dead ends and eighteen widths where something was clipped, stranded or unreadable.",
+   "entryPoint": "패널 전체, 340–1400px",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "if(event.target!==row)return; // Space and Enter typed in the memo stay in the memo."
+    },
+    {
+     "file": "content/workbench.css",
+     "marker": "Narrow panels: what folds, what hides, what wraps"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "every button on every tab survives a press without throwing, and the tab still draws"
+    },
+    {
+     "file": "test/styles.test.mjs",
+     "name": "resizable panel has container-based width/height adaptation and small-viewport scroll escape"
+    }
+   ],
+   "status": "verified",
+   "review": "Dead ends: keys typed in memos and checkboxes no longer toggle their rows; a colour filter, a news filter and a field pick each show their state and offer a way out; searches keep focus; empty tabs offer the button that fills them; map nodes select in place and take Space; Escape leaves a field, not the panel; menu entries report. Widths: the nav wraps instead of scrolling off-screen; card figures drop under the title and empty ones vanish; the journal table's hover buttons escape the clipped cell and the name takes the room; the map keeps a readable size and scrolls; the manager table, the selection tools, the footer, the watch tools, the collections rows and the segmented toggles fold instead of spilling; the reading strip is fluid; the two viewport media blocks that fought the container rules are gone."
   }
  ],
  "introducedInVersion": "0.6.0"
