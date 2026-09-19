@@ -22,6 +22,8 @@ Every point where they conflict or would conflict: claim vs claim, assumption vs
 ## Open questions
 What none of them answers.
 Do not invent findings; where the abstracts are silent, say so. Preserve numbers, organisms, identifiers and negation.`;
+   // The user's own outline replaces the default, with the language kept.
+   if(task==='compare'){const own=String(runtime.pref('aiComparePrompt','')||'').trim();if(own)prompts.compare=own+`\nWrite in ${language}. Use ONLY the supplied titles, abstracts and notes; do not invent findings.`;}
    if(!prompts[task])throw new Error('Unknown assistance task');
    const capability={tags:'AIGenerateTags',remark:'AIGenerateRemark',summary:'tldr'}[task];if(capability&&runtime.featureEnabled?.(capability)===false)throw new Error('설정에서 이 기능을 켜세요.');
    if(task==='tags')prompts.tags=String(runtime.pref('aiTagsPrompt',prompts.tags)||prompts.tags);

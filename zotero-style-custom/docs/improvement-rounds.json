@@ -1,5 +1,5 @@
 {
- "version": "0.44.2",
+ "version": "0.44.3",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1623,6 +1623,34 @@
    ],
    "status": "verified",
    "review": "The tree's title cell is rebuilt with the six inline tags drawn whenever the tree prints them again; ZotPoP keeps the source's markup beside the plain title, draws it in the list and the detail, and imports it as Zotero itself would."
+  },
+  {
+   "round": "R56",
+   "title": "함께 읽기 지시문과 새 소식만 보기",
+   "gap": "The read-together outline was fixed, while the remark and tag prompts could be changed; and a hundred quiet author cards hid the ten with news.",
+   "entryPoint": "설정 → 번역·AI → 함께 읽기 지시문 · 저자 추적 → 새 소식만",
+   "sources": [
+    {
+     "file": "src/assist.js",
+     "marker": "aiComparePrompt"
+    },
+    {
+     "file": "src/workbench.js",
+     "marker": "state.watchFreshOnly"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/assist.test.mjs",
+     "name": "the reader can replace the outline for reading together; the language and the no-invention rule stay"
+    },
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "one chip keeps only the followed authors with something new"
+    }
+   ],
+   "status": "verified",
+   "review": "A setting replaces the outline; the output language and the no-invention rule are always appended. A chip on the followed list keeps only the people with a new paper, a new patent or a move."
   }
  ],
  "introducedInVersion": "0.6.0"

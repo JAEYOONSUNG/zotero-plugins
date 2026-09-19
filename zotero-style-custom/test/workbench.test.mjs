@@ -977,3 +977,17 @@ test('the followed list can be tended as a table: found, sorted, let go',async()
  assert.equal(f.body().querySelector('.sc-watch-table'),null);
  f.bench.destroy();
 });
+
+test('one chip keeps only the followed authors with something new',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'Ada',news:[{id:'W1'}],seen:[]},{id:'A2',name:'Bo',news:[],seen:[]},{id:'A3',name:'Cy',news:[],moved:{from:'X',to:'Y',rule:2},seen:[]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ await f.bench.show('authors');
+ const names=()=>[...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent);
+ assert.deepEqual(names(),['Ada','Bo','Cy']);
+ await f.click('새 소식만');
+ assert.deepEqual(names(),['Ada','Cy'],'news or a move counts; a quiet card does not');
+ await f.click('모두 보기');
+ assert.deepEqual(names(),['Ada','Bo','Cy']);
+ f.bench.destroy();
+});

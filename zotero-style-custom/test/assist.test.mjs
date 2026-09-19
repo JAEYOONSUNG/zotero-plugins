@@ -28,3 +28,13 @@ test('reading papers together sends two to six abstracts with their notes, and r
  assert.deepEqual(sent.map(p=>[p.n,p.title,p.abstract,p.notes]),[[1,'Paper 1','Abstract 1','my note'],[2,'Paper 2','Abstract 2',undefined]]);
  h.api.stop();
 });
+
+test('the reader can replace the outline for reading together; the language and the no-invention rule stay',async()=>{
+ const h=harness({aiComparePrompt:'Compare methods only.'});
+ const paper=(n)=>({id:String(n),title:'Paper '+n,abstract:'Abstract '+n});
+ await h.api.run('compare',[paper(1),paper(2)],{language:'Korean'});
+ const system=JSON.parse(h.requests[0].options.body).messages[0].content;
+ assert.match(system,/^Compare methods only\./);
+ assert.match(system,/Write in Korean/);assert.match(system,/do not invent/);
+ h.api.stop();
+});

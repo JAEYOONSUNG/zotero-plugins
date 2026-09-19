@@ -1094,6 +1094,14 @@
       "default": "Suggest 3 to 8 concise topical tags for this abstract. Return only a JSON array of strings."
     },
     {
+      "key": "aiComparePrompt",
+      "category": "ai",
+      "label": "함께 읽기 지시문 (선택)",
+      "type": "textarea",
+      "default": "",
+      "description": "비워 두면 기본 개요(핵심 주장 · 논리 흐름 · 근거의 강점·한계 · 공통 기반 · 논쟁 여지와 판가름할 증거 · 열린 질문)를 씁니다. 출력 언어와 '지어내지 말 것'은 항상 덧붙습니다."
+    },
+    {
       "key": "aiRemarkPrompt",
       "category": "ai",
       "label": "읽기 메모 지시문",

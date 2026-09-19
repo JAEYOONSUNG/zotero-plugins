@@ -1467,12 +1467,14 @@
     }),tools);
     if(fresh.length)node('span',`새 논문 ${fresh.reduce((n,p)=>n+p.news.length,0)}편 · ${fresh.length}명`,tools,{class:'sc-watch-count'});
     else if(swept)node('span','새 논문 없음',tools,{class:'sc-watch-quiet'});
+    // One chip keeps only the people with something new; a hundred quiet cards hide the ten that matter.
+    if(fresh.length&&fresh.length<watched.length)button(state.watchFreshOnly?'모두 보기':'새 소식만',()=>{state.watchFreshOnly=!state.watchFreshOnly;refreshWatched();},tools,{'aria-pressed':String(!!state.watchFreshOnly)});
     const manage=button(state.watchManage?'카드로 보기':'목록 관리',()=>{state.watchManage=!state.watchManage;refreshWatched();},tools,{'aria-pressed':String(!!state.watchManage)});
     if(state.watchManage){drawWatchManager(watched,parent);return;}
     // A grid, not a column: at this panel width one name per row turned a
     // hundred people into a scroll, and the whole point is to see them at once.
     const rows=node('div',null,parent,{class:'sc-watch-grid'});
-    for(const person of watched){
+    for(const person of (state.watchFreshOnly?watched.filter(p=>p.news?.length||p.newPatents?.length||p.moved):watched)){
      const count=person.news?.length||0;
      const row=node('div',null,rows,{class:'sc-watch'+(count?' sc-watch-new':'')});
      row.setAttribute('role','button');row.tabIndex=0;
