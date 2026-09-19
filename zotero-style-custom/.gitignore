@@ -2,3 +2,5 @@ build/
 __pycache__/
 *.pyc
 node_modules/
+# The sweep cache for the registry subjects: input to --merge, not shipped.
+data/journal-fields.json
