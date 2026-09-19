@@ -1,5 +1,5 @@
 {
- "version": "0.43.0",
+ "version": "0.43.1",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1463,6 +1463,26 @@
    ],
    "status": "verified",
    "review": "One request per followed author, at most weekly, the key sent to api.uspto.gov only. The reader accepts the portal's field names and PatentsView's, so a rename degrades to nothing found; namesakes are told apart by the LAST; FIRST form the portal writes. The first look is the baseline; later ones badge the card with what is new, and the detail lists each patent with a link to its public page. No key was available in this session, so the live response shape is unverified: the self-check's patents entry runs one real query the moment a key is entered and reports what came back."
+  },
+  {
+   "round": "R49",
+   "title": "종류별로 한 번에 가르기: 특허·학위논문·프리프린트",
+   "gap": "Patents and theses sat among the papers with only a chip on the tree row; the user asked for them to be a layer of their own. Zotero's tree cannot group, and the panel's type filter was a select of raw itemType names.",
+   "entryPoint": "작업 패널 → 검색줄 아래 종류 칩",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "function drawKindChips"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "the library splits by kind with one chip: patents and theses apart from the papers"
+    }
+   ],
+   "status": "verified",
+   "review": "A row of chips under the search line counts the library by kind -- 논문 1167 · 프리프린트 26 · 학위논문 6 -- and one click shows only that kind; the select says the same in the same words, and each card names its kind unless it is a plain paper. The journal figure takes the same colour bands as the IF column in the tree."
   }
  ],
  "introducedInVersion": "0.6.0"

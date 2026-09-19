@@ -146,6 +146,14 @@
 #style-custom-workbench .sc-filter-fields select { max-width: 160px; }
 #style-custom-workbench .sc-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 16px; max-height: 84px; overflow: auto; }
 #style-custom-workbench .sc-filter-chips:empty { display: none; }
+/* The library by kind: papers, preprints, patents, theses, one chip each. */
+#style-custom-workbench .sc-kind-chips { display: flex; flex-wrap: wrap; gap: 4px; flex-shrink: 0; padding: 6px 16px 0; }
+#style-custom-workbench .sc-kind-chips:empty { display: none; }
+#style-custom-workbench .sc-kind { margin-inline-end: 6px; vertical-align: 2px; }
+#style-custom-workbench .sc-journal-if[data-tone=top]  { color: #9B71BF; }
+#style-custom-workbench .sc-journal-if[data-tone=high] { color: #6484BA; }
+#style-custom-workbench .sc-journal-if[data-tone=mid]  { color: #468D9B; }
+#style-custom-workbench .sc-journal-if[data-tone=low]  { color: #42926C; }
 #style-custom-workbench .sc-filter-chips button { min-height: 26px; padding: 3px 8px; border-color: var(--sc-border); border-radius: var(--sc-radius-sm); color: var(--sc-accent); background: var(--sc-accent-soft); font-size: 11px; }
 #style-custom-workbench .sc-shell { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; }
 #style-custom-workbench .sc-shell nav { flex: 0 0 var(--sc-nav-width); padding: 14px 10px; overflow: auto; border-inline-end: 1px solid var(--sc-border); background: var(--sc-surface-alt); }

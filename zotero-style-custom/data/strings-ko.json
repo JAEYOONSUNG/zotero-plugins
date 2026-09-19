@@ -286,6 +286,22 @@
    ]
   },
   {
+   "ko": "특허",
+   "n": 2,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "학위논문",
+   "n": 2,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "별점",
    "n": 2,
    "files": [
@@ -647,6 +663,20 @@
   },
   {
    "ko": "상세 필터",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "논문",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "프리프린트",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -1753,20 +1783,6 @@
   },
   {
    "ko": "이 문헌에서 인용문을 만들 메타데이터가 부족합니다.",
-   "n": 1,
-   "files": [
-    "src/runtime.js"
-   ]
-  },
-  {
-   "ko": "특허",
-   "n": 1,
-   "files": [
-    "src/runtime.js"
-   ]
-  },
-  {
-   "ko": "학위논문",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -4230,6 +4246,125 @@
    ]
   },
   {
+   "ko": "책",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "책의 장",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "학회 논문",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "보고서",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "데이터셋",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "소프트웨어",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "문서",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "웹페이지",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "잡지 기사",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "신문 기사",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "원고",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "표준",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "발표",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "문헌 종류",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "전체",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "모든 종류",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}만 보기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "읽기 상태 필터",
    "n": 1,
    "files": [
@@ -6127,13 +6262,6 @@
    ]
   },
   {
-   "ko": "프리프린트",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "아직 심사 전 원고입니다. 정식 게재본은 나중에 따로 나올 수 있습니다.",
    "n": 1,
    "files": [
@@ -6254,13 +6382,6 @@
   },
   {
    "ko": "소속",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "논문",
    "n": 1,
    "files": [
     "src/workbench.js"

@@ -1040,5 +1040,22 @@
  "등록 {0}": "granted {0}",
  "출원 {0}": "filed {0}",
  "특허 확인은 설정에 USPTO Open Data Portal 키를 넣으면 켜집니다 (무료).": "The patent check turns on once a USPTO Open Data Portal key is entered in Settings (free).",
- "마지막 확인 이후 새 특허 {0}건": "{0} new patents since the last check"
+ "마지막 확인 이후 새 특허 {0}건": "{0} new patents since the last check",
+ "책": "Book",
+ "책의 장": "Book chapter",
+ "학회 논문": "Conference paper",
+ "보고서": "Report",
+ "데이터셋": "Dataset",
+ "소프트웨어": "Software",
+ "문서": "Document",
+ "웹페이지": "Web page",
+ "잡지 기사": "Magazine article",
+ "신문 기사": "Newspaper article",
+ "원고": "Manuscript",
+ "표준": "Standard",
+ "발표": "Presentation",
+ "문헌 종류": "Kinds of item",
+ "전체": "All",
+ "모든 종류": "Every kind",
+ "{0}만 보기": "Only {0}"
 }

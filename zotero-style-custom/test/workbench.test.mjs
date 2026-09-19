@@ -854,3 +854,24 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  assert.deepEqual([...f.body().querySelectorAll('.sc-hit-group')].map(h=>h.textContent),['Multidisciplinary · 1종','분야 미확인 · 1종']);
  f.bench.destroy();
 });
+
+test('the library splits by kind with one chip: patents and theses apart from the papers',async()=>{
+ const f=fixture();
+ const extra=[{id:'7',key:'K7',libraryID:1,title:'A Thesis',authors:'Grad Student',year:'2024',venue:'',itemType:'thesis',tags:[],abstract:'',related:[]},
+  {id:'8',key:'K8',libraryID:1,title:'A Preprint',authors:'Some One',year:'2026',venue:'bioRxiv',itemType:'preprint',tags:[],abstract:'',related:[]}];
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ await f.bench.show('explore');
+ const chips=[...f.bench.panel.querySelectorAll('.sc-kind-chips button')].map(b=>b.textContent);
+ assert.deepEqual(chips,['전체 4','논문 2','프리프린트 1','학위논문 1']);
+ // The card says what kind of thing it is, unless it is a plain paper.
+ const kinds=[...f.body().querySelectorAll('.sc-paper-card')].map(c=>c.querySelector('.sc-kind')?.textContent||'');
+ assert.deepEqual(kinds.sort(),['','','프리프린트','학위논문']);
+ await f.click('학위논문 1');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-paper-title')].map(h=>h.textContent),['학위논문A Thesis']);
+ assert.equal(f.bench.panel.querySelector('.sc-kind-chips button[data-kind=thesis]').getAttribute('aria-pressed'),'true');
+ // The select says the same thing in the same words.
+ assert.equal(f.bench.panel.querySelector('select[aria-label="문헌 유형 필터"]').value,'thesis');
+ await f.click('학위논문 1');
+ assert.equal(f.body().querySelectorAll('.sc-paper-card').length,4);
+ f.bench.destroy();
+});

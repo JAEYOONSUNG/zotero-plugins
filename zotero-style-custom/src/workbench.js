@@ -224,6 +224,24 @@
   const filterPanel=node('details',null,panel,{class:'sc-filters'}),filterSummary=node('summary','상세 필터',filterPanel);
   const filters=node('div',null,filterPanel,{class:'sc-filter-fields','aria-label':'문헌 상세 필터'});
   const filterChips=node('div',null,panel,{class:'sc-filter-chips','aria-label':'적용 중인 필터'});
+  /* What kind of thing each item is, in words, and a row of chips that
+     splits the library by kind with one click. The user asked for patents
+     and theses to sit apart from the papers rather than blend in; the tree
+     cannot group, so the panel does: 특허 6 · 학위논문 6 · 프리프린트 26. */
+  const KIND_LABELS={journalArticle:'논문',preprint:'프리프린트',patent:'특허',thesis:'학위논문',book:'책',bookSection:'책의 장',conferencePaper:'학회 논문',report:'보고서',dataset:'데이터셋',computerProgram:'소프트웨어',document:'문서',webpage:'웹페이지',magazineArticle:'잡지 기사',newspaperArticle:'신문 기사',manuscript:'원고',standard:'표준',presentation:'발표'};
+  const kindLabel=type=>KIND_LABELS[type]||type||'';
+  const kindChips=node('div',null,panel,{class:'sc-kind-chips','aria-label':'문헌 종류'});
+  function drawKindChips(){
+   kindChips.replaceChildren();
+   const counts=new Map();
+   for(const item of state.items)if(item.itemType)counts.set(item.itemType,(counts.get(item.itemType)||0)+1);
+   if(counts.size<2)return;
+   const order=['journalArticle','preprint','conferencePaper','patent','thesis','book','bookSection','report'];
+   const kinds=[...counts].sort((a,b)=>(order.indexOf(a[0])+1||99)-(order.indexOf(b[0])+1||99)||b[1]-a[1]);
+   const chip=(label,value,count,title)=>{const b=node('button',null,kindChips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(state.type===value),title});b.textContent=`${T(label)} ${count}`;b.dataset.kind=value;b.addEventListener('click',()=>{state.type=state.type===value?'':value;type.value=state.type;render();});return b;};
+   chip('전체','',state.items.length,'모든 종류');
+   for(const [kind,count] of kinds)chip(kindLabel(kind),kind,count,`${kindLabel(kind)}만 보기`);
+  }
   const filterInputs=new Map();
   function selectFilter(key,label,choices){const input=node('select',null,filters,{'aria-label':label});for(const[value,title]of choices)node('option',title,input,{value});input.value=state[key];input.addEventListener('change',()=>{state[key]=input.value;render();});filterInputs.set(key,input);}
   selectFilter('status','읽기 상태 필터',[['','모든 읽기 상태'],['unread','안 읽음'],['reading','읽는 중'],['done','완료']]);
@@ -358,7 +376,7 @@
    if(state.scope.startsWith('collection')){state.collectionIDs=[];const collection=win.ZoteroPane?.getSelectedCollection?.();if(collection){const members=await library.collectionItems(collection.id,{libraryID,recursive:state.scope==='collection-recursive'});if(disposed||token!==loadEpoch||panel.hidden)return;if(context!==scopeContext())return load();state.collectionIDs=members;}}
    state.items=snapshot.map(i=>{const ref=runtime.Z.Items.get(Number(i.id));return {...i,...(ref?runtime.state(ref):{})};});
    const existing=new Set(state.items.map(i=>i.id));state.selected=new Set([...state.selected].filter(id=>existing.has(id)));
-   type.replaceChildren();node('option','모든 유형',type,{value:''});for(const t of [...new Set(state.items.map(i=>i.itemType))].filter(Boolean).sort())node('option',t,type,{value:t});type.value=state.type;
+   type.replaceChildren();node('option','모든 유형',type,{value:''});for(const t of [...new Set(state.items.map(i=>i.itemType))].filter(Boolean).sort())node('option',kindLabel(t),type,{value:t});type.value=state.type;drawKindChips();
    message(state.items.length+'개 문헌');await render();
   }
   async function toggle(show){const wasHidden=panel.hidden,open=show===undefined?wasHidden:!!show;if(open&&wasHidden)returnFocus=doc.activeElement;panel.hidden=!open;if(open){state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));await load();if(!disposed&&!panel.hidden)(controls.hidden?body:search).focus?.();}else{navigationEpoch++;closeCommands(false);epoch++;loadEpoch++;aiEpoch++;clear();if(returnFocus?.isConnected&&!win.closed)returnFocus.focus?.();returnFocus=null;}}
@@ -379,7 +397,9 @@
    const marked=runtime.highlightOf?.(runtime.Z.Items.get(Number(item.id)));
    if(marked)c.dataset.mark=marked;
    const identity=node('div',null,heading,{class:'sc-paper-identity'});
-   node('h3',item.title||'제목 없음',identity,{class:'sc-paper-title',title:item.title||''});
+   const h3=node('h3',null,identity,{class:'sc-paper-title',title:item.title||''});
+   if(item.itemType&&item.itemType!=='journalArticle'&&KIND_LABELS[item.itemType])node('span',kindLabel(item.itemType),h3,{class:'sc-preprint sc-kind',title:kindLabel(item.itemType)});
+   h3.appendChild(doc.createTextNode(item.title||T('제목 없음')));
    node('span',[item.year,item.venue,item.authors].filter(Boolean).join(' · '),identity,{class:'sc-paper-meta',title:[item.authors,item.venue].filter(Boolean).join(' · ')});
    const metrics=node('div',null,heading,{class:'sc-metrics'});
    metric(metrics,{icon:'impact',name:'impact',text:item.impactFactor??'—',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
@@ -1594,6 +1614,7 @@
       journals can be compared down the page the way the IF column is. */
    const figure=node('span',j.impact!=null?j.impact.toFixed(1):'—',c,{class:'sc-journal-if',title:j.impact!=null?`JIF ${j.impact.toFixed(1)}${j.year?' ('+j.year+')':''}`:'IF 미확인'});
    if(j.impact==null)figure.classList.add('sc-journal-if-none');
+   else figure.dataset.tone=j.impact>=10?'top':j.impact>=5?'high':j.impact>=2?'mid':'low';
    const meta=node('p',null,c,{class:'sc-hit-meta'});
    const bits=[];
    if(j.abbreviation)bits.push(j.abbreviation);
@@ -1664,7 +1685,7 @@
    const customFields=node('input',null,body,{'aria-label':'추가 문헌 열','placeholder':'DOI, publisher, language'});customFields.value=runtime.pref('customFields','');button('추가 열 적용',async()=>{await runtime.setCustomFields(customFields.value);message('추가 열을 적용했습니다.');},body);
    const css=node('textarea',null,body,{'aria-label':'Custom 패널 CSS',placeholder:'.sc-card { font-size: 13px; }'});css.value=runtime.pref('panelCSS','');css.hidden=!enabled('styleEditor');button('패널 CSS 적용',()=>runtime.setPanelCSS(css.value),body).hidden=!enabled('styleEditor');
   }
-  async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';const token=++epoch;clear();memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();refreshNotice().catch(()=>{});try{
+  async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';const token=++epoch;clear();for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();refreshNotice().catch(()=>{});try{
    switch(state.tab){case'explore':await paperList(rows());break;case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
