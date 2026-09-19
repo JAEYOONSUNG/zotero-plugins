@@ -440,7 +440,7 @@
    const P=runtime.palette?.(doc);
    const venueMark=item.venue&&P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,item.venue,P):null;
    if(venueMark){venueMark.style.marginInlineEnd='5px';meta.appendChild(venueMark);}
-   meta.appendChild(doc.createTextNode([item.year,item.venue,item.authors].filter(Boolean).join(' · ')));
+   node('span',[item.year,item.venue,item.authors].filter(Boolean).join(' · '),meta,{class:'sc-paper-meta-text'});
    const metrics=node('div',null,heading,{class:'sc-metrics'});
    metric(metrics,{icon:'impact',name:'impact',text:item.impactFactor??'—',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
    metric(metrics,{icon:'citations',name:'citations',text:item.citations??'—',label:'인용 수'});

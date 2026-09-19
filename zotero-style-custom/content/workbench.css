@@ -718,7 +718,10 @@
 #style-custom-workbench .sc-legend-name { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-legend-count { color: var(--sc-faint); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+/* The mark sits beside the words; the words alone take the ellipsis, which a
+   bare text node inside a flex box would not. */
 #style-custom-workbench .sc-paper-meta { display: flex; align-items: center; }
+#style-custom-workbench .sc-paper-meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The subject tree: one row per level, the chosen chip folded with its way back. */
 #style-custom-workbench .sc-field-tree { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 8px; }
