@@ -257,9 +257,19 @@
 #style-custom-workbench .sc-metric { white-space: nowrap; }
 /* Held out of the way until the row is wanted, so the list reads as a list. */
 #style-custom-workbench .sc-paper-actions {
-  display: flex; flex-wrap: wrap; gap: 4px; margin-block-start: 6px;
+  display: flex; flex-wrap: nowrap; gap: 6px; margin: 0 0 0 auto; flex: 0 0 auto;
   opacity: 0; transition: opacity .12s ease;
 }
+/* Room to breathe on the title row: the dot, then the box (its word is for
+   the screen reader), then the title, and the buttons only at the far end. */
+#style-custom-workbench .sc-paper-card { padding-inline-start: 26px; }
+#style-custom-workbench .sc-paper-card[data-status]::before { inset-inline-start: 10px; inset-block-start: 18px; }
+#style-custom-workbench .sc-paper-heading { gap: 10px; }
+#style-custom-workbench .sc-paper-heading .sc-check span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#style-custom-workbench .sc-paper-heading .sc-check { margin: 0; gap: 0; }
+#style-custom-workbench .sc-paper-heading .sc-metrics,
+#style-custom-workbench .sc-paper-heading .sc-paper-actions { min-height: 24px; align-items: center; }
+#style-custom-workbench .sc-paper-card[data-selected=true] .sc-metrics { display: none; }
 #style-custom-workbench .sc-paper-card:hover .sc-paper-actions,
 #style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions,
 #style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-actions { opacity: 1; }
@@ -321,7 +331,7 @@
 #style-custom-workbench[data-density=compact] .sc-search-row { padding-block: 8px; }
 #style-custom-workbench[data-density=compact] .sc-nav-group { margin-block-end: 10px; }
 #style-custom-workbench[data-density=compact] .sc-context { padding-block: 10px; }
-#style-custom-workbench[data-density=compact] .sc-paper-actions { margin-block-start: 6px; }
+#style-custom-workbench[data-density=compact] .sc-paper-actions { margin-block-start: 0; }
 
 /* Apple's dark surfaces are near-black with light hairlines, not inverted greys. */
 @media (prefers-color-scheme: dark) {

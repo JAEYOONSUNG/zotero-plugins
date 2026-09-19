@@ -1,5 +1,5 @@
 {
- "version": "0.45.1",
+ "version": "0.45.2",
  "minimumRequestedRounds": 10,
  "rounds": [
   {
@@ -1691,6 +1691,26 @@
    ],
    "status": "verified",
    "review": "One line, three menus, large to small, each listing what lies under the choice to its left with counts, largest first; a smaller level can be picked on its own and the levels above it follow; menus not yet narrowed group their options under the parent, biggest parent first. Each journal's fields sit on one line, each field once with its subfields after it."
+  },
+  {
+   "round": "R59",
+   "title": "카드 위에 손을 올렸을 때 덜 붙어 보이게",
+   "gap": "On hover the checkbox, its word and the two buttons crowded together under the status dot, and the buttons wrapped under the checkbox.",
+   "entryPoint": "보유 문헌 카드에 마우스 올리기",
+   "sources": [
+    {
+     "file": "src/workbench.js",
+     "marker": "const actions=bar(heading);"
+    }
+   ],
+   "tests": [
+    {
+     "file": "test/workbench.test.mjs",
+     "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+    }
+   ],
+   "status": "verified",
+   "review": "The buttons take the figures' place at the far right of the title row while the pointer is on the card; the checkbox keeps its word for the screen reader only; the dot sits further in and the row has more air."
   }
  ],
  "introducedInVersion": "0.6.0"

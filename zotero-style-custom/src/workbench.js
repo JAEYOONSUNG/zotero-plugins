@@ -493,7 +493,10 @@
    metric(metrics,{icon:'time',name:'time',text:runtime.formatReadTime?runtime.formatReadTime(item.seconds)||'0s':Math.floor(Number(item.seconds)||0)+'초',label:'읽은 시간'});
    const unusedMetrics=node('p',null,c,{class:'sc-metrics-source',hidden:'hidden'});
    for(const[label,value]of [['','']])node('span',[label,value].filter(value=>value!=='').join(' '),unusedMetrics,{class:'sc-metric','data-metric':label==='읽기'?'time':label===''?'status':label});
-   const actions=bar(c);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-variant':'primary'});button('자세히',()=>{state.selected=new Set([item.id]);state.scope='selected';scope.value='selected';render();},actions);
+   // The two buttons take the figures' place at the right end of the title
+   // row while the pointer is on the card, instead of stacking under the
+   // checkbox where they crowded the dot and the title.
+   const actions=bar(heading);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-variant':'primary'});button('자세히',()=>{state.selected=new Set([item.id]);state.scope='selected';scope.value='selected';render();},actions);
    unusedMetrics.title=[item.citationSource,item.impactSource].filter(Boolean).join(' · ')||'지표 출처 미확인';
    if(state.scope==='selected'){node('p',item.abstract||'초록이 없습니다.',c);const ref=runtime.Z.Items.get(Number(item.id));const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);message('메모를 저장했습니다.');},c);}
    if(state.scope==='selected'&&items.length===1)details.push((async()=>{
