@@ -388,7 +388,6 @@
  "별점 {0}/5": "Rating {0}/5",
  "읽은 시간": "Time read",
  "자세히": "Details",
- "지표 출처 미확인": "Metric source unverified",
  "초록이 없습니다.": "No abstract.",
  "메모 저장": "Save note",
  "메모를 저장했습니다.": "Note saved.",
@@ -1120,5 +1119,7 @@
  "내 문헌": "My papers",
  "{0} 페이지별 읽은 시간": "{0}: time read per page",
  "적게": "Less",
- "많이": "More"
+ "많이": "More",
+ "인용 수 · {0}": "Citations · {0}",
+ "출처 미확인": "source unknown"
 }

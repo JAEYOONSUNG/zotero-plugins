@@ -286,18 +286,18 @@
   setMaximized(ui.maximized===true,{save:false});
   brand.addEventListener('dblclick',()=>setMaximized(panel.dataset.maximized!=='true'));
   setIcon(button('',()=>openCommands(),headerActions,{'aria-keyshortcuts':'Meta+K Control+K','aria-label':'기능 찾기',title:'기능 찾기 · ⌘/Ctrl K',class:'sc-icon-button'}),'search');
-  setIcon(button('',()=>toggle(false),headerActions,{'aria-label':'작업 패널 닫기',title:'닫기',class:'sc-icon-button'}),'close');
+  setIcon(button('',()=>toggle(false),headerActions,{'aria-label':'작업 패널 닫기',title:'닫기',class:'sc-icon-button sc-close'}),'close');
   const controls=node('div',null,panel,{class:'sc-controls sc-search-row'});
   const search=node('input',null,controls,{type:'search',placeholder:'제목·저자·태그 검색','aria-label':'작업 패널 검색'});
   search.addEventListener('input',()=>{state.query=search.value;render();});
   const scope=node('select',null,controls,{'aria-label':'표시 범위'});node('option','라이브러리',scope,{value:'library'});node('option','선택한 문헌',scope,{value:'selected'});node('option','현재 컬렉션',scope,{value:'collection'});node('option','현재 컬렉션과 하위 컬렉션',scope,{value:'collection-recursive'});
   scope.addEventListener('change',()=>{state.scope=scope.value;state.annotationIDs.clear();run(load);});
-  const type=node('select',null,controls,{'aria-label':'문헌 유형 필터'});node('option','모든 유형',type,{value:''});
+  const type=node('select',null,null,{'aria-label':'문헌 유형 필터'});node('option','모든 유형',type,{value:''});
   type.addEventListener('change',()=>{state.type=type.value;render();});
   button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},controls);
   button('새로고침',load,controls);
   const filterPanel=node('details',null,panel,{class:'sc-filters'}),filterSummary=node('summary','상세 필터',filterPanel);
-  const filters=node('div',null,filterPanel,{class:'sc-filter-fields','aria-label':'문헌 상세 필터'});
+  const filters=node('div',null,filterPanel,{class:'sc-filter-fields','aria-label':'문헌 상세 필터'});filters.appendChild(type);
   const filterChips=node('div',null,panel,{class:'sc-filter-chips','aria-label':'적용 중인 필터'});
   /* What kind of thing each item is, in words, and a row of chips that
      splits the library by kind with one click. The user asked for patents
@@ -305,7 +305,7 @@
      cannot group, so the panel does: 특허 6 · 학위논문 6 · 프리프린트 26. */
   const KIND_LABELS={journalArticle:'논문',preprint:'프리프린트',patent:'특허',thesis:'학위논문',book:'책',bookSection:'책의 장',conferencePaper:'학회 논문',report:'보고서',dataset:'데이터셋',computerProgram:'소프트웨어',document:'문서',webpage:'웹페이지',magazineArticle:'잡지 기사',newspaperArticle:'신문 기사',manuscript:'원고',standard:'표준',presentation:'발표'};
   const kindLabel=type=>KIND_LABELS[type]||type||'';
-  const kindChips=node('div',null,panel,{class:'sc-kind-chips','aria-label':'문헌 종류'});
+  const kindChips=node('div',null,null,{class:'sc-kind-chips','aria-label':'문헌 종류'});
   function drawKindChips(){
    kindChips.replaceChildren();
    const counts=new Map();
@@ -325,7 +325,7 @@
   selectFilter('sort','문헌 정렬',[['library','기본 순서'],['title','제목순'],['year-desc','최신 발행순'],['citations-desc','인용 많은 순'],['rating-desc','별점 높은 순'],['time-desc','읽기 시간순']]);
   button('필터 초기화',()=>{for(const key of ['status','ratingMin','yearFrom','yearTo']){state[key]='';filterInputs.get(key).value='';}state.query=search.value='';state.type=type.value='';state.tag='';state.sort='library';filterInputs.get('sort').value='library';render();},filters);
   const shell=node('div',null,panel,{class:'sc-shell'}),nav=node('nav',null,shell,{'aria-label':'작업 종류'}),content=node('div',null,shell,{class:'sc-content'});
-  const context=node('div',null,content,{class:'sc-context'}),sectionTitle=node('h2','보유 문헌',context,{class:'sc-section-title'}),contextDetail=node('span',null,context,{class:'sc-context-detail'});
+  const context=node('div',null,content,{class:'sc-context'}),sectionTitle=node('h2','보유 문헌',context,{class:'sc-section-title'}),contextDetail=node('span',null,context,{class:'sc-context-detail'});context.appendChild(kindChips);
   const body=node('div',null,content,{class:'sc-body',tabindex:'-1'});
   const navButtons=new Map();
   async function navigate(id,{focus=false}={}){if(!TABS.some(([key])=>key===id)||hiddenTabs().has(id))return;const request=++navigationEpoch;state.tab=id;await render();if(disposed||panel.hidden||request!==navigationEpoch||state.tab!==id)return;await saveUI({lastTab:id});if(focus&&!disposed&&!panel.hidden&&request===navigationEpoch&&state.tab===id&&commands.hidden)body.focus?.();}
@@ -407,7 +407,7 @@
   }
   function updateChrome(){
    sectionTitle.textContent=TABS.find(([id])=>id===state.tab)?.[1]||'';
-   const applicable=FILTER_TABS.has(state.tab)&&state.tab!=='collections';controls.hidden=!applicable;filterPanel.hidden=!applicable;
+   const applicable=FILTER_TABS.has(state.tab)&&state.tab!=='collections';controls.hidden=!applicable;filterPanel.hidden=!applicable;kindChips.hidden=!applicable;
    contextDetail.textContent=applicable?`${({library:'라이브러리',selected:'선택한 문헌',collection:'현재 컬렉션','collection-recursive':'현재·하위 컬렉션'})[state.scope]} · ${(['notes','annotations','attachments'].includes(state.tab)?model.filter(scoped(),parentOptions()):rows()).length}개 문헌${['notes','annotations','attachments'].includes(state.tab)?' 범위 · 내용 검색':''}`:'선택한 문헌 '+state.selected.size+'개';
    filterChips.replaceChildren();const labels={query:'검색',type:'유형',tag:'태그',status:'상태',ratingMin:'최소 별점',yearFrom:'시작 연도',yearTo:'마지막 연도'};
    for(const[key,label]of Object.entries(labels))if(state[key]){const value=key==='status'?({unread:'안 읽음',reading:'읽는 중',done:'완료'})[state[key]]:state[key];button(`${label}: ${value} ×`,()=>{state[key]='';if(key==='query')search.value='';else if(key==='type')type.value='';else if(filterInputs.has(key))filterInputs.get(key).value='';return render();},filterChips,{'aria-label':label+' 필터 해제'});}
@@ -452,7 +452,7 @@
    state.items=snapshot.map(i=>{const ref=runtime.Z.Items.get(Number(i.id));return {...i,...(ref?runtime.state(ref):{})};});
    const existing=new Set(state.items.map(i=>i.id));state.selected=new Set([...state.selected].filter(id=>existing.has(id)));
    type.replaceChildren();node('option','모든 유형',type,{value:''});for(const t of [...new Set(state.items.map(i=>i.itemType))].filter(Boolean).sort())node('option',kindLabel(t),type,{value:t});type.value=state.type;drawKindChips();
-   message(state.items.length+'개 문헌');await render();
+   message('');await render();
   }
   async function toggle(show){const wasHidden=panel.hidden,open=show===undefined?wasHidden:!!show;
    if(open&&wasHidden){syncDock();if(!tabID&&runtime.cache.workbenchUI?.docked===true&&canDock())dock({save:false});}
@@ -464,9 +464,11 @@
    if(state.pageKey!==key){state.pageKey=key;state.pageIndex=0;}
    state.pageIndex=Math.max(0,Math.min(state.pageIndex||0,Math.ceil(items.length/pageSize)-1));
    const start=state.pageIndex*pageSize,page=items.slice(start,start+pageSize),paging=bar();
-   node('span',`${start+1}–${start+page.length} / ${items.length}개`,paging,{role:'status','aria-label':'문헌 페이지 범위'});
-   button('이전 페이지',()=>{state.pageIndex--;render();},paging).disabled=state.pageIndex===0;
-   button('다음 페이지',()=>{state.pageIndex++;render();},paging).disabled=start+pageSize>=items.length;
+   if(items.length>pageSize){
+    node('span',`${start+1}–${start+page.length} / ${items.length}개`,paging,{role:'status','aria-label':'문헌 페이지 범위'});
+    button('이전 페이지',()=>{state.pageIndex--;render();},paging).disabled=state.pageIndex===0;
+    button('다음 페이지',()=>{state.pageIndex++;render();},paging).disabled=start+pageSize>=items.length;
+   }
    const choose=(values,on)=>{state.annotationIDs.clear();for(const item of values)on?state.selected.add(String(item.id)):state.selected.delete(String(item.id));render();};
    button('현재 페이지 선택',()=>choose(page,true),paging);button('현재 페이지 선택 해제',()=>choose(page,false),paging);button('검색 결과 전체 선택',()=>choose(items,true),paging);
    const list=node('div',null,body,{class:'sc-paper-list'}),details=[],generation=epoch;for(const item of page){
@@ -486,18 +488,12 @@
    if(venueMark){venueMark.style.marginInlineEnd='5px';meta.appendChild(venueMark);}
    node('span',[item.year,item.venue,item.authors].filter(Boolean).join(' · '),meta,{class:'sc-paper-meta-text'});
    const metrics=node('div',null,heading,{class:'sc-metrics'});
-   metric(metrics,{icon:'impact',name:'impact',text:item.impactFactor??'—',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
-   metric(metrics,{icon:'citations',name:'citations',text:item.citations??'—',label:'인용 수'});
-   const stars=node('span',null,metrics,{class:'sc-metric sc-stars',title:`별점 ${item.rating??0}/5`});stars.dataset.metric='rating';
-   node('span','\u2605'.repeat(item.rating??0)+'\u2606'.repeat(5-(item.rating??0)),stars,{class:'sc-metric-value'});
-   metric(metrics,{icon:'time',name:'time',text:runtime.formatReadTime?runtime.formatReadTime(item.seconds)||'0s':Math.floor(Number(item.seconds)||0)+'초',label:'읽은 시간'});
-   const unusedMetrics=node('p',null,c,{class:'sc-metrics-source',hidden:'hidden'});
-   for(const[label,value]of [['','']])node('span',[label,value].filter(value=>value!=='').join(' '),unusedMetrics,{class:'sc-metric','data-metric':label==='읽기'?'time':label===''?'status':label});
-   // The two buttons take the figures' place at the right end of the title
-   // row while the pointer is on the card, instead of stacking under the
-   // checkbox where they crowded the dot and the title.
+   metric(metrics,{icon:'impact',name:'impact',text:item.impactFactor??'',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
+   metric(metrics,{icon:'citations',name:'citations',text:item.citations??'',label:'인용 수 · '+(item.citationSource||'출처 미확인')});
+   // Stars only once a paper has been rated: five hollow stars on every row were noise.
+   if(item.rating){const stars=node('span',null,metrics,{class:'sc-metric sc-stars',title:`별점 ${item.rating}/5`});stars.dataset.metric='rating';node('span','\u2605'.repeat(item.rating)+'\u2606'.repeat(5-item.rating),stars,{class:'sc-metric-value'});}
+   metric(metrics,{icon:'time',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
    const actions=bar(heading);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-variant':'primary'});button('자세히',()=>{state.selected=new Set([item.id]);state.scope='selected';scope.value='selected';render();},actions);
-   unusedMetrics.title=[item.citationSource,item.impactSource].filter(Boolean).join(' · ')||'지표 출처 미확인';
    if(state.scope==='selected'){node('p',item.abstract||'초록이 없습니다.',c);const ref=runtime.Z.Items.get(Number(item.id));const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);message('메모를 저장했습니다.');},c);}
    if(state.scope==='selected'&&items.length===1)details.push((async()=>{
     const results=await Promise.allSettled([library.notes([item.id]),library.annotations([item.id])]);
@@ -1951,7 +1947,7 @@
   function refreshMetrics(){
    if(disposed||panel.hidden)return;
    for(const item of state.items){const ref=runtime.Z.Items.get(Number(item.id));if(ref)Object.assign(item,runtime.state(ref));}
-   for(const card of body.querySelectorAll('[data-item-id]')){const item=state.items.find(row=>String(row.id)===card.dataset.itemId);if(!item)continue;card.dataset.status=item.status;const time=card.querySelector('[data-metric=time] .sc-metric-value');if(time)time.textContent=(runtime.formatReadTime?runtime.formatReadTime(item.seconds)||'0s':Math.floor(item.seconds||0)+'초');const status=card.querySelector('[data-metric=status]');if(status)status.textContent=({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음';}
+   for(const card of body.querySelectorAll('[data-item-id]')){const item=state.items.find(row=>String(row.id)===card.dataset.itemId);if(!item)continue;card.dataset.status=item.status;const time=card.querySelector('[data-metric=time] .sc-metric-value');if(time)time.textContent=Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(item.seconds)+'초'):'';const status=card.querySelector('[data-metric=status]');if(status)status.textContent=({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음';}
   }
   async function applyPreferences(){panel.dataset.density=setting('workbenchDensity',runtime.cache.workbenchUI?.density||'comfortable');syncDensity();const accent=setting('accentColor','#374151');if(['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=setting('panelFontSize',13)+'px';await render();}
   const keyboard=e=>{if(e.isComposing||panel.hidden)return;

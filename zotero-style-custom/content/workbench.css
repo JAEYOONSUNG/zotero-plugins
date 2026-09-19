@@ -68,11 +68,14 @@
 }
 /* In a Zotero tab: the same panel, filling the tab, no chrome of its own. */
 #style-custom-workbench[data-docked="tab"] {
-  position: static; inset: auto; flex: 1 1 auto;
+  position: relative; inset: auto; flex: 1 1 auto;
   width: 100% !important; height: 100% !important; min-width: 0; min-height: 0; max-width: none; max-height: none;
   border-radius: 0; box-shadow: none; resize: none;
 }
-#style-custom-workbench[data-docked="tab"] .sc-maximize { display: none; }
+#style-custom-workbench[data-docked="tab"] .sc-maximize,
+#style-custom-workbench[data-docked="tab"] .sc-close,
+#style-custom-workbench[data-docked="tab"] .sc-subtitle { display: none; }
+#style-custom-workbench[data-docked="tab"][data-maximized="true"] { inset: auto; width: 100% !important; height: 100% !important; border-radius: 0; }
 /* Filling the window: the same panel, edge to edge, corners eased off. */
 #style-custom-workbench[data-maximized="true"] {
   inset: 6px; width: auto !important; height: auto !important;
@@ -139,7 +142,8 @@
 #style-custom-workbench > header > strong { font: 600 15px/1.35 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; }
 #style-custom-workbench .sc-header-actions { display: flex; align-items: center; gap: 6px; margin-inline-start: auto; flex-shrink: 0; }
 #style-custom-workbench .sc-header-actions button { font-size: 12px; }
-#style-custom-workbench .sc-status { flex-shrink: 0; padding: 6px 20px; color: var(--sc-muted); background: transparent; border-block-end: 1px solid var(--sc-border); font: 11px/1.5 var(--sc-font); overflow-wrap: anywhere; }
+#style-custom-workbench .sc-status { flex-shrink: 0; padding: 4px 16px 8px; color: var(--sc-muted); background: var(--sc-surface); border-block-end: 0; font: 11px/1.5 var(--sc-font); overflow-wrap: anywhere; }
+#style-custom-workbench .sc-status:empty { display: none; }
 #style-custom-workbench .sc-status[data-error=true] { color: var(--sc-error); background: var(--sc-error-bg); }
 #style-custom-workbench .sc-controls,
 #style-custom-workbench .sc-actions,
@@ -152,7 +156,8 @@
 #style-custom-workbench .sc-search-row select { max-width: 168px; }
 #style-custom-workbench .sc-actions { padding: 8px 0; }
 #style-custom-workbench .sc-actions input:not([type=checkbox]):not([type=color]):not([type=number]) { flex: 1 1 150px; min-width: 100px; }
-#style-custom-workbench .sc-filters { flex-shrink: 0; padding: 0 16px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-filters { flex-shrink: 0; padding: 0 16px; border-block-end: 0; }
+#style-custom-workbench .sc-filters[open] { border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-filters > summary { padding: 7px 0; color: var(--sc-muted); font-size: 12px; cursor: pointer; }
 #style-custom-workbench .sc-filters[open] > summary { color: var(--sc-text); }
 #style-custom-workbench .sc-filter-fields { padding: 0 0 12px; max-height: 156px; overflow: auto; }
@@ -161,7 +166,7 @@
 #style-custom-workbench .sc-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 16px; max-height: 84px; overflow: auto; }
 #style-custom-workbench .sc-filter-chips:empty { display: none; }
 /* The library by kind: papers, preprints, patents, theses, one chip each. */
-#style-custom-workbench .sc-kind-chips { display: flex; flex-wrap: wrap; gap: 4px; flex-shrink: 0; padding: 6px 16px 0; }
+#style-custom-workbench .sc-kind-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-inline-start: auto; padding: 0; }
 #style-custom-workbench .sc-kind-chips:empty { display: none; }
 #style-custom-workbench .sc-kind { margin-inline-end: 6px; vertical-align: 2px; }
 #style-custom-workbench .sc-journal-if[data-tone=top]  { color: #9B71BF; }
@@ -224,7 +229,6 @@
 #style-custom-workbench .sc-card .sc-check input[type=checkbox] { width: 13px; height: 13px; margin: 0; }
 #style-custom-workbench .sc-paper-card {
   position: relative;
-  padding: 11px 12px 11px 22px;
   margin: 0;
   border-radius: var(--sc-radius);
   box-shadow: none;
@@ -251,9 +255,8 @@
 #style-custom-workbench .sc-paper-card:focus-within .sc-check,
 #style-custom-workbench .sc-paper-card[data-selected=true] .sc-check { opacity: 1; }
 #style-custom-workbench .sc-paper-title { flex: 0 1 auto; min-width: 0; margin: 0; font: 500 13px/1.45 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#style-custom-workbench .sc-paper-meta { flex: 1 1 auto; min-width: 0; color: var(--sc-faint); font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-paper-meta { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.5; }
 #style-custom-workbench .sc-metrics { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; padding-block-start: 8px; color: var(--sc-muted); font: 11px/1.6 var(--sc-mono); }
-#style-custom-workbench .sc-paper-card .sc-metrics { border: 0; margin-block-start: 3px; font-size: 11px; }
 #style-custom-workbench .sc-metric { white-space: nowrap; }
 /* Held out of the way until the row is wanted, so the list reads as a list. */
 #style-custom-workbench .sc-paper-actions {
@@ -262,23 +265,17 @@
 }
 /* Room to breathe on the title row: the dot, then the box (its word is for
    the screen reader), then the title, and the buttons only at the far end. */
-#style-custom-workbench .sc-paper-card { padding-inline-start: 26px; }
-#style-custom-workbench .sc-paper-card[data-status]::before { inset-inline-start: 10px; inset-block-start: 18px; }
+#style-custom-workbench .sc-paper-card[data-status]::before { inset-inline-start: 10px; }
 #style-custom-workbench .sc-paper-heading { gap: 10px; }
 #style-custom-workbench .sc-paper-heading .sc-check span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 #style-custom-workbench .sc-paper-heading .sc-check { margin: 0; gap: 0; }
 #style-custom-workbench .sc-paper-heading .sc-metrics,
 #style-custom-workbench .sc-paper-heading .sc-paper-actions { min-height: 24px; align-items: center; }
-#style-custom-workbench .sc-paper-card[data-selected=true] .sc-metrics { display: none; }
-#style-custom-workbench .sc-paper-card:hover .sc-paper-actions,
-#style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions,
-#style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-actions { opacity: 1; }
 #style-custom-workbench .sc-paper-actions button { min-height: 24px; padding: 2px 9px; font-size: 11px; }
 /* Keyboard users must still be able to reach a button they cannot yet see. */
 @media (prefers-reduced-motion: reduce) {
   #style-custom-workbench .sc-paper-actions { transition: none; }
 }
-#style-custom-workbench .sc-paper-actions button { min-height: 28px; padding: 4px 8px; font-size: 11px; }
 #style-custom-workbench .sc-check { display: inline-flex; align-items: center; gap: 6px; margin: 4px 8px 4px 0; }
 #style-custom-workbench .sc-empty { margin: 0; padding: 32px 16px; color: var(--sc-muted); text-align: center; }
 #style-custom-workbench details:not(.sc-filters) { padding-inline-start: 12px; }
@@ -327,11 +324,12 @@
 #style-custom-workbench .sc-native-preview { display: block; width: 100%; height: 400px; min-height: 240px; overflow: hidden; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); }
 
 /* Quick command search is an in-panel dialog, not a separate window. */
-#style-custom-workbench .sc-command-palette { position: absolute; z-index: 20; inset-block-start: 56px; inset-inline: 16px; width: min(540px, calc(100% - 32px)); margin-inline: auto; max-height: calc(100% - 72px); display: flex; flex-direction: column; padding: 12px; gap: 8px; border: 1px solid var(--sc-border-strong); border-radius: var(--sc-radius-card); background: var(--sc-surface); color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-command-palette { position: absolute; z-index: 20; inset-block-start: 56px; inset-inline: 16px; width: min(540px, calc(100% - 32px)); margin-inline: auto; max-height: calc(100% - 72px); display: flex; flex-direction: column; padding: 12px; gap: 8px; border: 1px solid var(--sc-border-strong); border-radius: var(--sc-radius-card); background: var(--sc-surface); color: var(--sc-text); box-shadow: var(--sc-shadow); }
 #style-custom-workbench .sc-command-search { flex-shrink: 0; width: 100%; }
 #style-custom-workbench .sc-command-results { overflow: auto; min-height: 0; }
-#style-custom-workbench .sc-command-option { display: block; width: 100%; margin: 2px 0; text-align: start; border-color: transparent; }
-#style-custom-workbench .sc-command-option[aria-selected=true] { background: var(--sc-accent-soft); color: var(--sc-accent); border-color: var(--sc-accent); }
+#style-custom-workbench .sc-command-option { display: block; width: 100%; margin: 2px 0; text-align: start; }
+#style-custom-workbench .sc-command-option[aria-selected=true] { background: var(--sc-accent-soft); color: var(--sc-accent); box-shadow: inset 0 0 0 1px var(--sc-accent); }
+#style-custom-workbench .sc-command-palette > p { margin: 0; font-size: 11px; }
 #style-custom-workbench .sc-command-option small { color: var(--sc-muted); margin-inline-start: 8px; }
 #style-custom-workbench kbd { font: 10px var(--sc-mono); padding: 2px 4px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-sm); color: var(--sc-muted); }
 
@@ -340,7 +338,6 @@
 #style-custom-workbench[data-density=compact] .sc-search-row { padding-block: 8px; }
 #style-custom-workbench[data-density=compact] .sc-nav-group { margin-block-end: 10px; }
 #style-custom-workbench[data-density=compact] .sc-context { padding-block: 10px; }
-#style-custom-workbench[data-density=compact] .sc-paper-actions { margin-block-start: 0; }
 
 /* Apple's dark surfaces are near-black with light hairlines, not inverted greys. */
 @media (prefers-color-scheme: dark) {
@@ -517,11 +514,14 @@
 
 /* Figures sit in a fixed column so they can be compared down the list, each
    with its own mark so the row reads without a header above it. */
-#style-custom-workbench .sc-paper-card { display: block; padding: 6px 10px 6px 20px; }
-#style-custom-workbench .sc-paper-card .sc-metrics { display: flex; align-items: center; gap: 12px; margin: 0; flex: 0 0 auto; }
+#style-custom-workbench .sc-paper-card { display: block; padding: 6px var(--sc-card-padding, 12px) 6px calc(var(--sc-card-padding, 12px) + 14px); }
+#style-custom-workbench .sc-paper-card .sc-metrics { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; min-height: 24px; flex: 0 0 auto; }
 #style-custom-workbench .sc-metric { display: inline-flex; align-items: center; gap: 3px; color: var(--sc-muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #style-custom-workbench .sc-metric svg { flex: 0 0 auto; opacity: .55; }
 #style-custom-workbench .sc-metric-value { min-width: 1.6em; text-align: end; }
+#style-custom-workbench .sc-metric[data-metric=impact] .sc-metric-value { min-width: 3.2em; }
+#style-custom-workbench .sc-metric[data-metric=citations] .sc-metric-value { min-width: 3.6em; }
+#style-custom-workbench .sc-metric[data-metric=time] .sc-metric-value { min-width: 3.4em; }
 #style-custom-workbench .sc-metric[data-tone] { font-weight: 600; }
 #style-custom-workbench .sc-metric[data-tone=top]   { color: #9B71BF; }
 #style-custom-workbench .sc-metric[data-tone=high]  { color: #6484BA; }
@@ -545,10 +545,21 @@
 #style-custom-workbench .sc-paper-card:focus-within .sc-metrics { display: none; }
 #style-custom-workbench .sc-paper-card .sc-paper-actions { display: none; }
 #style-custom-workbench .sc-paper-card:hover .sc-paper-actions,
-#style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions,
-#style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-actions { display: flex; opacity: 1; }
+#style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions { display: flex; opacity: 1; }
 
 @media (prefers-color-scheme: dark) {
+  #style-custom-workbench .sc-journal-if[data-tone=top], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=top], #style-custom-workbench .sc-fact[data-tone=top] dd { color: #B38DD5; }
+  #style-custom-workbench .sc-journal-if[data-tone=high], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=high], #style-custom-workbench .sc-fact[data-tone=high] dd { color: #809DD0; }
+  #style-custom-workbench .sc-journal-if[data-tone=mid], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=mid], #style-custom-workbench .sc-fact[data-tone=mid] dd { color: #49A9BC; }
+  #style-custom-workbench .sc-journal-if[data-tone=low], #style-custom-workbench .sc-journal-table .sc-journal-if[data-tone=low], #style-custom-workbench .sc-fact[data-tone=low] dd { color: #41AF7C; }
+  #style-custom-workbench .sc-chip-on, #style-custom-workbench .sc-chip-button[aria-pressed=true] { color: #10131a; }
+  #style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #D48A8C; }
+  #style-custom-workbench .sc-paper-card[data-mark=orange] { --sc-mark: #C9975F; }
+  #style-custom-workbench .sc-paper-card[data-mark=gold]   { --sc-mark: #B89944; }
+  #style-custom-workbench .sc-paper-card[data-mark=green]  { --sc-mark: #41AF7C; }
+  #style-custom-workbench .sc-paper-card[data-mark=teal]   { --sc-mark: #49A9BC; }
+  #style-custom-workbench .sc-paper-card[data-mark=blue]   { --sc-mark: #809DD0; }
+  #style-custom-workbench .sc-paper-card[data-mark=purple] { --sc-mark: #B38DD5; }
   #style-custom-workbench .sc-metric[data-tone=top]  { color: #B38DD5; }
   #style-custom-workbench .sc-metric[data-tone=high] { color: #809DD0; }
   #style-custom-workbench .sc-metric[data-tone=mid]  { color: #49A9BC; }
@@ -595,7 +606,7 @@
 /* --- What is missing, said where the user already is --- */
 #style-custom-workbench .sc-notice {
   flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 7px 20px; border-block-end: 1px solid var(--sc-border);
+  padding: 7px 16px; border-block-end: 1px solid var(--sc-border);
   background: var(--sc-accent-soft); color: var(--sc-text);
   font: 11.5px/1.5 var(--sc-font);
 }
@@ -752,7 +763,6 @@
 #style-custom-workbench .sc-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 /* The mark sits beside the words; the words alone take the ellipsis, which a
    bare text node inside a flex box would not. */
-#style-custom-workbench .sc-paper-meta { display: flex; align-items: center; }
 #style-custom-workbench .sc-paper-meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The subject line: three menus, large to small, on one line. */

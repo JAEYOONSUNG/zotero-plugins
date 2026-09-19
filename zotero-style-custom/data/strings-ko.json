@@ -501,13 +501,6 @@
    ]
   },
   {
-   "ko": "읽기",
-   "n": 2,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "선택 주석 색 바꾸기",
    "n": 2,
    "files": [
@@ -719,20 +712,6 @@
   },
   {
    "ko": "마지막 연도",
-   "n": 2,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "개 문헌",
-   "n": 2,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "인용 수",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -4169,6 +4148,13 @@
    ]
   },
   {
+   "ko": "읽기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "정리",
    "n": 1,
    "files": [
@@ -4841,6 +4827,20 @@
    ]
   },
   {
+   "ko": "인용 수 · ",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "출처 미확인",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "별점 {0}/5",
    "n": 1,
    "files": [
@@ -4856,13 +4856,6 @@
   },
   {
    "ko": "자세히",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "지표 출처 미확인",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6290,6 +6283,13 @@
    ]
   },
   {
+   "ko": "인용 수",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "읽기 상태",
    "n": 1,
    "files": [
@@ -6487,6 +6487,13 @@
   },
   {
    "ko": "즐겨찾기 먼저",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "개 문헌",
    "n": 1,
    "files": [
     "src/workbench.js"
