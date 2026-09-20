@@ -1,8 +1,10 @@
 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Search and import papers">
-<!-- Two colours, not context-fill: a monochrome outline was indistinguishable
-     from Zotero's own tools at a glance. The lens searches, the bars are the
-     citation figures it brings back. -->
-<path fill-rule="evenodd" clip-rule="evenodd" d="M12.75 7.5C12.75 10.3995 10.3995 12.75 7.5 12.75C4.60051 12.75 2.25 10.3995 2.25 7.5C2.25 4.60051 4.60051 2.25 7.5 2.25C10.3995 2.25 12.75 4.60051 12.75 7.5ZM11.6331 12.5169C10.5097 13.4435 9.06986 14 7.5 14C3.91015 14 1 11.0899 1 7.5C1 3.91015 3.91015 1 7.5 1C11.0899 1 14 3.91015 14 7.5C14 9.06984 13.4435 10.5097 12.517 11.6331L19 18.1161L18.1162 19L11.6331 12.5169Z" fill="#5C86C4"/>
-<path d="M4.75 8.25H6.75V11H4.75V8.25Z" fill="#479A73"/>
-<path d="M8.25 4.5H10.25V11H8.25V4.5Z" fill="#B8823C"/>
+<!-- Zotero's own 20-pixel magnifier, line for line, so the button sits level
+     with the tools beside it; in the plugin's colours rather than the toolbar's
+     ink so it can still be found among them. Inside the lens, three rounded
+     bars rising: the citation figures a search brings back. -->
+<path fill-rule="evenodd" clip-rule="evenodd" d="M12.75 7.5C12.75 10.3995 10.3995 12.75 7.5 12.75C4.60051 12.75 2.25 10.3995 2.25 7.5C2.25 4.60051 4.60051 2.25 7.5 2.25C10.3995 2.25 12.75 4.60051 12.75 7.5ZM11.6331 12.5169C10.5097 13.4435 9.06986 14 7.5 14C3.91015 14 1 11.0899 1 7.5C1 3.91015 3.91015 1 7.5 1C11.0899 1 14 3.91015 14 7.5C14 9.06984 13.4435 10.5097 12.517 11.6331L18.5581 17.6719C18.9486 18.0624 18.9486 18.6956 18.5581 19.0861C18.1676 19.4766 17.5344 19.4766 17.1439 19.0861L11.6331 12.5169Z" fill="#5C86C4"/>
+<rect x="4" y="8.25" width="1.75" height="2.5" rx="0.6" fill="#479A73"/>
+<rect x="6.6" y="6.25" width="1.75" height="4.5" rx="0.6" fill="#479A73"/>
+<rect x="9.2" y="4.25" width="1.75" height="6.5" rx="0.6" fill="#B8823C"/>
 </svg>
