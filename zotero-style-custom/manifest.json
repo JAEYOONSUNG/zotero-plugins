@@ -1,12 +1,12 @@
 {
   "manifest_version": 2,
   "name": "Style Custom",
-  "version": "0.51.2",
+  "version": "0.51.3",
   "description": "Personal title scrolling, reading status, ratings and literature metrics.",
   "applications": {
     "zotero": {
       "id": "style-custom@sungjaeyoon.dev",
-      "update_url": "https://updates.invalid/style-custom.json",
+      "update_url": "https://raw.githubusercontent.com/JAEYOONSUNG/zotero-plugins/main/updates/style-custom.json",
       "strict_min_version": "9.0",
       "strict_max_version": "9.*"
     }

@@ -29,7 +29,7 @@
     }
   }
 
-  async function run(Zotero, runtime, {network = true, repair = false, fill = false} = {}) {
+  async function run(Zotero, runtime, {network = true, repair = false, fill = false, shots = false} = {}) {
     const results = [];
     const win = Zotero.getMainWindow && Zotero.getMainWindow();
     const doc = win && win.document;
@@ -178,6 +178,36 @@
       if (!state.columnFit.seen) throw new Error(`the double-click never reached the handler (resizer classes: ${target.className})`);
       if (!state.columnFit.fitted) throw new Error(`the handler stopped: ${state.columnFit.last}`);
       return `${state.columnFit.last} · header ${Math.round(before)} → ${Math.round(after)}px · ${resizers.length} resizers`;
+    }));
+
+    if (shots) results.push(await attempt('pictures of the panel for the README, taken off the hidden window', async () => {
+      /* drawWindow paints from layout, so a window that is hidden from the
+         screen still yields its picture. Nothing is brought forward. */
+      const state = runtime.windows.get(win), bench = state && state.workbench;
+      if (!bench) throw new Error('workbench not attached');
+      const dir = PathUtils.join(PathUtils.parent(runtime.selfCheckPath || Zotero.DataDirectory.dir + '/style-custom-selfcheck.json'), 'style-custom-shots');
+      await IOUtils.makeDirectory(dir, { ignoreExisting: true });
+      const shoot = async name => {
+        await new Promise(resolve => win.setTimeout(resolve, 900));
+        const scale = 2, w = win.innerWidth, h = win.innerHeight;
+        const canvas = win.document.createElementNS('http://www.w3.org/1999/xhtml', 'canvas');
+        canvas.width = w * scale; canvas.height = h * scale;
+        const ctx = canvas.getContext('2d'); ctx.scale(scale, scale);
+        ctx.drawWindow(win, 0, 0, w, h, '#ffffff');
+        const data = canvas.toDataURL('image/png').split(',')[1];
+        const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+        await IOUtils.write(PathUtils.join(dir, name + '.png'), bytes);
+        return `${name} ${w}×${h}`;
+      };
+      const taken = [];
+      try { await bench.toggle(false); } catch (ignored) {}
+      taken.push(await shoot('library'));
+      await bench.show('explore'); if (!bench.docked()) { try { bench.dock(); } catch (ignored) {} }
+      for (const tab of ['explore', 'related', 'authors', 'journals', 'annotations', 'graph', 'collections', 'reading', 'matrix']) {
+        try { await bench.show(tab); taken.push(await shoot(tab)); } catch (error) { taken.push(`${tab} failed: ${error.message || error}`); }
+      }
+      try { await bench.toggle(false); } catch (ignored) {}
+      return taken.join(' · ') + ' → ' + dir;
     }));
 
     results.push(await attempt('the panel can sit in a Zotero tab and fill it', async () => {

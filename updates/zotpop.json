@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "zotpop@sungjaeyoon.dev": {
+      "updates": [
+        {
+          "version": "0.38.0",
+          "update_link": "https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/zotpop-v0.38.0/zotpop-0.38.0.xpi",
+          "update_hash": "sha256:350c5d3eeb6a0f146a1541340876e094a6e7e5c4b911b9813b908d0c5d4e7ff3",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "7.0"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

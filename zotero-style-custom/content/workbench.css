@@ -1088,3 +1088,6 @@
   #style-custom-workbench .sc-jcr-group-head, #style-custom-workbench .sc-jcr-group-toggle { grid-template-columns: minmax(0, 1fr) 80px 24px; }
   #style-custom-workbench .sc-jcr-group-metric:not(:nth-of-type(2)), #style-custom-workbench .sc-jcr-group-head span:nth-child(2), #style-custom-workbench .sc-jcr-group-head span:nth-child(4) { display: none; }
 }
+
+/* A verb that removes something: quiet until hovered, then in the error ink. */
+#style-custom-workbench .sc-danger-soft:hover { color: var(--sc-error); border-color: var(--sc-error); }

@@ -87,9 +87,10 @@ async function startup({ id, version, rootURI }) {
       const options = {
         network: Zotero.Prefs.get("extensions.style-custom.selfCheckNetwork", true) !== false,
         repair: Zotero.Prefs.get("extensions.style-custom.selfCheckRepair", true) === true,
-        fill: Zotero.Prefs.get("extensions.style-custom.selfCheckFill", true) === true
+        fill: Zotero.Prefs.get("extensions.style-custom.selfCheckFill", true) === true,
+        shots: Zotero.Prefs.get("extensions.style-custom.selfCheckShots", true) === true
       };
-      for (const flag of ["selfCheck", "selfCheckRepair", "selfCheckFill"]) Zotero.Prefs.set("extensions.style-custom." + flag, false, true);
+      for (const flag of ["selfCheck", "selfCheckRepair", "selfCheckFill", "selfCheckShots"]) Zotero.Prefs.set("extensions.style-custom." + flag, false, true);
       const reportPath = PathUtils.join(Zotero.DataDirectory.dir, "style-custom-selfcheck.json");
       setTimeout(() => {
         globalThis.CustomStyleSelfCheck

@@ -456,7 +456,14 @@
       }
       return output;
     }
-    return {snapshot,graph,tagTree,notes,annotations,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
+    /* Into the trash, never erased: Zotero's own trash keeps it, and the
+       reader restores it there. One save per item, outside any transaction. */
+    async function trashItems(ids) {
+      let moved=0;
+      for(const id of ids){const item=await get(id);if(!item||item.deleted)continue;item.deleted=true;await item.saveTx();moved++;}
+      return moved;
+    }
+    return {trashItems,snapshot,graph,tagTree,notes,annotations,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
