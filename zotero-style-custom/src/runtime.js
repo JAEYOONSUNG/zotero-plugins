@@ -182,7 +182,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(existing){this.Z.ItemTreeManager.unregisterColumn(existing);this.columns=this.columns.filter(key=>key!==existing);this.featureColumns.delete(dataKey);}continue;
       }
       if(existing)continue;
-      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
+      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:dataKey==='if'?56:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
       if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
     }
   }
@@ -380,7 +380,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   value(key, item) {
     try {
       const state = this.state(item);
-      if (key === "if") return state.impactFactor == null ? "" : String(state.impactFactor);
+      if (key === "if") { if (state.impactFactor != null) return String(state.impactFactor); const estimate = this.journalCitedness(item); return estimate ? String(estimate.citedness) : ""; }
       if (key === "journalMark") return this.journalAbbreviationOf(item);
       if (key === "citations") return state.citations == null ? "" : String(state.citations);
       if (key === "status") return String({unread:0,reading:1,done:2}[state.status]);
@@ -708,7 +708,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     mark.textContent = this.journalAbbreviationOf(item);
     const bg = tone.badge || tone.fill, ink = tone.badge ? tone.badgeInk : tone.ink, edge = tone.badge ? 'transparent' : tone.edge;
-    mark.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;`
+    mark.style.cssText = `flex:none;display:inline-block;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;`
       + `min-width:22px;height:14px;padding:0 4px;border-radius:3px;white-space:nowrap;`
       + `background:${bg};color:${ink};box-shadow:inset 0 0 0 .5px ${edge};`
       + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
@@ -751,7 +751,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
        figure now reads to a tenth, in tabular digits, right-aligned, so the
        points line up and the column can be scanned. */
     number.textContent = figure == null ? '—' : (estimate ? '~' : '') + (Number.isFinite(value) ? value.toFixed(1) : String(figure));
-    number.style.cssText = `font-variant-numeric:tabular-nums;margin-inline-start:auto;text-align:right;min-width:3.2em;`
+    number.style.cssText = `font-variant-numeric:tabular-nums;margin-inline-start:auto;text-align:right;flex:none;`
       // Only how high the figure is, and only in weight. The tier used to be
       // said twice: once by a colour and once by the number right beside it.
       + `font-weight:${value >= 10 ? 640 : value >= 5 ? 560 : 400};`
@@ -800,9 +800,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       wrap.appendChild(flag);
     }
     const name = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-    name.textContent = row.institution || row.name || "—";
+    // OpenAlex names carry their country ("BGI Group (China)") and the flag already says it.
+    const institution = row.institution ? String(row.institution).replace(/\s*\([^)]+\)\s*$/, row.flag ? "" : "$&").trim() || row.institution : "";
+    name.textContent = institution || (row.name ? this.t("소속 미상") : "—");
+    if (!institution && row.name) name.title = `${row.name} · ${this.t("소속 미상")}`;
     name.style.cssText = `font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`
-      + `color:${role === "first" ? P.text : P.muted};`;
+      + `color:${institution ? (role === "first" ? P.text : P.muted) : P.faint};${institution ? "" : "font-style:italic;"}`;
     wrap.appendChild(name);
     return wrap;
   }
@@ -862,7 +865,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.textContent=state.citationPending===id?"…":"—";
         cell.style.color=P.faint;
         const attempt=state.citationAttempt?.identity===id?state.citationAttempt:null;
-        cell.title=state.citationPending===id?"인용 수 조회 중":attempt?({"not-found":"일치하는 논문의 인용 수를 찾지 못했습니다.",error:"조회 실패: 기존 값은 유지됩니다.",unsupported:"확인 가능한 논문 식별자가 부족합니다."}[attempt.status]||"")+(attempt.reason?" "+attempt.reason:""):"아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.";
+        cell.title=state.citationPending===id?"인용 수 조회 중":!this.openAlexKey()&&!attempt?this.t("OpenAlex 키가 없어 자동 조회를 쉬고 있습니다. 설정 → 인용 수·IF에 키를 넣거나, 우클릭 → 선택한 문헌 인용 수 새로고침을 실행하세요."):attempt?({"not-found":"일치하는 논문의 인용 수를 찾지 못했습니다.",error:"조회 실패: 기존 값은 유지됩니다.",unsupported:"확인 가능한 논문 식별자가 부족합니다."}[attempt.status]||"")+(attempt.reason?" "+attempt.reason:""):"아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.";
       }
       // "Not checked" and "nothing wrong" are different answers, and only one
       // of them is safe to read as reassurance.
@@ -896,9 +899,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       dot.textContent = {unread: "○", reading: "◐", done: "●"}[label];
       dot.style.cssText = `font-size:10px;line-height:1;color:${tone};`;
       const text = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-      text.textContent = label;
+      // Thirty rows saying "unread" were the column's texture; the hollow circle says it alone.
+      text.textContent = label === "unread" ? "" : this.t({unread: "안 읽음", reading: "읽는 중", done: "읽음"}[label]);
       text.style.cssText = `color:${label === "unread" ? P.muted : tone};font-weight:${label === "unread" ? 400 : 590};`;
       cell.append(dot, text);
+      if (this.isRegular(item)) {
+        cell.title = this.t({unread: "안 읽음", reading: "읽는 중", done: "읽음"}[label]) + " · " + this.t("클릭하면 다음 상태로 바꿉니다");
+        cell.style.cursor = "pointer";
+        cell.addEventListener("click", event => { event.stopPropagation(); if (!this.canEdit(item)) return; const next = {unread: "reading", reading: "done", done: "unread"}[label]; this.edit([item], {status: next}).catch(e => this.Z.logError(e)); });
+      }
     } else if (key === "rating") {
       const rating = Number(value);
       label = "★".repeat(rating) + "☆".repeat(5-rating);
@@ -1114,8 +1123,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     } else { cell.textContent = label; }
     if (!["time","progress","annotationCount"].includes(key)) cell.title = label;
     if (this.isRegular(item) && ["if","citations"].includes(key)) {
+      // The number is a door: citations to the papers around this one, IF to the journal's page.
+      cell.style.cursor = "pointer";
+      cell.addEventListener("click", () => { const win = doc.defaultView; this.windows.get(win)?.workbench?.show(key === "citations" ? "related" : "journals"); });
       const metrics = this.metrics(item);
-      cell.title = `${label} · ${metrics[key === "if" ? "impactSource" : "citationSource"] || "saved metadata"}`;
+      const source = metrics[key === "if" ? "impactSource" : "citationSource"] || this.t("저장된 메타데이터");
+      if (key === "if" && cell.title) cell.title += ` · ${source}`; else cell.title = `${label} · ${source}`;
       if (key === "citations" && metrics.citationCheckedAt) cell.title += ` · ${metrics.citationCheckedAt}`;
       if (key === "citations" && this.entry(item).citationAttempt?.status === "error") cell.title += " · 최근 조회 실패, 마지막 확인값 유지";
     }

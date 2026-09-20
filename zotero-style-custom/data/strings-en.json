@@ -1315,5 +1315,17 @@
  "색 없음": "no colour",
  " · 빈 항목은 휴지통으로": " · empty ones go to the trash",
  "책임저자": "senior author",
- " · 2년 평균 피인용 ": " · 2-year mean citations "
+ " · 2년 평균 피인용 ": " · 2-year mean citations ",
+ "선택한 {0}편 중 하나를 고르세요": "Pick one of the {0} selected papers",
+ "Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.": "Nothing is selected in the Zotero list. Pick something there first.",
+ "리더 모양·주석 색": "Reader appearance and annotation colours",
+ "아직 읽지 않은 문헌 {0}편은 아래 목록에서 뺐습니다. 읽은 순서로 보여 줍니다.": "{0} papers not read yet are left out below. The rest are in reading order.",
+ "{0}개 탭": "{0} tabs",
+ "{0}개 열 설정": "{0} columns",
+ "{0}편 · 2년 평균 피인용 {1}": "{0} papers · 2-year mean citations {1}",
+ "{0} 메뉴 표시": "Show the {0} tab",
+ "비교 항목: {0}": "Compare: {0}",
+ "저장된 메타데이터": "saved metadata",
+ "클릭하면 다음 상태로 바꿉니다": "click to move it to the next state",
+ "OpenAlex 키가 없어 자동 조회를 쉬고 있습니다. 설정 → 인용 수·IF에 키를 넣거나, 우클릭 → 선택한 문헌 인용 수 새로고침을 실행하세요.": "Without an OpenAlex key the automatic lookup is paused. Enter a key under Settings → Citations · IF, or right-click → Refresh citations for selected items."
 }

@@ -241,7 +241,7 @@
   }
   const density=button('',()=>{panel.dataset.density=panel.dataset.density==='compact'?'comfortable':'compact';syncDensity();return saveUI({density:panel.dataset.density});},headerActions,{'aria-label':'화면 밀도 전환',class:'sc-icon-button'});
   setIcon(density,'density');
-  function syncDensity(){const compact=panel.dataset.density==='compact';density.title=compact?'간격 넓게':'간격 좁게';density.setAttribute('aria-pressed',String(compact));}syncDensity();
+  function syncDensity(){const compact=panel.dataset.density==='compact';density.title=T(compact?'간격 넓게':'간격 좁게');density.setAttribute('aria-pressed',String(compact));}syncDensity();
   /* The panel floats over the window at a size the user dragged out; on a
      laptop that leaves the list in a letterbox. One press fills the window
      edge to edge, the next puts it back where it was, and the choice is
@@ -282,13 +282,13 @@
    if(save)saveUI({docked:false});
   }
   const dockButton=button('',()=>{if(tabID)undock();else if(!dock())message('이 창에서는 탭을 열 수 없습니다.',true);},headerActions,{'aria-label':'탭으로 열기 / 창으로 띄우기',class:'sc-icon-button sc-dock','aria-pressed':'false'});
-  function syncDock(){const docked=!!tabID;dockButton.setAttribute('aria-pressed',String(docked));dockButton.title=docked?'창으로 띄우기':'탭으로 열기';dockButton.replaceChildren();setIcon(dockButton,docked?'window':'tab');dockButton.hidden=!canDock();}
+  function syncDock(){const docked=!!tabID;dockButton.setAttribute('aria-pressed',String(docked));dockButton.title=T(docked?'창으로 띄우기':'탭으로 열기');dockButton.replaceChildren();setIcon(dockButton,docked?'window':'tab');dockButton.hidden=!canDock();}
   syncDock();
   const maximize=button('',()=>setMaximized(panel.dataset.maximized!=='true'),headerActions,{'aria-label':'전체 화면 전환',class:'sc-icon-button sc-maximize','aria-pressed':'false'});
   function setMaximized(on,{save=true}={}){
    panel.dataset.maximized=String(!!on);
    maximize.setAttribute('aria-pressed',String(!!on));
-   maximize.title=on?'원래 크기로':'전체 화면';
+   maximize.title=T(on?'원래 크기로':'전체 화면');
    maximize.replaceChildren();setIcon(maximize,on?'restore':'maximize');
    return save?saveUI({maximized:!!on}):undefined;
   }
@@ -303,7 +303,7 @@
   scope.addEventListener('change',()=>{state.scope=scope.value;state.annotationIDs.clear();run(load);});
   const type=node('select',null,null,{'aria-label':'문헌 유형 필터'});node('option','모든 유형',type,{value:''});
   type.addEventListener('change',()=>{state.type=type.value;render();});
-  button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},controls);
+  button('현재 선택 가져오기',()=>{const picked=runtime.selected(win);if(!picked.length){message('Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.',true);return;}state.selected=new Set(picked.map(i=>String(i.id)));render();},controls);
   button('새로고침',load,controls);
   const filterPanel=node('details',null,panel,{class:'sc-filters'}),filterSummary=node('summary','상세 필터',filterPanel);
   const filters=node('div',null,filterPanel,{class:'sc-filter-fields','aria-label':'문헌 상세 필터'});filters.appendChild(type);
@@ -324,7 +324,7 @@
    const kinds=[...counts].sort((a,b)=>(order.indexOf(a[0])+1||99)-(order.indexOf(b[0])+1||99)||b[1]-a[1]);
    const chip=(label,value,count,title)=>{const b=node('button',null,kindChips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(state.type===value),title});b.textContent=`${T(label)} ${count}`;b.dataset.kind=value;b.addEventListener('click',()=>{state.type=state.type===value?'':value;type.value=state.type;render();});return b;};
    chip('전체','',state.items.length,'모든 종류');
-   for(const [kind,count] of kinds)chip(kindLabel(kind),kind,count,`${kindLabel(kind)}만 보기`);
+   for(const [kind,count] of kinds)chip(kindLabel(kind),kind,count,`${T(kindLabel(kind))}만 보기`);
   }
   const filterInputs=new Map();
   function selectFilter(key,label,choices){const input=node('select',null,filters,{'aria-label':label});for(const[value,title]of choices)node('option',title,input,{value});input.value=state[key];input.addEventListener('change',()=>{state[key]=input.value;render();});filterInputs.set(key,input);}
@@ -358,7 +358,7 @@
   const commandResults=node('div',null,commands,{id:'sc-command-results',class:'sc-command-results',role:'listbox','aria-label':'검색된 기능'});
   node('p','↑↓ 이동 · Enter 열기 · Esc 닫기',commands,{class:'sc-muted'});
   function drawCommands(){
-   const query=commandSearch.value.trim().toLocaleLowerCase();commandMatches=TABS.filter(([id,label])=>!hiddenTabs().has(id)&&(!query||(label+' '+id).toLocaleLowerCase().includes(query)));
+   const query=commandSearch.value.trim().toLocaleLowerCase();commandMatches=TABS.filter(([id,label])=>!hiddenTabs().has(id)&&(!query||(label+' '+T(label)+' '+id).toLocaleLowerCase().includes(query)));
    commandIndex=Math.max(0,Math.min(commandIndex,commandMatches.length-1));commandResults.replaceChildren();
    if(!commandMatches.length){node('p','일치하는 기능이 없습니다.',commandResults);commandSearch.removeAttribute('aria-activedescendant');return;}
    commandMatches.forEach(([id,label],index)=>{const option=button(label,()=>{closeCommands(false);return navigate(id,{focus:true});},commandResults,{class:'sc-command-option',id:'sc-command-'+id,role:'option','aria-selected':String(index===commandIndex),tabindex:-1});});
@@ -425,7 +425,7 @@
    if(applicable&&state.scope==='selected'){if(!back){back=button('전체 목록으로',()=>{state.scope='library';scope.value='library';render();},null,{class:'sc-scope-back'});context.insertBefore(back,contextDetail.nextSibling);}}
    else back?.remove();
    {const scopeName=T(({library:'라이브러리',selected:'선택한 문헌',collection:'현재 컬렉션','collection-recursive':'현재·하위 컬렉션'})[state.scope]||'라이브러리'),inside=['notes','annotations','attachments'].includes(state.tab),n=(inside?model.filter(scoped(),parentOptions()):rows()).length;
-   contextDetail.textContent=nativeJCR?'Clarivate Journal Citation Reports':applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`):T(`선택한 문헌 ${state.selected.size}개`);}
+   contextDetail.textContent=nativeJCR?'Clarivate Journal Citation Reports':applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`):state.selected.size?T(`선택한 문헌 ${state.selected.size}개`):'';}
    filterChips.replaceChildren();const labels={query:'검색',type:'유형',tag:'태그',status:'상태',ratingMin:'최소 별점',yearFrom:'시작 연도',yearTo:'마지막 연도'};
    for(const[key,label]of Object.entries(labels))if(state[key]){const value=key==='status'?({unread:'안 읽음',reading:'읽는 중',done:'완료'})[state[key]]:state[key];button(`${label}: ${value} ×`,()=>{state[key]='';if(key==='query')search.value='';else if(key==='type')type.value='';else if(filterInputs.has(key))filterInputs.get(key).value='';return render();},filterChips,{'aria-label':label+' 필터 해제'});}
    const count=Object.keys(labels).filter(key=>state[key]).length;filterSummary.textContent=T('상세 필터')+(count?' · '+T(`${count}개 적용`):'');filterChips.hidden=!applicable||!count;
@@ -475,10 +475,16 @@
    message('');await render();
   }
   async function toggle(show){const wasHidden=panel.hidden,open=show===undefined?wasHidden:!!show;
+   // Read the pane's selection before docking moves the window to another tab.
+   const fromPane=open?runtime.selected(win).map(i=>String(i.id)):[];
    if(open&&wasHidden){syncDock();if(!tabID&&runtime.cache.workbenchUI?.docked===true&&canDock())dock({save:false});}
    if(tabID&&open){try{win.Zotero_Tabs.select(tabID);}catch(error){runtime.Z.logError?.(error);}}
    if(tabID&&!open){const id=tabID;tabID=null;closingSelf=true;moveBack();try{win.Zotero_Tabs.close(id);}catch(error){runtime.Z.logError?.(error);}closingSelf=false;}
-   if(open&&wasHidden)returnFocus=doc.activeElement;panel.hidden=!open;if(open){state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));await load();
+   if(open&&wasHidden)returnFocus=doc.activeElement;panel.hidden=!open;if(open){
+    /* A paper ticked in the panel used to be thrown away the moment a tab was
+       reached through the menu or ⌘K, because the pane's (empty) selection
+       replaced it. The pane wins only when it has something to say. */
+    if(fromPane.length||wasHidden)state.selected=new Set(fromPane);await load();
     if(!disposed&&!runtime.cache.workbenchUI?.welcomed&&!welcome.childNodes.length){
      // One line, once, on the first open: where the features are and how a paper gets in.
      node('span','처음 여셨네요. 왼쪽 탭이 기능이고, ⌘/Ctrl K로 기능을 찾습니다. 문헌은 목록에서 고른 뒤 「현재 선택 가져오기」로 넘기고, 열 경계를 두 번 클릭하면 너비가 내용에 맞춰집니다.',welcome);
@@ -708,9 +714,9 @@
     g.appendChild(label);
     const title=doc.createElementNS(SVG,'title');
     title.textContent=`${plain(n.label)}\n`+[n.venue,n.year,
-     n.kind==='external'?'내 라이브러리에 없음':null,
-     `인용 ${n.citations}`,n.references?`참고문헌 ${n.references}`:null,`연결 ${n.degree}`,
-     n.rank!=null?`중심성 ${(n.rank*100).toFixed(0)}%`:null].filter(Boolean).join(' · ');
+     n.kind==='external'?T('내 라이브러리에 없음'):null,
+     T(`인용 ${n.citations}`),n.references?T(`참고문헌 ${n.references}`):null,T(`연결 ${n.degree}`),
+     n.rank!=null?T(`중심성 ${(n.rank*100).toFixed(0)}%`):null].filter(Boolean).join(' · ');
     g.appendChild(title);
     // Selecting a node marks it in place: a redraw would reset the zoom and the hover.
     const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);for(const [key,m] of marks)m.circle.setAttribute('stroke-width',key===n.id?2.4:1);};
@@ -837,7 +843,7 @@
     label.textContent=n.labelText;
     if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('opacity','0');
     g.appendChild(label);
-    const title=doc.createElementNS(SVG,'title');title.textContent=`${n.label}\n연결 ${n.degree}`;g.appendChild(title);
+    const title=doc.createElementNS(SVG,'title');title.textContent=`${n.label}\n`+T(`연결 ${n.degree}`);g.appendChild(title);
     const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);for(const other of group.querySelectorAll('circle[data-picked]')){other.removeAttribute('data-picked');other.setAttribute('fill','var(--sc-fill)');other.setAttribute('stroke','var(--sc-muted)');}circle.setAttribute('data-picked','1');circle.setAttribute('fill','var(--sc-accent)');circle.setAttribute('stroke','var(--sc-accent)');};
     g.addEventListener('click',activate);
     g.addEventListener('dblclick',()=>run(()=>library.openItem(n.id)));
@@ -961,7 +967,12 @@
     if(!byDocument.has(key))byDocument.set(key,[]);
     byDocument.get(key).push(a);
    }
-   const titles=new Map((await library.attachments(ids())).map(a=>[a.id,a.title]));
+   const attachmentRows=await library.attachments(ids());
+   const titles=new Map(attachmentRows.map(a=>[a.id,a.title])),parents=new Map(attachmentRows.map(a=>[a.id,a.parentID]));
+   // Three groups all called "Full text PDF" say nothing; the paper's title does.
+   const paperOf=id=>{const parent=parents.get(id);return parent?state.items.find(i=>String(i.id)===String(parent))?.title:null;};
+   const siblings=new Map();for(const id of byDocument.keys()){const key=parents.get(id)||id;siblings.set(key,(siblings.get(key)||0)+1);}
+   const groupName=id=>{const paper=paperOf(id),file=titles.get(id)||T('첨부파일');if(!paper)return file;return (siblings.get(parents.get(id))||0)>1?`${paper} · ${file}`:paper;};
    if(token!==epoch||disposed)return;
 
    let budget=state.annotationBudget||setting('annotationPageSize',150);
@@ -972,7 +983,7 @@
     budget-=group.length;
     if(byDocument.size>1){
      const head=node('h3',null,body,{class:'sc-annot-group'});
-     node('span',titles.get(attachmentID)||T('첨부파일'),head,{class:'sc-annot-group-name'});
+     node('span',groupName(attachmentID),head,{class:'sc-annot-group-name'});
      node('span',`${group.length}`,head,{class:'sc-annot-group-count'});
     }
     const stack=node('div',null,body,{class:'sc-annots'});
@@ -1096,7 +1107,10 @@
    bindMemo(field,value=>library.setRemark(item.id,value),item.title||'문헌');
   }
 
-  const pickOne=()=>{const acts=bar();button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});button('보유 문헌에서 고르기',()=>navigate('explore'),acts);};
+  const pickOne=()=>{
+   const chosen=selected();
+   if(chosen.length>1){node('p',`선택한 ${chosen.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});const pickBar=bar();for(const it of chosen.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar);}
+   const acts=bar();button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});button('보유 문헌에서 고르기',()=>navigate('explore'),acts);};
   async function drawBacklinks(token){let item;try{item=one();}catch(_){empty('역링크를 확인할 문헌 하나를 선택하세요.');pickOne();return;}node('h2',item.title,body);const links=await library.backlinks(item.id);if(token!==epoch||disposed)return;for(const link of links){const c=card(link.title,link.kind==='note'?'이 문헌을 참조한 노트':'관련 문헌');button('열기',()=>library.openItem(link.id),c,{'data-opens':'window'});}if(!links.length)empty('이 문헌을 가리키는 노트나 관련 문헌이 없습니다.');}
   // What the scan found across the whole library, with somewhere to go. The
   // classifier can name 29 supplementary files, 17 duplicates and 6 papers
@@ -1205,11 +1219,13 @@
    if(disposed||panel.hidden||state.tab!=='reading')return;
    let drewStrip=false;
    const list=body.querySelector('[data-reading-progress]');if(!list)return;list.replaceChildren();
-   for(const item of rows()){
-    const ref=runtime.Z.Items.get(Number(item.id));if(!ref)continue;
-    const p=runtime.pageProgress(ref),entry=runtime.entry(ref);
+   const ranked=rows().map(item=>{const ref=runtime.Z.Items.get(Number(item.id));if(!ref)return null;const entry=runtime.entry(ref),p=runtime.pageProgress(ref);return {item,ref,entry,p,seconds:Number(entry.seconds)||0};}).filter(Boolean);
+   const unread=ranked.filter(r=>!r.seconds&&!r.p.total).length;
+   if(unread&&unread<ranked.length)node('p',`아직 읽지 않은 문헌 ${unread}편은 아래 목록에서 뺐습니다. 읽은 순서로 보여 줍니다.`,list,{class:'sc-muted'});
+   for(const {item,ref,p,entry} of ranked.filter(r=>r.seconds||r.p.total).sort((a,b)=>b.seconds-a.seconds)){
     const time=runtime.formatReadTime?runtime.formatReadTime(entry.seconds):Math.floor(entry.seconds||0)+'초';
     const c=card(item.title,p.total?`읽은 시간 ${time} · 전체 ${p.total}쪽 중 ${p.visited}쪽`:`읽은 시간 ${time} · 아직 페이지 기록 없음`,list);
+    button('열기',()=>library.openItem(item.id),c,{'data-opens':'window'});
     const rangeSize=100,total=Math.max(0,Number(p.total)||0);let start=pageRanges.get(item.id)||0;
     if(start>=total)start=0;pageRanges.set(item.id,start);
     if(total>rangeSize){const range=node('select',null,c,{'aria-label':item.title+' 페이지 범위'});
@@ -1235,7 +1251,7 @@
    if(!drewStrip&&!list.childNodes.length)node('p','읽은 시간과 페이지는 PDF를 열어 읽는 동안 자동으로 기록됩니다. 아직 기록이 없습니다.',list,{class:'sc-empty'});
    if(drewStrip){const legend=node('div',null,list,{class:'sc-page-legend','aria-hidden':'true'});node('span','적게',legend);for(const level of [0,1,2,3,4])node('span','',legend,{class:'sc-page-cell sc-page-key','data-level':String(level)});node('span','많이',legend);}
   }
-  function drawReading(){const b=bar();for(const theme of ['light','dark','sepia'])button(({light:'밝은 PDF',dark:'어두운 PDF',sepia:'세피아 PDF'})[theme],()=>reader.applyTheme(win,theme),b);
+  function drawReading(){const progress=node('div',null,body,{'data-reading-progress':'true'});const b=bar();for(const theme of ['light','dark','sepia'])button(({light:'밝은 PDF',dark:'어두운 PDF',sepia:'세피아 PDF'})[theme],()=>reader.applyTheme(win,theme),b);
    button('리더 모양 원래대로',async()=>{await reader.resetAppearance(win);render();},b);
    const margin=reader.marginOptions(),marginBar=bar();
    const width=node('input',null,marginBar,{type:'number',min:160,max:480,'aria-label':'여백 주석 너비'});width.value=String(margin.width);
@@ -1262,7 +1278,12 @@
     const entries=paletteText.value.split(/\r?\n/).filter(line=>line.trim()).map(line=>{const comma=line.indexOf(',');if(comma<0)throw new Error('색상과 이름을 쉼표로 구분하세요.');return {color:line.slice(0,comma).trim(),label:line.slice(comma+1).trim()};});
     const saved=await reader.saveAnnotationPalette(paletteName.value,entries);state.paletteID=saved.id;render();
    },body);
-   node('div',null,body,{'data-reading-progress':'true'});refreshReading();
+   /* The reading data is what the tab is for; the reader's appearance and
+      annotation colours sat above it and pushed it below the fold. */
+   const look=node('details',null,body,{class:'sc-filters sc-reader-look'});node('summary','리더 모양·주석 색',look);
+   for(const el of [...body.children])if(el!==progress&&el!==look)look.appendChild(el);
+   look.open=!!runtime.cache.workbenchUI?.readerLook;look.addEventListener('toggle',()=>saveUI({readerLook:look.open}));
+   refreshReading();
   }
   function drawTabs(){
    const b=bar();check('세로 탭 목록 표시',!!runtime.cache.readerSettings?.verticalTabs,on=>run(()=>reader.setVerticalTabs(win,on)),b);
@@ -1278,7 +1299,7 @@
    }
    node('h2','저장된 탭 그룹',body);
    for(const group of reader.tabGroups()){
-    const c=card(group.name,group.tabs.length+'개 탭'),title=node('input',null,c,{'aria-label':'저장된 탭 그룹 이름'});title.value=group.name;title.dataset.draftKey=JSON.stringify(['tab-group-name',group.id]);
+    const c=card(group.name,`${group.tabs.length}개 탭`),title=node('input',null,c,{'aria-label':'저장된 탭 그룹 이름'});title.value=group.name;title.dataset.draftKey=JSON.stringify(['tab-group-name',group.id]);
     button('복원',async()=>{const result=await reader.restoreTabGroup(win,group.id);await render();message(`복원 ${result.opened} · 찾지 못함 ${result.missing}`);},c);
     button('탭 그룹 이름 변경',async()=>{const submitted=title.value;await reader.renameTabGroup(group.id,submitted);finishDraft(title,submitted);render();},c);
     button('현재 탭으로 그룹 갱신',async()=>{await reader.updateTabGroup(win,group.id);render();},c);
@@ -1288,7 +1309,7 @@
   function drawViews(){
    const b=bar(),name=node('input',null,b,{placeholder:'현재 열 배치 이름','aria-label':'뷰 그룹 이름'});button('현재 뷰 저장',async()=>{await reader.saveView(win,name.value);render();},b);
    for(const view of reader.viewGroups()){
-    const c=card(view.name,view.columns.length+'개 열 설정'),title=node('input',null,c,{'aria-label':'저장된 뷰 그룹 이름'});title.value=view.name;title.dataset.draftKey=JSON.stringify(['view-group-name',view.id]);
+    const c=card(view.name,`${view.columns.length}개 열 설정`),title=node('input',null,c,{'aria-label':'저장된 뷰 그룹 이름'});title.value=view.name;title.dataset.draftKey=JSON.stringify(['view-group-name',view.id]);
     button('적용',()=>reader.applyView(win,view.id),c);
     button('뷰 그룹 이름 변경',async()=>{const submitted=title.value;await reader.renameView(view.id,submitted);finishDraft(title,submitted);render();},c);
     button('현재 열 배치로 뷰 갱신',async()=>{await reader.updateView(win,view.id);render();},c);
@@ -1310,7 +1331,7 @@
     const title=node('input',null,editor,{'aria-label':'카드 제목'});title.value=n.label;title.dataset.draftKey=JSON.stringify(['board-label',board.id,n.id]);
     const color=node('input',null,editor,{type:'color','aria-label':'카드 색상'});color.value=n.color;color.dataset.draftKey=JSON.stringify(['board-color',board.id,n.id]);
     button('카드 모양 저장',async()=>{const label=title.value,hex=color.value;model.updateCard(board,n.id,{label,color:hex});runtime.dirty=true;await runtime.flush();finishDraft(title,label);finishDraft(color,hex);render();},editor);
-    const handle=c.querySelector('h3');handle.setAttribute('tabindex','0');handle.title='드래그하거나 방향키로 이동';handle.addEventListener('keydown',e=>{const move={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[e.key];if(move){e.preventDefault();model.moveCard(board,n.id,n.x+move[0],n.y+move[1]);run(save);}});
+    const handle=c.querySelector('h3');handle.setAttribute('tabindex','0');handle.title=T('드래그하거나 방향키로 이동');handle.addEventListener('keydown',e=>{const move={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[e.key];if(move){e.preventDefault();model.moveCard(board,n.id,n.x+move[0],n.y+move[1]);run(save);}});
     handle.addEventListener('pointerdown',e=>{const start={x:e.clientX,y:e.clientY,left:n.x,top:n.y};handle.setPointerCapture?.(e.pointerId);const move=ev=>{model.moveCard(board,n.id,start.left+ev.clientX-start.x,start.top+ev.clientY-start.y);c.style.left=n.x+'px';c.style.top=n.y+'px';};const up=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);run(save);};handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});});
    }
   }
@@ -1322,7 +1343,8 @@
    if(!fields.length)fields.push(...defaults);
    const b=bar();button('행·열 전환',()=>{state.transpose=!state.transpose;render();},b);
    const options=node('details',null,body);node('summary','비교 항목 선택',options);
-   for(const[key,label]of available)check('비교 항목: '+label,fields.includes(key),on=>run(async()=>{
+   const fieldNames=Object.fromEntries(available);
+   for(const[key,label]of available)check('비교 항목: '+T(label),fields.includes(key),on=>run(async()=>{
     const latest=Array.isArray(runtime.cache.matrixFields)?[...new Set(runtime.cache.matrixFields.filter(field=>available.some(([id])=>id===field)))]:fields;
     const next=on?[...new Set([...latest,key])]:latest.filter(field=>field!==key);
     if(!next.length){render();throw new Error('비교하려면 최소 한 편은 남아 있어야 합니다.');}
@@ -1333,7 +1355,7 @@
     return {...item,tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||''};
    });
    const data=model.matrix(values,fields,state.transpose);
-   button('CSV 복사',()=>copy(model.csv(data)),b);
+   button('CSV 복사',()=>copy(model.csv(data.map((row,i)=>row.map((value,j)=>(state.transpose?j===0:i===0)?T(fieldNames[value]||String(value)):value)))),b);
    const pageSize=setting('matrixPageSize',50),total=Math.ceil(values.length/pageSize),key=JSON.stringify(values.map(i=>i.id));
    if(state.matrixPageKey!==key){state.matrixPageKey=key;state.matrixPage=0;}
    state.matrixPage=Math.max(0,Math.min(state.matrixPage||0,Math.max(0,total-1)));
@@ -1343,7 +1365,7 @@
    const shown=model.matrix(values.slice(state.matrixPage*pageSize,(state.matrixPage+1)*pageSize),fields,state.transpose);
    const scroll=node('div',null,body,{class:'sc-matrix-scroll'});
    const table=node('table',null,scroll,{class:'sc-matrix'});
-   shown.forEach((row,i)=>{const tr=node('tr',null,table);row.forEach((value,j)=>{const heading=state.transpose?j===0:i===0;const cell=node(heading?'th':'td',String(value),tr);if(heading)cell.setAttribute('scope',state.transpose?'row':'col');const field=state.transpose?fields[i]:fields[j];if(!heading&&field)cell.dataset.field=field;});});
+   shown.forEach((row,i)=>{const tr=node('tr',null,table);row.forEach((value,j)=>{const heading=state.transpose?j===0:i===0;const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):String(value),tr);if(heading)cell.setAttribute('scope',state.transpose?'row':'col');const field=state.transpose?fields[i]:fields[j];if(!heading&&field)cell.dataset.field=field;});});
    drawCompareInsight(values);
   }
   /* The papers in the table, read together by the model: what each claims,
@@ -1506,6 +1528,8 @@
     const steps=node('ul',null,guide,{class:'sc-guide-list'});
     for(const [key,label] of Object.entries(GROUP_LABELS)){const li=node('li',null,steps);node('strong',label,li);node('span',' — '+T(GROUP_NOTES[key]),li);}
     node('p','보유하지 않은 논문은 행의 버튼으로 ZotPoP에서 바로 찾거나 가져올 수 있습니다.',guide,{class:'sc-muted'});
+    const chosen=selected();
+    if(chosen.length>1){node('p',`선택한 ${chosen.length}편 중 하나를 고르세요`,guide,{class:'sc-muted'});const pickBar=bar(guide);for(const it of chosen.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar);}
     const acts=bar(guide);
     button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});
     button('보유 문헌에서 고르기',()=>navigate('explore'),acts);
@@ -1954,7 +1978,7 @@
     hIndex:profile?.hIndex??null,works:profile?.works??null,citedness:profile?.citedness??null,isOA:!!profile?.isOA,inDoaj:!!profile?.inDoaj,apc:profile?.apc??null,
     country:profile?.country||'',homepage:profile?.homepage||'',openAlexID:profile?.openAlexID||'',
     papers:items.length,read,avgCited:cited.length?Math.round(cited.reduce((a,b)=>a+b,0)/cited.length):0,
-    span:years.length?[Math.min(...years),Math.max(...years)]:null,source:registryImpact?'저장된 JIF 자료':first.impactSource||''};
+    span:years.length?[Math.min(...years),Math.max(...years)]:null,source:registryImpact?T('저장된 JIF 자료'):first.impactSource||''};
   }
   /* A journal the library does not hold, straight from the registry: the
      figure, quartile, abbreviation, publisher and ISSNs are all there; only
@@ -1966,7 +1990,7 @@
     globalRank:row.rank,publisher:row.publisher||'',issns:(row.issns||[]).map(x=>String(x).length===8?String(x).slice(0,4)+'-'+String(x).slice(4):String(x)),fields:levels.map(l=>journalPathLabel(l)),topics:[],levels,
     fieldRanks:runtime.journalIdentity?.registryFieldRanks?.(row.title)||[],
     hIndex:null,works:null,citedness:null,isOA:false,inDoaj:false,apc:null,country:'',homepage:'',openAlexID:'',
-    papers:(items||[]).length,read:(items||[]).filter(i=>i.status==='done').length,avgCited:0,span:null,source:'저장된 JIF 자료',registryOnly:true};
+    papers:(items||[]).length,read:(items||[]).filter(i=>i.status==='done').length,avgCited:0,span:null,source:T('저장된 JIF 자료'),registryOnly:true};
   }
   function drawJournals(){
    const switchBrowser=async mode=>{state.journalBrowser=mode;await saveUI({journalBrowser:mode});if(!disposed&&state.tab==='journals')await render();};
@@ -2152,7 +2176,7 @@
     // Grouped by the level beneath the one chosen: fields by default, subfields once a field is picked.
     const groupLevel=pick.field?'subfield':pick.domain?'field':'field';
     for(const j of shown){const path=j.levels.find(x=>journalPathMatches(x,pick));const index=groupLevel==='field'?1:2;
-     const key=path?journalPathKey(path,index):'\u0000none';const group=groups.get(key)||{label:path?journalPathLabel(path,index):'분야 미확인',list:[]};group.list.push(j);groups.set(key,group);}
+     const key=path?journalPathKey(path,index):'\u0000none';const group=groups.get(key)||{label:path?journalPathLabel(path,index):T('분야 미확인'),list:[]};group.list.push(j);groups.set(key,group);}
     const sections=[...groups.values()].sort((a,b)=>b.list.length-a.list.length||a.label.localeCompare(b.label));
     for(const {label:field,list} of sections){
      const gr=node('tr',null,tbody,{class:'sc-journal-group'});node('th',`${field} · ${list.length}종`,gr,{colspan:'9',scope:'colgroup',class:'sc-hit-group'});
@@ -2244,7 +2268,7 @@
    fact('issn','ISSN',j.issns.length?j.issns.join(' · '):null);
    if(j.fields.length){const span=doc.createElementNS(HTML,'span');j.fields.forEach(f=>{node('span',f,span,{class:'sc-chip sc-chip-tiny'});});fact('field','OpenAlex 분야',span,{title:'표와 필터에 사용하는 동일한 OpenAlex 분류 경로'});}
    fact('hindex','h-index',j.hIndex!=null?String(j.hIndex):null,{title:'OpenAlex 기준 저널 h-index'});
-   fact('works','발행·피인용',j.works!=null?`${compact(j.works)}편${j.citedness!=null?' · 2년 평균 피인용 '+j.citedness:''}`:null,{title:'OpenAlex 기준 누적 논문 수와 2년 평균 피인용 (공식 JIF 아님)'});
+   fact('works','발행·피인용',j.works!=null?(j.citedness!=null?T(`${compact(j.works)}편 · 2년 평균 피인용 ${j.citedness}`):T(`${compact(j.works)}편`)):null,{title:'OpenAlex 기준 누적 논문 수와 2년 평균 피인용 (공식 JIF 아님)'});
    const access=!j.profile?null:[T(j.isOA?'전면 OA':'구독형'),j.inDoaj?T('DOAJ 등재'):'',j.apc!=null?T(j.isOA?'APC ${0}':'OA 선택 시 APC ${0}').replace('{0}',j.apc.toLocaleString()):''].filter(Boolean).join(' · ');
    fact('access','오픈액세스',access,{tone:j.isOA?'low':''});
    fact('country','국가',j.country?`${COUNTRY_NAMES[j.country]||j.country}`:null);
@@ -2277,7 +2301,7 @@
   }
   function drawAppearance(){
    const menus=bar();menus.hidden=!enabled('menuVisibility');node('strong','작업 메뉴 표시',menus);
-   for(const [id,label]of TABS)if(id!=='appearance')check(label+' 메뉴 표시',!hiddenTabs().has(id),on=>run(async()=>{const hidden=hiddenTabs();on?hidden.delete(id):hidden.add(id);runtime.cache.hiddenWorkbenchTabs=[...hidden];runtime.dirty=true;await runtime.flush();render();}),menus);
+   for(const [id,label]of TABS)if(id!=='appearance')check(T(label)+' 메뉴 표시',!hiddenTabs().has(id),on=>run(async()=>{const hidden=hiddenTabs();on?hidden.delete(id):hidden.add(id);runtime.cache.hiddenWorkbenchTabs=[...hidden];runtime.dirty=true;await runtime.flush();render();}),menus);
    button('메뉴 기본값 복원',async()=>{runtime.cache.hiddenWorkbenchTabs=[];runtime.dirty=true;await runtime.flush();render();},menus);
    button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),body);check('문서 탭 활동 시 수정일 갱신',runtime.pref('touchDateOnRead',false),on=>runtime.Z.Prefs.set('extensions.style-custom.touchDateOnRead',on,true),body);
    node('p','Custom 패널과 추가 열의 표시를 조절합니다. PDF 색상은 읽기 진행에서 설정하세요.',body);const form=bar();const accent=node('input',null,form,{type:'color','aria-label':'강조 색상'});accent.value=runtime.pref('accentColor','#374151');const size=node('input',null,form,{type:'number',min:'11',max:'20','aria-label':'패널 글꼴 크기'});size.value=runtime.pref('panelFontSize',13);button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);},form);

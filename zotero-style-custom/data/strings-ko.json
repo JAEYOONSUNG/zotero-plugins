@@ -8,10 +8,33 @@
    ]
   },
   {
+   "ko": "안 읽음",
+   "n": 7,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "저널 수",
    "n": 6,
    "files": [
     "src/jcr-browser.js"
+   ]
+  },
+  {
+   "ko": "읽는 중",
+   "n": 6,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "열기",
+   "n": 6,
+   "files": [
+    "src/workbench.js"
    ]
   },
   {
@@ -39,21 +62,6 @@
    ]
   },
   {
-   "ko": "안 읽음",
-   "n": 5,
-   "files": [
-    "src/runtime.js",
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "열기",
-   "n": 5,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "카테고리 수",
    "n": 4,
    "files": [
@@ -69,18 +77,17 @@
    ]
   },
   {
-   "ko": "문헌을 먼저 선택하세요.",
+   "ko": "소속 미상",
    "n": 4,
    "files": [
     "src/runtime.js"
    ]
   },
   {
-   "ko": "읽는 중",
+   "ko": "문헌을 먼저 선택하세요.",
    "n": 4,
    "files": [
-    "src/runtime.js",
-    "src/workbench.js"
+    "src/runtime.js"
    ]
   },
   {
@@ -146,6 +153,13 @@
   },
   {
    "ko": "아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기",
+   "n": 3,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "읽음",
    "n": 3,
    "files": [
     "src/runtime.js"
@@ -447,13 +461,6 @@
    "files": [
     "src/paper-signals.js",
     "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "소속 미상",
-   "n": 2,
-   "files": [
-    "src/runtime.js"
    ]
   },
   {
@@ -1005,6 +1012,13 @@
    ]
   },
   {
+   "ko": "연결 {0}",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "확대",
    "n": 2,
    "files": [
@@ -1117,6 +1131,13 @@
    ]
   },
   {
+   "ko": "{0}편",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "오픈액세스",
    "n": 2,
    "files": [
@@ -1139,13 +1160,6 @@
   },
   {
    "ko": "특허 {0}",
-   "n": 2,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "{0}편{1}",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -1999,6 +2013,13 @@
    ]
   },
   {
+   "ko": "OpenAlex 키가 없어 자동 조회를 쉬고 있습니다. 설정 → 인용 수·IF에 키를 넣거나, 우클릭 → 선택한 문헌 인용 수 새로고침을 실행하세요.",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
    "ko": "일치하는 논문의 인용 수를 찾지 못했습니다.",
    "n": 1,
    "files": [
@@ -2035,6 +2056,13 @@
   },
   {
    "ko": "DOI가 없어 철회 여부를 확인할 수 없습니다.",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "클릭하면 다음 상태로 바꿉니다",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -2182,6 +2210,13 @@
   },
   {
    "ko": "피인용 수 · 길이는 로그 눈금",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "저장된 메타데이터",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -2476,13 +2511,6 @@
   },
   {
    "ko": "파일 이름으로 판별",
-   "n": 1,
-   "files": [
-    "src/runtime.js"
-   ]
-  },
-  {
-   "ko": "읽음",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -5212,6 +5240,13 @@
    ]
   },
   {
+   "ko": "Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "문헌 상세 필터",
    "n": 1,
    "files": [
@@ -5961,13 +5996,6 @@
    ]
   },
   {
-   "ko": "연결 {0}",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "중심성 {0}%",
    "n": 1,
    "files": [
@@ -6039,13 +6067,6 @@
   },
   {
    "ko": "문헌 관계 그래프",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "{0}\n연결 {1}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6451,6 +6472,13 @@
    ]
   },
   {
+   "ko": "선택한 {0}편 중 하나를 고르세요",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "역링크를 확인할 문헌 하나를 선택하세요.",
    "n": 1,
    "files": [
@@ -6655,6 +6683,13 @@
   },
   {
    "ko": "첨부파일이 없습니다. PDF 또는 스냅샷을 첨부하세요.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "아직 읽지 않은 문헌 {0}편은 아래 목록에서 뺐습니다. 읽은 순서로 보여 줍니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6871,6 +6906,13 @@
    ]
   },
   {
+   "ko": "리더 모양·주석 색",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "열린 탭 저장",
    "n": 1,
    "files": [
@@ -6927,7 +6969,7 @@
    ]
   },
   {
-   "ko": "개 탭",
+   "ko": "{0}개 탭",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6997,7 +7039,7 @@
    ]
   },
   {
-   "ko": "개 열 설정",
+   "ko": "{0}개 열 설정",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7515,13 +7557,6 @@
    ]
   },
   {
-   "ko": "{0}편",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "비어 있음",
    "n": 1,
    "files": [
@@ -7838,6 +7873,13 @@
   },
   {
    "ko": "함께 낸 저자 {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}편{1}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8845,7 +8887,7 @@
    ]
   },
   {
-   "ko": " · 2년 평균 피인용 ",
+   "ko": "{0}편 · 2년 평균 피인용 {1}",
    "n": 1,
    "files": [
     "src/workbench.js"

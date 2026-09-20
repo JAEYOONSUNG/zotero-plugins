@@ -1626,3 +1626,49 @@ test('a note in the list can be sent to the trash, and only the trash', async ()
  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/휴지통으로 옮겼습니다/);
  f.bench.destroy();
 });
+
+test('a paper chosen in the panel survives reaching a tab through the menu while the pane has nothing selected', async () => {
+ /* show(tab) reopened the panel and let the pane's (empty) selection replace
+    the one ticked in the panel, so Related and Authors said "0 selected". */
+ const f = fixture();
+ await f.bench.show('explore');
+ f.bench.state.selected = new Set(['2']);
+ f.setSelection([]);
+ await f.bench.show('related');
+ assert.deepEqual([...f.bench.state.selected], ['2'], 'the panel keeps what it had');
+ f.setSelection([1]);
+ await f.bench.show('authors');
+ assert.deepEqual([...f.bench.state.selected], ['1'], 'the pane wins when it has something to say');
+ f.bench.destroy();
+});
+
+test('with several papers selected, a one-paper tab offers them to pick from instead of a dead end', async () => {
+ const f = fixture();
+ f.setSelection([1, 2]);
+ await f.bench.show('related');
+ assert.match(f.body().textContent, /선택한 2편 중 하나를 고르세요/);
+ await f.click('Paper Beta');
+ assert.deepEqual([...f.bench.state.selected], ['2']);
+ f.bench.destroy();
+});
+
+test('the reading tab leads with the reading and folds the reader appearance away', async () => {
+ const f = fixture();
+ await f.bench.show('reading');
+ const first = f.body().firstElementChild;
+ assert.ok(first && first.hasAttribute('data-reading-progress'), 'the reading data comes first');
+ const look = f.body().querySelector('details.sc-reader-look');
+ assert.ok(look, 'the appearance controls sit in a fold');
+ assert.ok(look.querySelector('button'), 'and the theme buttons are inside it');
+ f.bench.destroy();
+});
+
+test('a comparison table shows field names in its headings and its CSV', async () => {
+ const f = fixture();
+ f.setSelection([1, 2]);
+ await f.bench.show('matrix');
+ const heads = [...f.body().querySelectorAll('.sc-matrix th')].map(th => th.textContent);
+ assert.ok(heads.length > 1, 'there are headings');
+ assert.ok(!heads.some(h => /^(title|impactFactor|authors)$/.test(h)), 'no raw field keys: ' + heads.join(','));
+ f.bench.destroy();
+});
