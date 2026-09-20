@@ -7,9 +7,11 @@ Two plugins for Zotero 7, 8 and 9, kept in one repository and installed separate
 | **ZotPoP** | Publish or Perish-style search and import. Find papers by author, journal, title, keywords and years across several indexes, read citation counts and h-index-style metrics while you choose, and add the papers to your library. | [zotpop-0.38.0.xpi](https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/zotpop-v0.38.0/zotpop-0.38.0.xpi) |
 | **Style Custom** | A research workbench inside Zotero: your library, related papers, author tracking, JCR journal metrics, annotations and notes, a citation graph and reading progress in one panel, plus impact factor, citation, reading-time and journal-mark columns in the item list. | [style-custom-0.51.3.xpi](https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/style-custom-v0.51.3/style-custom-0.51.3.xpi) |
 
-![The two buttons in the items toolbar: the ZotPoP magnifier and the Style Custom panel](docs/images/toolbar-icons.png)
+![The Zotero item list with Style Custom's columns: impact factor, citation count with a bar, reading status, the journal in its own colour, rating, reading time, file kinds, and the corresponding institution with its tier and flag](docs/images/library-columns.png)
 
-Both plugins are available in English and Korean; the language is chosen in each plugin's settings.
+The item list above is Zotero's own, with Style Custom's columns switched on. Both plugins are available in English and Korean; the language is chosen in each plugin's settings.
+
+![The two buttons in the items toolbar: the ZotPoP magnifier and the Style Custom panel](docs/images/toolbar-icons.png)
 
 ## Install
 
@@ -68,7 +70,7 @@ Open it from the **panel** button in the items toolbar, **Tools → Style Custom
 
 ### Columns in the item list
 
-Installing adds columns to the item list: **IF** (JCR 2025 impact factor), **Citations**, **Read time**, **Status** (unread, reading, read), **Rating**, **Journal mark** (each journal in its own colour and abbreviation), **First-author institution** with country, and **File kinds**. Right-click → **Switch to custom columns** turns them on together. **Double-click a column edge** to fit that column to its content.
+Installing adds columns to the item list, as in the picture at the top of this page: **IF** (JCR 2025 impact factor), **Cited count** with a bar against the library's most-cited paper, **Status** (unread, reading, read) with a half-filled circle while a paper is being read, **Journal** as a mark in the journal's own colour, **Rating** as stars you can click, **Read time** recorded from the PDF reader, **Files** (PDF, supplementary, duplicates), and **Corresponding institution** with its tier and country flag. Patents and theses are labelled as such. Right-click → **Switch to custom columns** turns them on together; the column header's own menu shows or hides each one. **Double-click a column edge** to fit that column to its content.
 
 ### The right-click menu (item → Style Custom)
 
