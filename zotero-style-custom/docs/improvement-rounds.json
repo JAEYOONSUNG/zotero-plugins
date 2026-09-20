@@ -1,5 +1,5 @@
 {
-  "version": "0.50.0",
+  "version": "0.50.1",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -2143,6 +2143,30 @@
       ],
       "status": "verified",
       "review": "저널마다 자기 분야 안에서 몇 위인지를 낸다. 세부 분야와 분야 양쪽에서, JIF 순으로, 그 분야 사분위까지. 표에 「분야 순위」 열을 두고 가장 좁은 분야를 앞에 쓰며, 나머지는 툴팁과 자세히 보기에 모두 적는다. 그 순서로 정렬하는 항목도 넣었다. 세 메뉴의 첫 줄은 이제 그 메뉴가 가진 분야 수를 말한다. 레지스트리 전체를 한 번 훑어 만들고 기억해 둔다. JIF가 없는 저널은 줄 세울 수 없으므로 분모에서도 빠진다."
+    },
+    {
+      "round": "R77",
+      "title": "설치할 때마다 열리던 노트 창",
+      "gap": "The self-check presses every button on every tab, and leaves alone the ones marked data-opens because a label cannot be trusted to say it opens a window. Five buttons that open one had lost the marker, 「노트 편집」 among them, so every install opened a note editor over the reader's library and they stacked up.",
+      "entryPoint": "설치 후 자체 점검",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});"
+        },
+        {
+          "file": "src/selfcheck.js",
+          "marker": "data-opens is the contract for windows; these verbs are the second net,"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "every button that opens a Zotero window says so, or the self-check stacks note editors"
+        }
+      ],
+      "status": "verified",
+      "review": "Zotero 창을 여는 버튼 다섯 개에 data-opens 표시를 되돌렸다. 표시를 빠뜨리면 실패하는 테스트를 넣어, openItem을 부르는 버튼은 전부 표시를 달아야 한다. 점검의 건너뛸 동사 목록에도 편집·바꾸기·노트로·전체 선택을 넣어 두 겹으로 막는다. 노트는 새로 만들어지지 않았고 사라진 것도 없다. 열렸던 창은 기존 노트를 연 것이다."
     }
   ],
   "introducedInVersion": "0.6.0"

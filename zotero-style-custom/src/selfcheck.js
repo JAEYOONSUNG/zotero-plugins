@@ -130,7 +130,9 @@
       const state = runtime.windows.get(win);
       const bench = state && state.workbench;
       if (!bench) throw new Error('workbench not attached');
-      const skip = /가져오기|조회|새로고침|확인|함께 읽기|검색|내려받기|채우기|저장|복사|열기|이동|해제|병합|휴지통|초기화|복원|삭제|중지|등록|전환|만들기|추가|연결|적용|다시|찾기|가리기|표시|보기|JCR|OpenAlex|ZotPoP|번역|요약|제안|정리|옮기기|지우기|되돌리기/;
+      /* data-opens is the contract for windows; these verbs are the second net,
+         for anything that writes to the library or edits an item in place. */
+      const skip = /가져오기|조회|새로고침|확인|함께 읽기|검색|내려받기|채우기|저장|복사|열기|이동|해제|병합|휴지통|초기화|복원|삭제|중지|등록|전환|만들기|추가|연결|적용|다시|찾기|가리기|표시|보기|JCR|OpenAlex|ZotPoP|번역|요약|제안|정리|옮기기|지우기|되돌리기|편집|바꾸기|노트로|전체 선택/;
       const jsError = /TypeError|ReferenceError|RangeError|is not a function|Cannot read|Cannot set|undefined|NaN/;
       const tabs = (root.CustomStyleWorkbench && root.CustomStyleWorkbench.TABS || []).map(row => row[0]);
       const broken = []; let pressed = 0;

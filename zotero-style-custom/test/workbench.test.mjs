@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {parseHTML} from 'linkedom';
 import Workbench from '../src/workbench.js';
 import Model from '../src/workspace.js';
@@ -1301,4 +1302,23 @@ test('the three annotation verbs wait until something is selected', async () => 
  // The memo that exists is drawn; the one that does not is a button away.
  assert.equal(f.body().querySelectorAll('.sc-annot .sc-annot-memo').length, 1, 'one memo written, one memo drawn');
  f.bench.destroy();
+});
+
+test('every button that opens a Zotero window says so, or the self-check stacks note editors', () => {
+  /* The running self-check presses every button on every tab. It leaves alone
+     the ones marked data-opens, because a button's label cannot be trusted to
+     say it opens a window -- a note title is a label, and so is 「노트 편집」.
+     Three of them lost the marker and the sweep opened a note editor on every
+     install, which is what the reader saw stacking up. */
+  const source = fs.readFileSync(new URL('../src/workbench.js', import.meta.url), 'utf8');
+  const missing = [];
+  for (let at = source.indexOf('openItem('); at >= 0; at = source.indexOf('openItem(', at + 1)) {
+    const before = source.slice(Math.max(0, at - 500), at);
+    const fromButton = before.lastIndexOf('button('), fromListener = before.lastIndexOf('addEventListener(');
+    // Only a real button is pressed by the sweep; a listener on a cell is not.
+    if (fromButton < 0 || fromButton < fromListener) continue;
+    const call = before.slice(fromButton) + source.slice(at, at + 220);
+    if (!call.includes('data-opens')) missing.push(call.slice(0, 90).replace(/\s+/g, ' '));
+  }
+  assert.deepEqual(missing, [], 'these buttons open a Zotero window without saying so');
 });
