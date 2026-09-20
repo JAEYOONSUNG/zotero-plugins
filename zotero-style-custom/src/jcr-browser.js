@@ -248,7 +248,7 @@
    if(state.view!=='groups')button(`${t('그룹 보기')} · ${catalog.groups.length}`,navigation,()=>navigate('groups'));
    if(state.view!=='categories')button(`${t(catalog.source.complete?.categories===true?'전체 카테고리':'수집된 카테고리')} · ${catalog.categories.length}`,navigation,()=>navigate('categories'));
    if(typeof options.onOpenSource==='function')button(t('JCR 원본 열기'),navigation,openSource,{'data-opens':'external'});
-   if(typeof options.onOpenAlex==='function')button(t('OpenAlex 주제로 탐색'),navigation,()=>invoke(options.onOpenAlex));
+   if(typeof options.onOpenAlex==='function')button(t('OpenAlex 주제로 탐색'),navigation,()=>invoke(options.onOpenAlex,state.categoryKey?{categoryKey:state.categoryKey,name:displayName(catalog.category(state.categoryKey)?.name||'')}:null));
    if(catalog.source.complete?.groups!==true||catalog.source.complete?.categories!==true)
     el('p',t('그룹 또는 카테고리 목록이 일부만 수집되어 있습니다.'),header,{class:'sc-jcr-coverage'});
    if(message)el('p',message,element,{class:'sc-jcr-error',role:'alert'});

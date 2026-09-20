@@ -743,7 +743,7 @@ test('an empty watchlist with nothing selected explains what to do',async()=>{
  f.runtime.watchedAuthorsByNews=f.runtime.watchedAuthors=()=>[];
  f.setSelection([]);
  await f.bench.show('authors');
- assert.match(f.body().textContent,/아직 관심 저자가 없습니다/);
+ assert.match(f.body().textContent,/문헌을 하나 고르면 OpenAlex에서 그 논문의 저자를 찾고/);
  assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error,'true');
  f.bench.destroy();
 });

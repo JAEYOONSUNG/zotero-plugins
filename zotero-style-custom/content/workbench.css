@@ -522,11 +522,15 @@
 #style-custom-workbench .sc-paper-card[data-status]::before { inset-block-start: 50%; margin-block-start: -3px; }
 /* Actions take the place of the figures rather than adding a second line. */
 #style-custom-workbench .sc-paper-card .sc-paper-actions { margin: 0; }
-#style-custom-workbench .sc-paper-card:hover .sc-metrics,
-#style-custom-workbench .sc-paper-card:focus-within .sc-metrics { display: none; }
-#style-custom-workbench .sc-paper-card .sc-paper-actions { display: none; }
+/* The figures stay where they are; the actions float over the card's right
+   edge while the pointer is on it, so a tooltip on a figure can still be read. */
+#style-custom-workbench .sc-paper-card { position: relative; }
+#style-custom-workbench .sc-paper-card .sc-paper-actions { display: none; position: absolute; inset-inline-end: 8px; inset-block-start: 50%; transform: translateY(-50%); padding: 2px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); z-index: 1; }
 #style-custom-workbench .sc-paper-card:hover .sc-paper-actions,
 #style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions { display: flex; opacity: 1; }
+#style-custom-workbench .sc-paper-card:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -2px; }
+#style-custom-workbench .sc-hit-title-link { border: 0; background: none; padding: 0; margin: 0; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-hit-title-link:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
 
 @media (prefers-color-scheme: dark) {
   #style-custom-workbench .sc-quartile[data-q="1"], #style-custom-workbench .sc-quartile[data-q="2"], #style-custom-workbench .sc-quartile[data-q="3"] { color: #10131a; }

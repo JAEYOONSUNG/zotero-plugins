@@ -409,9 +409,9 @@
   const ids=()=>Object.values(parentOptions()).some(Boolean)?model.filter(scoped(),parentOptions()).map(item=>String(item.id)):state.scope==='selected'?[...state.selected]:state.scope.startsWith('collection')?[...(state.collectionIDs||[])]:undefined;
   function updateSelectionUI(){
    const nativeJCR=state.tab==='journals'&&state.journalBrowser!=='openalex';
-   footer.hidden=nativeJCR;
+   footer.hidden=nativeJCR||state.tab==='collections';
    const count=state.selected.size;footer.dataset.selected=String(count>0);const visible=new Set((['notes','annotations','attachments'].includes(state.tab)?model.filter(scoped(),parentOptions()):rows()).map(item=>String(item.id))),outside=[...state.selected].filter(id=>!visible.has(String(id))).length;
-   selectionLabel.textContent=count?T(`${count}개 문헌 선택`)+(outside?' · '+T(`현재 결과 밖 ${outside}개 포함`):''):T('문헌을 선택하면 함께 비교하거나 연결할 수 있습니다.');
+   selectionLabel.textContent=count?(count===1?T('문헌 1개 선택'):T(`${count}개 문헌 선택`))+(outside?' · '+T(`현재 결과 밖 ${outside}개 포함`):''):T('문헌을 선택하면 함께 비교하거나 연결할 수 있습니다.');
    selectionLabel.title=selected().slice(0,5).map(item=>item.title).join('\n');
    clearSelection.disabled=nativeJCR||!count||clearSelection.dataset.busy==='true';relatedAction.disabled=nativeJCR||count<2||relatedAction.dataset.busy==='true';unlinkAction.disabled=nativeJCR||count<2||unlinkAction.dataset.busy==='true';
    for(const card of body.querySelectorAll('[data-item-id]'))card.dataset.selected=String(state.selected.has(card.dataset.itemId));
@@ -425,7 +425,10 @@
    if(applicable&&state.scope==='selected'){if(!back){back=button('전체 목록으로',()=>{state.scope='library';scope.value='library';render();},null,{class:'sc-scope-back'});context.insertBefore(back,contextDetail.nextSibling);}}
    else back?.remove();
    {const scopeName=T(({library:'라이브러리',selected:'선택한 문헌',collection:'현재 컬렉션','collection-recursive':'현재·하위 컬렉션'})[state.scope]||'라이브러리'),inside=['notes','annotations','attachments'].includes(state.tab),n=(inside?model.filter(scoped(),parentOptions()):rows()).length;
-   contextDetail.textContent=nativeJCR?'Clarivate Journal Citation Reports':applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`):state.selected.size?T(`선택한 문헌 ${state.selected.size}개`):'';}
+   contextDetail.textContent=nativeJCR?'Clarivate Journal Citation Reports':applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`)
+    :state.tab==='matrix'?T(`비교 중 ${(selected().length||rows().length)}편`):state.tab==='collections'?''
+    :['related','authors','backlinks'].includes(state.tab)&&selected().length===1?selected()[0].title
+    :state.selected.size===1?T('선택한 문헌 1개'):state.selected.size?T(`선택한 문헌 ${state.selected.size}개`):'';}
    filterChips.replaceChildren();const labels={query:'검색',type:'유형',tag:'태그',status:'상태',ratingMin:'최소 별점',yearFrom:'시작 연도',yearTo:'마지막 연도'};
    for(const[key,label]of Object.entries(labels))if(state[key]){const value=key==='status'?({unread:'안 읽음',reading:'읽는 중',done:'완료'})[state[key]]:state[key];button(`${label}: ${value} ×`,()=>{state[key]='';if(key==='query')search.value='';else if(key==='type')type.value='';else if(filterInputs.has(key))filterInputs.get(key).value='';return render();},filterChips,{'aria-label':label+' 필터 해제'});}
    const count=Object.keys(labels).filter(key=>state[key]).length;filterSummary.textContent=T('상세 필터')+(count?' · '+T(`${count}개 적용`):'');filterChips.hidden=!applicable||!count;
@@ -509,6 +512,10 @@
    const list=node('div',null,body,{class:'sc-paper-list'}),details=[],generation=epoch;for(const item of page){
    const c=node('article',null,list,{class:'sc-card sc-paper-card','data-item-id':item.id,'data-status':['reading','done'].includes(item.status)?item.status:'unread','data-selected':String(state.selected.has(item.id))});
    const heading=node('div',null,c,{class:'sc-paper-heading'}),pick=check('선택',state.selected.has(item.id),on=>selectItem(item.id,on),heading);pick.setAttribute('aria-label',item.title+' 선택');
+   // The whole card selects, as an annotation card does; the checkbox was 14px of it.
+   c.tabIndex=0;c.addEventListener('click',e=>{if(e.target.closest('button,input,label,textarea,a,select'))return;selectItem(item.id,!state.selected.has(item.id));});
+   c.addEventListener('dblclick',e=>{if(e.target.closest('button,input,label,textarea,a,select'))return;run(()=>library.openItem(item.id));});
+   c.addEventListener('keydown',e=>{if(e.target!==c)return;if(e.key===' '||e.key==='Enter'){e.preventDefault();selectItem(item.id,!state.selected.has(item.id));}});
    // A paper carries whatever colour it has been given; otherwise its reading state.
    const marked=runtime.highlightOf?.(runtime.Z.Items.get(Number(item.id)));
    if(marked)c.dataset.mark=marked;
@@ -551,8 +558,9 @@
   async function drawRecent(){
    const timestamp=value=>{if(typeof value==='number')return Number.isFinite(value)?value:0;const parsed=Date.parse(value||'');return Number.isFinite(parsed)?parsed:0;};
    const activity=item=>Math.max(timestamp(item.lastRead),timestamp(item.dateModified),timestamp(item.dateAdded));
-   const recent=rows().filter(item=>activity(item)>0).sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id)));
-   node('p','마지막 읽기·수정·추가 시각이 최근인 순서입니다.',body,{class:'sc-muted'});
+   const cap=setting('recentCount',50);
+   const recent=rows().filter(item=>activity(item)>0).sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id))).slice(0,cap);
+   node('p',`마지막 읽기·수정·추가 시각이 최근인 순서로 ${recent.length}편입니다.`,body,{class:'sc-muted'});
    await paperList(recent);
   }
   /* The citation map.
@@ -719,7 +727,7 @@
      n.rank!=null?T(`중심성 ${(n.rank*100).toFixed(0)}%`):null].filter(Boolean).join(' · ');
     g.appendChild(title);
     // Selecting a node marks it in place: a redraw would reset the zoom and the hover.
-    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);for(const [key,m] of marks)m.circle.setAttribute('stroke-width',key===n.id?2.4:1);};
+    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);for(const [key,m] of marks)m.circle.setAttribute('stroke-width',key===n.id?2.4:1);if(n.kind!=='external')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
     g.addEventListener('click',activate);
     g.addEventListener('dblclick',()=>run(()=>n.kind==='external'
      ?runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${n.openalex}`)
@@ -861,9 +869,9 @@
    button('선택 문헌 태그 이름 변경',async()=>{const result=await library.renameTagBranch([...state.selected],from.value,to.value,{subtree});await load();message(`태그 변경 ${result.updatedItems}개 문헌 · 병합 ${result.mergedTags}개`);},rename);
    const tree=library.tagTree(rows());function branch(nodes,parent){for(const n of nodes){const details=node('details',null,parent);const summary=node('summary',null,details);node('span',`${n.name} (${n.count})`,summary,{class:'sc-tag-name'});const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},summary,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(n.children.length)branch(n.children,details);}}branch(tree,body);if(!tree.length)empty('태그가 없습니다. 문헌을 선택하고 태그를 추가하세요.');
   }
-  async function drawNotes(token){const draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar();button('새 노트 저장',async()=>{const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
+  async function drawNotes(token){const target=selected();node('p',target.length===1?`${target[0].title}에 새 노트`:'노트를 붙일 문헌 하나를 선택하세요',body,{class:'sc-muted'});const draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar();const saveNote=button('새 노트 저장',async()=>{const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});saveNote.disabled=target.length!==1;
    if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions,{'data-opens':'window'});}
-   const notes=await library.notes(ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>!state.query||(n.title+' '+n.text).toLowerCase().includes(state.query.toLowerCase()));for(const n of matching){const c=card(n.title,String(n.modified||'').slice(0,10));node('p',n.text.slice(0,1200),c,{class:'sc-note-text'});button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
+   const notes=await library.notes(ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>!state.query||(n.title+' '+n.text).toLowerCase().includes(state.query.toLowerCase()));const paperTitle=id=>state.items.find(i=>String(i.id)===String(id))?.title;for(const n of matching){const c=card(n.title,[paperTitle(n.parentID),String(n.modified||'').slice(0,10)].filter(Boolean).join(' · '));const text=node('p',n.text.length>1200?n.text.slice(0,1200)+'…':n.text,c,{class:'sc-note-text'});if(n.text.length>1200)button('전체 내용 보기',()=>{text.textContent=n.text;},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
     // The list had no way to let a note go. Trash, not delete: Zotero's trash keeps it.
     button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':'이 범위에 노트가 없습니다. 문헌을 선택해 새 노트를 작성하세요.');}
   /* Reading back through what you marked up.
@@ -998,6 +1006,7 @@
      node('span',({highlight:'하이라이트',underline:'밑줄',note:'메모',image:'그림',ink:'필기',text:'텍스트'})[a.type]||a.type,head,{class:'sc-annot-kind'});
      const actions=node('div',null,head,{class:'sc-annot-actions'});
      button('원문',()=>library.openItem(a.id),actions,{'data-opens':'window'});
+     button('내용 복사',()=>copy(a.text+(a.comment?'\n'+a.comment:'')),actions);
      button('참조 노트',async()=>{
       const mark=epoch,links=await library.backlinks(a.id);
       if(disposed||mark!==epoch||!row.isConnected)return;
@@ -1195,9 +1204,10 @@
    const list=await library.attachments(ids());if(token!==epoch||disposed)return;
    await drawFindings(token);
    if(token!==epoch||disposed)return;
-   if(list.length)node('h3','선택한 문헌의 첨부파일',body,{class:'sc-hit-group'});
+   if(list.length)node('h3',`선택한 문헌의 첨부파일 · ${list.length}`,body,{class:'sc-hit-group'});
    const matching=list.filter(a=>!state.query||(a.title+' '+a.contentType).toLowerCase().includes(state.query.toLowerCase()));
-   for(const a of matching){const c=card(a.title,a.contentType);button('열기',()=>library.openItem(a.id),c,{'data-opens':'window'});
+   const kindWord=type=>({'application/pdf':'PDF','application/epub+zip':'EPUB','application/epub':'EPUB','text/html':T('스냅샷')})[type]||(type?String(type).split('/')[0]:'');
+   for(const a of matching){const c=card(a.title,kindWord(a.contentType));button('열기',()=>library.openItem(a.id),c,{'data-opens':'window'});
     const supported=['application/pdf','application/epub+zip','application/epub','text/html'].includes(a.contentType)||/^(image|audio|video)\//.test(a.contentType||'');
     if(!supported||a.path===null){node('p','이 첨부는 미리보기를 지원하지 않습니다. 열기로 확인하세요.',c,{class:'sc-muted'});continue;}
     button('미리보기',async()=>{
@@ -1310,7 +1320,7 @@
    const b=bar(),name=node('input',null,b,{placeholder:'현재 열 배치 이름','aria-label':'뷰 그룹 이름'});button('현재 뷰 저장',async()=>{await reader.saveView(win,name.value);render();},b);
    for(const view of reader.viewGroups()){
     const c=card(view.name,`${view.columns.length}개 열 설정`),title=node('input',null,c,{'aria-label':'저장된 뷰 그룹 이름'});title.value=view.name;title.dataset.draftKey=JSON.stringify(['view-group-name',view.id]);
-    button('적용',()=>reader.applyView(win,view.id),c);
+    button('적용',()=>run(async()=>{await reader.applyView(win,view.id);message(`${view.name} 뷰를 적용했습니다.`);}),c);
     button('뷰 그룹 이름 변경',async()=>{const submitted=title.value;await reader.renameView(view.id,submitted);finishDraft(title,submitted);render();},c);
     button('현재 열 배치로 뷰 갱신',async()=>{await reader.updateView(win,view.id);render();},c);
     button('삭제',async()=>{await reader.deleteView(view.id);render();},c);
@@ -1325,13 +1335,13 @@
    const boardName=node('input',null,b,{'aria-label':'현재 보드 이름'});boardName.value=board.name;boardName.dataset.draftKey=JSON.stringify(['board-name',board.id]);
    button('보드 이름 변경',async()=>{const submitted=boardName.value;model.renameBoard(board,submitted);runtime.dirty=true;await runtime.flush();finishDraft(boardName,submitted);render();},b);
    button('카드 연결 해제',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('연결을 해제할 두 카드를 선택하세요.');model.unlinkCards(board,...ids);await save();},b);
-   const canvas=node('div',null,body,{class:'sc-canvas'});const svg=doc.createElementNS(SVG,'svg');svg.setAttribute('class','sc-canvas-lines');svg.setAttribute('width',String(Math.max(2000,...board.nodes.map(n=>n.x+300))));svg.setAttribute('height',String(Math.max(2000,...board.nodes.map(n=>n.y+300))));canvas.appendChild(svg);for(const e of board.edges){const a=board.nodes.find(n=>n.id===e.source),z=board.nodes.find(n=>n.id===e.target);if(!a||!z)continue;const line=doc.createElementNS(SVG,'line');for(const[k,v]of Object.entries({x1:a.x+90,y1:a.y+40,x2:z.x+90,y2:z.y+40,stroke:'#8196a4'}))line.setAttribute(k,v);svg.appendChild(line);}
+   const canvas=node('div',null,body,{class:'sc-canvas'});const svg=doc.createElementNS(SVG,'svg');svg.setAttribute('class','sc-canvas-lines');svg.setAttribute('width',String(Math.max(2000,...board.nodes.map(n=>n.x+300))));svg.setAttribute('height',String(Math.max(2000,...board.nodes.map(n=>n.y+300))));canvas.appendChild(svg);for(const e of board.edges){const a=board.nodes.find(n=>n.id===e.source),z=board.nodes.find(n=>n.id===e.target);if(!a||!z)continue;const line=doc.createElementNS(SVG,'line');for(const[k,v]of Object.entries({x1:a.x+90,y1:a.y+40,x2:z.x+90,y2:z.y+40,stroke:'var(--sc-graph-line)'}))line.setAttribute(k,v);svg.appendChild(line);}
    for(const n of board.nodes){const c=card(n.label,null,canvas);c.classList.add('sc-canvas-card');c.style.left=n.x+'px';c.style.top=n.y+'px';c.style.background=/^#[0-9a-f]{6}$/i.test(n.color)?n.color:'#ffffff';check('카드 선택',state.cardIDs.has(n.id),on=>on?state.cardIDs.add(n.id):state.cardIDs.delete(n.id),c);const memo=node('textarea',null,c,{'aria-label':'카드 메모'});memo.dataset.draftKey=JSON.stringify(['board-note',board.id,n.id]);memo.value=n.note;memo.addEventListener('change',()=>run(async()=>{n.note=memo.value.slice(0,50000);runtime.dirty=true;await runtime.flush();}));if(n.itemID)button('문헌 열기',()=>library.openItem(n.itemID),c,{'data-opens':'window'});
     const editor=node('details',null,c);node('summary','카드 편집',editor);
     const title=node('input',null,editor,{'aria-label':'카드 제목'});title.value=n.label;title.dataset.draftKey=JSON.stringify(['board-label',board.id,n.id]);
     const color=node('input',null,editor,{type:'color','aria-label':'카드 색상'});color.value=n.color;color.dataset.draftKey=JSON.stringify(['board-color',board.id,n.id]);
     button('카드 모양 저장',async()=>{const label=title.value,hex=color.value;model.updateCard(board,n.id,{label,color:hex});runtime.dirty=true;await runtime.flush();finishDraft(title,label);finishDraft(color,hex);render();},editor);
-    const handle=c.querySelector('h3');handle.setAttribute('tabindex','0');handle.title=T('드래그하거나 방향키로 이동');handle.addEventListener('keydown',e=>{const move={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[e.key];if(move){e.preventDefault();model.moveCard(board,n.id,n.x+move[0],n.y+move[1]);run(save);}});
+    const handle=c.querySelector('h3');handle.setAttribute('tabindex','0');handle.title=T('드래그하거나 방향키로 이동');if(n.itemID)handle.addEventListener('dblclick',()=>run(()=>library.openItem(n.itemID)));handle.addEventListener('keydown',e=>{const move={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[e.key];if(move){e.preventDefault();model.moveCard(board,n.id,n.x+move[0],n.y+move[1]);run(save);}});
     handle.addEventListener('pointerdown',e=>{const start={x:e.clientX,y:e.clientY,left:n.x,top:n.y};handle.setPointerCapture?.(e.pointerId);const move=ev=>{model.moveCard(board,n.id,start.left+ev.clientX-start.x,start.top+ev.clientY-start.y);c.style.left=n.x+'px';c.style.top=n.y+'px';};const up=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);run(save);};handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});});
    }
   }
@@ -1473,7 +1483,8 @@
   // the way until the row is hovered.
   function hitRow(work,parent){
    const row=node('div',null,parent||null,{class:'sc-hit'});
-   node('p',work.title||'제목 없음',row,{class:'sc-hit-title'});
+   if(work.doi&&!work.inLibrary){const open=node('button',work.title||'제목 없음',row,{class:'sc-hit-title sc-hit-title-link',type:'button',title:'doi.org에서 열기'});open.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+encodeURI(work.doi));}catch(e){message(readable(e),true);}});}
+   else node('p',work.title||'제목 없음',row,{class:'sc-hit-title'});
    const meta=node('p',null,row,{class:'sc-hit-meta'});
    // The publisher mark leads the line: it is the one thing in a row of grey
    // metadata a reader recognises at a glance.
@@ -1574,6 +1585,7 @@
     const {profile,works,fresh,watching,checkedAt}=await runtime.authorUpdates(person.id);
     if(token!==epoch||disposed||state.tab!=='authors')return;
     list.replaceChildren();
+    if(item){const back=bar(list);button('← 이 논문의 저자 보기',()=>run(loadAuthors),back);}
     // The face, the name and the numbers on one line. A person is easier to
     // hold in mind than a row of statistics, which is the whole point of
     // following people rather than papers.
@@ -1794,7 +1806,7 @@
    function refreshWatched(){
     watchArea.replaceChildren();
     drawWatched(watchArea);
-    if(!watchArea.childNodes.length&&!item)node('p','아직 관심 저자가 없습니다. 문헌을 하나 선택하면 그 저자를 등록할 수 있습니다.',watchArea,{class:'sc-muted'});
+
    }
 
    async function loadAuthors(){
@@ -1822,7 +1834,9 @@
     message(`저자 ${people.length}명. 이름을 눌러 최근 작업을 확인하세요.`);
     const authors=node('div',null,list,{class:'sc-hits'});
     for(const person of people){
-     const row=node('div',null,authors,{class:'sc-hit'});
+     const row=node('div',null,authors,{class:'sc-hit',role:'button',tabindex:'0'});
+     row.addEventListener('click',e=>{if(e.target.closest('button'))return;run(()=>show(person));});
+     row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run(()=>show(person));}});
      node('p',person.name,row,{class:'sc-hit-title'});
      node('p',[T(person.position==='first'?'제1저자':person.position==='last'?'교신·책임저자':'공저자'),person.institution].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
      const actions=node('div',null,row,{class:'sc-hit-actions'});
@@ -1833,7 +1847,7 @@
    }
    refreshWatched();
    if(!item){
-    message(`관심 저자 ${runtime.watchedAuthors().length}명. 새 저자를 등록하려면 문헌을 하나 선택하세요.`);
+    message(`관심 저자 ${runtime.watchedAuthors().length}명`);
     node('p','문헌을 하나 고르면 OpenAlex에서 그 논문의 저자를 찾고, 관심 저자로 등록하면 새 논문·소속 이동·특허를 알려줍니다.',body,{class:'sc-muted'});pickOne();
     return;
    }
@@ -2011,7 +2025,7 @@
    jcrMount=browser.mount(host,{catalog:runtime.jcrCatalog,initialState:state.jcrBrowserState||{},t:T,
     errorMessages:{ZOTPOP_UNAVAILABLE:zotPoPUnavailable},
     onStateChange:value=>{state.jcrBrowserState=value;return saveUI({jcrBrowserState:value});},
-    onOpenAlex:()=>switchBrowser('openalex'),
+    onOpenAlex:ctx=>{if(ctx&&ctx.name){journalView.query=String(ctx.name);journalView.page=0;}return switchBrowser('openalex');},
     onOpenSource:url=>runtime.Z.launchURL?.(url),
     onSearchJournal:journal=>{
      if(typeof runtime.Z.ZotPoP?.openSearch!=='function'){

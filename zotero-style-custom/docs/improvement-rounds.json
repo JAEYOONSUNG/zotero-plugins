@@ -1,5 +1,5 @@
 {
-  "version": "0.51.8",
+  "version": "0.51.10",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -1916,7 +1916,7 @@
         },
         {
           "file": "src/settings.js",
-          "marker": "const FIRST=['citationEmail','openalexApiKey','aiEndpoint']"
+          "marker": "const FIRST=['openalexApiKey','aiEndpoint','citationEmail']"
         }
       ],
       "tests": [
@@ -2301,6 +2301,38 @@
       ],
       "status": "verified",
       "review": "카테고리 이름을 대문자 그대로가 아니라 이름으로 읽히게 바꾸고(원문은 툴팁과 키에 보존), 그룹과 색인은 칩으로, 저널 수는 페이지 안 최댓값 대비 막대로, JIF 중앙값은 색조로 그린다. 표 머리글은 고정되고 숫자 열은 자리가 맞는다. 열 맞춤 더블클릭은 어디서 멈췄는지를 기록하고, 자체 점검이 실제 머리글에 더블클릭을 보내 결과를 읽는다. 맞춤은 오른쪽 열 전체에서 차례로 폭을 빌려오고, 이웃이 최소 폭이어도 내용에 닿는다. 노트 탭의 카드에 「휴지통으로」를 두어 지우지 않고 Zotero 휴지통으로 옮긴다."
+    },
+    {
+      "round": "R82",
+      "title": "세 감사에서 나온 사소한 편의 마흔 가지",
+      "gap": "Four read-only audits of the panel tabs, the item list columns and menu, the organise and tools tabs, and the ZotPoP window returned the small things a daily user trips on: a selection thrown away on the way to a tab, a status column shouting in English, an IF figure clipped at the decimal, a click on a title that leaves Zotero, a person shown as an institution, legends and figures that do nothing when clicked, and forty strings that never reached the dictionary because the extractor could not see inside a template placeholder.",
+      "entryPoint": "연구 작업 패널 · 아이템 목록 · 우클릭 메뉴 · 설정 · ZotPoP 창",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "if(fromPane.length||wasHidden)state.selected=new Set(fromPane);"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "const upkeep=make(\"menupopup\",null,iconic(make(\"menu\",\"라이브러리 정리\",body),\"fill\"));"
+        },
+        {
+          "file": "scripts/extract-strings.py",
+          "marker": "out.extend(literals(text[j+2:k-1]))"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a paper chosen in the panel survives reaching a tab through the menu while the pane has nothing selected"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the reading tab leads with the reading and folds the reader appearance away"
+        }
+      ],
+      "status": "verified",
+      "review": "패널: 메뉴나 ⌘K로 탭에 갈 때 패널이 든 선택을 잃지 않고, 여러 편이 선택되면 그중 하나를 고르게 하며, 읽기 탭은 읽은 기록을 먼저 보이고 리더 모양은 접어 두고, 주석 묶음은 논문 제목으로 부르고, 카드 자체를 눌러 고르고, 노트는 어느 문헌에 붙는지 말하고, 비교표 머리글은 필드 이름이다. 열: IF는 잘리지 않고 보이는 값으로 정렬되며, 상태 열은 우리말로 말하고 눌러서 바꾸며, 기관 열은 사람을 기관으로 보이지 않고, 인용 수·IF 숫자를 누르면 설명하는 탭이 열린다. 메뉴: 서재 전체에 걸리는 일곱 항목은 「라이브러리 정리」 아래로, 현재 상태·별점은 회색으로, 도구 메뉴에 설정 문이 생겼다. 설정: 먼저 할 것의 순서와 이유, AI 항목 설명, 읽기 시간 표기. 사전: 자리표시자 안의 문구를 추출기가 보게 되어 스물한 개가 드러났고, 조합 문구는 조각별로 번역한다."
     }
   ],
   "introducedInVersion": "0.6.0"

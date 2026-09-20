@@ -632,6 +632,17 @@
       ]
     },
     {
+      "key": "recentCount",
+      "category": "views",
+      "label": "최근 문헌 탭에 보일 개수",
+      "type": "number",
+      "default": 50,
+      "min": 10,
+      "max": 500,
+      "step": 10,
+      "description": "마지막으로 읽거나 고치거나 추가한 순서로 이 수만큼만 보입니다. 서재 전체가 아니라 최근 것이 목적입니다."
+    },
+    {
       "key": "explorePageSize",
       "category": "views",
       "label": "한 페이지 문헌 수",
@@ -1079,6 +1090,7 @@
     },
     {
       "key": "aiEndpoint",
+      "description": "Chat Completions 형식 주소. 예: https://api.openai.com/v1/chat/completions, 로컬 Ollama는 http://localhost:11434/v1/chat/completions",
       "category": "ai",
       "label": "AI 서버 주소 (Chat Completions)",
       "type": "url",
@@ -1086,6 +1098,7 @@
     },
     {
       "key": "aiModel",
+      "description": "서버가 받는 모델 이름 그대로. 예: gpt-4o-mini, llama3",
       "category": "ai",
       "label": "모델 이름",
       "type": "text",
@@ -1102,6 +1115,7 @@
     },
     {
       "key": "aiLanguage",
+      "description": "요약·번역 결과를 쓸 언어. 한국어로 받으려면 Korean으로 두세요.",
       "category": "ai",
       "label": "출력 언어",
       "type": "text",

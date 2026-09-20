@@ -1,6 +1,6 @@
 {
   "name": "zotero-style-custom",
-  "version": "0.51.8",
+  "version": "0.51.10",
   "private": true,
   "description": "Personal Zotero reading workflow and native title scrolling",
   "scripts": {

@@ -677,7 +677,7 @@ test('column labels are the plain field name, with no plugin suffix', async () =
     assert.doesNotMatch(label, /Custom/, `"${label}" should not advertise the plugin in every heading`);
     assert.doesNotMatch(label, /·/);
   }
-  assert.deepEqual(plugin.columnDefinitions.slice(0, 4).map(c => c[1]), ['Journal', 'IF', 'Cited Count', 'Status']);
+  assert.deepEqual(plugin.columnDefinitions.slice(0, 4).map(c => c[1]), ['저널', 'IF', '피인용', '상태'], 'the labels are dictionary keys; the header reads in the interface language');
 });
 
 test('citation bars all start at the same x, so their lengths can be compared', async () => {
@@ -1531,7 +1531,7 @@ test('first author, corresponding author and tier each get a column of their own
   const ref = item(1);
   window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
   const labels = Object.fromEntries(plugin.columnDefinitions.map(([key, label]) => [key, label]));
-  assert.deepEqual([labels.firstInstitution, labels.correspondingInstitution, labels.institutionTier], ['1st Author Inst.', 'Corresponding Inst.', 'Tier']);
+  assert.deepEqual([labels.firstInstitution, labels.correspondingInstitution, labels.institutionTier], ['1저자 기관', '교신 기관', '기관 등급'], 'labels are dictionary keys, so the header speaks the interface language');
 
   // Nothing looked up yet: every cell says so instead of showing a blank.
   assert.equal(plugin.value('firstInstitution', ref), '');

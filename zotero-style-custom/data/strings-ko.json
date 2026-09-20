@@ -54,10 +54,26 @@
    ]
   },
   {
+   "ko": "메모",
+   "n": 5,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js",
+    "src/workspace.js"
+   ]
+  },
+  {
    "ko": "특허",
    "n": 5,
    "files": [
     "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "제목 없음",
+   "n": 5,
+   "files": [
     "src/workbench.js"
    ]
   },
@@ -77,6 +93,24 @@
    ]
   },
   {
+   "ko": "저널",
+   "n": 4,
+   "files": [
+    "src/jcr-browser.js",
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "태그",
+   "n": 4,
+   "files": [
+    "src/runtime.js",
+    "src/settings-schema.js",
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "소속 미상",
    "n": 4,
    "files": [
@@ -91,18 +125,11 @@
    ]
   },
   {
-   "ko": "제목 없음",
+   "ko": "연구 작업 패널",
    "n": 4,
    "files": [
+    "src/runtime.js",
     "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "메모",
-   "n": 4,
-   "files": [
-    "src/workbench.js",
-    "src/workspace.js"
    ]
   },
   {
@@ -128,19 +155,27 @@
    ]
   },
   {
-   "ko": "저널",
-   "n": 3,
-   "files": [
-    "src/jcr-browser.js",
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "선택한 문헌 없음",
    "n": 3,
    "files": [
     "src/runtime.js",
     "src/settings.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "별점",
+   "n": 3,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "소속",
+   "n": 3,
+   "files": [
+    "src/runtime.js",
     "src/workbench.js"
    ]
   },
@@ -182,22 +217,6 @@
    ]
   },
   {
-   "ko": "Style Custom 연구 작업 패널",
-   "n": 3,
-   "files": [
-    "src/runtime.js",
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "연구 작업 패널",
-   "n": 3,
-   "files": [
-    "src/runtime.js",
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "보유 문헌",
    "n": 3,
    "files": [
@@ -210,14 +229,6 @@
    "n": 3,
    "files": [
     "src/selfcheck.js",
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "태그",
-   "n": 3,
-   "files": [
-    "src/settings-schema.js",
     "src/workbench.js"
    ]
   },
@@ -464,6 +475,22 @@
    ]
   },
   {
+   "ko": "상태",
+   "n": 2,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "읽은 시간",
+   "n": 2,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "중복",
    "n": 2,
    "files": [
@@ -546,14 +573,6 @@
    "n": 2,
    "files": [
     "src/runtime.js"
-   ]
-  },
-  {
-   "ko": "별점",
-   "n": 2,
-   "files": [
-    "src/runtime.js",
-    "src/workbench.js"
    ]
   },
   {
@@ -886,6 +905,13 @@
    ]
   },
   {
+   "ko": "Style Custom 연구 작업 패널",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "닫기",
    "n": 2,
    "files": [
@@ -964,6 +990,13 @@
   },
   {
    "ko": "마지막 연도",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "전체 내용 보기",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -1054,6 +1087,13 @@
    ]
   },
   {
+   "ko": "내용 복사",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "휴지통으로",
    "n": 2,
    "files": [
@@ -1069,6 +1109,13 @@
   },
   {
    "ko": "선택 해제 ({0})",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "선택한 {0}편 중 하나를 고르세요",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -1146,13 +1193,6 @@
   },
   {
    "ko": "{0}편 · 이미 보유 {1}편",
-   "n": 2,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "소속",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -1866,6 +1906,132 @@
    ]
   },
   {
+   "ko": "피인용",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "파일",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "쪽",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "저널 태그",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "작성자",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "추가일",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "수정일",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "마지막 읽음",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "태그 수",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "번역 제목",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "요약",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "주석 수",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "노트 수",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "출판물",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "신호",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "1저자 기관",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "교신 기관",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "기관 등급",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
    "ko": "연도 미표기",
    "n": 1,
    "files": [
@@ -2069,6 +2235,20 @@
    ]
   },
   {
+   "ko": "클릭하면 별점을 지웁니다",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "{0}/5로 매기기",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
    "ko": "주석 위치 분포",
    "n": 1,
    "files": [
@@ -2119,6 +2299,20 @@
   },
   {
    "ko": "방금",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "실제로 읽은 시간 {0}초",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "{0}쪽 중 {1}쪽 읽음",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -2210,6 +2404,13 @@
   },
   {
    "ko": "피인용 수 · 길이는 로그 눈금",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "별점 · 클릭해서 매깁니다",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -2517,6 +2718,20 @@
    ]
   },
   {
+   "ko": "설정…",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "설정 창을 열 수 없습니다. Zotero 설정에서 Style Custom을 여세요.",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
    "ko": "ZotPoP에서 이 논문 검색",
    "n": 1,
    "files": [
@@ -2658,6 +2873,13 @@
   },
   {
    "ko": "{0}개 문헌의 색을 지웠습니다.",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "라이브러리 정리",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -3973,6 +4195,20 @@
    ]
   },
   {
+   "ko": "최근 문헌 탭에 보일 개수",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
+   "ko": "마지막으로 읽거나 고치거나 추가한 순서로 이 수만큼만 보입니다. 서재 전체가 아니라 최근 것이 목적입니다.",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
    "ko": "한 페이지 문헌 수",
    "n": 1,
    "files": [
@@ -4400,7 +4636,21 @@
    ]
   },
   {
+   "ko": "Chat Completions 형식 주소. 예: https://api.openai.com/v1/chat/completions, 로컬 Ollama는 http://localhost:11434/v1/chat/completions",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
    "ko": "AI 서버 주소 (Chat Completions)",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
+   "ko": "서버가 받는 모델 이름 그대로. 예: gpt-4o-mini, llama3",
    "n": 1,
    "files": [
     "src/settings-schema.js"
@@ -4422,6 +4672,13 @@
   },
   {
    "ko": "위에 입력한 AI 서버 주소에만 인증 헤더로 보냅니다. 다른 곳으로는 보내지 않습니다.",
+   "n": 1,
+   "files": [
+    "src/settings-schema.js"
+   ]
+  },
+  {
+   "ko": "요약·번역 결과를 쓸 언어. 한국어로 받으려면 Korean으로 두세요.",
    "n": 1,
    "files": [
     "src/settings-schema.js"
@@ -4897,14 +5154,14 @@
    ]
   },
   {
-   "ko": "빠른 조회 대기열",
+   "ko": "(선택) 빠른 대기열 · 주소가 서버에 남습니다",
    "n": 1,
    "files": [
     "src/settings.js"
    ]
   },
   {
-   "ko": "인용 수·저널 정보",
+   "ko": "없으면 인용 수 열이 비어 있습니다",
    "n": 1,
    "files": [
     "src/settings.js"
@@ -5534,6 +5791,13 @@
    ]
   },
   {
+   "ko": "문헌 1개 선택",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "{0}개 문헌 선택",
    "n": 1,
    "files": [
@@ -5583,6 +5847,20 @@
    ]
   },
   {
+   "ko": "비교 중 {0}편",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "선택한 문헌 1개",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "선택한 문헌 {0}개",
    "n": 1,
    "files": [
@@ -5591,13 +5869,6 @@
   },
   {
    "ko": "유형",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "상태",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5765,13 +6036,6 @@
    ]
   },
   {
-   "ko": "읽은 시간",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "자세히",
    "n": 1,
    "files": [
@@ -5821,13 +6085,6 @@
    ]
   },
   {
-   "ko": "전체 내용 보기",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "주석 원문 열기",
    "n": 1,
    "files": [
@@ -5842,7 +6099,7 @@
    ]
   },
   {
-   "ko": "마지막 읽기·수정·추가 시각이 최근인 순서입니다.",
+   "ko": "마지막 읽기·수정·추가 시각이 최근인 순서로 {0}편입니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6129,6 +6386,20 @@
    ]
   },
   {
+   "ko": "{0}에 새 노트",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "노트를 붙일 문헌 하나를 선택하세요",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "새 노트 내용",
    "n": 1,
    "files": [
@@ -6165,13 +6436,6 @@
   },
   {
    "ko": "노트 편집",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "내용 복사",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -6472,13 +6736,6 @@
    ]
   },
   {
-   "ko": "선택한 {0}편 중 하나를 고르세요",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "역링크를 확인할 문헌 하나를 선택하세요.",
    "n": 1,
    "files": [
@@ -6647,7 +6904,14 @@
    ]
   },
   {
-   "ko": "선택한 문헌의 첨부파일",
+   "ko": "선택한 문헌의 첨부파일 · {0}",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "스냅샷",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7047,6 +7311,13 @@
   },
   {
    "ko": "저장된 뷰 그룹 이름",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0} 뷰를 적용했습니다.",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -7613,6 +7884,13 @@
    ]
   },
   {
+   "ko": "doi.org에서 열기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "아직 심사 전 원고입니다. 정식 게재본은 나중에 따로 나올 수 있습니다.",
    "n": 1,
    "files": [
@@ -7761,6 +8039,13 @@
   },
   {
    "ko": "{0}의 최근 작업을 불러오는 중…",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "← 이 논문의 저자 보기",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8201,13 +8486,6 @@
    ]
   },
   {
-   "ko": "아직 관심 저자가 없습니다. 문헌을 하나 선택하면 그 저자를 등록할 수 있습니다.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "저자 정보를 확인하는 중…",
    "n": 1,
    "files": [
@@ -8271,7 +8549,7 @@
    ]
   },
   {
-   "ko": "관심 저자 {0}명. 새 저자를 등록하려면 문헌을 하나 선택하세요.",
+   "ko": "관심 저자 {0}명",
    "n": 1,
    "files": [
     "src/workbench.js"

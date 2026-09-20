@@ -223,20 +223,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.applyLocale();
     this.rebuildJournals();
     this.labels = { unread: "unread", reading: "reading", done: "done" };
-    this.columnDefinitions = [["journalMark", "Journal", "110"], ["if", "IF", "90"], ["citations", "Cited Count", "120"],
-      ["status", "Status", "100"], ["rating", "Rating", "100"],
-      ["time", "Read Time", "120"], ["tags", "Tags", "140"],
-      ["files", "Files", "110"],
-      ["progress","Pages","100"],["remark","Remark","180"],
-      ["publication","Journal Tags","160"],["authors","Creators","160"],
-      ["added","Added","130"],["modified","Modified","130"],
-      ["lastRead","Last Read","130"],["tagCount","#Tags","70"],
-      ["translatedTitle","Translated Title","220"],["summary","Summary","220"],
-      ["annotationCount","Annotations","90"],["noteCount","Notes","70"],["venue","Publication","170"],
-      ["signals","Signals","160"],["affiliation","Affiliation","210"],
+    this.columnDefinitions = [["journalMark","저널","110"], ["if","IF","90"], ["citations","피인용","120"],
+      ["status","상태","100"], ["rating","별점","100"],
+      ["time","읽은 시간","120"], ["tags","태그","140"],
+      ["files","파일","110"],
+      ["progress","쪽","100"],["remark","메모","180"],
+      ["publication","저널 태그","160"],["authors","작성자","160"],
+      ["added","추가일","130"],["modified","수정일","130"],
+      ["lastRead","마지막 읽음","130"],["tagCount","태그 수","70"],
+      ["translatedTitle","번역 제목","220"],["summary","요약","220"],
+      ["annotationCount","주석 수","90"],["noteCount","노트 수","70"],["venue","출판물","170"],
+      ["signals","신호","160"],["affiliation","소속","210"],
       // The same facts as Affiliation, one to a column, so each can be sorted and
       // read on its own: who did the work, who answers for it, and how their lab stands.
-      ["firstInstitution","1st Author Inst.","170"],["correspondingInstitution","Corresponding Inst.","170"],["institutionTier","Tier","80"]];
+      ["firstInstitution","1저자 기관","170"],["correspondingInstitution","교신 기관","170"],["institutionTier","기관 등급","80"]];
     this.syncFeatureColumns();
     try{this.setCustomFields(this.pref('customFields',''),{persist:false});}catch(error){this.Z.logError(error);}
     this.prefPane = await this.Z.PreferencePanes.register({ pluginID: id, src: rootURI + "content/preferences.xhtml", label: "Style Custom",image:rootURI+"content/icons/style-custom.svg",scripts:[rootURI+"src/settings.js"],stylesheets:[rootURI+"content/preferences.css"] });
@@ -913,7 +913,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       label = "★".repeat(rating) + "☆".repeat(5-rating);
       for (let n=1;n<=5;n++) {
         const star = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        star.textContent = n<=rating ? "★" : "☆"; star.title = `${n}/5`;
+        star.textContent = n<=rating ? "★" : "☆"; star.title = n===rating ? this.t("클릭하면 별점을 지웁니다") : this.t(`${n}/5로 매기기`); star.setAttribute("role","button");
         // A filled star is a mark, not text: it can be the light warm colour a
         // star is supposed to be instead of the dark ochre that reads as dirt.
         star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.star:P.faint};`;
@@ -947,11 +947,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // Untouched papers recede; the longer the session, the more present the number.
       cell.style.color = seconds <= 0 ? P.faint : P.text;
       if (seconds >= 3600) cell.style.fontWeight = "590";
-      cell.title = `${Math.floor(seconds)} seconds of active reading`;
+      cell.title = this.t(`실제로 읽은 시간 ${Math.floor(seconds)}초`);
     } else if (key === "progress") {
       const p=this.isRegular(item)?this.pageProgress(item):{percent:Number(value)};
       cell.textContent=p.percent+'%';cell.style.backgroundImage=`linear-gradient(90deg,#245c7830 ${p.percent}%,transparent ${p.percent}%)`;
-      cell.title=p.total?`${p.visited}/${p.total} pages read`:cell.textContent;
+      cell.title=p.total?this.t(`${p.total}쪽 중 ${p.visited}쪽 읽음`):cell.textContent;
     } else if (key === "files" && this.isRegular(item)) {
       // Three different things turn up as "an extra PDF", and they are not the
       // same: a supplementary file, the same file twice, and a different paper
@@ -1121,7 +1121,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       track.title = young ? `출판 3년 이내 (${year}) — 아직 인용이 쌓이는 중이라 회색 · 길이는 로그 눈금` : '피인용 수 · 길이는 로그 눈금';
       track.appendChild(fill); cell.appendChild(track);
     } else { cell.textContent = label; }
-    if (!["time","progress","annotationCount"].includes(key)) cell.title = label;
+    if (!["time","progress","annotationCount"].includes(key)) cell.title = key === "rating" && this.isRegular(item) ? this.t("별점 · 클릭해서 매깁니다") : label;
     if (this.isRegular(item) && ["if","citations"].includes(key)) {
       // The number is a door: citations to the papers around this one, IF to the journal's page.
       cell.style.cursor = "pointer";
@@ -3601,7 +3601,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const menu=make("menu","Style Custom",popup);menu.id="style-custom-itemmenu";state.nodes.push(menu);
       // A door that needs no paper selected: the Tools menu, beside ZotPoP's.
       const tools=doc.getElementById("menu_ToolsPopup");
-      if(tools&&!doc.getElementById("style-custom-tools-item")){const entry=make("menuitem","Style Custom 연구 작업 패널",tools);entry.id="style-custom-tools-item";entry.addEventListener("command",()=>state.workbench?.toggle(true));state.nodes.push(entry);}
+      if(tools&&!doc.getElementById("style-custom-tools-item")){
+        const entry=make("menu","Style Custom",tools);entry.id="style-custom-tools-item";state.nodes.push(entry);
+        const sub=make("menupopup",null,entry);
+        const door=(label,fn)=>{const node=make("menuitem",label,sub);node.addEventListener("command",()=>Promise.resolve().then(fn).catch(e=>{this.Z.logError(e);this.say(win,e.message);}));return node;};
+        door("연구 작업 패널",()=>state.workbench?.toggle(true));
+        door("설정…",()=>{const id=this.prefPane&&(this.prefPane.id||this.prefPane);if(typeof this.Z.Utilities?.Internal?.openPreferences==="function")this.Z.Utilities.Internal.openPreferences(id);else throw new Error("설정 창을 열 수 없습니다. Zotero 설정에서 Style Custom을 여세요.");});
+      }
       const body=make("menupopup",null,menu);
       /* Every entry carries a small drawn sign, so a list of twenty verbs
          can be scanned by shape; the signs are the same strokes the panel's
@@ -3616,7 +3622,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       /* The parent entry sits among other plugins' entries, which carry signs;
          without one, Style Custom is the only unmarked line in the menu. */
       iconic(menu,"panel");iconic(doc.getElementById("style-custom-tools-item"),"panel");
-      for(const status of ["unread","reading","done"]) action(({unread:"안 읽음",reading:"읽는 중",done:"읽음"})[status],()=>this.edit(this.selected(win),{status}),body,{unread:"circle",reading:"half",done:"disc"}[status]);
+      const statusItems={};
+      for(const status of ["unread","reading","done"]) statusItems[status]=action(({unread:"안 읽음",reading:"읽는 중",done:"읽음"})[status],()=>this.edit(this.selected(win),{status}),body,{unread:"circle",reading:"half",done:"disc"}[status]);
       /* The paper you are looking at is the best query you have. The search
          tab used to open empty and ask you to type in what was already on the
          row under the pointer. */
@@ -3631,7 +3638,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       },body,"search");
       make("menuseparator",null,body);
       const ratings=make("menupopup",null,iconic(make("menu","별점",body),"star"));
-      for(let rating=0;rating<=5;rating++)action(rating?"★".repeat(rating):"별점 지우기",()=>this.edit(this.selected(win),{rating}),ratings);
+      const ratingItems={};
+      for(let rating=0;rating<=5;rating++)ratingItems[rating]=action(rating?"★".repeat(rating):"별점 지우기",()=>this.edit(this.selected(win),{rating}),ratings);
       make("menuseparator",null,body);
       const suppl=make("menupopup",null,iconic(make("menu","보충자료 내려받기",body),"download"));
       action("선택한 파일을 보충자료로 표시",async()=>{
@@ -3674,6 +3682,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       },marks);
       make("menuseparator",null,marks);
       action("색 지우기",async()=>{const n=await this.setHighlight(this.selected(win),null);this.say(win,`${n}개 문헌의 색을 지웠습니다.`);},marks);
+      /* Seven entries acted on the whole library, not the paper under the
+         pointer; among twenty-six lines nothing said which. They have a menu. */
+      const upkeep=make("menupopup",null,iconic(make("menu","라이브러리 정리",body),"fill"));
       action("라이브러리 저널 지표 채우기",async()=>{
         const items=await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
         const papers=items.filter(item=>this.isRegular(item));
@@ -3684,20 +3695,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(result.budgetGone) lines.push(`OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}종이 남았고, 한국 시간 오전 9시에 초기화됩니다.\n지금까지 받은 값은 저장했으니 내일 다시 실행하면 남은 것부터 이어서 채웁니다.`);
         else lines.push("공식 JIF가 있는 저널은 그대로 두고, 없는 저널만 ~추정치로 채웁니다.");
         this.say(win,lines.join("\n"));
-      },body,"journals");
+      },upkeep,"journals");
       action("읽기 기록 가져오기",async()=>{
         const preview=await this.importLegacyReading({dryRun:true});
         if(!preview.imported){this.say(win,`가져올 읽기 기록이 없습니다. (노트 ${preview.notes}개 · 이미 보유 ${preview.skipped}개 · 대상 불명 ${preview.unresolved}개)`);return;}
         const hours=(preview.seconds/3600).toFixed(1);
         const result=await this.importLegacyReading();
         this.say(win,`읽기 기록 ${result.imported}편 · ${hours}시간을 가져왔습니다.\n이미 더 많이 기록된 ${result.skipped}편은 그대로 두었습니다.`+(result.unresolved?`\n대상 문헌을 찾지 못한 노트 ${result.unresolved}개`:""));
-      },body,"reading","이전 플러그인이 노트에 남긴 읽기 시간을 찾아 옮깁니다.");
+      },upkeep,"reading","이전 플러그인이 노트에 남긴 읽기 시간을 찾아 옮깁니다.");
       action("제목 앞 별 태그 정리",async()=>{
         const found=await this.starTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
         if(!found.length){this.say(win,"정리할 별 태그가 없습니다.");return;}
         const {moved,skipped}=await this.migrateStarTags(found);
         this.say(win,`${moved}개 항목의 별 태그를 정리했습니다. 평점은 그대로 유지됩니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:""));
-      },body,"star");
+      },upkeep,"star");
       action("평점 태그를 Extra로 옮기기",async()=>{
         const found=await this.visibleRatingTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
         if(!found.length){this.say(win,"태그로 남은 평점이 없습니다.");return;}
@@ -3708,10 +3719,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(stray.orphans)lines.push(`독립 첨부파일 ${stray.orphans}개는 본 문헌이 없어 태그를 그대로 두었습니다.`);
         lines.push("Extra는 동기화되고 직접 고칠 수 있으며, 태그 목록에는 나타나지 않습니다.");
         this.say(win,lines.join("\n"));
-      },body,"star");
+      },upkeep,"star");
       make("menuseparator",null,body);
       action("인용…",()=>this.citationPanel(win,this.selected(win)),body,"quote");
-      action("커스텀 열로 전환",()=>this.useColumns(win),body,"columns");
+      action("커스텀 열로 전환",()=>this.useColumns(win),upkeep,"columns");
       action("연구 작업 패널",()=>state.workbench?.toggle(true),body,"panel");
       action("관계 그래프 열기",()=>state.workbench?.show('graph'),body,"graph");
       /* The paper under the pointer is already the question. Both of these
@@ -3726,12 +3737,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         state.workbench?.show('authors','pi');
       },body,"authors","마지막에 이름을 올린 저자를 이 논문의 책임저자로 보고, 그 사람의 최근 논문·소속 이동·특허를 엽니다.");
       make("menuseparator",null,body);
+      body.addEventListener("popupshowing",()=>{
+        // Greyed means "already so": the current status and rating cannot be chosen again.
+        try{
+          const first=this.selected(win)[0], current=first?this.state(first):null;
+          for(const [status,node] of Object.entries(statusItems))node.disabled=!!current&&current.status===status;
+          for(const [rating,node] of Object.entries(ratingItems))node.disabled=!!current&&Number(current.rating||0)===Number(rating);
+          stopItem.hidden=!this.citationJob;
+        }catch(error){this.Z.logError(error);}
+      });
       action("지표·읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();},body,"refresh","저장된 값을 다시 읽어 열을 새로 그립니다. 네트워크는 쓰지 않습니다.");
       action("선택한 문헌 인용 수 새로고침",async()=>{
         const result=await this.refreshCitations(this.selected(win),{force:true});
         this.say(win,`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
       },body,"citations");
-      action("인용 수 조회 중지",()=>{if(!this.citationJob)throw new Error("진행 중인 인용 수 조회가 없습니다. 중지할 것이 없습니다.");this.citationJob.controller.abort();this.say(win,"인용 수 조회를 중지했습니다. 지금까지 받은 값은 저장했습니다.");},body,"stop");
+      const stopItem=action("인용 수 조회 중지",()=>{if(!this.citationJob)throw new Error("진행 중인 인용 수 조회가 없습니다. 중지할 것이 없습니다.");this.citationJob.controller.abort();this.say(win,"인용 수 조회를 중지했습니다. 지금까지 받은 값은 저장했습니다.");},body,"stop");
       action("첨부파일 종류 판별",async()=>{
         const chosen=this.selected(win);
         const items=chosen.length?chosen:await this.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
@@ -3749,12 +3769,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const report=await this.runBackfill({libraryID:win.ZoteroPane?.getSelectedLibraryID?.(),
           onProgress:({stage,done,total})=>this.showBackfillProgress(win,stage,done,total)});
         this.say(win,this.backfillSummary(report));
-      },body,"fill","철회 신호·저널 지표·관심 저자의 새 논문을 한 번에 채웁니다.");
+      },upkeep,"fill","철회 신호·저널 지표·관심 저자의 새 논문을 한 번에 채웁니다.");
       action("철회·공개접근 확인",async()=>{
         const result=await this.refreshPaperSignals(this.selected(win));
         this.say(win,`신호 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · DOI 없음 ${result.unsupported}개 · 조회 오류 ${result.error}개`);
       },body,"signal","선택한 문헌이 철회됐는지, 공개접근본이 있는지 확인합니다.");
-      action("라이브러리 전체 인용 수 조회",async()=>{const r=await this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID);this.say(win,r.cancelled?`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개 · 중지됨`:`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개`);},body,"citations","이 라이브러리의 모든 문헌에 인용 수를 채우고 Extra에 기록합니다.");
+      action("라이브러리 전체 인용 수 조회",async()=>{const r=await this.syncLibraryCitations(win.ZoteroPane.getSelectedLibraryID?.()||this.Z.Libraries.userLibraryID);this.say(win,r.cancelled?`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개 · 중지됨`:`인용 수 저장 ${r.saved||0}개 · 확인 불가 ${r.unavailable||0}개`);},upkeep,"citations","이 라이브러리의 모든 문헌에 인용 수를 채우고 Extra에 기록합니다.");
       action("저널 IF 공식 값 새로고침",async()=>{
         const result = await this.refreshJournalMetrics(this.selected(win), win.DOMParser);
         this.say(win,`IF 확인 ${result.updated}개 · 조회 실패 ${result.failed}개 · 미등록 저널 ${result.unknown}개. 기존 확인된 값은 유지됩니다.`);

@@ -27,7 +27,7 @@
   const secret=spec=>!!spec.secret||spec.type==='password';
   // Three fields decide what the plugin can reach; a new user should see them
   // before the category list, and only while they are still blank.
-  const FIRST=['citationEmail','openalexApiKey','aiEndpoint'];let refreshFirst=()=>{};
+  const FIRST=['openalexApiKey','aiEndpoint','citationEmail'];let refreshFirst=()=>{};
   const valueOf=state=>state.spec.type==='boolean'?state.input.checked:state.input.value;
   function display(state,value){if(state.spec.type==='boolean')state.input.checked=!!value;else state.input.value=String(value??'');}
   function sync(state){
@@ -139,7 +139,7 @@
    try{const value=await runtime.getSettingsStatus?.();if(destroyed)return;
     if(!value){readTime.textContent='—';liveText.textContent='현재 동작 정보를 제공하지 않습니다.';return;}
     const seconds=typeof value.readSeconds==='number'&&Number.isFinite(value.readSeconds)&&value.readSeconds>=0?Math.floor(value.readSeconds):null;
-    readTime.textContent=seconds===null?'—':seconds+'초';
+    readTime.textContent=seconds===null?'—':(typeof runtime.formatReadTime==='function'?runtime.formatReadTime(seconds):seconds+'초');
     const parts=[value.version?t('버전 {0}').replace('{0}',value.version):null,t('읽기 기록 {0}').replace('{0}',t(value.recordReading?'켜짐':'꺼짐')),value.selectedTitle?t('선택: {0}').replace('{0}',value.selectedTitle):t('선택한 문헌 없음'),value.citationStatus?t('인용 조회: {0}').replace('{0}',t(value.citationStatus)):null,value.storagePath?t('저장 위치: {0}').replace('{0}',value.storagePath):null];
     liveText.replaceChildren();for(const part of parts.filter(Boolean))node('span',null,liveText,{class:'scs-live-part'}).textContent=part;
    }catch(error){if(!destroyed){readTime.textContent='—';liveText.textContent='현재 동작을 확인하지 못했습니다.';}}
@@ -149,7 +149,7 @@
   {
    const heading=node('strong','먼저 할 것',first);node('p','비워 두어도 동작하지만, 채우면 인용 수·저널 정보·AI 기능이 열립니다.',first,{class:'scs-help'});
    const list=node('div',null,first,{class:'scs-first-list'}),rows=new Map();
-   for(const key of FIRST){const state=states.get(key);if(!state)continue;const row=node('button',null,list,{type:'button','data-first':key});node('span',state.spec.label,row);node('span',state.spec.category==='ai'?'AI 요약·비교':key==='citationEmail'?'빠른 조회 대기열':'인용 수·저널 정보',row,{class:'scs-first-why'});row.addEventListener('click',()=>{selectCategory(state.spec.category);state.input.focus();});rows.set(key,row);}
+   for(const key of FIRST){const state=states.get(key);if(!state)continue;const row=node('button',null,list,{type:'button','data-first':key});node('span',state.spec.label,row);node('span',state.spec.category==='ai'?'AI 요약·비교':key==='citationEmail'?'(선택) 빠른 대기열 · 주소가 서버에 남습니다':'없으면 인용 수 열이 비어 있습니다',row,{class:'scs-first-why'});row.addEventListener('click',()=>{selectCategory(state.spec.category);state.input.focus();});rows.set(key,row);}
    refreshFirst=()=>{if(destroyed)return;let open=0;for(const [key,row]of rows){const state=states.get(key);const blank=!String(valueOf(state)??'').trim();row.hidden=!blank;if(blank)open++;}first.hidden=!open;heading.textContent=t(open>1?'먼저 할 것':'아직 비어 있는 것');};
    refreshFirst();
   }

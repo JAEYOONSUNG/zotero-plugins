@@ -23,7 +23,7 @@
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-controls { margin: 0 0 12px; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-button,
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) select,
-:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) input { border: 1px solid var(--jcr-line); border-radius: 4px; min-height: 30px; background: var(--jcr-bg); color: var(--jcr-ink); font: inherit; padding: 5px 9px; box-shadow: none; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) input { border: 1px solid var(--jcr-line); border-radius: var(--sc-radius-sm, 7px); min-height: 30px; background: var(--jcr-bg); color: var(--jcr-ink); font: inherit; padding: 5px 9px; box-shadow: none; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-button { cursor: pointer; white-space: normal; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-button:hover { background: var(--jcr-fill); }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) button:disabled { opacity: .45; cursor: default; }
@@ -34,7 +34,7 @@
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-toggle { display: grid; grid-template-columns: minmax(160px,1fr) 95px 110px 125px 22px; align-items: center; gap: 12px; width: 100%; text-align: left; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-head { padding: 7px 14px; color: var(--jcr-muted); font-size: 11px; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-head span:not(:first-child) { text-align: right; }
-:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group { border: 1px solid var(--jcr-line); border-radius: 4px; margin-bottom: 8px; overflow: hidden; background: var(--jcr-bg); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group { border: 1px solid var(--jcr-line); border-radius: var(--sc-radius-sm, 7px); margin-bottom: 8px; overflow: hidden; background: var(--jcr-bg); }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-toggle { padding: 15px 14px; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; min-height: 64px; cursor: pointer; white-space: normal; box-shadow: none; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-toggle:hover,
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-toggle[aria-expanded="true"] { background: var(--jcr-fill); }
@@ -43,9 +43,9 @@
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-chevron { font-size: 18px; line-height: 1; text-align: right; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-content { padding: 13px 18px; border-top: 1px solid var(--jcr-line); }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-links { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(220px,100%),1fr)); gap: 7px 20px; padding: 0; margin: 0; list-style: none; }
-:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-link { border: 0; background: transparent; border-radius: 3px; color: inherit; font: inherit; padding: 2px 0; text-align: left; text-decoration: underline; text-decoration-color: var(--jcr-line); text-underline-offset: 3px; white-space: normal; overflow-wrap: anywhere; cursor: pointer; box-shadow: none; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-link { border: 0; background: transparent; border-radius: var(--sc-radius-sm, 7px); color: inherit; font: inherit; padding: 2px 0; text-align: left; text-decoration: underline; text-decoration-color: var(--jcr-line); text-underline-offset: 3px; white-space: normal; overflow-wrap: anywhere; cursor: pointer; box-shadow: none; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-link:hover { text-decoration-color: currentColor; }
-:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--jcr-line); border-radius: 4px; background: var(--jcr-bg); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--jcr-line); border-radius: var(--sc-radius-sm, 7px); background: var(--jcr-bg); }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table { border-collapse: collapse; border: 0; margin: 0; min-width: 860px; width: 100%; table-layout: auto; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table :is(th,td) { border: 0; border-bottom: 1px solid var(--jcr-line); padding: 10px 12px; text-align: left; vertical-align: top; white-space: normal; font-size: 12px; line-height: 1.45; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th { background: var(--jcr-fill); font-weight: 600; }
@@ -70,7 +70,7 @@
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-pagination { margin: 8px 0 12px; color: var(--jcr-muted); font-size: 12px; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-pagination span { margin-right: auto; font-variant-numeric: tabular-nums; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-page-size { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-context { background: var(--jcr-fill); border: 1px solid var(--jcr-line); border-radius: 4px; padding: 12px 14px; margin: 12px 0; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-context { background: var(--jcr-fill); border: 1px solid var(--jcr-line); border-radius: var(--sc-radius-sm, 7px); padding: 12px 14px; margin: 12px 0; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-parents { color: var(--jcr-muted); font-size: 12px; margin: 0 0 10px; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-stats { display: flex; flex-wrap: wrap; gap: 12px 28px; margin: 0; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-stats dt { color: var(--jcr-muted); font-size: 11px; }

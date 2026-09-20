@@ -85,7 +85,7 @@ test('the start-here block lists only the blank keys and sends each to its field
  const block=f.doc.querySelector('.scs-first');
  assert.ok(block&&!block.hidden,'a fresh profile is told what to fill first');
  const shown=()=>[...f.doc.querySelectorAll('.scs-first-list button')].filter(b=>!b.hidden).map(b=>b.dataset.first);
- assert.deepEqual(shown(),['citationEmail','openalexApiKey','aiEndpoint']);
+ assert.deepEqual(shown(),['openalexApiKey','aiEndpoint','citationEmail'],'the key that turns the citation column on comes first; the email, which costs privacy, last');
  assert.ok(block.textContent.includes('인용 수·저널 정보'),'each one says what it unlocks');
  const row=f.doc.querySelector('[data-first="aiEndpoint"]');
  row.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
