@@ -4,7 +4,7 @@ Two plugins for Zotero 7, 8 and 9, kept in one repository and installed separate
 
 | Plugin | What it does | Latest |
 |---|---|---|
-| **ZotPoP** | Publish or Perish-style search and import. Find papers by author, journal, title, keywords and years across several indexes, read citation counts and h-index-style metrics while you choose, and add the papers to your library. | [zotpop-0.38.0.xpi](https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/zotpop-v0.38.0/zotpop-0.38.0.xpi) |
+| **ZotPoP** | Search and import. Find papers by author, journal, title, keywords and years across several indexes, read citation counts and h-index-style metrics while you choose, and add the papers to your library. | [zotpop-0.38.0.xpi](https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/zotpop-v0.38.0/zotpop-0.38.0.xpi) |
 | **Style Custom** | A research workbench inside Zotero: your library, related papers, author tracking, JCR journal metrics, annotations and notes, a citation graph and reading progress in one panel, plus impact factor, citation, reading-time and journal-mark columns in the item list. | [style-custom-0.51.3.xpi](https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/style-custom-v0.51.3/style-custom-0.51.3.xpi) |
 
 ![The Zotero item list with Style Custom's columns: impact factor, citation count with a bar, reading status, the journal in its own colour, rating, reading time, file kinds, and the corresponding institution with its tier and flag](docs/images/library-columns.png)
@@ -30,7 +30,6 @@ Everything works without these. They live in Settings → the plugin's page.
 |---|---|---|
 | OpenAlex API key | Raises the daily allowance for citation counts, journal facts and author tracking about a hundredfold | [openalex.org](https://openalex.org), free |
 | Contact email | Puts OpenAlex and Crossref requests in their faster "polite pool". The address is recorded by those two services on every request | your own address |
-| Publish or Perish executable | Google Scholar search in ZotPoP | [harzing.com/pop](https://harzing.com/resources/publish-or-perish) |
 | AI endpoint and model | Translation, summaries and paper comparison in Style Custom | any OpenAI-compatible Chat Completions endpoint |
 | easyScholar key, USPTO key | Further journal grades such as CAS; patents filed by followed authors | free keys from each service |
 
@@ -44,7 +43,7 @@ Open it from the **magnifier** button in the items toolbar or **Tools → ZotPoP
 
 ### Searching
 
-- **Sources**: a combined index (OpenAlex + Crossref + Europe PMC + arXiv), OpenAlex, Crossref, PubMed, Europe PMC, Semantic Scholar, arXiv, preprint servers, and Google Scholar through an installed Publish or Perish engine.
+- **Sources**: a combined index (OpenAlex + Crossref + Europe PMC + arXiv), OpenAlex, Crossref, PubMed, Europe PMC, Semantic Scholar, arXiv, preprint servers, and Google Scholar (Scholar may ask for a CAPTCHA).
 - **Criteria**: authors, journal, title words, keywords in any field, a year range, a maximum number of results (up to 2,000) and a sort order. Boolean expressions (`AND`, `OR`, `NOT`, parentheses, quoted phrases) mean the same thing in every source.
 - **The result table**: citations, citations per year, rank, authors, title, year, journal (in the journal's own colour), impact factor, first author's institution and country, institution tier, DOI, whether a PDF is available and whether the paper is already in your library. Column widths and order are remembered. A cell whose text overflows scrolls once while the pointer rests on it.
 - **Citation metrics** (left): the span of publication years, paper count, total citations, h-index, g-index, hI,norm, hI,annual and hA-index, recomputed for whatever the filter leaves visible.
@@ -56,7 +55,7 @@ Tick rows with the checkbox or the space bar and press **Add selected**. Metadat
 
 ### The author tab
 
-Find a person by name, ORCID, or Google Scholar profile URL or ID and load their publication list. Google now requires a signed-in account for Scholar *profile* search, so a profile lookup without one runs a Scholar *paper* search by the same name instead and says so in a banner. For the profile itself, sign in to Google Scholar inside Publish or Perish and press Find profile again.
+Find a person by name, ORCID, or Google Scholar profile URL or ID and load their publication list. Google requires a signed-in account for Scholar *profile* search, so a profile lookup without one runs a Scholar *paper* search by the same name instead and says so in a banner.
 
 ### Keyboard
 
@@ -123,7 +122,7 @@ After an install, when Zotero starts, 36 checks run against the real library and
 | Clarivate Journal Citation Reports 2026 (JIF 2025) | Journal impact factor, quartile, category, rank |
 | OpenAlex | Citation counts, authors and institutions, journal profiles and subject classification, related papers |
 | Crossref, Europe PMC, PubMed, Semantic Scholar, arXiv | ZotPoP search, citation cross-checks |
-| Publish or Perish (Harzing) | Google Scholar search engine |
+| Google Scholar | Scholar search and author profiles |
 | USPTO Open Data Portal | Patents of followed authors (key required) |
 
 Email addresses and API keys are sent only to the service they belong to, and only if you entered them yourself.
@@ -140,4 +139,4 @@ sh scripts/build.sh                                   # build/zotpop-<version>.x
 cd zotero-style-custom && python3 scripts/build.py    # build/style-custom-<version>.xpi
 ```
 
-ZotPoP is documented in more detail in [docs/ZOTPOP.md](docs/ZOTPOP.md) and Style Custom in [zotero-style-custom/README.md](zotero-style-custom/README.md). Every improvement round of Style Custom is recorded in [zotero-style-custom/docs/improvement-rounds.json](zotero-style-custom/docs/improvement-rounds.json). Third-party notices are in each directory's `LICENSES.md`.
+Style Custom's reference is [zotero-style-custom/README.md](zotero-style-custom/README.md). Every improvement round of Style Custom is recorded in [zotero-style-custom/docs/improvement-rounds.json](zotero-style-custom/docs/improvement-rounds.json). Third-party notices are in each directory's `LICENSES.md`.
