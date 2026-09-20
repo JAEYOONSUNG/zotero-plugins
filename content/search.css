@@ -191,12 +191,17 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 #results-table th.column-drop-after { box-shadow: inset -3px 0 0 var(--accent); }
 #results-table th .rz { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; }
 #results-table th .rz:hover { background: var(--accent); opacity: .5; }
-#results-table th.sorted-asc::after { content: " ▲"; font-size: 8px; color: var(--accent); }
-#results-table th.sorted-desc::after { content: " ▼"; font-size: 8px; color: var(--accent); }
+/* The sort mark sits outside the header's text, so "Rank" does not become "Ra…" the moment it is sorted. */
+#results-table th[data-sort] { padding-right: 18px; }
+#results-table th.sorted-asc::after, #results-table th.sorted-desc::after { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 8px; color: var(--accent); }
+#results-table th.sorted-asc::after { content: "▲"; }
+#results-table th.sorted-desc::after { content: "▼"; }
 #results-table td.num, #results-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 #results-table th.mini, #results-table td.mini { text-align: center; }
-#results-table td.title a { color: inherit; text-decoration: none; }
-#results-table td.title a:hover { text-decoration: underline; color: var(--accent); }
+#results-table td.doi a.doi-link { color: inherit; text-decoration: none; }
+#results-table td.doi a.doi-link:hover { text-decoration: underline; color: var(--accent); }
+#results-table td[role="button"] { cursor: pointer; }
+#results-table td[role="button"]:hover { color: var(--accent); }
 .marquee-text { display: block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; scroll-behavior: auto; }
 /* At rest a cell shows its beginning with an ellipsis; the row under the pointer rolls once. */
 #results-table tbody tr:hover td { background: var(--row-hover); }

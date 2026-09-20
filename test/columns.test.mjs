@@ -51,7 +51,7 @@ test("the shipped header, colgroup and actual generated cells share all stable f
 });
 
 test("header drag moves keyed cells and widths in place while preserving checkbox, links and marquee", () => {
-	const launches = [], prefs = { colWidthsVersion: 7, colWidths: JSON.stringify({ title: 411, year: 83 }) };
+	const launches = [], prefs = { colWidthsVersion: 8, colWidths: JSON.stringify({ title: 411, year: 83 }) };
 	let refreshed = 0;
 	const h = setup({ prefs, launchURL: url => launches.push(url), marquee: { attach: () => ({ refresh: () => refreshed++, refreshCell() {} }) } });
 	const rec = paper("one", { rank: 1, url: "https://example.test/paper", title: "Paper", year: 2024, authorString: "Example" });
@@ -72,7 +72,9 @@ test("header drag moves keyed cells and widths in place while preserving checkbo
 	assert.equal(titleCol.style.width, "411px");
 	assert.equal(h.get("cols").children.find(col => col.dataset.k === "year").style.width, "83px");
 	assert.deepEqual(JSON.parse(prefs.colOrder), expected);
-	event(title.firstChild, "click"); assert.deepEqual(launches, [rec.url]);
+	// A click on the title stays in the window; double-click is the way to the browser.
+	event(title.firstChild, "click"); assert.deepEqual(launches, []);
+	event(row, "dblclick"); assert.deepEqual(launches, [rec.url]);
 	checkbox.checked = false; event(checkbox, "change"); assert.equal(h.state.selected.has(rec.key), false);
 	const reopened = setup({ prefs }); aligned(reopened, expected);
 	assert.equal(reopened.state.colWidths.title, 411);
@@ -118,7 +120,7 @@ test("drop after target works both directions and checkbox column stays fixed", 
 
 test("invalid saved orders retain known unique fields, append new fields and leave widths unchanged", () => {
 	for (const saved of ["bad JSON", "{}", "null", '"title"', '["title","bad","title","chk",4,null]']) {
-		const prefs = { colOrder: saved, colWidthsVersion: 7, colWidths: '{"title":480,"year":77}' };
+		const prefs = { colOrder: saved, colWidthsVersion: 8, colWidths: '{"title":480,"year":77}' };
 		const h = setup({ prefs }), order = keys(h.get("cols"));
 		assert.equal(order.length, 16); assert.equal(new Set(order).size, 16); assert.equal(order[0], "chk");
 		if (saved.startsWith("[")) assert.equal(order[1], "title");

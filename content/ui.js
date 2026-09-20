@@ -15,14 +15,15 @@
 	// Wider text columns: at the old widths a title showed eight words and an
 	// author list two names, and every one of them rolled at once.
 	const DEFAULT_COLS = {
-		chk: 28, citations: 56, cpy: 60, rank: 44, authorString: 190, title: 320,
-		year: 46, venue: 170, journalIF: 48, affiliation: 170, country: 62, tier: 56,
+		chk: 28, citations: 56, cpy: 74, rank: 60, authorString: 190, title: 320,
+		year: 58, venue: 150, journalIF: 48, affiliation: 150, country: 62, tier: 56,
 		doi: 150, pdf: 44, inLibrary: 44, status: 96
 	};
 
-	const COL_VERSION = 7;
+	// 8: Year, Rank and Per year were narrower than their own digits ("20…", "Ra…").
+	const COL_VERSION = 8;
 	const COLUMN_KEYS = Object.keys(DEFAULT_COLS);
-	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~40px)
+	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~56px with its padding)
 	const MIN_COL = 40;
 	// An unbounded drag used to persist a column wider than the window
 	const MAX_COL = 900;
@@ -160,7 +161,10 @@
 		// A network-level failure arrives as status 0, which is falsy: testing truthiness
 		// fell through to Zotero's message, which carries the contact e-mail.
 		let msg = status != null && status !== 0 ? `HTTP ${status}` : scrubURLs(e?.message || String(e));
-		let err = new Error(msg + " — " + url.split("?")[0]);
+		// The host says which service failed; the path and query are for the log.
+		let host = ""; try { host = new URL(url).host; } catch (ignored) { host = url.split("?")[0]; }
+		let err = new Error(msg + " · " + host);
+		err.url = url.split("?")[0];
 		err.status = status;
 		// sources.js distinguishes an exhausted OpenAlex budget from a transient 429
 		err.body = String(body).slice(0, 400);
@@ -209,9 +213,17 @@
 
 	function log(msg) { Zotero.debug("ZotPoP: " + msg); }
 
-	function setStatus(msg, cls) {
+	let statusRevert = null, lastStatus = { msg: "", cls: "" };
+	// Timers by whichever global has them: the window in Zotero, none in the test sandbox.
+	const later = (fn, ms) => (typeof setTimeout === "function" ? setTimeout(fn, ms) : typeof window !== "undefined" && window.setTimeout ? window.setTimeout(fn, ms) : null);
+	const cancelLater = id => { if (id == null) return; if (typeof clearTimeout === "function") clearTimeout(id); else if (typeof window !== "undefined" && window.clearTimeout) window.clearTimeout(id); };
+	function setStatus(msg, cls, options = {}) {
+		if (statusRevert != null) { cancelLater(statusRevert); statusRevert = null; }
 		$("status").textContent = msg;
 		$("statusbar").classList.toggle("err", cls === "err");
+		// "DOI copied." is news for a moment, not a state to read back later.
+		if (options.transient) statusRevert = later(() => { statusRevert = null; setStatus(lastStatus.msg, lastStatus.cls); }, 4000);
+		else lastStatus = { msg, cls };
 	}
 	function setProgress(value, max) {
 		let p = $("progress");
@@ -272,7 +284,7 @@
 		setDetailVisible(!$("detail").hidden);
 		setStatus(PREF("hintShown") ? t("ready") : t("welcome"));
 		render();
-		$(searchSurface === "authors" ? "author-input" : "keywords").focus();
+		{ let field = $(searchSurface === "authors" ? "author-input" : "keywords"); field.focus(); if (field.value) field.select(); }
 		loadCaches().finally(restoreCachedSearch);
 	}
 
@@ -1285,10 +1297,22 @@
 	}
 
 	// ------------------------------------------------------------ search
+	let escapeArmed = 0;
 	function stopOperation() {
 		state.cancelled = true;
 		state.searchController?.abort();
-		setStatus(t("stopping"));
+		setStatus(t(state.importing ? "stoppingImport" : "stopping"));
+	}
+	// The library's own copy of a paper, brought into view in the main window.
+	function showInLibrary(r) {
+		try {
+			let key = r.doi && ZotPoPSources.normalizeDOI ? ZotPoPSources.normalizeDOI(r.doi) : r.doi;
+			let id = key && state.doiMap.get(key);
+			let pane = mainWindow?.ZoteroPane;
+			if (id && pane?.selectItem) { pane.selectItem(id); setStatus(t("shownInLibrary"), "", { transient: true }); }
+			else setStatus(t("thLibTip"), "", { transient: true });
+		}
+		catch (e) { log("showInLibrary failed: " + e.message); }
 	}
 
 	function recordIdentities(record) {
@@ -1516,7 +1540,7 @@
 	function matchesFilter(r, f) {
 		if (!f) return true;
 		let where = affiliationOf(r);
-		let hay = (r.title + " " + r.authorString + " " + r.venue + " " + (r.doi || "") + " " + (r.year || "")
+		let hay = (r.title + " " + r.authorString + " " + r.venue + " " + (r.doi || "") + " " + (r.year || "") + " " + (r.status || "")
 			+ " " + (where ? [where.first?.institution, where.corresponding?.institution, ...where.countries].filter(Boolean).join(" ") : "")).toLowerCase();
 		return f.split(/\s+/).every(w => hay.includes(w));
 	}
@@ -1637,7 +1661,7 @@
 		else marquee.refresh();
 
 		$("empty").hidden = list.length > 0 || !$("busy").hidden;
-		$("empty").textContent = state.records.length ? t("emptyFiltered") : t("emptyInitial");
+		$("empty").textContent = state.records.length ? t("emptyFiltered") : t(searchSurface === "authors" ? "emptyInitialAuthors" : "emptyInitial");
 		updateCounts();
 		renderMetrics(list);
 		renderDetail();
@@ -1686,9 +1710,11 @@
 
 		let tt = td("title", "title", null, r.title);
 		tt.dataset.marquee = "title";
-		let a = document.createElement(r.url ? "a" : "span");
+		// Plain text: the title is the widest cell, and a click on "the row" used
+		// to leave Zotero for the browser. Double-click, Enter or the menu do that.
+		let a = document.createElement("span");
 		if (r.titleMarkup) rich(a, r.titleMarkup); else a.textContent = r.title;
-		if (r.url) { a.href = "#"; a.tabIndex = -1; a.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); Zotero.launchURL(r.url); }); }
+		if (r.url) tt.title = r.title + "\n" + t("titleOpenTip");
 		tt.appendChild(a);
 
 		td("year", "num", r.year == null ? "" : String(r.year));
@@ -1703,23 +1729,27 @@
 		let tierCell = td("tier", "mini tiercell", null, "");
 		let chip = tierChip(where);
 		if (chip) tierCell.appendChild(chip);
-		td("doi", "", r.doi || "", r.doi || "").dataset.marquee = "doi";
-		td("pdf", "mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfTip") : "");
-		td("inLibrary", "mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibTip") : "");
+		let doiCell = td("doi", "doi", null, r.doi ? t("thDoiTip") : ""); doiCell.dataset.marquee = "doi";
+		if (r.doi) { let link = document.createElement("a"); link.href = "#"; link.tabIndex = -1; link.textContent = r.doi; link.className = "doi-link";
+			link.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); Zotero.launchURL("https://doi.org/" + encodeURI(r.doi)); }); doiCell.appendChild(link); }
+		let pdfCell = td("pdf", "mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfClickTip") : "");
+		if (hasPDF(r)) { pdfCell.setAttribute("role", "button"); pdfCell.addEventListener("click", e => { e.stopPropagation(); state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail(); openPreview(r); }); }
+		let libCell = td("inLibrary", "mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibClickTip") : "");
+		if (r.inLibrary) { libCell.setAttribute("role", "button"); libCell.addEventListener("click", e => { e.stopPropagation(); showInLibrary(r); }); }
 		let st = td("status", "status", r.status || "", r.statusTitle || "");
 		st.dataset.marquee = "status";
 		if (r.statusClass) st.classList.add(r.statusClass);
 		orderColumnCells(tr);
 
 		tr.addEventListener("click", e => {
-			if (e.target.closest("input, a")) return;
+			if (e.target.closest("input, a, [role=button]")) return;
 			state.focusKey = r.key;
 			state.detailKey = r.key;
 			if (e.metaKey || e.ctrlKey) toggleSelect(r, !state.selected.has(r.key));
 			else { paintRows(); renderDetail(); }
 		});
 		tr.addEventListener("dblclick", e => {
-			if (e.target.closest("input, a")) return;
+			if (e.target.closest("input, a, [role=button]")) return;
 			if (r.url) Zotero.launchURL(r.url);
 		});
 		tr.addEventListener("contextmenu", e => {
@@ -1754,7 +1784,13 @@
 		let n = state.records.filter(r => state.selected.has(r.key)).length;
 		$("selected-count").textContent = t("selected", n);
 		$("import-btn").disabled = n === 0 || state.importing || state.searching;
-		$("chk-all").checked = state.visible.length > 0 && state.visible.every(r => state.selected.has(r.key));
+		let all = state.visible.length > 0 && state.visible.every(r => state.selected.has(r.key));
+		let some = state.visible.some(r => state.selected.has(r.key));
+		$("chk-all").checked = all;
+		$("chk-all").indeterminate = some && !all;
+		let fresh = state.visible.filter(r => !r.inLibrary).length;
+		let newLabel = $("select-new").querySelector("span"); if (newLabel) newLabel.textContent = t("selNewCount", fresh);
+		$("select-new").disabled = fresh === 0;
 		$("preview-btn").disabled = !previewRecord();
 		previewManager?.update(previewRecord());
 	}
@@ -1990,8 +2026,17 @@
 			if (openSel) { closeSelMenu(); return; }
 			if (!$("histmenu").hidden) { closeHistoryMenu(); return; }
 			if (!$("ctxmenu").hidden) { hideCtxMenu(); return; }
-			if (state.searching || state.importing) { stopOperation(); return; }
+			if (state.searching) { stopOperation(); return; }
+			if (state.importing) {
+				// One Esc, pressed to dismiss something that had already closed, used
+				// to abort a batch add half-way. It takes two within a moment and a half.
+				let now = Date.now();
+				if (escapeArmed && now - escapeArmed < 1500) { escapeArmed = 0; stopOperation(); }
+				else { escapeArmed = now; setStatus(t("escapeAgainToStop")); }
+				return;
+			}
 			if (document.activeElement === $("filter") && $("filter").value) { clearFilter(); return; }
+			if (document.activeElement === $("filter")) { $("table-wrap").focus(); return; }
 			if (state.detailKey) { state.detailKey = null; paintRows(); renderDetail(); return; }
 			return;
 		}
@@ -2002,6 +2047,15 @@
 		// it made select-all in the query boxes select every result row instead.
 		if (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
 		if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); selectVisible(true); return; }
+		if (mod && e.key.toLowerCase() === "c") {
+			// The focused row's citation, or with Shift its DOI: what a reader reaches for most.
+			let r = state.visible.find(row => row.key === state.focusKey);
+			if (!r) return;
+			e.preventDefault();
+			if (e.shiftKey) { if (r.doi) copyText(r.doi, t("copiedDoi")); }
+			else copyText(citationText(r), t("copiedCite"));
+			return;
+		}
 		if (!mod && !e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); openPreview(); return; }
 		if (!state.visible.length) return;
 		let idx = state.visible.findIndex(r => r.key === state.focusKey);
@@ -2025,6 +2079,19 @@
 			toggleSelect(r, !state.selected.has(r.key));
 			return;
 		}
+		if ((e.key === "Backspace" || e.key === "Delete") && idx >= 0) {
+			e.preventDefault();
+			if (mod) { state.selected.clear(); paintRows(); }
+			else toggleSelect(state.visible[idx], false);
+			return;
+		}
+		if (e.key === "Home" || e.key === "End") {
+			e.preventDefault();
+			let r = state.visible[e.key === "Home" ? 0 : state.visible.length - 1];
+			state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail();
+			document.querySelector(`#results-body tr[data-key="${CSS.escape(r.key)}"]`)?.scrollIntoView({ block: "nearest" });
+			return;
+		}
 		if (e.key === "Enter" && idx >= 0) {
 			e.preventDefault();
 			let r = state.visible[idx];
@@ -2035,7 +2102,7 @@
 	// ------------------------------------------------------------ export
 	function copyText(text, msg) {
 		Zotero.Utilities.Internal.copyTextToClipboard(String(text || ""));
-		setStatus(msg || t("copied"));
+		setStatus(msg || t("copied"), "", { transient: true });
 	}
 
 	function csvText() {

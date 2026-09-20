@@ -2,16 +2,23 @@
  "strings": [
   {
    "ko": "인용 가능 항목",
-   "n": 6,
+   "n": 7,
    "files": [
     "src/jcr-browser.js"
    ]
   },
   {
    "ko": "저널 수",
-   "n": 5,
+   "n": 6,
    "files": [
     "src/jcr-browser.js"
+   ]
+  },
+  {
+   "ko": "조회처",
+   "n": 5,
+   "files": [
+    "src/failures.js"
    ]
   },
   {
@@ -20,6 +27,14 @@
    "files": [
     "src/runtime.js",
     "src/settings.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "특허",
+   "n": 5,
+   "files": [
+    "src/runtime.js",
     "src/workbench.js"
    ]
   },
@@ -36,6 +51,13 @@
    "n": 5,
    "files": [
     "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "카테고리 수",
+   "n": 4,
+   "files": [
+    "src/jcr-browser.js"
    ]
   },
   {
@@ -85,14 +107,14 @@
    ]
   },
   {
-   "ko": "카테고리 수",
+   "ko": "JIF 중앙값",
    "n": 3,
    "files": [
     "src/jcr-browser.js"
    ]
   },
   {
-   "ko": "JIF 중앙값",
+   "ko": "지표 연도",
    "n": 3,
    "files": [
     "src/jcr-browser.js"
@@ -130,7 +152,15 @@
    ]
   },
   {
-   "ko": "특허",
+   "ko": "저널 지표",
+   "n": 3,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "학위논문",
    "n": 3,
    "files": [
     "src/runtime.js",
@@ -311,13 +341,6 @@
    ]
   },
   {
-   "ko": "지표 연도",
-   "n": 2,
-   "files": [
-    "src/jcr-browser.js"
-   ]
-  },
-  {
    "ko": "그룹",
    "n": 2,
    "files": [
@@ -362,6 +385,20 @@
    "files": [
     "src/jcr-browser.js",
     "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "전체 카테고리",
+   "n": 2,
+   "files": [
+    "src/jcr-browser.js"
+   ]
+  },
+  {
+   "ko": "수집된 카테고리",
+   "n": 2,
+   "files": [
+    "src/jcr-browser.js"
    ]
   },
   {
@@ -413,6 +450,13 @@
    ]
   },
   {
+   "ko": "소속 미상",
+   "n": 2,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
    "ko": "중복",
    "n": 2,
    "files": [
@@ -444,7 +488,15 @@
    ]
   },
   {
-   "ko": "저널 지표",
+   "ko": "철회·공개접근 신호",
+   "n": 2,
+   "files": [
+    "src/runtime.js",
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "관심 저자 새 논문",
    "n": 2,
    "files": [
     "src/runtime.js",
@@ -476,11 +528,17 @@
    ]
   },
   {
-   "ko": "학위논문",
+   "ko": "제목으로 판별",
    "n": 2,
    "files": [
-    "src/runtime.js",
-    "src/workbench.js"
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "항목 유형",
+   "n": 2,
+   "files": [
+    "src/runtime.js"
    ]
   },
   {
@@ -632,6 +690,13 @@
   },
   {
    "ko": "현재 선택 문헌 누적 읽기",
+   "n": 2,
+   "files": [
+    "src/settings.js"
+   ]
+  },
+  {
+   "ko": "제한 없음",
    "n": 2,
    "files": [
     "src/settings.js"
@@ -1101,6 +1166,13 @@
    ]
   },
   {
+   "ko": "제1저자",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "로컬 JIF 순번",
    "n": 2,
    "files": [
@@ -1374,6 +1446,13 @@
    ]
   },
   {
+   "ko": "조회",
+   "n": 1,
+   "files": [
+    "src/failures.js"
+   ]
+  },
+  {
    "ko": "{0} 요청이 실패했습니다{1}.",
    "n": 1,
    "files": [
@@ -1479,6 +1558,20 @@
    ]
   },
   {
+   "ko": "원본 갱신",
+   "n": 1,
+   "files": [
+    "src/jcr-browser.js"
+   ]
+  },
+  {
+   "ko": "수집",
+   "n": 1,
+   "files": [
+    "src/jcr-browser.js"
+   ]
+  },
+  {
    "ko": "검색에 맞는 그룹이 없습니다.",
    "n": 1,
    "files": [
@@ -1494,6 +1587,13 @@
   },
   {
    "ko": "이 그룹의 카테고리 목록은 아직 수집되지 않았습니다.",
+   "n": 1,
+   "files": [
+    "src/jcr-browser.js"
+   ]
+  },
+  {
+   "ko": "표시 결과",
    "n": 1,
    "files": [
     "src/jcr-browser.js"
@@ -1550,6 +1650,13 @@
   },
   {
    "ko": "JCR 저널 수",
+   "n": 1,
+   "files": [
+    "src/jcr-browser.js"
+   ]
+  },
+  {
+   "ko": "수집된 저널",
    "n": 1,
    "files": [
     "src/jcr-browser.js"
@@ -1619,21 +1726,14 @@
    ]
   },
   {
-   "ko": "전체 카테고리",
-   "n": 1,
-   "files": [
-    "src/jcr-browser.js"
-   ]
-  },
-  {
-   "ko": "수집된 카테고리",
-   "n": 1,
-   "files": [
-    "src/jcr-browser.js"
-   ]
-  },
-  {
    "ko": "뒤로",
+   "n": 1,
+   "files": [
+    "src/jcr-browser.js"
+   ]
+  },
+  {
+   "ko": "그룹 보기",
    "n": 1,
    "files": [
     "src/jcr-browser.js"
@@ -1752,6 +1852,13 @@
    ]
   },
   {
+   "ko": "연도 미표기",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
    "ko": "중복×{0}",
    "n": 1,
    "files": [
@@ -1830,6 +1937,20 @@
   },
   {
    "ko": "일반",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "1저자",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "교신저자",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -1928,6 +2049,13 @@
   },
   {
    "ko": "첨부 {0} · {1}페이지 · 주석 {2}개",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": " · 앞 120개 위치 표시",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -2221,20 +2349,6 @@
    ]
   },
   {
-   "ko": "철회·공개접근 신호",
-   "n": 1,
-   "files": [
-    "src/runtime.js"
-   ]
-  },
-  {
-   "ko": "관심 저자 새 논문",
-   "n": 1,
-   "files": [
-    "src/runtime.js"
-   ]
-  },
-  {
    "ko": "관심 저자 특허",
    "n": 1,
    "files": [
@@ -2355,6 +2469,13 @@
   },
   {
    "ko": "저장하지 못했습니다. 디스크 공간과 Zotero 폴더 권한을 확인하세요. 지금까지의 기록은 창을 닫기 전까지 남아 있습니다.",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": "파일 이름으로 판별",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -2733,6 +2854,13 @@
   },
   {
    "ko": "선택한 문헌 인용 수 새로고침",
+   "n": 1,
+   "files": [
+    "src/runtime.js"
+   ]
+  },
+  {
+   "ko": " · 중지됨",
    "n": 1,
    "files": [
     "src/runtime.js"
@@ -6148,6 +6276,13 @@
    ]
   },
   {
+   "ko": "색 없음",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "{0} · {1}개 · 눌러서 이 색만 보기",
    "n": 1,
    "files": [
@@ -6422,6 +6557,13 @@
   },
   {
    "ko": "원논문에 붙이기",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": " · 빈 항목은 휴지통으로",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8038,6 +8180,13 @@
    ]
   },
   {
+   "ko": "책임저자",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "이 논문의 저자 {0}명 모두 보기",
    "n": 1,
    "files": [
@@ -8053,13 +8202,6 @@
   },
   {
    "ko": "저자 {0}명. 이름을 눌러 최근 작업을 확인하세요.",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "제1저자",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8472,6 +8614,13 @@
    ]
   },
   {
+   "ko": "분야가 있는 저널",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "{0} {1}개 · {2} {3}종",
    "n": 1,
    "files": [
@@ -8690,6 +8839,13 @@
   },
   {
    "ko": "발행·피인용",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": " · 2년 평균 피인용 ",
    "n": 1,
    "files": [
     "src/workbench.js"

@@ -82,7 +82,9 @@ export function mockElement(tagName = "div") {
 	return node;
 }
 
-export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {}, historyFiles = new Map(), prefs = {} } = {}) {
+export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {
+}, historyFiles = new Map(), prefs = {} } = {}) {
+	const copied = [];
 	const elements = new Map(), errors = [], events = new Map();
 	const get = id => {
 		if (!elements.has(id)) { const node = mockElement(); node.connected = true; elements.set(id, node); }
@@ -127,7 +129,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		AbortController,
 		window: { addEventListener(name, fn) { events.set(name, fn); winEvents.addEventListener(name, fn); }, openDialog },
 		document,
-		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set: (key, value) => { prefs[key.replace("extensions.zotpop.", "")] = value; } }, debug() {}, logError: e => errors.push(e), launchURL,
+		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set: (key, value) => { prefs[key.replace("extensions.zotpop.", "")] = value; } }, debug() {}, logError: e => errors.push(e), launchURL, Utilities: { Internal: { copyTextToClipboard: text => copied.push(String(text)) } },
 			HTTP: { request: request || (() => { throw new Error("Unexpected HTTP request"); }) } },
 		ZotPoPI18N: { make: () => (key, ...args) => key === "csvHead" ? ["head"] : [key, ...args].join("|") },
 		ZotPoPSources: { SOURCES: { openalex: { label: "OpenAlex" } }, POP_SOURCES: Sources.POP_SOURCES, normalizeDOI: Sources.normalizeDOI, filterRecords: (records, query) => Sources.filterRecords ? Sources.filterRecords(records, query) : records,
@@ -161,5 +163,5 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 			setOpenSelectForTest: value => { openSel = value; } };
 	`);
 	vm.runInContext(code, context);
-	return { ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
+	return { copied,  ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
 }

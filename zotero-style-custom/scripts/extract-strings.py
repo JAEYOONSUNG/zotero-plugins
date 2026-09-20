@@ -31,6 +31,9 @@ def literals(text):
                         if text[k] == '{': depth += 1
                         elif text[k] == '}': depth -= 1
                         k += 1
+                    # A literal inside the placeholder -- `${t('그룹 보기')} · ${n}` -- is
+                    # a key of its own; the placeholder used to swallow it unseen.
+                    out.extend(literals(text[j+2:k-1]))
                     buf.append('{%d}' % parts); parts += 1; j = k; continue
                 if d == quote:
                     break

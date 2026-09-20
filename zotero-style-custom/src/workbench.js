@@ -626,7 +626,7 @@
    const graph=graphTools.layout(graphTools.build(papers,{citedBy}),{width:W,height:H});
    const counted=graph.counted||{direct:0,coupled:0,isolated:0};
    node('p',`이어진 논문 ${graph.nodes.filter(n=>n.kind==='paper').length} · 인용 ${counted.direct}건 · 공통 참고문헌 쌍 ${counted.coupled}`,body,{class:'sc-muted sc-graph-summary'});
-   {const left=[counted.isolated?`연결 없음 ${counted.isolated}`:'',withRefs<papers.length?`인용 목록 없음 ${papers.length-withRefs}`:'',counted.external?`바깥 논문 ${counted.external}`:''].filter(Boolean);if(left.length)node('p',`그리지 않음: ${left.join(' · ')}`,body,{class:'sc-muted sc-graph-summary'});}
+   {const left=[counted.isolated?T(`연결 없음 ${counted.isolated}`):'',withRefs<papers.length?T(`인용 목록 없음 ${papers.length-withRefs}`):'',counted.external?T(`바깥 논문 ${counted.external}`):''].filter(Boolean);if(left.length)node('p',`그리지 않음: ${left.join(' · ')}`,body,{class:'sc-muted sc-graph-summary'});}
    drawJournalLegend(graph.nodes.filter(n=>n.kind==='paper'),body);
    if(!graph.nodes.length){
     empty('이 범위에서는 서로 인용하거나 참고문헌을 공유하는 논문이 없습니다. 범위를 넓혀보세요.');
@@ -764,7 +764,7 @@
     for(const n of graph.isolated.slice(0,30)){
      const c=node('div',null,list,{class:'sc-hit'});
      node('p',n.label,c,{class:'sc-hit-title'});
-     node('p',[n.venue,n.year,n.references?`참고문헌 ${n.references}건`:'인용 목록 없음'].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
+     node('p',[n.venue,n.year,n.references?T(`참고문헌 ${n.references}건`):T('인용 목록 없음')].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
      button('열기',()=>library.openItem(n.id),node('div',null,c,{class:'sc-hit-actions'}),{'data-opens':'window'});
     }
    }
@@ -1470,7 +1470,7 @@
      title:rank>=3?'철회된 논문입니다. 인용하기 전에 철회 사유를 확인하세요.':rank>=2?'우려 표명(expression of concern)이 게시된 논문입니다.':'정정·정오표가 게시된 논문입니다.'});
     chip.style.marginInlineEnd='6px';
    }
-   meta.appendChild(doc.createTextNode([work.year||'연도 미상',work.venue,work.citations==null?null:`인용 ${work.citations}`,work.openAccess?'오픈액세스':null].filter(Boolean).join(' · ')));
+   meta.appendChild(doc.createTextNode([work.year||T('연도 미상'),work.venue,work.citations==null?null:T(`인용 ${work.citations}`),work.openAccess?T('오픈액세스'):null].filter(Boolean).join(' · ')));
    if(work.authors?.length)node('p',work.authors.slice(0,4).join(', ')+(work.authors.length>4?` 외 ${work.authors.length-4}명`:''),row,{class:'sc-hit-authors'});
    if(work.inLibrary){node('span','보유 중',row,{class:'sc-hit-owned'});return row;}
    const actions=node('div',null,row,{class:'sc-hit-actions'});
@@ -1800,7 +1800,7 @@
     for(const person of people){
      const row=node('div',null,authors,{class:'sc-hit'});
      node('p',person.name,row,{class:'sc-hit-title'});
-     node('p',[person.position==='first'?'제1저자':person.position==='last'?'교신·책임저자':'공저자',person.institution].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
+     node('p',[T(person.position==='first'?'제1저자':person.position==='last'?'교신·책임저자':'공저자'),person.institution].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
      const actions=node('div',null,row,{class:'sc-hit-actions'});
      button('최근 논문',()=>run(()=>show(person)),actions);
     }

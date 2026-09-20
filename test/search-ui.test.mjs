@@ -476,7 +476,7 @@ test("a title's italics are drawn in the list and the detail, and kept for the i
 	] });
 	await ui.runSearch();
 	const rows = ui.get("results-body").children;
-	const link = rows[0].querySelector("td.title").querySelector("a");
+	const link = rows[0].querySelector("td.title").querySelector("span");
 	assert.equal(link.querySelector("i").textContent, "Bacillus subtilis");
 	assert.equal(link.querySelector("sub").textContent, "2");
 	assert.equal(link.textContent, "Establishing a Bacillus subtilis CO2 route");
@@ -853,4 +853,34 @@ test("a Scholar profile search that hits Google's login wall falls back to the p
 	await byUrl.runAuthorAction("profiles");
 	assert.ok(!urlCalls.includes("scholar"), "a profile URL is never re-run as a name search");
 	assert.equal(byUrl.state.records.length, 0);
+});
+
+test("the keyboard reaches what the mouse reaches: copy, deselect, jump to either end", async () => {
+	/* ⌘C copies the focused row's citation and ⇧⌘C its DOI; Backspace deselects the
+	   focused row and ⌘Backspace clears every selection; Home and End move focus
+	   to the ends, which used to scroll the table while the focus stayed put. */
+	const ui = uiHarness({ realRows: true, search: async () => [
+		paper("first", { title: "First paper", doi: "10.1/first", authors: [{ name: "A" }], year: 2020, venue: "J" }),
+		paper("second", { title: "Second paper", doi: "10.1/second", authors: [{ name: "B" }], year: 2021, venue: "J" }),
+		paper("third", { title: "Third paper", doi: "10.1/third", authors: [{ name: "C" }], year: 2022, venue: "J" })
+	] });
+	await ui.runSearch();
+	const press = (key, extra = {}) => ui.onKeyDown({ key, preventDefault() {}, ...extra });
+	press("End");
+	assert.equal(ui.state.focusKey, "third");
+	press("Home");
+	assert.equal(ui.state.focusKey, "first");
+	press(" ");
+	assert.equal(ui.state.selected.has("first"), true);
+	press("Backspace");
+	assert.equal(ui.state.selected.has("first"), false, "Backspace deselects the focused row");
+	press("a", { metaKey: true });
+	assert.equal(ui.state.selected.size, 3);
+	press("Backspace", { metaKey: true });
+	assert.equal(ui.state.selected.size, 0, "⌘Backspace clears the selection");
+	press("c", { metaKey: true });
+	assert.match(ui.copied.at(-1), /First paper/, "⌘C copies the citation");
+	press("c", { metaKey: true, shiftKey: true });
+	assert.equal(ui.copied.at(-1), "10.1/first", "⇧⌘C copies the DOI");
+	assert.match(ui.get("status").textContent, /copiedDoi|DOI/);
 });
