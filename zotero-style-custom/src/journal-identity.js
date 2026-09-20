@@ -528,6 +528,53 @@
   }
   function registryRank(title) { registryRanked(); return REGISTRY && REGISTRY.rankByKey ? (REGISTRY.rankByKey.get(flat(title)) || null) : null; }
   function registryLookup(flatTitle) { return REGISTRY ? (REGISTRY.byTitle.get(flatTitle) || null) : null; }
+  /* Where a journal stands inside its own subject, which is the figure JCR
+     prints and the one a reader actually uses: 12 of 312 in Molecular Biology
+     says more than 214th of 22,594. Built once off the ranked list, which is
+     already JIF-descending, so a group's order is its rank order. A journal
+     with no JIF cannot be placed among journals ordered by JIF, so it is left
+     out of the groups rather than dropped at the bottom of them. */
+  function fieldRanks() {
+    if (REGISTRY && REGISTRY.fieldRanks) return REGISTRY.fieldRanks;
+    const ranked = registryRanked();
+    if (!REGISTRY) return new Map();
+    const groups = new Map(), order = new Map();
+    for (const row of ranked) {
+      if (row.impactFactor == null || !Number.isFinite(Number(row.impactFactor))) continue;
+      /* The journal's own subjects in its own order -- the sweep wrote them
+         largest topic first -- and the narrower name before the broader one.
+         Sorting instead by how high it stands puts Science under Arts and
+         Humanities, where it is third of 3,723 and nobody looks for it. */
+      const mine = new Map();
+      for (const level of (row.levels || [])) {
+        for (const [name, value] of [['subfield', level.subfield], ['field', level.field]]) {
+          if (!value) continue;
+          const key = name + '\u0000' + value;
+          if (mine.has(key)) continue;
+          mine.set(key, mine.size);
+          const list = groups.get(key) || [];
+          list.push(row.key); groups.set(key, list);
+        }
+      }
+      if (mine.size) order.set(row.key, mine);
+    }
+    const byJournal = new Map();
+    for (const [key, list] of groups) {
+      const cut = key.indexOf('\u0000'), level = key.slice(0, cut), name = key.slice(cut + 1), of = list.length;
+      list.forEach((journalKey, index) => {
+        const rank = index + 1, mine = byJournal.get(journalKey) || [];
+        mine.push({level, name, rank, of, percentile: Math.max(1, Math.round(rank / of * 100)), quartile: Math.min(4, Math.max(1, Math.ceil(rank / of * 4)))});
+        byJournal.set(journalKey, mine);
+      });
+    }
+    for (const [journalKey, list] of byJournal) {
+      const ord = order.get(journalKey);
+      list.sort((a, b) => (ord.get(a.level + '\u0000' + a.name) ?? 99) - (ord.get(b.level + '\u0000' + b.name) ?? 99));
+    }
+    REGISTRY.fieldRanks = byJournal;
+    return byJournal;
+  }
+  function registryFieldRanks(title) { const all = fieldRanks(); return all.get(flat(title)) || []; }
   // The subjects the registry knows for a journal, by its printed name.
   function registryLevels(title) {
     const row = REGISTRY ? REGISTRY.byTitle.get(flat(title)) : null;
@@ -624,7 +671,7 @@
       : {...badge, ink, fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84)};
   }
 
-  const api = {registryLevels, identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, registryRanked, registryRank, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
+  const api = {registryFieldRanks, registryLevels, identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, registryRanked, registryRank, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

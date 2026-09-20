@@ -170,3 +170,35 @@ test('the registry carries each journal’s subjects, packed against one table o
   assert.equal(ranked[0].title, 'Cell');
   assert.equal(ranked[0].levels[0].domain, 'Life Sciences');
 });
+
+test('a journal is placed inside its own subject, which is the figure JCR prints', () => {
+  /* 214th of 22,594 tells a reader nothing. 12 of 1,813 in Molecular Biology
+     is what JCR reports and what they can act on. */
+  journals.loadRegistry({
+    subjects: ['Life Sciences', 'Biochemistry, Genetics and Molecular Biology', 'Molecular Biology', 'Cell Biology', 'Physical Sciences', 'Chemistry', 'Organic Chemistry'],
+    journals: [
+      {title: 'Top Review', impactFactor: 60, levels: [[0, 1, 2]]},
+      {title: 'Cell', impactFactor: 45.5, levels: [[0, 1, 2], [0, 1, 3]]},
+      {title: 'Mol Cell', impactFactor: 14.5, levels: [[0, 1, 2]]},
+      {title: 'J Cell Biol', impactFactor: 7.4, levels: [[0, 1, 3]]},
+      {title: 'Chem Rev', impactFactor: 51, levels: [[4, 5, 6]]},
+      {title: 'No Figure', levels: [[0, 1, 2]]}
+    ]
+  });
+  const cell = journals.registryFieldRanks('Cell');
+  // The narrower name first, and in the order the journal's own subjects run.
+  assert.deepEqual(cell.map(r => [r.level, r.name, r.rank, r.of]), [
+    ['subfield', 'Molecular Biology', 2, 3],
+    ['field', 'Biochemistry, Genetics and Molecular Biology', 2, 4],
+    ['subfield', 'Cell Biology', 1, 2]
+  ]);
+  assert.equal(cell[0].quartile, 3, 'second of three is the third quarter');
+  assert.equal(journals.registryFieldRanks('Chem Rev')[0].name, 'Organic Chemistry');
+  assert.equal(journals.registryFieldRanks('Chem Rev')[0].of, 1, 'a subject of one still places its journal');
+  // A journal with no figure cannot be ordered among journals ordered by figure.
+  assert.deepEqual(journals.registryFieldRanks('No Figure'), []);
+  assert.equal(journals.registryFieldRanks('Mol Cell')[0].of, 3, 'and it is not counted in anyone else’s total');
+  assert.deepEqual(journals.registryFieldRanks('Not A Journal'), []);
+  // Built once and kept, because it walks every row in the registry.
+  assert.equal(journals.registryFieldRanks('Cell'), cell);
+});

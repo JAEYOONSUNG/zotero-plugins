@@ -865,8 +865,9 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  const menu=level=>f.body().querySelector(`.sc-field-line select[data-level=${level}]`);
  const optionsOf=level=>[...menu(level).querySelectorAll('option')].map(o=>o.textContent);
  const choose=(level,value)=>{const m=menu(level);m.value=value;m.dispatchEvent(new f.win.Event('change',{bubbles:true}));};
- assert.deepEqual(optionsOf('domain'),['전체 · 1','분야 미상 · 1','Life Sciences 1','Physical Sciences 1']);
- assert.deepEqual(optionsOf('field'),['전체 · 1','Multidisciplinary 1','Engineering 1'],'fields are offered before a domain is chosen');
+ assert.deepEqual(optionsOf('domain'),['전체 · 2개','분야 미상 · 1','Life Sciences 1','Physical Sciences 1'],
+  'the first option counts the subjects on offer; all three menus used to repeat the journal count instead');
+ assert.deepEqual(optionsOf('field'),['전체 · 2개','Multidisciplinary 1','Engineering 1'],'fields are offered before a domain is chosen');
  assert.deepEqual([...f.body().querySelectorAll('.sc-field-line .sc-field-level')].map(x=>x.textContent),['대분류','분야','세부 분야'],'each menu has its caption beside it');
  assert.deepEqual([...menu('field').querySelectorAll('optgroup')].map(g=>g.getAttribute('label')),['Life Sciences','Physical Sciences'],'grouped under their domains');
  // Nothing is open yet; opening a journal lays out its facts.
@@ -884,10 +885,10 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  assert.ok([...f.body().querySelectorAll('button')].some(b=>b.textContent==='JCR에서 보기'),'the JCR page is one click away');
  // Choosing a domain narrows the menus to its right.
  choose('domain','Physical Sciences');await settle();
- assert.deepEqual(optionsOf('field'),['전체 · 1','Engineering 1']);
+ assert.deepEqual(optionsOf('field'),['전체 · 1개','Engineering 1']);
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science']);
  choose('field','Engineering');await settle();
- assert.deepEqual(optionsOf('subfield'),['전체 · 1','Biomedical Engineering 1']);
+ assert.deepEqual(optionsOf('subfield'),['전체 · 1개','Biomedical Engineering 1']);
  // A subfield chosen on its own pulls the levels above it along.
  await f.click('전체');await settle();
  choose('subfield','General');await settle();
@@ -895,10 +896,10 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science']);
  await f.click('전체');await settle();
  assert.equal(f.body().querySelectorAll('.sc-journal').length,2,'back to every journal');
- // Each journal is one table row: rank, name, quartile, abbreviation, house, papers, fields, figure.
+ // Each journal is one row: rank, name, quartile, abbreviation, house, papers, fields, place in field, figure.
  const first=f.body().querySelector('tr.sc-journal');
- assert.equal(first.querySelectorAll('td').length,8);
- assert.deepEqual([...f.body().querySelectorAll('.sc-journal-table thead th')].map(th=>th.textContent),['JCR 순위','저널','Q','약어','출판사','내 문헌','분야','JIF 2025']);
+ assert.equal(first.querySelectorAll('td').length,9);
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal-table thead th')].map(th=>th.textContent),['JCR 순위','저널','Q','약어','출판사','내 문헌','분야','분야 순위','JIF 2025']);
  assert.equal(first.querySelector('.sc-col-q .sc-quartile').textContent,'Q1');
  assert.equal(first.querySelector('.sc-col-abbr').textContent,'NATURE','sorted by IF, Nature first');
  // The journals have a search of their own, by name, abbreviation, publisher or field.
@@ -1206,6 +1207,42 @@ test('every button that opens a Zotero window is marked so a sweep can leave it 
  f.bench.destroy();
 });
 
+test('the journals table says where each one stands inside its own subject', async () => {
+ /* The reader asked for this by name: 분야 내 몇 위. The three subject menus
+    also used to repeat one figure -- the journals placed -- in all three, which
+    read as though the subject list itself were that short. */
+ const f = fixture();
+ const registry = [
+  {title: 'Top Review', rank: 1, key: 'top review', issns: [], abbreviation: 'TOP REV', impactFactor: 60, year: 2025, quartile: 1, publisher: 'Nature Portfolio',
+   levels: [{domain: 'Life Sciences', field: 'Biology', subfield: 'Molecular Biology'}]},
+  {title: 'Cell', rank: 2, key: 'cell', issns: [], abbreviation: 'CELL', impactFactor: 42.5, year: 2025, quartile: 1, publisher: 'Cell Press',
+   levels: [{domain: 'Life Sciences', field: 'Biology', subfield: 'Molecular Biology'}]}
+ ];
+ const ranks = {
+  'Top Review': [{level: 'subfield', name: 'Molecular Biology', rank: 1, of: 1813, percentile: 1, quartile: 1}],
+  'Cell': [{level: 'subfield', name: 'Molecular Biology', rank: 12, of: 1813, percentile: 1, quartile: 1},
+           {level: 'field', name: 'Biology', rank: 40, of: 2996, percentile: 2, quartile: 1}]
+ };
+ f.runtime.journalIdentity = {
+  identify: venue => registry.find(x => x.title === venue) || null,
+  registryRanked: () => registry,
+  registryRank: title => registry.find(x => x.title === title)?.rank || null,
+  registryLevels: title => registry.find(x => x.title === title)?.levels || [],
+  registryFieldRanks: title => ranks[title] || []
+ };
+ await f.bench.show('journals');
+ await f.click('전체 JCR 2');
+ const places = [...f.body().querySelectorAll('tr.sc-journal .sc-col-fieldrank')];
+ assert.deepEqual(places.map(td => td.textContent), ['1/1,813', '12/1,813']);
+ // Every subject it is ranked in, for a journal that sits in more than one.
+ assert.match(places[1].title, /Molecular Biology 1,813종 중 12위 · 상위 1% · Q1/);
+ assert.match(places[1].title, /Biology 2,996종 중 40위/);
+ // The menus count the subjects they offer, not the journals underneath them.
+ const first = f.body().querySelector('.sc-field-line select[data-level="domain"] option');
+ assert.equal(first.textContent, '전체 · 1개');
+ f.bench.destroy();
+});
+
 test('a journal the library does not hold is still placed in the subject hierarchy', async () => {
  /* The three subject menus used to count only the journals the library held
     and had a profile for, so "전체 · 22594" sat above menus totalling a couple
@@ -1229,7 +1266,7 @@ test('a journal the library does not hold is still placed in the subject hierarc
  await f.click('전체 JCR 3');
  const menu = level => f.body().querySelector(`.sc-field-line select[data-level="${level}"]`);
  const options = level => [...menu(level).querySelectorAll('option')].map(o => o.textContent);
- assert.deepEqual(options('domain'), ['전체 · 2', '분야 미상 · 1', 'Life Sciences 2'],
+ assert.deepEqual(options('domain'), ['전체 · 1개', '분야 미상 · 1', 'Life Sciences 2'],
   'two of the three can be placed, and the third says so');
  assert.deepEqual(options('subfield').slice(1).sort(), ['Cell Biology 1', 'Molecular Biology 1'],
   'a journal the library does not hold reaches the smallest level');

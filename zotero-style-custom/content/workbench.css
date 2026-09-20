@@ -971,3 +971,13 @@
    way back to the rest of its authors. */
 #style-custom-workbench .sc-focus-back { margin-block-end: 8px; align-items: baseline; }
 #style-custom-workbench .sc-focus-back button { min-height: 24px; padding: 2px 9px; font-size: 11px; }
+
+/* Where a journal stands inside its own subject: the figure JCR prints. The
+   ink is the quartile within that subject, which is not always the JCR one. */
+#style-custom-workbench .sc-col-fieldrank { width: 84px; text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-field-rank { font: 600 11.5px/1.5 var(--sc-mono); }
+#style-custom-workbench .sc-field-rank[data-q="1"] { color: var(--sc-tone-top); }
+#style-custom-workbench .sc-field-rank[data-q="2"] { color: var(--sc-tone-high); }
+#style-custom-workbench .sc-field-rank[data-q="3"] { color: var(--sc-tone-mid); }
+#style-custom-workbench .sc-field-rank[data-q="4"] { color: var(--sc-tone-low); }
+@container sc-workbench (max-width: 900px) { #style-custom-workbench .sc-col-fieldrank { display: none; } }

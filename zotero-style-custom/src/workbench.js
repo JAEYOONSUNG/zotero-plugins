@@ -1921,6 +1921,7 @@
     levels:(profile?.topics||[]).length
      ?(profile.topics||[]).slice(0,2).map(t=>({domain:t.domain||'',field:t.field||'',subfield:t.subfield||''}))
      :(runtime.journalIdentity?.registryLevels?.(venue)||[]),
+    fieldRanks:runtime.journalIdentity?.registryFieldRanks?.(venue)||[],
     hIndex:profile?.hIndex??null,works:profile?.works??null,citedness:profile?.citedness??null,isOA:!!profile?.isOA,inDoaj:!!profile?.inDoaj,apc:profile?.apc??null,
     country:profile?.country||'',homepage:profile?.homepage||'',openAlexID:profile?.openAlexID||'',
     papers:items.length,read,avgCited:cited.length?Math.round(cited.reduce((a,b)=>a+b,0)/cited.length):0,
@@ -1934,6 +1935,7 @@
    return {venue:row.title,items:items||[],id,profile:null,impact:row.impactFactor??null,year:row.year??null,quartile:row.quartile??null,abbreviation:row.abbreviation||'',
     globalRank:row.rank,publisher:row.publisher||'',issns:(row.issns||[]).map(x=>String(x).length===8?String(x).slice(0,4)+'-'+String(x).slice(4):String(x)),fields:[],topics:[],
     levels:Array.isArray(row.levels)?row.levels:[],
+    fieldRanks:runtime.journalIdentity?.registryFieldRanks?.(row.title)||[],
     hIndex:null,works:null,citedness:null,isOA:false,inDoaj:false,apc:null,country:'',homepage:'',openAlexID:'',
     papers:(items||[]).length,read:(items||[]).filter(i=>i.status==='done').length,avgCited:0,span:null,source:'등재 JCR 목록',registryOnly:true};
   }
@@ -1983,7 +1985,7 @@
    let typing=null;
    find.addEventListener('input',()=>{journalView.query=find.value;win.clearTimeout(typing);typing=win.setTimeout(()=>{typing=null;redrawJournalList();},120);});
    const sortPick=node('select',null,controls,{'aria-label':'저널 정렬'});
-   for(const [value,label] of [['if','IF 높은 순'],['name','이름순'],['papers','내 문헌 많은 순'],['quartile','사분위 순']]){const o=node('option',label,sortPick,{value});if(journalView.sort===value)o.selected=true;}
+   for(const [value,label] of [['if','IF 높은 순'],['name','이름순'],['papers','내 문헌 많은 순'],['quartile','사분위 순'],['fieldrank','분야 순위 높은 순']]){const o=node('option',label,sortPick,{value});if(journalView.sort===value)o.selected=true;}
    sortPick.addEventListener('change',()=>{journalView.sort=sortPick.value;render();});
    const grouped=button(journalView.grouped?'목록으로':'분야별로 묶기',()=>{journalView.grouped=!journalView.grouped;render();},controls,{'aria-pressed':String(journalView.grouped)});
    grouped.classList.add('sc-journal-toggle');
@@ -2012,7 +2014,12 @@
     const select=node('select',null,line,{'aria-label':label,'data-level':level});
     const under_=all.filter(j=>LEVELS.slice(0,index).every(([l])=>!pick[l]||j.levels.some(x=>x[l]===pick[l])));
     const placed=under_.filter(j=>j.levels.length).length;
-    node('option',`${T('전체')} · ${placed}`,select,{value:''});
+    /* The three menus used to read "전체 · 252" alike, which is the number of
+       journals placed and the same figure in all three. It looked like the
+       list of subjects was 252 long, or missing. Each says how many subjects
+       it offers; how many journals sit under them is on the menu itself. */
+    node('option',`전체 · ${options.length}개`,select,{value:''});
+    select.title=`${T(label)} ${options.length}개 · ${T('분야가 있는 저널')} ${placed.toLocaleString()}종`;
     const unplaced=index===0?all.length-all.filter(j=>j.levels.length).length:0;
     const unknownLabel=T('분야 미상');
     if(unplaced)node('option',unknownLabel+' · '+unplaced,select,{value:'\u0000none'});
@@ -2041,7 +2048,7 @@
    }
    if(pick.domain||pick.field||pick.subfield){const clear=button('전체',()=>{for(const [l] of LEVELS)pick[l]='';journalView.field='';render();},line,{class:'sc-field-clear',title:'분야 선택 지우기'});}
    // JIF order is the registry's order where both rows are in it, so a journal's place here is its JCR rank.
-   const order={if:(a,b)=>(a.globalRank&&b.globalRank)?a.globalRank-b.globalRank:(b.impact??-1)-(a.impact??-1)||a.venue.localeCompare(b.venue),name:(a,b)=>a.venue.localeCompare(b.venue),papers:(a,b)=>b.papers-a.papers||(b.impact??-1)-(a.impact??-1),quartile:(a,b)=>(a.quartile??9)-(b.quartile??9)||(b.impact??-1)-(a.impact??-1)}[journalView.sort]||((a,b)=>0);
+   const order={if:(a,b)=>(a.globalRank&&b.globalRank)?a.globalRank-b.globalRank:(b.impact??-1)-(a.impact??-1)||a.venue.localeCompare(b.venue),name:(a,b)=>a.venue.localeCompare(b.venue),papers:(a,b)=>b.papers-a.papers||(b.impact??-1)-(a.impact??-1),fieldrank:(a,b)=>{const x=a.fieldRanks?.[0],y=b.fieldRanks?.[0];return (x?x.rank/x.of:9)-(y?y.rank/y.of:9)||(b.impact??-1)-(a.impact??-1)||a.venue.localeCompare(b.venue);},quartile:(a,b)=>(a.quartile??9)-(b.quartile??9)||(b.impact??-1)-(a.impact??-1)}[journalView.sort]||((a,b)=>0);
    const listArea=node('div',null,body,{class:'sc-journal-list'});
    journalView.redraw=()=>{
    listArea.replaceChildren();
@@ -2068,7 +2075,7 @@
       papers here, fields, and the figure; the column names once at the top. */
    const table=node('table',null,listArea,{class:'sc-journal-table'});
    const thead=node('thead',null,table);const hr=node('tr',null,thead,{class:'sc-journal-head'});
-   for(const [label,cls] of [['JCR 순위','sc-col-rank'],['저널','sc-col-name'],['Q','sc-col-q'],['약어','sc-col-abbr'],['출판사','sc-col-pub'],['내 문헌','sc-col-n'],['분야','sc-col-fields'],[`JIF${shown[0].year?' '+shown[0].year:''}`,'sc-col-if']])node('th',label,hr,{scope:'col',class:cls});
+   for(const [label,cls] of [['JCR 순위','sc-col-rank'],['저널','sc-col-name'],['Q','sc-col-q'],['약어','sc-col-abbr'],['출판사','sc-col-pub'],['내 문헌','sc-col-n'],['분야','sc-col-fields'],['분야 순위','sc-col-fieldrank'],[`JIF${shown[0].year?' '+shown[0].year:''}`,'sc-col-if']])node('th',label,hr,{scope:'col',class:cls});
    const tbody=node('tbody',null,table);
    if(journalView.grouped){
     const groups=new Map();
@@ -2118,6 +2125,18 @@
     fieldsCell.title=parts.join('\n');
     if(journalView.pick.field&&byField.has(journalView.pick.field))fieldsCell.classList.add('sc-chip-on-text');
    }
+   /* Where it stands inside its own subject. 12 of 1,813 in Molecular Biology
+      is the figure JCR prints and the one a reader can act on; 214th of 22,594
+      is not. The narrowest subject leads, the rest are in the tooltip. */
+   const rankCell=node('td',null,tr,{class:'sc-col-fieldrank'});
+   const best=j.fieldRanks&&j.fieldRanks.length?j.fieldRanks[0]:null;
+   if(!best){rankCell.textContent='—';rankCell.classList.add('sc-journal-if-none');
+    rankCell.title=T(j.impact==null?'JIF가 없으면 분야 안에서 줄을 세울 수 없습니다.':'이 저널의 분야를 몰라 분야 순위를 낼 수 없습니다.');}
+   else{
+    const place=node('span',`${best.rank.toLocaleString()}/${best.of.toLocaleString()}`,rankCell,{class:'sc-field-rank'});
+    place.dataset.q=String(best.quartile);
+    rankCell.title=j.fieldRanks.map(r=>`${r.name} ${r.of.toLocaleString()}종 중 ${r.rank.toLocaleString()}위 · 상위 ${r.percentile}% · Q${r.quartile}`).join('\n');
+   }
    const figure=node('td',j.impact!=null?j.impact.toFixed(1):'—',tr,{class:'sc-col-if sc-journal-if',title:j.impact!=null?`JIF ${j.impact.toFixed(1)}${j.year?' ('+j.year+')':''}${j.source?' · '+j.source:''}`:'IF 미확인'});
    if(j.impact==null)figure.classList.add('sc-journal-if-none');
    else figure.dataset.tone=j.impact>=10?'top':j.impact>=5?'high':j.impact>=2?'mid':'low';
@@ -2161,6 +2180,9 @@
    fact('access','오픈액세스',access,{tone:j.isOA?'low':''});
    fact('country','국가',j.country?`${COUNTRY_NAMES[j.country]||j.country}`:null);
    if(j.homepage){const a=node('a',j.homepage.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),null,{href:'#',title:j.homepage});a.addEventListener('click',e=>{e.preventDefault();runtime.Z.launchURL&&runtime.Z.launchURL(j.homepage);});fact('link','홈페이지',a);}
+   for(const r of (j.fieldRanks||[]).slice(0,6))
+    fact('quartile',r.name,`${r.rank.toLocaleString()}위 / ${r.of.toLocaleString()}종 · 상위 ${r.percentile}%`,
+     {title:`${r.name} · ${T('분야 안에서 JIF 순')} · Q${r.quartile}`,tone:r.quartile===1?'top':r.quartile===2?'high':r.quartile===3?'mid':'low'});
    if(j.globalRank)fact('quartile','JCR 순위',`${j.globalRank.toLocaleString()}위 / ${(runtime.journalIdentity?.registryRanked?.()||[]).length.toLocaleString()}`,{title:'JIF 순, 등재 저널 전체'});
    fact('library','내 서재',j.papers?`${j.papers}편 · 읽음 ${j.read} · 평균 피인용 ${j.avgCited}${j.span?' · '+(j.span[0]===j.span[1]?j.span[0]:j.span[0]+'–'+j.span[1]):''}`:'없음',{title:'이 서재에서 이 저널의 문헌'});
    if(!j.profile)node('p','분야·h-index·오픈액세스는 「빈 칸 채우기」(패널 위 알림, 또는 문헌 우클릭 → Style Custom)를 실행하면 OpenAlex에서 채워집니다.',box,{class:'sc-muted sc-fact-note'});

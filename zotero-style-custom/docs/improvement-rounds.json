@@ -1,5 +1,5 @@
 {
-  "version": "0.49.1",
+  "version": "0.50.0",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -2115,6 +2115,34 @@
       ],
       "status": "verified",
       "review": "문헌 우클릭 메뉴에 「이 논문의 관련 논문」과 「이 논문 책임저자 추적」을 넣었다. 패널이 선택된 문헌을 그대로 읽어 해당 탭을 연다. 책임저자는 OpenAlex 저자 목록의 마지막 이름으로 보고 곧장 그 사람을 연다. 나머지 저자는 한 번 눌러 돌아간다. 둘 다 문헌이 하나일 때만 열리고, 여럿이면 하나만 고르라고 말한다."
+    },
+    {
+      "round": "R76",
+      "title": "분야 안에서 몇 위인가, 그리고 세 메뉴가 같은 숫자를 말하던 일",
+      "gap": "The three subject menus each opened with 「전체 · 252」 -- the number of journals placed, the same figure in all three -- which read as though the subject list itself were 252 long, or missing. And the only rank on offer was the place in the whole registry: 214th of 22,594, which tells a reader nothing. JCR prints the place inside the subject, and that was the figure missing.",
+      "entryPoint": "연구 작업 패널 → 저널 지표",
+      "sources": [
+        {
+          "file": "src/journal-identity.js",
+          "marker": "function registryFieldRanks(title)"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "const rankCell=node('td',null,tr,{class:'sc-col-fieldrank'});"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/journal-identity.test.mjs",
+          "name": "a journal is placed inside its own subject, which is the figure JCR prints"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the journals table says where each one stands inside its own subject"
+        }
+      ],
+      "status": "verified",
+      "review": "저널마다 자기 분야 안에서 몇 위인지를 낸다. 세부 분야와 분야 양쪽에서, JIF 순으로, 그 분야 사분위까지. 표에 「분야 순위」 열을 두고 가장 좁은 분야를 앞에 쓰며, 나머지는 툴팁과 자세히 보기에 모두 적는다. 그 순서로 정렬하는 항목도 넣었다. 세 메뉴의 첫 줄은 이제 그 메뉴가 가진 분야 수를 말한다. 레지스트리 전체를 한 번 훑어 만들고 기억해 둔다. JIF가 없는 저널은 줄 세울 수 없으므로 분모에서도 빠진다."
     }
   ],
   "introducedInVersion": "0.6.0"

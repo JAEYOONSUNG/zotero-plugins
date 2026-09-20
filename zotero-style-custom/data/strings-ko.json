@@ -7979,6 +7979,13 @@
    ]
   },
   {
+   "ko": "분야 순위 높은 순",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "목록으로",
    "n": 1,
    "files": [
@@ -8028,6 +8035,20 @@
    ]
   },
   {
+   "ko": "전체 · {0}개",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0} {1}개 · {2} {3}종",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "분야 미상",
    "n": 1,
    "files": [
@@ -8071,6 +8092,13 @@
   },
   {
    "ko": "내 문헌",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "분야 순위",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8134,6 +8162,27 @@
   },
   {
    "ko": "OpenAlex에 이 저널의 분야 정보가 없습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "JIF가 없으면 분야 안에서 줄을 세울 수 없습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "이 저널의 분야를 몰라 분야 순위를 낼 수 없습니다.",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0} {1}종 중 {2}위 · 상위 {3}% · Q{4}",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -8274,6 +8323,13 @@
   },
   {
    "ko": "홈페이지",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "{0}위 / {1}종 · 상위 {2}%",
    "n": 1,
    "files": [
     "src/workbench.js"
