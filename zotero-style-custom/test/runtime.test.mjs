@@ -1840,6 +1840,38 @@ test('double-clicking a column resizer fits the column to its widest visible cel
   assert.equal(state.listeners.length, 1, 'and the listener is registered for cleanup');
 });
 
+test('a fit borrows width from every column to the right, not only the one beside it', async () => {
+  /* The neighbour was already at its minimum, so the title stopped at 135
+     pixels with 152 of text. A column further right had room to spare. */
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML(`<html><body><div id="tbl">
+    <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="resizer title"></div><div class="cell year"><span>Year</span></div><div class="cell journal"><span>Journal</span></div><div class="cell fixed"><span>F</span></div></div>
+    <div class="virtualized-table-body"><div class="row"><span class="cell title">a much longer title text</span></div></div>
+  </div></body></html>`);
+  const {plugin} = fixture();
+  const resized = [];
+  const columns = [{dataKey: 'title', minWidth: 50}, {dataKey: 'year', minWidth: 20}, {dataKey: 'journal', minWidth: 40}, {dataKey: 'fixed', minWidth: 20, fixedWidth: true}];
+  window.ZoteroPane = {itemsView: {tree: {props: {id: 'tbl'}, _getVisibleColumns: () => columns, _columns: {onResize: (widths, store) => resized.push([widths, store])}}}};
+  window.CSS = {escape: s => s};
+  for (const el of document.querySelectorAll('.cell.title')) Object.defineProperty(el, 'scrollWidth', {value: el.textContent.length * 7});
+  Object.defineProperty(document.querySelector('.cell-text'), 'scrollWidth', {value: 30});
+  const size = {title: 120, year: 36, journal: 200, fixed: 300};
+  for (const [key, width] of Object.entries(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width});
+  const state = {listeners: []};
+  plugin.attachColumnFit(window, state);
+  document.querySelector('.resizer.title').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  assert.equal(resized.length, 1);
+  const [widths] = resized[0];
+  // Wants 24 * 7 + 16 = 184. The year column has no room (36 = 20 + 16), so
+  // the 64 pixels come from the journal column; the fixed column is not asked.
+  assert.equal(widths.title, 184, 'the column reaches its content');
+  assert.equal(widths.year, undefined, 'a neighbour with nothing to give is left alone');
+  assert.equal(widths.journal, 136, 'the room comes from the next column that has it');
+  assert.equal(widths.fixed, undefined, 'a fixed column keeps its width');
+  assert.equal(state.columnFit.fitted, 1);
+  assert.match(state.columnFit.last, /title: 120 → 184/);
+});
+
 test('the tree draws the italics and subscripts of a title instead of its tags', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML('<html><body><div class="row"><span class="cell title"><span class="cell-text">x</span></span></div></body></html>');

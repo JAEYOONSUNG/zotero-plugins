@@ -158,6 +158,28 @@
       return `${pressed} buttons pressed across ${tabs.length} tabs, none threw`;
     }));
 
+    results.push(await attempt('a double-click on a column edge fits the column to its content', async () => {
+      /* The user reported the fit not happening. The handler is real code on
+         the real header: dispatch the double-click it listens for and read
+         back what it did, or where it stopped. */
+      const state = runtime.windows.get(win);
+      if (!state || !state.columnFit) throw new Error('column fit not attached');
+      const resizers = [...win.document.querySelectorAll('.virtualized-table-header .resizer')];
+      if (!resizers.length) throw new Error('no column resizers in the items header');
+      const tree = win.ZoteroPane?.itemsView?.tree;
+      const visible = tree?._getVisibleColumns?.() || [];
+      const target = resizers.find(node => { const key = [...node.classList].find(n => !['resizer', 'draggable'].includes(n)); const i = visible.findIndex(c => c.dataKey === key); return i >= 0 && i < visible.length - 1; }) || resizers[0];
+      const key = [...target.classList].find(n => !['resizer', 'draggable'].includes(n));
+      const cell = () => win.document.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
+      const before = cell()?.getBoundingClientRect().width;
+      target.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, cancelable: true, view: win }));
+      await new Promise(resolve => win.setTimeout(resolve, 120));
+      const after = cell()?.getBoundingClientRect().width;
+      if (!state.columnFit.seen) throw new Error(`the double-click never reached the handler (resizer classes: ${target.className})`);
+      if (!state.columnFit.fitted) throw new Error(`the handler stopped: ${state.columnFit.last}`);
+      return `${state.columnFit.last} · header ${Math.round(before)} → ${Math.round(after)}px · ${resizers.length} resizers`;
+    }));
+
     results.push(await attempt('the panel can sit in a Zotero tab and fill it', async () => {
       const state = runtime.windows.get(win);
       const bench = state && state.workbench;

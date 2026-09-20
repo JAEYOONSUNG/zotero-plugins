@@ -3498,22 +3498,27 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // A host without a real document (tests, some headless windows) has no
     // header to fit; register nothing rather than fail the whole window setup.
     if (typeof doc?.addEventListener !== 'function') return;
-    const onDouble = event => {
+    // What the last double-click found, for the self-check: a fit that does
+    // nothing looks the same as one that never ran, and the user cannot tell.
+    state.columnFit = { seen: 0, fitted: 0, last: '' };
+    const onDouble = event => { try { fit(event); } catch (error) { state.columnFit.last = 'error: ' + (error.message || error); this.Z.logError(error); } };
+    const fit = event => {
       const resizer = event.target?.closest?.('.virtualized-table-header .resizer');
       if (!resizer) return;
+      state.columnFit.seen++;
       const tree = win.ZoteroPane?.itemsView?.tree;
-      if (!tree?._columns?.onResize || !tree.props?.id) return;
-      const dataKey = [...resizer.classList].find(name => name !== 'resizer' && name !== 'react-draggable' && !name.startsWith('react-draggable-'));
-      if (!dataKey) return;
+      if (!tree?._columns?.onResize || !tree.props?.id) { state.columnFit.last = 'no tree: ' + [!!tree, !!tree?._columns?.onResize, tree?.props?.id].join(','); return; }
+      const dataKey = [...resizer.classList].find(name => !['resizer', 'draggable', 'react-draggable'].includes(name) && !name.startsWith('react-draggable-'));
+      if (!dataKey) { state.columnFit.last = 'no key in ' + resizer.className; return; }
       const visible = tree._getVisibleColumns?.() || [];
       const index = visible.findIndex(column => column.dataKey === dataKey);
       const column = visible[index], neighbour = visible[index + 1];
-      if (!column || !neighbour) return;
+      if (!column || !neighbour) { state.columnFit.last = 'no pair for ' + dataKey; return; }
       event.stopPropagation(); event.preventDefault();
       const escape = win.CSS.escape(dataKey);
       const head = doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${escape}`);
       const next = doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(neighbour.dataKey)}`);
-      if (!head || !next) return;
+      if (!head || !next) { state.columnFit.last = 'no header cells for ' + dataKey; return; }
       let widest = 0;
       for (const cell of doc.querySelectorAll(`#${tree.props.id} .virtualized-table-body .cell.${escape}`)) {
         // scrollWidth is the content's width even where overflow is clipped.
@@ -3522,11 +3527,32 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const label = head.querySelector('.cell-text, span');
       widest = Math.max(widest, label ? label.scrollWidth + 22 : 0);
       const PAD = 16, MIN = 20;
-      const sum = head.getBoundingClientRect().width + next.getBoundingClientRect().width;
       const want = Math.max((column.minWidth || MIN) + PAD, widest + PAD);
-      const neighbourMin = (neighbour.minWidth || MIN) + PAD;
-      const width = Math.min(want, sum - neighbourMin);
-      tree._columns.onResize({[dataKey]: width, [neighbour.dataKey]: sum - width}, true);
+      /* A drag trades width with one neighbour, and the fit used to do the
+         same, so a column beside one already at its minimum could not grow at
+         all: the title stopped at 135 pixels with 152 of text. The room comes
+         from every column to the right in turn, then from the left, each kept
+         at its own minimum; fixed columns are not asked. Shrinking hands the
+         surplus to the neighbour, as a drag would. */
+      const cellFor = key => doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
+      const widths = new Map();
+      for (const c of visible) { const cell = c.dataKey === dataKey ? head : c.dataKey === neighbour.dataKey ? next : cellFor(c.dataKey); if (cell) widths.set(c.dataKey, cell.getBoundingClientRect().width); }
+      const current = widths.get(dataKey), changes = {};
+      let delta = want - current;
+      if (delta > 0) {
+        const donors = [...visible.slice(index + 1), ...visible.slice(0, index).reverse()].filter(c => widths.has(c.dataKey) && !c.fixedWidth && !c.staticWidth);
+        for (const c of donors) {
+          if (delta <= 0) break;
+          const room = widths.get(c.dataKey) - ((c.minWidth || MIN) + PAD);
+          const give = Math.min(delta, Math.max(0, room));
+          if (give > 0) { changes[c.dataKey] = widths.get(c.dataKey) - give; delta -= give; }
+        }
+      }
+      else if (delta < 0) changes[neighbour.dataKey] = widths.get(neighbour.dataKey) - delta;
+      const width = want - Math.max(0, delta);
+      changes[dataKey] = width;
+      tree._columns.onResize(changes, true);
+      state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} → ${Math.round(width)} (content ${Math.round(widest)}, from ${Object.keys(changes).length - 1} columns)`;
     };
     doc.addEventListener('dblclick', onDouble, true);
     state.listeners.push([doc, 'dblclick', onDouble, true]);
