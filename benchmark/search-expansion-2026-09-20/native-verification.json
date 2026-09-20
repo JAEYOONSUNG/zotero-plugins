@@ -1,0 +1,32 @@
+{
+  "version": "0.37.0",
+  "preserved": true,
+  "controls": 7,
+  "selected": [
+    "multi-source-openalex",
+    "multi-source-crossref",
+    "multi-source-europepmc",
+    "multi-source-arxiv"
+  ],
+  "selectionSaved": true,
+  "badNameMatches": false,
+  "records": 67,
+  "banner": "2026. 9. 18. 오후 4:47:28에 저장된 결과입니다. 최신 결과를 받으려면 검색을 누르세요. 검색 조건에 맞지 않는 저장 결과 2건을 이번 표시에서 제외했습니다.",
+  "idle": {
+    "active": 0,
+    "mode": "hover",
+    "paused": false,
+    "nonzero": 0
+  },
+  "hover": {
+    "active": 1,
+    "offset": 45,
+    "otherMoving": 0
+  },
+  "leave": {
+    "active": 0,
+    "nonzero": 0
+  },
+  "syntheticHoverEvents": true,
+  "success": true
+}

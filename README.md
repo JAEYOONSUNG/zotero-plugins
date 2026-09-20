@@ -31,11 +31,61 @@ and NOT/ANDNOT.
 the free routes fail, and *Open via library* opens the publisher page through it. Configure it in
 Settings → ZotPoP; a Yonsei preset is built in.
 
+## Author search and original PoP engine (0.38.0)
+
+The **Author search** tab accepts a Google Scholar author name, profile URL or ID,
+or an ORCID iD/profile URL. Select a profile and load its publications. Scholar name-based
+paper searches are a separate action and remain unverified as to author identity.
+Scholar profile discovery requires service access/login; a profile ID can be supplied directly.
+ORCID loads publicly registered works, without inventing complete bylines or citation metrics.
+Author inputs, profiles and history are preserved separately from the paper-search context.
+
+For paper searches, select **Publish or Perish original search** to invoke the installed PoP
+engine with its native fields and output order. This explicit mode uses the PoP application's
+configured profile by default and supports 14 CLI source routes, subject to provider access.
+It preserves every raw row, duplicate and rank, exposes original JSON copying, and keeps native
+results in history. Fresh retrieval and reading PoP's cache are explicit choices.
+
+[The 0.38.0 validation report](benchmark/pop-equivalence-2026-09-20/REPORT.md) records exact
+same-snapshot fidelity for 1,062 rows, the remaining difference in one of four separately refreshed
+comparisons, and live Scholar/ORCID author workflows. Output fidelity does not establish universal
+search coverage or independent bibliographic correctness.
+
+## Column order (0.37.1)
+
+Drag a result column header onto another header to move it. The insertion edge is
+highlighted, and the order is restored when ZotPoP reopens. Column widths move with
+their fields; a normal click still sorts and the edge grip still resizes.
+
+## Search expansion (0.37.0)
+
+Combined search can now include any selection of OpenAlex, Crossref, Europe PMC, arXiv,
+PubMed, Semantic Scholar and Google Scholar. Expand **Choose combined search sources**
+under the search form. Google Scholar uses the separately installed PoP engine when available.
+Selections are preserved in recent searches; the original four sources remain the default.
+
+The requested result limit reaches the engine unchanged, including without an OpenAlex key.
+Combined and Preprints paginate to collect up to 2,000 unique results, with bounded overfetch
+and refill after duplicates collapse. Provider quotas, candidate limits and failures remain
+explicitly marked as incomplete; stopping or a failed continuation preserves received rows.
+
+Enter an ORCID or OpenAlex author ID in Authors with OpenAlex/Combined for identity-based
+search. Full-name matches no longer expand an unrelated middle initial into a requested name.
+PubMed pasted titles handle unindexed stopwords; supported title searches preserve phrases,
+Boolean grouping and exclusion. Unsupported provider syntax is rejected explicitly.
+Scientific signs and superscript/subscript distinctions are retained when removing duplicates,
+and preprint/publication links require corroborating evidence. Citation provenance is retained
+and provider credentials stay on their intended service.
+
+[Fresh comparison and validation](benchmark/search-expansion-2026-09-20/REPORT.md) records
+actual 1,000-result retrieval, the stricter PoP comparison, and remaining source limitations.
+It does not claim universal or independently scraped Google Scholar parity.
+
 ## Sources
 
 | Source | Citation counts | Notes |
 |---|---|---|
-| OpenAlex | yes | default, no key needed |
+| OpenAlex | yes | optional key; provider quotas apply |
 | Crossref | yes | `is-referenced-by-count` |
 | Semantic Scholar | yes | unauthenticated access is heavily rate-limited; add an API key in Settings |
 | PubMed | via OpenAlex | counts looked up by DOI after the search |
@@ -65,8 +115,10 @@ Zotero Settings → ZotPoP.
 
 Google Scholar can use the official [Publish or Perish command-line tool](https://harzing.com/resources/publish-or-perish/command-line).
 Set its absolute executable path in ZotPoP settings, or put it in the user application support
-directory at `ZotPoP/tools/pop8query` (`pop8query.exe` on Windows). ZotPoP keeps its PoP search
-data in `ZotPoP/PoPData`, separate from the PoP application's search history. The executable is
+directory at `ZotPoP/tools/pop8query` (`pop8query.exe` on Windows). The integrated/direct search
+mode keeps its Scholar search data in `ZotPoP/PoPData`, separate from the PoP application's history.
+The explicit original PoP mode and author-profile searches use the PoP application's configured
+profile by default. The executable is
 an external dependency and is not included in the XPI. The progress message identifies this
 search route. A PoP CAPTCHA or service error is shown as an error; it is not an empty result set.
 
@@ -74,7 +126,7 @@ Search results appear as sources finish. Stop cancels HTTP requests, retry delay
 process. Bibliographic filters check author names and journals where complete metadata are
 available; missing Scholar bylines/journal snippets remain unverified. DOI lookup requires
 matching title identity, including negation and scientific numbers.
-Large PoP searches first display a small batch, then extend to the requested limit. If a provider
+In integrated/direct mode, large PoP-backed Scholar searches first display a small batch, then extend to the requested limit. If a provider
 fails after returning records, ZotPoP attempts one offline recovery and can retain an exact-query
 snapshot from the last 24 hours. Such results carry a visible incomplete/cached warning and are
 not treated as a fresh complete search. The [unrestricted Geobacillus case](benchmark/real-query/README.md)
@@ -85,7 +137,7 @@ documents the actual CAPTCHA interruption and recovery of 210 already received r
 ```
 npm run install               # quit Zotero first
 /Applications/Zotero.app/Contents/MacOS/zotero -purgecaches -ZoteroDebugText
-npm run test:offline          # 148 deterministic tests, no network
+npm run test:offline          # deterministic tests, no network
 npm test                      # adds live API tests; they skip themselves when a
                               # provider is down or its budget is spent.
                               # OPENALEX_API_KEY=... npm test runs the OpenAlex ones.

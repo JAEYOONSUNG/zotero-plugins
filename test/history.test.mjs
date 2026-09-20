@@ -99,3 +99,62 @@ test("the persisted index survives a fresh instance over the same files", async 
 	assert.equal(list.length, 1);
 	assert.deepEqual((await second.get(list[0].id)).records, records);
 });
+
+test("combined source selection is part of cache identity, with legacy default compatibility", () => {
+	const base = { keywords: "Geobacillus", maxResults: 1000 };
+	const defaults = ["openalex", "crossref", "europepmc", "arxiv"];
+	assert.equal(History.signature("multi", base), History.signature("multi", { ...base, sources: defaults }));
+	assert.equal(History.signature("multi", { ...base, sources: ["scholar", "pubmed"] }),
+		History.signature("multi", { ...base, sources: ["pubmed", "scholar", "scholar"] }));
+	assert.notEqual(History.signature("multi", base), History.signature("multi", { ...base, sources: [...defaults, "scholar"] }));
+	assert.notEqual(History.signature("multi", base), History.signature("multi", { ...base, sources: [] }));
+});
+
+test("Boolean operators cannot collide with literal lowercase words in cached queries", async () => {
+	for (const field of ["title", "keywords", "venue"]) {
+		assert.notEqual(History.signature("openalex", { [field]: "cancer OR diabetes" }),
+			History.signature("openalex", { [field]: "cancer or diabetes" }));
+		assert.equal(History.signature("openalex", { [field]: 'Cancer OR "DNA AND RNA"' }),
+			History.signature("openalex", { [field]: 'cancer OR "dna and rna"' }));
+	}
+	const { io, history } = store();
+	const literal = { title: "cancer or diabetes", maxResults: 10 };
+	const boolean = { ...literal, title: "cancer OR diabetes" };
+	const legacyID = History.signature("openalex", literal);
+	io.files.set("/data/zotpop/history/index.json", JSON.stringify({ entries: [
+		{ id: legacyID, source: "openalex", query: boolean, savedAt: "2026-09-20T00:00:00Z", count: 1 }
+	] }));
+	assert.equal(await history.find("openalex", literal), null, "a legacy lowercased key is not proof of the same query");
+});
+
+test("PoP history keys preserve native case, whitespace, profile, fields and output sort", () => {
+	const q = { engine: "pop", keywords: "GeneA OR GeneB", maxResults: 30, popOutputSort: "rank", popProfile: "pop-default" };
+	for (const changed of [{ keywords: "genea OR geneb" }, { keywords: "GeneA  OR GeneB" }, { popProfile: "/another/profile" },
+		{ popOutputSort: "-cites" }, { affiliation: "A university" }, { issn: "1234-5678" }, { citedId: "cluster1" }, { field: "biology" }, { popRaw: "x:y" }, { engine: "direct" }]) {
+		assert.notEqual(History.signature("crossref", q), History.signature("crossref", { ...q, ...changed }), JSON.stringify(changed));
+	}
+	assert.notEqual(History.signature("crossref", q), History.signature("pubmed", q));
+	assert.equal(History.signature("crossref", {}), History.signature("crossref", { engine: "direct" }), "legacy direct keys stay compatible");
+});
+
+test("author history separates input, provider, action and case-sensitive profile IDs", () => {
+	const q = { mode: "author", authorProvider: "scholar", authorInput: "Name As Typed", authorAction: "publications", authorProfileId: "dsdG3ewAAAAJ", maxResults: 100, popProfile: "pop-default" };
+	for (const changed of [{ authorInput: "name as typed" }, { authorInput: "Name  As Typed" }, { authorProvider: "orcid" }, { authorAction: "name-papers" },
+		{ authorProfileId: "dsdg3ewaaaaj" }, { maxResults: 200 }, { popProfile: "/other" }, { mode: "papers" }]) {
+		assert.notEqual(History.signature("author:scholar", q), History.signature("author:scholar", { ...q, ...changed }));
+	}
+	assert.equal(History.signature("author:scholar", q), History.signature("author:scholar", { ...q, authorProfile: { id: q.authorProfileId, name: "Updated name" } }), "card metadata is not coerced to a query identity string");
+});
+
+test("only valid author profile cards allow history without publication rows and are counted as profiles", async () => {
+	const { history } = store();
+	const profile = { provider: "orcid", id: "0000-0001-8277-5907", name: "Sheila Ingemann Jensen" };
+	const query = { mode: "author", authorProvider: "orcid", authorInput: profile.id, authorAction: "profiles", maxResults: 1000, authorProfiles: [profile] };
+	const id = await history.save({ source: "author:orcid", query, records: [] });
+	assert.ok(id); const saved = await history.get(id); assert.deepEqual(saved.records, []); assert.deepEqual(saved.query.authorProfiles, [profile]);
+	const [entry] = await history.list(); assert.equal(entry.kind, "profiles"); assert.equal(entry.count, 1); assert.match(entry.label, /ORCID/);
+	for (const authorProfiles of [[], [null], [{ provider: "orcid", id: "" }], [{ provider: "scholar", id: "other" }]]) {
+		assert.equal(await history.save({ source: "author:orcid", query: { ...query, authorProfiles }, records: [] }), null);
+	}
+	assert.equal(await history.save({ source: "orcid", query: { ...query, mode: "papers" }, records: [] }), null);
+});

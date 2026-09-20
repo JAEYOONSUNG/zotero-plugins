@@ -1,0 +1,28 @@
+{
+  "version": "0.50.3",
+  "sha256": "54bd5b52768a005d2455d857c581251890409389bdd889fd76ca4d67478d0d0d",
+  "previousVersion": "0.50.2",
+  "previousSha256": "569e36d6c664d306661a8ee0897b4edb55df51136ecebe2a7b39322de7c5ee7a",
+  "changedMembers": [
+    "manifest.json",
+    "bootstrap.js",
+    "src/workbench.js",
+    "content/workbench.css",
+    "src/strings.js",
+    "src/journal-identity.js",
+    "data/journal-registry.json",
+    "data/features.json"
+  ],
+  "allMembersMatchSources": true,
+  "nodeTests": 661,
+  "builderTests": 20,
+  "installerTests": 28,
+  "built": true,
+  "installed": false,
+  "runtimeVerified": false,
+  "checkedAt": "2026-09-20T03:46:25.065991+00:00",
+  "installState": "waiting-for-zotero-exit",
+  "watcherPID": 32279,
+  "watcherAlive": true,
+  "liveStatusFile": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/jcr-classification-fix-20260920/install-status.json"
+}

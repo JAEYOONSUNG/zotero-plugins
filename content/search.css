@@ -58,6 +58,20 @@ body {
 		var(--bg);
 }
 #app { display: flex; flex-direction: column; height: 100vh; }
+.search-modes { display: flex; gap: 5px; padding: 8px 13px 0; }
+.search-modes button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.search-modes button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.author-panel { padding: 12px 13px; border-bottom: 1px solid var(--border); }
+.author-query { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 9px; }
+.author-actions { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 1px; }
+.author-help { margin: 8px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.author-profiles { display: flex; flex-wrap: wrap; gap: 8px; max-height: 180px; overflow: auto; }
+.author-profile { display: flex; flex: 1 1 250px; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; min-width: 0; }
+.author-profile.selected { border-color: var(--accent); background: var(--accent-soft); }
+.author-profile-info { min-width: 0; }
+.author-profile-name { font-weight: 650; }
+.author-profile-meta { color: var(--muted); font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
+.author-profile-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
 .sprite { display: none; }
 .ic { width: 14px; height: 14px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
 .ic.muted { color: var(--muted); }
@@ -171,6 +185,10 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 	border-bottom: 1px solid var(--border-strong);
 }
 #results-table th:hover { color: var(--text); }
+#results-table th[draggable="true"] { cursor: grab; }
+#results-table th.column-dragging { opacity: .45; cursor: grabbing; }
+#results-table th.column-drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+#results-table th.column-drop-after { box-shadow: inset -3px 0 0 var(--accent); }
 #results-table th .rz { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; }
 #results-table th .rz:hover { background: var(--accent); opacity: .5; }
 #results-table th.sorted-asc::after { content: " ▲"; font-size: 8px; color: var(--accent); }
@@ -322,3 +340,14 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 
 /* The metrics sidebar before any search: one line saying what will appear, not a column of dashes. */
 .metrics-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+/* Optional search coverage stays with the query controls. */
+.combined-options { flex: 0 0 auto; padding: 6px 16px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.combined-options summary { cursor: pointer; color: var(--muted); }
+.combined-source-list { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 8px; }
+.combined-source-list label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.combined-options p { margin: 8px 0 0; color: var(--muted); }
+
+.pop-native-fields { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-top: 8px; }
+.pop-native-fields label { display: flex; flex: 1 1 150px; flex-direction: column; gap: 4px; }
+.pop-native-fields .pop-raw-field { flex-basis: 100%; }

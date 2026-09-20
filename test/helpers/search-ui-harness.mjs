@@ -6,6 +6,7 @@ import History from "../../content/history.js";
 import Affiliations from "../../content/affiliations.js";
 import JournalMarks from "../../content/journal-marks.js";
 import JCR from "../../content/jcr.js";
+import Authors from "../../content/authors.js";
 
 export const paper = (key, extra = {}) => ({
 	key, title: key, citations: 1, year: 2026, authors: [], ...extra
@@ -70,7 +71,8 @@ export function mockElement(tagName = "div") {
 		removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
 		emit(name, event = {}) { for (const fn of listeners.get(name) || []) fn({ target: this, ...event }); },
 		listenerCount() { return [...listeners.values()].reduce((sum, set) => sum + set.size, 0); },
-		focus() {}, scrollIntoView() {}
+		focus() {}, scrollIntoView() {},
+		getBoundingClientRect() { return { left: 0, right: 100, top: 0, bottom: 30, width: 100, height: 30 }; }
 	};
 	const dataName = key => "data-" + String(key).replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
 	node.dataset = new Proxy({}, {
@@ -80,14 +82,19 @@ export function mockElement(tagName = "div") {
 	return node;
 }
 
-export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, openDialog, marquee, realRows = false, launchURL = () => {}, historyFiles = new Map(), prefs = {} } = {}) {
+export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {}, historyFiles = new Map(), prefs = {} } = {}) {
 	const elements = new Map(), errors = [], events = new Map();
 	const get = id => {
 		if (!elements.has(id)) { const node = mockElement(); node.connected = true; elements.set(id, node); }
 		return elements.get(id);
 	};
+	const docEvents = mockElement("document"), winEvents = mockElement("window");
 	const document = {
-		getElementById: get, querySelectorAll: () => [], createElement: mockElement,
+		getElementById: get, querySelectorAll(selector) {
+			const match = selector.match(/^#([\w-]+)\s+(.+)$/);
+			return match ? get(match[1]).querySelectorAll(match[2]) : [];
+		}, createElement: mockElement, body: mockElement("body"),
+		addEventListener: (...args) => docEvents.addEventListener(...args), removeEventListener: (...args) => docEvents.removeEventListener(...args),
 		createTextNode(value) { const node = mockElement("#text"); node.textContent = value; return node; },
 		createDocumentFragment: () => mockElement("#fragment"),
 		querySelector(selector) {
@@ -95,22 +102,38 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 			return match ? get(match[1]).querySelector(match[2]) : null;
 		}
 	};
+	if (columns) {
+		const table = get("results-table"), head = get("results-head"), cols = get("cols");
+		table.appendChild(cols); table.appendChild(head); table.appendChild(get("results-body"));
+		const markup = fs.readFileSync(new URL("../../content/search.xhtml", import.meta.url), "utf8");
+		const keys = [...markup.matchAll(/<col data-k="([^"]+)"/g)].map(match => match[1]);
+		for (const key of keys) {
+			const col = mockElement("col"); col.dataset.k = key; cols.appendChild(col);
+			const th = mockElement("th"); th.dataset.k = key;
+			if (key !== "chk") { th.dataset.sort = key; if (key !== "status") { const grip = mockElement("span"); grip.className = "rz"; th.appendChild(grip); } }
+			head.appendChild(th);
+		}
+	}
+	for (const source of ["openalex", "crossref", "europepmc", "arxiv"]) get("multi-source-" + source).checked = true;
 	get("keywords").value = "genome editing";
 	get("sort").value = sort;
 	get("source").value = "openalex";
 	get("maxResults").value = "10";
+	get("author-provider").value = "scholar";
+	get("author-max-results").value = "1000";
 	const apiRecords = [paper("relevant", { title: "Precise match" }),
 		paper("popular", { title: "Broad review", citations: 10000, year: 2020 })];
 	const context = vm.createContext({
 		AbortController,
-		window: { addEventListener(name, fn) { events.set(name, fn); }, openDialog },
+		window: { addEventListener(name, fn) { events.set(name, fn); winEvents.addEventListener(name, fn); }, openDialog },
 		document,
-		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set() {} }, debug() {}, logError: e => errors.push(e), launchURL,
+		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set: (key, value) => { prefs[key.replace("extensions.zotpop.", "")] = value; } }, debug() {}, logError: e => errors.push(e), launchURL,
 			HTTP: { request: request || (() => { throw new Error("Unexpected HTTP request"); }) } },
 		ZotPoPI18N: { make: () => (key, ...args) => key === "csvHead" ? ["head"] : [key, ...args].join("|") },
-		ZotPoPSources: { SOURCES: { openalex: { label: "OpenAlex" } }, normalizeDOI: Sources.normalizeDOI,
+		ZotPoPSources: { SOURCES: { openalex: { label: "OpenAlex" } }, POP_SOURCES: Sources.POP_SOURCES, normalizeDOI: Sources.normalizeDOI, filterRecords: (records, query) => Sources.filterRecords ? Sources.filterRecords(records, query) : records,
 			search: search || (async (_source, query) => query.sort === "citations" ? [...apiRecords].reverse() : [...apiRecords]) },
 		ZotPoPPoPBridge: popBridge,
+		ZotPoPAuthors: authorsService,
 		ZotPoPPreview: Preview,
 		ZotPoPHistory: { ...History, memoryIO: () => History.memoryIO(historyFiles) },
 		ZotPoPAffiliations: Affiliations,
@@ -127,13 +150,16 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 	code = code.replace('window.addEventListener("load", init);', `
 		refreshLibraryFlags = globalThis.refreshFlags;
 		${realRows ? "" : 'buildRow = () => document.createElement("tr");'}
+		const originalRenderMetrics = renderMetrics;
 		renderMetrics = renderDetail = () => {};
 		cacheIO = setupStorage();
 		globalThis.harness = { state, runSearch, render, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
-			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText,
+			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
+			wireEvents, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
+			searchMode: () => searchSurface, authorSessions,
 			get history() { return history; },
 			setOpenSelectForTest: value => { openSel = value; } };
 	`);
 	vm.runInContext(code, context);
-	return { ...context.harness, get, errors, events };
+	return { ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
 }

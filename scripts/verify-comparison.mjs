@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import Query from "../content/query.js";
 import { evaluateCase } from "./benchmark-search.mjs";
 import { loadPoPReference } from "./lib/pop-reference.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const folder = resolve(root, "benchmark");
+assert.deepEqual(process.argv.slice(2), ["--historical-replay"], "Usage: node scripts/verify-comparison.mjs --historical-replay (frozen captures only; no current live parity claim)");
 const read = async path => JSON.parse((await readFile(path, "utf8")).replace(/^\uFEFF/, ""));
 const config = await read(resolve(folder, "queries.json"));
 const baseline = await read(resolve(folder, "results/baseline-report.json"));
@@ -16,6 +18,7 @@ assert.equal(config.cases.length, 12);
 assert.equal(improved.cases.length, config.cases.length);
 assert.equal(baseline.cases.length, config.cases.length);
 let recovered = 0, targets = 0, direct = 0, bridged = 0;
+const captureTimes = new Set(), evidence = [];
 for (const spec of config.cases) {
 	const result = improved.cases.find(c => c.id === spec.id);
 	const before = baseline.cases.find(c => c.id === spec.id);
@@ -31,8 +34,11 @@ for (const spec of config.cases) {
 	assert.equal(original.provenance.exitCode, 0);
 	assert.ok(original.provenance.command.includes("--direct"));
 	const reference = await loadPoPReference(referencePath);
+	assert.ok(Number.isFinite(Date.parse(result.capturedAt)), `${spec.id}: missing candidate capture time`);
+	captureTimes.add(result.capturedAt.slice(0, 10));
 	const check = evaluateCase(spec, { reference, records: result.records, errors: result.errors,
-		queryHelper: Query, thresholds: config.thresholds, requests: result.requests });
+		queryHelper: Query, thresholds: config.thresholds, requests: result.requests, now: result.capturedAt,
+		timeZone: "Asia/Seoul", criteria: { profile: "overlap" } });
 	assert.equal(check.status, "pass", `${spec.id}: ${check.reasons.join(", ")}`);
 	assert.equal(check.top.recall, 1, `${spec.id}: top references missing`);
 	assert.deepEqual(check.top.matches, result.top.matches);
@@ -49,7 +55,13 @@ for (const spec of config.cases) {
 	}
 	recovered += check.top.matches.length;
 	targets += Math.min(config.thresholds.referenceTopK, reference.records.length);
+	evidence.push({ id: spec.id, referenceSHA256: reference.provenance.sha256,
+		candidateRecordsSHA256: createHash("sha256").update(JSON.stringify(result.records)).digest("hex"),
+		fullRecall: check.full.recall, sameTopKRecall: check.ranking.sameTopKRecall,
+		rankAgreement: check.ranking.rankAgreement, metadataConflicts: check.metadata.conflicts.length });
 }
 assert.equal(direct, 6); assert.equal(bridged, 6);
 assert.ok(baseline.summary.passed < improved.summary.passed);
-console.log(`comparison verified: ${config.cases.length}/${config.cases.length} cases, ${recovered}/${targets} top references, ${direct} direct API and ${bridged} installed PoP cases`);
+console.log(JSON.stringify({ mode: "historical-replay", profile: "overlap", captureDates: [...captureTimes], parityEstablished: false,
+	limitation: "Frozen 30-result captures; legacy overlap checks only. Original candidate source hashes were not recorded. This does not establish strict completeness, ranking fidelity or current live parity.", cases: evidence }, null, 2));
+console.log(`historical comparison replay verified: ${config.cases.length}/${config.cases.length} cases, ${recovered}/${targets} top references, ${direct} direct API and ${bridged} installed PoP cases`);

@@ -83,8 +83,8 @@ test("Semantic Scholar author-only OR considers papers from both authors before 
 });
 
 test("PubMed compiles literal text words, quoted phrases and explicit field tags", () => {
-	assert.equal(S.pubmedTerm({ keywords: "CRISPR base editing" }), "CRISPR[Text Word] AND base[Text Word] AND editing[Text Word]");
-	assert.equal(S.pubmedTerm({ keywords: '("base editing" OR CRISPR) NOT cancer' }), '("base editing"[Text Word] OR CRISPR[Text Word]) NOT cancer[Text Word]');
+	assert.equal(S.pubmedTerm({ keywords: "CRISPR base editing" }), "((CRISPR[Text Word] AND base[Text Word]) AND editing[Text Word])");
+	assert.equal(S.pubmedTerm({ keywords: '("base editing" OR CRISPR) NOT cancer' }), '(("base editing"[Text Word] OR CRISPR[Text Word]) NOT cancer[Text Word])');
 	assert.equal(S.pubmedTerm({ keywords: "CRISPR[All Fields]" }), "CRISPR[All Fields]");
 });
 

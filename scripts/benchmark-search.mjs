@@ -3,11 +3,44 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { performance } from "node:perf_hooks";
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { assessReference, canonicalDOI, compareRecords, loadPoPReference, normalizeRecord, normalizeSource, normalizedTitle } from "./lib/pop-reference.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULTS = { referenceTopK: 10, candidateTopK: 30, minReferenceRecall: 0.9 };
 const errorInfo = error => ({ name: error?.name || "Error", message: String(error?.message || error), ...(error?.status ? { status: error.status } : {}) });
+const sha256 = value => createHash("sha256").update(value).digest("hex");
+
+function validateCriteria(options = {}) {
+	if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("Invalid criteria");
+	const profile = options.profile || "overlap";
+	if (!["strict", "overlap"].includes(profile)) throw new Error("Invalid criteria profile");
+	const strict = profile === "strict";
+	const criteria = { profile, minFullRecall: strict ? 1 : null, minSameTopKRecall: strict ? 1 : null,
+		minRankAgreement: strict ? 1 : null, requireMetadataConsistency: strict, requireVerifiedFields: strict, ...options };
+	for (const key of ["minFullRecall", "minSameTopKRecall", "minRankAgreement"]) {
+		if (criteria[key] === null && !strict) continue;
+		if (!Number.isFinite(criteria[key]) || criteria[key] < 0 || criteria[key] > 1) throw new Error(`Invalid criterion ${key}`);
+	}
+	for (const key of ["requireMetadataConsistency", "requireVerifiedFields"]) if (typeof criteria[key] !== "boolean") throw new Error(`Invalid criterion ${key}`);
+	if (strict && (!criteria.requireMetadataConsistency || !criteria.requireVerifiedFields || criteria.minFullRecall <= 0 || criteria.minSameTopKRecall <= 0 || criteria.minRankAgreement <= 0)) throw new Error("Strict criteria cannot disable completeness, ranking, metadata or field verification");
+	return criteria;
+}
+
+function rankingAssessment(reference, candidates, k, comparable) {
+	const count = Math.min(k, reference.length);
+	const matches = compareRecords(reference.slice(0, count), candidates.slice(0, count)).matches;
+	const exact = matches.filter(match => match.referenceIndex === match.candidateIndex).length;
+	const gain = index => 1 / (index + 1);
+	const ideal = Array.from({ length: count }, (_, i) => gain(i) / Math.log2(i + 2)).reduce((a, b) => a + b, 0);
+	const dcg = matches.reduce((sum, match) => sum + gain(match.referenceIndex) / Math.log2(match.candidateIndex + 2), 0);
+	return { applicable: comparable, k: count, sameTopKRecall: count ? matches.length / count : null,
+		rankAgreement: count ? exact / count : null, ndcg: ideal ? dcg / ideal : null,
+		meanAbsoluteRankError: matches.length ? matches.reduce((sum, match) => sum + Math.abs(match.referenceIndex - match.candidateIndex), 0) / matches.length : null,
+		method: "Same-size top-k identity recall, exact-position agreement and NDCG with reciprocal reference rank gain. Rank measures are gated only for matching source and retrieval sort." };
+}
 
 function validateThresholds(options) {
 	const thresholds = { ...DEFAULTS, ...options };
@@ -33,7 +66,7 @@ function fieldAssessment(records, query, helper) {
 				const names = record.authors.map(author => author.name || [author.firstName, author.lastName].filter(Boolean).join(" ")).filter(Boolean);
 				if (!names.length || names.some(truncated)) unknown.push("authors"); else failed.push("authors");
 			}
-			if (query.title && !helper.matchesTitle(query.title, record.title)) {
+			if (query.title && !helper.matchesTitle(query.title, record.titleMarkup || record.title)) {
 				if (!record.title || truncated(record.title)) unknown.push("title"); else failed.push("title");
 			}
 			if (query.venue && !helper.matchesVenue(query.venue, record)) {
@@ -59,7 +92,7 @@ function targetAssessment(spec, reference, candidates) {
 	let titles = spec.expectedTitles || [];
 	if (!expected.length && !titles.length && ["exact-title", "known-paper"].includes(spec.kind) && spec.query?.title) titles = [spec.query.title];
 	for (const title of titles) {
-		const refs = (reference?.records || []).filter(record => normalizedTitle(record.title) === normalizedTitle(title));
+		const refs = (reference?.records || []).filter(record => normalizedTitle(record.titleMarkup || record.title) === normalizedTitle(title));
 		const knownDOIs = new Set(refs.map(record => canonicalDOI(record.doi)).filter(Boolean));
 		expected.push({ title, doi: knownDOIs.size === 1 ? [...knownDOIs][0] : null, ambiguous: knownDOIs.size > 1 });
 	}
@@ -92,8 +125,9 @@ function precisionAssessment(spec, candidates) {
 
 export function evaluateCase(spec, { reference = null, records = [], errors = [], latencyMs = null, firstResultMs = null,
 	requests = [], queryHelper = null, thresholds = {}, now = new Date(), candidateIssues = [], referenceError = null,
-	maxReferenceAgeHours = 24, timeZone } = {}) {
+	maxReferenceAgeHours = 24, timeZone, criteria = {} } = {}) {
 	const limits = validateThresholds(thresholds);
+	const rules = validateCriteria({ ...criteria, ...spec.criteria });
 	const max = Number(spec.query?.maxResults);
 	const reasons = [...candidateIssues];
 	const candidateErrors = [...errors];
@@ -111,6 +145,8 @@ export function evaluateCase(spec, { reference = null, records = [], errors = []
 	if (!candidate.length) reasons.push("empty-candidate");
 	const top = compareRecords(refRecords.slice(0, limits.referenceTopK), candidate.slice(0, limits.candidateTopK));
 	const full = compareRecords(refRecords, candidate);
+	const ranking = rankingAssessment(refRecords, candidate, limits.referenceTopK, Boolean(reference
+		&& reference.source === normalizeSource(spec.source) && reference.query?.sort === (spec.query?.sort || "relevance")));
 	const expectedTargets = targetAssessment(spec, reference, candidate);
 	if (["exact-title", "known-paper"].includes(spec.kind) && !expectedTargets.length) reasons.push("missing-expected-target");
 	if (expectedTargets.some(target => !target.found)) reasons.push("expected-target-missing");
@@ -119,11 +155,21 @@ export function evaluateCase(spec, { reference = null, records = [], errors = []
 	if (fields.required && !fields.checked) reasons.push("field-check-unavailable");
 	if (fields.violations.length) reasons.push("field-violations");
 	if (top.recall === null || top.recall < limits.minReferenceRecall) reasons.push("reference-recall-below-threshold");
+	if (rules.minFullRecall !== null && (full.recall === null || full.recall < rules.minFullRecall)) reasons.push("full-recall-below-threshold");
+	if (rules.minSameTopKRecall !== null && ranking.applicable && (ranking.sameTopKRecall === null || ranking.sameTopKRecall < rules.minSameTopKRecall)) reasons.push("same-top-k-recall-below-threshold");
+	if (rules.minRankAgreement !== null && ranking.applicable && (ranking.rankAgreement === null || ranking.rankAgreement < rules.minRankAgreement)) reasons.push("rank-agreement-below-threshold");
+	if (rules.requireMetadataConsistency && full.metadata.conflicts.length) reasons.push("metadata-conflicts");
+	if (rules.requireMetadataConsistency && full.metadata.unverifiable.length) reasons.push("metadata-unverifiable");
+	// A same-title, different-DOI pair is an excluded alternative, not a defect
+	// when each distinct record matched its own DOI. Unresolved identities lower
+	// recall; contradictions within actual matches are metadata conflicts.
+	if (rules.requireVerifiedFields && fields.unverifiableFields.length) reasons.push("unverifiable-fields");
+	if (rules.requireVerifiedFields && (referenceFields.violations.length || referenceFields.unverifiableFields.length || referenceFields.required && !referenceFields.checked)) reasons.push("unverified-reference-fields");
 	return { id: spec.id, kind: spec.kind || "topic", source: normalizeSource(spec.source), query: spec.query,
 		status: reasons.length ? "fail" : "pass", reasons: [...new Set(reasons)], reference: evidence,
 		referenceError, counts: { referenceRaw: reference?.rawCount ?? 0, referenceCompared: refRecords.length,
 			candidateRaw: records.length, candidateCompared: candidate.length },
-		thresholds: limits, top, full, expectedTargets, fields, referenceQuality: referenceFields, precision: precisionAssessment(spec, candidate),
+		thresholds: limits, criteria: rules, top, full, ranking, metadata: full.metadata, expectedTargets, fields, referenceQuality: referenceFields, precision: precisionAssessment(spec, candidate),
 		latencyMs, firstResultMs, requests, errors: candidateErrors.map(errorInfo), records: candidate };
 }
 
@@ -137,6 +183,22 @@ export function redactedURL(value) {
 }
 
 export function createHTTPAdapter({ fetchImpl = globalThis.fetch, requests = [], signal: defaultSignal, timeoutMs = 30000 } = {}) {
+	async function errorBody(response) {
+		const limit = 16384, reader = response.body?.getReader?.();
+		if (!reader) return String(await response.text()).slice(0, limit);
+		const decoder = new TextDecoder();
+		let body = "", size = 0;
+		try {
+			while (size < limit) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				const part = value.subarray(0, limit - size);
+				body += decoder.decode(part, { stream: true }); size += part.length;
+				if (size >= limit) await reader.cancel();
+			}
+			return body + decoder.decode();
+		} finally { reader.releaseLock(); }
+	}
 	async function request(type, url, headers = {}, signal) {
 		const entry = { method: "GET", type, url: redactedURL(url), startedAt: new Date().toISOString() };
 		requests.push(entry);
@@ -149,7 +211,11 @@ export function createHTTPAdapter({ fetchImpl = globalThis.fetch, requests = [],
 		try {
 			const response = await fetchImpl(url, { headers, signal: controller.signal });
 			entry.status = response.status;
-			if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status} from ${new URL(url).hostname}`), { status: response.status });
+			if (!response.ok) {
+				let body = "";
+				try { body = await errorBody(response); } catch { /* Preserve the HTTP status even if the response stream fails. */ }
+				throw Object.assign(new Error(`HTTP ${response.status} from ${new URL(url).hostname}`), { status: response.status, body });
+			}
 			const text = await response.text();
 			entry.bytes = Buffer.byteLength(text);
 			return type === "json" ? JSON.parse(text.replace(/^\uFEFF/, "")) : text;
@@ -174,6 +240,22 @@ async function optionalQueryHelper(path) {
 	catch (error) { if (error.code === "ERR_MODULE_NOT_FOUND" || error.code === "MODULE_NOT_FOUND") return null; throw error; }
 }
 
+async function sourceEvidence(paths, { sources, queryHelper } = {}) {
+	const files = [];
+	for (const path of [...new Set(paths)]) {
+		try { files.push({ path: resolve(path), sha256: sha256(await readFile(path)) }); }
+		catch (error) { files.push({ path: resolve(path), error: errorInfo(error).message }); }
+	}
+	let revision = null, dirty = null;
+	try {
+		const run = promisify(execFile);
+		const [head, status] = await Promise.all([run("git", ["rev-parse", "HEAD"], { cwd: ROOT }), run("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: ROOT })]);
+		revision = head.stdout.trim(); dirty = Boolean(status.stdout.trim());
+	} catch { /* Non-git installations still retain exact module hashes. */ }
+	return { revision, dirty, files, injectedSources: Boolean(sources), injectedQueryHelper: queryHelper !== undefined,
+		...(sources ? { injectedSearchSHA256: sha256(String(sources.search)), limitation: "Injected source function hash cannot establish closed-over state." } : {}) };
+}
+
 export async function runBenchmark(config, { baseDir = process.cwd(), sourcesModule = resolve(ROOT, "content/sources.js"),
 	sources = null, queryHelper, queryModule = resolve(ROOT, "content/query.js"), DOMParser,
 	fetchImpl = globalThis.fetch, now, context = {}, offlineCandidates = {}, popExecutable = null, popDataDir = null,
@@ -184,22 +266,32 @@ export async function runBenchmark(config, { baseDir = process.cwd(), sourcesMod
 		if (!spec.id || ids.has(spec.id)) throw new Error("Benchmark case ids must be present and unique");
 		ids.add(spec.id);
 		if (!spec.source || !spec.query) throw new Error(`Case ${spec.id} requires source and query`);
+		validateCriteria({ ...config.criteria, ...spec.criteria });
 	}
 	validateThresholds(config.thresholds);
+	validateCriteria(config.criteria);
+	const evaluationMode = config.mode || "fresh";
+	if (!["fresh", "historical-replay"].includes(evaluationMode)) throw new Error("Invalid benchmark mode");
+	if (evaluationMode === "historical-replay" && config.cases.some(spec => !spec.candidatePath && !Object.hasOwn(offlineCandidates, spec.id))) throw new Error("Historical replay requires recorded candidates for every case");
+	const evaluatorEvidence = await sourceEvidence([sourcesModule, queryModule, fileURLToPath(import.meta.url), resolve(ROOT, "scripts/lib/pop-reference.mjs"),
+		...(popExecutable ? [popModule, popExecutable] : [])], { sources, queryHelper });
 	const helper = queryHelper === undefined ? await optionalQueryHelper(queryModule) : queryHelper;
 	if (popExecutable && !popBridge) popBridge = await moduleValue(popModule);
 	if (popExecutable && typeof popBridge?.search !== "function") throw new Error("PoP bridge must export search(query, context)");
 	const results = [];
 	for (const spec of config.cases) {
 		let reference = null, referenceError = null, records = [], errors = [], latencyMs = null, firstResultMs = null;
-		let requests = [], candidateIssues = [], mode = "live", transport = "direct";
-		const capturedAt = now ? new Date(now) : new Date();
+		let requests = [], candidateIssues = [], mode = "live", transport = "direct", candidateEvidence = evaluatorEvidence, candidateSHA256 = null;
+		let capturedAt = now ? new Date(now) : new Date();
+		let assessmentTime = capturedAt;
 		try { if (spec.referencePath) reference = await loadPoPReference(resolve(baseDir, spec.referencePath)); }
 		catch (error) { referenceError = errorInfo(error); }
 		try {
 			if (Object.hasOwn(offlineCandidates, spec.id) || spec.candidatePath) {
 				mode = "recorded";
-				const fixture = Object.hasOwn(offlineCandidates, spec.id) ? offlineCandidates[spec.id] : JSON.parse((await readFile(resolve(baseDir, spec.candidatePath), "utf8")).replace(/^\uFEFF/, ""));
+				const bytes = Object.hasOwn(offlineCandidates, spec.id) ? JSON.stringify(offlineCandidates[spec.id]) : await readFile(resolve(baseDir, spec.candidatePath), "utf8");
+				candidateSHA256 = sha256(bytes);
+				const fixture = JSON.parse(bytes.replace(/^\uFEFF/, ""));
 				records = Array.isArray(fixture) ? fixture : fixture.records;
 				if (!Array.isArray(records)) throw new Error("Candidate fixture requires records array");
 				errors = fixture.errors || [];
@@ -207,9 +299,12 @@ export async function runBenchmark(config, { baseDir = process.cwd(), sourcesMod
 				latencyMs = fixture.latencyMs ?? null;
 				firstResultMs = fixture.firstResultMs ?? null;
 				transport = fixture.transport || "recorded-unspecified";
+				candidateEvidence = fixture.sourceEvidence || { revision: null, files: [], limitation: "Original candidate source revision and hashes were not recorded." };
+				if (Number.isFinite(new Date(fixture.capturedAt || NaN).getTime())) capturedAt = new Date(fixture.capturedAt);
+				if (evaluationMode === "historical-replay") assessmentTime = capturedAt;
 				const recordedEvidence = assessReference({ source: normalizeSource(fixture.source), query: fixture.query || {}, records,
 					errors, rawCount: records.length, provenance: { capturedAt: fixture.capturedAt, completed: fixture.status === "complete" } }, spec,
-					{ now: capturedAt, maxReferenceAgeHours: config.maxReferenceAgeHours ?? 24, ...(config.timeZone ? { timeZone: config.timeZone } : {}) });
+					{ now: assessmentTime, maxReferenceAgeHours: config.maxReferenceAgeHours ?? 24, ...(config.timeZone ? { timeZone: config.timeZone } : {}) });
 				candidateIssues.push(...recordedEvidence.reasons.map(reason => `recorded-candidate:${reason}`));
 			} else {
 				if (!sources) sources = await moduleValue(sourcesModule);
@@ -247,16 +342,24 @@ export async function runBenchmark(config, { baseDir = process.cwd(), sourcesMod
 			}
 		} catch (error) { errors.push(error); }
 		const result = evaluateCase(spec, { reference, referenceError, records: Array.isArray(records) ? records : [], errors,
-			latencyMs, firstResultMs, requests, queryHelper: helper, thresholds: config.thresholds, candidateIssues, now: capturedAt,
+			latencyMs, firstResultMs, requests, queryHelper: helper, thresholds: config.thresholds, criteria: config.criteria, candidateIssues, now: assessmentTime,
 			maxReferenceAgeHours: config.maxReferenceAgeHours ?? 24, timeZone: config.timeZone });
-		results.push({ ...result, mode, transport, capturedAt: capturedAt.toISOString(), retrievalStatus: result.errors.length || candidateIssues.length ? "error" : "complete" });
+		results.push({ ...result, mode, evaluationMode, transport, capturedAt: capturedAt.toISOString(), assessedAt: assessmentTime.toISOString(),
+			sourceEvidence: candidateEvidence, candidateSHA256, retrievalStatus: result.errors.length || candidateIssues.length ? "error" : "complete" });
 	}
 	const passed = results.filter(result => result.status === "pass").length;
 	const sourceSet = new Set(results.filter(result => result.status === "pass").map(result => result.source));
 	const hasScholarAndAPI = sourceSet.has("scholar") && [...sourceSet].some(source => !["scholar", "multi"].includes(source));
-	return { generatedAt: new Date().toISOString(), sourcesModule: resolve(sourcesModule), thresholds: validateThresholds(config.thresholds),
+	const coverage = { declaration: config.coverage || null, observed: { sources: [...new Set(results.map(result => result.source))],
+		kinds: [...new Set(results.map(result => result.kind))], caps: [...new Set(results.map(result => result.query.maxResults))],
+		queries: results.map(result => ({ id: result.id, source: result.source, query: result.query, criteria: result.criteria })) },
+		limitation: "Results apply only to these cases, source transports, retrieval orders, caps and capture times; no universal Publish or Perish parity is established." };
+	return { generatedAt: new Date().toISOString(), evaluationMode, sourcesModule: resolve(sourcesModule), sourceEvidence: evaluatorEvidence,
+		configSHA256: sha256(JSON.stringify(config)), thresholds: validateThresholds(config.thresholds), criteria: validateCriteria(config.criteria), coverage,
 		summary: { cases: results.length, passed, failed: results.length - passed,
-			allCasesPass: passed === results.length, hasScholarAndAPI, parityEstablished: passed === results.length && hasScholarAndAPI },
+			allCasesPass: passed === results.length, hasScholarAndAPI, parityEstablished: false,
+			declaredCoveragePassed: Boolean(config.coverage) && passed === results.length && results.every(result => result.criteria.profile === "strict"),
+			freshStrictCasesPassed: evaluationMode === "fresh" ? results.filter(result => result.status === "pass" && result.criteria.profile === "strict").length : 0 },
 		cases: results };
 }
 
@@ -265,14 +368,21 @@ const cell = value => String(value ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g
 export function renderReport(report) {
 	const lines = [`# ZotPoP / Publish or Perish comparison`, "", `Generated: ${report.generatedAt}`, "",
 		`${report.summary.passed}/${report.summary.cases} cases pass. Scholar and API coverage: ${report.summary.hasScholarAndAPI ? "present" : "not established"}.`, "",
+		`Evaluation: ${report.evaluationMode || "unspecified"}. Profile: ${report.criteria?.profile || "unspecified"}. ${report.coverage?.limitation || "No universal Publish or Perish parity is established."}`, "",
+		...(report.evaluationMode === "historical-replay" ? ["Historical replay evaluates frozen captures at their original candidate capture time; it does not measure current live search performance.", ""] : []),
+		`Declared coverage: ${cell(JSON.stringify(report.coverage?.declaration || null))}. Observed sources: ${(report.coverage?.observed?.sources || []).join(", ")}. Observed caps: ${(report.coverage?.observed?.caps || []).join(", ")}.`, "",
+		`Evaluator revision: ${report.sourceEvidence?.revision || "unavailable"}. Dirty working tree: ${report.sourceEvidence?.dirty ?? "unknown"}. Config SHA-256: ${report.configSHA256 || "unavailable"}.`, "",
 		"Candidate overlap is bibliographic agreement with PoP, not relevance precision. Missing human judgements leave precision unavailable.", "",
 		"Transport 'installed-publish-or-perish' uses the installed PoP engine; its overlap measures integration fidelity and does not establish independent scraper parity.", "",
-		"| Case | Source | Status | PoP top recall | Full-cap recall | Candidate overlap | Precision | Latency |", "| --- | --- | --- | --- | --- | --- | --- | --- |"];
-	for (const result of report.cases) lines.push(`| ${cell(result.id)} | ${cell(result.source)} | ${result.status} | ${pct(result.top.recall)} | ${pct(result.full.recall)} | ${pct(result.full.candidateOverlap)} | ${pct(result.precision.precision)} | ${result.latencyMs ?? "unavailable"} ms |`);
+		"| Case | Source | Status | PoP top recall | Full-cap recall | Same top-k recall | Rank agreement | Metadata conflicts | Precision | Latency |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"];
+	for (const result of report.cases) lines.push(`| ${cell(result.id)} | ${cell(result.source)} | ${result.status} | ${pct(result.top.recall)} | ${pct(result.full.recall)} | ${pct(result.ranking?.sameTopKRecall)} | ${pct(result.ranking?.rankAgreement)} | ${result.metadata?.conflicts.length ?? "unavailable"} | ${pct(result.precision.precision)} | ${result.latencyMs ?? "unavailable"} ms |`);
 	for (const result of report.cases) {
 		lines.push("", `## ${result.id}`, "", `Mode: ${result.mode}. Transport: ${result.transport}. Counts: ${JSON.stringify(result.counts)}.`, "",
 			`Outcome: ${result.reasons.length ? result.reasons.join(", ") : "All declared checks pass"}.`, "",
+			`Criteria: ${JSON.stringify(result.criteria || {})}. Ranking applicable: ${result.ranking?.applicable ?? false}; NDCG: ${pct(result.ranking?.ndcg)}.`, "",
 			`Matches: ${result.full.doiMatches} DOI, ${result.full.titleMatches} normalized exact title. Identity conflicts: ${result.full.identityConflicts.length}. Known field violations: ${result.fields.violations.length}. Records with unverifiable fields: ${result.fields.unverifiableFields.length}. Fully verified field records: ${result.fields.verifiedRecords}.`, "",
+			`Unique DOI diagnostic: ${pct(result.full.doiCoverage?.recall)} recall; reference duplicates: ${result.full.doiCoverage?.referenceDuplicates ?? "unavailable"}. Raw full-cap recall remains the strict criterion.`, "",
+			`Matched-record metadata: ${result.metadata?.conflicts.length ?? "unavailable"} conflicts; ${result.metadata?.unverifiable.length ?? "unavailable"} unverifiable records. Candidate capture: ${result.capturedAt || "unavailable"}. Candidate SHA-256: ${result.candidateSHA256 || "live"}. Candidate source revision: ${result.sourceEvidence?.revision || "unavailable"}.`, "",
 			`Reference quality: ${result.referenceQuality.violations.length} known field violations; ${result.referenceQuality.unverifiableFields.length} records with unverifiable fields.`, "",
 			`Reference time: ${result.reference.provenance?.capturedAt || "unavailable"}. Reference SHA-256: ${result.reference.provenance?.sha256 || "unavailable"}.`);
 		if (result.errors.length) lines.push("", `Errors: ${result.errors.map(error => error.message).join("; ")}`);
@@ -285,7 +395,7 @@ export async function main(argv = process.argv.slice(2)) {
 	for (let i = 0; i < argv.length; i++) {
 		const key = argv[i];
 		if (key === "--help") {
-			console.log("Usage: node scripts/benchmark-search.mjs --config FILE --out DIR [--sources-module FILE] [--query-module FILE] [--dom-parser-module FILE_OR_PACKAGE] [--pop-executable FILE] [--pop-data-dir DIR]\nCases may set candidatePath to a recorded candidate JSON: {records,source,query,capturedAt,status:'complete',errors,requests,latencyMs}. Paths in config are relative to its directory.");
+			console.log("Usage: node scripts/benchmark-search.mjs --config FILE --out DIR [--sources-module FILE] [--query-module FILE] [--dom-parser-module FILE_OR_PACKAGE] [--pop-executable FILE] [--pop-data-dir DIR]\nSet criteria.profile='strict' for full-cap recall, same-top-k order, metadata and field verification. Config mode='historical-replay' explicitly replays recorded captures at capture time. Cases may set candidatePath to {records,source,query,capturedAt,status:'complete',errors,requests,latencyMs,sourceEvidence}. Paths in config are relative to its directory. Coverage is declared in config.coverage; passing cases never establishes universal parity.");
 			return 0;
 		}
 		if (!["--config", "--out", "--sources-module", "--query-module", "--dom-parser-module", "--pop-executable", "--pop-data-dir"].includes(key) || !argv[i + 1] || argv[i + 1].startsWith("--")) throw new Error(`Invalid CLI argument: ${key}`);

@@ -10,6 +10,15 @@ var ZotPoPPoPBridge = (function () {
 	const SNAPSHOT_MAX_BYTES = 8 * 1024 * 1024;
 	const SNAPSHOT_MAX_FILES = 12;
 	const snapshotWrites = new Map();
+	const SOURCE_FLAGS = Object.freeze({
+		scholar: "--gscholar", crossref: "--crossref", pubmed: "--pubmed", openalex: "--openalex",
+		semanticscholar: "--semscholar", scholarauthor: "--gsauthor", scholarprofile: "--gsprofile",
+		scholarciting: "--gsciting", hadb: "--hadb", lens: "--lens", scopus: "--scopus",
+		wos: "--wos", wosexpanded: "--wosexpanded", wosstarter: "--wosstarter"
+	});
+	const SOURCE_FIELDS = Object.freeze({ keywords: "--keywords", title: "--title", authors: "--author", venue: "--journal",
+		affiliation: "--affiliation", issn: "--issn", citedId: "--citedid", field: "--field" });
+	const OUTPUT_SORTS = new Set(["rank", "author", "cites", "cites_annual", "cites_norm", "source", "title", "year"]);
 
 	function abortError() {
 		return Object.assign(new Error("Publish or Perish search cancelled"), { name: "AbortError" });
@@ -20,7 +29,7 @@ var ZotPoPPoPBridge = (function () {
 	function reportProgress(stderr, ctx) {
 		let matches = [...stderr.matchAll(/Progress:\s*(\d+)\s*\(of\s*(\d+)\)/g)];
 		let last = matches[matches.length - 1];
-		if (last) ctx.onProgress?.(`${LABEL}: ${last[1]} / ${last[2]}`, Number(last[1]), Number(last[2]));
+		if (last) ctx.onProgress?.(`${ctx.popProgressLabel || LABEL}: ${last[1]} / ${last[2]}`, Number(last[1]), Number(last[2]));
 		let positive = matches.filter(match => Number(match[1]) > 0).at(-1);
 		if (positive) ctx._popProgressCount = Number(positive[1]);
 	}
@@ -55,6 +64,58 @@ var ZotPoPPoPBridge = (function () {
 		return args;
 	}
 
+	function nativeText(value, field) {
+		if (value == null) return "";
+		if (typeof value !== "string" || value.includes("\0")) throw new Error(`Invalid PoP ${field}`);
+		return value;
+	}
+
+	function buildSourceArguments(sourceKey, query, dataDir = null, cachePolicy = "refresh") {
+		if (!Object.hasOwn(SOURCE_FLAGS, sourceKey)) throw new Error("Unsupported Publish or Perish source: " + sourceKey);
+		if (!["refresh", "offline"].includes(cachePolicy)) throw new Error("Invalid PoP cache policy");
+		let raw = nativeText(query.popRaw, "raw query"), outputSort = nativeText(query.popOutputSort, "output sort") || "rank";
+		if (!OUTPUT_SORTS.has(outputSort.replace(/^-/, ""))) throw new Error("Invalid PoP output sort");
+		let fields = Object.fromEntries(Object.keys(SOURCE_FIELDS).map(key => [key, nativeText(query[key], key)]));
+		let hasFields = Object.values(fields).some(value => value.trim());
+		let hasYear = key => query[key] != null && query[key] !== "";
+		if (raw.trim() && (hasFields || hasYear("yearFrom") || hasYear("yearTo"))) throw new Error("PoP raw query cannot be combined with ordinary search fields or years");
+		if (!raw.trim() && !hasFields) throw new Error("Enter at least one PoP search field or native query");
+		let args = [];
+		if (dataDir) args.push("--datadir", dataDir);
+		args.push(SOURCE_FLAGS[sourceKey]);
+		if (raw.trim()) args.push("--raw", raw);
+		else {
+			for (let [key, flag] of Object.entries(SOURCE_FIELDS)) if (fields[key].trim()) args.push(flag, fields[key]);
+			let year = key => {
+				if (!hasYear(key)) return "";
+				let value = Number(query[key]);
+				if (!Number.isInteger(value) || value < 1500 || value > 2100) throw new Error(`Invalid ${key}`);
+				return String(value);
+			};
+			let from = year("yearFrom"), to = year("yearTo");
+			if (from && to && from > to) throw new Error("Start year must not exceed end year");
+			if (from || to) args.push("--years", from + "-" + to);
+		}
+		args.push("--max", String(maxResults(query)), cachePolicy === "offline" ? "--offline" : "--direct",
+			"--sort", outputSort, "--format", "json", "--noerrlog");
+		return args;
+	}
+
+	function parseSourceResults(stdout) {
+		let data;
+		try { data = JSON.parse(stdout.replace(/^\uFEFF/, "")); }
+		catch (_) { throw new Error("Publish or Perish returned invalid JSON"); }
+		let rows = Array.isArray(data) ? data : data?.$results;
+		if (!Array.isArray(rows) || rows.some(row => !row || Array.isArray(row) || typeof row !== "object")) {
+			throw new Error("Publish or Perish returned an invalid result list");
+		}
+		if (!Array.isArray(data) && data.$query && (data.$query.ErrorDetails
+			|| ["LastResult", "LastSubResult"].some(key => data.$query[key] !== undefined && Number(data.$query[key]) !== 0))) {
+			throw new Error("Publish or Perish output reports an incomplete query");
+		}
+		return rows;
+	}
+
 	function nodeRuntime() {
 		const fs = require("node:fs/promises"), path = require("node:path"), os = require("node:os");
 		const home = os.homedir();
@@ -63,6 +124,7 @@ var ZotPoPPoPBridge = (function () {
 				: process.env.XDG_DATA_HOME || path.join(home, ".local", "share");
 		return {
 			join: path.join,
+			uuid: () => require("node:crypto").randomUUID(),
 			basename: path.basename,
 			isAbsolute: path.isAbsolute,
 			supportDir: path.join(base, "ZotPoP"),
@@ -106,6 +168,7 @@ var ZotPoPPoPBridge = (function () {
 				: services.env.get("XDG_DATA_HOME") || PathUtils.join(home, ".local", "share");
 		return {
 			join: (...parts) => PathUtils.join(...parts),
+			uuid: () => String(services.uuid.generateUUID()).replace(/[{}]/g, ""),
 			basename: value => PathUtils.filename(value),
 			isAbsolute: value => PathUtils.isAbsolute(value),
 			supportDir: PathUtils.join(base, "ZotPoP"),
@@ -220,6 +283,61 @@ var ZotPoPPoPBridge = (function () {
 			|| runtime.join(runtime.supportDir, "PoPData");
 		if (!runtime.isAbsolute(executable) || !runtime.isAbsolute(dataDir)) throw new Error("PoP executable and data directory must use absolute paths");
 		return { runtime, executable, dataDir };
+	}
+
+	function sourceSettings(ctx) {
+		let runtime = isNode ? nodeRuntime() : geckoRuntime();
+		let executable = text(ctx.popExecutable ?? runtime.pref("popExecutable"), "PoP executable")
+			|| runtime.join(runtime.supportDir, "tools", runtime.executableName);
+		let dataDir = text(ctx.popDataDir ?? runtime.pref("popDataDir"), "PoP data directory") || null;
+		if (!runtime.isAbsolute(executable) || dataDir && !runtime.isAbsolute(dataDir)) throw new Error("PoP executable and data directory must use absolute paths");
+		return { runtime, executable, dataDir };
+	}
+
+	// The explicit native engine is a separate path: one invocation, no legacy
+	// Scholar probing/recovery and no transformed or silently discarded rows.
+	async function searchSource(sourceKey, query = {}, ctx = {}) {
+		checkCancelled(ctx);
+		let { runtime, executable, dataDir } = sourceSettings(ctx);
+		let cachePolicy = ctx.popCachePolicy ?? "refresh";
+		let args = buildSourceArguments(sourceKey, query, dataDir, cachePolicy);
+		if (ctx.popCacheOnly) throw new Error("Native PoP cache requests must explicitly use the offline cache policy");
+		if (!await runtime.exists(executable)) { checkCancelled(ctx); throw new Error("Publish or Perish executable is unavailable; configure its path to use the PoP engine"); }
+		if (dataDir) await runtime.mkdir(dataDir);
+		checkCancelled(ctx);
+		let startedAt = new Date().toISOString(), invocationId = runtime.uuid();
+		let label = `Publish or Perish (${sourceKey})`;
+		let processCtx = { signal: ctx.signal, isCancelled: ctx.isCancelled, onProgress: ctx.onProgress, popProgressLabel: label, _popProgressCount: 0 };
+		ctx.onProgress?.(label + ": searching…", 0, maxResults(query));
+		let result = await runtime.run(executable, args, processCtx);
+		checkCancelled(ctx);
+		if (result.exitCode !== 0 && result.exitCode !== 4) {
+			// stderr can contain service URLs or credentials. Expose only a fixed
+			// actionable category, never copy the provider's response into logs.
+			// Google now answers the Scholar profile-search URL with its sign-in
+			// page for anyone not signed in; the tool then fails to parse a login
+			// form as a results page. That is a login wall, not a CAPTCHA, and
+			// the caller can fall back to the paper search, which is still open.
+			let login = /accounts\.google\.com|\/signin\/|\bLogin\?/i.test(result.stderr);
+			let detail = login ? "; Google requires a signed-in Google account for Scholar profile search. Sign in to Google Scholar inside Publish or Perish, then retry"
+				: /captcha|unusual traffic|robot/i.test(result.stderr) ? "; verify access in Publish or Perish"
+					: /unauthori[sz]ed|forbidden|api.?key|credential|subscription|authenticat/i.test(result.stderr) ? "; check this source's access settings in Publish or Perish"
+						: /quota|budget|rate.?limit|too many requests/i.test(result.stderr) ? "; this source's request limit was reached" : "";
+			throw Object.assign(new Error(`${label} search failed (${result.signal || result.exitCode})${detail}`), { exitCode: result.exitCode, source: sourceKey, reason: login ? "login" : undefined });
+		}
+		let rows = result.exitCode === 4 ? [] : parseSourceResults(result.stdout);
+		checkCancelled(ctx);
+		let effectiveQuery = { engine: "pop" };
+		for (let key of [...Object.keys(SOURCE_FIELDS), "yearFrom", "yearTo", "popRaw"]) if (query[key] !== undefined) effectiveQuery[key] = query[key];
+		effectiveQuery.maxResults = maxResults(query);
+		effectiveQuery.popOutputSort = query.popOutputSort || "rank";
+		let provenance = { engine: "publish-or-perish", source: sourceKey, outputSort: effectiveQuery.popOutputSort,
+			profileId: dataDir || "pop-default", invocationId, acquisition: { kind: "process", invocationId }, startedAt, retrievedAt: new Date().toISOString(),
+			capturedAt: cachePolicy === "offline" ? null : startedAt,
+			query: effectiveQuery, exitCode: result.exitCode, complete: true, cached: cachePolicy === "offline", cancelled: false };
+		ctx.onProgress?.(`${label}: ${rows.length} results`, rows.length, maxResults(query));
+		checkCancelled(ctx);
+		return { rows, provenance };
 	}
 
 	function queryKey(query) {
@@ -388,7 +506,7 @@ var ZotPoPPoPBridge = (function () {
 		return rows;
 	}
 
-	return { search, buildArguments, parseResults, storeSnapshot };
+	return { search, buildArguments, parseResults, storeSnapshot, SOURCE_FLAGS, searchSource, buildSourceArguments, parseSourceResults };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPPoPBridge;

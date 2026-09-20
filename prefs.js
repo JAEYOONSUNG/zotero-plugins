@@ -24,3 +24,7 @@ pref("extensions.zotpop.journalMetrics", true);
 pref("extensions.zotpop.institutionMetrics", true);
 // Finished searches kept on disk with their results, so a repeat costs no API budget.
 pref("extensions.zotpop.historySize", 30);
+
+// Native PoP output is an explicit mode; ordinary direct/combined searches remain available.
+pref("extensions.zotpop.searchEngine", "direct");
+pref("extensions.zotpop.popDefaultSource", "scholar");

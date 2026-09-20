@@ -76,7 +76,49 @@ var ZotPoPSources = (function () {
 		return terms.some(term => hay.includes(term));
 	}
 
-	function matchingRecords(records, query) {
+	function structuredQuery(value) { return /\b(?:AND|OR|NOT|ANDNOT)\b|["()]/.test(value || ""); }
+	function positiveQueryTerms(value, wholeAtoms = false) {
+		let tree = Query.parseExpression(value, wholeAtoms, wholeAtoms);
+		if (!tree) throw new SyntaxError("Invalid search expression: check quotes, operators and parentheses");
+		let terms = [];
+		function visit(node, negative = false) {
+			if (node.kind === "term") { if (!negative) terms.push(node.value); return; }
+			if (node.kind === "NOT") visit(node.child, !negative);
+			else { visit(node.left, negative); visit(node.right, negative); }
+		}
+		visit(tree);
+		function anchored(node, negative = false) {
+			if (node.kind === "term") return !negative;
+			if (node.kind === "NOT") return anchored(node.child, !negative);
+			let join = negative ? (node.kind === "AND" ? "OR" : "AND") : node.kind;
+			return join === "OR" ? anchored(node.left, negative) && anchored(node.right, negative)
+				: anchored(node.left, negative) || anchored(node.right, negative);
+		}
+		// An OR branch containing only exclusions has no positive seed. Restricting
+		// it to another branch's term would lose legitimate matches silently.
+		return anchored(tree) ? [...new Set(terms)] : [];
+	}
+	// OSF's API only has contiguous-substring filters. One necessary positive
+	// atom per Boolean branch supplies a superset; the original expression is
+	// then verified against the returned fields. Refuse an unbounded complement.
+	function substringSeeds(value) {
+		let tree = Query.parseExpression(value);
+		if (!tree) throw new SyntaxError("Invalid search expression: check quotes, operators and parentheses");
+		function clauses(node, negative = false) {
+			if (node.kind === "term") return [[negative ? null : node.value]];
+			if (node.kind === "NOT") return clauses(node.child, !negative);
+			let left = clauses(node.left, negative), right = clauses(node.right, negative);
+			let join = negative ? (node.kind === "AND" ? "OR" : "AND") : node.kind;
+			if ((join === "OR" ? left.length + right.length : left.length * right.length) > 32) throw new RangeError("OSF search has too many Boolean alternatives");
+			return join === "OR" ? [...left, ...right] : left.flatMap(a => right.map(b => [...a, ...b]));
+		}
+		let seeds = clauses(tree).map(clause => clause.filter(Boolean).sort((a, b) => b.length - a.length)[0]);
+		if (seeds.some(seed => !seed)) throw new SyntaxError("OSF requires a positive term in every OR branch");
+		return [...new Set(seeds)];
+	}
+
+	function matchingRecords(records, query = {}) {
+		query = query || {};
 		// Scholar's bylines/journal names are snippets and can be truncated. Its
 		// fielded query has already constrained these fields; absence in a snippet
 		// cannot disprove a match. Never fill that missing metadata from the query.
@@ -84,10 +126,28 @@ var ZotPoPSources = (function () {
 		// so only the year range is re-checked there.
 		let terms = keywordTerms(query.keywords);
 		return records.filter(r => {
+			if (!r) return false;
 			if (r.source === "scholar") return Query ? Query.matchesRecord(r, { yearFrom: query.yearFrom, yearTo: query.yearTo }) : true;
 			if (Query && !Query.matchesRecord(r, query)) return false;
+			if (["crossref", "osf"].includes(r.source) && structuredQuery(query.keywords)
+				&& !Query.matchesTitle(query.keywords, [r.title, r.abstract].filter(Boolean).join(" "))) return false;
 			return matchesKeywords(terms, r);
 		});
+	}
+	function warn(ctx, source, message) {
+		let text = (SOURCES[source]?.label || source) + ": " + message;
+		if (!ctx.errors) ctx.errors = [];
+		if (!ctx.errors.includes(text)) ctx.errors.push(text);
+	}
+	function sourceStatus(ctx, source, details) {
+		if (!ctx.sourceStatus) ctx.sourceStatus = {};
+		ctx.sourceStatus[source] = Object.assign({}, ctx.sourceStatus[source], details);
+	}
+	function candidateLimit(ctx, source, retrieved, scanned, total, limit, exhausted) {
+		let truncated = !exhausted && scanned >= PAGE_WALK_LIMIT && retrieved < limit;
+		sourceStatus(ctx, source, { retrieved, scanned, total, limit, exhausted, truncated,
+			reason: truncated ? "candidate-limit" : !exhausted && retrieved >= limit ? "result-limit" : null });
+		if (truncated) warn(ctx, source, `Search stopped after ${PAGE_WALK_LIMIT} candidates; more matches may exist. Narrow the query.`);
 	}
 	function publishResults(records, query, ctx, final = false) {
 		if (!ctx.onResults || ctx.signal?.aborted || ctx.isCancelled?.()) return;
@@ -97,7 +157,14 @@ var ZotPoPSources = (function () {
 
 	function stripTags(s) {
 		if (!s) return "";
-		return String(s).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+		let text = String(s);
+		// Bibliographic titles also contain inequalities. Only remove actual paired markup.
+		for (let i = 0; i < 8; i++) {
+			let unwrapped = text.replace(/<([a-z][\w:-]*)(?:\s[^<>]*?)?>([\s\S]*?)<\/\1\s*>/gi, "$2");
+			if (unwrapped === text) break;
+			text = unwrapped;
+		}
+		return text.replace(/<br\s*\/?>/gi, " ").replace(/\s+/g, " ").trim();
 	}
 
 	function decodeEntities(s) {
@@ -234,7 +301,10 @@ var ZotPoPSources = (function () {
 			catch (e) {
 				throwIfCancelled(ctx);
 				lastErr = e;
-				if (isQuotaError(e) || !retryOn.includes(e.status) || i === tries - 1) throw e;
+				let transientTransport = e.status === 0
+					|| /^(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT|UND_ERR_SOCKET)$/.test(e.code || e.cause?.code || "")
+					|| (e.name === "TypeError" && /fetch failed|failed to fetch|network request failed|networkerror/i.test(e.message || ""));
+				if (isQuotaError(e) || (!retryOn.includes(e.status) && !transientTransport) || i === tries - 1) throw e;
 				await sleep(delay * (i + 1), ctx);
 			}
 		}
@@ -304,6 +374,7 @@ var ZotPoPSources = (function () {
 			+ "&per-page=25&select=id,display_name,display_name_alternatives,works_count" + openAlexAuth(ctx);
 		let data = await withRetry(() => http.getJSON(url), {}, ctx);
 		let ids = [];
+		if ((data.meta?.count || 0) > 25) warn(ctx, "openalex", "Only the first 25 author profiles were checked; use an OpenAlex author ID or ORCID to disambiguate.");
 		for (let a of data.results || []) {
 			let names = [a.display_name, ...(a.display_name_alternatives || [])].filter(Boolean);
 			if (!names.some(n => Query.matchesAuthor(name, [{ name: n }]))) continue;
@@ -320,8 +391,9 @@ var ZotPoPSources = (function () {
 		if (q.keywords?.trim()) params.push("search=" + enc(q.keywords.trim()));
 		if (q.title?.trim()) filters.push("title.search:" + enc(q.title.trim()));
 		if (q.authors?.trim()) {
-			let resolved = null;
-			if (isPlainAuthorQuery(q.authors)) {
+			let identifier = Query.parseAuthorIdentifier(q.authors);
+			let resolved = identifier ? (identifier.type === "openalex" ? "authorships.author.id:" : "authorships.author.orcid:") + enc(identifier.id) : null;
+			if (!identifier && isPlainAuthorQuery(q.authors)) {
 				try { resolved = await openAlexAuthorFilter(q.authors.trim(), http, ctx); }
 				catch (e) {
 					if (e.name === "AbortError" || isQuotaError(e)) throw e;
@@ -374,7 +446,9 @@ var ZotPoPSources = (function () {
 					source: "openalex",
 					sourceId: (w.id || "").replace("https://openalex.org/", ""),
 					title: w.title || w.display_name || "",
-					authors: (w.authorships || []).map(a => parseName(a.author?.display_name || a.raw_author_name)),
+					authors: (w.authorships || []).map(a => Object.assign(parseName(a.author?.display_name || a.raw_author_name), {
+						openalexId: openAlexId(a.author?.id), orcid: a.author?.orcid || a.raw_orcid || null
+					})),
 					people: openAlexPeople(w.authorships),
 					year: w.publication_year || null,
 					publicationDate: w.publication_date || null,
@@ -400,7 +474,9 @@ var ZotPoPSources = (function () {
 			out = matchingRecords(dedupe(out), q);
 			publishResults(out, q, ctx);
 			ctx.onProgress?.(`OpenAlex: ${out.length} / ${Math.min(max, data.meta?.count ?? max)}`, out.length, Math.min(max, data.meta?.count ?? max));
-			if (results.length < perPage || seen >= (data.meta?.count ?? seen) || seen >= 10000) break;
+			let exhausted = results.length < perPage || (data.meta?.count != null && seen >= data.meta.count);
+			candidateLimit(ctx, "openalex", out.length, seen, data.meta?.count ?? null, max, exhausted);
+			if (exhausted || seen >= PAGE_WALK_LIMIT) break;
 			page++;
 		}
 		return out.slice(0, max);
@@ -427,6 +503,7 @@ var ZotPoPSources = (function () {
 				for (let w of data.results || []) {
 					for (let r of byDoi.get(normalizeDOI(w.doi)) || []) {
 						r.citations = toInt(w.cited_by_count);
+						if (r.citations != null) r.citationSource = "openalex";
 						if (!r.pdfUrl) r.pdfUrl = w.best_oa_location?.pdf_url || w.open_access?.oa_url || null;
 						for (let l of w.locations || []) if (l.is_oa && l.pdf_url && !r.pdfUrls.includes(l.pdf_url)) r.pdfUrls.push(l.pdf_url);
 						if (r.pdfUrl && !r.pdfUrls.includes(r.pdfUrl)) r.pdfUrls.unshift(r.pdfUrl);
@@ -668,11 +745,12 @@ var ZotPoPSources = (function () {
 	// with the highest count plus its journal's impact.
 	async function checkCitations(rec, http, ctx = {}) {
 		let doi = rec.doi;
-		let mailto = openAlexAuth(ctx).replace(/^&/, "");
+		let auth = openAlexAuth(ctx);
+		let mailto = ctx.email ? "mailto=" + enc(ctx.email) : "";
 		let out = { openalex: null, crossref: null, semanticscholar: null };
 		let tasks = [];
 		if (doi) {
-			tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/doi:" + enc(doi) + "?select=cited_by_count,primary_location" + (mailto ? "&" + mailto : "")), {}, ctx).then(w => {
+			tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/doi:" + enc(doi) + "?select=cited_by_count,primary_location" + auth), {}, ctx).then(w => {
 				out.openalex = toInt(w.cited_by_count);
 				let src = w.primary_location?.source;
 				if (src?.id && !rec.journalId) rec.journalId = src.id.replace("https://openalex.org/", "");
@@ -684,7 +762,7 @@ var ZotPoPSources = (function () {
 			}).catch(e => ctx.log?.("Crossref: " + e.message)));
 		}
 		else if (rec.source === "openalex" && rec.sourceId) {
-			tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/" + enc(rec.sourceId) + "?select=cited_by_count" + (mailto ? "&" + mailto : "")), {}, ctx).then(w => {
+			tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/" + enc(rec.sourceId) + "?select=cited_by_count" + auth), {}, ctx).then(w => {
 				out.openalex = toInt(w.cited_by_count);
 			}).catch(e => ctx.log?.("OpenAlex: " + e.message)));
 		}
@@ -755,9 +833,13 @@ var ZotPoPSources = (function () {
 		if (!hasAny(q)) return [];
 		let params = [];
 		let endpoint = "https://api.crossref.org/works", journal = null;
-		if (q.keywords?.trim()) params.push("query=" + enc(q.keywords.trim()));
-		if (q.title?.trim()) params.push("query.bibliographic=" + enc(q.title.trim()));
-		if (q.authors?.trim()) params.push("query.author=" + enc(q.authors.trim()));
+		for (let [field, parameter] of [["keywords", "query"], ["title", "query.bibliographic"], ["authors", "query.author"]]) {
+			if (!q[field]?.trim()) continue;
+			if (field === "keywords" && /\w+:|\[[^\]]+\]/.test(q[field])) throw new Error("Crossref does not support native field tags in keywords; use the title, author and journal boxes");
+			let terms = positiveQueryTerms(q[field], field === "authors");
+			if (terms.length) params.push(parameter + "=" + enc(terms.join(" ")));
+			if (field === "keywords" && structuredQuery(q[field])) warn(ctx, "crossref", "Boolean and phrase keyword checks use deposited titles and abstracts; missing metadata can limit coverage.");
+		}
 		let filters = [];
 		// "posted-content" is Crossref's type for a preprint posting. It is the whole preprint
 		// landscape in one index -- bioRxiv, ChemRxiv, Research Square, SSRN, Preprints.org --
@@ -781,7 +863,7 @@ var ZotPoPSources = (function () {
 		// the whole request a 400. The preprint route therefore takes the full record and
 		// pays the extra bytes; every other route stays on the narrow projection, which
 		// `resource` keeps wide enough to name an archive when a posting turns up there.
-		if (!preprintsOnly) params.push("select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN");
+		if (!preprintsOnly) params.push("select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN");
 
 		let max = q.maxResults || 200;
 		let out = [];
@@ -802,7 +884,9 @@ var ZotPoPSources = (function () {
 				let isPreprint = w.type === "posted-content";
 				// A preprint is dated by when it went up, which Crossref keeps in `posted`.
 				// `issued` can carry the journal version's date and would misdate the posting.
-				let dated = (isPreprint && w.posted?.["date-parts"]?.[0]) || w.issued?.["date-parts"]?.[0];
+				let dates = [w.issued, w.published, w["published-online"], w["published-print"]]
+					.map(date => date?.["date-parts"]?.[0]).filter(parts => Number.isInteger(parts?.[0]) && parts[0] >= 1500);
+				let dated = (isPreprint && w.posted?.["date-parts"]?.[0]) || dates[0];
 				let server = isPreprint ? crossrefPreprintServer(w) : null;
 				out.push(makeRecord({
 					source: "crossref",
@@ -840,7 +924,9 @@ var ZotPoPSources = (function () {
 			out = matchingRecords(dedupe(out), q);
 			publishResults(out, q, ctx);
 			ctx.onProgress?.(`Crossref: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
-			if (items.length < rows || offset + items.length >= total || offset + rows >= 10000) break;
+			let exhausted = items.length < rows || offset + items.length >= total;
+			candidateLimit(ctx, "crossref", out.length, offset + items.length, total, max, exhausted);
+			if (exhausted || offset + rows >= PAGE_WALK_LIMIT) break;
 			offset += rows;
 		}
 		return out.slice(0, max);
@@ -901,7 +987,8 @@ var ZotPoPSources = (function () {
 	}
 
 	async function searchSemanticScholar(q, http, ctx) {
-		let terms = [q.keywords, q.title].map(x => (x || "").trim().replace(/-/g, " ")).filter(Boolean);
+		if ([q.keywords, q.title].some(structuredQuery)) throw new Error("Semantic Scholar relevance search does not support Boolean or quoted expressions; use OpenAlex, PubMed, Europe PMC or arXiv for these queries");
+		let terms = [q.keywords, q.title].map(x => (x || "").trim()).filter(Boolean);
 		// The paper relevance endpoint searches paper text, not author bylines.
 		// Author-only searches are resolved through the author graph below.
 		if (!terms.length && q.authors?.trim()) return searchSemanticScholarAuthor(q, http, ctx);
@@ -927,7 +1014,13 @@ var ZotPoPSources = (function () {
 			out = matchingRecords(dedupe(out), q);
 			publishResults(out, q, ctx);
 			ctx.onProgress?.(`Semantic Scholar: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
-			if (items.length < limit || data.next == null || offset + items.length >= total) break;
+			let reachedCap = offset + items.length >= 1000 && offset + items.length < total;
+			let exhausted = items.length < limit || (!reachedCap && data.next == null) || offset + items.length >= total;
+			let truncated = reachedCap && out.length < (q.maxResults || 200);
+			sourceStatus(ctx, "semanticscholar", { retrieved: out.length, scanned: offset + items.length, total,
+				limit: max, exhausted, truncated, reason: truncated ? "provider-limit" : !exhausted ? "result-limit" : null });
+			if (truncated) warn(ctx, "semanticscholar", "The relevance API exhausted its 1000-candidate limit; additional matching records may exist.");
+			if (exhausted || data.next == null || data.next <= offset) break;
 			offset = data.next;
 			await sleep(1100, ctx); // unauthenticated rate limit ~1 req/s
 		}
@@ -938,7 +1031,7 @@ var ZotPoPSources = (function () {
 		if (/\bNOT\b|[()]/i.test(q.authors)) throw new Error("Semantic Scholar author lookup supports names separated by AND, OR or semicolons");
 		let names = q.authors.split(/\s+(?:AND|OR)\s+|;/i).map(n => n.trim().replace(/^"|"$/g, "")).filter(Boolean);
 		let headers = ctx.s2ApiKey ? { "x-api-key": ctx.s2ApiKey } : {};
-		let authors = new Map(), out = [], max = Math.min(q.maxResults || 200, 1000);
+		let authors = new Map(), out = [], max = q.maxResults || 200;
 		for (let name of names) {
 			let url = "https://api.semanticscholar.org/graph/v1/author/search?query=" + enc(name.replace(/-/g, " ")) + "&limit=20&fields=name";
 			let response = await withRetry(() => http.getJSON(url, headers), { tries: 3, delay: 2000 }, ctx);
@@ -954,7 +1047,7 @@ var ZotPoPSources = (function () {
 		for (let author of authors.values()) {
 			let offset = 0;
 			let authorRecords = [];
-			while (offset < 1000 && authorRecords.length < max) {
+			while (offset < PAGE_WALK_LIMIT && authorRecords.length < max) {
 				throwIfCancelled(ctx);
 				let url = "https://api.semanticscholar.org/graph/v1/author/" + enc(author.authorId) + "/papers?fields=" + S2_FIELDS + "&limit=100&offset=" + offset;
 				let response = await withRetry(() => http.getJSON(url, headers), { tries: 3, delay: 2000 }, ctx);
@@ -965,6 +1058,7 @@ var ZotPoPSources = (function () {
 				offset = response.next;
 				await sleep(1100, ctx);
 			}
+			if (offset >= PAGE_WALK_LIMIT && authorRecords.length < max) warn(ctx, "semanticscholar", "Author retrieval stopped after 10000 candidates; narrow the query.");
 			perAuthor.push(authorRecords);
 		}
 		return sortSearchResults(interleave(perAuthor), q).slice(0, max);
@@ -986,6 +1080,19 @@ var ZotPoPSources = (function () {
 		return years.length ? Math.min(...years) : null;
 	}
 
+	function grouped(value) {
+		let depth = 0, quoted = false;
+		if (value[0] === "(") {
+			for (let i = 0; i < value.length; i++) {
+				if (value[i] === '"' && value[i - 1] !== "\\") quoted = !quoted;
+				if (quoted) continue;
+				if (value[i] === "(") depth++;
+				if (value[i] === ")" && --depth === 0) return i === value.length - 1 ? value : "(" + value + ")";
+			}
+		}
+		return "(" + value + ")";
+	}
+
 	function pubmedTerm(q) {
 		let parts = [];
 		// PoP uses Text Word, not PubMed's unrestricted automatic term mapping.
@@ -995,39 +1102,85 @@ var ZotPoPSources = (function () {
 		if (q.authors?.trim()) parts.push(Query.compileAuthors(q.authors, name => name + "[au]", { binaryNot: true }));
 		if (q.venue?.trim()) parts.push('"' + q.venue.trim() + '"[ta]');
 		if (q.yearFrom || q.yearTo) parts.push((q.yearFrom || "1800") + ":" + (q.yearTo || "3000") + "[dp]");
-		return parts.join(" AND ");
+		return parts.length === 1 ? parts[0] : parts.map(grouped).join(" AND ");
 	}
 
-	// PubMed evaluates strictly left to right, so "a OR b c" becomes ("a" OR "b") AND "c",
-	// the opposite of what the box means and of what query.js applies locally. Emit explicit
-	// parentheses around each run of implicitly-ANDed terms so both sides agree.
-	function pubmedFieldQuery(value, field) {
-		let tokens = value.trim().match(/"[^"]*"(?:\[[^\]]+\])?|[^\s()[\]"]+\[[^\]]+\]|[()]|[^\s()]+/g) || [];
-		let pos = 0;
-
-		let tag = token => /\[[^\]]+\]$/.test(token) ? token : token + "[" + field + "]";
-
-		// One parenthesis level: AND-runs separated by OR/NOT.
-		function level() {
-			let segments = [[]], separators = [];
-			while (pos < tokens.length) {
-				let token = tokens[pos++];
-				if (token === ")") break;
-				if (token === "(") { segments[segments.length - 1].push("(" + level() + ")"); continue; }
-				if (token === "ANDNOT") token = "NOT";
-				if (/^(OR|NOT)$/.test(token)) { separators.push(token); segments.push([]); continue; }
-				if (token === "AND") continue;
-				segments[segments.length - 1].push(tag(token));
-			}
-			let grouped = segments.filter(seg => seg.length).map(seg =>
-				seg.length > 1 && separators.length ? "(" + seg.join(" AND ") + ")" : seg.join(" AND "));
-			if (!grouped.length) return "";
-			let out = grouped[0];
-			for (let i = 1; i < grouped.length; i++) out += " " + (separators[i - 1] || "AND") + " " + grouped[i];
-			return out;
+	// All adapters compile the same AST. Explicit fielded atoms are kept intact;
+	// backend operator precedence never gets to reinterpret an OR branch.
+	function fieldExpression(value, formatAtom, { wholeAtoms = false, ignoreOperatorCase = false,
+		universe = null, binaryNot = null, nativeFields = false, omit = null } = {}) {
+		let fields = [];
+		let input = String(value || ""), prefix = "ZOTPOPFIELD";
+		while (input.includes(prefix)) prefix += "X";
+		if (nativeFields) input = input.replace(/(?:"(?:\\.|[^"\\])*"|[^\s()"]+)\[[^\]]+\]|[a-z_]+:"(?:\\.|[^"\\])*"/gi,
+			atom => { let token = prefix + fields.length; fields.push(atom); return token; });
+		let tree = Query.parseExpression(input, wholeAtoms, ignoreOperatorCase);
+		if (!tree) throw new SyntaxError("Invalid search expression: check quotes, operators and parentheses");
+		function term(node) {
+			let field = new RegExp("^" + prefix + "(\\d+)$").exec(node.value);
+			return field && fields[Number(field[1])] ? fields[Number(field[1])] : formatAtom(node.value, node.phrase === true);
 		}
+		function render(node, negative = false) {
+			if (node.kind === "term") return omit?.(node.value, node.phrase) ? (negative ? "(" + universe + " NOT " + universe + ")" : universe) : term(node);
+			if (node.kind === "NOT") {
+				if (node.child.kind === "NOT") return render(node.child.child, negative);
+				return universe ? "(" + universe + " NOT " + render(node.child, !negative) + ")" : "(NOT " + render(node.child, !negative) + ")";
+			}
+			let left = render(node.left, negative), right = render(node.right, negative);
+			if (node.kind === "AND" && universe) {
+				if (left === universe) return right;
+				if (right === universe) return left;
+			}
+			if (node.kind === "OR" && universe && (left === universe || right === universe)) return universe;
+			// Binary exclusion is more compact than complementing a universe.
+			if (node.kind === "AND" && node.right.kind === "NOT" && !omit) return "(" + left + " NOT " + render(node.right.child) + ")";
+			return "(" + left + " " + node.kind + " " + right + ")";
+		}
+		if (!binaryNot) return render(tree);
+		function native(node) {
+			if (node.kind === "term") return term(node);
+			if (node.kind === "NOT") return node.child.kind === "NOT" ? native(node.child.child) : null;
+			if (node.kind === "AND") for (let [positive, negative] of [[node.left, node.right], [node.right, node.left]]) {
+				if (negative.kind !== "NOT") continue;
+				let left = native(positive), right = native(negative.child);
+				if (left && right) return "(" + left + " " + binaryNot + " " + right + ")";
+			}
+			let left = native(node.left), right = native(node.right);
+			return left && right ? "(" + left + " " + node.kind + " " + right + ")" : null;
+		}
+		let compact = native(tree);
+		if (compact) return compact;
+		// arXiv has only binary ANDNOT. Convert nested negation without ever
+		// turning a pure negative branch into an affirmative search.
+		function clauses(node, negated = false) {
+			if (node.kind === "term") return [[{ node, negated }]];
+			if (node.kind === "NOT") return clauses(node.child, !negated);
+			let left = clauses(node.left, negated), right = clauses(node.right, negated);
+			let join = negated ? (node.kind === "AND" ? "OR" : "AND") : node.kind;
+			if ((join === "OR" ? left.length + right.length : left.length * right.length) > 128) throw new RangeError("Search expression has too many Boolean alternatives");
+			return join === "OR" ? [...left, ...right] : left.flatMap(a => right.map(b => [...a, ...b]));
+		}
+		let alternatives = clauses(tree);
+		if (alternatives.some(clause => clause.every(part => part.negated))) throw new SyntaxError("This source requires a positive search term in every OR branch; purely negative expressions are unsupported");
+		let join = (parts, operator) => parts.length === 1 ? parts[0] : "(" + parts.join(" " + operator + " ") + ")";
+		return join(alternatives.map(clause => {
+			let positive = join(clause.filter(part => !part.negated).map(part => term(part.node)), "AND");
+			let negative = clause.filter(part => part.negated).map(part => term(part.node));
+			return negative.length ? "(" + positive + " " + binaryNot + " " + join(negative, "OR") + ")" : positive;
+		}), "OR");
+	}
 
-		return level();
+	// PubMed does not index standalone stopwords in [ti]. Broaden those atoms
+	// (including complemented atoms) in the candidate query; matchesTitle checks
+	// the complete original title afterward. Quoted phrases use proximity zero,
+	// which includes stopwords and is independent of PubMed's phrase index.
+	const PUBMED_TITLE_STOPWORDS = new Set(["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he", "in", "is", "it", "its", "of", "on", "or", "that", "the", "to", "was", "were", "will", "with"]);
+	function pubmedFieldQuery(value, field) {
+		return fieldExpression(value, (term, phrase) => {
+			let atom = phrase ? '"' + term.replace(/"/g, "") + '"' : term;
+			return atom + "[" + field + (phrase && field === "ti" && /\s/.test(term) ? ":~0" : "") + "]";
+		}, { universe: "all[sb]", nativeFields: true,
+			omit: field === "ti" ? term => PUBMED_TITLE_STOPWORDS.has(term.toLowerCase()) : null });
 	}
 
 	async function searchPubMed(q, http, ctx) {
@@ -1036,50 +1189,63 @@ var ZotPoPSources = (function () {
 		let base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/";
 		let tool = "&tool=zotpop" + (ctx.email ? "&email=" + enc(ctx.email) : "");
 		let sort = q.sort === "date" ? "pub_date" : "relevance";
-		let es = await withRetry(() => http.getJSON(base + "esearch.fcgi?db=pubmed&retmode=json&sort=" + sort + "&retmax=" + Math.min(10000, max * 3) + "&term=" + enc(pubmedTerm(q)) + tool), {}, ctx);
-		let ids = es.esearchresult?.idlist || [];
-		let total = toInt(es.esearchresult?.count) || ids.length;
-		let out = [];
-		for (let i = 0; i < ids.length && out.length < max; i += 200) {
-			throwIfCancelled(ctx);
-			let chunk = ids.slice(i, i + 200);
-			await sleep(350, ctx);
-			let sum = await withRetry(() => http.getJSON(base + "esummary.fcgi?db=pubmed&retmode=json&id=" + chunk.join(",") + tool), {}, ctx);
-			let result = sum.result || {};
-			for (let uid of result.uids || chunk) {
-				let d = result[uid];
-				if (!d || d.error) continue;
-				let aids = d.articleids || [];
-				let doi = aids.find(x => x.idtype === "doi")?.value || d.elocationid?.replace(/^doi:\s*/i, "") || null;
-				let pmc = aids.find(x => x.idtype === "pmc")?.value || null;
-				out.push(makeRecord({
-					source: "pubmed",
-					sourceId: uid,
-					title: d.title || "",
-					authors: (d.authors || []).filter(a => a.authtype !== "CollectiveName").map(a => {
-						// "Sung JY" -> last "Sung", first "JY"
-						let m = String(a.name || "").match(/^(.*\S)\s+(\S+)$/);
-						return m ? { firstName: m[2], lastName: m[1], name: a.name } : parseName(a.name);
-					}),
-					year: pubmedYear(d),
-					venue: d.fulljournalname || d.source || "",
-					issn: d.issn || d.essn || null,
-					doi,
-					pmid: uid,
-					pmcid: pmc,
-					url: "https://pubmed.ncbi.nlm.nih.gov/" + uid + "/",
-					pdfUrl: pmc ? "https://www.ncbi.nlm.nih.gov/pmc/articles/" + pmc + "/pdf/" : null,
-					citations: null,
-					volume: d.volume || "",
-					issue: d.issue || "",
-					pages: d.pages || "",
-					itemType: "journalArticle"
-				}));
+		let out = [], scanned = 0, total = null;
+		let term = enc(pubmedTerm(q));
+		while (out.length < max && scanned < PAGE_WALK_LIMIT) {
+			let retmax = Math.min(1000, Math.max(200, max * 3), PAGE_WALK_LIMIT - scanned);
+			let es = await withRetry(() => http.getJSON(base + "esearch.fcgi?db=pubmed&retmode=json&sort=" + sort + "&retmax=" + retmax + "&retstart=" + scanned + "&term=" + term + tool), {}, ctx);
+			if (es.error || es.esearchresult?.ERROR) throw new Error("PubMed rejected the query: " + (es.error || es.esearchresult.ERROR));
+			let ids = es.esearchresult?.idlist || [];
+			total = toInt(es.esearchresult?.count) ?? ids.length;
+			let issues = es.esearchresult?.errorlist;
+			if (issues?.fieldsnotfound?.length) throw new Error("PubMed does not recognize fields: " + issues.fieldsnotfound.join(", "));
+			if (issues?.phrasesnotfound?.length) warn(ctx, "pubmed", "PubMed could not find query terms: " + issues.phrasesnotfound.join(", "));
+			for (let i = 0; i < ids.length && out.length < max; i += 200) {
+				throwIfCancelled(ctx);
+				let chunk = ids.slice(i, i + 200);
+				await sleep(350, ctx);
+				let sum = await withRetry(() => http.getJSON(base + "esummary.fcgi?db=pubmed&retmode=json&id=" + chunk.join(",") + tool), {}, ctx);
+				let result = sum.result || {};
+				for (let uid of result.uids || chunk) {
+					let d = result[uid];
+					if (!d || d.error) continue;
+					let aids = d.articleids || [];
+					let doi = aids.find(x => x.idtype === "doi")?.value || d.elocationid?.replace(/^doi:\s*/i, "") || null;
+					let pmc = aids.find(x => x.idtype === "pmc")?.value || null;
+					out.push(makeRecord({
+						source: "pubmed",
+						sourceId: uid,
+						title: d.title || "",
+						authors: (d.authors || []).filter(a => a.authtype !== "CollectiveName").map(a => {
+							// "Sung JY" -> last "Sung", first "JY"
+							let m = String(a.name || "").match(/^(.*\S)\s+(\S+)$/);
+							return m ? { firstName: m[2], lastName: m[1], name: a.name } : parseName(a.name);
+						}),
+						year: pubmedYear(d),
+						venue: d.fulljournalname || d.source || "",
+						issn: d.issn || d.essn || null,
+						doi,
+						pmid: uid,
+						pmcid: pmc,
+						url: "https://pubmed.ncbi.nlm.nih.gov/" + uid + "/",
+						pdfUrl: pmc ? "https://www.ncbi.nlm.nih.gov/pmc/articles/" + pmc + "/pdf/" : null,
+						citations: null,
+						volume: d.volume || "",
+						issue: d.issue || "",
+						pages: d.pages || "",
+						itemType: "journalArticle"
+					}));
+				}
+				out = matchingRecords(dedupe(out), q);
+				publishResults(out, q, ctx);
+				ctx.onProgress?.(`PubMed: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
 			}
-			out = matchingRecords(dedupe(out), q);
-			publishResults(out, q, ctx);
-			ctx.onProgress?.(`PubMed: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
+			scanned += ids.length;
+			let exhausted = !ids.length || scanned >= total;
+			candidateLimit(ctx, "pubmed", out.length, scanned, total, max, exhausted);
+			if (exhausted) break;
 		}
+		if (q.sort === "citations" && scanned < total) warn(ctx, "pubmed", "Citation order applies to the retrieved PubMed relevance pool; PubMed has no global citation ranking.");
 		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(out, http, ctx);
 		return sortSearchResults(out, q).slice(0, max);
 	}
@@ -1091,21 +1257,9 @@ var ZotPoPSources = (function () {
 	}
 
 	function arxivFieldQuery(value, field) {
-		// Preserve phrases and Boolean structure; add AND only between adjacent terms.
-		let tokens = value.trim().match(/(?:[a-z_]+:)?"[^"]*"|[()]|[^\s()]+/gi) || [];
-		let out = [], previousTerm = false;
-		for (let token of tokens) {
-			if (token === "NOT") {
-				if (out[out.length - 1] === "AND") out.pop();
-				token = "ANDNOT";
-			}
-			let operator = /^(AND|OR|ANDNOT)$/.test(token);
-			let startsTerm = !operator && token !== ")";
-			if (previousTerm && startsTerm) out.push("AND");
-			out.push(operator || token === "(" || token === ")" || /^[a-z_]+:/i.test(token) ? token : field + ":" + token);
-			previousTerm = !operator && token !== "(";
-		}
-		return out.join(" ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
+		return fieldExpression(value, (term, phrase) => /^[a-z_]+:/i.test(term) ? term
+			: field + ":" + (phrase ? '"' + term.replace(/"/g, "") + '"' : term),
+			{ nativeFields: true, binaryNot: "ANDNOT" });
 	}
 
 	async function searchArxiv(q, http, ctx) {
@@ -1116,7 +1270,7 @@ var ZotPoPSources = (function () {
 		if (q.venue?.trim()) parts.push('jr:"' + q.venue.trim() + '"');
 		if (!parts.length) return [];
 		if (q.yearFrom || q.yearTo) parts.push("submittedDate:[" + (q.yearFrom || "1990") + "01010000 TO " + (q.yearTo || "2100") + "12312359]");
-		let query = parts.map(p => "(" + p + ")").join(" AND ");
+		let query = parts.map(grouped).join(" AND ");
 		let max = q.maxResults || 200;
 		let out = [];
 		let start = 0;
@@ -1164,7 +1318,9 @@ var ZotPoPSources = (function () {
 			ctx.onProgress?.(`arXiv: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
 			// start counts rows walked, not rows kept, so a filter that rejects everything
 			// would otherwise page through the entire result set three seconds at a time.
-			if (entries.length < n || start + entries.length >= total || start + entries.length >= PAGE_WALK_LIMIT) break;
+			let exhausted = entries.length < n || start + entries.length >= total;
+			candidateLimit(ctx, "arxiv", out.length, start + entries.length, total, max, exhausted);
+			if (exhausted || start + entries.length >= PAGE_WALK_LIMIT) break;
 			start += n;
 			await sleep(3000, ctx); // arXiv asks for 3 s between requests
 		}
@@ -1178,7 +1334,7 @@ var ZotPoPSources = (function () {
 	function epmcQuery(q, preprintsOnly) {
 		let parts = [];
 		if (q.keywords?.trim()) parts.push("(" + q.keywords.trim() + ")");
-		if (q.title?.trim()) parts.push('TITLE:"' + q.title.trim().replace(/"/g, "") + '"');
+		if (q.title?.trim()) parts.push(fieldExpression(q.title, (term, phrase) => "TITLE:" + (phrase ? '"' + term.replace(/"/g, "") + '"' : term)));
 		if (q.authors?.trim()) {
 			parts.push(Query.compileAuthors(q.authors, name => 'AUTH:"' + name.replace(/"/g, "") + '"'));
 		}
@@ -1188,7 +1344,7 @@ var ZotPoPSources = (function () {
 		}
 		if (q.yearFrom || q.yearTo) parts.push("PUB_YEAR:[" + (q.yearFrom || 1800) + " TO " + (q.yearTo || 3000) + "]");
 		if (preprintsOnly) parts.push("SRC:PPR");
-		return parts.join(" AND ");
+		return parts.length === 1 ? parts[0] : parts.map(grouped).join(" AND ");
 	}
 
 	function epmcPublishedPmid(r) {
@@ -1277,7 +1433,9 @@ var ZotPoPSources = (function () {
 			let next = data.nextCursorMark;
 			// Local filtering can reject every row, so out.length alone never terminates the
 			// walk. Stop after the same 10,000 rows OpenAlex and Crossref stop at.
-			if (!items.length || !next || next === cursor || out.length >= total || seen >= PAGE_WALK_LIMIT) break;
+			let exhausted = !items.length || !next || next === cursor || seen >= total;
+			candidateLimit(ctx, "europepmc", out.length, seen, total, max, exhausted);
+			if (exhausted || seen >= PAGE_WALK_LIMIT) break;
 			cursor = next;
 		}
 		return out.slice(0, max);
@@ -1334,14 +1492,38 @@ var ZotPoPSources = (function () {
 		});
 	}
 
-	async function searchOSF(q, http, ctx) {
+	async function searchOSF(q, http, ctx, seed = null) {
+		let value = q.title?.trim() || q.keywords?.trim();
+		if (!value) {
+			warn(ctx, "osf", "Author-only and journal-only searches are unavailable in the OSF API; add a title or keyword.");
+			sourceStatus(ctx, "osf", { retrieved: 0, scanned: 0, total: null, limit: q.maxResults || 200, exhausted: false, truncated: true, reason: "unsupported-query" });
+			return [];
+		}
+		if (!seed) {
+			let seeds = substringSeeds(value);
+			if (seeds.length > 1) {
+				let lists = [], statuses = [];
+				for (let part of seeds) {
+					let rows = await searchOSF(q, http, Object.assign({}, ctx, { onResults: records => {
+						publishResults(mergeRecords([...lists, records]), q, ctx);
+					} }), part);
+					lists.push(rows); statuses.push(ctx.sourceStatus?.osf);
+				}
+				let out = sortSearchResults(mergeRecords(lists), q).slice(0, q.maxResults || 200);
+				sourceStatus(ctx, "osf", { retrieved: out.length, scanned: statuses.reduce((n, st) => n + (st?.scanned || 0), 0),
+					total: null, limit: q.maxResults || 200, exhausted: statuses.every(st => st?.exhausted),
+					truncated: statuses.some(st => st?.truncated), reason: statuses.find(st => st?.truncated)?.reason || null });
+				return out;
+			}
+			seed = seeds[0];
+		}
 		let filters = [];
 		// filter[field] is a contiguous, case-insensitive substring test, not a term search:
 		// filter[title]=protein engineering matched 0 of 201,549 postings while
 		// filter[title,description] (OSF's OR over both fields) matched 31 for another phrase.
 		// So a keyword query goes to both fields and only a title query is narrowed to one.
-		if (q.title?.trim()) filters.push("filter[title]=" + enc(q.title.trim()));
-		else if (q.keywords?.trim()) filters.push("filter[title,description]=" + enc(q.keywords.trim()));
+		if (q.title?.trim()) filters.push("filter[title]=" + enc(seed));
+		else if (q.keywords?.trim()) filters.push("filter[title,description]=" + enc(seed));
 		// OSF answered filter[contributors] with "not a filterable field", and there is no
 		// other author route on /preprints/, so an author-only query has nothing to ask.
 		if (!filters.length) return [];
@@ -1369,7 +1551,9 @@ var ZotPoPSources = (function () {
 			out = matchingRecords(dedupe(out), q);
 			publishResults(out, q, ctx);
 			ctx.onProgress?.(`OSF Preprints: ${out.length} / ${Math.min(max, total)}`, out.length, Math.min(max, total));
-			url = items.length && seen < PAGE_WALK_LIMIT ? data.links?.next || null : null;
+			let next = data.links?.next || null;
+			candidateLimit(ctx, "osf", out.length, seen, total, max, !items.length || !next);
+			url = items.length && seen < PAGE_WALK_LIMIT ? next : null;
 		}
 		return out.slice(0, max);
 	}
@@ -1436,7 +1620,7 @@ var ZotPoPSources = (function () {
 				sourceId: clusterId || title.toLowerCase(),
 				title,
 				abstract: div.querySelector(".gs_rs")?.textContent?.trim() || "",
-				authors: authorsSeg.split(",").map(s => s.replace(/…|\.\.\./g, "").trim()).filter(s => s && !/^\d+$/.test(s)).map(parseName),
+				authors: authorsSeg.split(",").map(s => s.trim()).filter(s => s && !/^\d+$/.test(s)).map(parseName),
 				year,
 				venue,
 				url: a?.getAttribute("href") || null,
@@ -1504,6 +1688,120 @@ var ZotPoPSources = (function () {
 			issue: r.issue ? String(r.issue) : "", pages: r.startpage ? String(r.startpage) + (r.endpage && r.endpage !== r.startpage ? "-" + r.endpage : "") : "",
 			itemType: /preprint/i.test(r.type || "") ? "preprint" : /book/i.test(r.type || "") ? "book" : "journalArticle"
 		}));
+	}
+
+	// This registry describes the installed PoP command, not direct API support.
+	const POP_SOURCES = Object.freeze(Object.fromEntries([
+		["scholar", "Google Scholar", "--gscholar"], ["crossref", "Crossref", "--crossref"],
+		["pubmed", "PubMed", "--pubmed"], ["openalex", "OpenAlex", "--openalex"],
+		["semanticscholar", "Semantic Scholar", "--semscholar"],
+		["scholarauthor", "Google Scholar author", "--gsauthor"],
+		["scholarprofile", "Google Scholar profile", "--gsprofile"],
+		["scholarciting", "Google Scholar citing articles", "--gsciting"],
+		["hadb", "Harzing's author database", "--hadb"], ["lens", "Lens", "--lens"],
+		["scopus", "Scopus", "--scopus"], ["wos", "Web of Science", "--wos"],
+		["wosexpanded", "Web of Science Expanded", "--wosexpanded"],
+		["wosstarter", "Web of Science Starter", "--wosstarter"]
+	].map(([key, label, flag]) => [key, Object.freeze({ label, flag })])));
+
+	function clonePoPJSON(value) { return JSON.parse(JSON.stringify(value)); }
+
+	function popItemType(value) {
+		let type = String(value || "").toLowerCase().replace(/[_\s]+/g, "-");
+		if (Object.hasOwn(CROSSREF_TYPES, type)) return CROSSREF_TYPES[type];
+		if (type === "dataset") return "dataset";
+		if (/book-(?:chapter|section)|^chapter$/.test(type)) return "bookSection";
+		if (/conference|proceedings/.test(type)) return "conferencePaper";
+		if (/dissertation|thesis/.test(type)) return "thesis";
+		if (/preprint/.test(type)) return "preprint";
+		if (/book/.test(type)) return "book";
+		if (/report/.test(type)) return "report";
+		if (/patent/.test(type)) return "patent";
+		return "document";
+	}
+
+	function popExactAuthor(author) {
+		if (typeof author === "string") return parseName(author);
+		if (!author || typeof author !== "object" || Array.isArray(author)) return parseName(String(author ?? ""));
+		let copy = clonePoPJSON(author);
+		let name = String(copy.name ?? [copy.firstName ?? copy.given, copy.lastName ?? copy.family].filter(part => part != null && part !== "").join(" "));
+		let parsed = parseName(name);
+		return Object.assign(copy, { name, firstName: copy.firstName ?? copy.given ?? parsed.firstName,
+			lastName: copy.lastName ?? copy.family ?? parsed.lastName });
+	}
+
+	function popTitleMarkup(value) {
+		let text = decodeEntities(String(value ?? ""));
+		const tags = { i: "i", italic: "i", b: "b", bold: "b", em: "em", strong: "strong", sub: "sub", sup: "sup" };
+		text = text.replace(/<(\/?)(?:jats:)?(i|italic|b|bold|em|strong|sub|sup)(?:\s+[^<>]*?)?\s*>/gi,
+			(_, close, tag) => "<" + close + tags[tag.toLowerCase()] + ">");
+		// Only unwrap actual paired elements: '< 0.05 and q > 0.1' is scientific text.
+		for (let i = 0; i < 8; i++) {
+			let next = text.replace(/<((?!(?:i|b|em|strong|sub|sup)(?:\s|>))[a-z][\w:-]*)(?:\s[^<>]*?)?>([\s\S]*?)<\/\1\s*>/gi, "$2");
+			if (next === text) break;
+			text = next;
+		}
+		return /<\/?(?:i|b|em|strong|sub|sup)>/i.test(text)
+			? text.replace(/<br\s*\/?>/gi, " ").replace(/\s+/g, " ").trim() : null;
+	}
+
+	// A faithful UI projection retains the native row separately. In particular, a
+	// repeated DOI is still a selectable occurrence and an absent title stays absent.
+	function normalizePoPExactRecords(rows, source, provenance = {}) {
+		if (!Object.hasOwn(POP_SOURCES, source)) throw new Error("Publish or Perish does not support source: " + source);
+		if (!Array.isArray(rows)) throw new Error("Invalid Publish or Perish result list");
+		let records = rows.map((row, index) => {
+			if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("Invalid Publish or Perish row at index " + index);
+			let original = clonePoPJSON(row);
+			let authors = Array.isArray(row.authors) ? row.authors : row.authors == null ? [] : [row.authors];
+			let pages = row.startpage != null ? String(row.startpage)
+				+ (row.endpage != null && row.endpage !== row.startpage ? "-" + row.endpage : "") : String(row.pages ?? "");
+			let record = makeRecord({
+				source, sourceId: String(row.uid ?? row.sourceId ?? row.doi ?? ""),
+				engine: "pop", searchBackend: "publish-or-perish",
+				title: String(row.title ?? ""), authors: authors.map(popExactAuthor),
+				year: row.year ?? null, venue: row.source ?? row.venue ?? "", publisher: row.publisher ?? "",
+				issn: row.issn ?? null, doi: row.doi ?? normalizeDOI(row.article_url),
+				pmid: row.pmid ?? null, pmcid: row.pmcid ?? null, arxiv: row.arxiv ?? null,
+				url: row.article_url ?? row.url ?? null, fulltextUrl: row.fulltext_url ?? null,
+				pdfUrl: /\.pdf(?:[?#]|$)|\/pdf(?:[/?#]|$)/i.test(row.fulltext_url || "") ? row.fulltext_url : null,
+				citations: row.cites ?? row.citations ?? null, abstract: row.abstract ?? "",
+				volume: String(row.volume ?? ""), issue: String(row.issue ?? ""), pages,
+				itemType: popItemType(row.type), popType: row.type ?? null,
+				popOriginal: original, popOrdinal: index, popRank: row.rank ?? null,
+				rank: row.rank ?? index + 1, popProvenance: clonePoPJSON(provenance)
+			});
+			record.titleMarkup = popTitleMarkup(row.title);
+			record.key = "pop:" + source + ":" + enc(String(provenance.profileId ?? "default"))
+				+ ":" + enc(String(provenance.invocationId ?? provenance.capturedAt ?? provenance.retrievedAt ?? "")) + ":" + index;
+			return record;
+		});
+		records.popProvenance = clonePoPJSON(provenance);
+		if (rows.partial || provenance.complete === false || provenance.cancelled) records.partial = true;
+		return records;
+	}
+
+	async function searchPoPExact(source, query, ctx) {
+		throwIfCancelled(ctx);
+		if (!Object.hasOwn(POP_SOURCES, source)) throw new Error("Publish or Perish does not support source: " + source);
+		if (typeof ctx.popSearchSource !== "function") throw new Error("Publish or Perish native search is unavailable; install or configure its command-line tool");
+		ctx.errors = [];
+		ctx.sourceStatus = {};
+		delete ctx.popProvenance;
+		let result = await ctx.popSearchSource(source, Object.assign({}, query), ctx);
+		throwIfCancelled(ctx);
+		if (!result || !Array.isArray(result.rows) || result.provenance?.engine !== "publish-or-perish"
+			|| result.provenance.source !== source || typeof result.provenance.complete !== "boolean") throw new Error("Invalid Publish or Perish source result or provenance");
+		if (result.provenance.cancelled) throw abortError();
+		let records = normalizePoPExactRecords(result.rows, source, result.provenance);
+		ctx.popProvenance = clonePoPJSON(result.provenance);
+		sourceStatus(ctx, source, { retrieved: records.length, scanned: records.length,
+			complete: result.provenance.complete === true && !records.partial, cached: result.provenance.cached === true,
+			engine: "publish-or-perish", partial: Boolean(records.partial) });
+		// Deliberately bypass publishResults: it merges, sorts and caps API records.
+		ctx.onResults?.(records, { final: !records.partial, source, engine: "pop", popProvenance: ctx.popProvenance });
+		throwIfCancelled(ctx);
+		return records;
 	}
 
 	// ---------------------------------------------------------------- library proxy
@@ -1602,14 +1900,15 @@ var ZotPoPSources = (function () {
 	function sameTitleWork(a, b, title) {
 		if (!title || !compatibleIdentity(a, b)) return false;
 		if (a.year && b.year && Math.abs(a.year - b.year) > 1) return false;
-		let authorA = normalizedText(a.authors?.[0]?.lastName || a.authors?.[0]?.name);
-		let authorB = normalizedText(b.authors?.[0]?.lastName || b.authors?.[0]?.name);
-		if (authorA && authorB && authorA !== authorB) return false;
+		let fullName = author => typeof author === "string" ? author : author?.name || [author?.firstName, author?.lastName].filter(Boolean).join(" ");
+		let authorA = fullName(a.authors?.[0]), authorB = fullName(b.authors?.[0]);
+		let authorsAgree = Boolean(authorA && authorB && Query.matchesAuthor(authorA, [b.authors[0]]) && Query.matchesAuthor(authorB, [a.authors[0]]));
+		if (authorA && authorB && !authorsAgree) return false;
 		// Generic titles (e.g. Introduction) need corroborating metadata.
 		let generic = /^(editorial|editorial board|introduction|acknowledg(e)?ments|preface|foreword|contents|table of contents|references|abstract|summary|conclusion|conclusions|correction|erratum|corrigendum)$/i.test(title);
 		if (generic && (!normalizedText(a.venue) || normalizedText(a.venue) !== normalizedText(b.venue))) return false;
 		return (!generic && (title.length >= 24 || title.split(" ").length >= 3))
-			|| Boolean(a.year && a.year === b.year && authorA && authorA === authorB);
+			|| Boolean(a.year && a.year === b.year && authorsAgree);
 	}
 
 	function sortSearchResults(records, q, fused = false) {
@@ -1618,13 +1917,13 @@ var ZotPoPSources = (function () {
 			let date = r => r.publicationDate || (r.year ? String(r.year) : "");
 			return records.sort((a, b) => date(a) < date(b) ? 1 : date(a) > date(b) ? -1 : 0);
 		}
-		let text = (q.title || q.keywords || "").trim();
-		let exact = /\b(?:AND|OR|NOT|ANDNOT)\b|\w+:/.test(text) ? "" : normalizedText(text);
+		let text = (q.title || (fused ? q.keywords : "") || "").trim();
+		let exact = /\b(?:AND|OR|NOT|ANDNOT)\b|\w+:/.test(text) ? "" : Query.titleIdentity(text);
 		// Native relevance scores have different scales. Fuse source ranks instead,
 		// counting each source once, with no citation-count tie breaker.
 		let score = r => Object.values(r.sourceRanks || {}).reduce((sum, rank) => sum + 1 / (60 + rank), 0);
 		return records.sort((a, b) => {
-			let match = r => exact && normalizedText(r.title) === exact ? 1 : 0;
+			let match = r => exact && Query.titleIdentity(r.titleMarkup || r.title) === exact ? 1 : 0;
 			return match(b) - match(a) || (fused ? score(b) - score(a) : 0);
 		});
 	}
@@ -1682,7 +1981,7 @@ var ZotPoPSources = (function () {
 					pdfUrls: [...(original.pdfUrls || [])], sources: [...(original.sources || [original.source])],
 					sourceRanks: Object.assign({}, original.sourceRanks || { [original.source]: index + 1 })
 				});
-				let ids = identityKeys(r), title = normalizedText(r.title);
+				let ids = identityKeys(r), title = Query.titleIdentity(r.titleMarkup || r.title);
 				let matches = [...new Set(ids.map(id => root(byID.get(id))).filter(e => e && compatibleIdentity(e.record, r)))];
 				if (!matches.length && title) {
 					let candidates = [...new Set((byTitle.get(title) || []).map(root))]
@@ -1710,63 +2009,59 @@ var ZotPoPSources = (function () {
 		return entries.filter(e => !e.mergedInto).map(e => e.record);
 	}
 
-	/* A preprint and the journal article it became.
-
-	   These are two records with two DOIs, and merging them would be wrong: they
-	   are distinct objects and somebody may want either. But showing both with
-	   nothing to say they are the same work is how a result list looks broken.
-	   A real search returned the Research Square preprint and the Biotechnology
-	   for Biofuels article one after the other, differing only in the case of
-	   one letter.
-
-	   So they are left as two records and each is told about the other. */
+	// Keep distinct versions separate, linking only a deposited relation or a strong
+	// title/author/date match. A shared generic title is never sufficient evidence.
 	function linkPreprintVersions(records) {
-		let byTitle = new Map();
-		for (let r of records) {
-			let key = normalizedText(r.title);
-			if (!key) continue;
-			if (!byTitle.has(key)) byTitle.set(key, []);
-			byTitle.get(key).push(r);
+		for (let record of records) { delete record.publishedAs; delete record.preprintOf; }
+		let byTitle = new Map(), byDoi = new Map(), byPmid = new Map();
+		let index = (map, key, record) => { if (key) { if (!map.has(key)) map.set(key, []); map.get(key).push(record); } };
+		for (let article of records.filter(r => r.itemType !== "preprint" && r.venue)) {
+			index(byTitle, Query.titleIdentity(article.titleMarkup || article.title), article);
+			index(byDoi, normalizeDOI(article.doi), article);
+			index(byPmid, article.pmid ? String(article.pmid) : null, article);
 		}
-		for (let group of byTitle.values()) {
-			if (group.length < 2) continue;
-			let published = group.find(r => r.itemType !== "preprint" && r.venue);
-			let preprints = group.filter(r => r !== published && r.itemType === "preprint");
-			if (!published || !preprints.length) continue;
-			for (let pre of preprints) {
-				/* Only when they really are two records, not one seen twice.
-
-				   Compared raw as well as normalised: normalizeDOI returns null
-				   for anything it does not recognise, and a guard that only
-				   looked at the normalised form treated two records carrying the
-				   same unrecognised string as different versions. */
-				let a = normalizeDOI(pre.doi), b = normalizeDOI(published.doi);
-				let raw = value => String(value == null ? "" : value).trim().toLowerCase();
-				if ((a && a === b) || (raw(pre.doi) && raw(pre.doi) === raw(published.doi))) continue;
-				pre.publishedAs = { doi: published.doi || null, venue: published.venue || null, year: published.year || null };
-				published.preprintOf = { doi: pre.doi || null, venue: pre.venue || null };
-			}
+		for (let pre of records.filter(r => r.itemType === "preprint")) {
+			let title = Query.titleIdentity(pre.titleMarkup || pre.title);
+			let pool = pre.publishedDoi || pre.publishedPmid
+				? [...new Set([...(byDoi.get(normalizeDOI(pre.publishedDoi)) || []), ...(byPmid.get(String(pre.publishedPmid)) || [])])]
+				: byTitle.get(title) || [];
+			let candidates = pool.filter(pub => {
+				let a = normalizeDOI(pre.doi), b = normalizeDOI(pub.doi);
+				if (a && a === b) return false;
+				if (pre.doi && String(pre.doi).trim().toLowerCase() === String(pub.doi || "").trim().toLowerCase()) return false;
+				if (pre.publishedDoi || pre.publishedPmid) return Boolean(
+					(pre.publishedDoi && normalizeDOI(pre.publishedDoi) === b)
+					|| (pre.publishedPmid && String(pre.publishedPmid) === String(pub.pmid || "")));
+				if (!title || title !== Query.titleIdentity(pub.titleMarkup || pub.title) || title.length < 24 || title.split(" ").length < 4) return false;
+				if (!pre.year || !pub.year || pub.year < pre.year - 1 || pub.year > pre.year + 5) return false;
+				let author = pre.authors?.[0];
+				let name = author?.name || [author?.firstName, author?.lastName].filter(Boolean).join(" ");
+				return Boolean(name && Query.matchesAuthor(name, pub.authors));
+			});
+			if (candidates.length !== 1) continue;
+			let pub = candidates[0];
+			pre.publishedAs = { doi: pub.doi || null, venue: pub.venue || null, year: pub.year || null };
+			pub.preprintOf = { doi: pre.doi || null, venue: pre.venue || null };
 		}
 		return records;
 	}
 
 	const MULTI_SOURCES = ["openalex", "crossref", "europepmc", "arxiv"];
 
-	/* How many each source is asked for, when several are being combined.
+	// A wider pool lets reciprocal-rank fusion reward agreement below each
+	// source's displayed top N. Small searches overfetch threefold; large ones
+	// add at most 200 candidates per provider instead of imposing a 200-row cap.
 
-	   Asking each for exactly the number to be shown is what made the combined
-	   search no better than three lists stapled together. Measured on a real
-	   query, OpenAlex, Crossref and Europe PMC returned twenty results each and
-	   sixty distinct DOIs -- not one paper in common. Reciprocal rank fusion
-	   rewards agreement between sources, and there was no room for agreement to
-	   appear: a paper both engines rank twenty-fifth is invisible to both.
-
-	   Widening the pool costs bandwidth, not round trips -- it is the same one
-	   request per source -- so each is asked for three times the final count. */
-	const poolFor = max => Math.min(200, Math.max(30, (max || 20) * 3));
+	const poolFor = max => Math.min(PAGE_WALK_LIMIT, Math.max(30, Math.min((max || 200) * 3, (max || 200) + 200)));
 
 	async function searchCombined(q, http, ctx, sources, preprintsOnly = false) {
-		let lists = sources.map(() => []), errors = [], done = 0, succeeded = 0;
+		if (Query.parseAuthorIdentifier(q.authors)) {
+			if (!sources.some(source => source.key === "openalex")) throw new Error("Author identifiers require OpenAlex or Combined search");
+			if (sources.length > 1) warn(ctx, "multi", "Author identifier search uses OpenAlex only; the other sources cannot verify this identity.");
+			sources = sources.filter(source => source.key === "openalex");
+		}
+		if (!ctx.sourceStatus) ctx.sourceStatus = {};
+		let lists = sources.map(() => []), errors = ctx.errors || (ctx.errors = []), done = 0, succeeded = 0;
 		// Citation and date ordering are decided over the whole pool too, so the
 		// wider pool helps them for the same reason.
 		let subQuery = Object.assign({}, q, { maxResults: poolFor(q.maxResults) });
@@ -1779,16 +2074,19 @@ var ZotPoPSources = (function () {
 		await Promise.allSettled(sources.map(async (source, index) => {
 			let sub = Object.assign({}, ctx, {
 				enrichCitations: false,
+				errors, sourceStatus: ctx.sourceStatus,
 				onResults: records => { lists[index] = records; publish(); },
 				onProgress: msg => ctx.onProgress?.(`${done}/${sources.length} · ${msg}`, done, sources.length)
 			});
 			try {
-				lists[index] = await source.search(subQuery, http, sub);
+				let providerQuery = source.key === "scholar" ? Object.assign({}, subQuery, { maxResults: Math.min(2000, subQuery.maxResults) }) : subQuery;
+				lists[index] = await source.search(providerQuery, http, sub);
 				succeeded++;
 			}
 			catch (e) {
 				if (e.name !== "AbortError") {
 					errors.push(`${SOURCES[source.key].label}: ${e.message}`);
+					sourceStatus(ctx, source.key, { retrieved: lists[index].length, truncated: true, reason: "source-error" });
 					ctx.log?.(`Search source ${source.key} failed: ${e.message}`);
 				}
 			}
@@ -1802,6 +2100,29 @@ var ZotPoPSources = (function () {
 		throwIfCancelled(ctx);
 		if (!succeeded) throw Object.assign(new Error("All search sources failed: " + errors.join(" / ")), { errors });
 		let merged = matchingRecords(mergeRecords(lists), q);
+		let pool = subQuery.maxResults;
+		while (merged.length < (q.maxResults || 200) && pool < PAGE_WALK_LIMIT) {
+			let expandable = sources.map((source, index) => ({ source, index }))
+				.filter(({ source, index }) => lists[index].length >= pool && !ctx.sourceStatus[source.key]?.exhausted
+					&& !ctx.sourceStatus[source.key]?.truncated && !["scholar", "semanticscholar"].includes(source.key));
+			if (!expandable.length) break;
+			pool = Math.min(PAGE_WALK_LIMIT, pool * 2);
+			for (let { source, index } of expandable) {
+				throwIfCancelled(ctx);
+				let previous = lists[index];
+				try {
+					lists[index] = await source.search(Object.assign({}, q, { maxResults: pool }), http,
+						Object.assign({}, ctx, { enrichCitations: false, onResults: records => { lists[index] = mergeRecords([previous, records]); publish(); } }));
+				}
+				catch (e) {
+					if (e.name === "AbortError") throw e;
+					warn(ctx, source.key, "Refill stopped: " + e.message);
+					// Preserve the prior list and stop retrying this failed continuation.
+					sourceStatus(ctx, source.key, { truncated: true, reason: "source-error" });
+				}
+			}
+			merged = matchingRecords(mergeRecords(lists), q);
+		}
 		if (preprintsOnly) for (let r of merged) r.itemType = "preprint";
 		// Citation enrichment can change which records belong in the top N.
 		// For relevance/date it cannot, so enrich only the chosen results there.
@@ -1811,7 +2132,7 @@ var ZotPoPSources = (function () {
 	}
 
 	async function searchMulti(q, http, ctx) {
-		return searchCombined(q, http, ctx, MULTI_SOURCES.map(key => ({ key, search: SOURCES[key].search })));
+		return searchCombined(q, http, ctx, (q.sources || MULTI_SOURCES).map(key => ({ key, search: SOURCES[key].search })));
 	}
 
 	// ---------------------------------------------------------------- registry
@@ -1833,11 +2154,18 @@ var ZotPoPSources = (function () {
 	}
 
 	async function search(sourceKey, query, http, ctx = {}) {
+		if (query?.engine === "pop") return searchPoPExact(sourceKey, query, ctx);
+		if (query?.engine && query.engine !== "direct") throw new Error("Unknown search engine: " + query.engine);
 		let src = SOURCES[sourceKey];
 		if (!src) throw new Error("Unknown source: " + sourceKey);
 		throwIfCancelled(ctx);
 		query = Object.assign({ sort: "relevance", maxResults: 200 }, query);
 		for (let key of ["keywords", "title", "authors", "venue"]) query[key] = String(query[key] || "").trim();
+		if (sourceKey === "multi" && query.sources !== undefined) {
+			let allowed = [...MULTI_SOURCES, "pubmed", "semanticscholar", "scholar"];
+			if (!Array.isArray(query.sources) || !query.sources.length || query.sources.some(key => !allowed.includes(key))) throw new Error("Combined search requires at least one supported source");
+			query.sources = [...new Set(query.sources)];
+		}
 		if (!hasAny(query)) return [];
 		if (!Number.isInteger(query.maxResults) || query.maxResults < 1 || query.maxResults > 2000) throw new Error("Result limit must be an integer from 1 to 2000");
 		for (let key of ["yearFrom", "yearTo"]) {
@@ -1845,7 +2173,11 @@ var ZotPoPSources = (function () {
 			if (query[key] != null && query[key] !== "" && (!Number.isInteger(query[key]) || query[key] < 1500 || query[key] > 2100)) throw new Error("Invalid publication year");
 		}
 		if (query.yearFrom && query.yearTo && query.yearFrom > query.yearTo) throw new Error("Start year must not exceed end year");
+		let identifier = Query.parseAuthorIdentifier(query.authors);
+		if (!identifier && /(?:orcid\.org|openalex\.org|\borcid:|\bopenalex:|\bA\d+\b|\b\d{4}-\d{4}-|\b\d{15}[\dX]\b)/i.test(query.authors)) throw new Error("Invalid or compound author identifier: enter one valid OpenAlex author ID or ORCID with its checksum");
+		if (identifier && !["openalex", "multi"].includes(sourceKey)) throw new Error("Author identifiers require OpenAlex or Combined search");
 		ctx.errors = [];
+		ctx.sourceStatus = {};
 		const transport = {};
 		for (let method of ["getJSON", "getText"]) transport[method] = async (url, headers = {}) => {
 			throwIfCancelled(ctx);
@@ -1874,7 +2206,7 @@ var ZotPoPSources = (function () {
 	}
 
 	return {
-		SOURCES, search, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, isPlainAuthorQuery, openAlexAuthorFilter, openAlexAuth, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
+		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, filterRecords: matchingRecords, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();

@@ -21,6 +21,7 @@
 	};
 
 	const COL_VERSION = 7;
+	const COLUMN_KEYS = Object.keys(DEFAULT_COLS);
 	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~40px)
 	const MIN_COL = 40;
 	// An unbounded drag used to persist a column wider than the window
@@ -63,8 +64,10 @@
 	}
 
 	function sourceLabel(key) {
+		if (key === "orcid") return "ORCID";
 		let k = SOURCE_LABEL_KEYS[key];
-		return k ? t(k) : (ZotPoPSources.SOURCES[key]?.label || key);
+		return engineValue() === "pop" ? (ZotPoPSources.POP_SOURCES?.[key]?.label || key)
+			: k ? t(k) : (ZotPoPSources.SOURCES[key]?.label || key);
 	}
 
 	const state = {
@@ -82,10 +85,16 @@
 		cancelled: false,
 		doiMap: new Map(),
 		libraryID: null,
-		colWidths: Object.assign({}, DEFAULT_COLS)
+		colWidths: Object.assign({}, DEFAULT_COLS),
+		colOrder: [...COLUMN_KEYS]
 	};
 	let marquee = null;
 	let history = null;
+	let searchSurface = "papers";
+	const surfaceSnapshots = new Map();
+	const authorSessions = { scholar: { input: "", profiles: [], profile: null, action: "profiles" }, orcid: { input: "", profiles: [], profile: null, action: "profiles" } };
+	let activeAuthorProvider = "scholar";
+	let authorAction = "profiles";
 
 	// ------------------------------------------------------------ files
 	// Where ZotPoP keeps what it learned: recent searches with their results, and the
@@ -107,7 +116,7 @@
 		let io = diskIO() || ZotPoPHistory.memoryIO();
 		let size = parseInt(PREF("historySize"), 10);
 		history = ZotPoPHistory.create({ io, dir: dataPath("history"), join: typeof PathUtils !== "undefined" ? PathUtils.join : undefined,
-			max: size > 0 ? size : 30 });
+			max: size > 0 ? size : 30, maxBytes: 64 * 1024 * 1024 });
 		return io;
 	}
 	let cacheIO = null;
@@ -230,12 +239,8 @@
 		ZotPoPI18N.apply(document, t);
 		document.title = t("windowTitle");
 
+		$("engine").value = PREF("searchEngine") === "pop" ? "pop" : "direct";
 		let sel = $("source");
-		for (let key of Object.keys(ZotPoPSources.SOURCES)) {
-			let o = document.createElement("option");
-			o.value = key; o.textContent = sourceLabel(key);
-			sel.appendChild(o);
-		}
 		// A saved preference always beats the shipped default, so every profile
 		// that used ZotPoP before the combined search existed stayed pinned to a
 		// single source -- which is exactly the "it only searches one API"
@@ -246,11 +251,13 @@
 		}
 		// The fallback has to agree with prefs.js; hard-coding a single source
 		// here quietly overrode the shipped default of "multi".
-		sel.value = PREF("defaultSource") || "multi";
-		if (!sel.value) sel.value = "multi";
-		for (let id of ["source", "sort", "target"]) enhanceSelect($(id));
+		populateSearchSources();
+		populatePoPOutputSort();
+		for (let id of ["engine", "source", "sort", "popOutputSort", "popCachePolicy", "target"]) enhanceSelect($(id));
 
 		restoreQuery();
+		restoreAuthorPreferences();
+		searchSurface = PREF("searchSurface") === "authors" ? "authors" : "papers";
 		$("opt-pdf").checked = PREF("attachPDF") !== false;
 		$("opt-skip").checked = PREF("skipDuplicates") !== false;
 		$("opt-extra").checked = PREF("citationsInExtra") !== false;
@@ -259,16 +266,27 @@
 		populateTargets();
 		cacheIO = setupStorage();
 		wireEvents();
+		applySearchSurface();
 		sourceHint();
 		applyColumnWidths();
 		setDetailVisible(!$("detail").hidden);
 		setStatus(PREF("hintShown") ? t("ready") : t("welcome"));
 		render();
-		$("keywords").focus();
+		$(searchSurface === "authors" ? "author-input" : "keywords").focus();
 		loadCaches().finally(restoreCachedSearch);
 	}
 
 	function wireEvents() {
+		$("mode-papers").addEventListener("click", () => switchSearchMode("papers"));
+		$("mode-authors").addEventListener("click", () => switchSearchMode("authors"));
+		$("author-form").addEventListener("submit", e => { e.preventDefault(); runAuthorAction("profiles"); });
+		$("author-input").addEventListener("input", authorInputChanged);
+		$("author-input-kind").addEventListener("change", authorInputChanged);
+		$("author-max-results").addEventListener("change", () => { if (searchSurface === "authors") state.searchController?.abort(); saveAuthorPreferences(); });
+		$("author-provider").addEventListener("change", () => switchAuthorProvider($("author-provider").value));
+		$("author-name-btn").addEventListener("click", () => runAuthorAction("name-papers"));
+		$("author-stop-btn").addEventListener("click", stopOperation);
+		$("author-history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(); });
 		$("query-form").addEventListener("submit", e => { e.preventDefault(); runSearch(); });
 		$("query-form").addEventListener("input", cancelCacheRestore);
 		$("query-form").addEventListener("change", cancelCacheRestore);
@@ -292,6 +310,7 @@
 			render();
 		});
 		$("copy-csv").addEventListener("click", copyCSV);
+		$("copy-pop-json")?.addEventListener("click", () => copyText(popOriginalJSON(), t("popJSONCopied")));
 		$("save-csv").addEventListener("click", saveCSV);
 		$("toggle-detail").addEventListener("click", toggleDetail);
 		$("toggle-metrics")?.addEventListener("click", toggleMetrics);
@@ -301,16 +320,13 @@
 		$("import-btn").addEventListener("click", () => importRecords(state.records.filter(r => state.selected.has(r.key))));
 		$("target").addEventListener("change", () => { state.doiMap.clear(); refreshLibraryFlags(); });
 		$("source").addEventListener("change", sourceHint);
+		$("engine").addEventListener("change", () => { cancelCacheRestore(); populateSearchSources(); sourceHint(); savePrefs(); saveQuery(); });
+		$("pop-options")?.addEventListener("input", cancelCacheRestore);
+		$("popOutputSort")?.addEventListener("change", () => { cancelCacheRestore(); saveQuery(); });
+		$("popCachePolicy")?.addEventListener("change", () => { cancelCacheRestore(); saveQuery(); });
+		for (let key of COMBINED_SOURCES) $("multi-source-" + key)?.addEventListener("change", () => { cancelCacheRestore(); saveQuery(); });
 
-		for (let th of document.querySelectorAll("#results-table th[data-sort]")) {
-			th.addEventListener("click", e => {
-				if (e.target.classList.contains("rz")) return;
-				let k = th.dataset.sort;
-				if (state.sortKey === k) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-				else { state.sortKey = k; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf", "journalIF", "tier"].includes(k) ? "desc" : "asc"; }
-				render();
-			});
-		}
+		setupColumnOrder();
 		for (let id of ["source", "sort", "opt-pdf", "opt-skip", "opt-extra", "maxResults"]) {
 			$(id).addEventListener("change", savePrefs);
 		}
@@ -487,7 +503,8 @@
 	}
 
 	function savePrefs() {
-		PREF("defaultSource", $("source").value);
+		PREF(engineValue() === "pop" ? "popDefaultSource" : "defaultSource", $("source").value);
+		PREF("searchEngine", engineValue());
 		PREF("attachPDF", $("opt-pdf").checked);
 		PREF("skipDuplicates", $("opt-skip").checked);
 		PREF("citationsInExtra", $("opt-extra").checked);
@@ -495,8 +512,38 @@
 		if (m > 0) PREF("maxResults", m);
 	}
 
+	function populatePoPOutputSort() {
+		let select = $("popOutputSort"), labels = { rank: "popRank", author: "authors", cites: "thCites", cites_annual: "thPerYear", cites_norm: "popCitesNorm", source: "venue", title: "thTitle", year: "years" };
+		select.textContent = "";
+		for (let [key, label] of Object.entries(labels)) for (let direction of ["", "-"]) { let option = document.createElement("option"); option.value = direction + key; option.textContent = t(label) + (direction ? " ↓" : " ↑"); select.appendChild(option); }
+		select.value = "rank";
+	}
+
+	function engineValue() { return $("engine")?.value === "pop" ? "pop" : "direct"; }
+	function populateSearchSources(preferred) {
+		let pop = engineValue() === "pop", select = $("source");
+		let registry = pop ? ZotPoPSources.POP_SOURCES || {} : ZotPoPSources.SOURCES;
+		let choice = preferred || PREF(pop ? "popDefaultSource" : "defaultSource") || (pop ? "scholar" : "multi");
+		select.textContent = "";
+		for (let key of Object.keys(registry)) { let option = document.createElement("option"); option.value = key; option.textContent = sourceLabel(key); select.appendChild(option); }
+		select.value = Object.prototype.hasOwnProperty.call(registry, choice) ? choice : pop ? "scholar" : "multi";
+		syncSel(select);
+	}
 	function sourceHint() {
+		if (searchSurface === "authors") {
+			$("combined-options").hidden = true; $("pop-options").hidden = true;
+			updateAuthorHint(); return;
+		}
 		let key = $("source").value;
+		let pop = engineValue() === "pop";
+		$("authors").setAttribute("placeholder", t(pop ? "popAuthorsPh" : "authorsPh"));
+		$("authors").setAttribute("title", t(pop ? "popAuthorsHelp" : "authorsHelp"));
+		$("title").setAttribute("title", t(pop ? "popTitleHelp" : "titleHelp"));
+		if ($("combined-options")) $("combined-options").hidden = pop || key !== "multi";
+		if ($("pop-options")) $("pop-options").hidden = !pop;
+		if ($("direct-sort-field")) $("direct-sort-field").hidden = pop;
+		if ($("pop-sort-field")) $("pop-sort-field").hidden = !pop;
+		if (pop) { showBanner(t("popModeNotice")); return; }
 		if (key === "semanticscholar" && !(PREF("s2ApiKey") || "").trim()) showBanner(t("bannerS2"));
 		else if (key === "openalex" && !String(PREF("openAlexApiKey") || "").trim()) showBanner(t("bannerNoKey"));
 		else if (key === "scholar") showBanner(t("bannerScholar"));
@@ -505,18 +552,251 @@
 		else hideBanner();
 	}
 
+	function currentSurfaceKey() { return searchSurface === "authors" ? "author:" + activeAuthorProvider : "papers"; }
+	function saveSurfaceResults() {
+		surfaceSnapshots.set(currentSurfaceKey(), { records: state.records, selected: new Set(state.selected), focusKey: state.focusKey,
+			detailKey: state.detailKey, sortKey: state.sortKey, sortDir: state.sortDir, filter: $("filter").value });
+	}
+	function restoreSurfaceResults() {
+		let saved = surfaceSnapshots.get(currentSurfaceKey());
+		Object.assign(state, saved || { records: [], selected: new Set(), focusKey: null, detailKey: null, sortKey: "rank", sortDir: "asc" });
+		$("filter").value = saved?.filter || "";
+	}
+	function applySearchSurface() {
+		$("query-form").hidden = searchSurface === "authors";
+		$("author-panel").hidden = searchSurface !== "authors";
+		$("mode-papers").setAttribute("aria-pressed", String(searchSurface === "papers"));
+		$("mode-authors").setAttribute("aria-pressed", String(searchSurface === "authors"));
+		sourceHint(); renderAuthorProfiles();
+	}
+	async function settleActiveSearch() {
+		if (state.searching) { state.searchController?.abort(); try { await state.searchDone; } catch (_) {} }
+	}
+	async function switchSearchMode(mode) {
+		if (state.importing || !["papers", "authors"].includes(mode)) return;
+		cancelCacheRestore(); while (state.searching) await settleActiveSearch();
+		if (searchSurface !== mode) { saveSurfaceResults(); searchSurface = mode; restoreSurfaceResults(); }
+		PREF("searchSurface", mode); applySearchSurface(); hideBanner(); setStatus(t("ready")); render();
+	}
+	async function switchAuthorProvider(provider) {
+		if (!["scholar", "orcid"].includes(provider)) return;
+		if (state.importing) { $("author-provider").value = activeAuthorProvider; return; }
+		cancelCacheRestore(); while (state.searching) await settleActiveSearch();
+		authorSessions[activeAuthorProvider].input = $("author-input").value;
+		if (activeAuthorProvider === "scholar") authorSessions.scholar.inputKind = $("author-input-kind").value || "auto";
+		if (searchSurface === "authors") saveSurfaceResults();
+		activeAuthorProvider = provider; $("author-provider").value = provider;
+		authorAction = authorSessions[provider].action;
+		$("author-input").value = authorSessions[provider].input;
+		$("author-input-kind").value = authorSessions[provider].inputKind || "auto";
+		if (searchSurface === "authors") restoreSurfaceResults();
+		saveAuthorPreferences(); updateAuthorHint(); renderAuthorProfiles(); hideBanner(); setStatus(t("ready")); render();
+	}
+	function saveAuthorPreferences() {
+		authorSessions[activeAuthorProvider].input = $("author-input").value;
+		if (activeAuthorProvider === "scholar") authorSessions.scholar.inputKind = $("author-input-kind").value || "auto";
+		PREF("lastAuthorQuery", JSON.stringify({ provider: activeAuthorProvider, inputKind: $("author-input-kind").value || "auto", maxResults: $("author-max-results").value,
+			sessions: Object.fromEntries(Object.entries(authorSessions).map(([key, value]) => [key, { input: value.input, profile: value.profile, action: value.action, inputKind: value.inputKind }])) }));
+	}
+	function restoreAuthorPreferences() {
+		let saved = {}; try { saved = JSON.parse(PREF("lastAuthorQuery") || "{}"); } catch (_) {}
+		activeAuthorProvider = saved.provider === "orcid" ? "orcid" : "scholar";
+		for (let key of ["scholar", "orcid"]) {
+			let session = saved.sessions?.[key];
+			authorSessions[key].input = typeof session?.input === "string" ? session.input : "";
+			authorSessions[key].action = ["profiles", "publications", "name-papers"].includes(session?.action) ? session.action : "profiles";
+			authorSessions[key].inputKind = ["name", "profile"].includes(session?.inputKind) ? session.inputKind : "auto";
+			if (session?.profile?.provider === key && typeof session.profile.id === "string") {
+				authorSessions[key].profile = session.profile; authorSessions[key].profiles = [session.profile];
+			}
+		}
+		$("author-provider").value = activeAuthorProvider;
+		$("author-input-kind").value = authorSessions[activeAuthorProvider].inputKind;
+		authorAction = authorSessions[activeAuthorProvider].action;
+		$("author-input").value = authorSessions[activeAuthorProvider].input;
+		let max = Number(saved.maxResults); $("author-max-results").value = Number.isInteger(max) && max >= 1 && max <= 2000 ? String(max) : "1000";
+	}
+	function updateAuthorHint() {
+		let orcid = activeAuthorProvider === "orcid";
+		$("author-input-label").textContent = t(orcid ? "authorOrcidInput" : "authorScholarInput");
+		$("author-help").textContent = t(orcid ? "authorOrcidHelp" : "authorScholarHelp");
+		$("author-name-btn").hidden = orcid;
+		$("author-input-kind-field").hidden = orcid;
+	}
+	function authorInputChanged() {
+		cancelCacheRestore();
+		if (searchSurface === "authors") state.searchController?.abort();
+		let session = authorSessions[activeAuthorProvider]; session.profiles = []; session.profile = null; session.action = authorAction = "profiles";
+		saveAuthorPreferences(); renderAuthorProfiles();
+	}
+	function renderAuthorProfiles() {
+		let host = $("author-profiles"), session = authorSessions[activeAuthorProvider]; host.textContent = "";
+		for (let profile of session.profiles) {
+			let card = document.createElement("article"); card.className = "author-profile";
+			if (session.profile && profile.id === session.profile.id && profile.name === session.profile.name) card.classList.add("selected");
+			let info = document.createElement("div"); info.className = "author-profile-info";
+			let line = (cls, value) => { let node = document.createElement("div"); node.className = cls; node.textContent = value; info.appendChild(node); };
+			line("author-profile-name", profile.name || profile.id || t("authorNameUnverified"));
+			if (profile.affiliation) line("author-profile-meta", profile.affiliation);
+			if (profile.id) line("author-profile-meta", profile.id);
+			line("author-profile-meta", t(profile.mode === "name-search" ? "authorNameUnverified" : profile.identityConfirmed ? "authorIdentityConfirmed" : "authorIdentityPending"));
+			let actions = document.createElement("div"); actions.className = "author-profile-actions";
+			if (profile.id) { let load = document.createElement("button"); load.type = "button"; load.textContent = t("authorLoadWorks"); load.disabled = state.searching || state.importing;
+				load.addEventListener("click", () => runAuthorAction("publications", profile)); actions.appendChild(load); }
+			if (/^https:\/\//i.test(profile.url || "")) { let open = document.createElement("button"); open.type = "button"; open.textContent = t("authorOpenProfile");
+				open.addEventListener("click", () => Zotero.launchURL(profile.url)); actions.appendChild(open); }
+			card.appendChild(info); card.appendChild(actions); host.appendChild(card);
+		}
+	}
+	function authorQuery(action = authorAction, profile = authorSessions[activeAuthorProvider].profile) {
+		return { mode: "author", authorProvider: activeAuthorProvider, authorInput: $("author-input").value,
+			authorAction: action, authorProfileId: action === "publications" ? profile?.id || "" : "",
+			maxResults: $("author-max-results").value.trim() ? Number($("author-max-results").value) : 1000,
+			...(activeAuthorProvider === "scholar" ? { authorInputKind: $("author-input-kind").value || "auto", popProfile: String(PREF("popDataDir") || "pop-default") } : {}) };
+	}
+	async function restoreAuthorHistory() {
+		if (state.searching || state.importing || !history || !$("author-input").value.trim()) return;
+		cancelCacheRestore(); let controller = cacheRestoreController = new AbortController();
+		let query = authorQuery(), signature = JSON.stringify(query);
+		let active = () => cacheRestoreController === controller && !controller.signal.aborted && !state.searching && searchSurface === "authors" && JSON.stringify(authorQuery()) === signature;
+		try {
+			let saved = await history.find("author:" + query.authorProvider, query), entry = saved && await history.get(saved.id);
+			if (entry && active()) await showAuthorHistory(entry, active);
+		} catch (error) { log("author history restore failed: " + error.message); }
+		finally { if (cacheRestoreController === controller) cacheRestoreController = null; }
+	}
+	async function showAuthorHistory(entry, active = () => true) {
+		let query = entry.query || {}, provider = query.authorProvider;
+		if (!["scholar", "orcid"].includes(provider)) return false;
+		await refreshLibraryFlags(); if (!active()) return false;
+		if (activeAuthorProvider !== provider) { saveSurfaceResults(); activeAuthorProvider = provider; }
+		$("author-provider").value = provider; $("author-input").value = query.authorInput || "";
+		$("author-input-kind").value = query.authorInputKind || "auto";
+		$("author-max-results").value = String(query.maxResults || 1000);
+		let session = authorSessions[provider]; session.input = $("author-input").value;
+		session.inputKind = query.authorInputKind || "auto";
+		session.profile = query.authorProfile || entry.records?.[0]?.authorProfile || null;
+		session.profiles = Array.isArray(query.authorProfiles) && query.authorProfiles.length ? query.authorProfiles : session.profile ? [session.profile] : [];
+		session.action = authorAction = query.authorAction || "profiles";
+		state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = "";
+		state.sortKey = entry.records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc";
+		displaySearchResults(entry.records); updateAuthorHint(); renderAuthorProfiles(); saveAuthorPreferences();
+		setStatus(query.authorAction === "profiles" ? t("authorProfilesFound", session.profiles.length) : t("historyRestored", entry.records.length));
+		showBanner(t("historyRestoredNotice", new Date(entry.savedAt).toLocaleString(t.locale || undefined), Boolean(entry.partial))
+			+ (query.authorAction === "name-papers" ? " " + t("authorNameUnverified") : provider === "orcid" ? " " + t("authorOrcidHelp") : popHistoryNotice(entry)));
+		return true;
+	}
+	async function abortableAuthorTask(task, signal) {
+		let rejectAbort; const interrupted = new Promise((_, reject) => { rejectAbort = () => reject(abortError()); signal.addEventListener("abort", rejectAbort, { once: true }); if (signal.aborted) rejectAbort(); });
+		try { return await Promise.race([task, interrupted]); }
+		finally { signal.removeEventListener("abort", rejectAbort); }
+	}
+	async function runAuthorAction(action = "profiles", profile = null) {
+		if (state.importing) return;
+		while (state.searching) await settleActiveSearch(); cancelCacheRestore();
+		if (searchSurface !== "authors") return;
+		let q = authorQuery(action, profile), input = q.authorInput;
+		if (!input.trim()) { setStatus(t("authorNeedInput"), "err"); return; }
+		if (!Number.isInteger(q.maxResults) || q.maxResults < 1 || q.maxResults > 2000) { setStatus(t("needCriteria"), "err"); return; }
+		if (typeof ZotPoPAuthors === "undefined") { setStatus(t("authorModuleUnavailable"), "err"); return; }
+		if (action === "name-papers" && (activeAuthorProvider !== "scholar" || q.authorInputKind === "profile" || ZotPoPAuthors.parseOrcid(input) || /https?:\/\//i.test(input))) { setStatus(t("authorNeedName"), "err"); return; }
+		if (action === "publications" && (!profile?.id || profile.provider !== activeAuthorProvider)) return;
+		authorAction = action;
+		let session = authorSessions[activeAuthorProvider];
+		session.action = action;
+		if (action !== "publications") { session.profiles = []; session.profile = null; } else session.profile = profile;
+		saveAuthorPreferences();
+		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = "";
+		state.searching = true; state.cancelled = false;
+		let resolveDone; state.searchDone = new Promise(resolve => { resolveDone = resolve; });
+		let controller = state.searchController = new AbortController();
+		let active = () => state.searchController === controller && !controller.signal.aborted && searchSurface === "authors"
+			&& activeAuthorProvider === q.authorProvider && $("author-input").value === q.authorInput;
+		let received = [], profiles = [], message = t(action === "profiles" ? "authorLookup" : "authorLoading"), fallbackToName = false;
+		$("author-search-btn").disabled = true; $("author-name-btn").disabled = true; $("author-stop-btn").disabled = false;
+		$("search-btn").disabled = true; $("busy").hidden = action === "profiles"; $("busy-text").textContent = message;
+		setStatus(message); hideBanner(); renderAuthorProfiles(); render();
+		let ctx = { signal: controller.signal, isCancelled: () => controller.signal.aborted, errors: [], scholarInputKind: q.authorInputKind || "auto",
+			popSearchSource: typeof ZotPoPPoPBridge !== "undefined" && ZotPoPPoPBridge.searchSource ? (source, query, context) => ZotPoPPoPBridge.searchSource(source, query, context) : undefined,
+			onProgress: (msg, n, total) => { if (active()) { setStatus(msg); setProgress(n, total); } },
+			onResults: records => { if (active()) { received = records; state.sortKey = records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc"; displaySearchResults(records); } }, log };
+		try {
+			let options = { maxResults: q.maxResults, popOutputSort: "rank" };
+			let task = action === "profiles" ? ZotPoPAuthors.searchProfiles(q.authorProvider, input, http, ctx)
+				: action === "name-papers" ? ZotPoPAuthors.loadNamePublications(input, options, http, ctx) : ZotPoPAuthors.loadPublications(profile, options, http, ctx);
+			let result = await abortableAuthorTask(task, controller.signal);
+			if (!active()) throw abortError();
+			if (action === "profiles") { profiles = result; session.profiles = result; setStatus(result.length ? t("authorProfilesFound", result.length) : t("authorNoProfiles")); }
+			else {
+				received = result; session.profile = { ...(profile || {}), ...(result.authorProfile || result.profile || profile || {}) };
+				if (session.profile.provider) {
+					if (action === "publications" && session.profiles.some(item => item.id === session.profile.id)) session.profiles = session.profiles.map(item => item.id === session.profile.id ? session.profile : item);
+					else session.profiles = [session.profile];
+				}
+				state.sortKey = result.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc";
+				displaySearchResults(result); await refreshLibraryFlags(); if (!active()) throw abortError();
+				let partial = Boolean(result.partial || ctx.errors.length);
+				setStatus(t(partial ? "incompleteResults" : "resultCount", q.authorProvider === "orcid" ? "ORCID" : "Google Scholar", result.length, false));
+				showBanner(t(action === "name-papers" ? "authorNameUnverified" : q.authorProvider === "orcid" ? "authorOrcidHelp" : "popModeNotice")
+					+ (result.authorProvenance?.truncated ? " " + t("authorLimited", result.length, result.authorProvenance.totalGroups) : ""));
+			}
+			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")));
+			await history?.save({ source: "author:" + q.authorProvider, query: { ...q, authorProfile: session.profile, authorProfiles: session.profiles },
+				records: stripDisplayFields(received), partial: Boolean(received.partial || ctx.errors.length) });
+			saveAuthorPreferences();
+		} catch (error) {
+			if (state.searchController !== controller) return;
+			if (controller.signal.aborted || error.name === "AbortError") {
+				state.cancelled = true; setStatus(t("searchStopped", received.length));
+				if (received.length) await history?.save({ source: "author:" + q.authorProvider, query: { ...q, authorProfile: session.profile }, records: stripDisplayFields(received), partial: true });
+			}
+			// A profile lookup that hit Google's login wall: the paper search by
+			// name is still open, so run it rather than leave an empty table.
+			else if (action === "profiles" && q.authorProvider === "scholar" && error.reason === "login" && q.authorInputKind !== "profile" && !/https?:\/\//i.test(input)) {
+				fallbackToName = true; setStatus(t("searchFailed", error.message || error), "err");
+			}
+			else { setStatus(t("searchFailed", error.message || error), "err"); showBanner(t("searchFailed", error.message || error)); }
+		} finally {
+			if (state.searchController === controller || !state.searchController) { state.searching = false; state.searchController = null;
+				$("author-search-btn").disabled = false; $("author-name-btn").disabled = false; $("author-stop-btn").disabled = true; $("search-btn").disabled = false;
+				$("busy").hidden = true; setProgress(null); renderAuthorProfiles(); render(); }
+			resolveDone();
+		}
+		if (fallbackToName) {
+			await runAuthorAction("name-papers");
+			if (searchSurface === "authors" && activeAuthorProvider === "scholar" && $("author-input").value === input) showBanner(t("scholarProfileLogin"));
+		}
+	}
+
 	// ------------------------------------------------------------ query persistence
 	const QUERY_FIELDS = ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "maxResults", "sort"];
+	const POP_FIELDS = ["affiliation", "issn", "citedId", "field", "popRaw", "popOutputSort", "popCachePolicy"];
+	const COMBINED_SOURCES = ["openalex", "crossref", "europepmc", "arxiv", "pubmed", "semanticscholar", "scholar"];
+	const DEFAULT_COMBINED_SOURCES = COMBINED_SOURCES.slice(0, 4);
+	function readCombinedSources() { return COMBINED_SOURCES.filter(key => $("multi-source-" + key)?.checked); }
+	function restoreCombinedSources(values) {
+		let selected = Array.isArray(values) ? values : DEFAULT_COMBINED_SOURCES;
+		for (let key of COMBINED_SOURCES) if ($("multi-source-" + key)) $("multi-source-" + key).checked = selected.includes(key);
+	}
 	function restoreQuery() {
 		let saved = {};
 		try { saved = JSON.parse(PREF("lastQuery") || "{}"); } catch (e) {}
 		for (let f of QUERY_FIELDS) if (saved[f] != null) $(f).value = saved[f];
+		restoreCombinedSources(saved.sources);
+		for (let f of POP_FIELDS) if (saved[f] != null) $(f).value = saved[f];
+		if (!$("popOutputSort").value) $("popOutputSort").value = "rank";
+		if (!$("popCachePolicy").value) $("popCachePolicy").value = "refresh";
+		syncSel($("popCachePolicy"));
+		syncSel($("popOutputSort"));
 		if (!$("maxResults").value) $("maxResults").value = PREF("maxResults") || 200;
 		syncSel($("sort"));
 	}
 	function saveQuery() {
 		let o = {};
 		for (let f of QUERY_FIELDS) o[f] = $(f).value;
+		o.sources = readCombinedSources();
+		o.engine = engineValue();
+		for (let f of POP_FIELDS) o[f] = $(f).value;
 		PREF("lastQuery", JSON.stringify(o));
 	}
 
@@ -529,12 +809,13 @@
 	// The query the window opened with may already have an answer on disk. Show it,
 	// say when it was captured, and leave Search to fetch a fresh one on request.
 	async function restoreCachedSearch() {
+		if (searchSurface === "authors") return restoreAuthorHistory();
 		if (state.searching || state.importing) return;
 		let query = readQuery();
-		if (![query.authors, query.venue, query.title, query.keywords].some(value => value.trim())) return;
+		if (![query.authors, query.venue, query.title, query.keywords, ...POP_FIELDS.map(f => query[f] || "").filter((_, i) => !["popOutputSort", "popCachePolicy"].includes(POP_FIELDS[i]))].some(value => value.trim())) return;
 		cancelCacheRestore();
 		let controller = cacheRestoreController = new AbortController(), metadata;
-		let signature = () => JSON.stringify([$("source").value, ...QUERY_FIELDS.map(key => $(key).value)]);
+		let signature = () => JSON.stringify([engineValue(), $("source").value, readQuery()]);
 		let originalSignature = signature();
 		let active = () => cacheRestoreController === controller && !controller.signal.aborted
 			&& !state.searching && !state.importing && originalSignature === signature();
@@ -546,7 +827,7 @@
 				if (entry?.records?.length && await showHistoryEntry(entry, active)) return;
 			}
 			catch (e) { log("history restore failed: " + e.message); }
-			if (!active() || $("source").value !== "scholar" || typeof ZotPoPPoPBridge === "undefined") return;
+			if (!active() || engineValue() === "pop" || $("source").value !== "scholar" || typeof ZotPoPPoPBridge === "undefined") return;
 			let noNetwork = async () => { throw new Error("Network is disabled while restoring a cached search"); };
 			let ctx = {
 				signal: controller.signal, isCancelled: () => controller.signal.aborted,
@@ -581,7 +862,10 @@
 
 	// ------------------------------------------------------------ recent searches
 	function stripDisplayFields(records) {
-		return records.map(({ rank, authorString, status, statusClass, statusTitle, inLibrary, ...rest }) => rest);
+		return records.map(({ rank, authorString, status, statusClass, statusTitle, inLibrary, ...rest }) => {
+			if (rest.popOriginal) rest.rank = rank;
+			return rest;
+		});
 	}
 
 	// Every finished search is kept, so that typing it again costs nothing. A stopped
@@ -593,18 +877,34 @@
 	}
 
 	async function showHistoryEntry(entry, active = () => true) {
+		if (entry.query?.mode === "author") return showAuthorHistory(entry, active);
 		let records = entry.records || [];
 		if (!records.length) return false;
+		// Saved results may predate stricter author/identity checks. Revalidate
+		// their fields locally without spending requests or rewriting the snapshot.
+		let originalCount = records.length;
+		if (entry.query?.engine !== "pop" && ZotPoPSources.filterRecords) records = ZotPoPSources.filterRecords(records, { ...entry.query, keywords: "" });
+		let removed = originalCount - records.length;
 		await refreshLibraryFlags();
 		if (!active()) return false;
-		state.sortKey = "rank";
+		state.sortKey = entry.query?.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
 		$("filter").value = "";
 		displaySearchResults(records);
 		let captured = new Date(entry.savedAt).toLocaleString(t.locale || undefined);
 		setStatus(t("historyRestored", records.length));
-		showBanner(t("historyRestoredNotice", captured, Boolean(entry.partial)));
+		showBanner(t("historyRestoredNotice", captured, Boolean(entry.partial))
+			+ (removed ? " " + t("historyRevalidated", removed) : "")
+			+ (entry.query?.engine === "pop" ? popHistoryNotice(entry) : ""));
 		return true;
+	}
+
+	function popHistoryNotice(entry) {
+		let saved = entry.records?.[0]?.popProvenance?.profileId || entry.query?.popProfile || "pop-default";
+		let current = String(PREF("popDataDir") || "pop-default");
+		if (saved === current) return " " + t("popModeNotice");
+		return " " + t("popProfileChanged", saved === "pop-default" ? t("popDefaultProfile") : saved,
+			current === "pop-default" ? t("popDefaultProfile") : current);
 	}
 
 	// Bring a recent search back: its boxes, its source, and its results, from disk.
@@ -616,7 +916,18 @@
 		if (state.searching || state.importing) return;
 		let stillMine = () => !state.searching && !state.importing;
 		let query = entry.query || {};
+		if (query.mode === "author") {
+			await switchSearchMode("authors");
+			await showAuthorHistory(entry, stillMine); return;
+		}
+		if (searchSurface !== "papers") await switchSearchMode("papers");
+		$("engine").value = query.engine === "pop" ? "pop" : "direct";
+		populateSearchSources(entry.source);
+		syncSel($("engine"));
+		for (let f of POP_FIELDS) $(f).value = query[f] == null ? (f === "popOutputSort" ? "rank" : f === "popCachePolicy" ? "refresh" : "") : String(query[f]);
+		syncSel($("popOutputSort"));
 		for (let f of QUERY_FIELDS) $(f).value = query[f] == null ? "" : String(query[f]);
+		restoreCombinedSources(query.sources);
 		syncSel($("sort"));
 		let source = $("source");
 		if (entry.source && Array.from(source.options || []).some(o => o.value === entry.source)) {
@@ -624,6 +935,7 @@
 			syncSel(source);
 			sourceHint();
 		}
+		savePrefs();
 		saveQuery();
 		state.selected.clear();
 		state.focusKey = null;
@@ -637,6 +949,7 @@
 		menu.hidden = true;
 		menu.textContent = "";
 		$("history-btn").setAttribute("aria-expanded", "false");
+		$("author-history-btn").setAttribute("aria-expanded", "false");
 	}
 
 	async function toggleHistoryMenu() {
@@ -669,7 +982,8 @@
 			let meta = document.createElement("span");
 			meta.className = "h-meta";
 			let when = new Date(e.savedAt).toLocaleString(t.locale || undefined);
-			meta.textContent = t("historyEntryMeta", sourceLabel(e.source), e.count, when, Boolean(e.partial));
+			let provider = e.query?.mode === "author" ? (e.query.authorProvider === "orcid" ? "ORCID" : "Google Scholar") : sourceLabel(e.source);
+			meta.textContent = e.kind === "profiles" ? t("authorHistoryProfiles", provider, e.count, when) : t("historyEntryMeta", provider, e.count, when, Boolean(e.partial));
 			d.appendChild(label);
 			d.appendChild(meta);
 			d.title = label.textContent;
@@ -696,8 +1010,8 @@
 			menu.appendChild(clear);
 		}
 		menu.hidden = false;
-		$("history-btn").setAttribute("aria-expanded", "true");
-		let btn = $("history-btn");
+		let btn = $(searchSurface === "authors" ? "author-history-btn" : "history-btn");
+		btn.setAttribute("aria-expanded", "true");
 		if (typeof btn.getBoundingClientRect !== "function") return;
 		let r = btn.getBoundingClientRect();
 		let below = window.innerHeight - r.bottom - 8;
@@ -708,6 +1022,8 @@
 
 	// ------------------------------------------------------------ layout persistence
 	function restoreLayout() {
+		try { state.colOrder = normalizeColumnOrder(JSON.parse(PREF("colOrder") || "null")); }
+		catch (e) { state.colOrder = [...COLUMN_KEYS]; }
 		// Sizes saved on a large screen are clamped to this window, so a wide
 		// sidebar or a tall detail pane cannot swallow the table on a laptop.
 		let w = parseInt(PREF("metricsWidth"), 10);
@@ -806,6 +1122,105 @@
 		}
 	}
 
+	function normalizeColumnOrder(saved) {
+		let ordered = ["chk"];
+		for (let key of [...(Array.isArray(saved) ? saved : []), ...COLUMN_KEYS]) {
+			if (typeof key === "string" && COLUMN_KEYS.includes(key) && !ordered.includes(key)) ordered.push(key);
+		}
+		return ordered;
+	}
+
+	function orderColumnCells(parent) {
+		if (!parent) return;
+		let cells = new Map([...parent.children].map(cell => [cell.dataset.k, cell]));
+		for (let key of state.colOrder) if (cells.has(key)) parent.appendChild(cells.get(key));
+	}
+
+	function applyColumnOrder() {
+		orderColumnCells($("results-head"));
+		orderColumnCells($("cols"));
+		for (let row of $("results-body").children) orderColumnCells(row);
+		marquee?.refresh();
+	}
+
+	let columnDrag = null, columnDragBlocked = false, suppressColumnClickUntil = 0;
+	function clearColumnDrag() {
+		if (columnDrag) suppressColumnClickUntil = Date.now() + 400;
+		columnDrag = null;
+		columnDragBlocked = false;
+		for (let th of document.querySelectorAll("#results-table th")) th.classList.remove("column-dragging", "column-drop-before", "column-drop-after");
+	}
+
+	function setupColumnOrder() {
+		let headers = [...document.querySelectorAll("#results-table th")];
+		for (let th of headers) {
+			let key = th.dataset.sort;
+			th.dataset.k = key || "chk";
+			if (!key) continue;
+			th.setAttribute("draggable", "true");
+			th.title = [th.title, t("columnDragTip")].filter(Boolean).join("\n");
+			th.addEventListener("mousedown", e => {
+				columnDragBlocked = Boolean(e.target.closest?.(".rz"));
+				if (!columnDrag) suppressColumnClickUntil = 0;
+			}, true);
+			th.addEventListener("click", e => {
+				if (e.target.closest?.(".rz")) return;
+				if (columnDrag || Date.now() < suppressColumnClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
+				if (state.sortKey === key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+				else { state.sortKey = key; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf", "journalIF", "tier"].includes(key) ? "desc" : "asc"; }
+				render();
+			});
+			th.addEventListener("dragstart", e => {
+				if (columnDragBlocked || e.target.closest?.(".rz") || !e.dataTransfer) { e.preventDefault(); return; }
+				clearColumnDrag();
+				columnDrag = { key };
+				th.classList.add("column-dragging");
+				e.dataTransfer.effectAllowed = "move";
+				e.dataTransfer.setData("text/plain", key);
+			});
+			th.addEventListener("dragover", e => {
+				if (!columnDrag) return;
+				e.preventDefault();
+				if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+				for (let header of headers) header.classList.remove("column-drop-before", "column-drop-after");
+				if (key !== columnDrag.key) {
+					let rect = th.getBoundingClientRect();
+					th.classList.add(e.clientX < rect.left + rect.width / 2 ? "column-drop-before" : "column-drop-after");
+				}
+			});
+			th.addEventListener("dragleave", e => {
+				if (!th.contains(e.relatedTarget)) th.classList.remove("column-drop-before", "column-drop-after");
+			});
+			th.addEventListener("drop", e => {
+				if (!columnDrag) return;
+				e.preventDefault(); e.stopPropagation();
+				if (key !== columnDrag.key) {
+					let rect = th.getBoundingClientRect(), order = state.colOrder.filter(id => id !== columnDrag.key);
+					order.splice(order.indexOf(key) + (e.clientX < rect.left + rect.width / 2 ? 0 : 1), 0, columnDrag.key);
+					if (order.join("|") !== state.colOrder.join("|")) {
+						state.colOrder = normalizeColumnOrder(order);
+						applyColumnOrder();
+						PREF("colOrder", JSON.stringify(state.colOrder));
+					}
+				}
+				clearColumnDrag();
+			});
+			th.addEventListener("dragend", clearColumnDrag);
+		}
+		document.addEventListener("mouseup", () => { columnDragBlocked = false; });
+		document.addEventListener("keydown", e => { if (e.key === "Escape") clearColumnDrag(); });
+		$("table-wrap").addEventListener("dragover", e => {
+			if (!columnDrag) return;
+			let wrap = $("table-wrap"), rect = wrap.getBoundingClientRect();
+			if (wrap.scrollWidth <= wrap.clientWidth) return;
+			let delta = e.clientX < rect.left + 36 ? -28 : e.clientX > rect.right - 36 ? 28 : 0;
+			if (delta) wrap.scrollLeft = Math.max(0, Math.min(wrap.scrollWidth - wrap.clientWidth, wrap.scrollLeft + delta));
+		});
+		window.addEventListener("blur", clearColumnDrag);
+		window.addEventListener("unload", clearColumnDrag);
+		applyColumnOrder();
+	}
+
 	function setupColumnResize() {
 		let ths = [...document.querySelectorAll("#results-table th")];
 		for (let th of ths) {
@@ -877,6 +1292,7 @@
 	}
 
 	function recordIdentities(record) {
+		if (record.popOriginal) return ["key:" + record.key];
 		let ids = ["key:" + record.key];
 		let doi = ZotPoPSources.normalizeDOI(record.doi);
 		if (doi) ids.push("doi:" + doi);
@@ -895,7 +1311,7 @@
 	}
 
 	function displaySearchResults(records) {
-		settleImpactFactors(records);
+		settleImpactFactors(records.filter(r => !r.popOriginal && !r.authorProfile));
 		// A merged record may acquire a different source key. Carry row interaction
 		// state through a shared identifier as well as an unchanged key.
 		let previous = new Map();
@@ -911,7 +1327,7 @@
 		let selected = new Set(), focusKey = null, detailKey = null;
 		state.records = records.map((record, i) => {
 			let r = Object.assign({}, record, {
-				rank: i + 1,
+				rank: record.popOriginal ? record.rank : i + 1,
 				authorString: (record.authors || []).map(a => a.name || [a.firstName, a.lastName].filter(Boolean).join(" ")).join(", "),
 				status: "",
 				inLibrary: Boolean(record.doi && state.doiMap.has(record.doi))
@@ -937,11 +1353,15 @@
 		return {
 			authors: $("authors").value, venue: $("venue").value, title: $("title").value, keywords: $("keywords").value,
 			yearFrom: num("yearFrom"), yearTo: num("yearTo"), maxResults: num("maxResults") || 200,
-			sort: $("sort").value || "relevance"
+			sort: $("sort").value || "relevance",
+			...(engineValue() === "pop" ? { engine: "pop", popProfile: String(PREF("popDataDir") || "pop-default"),
+				...Object.fromEntries(POP_FIELDS.map(key => [key, $(key).value || (key === "popOutputSort" ? "rank" : key === "popCachePolicy" ? "refresh" : "")])) }
+				: $("source").value === "multi" ? { sources: readCombinedSources() } : {})
 		};
 	}
 
 	async function runSearch() {
+		if (searchSurface === "authors") return runAuthorAction("profiles");
 		if (state.importing) return;
 		// A second request while one runs used to vanish, prefill included: the
 		// running one is stopped and waited out, and the new one goes.
@@ -949,10 +1369,15 @@
 		if (state.searching) return;
 		cancelCacheRestore();
 		let q = readQuery();
-		// Without a key OpenAlex gives about ten searches a day; a 1000-row page
-		// would spend most of that budget on one query.
-		if (["openalex", "multi"].includes($("source").value) && !String(PREF("openAlexApiKey") || "").trim() && q.maxResults > 200) q.maxResults = 200;
-		if (![q.authors, q.venue, q.title, q.keywords].some(x => x.trim())) {
+		if (engineValue() !== "pop" && $("source").value === "multi" && !q.sources.length) {
+			setStatus(t("needSources"), "err");
+			if ($("combined-options")) $("combined-options").open = true;
+			return;
+		}
+		if (q.engine === "pop" && q.popRaw?.trim() && [q.authors, q.venue, q.title, q.keywords, q.affiliation, q.issn, q.citedId, q.field, q.yearFrom, q.yearTo].some(value => String(value ?? "").trim())) {
+			setStatus(t("popRawConflict"), "err"); return;
+		}
+		if (![q.authors, q.venue, q.title, q.keywords, q.popRaw, q.affiliation, q.issn, q.citedId, q.field].some(x => String(x || "").trim())) {
 			setStatus(t("needCriteria"), "err");
 			$("keywords").focus();
 			return;
@@ -971,7 +1396,7 @@
 		state.records = [];
 		// The API layer already applies the requested search order. Preserve its rank
 		// until the user explicitly sorts a result column again.
-		state.sortKey = "rank";
+		state.sortKey = q.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
 		$("filter").value = "";
 		state.selected.clear();
@@ -992,6 +1417,8 @@
 			journalMetrics: PREF("journalMetrics") !== false,
 			institutionMetrics: PREF("institutionMetrics") !== false,
 			DOMParser: window.DOMParser,
+			popCachePolicy: q.engine === "pop" ? q.popCachePolicy : undefined,
+			popSearchSource: typeof ZotPoPPoPBridge !== "undefined" && typeof ZotPoPPoPBridge.searchSource === "function" ? (source, query, context) => ZotPoPPoPBridge.searchSource(source, query, context) : undefined,
 			popSearch: typeof ZotPoPPoPBridge !== "undefined" ? (query, context) => ZotPoPPoPBridge.search(query, context) : undefined,
 			signal: controller.signal,
 			isCancelled: () => controller.signal.aborted,
@@ -1008,17 +1435,19 @@
 			displaySearchResults(recs);
 			await refreshLibraryFlags();
 			if (!active()) throw abortError();
-			setStatus(t("resultCount", label, recs.length, false));
-			rememberSearch(sourceKey, q, recs, false);
+			let partial = Boolean(ctx.errors?.length || recs.partial || recs.popProvenance?.complete === false);
+			setStatus(partial ? t("incompleteResults", label, recs.length) : t("resultCount", label, recs.length, false));
+			rememberSearch(sourceKey, q, recs, partial);
+			if (q.engine === "pop") showBanner(t("popModeNotice") + (recs.popProvenance?.cached ? " " + t("popCachedNotice") : ""));
 			if (ctx.errors?.length) {
 				// A bare "HTTP 429" from OpenAlex is its exhausted daily budget, which the user
 				// can actually fix; say so instead of showing the status code alone.
 				let quota = ctx.errors.some(m => /openalex/i.test(m) && /429|budget|credit/i.test(m));
 				showBanner(t("partialFail", ctx.errors.join(" / ")) + (quota ? " " + t("openAlexQuota") : ""));
 			}
-			if (!recs.length) setStatus(t("noResults", label));
-			else if (q.sort === "date" && q.venue.trim()) setStatus(t("journalFeed", q.venue.trim(), recs.length));
-			else if (!PREF("hintShown")) {
+			if (!recs.length && !partial) setStatus(t("noResults", label));
+			else if (!partial && q.sort === "date" && q.venue.trim()) setStatus(t("journalFeed", q.venue.trim(), recs.length));
+			else if (!partial && !PREF("hintShown")) {
 				PREF("hintShown", true);
 				setStatus(t("firstHint", label, recs.length));
 			}
@@ -1038,6 +1467,7 @@
 				let text = quota ? t("openAlexQuota") : t("searchFailed", e.message || e);
 				setStatus(text, "err");
 				showBanner(text);
+				if (state.records.length) rememberSearch(sourceKey, q, state.records, true);
 			}
 		}
 		finally {
@@ -1071,7 +1501,7 @@
 			state.searchController = null;
 			$("busy").hidden = true;
 		}
-		for (let id of ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "filter"]) $(id).value = "";
+		for (let id of ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "filter", ...POP_FIELDS.filter(k => !["popOutputSort", "popCachePolicy"].includes(k))]) $(id).value = "";
 		state.records = [];
 		state.selected.clear();
 		state.focusKey = null;
@@ -1092,6 +1522,7 @@
 	}
 
 	function sortValue(r, k) {
+		if (k === "rank" && r.popOriginal) return r.popRank ?? -1;
 		if (k === "cpy") return ZotPoPMetrics.citesPerYear(r) ?? -1;
 		if (k === "affiliation") return (affiliationOf(r)?.first?.institution || "").toLowerCase();
 		if (k === "country") return (affiliationOf(r)?.countries || []).join("/");
@@ -1175,7 +1606,10 @@
 	function syncFilterClear() { let b = $("filter-clear"); if (b) b.hidden = !$("filter").value; }
 	function clearFilter() { $("filter").value = ""; state.focusKey = null; render(); syncFilterClear(); }
 
+	function popOriginalJSON() { return JSON.stringify(state.records.filter(r => r.popOriginal).slice().sort((a, b) => a.popOrdinal - b.popOrdinal).map(r => r.popOriginal), null, 2); }
+
 	function render() {
+		if ($("copy-pop-json")) $("copy-pop-json").hidden = !state.records.length || state.records.some(r => !r.popOriginal);
 		let f = $("filter").value.trim().toLowerCase();
 		let list = state.records.filter(r => matchesFilter(r, f));
 		let k = state.sortKey, dir = state.sortDir === "asc" ? 1 : -1;
@@ -1183,7 +1617,7 @@
 			let va = sortValue(a, k), vb = sortValue(b, k);
 			if (va < vb) return -dir;
 			if (va > vb) return dir;
-			return a.rank - b.rank;
+			return a.popOriginal && b.popOriginal ? a.popOrdinal - b.popOrdinal : a.rank - b.rank;
 		});
 		state.visible = list;
 
@@ -1228,8 +1662,9 @@
 				let el = document.createElement(tag); stack[stack.length - 1].appendChild(el); stack.push(el);
 			}
 		};
-		let td = (cls, text, title) => {
+		let td = (key, cls, text, title) => {
 			let c = document.createElement("td");
+			c.dataset.k = key;
 			if (cls) c.className = cls;
 			if (text != null) c.textContent = text;
 			if (title) c.title = title;
@@ -1237,43 +1672,44 @@
 			return c;
 		};
 
-		let c0 = td("chk");
+		let c0 = td("chk", "chk");
 		let cb = document.createElement("input");
 		cb.type = "checkbox"; cb.tabIndex = -1;
 		cb.checked = state.selected.has(r.key);
 		cb.addEventListener("change", () => toggleSelect(r, cb.checked));
 		c0.appendChild(cb);
 
-		td("num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : "");
-		td("num", fmt(ZotPoPMetrics.citesPerYear(r)));
-		td("num", String(r.rank));
-		td("", r.authorString, r.authorString).dataset.marquee = "authors";
+		td("citations", "num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : "");
+		td("cpy", "num", fmt(ZotPoPMetrics.citesPerYear(r)));
+		td("rank", "num", r.popOriginal ? (r.popRank == null ? "–" : String(r.popRank)) : String(r.rank));
+		td("authorString", "", r.authorString, r.authorString).dataset.marquee = "authors";
 
-		let tt = td("title", null, r.title);
+		let tt = td("title", "title", null, r.title);
 		tt.dataset.marquee = "title";
 		let a = document.createElement(r.url ? "a" : "span");
 		if (r.titleMarkup) rich(a, r.titleMarkup); else a.textContent = r.title;
 		if (r.url) { a.href = "#"; a.tabIndex = -1; a.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); Zotero.launchURL(r.url); }); }
 		tt.appendChild(a);
 
-		td("num", r.year == null ? "" : String(r.year));
-		let venueCell = td("venue", r.venue, r.publisher ? r.venue + " · " + r.publisher : r.venue);
+		td("year", "num", r.year == null ? "" : String(r.year));
+		let venueCell = td("venue", "venue", r.venue, r.publisher ? r.venue + " · " + r.publisher : r.venue);
 		venueCell.dataset.marquee = "venue";
 		paintVenue(venueCell, r);
-		td("num if" + (r.journalIFEstimate ? " estimate" : ""), r.journalIF == null ? "" : (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1),
+		td("journalIF", "num if" + (r.journalIFEstimate ? " estimate" : ""), r.journalIF == null ? "" : (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1),
 			r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
 		let where = affiliationOf(r);
-		td("aff", where?.first?.institution || "", affiliationTip(where)).dataset.marquee = "affiliation";
-		td("mini country", where ? where.countries.map(c => (ZotPoPAffiliations.flag(c) + " " + c).trim()).join(" ") : "", affiliationTip(where));
-		let tierCell = td("mini tiercell", null, "");
+		td("affiliation", "aff", where?.first?.institution || "", affiliationTip(where)).dataset.marquee = "affiliation";
+		td("country", "mini country", where ? where.countries.map(c => (ZotPoPAffiliations.flag(c) + " " + c).trim()).join(" ") : "", affiliationTip(where));
+		let tierCell = td("tier", "mini tiercell", null, "");
 		let chip = tierChip(where);
 		if (chip) tierCell.appendChild(chip);
-		td("", r.doi || "", r.doi || "").dataset.marquee = "doi";
-		td("mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfTip") : "");
-		td("mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibTip") : "");
-		let st = td("status", r.status || "", r.statusTitle || "");
+		td("doi", "", r.doi || "", r.doi || "").dataset.marquee = "doi";
+		td("pdf", "mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfTip") : "");
+		td("inLibrary", "mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibTip") : "");
+		let st = td("status", "status", r.status || "", r.statusTitle || "");
 		st.dataset.marquee = "status";
 		if (r.statusClass) st.classList.add(r.statusClass);
+		orderColumnCells(tr);
 
 		tr.addEventListener("click", e => {
 			if (e.target.closest("input, a")) return;
@@ -1329,6 +1765,10 @@
 	}
 
 	function renderMetrics(list) {
+		if (searchSurface === "authors" && list.length && !list.some(record => record.citations != null && Number.isFinite(Number(record.citations)))) {
+			$("metrics-hint").hidden = false; $("metrics-hint").textContent = t("authorNoCitationData", list.length); $("metrics-table").hidden = true; return;
+		}
+		if ($("metrics-hint")) $("metrics-hint").textContent = t("metricsHint");
 		let m = ZotPoPMetrics.compute(list);
 		let set = (id, v) => { $(id).textContent = v; };
 		let hint = $("metrics-hint"); if (hint) { hint.hidden = list.length > 0; $("metrics-table").hidden = !list.length; }
@@ -1471,11 +1911,12 @@
 		$("d-check").disabled = true;
 		setStatus(t("citeChecking"));
 		try {
-			let res = await ZotPoPSources.checkCitations(r, http, { email: PREF("email") || "", s2ApiKey: PREF("s2ApiKey") || "", openAlexApiKey: PREF("openAlexApiKey") || "", log });
+			let checked = r.popOriginal ? Object.assign({}, r) : r;
+			let res = await ZotPoPSources.checkCitations(checked, http, { email: PREF("email") || "", s2ApiKey: PREF("s2ApiKey") || "", openAlexApiKey: PREF("openAlexApiKey") || "", log });
 			let parts = [["openalex", res.openalex], ["crossref", res.crossref], ["semanticscholar", res.semanticscholar]]
 				.filter(([, v]) => v != null).map(([k, v]) => sourceLabel(k) + " " + v);
 			if (!parts.length) setStatus(t("citeCheckNone"), "err");
-			else setStatus(t("citeCheckResult", parts.join(" · "), r.journalIF == null ? null : fmt(r.journalIF, 1)));
+			else setStatus(t("citeCheckResult", parts.join(" · "), checked.journalIF == null ? null : fmt(checked.journalIF, 1)));
 			render();
 		}
 		catch (e) {
@@ -1602,7 +2043,7 @@
 		let lines = [t("csvHead").join(",")];
 		for (let r of state.visible) {
 			lines.push([
-				r.citations ?? "", fmt(ZotPoPMetrics.citesPerYear(r)), r.rank, r.authorString, r.title,
+				r.citations ?? "", fmt(ZotPoPMetrics.citesPerYear(r)), r.popOriginal ? r.popRank : r.rank, r.authorString, r.title,
 				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2),
 				affiliationOf(r)?.first?.institution ?? "", (affiliationOf(r)?.countries || []).join("/"), affiliationOf(r)?.hIndex ?? "",
 				r.publisher, r.doi ?? "", r.url ?? "",
@@ -1737,7 +2178,7 @@
 		if (year) { $("yearFrom").value = String(year - 1); $("yearTo").value = String(year + 1); }
 		$("keywords").value = "";
 		setStatus(t("prefilledFrom"));
-		runSearch().catch(e => log("prefilled search failed: " + e.message));
+		(searchSurface === "authors" ? switchSearchMode("papers").then(() => runSearch()) : runSearch()).catch(e => log("prefilled search failed: " + e.message));
 		return true;
 	}
 	window.addEventListener("load", init);

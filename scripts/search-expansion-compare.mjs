@@ -1,0 +1,14 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import {fileURLToPath} from 'node:url';
+import {DOMParser} from 'linkedom';
+import {runBenchmark,renderReport} from './benchmark-search.mjs';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const dir=path.join(root,'build/search-expansion-20260920');
+const config=JSON.parse(await fs.readFile(path.join(dir,'comparison-config.json'),'utf8'));
+const report=await runBenchmark(config,{baseDir:dir,DOMParser,context:{institutionMetrics:false},popExecutable:path.join(os.homedir(),'Library/Application Support/ZotPoP/tools/pop8query'),popDataDir:path.join(dir,'pop-data')});
+await fs.writeFile(path.join(dir,'comparison-report.json'),JSON.stringify(report,null,2));
+await fs.writeFile(path.join(dir,'comparison-report.md'),renderReport(report));
+for(const c of report.cases) console.log(JSON.stringify({id:c.id,status:c.status,reasons:c.reasons,counts:c.counts,fullRecall:c.full.recall,topRecall:c.top.recall,rank:c.ranking.rankAgreement,metadataConflicts:c.metadata.conflicts.length,metadataUnknown:c.metadata.unverifiable.length,fieldUnknown:c.fields.unverifiableFields.length,firstResultMs:c.firstResultMs,latencyMs:c.latencyMs}));
+console.log(JSON.stringify(report.summary));

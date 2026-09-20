@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { deferred, mockElement, paper, uiHarness } from "./helpers/search-ui-harness.mjs";
 import Sources from "../content/sources.js";
+import Authors from "../content/authors.js";
 
 for (const sort of ["relevance", "date", "citations"]) {
 	test(`UI displays requested ${sort} order after a previous column sort`, async () => {
@@ -502,4 +503,354 @@ test("the × clears the results filter and hides itself when there is nothing to
 	assert.equal(ui.get("filter").value, "");
 	assert.equal(ui.state.visible.length, 2, "every result is back");
 	assert.equal(ui.get("filter-clear").hidden, true);
+});
+
+
+test("requested 1000 and 2000 limits reach the search engine without an API key", async () => {
+	for (const source of ["multi", "openalex"]) for (const max of [1000, 2000]) {
+		let received;
+		const ui = uiHarness({ prefs: { openAlexApiKey: "" }, search: async (_source, query) => { received = query.maxResults; return []; } });
+		ui.get("source").value = source;
+		ui.get("maxResults").value = String(max);
+		await ui.runSearch();
+		assert.equal(received, max);
+		assert.equal(ui.get("maxResults").value, String(max));
+	}
+});
+
+test("source failures keep history incomplete and never describe zero partial rows as no matches", async () => {
+	for (const rows of [[paper("partial")], []]) {
+		const ui = uiHarness({ search: async (_s, _q, _h, ctx) => { ctx.errors = ["Crossref: HTTP 503"]; return rows; } });
+		await ui.runSearch();
+		assert.match(ui.get("status").textContent, /^incompleteResults\|/);
+		assert.match(ui.get("banner-text").textContent, /Crossref: HTTP 503/);
+		const entries = await ui.history.list();
+		if (rows.length) assert.equal(entries[0].partial, true);
+	}
+});
+
+test("old cached author false positives are excluded locally while the original snapshot is preserved", async () => {
+	const ui = uiHarness({ search: async () => assert.fail("cache revalidation must not search") });
+	const query = { authors: "Sheila Ingemann", keywords: "", maxResults: 1000, sort: "relevance" };
+	const rows = [paper("right", { authors: [{ firstName: "Sheila Ingemann", lastName: "Jensen", name: "Sheila Ingemann Jensen" }] }),
+		paper("wrong", { year: 1947, authors: [{ firstName: "Sheila I.", lastName: "Stewart", name: "Sheila I. Stewart" }] })];
+	const id = await ui.history.save({ source: "openalex", query, records: rows });
+	await ui.openHistoryEntry(id);
+	assert.deepEqual(Array.from(ui.state.records, r => r.key), ["right"]);
+	assert.match(ui.get("banner-text").textContent, /historyRevalidated\|1/);
+	assert.equal((await ui.history.get(id)).records.length, 2, "do not rewrite the captured evidence");
+});
+
+test("combined selection reaches the engine, is cached separately and is restored", async () => {
+	let requested;
+	const ui = uiHarness({ search: async (_s, query) => { requested = query; return [paper("coverage")]; } });
+	ui.get("source").value = "multi";
+	ui.get("multi-source-scholar").checked = true;
+	ui.get("multi-source-pubmed").checked = true;
+	await ui.runSearch();
+	assert.deepEqual(Array.from(requested.sources), ["openalex", "crossref", "europepmc", "arxiv", "pubmed", "scholar"]);
+	const [entry] = await ui.history.list();
+	assert.deepEqual(Array.from(entry.query.sources), Array.from(requested.sources));
+	ui.get("multi-source-scholar").checked = false;
+	await ui.openHistoryEntry(entry.id);
+	assert.equal(ui.get("multi-source-scholar").checked, true);
+});
+
+test("an explicitly empty combined selection fails before clearing existing results", async () => {
+	const ui = uiHarness({ search: async () => assert.fail("no selected sources") });
+	ui.get("source").value = "multi";
+	for (const source of ["openalex", "crossref", "europepmc", "arxiv", "pubmed", "semanticscholar", "scholar"]) ui.get("multi-source-" + source).checked = false;
+	ui.state.records = [paper("existing")];
+	await ui.runSearch();
+	assert.equal(ui.get("status").textContent, "needSources");
+	assert.equal(ui.state.records[0].key, "existing");
+});
+
+test("results received before a transport exception remain in incomplete history", async () => {
+	const ui = uiHarness({ search: async (_s, _q, _h, ctx) => { ctx.onResults([paper("received")]); throw new Error("connection closed"); } });
+	await ui.runSearch();
+	assert.equal(ui.state.records[0].key, "received");
+	const [entry] = await ui.history.list();
+	assert.equal(entry.partial, true);
+	assert.equal(entry.count, 1);
+});
+
+test("PoP rows retain native rank, order, duplicates, unknowns and independent selection through history", async () => {
+	const raw = [
+		{ title: "", rank: 8, year: 0, cites: 0, doi: "10.1234/grant", authors: [] },
+		{ title: "Shared title", rank: 3, year: 2016, cites: 7, doi: "10.1234/duplicate", authors: ["S Jensen", "..."] },
+		{ title: "Shared title", rank: 9, year: 2016, cites: 7, doi: "10.1234/duplicate", authors: ["S Jensen", "..."] }
+	];
+	const provenance = { engine: "publish-or-perish", source: "crossref", profileId: "pop-default", outputSort: "-cites", capturedAt: new Date().toISOString(), invocationId: "ui-probe", complete: true, cached: false, cancelled: false, exitCode: 0 };
+	const records = Sources.normalizePoPExactRecords(raw, "crossref", provenance);
+	const prefs = { popDataDir: "" }, files = new Map();
+	const ui = uiHarness({ prefs, historyFiles: files, realRows: true, search: async () => records });
+	ui.get("engine").value = "pop"; ui.get("source").value = "crossref"; ui.get("popOutputSort").value = "-cites";
+	ui.get("authors").value = "An author absent from these snippets";
+	await ui.runSearch();
+	assert.deepEqual(Array.from(ui.state.visible, r => r.rank), [8, 3, 9]);
+	assert.equal(ui.state.records.length, 3);
+	assert.equal(new Set(ui.state.records.map(r => r.key)).size, 3);
+	assert.deepEqual(JSON.parse(JSON.stringify(ui.state.records.map(r => r.popOriginal))), raw);
+	assert.deepEqual(JSON.parse(ui.popOriginalJSON()), raw);
+	assert.equal(ui.get("copy-pop-json").hidden, false);
+	ui.state.selected.add(ui.state.records[1].key);
+	ui.displaySearchResults(records);
+	assert.deepEqual(Array.from(ui.state.selected), [records[1].key], "selecting one duplicate must not select the other");
+	const [saved] = await ui.history.list();
+	const snapshot = await ui.history.get(saved.id);
+	assert.equal(snapshot.query.engine, "pop");
+	assert.deepEqual(snapshot.records.map(r => r.rank), [8, 3, 9]);
+	const reopened = uiHarness({ prefs, historyFiles: files, realRows: true, search: async () => assert.fail("history must not call the network") });
+	await reopened.openHistoryEntry(saved.id);
+	assert.equal(reopened.get("engine").value, "pop");
+	assert.equal(reopened.get("source").value, "crossref");
+	assert.deepEqual(Array.from(reopened.state.visible, r => r.rank), [8, 3, 9]);
+	assert.deepEqual(JSON.parse(JSON.stringify(reopened.state.records.map(r => r.popOriginal))), raw);
+	assert.doesNotMatch(reopened.get("banner-text").textContent, /historyRevalidated/);
+});
+
+test("native raw query conflicts fail before erasing results, while raw-only criteria reach PoP", async () => {
+	let query;
+	const ui = uiHarness({ prefs: { popDataDir: "" }, search: async (_s, q) => { query = q; return []; } });
+	ui.get("engine").value = "pop"; ui.get("source").value = "crossref";
+	ui.get("popRaw").value = "query=CRISPR";
+	ui.state.records = [paper("existing")];
+	await ui.runSearch();
+	assert.equal(query, undefined);
+	assert.equal(ui.state.records[0].key, "existing");
+	assert.equal(ui.get("status").textContent, "popRawConflict");
+	ui.get("keywords").value = "";
+	await ui.runSearch();
+	assert.equal(query.engine, "pop"); assert.equal(query.popRaw, "query=CRISPR");
+	assert.equal(query.popProfile, "pop-default"); assert.equal(query.popOutputSort, "rank");
+});
+
+test("rankless native rows do not display or export an invented original rank", async () => {
+	const rows = Sources.normalizePoPExactRecords([{ title: "No native rank", year: 0 }], "crossref", { engine: "publish-or-perish", source: "crossref", profileId: "pop-default", invocationId: "rankless", complete: true });
+	const ui = uiHarness({ realRows: true, search: async () => rows });
+	ui.get("engine").value = "pop"; ui.get("source").value = "crossref";
+	await ui.runSearch();
+	assert.equal(ui.get("results-body").firstChild.querySelector('td[data-k="rank"]').textContent, "–");
+	assert.equal(ui.sortValue(ui.state.records[0], "rank"), -1);
+	assert.equal(ui.csvText().split("\n")[1].split(",")[2], '""');
+	assert.equal(Object.hasOwn(JSON.parse(ui.popOriginalJSON())[0], "rank"), false);
+});
+
+test("native help changes with the engine and history warns without switching profiles", async () => {
+	const ui = uiHarness({ prefs: { popDataDir: "/profile/B" } });
+	ui.get("engine").value = "pop"; ui.get("source").value = "crossref"; ui.sourceHint();
+	assert.equal(ui.get("authors").getAttribute("title"), "popAuthorsHelp");
+	assert.equal(ui.get("title").getAttribute("title"), "popTitleHelp");
+	ui.get("engine").value = "direct"; ui.sourceHint();
+	assert.equal(ui.get("authors").getAttribute("title"), "authorsHelp");
+	const query = { engine: "pop", keywords: "gene", maxResults: 30, popProfile: "/profile/A", popOutputSort: "rank" };
+	const rows = Sources.normalizePoPExactRecords([{ title: "Gene paper", rank: 1 }], "crossref", { engine: "publish-or-perish", source: "crossref", profileId: "/profile/A", invocationId: "profile-A", complete: true });
+	const id = await ui.history.save({ source: "crossref", query, records: rows });
+	await ui.openHistoryEntry(id);
+	assert.match(ui.get("banner-text").textContent, /popProfileChanged\|\/profile\/A\|\/profile\/B/);
+	assert.equal(ui.readQuery().popProfile, "/profile/B");
+});
+
+test("ORCID author mode finds a real profile shape, loads unknown-citation works and restores separate history", async () => {
+	const id = "0000-0001-8277-5907", files = new Map(), prefs = {}, requests = [];
+	const person = { path: `/${id}/person`, name: { "given-names": { value: "Sheila Ingemann" }, "family-name": { value: "Jensen" } } };
+	const works = { path: `/${id}/works`, group: [1, 2, 3].map(n => ({ "work-summary": [{ "put-code": n, title: { title: { value: `Public work ${n}` } }, "publication-date": { year: { value: "2020" } }, type: "journal-article" }] })) };
+	const ui = uiHarness({ realRows: true, prefs, historyFiles: files, request: async (_method, url) => { requests.push(url); return { response: url.endsWith("/person") ? person : works, status: 200 }; } });
+	ui.state.records = [paper("paper-context")]; ui.get("keywords").value = "My paper query";
+	await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("orcid");
+	ui.get("author-input").value = id; ui.get("author-max-results").value = "2"; ui.authorInputChanged();
+	await ui.runAuthorAction("profiles");
+	assert.match(ui.get("author-profiles").textContent, /Sheila Ingemann Jensen/);
+	assert.match(ui.get("author-profiles").textContent, /authorIdentityConfirmed/);
+	assert.equal(ui.get("author-name-btn").hidden, true);
+	let entries = await ui.history.list(); assert.equal(entries[0].kind, "profiles"); assert.equal(entries[0].count, 1);
+	const profileEntry = entries[0];
+	ui.get("author-profiles").querySelector("button").emit("click");
+	await new Promise(resolve => setImmediate(resolve)); await ui.state.searchDone;
+	assert.equal(ui.state.records.length, 2); assert.equal(requests.length, 2);
+	assert.ok(ui.state.records.every(row => row.citations === null && row.authors.length === 0));
+	assert.match(ui.get("status").textContent, /incompleteResults/);
+	assert.match(ui.get("banner-text").textContent, /authorLimited\|2\|3/);
+	ui.originalRenderMetrics(ui.state.records);
+	assert.equal(ui.get("metrics-table").hidden, true); assert.match(ui.get("metrics-hint").textContent, /authorNoCitationData\|2/);
+	entries = await ui.history.list(); const publicationEntry = entries.find(entry => entry.query.authorAction === "publications");
+	assert.equal(publicationEntry.partial, true); assert.equal(publicationEntry.query.authorProfileId, id);
+	await ui.switchSearchMode("papers"); assert.equal(ui.state.records[0].key, "paper-context"); assert.equal(ui.get("keywords").value, "My paper query");
+	const reopened = uiHarness({ realRows: true, prefs, historyFiles: files, request: () => assert.fail("history must not use the network") });
+	await reopened.openHistoryEntry(publicationEntry.id);
+	assert.equal(reopened.searchMode(), "authors"); assert.equal(reopened.get("author-provider").value, "orcid");
+	assert.equal(reopened.get("author-input").value, id); assert.equal(reopened.state.records.length, 2);
+	assert.ok(reopened.state.records.every(row => row.citations === null));
+	assert.doesNotMatch(reopened.get("banner-text").textContent, /historyRevalidated/);
+	await reopened.openHistoryEntry(profileEntry.id); assert.equal(reopened.state.records.length, 0);
+	assert.match(reopened.get("author-profiles").textContent, /Sheila Ingemann Jensen/);
+});
+
+test("Scholar profile URL bypasses name lookup and keeps native publication rank and original rows", async () => {
+	const calls = [], id = "dsdG3ewAAAAJ";
+	const raw = [{ title: "Native profile publication", rank: 9, cites: 20, authors: ["Curtis Bonk"] }];
+	const ui = uiHarness({ realRows: true, prefs: { popDataDir: "" }, popBridge: { async searchSource(source, query) {
+		calls.push({ source, query }); return { rows: raw, provenance: { engine: "publish-or-perish", source, complete: true, cached: false, profileId: "pop-default", invocationId: "author-ui-profile" } };
+	} } });
+	await ui.switchSearchMode("authors"); ui.get("author-input").value = `https://scholar.google.com/citations?user=${id}`;
+	await ui.runAuthorAction("profiles"); assert.equal(calls.length, 0);
+	assert.match(ui.get("author-profiles").textContent, /authorIdentityPending/);
+	await ui.runAuthorAction("publications", ui.authorSessions.scholar.profiles[0]);
+	assert.equal(calls[0].source, "scholarprofile"); assert.equal(calls[0].query.authors, id);
+	assert.equal(ui.state.records[0].rank, 9); assert.deepEqual(JSON.parse(ui.popOriginalJSON()), raw);
+	assert.match(ui.get("author-profiles").textContent, /authorIdentityConfirmed/);
+});
+
+test("Scholar profile access errors stay visible and the separate name-paper action does not claim identity", async () => {
+	const calls = [];
+	const ui = uiHarness({ realRows: true, prefs: { popDataDir: "" }, popBridge: { async searchSource(source, query) {
+		calls.push(source);
+		if (source === "scholarauthor") throw new Error("Login required");
+		return { rows: [{ title: "A matching name", rank: 1, authors: [query.authors] }], provenance: { engine: "publish-or-perish", source, complete: true, cached: false, invocationId: "name-papers" } };
+	} } });
+	await ui.switchSearchMode("authors"); ui.get("author-input").value = "Sheila Ingemann Jensen";
+	await ui.runAuthorAction("profiles"); assert.match(ui.get("banner-text").textContent, /Login required/); assert.equal(ui.get("author-profiles").children.length, 0);
+	await ui.runAuthorAction("name-papers"); assert.deepEqual(calls, ["scholarauthor", "scholar"]);
+	assert.match(ui.get("banner-text").textContent, /authorNameUnverified/); assert.match(ui.get("author-profiles").textContent, /authorNameUnverified/);
+	assert.equal(ui.state.records[0].authorProfile.identityConfirmed, false);
+	assert.equal(ui.get("author-profiles").querySelector("button"), null, "name results cannot be selected as a confirmed profile");
+	const [entry] = await ui.history.list(); assert.equal(entry.query.authorAction, "name-papers"); assert.equal(entry.query.authorProfileId, "");
+});
+
+test("cancelled and stale author lookups cannot replace a paper context, including services that ignore abort", async () => {
+	const pending = deferred(); let ctx;
+	const ui = uiHarness({ authorsService: { ...Authors, searchProfiles: async (_provider, _input, _http, context) => { ctx = context; return pending.promise; } } });
+	ui.state.records = [paper("paper-retained")]; ui.get("keywords").value = "paper criteria";
+	await ui.switchSearchMode("authors"); ui.get("author-input").value = "Old name";
+	const searching = ui.runAuthorAction("profiles"); await new Promise(resolve => setImmediate(resolve));
+	await ui.switchSearchMode("papers"); assert.equal(ctx.signal.aborted, true);
+	assert.equal(ui.state.records[0].key, "paper-retained"); assert.equal(ui.get("keywords").value, "paper criteria");
+	pending.resolve([{ provider: "scholar", id: "dsdG3ewAAAAJ", name: "Late result" }]); await searching;
+	assert.equal(ui.searchMode(), "papers"); assert.equal(ui.state.records[0].key, "paper-retained");
+	assert.equal(ui.authorSessions.scholar.profiles.length, 0); assert.equal((await ui.history.list()).length, 0);
+});
+
+test("editing author input cancels the active request and provider inputs persist independently", async () => {
+	const pending = deferred(); let signal;
+	const ui = uiHarness({ authorsService: { ...Authors, searchProfiles: async (_provider, _input, _http, ctx) => { signal = ctx.signal; return pending.promise; } } });
+	await ui.switchSearchMode("authors"); ui.get("author-input").value = "Scholar Name";
+	const running = ui.runAuthorAction("profiles"); await new Promise(resolve => setImmediate(resolve));
+	ui.get("author-input").value = "Edited Name"; ui.authorInputChanged(); await running;
+	assert.equal(signal.aborted, true); pending.resolve([]);
+	await ui.switchAuthorProvider("orcid"); ui.get("author-input").value = "0000-0001-8277-5907"; ui.authorInputChanged();
+	await ui.switchAuthorProvider("scholar"); assert.equal(ui.get("author-input").value, "Edited Name");
+	const fresh = uiHarness({ prefs: ui.prefs }); fresh.restoreAuthorPreferences();
+	assert.equal(fresh.get("author-input").value, "Edited Name");
+	await fresh.switchAuthorProvider("orcid"); assert.equal(fresh.get("author-input").value, "0000-0001-8277-5907");
+});
+
+test("author mode validates ORCID, missing bridge and raw profile/name actions without fabricated cards", async () => {
+	const ui = uiHarness(); await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("orcid");
+	ui.get("author-input").value = "Sheila Jensen"; await ui.runAuthorAction("profiles");
+	assert.match(ui.get("banner-text").textContent, /valid ORCID/); assert.equal(ui.get("author-profiles").children.length, 0);
+	await ui.switchAuthorProvider("scholar"); ui.get("author-input").value = "Some Author"; await ui.runAuthorAction("profiles");
+	assert.match(ui.get("banner-text").textContent, /Publish or Perish command-line tool/);
+	ui.get("author-input").value = "https://scholar.google.com/citations?user=dsdG3ewAAAAJ"; await ui.runAuthorAction("name-papers");
+	assert.equal(ui.get("status").textContent, "authorNeedName");
+});
+
+test("ambiguous Scholar names need an explicit input kind and name-paper search remains separate", async () => {
+	const calls = [];
+	const ui = uiHarness({ popBridge: { async searchSource(source, query) { calls.push({ source, query }); return { rows: [], provenance: { engine: "publish-or-perish", source, complete: true } }; } } });
+	await ui.switchSearchMode("authors"); ui.get("author-input").value = "MichaelSmith";
+	await ui.runAuthorAction("profiles"); assert.equal(calls.length, 0); assert.match(ui.get("banner-text").textContent, /ambiguous|name|profile/i);
+	ui.get("author-input-kind").value = "name"; ui.authorInputChanged(); await ui.runAuthorAction("profiles");
+	assert.equal(calls[0].source, "scholarauthor"); assert.equal(calls[0].query.authors, "MichaelSmith");
+	await ui.runAuthorAction("name-papers"); assert.equal(calls[1].source, "scholar");
+	await ui.switchAuthorProvider("orcid"); await ui.switchAuthorProvider("scholar"); assert.equal(ui.get("author-input-kind").value, "name");
+	ui.get("author-input-kind").value = "profile"; await ui.runAuthorAction("name-papers"); assert.equal(ui.get("status").textContent, "authorNeedName");
+});
+
+test("author startup restores the last selected profile publication context without a request", async () => {
+	const prefs = {}, files = new Map(), id = "0000-0001-8277-5907";
+	const profile = { provider: "orcid", id, name: "Public Author", identityConfirmed: true };
+	const records = [paper("public-work", { citations: null, authors: [], authorProfile: profile })]; records.authorProfile = profile;
+	const ui = uiHarness({ prefs, historyFiles: files, authorsService: { ...Authors, searchProfiles: async () => [profile], loadPublications: async () => records } });
+	await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("orcid"); ui.get("author-input").value = id;
+	await ui.runAuthorAction("profiles"); await ui.runAuthorAction("publications", profile);
+	const reopened = uiHarness({ prefs, historyFiles: files, authorsService: { ...Authors, searchProfiles: () => assert.fail("no lookup") } });
+	reopened.restoreAuthorPreferences(); await reopened.switchSearchMode("authors"); await reopened.restoreCachedSearch();
+	assert.equal(reopened.state.records[0].key, "public-work"); assert.match(reopened.get("author-profiles").textContent, /Public Author/);
+});
+
+test("Stop preserves published author rows as incomplete without late overwrite", async () => {
+	const waiting = deferred(); let context;
+	const profile = { provider: "orcid", id: "0000-0001-8277-5907", name: "Known public profile" };
+	const ui = uiHarness({ authorsService: { ...Authors, loadPublications: async (_profile, _options, _http, ctx) => {
+		context = ctx; ctx.onResults([paper("received-author-row", { authorProfile: profile, citations: null })]); return waiting.promise;
+	} } });
+	await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("orcid"); ui.get("author-input").value = profile.id;
+	const running = ui.runAuthorAction("publications", profile); await new Promise(resolve => setImmediate(resolve));
+	ui.stopOperation(); await running;
+	assert.equal(context.signal.aborted, true); assert.equal(ui.state.records[0].key, "received-author-row");
+	const [entry] = await ui.history.list(); assert.equal(entry.partial, true); assert.equal(entry.query.authorProfileId, profile.id);
+	waiting.resolve([paper("late")]); await new Promise(resolve => setImmediate(resolve));
+	assert.equal(ui.state.records[0].key, "received-author-row");
+});
+
+test("author UI is registered after sources, and native paper fields and history controls remain available", () => {
+	const markup = readFileSync(new URL("../content/search.xhtml", import.meta.url), "utf8");
+	assert.ok(markup.indexOf('/sources.js') < markup.indexOf('/authors.js') && markup.indexOf('/authors.js') < markup.indexOf('/ui.js'));
+	for (const id of ["mode-papers", "mode-authors", "author-form", "author-provider", "author-input-kind", "author-input", "author-stop-btn", "author-history-btn", "author-profiles", "query-form", "popRaw", "copy-pop-json"]) assert.ok(markup.includes(`id="${id}"`), id);
+});
+
+test("author form and mode button events execute the workflow and cancel edits without touching paper input", async () => {
+	let calls = 0;
+	const ui = uiHarness({ authorsService: { ...Authors, searchProfiles: async () => { calls++; return []; } } });
+	ui.wireEvents(); ui.get("mode-authors").emit("click"); await new Promise(resolve => setImmediate(resolve));
+	assert.equal(ui.searchMode(), "authors"); assert.equal(ui.get("query-form").hidden, true);
+	ui.get("author-input").value = "A Scholar Name"; ui.get("author-input").emit("input");
+	let prevented = false; ui.get("author-form").emit("submit", { preventDefault: () => { prevented = true; } });
+	await new Promise(resolve => setImmediate(resolve)); await ui.state.searchDone;
+	assert.equal(prevented, true); assert.equal(calls, 1);
+	assert.equal(ui.get("keywords").value, "genome editing");
+	ui.get("mode-papers").emit("click"); await new Promise(resolve => setImmediate(resolve));
+	assert.equal(ui.get("query-form").hidden, false); assert.equal(ui.get("author-panel").hidden, true);
+});
+
+test("overlapping author requests serialize and generic clear cannot leave search locked", async () => {
+	const delayed = deferred(); let firstSignal, calls = 0;
+	const ui = uiHarness({ authorsService: { ...Authors, searchProfiles: async (_p, _i, _h, ctx) => {
+		calls++; if (calls === 1) { firstSignal = ctx.signal; return delayed.promise; } return [];
+	} } });
+	await ui.switchSearchMode("authors"); ui.get("author-input").value = "Name";
+	const a = ui.runAuthorAction("profiles"), b = ui.runAuthorAction("profiles");
+	await Promise.all([a, b]); assert.equal(firstSignal.aborted, true); assert.equal(calls, 2); assert.equal(ui.state.searching, false);
+	delayed.resolve([]);
+	const blocked = deferred(); ui.authorSessions.scholar.profile = null;
+	const other = uiHarness({ authorsService: { ...Authors, searchProfiles: async () => blocked.promise } });
+	await other.switchSearchMode("authors"); other.get("author-input").value = "Name";
+	const pending = other.runAuthorAction("profiles"); other.clearAll(); await pending;
+	assert.equal(other.state.searching, false); assert.equal(other.state.searchController, null); blocked.resolve([]);
+});
+
+test("a Scholar profile search that hits Google's login wall falls back to the paper search by name, and says why", async () => {
+	/* The reader typed a name and pressed Find profile, and got a red line and an
+	   empty table, because Google now wants a signed-in account for profile
+	   search. The paper search by the same name is still open, so it runs. */
+	const calls = [];
+	const ui = uiHarness({ realRows: true, prefs: { popDataDir: "" }, popBridge: { async searchSource(source, query) {
+		calls.push(source);
+		if (source === "scholarauthor") throw Object.assign(new Error("Publish or Perish (scholarauthor) search failed (3); Google requires a signed-in Google account for Scholar profile search"), { exitCode: 3, source, reason: "login" });
+		return { rows: [{ title: "A matching name", rank: 1, authors: [query.authors] }], provenance: { engine: "publish-or-perish", source, complete: true, cached: false, invocationId: "name-papers" } };
+	} } });
+	await ui.switchSearchMode("authors"); ui.get("author-input").value = "Sheila Ingemann";
+	await ui.runAuthorAction("profiles");
+	assert.deepEqual(calls, ["scholarauthor", "scholar"], "the name search ran on its own");
+	assert.equal(ui.state.records.length, 1, "the table is not left empty");
+	assert.match(ui.get("banner-text").textContent, /scholarProfileLogin/, "the banner says why these are name results and how to get the profile");
+	assert.equal(ui.state.records[0].authorProfile.identityConfirmed, false, "and does not claim the identity was verified");
+	// A profile URL cannot be re-run as a name; that path stays an error.
+	const urlCalls = [];
+	const byUrl = uiHarness({ realRows: true, prefs: { popDataDir: "" }, popBridge: { async searchSource(source) { urlCalls.push(source); throw Object.assign(new Error("login"), { reason: "login" }); } } });
+	await byUrl.switchSearchMode("authors"); byUrl.get("author-input").value = "https://scholar.google.com/citations?user=abc123";
+	await byUrl.runAuthorAction("profiles");
+	assert.ok(!urlCalls.includes("scholar"), "a profile URL is never re-run as a name search");
+	assert.equal(byUrl.state.records.length, 0);
 });

@@ -15,6 +15,7 @@
 	<script src="chrome://zotpop/content/jcr.js"></script>
 	<script src="chrome://zotpop/content/history.js"></script>
 	<script src="chrome://zotpop/content/sources.js"></script>
+	<script src="chrome://zotpop/content/authors.js"></script>
 	<script src="chrome://zotpop/content/metrics.js"></script>
 	<script src="chrome://zotpop/content/importer.js"></script>
 	<script src="chrome://zotpop/content/preview.js"></script>
@@ -41,14 +42,33 @@
 </svg>
 
 <div id="app">
+	<nav class="search-modes" aria-label="Search mode">
+		<button id="mode-papers" type="button" aria-pressed="true" data-i18n="modePapers"></button>
+		<button id="mode-authors" type="button" aria-pressed="false" data-i18n="modeAuthors"></button>
+	</nav>
+	<section id="author-panel" class="author-panel glass" hidden="hidden">
+		<form id="author-form" class="author-query" onsubmit="return false;">
+			<label class="field"><span data-i18n="authorProvider"></span><select id="author-provider"><option value="scholar">Google Scholar</option><option value="orcid">ORCID</option></select></label>
+			<label id="author-input-kind-field" class="field"><span data-i18n="authorInputKind"></span><select id="author-input-kind"><option value="auto" data-i18n="authorAutoKind"></option><option value="name" data-i18n="authorNameKind"></option><option value="profile" data-i18n="authorProfileKind"></option></select></label>
+			<label class="field grow2"><span id="author-input-label" data-i18n="authorScholarInput"></span><input id="author-input" type="text" autocomplete="off"/></label>
+			<label class="field narrow"><span data-i18n="maxResults"></span><input id="author-max-results" type="number" min="1" max="2000" value="1000"/></label>
+			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary" data-i18n="findAuthorProfiles"></button><button id="author-name-btn" type="button" data-i18n="authorNamePapers"></button><button id="author-stop-btn" type="button" disabled="disabled" data-i18n="stop"></button><button id="author-history-btn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n="history"></button></div>
+		</form>
+		<p id="author-help" class="author-help"></p>
+		<div id="author-profiles" class="author-profiles" aria-live="polite"></div>
+	</section>
 	<form id="query-form" class="query glass" onsubmit="return false;">
+		<div class="field">
+			<label for="engine" data-i18n="engine"></label>
+			<select id="engine"><option value="direct" data-i18n="engineDirect"></option><option value="pop" data-i18n="enginePoP"></option></select>
+		</div>
 		<div class="field">
 			<label for="source" data-i18n="source"></label>
 			<select id="source"></select>
 		</div>
 		<div class="field grow">
 			<label for="authors" data-i18n="authors"></label>
-			<input id="authors" type="text" data-i18n-ph="authorsPh"/>
+			<input id="authors" type="text" data-i18n-ph="authorsPh" data-i18n-title="authorsHelp"/>
 		</div>
 		<div class="field grow">
 			<label for="venue" data-i18n="venue"></label>
@@ -56,7 +76,7 @@
 		</div>
 		<div class="field grow">
 			<label for="title" data-i18n="titleWords"></label>
-			<input id="title" type="text" data-i18n-ph="titlePh"/>
+			<input id="title" type="text" data-i18n-ph="titlePh" data-i18n-title="titleHelp"/>
 		</div>
 		<div class="field grow2">
 			<label for="keywords" data-i18n="keywords"></label>
@@ -65,17 +85,25 @@
 		<div class="field years">
 			<label data-i18n="years"></label>
 			<div class="row">
-				<input id="yearFrom" type="number" min="1800" max="2100" data-i18n-ph="yearFromPh"/>
+				<input id="yearFrom" type="number" min="1500" max="2100" data-i18n-ph="yearFromPh"/>
 				<span class="dash">–</span>
-				<input id="yearTo" type="number" min="1800" max="2100" data-i18n-ph="yearToPh"/>
+				<input id="yearTo" type="number" min="1500" max="2100" data-i18n-ph="yearToPh"/>
 			</div>
 		</div>
-		<div class="field">
+		<div class="field" id="direct-sort-field">
 			<label for="sort" data-i18n="sort"></label>
 			<select id="sort">
 				<option value="relevance" data-i18n="sortRelevance"></option>
 				<option value="citations" data-i18n="sortCitations"></option>
 				<option value="date" data-i18n="sortDate"></option>
+			</select>
+		</div>
+		<div class="field" id="pop-sort-field" hidden="hidden">
+			<label for="popOutputSort" data-i18n="popOutputSort"></label>
+			<select id="popOutputSort">
+				<option value="rank" data-i18n="popRank"></option><option value="-cites" data-i18n="sortCitations"></option><option value="-year" data-i18n="sortDate"></option>
+				<option value="author" data-i18n="authors"></option><option value="title" data-i18n="thTitle"></option><option value="source" data-i18n="venue"></option>
+				<option value="-cites_annual" data-i18n="thPerYear"></option><option value="-cites_norm" data-i18n="popCitesNorm"></option>
 			</select>
 		</div>
 		<div class="field narrow">
@@ -92,6 +120,31 @@
 			</div>
 		</div>
 	</form>
+	<details id="pop-options" class="combined-options" hidden="hidden">
+		<summary data-i18n="popOptions"></summary>
+		<p data-i18n="popNativeHelp"></p>
+		<div class="pop-native-fields">
+			<label><span data-i18n="popCachePolicy"></span><select id="popCachePolicy" form="query-form"><option value="refresh" data-i18n="popRefresh"></option><option value="offline" data-i18n="popOffline"></option></select></label>
+			<label><span data-i18n="popAffiliation"></span><input id="affiliation" type="text" form="query-form"/></label>
+			<label>ISSN<input id="issn" type="text" form="query-form"/></label>
+			<label><span data-i18n="popCitedId"></span><input id="citedId" type="text" form="query-form"/></label>
+			<label><span data-i18n="popField"></span><input id="field" type="text" form="query-form"/></label>
+			<label class="pop-raw-field"><span data-i18n="popRaw"></span><input id="popRaw" type="text" form="query-form" data-i18n-title="popRawHelp"/></label>
+		</div>
+	</details>
+	<details id="combined-options" class="combined-options" hidden="hidden">
+		<summary data-i18n="combinedSources"></summary>
+		<div class="combined-source-list">
+			<label><input id="multi-source-openalex" type="checkbox" checked="checked"/> OpenAlex</label>
+			<label><input id="multi-source-crossref" type="checkbox" checked="checked"/> Crossref</label>
+			<label><input id="multi-source-europepmc" type="checkbox" checked="checked"/> Europe PMC</label>
+			<label><input id="multi-source-arxiv" type="checkbox" checked="checked"/> arXiv</label>
+			<label><input id="multi-source-pubmed" type="checkbox"/> PubMed</label>
+			<label><input id="multi-source-semanticscholar" type="checkbox"/> Semantic Scholar</label>
+			<label><input id="multi-source-scholar" type="checkbox"/> Google Scholar</label>
+		</div>
+		<p data-i18n="combinedSourcesHelp"></p>
+	</details>
 
 	<div id="banner" class="banner" hidden="hidden"><span id="banner-text"></span><span class="spacer"></span><button id="banner-close" type="button">×</button></div>
 
@@ -115,7 +168,7 @@
 				<tr><td>hI,annual</td><td id="m-hiannual">–</td></tr>
 				<tr><td>hA-index</td><td id="m-ha">–</td></tr>
 			</table>
-			<p class="hint" data-i18n="metricsHint"></p>
+			<p class="hint" data-i18n="metricsScope"></p>
 		</aside>
 
 		<div id="vsplit" class="splitter-v"></div>
@@ -134,6 +187,7 @@
 				<button id="select-new" type="button" class="ghost icon-text" data-i18n-title="selNewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-new"/></svg><span data-i18n="selNew"></span></button>
 				<span class="sep"></span>
 				<button id="copy-csv" type="button" class="ghost icon-text" data-i18n-title="copyCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy"/></svg><span data-i18n="copyCsv"></span></button>
+				<button id="copy-pop-json" type="button" class="ghost icon-text" hidden="hidden" data-i18n="popOriginalJSON"></button>
 				<button id="save-csv" type="button" class="ghost icon-text" data-i18n-title="saveCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-save"/></svg><span data-i18n="saveCsv"></span></button>
 				<button id="toggle-metrics" type="button" class="ghost icon-text" data-i18n-title="metricsTip" aria-pressed="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-panel"/></svg><span data-i18n="metricsToggle"></span></button>
 				<button id="toggle-detail" type="button" class="ghost icon-text" data-i18n-title="detailTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-panel"/></svg><span id="toggle-detail-label"></span></button>
@@ -147,8 +201,8 @@
 						<col data-k="doi"/><col data-k="pdf"/><col data-k="inLibrary"/><col data-k="status"/>
 					</colgroup>
 					<thead>
-						<tr>
-							<th class="chk"><input id="chk-all" type="checkbox" data-i18n-title="chkAllTip"/></th>
+						<tr id="results-head">
+							<th class="chk" data-k="chk"><input id="chk-all" type="checkbox" data-i18n-title="chkAllTip"/></th>
 							<th data-sort="citations" class="num"><span data-i18n="thCites"></span><span class="rz"></span></th>
 							<th data-sort="cpy" class="num"><span data-i18n="thPerYear"></span><span class="rz"></span></th>
 							<th data-sort="rank" class="num"><span data-i18n="thRank"></span><span class="rz"></span></th>

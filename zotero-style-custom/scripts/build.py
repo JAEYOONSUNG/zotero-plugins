@@ -7,7 +7,7 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ["manifest.json", "bootstrap.js", "prefs.js", "src/data.js", "src/reading.js", "src/marquee.js",
+FILES = ["src/jcr-categories.js", "src/jcr-browser.js", "content/jcr-browser.css", "data/jcr-categories.json", "manifest.json", "bootstrap.js", "prefs.js", "src/data.js", "src/reading.js", "src/marquee.js",
          "src/workspace.js", "src/assist.js", "src/library.js", "src/reader-tools.js", "src/workbench.js", "content/workbench.css", "content/citation.css", "src/runtime.js", "src/citations.js", "src/citation-formats.js", "src/supplementary.js", "src/discover.js", "src/paper-signals.js", "src/legacy-reading.js", "src/journal-metrics.js", "src/selfcheck.js", "src/failures.js", "src/brand-icons.js", "src/i18n.js", "src/strings.js", "src/author-portrait.js", "src/attachment-kinds.js", "src/item-kinds.js", "src/patents.js", "src/journal-identity.js", "src/affiliations.js", "src/paper-graph.js", "LICENSES.md", "src/journals.js", "data/if-catalog.json", "data/journal-registry.json", "data/features.json", "content/preferences.xhtml", "content/preferences.css", "src/settings-schema.js", "src/settings.js", "content/icons/style-custom.svg", "content/icons/style-custom-toolbar.svg", *[f"content/icons/style-custom-{size}.png" for size in [16,24,32,48,96,128,256]]]
 
 

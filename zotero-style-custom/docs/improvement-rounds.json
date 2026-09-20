@@ -1,5 +1,5 @@
 {
-  "version": "0.50.2",
+  "version": "0.51.2",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -1402,7 +1402,7 @@
     },
     {
       "round": "R47",
-      "title": "저널 프로필: JCR 페이지처럼, 로그인 없이",
+      "title": "저널 프로필: 저장된 지표와 OpenAlex 분류",
       "gap": "The journals tab was a list of names with a figure, and the user asked for what JCR's journal page shows -- each fact with its own sign, and the list by field. JCR's site needs an institutional login, so nothing could be read from it here; the registry shipped with the plugin knows the figure, quartile, abbreviation, publisher and ISSN, and OpenAlex knows the subject fields, h-index, output, open-access status, fee, country and homepage.",
       "entryPoint": "작업 패널 → 저널 → 저널 이름 클릭",
       "sources": [
@@ -1422,7 +1422,7 @@
       "tests": [
         {
           "file": "test/workbench.test.mjs",
-          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+          "name": "a journal profile labels stored metrics and OpenAlex fields while path choices filter the list"
         },
         {
           "file": "test/journal-profiles.test.mjs",
@@ -1430,7 +1430,7 @@
         }
       ],
       "status": "verified",
-      "review": "The profile fields ride on the request the figure already costs; journals cached before them are filled fifty at a time by ISSN -- 258 journals in this library in six requests, every one with a subject field afterwards. On the tab: the figure in its own column, quartile chip, field chips that filter, a grouped-by-field view with ranks, and a profile under any name with twelve signed facts and a button to the JCR page itself."
+      "review": "현재 프로필은 JIF 자료와 OpenAlex 분류의 출처를 구분한다. 공식 JCR 카테고리 전체가 내장된 것은 아니며, 기존 단일 Q는 카테고리 미확인으로 표시한다. 공식 카테고리 화면은 별도 링크로 제공한다."
     },
     {
       "round": "R48",
@@ -1550,7 +1550,7 @@
       "tests": [
         {
           "file": "test/workbench.test.mjs",
-          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+          "name": "a journal profile labels stored metrics and OpenAlex fields while path choices filter the list"
         }
       ],
       "status": "verified",
@@ -1686,7 +1686,7 @@
       "tests": [
         {
           "file": "test/workbench.test.mjs",
-          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+          "name": "a journal profile labels stored metrics and OpenAlex fields while path choices filter the list"
         }
       ],
       "status": "verified",
@@ -1706,7 +1706,7 @@
       "tests": [
         {
           "file": "test/workbench.test.mjs",
-          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+          "name": "a journal profile labels stored metrics and OpenAlex fields while path choices filter the list"
         }
       ],
       "status": "verified",
@@ -1726,7 +1726,7 @@
       "tests": [
         {
           "file": "test/workbench.test.mjs",
-          "name": "a journal opens into a profile of signed facts, and the fields filter the list"
+          "name": "a journal profile labels stored metrics and OpenAlex fields while path choices filter the list"
         }
       ],
       "status": "verified",
@@ -1806,7 +1806,7 @@
     },
     {
       "round": "R64",
-      "title": "저널 지표에 JCR 전체 목록과 등수",
+      "title": "저장된 저널 목록과 로컬 JIF 순번",
       "gap": "The journals tab listed only the 255 journals the library holds; the user wanted every JCR journal, with each one's place among all of them, including journals they do not hold.",
       "entryPoint": "작업 패널 → 저널 → 내 서재 / 전체 JCR",
       "sources": [
@@ -1822,7 +1822,7 @@
       "tests": [
         {
           "file": "test/workbench.test.mjs",
-          "name": "the journals tab can show every JCR journal, ranked, with the ones the library lacks marked"
+          "name": "the journals tab shows the stored catalog with local positions and absent-library markers"
         },
         {
           "file": "test/journal-identity.test.mjs",
@@ -1830,7 +1830,7 @@
         }
       ],
       "status": "verified",
-      "review": "The registry is read once in JIF order and each journal carries its rank; the rank column shows that place in both views. A toggle switches between the library's journals and all 22,594, a hundred a page, searchable; a journal the library lacks is present but quieter, its profile shows the registry facts and offers a ZotPoP search."
+      "review": "22,594종은 번들에 저장된 저널 목록이다. 전체 JCR의 완전한 최신 목록 또는 공식 카테고리 순위로 표시하지 않는다. 서재 보유 여부와 로컬 JIF 순번을 제공한다."
     },
     {
       "round": "R65",
@@ -2064,7 +2064,7 @@
       "sources": [
         {
           "file": "scripts/build-journal-fields.py",
-          "marker": "distinct domain/field/subfield triples that its top topics belong to"
+          "marker": "def merge_state(registry, state):"
         },
         {
           "file": "src/journal-identity.js",
@@ -2086,7 +2086,7 @@
         }
       ],
       "status": "verified",
-      "review": "OpenAlex의 topic 계층을 등재 저널 전체에 쓸어 담아 레지스트리에 함께 실었다. 이름표 하나를 공유하고 행마다 색인만 두어 파일이 크게 늘지 않는다. 분야를 모르는 저널은 메뉴에서 '분야 미상'으로 따로 고를 수 있다. 주석 탭은 메모가 있는 주석에만 상자를 그리고, 나머지는 '메모' 버튼을 누를 때 만든다. 한 번에 그리는 수도 설정에서 바꾼다."
+      "review": "기존 번들 분류는 OpenAlex 상위 주제에서 만든 제한된 자료이며 출처·수집일 미확인 상태를 보존한다. 새 생성기는 모든 반환 주제와 식별자, 안정된 ISSN 연결, 중단 재개를 지원한다. 실제 전수 재수집은 이번 버전에서 실행하지 않았다. 주석 편집 기능은 유지한다."
     },
     {
       "round": "R75",
@@ -2119,7 +2119,7 @@
     {
       "round": "R76",
       "title": "분야 안에서 몇 위인가, 그리고 세 메뉴가 같은 숫자를 말하던 일",
-      "gap": "The three subject menus each opened with 「전체 · 252」 -- the number of journals placed, the same figure in all three -- which read as though the subject list itself were 252 long, or missing. And the only rank on offer was the place in the whole registry: 214th of 22,594, which tells a reader nothing. JCR prints the place inside the subject, and that was the figure missing.",
+      "gap": "A local JIF comparison over OpenAlex subject paths had been presented as a JCR category rank; same-named paths and equal-JIF journals could receive incorrect ranks.",
       "entryPoint": "연구 작업 패널 → 저널 지표",
       "sources": [
         {
@@ -2134,7 +2134,7 @@
       "tests": [
         {
           "file": "test/journal-identity.test.mjs",
-          "name": "a journal is placed inside its own subject, which is the figure JCR prints"
+          "name": "local JIF comparisons preserve subject order without claiming official JCR category ranks"
         },
         {
           "file": "test/workbench.test.mjs",
@@ -2142,7 +2142,7 @@
         }
       ],
       "status": "verified",
-      "review": "저널마다 자기 분야 안에서 몇 위인지를 낸다. 세부 분야와 분야 양쪽에서, JIF 순으로, 그 분야 사분위까지. 표에 「분야 순위」 열을 두고 가장 좁은 분야를 앞에 쓰며, 나머지는 툴팁과 자세히 보기에 모두 적는다. 그 순서로 정렬하는 항목도 넣었다. 세 메뉴의 첫 줄은 이제 그 메뉴가 가진 분야 수를 말한다. 레지스트리 전체를 한 번 훑어 만들고 기억해 둔다. JIF가 없는 저널은 줄 세울 수 없으므로 분모에서도 빠진다."
+      "review": "분야 순위는 OpenAlex 분류와 저장된 JIF를 사용한 자체 비교라고 표시한다. 전체 상위 경로를 분리하고 같은 표시 JIF는 공동 순위와 같은 Q를 받는다. 선택한 경로와 표시 순위를 맞추며 공식 JCR 카테고리 순위는 추정하지 않는다."
     },
     {
       "round": "R77",
@@ -2187,6 +2187,120 @@
       ],
       "status": "verified",
       "review": "두 아이콘을 Zotero 자체 아이콘과 같은 20픽셀 격자, 같은 1.25픽셀 선으로 다시 그렸다. ZotPoP은 Zotero의 돋보기 기하를 그대로 쓰고 손잡이 끝을 둥글렸으며 안에 둥근 막대 셋을 두었다. Style Custom은 패널의 모습 그대로 모서리가 둥근 틀, 제목줄, 왼쪽 탭 띠, 안의 둥근 행 둘이다. 색은 전과 같은 세 가지를 두 아이콘이 나눠 써서 한 쌍으로 읽힌다. 밝은 툴바와 어두운 툴바에서 렌더링해 확인했다."
+    },
+    {
+      "round": "R79",
+      "title": "JCR 구성 확인과 분류·순위 오류 수정",
+      "gap": "The subject pipeline, UI and ranking confused OpenAlex topics with official JCR categories, crossed parent paths, lost cache classifications, conflated normalized journal titles and split equal-JIF ranks.",
+      "entryPoint": "연구 작업 패널 → 저널",
+      "sources": [
+        {
+          "file": "src/journal-identity.js",
+          "marker": "function resolveLevels(title, profile)"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "const journalPathMatches="
+        },
+        {
+          "file": "scripts/build-journal-fields.py",
+          "marker": "def capture_registry("
+        },
+        {
+          "file": "scripts/install-background.py",
+          "marker": "expected_installed_hash=None"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/journal-identity.test.mjs",
+          "name": "actual registry counterexamples keep Genetics parents separate, JIF ties equal and Nature Methods classifications stable"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "journal menus distinguish all six repeated subfield names by full path and reject crossed branches"
+        },
+        {
+          "file": "test/journal_fields_test.py",
+          "name": "test_late_cli_failure_preserves_successful_batch_and_resume_skips_it"
+        },
+        {
+          "file": "test/install_background_test.py",
+          "name": "test_same_version_different_content_is_not_overwritten"
+        }
+      ],
+      "status": "verified",
+      "review": "Aside에서 JCR의 21개 Groups·254개 Categories와 다중 소속을 확인했다. 공식 데이터 내보내기는 로그인 대기이며 전체 공식 자료를 확보했다고 주장하지 않는다. 전체 번들의 자체 계산을 독립 검증하고 경로·캐시·동점·연도·저널 식별 오류를 수정했다. 생성기는 출처와 중단 재개를 보존하고 설치기는 다른 업데이트를 덮어쓰지 않도록 변경 감지를 강화했다.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R80",
+      "title": "실제 JCR 그룹·카테고리·저널 기본 탐색",
+      "gap": "The previous release corrected OpenAlex labels but did not implement the requested JCR Categories by Group page.",
+      "entryPoint": "연구 작업 패널 → 저널 지표",
+      "sources": [
+        {
+          "file": "src/jcr-categories.js",
+          "marker": "function create(payload)"
+        },
+        {
+          "file": "src/jcr-browser.js",
+          "marker": "function mount(host,options={})"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "state.journalBrowser=ui.journalBrowser==='openalex'?'openalex':'jcr'"
+        },
+        {
+          "file": "scripts/build-jcr-catalog.py",
+          "marker": "def main("
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/jcr-categories.test.mjs",
+          "name": "actual captured JCR taxonomy validates exact group and category membership coverage"
+        },
+        {
+          "file": "test/jcr-browser.test.mjs",
+          "name": "captured JCR catalog renders the actual 21 group structure, all 254 categories and exact group membership"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "actual journal tab defaults to all captured JCR groups despite old OpenAlex selections and paper filters"
+        }
+      ],
+      "status": "verified",
+      "review": "Aside의 실제 JCR 화면에서 그룹 21개·카테고리 254개·저널 22,643종을 수집했다. 모든 카테고리의 저널 수와 공식 다중 소속·카테고리별 순위·Q·백분위가 연결된 기본 화면을 구현했다. 범위값과 미제공 지표는 그대로 보존하고 이전 OpenAlex 탐색은 명시적 대안으로 유지한다. 전체 원본과 통합 화면·헤드리스 미리보기를 검증하며 설치와 실행 검증을 구분한다.",
+      "nativeActivationVerified": false
+    },
+    {
+      "round": "R81",
+      "title": "JCR 카테고리 화면의 옷, 그리고 열 맞춤이 어디서 멈추는지",
+      "gap": "The JCR category view arrived as bare table markup with no styling of its own: capitals down the first column, two lines of group names per row, three stacked toolbars. And the double-click that fits a column to its content was reported not to work, with nothing to say whether the click never arrived or the fit stopped part-way.",
+      "entryPoint": "연구 작업 패널 → 저널 지표 → 공식 JCR 카테고리 · 아이템 목록 열 경계",
+      "sources": [
+        {
+          "file": "src/jcr-browser.js",
+          "marker": "button(displayName(category.name),name,()=>navigate('journals',category.key)"
+        },
+        {
+          "file": "content/workbench.css",
+          "marker": "JCR categories: Clarivate's own numbers, drawn like the rest of the panel."
+        },
+        {
+          "file": "src/selfcheck.js",
+          "marker": "a double-click on a column edge fits the column to its content"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/jcr-browser.test.mjs",
+          "name": "categories read as names, with their groups and editions as chips and their size as a bar"
+        }
+      ],
+      "status": "verified",
+      "review": "카테고리 이름을 대문자 그대로가 아니라 이름으로 읽히게 바꾸고(원문은 툴팁과 키에 보존), 그룹과 색인은 칩으로, 저널 수는 페이지 안 최댓값 대비 막대로, JIF 중앙값은 색조로 그린다. 표 머리글은 고정되고 숫자 열은 자리가 맞는다. 열 맞춤 더블클릭은 어디서 멈췄는지를 기록하고, 자체 점검이 실제 머리글에 더블클릭을 보내 결과를 읽는다. 맞춤은 오른쪽 열 전체에서 차례로 폭을 빌려오고, 이웃이 최소 폭이어도 내용에 닿는다."
     }
   ],
   "introducedInVersion": "0.6.0"

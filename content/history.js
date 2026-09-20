@@ -14,7 +14,7 @@ var ZotPoPHistory = (function () {
 	"use strict";
 
 	const INDEX = "index.json";
-	const QUERY_FIELDS = ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "sort", "maxResults"];
+	const QUERY_FIELDS = ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "sort", "maxResults", "sources", "engine", "affiliation", "issn", "citedId", "field", "popRaw", "popOutputSort", "popProfile", "popCachePolicy"];
 
 	// A stable id for a query: FNV-1a over its normalised fields, so the same search
 	// lands on the same file however the boxes were spaced or capitalised.
@@ -27,11 +27,37 @@ var ZotPoPHistory = (function () {
 		return h.toString(16).padStart(8, "0");
 	}
 	function normalizeQuery(query = {}) {
+		if (query.mode === "author") {
+			let out = { mode: "author" };
+			for (let key of ["authorProvider", "authorInput", "authorInputKind", "authorAction", "authorProfileId", "popProfile"]) if (query[key] != null && query[key] !== "") out[key] = String(query[key]);
+			if (query.maxResults != null) out.maxResults = Number(query.maxResults);
+			return out;
+		}
 		let out = {};
 		for (let key of QUERY_FIELDS) {
 			let value = query[key];
 			if (value == null || value === "") continue;
-			out[key] = ["yearFrom", "yearTo", "maxResults"].includes(key) ? Number(value) : String(value).replace(/\s+/g, " ").trim().toLowerCase();
+			if (key === "engine" && value === "direct") continue;
+			if (query.engine === "pop") {
+				if (key === "sources" || key === "sort") continue;
+				out[key] = ["yearFrom", "yearTo", "maxResults"].includes(key) ? Number(value) : String(value);
+				continue;
+			}
+			if (key === "sources") {
+				if (!Array.isArray(value)) continue;
+				let names = [...new Set(value.map(name => String(name).trim().toLowerCase()))].sort();
+				// Preserve the keys of searches saved before source selection existed.
+				if (names.join(",") !== "arxiv,crossref,europepmc,openalex") out[key] = names;
+				continue;
+			}
+			if (["yearFrom", "yearTo", "maxResults"].includes(key)) { out[key] = Number(value); continue; }
+			let text = String(value).replace(/\s+/g, " ").trim();
+			// Uppercase Boolean operators are syntax in title/keyword queries;
+			// the lowercase words and quoted literals must never reuse that cache.
+			out[key] = ["title", "keywords", "venue"].includes(key)
+				? (text.match(/"(?:\\.|[^"\\])*"|[^"]+/g) || []).map(part => part.startsWith('"') ? part.toLowerCase()
+					: part.split(/(\b(?:AND|OR|NOT|ANDNOT)\b)/).map(token => /^(AND|OR|NOT|ANDNOT)$/.test(token) ? token : token.toLowerCase()).join("")).join("")
+				: text.toLowerCase();
 		}
 		return out;
 	}
@@ -42,7 +68,10 @@ var ZotPoPHistory = (function () {
 
 	// What the menu shows for a search: the boxes that were filled, in reading order.
 	function describe(query = {}) {
+		if (query.mode === "author") return [query.authorProvider === "orcid" ? "ORCID" : "Google Scholar", query.authorInput || query.authorProfileId].filter(Boolean).join(" · ");
 		let bits = [];
+		if (query.engine === "pop") bits.push("PoP");
+		if (query.popRaw) bits.push(String(query.popRaw));
 		if (query.keywords) bits.push(String(query.keywords).trim());
 		if (query.title) bits.push("title: " + String(query.title).trim());
 		if (query.authors) bits.push(String(query.authors).trim());
@@ -92,7 +121,9 @@ var ZotPoPHistory = (function () {
 		}
 
 		async function save({ source, query, records, partial = false, label = "" }) {
-			if (!source || !Array.isArray(records) || !records.length) return null;
+			let profiles = query?.mode === "author" && ["scholar", "orcid"].includes(query.authorProvider) && Array.isArray(query.authorProfiles)
+				? query.authorProfiles.filter(profile => profile && profile.provider === query.authorProvider && typeof profile.id === "string" && profile.id.trim()) : [];
+			if (!source || !Array.isArray(records) || !records.length && !profiles.length) return null;
 			let id = signature(source, query);
 			let savedAt = now().toISOString();
 			let body = JSON.stringify({ version: 1, id, source, query, savedAt, partial, records });
@@ -101,7 +132,9 @@ var ZotPoPHistory = (function () {
 				await load();
 				await io.writeText(path(id + ".json"), body);
 				index = index.filter(e => e.id !== id);
-				index.push({ id, source, label: label || describe(query), query, count: records.length, savedAt, partial });
+				let profileOnly = query?.mode === "author" && query.authorAction === "profiles";
+				index.push({ id, source, label: label || describe(query), query, count: profileOnly ? profiles.length : records.length,
+					...(profileOnly ? { kind: "profiles" } : {}), savedAt, partial });
 				index.sort((a, b) => String(a.savedAt).localeCompare(String(b.savedAt)));
 				let dropped = index.splice(0, Math.max(0, index.length - max));
 				for (let e of dropped) await io.remove(path(e.id + ".json")).catch(() => {});
@@ -113,7 +146,9 @@ var ZotPoPHistory = (function () {
 		async function find(source, query) {
 			let id = signature(source, query);
 			await writes;
-			return (await load()).find(e => e.id === id) || null;
+			let normalized = JSON.stringify(normalizeQuery(query));
+			return (await load()).find(e => e.id === id && e.source === source
+				&& JSON.stringify(normalizeQuery(e.query)) === normalized) || null;
 		}
 
 		async function get(id) {

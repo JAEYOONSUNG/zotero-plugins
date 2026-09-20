@@ -1,0 +1,206 @@
+{
+  "createdAt": "2026-09-20T03:43:16.036Z",
+  "journalCount": 22594,
+  "groups": 277,
+  "expectedGroupsFromRaw": 277,
+  "expectedMembershipsFromRaw": 138863,
+  "membershipsChecked": 138863,
+  "tiedMembershipsChecked": 131598,
+  "rankInvariantFailures": 0,
+  "filterCases": [
+    {
+      "pick": {
+        "domain": "Life Sciences",
+        "field": "Biochemistry, Genetics and Molecular Biology",
+        "subfield": "Genetics"
+      },
+      "matches": 907,
+      "crossPathFalsePositives": 0
+    },
+    {
+      "pick": {
+        "domain": "Health Sciences",
+        "field": "Biochemistry, Genetics and Molecular Biology",
+        "subfield": "Genetics"
+      },
+      "matches": 0,
+      "crossPathFalsePositives": 0
+    },
+    {
+      "pick": {
+        "domain": "Health Sciences",
+        "field": "Medicine",
+        "subfield": "Genetics"
+      },
+      "matches": 194,
+      "crossPathFalsePositives": 0
+    }
+  ],
+  "cacheCases": [
+    {
+      "title": "Nature",
+      "displayedLevels": [
+        {
+          "domain": "Physical Sciences",
+          "field": "Physics and Astronomy",
+          "subfield": "Astronomy and Astrophysics"
+        },
+        {
+          "domain": "Health Sciences",
+          "field": "Medicine",
+          "subfield": "Reproductive Medicine"
+        },
+        {
+          "domain": "Physical Sciences",
+          "field": "Engineering",
+          "subfield": "Aerospace Engineering"
+        },
+        {
+          "domain": "Health Sciences",
+          "field": "Medicine",
+          "subfield": "Public Health, Environmental and Occupational Health"
+        }
+      ],
+      "impact": 56.1,
+      "year": 2025,
+      "firstRank": {
+        "level": "subfield",
+        "name": "Astronomy and Astrophysics",
+        "domain": "Physical Sciences",
+        "field": "Physics and Astronomy",
+        "subfield": "Astronomy and Astrophysics",
+        "pathKey": "[\"subfield\",\"Physical Sciences\",\"Physics and Astronomy\",\"Astronomy and Astrophysics\"]",
+        "rank": 2,
+        "of": 270,
+        "percentile": 1,
+        "quartile": 1,
+        "source": "openalex",
+        "method": "local-jif",
+        "isOfficial": false
+      }
+    },
+    {
+      "title": "Science",
+      "displayedLevels": [
+        {
+          "domain": "Social Sciences",
+          "field": "Economics, Econometrics and Finance",
+          "subfield": "Economics and Econometrics"
+        },
+        {
+          "domain": "Health Sciences",
+          "field": "Medicine",
+          "subfield": "Reproductive Medicine"
+        },
+        {
+          "domain": "Physical Sciences",
+          "field": "Engineering",
+          "subfield": "Aerospace Engineering"
+        },
+        {
+          "domain": "Social Sciences",
+          "field": "Arts and Humanities",
+          "subfield": "History and Philosophy of Science"
+        }
+      ],
+      "impact": 47.3,
+      "year": 2025,
+      "firstRank": {
+        "level": "subfield",
+        "name": "Economics and Econometrics",
+        "domain": "Social Sciences",
+        "field": "Economics, Econometrics and Finance",
+        "subfield": "Economics and Econometrics",
+        "pathKey": "[\"subfield\",\"Social Sciences\",\"Economics, Econometrics and Finance\",\"Economics and Econometrics\"]",
+        "rank": 7,
+        "of": 2903,
+        "percentile": 1,
+        "quartile": 1,
+        "source": "openalex",
+        "method": "local-jif",
+        "isOfficial": false
+      }
+    },
+    {
+      "title": "Nature Methods",
+      "displayedLevels": [
+        {
+          "domain": "Life Sciences",
+          "field": "Biochemistry, Genetics and Molecular Biology",
+          "subfield": "Molecular Biology"
+        },
+        {
+          "domain": "Life Sciences",
+          "field": "Biochemistry, Genetics and Molecular Biology",
+          "subfield": "Biophysics"
+        },
+        {
+          "domain": "Physical Sciences",
+          "field": "Chemistry",
+          "subfield": "Spectroscopy"
+        },
+        {
+          "domain": "Life Sciences",
+          "field": "Biochemistry, Genetics and Molecular Biology",
+          "subfield": "Structural Biology"
+        }
+      ],
+      "impact": 28.3,
+      "year": 2025,
+      "firstRank": {
+        "level": "subfield",
+        "name": "Molecular Biology",
+        "domain": "Life Sciences",
+        "field": "Biochemistry, Genetics and Molecular Biology",
+        "subfield": "Molecular Biology",
+        "pathKey": "[\"subfield\",\"Life Sciences\",\"Biochemistry, Genetics and Molecular Biology\",\"Molecular Biology\"]",
+        "rank": 27,
+        "of": 1813,
+        "percentile": 1,
+        "quartile": 1,
+        "source": "openalex",
+        "method": "local-jif",
+        "isOfficial": false
+      }
+    }
+  ],
+  "oncologyTie": [
+    {
+      "title": "Medical Oncology",
+      "level": "subfield",
+      "name": "Oncology",
+      "domain": "Health Sciences",
+      "field": "Medicine",
+      "subfield": "Oncology",
+      "pathKey": "[\"subfield\",\"Health Sciences\",\"Medicine\",\"Oncology\"]",
+      "rank": 174,
+      "of": 713,
+      "percentile": 24,
+      "quartile": 1,
+      "source": "openalex",
+      "method": "local-jif",
+      "isOfficial": false
+    },
+    {
+      "title": "Oncologist",
+      "level": "subfield",
+      "name": "Oncology",
+      "domain": "Health Sciences",
+      "field": "Medicine",
+      "subfield": "Oncology",
+      "pathKey": "[\"subfield\",\"Health Sciences\",\"Medicine\",\"Oncology\"]",
+      "rank": 174,
+      "of": 713,
+      "percentile": 24,
+      "quartile": 1,
+      "source": "openalex",
+      "method": "local-jif",
+      "isOfficial": false
+    }
+  ],
+  "sourceSHA256": {
+    "zotero-style-custom/src/journal-identity.js": "117201a7625c2bbbb3f56f7679518dc2b1c96f465590d7d552acca0273eccc27",
+    "zotero-style-custom/src/workbench.js": "3f30173895722fb4d3240648cc634c0e28dba967d7eee70d84a2726ddf4395da",
+    "zotero-style-custom/data/journal-registry.json": "d963b96de19c82210c1217f5a2760bbe3fecdd147925c3a10ed6601368a5df64"
+  }
+}

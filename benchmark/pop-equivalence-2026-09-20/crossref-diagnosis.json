@@ -1,0 +1,373 @@
+{
+  "kind": "recorded-provider-response replay, no live request",
+  "sourceSHA256": "3ebac862ab0a707306e963ec4a2a9093f9b021f31e3dca85363b8f0775a82301",
+  "referenceRows": 1000,
+  "referenceUnique": 986,
+  "priorUniqueMatches": 971,
+  "missing": [
+    {
+      "doi": "10.3389/fmicb.2023.1178748",
+      "originalRanks": [
+        201
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.1101/2021.04.07.438430",
+      "originalRanks": [
+        292
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.2210/pdb9zi3/pdb",
+      "originalRanks": [
+        296,
+        302
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.1016/j.pep.2005.03.011",
+      "originalRanks": [
+        401
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.1601/ex.18149",
+      "originalRanks": [
+        495,
+        501
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.2210/pdb9own/pdb",
+      "originalRanks": [
+        601
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.2210/pdb3hht/pdb",
+      "originalRanks": [
+        711
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.3390/ijms20030780",
+      "originalRanks": [
+        797,
+        801
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.2210/pdb9owp/pdb",
+      "originalRanks": [
+        899,
+        901
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.1007/s00792-004-0395-2",
+      "originalRanks": [
+        900,
+        920
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.15174/au.2024.4153",
+      "originalRanks": [
+        980
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.2210/pdb2iex/pdb",
+      "originalRanks": [
+        981
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.3390/ijms20235869",
+      "originalRanks": [
+        982
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.24002/biota.v14i3.2580",
+      "originalRanks": [
+        984
+      ],
+      "recovered": true
+    },
+    {
+      "doi": "10.22146/ijbiotech.65822",
+      "originalRanks": [
+        985
+      ],
+      "recovered": true
+    }
+  ],
+  "replayedUnique": 986,
+  "requests": [
+    0,
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900,
+    1000
+  ],
+  "boundedStop": true,
+  "limitation": "An explicit empty fixture after the tenth captured page bounds replay; it is not evidence the provider is exhausted. Historical candidate HTTP bodies were not retained, so per-miss backend causes cannot be conclusively assigned.",
+  "duplicates": [
+    {
+      "doi": "10.1021/acs.iecr.1c03070.s001",
+      "rows": [
+        {
+          "rank": 98,
+          "score": 13.673896
+        },
+        {
+          "rank": 101,
+          "score": 13.648397
+        }
+      ]
+    },
+    {
+      "doi": "10.2210/pdb4c1p/pdb",
+      "rows": [
+        {
+          "rank": 198,
+          "score": 12.9825535
+        },
+        {
+          "rank": 202,
+          "score": 12.971261
+        }
+      ]
+    },
+    {
+      "doi": "10.1601/ex.23948",
+      "rows": [
+        {
+          "rank": 199,
+          "score": 12.957182
+        },
+        {
+          "rank": 208,
+          "score": 12.962766
+        }
+      ]
+    },
+    {
+      "doi": "10.2210/pdb5j78/pdb",
+      "rows": [
+        {
+          "rank": 200,
+          "score": 12.957182
+        },
+        {
+          "rank": 209,
+          "score": 12.962766
+        }
+      ]
+    },
+    {
+      "doi": "10.1016/j.plasmid.2013.10.002",
+      "rows": [
+        {
+          "rank": 295,
+          "score": 12.7276
+        },
+        {
+          "rank": 301,
+          "score": 12.733432
+        }
+      ]
+    },
+    {
+      "doi": "10.2210/pdb9zi3/pdb",
+      "rows": [
+        {
+          "rank": 296,
+          "score": 12.72614
+        },
+        {
+          "rank": 302,
+          "score": 12.728113
+        }
+      ]
+    },
+    {
+      "doi": "10.1016/j.gene.2005.08.017",
+      "rows": [
+        {
+          "rank": 300,
+          "score": 12.722215
+        },
+        {
+          "rank": 305,
+          "score": 12.722215
+        }
+      ]
+    },
+    {
+      "doi": "10.11606/t.18.2017.tde-12042017-105059",
+      "rows": [
+        {
+          "rank": 395,
+          "score": 12.334082
+        },
+        {
+          "rank": 407,
+          "score": 12.308202
+        }
+      ]
+    },
+    {
+      "doi": "10.2210/pdb5hon/pdb",
+      "rows": [
+        {
+          "rank": 396,
+          "score": 12.334082
+        },
+        {
+          "rank": 408,
+          "score": 12.308202
+        }
+      ]
+    },
+    {
+      "doi": "10.1601/ex.18149",
+      "rows": [
+        {
+          "rank": 495,
+          "score": 11.97932
+        },
+        {
+          "rank": 501,
+          "score": 11.9406
+        }
+      ]
+    },
+    {
+      "doi": "10.21203/rs.3.rs-3420371/v1",
+      "rows": [
+        {
+          "rank": 700,
+          "score": 11.426199
+        },
+        {
+          "rank": 701,
+          "score": 11.426199
+        }
+      ]
+    },
+    {
+      "doi": "10.3390/ijms20030780",
+      "rows": [
+        {
+          "rank": 797,
+          "score": 11.177725
+        },
+        {
+          "rank": 801,
+          "score": 11.15654
+        }
+      ]
+    },
+    {
+      "doi": "10.2210/pdb9owp/pdb",
+      "rows": [
+        {
+          "rank": 899,
+          "score": 10.967756
+        },
+        {
+          "rank": 901,
+          "score": 10.967756
+        }
+      ]
+    },
+    {
+      "doi": "10.1007/s00792-004-0395-2",
+      "rows": [
+        {
+          "rank": 900,
+          "score": 10.952727
+        },
+        {
+          "rank": 920,
+          "score": 10.938502
+        }
+      ]
+    }
+  ],
+  "duplicateRows": 14,
+  "duplicatesWithChangingScores": 11,
+  "cacheEvidence": [
+    {
+      "file": "000aebe0699f74f189832e849ebcdc5d.dat",
+      "offset": 200,
+      "sha256": "26f6593df30958ebfe430a9e548b4f0710d0ba6ceb4af9bb38820fe8f85f1866"
+    },
+    {
+      "file": "201ecd646f0ad58dcc766347d4aeb4b2.dat",
+      "offset": 500,
+      "sha256": "a5e739217de5625ddf07155b3938958afb7898347200a88f75710bc8fec4c931"
+    },
+    {
+      "file": "2d8bcf72d99ef7b58485fffcc0c83982.dat",
+      "offset": 300,
+      "sha256": "fc2006b070b2af7285400c6c18a309521c416a239a24cfee0aaf6667d4b92522"
+    },
+    {
+      "file": "58aa35a2e7d3eb64e0259d703a1e65f2.dat",
+      "offset": 600,
+      "sha256": "b5291aaf50a497c5fc031a1f3d5ebec18099e11fa38dd0c7c4597f6fef4aa8b0"
+    },
+    {
+      "file": "b93c5944f0733ba668e210212d831d1b.dat",
+      "offset": 900,
+      "sha256": "5f1b76f12aa5d8b9cd7ee93b55b0777825c7223212f36d6a10b5c9b94ad77183"
+    },
+    {
+      "file": "d89404f34e8b1eacaaf22c22deca50ce.dat",
+      "offset": 800,
+      "sha256": "453be99bd255211f238e7b212dba48ca5a3f7b530f6cec6123160b3900408117"
+    },
+    {
+      "file": "f5bc5265dcbef6ea437a25876c8cf1b8.dat",
+      "offset": 400,
+      "sha256": "b3811c48aebd33250d920760dacc67139b36ad9622d4a8dab9c6c0561aa8e5c1"
+    },
+    {
+      "file": "f7178fdcb7e52cb41a9ea5c90593037e.dat",
+      "offset": 0,
+      "sha256": "0c3d749e6343f3cd185311422093744614acab83a39ac8f8932910d2facfa26f"
+    },
+    {
+      "file": "f7a12ee9fd2131a5a6207cf279d172e2.dat",
+      "offset": 700,
+      "sha256": "88f630bbbfea68c81a5f15ddd43c8e33e27960b875883b321a7ce41fb3955b7c"
+    },
+    {
+      "file": "f7d47dc25adbdb598f52e01775e7b95e.dat",
+      "offset": 100,
+      "sha256": "3dc245bf9477285d128be86eada656e2fbf6577f095c05c0f9a4141257a4206d"
+    }
+  ]
+}

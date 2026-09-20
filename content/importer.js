@@ -157,8 +157,13 @@ var ZotPoPImporter = (function () {
 		return items && items.length ? items[0] : null;
 	}
 
+	function manualItemType(rec) {
+		if (Zotero.ItemTypes.getID(rec.itemType)) return rec.itemType;
+		return rec.engine === "pop" || rec.popOriginal ? "document" : "journalArticle";
+	}
+
 	async function createManually(rec, libraryID, collections) {
-		let itemType = Zotero.ItemTypes.getID(rec.itemType) ? rec.itemType : "journalArticle";
+		let itemType = manualItemType(rec);
 		let item = new Zotero.Item(itemType);
 		item.libraryID = libraryID;
 		let setIf = (field, value) => {
@@ -373,5 +378,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { importRecord, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
+	return { manualItemType, importRecord, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
 })();

@@ -1,0 +1,1192 @@
+{
+  "journals": 22594,
+  "withLevels": 22181,
+  "withoutLevels": 413,
+  "coveragePercent": 98.1721,
+  "levelsPerJournal": {
+    "0": 413,
+    "1": 31,
+    "2": 579,
+    "3": 1793,
+    "4": 19778
+  },
+  "uniqueLevelCounts": {
+    "domain": 4,
+    "field": 26,
+    "subfield": 245
+  },
+  "uniqueFullTriples": 251,
+  "domains": [
+    "Health Sciences",
+    "Life Sciences",
+    "Physical Sciences",
+    "Social Sciences"
+  ],
+  "fieldNames": [
+    "Agricultural and Biological Sciences",
+    "Arts and Humanities",
+    "Biochemistry, Genetics and Molecular Biology",
+    "Business, Management and Accounting",
+    "Chemical Engineering",
+    "Chemistry",
+    "Computer Science",
+    "Decision Sciences",
+    "Dentistry",
+    "Earth and Planetary Sciences",
+    "Economics, Econometrics and Finance",
+    "Energy",
+    "Engineering",
+    "Environmental Science",
+    "Health Professions",
+    "Immunology and Microbiology",
+    "Materials Science",
+    "Mathematics",
+    "Medicine",
+    "Neuroscience",
+    "Nursing",
+    "Pharmacology, Toxicology and Pharmaceutics",
+    "Physics and Astronomy",
+    "Psychology",
+    "Social Sciences",
+    "Veterinary"
+  ],
+  "multipleParentNames": {
+    "1": {},
+    "2": {
+      "Genetics": [
+        "Biochemistry, Genetics and Molecular Biology",
+        "Medicine"
+      ],
+      "Neurology": [
+        "Medicine",
+        "Neuroscience"
+      ],
+      "Pharmacology": [
+        "Medicine",
+        "Pharmacology, Toxicology and Pharmaceutics"
+      ],
+      "Physiology": [
+        "Biochemistry, Genetics and Molecular Biology",
+        "Medicine"
+      ],
+      "Biochemistry": [
+        "Biochemistry, Genetics and Molecular Biology",
+        "Medicine"
+      ],
+      "Archeology": [
+        "Arts and Humanities",
+        "Social Sciences"
+      ]
+    }
+  },
+  "rowsMatchingIntermediate": 22594,
+  "intermediateKeys": 22244,
+  "emptyIntermediateKeys": 63,
+  "registryRowKeys": [
+    "abbreviation",
+    "impactFactor",
+    "issns",
+    "levels",
+    "publisher",
+    "quartile",
+    "title",
+    "year"
+  ],
+  "jcrInputRowKeys": [
+    "aliases",
+    "authority",
+    "checkedAt",
+    "evidence",
+    "impactFactor",
+    "issns",
+    "sourceURL",
+    "title",
+    "year"
+  ],
+  "jcrInputRows": 22594,
+  "missingExamples": [
+    "Bmj-british Medical Journal",
+    "Escience",
+    "Green Energy and Intelligent Transportation",
+    "Journal of Bioresources and Bioproducts",
+    "Artificial Intelligence in Agriculture",
+    "Research",
+    "Circular Economy",
+    "Chinese Medical Journal Pulmonary and Critical Care Medicine",
+    "Mit Technology Review",
+    "New Carbon Materials",
+    "Gas Science and Engineering",
+    "Engineering Microbiology"
+  ],
+  "metricQuartiles": {
+    "1": 5279,
+    "2": 5138,
+    "3": 4894,
+    "None": 2257,
+    "4": 5026
+  },
+  "twoWorkspaceRegistriesEqual": true,
+  "installedMatchesWorkspaceSnapshot": {
+    "zotpop@sungjaeyoon.dev.xpi:content/journal-registry.json": true,
+    "style-custom@sungjaeyoon.dev.xpi:data/journal-registry.json": true,
+    "style-custom@sungjaeyoon.dev.xpi:src/journal-identity.js": true,
+    "style-custom@sungjaeyoon.dev.xpi:src/journal-metrics.js": true,
+    "style-custom@sungjaeyoon.dev.xpi:src/workbench.js": true,
+    "style-custom@sungjaeyoon.dev.xpi:src/strings.js": true
+  },
+  "productionRanks": {
+    "examples": [
+      {
+        "title": "Nature",
+        "levels": [
+          {
+            "domain": "Physical Sciences",
+            "field": "Physics and Astronomy",
+            "subfield": "Astronomy and Astrophysics"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Reproductive Medicine"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Engineering",
+            "subfield": "Aerospace Engineering"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Public Health, Environmental and Occupational Health"
+          }
+        ],
+        "ranks": [
+          {
+            "level": "subfield",
+            "name": "Astronomy and Astrophysics",
+            "rank": 2,
+            "of": 270,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Physics and Astronomy",
+            "rank": 2,
+            "of": 993,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Reproductive Medicine",
+            "rank": 3,
+            "of": 267,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Medicine",
+            "rank": 13,
+            "of": 6430,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Aerospace Engineering",
+            "rank": 3,
+            "of": 1405,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Engineering",
+            "rank": 5,
+            "of": 4979,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Public Health, Environmental and Occupational Health",
+            "rank": 3,
+            "of": 1312,
+            "percentile": 1,
+            "quartile": 1
+          }
+        ]
+      },
+      {
+        "title": "Science",
+        "levels": [
+          {
+            "domain": "Social Sciences",
+            "field": "Economics, Econometrics and Finance",
+            "subfield": "Economics and Econometrics"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Reproductive Medicine"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Engineering",
+            "subfield": "Aerospace Engineering"
+          },
+          {
+            "domain": "Social Sciences",
+            "field": "Arts and Humanities",
+            "subfield": "History and Philosophy of Science"
+          }
+        ],
+        "ranks": [
+          {
+            "level": "subfield",
+            "name": "Economics and Econometrics",
+            "rank": 7,
+            "of": 2903,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Economics, Econometrics and Finance",
+            "rank": 7,
+            "of": 3226,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Reproductive Medicine",
+            "rank": 5,
+            "of": 267,
+            "percentile": 2,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Medicine",
+            "rank": 19,
+            "of": 6430,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Aerospace Engineering",
+            "rank": 4,
+            "of": 1405,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Engineering",
+            "rank": 8,
+            "of": 4979,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "History and Philosophy of Science",
+            "rank": 1,
+            "of": 335,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Arts and Humanities",
+            "rank": 3,
+            "of": 3723,
+            "percentile": 1,
+            "quartile": 1
+          }
+        ]
+      },
+      {
+        "title": "Lancet",
+        "levels": [
+          {
+            "domain": "Social Sciences",
+            "field": "Economics, Econometrics and Finance",
+            "subfield": "Economics and Econometrics"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Engineering",
+            "subfield": "Aerospace Engineering"
+          },
+          {
+            "domain": "Social Sciences",
+            "field": "Social Sciences",
+            "subfield": "Transportation"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Health Professions",
+            "subfield": "General Health Professions"
+          }
+        ],
+        "ranks": [
+          {
+            "level": "subfield",
+            "name": "Economics and Econometrics",
+            "rank": 2,
+            "of": 2903,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Economics, Econometrics and Finance",
+            "rank": 2,
+            "of": 3226,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Aerospace Engineering",
+            "rank": 1,
+            "of": 1405,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Engineering",
+            "rank": 1,
+            "of": 4979,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Transportation",
+            "rank": 1,
+            "of": 532,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Social Sciences",
+            "rank": 1,
+            "of": 7782,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "General Health Professions",
+            "rank": 1,
+            "of": 1380,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Health Professions",
+            "rank": 1,
+            "of": 1975,
+            "percentile": 1,
+            "quartile": 1
+          }
+        ]
+      },
+      {
+        "title": "Chemical Reviews",
+        "levels": [
+          {
+            "domain": "Physical Sciences",
+            "field": "Chemistry",
+            "subfield": "Physical and Theoretical Chemistry"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Chemistry",
+            "subfield": "Organic Chemistry"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Environmental Science",
+            "subfield": "Environmental Chemistry"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Chemistry",
+            "subfield": "Electrochemistry"
+          }
+        ],
+        "ranks": [
+          {
+            "level": "subfield",
+            "name": "Physical and Theoretical Chemistry",
+            "rank": 1,
+            "of": 91,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Chemistry",
+            "rank": 1,
+            "of": 722,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Organic Chemistry",
+            "rank": 1,
+            "of": 358,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Environmental Chemistry",
+            "rank": 1,
+            "of": 167,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Environmental Science",
+            "rank": 4,
+            "of": 2620,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Electrochemistry",
+            "rank": 1,
+            "of": 67,
+            "percentile": 1,
+            "quartile": 1
+          }
+        ]
+      },
+      {
+        "title": "Annual Review of Biochemistry",
+        "levels": [
+          {
+            "domain": "Life Sciences",
+            "field": "Biochemistry, Genetics and Molecular Biology",
+            "subfield": "Cell Biology"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Public Health, Environmental and Occupational Health"
+          },
+          {
+            "domain": "Life Sciences",
+            "field": "Biochemistry, Genetics and Molecular Biology",
+            "subfield": "Molecular Biology"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Complementary and alternative medicine"
+          }
+        ],
+        "ranks": [
+          {
+            "level": "subfield",
+            "name": "Cell Biology",
+            "rank": 5,
+            "of": 278,
+            "percentile": 2,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Biochemistry, Genetics and Molecular Biology",
+            "rank": 47,
+            "of": 2996,
+            "percentile": 2,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Public Health, Environmental and Occupational Health",
+            "rank": 9,
+            "of": 1312,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "field",
+            "name": "Medicine",
+            "rank": 61,
+            "of": 6430,
+            "percentile": 1,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Molecular Biology",
+            "rank": 36,
+            "of": 1813,
+            "percentile": 2,
+            "quartile": 1
+          },
+          {
+            "level": "subfield",
+            "name": "Complementary and alternative medicine",
+            "rank": 1,
+            "of": 128,
+            "percentile": 1,
+            "quartile": 1
+          }
+        ]
+      }
+    ],
+    "filterExamples": [
+      {
+        "pick": {
+          "domain": "Life Sciences",
+          "field": "Biochemistry, Genetics and Molecular Biology",
+          "subfield": "Genetics"
+        },
+        "productionMatches": 952,
+        "fullTripleMatches": 907,
+        "crossBranchMatches": 45,
+        "examples": [
+          {
+            "title": "Blood Cancer Journal",
+            "levels": [
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Hematology"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Genetics"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Pathology and Forensic Medicine"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Molecular Biology"
+              }
+            ]
+          },
+          {
+            "title": "Neuro-oncology",
+            "levels": [
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Genetics"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Pulmonary and Respiratory Medicine"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Radiology, Nuclear Medicine and Imaging"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Cancer Research"
+              }
+            ]
+          },
+          {
+            "title": "Stem Cell Research & Therapy",
+            "levels": [
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Genetics"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Molecular Biology"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Surgery"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Oncology"
+              }
+            ]
+          },
+          {
+            "title": "Inflammation and Regeneration",
+            "levels": [
+              {
+                "domain": "Life Sciences",
+                "field": "Immunology and Microbiology",
+                "subfield": "Immunology"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Genetics"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Molecular Biology"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Surgery"
+              }
+            ]
+          },
+          {
+            "title": "Cell Proliferation",
+            "levels": [
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Oncology"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Genetics"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Cancer Research"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Molecular Biology"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "pick": {
+          "domain": "Health Sciences",
+          "field": "Biochemistry, Genetics and Molecular Biology",
+          "subfield": "Genetics"
+        },
+        "productionMatches": 531,
+        "fullTripleMatches": 0,
+        "crossBranchMatches": 531,
+        "examples": [
+          {
+            "title": "Ca-a Cancer Journal for Clinicians",
+            "levels": [
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Oncology"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Radiology, Nuclear Medicine and Imaging"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Genetics"
+              },
+              {
+                "domain": "Social Sciences",
+                "field": "Economics, Econometrics and Finance",
+                "subfield": "Economics and Econometrics"
+              }
+            ]
+          },
+          {
+            "title": "Nature Reviews Gastroenterology & Hepatology",
+            "levels": [
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Epidemiology"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Hepatology"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Molecular Biology"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Genetics"
+              }
+            ]
+          },
+          {
+            "title": "Lancet Gastroenterology & Hepatology",
+            "levels": [
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Epidemiology"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Hepatology"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Genetics"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Oncology"
+              }
+            ]
+          },
+          {
+            "title": "Nature Reviews Endocrinology",
+            "levels": [
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Physiology"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Endocrinology, Diabetes and Metabolism"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Surgery"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Genetics"
+              }
+            ]
+          },
+          {
+            "title": "Lancet Diabetes & Endocrinology",
+            "levels": [
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Endocrinology, Diabetes and Metabolism"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Surgery"
+              },
+              {
+                "domain": "Life Sciences",
+                "field": "Biochemistry, Genetics and Molecular Biology",
+                "subfield": "Genetics"
+              },
+              {
+                "domain": "Health Sciences",
+                "field": "Medicine",
+                "subfield": "Physiology"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "cacheExamples": [
+      {
+        "title": "Nature",
+        "profileAt": "2026-09-19T03:43:08.375Z",
+        "registryLevels": [
+          {
+            "domain": "Physical Sciences",
+            "field": "Physics and Astronomy",
+            "subfield": "Astronomy and Astrophysics"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Reproductive Medicine"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Engineering",
+            "subfield": "Aerospace Engineering"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Public Health, Environmental and Occupational Health"
+          }
+        ],
+        "displayedLevels": [
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Reproductive Medicine"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Physics and Astronomy",
+            "subfield": "Astronomy and Astrophysics"
+          }
+        ],
+        "detailFields": [
+          "Medicine",
+          "Physics and Astronomy",
+          "Engineering",
+          "Chemistry"
+        ],
+        "firstRank": {
+          "level": "subfield",
+          "name": "Astronomy and Astrophysics",
+          "rank": 2,
+          "of": 270,
+          "percentile": 1,
+          "quartile": 1
+        }
+      },
+      {
+        "title": "Science",
+        "profileAt": "2026-09-19T03:43:08.375Z",
+        "registryLevels": [
+          {
+            "domain": "Social Sciences",
+            "field": "Economics, Econometrics and Finance",
+            "subfield": "Economics and Econometrics"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Reproductive Medicine"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Engineering",
+            "subfield": "Aerospace Engineering"
+          },
+          {
+            "domain": "Social Sciences",
+            "field": "Arts and Humanities",
+            "subfield": "History and Philosophy of Science"
+          }
+        ],
+        "displayedLevels": [
+          {
+            "domain": "Social Sciences",
+            "field": "Economics, Econometrics and Finance",
+            "subfield": "Economics and Econometrics"
+          },
+          {
+            "domain": "Health Sciences",
+            "field": "Medicine",
+            "subfield": "Reproductive Medicine"
+          }
+        ],
+        "detailFields": [
+          "Economics, Econometrics and Finance",
+          "Medicine",
+          "Engineering",
+          "Arts and Humanities",
+          "Social Sciences",
+          "Decision Sciences"
+        ],
+        "firstRank": {
+          "level": "subfield",
+          "name": "Economics and Econometrics",
+          "rank": 7,
+          "of": 2903,
+          "percentile": 1,
+          "quartile": 1
+        }
+      },
+      {
+        "title": "Nature Methods",
+        "profileAt": "2026-09-19T03:43:08.375Z",
+        "registryLevels": [
+          {
+            "domain": "Life Sciences",
+            "field": "Biochemistry, Genetics and Molecular Biology",
+            "subfield": "Molecular Biology"
+          },
+          {
+            "domain": "Life Sciences",
+            "field": "Biochemistry, Genetics and Molecular Biology",
+            "subfield": "Biophysics"
+          },
+          {
+            "domain": "Physical Sciences",
+            "field": "Chemistry",
+            "subfield": "Spectroscopy"
+          },
+          {
+            "domain": "Life Sciences",
+            "field": "Biochemistry, Genetics and Molecular Biology",
+            "subfield": "Structural Biology"
+          }
+        ],
+        "displayedLevels": [
+          {
+            "domain": "Life Sciences",
+            "field": "Biochemistry, Genetics and Molecular Biology",
+            "subfield": "Biophysics"
+          },
+          {
+            "domain": "Life Sciences",
+            "field": "Biochemistry, Genetics and Molecular Biology",
+            "subfield": "Biophysics"
+          }
+        ],
+        "detailFields": [
+          "Biochemistry, Genetics and Molecular Biology"
+        ],
+        "firstRank": {
+          "level": "subfield",
+          "name": "Molecular Biology",
+          "rank": 27,
+          "of": 1813,
+          "percentile": 1,
+          "quartile": 1
+        }
+      }
+    ],
+    "groups": 271,
+    "equalValueAdjacentPairs": 119971,
+    "equalValueQuartileBoundaryPairs": 569,
+    "boundaryExamples": [
+      {
+        "a": {
+          "title": "Medical Oncology",
+          "impactFactor": 4.7,
+          "level": "subfield",
+          "name": "Oncology",
+          "rank": 178,
+          "of": 713,
+          "percentile": 25,
+          "quartile": 1
+        },
+        "b": {
+          "title": "Oncologist",
+          "impactFactor": 4.7,
+          "level": "subfield",
+          "name": "Oncology",
+          "rank": 179,
+          "of": 713,
+          "percentile": 25,
+          "quartile": 2
+        }
+      },
+      {
+        "a": {
+          "title": "Human Cell",
+          "impactFactor": 2.8,
+          "level": "subfield",
+          "name": "Oncology",
+          "rank": 356,
+          "of": 713,
+          "percentile": 50,
+          "quartile": 2
+        },
+        "b": {
+          "title": "Journal of Biological Inorganic Chemistry",
+          "impactFactor": 2.8,
+          "level": "subfield",
+          "name": "Oncology",
+          "rank": 357,
+          "of": 713,
+          "percentile": 50,
+          "quartile": 3
+        }
+      },
+      {
+        "a": {
+          "title": "Lymphatic Research and Biology",
+          "impactFactor": 1.7,
+          "level": "subfield",
+          "name": "Oncology",
+          "rank": 534,
+          "of": 713,
+          "percentile": 75,
+          "quartile": 3
+        },
+        "b": {
+          "title": "Oncology Nursing Forum",
+          "impactFactor": 1.7,
+          "level": "subfield",
+          "name": "Oncology",
+          "rank": 535,
+          "of": 713,
+          "percentile": 75,
+          "quartile": 4
+        }
+      },
+      {
+        "a": {
+          "title": "Cytokine",
+          "impactFactor": 3.6,
+          "level": "field",
+          "name": "Medicine",
+          "rank": 1607,
+          "of": 6430,
+          "percentile": 25,
+          "quartile": 1
+        },
+        "b": {
+          "title": "Dermatology",
+          "impactFactor": 3.6,
+          "level": "field",
+          "name": "Medicine",
+          "rank": 1608,
+          "of": 6430,
+          "percentile": 25,
+          "quartile": 2
+        }
+      },
+      {
+        "a": {
+          "title": "World Journal of Oncology",
+          "impactFactor": 2.3,
+          "level": "field",
+          "name": "Medicine",
+          "rank": 3215,
+          "of": 6430,
+          "percentile": 50,
+          "quartile": 2
+        },
+        "b": {
+          "title": "World Journal of Orthopedics",
+          "impactFactor": 2.3,
+          "level": "field",
+          "name": "Medicine",
+          "rank": 3216,
+          "of": 6430,
+          "percentile": 50,
+          "quartile": 3
+        }
+      },
+      {
+        "a": {
+          "title": "Indian Journal of Endocrinology and Metabolism",
+          "impactFactor": 1.2,
+          "level": "field",
+          "name": "Medicine",
+          "rank": 4822,
+          "of": 6430,
+          "percentile": 75,
+          "quartile": 3
+        },
+        "b": {
+          "title": "Indian Journal of Pharmacology",
+          "impactFactor": 1.2,
+          "level": "field",
+          "name": "Medicine",
+          "rank": 4823,
+          "of": 6430,
+          "percentile": 75,
+          "quartile": 4
+        }
+      }
+    ],
+    "tieControl": [
+      {
+        "level": "subfield",
+        "name": "Subfield",
+        "rank": 1,
+        "of": 8,
+        "percentile": 13,
+        "quartile": 1
+      },
+      {
+        "level": "subfield",
+        "name": "Subfield",
+        "rank": 2,
+        "of": 8,
+        "percentile": 25,
+        "quartile": 1
+      },
+      {
+        "level": "subfield",
+        "name": "Subfield",
+        "rank": 3,
+        "of": 8,
+        "percentile": 38,
+        "quartile": 2
+      },
+      {
+        "level": "subfield",
+        "name": "Subfield",
+        "rank": 4,
+        "of": 8,
+        "percentile": 50,
+        "quartile": 2
+      },
+      {
+        "level": "subfield",
+        "name": "Subfield",
+        "rank": 5,
+        "of": 8,
+        "percentile": 63,
+        "quartile": 3
+      },
+      {
+        "level": "subfield",
+        "name": "Subfield",
+        "rank": 6,
+        "of": 8,
+        "percentile": 75,
+        "quartile": 3
+      },
+      {
+        "level": "subfield",
+        "name": "Subfield",
+        "rank": 7,
+        "of": 8,
+        "percentile": 88,
+        "quartile": 4
+      },
+      {
+        "level": "subfield",
+        "name": "Subfield",
+        "rank": 8,
+        "of": 8,
+        "percentile": 100,
+        "quartile": 4
+      }
+    ]
+  }
+}

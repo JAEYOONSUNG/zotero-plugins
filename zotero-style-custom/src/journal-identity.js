@@ -429,7 +429,7 @@
        back without its quartile or abbreviation, so the list showed Q1 on
        Chemical Reviews and nothing on Nature. */
     if (found) {
-      const row = registryLookup(flat(name));
+      const row = registryLookup(name);
       if (row) {
         if (found.quartile == null) found.quartile = row.quartile ?? null;
         if (!found.abbreviation) found.abbreviation = row.abbreviation || '';
@@ -471,7 +471,7 @@
        who publishes it, and a journal nobody curated then gets the colour of
        the house that prints it -- which is the thing a reader recognises.
        Measured over every JCR journal, the rules alone reached 3%. */
-    const row = registryLookup(key);
+    const row = registryLookup(name);
     const family = row ? familyForPublisher(row.publisher) : null;
     const info = family ? familyInfo(family, row.publisher) : null;
     if (info) {
@@ -488,14 +488,22 @@
   /* The registry: one row per JCR journal, loaded once, looked up by the same
      flattened title the rules use and by ISSN. Absent under test or before the
      data file loads, every lookup simply misses and the old behaviour stands. */
-  let REGISTRY = null;
+  let REGISTRY = null, REGISTRY_REVISION = 0;
   function loadRegistry(payload) {
     const list = Array.isArray(payload) ? payload : (payload && payload.journals) || [];
     /* Each row's subjects are indexes into one table of names, because the
        same two hundred subject names repeat across 22,594 journals. They are
        unpacked here so nothing downstream has to know how they are stored. */
     const names = (payload && payload.subjects) || [];
-    REGISTRY = {byTitle: new Map(), byIssn: new Map(), size: list.length, subjects: names};
+    const registry = {byExactTitle: new Map(), byTitle: new Map(), byIssn: new Map(), rowKeys: new Map(),
+      rows: [...new Set(list)], size: list.length, subjects: names};
+    const titleCounts = new Map(), usedKeys = new Set();
+    for (const row of registry.rows) titleCounts.set(flat(row.title), (titleCounts.get(flat(row.title)) || 0) + 1);
+    const indexUnique = (map, key, row) => {
+      if (!key) return;
+      if (!map.has(key)) map.set(key, row);
+      else if (map.get(key) !== row) map.set(key, null);
+    };
     for (const row of list) {
       if (Array.isArray(row.levels) && row.levels.length && Array.isArray(row.levels[0])) {
         row.levels = row.levels
@@ -504,11 +512,18 @@
       }
       else if (!Array.isArray(row.levels)) row.levels = [];
       const key = flat(row.title);
-      if (key && !REGISTRY.byTitle.has(key)) REGISTRY.byTitle.set(key, row);
+      const codes = [...new Set((row.issns || []).map(code => String(code).toUpperCase().replace(/[-\s]/g, '')))].sort();
+      const rowKey = titleCounts.get(key) === 1 ? key : 'journal:' + JSON.stringify([exactRegistryTitle(row.title), codes]);
+      if (usedKeys.has(rowKey) && !registry.rowKeys.has(row)) throw new Error('Duplicate journal registry identity: ' + row.title);
+      usedKeys.add(rowKey); registry.rowKeys.set(row, rowKey);
+      indexUnique(registry.byExactTitle, exactRegistryTitle(row.title), row);
+      indexUnique(registry.byTitle, key, row);
       const abbr = flat(row.abbreviation);
-      if (abbr && !REGISTRY.byTitle.has(abbr)) REGISTRY.byTitle.set(abbr, row);
-      for (const issn of row.issns || []) if (issn) REGISTRY.byIssn.set(String(issn).toUpperCase(), row);
+      indexUnique(registry.byTitle, abbr, row);
+      for (const issn of row.issns || []) if (issn) indexUnique(registry.byIssn, String(issn).toUpperCase().replace(/[-\s]/g, ''), row);
     }
+    REGISTRY = registry;
+    REGISTRY_REVISION++;
     seen.clear();
     return REGISTRY.size;
   }
@@ -519,68 +534,99 @@
   function registryRanked() {
     if (!REGISTRY) return [];
     if (!REGISTRY.ranked) {
-      const rows = [...new Set(REGISTRY.byTitle.values())];
+      const rows = [...REGISTRY.rows];
       rows.sort((a, b) => (Number(b.impactFactor) || 0) - (Number(a.impactFactor) || 0) || String(a.title).localeCompare(String(b.title)));
-      REGISTRY.ranked = rows.map((row, index) => ({...row, rank: index + 1, key: flat(row.title)}));
+      REGISTRY.ranked = rows.map((row, index) => ({...row, rank: index + 1, key: REGISTRY.rowKeys.get(row)}));
       REGISTRY.rankByKey = new Map(REGISTRY.ranked.map(row => [row.key, row.rank]));
     }
     return REGISTRY.ranked;
   }
-  function registryRank(title) { registryRanked(); return REGISTRY && REGISTRY.rankByKey ? (REGISTRY.rankByKey.get(flat(title)) || null) : null; }
-  function registryLookup(flatTitle) { return REGISTRY ? (REGISTRY.byTitle.get(flatTitle) || null) : null; }
-  /* Where a journal stands inside its own subject, which is the figure JCR
-     prints and the one a reader actually uses: 12 of 312 in Molecular Biology
-     says more than 214th of 22,594. Built once off the ranked list, which is
-     already JIF-descending, so a group's order is its rank order. A journal
-     with no JIF cannot be placed among journals ordered by JIF, so it is left
-     out of the groups rather than dropped at the bottom of them. */
+  function registryRank(title) {
+    registryRanked(); const row = registryLookup(title);
+    return row && REGISTRY.rankByKey ? (REGISTRY.rankByKey.get(REGISTRY.rowKeys.get(row)) || null) : null;
+  }
+  function exactRegistryTitle(title) { return String(title || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase(); }
+  function registryLookup(title) {
+    if (!REGISTRY) return null;
+    const exact = exactRegistryTitle(title);
+    if (REGISTRY.byExactTitle.has(exact)) return REGISTRY.byExactTitle.get(exact);
+    return REGISTRY.byTitle.get(flat(title)) || null;
+  }
+  /* Local JIF comparisons inside the bundled OpenAlex subject paths. These
+     are not official JCR category ranks. Identical displayed JIFs receive a
+     shared competition rank; missing JIFs do not enter the comparison. */
   function fieldRanks() {
     if (REGISTRY && REGISTRY.fieldRanks) return REGISTRY.fieldRanks;
     const ranked = registryRanked();
     if (!REGISTRY) return new Map();
     const groups = new Map(), order = new Map();
     for (const row of ranked) {
-      if (row.impactFactor == null || !Number.isFinite(Number(row.impactFactor))) continue;
+      if (row.impactFactor == null || row.impactFactor === '' || typeof row.impactFactor === 'boolean'
+        || !Number.isFinite(Number(row.impactFactor)) || Number(row.impactFactor) < 0) continue;
+      const displayedJIF = Number(row.impactFactor).toFixed(1);
       /* The journal's own subjects in its own order -- the sweep wrote them
          largest topic first -- and the narrower name before the broader one.
          Sorting instead by how high it stands puts Science under Arts and
          Humanities, where it is third of 3,723 and nobody looks for it. */
       const mine = new Map();
-      for (const level of (row.levels || [])) {
-        for (const [name, value] of [['subfield', level.subfield], ['field', level.field]]) {
-          if (!value) continue;
-          const key = name + '\u0000' + value;
+      for (const path of completeLevels(row.levels)) {
+        for (const level of ['subfield', 'field']) {
+          const domain = path.domain, field = path.field, subfield = level === 'subfield' ? path.subfield : '';
+          const key = JSON.stringify(level === 'subfield' ? [level, domain, field, subfield] : [level, domain, field]);
           if (mine.has(key)) continue;
           mine.set(key, mine.size);
-          const list = groups.get(key) || [];
-          list.push(row.key); groups.set(key, list);
+          let group = groups.get(key);
+          if (!group) groups.set(key, group = {level, name: level === 'subfield' ? subfield : field,
+            domain, field, subfield, pathKey: key, journals: []});
+          group.journals.push({key: row.key, displayedJIF});
         }
       }
       if (mine.size) order.set(row.key, mine);
     }
     const byJournal = new Map();
-    for (const [key, list] of groups) {
-      const cut = key.indexOf('\u0000'), level = key.slice(0, cut), name = key.slice(cut + 1), of = list.length;
-      list.forEach((journalKey, index) => {
-        const rank = index + 1, mine = byJournal.get(journalKey) || [];
-        mine.push({level, name, rank, of, percentile: Math.max(1, Math.round(rank / of * 100)), quartile: Math.min(4, Math.max(1, Math.ceil(rank / of * 4)))});
+    for (const group of groups.values()) {
+      const {journals, ...path} = group, of = journals.length;
+      let previousJIF = null, rank = 0;
+      journals.forEach(({key: journalKey, displayedJIF}, index) => {
+        if (displayedJIF !== previousJIF) rank = index + 1;
+        previousJIF = displayedJIF;
+        const mine = byJournal.get(journalKey) || [];
+        mine.push({...path, rank, of, percentile: Math.max(1, Math.round(rank * 100 / of)),
+          quartile: Math.min(4, Math.max(1, Math.ceil(rank / of * 4))), source: 'openalex', method: 'local-jif', isOfficial: false});
         byJournal.set(journalKey, mine);
       });
     }
     for (const [journalKey, list] of byJournal) {
       const ord = order.get(journalKey);
-      list.sort((a, b) => (ord.get(a.level + '\u0000' + a.name) ?? 99) - (ord.get(b.level + '\u0000' + b.name) ?? 99));
+      list.sort((a, b) => (ord.get(a.pathKey) ?? 99) - (ord.get(b.pathKey) ?? 99));
     }
     REGISTRY.fieldRanks = byJournal;
     return byJournal;
   }
-  function registryFieldRanks(title) { const all = fieldRanks(); return all.get(flat(title)) || []; }
+  function registryFieldRanks(title) { const all = fieldRanks(), row = registryLookup(title); return row ? all.get(REGISTRY.rowKeys.get(row)) || [] : []; }
   // The subjects the registry knows for a journal, by its printed name.
   function registryLevels(title) {
-    const row = REGISTRY ? REGISTRY.byTitle.get(flat(title)) : null;
+    const row = registryLookup(title);
     return row && Array.isArray(row.levels) ? row.levels : [];
   }
-  function registryByIssn(issn) { return REGISTRY ? (REGISTRY.byIssn.get(String(issn || '').toUpperCase()) || null) : null; }
+  function completeLevels(levels) {
+    const unique = new Map();
+    for (const level of Array.isArray(levels) ? levels : []) {
+      const path = ['domain', 'field', 'subfield'].map(key => typeof level?.[key] === 'string' ? level[key].trim() : '');
+      if (!path.every(Boolean)) continue;
+      const key = JSON.stringify(path);
+      if (!unique.has(key)) unique.set(key, {domain: path[0], field: path[1], subfield: path[2]});
+    }
+    return [...unique.values()];
+  }
+  // Display and local ranks share the same bundled classification whenever
+  // one is known. A cached profile only supplies missing journal subjects.
+  function resolveLevels(title, profile) {
+    const known = completeLevels(registryLevels(title));
+    return known.length ? known : completeLevels(profile?.topics);
+  }
+  function registryRevision() { return REGISTRY_REVISION; }
+  function registryByIssn(issn) { return REGISTRY ? (REGISTRY.byIssn.get(String(issn || '').toUpperCase().replace(/[-\s]/g, '')) || null) : null; }
 
   // The mark's ink and its fill, derived from one hue so every tile in the
   // column is built the same way. A curated family sits a little stronger than
@@ -671,7 +717,7 @@
       : {...badge, ink, fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84)};
   }
 
-  const api = {registryFieldRanks, registryLevels, identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, registryRanked, registryRank, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
+  const api = {registryFieldRanks, registryLevels, resolveLevels, registryRevision, identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, registryRanked, registryRank, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

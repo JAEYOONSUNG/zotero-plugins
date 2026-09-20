@@ -97,7 +97,7 @@ test("unit helpers", () => {
 	assert.equal(S.normalizeDOI("garbage"), null);
 	assert.deepEqual(S.parseName("Jae Yoon Sung"), { firstName: "Jae Yoon", lastName: "Sung", name: "Jae Yoon Sung" });
 	assert.deepEqual(S.parseName("Sung, Jae Yoon").lastName, "Sung");
-	assert.equal(S.pubmedTerm({ keywords: "crispr", authors: "Sung JY", yearFrom: 2020 }), "crispr[Text Word] AND Sung JY[au] AND 2020:3000[dp]");
+	assert.equal(S.pubmedTerm({ keywords: "crispr", authors: "Sung JY", yearFrom: 2020 }), "(crispr[Text Word]) AND (Sung JY[au]) AND (2020:3000[dp])");
 	assert.ok(S.titleSimilarity("Base editing of the human genome", "Base editing of the human genome.") > 0.9);
 });
 
@@ -286,7 +286,7 @@ test("a preprint and the article it became are kept apart but told about each ot
      in the case of one letter, with nothing to say they were the same work. */
   const rows = [
     {title: "Hi-TARGET: A fast tool for a thermophilic acetogen", doi: "10.21203/rs.3.rs-5676099/v1",
-     itemType: "preprint", venue: "Research Square", year: 2025},
+     itemType: "preprint", venue: "Research Square", year: 2025, publishedDoi: "10.1186/s13068-025-02647-0"},
     {title: "Hi-TARGET: a fast tool for a thermophilic acetogen", doi: "10.1186/s13068-025-02647-0",
      itemType: "journalArticle", venue: "Biotechnology for Biofuels", year: 2025},
     {title: "Something else entirely", doi: "10.1038/s41586-000-00000-0", itemType: "journalArticle", venue: "Nature"}
@@ -329,13 +329,21 @@ test("a combined search asks each source for more than it will show", () => {
   /* Asking each for exactly the number to be shown made the combined search no
      better than three lists stapled together: measured on a real query,
      OpenAlex, Crossref and Europe PMC returned twenty each and sixty distinct
-     DOIs -- not one paper in common, so rank fusion had nothing to fuse. */
+     DOIs -- not one paper in common, so rank fusion had nothing to fuse.
+     Small searches overfetch threefold; a large one adds at most 200 candidates
+     per provider rather than being cut to 200 rows, and Google Scholar, which
+     is scraped, is capped on its own. */
   const source = readFileSync(new URL("../content/sources.js", import.meta.url), "utf8");
   assert.match(source, /const poolFor = max =>/);
-  assert.match(source, /source\.search\(subQuery, http, sub\)/,
-    "each source is asked with the widened query, not the caller's");
-  const poolFor = new Function("return " + /const poolFor = (max => [^;]+);/.exec(source)[1])();
+  assert.match(source, /let providerQuery = source\.key === "scholar" \? Object\.assign\(\{\}, subQuery, \{ maxResults: Math\.min\(2000, subQuery\.maxResults\) \}\) : subQuery;/,
+    "each source is asked with the widened query, Scholar with a cap of its own");
+  assert.match(source, /source\.search\(providerQuery, http, sub\)/,
+    "and that widened query is what actually goes out");
+  const limit = Number(/const PAGE_WALK_LIMIT = (\d+);/.exec(source)[1]);
+  const poolFor = new Function("PAGE_WALK_LIMIT", "return " + /const poolFor = (max => [^;]+);/.exec(source)[1])(limit);
   assert.equal(poolFor(20), 60);
   assert.equal(poolFor(5), 30, "a small request still gets a pool worth fusing");
-  assert.equal(poolFor(100), 200, "and it is capped, because this is bandwidth");
+  assert.equal(poolFor(100), 300, "threefold while that is the smaller widening");
+  assert.equal(poolFor(1000), 1200, "a large request adds 200 per provider, it is not cut to 200");
+  assert.equal(poolFor(20000), limit, "and never past what a page walk is allowed to fetch");
 });

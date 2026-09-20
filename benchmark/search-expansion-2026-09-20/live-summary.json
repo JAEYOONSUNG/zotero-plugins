@@ -1,0 +1,544 @@
+{
+  "capturedAt": "2026-09-19T22:01:09.770Z",
+  "version": "0.37.0",
+  "context": "No API keys; citation/journal/institution enrichment disabled. Smoke/known-target/deep-retrieval evidence, not independent semantic relevance judgments.",
+  "revision": "3df94842b00d63be86cca1f0cd3a64157fa22959",
+  "files": {
+    "content/sources.js": "9f2b05218b11ea5d914351f5a693dcf0e227417821c9c78455868b64f7cb5a39",
+    "content/query.js": "a20640c2bb75b2fcb1e212eb1ba5ca64a1573565bd38a07cbb88b75fce4e0d19"
+  },
+  "cases": [
+    {
+      "id": "pasted-title-pubmed",
+      "source": "pubmed",
+      "query": {
+        "title": "CRISPR Cas9 assisted recombineering in Lactobacillus reuteri",
+        "maxResults": 10
+      },
+      "expectedDoi": "10.1093/nar/gku623",
+      "capturedAt": "2026-09-19T22:01:11.622Z",
+      "status": "pass",
+      "count": 1,
+      "partialCount": 1,
+      "firstResultMs": 1832,
+      "elapsedMs": 1832,
+      "expectedFound": true,
+      "error": null,
+      "warnings": [],
+      "sourceStatus": {
+        "pubmed": {
+          "retrieved": 1,
+          "scanned": 1,
+          "total": 1,
+          "limit": 10,
+          "exhausted": true,
+          "truncated": false,
+          "reason": null
+        }
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax=200&retstart=0&term=(((((CRISPR%5Bti%5D%20AND%20Cas9%5Bti%5D)%20AND%20assisted%5Bti%5D)%20AND%20recombineering%5Bti%5D)%20AND%20Lactobacillus%5Bti%5D)%20AND%20reuteri%5Bti%5D)&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:09.792Z",
+          "status": 200,
+          "bytes": 311,
+          "latencyMs": 766.26
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=25074379&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:10.910Z",
+          "status": 200,
+          "bytes": 1707,
+          "latencyMs": 705.5
+        }
+      ]
+    },
+    {
+      "id": "title-or-europepmc",
+      "source": "europepmc",
+      "query": {
+        "title": "recombineering OR \"genome editing\"",
+        "maxResults": 20
+      },
+      "capturedAt": "2026-09-19T22:01:15.751Z",
+      "status": "pass",
+      "count": 20,
+      "partialCount": 20,
+      "firstResultMs": 4126,
+      "elapsedMs": 4127,
+      "expectedFound": null,
+      "error": null,
+      "warnings": [],
+      "sourceStatus": {
+        "europepmc": {
+          "retrieved": 20,
+          "scanned": 20,
+          "total": 6451,
+          "limit": 20,
+          "exhausted": false,
+          "truncated": false,
+          "reason": "result-limit"
+        }
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=20&cursorMark=*&query=(TITLE%3Arecombineering%20OR%20TITLE%3A%22genome%20editing%22)",
+          "startedAt": "2026-09-19T22:01:11.624Z",
+          "status": 200,
+          "bytes": 103009,
+          "latencyMs": 4123.05
+        }
+      ]
+    },
+    {
+      "id": "title-not-pubmed",
+      "source": "pubmed",
+      "query": {
+        "title": "recombineering NOT yeast",
+        "maxResults": 20
+      },
+      "capturedAt": "2026-09-19T22:01:18.631Z",
+      "status": "pass",
+      "count": 20,
+      "partialCount": 20,
+      "firstResultMs": 2877,
+      "elapsedMs": 2878,
+      "expectedFound": null,
+      "error": null,
+      "warnings": [],
+      "sourceStatus": {
+        "pubmed": {
+          "retrieved": 200,
+          "scanned": 200,
+          "total": 305,
+          "limit": 20,
+          "exhausted": false,
+          "truncated": false,
+          "reason": "result-limit"
+        }
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax=200&retstart=0&term=(recombineering%5Bti%5D%20AND%20(all%5Bsb%5D%20NOT%20yeast%5Bti%5D))&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:15.753Z",
+          "status": 200,
+          "bytes": 2429,
+          "latencyMs": 465.64
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=35540496,25779316,19180090,36813481,18370078,36813479,35583737,36546891,30798549,29058367,28646112,18923412,27223821,37657890,33650120,40667245,35759188,39628926,33013782,34532515,36779782,31973879,35673614,42026131,35583733,31483098,35583730,21080281,36326838,36650293,17179933,28243260,33950388,35234968,32467157,24733238,38480006,34191386,36144292,14669518,30353507,25239740,31666295,36813480,28154939,28649005,33202746,36495358,26797514,31617176,39628932,37798358,39628785,28352570,26843851,35583728,20868752,35411846,18265390,20543050,25856528,36930400,39628930,25074379,17352923,36266336,31237429,22328729,33723601,41749095,38951330,42170672,39628787,35583729,32298586,32175691,33484238,35044833,28801604,28707884,34235660,34792175,35147944,16872384,40471122,36475474,30454659,40638043,21197472,35471009,19888330,19266337,22666652,41082444,25539914,21294796,31277550,12771385,27765807,19066825,35123478,27687863,30768999,25609697,30570724,34914058,28060411,40757815,21235649,30772453,27216209,32312593,16750601,30879090,34430726,31404315,34621006,38615317,29299733,36813486,36757632,26750263,33942460,42139565,40619069,33572733,27899661,29463653,32179472,25151158,30631105,39540709,31276249,42699337,19412171,30762073,38587185,28589101,31584177,35920321,24557893,31762229,21738123,31599106,28842871,21195765,22688760,16382181,23003673,40709654,15731329,25253248,29101371,23436787,22003432,17988739,23760953,19160076,37117031,17434584,20076795,25954970,28544213,20699140,15837432,18676454,24182919,21857163,35583732,11584293,26851519,39363081,37941137,19014699,16488403,29433512,29065183,32502342,23417807,12618378,27254463,23996444,40503884,34547891,27157860,24865558,24182922,22808327,18230724,25239749,19389224,20335359,19151186,21910851,25239742,31000602,26089387,31880899,16990816,25467441&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:16.569Z",
+          "status": 200,
+          "bytes": 370379,
+          "latencyMs": 2048.29
+        }
+      ]
+    },
+    {
+      "id": "combined-selected-1000",
+      "source": "multi",
+      "query": {
+        "keywords": "geobacillus",
+        "sources": [
+          "crossref",
+          "europepmc",
+          "pubmed"
+        ],
+        "maxResults": 1000
+      },
+      "expectedCount": 1000,
+      "capturedAt": "2026-09-19T22:01:43.525Z",
+      "status": "pass",
+      "count": 1000,
+      "partialCount": 1000,
+      "firstResultMs": 1192,
+      "elapsedMs": 24893,
+      "expectedFound": null,
+      "error": null,
+      "warnings": [],
+      "sourceStatus": {
+        "europepmc": {
+          "retrieved": 1200,
+          "scanned": 1220,
+          "total": 10782,
+          "limit": 1200,
+          "exhausted": false,
+          "truncated": false,
+          "reason": "result-limit"
+        },
+        "crossref": {
+          "retrieved": 1200,
+          "scanned": 1214,
+          "total": 1900,
+          "limit": 1200,
+          "exhausted": false,
+          "truncated": false,
+          "reason": "result-limit"
+        },
+        "pubmed": {
+          "retrieved": 1200,
+          "scanned": 2000,
+          "total": 4500,
+          "limit": 1200,
+          "exhausted": false,
+          "truncated": false,
+          "reason": "result-limit"
+        }
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=0",
+          "startedAt": "2026-09-19T22:01:18.634Z",
+          "status": 200,
+          "bytes": 127737,
+          "latencyMs": 2079.76
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=*&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:18.635Z",
+          "status": 200,
+          "bytes": 632042,
+          "latencyMs": 1173.43
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax=1000&retstart=0&term=geobacillus%5BText%20Word%5D&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:18.635Z",
+          "status": 200,
+          "bytes": 11054,
+          "latencyMs": 505.14
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=28608223,41167847,28265723,26003932,41298979,34361957,15545423,25659824,30310966,32744496,41304141,38542099,31501940,37134217,35229277,27871383,24085838,38906114,35203843,37632033,36833392,37704517,36439810,40870688,15046574,36308930,36839070,38408579,38013084,32320671,34669438,26536875,37487384,32403359,20817844,25481066,39162442,35670947,39427974,28608222,29162801,37884253,27726901,38408391,37908087,28651524,35863721,36918121,38882640,39530751,31740854,35811183,38063432,27888139,30119674,39596128,37428843,33046790,38255796,38975762,42714670,38986972,33164725,26123922,24177015,41028112,36213108,30285747,39570185,41183400,36557626,32635563,35982264,38036917,29925861,25625783,35644798,25994257,31843618,21856988,39337646,32041886,36110304,30471860,27002479,29574119,40319613,39282208,25573749,2314287,40355059,40742325,33940039,38212247,34850194,24721011,31701242,36806411,38523202,38951392,27332993,35587782,36442227,39688416,40398777,36862208,28934494,31242391,26339949,28465208,18031336,33987549,31499103,27126025,38353731,26333661,26346610,35260160,29945583,40880009,28381218,7154941,31212108,33856621,29758429,31273998,26875494,35007737,38832778,17692114,29305694,27570317,33188978,40683498,26515187,36069579,26073094,25195706,30733471,37713064,37428266,25415647,31956956,40715536,27924363,31743700,28593333,27252683,39732240,19703579,36626777,32347477,32738436,26986867,39168328,28900693,32295125,19700455,33507494,26391740,25273399,36499542,21764302,24419630,31719233,32044699,27688322,33320079,35001212,28557456,39075266,39063171,30222099,40868974,22814504,41395960,40802916,40138140,23385764,27599858,40982022,33622993,42148657,22784959,28105534,40038589,21487698,28378223,24440558,26679049,27502176,31652673,35601142,24375415,25514918,20091406,26332992,28521816,25119547,29074660&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:19.490Z",
+          "status": 200,
+          "bytes": 387727,
+          "latencyMs": 1896.37
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIQBHaCig1Mjk1MTMyNg%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:19.824Z",
+          "status": 200,
+          "bytes": 678191,
+          "latencyMs": 656.94
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP%2BuCCig1MjMyNjMyOQ%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:20.505Z",
+          "status": 200,
+          "bytes": 616320,
+          "latencyMs": 443.83
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=100",
+          "startedAt": "2026-09-19T22:01:20.743Z",
+          "status": 200,
+          "bytes": 115794,
+          "latencyMs": 1541.2
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP8qIVSg0OTQyOTY0OA%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:20.999Z",
+          "status": 200,
+          "bytes": 643235,
+          "latencyMs": 460.26
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP7DtySg0ODU5Nzk5NA%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:21.551Z",
+          "status": 200,
+          "bytes": 655716,
+          "latencyMs": 830.34
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=36455188,33574869,24276622,32526936,40261819,24336381,24769758,24242973,25532585,42286072,26412704,42069828,34427087,34191121,32107645,32527772,41461318,33706728,16461714,25783628,28070486,28314922,26577674,32315700,24613478,26467717,24100328,34620903,20015994,32600313,41130477,42048241,28351672,22806791,32693140,24788326,32409542,40403796,25908562,24903880,24650662,26205859,33770705,27444327,25881956,23704786,24200788,30759774,27842516,25673656,24796554,39725103,28152017,25425150,41612718,24415499,41775963,28406925,23455343,21221750,34105678,22544739,26100076,30059740,19205799,28132786,28385593,16927263,29619505,41850450,22694860,23608501,21606609,25687227,31392485,40572262,22927012,40955370,27579320,23504327,24880627,26472822,28583821,29483968,26029180,29421035,28672882,28616644,34946651,23696451,26500717,25724946,25573470,30222339,31428805,21838799,31145676,26932270,25326311,20094713,23479291,24903881,41733735,25404211,25285488,30974879,24119100,26002898,34299026,25388475,27878994,26603441,23010750,27123157,31188885,30334285,15545458,22343351,25164338,29981826,27382647,26175347,24929881,31053933,34061877,21837419,15545427,31201678,29153522,23708550,21870126,28422446,23683704,15046573,28842992,21315980,26289299,22644528,11760948,27695995,21645983,26790418,31051369,31771094,33301847,19966479,22328744,23561120,30322767,23782802,27818089,27548162,26762530,21656800,25496258,23797510,23461519,18266638,24233591,20587647,22526792,19426278,23436021,25798654,29779131,20599378,27184431,22372433,30682639,1141075,22639115,23545635,26679578,30082512,19436124,22652043,21633969,23919572,25481059,19733653,23856587,26638533,33085568,23337579,33766593,27702478,23075790,31624166,1141860,29976611,22985850,24927695,20049517,22750857,19787414,27450069,22865061,27905820,21790618,20522147&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:21.803Z",
+          "status": 200,
+          "bytes": 381382,
+          "latencyMs": 2583.14
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=200",
+          "startedAt": "2026-09-19T22:01:22.377Z",
+          "status": 200,
+          "bytes": 131612,
+          "latencyMs": 1691.32
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP52bfCg1MjQ4OTg5OA%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:22.493Z",
+          "status": 200,
+          "bytes": 631244,
+          "latencyMs": 469.89
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP5BLnCg0OTE2MTY4MA%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:23.214Z",
+          "status": 200,
+          "bytes": 677809,
+          "latencyMs": 650.13
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP4Wcoyg0MzkzMDQ3MQ%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:24.005Z",
+          "status": 200,
+          "bytes": 659070,
+          "latencyMs": 547.1
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=300",
+          "startedAt": "2026-09-19T22:01:24.196Z",
+          "status": 200,
+          "bytes": 125194,
+          "latencyMs": 966.25
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP3v9Syg1NDU0ODUyMw%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:24.741Z",
+          "status": 200,
+          "bytes": 676483,
+          "latencyMs": 596.61
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=28955760,23618712,15574910,24682607,2532320,23639697,23096998,24466741,3488008,23143325,24078190,22685159,31491671,26184933,19770007,30223522,20869219,24287927,22122512,32731607,6584074,12421083,29130183,21185780,22609753,26665604,23195552,14558699,31137725,29741344,19703722,19874846,22806019,29805114,22297170,25874413,30143196,23975281,21531550,23109876,21126260,20718292,23132347,26653153,21897031,30620883,20675491,31669755,27734668,27151781,24350443,25272749,23461395,24102221,25051465,22876885,19280125,20878539,28695490,21511766,24812215,26913091,24549802,1426551,23545637,22815439,21315194,25459862,21377821,29509385,2499254,22287005,20647685,23645192,28495764,26484058,22168011,26681166,22447612,23156689,19961354,21461912,24374431,27795271,21126910,27491973,23385759,21435685,1261679,23950135,2719481,23001947,9928110,467654,7763782,20851984,541306,819761,7219220,6611869,8900273,38861190,36208218,32096925,30508773,27538778,24752997,23926090,19749063,26492993,40878811,25280889,23448995,30200662,26812575,36995480,30679060,38688408,35602031,33610046,24157442,23775834,17116971,25342695,30995831,24816105,27491977,25414504,24459274,17708059,25791847,30968162,28648296,22837142,22084599,11097939,240496,697829,11330694,6200195,33841375,28875485,25267353,23036908,21636914,16751511,30701238,27789644,27516503,28193326,38921516,35122547,33166453,25937690,20412872,36519741,36458621,29698436,28946656,26068743,23832206,20001926,19763406,42250302,30189618,27069928,26026940,40782217,40683716,33788288,32940138,29247671,25875730,24974280,22431611,21365227,16107756,31677806,27571338,21487936,20036532,19997911,19958281,23950119,1132564,17009295,23766086,479837,740873,22959520,20889772,6575236,26103452,22806730,32977443,27957389,27928680,25706379,24725385,19052368&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:24.898Z",
+          "status": 200,
+          "bytes": 371528,
+          "latencyMs": 2067.63
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=400",
+          "startedAt": "2026-09-19T22:01:25.332Z",
+          "status": 200,
+          "bytes": 132952,
+          "latencyMs": 1867.58
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP2115ig0OTkzODMwOA%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:25.552Z",
+          "status": 200,
+          "bytes": 715059,
+          "latencyMs": 452.41
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP2E%2BDyg0NTgwMjQyMA%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:26.234Z",
+          "status": 200,
+          "bytes": 706285,
+          "latencyMs": 448.04
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIP1XBISg0MDA1NTEzMw%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:26.962Z",
+          "status": 200,
+          "bytes": 691545,
+          "latencyMs": 583.29
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=500",
+          "startedAt": "2026-09-19T22:01:27.451Z",
+          "status": 200,
+          "bytes": 146929,
+          "latencyMs": 1852.78
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=20&cursorMark=AoIIP0vf6yg0ODQyNzcxNQ%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T22:01:27.833Z",
+          "status": 200,
+          "bytes": 138460,
+          "latencyMs": 351.86
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=25372689,32802214,27416069,11321089,40565670,38426217,37241716,29942709,27909733,27052699,24993356,20817732,32486647,28239057,26946941,25889504,25682138,21795796,19269571,40844421,27896600,25069018,15239708,42031755,25748845,24516857,1369099,1368751,41857013,36425956,30298056,24225375,6473706,6228951,1262307,40877025,34105957,23851093,20980257,19304850,21084281,8411181,30894163,29348523,28393686,26852025,26319877,25615972,23442450,22100410,6628691,34350088,27989764,23434707,20443585,23976816,22858661,40572313,34131011,30097767,25153930,21153892,20691586,18675944,12777810,15709364,35350642,35031320,28213016,25791003,24750808,22904279,34642121,26919821,19864059,27551070,31457020,31388592,30738758,28567628,24100563,6389462,34357813,24015831,22692819,19007464,11876365,27020647,23831195,9210587,232960,181264,39393336,36458220,30800590,26442136,24730604,24108189,17277450,19502747,8129884,40258537,20850858,20138205,37360472,31878343,24290827,12832785,12768202,6645995,39805613,35694290,20208582,2252599,20047,27981047,23138858,22864246,21598124,20607233,19081062,18420185,18305896,22350313,28580528,14418125,13489542,34588455,33676984,33013795,32858380,25755080,24398554,23273190,13129955,33690764,33493559,32271820,31437264,23793634,23608509,22885745,21181486,13651989,4086408,1182284,13271319,3937893,37860988,29193524,25484225,22447772,21561685,19615330,19101565,9045827,26185804,8244026,6745426,7319400,1131456,11916738,6400480,214029,1137594,39835746,28777085,22629141,1661014,9526646,7765116,2699393,30006234,41990964,33547059,30407509,22322192,41862763,41647422,24915075,23408395,22347595,10079532,13489550,42442099,41986363,37622376,36463594,35688203,31388213,28068317,28330136,23431811,23198138,19052376,1206375,23332162,35438518,23545652,38053503&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:27.834Z",
+          "status": 200,
+          "bytes": 378795,
+          "latencyMs": 2349.17
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=600",
+          "startedAt": "2026-09-19T22:01:29.579Z",
+          "status": 200,
+          "bytes": 165524,
+          "latencyMs": 1111.76
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=700",
+          "startedAt": "2026-09-19T22:01:31.003Z",
+          "status": 200,
+          "bytes": 200673,
+          "latencyMs": 1278.48
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=34032106,31183251,29283459,25329331,23499020,20716513,19154787,17657347,9471966,31617574,26090417,24334097,22212694,20171064,19460092,30217852,12508894,143385,2575633,604365,24531461,27364543,21278265,25285338,34809461,24530795,18051594,3770480,599891,41548701,40589235,34112410,34073952,22538294,20730754,19836402,1268431,1278439,1170598,13459399,14469377,41192845,31476599,25967379,20630200,20469643,20347362,18989616,16260058,1696223,14350609,41161424,40523727,32966073,31654380,27005821,26949085,24637762,24413972,24362426,24100561,22167181,19407374,17897215,41416715,41203353,32681957,32493770,31452680,28082221,26329849,25798692,22795797,22608740,18610833,17805928,16289446,33850195,33723609,29555006,26391327,26137456,25049754,22266822,22148180,20394349,17644609,14599454,1554691,10095066,2026247,4086410,29581409,1368146,33207817,28323400,21338783,18028361,16861800,11566553,7592136,3389970,37755510,33050217,29037779,28066509,24547697,23819436,23722857,22728754,22312296,19942660,658447,4446694,7757456,6986603,124903,38234990,37275144,30915054,27126043,26481231,22872104,21358045,20226162,17126283,7229838,3134633,38146144,3225473,8586401,7764020,1160654,25224381,1248633,14241139,40640824,42555409,650036,875027,14469376,38040658,11158143,8635739,10822980,598504,967909,42196245,40286958,34246014,33467076,27752284,25260350,18388467,17933208,2455474,2442137,1100388,39281289,18368298,1856181,1903751,3147289,14350608,6726544,405247,613911,42575356,39100300,37452678,35792906,31611021,31173979,29488375,28122205,23449317,11878563,10803955,174549,42307032,29698417,26204408,25852134,21544610,18467863,18023020,16081242,6590983,575596,58588,32550107,23519421,23228940,11008708,10737207,9349714,3065618,7442567,6124601,7448234&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:31.003Z",
+          "status": 200,
+          "bytes": 362756,
+          "latencyMs": 1853.4
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=800",
+          "startedAt": "2026-09-19T22:01:32.592Z",
+          "status": 200,
+          "bytes": 172915,
+          "latencyMs": 883.9
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax=1000&retstart=1000&term=geobacillus%5BText%20Word%5D&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:33.216Z",
+          "status": 200,
+          "bytes": 10681,
+          "latencyMs": 727.94
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=900",
+          "startedAt": "2026-09-19T22:01:33.803Z",
+          "status": 200,
+          "bytes": 208355,
+          "latencyMs": 3370.16
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=4462138,38697441,22174946,17942139,1339360,42665198,42653343,25070894,20226371,2129135,1003466,260940,60956,4619938,40563163,31591267,14766574,479057,977788,2695,28968534,25084377,24101498,24069213,24058645,21460081,20667132,12762014,9863206,7764340,1828151,6749496,6160812,2960900,32545874,30146287,30007665,23836642,16086256,3275315,1793578,437299,1227967,4619940,13876047,3741644,6101557,923975,966282,4460007,24909380,8049268,12863,238960,39629160,38072346,26699857,25999315,25433551,21047695,18437997,12138763,13092844,1784818,3429356,26819654,3029705,38916249,35677969,31979156,26150372,24122394,21413783,19415803,19070660,19025872,18648921,8081498,6832362,347090,4078118,41610770,37471462,30953720,28502852,22307053,21924512,16845565,34197821,33418927,25445927,25396728,22112565,18026230,11034279,9528675,347503,939276,29982043,27026935,7311574,7459030,11507798,2075976,6351726,808733,15749314,10095067,9614713,6359242,416557,34683383,17277461,1742345,2176451,3269389,8085800,6404851,389163,700159,13876048,34071687,29748477,18512021,1260540,891985,1104459,23863045,11797047,29698531,22314074,3691954,6174581,1175777,39849684,37495598,25603143,24082400,23876545,16511233,40387084,23504033,23216604,39287972,26476952,24116134,32512695,30525476,27888076,26555161,24256105,21257773,18511452,15752723,39732781,17617711,17237604,16391146,11271801,1325141,1953302,3427581,2963782,26627651,38723826,30381167,28130451,25923019,23217110,21565415,16834609,16119855,12890607,3202631,2834342,8606191,23087987,3884370,228352,27455866,16489490,9099883,2851486,6488318,175753,38781968,36126073,33428404,32663274,32383051,23428201,22687242,20945834,32899798,23192035,21097624,12426359,9473486,1482198,1961976&tool=zotpop",
+          "startedAt": "2026-09-19T22:01:34.295Z",
+          "status": 200,
+          "bytes": 353686,
+          "latencyMs": 2217.78
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1000",
+          "startedAt": "2026-09-19T22:01:37.533Z",
+          "status": 200,
+          "bytes": 237952,
+          "latencyMs": 1735.23
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1100",
+          "startedAt": "2026-09-19T22:01:39.685Z",
+          "status": 200,
+          "bytes": 227677,
+          "latencyMs": 1272.1
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,published,published-print,published-online,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=14&offset=1200",
+          "startedAt": "2026-09-19T22:01:41.394Z",
+          "status": 200,
+          "bytes": 43331,
+          "latencyMs": 847.16
+        }
+      ]
+    },
+    {
+      "id": "openalex-author-id",
+      "source": "openalex",
+      "query": {
+        "authors": "A5086928770",
+        "maxResults": 10
+      },
+      "capturedAt": "2026-09-19T22:01:43.781Z",
+      "status": "incomplete",
+      "count": 0,
+      "partialCount": 0,
+      "firstResultMs": null,
+      "elapsedMs": 231,
+      "expectedFound": null,
+      "error": {
+        "name": "Error",
+        "message": "HTTP 429 from api.openalex.org"
+      },
+      "warnings": [],
+      "sourceStatus": {},
+      "requests": [
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/works?filter=authorships.author.id:A5086928770&select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids&per-page=10&page=1",
+          "startedAt": "2026-09-19T22:01:43.551Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 230.05
+        }
+      ]
+    }
+  ]
+}

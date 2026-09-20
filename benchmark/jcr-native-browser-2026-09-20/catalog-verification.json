@@ -1,0 +1,818 @@
+{
+  "groups": 21,
+  "categories": 254,
+  "journals": 22643,
+  "edges": 448,
+  "journalMemberships": 32215,
+  "metricContexts": 32215,
+  "categoryMismatches": [],
+  "source": {
+    "provider": "Clarivate",
+    "product": "JCR",
+    "url": "https://jcr.clarivate.com/jcr/browse-categories",
+    "capturedAt": "2026-09-20T05:47:13.287Z",
+    "datasetUpdated": "2026-06-17",
+    "releaseYear": 2026,
+    "metricYear": 2025,
+    "complete": {
+      "groups": true,
+      "categories": true,
+      "journals": true
+    },
+    "identityKind": "displayed-names",
+    "captureMethod": "visible-browser-tables",
+    "taxonomyCapturedAt": "2026-09-20T04:52:59.928Z",
+    "journalCapture": {
+      "url": "https://jcr.clarivate.com/jcr/browse-journals",
+      "captureMethod": "rendered-table-cells-and-category-details",
+      "totalReported": 22643,
+      "capturedJournals": 22643,
+      "capturedPages": 114,
+      "expectedPages": 114,
+      "pageSize": 200,
+      "firstCapturedAt": "2026-09-20T04:59:49.968Z",
+      "lastCapturedAt": "2026-09-20T05:47:13.287Z",
+      "complete": true,
+      "partial": false,
+      "categoryMembershipCountsVerified": true,
+      "categoriesChecked": 254,
+      "categoryMetricsAligned": true,
+      "metricColumn": {
+        "domKey": "jif2019",
+        "renderedMetricYear": 2025
+      },
+      "files": [
+        {
+          "file": "journals-001.json",
+          "sha256": "b6d1c51643e912c7b1bcb20bd20bf4a3b9c3888971685792a0796c2b60e5d1a4"
+        },
+        {
+          "file": "journals-002.json",
+          "sha256": "7fb8889bb864fbe3223353817c7cc96b2a9ecbdec17064ce252246ea6c1c39b1"
+        },
+        {
+          "file": "journals-003.json",
+          "sha256": "1d4061cbddc669a40322db0a6decd9078f7023aa039d0efcfdb4324feb011237"
+        },
+        {
+          "file": "journals-004.json",
+          "sha256": "695c40d7dea4397cdf37d5641be918221367f7e15c569776528f93c9430a54e3"
+        },
+        {
+          "file": "journals-005.json",
+          "sha256": "3de34441c4f1d0a06d3063d527a022f2667c8dbcf47f473f64401182c58397cf"
+        },
+        {
+          "file": "journals-006.json",
+          "sha256": "986e3d25b4a80d2660aa970fdd6719a0942f69223ad6c4a74db28f818112c553"
+        },
+        {
+          "file": "journals-007.json",
+          "sha256": "eae3cd17fe374dc69bd7748dc6689be6198d2932b313e652844a1aa4b77395be"
+        },
+        {
+          "file": "journals-008.json",
+          "sha256": "f53c82c339c945ee5c1658a3dc87260f352e9f12c652bac2dd805c076e32aea4"
+        },
+        {
+          "file": "journals-009.json",
+          "sha256": "9917d41add93d99e5bbcb1e81ff1b9dc4a438d953e469b9c80135056ff5c9ac9"
+        },
+        {
+          "file": "journals-010.json",
+          "sha256": "455fd63e8005697c99e2ef4245cd0bb621979479f254dd2c786b104992e5e36e"
+        },
+        {
+          "file": "journals-011.json",
+          "sha256": "ff50db1ea41bfe0a84a9602d8b4dc96f49d5224b6db8f84532ba973d77b423a2"
+        },
+        {
+          "file": "journals-012.json",
+          "sha256": "646e0ad99f8e737f0e486b90c12d9145d233cc67e0b7795c6630ee5a4c5b77d6"
+        },
+        {
+          "file": "journals-013.json",
+          "sha256": "4cef6512b8854c18fdce38da2bc238b86ee1744bba1725712bf52f15d69ebd90"
+        },
+        {
+          "file": "journals-014.json",
+          "sha256": "17a0cd76af3765d9308928ab15aa9f3de39f8f3a701cbbf97ba9e397a8a09c07"
+        },
+        {
+          "file": "journals-015.json",
+          "sha256": "274fb442514e194125f3d45a4bda4da282690706bf618f366bec39750cf3621b"
+        },
+        {
+          "file": "journals-016.json",
+          "sha256": "368443fc38fcde81f3ff200a9a34c563096109311bcd4889c82b2ee95ecc7fa2"
+        },
+        {
+          "file": "journals-017.json",
+          "sha256": "5cc22d8e2ff68340b8d3215d4e9b0251e145442fa7697ba15be10fc56e084e70"
+        },
+        {
+          "file": "journals-018.json",
+          "sha256": "b985705cae1083e5fe39cbb67a895229df17e1ca1ca492ec8313f63749c89c7a"
+        },
+        {
+          "file": "journals-019.json",
+          "sha256": "23b24528a55d2e8529aa0a692cec73cc93a952e3fed15217cec72aede48de500"
+        },
+        {
+          "file": "journals-020.json",
+          "sha256": "b2bacf64809fba8386319a310b7f74af97c62e108a163936b97ec8c919373367"
+        },
+        {
+          "file": "journals-021.json",
+          "sha256": "2c3e3e7a9e7ee8121f96addadefa574fd7a26651c945d1360f4d21f6cbaf2d79"
+        },
+        {
+          "file": "journals-022.json",
+          "sha256": "0d4bbe7ba6c850ad3e193c651ae84a1eb50e125cec52721709d61f97527fe18f"
+        },
+        {
+          "file": "journals-023.json",
+          "sha256": "6af06d90fe304b3c0580d8b6f7f2f4ada45a2bd0cafc062debb0b8da13283258"
+        },
+        {
+          "file": "journals-024.json",
+          "sha256": "6c02d7b5dab0458e812936c83e79495bbf9f248f81379c14d3bef329e9bcd96d"
+        },
+        {
+          "file": "journals-025.json",
+          "sha256": "819fd0350a9e07cc5dd5dd67808077ff4e16daa58b858c2e852b710dfde6c657"
+        },
+        {
+          "file": "journals-026.json",
+          "sha256": "e08b246acb49dc94230244744d06f7ba1b7d6814a424daa4f9d246e77ecc816e"
+        },
+        {
+          "file": "journals-027.json",
+          "sha256": "b3393197956975078aa5a798aefd281b31937c6aa2255456a9213ceec4346c20"
+        },
+        {
+          "file": "journals-028.json",
+          "sha256": "5bd3b360b315fb348c22de811f16fba4ce24bf2b1cba91d84e2f563e0575ce1f"
+        },
+        {
+          "file": "journals-029.json",
+          "sha256": "f6491ad8ad54e0fb7e669745737e59ff96ae062c53e1dd12282eb3d98d178a84"
+        },
+        {
+          "file": "journals-030.json",
+          "sha256": "9805593d11fd90d9e2ba82670a6868a36f12d858a06df16bdcc0c8f1a388240a"
+        },
+        {
+          "file": "journals-031.json",
+          "sha256": "26eae749bb571a6341f608c15e0987a55c0d23634ba0d824543d6b8e27bfaed8"
+        },
+        {
+          "file": "journals-032.json",
+          "sha256": "6ce8abcf6540857e124f38f4bb7acde80b1337df9c084364d2681b75bb046338"
+        },
+        {
+          "file": "journals-033.json",
+          "sha256": "02f93a0050e40bb548a4f5d50d171b37d767985484f8b12abed2317267d7844c"
+        },
+        {
+          "file": "journals-034.json",
+          "sha256": "69f6b546e4d994cdbdc9d500cf151e291d2643b7f045f210bd43298cabeb6a67"
+        },
+        {
+          "file": "journals-035.json",
+          "sha256": "377d3f237f6bf233c708adf45991bdd761ee469301721722d3aeeff696561cda"
+        },
+        {
+          "file": "journals-036.json",
+          "sha256": "c91c6ef0c43d4a62a708ff9c78f4f2a4e04943b71e0806fce870857b50724cb4"
+        },
+        {
+          "file": "journals-037.json",
+          "sha256": "fe0e89bb2c75dbaa6fe3aeaddbb86b073b09a97976702c2c2e0e61bea6073fab"
+        },
+        {
+          "file": "journals-038.json",
+          "sha256": "540f03a231e8771ca23254c0d34ed5a16d29923942c530246f63a85c9606b670"
+        },
+        {
+          "file": "journals-039.json",
+          "sha256": "1795878e898fd43d76f4296da999b9dfdfe3aa09da3dd0c1c3174f6d2205ab93"
+        },
+        {
+          "file": "journals-040.json",
+          "sha256": "2474732179f089eb3123885b73b8d3d90943d9d2e115cda18b03cb7eba6df99b"
+        },
+        {
+          "file": "journals-041.json",
+          "sha256": "8a414a415f525572e7671839a19000c85683572e7b47612d235653976b705340"
+        },
+        {
+          "file": "journals-042.json",
+          "sha256": "a8903ef3fe25a323ea063f08ed527b8728916c80859d6f3712d0b00cfbcd07be"
+        },
+        {
+          "file": "journals-043.json",
+          "sha256": "8e6ee5d359676b3b1d546dbab24a5beebd0930da2161cbbdaff7d72fdce3f520"
+        },
+        {
+          "file": "journals-044.json",
+          "sha256": "77acd1eb3ef83fca44878d547ddeb30a090685086b08275b2d6a15f7d71ea8b5"
+        },
+        {
+          "file": "journals-045.json",
+          "sha256": "cda53cc5d8e2940c13e71726f5d1b9ab45d07d0177cdb26ae71af3ef20400747"
+        },
+        {
+          "file": "journals-046.json",
+          "sha256": "0c3910cb475c51be92274ede70e1f167c1a4a281c1709f580c1baf0284a7231b"
+        },
+        {
+          "file": "journals-047.json",
+          "sha256": "40995dec92fdfd151c97ab04c9f3aeb42fdcd6c5033703c120361ca67c58f211"
+        },
+        {
+          "file": "journals-048.json",
+          "sha256": "7982412842026dd55961851aed82705c9d51f841dd88dc19e2430ef3ae3554a5"
+        },
+        {
+          "file": "journals-049.json",
+          "sha256": "b1ee6f44cd8a1232d2f937557f4236116503ff14cecd7b940a57028725a5bbd8"
+        },
+        {
+          "file": "journals-050.json",
+          "sha256": "683af028b5cba7006124c6e6fe859194c28ff169a9cf7e893f8eea01d521f6bf"
+        },
+        {
+          "file": "journals-051.json",
+          "sha256": "d5f5710d235e46465865fc3c4a37f31b522651a120ad012669568db87cf19527"
+        },
+        {
+          "file": "journals-052.json",
+          "sha256": "150110f0621075d2d79e14b5e72d7251b5b4a7afd2a8566d0e8e93e15c16e359"
+        },
+        {
+          "file": "journals-053.json",
+          "sha256": "d9b69daef8cf058d3924b24bed83042eba5492e76a6a0562474921675852eaaa"
+        },
+        {
+          "file": "journals-054.json",
+          "sha256": "07d2500a13adc13e1997472c35707bf4dc892ef58cd47174e566426ce11248d8"
+        },
+        {
+          "file": "journals-055.json",
+          "sha256": "c5b31c5943225957c4f3253dc8d3e7a2a3fe22969ca0846defd664d396547751"
+        },
+        {
+          "file": "journals-056.json",
+          "sha256": "d4afbc9dbaef31a56c31db29a94b3bb1223111d758df3302a66d6ac00b690e60"
+        },
+        {
+          "file": "journals-057.json",
+          "sha256": "0310298abdb2d7d95188fa3e6765fdeb7ca1ef01490aa771b6945379add528de"
+        },
+        {
+          "file": "journals-058.json",
+          "sha256": "4910faea214f923de81c4e46fa159921b032b87174589681077fb8e0d3356a98"
+        },
+        {
+          "file": "journals-059.json",
+          "sha256": "b6ac781daa7b2becbe32e1e18df95b72551049f3a8e58f91768da4ebc230c876"
+        },
+        {
+          "file": "journals-060.json",
+          "sha256": "5268384caa351b4c2e3e0f0effbdf1892c1a333e8feee2fd127b62277a21ede0"
+        },
+        {
+          "file": "journals-061.json",
+          "sha256": "2e6f9c696a0138df9c3cdcbee6fd563db541fb2e924dbe432fe5f8df38e1856b"
+        },
+        {
+          "file": "journals-062.json",
+          "sha256": "00d1ca46196dd2e3bcace6ea9fbe1595fb9fa428bdd7750c27e9d1b0502ddeae"
+        },
+        {
+          "file": "journals-063.json",
+          "sha256": "a1d952642acaa34a0b5528a50dc402fc8daec17144d58f2fced410363843710f"
+        },
+        {
+          "file": "journals-064.json",
+          "sha256": "8d05e172913ccf3fb308bbd3209ca7b83e7949ab115369114a64ab5c403d7508"
+        },
+        {
+          "file": "journals-065.json",
+          "sha256": "b7ec35cc8779db4ff09b0e7237174fa457210c9dc3338e45223b6e1633d57674"
+        },
+        {
+          "file": "journals-066.json",
+          "sha256": "59a23eb459bcb04aab1244937586cd7eb551541e14b9fb73ce4bd8e829446a02"
+        },
+        {
+          "file": "journals-067.json",
+          "sha256": "6b18ce7c58ae19a1ba9b1a4594254a050bbd32a13ab7d57dbccfb2463411ed25"
+        },
+        {
+          "file": "journals-068.json",
+          "sha256": "d3dc4bc5b53087d7540a0fe26e408e269a78fc95e210d539abcd508a1af40fd5"
+        },
+        {
+          "file": "journals-069.json",
+          "sha256": "03040d12687c3a6d08eda8003d8609f639560a55e6cfb2ea0d943d12f0fea838"
+        },
+        {
+          "file": "journals-070.json",
+          "sha256": "7d022a4d28e8100da8266f4da3adb426186d21ed50a9f143e4984edb3eb1afa6"
+        },
+        {
+          "file": "journals-071.json",
+          "sha256": "97eb4c351a358390bbaa57403f1b8b9dc20f002553825f59f3f23ab6dc947631"
+        },
+        {
+          "file": "journals-072.json",
+          "sha256": "5cab1eb8fc5b3ca1b29fe11c61e5fef4dbab016e1fa0d4cd4e8493bd39c3ff83"
+        },
+        {
+          "file": "journals-073.json",
+          "sha256": "90c6c2a6c27b9faf1f10122ae5f8d6a1a35e21ec10503cd018cb08f01acec2b7"
+        },
+        {
+          "file": "journals-074.json",
+          "sha256": "c05e9763cc3e6a68de4a84082bfbd2ac1547f08e730a49de00e1bc1d4dd76e2a"
+        },
+        {
+          "file": "journals-075.json",
+          "sha256": "db5351eca3c8ef7d3396c81f6c56a73082e87411f66858cf33bd70ef34bf46a8"
+        },
+        {
+          "file": "journals-076.json",
+          "sha256": "06ab5b6c6d6a809f3b26534db6ea1d98562ff470e6bd82cb2079f4b34c623a51"
+        },
+        {
+          "file": "journals-077.json",
+          "sha256": "fc226f09d1bb2c410fb59b212b25be1889bef8b2b3ecd9e330bf5ff5b401fae8"
+        },
+        {
+          "file": "journals-078.json",
+          "sha256": "caeaed6d49de20f1507939879ac643d768b310916b585466d690b9c8aaccc339"
+        },
+        {
+          "file": "journals-079.json",
+          "sha256": "d02fd880ea5ec4e17c0faf3ccd467f39db61ee4979f926b1dca38eef8231941a"
+        },
+        {
+          "file": "journals-080.json",
+          "sha256": "4de3f8bf36a721841f98a8f0fad4a803b242ce900d212d812c9c49ded80611d8"
+        },
+        {
+          "file": "journals-081.json",
+          "sha256": "7f0f3f323d55702aaebeae6c556196dba9dcd1c9ea3cf73d1ff441ea3f3076c0"
+        },
+        {
+          "file": "journals-082.json",
+          "sha256": "28e9a02e551f74ab35e17c718b89a401967ec8b13b2224665eee504abed93f2c"
+        },
+        {
+          "file": "journals-083.json",
+          "sha256": "aa5a0ea383344028ac549b004f47268f61aefb35edb5c4836071da02e102ae49"
+        },
+        {
+          "file": "journals-084.json",
+          "sha256": "cea03ff60ca3d0939696a0e34176550cc9207a1c4817173c458de714f14059e2"
+        },
+        {
+          "file": "journals-085.json",
+          "sha256": "512ae09cf84b01a392958c0dfcca255441dbeba2b865e1464bddfb6ae4c62fcc"
+        },
+        {
+          "file": "journals-086.json",
+          "sha256": "ef139061b419b0639efa457f58b446ad8fabc4e5d1d81db3883583ea2a5ad947"
+        },
+        {
+          "file": "journals-087.json",
+          "sha256": "f5c0deeebb11c06825e1a0ee3e26e2d5ac2465d783c8ed7fe15b9da8cc02254e"
+        },
+        {
+          "file": "journals-088.json",
+          "sha256": "84377f17e312eb6c3550cdba5a4becdcc6e729db1d32444970490a7f867e6ee3"
+        },
+        {
+          "file": "journals-089.json",
+          "sha256": "b7515641b822c1257d73d5bc3b5d25fd497e18a89187669049f35cec2067a2cf"
+        },
+        {
+          "file": "journals-090.json",
+          "sha256": "2f828e273d23bc4c6f1993378bd742a60ad8f05e51a16ab60d5eda5de37c1d7b"
+        },
+        {
+          "file": "journals-091.json",
+          "sha256": "fc3abd4f33e04ca73339d61defd68465ee798c1c4e3af92fabc0cd9df22563c8"
+        },
+        {
+          "file": "journals-092.json",
+          "sha256": "8abd886dd30ab31df7ffe7799a7384996f6dfbfb95917e4c51ae80a1bcc5d05d"
+        },
+        {
+          "file": "journals-093.json",
+          "sha256": "9da565d4e35da7213d836e4e155de8a9ba38e733f60f68246801f16f24bb1226"
+        },
+        {
+          "file": "journals-094.json",
+          "sha256": "8f85067fafb2e9f1a77402b20d85ac42c4af25a326d9785aa06acfcfb6a05f62"
+        },
+        {
+          "file": "journals-095.json",
+          "sha256": "bdc919f330a9590c9987bd482580574795056cfb09f4e1fc96654483ef2dbf6e"
+        },
+        {
+          "file": "journals-096.json",
+          "sha256": "c8bf53b87c6e9098c5e49d9f9efbb578dc9cdd1679ab1896572ec6b7423f7c2f"
+        },
+        {
+          "file": "journals-097.json",
+          "sha256": "52ea73b3607f909f46119d541f1bca500ca86d32a380a45e78edc26d63f8cf83"
+        },
+        {
+          "file": "journals-098.json",
+          "sha256": "2e4d8a5cddaaf0dbbcbc8a8ad5dc49ae6fce2375ec2fd12db863b6593272df18"
+        },
+        {
+          "file": "journals-099.json",
+          "sha256": "4de5026e09df25379580a7f29654838a61cfe6ecb751bf35a897e81694432b04"
+        },
+        {
+          "file": "journals-100.json",
+          "sha256": "b9c6c3a74a43830b5016185862fa035fc176229a66cf0c338849f63d7497c7c9"
+        },
+        {
+          "file": "journals-101.json",
+          "sha256": "ac5326a4aa1b34b28aec0e48393b780f58dfc00b47e79bd0ec5f130036ed0b1c"
+        },
+        {
+          "file": "journals-102.json",
+          "sha256": "49e0b402498af79dd2bdcff12ff36efe8ade3a06872f1ce66888eab2d09062e1"
+        },
+        {
+          "file": "journals-103.json",
+          "sha256": "8d1c1d7f5b989a3e61a96f01332765c4c2adb26908e5f66cd0069f4c42ab2607"
+        },
+        {
+          "file": "journals-104.json",
+          "sha256": "60a952119fb1e23afb0c5fb581ade12db4f5c0381dff22ff4988f433f47ffcf1"
+        },
+        {
+          "file": "journals-105.json",
+          "sha256": "e9bf6cb3fec192ec7a82b60cbc2c75099a3678337f77263c6d4065d1c3db6560"
+        },
+        {
+          "file": "journals-106.json",
+          "sha256": "e77c26cd7696311020c5f32787e9dd54e023e2bb68305863104e24d88a88bef6"
+        },
+        {
+          "file": "journals-107.json",
+          "sha256": "7a6edc9b9a0eda64a5400ae1e450fdc7181ecc6810f6672cb8b959ec4262b247"
+        },
+        {
+          "file": "journals-108.json",
+          "sha256": "1b1729d4abc1dd972feb13f2ee595efc899b8a7f9a99d203274ab0b7511af607"
+        },
+        {
+          "file": "journals-109.json",
+          "sha256": "cd7389e006296514f9dc164597cf1a2ce5a3d50c0ed43e9b9673a7d5a97269e3"
+        },
+        {
+          "file": "journals-110.json",
+          "sha256": "6c709c15d4bb9886b6001c27b935d18e40949cb60e603c223dd766cda271bb1d"
+        },
+        {
+          "file": "journals-111.json",
+          "sha256": "9a7afd20681d19c9c997e24124ad8e147b2806399aa9c5664fe5946e2cd05696"
+        },
+        {
+          "file": "journals-112.json",
+          "sha256": "7a45db8463e73f50423bbb77a0b75e5a7bb311dfa377f6dc7403c0f945795554"
+        },
+        {
+          "file": "journals-113.json",
+          "sha256": "893a763b5e5e085566b5cc1e8acc9f8c41e2857fc480e43ab27ff8210a41e90b"
+        },
+        {
+          "file": "journals-114.json",
+          "sha256": "3f14d7656398e08183d335dced1c71d38330daee6b501915053f6692eac2d411"
+        }
+      ]
+    }
+  },
+  "samples": [
+    {
+      "key": "journal:4a270b34f9839c489fb4f7ba3742c71e1e810dd51fcde8579da1710f3b835a4e",
+      "title": "NATURE",
+      "abbreviation": "",
+      "issns": [
+        "0028-0836",
+        "1476-4687"
+      ],
+      "keyKind": "local-issn-and-exact-title",
+      "categoryKeys": [
+        "MULTIDISCIPLINARY SCIENCES"
+      ],
+      "editions": [
+        "SCIE"
+      ],
+      "jif": 56.1,
+      "jifDisplay": "56.1",
+      "year": 2025,
+      "totalCitations": 1053832,
+      "jci": 10.84,
+      "jciDisplay": "10.84",
+      "openAccessPercent": 53.07,
+      "openAccessPercentDisplay": "53.07",
+      "categoryMetrics": [
+        {
+          "categoryKey": "MULTIDISCIPLINARY SCIENCES",
+          "editions": [
+            "SCIE"
+          ],
+          "rank": 1,
+          "rankTotal": 140,
+          "quartile": 1,
+          "percentile": 99.6,
+          "rankDisplay": "1/140",
+          "quartileDisplay": "Q1",
+          "percentileDisplay": "99.6"
+        }
+      ],
+      "capture": {
+        "page": 1,
+        "row": 3,
+        "ordinal": 3,
+        "capturedAt": "2026-09-20T04:59:49.968Z"
+      }
+    },
+    {
+      "key": "journal:a4e831106fb4cd07b4dde2696e5076fb6586687ecb59418424289bee794c7f07",
+      "title": "LANCET",
+      "abbreviation": "",
+      "issns": [
+        "0140-6736",
+        "1474-547X"
+      ],
+      "keyKind": "local-issn-and-exact-title",
+      "categoryKeys": [
+        "MEDICINE, GENERAL & INTERNAL"
+      ],
+      "editions": [
+        "SCIE"
+      ],
+      "jif": 109,
+      "jifDisplay": "109.0",
+      "year": 2025,
+      "totalCitations": 378842,
+      "jci": 23.89,
+      "jciDisplay": "23.89",
+      "openAccessPercent": 25.49,
+      "openAccessPercentDisplay": "25.49",
+      "categoryMetrics": [
+        {
+          "categoryKey": "MEDICINE, GENERAL & INTERNAL",
+          "editions": [
+            "SCIE"
+          ],
+          "rank": 1,
+          "rankTotal": 336,
+          "quartile": 1,
+          "percentile": 99.9,
+          "rankDisplay": "1/336",
+          "quartileDisplay": "Q1",
+          "percentileDisplay": "99.9"
+        }
+      ],
+      "capture": {
+        "page": 1,
+        "row": 18,
+        "ordinal": 18,
+        "capturedAt": "2026-09-20T04:59:49.968Z"
+      }
+    },
+    {
+      "key": "journal:46b05fb84c184c88485a804eff6bb5fbcadee04c0dfab75ae2efa0888aa1ea2c",
+      "title": "NATURE METHODS",
+      "abbreviation": "",
+      "issns": [
+        "1548-7091",
+        "1548-7105"
+      ],
+      "keyKind": "local-issn-and-exact-title",
+      "categoryKeys": [
+        "BIOCHEMICAL RESEARCH METHODS"
+      ],
+      "editions": [
+        "SCIE"
+      ],
+      "jif": 28.3,
+      "jifDisplay": "28.3",
+      "year": 2025,
+      "totalCitations": 142000,
+      "jci": 7.21,
+      "jciDisplay": "7.21",
+      "openAccessPercent": 54.23,
+      "openAccessPercentDisplay": "54.23",
+      "categoryMetrics": [
+        {
+          "categoryKey": "BIOCHEMICAL RESEARCH METHODS",
+          "editions": [
+            "SCIE"
+          ],
+          "rank": 1,
+          "rankTotal": 85,
+          "quartile": 1,
+          "percentile": 99.4,
+          "rankDisplay": "1/85",
+          "quartileDisplay": "Q1",
+          "percentileDisplay": "99.4"
+        }
+      ],
+      "capture": {
+        "page": 1,
+        "row": 94,
+        "ordinal": 94,
+        "capturedAt": "2026-09-20T04:59:49.968Z"
+      }
+    },
+    {
+      "key": "journal:e6e0867c25a88b328342e1be12cdc2ee675ff73e85fa799efe4c249ad40375e7",
+      "title": "CHEMICAL REVIEWS",
+      "abbreviation": "",
+      "issns": [
+        "0009-2665",
+        "1520-6890"
+      ],
+      "keyKind": "local-issn-and-exact-title",
+      "categoryKeys": [
+        "CHEMISTRY, MULTIDISCIPLINARY"
+      ],
+      "editions": [
+        "SCIE"
+      ],
+      "jif": 64.2,
+      "jifDisplay": "64.2",
+      "year": 2025,
+      "totalCitations": 262229,
+      "jci": 3.98,
+      "jciDisplay": "3.98",
+      "openAccessPercent": 28.23,
+      "openAccessPercentDisplay": "28.23",
+      "categoryMetrics": [
+        {
+          "categoryKey": "CHEMISTRY, MULTIDISCIPLINARY",
+          "editions": [
+            "SCIE"
+          ],
+          "rank": 1,
+          "rankTotal": 250,
+          "quartile": 1,
+          "percentile": 99.8,
+          "rankDisplay": "1/250",
+          "quartileDisplay": "Q1",
+          "percentileDisplay": "99.8"
+        }
+      ],
+      "capture": {
+        "page": 1,
+        "row": 37,
+        "ordinal": 37,
+        "capturedAt": "2026-09-20T04:59:49.968Z"
+      }
+    }
+  ],
+  "groupJournalCounts": [
+    {
+      "group": "Agricultural Sciences",
+      "source": 475,
+      "sumCategoryCounts": 475,
+      "uniqueJournals": 445
+    },
+    {
+      "group": "Arts & Humanities, Interdisciplinary",
+      "source": 1041,
+      "sumCategoryCounts": 1041,
+      "uniqueJournals": 1001
+    },
+    {
+      "group": "Biology & Biochemistry",
+      "source": 4186,
+      "sumCategoryCounts": 4186,
+      "uniqueJournals": 3381
+    },
+    {
+      "group": "Chemistry",
+      "source": 2506,
+      "sumCategoryCounts": 2506,
+      "uniqueJournals": 2094
+    },
+    {
+      "group": "Clinical Medicine",
+      "source": 7995,
+      "sumCategoryCounts": 7995,
+      "uniqueJournals": 6292
+    },
+    {
+      "group": "Computer Science",
+      "source": 1707,
+      "sumCategoryCounts": 1707,
+      "uniqueJournals": 1383
+    },
+    {
+      "group": "Economics & Business",
+      "source": 3637,
+      "sumCategoryCounts": 3637,
+      "uniqueJournals": 3074
+    },
+    {
+      "group": "Engineering",
+      "source": 3837,
+      "sumCategoryCounts": 3837,
+      "uniqueJournals": 3127
+    },
+    {
+      "group": "Environment/Ecology",
+      "source": 1852,
+      "sumCategoryCounts": 1852,
+      "uniqueJournals": 1690
+    },
+    {
+      "group": "Geosciences",
+      "source": 1143,
+      "sumCategoryCounts": 1143,
+      "uniqueJournals": 937
+    },
+    {
+      "group": "History & Archaeology",
+      "source": 1464,
+      "sumCategoryCounts": 1464,
+      "uniqueJournals": 1336
+    },
+    {
+      "group": "Literature & Language",
+      "source": 1676,
+      "sumCategoryCounts": 1676,
+      "uniqueJournals": 1368
+    },
+    {
+      "group": "Materials Science",
+      "source": 1750,
+      "sumCategoryCounts": 1750,
+      "uniqueJournals": 1437
+    },
+    {
+      "group": "Mathematics",
+      "source": 1852,
+      "sumCategoryCounts": 1852,
+      "uniqueJournals": 1459
+    },
+    {
+      "group": "Multidisciplinary",
+      "source": 6147,
+      "sumCategoryCounts": 6147,
+      "uniqueJournals": 5326
+    },
+    {
+      "group": "Philosophy & Religion",
+      "source": 999,
+      "sumCategoryCounts": 999,
+      "uniqueJournals": 914
+    },
+    {
+      "group": "Physics",
+      "source": 3185,
+      "sumCategoryCounts": 3185,
+      "uniqueJournals": 2484
+    },
+    {
+      "group": "Plant & Animal Science",
+      "source": 1711,
+      "sumCategoryCounts": 1711,
+      "uniqueJournals": 1464
+    },
+    {
+      "group": "Psychiatry/Psychology",
+      "source": 1598,
+      "sumCategoryCounts": 1598,
+      "uniqueJournals": 1311
+    },
+    {
+      "group": "Social Sciences, General",
+      "source": 6804,
+      "sumCategoryCounts": 6804,
+      "uniqueJournals": 5653
+    },
+    {
+      "group": "Visual & Performing Arts",
+      "source": 956,
+      "sumCategoryCounts": 956,
+      "uniqueJournals": 913
+    }
+  ],
+  "groupCountMeaning": "All 21 observed JCR group journal counts equal the sum of their category journal counts, including journals assigned to multiple categories; they are not unique-journal totals.",
+  "jifMissing": 668,
+  "jifBounded": 619,
+  "unrankedContexts": 3012
+}

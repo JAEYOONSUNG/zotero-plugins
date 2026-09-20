@@ -1,0 +1,106 @@
+{
+  "capturedAt": "2026-09-20T00:29:56.689Z",
+  "sourceSHA256": "ef52878604cb726b39a14948dafef5e7f4edf2dcffef8f4113076c832fe345ca",
+  "results": [
+    {
+      "provider": "orcid",
+      "input": "0000-0001-8277-5907",
+      "maxResults": 1000,
+      "status": "success",
+      "elapsedMs": 1045,
+      "profile": {
+        "provider": "orcid",
+        "id": "0000-0001-8277-5907",
+        "name": "Sheila Ingemann Jensen",
+        "url": "https://orcid.org/0000-0001-8277-5907",
+        "identityConfirmed": true
+      },
+      "count": 26,
+      "partial": false,
+      "citationsKnown": 0,
+      "bylinesKnown": 0,
+      "provenance": {
+        "provider": "orcid",
+        "id": "0000-0001-8277-5907",
+        "endpoint": "works",
+        "capturedAt": "2026-09-20T00:29:55.316Z",
+        "publicOnly": true,
+        "mode": "profile",
+        "identityConfirmed": true,
+        "totalGroups": 26,
+        "returned": 26,
+        "truncated": false,
+        "complete": true,
+        "authorListComplete": false,
+        "citationCountsAvailable": false
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://pub.orcid.org/v3.0/0000-0001-8277-5907/person",
+          "startedAt": "2026-09-20T00:29:54.272Z",
+          "status": 200,
+          "bytes": 3070,
+          "latencyMs": 699.88
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://pub.orcid.org/v3.0/0000-0001-8277-5907/works",
+          "startedAt": "2026-09-20T00:29:54.973Z",
+          "status": 200,
+          "bytes": 52803,
+          "latencyMs": 341.04
+        }
+      ]
+    },
+    {
+      "provider": "scholar",
+      "input": "https://scholar.google.com/citations?user=dsdG3ewAAAAJ&hl=en",
+      "maxResults": 10,
+      "status": "success",
+      "elapsedMs": 1369,
+      "profile": {
+        "provider": "scholar",
+        "id": "dsdG3ewAAAAJ",
+        "name": "",
+        "url": "https://scholar.google.com/citations?user=dsdG3ewAAAAJ",
+        "identityConfirmed": false
+      },
+      "count": 10,
+      "partial": false,
+      "citationsKnown": 10,
+      "bylinesKnown": 10,
+      "provenance": {
+        "engine": "publish-or-perish",
+        "source": "scholarprofile",
+        "outputSort": "rank",
+        "profileId": "pop-default",
+        "invocationId": "f659c469-83b2-4195-a726-e787d2ddfc31",
+        "acquisition": {
+          "kind": "process",
+          "invocationId": "f659c469-83b2-4195-a726-e787d2ddfc31"
+        },
+        "startedAt": "2026-09-20T00:29:55.321Z",
+        "retrievedAt": "2026-09-20T00:29:56.687Z",
+        "capturedAt": "2026-09-20T00:29:55.321Z",
+        "query": {
+          "engine": "pop",
+          "authors": "dsdG3ewAAAAJ",
+          "maxResults": 10,
+          "popOutputSort": "rank"
+        },
+        "exitCode": 0,
+        "complete": true,
+        "cached": false,
+        "cancelled": false,
+        "provider": "scholar",
+        "mode": "profile",
+        "authorId": "dsdG3ewAAAAJ",
+        "identityConfirmed": true
+      },
+      "requests": []
+    }
+  ]
+}

@@ -4,11 +4,14 @@ import fs from 'node:fs';
 import {parseHTML} from 'linkedom';
 import Workbench from '../src/workbench.js';
 import Model from '../src/workspace.js';
+import JournalIdentity from '../src/journal-identity.js';
+import JCRCategories from '../src/jcr-categories.js';
+import JCRBrowser from '../src/jcr-browser.js';
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));};
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 // toolbar: the ids and element names already in the items toolbar, in order, so
 // a test can check where the button is placed among them.
-function fixture(initialCache,toolbar){
+function fixture(initialCache,toolbar,{nativeJCR=false,catalog}={}){
  const {window:win,document:doc}=parseHTML('<html><head></head><body><div id="zotero-items-toolbar"></div></body></html>');
  if(toolbar){
   const bar=doc.getElementById('zotero-items-toolbar');
@@ -25,11 +28,16 @@ function fixture(initialCache,toolbar){
  Object.defineProperty(doc,'activeElement',{configurable:true,get(){return this._focusedElement||this.body;}});
  win.HTMLElement.prototype.focus=function(){this.ownerDocument._focusedElement=this;};
  const calls=[],errors=[],cache=initialCache||{items:{},readerSettings:{marginAnnotations:true}},refs=new Map([[1,{id:1}],[2,{id:2}],[9,{id:9}]]);
+ // Existing subject-browser tests intentionally select the optional OpenAlex
+ // view. Native default behavior is exercised with nativeJCR:true below.
+ if(!nativeJCR&&cache.workbenchUI?.journalBrowser===undefined)cache.workbenchUI={...(cache.workbenchUI||{}),journalBrowser:'openalex'};
  const papers=[{id:'1',key:'K1',libraryID:1,title:'Paper Alpha',authors:'Ada Lovelace',year:'2025',venue:'Science',doi:'10.1234/a',itemType:'journalArticle',tags:['topic/a'],abstract:'An abstract',related:['2']},{id:'2',key:'K2',libraryID:1,title:'Paper Beta',authors:'Ada Lovelace',year:'2024',venue:'Nature',itemType:'journalArticle',tags:['topic/b'],abstract:'Other abstract',related:['1']}];
  let libraryID=1,mainSelection=[refs.get(1)],notify;
  win.ZoteroPane={getSelectedLibraryID:()=>libraryID,collectionsView:{selectCollection:id=>calls.push(['collection',id])}};
  const record=(name,result)=>async(...args)=>{calls.push([name,...args]);return typeof result==='function'?result(...args):result;};
  const runtime={rootURI:'file:///plugin/',cache,dirty:false,selected:()=>mainSelection,pref:(key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||=( {}),state:()=>({citations:3,impactFactor:4,status:'reading'}),flush:record('flush'),refreshWindows:record('refresh'),publicationTags:()=>['Q1'],refreshJournalMetrics:record('journal',{updated:1,failed:0,unknown:0}),setPanelCSS:record('css'),toggleAppTheme:record('appTheme'),setCustomFields:record('customFields'),refreshPublicationRanks:record('ranks'),pageProgress:()=>({pages:{0:2,550:7},total:601,visited:2,percent:0,attachmentID:'99'})};
+ runtime.jcrBrowser=JCRBrowser;
+ if(nativeJCR)runtime.jcrCatalog=catalog===null?null:catalog||JCRCategories.create(JSON.parse(fs.readFileSync(new URL('../data/jcr-categories.json',import.meta.url),'utf8')));
  // Discovery goes out to OpenAlex; the panel only needs the shapes it returns.
  let watched=[];
  const suggestion=(id,source)=>({id,source,title:'Paper '+id,year:2024,venue:'Journal',citations:5,
@@ -853,10 +861,8 @@ test('the annotation list reads as a pass through the paper', async () => {
   f.bench.destroy();
 });
 
-test('a journal opens into a profile of signed facts, and the fields filter the list',async()=>{
- /* JCR's journal page, without its login: figure, quartile, abbreviation,
-    publisher, ISSN, subject, h-index, output, access, country, homepage, and
-    what this library holds from it -- each behind a drawn sign. */
+test('a journal profile labels stored metrics and OpenAlex fields while path choices filter the list',async()=>{
+ // Stored JIF/Q and OpenAlex profiles keep their separate provenance.
  const f=fixture();
  f.runtime.journalIdentity={identify:venue=>venue==='Science'?{quartile:1,abbreviation:'SCIENCE',issns:['0036-8075'],impactFactor:44.7,year:2025,publisher:'AAAS'}:{quartile:1,abbreviation:'NATURE',issns:['0028-0836'],impactFactor:50.5,year:2025,publisher:'Springer Nature'}};
  f.runtime.journalRecord=ref=>({name:String(ref.id)==='1'?'Science':'Nature',issn:''});
@@ -865,7 +871,7 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  // One line, three menus, largest first; every level can be picked on its own.
  const menu=level=>f.body().querySelector(`.sc-field-line select[data-level=${level}]`);
  const optionsOf=level=>[...menu(level).querySelectorAll('option')].map(o=>o.textContent);
- const choose=(level,value)=>{const m=menu(level);m.value=value;m.dispatchEvent(new f.win.Event('change',{bubbles:true}));};
+ const choose=(level,value)=>{const m=menu(level);const option=[...m.querySelectorAll('option')].find(o=>{try{return JSON.parse(o.value).at(-1)===value;}catch{return o.value===value;}});assert.ok(option,value);m.value=option.value;m.dispatchEvent(new f.win.Event('change',{bubbles:true}));};
  assert.deepEqual(optionsOf('domain'),['전체 · 2개','분야 미상 · 1','Life Sciences 1','Physical Sciences 1'],
   'the first option counts the subjects on offer; all three menus used to repeat the journal count instead');
  assert.deepEqual(optionsOf('field'),['전체 · 2개','Multidisciplinary 1','Engineering 1'],'fields are offered before a domain is chosen');
@@ -875,10 +881,10 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  assert.equal(f.body().querySelector('.sc-facts'),null);
  await f.click('Science');
  const facts=[...f.body().querySelectorAll('.sc-fact dt')].map(dt=>dt.textContent);
- assert.deepEqual(facts,['JIF','사분위','약어','출판사','ISSN','분야','h-index','발행·피인용','오픈액세스','국가','홈페이지','내 서재']);
+ assert.deepEqual(facts,['JIF','저장 Q','약어','출판사','ISSN','OpenAlex 분야','h-index','발행·피인용','오픈액세스','국가','홈페이지','내 서재']);
  for(const dt of f.body().querySelectorAll('.sc-fact dt'))assert.ok(dt.querySelector('svg'),'each fact carries its sign: '+dt.textContent);
  const value=label=>[...f.body().querySelectorAll('.sc-fact')].find(r=>r.querySelector('dt').textContent===label).querySelector('dd').textContent;
- assert.equal(value('JIF'),'4.0 · 2025');
+ assert.equal(value('JIF'),'44.7 · 2025','the local comparison uses the registry JIF, not a stale paper-level value');
  assert.equal(value('ISSN'),'0036-8075');
  assert.equal(value('오픈액세스'),'구독형 · OA 선택 시 APC $4,000');
  assert.equal(value('국가'),'미국');
@@ -893,15 +899,15 @@ test('a journal opens into a profile of signed facts, and the fields filter the 
  // A subfield chosen on its own pulls the levels above it along.
  await f.click('전체');await settle();
  choose('subfield','General');await settle();
- assert.equal(menu('domain').value,'Life Sciences');assert.equal(menu('field').value,'Multidisciplinary');
+ assert.equal(menu('domain').value,JSON.stringify(['Life Sciences']));assert.equal(menu('field').value,JSON.stringify(['Life Sciences','Multidisciplinary']));
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal')].map(r=>r.dataset.venue),['Science']);
  await f.click('전체');await settle();
  assert.equal(f.body().querySelectorAll('.sc-journal').length,2,'back to every journal');
  // Each journal is one row: rank, name, quartile, abbreviation, house, papers, fields, place in field, figure.
  const first=f.body().querySelector('tr.sc-journal');
  assert.equal(first.querySelectorAll('td').length,9);
- assert.deepEqual([...f.body().querySelectorAll('.sc-journal-table thead th')].map(th=>th.textContent),['JCR 순위','저널','Q','약어','출판사','내 문헌','분야','분야 순위','JIF 2025']);
- assert.equal(first.querySelector('.sc-col-q .sc-quartile').textContent,'Q1');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal-table thead th')].map(th=>th.textContent),['로컬 JIF 순번','저널','저장 Q','약어','출판사','내 문헌','OpenAlex 분야','로컬 분야 순위','JIF 2025']);
+ assert.equal(first.querySelector('.sc-col-q .sc-quartile').textContent,'Q1?');
  assert.equal(first.querySelector('.sc-col-abbr').textContent,'NATURE','sorted by IF, Nature first');
  // The journals have a search of their own, by name, abbreviation, publisher or field.
  const typed=async value=>{f.input('저널 검색',value);await new Promise(r=>setTimeout(r,160));await settle();};
@@ -1099,7 +1105,7 @@ test('the pages of a paper read as a strip of shaded squares, with the number an
  f.bench.destroy();
 });
 
-test('the journals tab can show every JCR journal, ranked, with the ones the library lacks marked',async()=>{
+test('the journals tab shows the stored catalog with local positions and absent-library markers',async()=>{
  const f=fixture();
  const registry=[{title:'Nature',rank:1,key:'nature',issns:['0028-0836'],abbreviation:'NATURE',impactFactor:50.5,year:2025,quartile:1,publisher:'Nature Portfolio'},
   {title:'Science',rank:2,key:'science',issns:['0036-8075'],abbreviation:'SCIENCE',impactFactor:44.7,year:2025,quartile:1,publisher:'AAAS'},
@@ -1109,18 +1115,18 @@ test('the journals tab can show every JCR journal, ranked, with the ones the lib
  await f.bench.show('journals');
  // The library view first: two journals, each with its place among all.
  assert.deepEqual([...f.body().querySelectorAll('tr.sc-journal')].map(r=>[r.dataset.venue,r.querySelector('.sc-col-rank').textContent]),[['Nature','1'],['Science','2']]);
- await f.click('전체 JCR 3');
+ await f.click('저장 저널 3');
  const rows=[...f.body().querySelectorAll('tr.sc-journal')];
  assert.deepEqual(rows.map(r=>r.dataset.venue),['Nature','Science','Cell'],'every registry journal, in JIF order');
  assert.equal(rows[2].classList.contains('sc-journal-absent'),true,'Cell is not in this library');
  assert.equal(rows[2].querySelector('.sc-col-n').textContent,'—');
  assert.equal(rows[0].querySelector('.sc-col-n').textContent,'1');
- assert.match(f.body().querySelector('.sc-journal-count').textContent,/JCR 등재 3종 · 분야 있는 저널 \d+ · 내 서재에 있는 저널 2/);
+ assert.match(f.body().querySelector('.sc-journal-count').textContent,/저장 저널 3종 · OpenAlex 분야 있음 \d+ · 내 서재 2/);
  // Opening an absent journal still shows its registry facts and its rank.
  await f.click('Cell');
  const value=label=>[...f.body().querySelectorAll('.sc-fact')].find(r=>r.querySelector('dt').textContent===label)?.querySelector('dd').textContent;
  assert.equal(value('JIF'),'42.5 · 2025');
- assert.equal(value('JCR 순위'),'3위 / 3');
+ assert.equal(value('로컬 JIF 순번'),'3번째 / 3');
  assert.equal(value('내 서재'),'없음');
  await f.click('내 서재 2');
  assert.equal(f.body().querySelectorAll('tr.sc-journal').length,2);
@@ -1232,11 +1238,11 @@ test('the journals table says where each one stands inside its own subject', asy
   registryFieldRanks: title => ranks[title] || []
  };
  await f.bench.show('journals');
- await f.click('전체 JCR 2');
+ await f.click('저장 저널 2');
  const places = [...f.body().querySelectorAll('tr.sc-journal .sc-col-fieldrank')];
  assert.deepEqual(places.map(td => td.textContent), ['1/1,813', '12/1,813']);
  // Every subject it is ranked in, for a journal that sits in more than one.
- assert.match(places[1].title, /Molecular Biology 1,813종 중 12위 · 상위 1% · Q1/);
+ assert.match(places[1].title, /Molecular Biology 1,813종 중 12위 · 상위 1% · 로컬 Q1/);
  assert.match(places[1].title, /Biology 2,996종 중 40위/);
  // The menus count the subjects they offer, not the journals underneath them.
  const first = f.body().querySelector('.sc-field-line select[data-level="domain"] option');
@@ -1264,7 +1270,7 @@ test('a journal the library does not hold is still placed in the subject hierarc
   registryLevels: title => registry.find(x => x.title === title)?.levels || []
  };
  await f.bench.show('journals');
- await f.click('전체 JCR 3');
+ await f.click('저장 저널 3');
  const menu = level => f.body().querySelector(`.sc-field-line select[data-level="${level}"]`);
  const options = level => [...menu(level).querySelectorAll('option')].map(o => o.textContent);
  assert.deepEqual(options('domain'), ['전체 · 1개', '분야 미상 · 1', 'Life Sciences 2'],
@@ -1272,7 +1278,7 @@ test('a journal the library does not hold is still placed in the subject hierarc
  assert.deepEqual(options('subfield').slice(1).sort(), ['Cell Biology 1', 'Molecular Biology 1'],
   'a journal the library does not hold reaches the smallest level');
  const venues = () => [...f.body().querySelectorAll('tr.sc-journal')].map(r => r.dataset.venue);
- menu('subfield').value = 'Cell Biology';
+ menu('subfield').value = JSON.stringify(['Life Sciences','Biochemistry, Genetics and Molecular Biology','Cell Biology']);
  menu('subfield').dispatchEvent(new f.win.Event('change', {bubbles: true}));
  await settle();
  assert.deepEqual(venues(), ['Cell'], 'picking a subfield filters the whole registry');
@@ -1282,6 +1288,289 @@ test('a journal the library does not hold is still placed in the subject hierarc
  await settle();
  assert.deepEqual(venues(), ['Some Bulletin'], 'and the ones with no subject can be found on their own');
  f.bench.destroy();
+});
+
+function subjectCatalog(f,entries,profiles={}){
+ JournalIdentity.loadRegistry({journals:entries.map((row,index)=>({title:row.title,impactFactor:row.impactFactor??10-index/10,
+  year:2025,issns:[],abbreviation:row.title.toUpperCase(),quartile:1,...row}))});
+ f.runtime.journalIdentity=JournalIdentity;
+ f.papers.splice(0,f.papers.length,...entries.map((row,index)=>({id:String(index+1),key:'K'+(index+1),libraryID:1,
+  title:'Paper '+row.title,venue:row.title,year:'2025',authors:'A Author',itemType:'journalArticle',tags:[],related:[]})));
+ for(const paper of f.papers)f.refs.set(Number(paper.id),{id:Number(paper.id)});
+ f.runtime.journalRecord=ref=>({name:f.papers[ref.id-1]?.venue||'',issn:''});
+ f.runtime.journalProfile=ref=>profiles[f.papers[ref.id-1]?.venue]||null;
+ f.runtime.Z.launchURL=url=>f.calls.push(['launchURL',url]);
+ const menu=level=>f.body().querySelector(`select[data-level="${level}"]`);
+ const choose=async(level,path)=>{const select=menu(level);select.value=path?JSON.stringify(path):'';select.dispatchEvent(new f.win.Event('change',{bubbles:true}));await settle();};
+ const row=title=>[...f.body().querySelectorAll('tr.sc-journal')].find(r=>r.dataset.venue===title);
+ return {menu,choose,row,venues:()=>[...f.body().querySelectorAll('tr.sc-journal')].map(r=>r.dataset.venue)};
+}
+
+test('journal menus distinguish all six repeated subfield names by full path and reject crossed branches',async()=>{
+ const f=fixture();
+ const biology='Biochemistry, Genetics and Molecular Biology';
+ const pairs=[
+  ['Genetics',['Life Sciences',biology],['Health Sciences','Medicine']],
+  ['Neurology',['Life Sciences','Neuroscience'],['Health Sciences','Medicine']],
+  ['Pharmacology',['Life Sciences','Pharmacology, Toxicology and Pharmaceutics'],['Health Sciences','Medicine']],
+  ['Physiology',['Life Sciences',biology],['Health Sciences','Medicine']],
+  ['Biochemistry',['Life Sciences',biology],['Health Sciences','Medicine']],
+  ['Archeology',['Social Sciences','Arts and Humanities'],['Social Sciences','Social Sciences']]
+ ];
+ const path=parts=>Object.fromEntries(['domain','field','subfield'].map((k,i)=>[k,parts[i]]));
+ const entries=pairs.flatMap(([label,a,b])=>[{title:'Left '+label,levels:[path([...a,label])]},
+  {title:'Right '+label,levels:[path([...b,label])]}]);
+ entries.push({title:'Mixed paths',levels:[path(['Life Sciences',biology,'Molecular Biology']),path(['Health Sciences','Medicine','Genetics'])]});
+ const ui=subjectCatalog(f,entries);await f.bench.show('journals');
+ for(const [label,a,b] of pairs){
+  if(f.findButton('전체'))await f.click('전체');
+  const options=[...ui.menu('subfield').querySelectorAll('option')];
+  const left=options.find(o=>o.value===JSON.stringify([...a,label])),right=options.find(o=>o.value===JSON.stringify([...b,label]));
+  assert.ok(left&&right,label+' has two independent path choices');assert.notEqual(left.value,right.value);
+  assert.equal(left.title,[...a,label].join(' › '));assert.equal(right.title,[...b,label].join(' › '));
+  assert.match(left.textContent,/ 1$/);assert.match(right.textContent,label==='Genetics'?/ 2$/:/ 1$/);
+  await ui.choose('subfield',[...a,label]);
+  assert.deepEqual(ui.venues(),['Left '+label]);
+  assert.equal(ui.menu('domain').value,JSON.stringify([a[0]]));assert.equal(ui.menu('field').value,JSON.stringify(a));
+  await f.click('전체');await ui.choose('subfield',[...b,label]);
+  assert.deepEqual(new Set(ui.venues()),new Set(label==='Genetics'?['Right Genetics','Mixed paths']:['Right '+label]));
+ }
+ await f.click('전체');await ui.choose('domain',['Health Sciences']);
+ const before=ui.menu('subfield').value;
+ await ui.choose('subfield',['Life Sciences',biology,'Genetics']);
+ assert.equal(ui.menu('domain').value,JSON.stringify(['Health Sciences']),'an unavailable option cannot replace the chosen domain');
+ assert.equal(ui.menu('subfield').value,before);
+ // An old or externally restored incompatible selection must also match zero rows.
+ Object.assign(f.bench.state.journalView.pick,{domain:'Health Sciences',field:biology,subfield:'Genetics'});
+ await f.bench.render();assert.deepEqual(ui.venues(),[]);assert.match(f.body().textContent,/이 분야의 저널이 없습니다/);
+ f.bench.destroy();
+});
+
+test('displayed and sorted local ranks follow the selected complete field or subfield path',async()=>{
+ const f=fixture(),a={domain:'Life Sciences',field:'Biology',subfield:'Genetics'},b={domain:'Health Sciences',field:'Medicine',subfield:'Genetics'};
+ const entries=[...Array.from({length:8},(_,i)=>({title:'A high '+i,impactFactor:20-i,levels:[a]})),
+  {title:'Alpha journal',impactFactor:8,levels:[a,b]},{title:'Beta journal',impactFactor:7,levels:[b]},
+  {title:'Different medicine',impactFactor:6,levels:[{...b,subfield:'Oncology'}]},
+  ...Array.from({length:8},(_,i)=>({title:'B low '+i,impactFactor:1,levels:[b]}))];
+ const ui=subjectCatalog(f,entries);await f.bench.show('journals');
+ const sort=f.body().querySelector('[aria-label="저널 정렬"]');sort.value='fieldrank';sort.dispatchEvent(new f.win.Event('change'));await settle();
+ assert.ok(ui.venues().indexOf('Beta journal')<ui.venues().indexOf('Alpha journal'),'unselected first paths have different denominators');
+ await f.click('Alpha journal');
+ const rankFacts=[...f.body().querySelectorAll('.sc-journal-profile .sc-fact')].filter(fact=>fact.title.includes('로컬 비교'));
+ assert.deepEqual(rankFacts.map(fact=>fact.querySelector('dt').textContent),['Biology › Genetics','Biology','Medicine › Genetics','Medicine']);
+ assert.ok(rankFacts[0].title.startsWith('Life Sciences › Biology › Genetics\n'));
+ assert.ok(rankFacts[2].title.startsWith('Health Sciences › Medicine › Genetics\n'));
+ await f.click('Alpha journal');
+ await ui.choose('field',['Health Sciences','Medicine']);
+ assert.deepEqual(ui.venues().slice(0,2),['Alpha journal','Beta journal']);
+ assert.equal(ui.row('Alpha journal').querySelector('.sc-col-fieldrank').textContent,'1/11');
+ assert.match(ui.row('Alpha journal').querySelector('.sc-col-fieldrank').title,/Health Sciences › Medicine 11종/);
+ await ui.choose('subfield',['Health Sciences','Medicine','Genetics']);
+ assert.deepEqual(ui.venues().slice(0,2),['Alpha journal','Beta journal']);
+ const cell=ui.row('Alpha journal').querySelector('.sc-col-fieldrank');assert.equal(cell.textContent,'1/10');
+ assert.match(cell.title,/Health Sciences › Medicine › Genetics 10종/);assert.doesNotMatch(cell.title,/Life Sciences/);
+ assert.match(cell.title,/로컬 비교/);assert.match(cell.title,/공식 JCR 순위 아님/);
+ await f.click('분야별로 묶기');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal-group th')].map(h=>h.textContent),['Health Sciences › Medicine › Genetics · 10종']);
+ await f.click('Alpha journal');
+ assert.match(f.body().querySelector('.sc-journal-profile').textContent,/1위 \/ 10종/);
+ assert.doesNotMatch(f.body().querySelector('.sc-journal-profile').textContent,/9위 \/ 9종/);
+ f.bench.destroy();
+});
+
+test('journal cache refresh keeps canonical subjects, registry JIF and profile facts aligned without changing item IDs',async()=>{
+ const f=fixture(),field='Biochemistry, Genetics and Molecular Biology';
+ const levels=['Molecular Biology','Biophysics','Spectroscopy','Structural Biology'].map(subfield=>({domain:'Life Sciences',field,subfield}));
+ const profiles={'Nature Methods':{profileAt:'2026-09-19',hIndex:40,fields:['Wrong field'],topics:[{domain:'Life Sciences',field,subfield:'Biophysics'},{domain:'Life Sciences',field,subfield:'Biophysics'}]},
+  'Unclassified journal':{profileAt:'2026-09-19',hIndex:10,topics:levels.flatMap(t=>[t,t])}};
+ const entries=[{title:'Nature Methods',impactFactor:32,year:2025,levels},{title:'Unclassified journal',impactFactor:2,levels:[]}];
+ const ui=subjectCatalog(f,entries,profiles);
+ f.runtime.state=()=>({impactFactor:4,impactYear:2020,impactSource:'old item snapshot',citations:3,status:'reading'});
+ await f.bench.show('journals');
+ assert.equal(ui.row('Nature Methods').querySelector('.sc-col-if').textContent,'32.0');
+ const title=ui.row('Nature Methods').querySelector('.sc-col-fields').title;
+ for(const level of levels)assert.ok(title.includes(level.subfield));assert.doesNotMatch(title,/Biophysics · Biophysics/);
+ await f.click('Nature Methods');
+ let facts=f.body().querySelector('.sc-journal-profile');assert.match(facts.textContent,/32\.0 · 2025/);assert.doesNotMatch(facts.textContent,/Wrong field|2020/);
+ const fieldFact=[...facts.querySelectorAll('.sc-fact')].find(r=>r.querySelector('dt').textContent==='OpenAlex 분야');
+ assert.equal(fieldFact.querySelectorAll('.sc-chip').length,4);
+ profiles['Nature Methods'].hIndex=55;profiles['Nature Methods'].profileAt='2026-09-20';await f.bench.render();
+ facts=f.body().querySelector('.sc-journal-profile');assert.ok([...facts.querySelectorAll('.sc-fact')].some(r=>r.querySelector('dt').textContent==='h-index'&&r.querySelector('dd').textContent==='55'));
+ const fallback=ui.row('Unclassified journal');for(const level of levels)assert.ok(fallback.querySelector('.sc-col-fields').title.includes(level.subfield));
+ assert.match(fallback.querySelector('.sc-col-fieldrank').title,/로컬 JIF 비교 순위가 없습니다/);assert.doesNotMatch(fallback.querySelector('.sc-col-fieldrank').title,/분야를 몰라/);
+ profiles['Unclassified journal'].topics.push({domain:'Physical Sciences',field:'Chemistry',subfield:'Analytical Chemistry'});
+ await f.bench.render();assert.match(ui.row('Unclassified journal').querySelector('.sc-col-fields').title,/Analytical Chemistry/);
+ // New registry classification and JIF change the same visible records through revision invalidation.
+ JournalIdentity.loadRegistry({journals:[{...entries[0],impactFactor:35,year:2026,levels:[{domain:'Physical Sciences',field:'Physics',subfield:'Optics'}]},entries[1]]});
+ await f.bench.render();
+ assert.match(ui.row('Nature Methods').querySelector('.sc-col-fields').title,/Physical Sciences › Physics › Optics/);
+ assert.doesNotMatch(ui.row('Nature Methods').querySelector('.sc-col-fields').title,/Molecular Biology/);
+ assert.equal(ui.row('Nature Methods').querySelector('.sc-col-if').textContent,'35.0');
+ f.bench.destroy();
+});
+
+test('journal source labels and unknown stored Q stay honest and official category navigation is preserved',async()=>{
+ const f=fixture();const ui=subjectCatalog(f,[{title:'Known subject',quartile:1,levels:[{domain:'Life Sciences',field:'Biology',subfield:'Genetics'}]},
+  {title:'Missing subject',quartile:4,levels:[]}]);await f.bench.show('journals');
+ assert.match(f.body().querySelector('.sc-journal-source').textContent,/OpenAlex 분야별 저장 JIF/);
+ assert.match(f.body().querySelector('.sc-journal-source').textContent,/로컬 순위·Q는 자체 계산이며, 저장 Q는 카테고리 미확인 원본값/);
+ assert.match(ui.row('Known subject').querySelector('.sc-col-q').textContent,/Q1\?/);
+ assert.match(ui.row('Known subject').querySelector('.sc-col-q span').title,/카테고리 미확인/);
+ assert.match(ui.row('Missing subject').querySelector('.sc-col-fields').title,/저장된 OpenAlex 분야 정보가 없습니다/);
+ assert.doesNotMatch(f.body().textContent,/전체 JCR|JCR 등재 \d/);
+ assert.ok([...f.body().querySelectorAll('th')].every(th=>th.textContent!=='JCR 순위'));
+ await f.click('공식 JCR 카테고리 보기');assert.deepEqual(f.calls.find(c=>c[0]==='launchURL'),['launchURL','https://jcr.clarivate.com/jcr/browse-categories']);
+ await f.click('Known subject');
+ assert.match(f.body().querySelector('.sc-journal-profile').textContent,/OpenAlex 분야/);
+ assert.match(f.body().querySelector('.sc-fact-note').textContent,/저장된 분류는 표와 상세에서 동일/);
+ assert.ok(f.findButton('JCR에서 보기'),'journal-specific official link still available');
+ assert.ok(f.findButton('이 저널 문헌 보기'),'existing library navigation preserved');
+ f.bench.destroy();
+});
+
+test('journal table only shares a JIF year when every visible row has that same known year',async()=>{
+ const f=fixture(),levels=[{domain:'Life Sciences',field:'Biology',subfield:'Genetics'}];
+ const entries=[{title:'Catalog journal',impactFactor:30,year:2025,levels},{title:'Outside registry',levels:[]}];
+ const ui=subjectCatalog(f,entries);
+ JournalIdentity.loadRegistry({journals:[entries[0]]});
+ f.runtime.state=()=>({impactFactor:4,impactYear:2020,citations:3,status:'reading'});
+ await f.bench.show('journals');
+ assert.equal(f.body().querySelector('thead .sc-col-if').textContent,'JIF');
+ assert.match(ui.row('Catalog journal').querySelector('.sc-col-if').title,/2025/);
+ assert.match(ui.row('Outside registry').querySelector('.sc-col-if').title,/2020/);
+ f.input('저널 검색','Catalog');await new Promise(resolve=>setTimeout(resolve,160));await settle();
+ assert.equal(f.body().querySelector('thead .sc-col-if').textContent,'JIF 2025');
+ f.input('저널 검색','');await new Promise(resolve=>setTimeout(resolve,160));await settle();
+ assert.equal(f.body().querySelector('thead .sc-col-if').textContent,'JIF');
+ f.bench.destroy();
+});
+
+function capturedJCRControl(){
+ const payload=JSON.parse(fs.readFileSync(new URL('../data/jcr-categories.json',import.meta.url),'utf8'));
+ // Real captured 21/254 taxonomy; this deliberately named unit-test journal
+ // exercises callbacks/metric cells and is never written to the shipped data.
+ const category=payload.categories.find(row=>row.journalCount>0&&row.groupKeys.length);
+ payload.source.complete.journals=false;
+ payload.journals=[{key:'integration-control',title:'Integration control journal',abbreviation:'CONTROL',issns:['1234-5678'],
+  categoryKeys:[category.key],jif:5.2,year:payload.source.metricYear,
+  categoryMetrics:[{categoryKey:category.key,editions:category.editions.slice(0,1),rank:3,rankTotal:100,quartile:1,percentile:97.5}]}];
+ return {catalog:JCRCategories.create(payload),category};
+}
+
+test('actual journal tab defaults to all captured JCR groups despite old OpenAlex selections and paper filters',async()=>{
+ const f=fixture({items:{},readerSettings:{},workbenchUI:{lastTab:'journals'}},undefined,{nativeJCR:true});
+ Object.assign(f.bench.state.journalView.pick,{domain:'Life Sciences',field:'Biology',subfield:'Genetics'});
+ Object.assign(f.bench.state,{query:'a paper filter with no journal matches',scope:'selected'});
+ await f.bench.show('journals');
+ assert.equal(f.bench.state.journalBrowser,'jcr');
+ assert.equal(f.body().querySelectorAll('.sc-jcr-group').length,21);
+ assert.equal(f.body().querySelector('.sc-journal-table'),null);
+ assert.equal(f.body().querySelector('select[data-level]'),null);
+ assert.equal(f.bench.panel.querySelector('.sc-search-row').hidden,true);
+ const find=new f.win.Event('keydown',{bubbles:true,cancelable:true});Object.defineProperties(find,{key:{value:'f'},ctrlKey:{value:true}});
+ f.bench.panel.dispatchEvent(find);assert.equal(f.doc.activeElement,f.body().querySelector('.sc-jcr-search'));
+ assert.match(f.body().textContent,/Clarivate|JCR/);
+ assert.ok(f.findButton('전체 카테고리 · 254'));
+ await f.click('전체 카테고리 · 254');
+ assert.equal(f.body().querySelectorAll('tr[data-category-key]').length,25);
+ assert.match(f.body().querySelector('.sc-jcr-pagination').textContent,/254/);
+ assert.equal(f.runtime.cache.workbenchUI.jcrBrowserState.view,'categories');
+ f.bench.destroy();
+});
+
+test('native JCR category journals use actual model/component, preserve official contexts and invoke ZotPoP only on user action',async()=>{
+ const {catalog,category}=capturedJCRControl();
+ const f=fixture(undefined,undefined,{nativeJCR:true,catalog});
+ f.runtime.Z.ZotPoP={openSearch:(window,query)=>f.calls.push(['journalSearch',window,query])};
+ f.runtime.Z.launchURL=url=>f.calls.push(['sourceOpen',url]);
+ await f.bench.show('journals');
+ assert.equal(f.calls.some(c=>['journalSearch','sourceOpen'].includes(c[0])),false);
+ const group=[...f.body().querySelectorAll('.sc-jcr-group')].find(node=>node.dataset.groupKey===category.groupKeys[0]);
+ group.querySelector('.sc-jcr-group-toggle').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ const target=[...f.body().querySelectorAll('.sc-jcr-category-link')].find(node=>node.dataset.categoryKey===category.key);
+ assert.ok(target);target.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ const row=f.body().querySelector('tr[data-journal-key="integration-control"]');assert.ok(row);
+ assert.equal(row.querySelector('[data-column="rank"]').textContent,'3/100');
+ assert.equal(row.querySelector('[data-column="quartile"]').textContent,'Q1');
+ assert.equal(row.querySelector('[data-column="percentile"]').textContent,'97.5');
+ assert.match(f.body().querySelector('.sc-jcr-coverage').textContent,/수집 미완료/);
+ await f.click('저널 검색');
+ const call=f.calls.find(c=>c[0]==='journalSearch');assert.equal(call[1],f.win);assert.deepEqual(call[2],{venue:'Integration control journal'});
+ await f.click('JCR 원본 열기');assert.deepEqual(f.calls.find(c=>c[0]==='sourceOpen'),['sourceOpen','https://jcr.clarivate.com/jcr/browse-categories']);
+ f.bench.destroy();
+});
+
+test('OpenAlex is an explicit remembered alternative with a native JCR return control and preserved JCR navigation',async()=>{
+ const {catalog}=capturedJCRControl(),f=fixture(undefined,undefined,{nativeJCR:true,catalog});
+ await f.bench.show('journals');await f.click('전체 카테고리 · 254');await f.click('OpenAlex 주제로 탐색');
+ assert.equal(f.bench.state.journalBrowser,'openalex');assert.ok(f.body().querySelector('.sc-journal-table'));
+ assert.equal(f.body().querySelector('.sc-jcr-browser'),null);assert.equal(f.runtime.cache.workbenchUI.journalBrowser,'openalex');
+ const cache=structuredClone(f.runtime.cache);f.bench.destroy();
+ const reopened=fixture(cache,undefined,{nativeJCR:true,catalog});await reopened.bench.show('journals');
+ assert.equal(reopened.bench.state.journalBrowser,'openalex');
+ await reopened.click('JCR 카테고리로 돌아가기');
+ assert.equal(reopened.bench.state.journalBrowser,'jcr');assert.equal(reopened.runtime.cache.workbenchUI.journalBrowser,'jcr');
+ assert.equal(reopened.body().querySelectorAll('tr[data-category-key]').length,25);
+ reopened.bench.destroy();
+});
+
+test('native JCR hides and disables paper selection actions while retaining selection for other views',async()=>{
+ const f=fixture(undefined,undefined,{nativeJCR:true});
+ f.setSelection([1,2]);await f.bench.show('journals');
+ const footer=f.bench.panel.querySelector('.sc-selection-bar');
+ assert.equal(footer.hidden,true);
+ assert.deepEqual([...f.bench.state.selected],['1','2']);
+ for(const button of footer.querySelectorAll('button')){
+  assert.equal(button.disabled,true);
+  button.dispatchEvent(new f.win.Event('click',{bubbles:true}));
+ }
+ await settle();
+ assert.deepEqual([...f.bench.state.selected],['1','2']);
+ assert.equal(f.calls.some(call=>['relate','unrelate'].includes(call[0])),false);
+ await f.click('OpenAlex 주제로 탐색');
+ assert.equal(footer.hidden,false);
+ assert.equal(f.findButton('관련 문헌으로 연결').disabled,false);
+ await f.click('JCR 카테고리로 돌아가기');assert.equal(footer.hidden,true);
+ await f.bench.show('explore');assert.equal(footer.hidden,false);
+ assert.deepEqual([...f.bench.state.selected],['1','2']);
+ await f.click('관련 문헌으로 연결');
+ assert.deepEqual(f.calls.find(call=>call[0]==='relate'),['relate',['1','2']]);
+ f.bench.destroy();
+});
+
+test('missing official catalog is visible in JCR mode and never silently displays OpenAlex groups',async()=>{
+ const f=fixture(undefined,undefined,{nativeJCR:true,catalog:null});
+ await f.bench.show('journals');
+ assert.ok(f.body().querySelector('.sc-jcr-unavailable[role="alert"]'));
+ assert.equal(f.body().querySelector('.sc-journal-table'),null);assert.equal(f.bench.state.journalBrowser,'jcr');
+ await f.click('OpenAlex 주제로 탐색');assert.ok(f.body().querySelector('.sc-journal-table'));
+ await f.click('JCR 카테고리로 돌아가기');assert.ok(f.body().querySelector('.sc-jcr-unavailable'));
+ f.bench.destroy();
+});
+
+test('a missing ZotPoP journal-search integration is reported without opening or changing other views',async()=>{
+ const {catalog,category}=capturedJCRControl(),f=fixture(undefined,undefined,{nativeJCR:true,catalog});
+ f.bench.state.jcrBrowserState={view:'journals',categoryKey:category.key};await f.bench.show('journals');
+ await f.click('저널 검색');
+ assert.match(f.body().querySelector('.sc-jcr-error[role="alert"]').textContent,/도구 → 부가 기능에서 ZotPoP를 설치·활성화한 뒤 다시 시도하세요\./);
+ assert.match(f.errors[0].message,/ZotPoP/);assert.equal(f.bench.state.journalBrowser,'jcr');
+ assert.ok(f.body().querySelector('tr[data-journal-key="integration-control"]'));
+ f.bench.destroy();
+});
+
+test('native JCR remount and workbench destruction remove old callbacks and their stylesheet',async()=>{
+ const {catalog}=capturedJCRControl(),f=fixture(undefined,undefined,{nativeJCR:true,catalog});
+ f.runtime.Z.launchURL=url=>f.calls.push(['sourceOpen',url]);
+ await f.bench.show('journals');const stale=f.findButton('JCR 원본 열기'),old=f.body().querySelector('.sc-jcr-browser');
+ await f.bench.show('explore');assert.equal(old.isConnected,false);
+ stale.dispatchEvent(new f.win.Event('click'));await settle();assert.equal(f.calls.some(c=>c[0]==='sourceOpen'),false);
+ await f.bench.show('journals');await f.bench.render();await f.bench.render();
+ assert.equal(f.doc.querySelectorAll('.sc-jcr-browser').length,1);
+ await f.click('JCR 원본 열기');assert.equal(f.calls.filter(c=>c[0]==='sourceOpen').length,1);
+ const latest=f.findButton('JCR 원본 열기');f.bench.destroy();latest.dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(f.calls.filter(c=>c[0]==='sourceOpen').length,1);
+ assert.equal(f.doc.querySelectorAll('.sc-jcr-browser').length,0);
+ assert.equal([...f.doc.querySelectorAll('link')].some(link=>link.getAttribute('href').endsWith('jcr-browser.css')),false);
 });
 
 test('the three annotation verbs wait until something is selected', async () => {

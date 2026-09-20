@@ -7,7 +7,7 @@ function uninstall() {}
 async function startup({ id, version, rootURI }) {
   try {
     await Zotero.initializationPromise;
-    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "patents", "journal-identity", "affiliations", "paper-graph", "failures", "brand-icons", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "runtime"]) {
+    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "patents", "journal-identity", "jcr-categories", "jcr-browser", "affiliations", "paper-graph", "failures", "brand-icons", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "runtime"]) {
       Services.scriptloader.loadSubScript(rootURI + "src/" + name + ".js", globalThis);
     }
     const path = PathUtils.join(Zotero.DataDirectory.dir, "style-custom.json");
@@ -18,15 +18,23 @@ async function startup({ id, version, rootURI }) {
     } catch (error) { Zotero.logError(error); }
     const catalogResponse = await Zotero.HTTP.request("GET", rootURI + "data/if-catalog.json", { responseType: "json" });
     const catalog = catalogResponse.response;
-    // The journal registry: every JCR journal with its abbreviation, quartile
-    // and publisher, so a journal no rule knows still gets its publisher's
-    // colour. Optional -- an older build without the file loses nothing but that.
+    // The local journal registry combines stored JIF metadata with OpenAlex
+    // subject paths. It is not an official JCR category/rank database.
+    // Optional for older builds; missing records remain unknown.
     try {
       const registry = await Zotero.HTTP.request("GET", rootURI + "data/journal-registry.json", { responseType: "json" });
       if (registry && registry.response && globalThis.CustomStyleJournalIdentity) {
         globalThis.CustomStyleJournalIdentity.loadRegistry(registry.response);
       }
     } catch (error) { Zotero.debug("Style Custom: journal registry not loaded: " + (error && error.message)); }
+    let jcrCatalog = null, jcrCatalogError = null;
+    try {
+      const response = await Zotero.HTTP.request("GET", rootURI + "data/jcr-categories.json", { responseType: "json" });
+      jcrCatalog = globalThis.CustomStyleJCRCategories.create(response.response);
+    } catch (error) {
+      jcrCatalogError = String(error && error.message || error);
+      Zotero.debug("Style Custom: official JCR catalog not loaded: " + jcrCatalogError);
+    }
     customStyle = new globalThis.CustomStyleRuntime({ Zotero, catalog, io: IOUtils, paths: PathUtils,
       model: globalThis.CustomStyleData, marquee: globalThis.CustomStyleMarquee,
       reading: globalThis.CustomStyleReading, legacy,
@@ -43,6 +51,9 @@ async function startup({ id, version, rootURI }) {
         }
       }
     });
+    customStyle.jcrCatalog = jcrCatalog;
+    customStyle.jcrCatalogError = jcrCatalogError;
+    customStyle.jcrBrowser = globalThis.CustomStyleJCRBrowser;
     await customStyle.start({ id, version, rootURI });
     Zotero.StyleCustom = customStyle;
     for (const window of Zotero.getMainWindows()) customStyle.addWindow(window);

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 const require = createRequire(import.meta.url);
 const journals = require("../src/journal-identity.js");
 
@@ -171,9 +172,7 @@ test('the registry carries each journal’s subjects, packed against one table o
   assert.equal(ranked[0].levels[0].domain, 'Life Sciences');
 });
 
-test('a journal is placed inside its own subject, which is the figure JCR prints', () => {
-  /* 214th of 22,594 tells a reader nothing. 12 of 1,813 in Molecular Biology
-     is what JCR reports and what they can act on. */
+test('local JIF comparisons preserve subject order without claiming official JCR category ranks', () => {
   journals.loadRegistry({
     subjects: ['Life Sciences', 'Biochemistry, Genetics and Molecular Biology', 'Molecular Biology', 'Cell Biology', 'Physical Sciences', 'Chemistry', 'Organic Chemistry'],
     journals: [
@@ -201,4 +200,170 @@ test('a journal is placed inside its own subject, which is the figure JCR prints
   assert.deepEqual(journals.registryFieldRanks('Not A Journal'), []);
   // Built once and kept, because it walks every row in the registry.
   assert.equal(journals.registryFieldRanks('Cell'), cell);
+  for (const rank of cell) {
+    assert.equal(rank.source, 'openalex');
+    assert.equal(rank.method, 'local-jif');
+    assert.equal(rank.isOfficial, false);
+    assert.equal(rank.domain, 'Life Sciences');
+    assert.equal(rank.field, 'Biochemistry, Genetics and Molecular Biology');
+    assert.ok(rank.pathKey.includes(rank.domain));
+  }
+});
+
+test('same-named subjects retain complete parent identity in field and subfield ranks', () => {
+  const life = {domain: 'Life Sciences', field: 'Shared field', subfield: 'Genetics'};
+  const health = {domain: 'Health Sciences', field: 'Shared field', subfield: 'Genetics'};
+  journals.loadRegistry({journals: [
+    {title: 'Life leader', impactFactor: 10, levels: [life]},
+    {title: 'Health leader', impactFactor: 9, levels: [health]},
+    {title: 'Shared journal', impactFactor: 5, levels: [life, {...life}, health]}
+  ]});
+  const lifeRanks = journals.registryFieldRanks('Life leader'), healthRanks = journals.registryFieldRanks('Health leader');
+  assert.equal(lifeRanks[0].of, 2); assert.equal(healthRanks[0].of, 2);
+  assert.notEqual(lifeRanks[0].pathKey, healthRanks[0].pathKey);
+  assert.notEqual(lifeRanks[1].pathKey, healthRanks[1].pathKey);
+  assert.equal(lifeRanks[1].subfield, '', 'a field rank represents the full parent field, not one child');
+  const shared = journals.registryFieldRanks('Shared journal');
+  assert.equal(shared.length, 4, 'two parent paths remain separate, repeated identical paths do not double count');
+  assert.deepEqual(shared.map(rank => [rank.domain, rank.level, rank.rank, rank.of]), [
+    ['Life Sciences', 'subfield', 2, 2], ['Life Sciences', 'field', 2, 2],
+    ['Health Sciences', 'subfield', 2, 2], ['Health Sciences', 'field', 2, 2]
+  ]);
+});
+
+test('equal displayed JIF values receive shared competition ranks, percentiles and quartiles', () => {
+  const levels = [{domain: 'Health Sciences', field: 'Medicine', subfield: 'Oncology'}];
+  const entries = [
+    {title: 'A', impactFactor: 10.04}, {title: 'B', impactFactor: 10.03},
+    {title: 'C', impactFactor: 9.80}, {title: 'D', impactFactor: 9.75},
+    {title: 'No value', impactFactor: null}, {title: 'Blank value', impactFactor: ''},
+    {title: 'Invalid boolean', impactFactor: false}, {title: 'Invalid negative', impactFactor: -1}
+  ].map(row => ({...row, levels}));
+  journals.loadRegistry({journals: entries});
+  const ranks = ['A', 'B', 'C', 'D'].map(title => journals.registryFieldRanks(title)[0]);
+  assert.deepEqual(ranks.map(row => row.rank), [1, 1, 3, 3]);
+  assert.deepEqual(ranks.map(row => row.quartile), [1, 1, 3, 3]);
+  assert.deepEqual(ranks.map(row => row.percentile), [25, 25, 75, 75]);
+  assert.ok(ranks.every(row => row.of === 4));
+  for (const row of entries.slice(4)) assert.deepEqual(journals.registryFieldRanks(row.title), []);
+  // The rendered decimal string is the tie criterion, including JS toFixed rounding.
+  journals.loadRegistry({journals: [{title: 'Round A', impactFactor: 1.15, levels}, {title: 'Round B', impactFactor: 1.14, levels}]});
+  assert.equal((1.15).toFixed(1), (1.14).toFixed(1));
+  assert.equal(journals.registryFieldRanks('Round A')[0].rank, journals.registryFieldRanks('Round B')[0].rank);
+});
+
+test('local percentile rounds the exact 23-of-40 midpoint upward', () => {
+  const levels = [{domain: 'Domain', field: 'Field', subfield: 'Subfield'}];
+  journals.loadRegistry({journals: Array.from({length: 40}, (_, index) => ({title: 'Journal ' + (index + 1), impactFactor: 40 - index, levels}))});
+  const ranks = journals.registryFieldRanks('Journal 23');
+  assert.ok(ranks.every(rank => rank.rank === 23 && rank.of === 40));
+  assert.ok(ranks.every(rank => rank.percentile === 58), '57.5 rounds to 58; divide-first binary floating point must not yield 57');
+});
+
+test('canonical level resolution preserves registry paths and uses all complete cached topics only as fallback', () => {
+  const first = {domain: 'Life Sciences', field: 'Biology', subfield: 'Molecular Biology'};
+  const second = {domain: 'Life Sciences', field: 'Biology', subfield: 'Biophysics'};
+  const incomplete = {domain: 'Life Sciences', field: 'Biology', subfield: ''};
+  const profile = {topics: [second, second, {domain: 'Physical Sciences', field: 'Chemistry', subfield: 'Spectroscopy'},
+    {domain: 'Life Sciences', field: 'Biology', subfield: 'Structural Biology'}, first, incomplete]};
+  journals.loadRegistry({journals: [{title: 'Known journal', levels: [first, first, incomplete]}, {title: 'Unknown subjects', levels: []}]});
+  const before = JSON.stringify(profile);
+  assert.deepEqual(journals.resolveLevels('Known journal', profile), [first]);
+  const fallback = journals.resolveLevels('Unknown subjects', profile);
+  assert.deepEqual(fallback.map(path => path.subfield), ['Biophysics', 'Spectroscopy', 'Structural Biology', 'Molecular Biology']);
+  assert.deepEqual(journals.resolveLevels('Unlisted journal', profile), fallback);
+  assert.deepEqual(journals.resolveLevels('Unlisted journal', {topics: [incomplete, null, {domain: {}, field: 'Biology', subfield: 'Cell Biology'}]}), []);
+  const resolved = journals.resolveLevels('Known journal', profile); resolved[0].field = 'changed';
+  assert.equal(journals.registryLevels('Known journal')[0].field, 'Biology');
+  assert.equal(JSON.stringify(profile), before);
+});
+
+test('registry revision changes on reload and invalidates previous rank caches', () => {
+  const before = journals.registryRevision();
+  const row = {title: 'Revision journal', impactFactor: 1, levels: [{domain: 'Domain', field: 'Field', subfield: 'Subfield'}]};
+  journals.loadRegistry({journals: [row]});
+  assert.equal(journals.registryRevision(), before + 1);
+  const old = journals.registryFieldRanks(row.title);
+  journals.resolveLevels(row.title, {}); journals.registryRanked();
+  assert.equal(journals.registryRevision(), before + 1, 'reads do not invalidate caches');
+  journals.loadRegistry({journals: []});
+  assert.equal(journals.registryRevision(), before + 2);
+  assert.deepEqual(journals.registryFieldRanks(row.title), []);
+  assert.notEqual(journals.registryFieldRanks(row.title), old);
+});
+
+test('actual registry counterexamples keep Genetics parents separate, JIF ties equal and Nature Methods classifications stable', () => {
+  const payload = JSON.parse(readFileSync(new URL('../data/journal-registry.json', import.meta.url), 'utf8'));
+  journals.loadRegistry(payload);
+  const all = journals.registryRanked();
+  const geneticPaths = [
+    {domain: 'Life Sciences', field: 'Biochemistry, Genetics and Molecular Biology', subfield: 'Genetics'},
+    {domain: 'Health Sciences', field: 'Medicine', subfield: 'Genetics'}
+  ];
+  const keys = [];
+  for (const path of geneticPaths) {
+    const members = all.filter(row => row.impactFactor != null && row.levels.some(level => Object.keys(path).every(key => level[key] === path[key])));
+    assert.ok(members.length > 0);
+    const rank = journals.registryFieldRanks(members[0].title).find(rank => rank.level === 'subfield'
+      && Object.keys(path).every(key => rank[key] === path[key]));
+    assert.equal(rank.of, members.length, 'group denominator is independently counted from the complete path');
+    keys.push(rank.pathKey);
+  }
+  assert.notEqual(keys[0], keys[1]);
+  const oncology = title => journals.registryFieldRanks(title).find(rank => rank.level === 'subfield' && rank.name === 'Oncology');
+  const medical = oncology('Medical Oncology'), oncologist = oncology('Oncologist');
+  assert.equal(all.find(row => row.title === 'Medical Oncology').impactFactor.toFixed(1), all.find(row => row.title === 'Oncologist').impactFactor.toFixed(1));
+  assert.deepEqual([medical.rank, medical.of, medical.quartile, medical.percentile], [oncologist.rank, oncologist.of, oncologist.quartile, oncologist.percentile]);
+  const profile = {topics: [{domain: 'Life Sciences', field: 'Biochemistry, Genetics and Molecular Biology', subfield: 'Biophysics'},
+    {domain: 'Life Sciences', field: 'Biochemistry, Genetics and Molecular Biology', subfield: 'Biophysics'}]};
+  const canonical = journals.resolveLevels('Nature Methods', profile);
+  assert.deepEqual(canonical, journals.resolveLevels('Nature Methods', null));
+  for (const subfield of ['Molecular Biology', 'Biophysics', 'Spectroscopy', 'Structural Biology']) assert.ok(canonical.some(path => path.subfield === subfield), subfield);
+  assert.equal(canonical.length, 4);
+});
+
+test('actual journals with colliding normalized titles retain distinct metrics and rank identities', () => {
+  const payload = JSON.parse(readFileSync(new URL('../data/journal-registry.json', import.meta.url), 'utf8'));
+  journals.loadRegistry(payload);
+  const all = journals.registryRanked();
+  assert.equal(new Set(all.map(row => row.key)).size, all.length);
+  for (const titles of [['Space-science & Technology', 'Space Science and Technology'],
+    ['Journal of Computer Science and Technology', 'Journal of Computer Science & Technology']]) {
+    const rows = titles.map(title => all.find(row => row.title === title));
+    assert.ok(rows.every(Boolean));
+    assert.notEqual(rows[0].key, rows[1].key);
+    assert.notEqual(rows[0].impactFactor, rows[1].impactFactor);
+    for (const row of rows) {
+      assert.equal(journals.registryLookup(row.title).impactFactor, row.impactFactor);
+      assert.equal(journals.identify(row.title).impactFactor, row.impactFactor);
+      assert.equal(journals.registryRank(row.title), row.rank);
+      assert.deepEqual(journals.registryLevels(row.title), row.levels);
+      for (const issn of row.issns) assert.equal(journals.registryByIssn(issn.replace('-', '')).title, row.title);
+    }
+  }
+  for (const ambiguous of ['Space Science & Technology', 'Journal-of-Computer-Science-and-Technology']) {
+    assert.equal(journals.registryLookup(ambiguous), null);
+    assert.equal(journals.registryRank(ambiguous), null);
+    assert.deepEqual(journals.registryLevels(ambiguous), []);
+    assert.deepEqual(journals.registryFieldRanks(ambiguous), []);
+    assert.equal(journals.identify(ambiguous).impactFactor, null);
+  }
+  // Independently aggregate every returned row identity. A normalized-title
+  // collision previously duplicated another journal's memberships and ranks.
+  const groups = new Map();
+  for (const row of all) for (const rank of journals.registryFieldRanks(row.title)) {
+    const list = groups.get(rank.pathKey) || [];
+    list.push({key: row.key, jif: row.impactFactor.toFixed(1), ...rank});
+    groups.set(rank.pathKey, list);
+  }
+  for (const members of groups.values()) {
+    assert.equal(new Set(members.map(row => row.key)).size, members.length);
+    assert.ok(members.every(row => row.of === members.length), members[0].pathKey);
+    let previous = null, rank = 0;
+    members.forEach((row, index) => {
+      if (previous !== row.jif) rank = index + 1;
+      assert.equal(row.rank, rank, row.key);
+      previous = row.jif;
+    });
+  }
 });

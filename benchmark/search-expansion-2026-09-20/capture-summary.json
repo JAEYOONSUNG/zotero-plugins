@@ -1,0 +1,148 @@
+[
+  {
+    "id": "crossref-geobacillus-1000",
+    "source": "crossref",
+    "query": {
+      "keywords": "geobacillus",
+      "maxResults": 1000,
+      "sort": "relevance"
+    },
+    "kind": "topic",
+    "startedAt": "2026-09-19T21:45:55.100Z",
+    "finishedAt": "2026-09-19T21:46:43.329Z",
+    "exitCode": 0,
+    "timedOut": false,
+    "completed": true,
+    "count": 1000,
+    "command": [
+      "/Users/JaeYoon/Library/Application Support/ZotPoP/tools/pop8query",
+      "--datadir",
+      "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/search-expansion-20260920/pop-data",
+      "--crossref",
+      "--keywords",
+      "geobacillus",
+      "--max",
+      "1000",
+      "--direct",
+      "--sort",
+      "rank",
+      "--format",
+      "json",
+      "--noerrlog",
+      "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/search-expansion-20260920/references/crossref-geobacillus-1000.raw.json"
+    ],
+    "sha256": "481e958db05c0c5f7fbacd78925f4d1e377fa0a4f53353f10b9546a31e3379ff",
+    "retrievalOrder": "Crossref relevance, matching PoP native default"
+  },
+  {
+    "id": "pubmed-known-paper",
+    "source": "pubmed",
+    "query": {
+      "title": "CRISPR Cas9 assisted recombineering Lactobacillus reuteri",
+      "maxResults": 10,
+      "sort": "date"
+    },
+    "kind": "known-paper",
+    "expectedDois": [
+      "10.1093/nar/gku623"
+    ],
+    "startedAt": "2026-09-19T21:46:43.331Z",
+    "finishedAt": "2026-09-19T21:46:45.537Z",
+    "exitCode": 0,
+    "timedOut": false,
+    "completed": true,
+    "count": 1,
+    "command": [
+      "/Users/JaeYoon/Library/Application Support/ZotPoP/tools/pop8query",
+      "--datadir",
+      "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/search-expansion-20260920/pop-data",
+      "--pubmed",
+      "--title",
+      "CRISPR Cas9 assisted recombineering Lactobacillus reuteri",
+      "--max",
+      "10",
+      "--direct",
+      "--sort",
+      "rank",
+      "--format",
+      "json",
+      "--noerrlog",
+      "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/search-expansion-20260920/references/pubmed-known-paper.raw.json"
+    ],
+    "sha256": "333bf07b7d85cae66eb99d662350636be7e8a7f90e6e5940f94de4ec44cac0ca",
+    "retrievalOrder": "PubMed native newest retrieval (PoP CLI rank), not output sort=year"
+  },
+  {
+    "id": "scholar-known-paper",
+    "source": "scholar",
+    "query": {
+      "title": "CRISPR Cas9 assisted recombineering in Lactobacillus reuteri",
+      "maxResults": 10,
+      "sort": "relevance"
+    },
+    "kind": "known-paper",
+    "expectedDois": [
+      "10.1093/nar/gku623"
+    ],
+    "startedAt": "2026-09-19T21:46:45.538Z",
+    "finishedAt": "2026-09-19T21:46:47.055Z",
+    "exitCode": 0,
+    "timedOut": false,
+    "completed": true,
+    "count": 1,
+    "command": [
+      "/Users/JaeYoon/Library/Application Support/ZotPoP/tools/pop8query",
+      "--datadir",
+      "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/search-expansion-20260920/pop-data",
+      "--gscholar",
+      "--title",
+      "CRISPR Cas9 assisted recombineering in Lactobacillus reuteri",
+      "--max",
+      "10",
+      "--direct",
+      "--sort",
+      "rank",
+      "--format",
+      "json",
+      "--noerrlog",
+      "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/search-expansion-20260920/references/scholar-known-paper.raw.json"
+    ],
+    "sha256": "b7b1c6afe2c2ecf1be509c982b2cbbc83593065322429276315cb6377749696a",
+    "retrievalOrder": "Google Scholar native relevance"
+  },
+  {
+    "id": "scholar-sheila",
+    "source": "scholar",
+    "query": {
+      "authors": "Sheila Ingemann Jensen",
+      "maxResults": 30,
+      "sort": "relevance"
+    },
+    "kind": "author",
+    "startedAt": "2026-09-19T21:46:47.056Z",
+    "finishedAt": "2026-09-19T21:46:54.317Z",
+    "exitCode": 0,
+    "timedOut": false,
+    "completed": true,
+    "count": 30,
+    "command": [
+      "/Users/JaeYoon/Library/Application Support/ZotPoP/tools/pop8query",
+      "--datadir",
+      "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/search-expansion-20260920/pop-data",
+      "--gscholar",
+      "--author",
+      "Sheila Ingemann Jensen",
+      "--max",
+      "30",
+      "--direct",
+      "--sort",
+      "rank",
+      "--format",
+      "json",
+      "--noerrlog",
+      "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/search-expansion-20260920/references/scholar-sheila.raw.json"
+    ],
+    "sha256": "250843ce86ed88e978b0b05c9c30879d2062269862d16b12ad8ee8c383c0b6d3",
+    "retrievalOrder": "Google Scholar native relevance"
+  }
+]

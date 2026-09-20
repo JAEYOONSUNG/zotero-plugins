@@ -43,6 +43,25 @@ var ZotPoPQuery = (function () {
 
 	function present(value) { return String(value ?? "").trim().length > 0; }
 
+	/** Normalize only verified author identifier syntax; a checksum is not proof of registration. */
+	function parseAuthorIdentifier(value) {
+		let raw = String(value ?? "").trim();
+		let openalex = raw.match(/^(?:(?:https?:\/\/(?:api\.)?openalex\.org\/)?(?:authors\/)?)?(A[1-9]\d*)\/?$/i);
+		if (openalex) return { type: "openalex", id: openalex[1].toUpperCase() };
+		let orcid = raw.match(/^(?:https?:\/\/orcid\.org\/|orcid:\s*)?(\d{4}-\d{4}-\d{4}-\d{3}[\dX]|\d{15}[\dX])\/?$/i);
+		if (!orcid) return null;
+		let digits = orcid[1].replace(/-/g, "").toUpperCase(), total = 0;
+		// ISO 7064 MOD 11-2, as specified by ORCID's identifier structure documentation.
+		for (let i = 0; i < 15; i++) total = (total + Number(digits[i])) * 2;
+		let checksum = (12 - total % 11) % 11;
+		if (digits[15] !== (checksum === 10 ? "X" : String(checksum))) return null;
+		return { type: "orcid", id: digits.match(/.{4}/g).join("-") };
+	}
+
+	function authorIdentifierLike(value) {
+		return /^(?:https?:\/\/|(?:authors\/)?[A-Za-z]\d|orcid:|\d{4}-?\d{4}-?\d{4}-?\d)/i.test(String(value).trim());
+	}
+
 	// Names and venue names are whole atoms; title words are separate atoms.
 	// Operators inside quotes remain literal. Malformed expressions fail closed.
 	function expressionTokens(value, wholeAtoms, ignoreOperatorCase) {
@@ -70,10 +89,18 @@ var ZotPoPQuery = (function () {
 	}
 
 	function parseExpression(value, wholeAtoms = false, ignoreOperatorCase = false) {
+		// Bound both parser and downstream visitor recursion for pasted/generated input.
+		if (String(value ?? "").length > 32768) return null;
 		let tokens = expressionTokens(value, wholeAtoms, ignoreOperatorCase);
-		if (!tokens?.length) return null;
-		let index = 0, valid = true;
+		if (!tokens?.length || tokens.length > 1024) return null;
+		let index = 0, valid = true, depth = 0;
 		function factor() {
+			if (++depth > 128) { valid = false; index = tokens.length; depth--; return null; }
+			let result = factorValue();
+			depth--;
+			return result;
+		}
+		function factorValue() {
 			let token = tokens[index++];
 			if (!token) { valid = false; return null; }
 			if (token.kind === "NOT") return { kind: "NOT", child: factor() };
@@ -110,12 +137,21 @@ var ZotPoPQuery = (function () {
 		let tree = parseExpression(value, wholeAtoms, ignoreOperatorCase);
 		if (!tree) return false;
 		function visit(node) {
-			if (node.kind === "term") return Boolean(match(node.value, node.phrase));
-			if (node.kind === "NOT") return !visit(node.child);
-			if (node.kind === "AND") return visit(node.left) && visit(node.right);
-			return visit(node.left) || visit(node.right);
+			if (node.kind === "term") {
+				let result = match(node.value, node.phrase);
+				return result == null ? null : Boolean(result);
+			}
+			if (node.kind === "NOT") {
+				let result = visit(node.child);
+				return result === null ? null : !result;
+			}
+			let left = visit(node.left);
+			if ((node.kind === "AND" && left === false) || (node.kind === "OR" && left === true)) return left;
+			let right = visit(node.right);
+			if (node.kind === "AND") return right === false ? false : left === null || right === null ? null : true;
+			return right === true ? true : left === null || right === null ? null : false;
 		}
-		return visit(tree);
+		return visit(tree) === true;
 	}
 
 	/** Compile whole author names; the caller owns field syntax and escaping. */
@@ -239,23 +275,24 @@ var ZotPoPQuery = (function () {
 		return nameTokens(value).flatMap(token => compactInitials(token) ? [...token.toLowerCase()] : [token.toLowerCase()]);
 	}
 
-	function tokenAgrees(a, b) {
-		return a === b || ((a.length === 1 || b.length === 1) && a[0] === b[0]);
-	}
-
 	// "Sheila Ingemann" is an unfinished "Sheila Ingemann Jensen", and "Ingemann Jensen" is
 	// the same person written without a first name. Neither ends in the family name the
 	// surname rule wants, yet both are how people actually type a Danish or Spanish name.
-	// A query of two or more tokens therefore also matches when it appears, in order and
-	// unbroken, anywhere in the full written name. One token alone stays a surname, so
-	// "David" still does not collect every David.
+	// Without a matching surname, the last requested full token must be present.
+	// Otherwise "Sheila Ingemann" falsely expands "Sheila I. Stewart". Query initials
+	// and earlier given-name tokens may still match initials ("S. Ingemann Jensen").
+	// One token alone stays a surname.
 	function partialNameMatches(query, family, given) {
 		let wanted = nameSequence(query);
 		if (wanted.length < 2 || wanted.every(token => token.length === 1)) return false;
+		let anchor = wanted.length - 1;
+		while (wanted[anchor].length === 1) anchor--;
 		let full = [...nameSequence(given), ...nameSequence(family)];
 		if (wanted.length > full.length) return false;
 		for (let start = 0; start + wanted.length <= full.length; start++) {
-			if (wanted.every((token, i) => tokenAgrees(token, full[start + i]))) return true;
+			if (wanted[anchor] !== full[start + anchor]) continue;
+			if (wanted.every((token, i) => token === full[start + i]
+				|| ((token.length === 1 || (i < anchor && full[start + i].length === 1)) && token[0] === full[start + i][0]))) return true;
 		}
 		return false;
 	}
@@ -287,8 +324,18 @@ var ZotPoPQuery = (function () {
 
 	function matchesAuthor(query, authors) {
 		let list = Array.isArray(authors) ? authors : present(authors) ? [authors] : [];
-		if (present(query) && !list.some(author => present(nameParts(author).family))) return false;
-		return evaluate(query, term => list.some(author => authorMatches(term, author)), true, true);
+		return evaluate(query, term => {
+			let identifier = parseAuthorIdentifier(term);
+			if (identifier) {
+				let field = identifier.type === "openalex" ? "openalexId" : "orcid";
+				let identities = list.map(author => parseAuthorIdentifier(author?.[field]));
+				if (identities.some(id => id?.type === identifier.type && id.id === identifier.id)) return true;
+				// Absence cannot establish an excluded identity when the byline lacks IDs.
+				return identities.length && identities.every(id => id?.type === identifier.type) ? false : null;
+			}
+			if (authorIdentifierLike(term) || !list.some(author => present(nameParts(author).family))) return null;
+			return list.some(author => authorMatches(term, author));
+		}, true, true);
 	}
 
 	function matchesTitle(query, title) {
@@ -345,10 +392,18 @@ var ZotPoPQuery = (function () {
 	}
 
 	function titleIdentity(value) {
-		return clean(value).toLowerCase().replace(/['’ʼ]/g, "").replace(/&/g, " and ")
-			.replace(/−/g, "-").replace(/(^|[\s(=<>])([-+])\s*(?=\d)/g, (_, lead, sign) => lead + (sign === "-" ? " minussign " : " plussign "))
-			.replace(/([\p{L}]+\d+)-(?=\s|$)/gu, "$1 negativesuffix ")
-			.match(/[\p{L}\p{M}]+|\d+(?:[.,]\d+)*|[\p{Sm}%!/⁄^]/gu)?.join(" ") || "";
+		// Retain scientific superscripts/subscripts before compatibility normalization
+		// flattens them into baseline digits (x², x₂ and x2 are different expressions).
+		let scripted = String(value ?? "")
+			.replace(/<(sup|sub)(?:\s[^<>]*?)?>([\s\S]*?)<\/\1\s*>/gi, (_, tag, text) => (tag.toLowerCase() === "sup" ? "^" : "_") + text)
+			.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾]+/g, text => "^" + text.normalize("NFKD"))
+			.replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]+/g, text => "_" + text.normalize("NFKD"));
+		return clean(scripted).toLowerCase().replace(/['’ʼ]/g, "").replace(/&/g, " and ")
+			.replace(/[−–—]/g, "-")
+			// Ordinary word hyphenation is typographic. Numeric ranges, signed values,
+			// ionic charges and single-letter mathematical subtraction carry identity.
+			.replace(/([\p{L}\p{M}]+)-(?=([\p{L}\p{M}]+))/gu, (_, left, right) => left + (left.length === 1 && right.length === 1 ? "-" : " "))
+			.match(/[\p{L}\p{M}]+|\d+(?:[.,]\d+)*|[\p{Sm}%!/⁄^_\-]/gu)?.join(" ") || "";
 	}
 
 	function isSafeDOIMatch(record, candidate) {
@@ -380,7 +435,7 @@ var ZotPoPQuery = (function () {
 		return true;
 	}
 
-	return { matchesAuthor, matchesTitle, matchesVenue, matchesRecord, isSafeDOIMatch, compileAuthors };
+	return { matchesAuthor, matchesTitle, matchesVenue, matchesRecord, isSafeDOIMatch, compileAuthors, parseExpression, titleIdentity, parseAuthorIdentifier };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPQuery;

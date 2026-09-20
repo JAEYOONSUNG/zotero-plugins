@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { uiHarness } from "./helpers/search-ui-harness.mjs";
 
 const ui = readFileSync(new URL("../content/ui.js", import.meta.url), "utf8");
 const prefs = readFileSync(new URL("../prefs.js", import.meta.url), "utf8");
@@ -10,13 +11,19 @@ test("the shipped default searches every source, not one", () => {
   assert.equal(shipped[1], "multi");
 });
 
-test("the fallback in the window agrees with the shipped default", () => {
-  // Hard-coding a single source here silently overrode prefs.js, so every
-  // profile searched one API no matter what the plugin shipped.
-  const fallbacks = [...ui.matchAll(/sel\.value\s*=\s*(?:PREF\("defaultSource"\)\s*\|\|\s*)?"([^"]+)"/g)]
-    .map(match => match[1]);
-  assert.ok(fallbacks.length, "the source select should have a fallback");
-  for (const value of fallbacks) assert.equal(value, "multi", `fallback "${value}" contradicts prefs.js`);
+test("the source fallback follows the selected engine and shipped default", () => {
+  const direct = uiHarness({ prefs: { defaultSource: "", popDefaultSource: "" } });
+  direct.get("engine").value = "direct";
+  direct.populateSearchSources();
+  assert.equal(direct.get("source").value, "multi");
+  direct.get("engine").value = "pop";
+  direct.populateSearchSources();
+  assert.equal(direct.get("source").value, "scholar");
+  const saved = uiHarness({ prefs: { defaultSource: "openalex", popDefaultSource: "pubmed" } });
+  saved.get("engine").value = "direct"; saved.populateSearchSources();
+  assert.equal(saved.get("source").value, "openalex");
+  saved.get("engine").value = "pop"; saved.populateSearchSources();
+  assert.equal(saved.get("source").value, "pubmed");
 });
 
 test("a profile pinned to the old single-source default is moved across exactly once", () => {

@@ -1,0 +1,45 @@
+{
+  "capturedAt": "2026-09-20T02:30:46.774011+00:00",
+  "workspace": {
+    "content/journal-registry.json": "b01a7137406cdb275bf499e3246e59fec137e3e8a972dd836dd00736b396bc06",
+    "zotero-style-custom/data/journal-registry.json": "b01a7137406cdb275bf499e3246e59fec137e3e8a972dd836dd00736b396bc06",
+    "zotero-style-custom/data/journal-fields.json": "20dc6f52df67bc7b95a3b285a36105678e6e23527c72fd9bbdb0682186b858b3",
+    "zotero-style-custom/data/if-jcr-2025.json": "9e82305e5315bae11d37a4040a6a7d1834c836eb87d30cd2fb975cb7cb26b220",
+    "zotero-style-custom/scripts/build-journal-fields.py": "5c381231e2d3df9197aaa9a00bbbba36c9272bb223d2b752ee277abda78160f9",
+    "zotero-style-custom/scripts/build-journal-registry.py": "6fbbd3e9e45d528938bc64ca1727ef4c6cf75735de92eef748d3bf0ad0f35ec3",
+    "zotero-style-custom/src/journal-identity.js": "ceae5b5a9b4190681b2cfba6de0eec15339a0cefcb22a90019142a1c6cd359b6",
+    "zotero-style-custom/src/journal-metrics.js": "a7b0aaee574eb6eee306bc2a724c8b499dda978d243929507345aa7e42a39673",
+    "zotero-style-custom/src/workbench.js": "7a2d2b81dca8c5d4d3dc1c82d9dab37775127fafe7e6ad44c280e2ca25499ff0",
+    "zotero-style-custom/src/strings.js": "d964777632259734772ec8966126ce243ee325c0434c1e37b1832de168ed1af1",
+    "zotero-style-custom/manifest.json": "fce26db9581d3add5e81b89274287384d4d9f55355f3c38b39c9a913e32b2396",
+    "manifest.json": "44544b4232b255299860d76f5195b1329b37cf142e14b2a3ad1981fe66ff84cc"
+  },
+  "installed": {
+    "zotpop@sungjaeyoon.dev.xpi": {
+      "sha256": "f3e42c5f57c93e939d433c0a8cadd0937f6bfdcbaa98a8804e7efd25fa680d34",
+      "version": "0.38.0",
+      "members": {
+        "content/journal-registry.json": "b01a7137406cdb275bf499e3246e59fec137e3e8a972dd836dd00736b396bc06"
+      }
+    },
+    "style-custom@sungjaeyoon.dev.xpi": {
+      "sha256": "569e36d6c664d306661a8ee0897b4edb55df51136ecebe2a7b39322de7c5ee7a",
+      "version": "0.50.2",
+      "members": {
+        "data/journal-registry.json": "b01a7137406cdb275bf499e3246e59fec137e3e8a972dd836dd00736b396bc06",
+        "src/journal-identity.js": "ceae5b5a9b4190681b2cfba6de0eec15339a0cefcb22a90019142a1c6cd359b6",
+        "src/journal-metrics.js": "a7b0aaee574eb6eee306bc2a724c8b499dda978d243929507345aa7e42a39673",
+        "src/workbench.js": "7a2d2b81dca8c5d4d3dc1c82d9dab37775127fafe7e6ad44c280e2ca25499ff0",
+        "src/strings.js": "d964777632259734772ec8966126ce243ee325c0434c1e37b1832de168ed1af1"
+      }
+    }
+  },
+  "cacheSample": {
+    "selectedJournalProfilesSHA256": "c13dae442f015f0edabb0dac3e847f356bfa37155fd8ee66f614dfeb14949774",
+    "selection": [
+      "Nature",
+      "Science",
+      "Nature Methods"
+    ]
+  }
+}

@@ -1,0 +1,1593 @@
+{
+  "createdAt": "2026-09-20T00:13:48.505Z",
+  "executableSHA256": "3234883c4123ddf1f13fe5c1cb390d109a374800a183f65ae5a3429dbb86c656",
+  "runnerSHA256": "6bc8cdc8bf05423e45fe36a2a2ad4312ad04983d99f4878049f82543b177c2f9",
+  "revision": "3df94842b00d63be86cca1f0cd3a64157fa22959",
+  "sourceEvidence": {
+    "content/pop.js": "387b5939ac0ef8dd3d4b03580eb9b7484c7017639c694a04cfed4b04af3c4030",
+    "content/sources.js": "3ebac862ab0a707306e963ec4a2a9093f9b021f31e3dca85363b8f0775a82301",
+    "content/query.js": "a20640c2bb75b2fcb1e212eb1ba5ca64a1573565bd38a07cbb88b75fce4e0d19",
+    "scripts/lib/pop-fidelity.mjs": "10a90cc153c5198f0c67f704546404f496f0c3fef042859d91d291528cac76a0",
+    "scripts/lib/pop-reference.mjs": "71385de1f1cdd6ed0424f89a2b1200a336810327dc7691e0f4932cc88ef711f3"
+  },
+  "cases": [
+    {
+      "id": "crossref-1000",
+      "source": "crossref",
+      "query": {
+        "engine": "pop",
+        "keywords": "geobacillus",
+        "maxResults": 1000,
+        "popOutputSort": "rank"
+      },
+      "snapshot": {
+        "status": "pass",
+        "passed": true,
+        "profile": "pop-output-fidelity",
+        "evidenceMode": "same-snapshot",
+        "reasons": [],
+        "counts": {
+          "reference": 1000,
+          "candidate": 1000,
+          "production": 1000
+        },
+        "raw": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "projection": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "provenance": {
+          "reference": {
+            "issues": [],
+            "capturedAt": null,
+            "retrievedAt": "2026-09-20T00:14:39.646Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": true,
+            "invocationId": "47c3101b-8ada-4f8c-b69c-a674aa3a0237"
+          },
+          "candidate": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:13:48.532Z",
+            "retrievedAt": "2026-09-20T00:14:39.486Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "b925f0c4-6ffa-4a79-9e76-374c8243e91a"
+          }
+        },
+        "snapshotEvidence": {
+          "valid": true,
+          "reasons": [],
+          "attestation": {
+            "snapshotId": "02712773-65b2-48ac-8ce0-29ea1ac2826d",
+            "producerInvocationId": "b925f0c4-6ffa-4a79-9e76-374c8243e91a",
+            "producedAt": "2026-09-20T00:13:48.532Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "source": "crossref",
+            "query": {
+              "engine": "pop",
+              "keywords": "geobacillus",
+              "maxResults": 1000,
+              "popOutputSort": "rank"
+            },
+            "cacheSHA256Before": "1b96047f2774180c6b2c716ec6edbdaa256c7e04b00c235dccc29b65ee773470",
+            "cacheSHA256After": "1b96047f2774180c6b2c716ec6edbdaa256c7e04b00c235dccc29b65ee773470"
+          }
+        },
+        "freshIndependentEvidence": false,
+        "evidenceScope": "Two process invocations against an explicitly shared cached snapshot; not independent fresh retrieval.",
+        "bibliographicQuality": {
+          "status": "not-established",
+          "metadata": {
+            "checked": 1000,
+            "conflicts": [],
+            "unverifiable": [
+              {
+                "referenceIndex": 42,
+                "candidateIndex": 42,
+                "method": "doi",
+                "fields": [
+                  "title"
+                ]
+              },
+              {
+                "referenceIndex": 171,
+                "candidateIndex": 171,
+                "method": "doi",
+                "fields": [
+                  "title"
+                ]
+              }
+            ],
+            "policy": "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria."
+          },
+          "limitation": "Exact PoP output fidelity does not establish independent metadata correctness, author identity, relevance precision or universal search parity."
+        }
+      },
+      "cacheFiles": 20,
+      "cacheManifest": [
+        [
+          "crossref/000aebe0699f74f189832e849ebcdc5d.dat",
+          "8b6460773398a0e36e6904b255f848bab0e7ec3f4c550916bffd5d083d8bd2d8"
+        ],
+        [
+          "crossref/201ecd646f0ad58dcc766347d4aeb4b2.dat",
+          "e8e02d516b84acc9b9dab8479cb387c822ff151e80c098b68ee52b95f2f895ad"
+        ],
+        [
+          "crossref/2d8bcf72d99ef7b58485fffcc0c83982.dat",
+          "8a8240179eb1ee03be78361f44c124d484717acc432fc63acaedd0819a18a8fe"
+        ],
+        [
+          "crossref/51ba144e941139adf71213c786436968.dat",
+          "5cd100aa9d5de6c07e3b541aee6881973a029337ab176d0d5ee67dc8cf51f76e"
+        ],
+        [
+          "crossref/58aa35a2e7d3eb64e0259d703a1e65f2.dat",
+          "0794612fd0958e1757b84febd09a6cb5eba8461899473cacdd2614814cab4496"
+        ],
+        [
+          "crossref/b93c5944f0733ba668e210212d831d1b.dat",
+          "bdcb03e564b43e287954625de4dc2012a006d14e27e14a7d7634d14c3c720097"
+        ],
+        [
+          "crossref/d89404f34e8b1eacaaf22c22deca50ce.dat",
+          "34509f90f3c2b620f575568ec8cb4873ac5acde29cee01d22856cdda7b820028"
+        ],
+        [
+          "crossref/f5bc5265dcbef6ea437a25876c8cf1b8.dat",
+          "a81a97546a907adddc7d4785002a5516a342c6bd86c3e2072eddd611ad4b880e"
+        ],
+        [
+          "crossref/f7178fdcb7e52cb41a9ea5c90593037e.dat",
+          "9adb1598acafb93737cf8b8f4128abfee13662137b52f0574e49d03f5fd36846"
+        ],
+        [
+          "crossref/f7a12ee9fd2131a5a6207cf279d172e2.dat",
+          "96d36df2c0c3dc1ec9212a10c4502fbad62bd93038a50e8476f7f89c4ca06c79"
+        ],
+        [
+          "crossref/f7d47dc25adbdb598f52e01775e7b95e.dat",
+          "535cd4bf5546091f2782597d38c14145b28deaccfa0aa4b7605f7ddd5760829e"
+        ],
+        [
+          "gscholar/799f2439a1b7989a01374d7479d4bd36.dat",
+          "1db87334047f13c17ff783d6c45f611fe21ec8f38f804ca4f656ee524bdbec2f"
+        ],
+        [
+          "gscholar/af79a0d8b8f0e71722a0d9e08d6e6bfb.dat",
+          "065f46d2c1c4b04e45301e38ed2e767dd44a89b611a4cdc1e23e9fc62dc87d7e"
+        ],
+        [
+          "gscholar/d49c6f204cb9b8ff8fc86e3a1dab589f.dat",
+          "be1fddae2aa7a6265836d19d982b252cdcbeb0bb62026e394c0f06f1d5bfed24"
+        ],
+        [
+          "gscholar/f5d63f69a5d30cec97464bf776a71f54.dat",
+          "07d566a0e431aebbc9d226472e8a7c449b18e111c2993fb314141d14426cde14"
+        ],
+        [
+          "gscholar.cookies",
+          "d19e450a4cbf0c9710dd6c8d2374bfa7cd52037832a8693868a165f47a6e6ec3"
+        ],
+        [
+          "pubmed/5a22eadee85ce221e29f6310cc03c076.dat",
+          "d2e2475e6e9c27274840a884c1cb863d29b932dd508314fab38c909bc9869310"
+        ],
+        [
+          "pubmed/74b23c7c59b7aa8327c98eea4ef86063.dat",
+          "eba3ffa25b90c3921a6e3f9ce58d75803ec7948cb3ee286d83b94defdd7b7b1d"
+        ],
+        [
+          "pubmed/e1ce3f0b18d2f69ce79ce93b23320068.dat",
+          "8aa66b1e85871cb970cfa111e028e6b701b9d581c8c714ec0a18b0c94cf1ed0f"
+        ],
+        [
+          "pubmed.cookies",
+          "fd7264c6d9df741959429a3252bfcd8abefb6a52bf3fab8ab8d41ca5d4d29bf1"
+        ]
+      ],
+      "candidateRows": 1000,
+      "referenceRows": 1000
+    },
+    {
+      "id": "pubmed-known",
+      "source": "pubmed",
+      "query": {
+        "engine": "pop",
+        "title": "CRISPR Cas9 assisted recombineering Lactobacillus reuteri",
+        "maxResults": 10,
+        "popOutputSort": "rank"
+      },
+      "snapshot": {
+        "status": "pass",
+        "passed": true,
+        "profile": "pop-output-fidelity",
+        "evidenceMode": "same-snapshot",
+        "reasons": [],
+        "counts": {
+          "reference": 1,
+          "candidate": 1,
+          "production": 1
+        },
+        "raw": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "projection": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "provenance": {
+          "reference": {
+            "issues": [],
+            "capturedAt": null,
+            "retrievedAt": "2026-09-20T00:14:42.102Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": true,
+            "invocationId": "96a74a9a-3d8c-44e0-b298-64710c5e1d8f"
+          },
+          "candidate": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:14:39.756Z",
+            "retrievedAt": "2026-09-20T00:14:42.083Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "b8c826aa-adb5-450d-96d1-59480d6206a0"
+          }
+        },
+        "snapshotEvidence": {
+          "valid": true,
+          "reasons": [],
+          "attestation": {
+            "snapshotId": "0cac8e50-1ff3-4e3d-a9fb-826410d6701f",
+            "producerInvocationId": "b8c826aa-adb5-450d-96d1-59480d6206a0",
+            "producedAt": "2026-09-20T00:14:39.756Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "source": "pubmed",
+            "query": {
+              "engine": "pop",
+              "title": "CRISPR Cas9 assisted recombineering Lactobacillus reuteri",
+              "maxResults": 10,
+              "popOutputSort": "rank"
+            },
+            "cacheSHA256Before": "f64f30a622d608a0f19f52c3ffa1c6b6e6dd17ac92509738ce507fc8e4fbd1d4",
+            "cacheSHA256After": "f64f30a622d608a0f19f52c3ffa1c6b6e6dd17ac92509738ce507fc8e4fbd1d4"
+          }
+        },
+        "freshIndependentEvidence": false,
+        "evidenceScope": "Two process invocations against an explicitly shared cached snapshot; not independent fresh retrieval.",
+        "bibliographicQuality": {
+          "status": "not-established",
+          "metadata": {
+            "checked": 1,
+            "conflicts": [],
+            "unverifiable": [],
+            "policy": "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria."
+          },
+          "limitation": "Exact PoP output fidelity does not establish independent metadata correctness, author identity, relevance precision or universal search parity."
+        }
+      },
+      "cacheFiles": 21,
+      "cacheManifest": [
+        [
+          "crossref/000aebe0699f74f189832e849ebcdc5d.dat",
+          "8b6460773398a0e36e6904b255f848bab0e7ec3f4c550916bffd5d083d8bd2d8"
+        ],
+        [
+          "crossref/201ecd646f0ad58dcc766347d4aeb4b2.dat",
+          "e8e02d516b84acc9b9dab8479cb387c822ff151e80c098b68ee52b95f2f895ad"
+        ],
+        [
+          "crossref/2d8bcf72d99ef7b58485fffcc0c83982.dat",
+          "8a8240179eb1ee03be78361f44c124d484717acc432fc63acaedd0819a18a8fe"
+        ],
+        [
+          "crossref/51ba144e941139adf71213c786436968.dat",
+          "5cd100aa9d5de6c07e3b541aee6881973a029337ab176d0d5ee67dc8cf51f76e"
+        ],
+        [
+          "crossref/58aa35a2e7d3eb64e0259d703a1e65f2.dat",
+          "0794612fd0958e1757b84febd09a6cb5eba8461899473cacdd2614814cab4496"
+        ],
+        [
+          "crossref/b93c5944f0733ba668e210212d831d1b.dat",
+          "bdcb03e564b43e287954625de4dc2012a006d14e27e14a7d7634d14c3c720097"
+        ],
+        [
+          "crossref/d89404f34e8b1eacaaf22c22deca50ce.dat",
+          "34509f90f3c2b620f575568ec8cb4873ac5acde29cee01d22856cdda7b820028"
+        ],
+        [
+          "crossref/f5bc5265dcbef6ea437a25876c8cf1b8.dat",
+          "a81a97546a907adddc7d4785002a5516a342c6bd86c3e2072eddd611ad4b880e"
+        ],
+        [
+          "crossref/f7178fdcb7e52cb41a9ea5c90593037e.dat",
+          "9adb1598acafb93737cf8b8f4128abfee13662137b52f0574e49d03f5fd36846"
+        ],
+        [
+          "crossref/f7a12ee9fd2131a5a6207cf279d172e2.dat",
+          "96d36df2c0c3dc1ec9212a10c4502fbad62bd93038a50e8476f7f89c4ca06c79"
+        ],
+        [
+          "crossref/f7d47dc25adbdb598f52e01775e7b95e.dat",
+          "535cd4bf5546091f2782597d38c14145b28deaccfa0aa4b7605f7ddd5760829e"
+        ],
+        [
+          "gscholar/799f2439a1b7989a01374d7479d4bd36.dat",
+          "1db87334047f13c17ff783d6c45f611fe21ec8f38f804ca4f656ee524bdbec2f"
+        ],
+        [
+          "gscholar/af79a0d8b8f0e71722a0d9e08d6e6bfb.dat",
+          "065f46d2c1c4b04e45301e38ed2e767dd44a89b611a4cdc1e23e9fc62dc87d7e"
+        ],
+        [
+          "gscholar/d49c6f204cb9b8ff8fc86e3a1dab589f.dat",
+          "be1fddae2aa7a6265836d19d982b252cdcbeb0bb62026e394c0f06f1d5bfed24"
+        ],
+        [
+          "gscholar/f5d63f69a5d30cec97464bf776a71f54.dat",
+          "07d566a0e431aebbc9d226472e8a7c449b18e111c2993fb314141d14426cde14"
+        ],
+        [
+          "gscholar.cookies",
+          "d19e450a4cbf0c9710dd6c8d2374bfa7cd52037832a8693868a165f47a6e6ec3"
+        ],
+        [
+          "pubmed/5a22eadee85ce221e29f6310cc03c076.dat",
+          "43e1529ebd6b2320dae5a17d17f563fdd7ecd28197d15b51f77518e9adc2c2f0"
+        ],
+        [
+          "pubmed/74b23c7c59b7aa8327c98eea4ef86063.dat",
+          "eba3ffa25b90c3921a6e3f9ce58d75803ec7948cb3ee286d83b94defdd7b7b1d"
+        ],
+        [
+          "pubmed/e1ce3f0b18d2f69ce79ce93b23320068.dat",
+          "8aa66b1e85871cb970cfa111e028e6b701b9d581c8c714ec0a18b0c94cf1ed0f"
+        ],
+        [
+          "pubmed/ef88f339b698e127157d16e205ba13dd.dat",
+          "320de969036c49154a7b62818e1b62d2c05c3d6f805ae7990c6358f6ee52cd63"
+        ],
+        [
+          "pubmed.cookies",
+          "a7ea76df266e9abb65a8849233b5218bc8b1bb07857f34d78be0d38cf012829f"
+        ]
+      ],
+      "candidateRows": 1,
+      "referenceRows": 1,
+      "liveLive": {
+        "status": "pass",
+        "passed": true,
+        "profile": "pop-output-fidelity",
+        "evidenceMode": "live-live",
+        "reasons": [],
+        "counts": {
+          "reference": 1,
+          "candidate": 1,
+          "production": 1
+        },
+        "raw": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "projection": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "provenance": {
+          "reference": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:14:42.109Z",
+            "retrievedAt": "2026-09-20T00:14:45.330Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "1857a791-e66a-43ef-b43a-163fbae60aea"
+          },
+          "candidate": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:14:39.756Z",
+            "retrievedAt": "2026-09-20T00:14:42.083Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "b8c826aa-adb5-450d-96d1-59480d6206a0"
+          }
+        },
+        "snapshotEvidence": null,
+        "freshIndependentEvidence": true,
+        "evidenceScope": "Separately invoked current PoP output; acquisition claims must be backed by runner evidence.",
+        "bibliographicQuality": {
+          "status": "not-established",
+          "metadata": {
+            "checked": 1,
+            "conflicts": [],
+            "unverifiable": [],
+            "policy": "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria."
+          },
+          "limitation": "Exact PoP output fidelity does not establish independent metadata correctness, author identity, relevance precision or universal search parity."
+        }
+      }
+    },
+    {
+      "id": "scholar-known",
+      "source": "scholar",
+      "query": {
+        "engine": "pop",
+        "title": "CRISPR Cas9 assisted recombineering in Lactobacillus reuteri",
+        "maxResults": 10,
+        "popOutputSort": "rank"
+      },
+      "snapshot": {
+        "status": "pass",
+        "passed": true,
+        "profile": "pop-output-fidelity",
+        "evidenceMode": "same-snapshot",
+        "reasons": [],
+        "counts": {
+          "reference": 1,
+          "candidate": 1,
+          "production": 1
+        },
+        "raw": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "projection": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "provenance": {
+          "reference": {
+            "issues": [],
+            "capturedAt": null,
+            "retrievedAt": "2026-09-20T00:14:46.626Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": true,
+            "invocationId": "5c00d33b-3b17-4309-99c7-ced7295ee437"
+          },
+          "candidate": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:14:45.332Z",
+            "retrievedAt": "2026-09-20T00:14:46.607Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "55b6a0bf-7cf6-4826-9de2-ed53bb9285dc"
+          }
+        },
+        "snapshotEvidence": {
+          "valid": true,
+          "reasons": [],
+          "attestation": {
+            "snapshotId": "4dfb3676-aa9f-4ae5-bd7a-fc2a8e7a1c93",
+            "producerInvocationId": "55b6a0bf-7cf6-4826-9de2-ed53bb9285dc",
+            "producedAt": "2026-09-20T00:14:45.332Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "source": "scholar",
+            "query": {
+              "engine": "pop",
+              "title": "CRISPR Cas9 assisted recombineering in Lactobacillus reuteri",
+              "maxResults": 10,
+              "popOutputSort": "rank"
+            },
+            "cacheSHA256Before": "e5cbb93378315381ed6d1775d74f5c74dd485b18a673315ba8fc2d0a5f8dbf95",
+            "cacheSHA256After": "e5cbb93378315381ed6d1775d74f5c74dd485b18a673315ba8fc2d0a5f8dbf95"
+          }
+        },
+        "freshIndependentEvidence": false,
+        "evidenceScope": "Two process invocations against an explicitly shared cached snapshot; not independent fresh retrieval.",
+        "bibliographicQuality": {
+          "status": "not-established",
+          "metadata": {
+            "checked": 1,
+            "conflicts": [],
+            "unverifiable": [],
+            "policy": "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria."
+          },
+          "limitation": "Exact PoP output fidelity does not establish independent metadata correctness, author identity, relevance precision or universal search parity."
+        }
+      },
+      "cacheFiles": 22,
+      "cacheManifest": [
+        [
+          "crossref/000aebe0699f74f189832e849ebcdc5d.dat",
+          "8b6460773398a0e36e6904b255f848bab0e7ec3f4c550916bffd5d083d8bd2d8"
+        ],
+        [
+          "crossref/201ecd646f0ad58dcc766347d4aeb4b2.dat",
+          "e8e02d516b84acc9b9dab8479cb387c822ff151e80c098b68ee52b95f2f895ad"
+        ],
+        [
+          "crossref/2d8bcf72d99ef7b58485fffcc0c83982.dat",
+          "8a8240179eb1ee03be78361f44c124d484717acc432fc63acaedd0819a18a8fe"
+        ],
+        [
+          "crossref/51ba144e941139adf71213c786436968.dat",
+          "5cd100aa9d5de6c07e3b541aee6881973a029337ab176d0d5ee67dc8cf51f76e"
+        ],
+        [
+          "crossref/58aa35a2e7d3eb64e0259d703a1e65f2.dat",
+          "0794612fd0958e1757b84febd09a6cb5eba8461899473cacdd2614814cab4496"
+        ],
+        [
+          "crossref/b93c5944f0733ba668e210212d831d1b.dat",
+          "bdcb03e564b43e287954625de4dc2012a006d14e27e14a7d7634d14c3c720097"
+        ],
+        [
+          "crossref/d89404f34e8b1eacaaf22c22deca50ce.dat",
+          "34509f90f3c2b620f575568ec8cb4873ac5acde29cee01d22856cdda7b820028"
+        ],
+        [
+          "crossref/f5bc5265dcbef6ea437a25876c8cf1b8.dat",
+          "a81a97546a907adddc7d4785002a5516a342c6bd86c3e2072eddd611ad4b880e"
+        ],
+        [
+          "crossref/f7178fdcb7e52cb41a9ea5c90593037e.dat",
+          "9adb1598acafb93737cf8b8f4128abfee13662137b52f0574e49d03f5fd36846"
+        ],
+        [
+          "crossref/f7a12ee9fd2131a5a6207cf279d172e2.dat",
+          "96d36df2c0c3dc1ec9212a10c4502fbad62bd93038a50e8476f7f89c4ca06c79"
+        ],
+        [
+          "crossref/f7d47dc25adbdb598f52e01775e7b95e.dat",
+          "535cd4bf5546091f2782597d38c14145b28deaccfa0aa4b7605f7ddd5760829e"
+        ],
+        [
+          "gscholar/799f2439a1b7989a01374d7479d4bd36.dat",
+          "d08165008d6c5a5259aa15f2d23ce643b006968e93f0137acb1a0c5111f3dfd3"
+        ],
+        [
+          "gscholar/af79a0d8b8f0e71722a0d9e08d6e6bfb.dat",
+          "065f46d2c1c4b04e45301e38ed2e767dd44a89b611a4cdc1e23e9fc62dc87d7e"
+        ],
+        [
+          "gscholar/d49c6f204cb9b8ff8fc86e3a1dab589f.dat",
+          "be1fddae2aa7a6265836d19d982b252cdcbeb0bb62026e394c0f06f1d5bfed24"
+        ],
+        [
+          "gscholar/f5d63f69a5d30cec97464bf776a71f54.dat",
+          "07d566a0e431aebbc9d226472e8a7c449b18e111c2993fb314141d14426cde14"
+        ],
+        [
+          "gscholar.cookies",
+          "d19e450a4cbf0c9710dd6c8d2374bfa7cd52037832a8693868a165f47a6e6ec3"
+        ],
+        [
+          "pubmed/2a8b6c6224c66767ae40beb970e38f74.dat",
+          "e7f7b564ba39977172241dfb48dd671a487b6b7edf894fb8d7bd737e6ee5f8a5"
+        ],
+        [
+          "pubmed/5a22eadee85ce221e29f6310cc03c076.dat",
+          "8412904024350fa1d083551a768b5e8fef904d8c96f36b04347279154b155a29"
+        ],
+        [
+          "pubmed/74b23c7c59b7aa8327c98eea4ef86063.dat",
+          "eba3ffa25b90c3921a6e3f9ce58d75803ec7948cb3ee286d83b94defdd7b7b1d"
+        ],
+        [
+          "pubmed/e1ce3f0b18d2f69ce79ce93b23320068.dat",
+          "8aa66b1e85871cb970cfa111e028e6b701b9d581c8c714ec0a18b0c94cf1ed0f"
+        ],
+        [
+          "pubmed/ef88f339b698e127157d16e205ba13dd.dat",
+          "320de969036c49154a7b62818e1b62d2c05c3d6f805ae7990c6358f6ee52cd63"
+        ],
+        [
+          "pubmed.cookies",
+          "1b028acf4bba73efb3fe445732b2139ce56c6c233747adccd22d74a994b817d6"
+        ]
+      ],
+      "candidateRows": 1,
+      "referenceRows": 1,
+      "liveLive": {
+        "status": "pass",
+        "passed": true,
+        "profile": "pop-output-fidelity",
+        "evidenceMode": "live-live",
+        "reasons": [],
+        "counts": {
+          "reference": 1,
+          "candidate": 1,
+          "production": 1
+        },
+        "raw": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "projection": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "provenance": {
+          "reference": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:14:46.637Z",
+            "retrievedAt": "2026-09-20T00:14:49.063Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "5f6046d5-6970-45da-8b28-747898ff8a72"
+          },
+          "candidate": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:14:45.332Z",
+            "retrievedAt": "2026-09-20T00:14:46.607Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "55b6a0bf-7cf6-4826-9de2-ed53bb9285dc"
+          }
+        },
+        "snapshotEvidence": null,
+        "freshIndependentEvidence": true,
+        "evidenceScope": "Separately invoked current PoP output; acquisition claims must be backed by runner evidence.",
+        "bibliographicQuality": {
+          "status": "not-established",
+          "metadata": {
+            "checked": 1,
+            "conflicts": [],
+            "unverifiable": [],
+            "policy": "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria."
+          },
+          "limitation": "Exact PoP output fidelity does not establish independent metadata correctness, author identity, relevance precision or universal search parity."
+        }
+      }
+    },
+    {
+      "id": "scholar-author",
+      "source": "scholar",
+      "query": {
+        "engine": "pop",
+        "authors": "Sheila Ingemann Jensen",
+        "maxResults": 30,
+        "popOutputSort": "rank"
+      },
+      "snapshot": {
+        "status": "pass",
+        "passed": true,
+        "profile": "pop-output-fidelity",
+        "evidenceMode": "same-snapshot",
+        "reasons": [],
+        "counts": {
+          "reference": 30,
+          "candidate": 30,
+          "production": 30
+        },
+        "raw": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "projection": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "provenance": {
+          "reference": {
+            "issues": [],
+            "capturedAt": null,
+            "retrievedAt": "2026-09-20T00:14:55.891Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": true,
+            "invocationId": "a3d18c12-42ff-494c-b1d8-879ec071ad21"
+          },
+          "candidate": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:14:49.065Z",
+            "retrievedAt": "2026-09-20T00:14:55.861Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "276d654a-3039-4a04-991a-64599abcf34e"
+          }
+        },
+        "snapshotEvidence": {
+          "valid": true,
+          "reasons": [],
+          "attestation": {
+            "snapshotId": "a64342c4-6039-47c6-b62a-be650dc67cf2",
+            "producerInvocationId": "276d654a-3039-4a04-991a-64599abcf34e",
+            "producedAt": "2026-09-20T00:14:49.065Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "source": "scholar",
+            "query": {
+              "engine": "pop",
+              "authors": "Sheila Ingemann Jensen",
+              "maxResults": 30,
+              "popOutputSort": "rank"
+            },
+            "cacheSHA256Before": "ed5d45d1f932f1a4bf62c106ada56bff17ce8939089ff46e50618cb3c0dd73af",
+            "cacheSHA256After": "ed5d45d1f932f1a4bf62c106ada56bff17ce8939089ff46e50618cb3c0dd73af"
+          }
+        },
+        "freshIndependentEvidence": false,
+        "evidenceScope": "Two process invocations against an explicitly shared cached snapshot; not independent fresh retrieval.",
+        "bibliographicQuality": {
+          "status": "not-established",
+          "metadata": {
+            "checked": 30,
+            "conflicts": [],
+            "unverifiable": [
+              {
+                "referenceIndex": 0,
+                "candidateIndex": 0,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 1,
+                "candidateIndex": 1,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 3,
+                "candidateIndex": 3,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 4,
+                "candidateIndex": 4,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 5,
+                "candidateIndex": 5,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 6,
+                "candidateIndex": 6,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 7,
+                "candidateIndex": 7,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 10,
+                "candidateIndex": 10,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 11,
+                "candidateIndex": 11,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 12,
+                "candidateIndex": 12,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 13,
+                "candidateIndex": 13,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 15,
+                "candidateIndex": 15,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 18,
+                "candidateIndex": 18,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 19,
+                "candidateIndex": 19,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 20,
+                "candidateIndex": 20,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 21,
+                "candidateIndex": 21,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 22,
+                "candidateIndex": 22,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 23,
+                "candidateIndex": 23,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 24,
+                "candidateIndex": 24,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 25,
+                "candidateIndex": 25,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 26,
+                "candidateIndex": 26,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 28,
+                "candidateIndex": 28,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 29,
+                "candidateIndex": 29,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              }
+            ],
+            "policy": "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria."
+          },
+          "limitation": "Exact PoP output fidelity does not establish independent metadata correctness, author identity, relevance precision or universal search parity."
+        }
+      },
+      "cacheFiles": 22,
+      "cacheManifest": [
+        [
+          "crossref/000aebe0699f74f189832e849ebcdc5d.dat",
+          "8b6460773398a0e36e6904b255f848bab0e7ec3f4c550916bffd5d083d8bd2d8"
+        ],
+        [
+          "crossref/201ecd646f0ad58dcc766347d4aeb4b2.dat",
+          "e8e02d516b84acc9b9dab8479cb387c822ff151e80c098b68ee52b95f2f895ad"
+        ],
+        [
+          "crossref/2d8bcf72d99ef7b58485fffcc0c83982.dat",
+          "8a8240179eb1ee03be78361f44c124d484717acc432fc63acaedd0819a18a8fe"
+        ],
+        [
+          "crossref/51ba144e941139adf71213c786436968.dat",
+          "5cd100aa9d5de6c07e3b541aee6881973a029337ab176d0d5ee67dc8cf51f76e"
+        ],
+        [
+          "crossref/58aa35a2e7d3eb64e0259d703a1e65f2.dat",
+          "0794612fd0958e1757b84febd09a6cb5eba8461899473cacdd2614814cab4496"
+        ],
+        [
+          "crossref/b93c5944f0733ba668e210212d831d1b.dat",
+          "bdcb03e564b43e287954625de4dc2012a006d14e27e14a7d7634d14c3c720097"
+        ],
+        [
+          "crossref/d89404f34e8b1eacaaf22c22deca50ce.dat",
+          "34509f90f3c2b620f575568ec8cb4873ac5acde29cee01d22856cdda7b820028"
+        ],
+        [
+          "crossref/f5bc5265dcbef6ea437a25876c8cf1b8.dat",
+          "a81a97546a907adddc7d4785002a5516a342c6bd86c3e2072eddd611ad4b880e"
+        ],
+        [
+          "crossref/f7178fdcb7e52cb41a9ea5c90593037e.dat",
+          "9adb1598acafb93737cf8b8f4128abfee13662137b52f0574e49d03f5fd36846"
+        ],
+        [
+          "crossref/f7a12ee9fd2131a5a6207cf279d172e2.dat",
+          "96d36df2c0c3dc1ec9212a10c4502fbad62bd93038a50e8476f7f89c4ca06c79"
+        ],
+        [
+          "crossref/f7d47dc25adbdb598f52e01775e7b95e.dat",
+          "535cd4bf5546091f2782597d38c14145b28deaccfa0aa4b7605f7ddd5760829e"
+        ],
+        [
+          "gscholar/799f2439a1b7989a01374d7479d4bd36.dat",
+          "4723d19f699715b56702c66d6292de3ec00743ac2d43a58bbeb1f10c805f47a4"
+        ],
+        [
+          "gscholar/af79a0d8b8f0e71722a0d9e08d6e6bfb.dat",
+          "daad83bd7cdd58a829fb7b3423a0ab362a0d5f8d53e2da2fa2a771e61f98d22f"
+        ],
+        [
+          "gscholar/d49c6f204cb9b8ff8fc86e3a1dab589f.dat",
+          "c893b65122916c6f860794e6516c35824b6ca6e6ba222ad3d2c606c481a24dd4"
+        ],
+        [
+          "gscholar/f5d63f69a5d30cec97464bf776a71f54.dat",
+          "b4dd54e86e4a69094e408aba0b47c84999076ffddf61d07315631f4cbf60a65a"
+        ],
+        [
+          "gscholar.cookies",
+          "d19e450a4cbf0c9710dd6c8d2374bfa7cd52037832a8693868a165f47a6e6ec3"
+        ],
+        [
+          "pubmed/2a8b6c6224c66767ae40beb970e38f74.dat",
+          "e7f7b564ba39977172241dfb48dd671a487b6b7edf894fb8d7bd737e6ee5f8a5"
+        ],
+        [
+          "pubmed/5a22eadee85ce221e29f6310cc03c076.dat",
+          "8412904024350fa1d083551a768b5e8fef904d8c96f36b04347279154b155a29"
+        ],
+        [
+          "pubmed/74b23c7c59b7aa8327c98eea4ef86063.dat",
+          "eba3ffa25b90c3921a6e3f9ce58d75803ec7948cb3ee286d83b94defdd7b7b1d"
+        ],
+        [
+          "pubmed/e1ce3f0b18d2f69ce79ce93b23320068.dat",
+          "8aa66b1e85871cb970cfa111e028e6b701b9d581c8c714ec0a18b0c94cf1ed0f"
+        ],
+        [
+          "pubmed/ef88f339b698e127157d16e205ba13dd.dat",
+          "320de969036c49154a7b62818e1b62d2c05c3d6f805ae7990c6358f6ee52cd63"
+        ],
+        [
+          "pubmed.cookies",
+          "1b028acf4bba73efb3fe445732b2139ce56c6c233747adccd22d74a994b817d6"
+        ]
+      ],
+      "candidateRows": 30,
+      "referenceRows": 30,
+      "liveLive": {
+        "status": "pass",
+        "passed": true,
+        "profile": "pop-output-fidelity",
+        "evidenceMode": "live-live",
+        "reasons": [],
+        "counts": {
+          "reference": 30,
+          "candidate": 30,
+          "production": 30
+        },
+        "raw": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "projection": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "provenance": {
+          "reference": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:14:55.904Z",
+            "retrievedAt": "2026-09-20T00:15:02.787Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "340accb9-004f-4323-abe5-72c480d23b6b"
+          },
+          "candidate": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:14:49.065Z",
+            "retrievedAt": "2026-09-20T00:14:55.861Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "276d654a-3039-4a04-991a-64599abcf34e"
+          }
+        },
+        "snapshotEvidence": null,
+        "freshIndependentEvidence": true,
+        "evidenceScope": "Separately invoked current PoP output; acquisition claims must be backed by runner evidence.",
+        "bibliographicQuality": {
+          "status": "not-established",
+          "metadata": {
+            "checked": 30,
+            "conflicts": [],
+            "unverifiable": [
+              {
+                "referenceIndex": 0,
+                "candidateIndex": 0,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 1,
+                "candidateIndex": 1,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 3,
+                "candidateIndex": 3,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 4,
+                "candidateIndex": 4,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 5,
+                "candidateIndex": 5,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 6,
+                "candidateIndex": 6,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 7,
+                "candidateIndex": 7,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 10,
+                "candidateIndex": 10,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 11,
+                "candidateIndex": 11,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 12,
+                "candidateIndex": 12,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 13,
+                "candidateIndex": 13,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 15,
+                "candidateIndex": 15,
+                "method": "doi",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 18,
+                "candidateIndex": 18,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 19,
+                "candidateIndex": 19,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 20,
+                "candidateIndex": 20,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 21,
+                "candidateIndex": 21,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 22,
+                "candidateIndex": 22,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 23,
+                "candidateIndex": 23,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 24,
+                "candidateIndex": 24,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 25,
+                "candidateIndex": 25,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 26,
+                "candidateIndex": 26,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 28,
+                "candidateIndex": 28,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              },
+              {
+                "referenceIndex": 29,
+                "candidateIndex": 29,
+                "method": "exact-title",
+                "fields": [
+                  "authors"
+                ]
+              }
+            ],
+            "policy": "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria."
+          },
+          "limitation": "Exact PoP output fidelity does not establish independent metadata correctness, author identity, relevance precision or universal search parity."
+        }
+      }
+    },
+    {
+      "id": "crossref-citation-order",
+      "source": "crossref",
+      "query": {
+        "engine": "pop",
+        "keywords": "geobacillus",
+        "maxResults": 30,
+        "popOutputSort": "-cites"
+      },
+      "snapshot": {
+        "status": "pass",
+        "passed": true,
+        "profile": "pop-output-fidelity",
+        "evidenceMode": "same-snapshot",
+        "reasons": [],
+        "counts": {
+          "reference": 30,
+          "candidate": 30,
+          "production": 30
+        },
+        "raw": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "projection": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "provenance": {
+          "reference": {
+            "issues": [],
+            "capturedAt": null,
+            "retrievedAt": "2026-09-20T00:15:06.223Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": true,
+            "invocationId": "f3af0679-4e7a-4bc7-8f84-aa9e3f39676b"
+          },
+          "candidate": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:15:02.791Z",
+            "retrievedAt": "2026-09-20T00:15:06.201Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "42661d9c-66fe-4995-aa45-e4727289eb5d"
+          }
+        },
+        "snapshotEvidence": {
+          "valid": true,
+          "reasons": [],
+          "attestation": {
+            "snapshotId": "933de9bc-49de-43c8-a028-ac156a568f18",
+            "producerInvocationId": "42661d9c-66fe-4995-aa45-e4727289eb5d",
+            "producedAt": "2026-09-20T00:15:02.791Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "source": "crossref",
+            "query": {
+              "engine": "pop",
+              "keywords": "geobacillus",
+              "maxResults": 30,
+              "popOutputSort": "-cites"
+            },
+            "cacheSHA256Before": "ca7c8bb459d15423bd30ba2c802e9560cbc7161cdda1d2755921902c22fb847a",
+            "cacheSHA256After": "ca7c8bb459d15423bd30ba2c802e9560cbc7161cdda1d2755921902c22fb847a"
+          }
+        },
+        "freshIndependentEvidence": false,
+        "evidenceScope": "Two process invocations against an explicitly shared cached snapshot; not independent fresh retrieval.",
+        "bibliographicQuality": {
+          "status": "not-established",
+          "metadata": {
+            "checked": 30,
+            "conflicts": [],
+            "unverifiable": [],
+            "policy": "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria."
+          },
+          "limitation": "Exact PoP output fidelity does not establish independent metadata correctness, author identity, relevance precision or universal search parity."
+        }
+      },
+      "cacheFiles": 22,
+      "cacheManifest": [
+        [
+          "crossref/000aebe0699f74f189832e849ebcdc5d.dat",
+          "8b6460773398a0e36e6904b255f848bab0e7ec3f4c550916bffd5d083d8bd2d8"
+        ],
+        [
+          "crossref/201ecd646f0ad58dcc766347d4aeb4b2.dat",
+          "e8e02d516b84acc9b9dab8479cb387c822ff151e80c098b68ee52b95f2f895ad"
+        ],
+        [
+          "crossref/2d8bcf72d99ef7b58485fffcc0c83982.dat",
+          "8a8240179eb1ee03be78361f44c124d484717acc432fc63acaedd0819a18a8fe"
+        ],
+        [
+          "crossref/51ba144e941139adf71213c786436968.dat",
+          "602b9661da1737a7bc9f449891169155aa42ed8599feaf3912398a0e66c9313c"
+        ],
+        [
+          "crossref/58aa35a2e7d3eb64e0259d703a1e65f2.dat",
+          "0794612fd0958e1757b84febd09a6cb5eba8461899473cacdd2614814cab4496"
+        ],
+        [
+          "crossref/b93c5944f0733ba668e210212d831d1b.dat",
+          "bdcb03e564b43e287954625de4dc2012a006d14e27e14a7d7634d14c3c720097"
+        ],
+        [
+          "crossref/d89404f34e8b1eacaaf22c22deca50ce.dat",
+          "34509f90f3c2b620f575568ec8cb4873ac5acde29cee01d22856cdda7b820028"
+        ],
+        [
+          "crossref/f5bc5265dcbef6ea437a25876c8cf1b8.dat",
+          "a81a97546a907adddc7d4785002a5516a342c6bd86c3e2072eddd611ad4b880e"
+        ],
+        [
+          "crossref/f7178fdcb7e52cb41a9ea5c90593037e.dat",
+          "9adb1598acafb93737cf8b8f4128abfee13662137b52f0574e49d03f5fd36846"
+        ],
+        [
+          "crossref/f7a12ee9fd2131a5a6207cf279d172e2.dat",
+          "96d36df2c0c3dc1ec9212a10c4502fbad62bd93038a50e8476f7f89c4ca06c79"
+        ],
+        [
+          "crossref/f7d47dc25adbdb598f52e01775e7b95e.dat",
+          "535cd4bf5546091f2782597d38c14145b28deaccfa0aa4b7605f7ddd5760829e"
+        ],
+        [
+          "gscholar/799f2439a1b7989a01374d7479d4bd36.dat",
+          "4723d19f699715b56702c66d6292de3ec00743ac2d43a58bbeb1f10c805f47a4"
+        ],
+        [
+          "gscholar/af79a0d8b8f0e71722a0d9e08d6e6bfb.dat",
+          "7b87374caa393b81a1e2d282f7c02ee3a961392668abad96ce5667ed248d830b"
+        ],
+        [
+          "gscholar/d49c6f204cb9b8ff8fc86e3a1dab589f.dat",
+          "21d73e56572d7a41c2ac070a92db383f610bc69c0c4c88d0bf7484d9380b1c55"
+        ],
+        [
+          "gscholar/f5d63f69a5d30cec97464bf776a71f54.dat",
+          "d433258fae8c8b40c4736e63170f72355095ec645b2d4b27941b71cd67e3769f"
+        ],
+        [
+          "gscholar.cookies",
+          "d19e450a4cbf0c9710dd6c8d2374bfa7cd52037832a8693868a165f47a6e6ec3"
+        ],
+        [
+          "pubmed/2a8b6c6224c66767ae40beb970e38f74.dat",
+          "e7f7b564ba39977172241dfb48dd671a487b6b7edf894fb8d7bd737e6ee5f8a5"
+        ],
+        [
+          "pubmed/5a22eadee85ce221e29f6310cc03c076.dat",
+          "8412904024350fa1d083551a768b5e8fef904d8c96f36b04347279154b155a29"
+        ],
+        [
+          "pubmed/74b23c7c59b7aa8327c98eea4ef86063.dat",
+          "eba3ffa25b90c3921a6e3f9ce58d75803ec7948cb3ee286d83b94defdd7b7b1d"
+        ],
+        [
+          "pubmed/e1ce3f0b18d2f69ce79ce93b23320068.dat",
+          "8aa66b1e85871cb970cfa111e028e6b701b9d581c8c714ec0a18b0c94cf1ed0f"
+        ],
+        [
+          "pubmed/ef88f339b698e127157d16e205ba13dd.dat",
+          "320de969036c49154a7b62818e1b62d2c05c3d6f805ae7990c6358f6ee52cd63"
+        ],
+        [
+          "pubmed.cookies",
+          "1b028acf4bba73efb3fe445732b2139ce56c6c233747adccd22d74a994b817d6"
+        ]
+      ],
+      "candidateRows": 30,
+      "referenceRows": 30,
+      "liveLive": {
+        "status": "fail",
+        "passed": false,
+        "profile": "pop-output-fidelity",
+        "evidenceMode": "live-live",
+        "reasons": [
+          "raw-output-different"
+        ],
+        "counts": {
+          "reference": 30,
+          "candidate": 30,
+          "production": 30
+        },
+        "raw": {
+          "equal": false,
+          "differenceCount": 16,
+          "differences": [
+            {
+              "path": "rows[23].article_url",
+              "reason": "different-value",
+              "reference": "https://doi.org/10.1601/ex.5027",
+              "candidate": "https://doi.org/10.7717/peerj.2714/table-2"
+            },
+            {
+              "path": "rows[23].authors",
+              "reason": "different-presence",
+              "reference": [
+                "Charles Thomas Parker",
+                "Kara Mannor",
+                "George M Garrity"
+              ]
+            },
+            {
+              "path": "rows[23].doi",
+              "reason": "different-value",
+              "reference": "10.1601/ex.5027",
+              "candidate": "10.7717/peerj.2714/table-2"
+            },
+            {
+              "path": "rows[23].publisher",
+              "reason": "different-value",
+              "reference": "NamesforLife, LLC",
+              "candidate": "PeerJ"
+            },
+            {
+              "path": "rows[23].source",
+              "reason": "different-presence",
+              "reference": "The NamesforLife Abstracts"
+            },
+            {
+              "path": "rows[23].title",
+              "reason": "different-value",
+              "reference": "Exemplar Abstract for Geobacillus subterraneus subterraneus (Nazina et al. 2001) Poli et al. 2013 and Geobacillus subterraneus Nazina et al. 2001 emend. Poli et al. 2012.",
+              "candidate": "Table 2: Purification of GBE from <i>Geobacillus mahadia</i> Geo-05 using affinity chromatography."
+            },
+            {
+              "path": "rows[23].type",
+              "reason": "different-value",
+              "reference": "dataset",
+              "candidate": "component"
+            },
+            {
+              "path": "rows[23].year",
+              "reason": "different-value",
+              "reference": 2010,
+              "candidate": 2016
+            },
+            {
+              "path": "rows[24].article_url",
+              "reason": "different-value",
+              "reference": "https://doi.org/10.7717/peerj.2714/table-2",
+              "candidate": "https://doi.org/10.1601/ex.5027"
+            },
+            {
+              "path": "rows[24].authors",
+              "reason": "different-presence",
+              "candidate": [
+                "Charles Thomas Parker",
+                "Kara Mannor",
+                "George M Garrity"
+              ]
+            },
+            {
+              "path": "rows[24].doi",
+              "reason": "different-value",
+              "reference": "10.7717/peerj.2714/table-2",
+              "candidate": "10.1601/ex.5027"
+            },
+            {
+              "path": "rows[24].publisher",
+              "reason": "different-value",
+              "reference": "PeerJ",
+              "candidate": "NamesforLife, LLC"
+            },
+            {
+              "path": "rows[24].source",
+              "reason": "different-presence",
+              "candidate": "The NamesforLife Abstracts"
+            },
+            {
+              "path": "rows[24].title",
+              "reason": "different-value",
+              "reference": "Table 2: Purification of GBE from <i>Geobacillus mahadia</i> Geo-05 using affinity chromatography.",
+              "candidate": "Exemplar Abstract for Geobacillus subterraneus subterraneus (Nazina et al. 2001) Poli et al. 2013 and Geobacillus subterraneus Nazina et al. 2001 emend. Poli et al. 2012."
+            },
+            {
+              "path": "rows[24].type",
+              "reason": "different-value",
+              "reference": "component",
+              "candidate": "dataset"
+            },
+            {
+              "path": "rows[24].year",
+              "reason": "different-value",
+              "reference": 2016,
+              "candidate": 2010
+            }
+          ],
+          "omittedDifferences": 0
+        },
+        "projection": {
+          "equal": true,
+          "differenceCount": 0,
+          "differences": [],
+          "omittedDifferences": 0
+        },
+        "provenance": {
+          "reference": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:15:06.238Z",
+            "retrievedAt": "2026-09-20T00:15:11.446Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "37162fd9-f1f9-441e-86bf-12333b2dbedb"
+          },
+          "candidate": {
+            "issues": [],
+            "capturedAt": "2026-09-20T00:15:02.791Z",
+            "retrievedAt": "2026-09-20T00:15:06.201Z",
+            "profileId": "/Users/JaeYoon/orca/workspaces/Zotero_plugin/guppy/build/pop-equivalence-20260920/PoPData",
+            "cached": false,
+            "invocationId": "42661d9c-66fe-4995-aa45-e4727289eb5d"
+          }
+        },
+        "snapshotEvidence": null,
+        "freshIndependentEvidence": false,
+        "evidenceScope": "Separately invoked current PoP output; acquisition claims must be backed by runner evidence.",
+        "bibliographicQuality": {
+          "status": "not-established",
+          "metadata": {
+            "checked": 30,
+            "conflicts": [],
+            "unverifiable": [],
+            "policy": "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria."
+          },
+          "limitation": "Exact PoP output fidelity does not establish independent metadata correctness, author identity, relevance precision or universal search parity."
+        }
+      }
+    }
+  ]
+}

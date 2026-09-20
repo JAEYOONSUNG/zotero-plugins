@@ -1,0 +1,92 @@
+/* Native JCR structure in the workbench's neutral, local-font appearance. */
+.sc-jcr-browser {
+ --jcr-bg: var(--sc-surface, #fff);
+ --jcr-fill: var(--sc-surface-alt, #f6f6f8);
+ --jcr-ink: var(--sc-text, #202124);
+ --jcr-muted: var(--sc-muted, #64666b);
+ --jcr-line: var(--sc-border-strong, #d6d6d8);
+ --jcr-focus: var(--sc-selection, #4a6ca5);
+ color: var(--jcr-ink);
+ font: 13px/1.5 var(--sc-font, system-ui, sans-serif);
+ min-width: 0;
+ width: 100%;
+ container: sc-jcr / inline-size;
+}
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) * { box-sizing: border-box; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-header { margin-bottom: 18px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) h2 { font: 600 19px/1.35 var(--sc-font, system-ui, sans-serif); margin: 0; overflow-wrap: anywhere; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-source { color: var(--jcr-muted); font-size: 11px; margin: 6px 0 12px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-navigation,
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-controls,
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-controls { margin: 0 0 12px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-button,
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) select,
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) input { border: 1px solid var(--jcr-line); border-radius: 4px; min-height: 30px; background: var(--jcr-bg); color: var(--jcr-ink); font: inherit; padding: 5px 9px; box-shadow: none; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-button { cursor: pointer; white-space: normal; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-button:hover { background: var(--jcr-fill); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) button:disabled { opacity: .45; cursor: default; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) :is(button,input,select,[tabindex]):focus-visible { outline: 2px solid var(--jcr-focus); outline-offset: 2px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-search { flex: 1 1 220px; min-width: 120px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-sort-label { display: flex; align-items: center; gap: 6px; color: var(--jcr-muted); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-head,
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-toggle { display: grid; grid-template-columns: minmax(160px,1fr) 95px 110px 125px 22px; align-items: center; gap: 12px; width: 100%; text-align: left; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-head { padding: 7px 14px; color: var(--jcr-muted); font-size: 11px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-head span:not(:first-child) { text-align: right; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group { border: 1px solid var(--jcr-line); border-radius: 4px; margin-bottom: 8px; overflow: hidden; background: var(--jcr-bg); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-toggle { padding: 15px 14px; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; min-height: 64px; cursor: pointer; white-space: normal; box-shadow: none; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-toggle:hover,
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-toggle[aria-expanded="true"] { background: var(--jcr-fill); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-name { font-weight: 600; overflow-wrap: anywhere; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-metric { text-align: right; font-size: 15px; font-variant-numeric: tabular-nums; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-chevron { font-size: 18px; line-height: 1; text-align: right; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-content { padding: 13px 18px; border-top: 1px solid var(--jcr-line); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-links { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(220px,100%),1fr)); gap: 7px 20px; padding: 0; margin: 0; list-style: none; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-link { border: 0; background: transparent; border-radius: 3px; color: inherit; font: inherit; padding: 2px 0; text-align: left; text-decoration: underline; text-decoration-color: var(--jcr-line); text-underline-offset: 3px; white-space: normal; overflow-wrap: anywhere; cursor: pointer; box-shadow: none; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-link:hover { text-decoration-color: currentColor; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--jcr-line); border-radius: 4px; background: var(--jcr-bg); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table { border-collapse: collapse; border: 0; margin: 0; min-width: 860px; width: 100%; table-layout: auto; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table :is(th,td) { border: 0; border-bottom: 1px solid var(--jcr-line); padding: 10px 12px; text-align: left; vertical-align: top; white-space: normal; font-size: 12px; line-height: 1.45; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th { background: var(--jcr-fill); font-weight: 600; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th:first-child { min-width: 190px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table [data-column="groups"],
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table [data-column="categories"] { min-width: 180px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table .sc-jcr-number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Identifiers and actions stay intact; the region scrolls instead of crushing
+   these columns into one character per line at desktop or narrow widths. */
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table [data-column="issns"] { min-width: 170px; white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th:is([data-column="jif"],[data-column="rank"],[data-column="quartile"],[data-column="percentile"],[data-column="year"],[data-column="action"]) { white-space: nowrap; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th[data-column="rank"] { min-width: 84px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th[data-column="percentile"] { min-width: 96px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th[data-column="year"] { min-width: 82px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th[data-column="action"] { min-width: 104px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table td .sc-jcr-button { min-width: 80px; white-space: nowrap; word-break: normal; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table tbody tr:last-child td { border-bottom: 0; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-memberships { margin: 0; padding: 0; list-style: none; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-memberships li+li { margin-top: 3px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-journal-title { font-weight: 600; display: block; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-abbreviation { display: block; color: var(--jcr-muted); font-size: 11px; margin-top: 3px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-pagination { margin: 8px 0 12px; color: var(--jcr-muted); font-size: 12px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-pagination span { margin-right: auto; font-variant-numeric: tabular-nums; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-page-size { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-context { background: var(--jcr-fill); border: 1px solid var(--jcr-line); border-radius: 4px; padding: 12px 14px; margin: 12px 0; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-parents { color: var(--jcr-muted); font-size: 12px; margin: 0 0 10px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-stats { display: flex; flex-wrap: wrap; gap: 12px 28px; margin: 0; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-stats dt { color: var(--jcr-muted); font-size: 11px; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-stats dd { margin: 1px 0 0; font-size: 16px; font-variant-numeric: tabular-nums; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-coverage { color: var(--jcr-muted); font-size: 12px; margin: 9px 0; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-empty { padding: 18px 0; color: var(--jcr-muted); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-error { color: var(--sc-error,#a04040); }
+@container sc-jcr (max-width: 620px) {
+ :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-head { display: none; }
+ :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-toggle { position: relative; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; padding: 13px; }
+ :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-name { grid-column: 1/-1; padding-right: 24px; }
+ :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-metric { text-align: left; font-size: 14px; }
+ :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-group-metric::before { content: attr(data-label); display: block; color: var(--jcr-muted); font-size: 10px; margin-bottom: 2px; }
+ :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-chevron { position: absolute; top: 16px; right: 14px; }
+ :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-search { flex-basis: 100%; }
+}
+@media (forced-colors: active) {
+ .sc-jcr-browser { --jcr-line: CanvasText; --jcr-focus: Highlight; }
+}

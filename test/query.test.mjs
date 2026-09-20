@@ -63,6 +63,91 @@ test("author matching supports accents, particles and non-Latin names", () => {
 	assert.equal(Q.matchesAuthor("कुमार", [{ lastName: "कुमीर" }]), false, "Indic vowel marks distinguish names");
 });
 
+test("incomplete full names need observed full tokens, not an unrelated middle initial", () => {
+	const stewart = { firstName: "Sheila I.", lastName: "Stewart", name: "Sheila I. Stewart" };
+	const jensen = { firstName: "Sheila Ingemann", lastName: "Jensen" };
+	for (const author of [stewart, "Sheila I. Stewart", { name: "Sheila I Stewart" }]) {
+		assert.equal(Q.matchesAuthor("Sheila Ingemann", [author]), false);
+		assert.equal(Q.matchesRecord({ authors: [author], year: 1947 }, { authors: "Sheila Ingemann" }), false);
+	}
+	for (const query of ["Sheila Ingemann", "S Ingemann", "Ingemann Jensen", "Sheila I Jensen", "Jensen SI"]) {
+		assert.equal(Q.matchesAuthor(query, [jensen]), true, query);
+	}
+	assert.equal(Q.matchesAuthor("Sheila Ingemann Jensen", [{ firstName: "Sheila I", lastName: "Jensen" }]), true, "matching full surname supports candidate middle initials");
+	assert.equal(Q.matchesAuthor("Sheila Ingemann", [{ firstName: "S Ingemann", lastName: "Jensen" }]), true, "observed full Ingemann anchors the abbreviated first name");
+	assert.equal(Q.matchesAuthor("Sheila Ingemann", [{ firstName: "SI", lastName: "Jensen" }]), false, "initials do not supply the missing full name");
+	assert.equal(Q.matchesAuthor("S I Stewart", [stewart]), true);
+	assert.equal(Q.matchesAuthor("Sheila Ingemann", [{ firstName: "Sheila", lastName: "Ingemann Larsen" }]), true);
+	assert.equal(Q.matchesAuthor("Maria Garcia", [{ firstName: "Maria", lastName: "Garcia Marquez" }]), true);
+	assert.equal(Q.matchesAuthor("Maria Garcia", [{ firstName: "Maria G", lastName: "Jones" }]), false);
+	assert.equal(Q.matchesAuthor("Sheila Ingemann OR Liu DR", [stewart, liu]), true);
+	assert.equal(Q.matchesAuthor("Sheila Ingemann AND Liu DR", [stewart, liu]), false);
+});
+
+test("author identifiers accept official ID and URL forms and enforce ORCID checksum", () => {
+	for (const value of ["A5086928770", "a5086928770", "https://openalex.org/A5086928770", "https://openalex.org/authors/A5086928770/", "http://api.openalex.org/authors/A5086928770", "authors/A5086928770"]) {
+		assert.deepEqual(Q.parseAuthorIdentifier(value), { type: "openalex", id: "A5086928770" }, value);
+	}
+	// ORCID's published examples include both numeric and X check digits.
+	for (const id of ["0000-0002-1825-0097", "0000-0001-5109-3700", "0000-0002-1694-233X"]) {
+		for (const value of [id, id.replace(/-/g, ""), "https://orcid.org/" + id, "orcid:" + id.toLowerCase()]) {
+			assert.deepEqual(Q.parseAuthorIdentifier(value), { type: "orcid", id }, value);
+		}
+	}
+	for (const value of ["Sheila Ingemann", "", null, "A0", "A0123", "A123xyz", "W5086928770", "https://openalex.org/works/A123", "https://openalex.org.example/A123", "https://openalex.org/A123?other=A456", "https://other.example/0000-0002-1825-0097", "0000-0002-1825-0098", "0000-0002-1694-2330", "0000-0002-1825", "1234567890"]) {
+		assert.equal(Q.parseAuthorIdentifier(value), null, String(value));
+	}
+});
+
+test("identifier searches require per-author ID evidence and support Boolean name combinations", () => {
+	const author = { ...liu, openalexId: "https://openalex.org/A5086928770", orcid: "https://orcid.org/0000-0002-1825-0097" };
+	for (const query of ["A5086928770", "https://openalex.org/authors/A5086928770", "0000-0002-1825-0097", '"0000-0002-1825-0097" AND "Liu DR"']) {
+		assert.equal(Q.matchesAuthor(query, [author]), true, query);
+		assert.equal(Q.matchesRecord({ title, authors: [author] }, { authors: query }), true, query);
+		assert.equal(Q.matchesAuthor(query, [liu]), false, "a matching name alone cannot prove " + query);
+	}
+	assert.equal(Q.matchesAuthor("A5086928770", [{ openalexId: "A5086928770" }]), true, "names are optional for a verified identifier");
+	assert.equal(Q.matchesAuthor("A5086928770", [{ name: "A5086928770" }]), false);
+	assert.equal(Q.matchesAuthor("A5086928770", [{ openalexId: "A50869287701" }]), false, "IDs are never substring matches");
+	assert.equal(Q.matchesAuthor("A5086928770", [{ orcid: "A5086928770" }]), false, "the wrong field is not evidence");
+	assert.equal(Q.matchesAuthor("0000-0002-1825-0098", [{ orcid: "0000-0002-1825-0098" }]), false, "bad checksums cannot match themselves");
+	assert.equal(Q.matchesAuthor("A5086928770 OR Sung JY", [sung]), true);
+	assert.equal(Q.matchesAuthor("A5086928770 AND Sung JY", [author, sung]), true);
+	assert.equal(Q.matchesAuthor("A5086928770 AND Sung JY", [author]), false);
+});
+
+test("missing author identities cannot verify exclusions, even through nested Boolean expressions", () => {
+	const known = { ...liu, openalexId: "A123" };
+	assert.equal(Q.matchesAuthor("NOT A456", [known]), true);
+	assert.equal(Q.matchesAuthor("NOT A123", [known]), false);
+	for (const authors of [[], [liu], [known, sung], [{ openalexId: "malformed" }]]) {
+		assert.equal(Q.matchesAuthor("NOT A456", authors), false);
+		assert.equal(Q.matchesAuthor("NOT NOT A456", authors), false);
+		assert.equal(Q.matchesAuthor("NOT (A456 OR A789)", authors), false);
+	}
+	assert.equal(Q.matchesAuthor("NOT A456 OR Liu DR", [liu]), true, "the known OR branch can establish a match");
+	assert.equal(Q.matchesAuthor("NOT A456 AND Liu DR", [liu]), false);
+	assert.equal(Q.matchesAuthor("NOT 0000-0002-1825-0098", [known]), false);
+	assert.equal(Q.matchesAuthor("NOT https://openalex.org.example/A456", [known]), false);
+});
+
+test("exported expression parser preserves fields, phrases, precedence and fail-closed syntax", () => {
+	assert.deepEqual(Q.parseExpression('"genome editing" OR CRISPR NOT cancer'), {
+		kind: "OR", left: { kind: "term", value: "genome editing", phrase: true },
+		right: { kind: "AND", left: { kind: "term", value: "CRISPR" }, right: { kind: "NOT", child: { kind: "term", value: "cancer" } } }
+	});
+	assert.deepEqual(Q.parseExpression("Sheila Ingemann and Liu DR", true, true), {
+		kind: "AND", left: { kind: "term", value: "Sheila Ingemann" }, right: { kind: "term", value: "Liu DR" }
+	});
+	assert.deepEqual(Q.parseExpression("survival in culture", true), { kind: "term", value: "survival in culture" });
+	assert.deepEqual(Q.parseExpression("not", false), { kind: "term", value: "not" });
+	for (const value of ["A OR", "A AND AND B", '"unclosed', "(A OR B", "A ) B", '""', "NOT", ""]) assert.equal(Q.parseExpression(value), null, value);
+	for (const value of ["NOT ".repeat(10000) + "A", "(".repeat(10000) + "A" + ")".repeat(10000), "A OR ".repeat(2000) + "B", "a".repeat(32769)]) {
+		assert.equal(Q.parseExpression(value), null, "pathological expressions are rejected without stack overflow");
+	}
+	assert.equal(Q.parseExpression("(".repeat(20) + "A" + ")".repeat(20)).value, "A", "ordinary nested groups remain supported");
+});
+
 test("author expressions implement explicit AND, OR, semicolons and grouping", () => {
 	assert.equal(Q.matchesAuthor('"Sung JY" AND "Liu DR"', [sung, liu]), true);
 	assert.equal(Q.matchesAuthor("Sung JY and Liu DR", [sung]), false);
@@ -264,6 +349,34 @@ test("safe DOI matching retains numeric, statistical and scientific sign distinc
 		["CD4+ cells regulate the immune response", "CD4- cells regulate the immune response"],
 		["Mutation effects at 5% prevalence in populations", "Mutation effects at 5 prevalence in populations"]
 	]) assert.equal(Q.isSafeDOIMatch({ title: a }, candidate({ title: b })), false, a);
+});
+
+test("shared scientific title identity preserves signed values, charges, ranges and subtraction", () => {
+	for (const [a, b] of [
+		["Bacterial growth at +10 C", "Bacterial growth at -10 C"],
+		["Bacterial growth at -10 C", "Bacterial growth at 10 C"],
+		["Growth at (- 10 C) in bacteria", "Growth at (10 C) in bacteria"],
+		["CD4-: a regulator in living cells", "CD4: a regulator in living cells"],
+		["Effects of Na- ions on growth", "Effects of Na ions on growth"],
+		["Scores of 10-20 in treated cells", "Scores of 10 20 in treated cells"],
+		["Calculating x-y in living cells", "Calculating x y in living cells"],
+		["Measuring x² in living cells", "Measuring x2 in living cells"],
+		["Measuring x₂ in living cells", "Measuring x² in living cells"],
+		["Measuring x<sub>2</sub> in living cells", "Measuring x<sup>2</sup> in living cells"],
+		["Effects of x < y > z", "Effects of x z"]
+	]) {
+		assert.notEqual(Q.titleIdentity(a), Q.titleIdentity(b), a);
+		assert.equal(Q.isSafeDOIMatch({ title: a }, candidate({ title: b })), false, a);
+	}
+	for (const [a, b] of [
+		["Growth at −10 C", "Growth at -10 C"],
+		["Growth at - 10 C", "Growth at -10 C"],
+		["Genome-editing: a well-known method", "Genome editing a well known method"],
+		["Growth between 10–20 C", "Growth between 10-20 C"],
+		["Measuring x² in living cells", "Measuring x<sup>2</sup> in living cells"],
+		["Measuring x₂ in living cells", "Measuring x<sub>2</sub> in living cells"],
+		["Café &amp; genomic research", "Cafe and genomic research"]
+	]) assert.equal(Q.titleIdentity(a), Q.titleIdentity(b), a);
 });
 
 test("safe DOI matching rejects conflicting identifiers, authors, years and unsupported title variants", () => {

@@ -22,8 +22,8 @@ export function canonicalDOI(value) {
 	return /^10\.\d{4,9}\/\S+$/i.test(doi) ? doi.toLowerCase() : null;
 }
 
-function decodeText(value) {
-	return String(value ?? "").replace(/<[^>]*>/g, "").replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (all, entity) => {
+function decodeEntities(value) {
+	return String(value ?? "").replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (all, entity) => {
 		if (entity[0] === "#") {
 			const code = Number.parseInt(entity.slice(entity[1].toLowerCase() === "x" ? 2 : 1), entity[1].toLowerCase() === "x" ? 16 : 10);
 			return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : all;
@@ -32,11 +32,29 @@ function decodeText(value) {
 	});
 }
 
+function decodeText(value) {
+	// Strip only recognized formatting tags. A scientific inequality such as
+	// `p < 0.05 and q > 0.1` is text, not an HTML element.
+	return decodeEntities(value).replace(/<\/?(?:i|b|em|strong|sup|sub|scp|span|p|br|jats:italic|jats:sup|jats:sub)(?:\s+[^<>]*?)?\s*\/?>/gi, "");
+}
+
+function scriptText(kind, value) {
+	return [...String(value).normalize("NFKC")].map(char => /\s/.test(char) ? " "
+		: ` ${kind} ${{ "-": "minussign", "−": "minussign", "+": "plussign", "=": "equalssign" }[char] || char} `).join("");
+}
+
 // Exact normalized text only. Mathematical symbols are retained: A+ and A− are distinct.
 export function normalizedTitle(value) {
-	return decodeText(value).normalize("NFKC").toLowerCase().replace(/['’ʼ]/g, "")
-		.replace(/(^|[\s(=<>])([-+])\s*(?=\d)/g, (_, lead, sign) => `${lead} ${sign === "-" ? "minussign" : "plussign"} `)
-		.replace(/([\p{L}]+\d+)-(?=\s|$)/gu, "$1 negativesuffix ")
+	const semantic = decodeEntities(value).replace(/<(?:jats:)?(sup|sub)(?:\s+[^<>]*?)?\s*>([\s\S]*?)<\/(?:jats:)?\1\s*>/gi,
+		(_, kind, content) => scriptText(kind.toLowerCase() === "sup" ? "superscript" : "subscript", decodeText(content)))
+		.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁱⁿ]/g, char => scriptText("superscript", char))
+		.replace(/[₀-₎ₐ-ₜ]/g, char => scriptText("subscript", char));
+	return decodeText(semantic)
+		.normalize("NFKC").toLowerCase().replace(/['’ʼ]/g, "")
+		.replace(/−/g, "-")
+		.replace(/(^|[\s(=<>^/])([-+])\s*(?=\d)/g, (_, lead, sign) => `${lead} ${sign === "-" ? "−" : "+"} `)
+		.replace(/([\p{L}\p{N}])-(?=\s|$|[,;:)])/gu, "$1 − ")
+		.replace(/-(?=\d)/g, " − ")
 		.match(/[\p{L}\p{M}]+|\d+(?:[.,]\d+)*|[\p{Sm}%!/⁄^]/gu)?.join(" ") || "";
 }
 
@@ -55,14 +73,16 @@ function isoTime(value) {
 
 export function normalizeRecord(row, index = 0, source = "") {
 	if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error(`Invalid record at index ${index}`);
-	const title = decodeText(Array.isArray(row.title) ? row.title[0] : row.title).trim();
+	const originalTitle = row.titleMarkup || (Array.isArray(row.title) ? row.title[0] : row.title);
+	const title = decodeText(originalTitle).trim();
+	const titleMarkup = /<\/?(?:jats:)?(?:sup|sub)(?:\s|>)/i.test(decodeEntities(originalTitle)) ? decodeEntities(originalTitle).trim() : null;
 	const authors = (Array.isArray(row.authors) ? row.authors : []).map(author => {
 		if (typeof author === "string") return { name: author };
 		return { ...author, name: author?.name || [author?.firstName || author?.given, author?.lastName || author?.family].filter(Boolean).join(" ") };
 	});
 	const doi = canonicalDOI(row.doi || row.DOI) || canonicalDOI(row.article_url || row.url);
 	return {
-		...row, title, doi, authors, source: normalizeSource(source || row.source),
+		...row, title, titleMarkup, doi, authors, source: normalizeSource(source || row.source),
 		sourceId: String(row.sourceId || row.uid || ""), venue: String(row.venue ?? (row.uid || row.article_url || row.cites !== undefined ? row.source : "") ?? ""),
 		url: row.url || row.article_url || null, year: numeric(row.year), citations: numeric(row.citations ?? row.cites),
 		rank: numeric(row.rank) ?? index + 1, originalIndex: index
@@ -165,10 +185,64 @@ function summary(record, index) {
 	return { index, rank: record.rank, doi: canonicalDOI(record.doi), title: record.title, year: record.year, sourceId: record.sourceId };
 }
 
+function authorKey(author) {
+	const structured = typeof author === "object" && (author?.lastName || author?.family);
+	const name = typeof author === "string" ? author : structured
+		? [author.firstName || author.given, author.lastName || author.family].filter(Boolean).join(" ") : author?.name;
+	if (/…|\.\.\.|\bet\s+al\.?\s*$/i.test(name || "")) return null;
+	const parts = String(name || "").normalize("NFKD").toLowerCase().replace(/\p{M}/gu, "").match(/[\p{L}\p{N}]+/gu) || [];
+	if (!parts.length) return null;
+	const rawParts = String(name).match(/[\p{L}\p{N}]+/gu) || [];
+	const fullName = parts.join(" ");
+	if (structured) return { fullName, surname: parts.at(-1), given: /^[A-Z]{1,4}$/.test(rawParts[0]) ? parts[0][0] : parts[0] };
+	if (String(name).includes(",") && parts.length > 1) return { fullName, surname: parts[0], given: parts[1] };
+	if (parts.length > 1 && /^[A-Z]{1,4}$/.test(rawParts.at(-1))) return { fullName, surname: parts.at(-2), given: parts.at(-1)[0] };
+	return { fullName, surname: parts.at(-1), given: parts.length > 1 ? parts[0] : "" };
+}
+
+const compatibleAuthor = (a, b) => a.fullName === b.fullName || a.surname === b.surname && (a.given === b.given
+	|| a.given.length === 1 && a.given === b.given[0] || b.given.length === 1 && b.given === a.given[0]);
+
+export function assessMetadata(reference, candidate, matches) {
+	const conflicts = [], unverifiable = [];
+	for (const match of matches) {
+		const ref = reference[match.referenceIndex], rec = candidate[match.candidateIndex];
+		const fields = [], missing = [];
+		for (const field of ["title", "year", "pmid", "pmcid", "arxiv"]) {
+			const a = field === "title" ? normalizedTitle(ref.titleMarkup || ref.title) : String(ref[field] || "").toLowerCase();
+			const b = field === "title" ? normalizedTitle(rec.titleMarkup || rec.title) : String(rec[field] || "").toLowerCase();
+			if (field === "title" && (!a || !b)) missing.push(field);
+			else if (a && b && a !== b) fields.push(field);
+			else if (a && !b) missing.push(field);
+		}
+		const ra = (ref.authors || []).map(authorKey).filter(Boolean), ca = (rec.authors || []).map(authorKey).filter(Boolean);
+		const truncatedAuthors = [ref, rec].some(record => (record.authors || []).some(author => /…|\.\.\.|\bet\s+al\.?\s*$/i.test(typeof author === "string" ? author : author?.name || "")));
+		if (truncatedAuthors) missing.push("authors");
+		else if (ra.length && ca.length && (ra.some(a => !ca.some(b => compatibleAuthor(a, b))) || ca.some(a => !ra.some(b => compatibleAuthor(a, b))))) fields.push("authors");
+		else if (ra.length && (!ca.length || ra.length !== ca.length)) missing.push("authors");
+		const context = { referenceIndex: match.referenceIndex, candidateIndex: match.candidateIndex, method: match.method };
+		if (fields.length) conflicts.push({ ...context, fields, reference: summary(ref, match.referenceIndex), candidate: summary(rec, match.candidateIndex),
+			values: Object.fromEntries(fields.map(field => [field, field === "title"
+				? { reference: ref.titleMarkup || ref.title, candidate: rec.titleMarkup || rec.title }
+				: { reference: ref[field], candidate: rec[field] }])) });
+		if (missing.length) unverifiable.push({ ...context, fields: missing });
+	}
+	return { checked: matches.length, conflicts, unverifiable,
+		policy: "Matched title, year, explicit identifiers and author-list compatibility (initials allowed); missing reference fields are not inferred. Citation counts and venue spelling may vary and are not identity criteria." };
+}
+
 export function compareRecords(reference, candidate) {
 	const used = new Set(), matched = new Map(), conflicts = [], titleDOIs = new Map();
-	for (const record of [...reference, ...candidate]) {
-		const title = normalizedTitle(record.title), doi = canonicalDOI(record.doi);
+	const identities = records => records.map(record => ({ title: normalizedTitle(record.titleMarkup || record.title), doi: canonicalDOI(record.doi) }));
+	const refIdentities = identities(reference), candidateIdentities = identities(candidate);
+	const byDOI = new Map(), byTitle = new Map();
+	for (const [index, { title, doi }] of candidateIdentities.entries()) {
+		for (const [map, key] of [[byDOI, doi], [byTitle, title]]) if (key) {
+			if (!map.has(key)) map.set(key, []);
+			map.get(key).push(index);
+		}
+	}
+	for (const { title, doi } of [...refIdentities, ...candidateIdentities]) {
 		if (title && doi) {
 			if (!titleDOIs.has(title)) titleDOIs.set(title, new Set());
 			titleDOIs.get(title).add(doi);
@@ -176,18 +250,16 @@ export function compareRecords(reference, candidate) {
 	}
 	// Resolve all DOI matches before title fallbacks can consume a DOI match's candidate.
 	for (const [ri, ref] of reference.entries()) {
-		const doi = canonicalDOI(ref.doi);
+		const doi = refIdentities[ri].doi;
 		if (!doi) continue;
-		const ci = candidate.findIndex((rec, index) => !used.has(index) && canonicalDOI(rec.doi) === doi);
-		if (ci >= 0) { used.add(ci); matched.set(ri, { referenceIndex: ri, candidateIndex: ci, method: "doi" }); }
+		const ci = byDOI.get(doi)?.find(index => !used.has(index));
+		if (ci !== undefined) { used.add(ci); matched.set(ri, { referenceIndex: ri, candidateIndex: ci, method: "doi" }); }
 	}
 	for (const [ri, ref] of reference.entries()) {
-		const title = normalizedTitle(ref.title);
+		const { title, doi } = refIdentities[ri];
 		if (!title) continue;
-		const doi = canonicalDOI(ref.doi);
-		for (const [ci, rec] of candidate.entries()) {
-			if (normalizedTitle(rec.title) !== title) continue;
-			const candidateDOI = canonicalDOI(rec.doi);
+		for (const ci of byTitle.get(title) || []) {
+			const rec = candidate[ci], candidateDOI = candidateIdentities[ci].doi;
 			if (doi && candidateDOI && doi !== candidateDOI) {
 				conflicts.push({ reason: "different-explicit-dois", reference: summary(ref, ri), candidate: summary(rec, ci) });
 				continue;
@@ -202,6 +274,9 @@ export function compareRecords(reference, candidate) {
 	}
 	const matches = [...matched.values()].sort((a, b) => a.referenceIndex - b.referenceIndex);
 	const count = matches.length;
+	const refDOIs = refIdentities.map(row => row.doi).filter(Boolean), candidateDOIs = candidateIdentities.map(row => row.doi).filter(Boolean);
+	const uniqueReferenceDOIs = new Set(refDOIs), uniqueCandidateDOIs = new Set(candidateDOIs);
+	const recoveredDOIs = [...uniqueReferenceDOIs].filter(doi => uniqueCandidateDOIs.has(doi)).length;
 	return { referenceCount: reference.length, candidateCount: candidate.length, matched: count,
 		recall: reference.length ? count / reference.length : null,
 		candidateOverlap: candidate.length ? count / candidate.length : null,
@@ -211,11 +286,25 @@ export function compareRecords(reference, candidate) {
 		matches: matches.map(match => ({ ...match, reference: summary(reference[match.referenceIndex], match.referenceIndex), candidate: summary(candidate[match.candidateIndex], match.candidateIndex) })),
 		misses: reference.flatMap((record, index) => matched.has(index) ? [] : [summary(record, index)]),
 		candidateOnly: candidate.flatMap((record, index) => used.has(index) ? [] : [summary(record, index)]),
-		identityConflicts: conflicts };
+		identityConflicts: conflicts,
+		doiCoverage: { referenceUnique: uniqueReferenceDOIs.size, candidateUnique: uniqueCandidateDOIs.size, matchedUnique: recoveredDOIs,
+			referenceDuplicates: refDOIs.length - uniqueReferenceDOIs.size, candidateDuplicates: candidateDOIs.length - uniqueCandidateDOIs.size,
+			referenceWithoutDOI: reference.length - refDOIs.length, candidateWithoutDOI: candidate.length - candidateDOIs.length,
+			recall: uniqueReferenceDOIs.size ? recoveredDOIs / uniqueReferenceDOIs.size : null,
+			method: "Diagnostic unique canonical DOI coverage only; does not replace raw one-to-one full-cap recall or strict criteria." },
+		metadata: assessMetadata(reference, candidate, matches) };
 }
 
 const TEXT_FIELDS = ["keywords", "authors", "title", "venue", "excludes"];
 const FLAGS = ["includeCitations", "includePatents", "onlyReviews"];
+const DEFAULT_MULTI_SOURCES = ["openalex", "crossref", "europepmc", "arxiv"];
+const MULTI_SOURCES = new Set([...DEFAULT_MULTI_SOURCES, "pubmed", "semanticscholar", "scholar"]);
+function selectedSources(value, source) {
+	if (value === undefined) return source === "multi" ? [...DEFAULT_MULTI_SOURCES].sort() : [];
+	if (!Array.isArray(value) || !value.length) return null;
+	const normalized = value.map(normalizeSource);
+	return normalized.some(key => !MULTI_SOURCES.has(key)) ? null : [...new Set(normalized)].sort();
+}
 const queryText = value => String(value || "").normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
 const calendarDate = (date, timeZone) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 
@@ -234,6 +323,8 @@ export function assessReference(reference, spec, { now = new Date(), maxReferenc
 		if (age > maxReferenceAgeHours * 3600000 || calendarDate(captured, timeZone) !== calendarDate(current, timeZone)) reasons.push("stale-reference");
 	}
 	const ref = reference.query || {}, query = spec.query || {};
+	const referenceSources = selectedSources(ref.sources, reference.source), candidateSources = selectedSources(query.sources, normalizeSource(spec.source));
+	if (!referenceSources || !candidateSources || JSON.stringify(referenceSources) !== JSON.stringify(candidateSources)) reasons.push("different-query:sources");
 	for (const key of TEXT_FIELDS) if (queryText(ref[key]) !== queryText(query[key])) reasons.push(`different-query:${key}`);
 	for (const key of ["yearFrom", "yearTo"]) if (Number(ref[key] || 0) !== Number(query[key] || 0)) reasons.push(`different-query:${key}`);
 	if (!Number.isInteger(Number(ref.maxResults)) || Number(ref.maxResults) < 1) reasons.push("missing-reference-cap");
