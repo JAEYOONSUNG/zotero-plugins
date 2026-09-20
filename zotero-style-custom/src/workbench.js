@@ -411,23 +411,24 @@
    const nativeJCR=state.tab==='journals'&&state.journalBrowser!=='openalex';
    footer.hidden=nativeJCR;
    const count=state.selected.size;footer.dataset.selected=String(count>0);const visible=new Set((['notes','annotations','attachments'].includes(state.tab)?model.filter(scoped(),parentOptions()):rows()).map(item=>String(item.id))),outside=[...state.selected].filter(id=>!visible.has(String(id))).length;
-   selectionLabel.textContent=count?`${count}개 문헌 선택${outside?' · 현재 결과 밖 '+outside+'개 포함':''}`:'문헌을 선택하면 함께 비교하거나 연결할 수 있습니다.';
+   selectionLabel.textContent=count?T(`${count}개 문헌 선택`)+(outside?' · '+T(`현재 결과 밖 ${outside}개 포함`):''):T('문헌을 선택하면 함께 비교하거나 연결할 수 있습니다.');
    selectionLabel.title=selected().slice(0,5).map(item=>item.title).join('\n');
    clearSelection.disabled=nativeJCR||!count||clearSelection.dataset.busy==='true';relatedAction.disabled=nativeJCR||count<2||relatedAction.dataset.busy==='true';unlinkAction.disabled=nativeJCR||count<2||unlinkAction.dataset.busy==='true';
    for(const card of body.querySelectorAll('[data-item-id]'))card.dataset.selected=String(state.selected.has(card.dataset.itemId));
   }
   function updateChrome(){
-   sectionTitle.textContent=TABS.find(([id])=>id===state.tab)?.[1]||'';
+   sectionTitle.textContent=T(TABS.find(([id])=>id===state.tab)?.[1]||'');
    const nativeJCR=state.tab==='journals'&&state.journalBrowser!=='openalex';
    const applicable=!nativeJCR&&FILTER_TABS.has(state.tab)&&state.tab!=='collections';controls.hidden=!applicable;filterPanel.hidden=!applicable;kindChips.hidden=!applicable;
    // While the list is narrowed to a selection, the way back is one button, not a menu.
    let back=context.querySelector('.sc-scope-back');
    if(applicable&&state.scope==='selected'){if(!back){back=button('전체 목록으로',()=>{state.scope='library';scope.value='library';render();},null,{class:'sc-scope-back'});context.insertBefore(back,contextDetail.nextSibling);}}
    else back?.remove();
-   contextDetail.textContent=nativeJCR?'Clarivate Journal Citation Reports':applicable?`${({library:'라이브러리',selected:'선택한 문헌',collection:'현재 컬렉션','collection-recursive':'현재·하위 컬렉션'})[state.scope]} · ${(['notes','annotations','attachments'].includes(state.tab)?model.filter(scoped(),parentOptions()):rows()).length}개 문헌${['notes','annotations','attachments'].includes(state.tab)?' 범위 · 내용 검색':''}`:'선택한 문헌 '+state.selected.size+'개';
+   {const scopeName=T(({library:'라이브러리',selected:'선택한 문헌',collection:'현재 컬렉션','collection-recursive':'현재·하위 컬렉션'})[state.scope]||'라이브러리'),inside=['notes','annotations','attachments'].includes(state.tab),n=(inside?model.filter(scoped(),parentOptions()):rows()).length;
+   contextDetail.textContent=nativeJCR?'Clarivate Journal Citation Reports':applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`):T(`선택한 문헌 ${state.selected.size}개`);}
    filterChips.replaceChildren();const labels={query:'검색',type:'유형',tag:'태그',status:'상태',ratingMin:'최소 별점',yearFrom:'시작 연도',yearTo:'마지막 연도'};
    for(const[key,label]of Object.entries(labels))if(state[key]){const value=key==='status'?({unread:'안 읽음',reading:'읽는 중',done:'완료'})[state[key]]:state[key];button(`${label}: ${value} ×`,()=>{state[key]='';if(key==='query')search.value='';else if(key==='type')type.value='';else if(filterInputs.has(key))filterInputs.get(key).value='';return render();},filterChips,{'aria-label':label+' 필터 해제'});}
-   const count=Object.keys(labels).filter(key=>state[key]).length;filterSummary.textContent='상세 필터'+(count?' · '+count+'개 적용':'');filterChips.hidden=!applicable||!count;
+   const count=Object.keys(labels).filter(key=>state[key]).length;filterSummary.textContent=T('상세 필터')+(count?' · '+T(`${count}개 적용`):'');filterChips.hidden=!applicable||!count;
    for(const group of nav.querySelectorAll('.sc-nav-group'))group.hidden=[...group.querySelectorAll('[data-tab]')].every(button=>button.hidden);
    updateSelectionUI();
   }

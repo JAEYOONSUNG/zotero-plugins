@@ -1287,5 +1287,12 @@
  "저장된 목록의 JIF 순번 · 공식 JCR 카테고리 순위 아님": "Position by JIF in the stored list · not an official JCR category rank",
  "추가 OpenAlex 프로필은 「빈 칸 채우기」로 조회할 수 있습니다. 저장된 분류는 표와 상세에서 동일하게 표시됩니다.": "More OpenAlex profiles can be fetched with “Fill the gaps”. The stored classification shows the same way in the table and the detail.",
  "노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.": "The note was moved to the trash. It can be restored from Zotero's trash.",
- "삭제하지 않고 Zotero 휴지통으로 옮깁니다": "Moves it to Zotero's trash rather than deleting it"
+ "삭제하지 않고 Zotero 휴지통으로 옮깁니다": "Moves it to Zotero's trash rather than deleting it",
+ "현재 결과 밖 {0}개 포함": "including {0} outside the current results",
+ "선택한 문헌 {0}개": "{0} selected items",
+ "{0}개 적용": "{0} applied",
+ "{0}개 문헌 선택": "{0} items selected",
+ "{0} · {1}개 문헌 범위 · 내용 검색": "{0} · {1} items · searching their content",
+ "{0} · {1}개 문헌": "{0} · {1} items",
+ "현재·하위 컬렉션": "This collection and its subcollections"
 }

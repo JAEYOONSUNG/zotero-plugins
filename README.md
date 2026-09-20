@@ -9,7 +9,7 @@ Two plugins for Zotero 7, 8 and 9, kept in one repository and installed separate
 
 ![The Zotero item list with Style Custom's columns: impact factor, citation count with a bar, reading status, the journal in its own colour, rating, reading time, file kinds, and the corresponding institution with its tier and flag](docs/images/library-columns.png)
 
-The item list above is Zotero's own, with Style Custom's columns switched on. Both plugins are available in English and Korean; the language is chosen in each plugin's settings.
+The item list above is Zotero's own, with Style Custom's columns switched on. Every picture on this page is of a demonstration library of well-known public papers. Both plugins are available in English and Korean; the language is chosen in each plugin's settings.
 
 ![The two buttons in the items toolbar: the ZotPoP magnifier and the Style Custom panel](docs/images/toolbar-icons.png)
 
@@ -99,9 +99,9 @@ Reading status and rating; search this paper in ZotPoP; related papers; follow t
 
 **Collections** — the collection tree with a bar for what each one holds; hide empty collections, search by name.
 
-**Reading** — time and pages read in the PDF reader are recorded automatically. A page map shows which pages were read and for how long; unread papers can be picked out.
+![The Collections tab](docs/images/style-custom-collections.png)
 
-![The Reading tab](docs/images/style-custom-reading.png)
+**Reading** — time and pages read in the PDF reader are recorded automatically. A page map shows which pages were read and for how long; unread papers can be picked out.
 
 **Notes, backlinks, attachment preview, nested tags, canvas, comparison, tabs, view groups, translation · AI, appearance** — write notes and send them to the trash, see the notes that point at a paper, preview attachments, browse tags as a hierarchy, arrange papers on a free canvas, compare several papers in a table (the AI reads their claims and points of contention), tidy open tabs, keep saved sets of views, translate and summarise, and set the panel's and the list's colours and fonts.
 

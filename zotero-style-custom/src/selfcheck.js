@@ -29,7 +29,7 @@
     }
   }
 
-  async function run(Zotero, runtime, {network = true, repair = false, fill = false, shots = false} = {}) {
+  async function run(Zotero, runtime, {network = true, repair = false, fill = false, shots = false, seed = ''} = {}) {
     const results = [];
     const win = Zotero.getMainWindow && Zotero.getMainWindow();
     const doc = win && win.document;
@@ -53,6 +53,73 @@
       try { return !!runtime.signalTools.bareDOI(runtime.citationRecord(item).doi); }
       catch (ignored) { return false; }
     });
+
+    /* A demonstration library, for pictures that show nobody's own work: public
+       papers from a JSON file named by a pref, with collections, tags, notes,
+       highlights on a placeholder PDF, reading time, status and rating. Only
+       into an empty library, only when asked, and never on a library that
+       already holds anything. */
+    if (seed) results.push(await attempt('a demonstration library is seeded from the named file', async () => {
+      const library = Zotero.Libraries.userLibraryID;
+      const existing = await Zotero.Items.getAll(library);
+      if (existing.some(item => item.isRegularItem && item.isRegularItem())) throw new Error('the library is not empty; refusing to seed into it');
+      const spec = JSON.parse(await IOUtils.readUTF8(seed));
+      const dir = PathUtils.parent(seed);
+      const collections = new Map();
+      for (const c of spec.collections || []) {
+        const col = new Zotero.Collection(); col.libraryID = library; col.name = c.name;
+        if (c.parent && collections.has(c.parent)) col.parentID = collections.get(c.parent);
+        await col.saveTx(); collections.set(c.name, col.id);
+      }
+      const made = [];
+      for (const r of spec.items || []) {
+        const type = r.itemType || 'journalArticle';
+        const item = new Zotero.Item(type); item.libraryID = library;
+        item.setField('title', r.title);
+        if (r.year) item.setField('date', String(r.year));
+        if (r.doi && type === 'journalArticle') item.setField('DOI', r.doi);
+        if (r.url) item.setField('url', r.url);
+        if (r.journal && type === 'journalArticle') item.setField('publicationTitle', r.journal);
+        if (r.journal && type === 'preprint') item.setField('repository', r.journal);
+        if (r.repository && type === 'dataset') item.setField('repository', r.repository);
+        if (r.university && type === 'thesis') item.setField('university', r.university);
+        if (r.number && type === 'patent') item.setField('patentNumber', r.number);
+        item.setCreators((r.authors || []).map(([last, first]) => first ? {firstName: first, lastName: last, creatorType: type === 'patent' ? 'inventor' : 'author'} : {name: last, creatorType: type === 'patent' ? 'inventor' : 'author', fieldMode: 1}));
+        if (r.collections) item.setCollections(r.collections.map(n => collections.get(n)).filter(Boolean));
+        if (r.tags) item.setTags(r.tags.map(tag => ({tag})));
+        await item.saveTx(); made.push(item);
+      }
+      for (const n of spec.notes || []) {
+        const note = new Zotero.Item('note'); note.libraryID = library; note.parentID = made[n.item].id; note.setNote(n.text); await note.saveTx();
+      }
+      const attachments = new Map();
+      const pdf = PathUtils.join(dir, 'demo-paper.pdf');
+      const withPdf = new Set([...(spec.annotations || []).map(a => a.item), ...(spec.reading || []).map(r => r.item)]);
+      for (const index of withPdf) {
+        const att = await Zotero.Attachments.importFromFile({file: pdf, parentItemID: made[index].id, title: 'Full text PDF'});
+        attachments.set(index, att);
+      }
+      let highlights = 0;
+      for (const a of spec.annotations || []) {
+        const att = attachments.get(a.item);
+        for (const [i, h] of (a.highlights || []).entries()) {
+          const ann = new Zotero.Item('annotation'); ann.libraryID = library; ann.parentID = att.id;
+          ann.annotationType = 'highlight'; ann.annotationText = h.text; ann.annotationComment = h.comment || '';
+          ann.annotationColor = h.color || '#ffd400'; ann.annotationPageLabel = String(h.page || 1);
+          ann.annotationSortIndex = `${String((h.page || 1) - 1).padStart(5, '0')}|${String(i * 100).padStart(6, '0')}|00000`;
+          ann.annotationPosition = JSON.stringify({pageIndex: (h.page || 1) - 1, rects: [[72, 700 - i * 40, 520, 716 - i * 40]]});
+          await ann.saveTx(); highlights++;
+        }
+      }
+      for (const r of spec.reading || []) {
+        const item = made[r.item], att = attachments.get(r.item);
+        const pages = r.read || [0], each = Math.max(1, Math.round(r.seconds / pages.length));
+        for (const page of pages) await runtime.addReading(item, each, {attachmentID: att.id, pageIndex: page, totalPages: r.pages || 9});
+        await runtime.edit([item], {status: r.status || 'unread', rating: r.rating || 0});
+      }
+      await runtime.flush();
+      return `${made.length} papers · ${collections.size} collections · ${(spec.notes || []).length} notes · ${highlights} highlights · ${(spec.reading || []).length} read`;
+    }));
 
     results.push(await attempt('Zotero.Items.getAll returns what the plugin assumes', () => {
       if (getAllShape === 'promise' && !runtime.libraryItems) {
@@ -178,36 +245,6 @@
       if (!state.columnFit.seen) throw new Error(`the double-click never reached the handler (resizer classes: ${target.className})`);
       if (!state.columnFit.fitted) throw new Error(`the handler stopped: ${state.columnFit.last}`);
       return `${state.columnFit.last} · header ${Math.round(before)} → ${Math.round(after)}px · ${resizers.length} resizers`;
-    }));
-
-    if (shots) results.push(await attempt('pictures of the panel for the README, taken off the hidden window', async () => {
-      /* drawWindow paints from layout, so a window that is hidden from the
-         screen still yields its picture. Nothing is brought forward. */
-      const state = runtime.windows.get(win), bench = state && state.workbench;
-      if (!bench) throw new Error('workbench not attached');
-      const dir = PathUtils.join(PathUtils.parent(runtime.selfCheckPath || Zotero.DataDirectory.dir + '/style-custom-selfcheck.json'), 'style-custom-shots');
-      await IOUtils.makeDirectory(dir, { ignoreExisting: true });
-      const shoot = async name => {
-        await new Promise(resolve => win.setTimeout(resolve, 900));
-        const scale = 2, w = win.innerWidth, h = win.innerHeight;
-        const canvas = win.document.createElementNS('http://www.w3.org/1999/xhtml', 'canvas');
-        canvas.width = w * scale; canvas.height = h * scale;
-        const ctx = canvas.getContext('2d'); ctx.scale(scale, scale);
-        ctx.drawWindow(win, 0, 0, w, h, '#ffffff');
-        const data = canvas.toDataURL('image/png').split(',')[1];
-        const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
-        await IOUtils.write(PathUtils.join(dir, name + '.png'), bytes);
-        return `${name} ${w}×${h}`;
-      };
-      const taken = [];
-      try { await bench.toggle(false); } catch (ignored) {}
-      taken.push(await shoot('library'));
-      await bench.show('explore'); if (!bench.docked()) { try { bench.dock(); } catch (ignored) {} }
-      for (const tab of ['explore', 'related', 'authors', 'journals', 'annotations', 'graph', 'collections', 'reading', 'matrix']) {
-        try { await bench.show(tab); taken.push(await shoot(tab)); } catch (error) { taken.push(`${tab} failed: ${error.message || error}`); }
-      }
-      try { await bench.toggle(false); } catch (ignored) {}
-      return taken.join(' · ') + ' → ' + dir;
     }));
 
     results.push(await attempt('the panel can sit in a Zotero tab and fill it', async () => {
@@ -639,6 +676,92 @@
         return JSON.stringify(counts) + (partial ? ` · ${partial} partial` : '');
       }));
     }
+
+    if (shots) results.push(await attempt('pictures of the panel for the README, taken off the hidden window', async () => {
+      /* drawWindow paints from layout, so a window hidden from the screen still
+         yields its picture. Nothing is brought forward. */
+      const state = runtime.windows.get(win), bench = state && state.workbench;
+      if (!bench) throw new Error('workbench not attached');
+      const dir = PathUtils.join(Zotero.DataDirectory.dir, 'style-custom-shots');
+      await IOUtils.makeDirectory(dir, { ignoreExisting: true });
+      try { win.resizeTo(1720, 1080); } catch (ignored) {}
+      // Zotero's own banners (upgrade, sync, Word plugin) are not the subject.
+      for (const el of win.document.querySelectorAll('#post-upgrade-banner, #mac-word-plugin-install-banner, #retracted-items-banner, #file-renaming-banner-container, [id*="sync-reminder"], notification-message, notification')) { el.hidden = true; el.style.display = 'none'; }
+      const dismiss = () => { for (const b of bench.panel.querySelectorAll('.sc-welcome button, .sc-notice button')) if (/Got it|Later|알겠어요|나중에/.test(b.textContent)) b.click(); };
+      const shoot = async (name, target = win) => {
+        await new Promise(resolve => win.setTimeout(resolve, 1200));
+        const scale = 2, w = target.innerWidth, h = target.innerHeight;
+        const canvas = win.document.createElementNS('http://www.w3.org/1999/xhtml', 'canvas');
+        canvas.width = w * scale; canvas.height = h * scale;
+        const ctx = canvas.getContext('2d'); ctx.scale(scale, scale);
+        ctx.drawWindow(target, 0, 0, w, h, '#ffffff');
+        const data = canvas.toDataURL('image/png').split(',')[1];
+        await IOUtils.write(PathUtils.join(dir, name + '.png'), Uint8Array.from(atob(data), c => c.charCodeAt(0)));
+        return `${name} ${w}×${h}`;
+      };
+      const library = Zotero.Libraries.userLibraryID;
+      const all = (await Zotero.Items.getAll(library)).filter(item => item.isRegularItem && item.isRegularItem());
+      const byTitle = part => all.find(item => String(item.getField('title')).includes(part));
+      const one = byTitle('dual-RNA-guided') || all[0];
+      const three = [one, byTitle('Programmable editing of a target base'), byTitle('Search-and-replace')].filter(Boolean);
+      const select = async items => { try { await win.ZoteroPane.selectItems(items.map(i => i.id)); } catch (ignored) {} await new Promise(resolve => win.setTimeout(resolve, 400)); };
+      bench.state.scope = 'library';
+      const taken = [];
+      try { await bench.toggle(false); } catch (ignored) {}
+      try { await runtime.useColumns(win); } catch (ignored) {}
+      await new Promise(resolve => win.setTimeout(resolve, 500));
+      // The columns the README talks about, and only those, at widths that read.
+      let columnsNote = '';
+      try {
+        const tree = win.ZoteroPane.itemsView.tree, cols = tree._columns._columns || [];
+        // A plugin column's key in the tree is the one registration handed back, not its name.
+        const key = name => (runtime.featureColumns && runtime.featureColumns.get(name)) || name;
+        const widths = {title: 430, firstCreator: 150, year: 56, journalMark: 120, if: 60, citations: 130, status: 90, rating: 84, time: 80, files: 70, correspondingInstitution: 220};
+        const keep = new Set(Object.keys(widths).map(key));
+        cols.forEach((column, index) => { const want = keep.has(column.dataKey); if (!!column.hidden === want) tree._columns.toggleHidden(index); });
+        await new Promise(resolve => win.setTimeout(resolve, 300));
+        const present = new Set(cols.map(c => c.dataKey));
+        tree._columns.onResize(Object.fromEntries(Object.entries(widths).map(([name, width]) => [key(name), width]).filter(([k]) => present.has(k))), true);
+        await new Promise(resolve => win.setTimeout(resolve, 300));
+        columnsNote = 'visible: ' + cols.filter(c => !c.hidden).map(c => c.dataKey).join(',');
+      } catch (error) { columnsNote = 'columns failed: ' + (error.message || error); }
+      try { await win.ZoteroPane.collectionsView.selectLibrary(library); } catch (ignored) {}
+      await select(one ? [one] : []);
+      taken.push(await shoot('library'));
+      await select([]);
+      const plan = [['explore', []], ['related', [one]], ['authors', [one]], ['journals', []], ['annotations', [one]], ['graph', []], ['collections', []], ['reading', []], ['matrix', three]];
+      for (const [tab, items] of plan) {
+        try {
+          await select(items.filter(Boolean));
+          bench.state.scope = 'library';
+          await bench.show(tab); if (!bench.docked()) { try { bench.dock(); } catch (ignored) {} }
+          dismiss();
+          await new Promise(resolve => win.setTimeout(resolve, tab === 'related' || tab === 'authors' ? 6000 : 800));
+          taken.push(await shoot(tab));
+        } catch (error) { taken.push(`${tab} failed: ${error.message || error}`); }
+      }
+      try { await bench.toggle(false); } catch (ignored) {}
+      // ZotPoP, in its own tab: one search on an open source, then its picture.
+      try {
+        const zotpop = Zotero.ZotPoP;
+        if (zotpop && typeof zotpop.openSearch === 'function') {
+          const tabID = zotpop.openSearch(win, {keywords: 'CRISPR base editing'});
+          await new Promise(resolve => win.setTimeout(resolve, 2500));
+          const browser = win.document.getElementById(tabID)?.querySelector('browser');
+          const cw = browser?.contentWindow, cd = cw?.document;
+          if (!cd) throw new Error('ZotPoP tab has no document');
+          const source = cd.getElementById('source'); if (source) { source.value = 'openalex'; source.dispatchEvent(new cw.Event('change', {bubbles: true})); }
+          const keywords = cd.getElementById('keywords'); if (keywords && !keywords.value) keywords.value = 'CRISPR base editing';
+          const max = cd.getElementById('maxResults'); if (max) max.value = '60';
+          cd.getElementById('search-btn')?.click();
+          for (let i = 0; i < 60; i++) { await new Promise(resolve => win.setTimeout(resolve, 1000)); if ((cd.getElementById('results-body')?.children.length || 0) >= 20) break; }
+          await new Promise(resolve => win.setTimeout(resolve, 1500));
+          taken.push(await shoot('zotpop'));
+          try { win.Zotero_Tabs.close(tabID); } catch (ignored) {}
+        }
+      } catch (error) { taken.push('zotpop failed: ' + (error.message || error)); }
+      return taken.join(' · ') + ' · ' + columnsNote + ' → ' + dir;
+    }));
 
     const passed = results.filter(row => row.pass).length;
     return {

@@ -222,6 +222,13 @@
    ]
   },
   {
+   "ko": "라이브러리",
+   "n": 3,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
    "ko": "현재 선택 가져오기",
    "n": 3,
    "files": [
@@ -808,6 +815,20 @@
   },
   {
    "ko": "닫기",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "선택한 문헌",
+   "n": 2,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "현재 컬렉션",
    "n": 2,
    "files": [
     "src/workbench.js"
@@ -5049,27 +5070,6 @@
    ]
   },
   {
-   "ko": "라이브러리",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "선택한 문헌",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
-   "ko": "현재 컬렉션",
-   "n": 1,
-   "files": [
-    "src/workbench.js"
-   ]
-  },
-  {
    "ko": "현재 컬렉션과 하위 컬렉션",
    "n": 1,
    "files": [
@@ -5371,7 +5371,14 @@
    ]
   },
   {
-   "ko": "{0}개 문헌 선택{1}",
+   "ko": "{0}개 문헌 선택",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "현재 결과 밖 {0}개 포함",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5392,21 +5399,28 @@
    ]
   },
   {
-   "ko": "{0} · {1}개 문헌{2}",
+   "ko": "현재·하위 컬렉션",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": "선택한 문헌 ",
+   "ko": "{0} · {1}개 문헌 범위 · 내용 검색",
    "n": 1,
    "files": [
     "src/workbench.js"
    ]
   },
   {
-   "ko": "개",
+   "ko": "{0} · {1}개 문헌",
+   "n": 1,
+   "files": [
+    "src/workbench.js"
+   ]
+  },
+  {
+   "ko": "선택한 문헌 {0}개",
    "n": 1,
    "files": [
     "src/workbench.js"
@@ -5434,7 +5448,7 @@
    ]
   },
   {
-   "ko": "개 적용",
+   "ko": "{0}개 적용",
    "n": 1,
    "files": [
     "src/workbench.js"
