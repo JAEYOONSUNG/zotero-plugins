@@ -708,10 +708,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     mark.textContent = this.journalAbbreviationOf(item);
     const bg = tone.badge || tone.fill, ink = tone.badge ? tone.badgeInk : tone.ink, edge = tone.badge ? 'transparent' : tone.edge;
-    mark.style.cssText = `flex:none;display:inline-block;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;`
+    // One box: 14px tall, the line exactly as tall, so the 9px text sits in
+    // the middle of it rather than on its upper edge.
+    mark.style.cssText = `flex:none;display:inline-block;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;vertical-align:middle;`
       + `min-width:22px;height:14px;padding:0 4px;border-radius:3px;white-space:nowrap;`
       + `background:${bg};color:${ink};box-shadow:inset 0 0 0 .5px ${edge};`
-      + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
+      + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:14px;font-variant-numeric:normal;`;
     mark.title = found.identity.label ? `${found.title} · ${found.identity.label}` : found.title;
     return mark;
   }
