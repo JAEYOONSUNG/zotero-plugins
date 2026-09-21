@@ -1929,6 +1929,43 @@ test('a fit that only needs a little touches the title alone, and a shrink hands
   assert.deepEqual(resized[1][0], {title: 370, venue: 170});
 });
 
+test('a second double-click on a fitted column changes nothing, and a cell wider than its text does not grow by its padding', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML(`<html><body><div id="tbl">
+    <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="cell venue"><div class="resizer venue"></div><span>Venue</span></div><div class="cell journal"><div class="resizer journal"></div><span>Journal</span></div></div>
+    <div class="virtualized-table-body"><div class="row"><span class="cell venue">Nucleic Acids Research</span></div></div>
+  </div></body></html>`);
+  const {plugin} = fixture();
+  const resized = [];
+  const columns = [{dataKey: 'title', minWidth: 50}, {dataKey: 'venue', minWidth: 20}, {dataKey: 'journal', minWidth: 40}];
+  window.ZoteroPane = {itemsView: {tree: {props: {id: 'tbl'}, _getVisibleColumns: () => columns, _columns: {onResize: (widths, store) => resized.push([widths, store])}}}};
+  window.CSS = {escape: s => s};
+  // A browser measures text: 7 px a character here, and every cell has 8 px of padding a side.
+  const createElementNS = document.createElementNS.bind(document);
+  document.createElementNS = (ns, tag) => tag === 'canvas' ? {getContext: () => ({font: '', measureText: text => ({width: text.length * 7})})} : createElementNS(ns, tag);
+  window.getComputedStyle = el => ({font: '13px sans-serif', overflow: 'visible', marginLeft: '0px', marginRight: '0px', paddingLeft: el.classList.contains('cell') ? '8px' : '0px', paddingRight: el.classList.contains('cell') ? '8px' : '0px'});
+  const cell = document.querySelector('.virtualized-table-body .cell.venue');
+  const size = {title: 500, venue: 40, journal: 200};
+  const box = (scroll, client) => { Object.defineProperty(cell, 'scrollWidth', {value: scroll, configurable: true}); Object.defineProperty(cell, 'clientWidth', {value: client, configurable: true}); };
+  box(162, 40); // 40 wide with 154 px of text: it overflows
+  for (const key of Object.keys(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width: size[key]});
+  const state = {listeners: []};
+  plugin.attachColumnFit(window, state);
+  document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  // 154 of text, 16 of cell padding, 16 of room: 186, all of it from the title.
+  assert.deepEqual(resized[0][0], {title: 354, venue: 186});
+  // Now 186 wide: nothing overflows, scrollWidth is just the box again.
+  size.venue = 186; size.title = 354; box(186, 186);
+  document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  assert.equal(resized.length, 1, 'no second resize: the column already fits');
+  assert.match(state.columnFit.last, /already fits/);
+  // Dragged wider by hand: the fit brings it back to the text, not to the box plus padding.
+  size.venue = 260; size.title = 280; box(260, 260);
+  document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  assert.equal(resized.length, 2);
+  assert.deepEqual(resized[1][0], {title: 354, venue: 186});
+});
+
 test('the tree draws the italics and subscripts of a title instead of its tags', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML('<html><body><div class="row"><span class="cell title"><span class="cell-text">x</span></span></div></body></html>');

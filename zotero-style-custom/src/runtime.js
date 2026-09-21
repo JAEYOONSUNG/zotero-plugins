@@ -3591,6 +3591,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       try { ctx = doc.createElementNS('http://www.w3.org/1999/xhtml', 'canvas').getContext('2d'); } catch (ignored) {}
       const styleOf = el => { try { return win.getComputedStyle?.(el) || null; } catch (ignored) { return null; } };
       const px = value => parseFloat(value) || 0;
+      /* scrollWidth only says something when the content overflows; for a
+         box wider than its text it is the box's own width, and a fit that
+         trusted it grew the column by its padding at every double-click. */
+      const overflow = el => ((el.scrollWidth || 0) > (el.clientWidth || 0) ? el.scrollWidth : 0);
       const contentWidth = el => {
         const style = styleOf(el);
         let sum = 0;
@@ -3604,22 +3608,29 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           else if (node.nodeType === 1) {
             const inner = styleOf(node);
             const box = typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect().width : 0;
-            sum += (inner && inner.overflow === 'hidden' ? contentWidth(node) : Math.max(box, node.scrollWidth || 0))
+            sum += (inner && inner.overflow === 'hidden' ? contentWidth(node) : Math.max(box, overflow(node)))
               + (inner ? px(inner.marginLeft) + px(inner.marginRight) : 0);
           }
         }
         if (style) sum += px(style.paddingLeft) + px(style.paddingRight);
-        return Math.max(sum, el.scrollWidth || 0, ...[...el.children].map(child => (child.scrollWidth || 0) + (child.offsetLeft || 0)));
+        return Math.max(sum, overflow(el), ...[...el.children].map(child => (overflow(child) ? child.scrollWidth + (child.offsetLeft || 0) : 0)));
       };
       let widest = 0, byScroll = 0, cells = 0, widestText = '';
       for (const cell of doc.querySelectorAll(`#${tree.props.id} .virtualized-table-body .cell.${escape}`)) {
         cells++;
-        byScroll = Math.max(byScroll, cell.scrollWidth || 0);
+        byScroll = Math.max(byScroll, overflow(cell));
         const width = contentWidth(cell);
         if (width > widest) { widest = width; widestText = String(cell.textContent || '').trim().slice(0, 60); }
       }
+      // The header's own word, measured the same way (its label box grows
+      // with the column, so its scrollWidth would only echo the width back).
       const label = head.querySelector('.cell-text, span');
-      widest = Math.max(widest, label ? (label.scrollWidth || 0) + 22 : 0);
+      if (label) {
+        let labelWidth = overflow(label);
+        const style = styleOf(label);
+        if (ctx && style && label.textContent.trim()) { ctx.font = style.font || `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`; labelWidth = Math.max(labelWidth, ctx.measureText(label.textContent).width); }
+        widest = Math.max(widest, labelWidth ? labelWidth + 22 : 0);
+      }
       const PAD = 16, MIN = 20, SHARE = 0.4, ALWAYS = 320, TITLE_KEEP = 0.2;
       const cellFor = key => doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
       const widths = new Map();
@@ -3634,6 +3645,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const want = Math.min(Math.max(floor(column), widest + PAD), cap);
       const current = widths.get(dataKey), changes = {};
       let delta = want - current;
+      // Already the right width: the same double-click must leave it alone.
+      if (Math.abs(delta) < 1) { state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} already fits (content ${Math.round(widest)})`; return; }
       const flexible = c => c.dataKey !== dataKey && widths.has(c.dataKey) && !c.fixedWidth && !c.staticWidth;
       const titleColumn = visible.find(c => c.dataKey === 'title' && flexible(c));
       /* The table has no sideways scroll, so a fit is paid for by another
