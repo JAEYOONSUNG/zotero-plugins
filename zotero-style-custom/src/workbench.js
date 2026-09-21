@@ -869,11 +869,42 @@
    button('선택 문헌 태그 이름 변경',async()=>{const result=await library.renameTagBranch([...state.selected],from.value,to.value,{subtree});await load();message(`태그 변경 ${result.updatedItems}개 문헌 · 병합 ${result.mergedTags}개`);},rename);
    const tree=library.tagTree(rows());function branch(nodes,parent){for(const n of nodes){const details=node('details',null,parent);const summary=node('summary',null,details);node('span',`${n.name} (${n.count})`,summary,{class:'sc-tag-name'});const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},summary,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(n.children.length)branch(n.children,details);}}branch(tree,body);if(!tree.length)empty('태그가 없습니다. 문헌을 선택하고 태그를 추가하세요.');
   }
-  async function drawNotes(token){const target=selected();node('p',target.length===1?`${target[0].title}에 새 노트`:'노트를 붙일 문헌 하나를 선택하세요',body,{class:'sc-muted'});const draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar();const saveNote=button('새 노트 저장',async()=>{const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});saveNote.disabled=target.length!==1;
-   if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions,{'data-opens':'window'});}
-   const notes=await library.notes(ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>!state.query||(n.title+' '+n.text).toLowerCase().includes(state.query.toLowerCase()));const paperTitle=id=>state.items.find(i=>String(i.id)===String(id))?.title;for(const n of matching){const c=card(n.title,[paperTitle(n.parentID),String(n.modified||'').slice(0,10)].filter(Boolean).join(' · '));const text=node('p',n.text.length>1200?n.text.slice(0,1200)+'…':n.text,c,{class:'sc-note-text'});if(n.text.length>1200)button('전체 내용 보기',()=>{text.textContent=n.text;},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
+  /* A note needs a paper. Opening this tab with the whole library in scope
+     used to show a disabled editor and "select a paper", with no paper to
+     be seen: the papers open in reader tabs, the recent ones, and whatever
+     the search box matches are offered here, one press each. */
+  function notePaperChooser(){
+   const pick=item=>{state.selected=new Set([String(item.id)]);render();};
+   const byId=id=>state.items.find(i=>String(i.id)===String(id));
+   node('p','노트를 붙일 문헌을 하나 고르세요. 열려 있는 논문·최근 문헌에서 누르거나, 위 검색창으로 찾으세요.',body,{class:'sc-muted'});
+   const open=[];
+   try{for(const tab of (typeof reader?.tabs==='function'?reader.tabs(win):[])){if(!tab.itemID)continue;const ref=runtime.Z?.Items?.get?.(Number(tab.itemID));const paper=(ref?.parentID&&byId(ref.parentID))||byId(tab.itemID);if(paper&&!open.some(i=>String(i.id)===String(paper.id)))open.push(paper);}}catch(error){runtime.Z?.logError?.(error);}
+   if(open.length){node('h3','지금 열려 있는 논문',body);const b=bar();for(const it of open)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
+   const when=v=>typeof v==='number'?(Number.isFinite(v)?v:0):(Date.parse(v||'')||0);
+   const activity=it=>Math.max(when(it.lastRead),when(it.dateModified),when(it.dateAdded));
+   const list=rows();
+   const shown=(state.query?list:[...list].sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id)))).slice(0,12);
+   node('h3',state.query?(list.length>12?`검색 결과 ${list.length}편 중 12편`:`검색 결과 ${list.length}편`):'최근 문헌',body);
+   if(shown.length){const b=bar();for(const it of shown)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
+   else empty(state.query?'검색에 맞는 문헌이 없습니다. 검색어를 바꿔 보세요.':'이 범위에 문헌이 없습니다. 범위를 라이브러리로 바꾸세요.');
+   const acts=bar();button('현재 선택 가져오기',()=>{const picked=runtime.selected(win);if(!picked.length){message('Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.',true);return;}state.selected=new Set(picked.slice(0,1).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});
+  }
+  async function drawNotes(token){const target=selected();
+   if(target.length!==1){if(target.length>1){node('p',`선택한 ${target.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});const pickBar=bar();for(const it of target.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar,{'data-pick':String(it.id)});}else notePaperChooser();}
+   else{
+    const head=node('p',`${target[0].title}에 새 노트`,body,{class:'sc-muted'});button('다른 문헌 고르기',()=>{state.selected=new Set();render();},head,{class:'sc-inline'});
+    const draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar();const saveNote=button('새 노트 저장',async()=>{const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
+    if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions,{'data-opens':'window'});}
+   }
+   // The notes: the chosen paper's own when it sits in the scope and nothing
+   // is being searched; otherwise the scope's, newest first, as a note search.
+   const own=target.length===1&&!state.query&&scoped().some(i=>String(i.id)===String(target[0].id));
+   const notes=await library.notes(own?[String(target[0].id)]:ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>!state.query||(n.title+' '+n.text).toLowerCase().includes(state.query.toLowerCase())).sort((a,b)=>String(b.modified||'').localeCompare(String(a.modified||'')));const paperTitle=id=>state.items.find(i=>String(i.id)===String(id))?.title;
+   const CAP=40;const listed=own?matching:matching.slice(0,CAP);
+   node('h3',own?`이 문헌의 노트 ${matching.length}개`:state.query?`검색된 노트 ${matching.length}개`:(matching.length>CAP?`최근 노트 ${CAP}개 (전체 ${matching.length}개)`:`이 범위의 노트 ${matching.length}개`),body);
+   for(const n of listed){const c=card(n.title,[paperTitle(n.parentID),String(n.modified||'').slice(0,10)].filter(Boolean).join(' · '));const text=node('p',n.text.length>1200?n.text.slice(0,1200)+'…':n.text,c,{class:'sc-note-text'});if(n.text.length>1200)button('전체 내용 보기',()=>{text.textContent=n.text;},c);if(!own&&n.parentID&&paperTitle(n.parentID))button('이 문헌에 노트 쓰기',()=>{state.selected=new Set([String(n.parentID)]);state.query=search.value='';render();},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
     // The list had no way to let a note go. Trash, not delete: Zotero's trash keeps it.
-    button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':'이 범위에 노트가 없습니다. 문헌을 선택해 새 노트를 작성하세요.');}
+    button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':own?'이 문헌에는 아직 노트가 없습니다. 위에 첫 노트를 쓰세요.':'이 범위에 노트가 없습니다. 위에서 문헌을 골라 첫 노트를 쓰세요.');}
   /* Reading back through what you marked up.
 
      The list was a stack of boxed cards, each with a four-pixel colour bar down

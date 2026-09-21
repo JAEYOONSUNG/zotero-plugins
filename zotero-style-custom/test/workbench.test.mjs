@@ -92,6 +92,23 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog}={}){
  return {win,doc,bench,runtime,library,reader,assist,calls,errors,papers,refs,body,click,input,findButton,setLibrary:id=>{libraryID=id;},setSelection:ids=>{mainSelection=ids.map(id=>refs.get(id));},notify:()=>notify(),record};
 }
 
+test('the notes tab offers the open, recent and searched papers when none is chosen, and the pick brings the editor', async () => {
+ const f=fixture();await f.bench.show('notes');f.bench.state.selected=new Set();await f.bench.render();
+ assert.equal(f.body().querySelector('textarea'),null,'no editor without a paper');
+ assert.ok(f.body().textContent.includes('지금 열려 있는 논문'));
+ assert.ok(f.body().textContent.includes('최근 문헌'));
+ const open=f.body().querySelector('[data-pick="1"]');assert.ok(open,'the paper open in a reader tab is offered');
+ f.bench.state.query='Beta';await f.bench.render();
+ assert.ok(f.body().textContent.includes('검색 결과'));
+ const found=[...f.body().querySelectorAll('[data-pick]')].map(b=>b.textContent);assert.ok(found.includes('Paper Beta'));
+ f.bench.state.query='';await f.bench.render();
+ f.body().querySelector('[data-pick="1"]').dispatchEvent(new f.win.Event('click'));await settle();
+ assert.ok(f.bench.state.selected.has('1'));assert.ok(f.body().querySelector('textarea'),'the editor for the chosen paper');
+ assert.ok(f.body().textContent.includes('Paper Alpha에 새 노트'));
+ await f.click('다른 문헌 고르기');assert.equal(f.bench.state.selected.size,0);assert.ok(f.body().textContent.includes('지금 열려 있는 논문'));
+ f.bench.destroy();
+});
+
 test('workbench mounts hidden and all nineteen tabs render without raw note HTML',async()=>{
  const f=fixture();assert.equal(f.bench.panel.hidden,true);assert.equal(f.calls.length,0);assert.equal(Workbench.TABS.length,19);
  for(const [tab] of Workbench.TABS){await f.bench.show(tab);assert.ok(f.body().childNodes.length,tab);assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error,'true',tab);}
