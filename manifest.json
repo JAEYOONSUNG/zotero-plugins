@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "ZotPoP",
-  "version": "0.38.2",
+  "version": "0.38.3",
   "description": "Publish or Perish-style literature search inside Zotero: query OpenAlex, Crossref, Semantic Scholar, PubMed, arXiv or Google Scholar, see citation metrics, and add papers (with PDFs) straight to your library.",
   "author": "Jae Yoon Sung",
   "homepage_url": "https://github.com/sungjaeyoon92/zotero-zotpop",

@@ -117,16 +117,19 @@
     /* Once soon after start-up, then daily while Zotero stays open. The first
        delay keeps the check off the start-up path; a check made within the
        last few hours is not repeated at every launch. */
-    function start({ delayMs = 45000, intervalMs = DAY, minGapMs = 6 * 60 * 60 * 1000 } = {}) {
+    function start({ delayMs = 45000, intervalMs = DAY, minGapMs = 6 * 60 * 60 * 1000, retryMs = 30 * 60 * 1000 } = {}) {
       stop();
       if (typeof setTimer !== "function") { log("no timer in this scope; updates are checked on request only"); return; }
       const tick = () => {
         state.timer = null;
         const lastAt = Date.parse(get("updateLastCheck", "") || "") || 0;
-        const due = !lastAt || now() - lastAt >= minGapMs;
+        // A new version found while the plugin was busy is not left until
+        // tomorrow: it is tried again soon, and at the next launch.
+        const deferred = (lastResult() || {}).status === "deferred";
+        const due = deferred || !lastAt || now() - lastAt >= minGapMs;
         (due ? run({ reason: "timer" }) : Promise.resolve({ status: "recent" }))
-          .catch(error => log("update check failed: " + (error.message || error)))
-          .finally(() => { if (state.started) state.timer = setTimer(tick, intervalMs); });
+          .catch(error => { log("update check failed: " + (error.message || error)); return {}; })
+          .then(result => { if (state.started) state.timer = setTimer(tick, result && result.status === "deferred" ? retryMs : intervalMs); });
       };
       state.started = true;
       state.timer = setTimer(tick, delayMs);

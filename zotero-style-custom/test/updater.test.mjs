@@ -130,6 +130,32 @@ test("start waits, checks, then re-arms daily; a recent check is not repeated at
   assert.equal(updater.state.timer, null);
 });
 
+test("an install deferred by busy work is retried soon and again at the next launch", async () => {
+  let busy = true;
+  const store = new Map();
+  const timers = [];
+  const installs = [];
+  const updater = Updater.create({
+    id: ID, version: "0.51.11", appVersion: "9.0.6", updateURL: "https://example.org/feed.json",
+    request: async () => feed("0.51.12"), install: async entry => { installs.push(entry); },
+    prefs: { get: k => store.get(k), set: (k, v) => store.set(k, v) }, busy: () => busy,
+    now: () => 1_700_000_000_000, setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: () => {}
+  });
+  updater.start({ delayMs: 1000, intervalMs: 86_400_000, minGapMs: 3600_000, retryMs: 1800_000 });
+  timers[0].fn();
+  for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(updater.lastResult().status, "deferred");
+  assert.equal(timers.at(-1).ms, 1800_000, "half an hour, not a day");
+  // A relaunch: the last check was seconds ago, but a deferred one is due at once.
+  updater.stop(); updater.start({ delayMs: 1000, intervalMs: 86_400_000, minGapMs: 3600_000 });
+  busy = false;
+  timers.at(-1).fn();
+  for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(installs.length, 1);
+  assert.equal(updater.lastResult().status, "installed");
+  assert.equal(timers.at(-1).ms, 86_400_000, "back to the daily rhythm");
+});
+
 test("ZotPoP ships the same updater, copied by its build", () => {
   const twin = path.join(here, "..", "..", "content", "updater.js");
   if (!existsSync(twin)) return;
