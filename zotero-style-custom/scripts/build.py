@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build and independently validate a deterministic Zotero XPI (stdlib only)."""
+import re
 import json
 import subprocess
 from pathlib import Path
@@ -8,7 +9,17 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ["src/jcr-categories.js", "src/jcr-browser.js", "content/jcr-browser.css", "data/jcr-categories.json", "manifest.json", "bootstrap.js", "prefs.js", "src/data.js", "src/reading.js", "src/marquee.js",
-         "src/workspace.js", "src/assist.js", "src/library.js", "src/reader-tools.js", "src/workbench.js", "content/workbench.css", "content/citation.css", "src/runtime.js", "src/citations.js", "src/citation-formats.js", "src/supplementary.js", "src/discover.js", "src/paper-signals.js", "src/legacy-reading.js", "src/journal-metrics.js", "src/selfcheck.js", "src/failures.js", "src/brand-icons.js", "src/i18n.js", "src/strings.js", "src/author-portrait.js", "src/attachment-kinds.js", "src/item-kinds.js", "src/patents.js", "src/journal-identity.js", "src/affiliations.js", "src/paper-graph.js", "LICENSES.md", "src/journals.js", "data/if-catalog.json", "data/journal-registry.json", "data/features.json", "content/preferences.xhtml", "content/preferences.css", "src/settings-schema.js", "src/settings.js", "content/icons/style-custom.svg", "content/icons/style-custom-toolbar.svg", *[f"content/icons/style-custom-{size}.png" for size in [16,24,32,48,96,128,256]]]
+         "src/workspace.js", "src/assist.js", "src/library.js", "src/reader-tools.js", "src/workbench.js", "content/workbench.css", "content/citation.css", "src/updater.js", "src/runtime.js", "src/citations.js", "src/citation-formats.js", "src/supplementary.js", "src/discover.js", "src/paper-signals.js", "src/legacy-reading.js", "src/journal-metrics.js", "src/selfcheck.js", "src/failures.js", "src/brand-icons.js", "src/i18n.js", "src/strings.js", "src/author-portrait.js", "src/attachment-kinds.js", "src/item-kinds.js", "src/patents.js", "src/journal-identity.js", "src/affiliations.js", "src/paper-graph.js", "LICENSES.md", "src/journals.js", "data/if-catalog.json", "data/journal-registry.json", "data/features.json", "content/preferences.xhtml", "content/preferences.css", "src/settings-schema.js", "src/settings.js", "content/icons/style-custom.svg", "content/icons/style-custom-toolbar.svg", *[f"content/icons/style-custom-{size}.png" for size in [16,24,32,48,96,128,256]]]
+
+# Every module bootstrap.js loads has to be in the archive: 0.51.12 shipped
+# without src/updater.js and the plugin died at startup with nothing on screen.
+def _loaded_modules():
+    text = (ROOT / "bootstrap.js").read_text(encoding="utf-8")
+    match = re.search(r'for \(const name of \[(.*?)\]\)', text, re.S)
+    assert match, "bootstrap.js module list not found"
+    return ["src/%s.js" % name for name in re.findall(r'"([\w-]+)"', match.group(1))]
+_missing = [name for name in _loaded_modules() if name not in FILES]
+assert not _missing, "bootstrap.js loads modules the build does not pack: %s" % ", ".join(_missing)
 
 
 def validate_manifest(manifest):
