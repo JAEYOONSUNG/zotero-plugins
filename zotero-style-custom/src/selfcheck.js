@@ -265,7 +265,7 @@
          shows a scrollbar instead of unreadable columns. */
       const state = runtime.windows.get(win);
       const roll = runtime.rollTable(win, state);
-      if (!roll) throw new Error('the list could not be measured (no tree, header, body or stylesheet)');
+      if (!roll) throw new Error('the list could not be measured: ' + (state.tableRoll?.error || 'no tree'));
       const tree = win.ZoteroPane.itemsView.tree, root = win.document.getElementById(tree.props.id);
       const list = root.querySelector('.windowed-list'), header = root.querySelector('.virtualized-table-header'), body = root.querySelector('.virtualized-table-body');
       if (roll.rolling) {
@@ -274,7 +274,7 @@
         if (body.scrollWidth <= body.clientWidth) throw new Error('rolling, but the body has nothing to scroll');
       }
       else if (list.style.minWidth || header.style.width) throw new Error('flat, but the roll styles are still on');
-      return `${roll.rolling ? 'rolling' : 'flat'}: columns want ${roll.wanted}px, the list offers ${roll.available}px`;
+      return `${roll.rolling ? 'rolling' : 'flat'}: columns want ${roll.wanted}px, the list offers ${roll.available}px · header ${Math.round(header.getBoundingClientRect().width)}px, rows ${Math.round(list.getBoundingClientRect().width)}px, body scrolls ${body.scrollWidth} in ${body.clientWidth}`;
     }));
 
     results.push(await attempt('the panel can sit in a Zotero tab and fill it', async () => {

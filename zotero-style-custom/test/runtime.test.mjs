@@ -1834,7 +1834,7 @@ test('double-clicking the edge at the right of a column fits that column to its 
   assert.equal(store, true, 'stored, so it persists like a drag');
   // widest cell = 24 chars * 7 = 168, plus 16 padding = 184. Nothing else
   // changes: when the columns no longer fit, the list rolls sideways.
-  assert.deepEqual(widths, {title: 184});
+  assert.deepEqual(widths, {title: 184, year: 80}, 'the fitted column at its content, the rest as they are');
   assert.ok(state.listeners.some(([, name]) => name === 'dblclick'), 'and the listener is registered for cleanup');
 });
 
@@ -1860,8 +1860,8 @@ test('a fit changes that column alone, whatever the columns around it hold', asy
   document.querySelector('.resizer.year').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
   assert.equal(resized.length, 1);
   const [widths] = resized[0];
-  // Wants 24 * 7 + 16 = 184, and gets it; the year, journal and fixed columns are not touched.
-  assert.deepEqual(widths, {title: 184});
+  // Wants 24 * 7 + 16 = 184, and gets it; year and journal are stored as they are, the fixed column is left to Zotero.
+  assert.deepEqual(widths, {title: 184, year: 36, journal: 200});
   assert.equal(state.columnFit.fitted, 1);
   assert.match(state.columnFit.last, /title: 120 → 184/);
 });
@@ -1887,13 +1887,13 @@ test('a column takes at most 60% of the list, and always may reach 320 px', asyn
   document.querySelector('.resizer.fixed').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
   assert.equal(resized.length, 1);
   const [widths] = resized[0];
-  assert.deepEqual(widths, {venue: 345});
+  assert.deepEqual(widths, {title: 400, year: 60, venue: 345, journal: 200});
   assert.match(state.columnFit.last, /venue: 40 → 345/);
   // A 400 px table: 60% is 240, but 320 is always allowed.
   Object.assign(size, {title: 100, journal: 60, fixed: 100});
   for (const [key, width] of Object.entries(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width});
   document.querySelector('.resizer.fixed').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
-  assert.deepEqual(resized[1][0], {venue: 320});
+  assert.deepEqual(resized[1][0], {title: 100, year: 60, venue: 320, journal: 60});
 });
 
 test('a column wider than its text shrinks to it, and a narrower one grows to it', async () => {
@@ -1914,11 +1914,11 @@ test('a column wider than its text shrinks to it, and a narrower one grows to it
   plugin.attachColumnFit(window, state);
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
   // 22 characters at 7 px plus padding: 170.
-  assert.deepEqual(resized[0][0], {venue: 170});
+  assert.deepEqual(resized[0][0], {title: 500, year: 60, venue: 170, journal: 200});
   // The same edge with the venue already wider than its text.
   size.venue = 300;
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
-  assert.deepEqual(resized[1][0], {venue: 170});
+  assert.deepEqual(resized[1][0], {title: 500, year: 60, venue: 170, journal: 200});
 });
 
 test('a second double-click on a fitted column changes nothing, and a cell wider than its text does not grow by its padding', async () => {
@@ -1945,7 +1945,7 @@ test('a second double-click on a fitted column changes nothing, and a cell wider
   plugin.attachColumnFit(window, state);
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
   // 154 of text, 16 of cell padding, 16 of room: 186.
-  assert.deepEqual(resized[0][0], {venue: 186});
+  assert.deepEqual(resized[0][0], {title: 500, venue: 186, journal: 200});
   // Now 186 wide: nothing overflows, scrollWidth is just the box again.
   size.venue = 186; size.title = 354; box(186, 186);
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
@@ -1955,7 +1955,7 @@ test('a second double-click on a fitted column changes nothing, and a cell wider
   size.venue = 260; size.title = 280; box(260, 260);
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
   assert.equal(resized.length, 2);
-  assert.deepEqual(resized[1][0], {venue: 186});
+  assert.deepEqual(resized[1][0], {title: 280, venue: 186, journal: 200});
 });
 
 test('when the columns add up to more than the list, the list rolls sideways and the header follows', async () => {
