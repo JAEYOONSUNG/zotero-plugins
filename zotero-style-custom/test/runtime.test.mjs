@@ -1872,6 +1872,38 @@ test('a fit borrows width from every column to the right, not only the one besid
   assert.match(state.columnFit.last, /title: 120 → 184/);
 });
 
+test('a fit spreads the cost over the flexible columns in proportion, and takes at most 40% of the table', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML(`<html><body><div id="tbl">
+    <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="cell year"><span>Year</span></div><div class="cell venue"><div class="resizer venue"></div><span>Venue</span></div><div class="cell fixed"><div class="resizer fixed"></div><span>F</span></div><div class="cell journal"><span>Journal</span></div></div>
+    <div class="virtualized-table-body"><div class="row"><span class="cell venue">Proceedings of the National Academy of Sciences</span></div></div>
+  </div></body></html>`);
+  const {plugin} = fixture();
+  const resized = [];
+  const columns = [{dataKey: 'title', minWidth: 50}, {dataKey: 'year', minWidth: 20}, {dataKey: 'venue', minWidth: 20}, {dataKey: 'fixed', minWidth: 20, fixedWidth: true}, {dataKey: 'journal', minWidth: 40}];
+  window.ZoteroPane = {itemsView: {tree: {props: {id: 'tbl'}, _getVisibleColumns: () => columns, _columns: {onResize: (widths, store) => resized.push([widths, store])}}}};
+  window.CSS = {escape: s => s};
+  // 47 characters at 7 px: 329 of text, 345 with padding -- but the table is
+  // 800 wide, so the fit stops at 320.
+  for (const el of document.querySelectorAll('.cell.venue')) Object.defineProperty(el, 'scrollWidth', {value: el.textContent.length * 7});
+  const size = {title: 400, year: 60, venue: 40, fixed: 100, journal: 200};
+  for (const [key, width] of Object.entries(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width});
+  const state = {listeners: []};
+  plugin.attachColumnFit(window, state);
+  // The edge at the right of the venue column is the fixed column's resizer.
+  document.querySelector('.resizer.fixed').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  assert.equal(resized.length, 1);
+  const [widths] = resized[0];
+  assert.equal(widths.venue, 320, 'capped at 40% of an 800 px table');
+  // 280 more pixels, shared 400:60:200 over the flexible columns -- the wide
+  // title pays most, the year column keeps most of its 60.
+  assert.equal(widths.title, 229);
+  assert.equal(widths.year, 36, 'down to its floor of 20 + 16, and no further');
+  assert.equal(widths.journal, 115);
+  assert.equal(widths.fixed, undefined, 'a fixed column keeps its width');
+  assert.match(state.columnFit.last, /venue: 40 → 320/);
+});
+
 test('the tree draws the italics and subscripts of a title instead of its tags', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML('<html><body><div class="row"><span class="cell title"><span class="cell-text">x</span></span></div></body></html>');

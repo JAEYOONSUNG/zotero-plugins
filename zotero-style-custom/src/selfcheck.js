@@ -235,16 +235,25 @@
       if (!resizers.length) throw new Error('no column resizers in the items header');
       const tree = win.ZoteroPane?.itemsView?.tree;
       const visible = tree?._getVisibleColumns?.() || [];
-      const target = resizers.find(node => { const key = [...node.classList].find(n => !['resizer', 'draggable'].includes(n)); const i = visible.findIndex(c => c.dataKey === key); return i >= 1; }) || resizers[0];
+      const keyOf = node => [...node.classList].find(n => !['resizer', 'draggable'].includes(n));
+      // The edge the user reported: the right edge of Zotero's own Publication
+      // column, which is the resizer of whatever column follows it.
+      const afterPublication = visible[visible.findIndex(c => c.dataKey === 'publicationTitle') + 1]?.dataKey;
+      const target = resizers.find(node => afterPublication && keyOf(node) === afterPublication)
+        || resizers.find(node => visible.findIndex(c => c.dataKey === keyOf(node)) >= 1) || resizers[0];
       // The resizer is named after the column at whose left edge it sits; the
       // fit is of the column before it, as in a spreadsheet.
       const edge = [...target.classList].find(n => !['resizer', 'draggable'].includes(n));
       const key = visible[visible.findIndex(c => c.dataKey === edge) - 1]?.dataKey || edge;
       const cell = () => win.document.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
       const before = cell()?.getBoundingClientRect().width;
+      // Every width as it was, so the check leaves the user's layout alone.
+      const layout = {};
+      for (const c of visible) { const node = win.document.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(c.dataKey)}`); if (node) layout[c.dataKey] = node.getBoundingClientRect().width; }
       target.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, cancelable: true, view: win }));
       await new Promise(resolve => win.setTimeout(resolve, 120));
       const after = cell()?.getBoundingClientRect().width;
+      try { tree._columns.onResize(layout, true); } catch (error) { Zotero.logError(error); }
       if (!state.columnFit.seen) throw new Error(`the double-click never reached the handler (resizer classes: ${target.className})`);
       if (!state.columnFit.fitted) throw new Error(`the handler stopped: ${state.columnFit.last}`);
       return `${state.columnFit.last} · header ${Math.round(before)} → ${Math.round(after)}px · ${resizers.length} resizers`;

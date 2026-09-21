@@ -3557,7 +3557,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // What the last double-click found, for the self-check: a fit that does
     // nothing looks the same as one that never ran, and the user cannot tell.
     state.columnFit = { seen: 0, fitted: 0, last: '' };
-    const onDouble = event => { try { fit(event); } catch (error) { state.columnFit.last = 'error: ' + (error.message || error); this.Z.logError(error); } };
+    const onDouble = event => { try { fit(event); } catch (error) { state.columnFit.last = 'error: ' + (error.message || error); this.Z.logError(error); } if (state.columnFit.last && !state.columnFit.last.includes(' → ')) { try { this.Z.Prefs.set('extensions.style-custom.columnFitLast', new Date().toISOString() + ' ' + state.columnFit.last, true); } catch (ignored) {} } };
     const fit = event => {
       const resizer = event.target?.closest?.('.virtualized-table-header .resizer');
       if (!resizer) return;
@@ -3582,40 +3582,91 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const head = doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${escape}`);
       const next = doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(neighbour.dataKey)}`);
       if (!head || !next) { state.columnFit.last = 'no header cells for ' + dataKey; return; }
-      let widest = 0;
+      /* What the cells hold. scrollWidth is the floor, but a cell that clips
+         its text behind an ellipsis can report the clipped width, and then
+         the fit finds nothing to do. So the text is also measured with the
+         cell's own font, and elements (journal marks, kind chips) by their
+         boxes; a clipped element is entered the same way. */
+      let ctx = null;
+      try { ctx = doc.createElementNS('http://www.w3.org/1999/xhtml', 'canvas').getContext('2d'); } catch (ignored) {}
+      const styleOf = el => { try { return win.getComputedStyle?.(el) || null; } catch (ignored) { return null; } };
+      const px = value => parseFloat(value) || 0;
+      const contentWidth = el => {
+        const style = styleOf(el);
+        let sum = 0;
+        for (const node of el.childNodes) {
+          if (node.nodeType === 3) {
+            if (ctx && style && node.textContent.trim()) {
+              ctx.font = style.font || `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+              sum += ctx.measureText(node.textContent).width;
+            }
+          }
+          else if (node.nodeType === 1) {
+            const inner = styleOf(node);
+            const box = typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect().width : 0;
+            sum += (inner && inner.overflow === 'hidden' ? contentWidth(node) : Math.max(box, node.scrollWidth || 0))
+              + (inner ? px(inner.marginLeft) + px(inner.marginRight) : 0);
+          }
+        }
+        if (style) sum += px(style.paddingLeft) + px(style.paddingRight);
+        return Math.max(sum, el.scrollWidth || 0, ...[...el.children].map(child => (child.scrollWidth || 0) + (child.offsetLeft || 0)));
+      };
+      let widest = 0, byScroll = 0, cells = 0, widestText = '';
       for (const cell of doc.querySelectorAll(`#${tree.props.id} .virtualized-table-body .cell.${escape}`)) {
-        // scrollWidth is the content's width even where overflow is clipped.
-        widest = Math.max(widest, cell.scrollWidth, ...[...cell.children].map(child => child.scrollWidth + child.offsetLeft));
+        cells++;
+        byScroll = Math.max(byScroll, cell.scrollWidth || 0);
+        const width = contentWidth(cell);
+        if (width > widest) { widest = width; widestText = String(cell.textContent || '').trim().slice(0, 60); }
       }
       const label = head.querySelector('.cell-text, span');
-      widest = Math.max(widest, label ? label.scrollWidth + 22 : 0);
-      const PAD = 16, MIN = 20;
-      const want = Math.max((column.minWidth || MIN) + PAD, widest + PAD);
-      /* A drag trades width with one neighbour, and the fit used to do the
-         same, so a column beside one already at its minimum could not grow at
-         all: the title stopped at 135 pixels with 152 of text. The room comes
-         from every column to the right in turn, then from the left, each kept
-         at its own minimum; fixed columns are not asked. Shrinking hands the
-         surplus to the neighbour, as a drag would. */
+      widest = Math.max(widest, label ? (label.scrollWidth || 0) + 22 : 0);
+      const PAD = 16, MIN = 20, SHARE = 0.4, ALWAYS = 320;
       const cellFor = key => doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
       const widths = new Map();
       for (const c of visible) { const cell = c.dataKey === dataKey ? head : c.dataKey === neighbour.dataKey ? next : cellFor(c.dataKey); if (cell) widths.set(c.dataKey, cell.getBoundingClientRect().width); }
+      const floor = c => (c.minWidth || MIN) + PAD;
+      /* The table cannot scroll sideways, so one column fitted to a long
+         value ("Proceedings of the National Academy of Sciences", 277 px) is
+         paid for by the others. It takes at most SHARE of the table, though
+         a column may always reach ALWAYS pixels. */
+      const tableWidth = [...widths.values()].reduce((a, b) => a + b, 0);
+      const cap = tableWidth ? Math.max(floor(column), ALWAYS, Math.round(tableWidth * SHARE)) : Infinity;
+      const want = Math.min(Math.max(floor(column), widest + PAD), cap);
       const current = widths.get(dataKey), changes = {};
       let delta = want - current;
       if (delta > 0) {
-        const donors = [...visible.slice(index + 1), ...visible.slice(0, index).reverse()].filter(c => widths.has(c.dataKey) && !c.fixedWidth && !c.staticWidth);
-        for (const c of donors) {
-          if (delta <= 0) break;
-          const room = widths.get(c.dataKey) - ((c.minWidth || MIN) + PAD);
-          const give = Math.min(delta, Math.max(0, room));
-          if (give > 0) { changes[c.dataKey] = widths.get(c.dataKey) - give; delta -= give; }
+        /* Every flexible column gives in proportion to its width, so the wide
+           title column carries most of it and a narrow one is not squeezed to
+           its minimum. A column already at its floor drops out and the rest
+           carry on; fixed columns are never asked. */
+        const donors = visible.filter(c => c.dataKey !== dataKey && widths.has(c.dataKey) && !c.fixedWidth && !c.staticWidth);
+        const room = new Map(donors.map(c => [c.dataKey, Math.max(0, widths.get(c.dataKey) - floor(c))]));
+        let pool = donors.filter(c => room.get(c.dataKey) > 0);
+        for (let pass = 0; pass < 6 && delta > 0.5 && pool.length; pass++) {
+          const total = pool.reduce((sum, c) => sum + widths.get(c.dataKey), 0);
+          const asked = delta;
+          for (const c of pool) {
+            const give = Math.min(room.get(c.dataKey), asked * widths.get(c.dataKey) / total);
+            if (give <= 0) continue;
+            changes[c.dataKey] = (changes[c.dataKey] ?? widths.get(c.dataKey)) - give;
+            room.set(c.dataKey, room.get(c.dataKey) - give);
+            delta -= give;
+          }
+          pool = pool.filter(c => room.get(c.dataKey) > 0.5);
         }
       }
-      else if (delta < 0) changes[neighbour.dataKey] = widths.get(neighbour.dataKey) - delta;
-      const width = want - Math.max(0, delta);
+      else if (delta < 0) {
+        // The surplus goes to the next flexible column, as a drag would give it.
+        const taker = visible.slice(index + 1).concat(visible.slice(0, index).reverse()).find(c => widths.has(c.dataKey) && !c.fixedWidth && !c.staticWidth);
+        if (taker) changes[taker.dataKey] = widths.get(taker.dataKey) - delta;
+      }
+      const width = Math.round(want - Math.max(0, delta));
+      for (const key of Object.keys(changes)) changes[key] = Math.round(changes[key]);
       changes[dataKey] = width;
       tree._columns.onResize(changes, true);
-      state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} → ${Math.round(width)} (content ${Math.round(widest)}, from ${Object.keys(changes).length - 1} columns)`;
+      state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} → ${Math.round(width)} (content ${Math.round(widest)} by text, ${Math.round(byScroll)} by scrollWidth, ${cells} cells, widest "${widestText}", from ${Object.keys(changes).length - 1} columns)`;
+      // Left where it can be read without a window, for the next report of a fit that did nothing.
+      try { this.Z.Prefs.set('extensions.style-custom.columnFitLast', new Date().toISOString() + ' ' + state.columnFit.last, true); } catch (ignored) {}
     };
     doc.addEventListener('dblclick', onDouble, true);
     state.listeners.push([doc, 'dblclick', onDouble, true]);
