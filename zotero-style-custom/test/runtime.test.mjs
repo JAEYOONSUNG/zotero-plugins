@@ -1872,7 +1872,7 @@ test('a fit borrows width from every column to the right, not only the one besid
   assert.match(state.columnFit.last, /title: 120 → 184/);
 });
 
-test('a fit spreads the cost over the flexible columns in proportion, and takes at most 40% of the table', async () => {
+test('a fit is paid for by the title column first, then the others in proportion, and takes at most 40% of the table', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML(`<html><body><div id="tbl">
     <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="cell year"><span>Year</span></div><div class="cell venue"><div class="resizer venue"></div><span>Venue</span></div><div class="cell fixed"><div class="resizer fixed"></div><span>F</span></div><div class="cell journal"><span>Journal</span></div></div>
@@ -1895,13 +1895,38 @@ test('a fit spreads the cost over the flexible columns in proportion, and takes 
   assert.equal(resized.length, 1);
   const [widths] = resized[0];
   assert.equal(widths.venue, 320, 'capped at 40% of an 800 px table');
-  // 280 more pixels, shared 400:60:200 over the flexible columns -- the wide
-  // title pays most, the year column keeps most of its 60.
-  assert.equal(widths.title, 229);
-  assert.equal(widths.year, 36, 'down to its floor of 20 + 16, and no further');
-  assert.equal(widths.journal, 115);
+  // 280 more pixels: the title gives until it holds a fifth of the table
+  // (160), the remaining 40 are shared 60:200 by the year and journal columns.
+  assert.equal(widths.title, 160);
+  assert.equal(widths.year, 51);
+  assert.equal(widths.journal, 169);
   assert.equal(widths.fixed, undefined, 'a fixed column keeps its width');
   assert.match(state.columnFit.last, /venue: 40 → 320/);
+});
+
+test('a fit that only needs a little touches the title alone, and a shrink hands the surplus back to it', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML(`<html><body><div id="tbl">
+    <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="cell year"><span>Year</span></div><div class="cell venue"><div class="resizer venue"></div><span>Venue</span></div><div class="cell journal"><div class="resizer journal"></div><span>Journal</span></div></div>
+    <div class="virtualized-table-body"><div class="row"><span class="cell venue">Nucleic Acids Research</span></div></div>
+  </div></body></html>`);
+  const {plugin} = fixture();
+  const resized = [];
+  const columns = [{dataKey: 'title', minWidth: 50}, {dataKey: 'year', minWidth: 20}, {dataKey: 'venue', minWidth: 20}, {dataKey: 'journal', minWidth: 40}];
+  window.ZoteroPane = {itemsView: {tree: {props: {id: 'tbl'}, _getVisibleColumns: () => columns, _columns: {onResize: (widths, store) => resized.push([widths, store])}}}};
+  window.CSS = {escape: s => s};
+  for (const el of document.querySelectorAll('.cell.venue')) Object.defineProperty(el, 'scrollWidth', {value: el.textContent.length * 7});
+  const size = {title: 500, year: 60, venue: 40, journal: 200};
+  for (const [key, width] of Object.entries(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width});
+  const state = {listeners: []};
+  plugin.attachColumnFit(window, state);
+  document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  // 22 characters at 7 px plus padding: 170. The 130 come from the title alone.
+  assert.deepEqual(resized[0][0], {title: 370, venue: 170});
+  // The same edge with the venue already wider than its text: the surplus goes back to the title.
+  size.venue = 300; size.title = 240;
+  document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  assert.deepEqual(resized[1][0], {title: 370, venue: 170});
 });
 
 test('the tree draws the italics and subscripts of a title instead of its tags', async () => {

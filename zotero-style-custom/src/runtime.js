@@ -3620,7 +3620,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
       const label = head.querySelector('.cell-text, span');
       widest = Math.max(widest, label ? (label.scrollWidth || 0) + 22 : 0);
-      const PAD = 16, MIN = 20, SHARE = 0.4, ALWAYS = 320;
+      const PAD = 16, MIN = 20, SHARE = 0.4, ALWAYS = 320, TITLE_KEEP = 0.2;
       const cellFor = key => doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
       const widths = new Map();
       for (const c of visible) { const cell = c.dataKey === dataKey ? head : c.dataKey === neighbour.dataKey ? next : cellFor(c.dataKey); if (cell) widths.set(c.dataKey, cell.getBoundingClientRect().width); }
@@ -3634,14 +3634,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const want = Math.min(Math.max(floor(column), widest + PAD), cap);
       const current = widths.get(dataKey), changes = {};
       let delta = want - current;
-      if (delta > 0) {
-        /* Every flexible column gives in proportion to its width, so the wide
-           title column carries most of it and a narrow one is not squeezed to
-           its minimum. A column already at its floor drops out and the rest
-           carry on; fixed columns are never asked. */
-        const donors = visible.filter(c => c.dataKey !== dataKey && widths.has(c.dataKey) && !c.fixedWidth && !c.staticWidth);
-        const room = new Map(donors.map(c => [c.dataKey, Math.max(0, widths.get(c.dataKey) - floor(c))]));
-        let pool = donors.filter(c => room.get(c.dataKey) > 0);
+      const flexible = c => c.dataKey !== dataKey && widths.has(c.dataKey) && !c.fixedWidth && !c.staticWidth;
+      const titleColumn = visible.find(c => c.dataKey === 'title' && flexible(c));
+      /* The table has no sideways scroll, so a fit is paid for by another
+         column. Zotero gives the title four times the flex of any other
+         column: it is the one meant to stretch and shrink. So a fit changes
+         the fitted column and the title, nothing else, until the title is
+         down to a fifth of the table; only then do the other flexible
+         columns give, in proportion to their width and never below their
+         minimum. Taking from every column at once, as this did before, left
+         the title at 36 pixels after a few fits. */
+      const keep = c => c === titleColumn ? Math.max(floor(c), Math.round(tableWidth * TITLE_KEEP)) : floor(c);
+      const takeFrom = group => {
+        const room = new Map(group.map(c => [c.dataKey, Math.max(0, widths.get(c.dataKey) - keep(c))]));
+        let pool = group.filter(c => room.get(c.dataKey) > 0);
         for (let pass = 0; pass < 6 && delta > 0.5 && pool.length; pass++) {
           const total = pool.reduce((sum, c) => sum + widths.get(c.dataKey), 0);
           const asked = delta;
@@ -3654,10 +3660,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           }
           pool = pool.filter(c => room.get(c.dataKey) > 0.5);
         }
+      };
+      if (delta > 0) {
+        if (titleColumn) takeFrom([titleColumn]);
+        takeFrom(visible.filter(c => flexible(c) && c !== titleColumn));
       }
       else if (delta < 0) {
-        // The surplus goes to the next flexible column, as a drag would give it.
-        const taker = visible.slice(index + 1).concat(visible.slice(0, index).reverse()).find(c => widths.has(c.dataKey) && !c.fixedWidth && !c.staticWidth);
+        // The surplus goes to the title, or failing that to the next flexible column.
+        const taker = titleColumn || visible.slice(index + 1).concat(visible.slice(0, index).reverse()).find(flexible);
         if (taker) changes[taker.dataKey] = widths.get(taker.dataKey) - delta;
       }
       const width = Math.round(want - Math.max(0, delta));
