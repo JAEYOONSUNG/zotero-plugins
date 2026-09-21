@@ -1994,6 +1994,46 @@ test('when the columns add up to more than the list, the list rolls sideways and
   state.rollCleanup?.();
 });
 
+test('dragging a column edge changes the column to its left only; the columns after it follow', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML(`<html><body><div id="tbl" class="virtualized-table">
+    <div class="virtualized-table-header"><div class="cell title"><span>Title</span></div><div class="cell venue"><div class="resizer venue"><div></div></div><span>Venue</span></div><div class="cell journal"><div class="resizer journal"><div></div></div><span>Journal</span></div></div>
+    <div class="virtualized-table-body"><div class="windowed-list"></div></div>
+  </div></body></html>`);
+  const {plugin} = fixture();
+  const resized = [];
+  const columns = [{dataKey: 'title', minWidth: 50}, {dataKey: 'venue', minWidth: 20}, {dataKey: 'journal', minWidth: 40}];
+  const rules = {title: {flexBasis: '284px'}, venue: {flexBasis: '184px'}, journal: {flexBasis: '84px'}};
+  const tree = {props: {id: 'tbl'}, _getVisibleColumns: () => columns, _columns: {
+    onResize: (widths, store) => { resized.push([widths, !!store]); for (const [k, w] of Object.entries(widths)) rules[k].flexBasis = (w - 16) + 'px'; },
+    _stylesheet: {sheet: {cssRules: [{style: rules.title}, {style: rules.venue}, {style: rules.journal}]}}, _columnStyleMap: {title: 0, venue: 1, journal: 2}}};
+  window.ZoteroPane = {itemsView: {tree}};
+  window.CSS = {escape: s => s};
+  const size = {title: 300, venue: 200, journal: 100};
+  for (const key of Object.keys(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width: size[key]});
+  Object.defineProperty(document.querySelector('.virtualized-table-body'), 'clientWidth', {value: 616, configurable: true});
+  const state = {listeners: []};
+  plugin.attachColumnDrag(window, state);
+  // Press on the edge at the right of the venue column (the journal column's resizer) and pull it 60 px left.
+  const handle = document.querySelector('.resizer.journal div');
+  // linkedom has no MouseEvent: a plain event carrying the two fields the handler reads.
+  const mouse = (type, clientX, target = document) => { const event = new window.Event(type, {bubbles: true, cancelable: true}); event.clientX = clientX; event.button = 0; target.dispatchEvent(event); return event; };
+  const down = mouse('mousedown', 500, handle);
+  assert.ok(down.defaultPrevented, 'taken over before Zotero sees it');
+  assert.deepEqual(resized[0], [{title: 300, venue: 200, journal: 100}, false], 'every column set to what it shows, as Zotero does');
+  assert.ok(document.getElementById('tbl').classList.contains('resizing'));
+  mouse('mousemove', 470); mouse('mousemove', 440);
+  assert.deepEqual(resized.at(-1), [{venue: 140}, false], 'the venue alone follows the pointer');
+  const up = mouse('mouseup', 440);
+  assert.ok(up.defaultPrevented, 'swallowed, or the header would sort');
+  assert.deepEqual(resized.at(-1), [{title: 300, venue: 140, journal: 100}, true], 'stored with every flexible column');
+  assert.ok(!document.getElementById('tbl').classList.contains('resizing'));
+  assert.equal(state.columnDrag.last, 'venue: 200 → 140');
+  // Below its minimum it stops.
+  mouse('mousedown', 440, handle); mouse('mousemove', 0); mouse('mouseup', 0);
+  assert.equal(resized.at(-1)[0].venue, 36);
+});
+
 test('the tree draws the italics and subscripts of a title instead of its tags', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML('<html><body><div class="row"><span class="cell title"><span class="cell-text">x</span></span></div></body></html>');

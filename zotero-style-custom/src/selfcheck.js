@@ -259,6 +259,36 @@
       return `${state.columnFit.last} · header ${Math.round(before)} → ${Math.round(after)}px · ${resizers.length} resizers`;
     }));
 
+    results.push(await attempt('dragging a column edge moves that column alone; the one after it keeps its width', async () => {
+      /* Zotero's own drag trades width between the two columns at the edge.
+         The plugin takes the drag over so the left column changes and the
+         rest follow, as in a spreadsheet; every width is put back after. */
+      const state = runtime.windows.get(win);
+      if (!state?.columnDrag) throw new Error('column drag not attached');
+      const tree = win.ZoteroPane?.itemsView?.tree, visible = tree?._getVisibleColumns?.() || [];
+      const root = win.document.getElementById(tree.props.id);
+      const keyOf = node => [...node.classList].find(n => !['resizer', 'draggable'].includes(n));
+      const resizers = [...root.querySelectorAll('.virtualized-table-header .resizer')];
+      const target = resizers.find(node => { const i = visible.findIndex(c => c.dataKey === keyOf(node)); return i >= 1 && !visible[i - 1].fixedWidth && !visible[i - 1].staticWidth && !visible[i].fixedWidth && !visible[i].staticWidth; });
+      if (!target) throw new Error('no edge between two flexible columns');
+      const edge = keyOf(target), i = visible.findIndex(c => c.dataKey === edge);
+      const left = visible[i - 1].dataKey, right = visible[i].dataKey;
+      const cell = key => root.querySelector(`.virtualized-table-header .cell.${win.CSS.escape(key)}`);
+      const layout = {};
+      for (const c of visible) { const node = cell(c.dataKey); if (node && !c.fixedWidth) layout[c.dataKey] = node.getBoundingClientRect().width; }
+      const before = { left: cell(left).getBoundingClientRect().width, right: cell(right).getBoundingClientRect().width };
+      const x = target.getBoundingClientRect().left + 5;
+      const mouse = (type, clientX, node) => node.dispatchEvent(new win.MouseEvent(type, { bubbles: true, cancelable: true, view: win, clientX, clientY: 10, button: 0 }));
+      mouse('mousedown', x, target.firstElementChild || target); mouse('mousemove', x + 20, win.document); mouse('mousemove', x + 40, win.document); mouse('mouseup', x + 40, win.document);
+      await new Promise(resolve => win.setTimeout(resolve, 120));
+      const after = { left: cell(left).getBoundingClientRect().width, right: cell(right).getBoundingClientRect().width };
+      try { tree._columns.onResize(layout, true); runtime.rollTable?.(win, state); } catch (error) { Zotero.logError(error); }
+      if (!state.columnDrag.drags) throw new Error('the drag never reached the handler');
+      if (Math.abs(after.left - before.left - 40) > 2) throw new Error(`${left} went ${Math.round(before.left)} → ${Math.round(after.left)}, not +40`);
+      if (Math.abs(after.right - before.right) > 2) throw new Error(`${right} moved with it: ${Math.round(before.right)} → ${Math.round(after.right)}`);
+      return `${state.columnDrag.last}; ${right} stayed at ${Math.round(after.right)}px`;
+    }));
+
     results.push(await attempt('the list rolls sideways when its columns do not fit, and lies flat when they do', async () => {
       /* The roll is computed from the widths Zotero stored, not from what
          the flex layout squeezed them to, so a layout wider than the window
