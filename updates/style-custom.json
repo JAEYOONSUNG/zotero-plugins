@@ -3,9 +3,9 @@
     "style-custom@sungjaeyoon.dev": {
       "updates": [
         {
-          "version": "0.51.19",
-          "update_link": "https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/style-custom-v0.51.19/style-custom-0.51.19.xpi",
-          "update_hash": "sha256:7ac4748a4037e045055d52c4adf6f840c51a34326d82b97abb09d1d2f26fc5d1",
+          "version": "0.51.20",
+          "update_link": "https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/style-custom-v0.51.20/style-custom-0.51.20.xpi",
+          "update_hash": "sha256:fc353ee59eb8a76877e67920012d2b6d38d82e1bdd737c749587a9912cedfd10",
           "applications": {
             "zotero": {
               "strict_min_version": "9.0"
