@@ -3631,68 +3631,101 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (ctx && style && label.textContent.trim()) { ctx.font = style.font || `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`; labelWidth = Math.max(labelWidth, ctx.measureText(label.textContent).width); }
         widest = Math.max(widest, labelWidth ? labelWidth + 22 : 0);
       }
-      const PAD = 16, MIN = 20, SHARE = 0.4, ALWAYS = 320, TITLE_KEEP = 0.2;
+      const PAD = 16, MIN = 20, SHARE = 0.6, ALWAYS = 320;
       const cellFor = key => doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
       const widths = new Map();
       for (const c of visible) { const cell = c.dataKey === dataKey ? head : c.dataKey === neighbour.dataKey ? next : cellFor(c.dataKey); if (cell) widths.set(c.dataKey, cell.getBoundingClientRect().width); }
       const floor = c => (c.minWidth || MIN) + PAD;
-      /* The table cannot scroll sideways, so one column fitted to a long
-         value ("Proceedings of the National Academy of Sciences", 277 px) is
-         paid for by the others. It takes at most SHARE of the table, though
-         a column may always reach ALWAYS pixels. */
+      /* A fit changes this one column and nothing else. When the columns no
+         longer fit the list, the list rolls sideways (rollTable) instead of
+         squeezing the others, as a spreadsheet would. A column still takes
+         at most SHARE of the list, and may always reach ALWAYS pixels. */
       const tableWidth = [...widths.values()].reduce((a, b) => a + b, 0);
       const cap = tableWidth ? Math.max(floor(column), ALWAYS, Math.round(tableWidth * SHARE)) : Infinity;
-      const want = Math.min(Math.max(floor(column), widest + PAD), cap);
+      const want = Math.round(Math.min(Math.max(floor(column), widest + PAD), cap));
       const current = widths.get(dataKey), changes = {};
-      let delta = want - current;
+      const delta = want - current;
       // Already the right width: the same double-click must leave it alone.
       if (Math.abs(delta) < 1) { state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} already fits (content ${Math.round(widest)})`; return; }
-      const flexible = c => c.dataKey !== dataKey && widths.has(c.dataKey) && !c.fixedWidth && !c.staticWidth;
-      const titleColumn = visible.find(c => c.dataKey === 'title' && flexible(c));
-      /* The table has no sideways scroll, so a fit is paid for by another
-         column. Zotero gives the title four times the flex of any other
-         column: it is the one meant to stretch and shrink. So a fit changes
-         the fitted column and the title, nothing else, until the title is
-         down to a fifth of the table; only then do the other flexible
-         columns give, in proportion to their width and never below their
-         minimum. Taking from every column at once, as this did before, left
-         the title at 36 pixels after a few fits. */
-      const keep = c => c === titleColumn ? Math.max(floor(c), Math.round(tableWidth * TITLE_KEEP)) : floor(c);
-      const takeFrom = group => {
-        const room = new Map(group.map(c => [c.dataKey, Math.max(0, widths.get(c.dataKey) - keep(c))]));
-        let pool = group.filter(c => room.get(c.dataKey) > 0);
-        for (let pass = 0; pass < 6 && delta > 0.5 && pool.length; pass++) {
-          const total = pool.reduce((sum, c) => sum + widths.get(c.dataKey), 0);
-          const asked = delta;
-          for (const c of pool) {
-            const give = Math.min(room.get(c.dataKey), asked * widths.get(c.dataKey) / total);
-            if (give <= 0) continue;
-            changes[c.dataKey] = (changes[c.dataKey] ?? widths.get(c.dataKey)) - give;
-            room.set(c.dataKey, room.get(c.dataKey) - give);
-            delta -= give;
-          }
-          pool = pool.filter(c => room.get(c.dataKey) > 0.5);
-        }
-      };
-      if (delta > 0) {
-        if (titleColumn) takeFrom([titleColumn]);
-        takeFrom(visible.filter(c => flexible(c) && c !== titleColumn));
-      }
-      else if (delta < 0) {
-        // The surplus goes to the title, or failing that to the next flexible column.
-        const taker = titleColumn || visible.slice(index + 1).concat(visible.slice(0, index).reverse()).find(flexible);
-        if (taker) changes[taker.dataKey] = widths.get(taker.dataKey) - delta;
-      }
-      const width = Math.round(want - Math.max(0, delta));
-      for (const key of Object.keys(changes)) changes[key] = Math.round(changes[key]);
+      const width = want;
       changes[dataKey] = width;
       tree._columns.onResize(changes, true);
-      state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} → ${Math.round(width)} (content ${Math.round(widest)} by text, ${Math.round(byScroll)} by scrollWidth, ${cells} cells, widest "${widestText}", from ${Object.keys(changes).length - 1} columns)`;
+      this.rollTable(win, state);
+      state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} → ${Math.round(width)} (content ${Math.round(widest)} by text, ${Math.round(byScroll)} by scrollWidth, ${cells} cells, widest "${widestText}", ${state.tableRoll?.rolling ? 'list rolls to ' + Math.round(state.tableRoll.wanted) : 'fits the list'})`;
       // Left where it can be read without a window, for the next report of a fit that did nothing.
       try { this.Z.Prefs.set('extensions.style-custom.columnFitLast', new Date().toISOString() + ' ' + state.columnFit.last, true); } catch (ignored) {}
     };
     doc.addEventListener('dblclick', onDouble, true);
     state.listeners.push([doc, 'dblclick', onDouble, true]);
+    this.attachTableRoll(win, state);
+  }
+
+  /* Zotero's item list has no sideways scroll: columns that do not fit are
+     squeezed until nothing in them reads, and a fit had to be paid for by
+     another column. When the widths the columns were given add up to more
+     than the list, the rows and the header are made that wide, the list
+     scrolls sideways and the header follows it. Nothing is squeezed; a
+     narrower window shows a scrollbar instead. */
+  rollTable(win, state) {
+    const doc = win.document, tree = win.ZoteroPane?.itemsView?.tree;
+    if (!tree?.props?.id || !tree._columns) return null;
+    const root = doc.getElementById(tree.props.id);
+    const table = root?.querySelector('.virtualized-table'), header = root?.querySelector('.virtualized-table-header');
+    const body = root?.querySelector('.virtualized-table-body'), list = body?.querySelector('.windowed-list');
+    if (!table || !header || !body || !list) return null;
+    const visible = tree._getVisibleColumns?.() || [];
+    const sheet = tree._columns._stylesheet?.sheet, map = tree._columns._columnStyleMap || {};
+    let wanted = 0;
+    for (const c of visible) {
+      const rule = sheet?.cssRules?.[map[win.CSS.escape(c.dataKey)]]?.style;
+      if (!rule) return null;
+      // A fixed or static column is set as min/max width; a flexible one as
+      // its flex-basis, which Zotero keeps 16 px under the width it stores.
+      if (c.fixedWidth || c.staticWidth) wanted += parseFloat(rule.minWidth) || parseFloat(c.width) || 0;
+      else wanted += (parseFloat(rule.flexBasis) || 0) + 16;
+    }
+    const PADDING = 16; // the body's own inline padding
+    const available = body.clientWidth - PADDING;
+    const rolling = wanted > 0 && available > 0 && wanted > available + 1;
+    if (rolling) {
+      const scrollbar = parseFloat(header.style.getPropertyValue('--scrollbar-width')) || Math.max(0, (body.offsetWidth || 0) - (body.clientWidth || 0));
+      list.style.minWidth = wanted + 'px';
+      header.style.width = (wanted + PADDING + scrollbar) + 'px';
+      header.style.transform = `translateX(${-(body.scrollLeft || 0)}px)`;
+      table.style.overflow = 'hidden';
+    }
+    else if (list.style.minWidth || header.style.width || table.style.overflow) {
+      list.style.removeProperty('min-width'); header.style.removeProperty('width'); header.style.removeProperty('transform'); table.style.removeProperty('overflow');
+      if (body.scrollLeft) body.scrollLeft = 0;
+    }
+    state.tableRoll = { wanted: Math.round(wanted), available: Math.round(available), rolling };
+    return state.tableRoll;
+  }
+
+  attachTableRoll(win, state) {
+    const doc = win.document;
+    if (typeof doc?.addEventListener !== 'function' || typeof win.setTimeout !== 'function') return;
+    let timer = null;
+    const schedule = () => { if (timer) return; timer = win.setTimeout(() => { timer = null; try { this.rollTable(win, state); } catch (error) { this.Z.logError(error); } }, 50); };
+    const follow = event => { const header = event.target?.parentNode?.querySelector?.('.virtualized-table-header'); if (header && header.style.width) header.style.transform = `translateX(${-(event.target.scrollLeft || 0)}px)`; };
+    // The list is built after the window: watch for it, then for its columns.
+    let observer = null;
+    const watch = () => {
+      const tree = win.ZoteroPane?.itemsView?.tree, root = tree?.props?.id && doc.getElementById(tree.props.id);
+      const body = root?.querySelector('.virtualized-table-body'), header = root?.querySelector('.virtualized-table-header');
+      if (!body || !header) return false;
+      body.addEventListener('scroll', follow); state.listeners.push([body, 'scroll', follow]);
+      if (typeof win.MutationObserver === 'function') { observer = new win.MutationObserver(schedule); observer.observe(header, { childList: true }); }
+      schedule();
+      return true;
+    };
+    let tries = 0;
+    const tryWatch = () => { if (watch() || ++tries > 40) return; win.setTimeout(tryWatch, 500); };
+    tryWatch();
+    const onUp = () => schedule();
+    doc.addEventListener('mouseup', onUp); state.listeners.push([doc, 'mouseup', onUp]);
+    win.addEventListener('resize', schedule); state.listeners.push([win, 'resize', schedule]);
+    state.rollCleanup = () => { observer?.disconnect(); if (timer) win.clearTimeout(timer); const tree = win.ZoteroPane?.itemsView?.tree, root = tree?.props?.id && doc.getElementById(tree.props.id); for (const [node, prop] of [[root?.querySelector('.windowed-list'), 'min-width'], [root?.querySelector('.virtualized-table-header'), 'width'], [root?.querySelector('.virtualized-table-header'), 'transform'], [root?.querySelector('.virtualized-table'), 'overflow']]) node?.style.removeProperty(prop); };
   }
 
   attachMotion(win, state, {marquee=true,reading=true}={}) {
@@ -4017,6 +4050,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     cleanup(()=>win.clearInterval(state.timer));cleanup(()=>state.marqueeCleanup?.());
     cleanup(()=>state.workbench?.destroy());cleanup(()=>state.readerCleanup?.());
     cleanup(()=>state.itemPaneObserver?.disconnect());
+    cleanup(()=>state.rollCleanup?.());
     for(const row of win.document.querySelectorAll('#zotero-item-pane .meta-row[style*="min-height"]'))cleanup(()=>row.style.removeProperty('min-height'));
     for(const node of state.titleNodes||[])cleanup(()=>node.remove());
     for(const[cell,position]of state.titlePositions||[])cleanup(()=>{if(cell.style.position==='relative'){if(position)cell.style.position=position;else cell.style.removeProperty('position');}});

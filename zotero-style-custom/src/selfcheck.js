@@ -253,10 +253,28 @@
       target.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, cancelable: true, view: win }));
       await new Promise(resolve => win.setTimeout(resolve, 120));
       const after = cell()?.getBoundingClientRect().width;
-      try { tree._columns.onResize(layout, true); } catch (error) { Zotero.logError(error); }
+      try { tree._columns.onResize(layout, true); runtime.rollTable?.(win, state); } catch (error) { Zotero.logError(error); }
       if (!state.columnFit.seen) throw new Error(`the double-click never reached the handler (resizer classes: ${target.className})`);
       if (!state.columnFit.fitted) throw new Error(`the handler stopped: ${state.columnFit.last}`);
       return `${state.columnFit.last} · header ${Math.round(before)} → ${Math.round(after)}px · ${resizers.length} resizers`;
+    }));
+
+    results.push(await attempt('the list rolls sideways when its columns do not fit, and lies flat when they do', async () => {
+      /* The roll is computed from the widths Zotero stored, not from what
+         the flex layout squeezed them to, so a layout wider than the window
+         shows a scrollbar instead of unreadable columns. */
+      const state = runtime.windows.get(win);
+      const roll = runtime.rollTable(win, state);
+      if (!roll) throw new Error('the list could not be measured (no tree, header, body or stylesheet)');
+      const tree = win.ZoteroPane.itemsView.tree, root = win.document.getElementById(tree.props.id);
+      const list = root.querySelector('.windowed-list'), header = root.querySelector('.virtualized-table-header'), body = root.querySelector('.virtualized-table-body');
+      if (roll.rolling) {
+        if (parseFloat(list.style.minWidth) !== roll.wanted) throw new Error(`rolling, but the rows are ${list.style.minWidth} wide, not ${roll.wanted}`);
+        if (!header.style.width) throw new Error('rolling, but the header was not widened');
+        if (body.scrollWidth <= body.clientWidth) throw new Error('rolling, but the body has nothing to scroll');
+      }
+      else if (list.style.minWidth || header.style.width) throw new Error('flat, but the roll styles are still on');
+      return `${roll.rolling ? 'rolling' : 'flat'}: columns want ${roll.wanted}px, the list offers ${roll.available}px`;
     }));
 
     results.push(await attempt('the panel can sit in a Zotero tab and fill it', async () => {

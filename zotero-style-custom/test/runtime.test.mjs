@@ -1832,17 +1832,15 @@ test('double-clicking the edge at the right of a column fits that column to its 
   assert.equal(resized.length, 1, 'one resize, applied through the table\'s own onResize');
   const [widths, store] = resized[0];
   assert.equal(store, true, 'stored, so it persists like a drag');
-  // widest cell = 24 chars * 7 = 168, plus 16 padding = 184 -- but the pair
-  // shares 200 and the neighbour keeps its minimum (20 + 16), so 164 is the
-  // most the title can take. A fit never squeezes the next column to nothing.
-  assert.equal(widths.title, 164);
-  assert.equal(widths.year, 36, 'the neighbour keeps its minimum');
-  assert.equal(state.listeners.length, 1, 'and the listener is registered for cleanup');
+  // widest cell = 24 chars * 7 = 168, plus 16 padding = 184. Nothing else
+  // changes: when the columns no longer fit, the list rolls sideways.
+  assert.deepEqual(widths, {title: 184});
+  assert.ok(state.listeners.some(([, name]) => name === 'dblclick'), 'and the listener is registered for cleanup');
 });
 
-test('a fit borrows width from every column to the right, not only the one beside it', async () => {
-  /* The neighbour was already at its minimum, so the title stopped at 135
-     pixels with 152 of text. A column further right had room to spare. */
+test('a fit changes that column alone, whatever the columns around it hold', async () => {
+  /* Earlier versions paid for a fit with the neighbours, then with every
+     column in proportion, and each left the layout in a worse state. */
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML(`<html><body><div id="tbl">
     <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="cell year"><div class="resizer year"></div><span>Year</span></div><div class="cell journal"><span>Journal</span></div><div class="cell fixed"><span>F</span></div></div>
@@ -1862,17 +1860,13 @@ test('a fit borrows width from every column to the right, not only the one besid
   document.querySelector('.resizer.year').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
   assert.equal(resized.length, 1);
   const [widths] = resized[0];
-  // Wants 24 * 7 + 16 = 184. The year column has no room (36 = 20 + 16), so
-  // the 64 pixels come from the journal column; the fixed column is not asked.
-  assert.equal(widths.title, 184, 'the column reaches its content');
-  assert.equal(widths.year, undefined, 'a neighbour with nothing to give is left alone');
-  assert.equal(widths.journal, 136, 'the room comes from the next column that has it');
-  assert.equal(widths.fixed, undefined, 'a fixed column keeps its width');
+  // Wants 24 * 7 + 16 = 184, and gets it; the year, journal and fixed columns are not touched.
+  assert.deepEqual(widths, {title: 184});
   assert.equal(state.columnFit.fitted, 1);
   assert.match(state.columnFit.last, /title: 120 → 184/);
 });
 
-test('a fit is paid for by the title column first, then the others in proportion, and takes at most 40% of the table', async () => {
+test('a column takes at most 60% of the list, and always may reach 320 px', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML(`<html><body><div id="tbl">
     <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="cell year"><span>Year</span></div><div class="cell venue"><div class="resizer venue"></div><span>Venue</span></div><div class="cell fixed"><div class="resizer fixed"></div><span>F</span></div><div class="cell journal"><span>Journal</span></div></div>
@@ -1883,8 +1877,7 @@ test('a fit is paid for by the title column first, then the others in proportion
   const columns = [{dataKey: 'title', minWidth: 50}, {dataKey: 'year', minWidth: 20}, {dataKey: 'venue', minWidth: 20}, {dataKey: 'fixed', minWidth: 20, fixedWidth: true}, {dataKey: 'journal', minWidth: 40}];
   window.ZoteroPane = {itemsView: {tree: {props: {id: 'tbl'}, _getVisibleColumns: () => columns, _columns: {onResize: (widths, store) => resized.push([widths, store])}}}};
   window.CSS = {escape: s => s};
-  // 47 characters at 7 px: 329 of text, 345 with padding -- but the table is
-  // 800 wide, so the fit stops at 320.
+  // 47 characters at 7 px: 329 of text, 345 with padding, under 60% of 800.
   for (const el of document.querySelectorAll('.cell.venue')) Object.defineProperty(el, 'scrollWidth', {value: el.textContent.length * 7});
   const size = {title: 400, year: 60, venue: 40, fixed: 100, journal: 200};
   for (const [key, width] of Object.entries(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width});
@@ -1894,17 +1887,16 @@ test('a fit is paid for by the title column first, then the others in proportion
   document.querySelector('.resizer.fixed').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
   assert.equal(resized.length, 1);
   const [widths] = resized[0];
-  assert.equal(widths.venue, 320, 'capped at 40% of an 800 px table');
-  // 280 more pixels: the title gives until it holds a fifth of the table
-  // (160), the remaining 40 are shared 60:200 by the year and journal columns.
-  assert.equal(widths.title, 160);
-  assert.equal(widths.year, 51);
-  assert.equal(widths.journal, 169);
-  assert.equal(widths.fixed, undefined, 'a fixed column keeps its width');
-  assert.match(state.columnFit.last, /venue: 40 → 320/);
+  assert.deepEqual(widths, {venue: 345});
+  assert.match(state.columnFit.last, /venue: 40 → 345/);
+  // A 400 px table: 60% is 240, but 320 is always allowed.
+  Object.assign(size, {title: 100, journal: 60, fixed: 100});
+  for (const [key, width] of Object.entries(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width});
+  document.querySelector('.resizer.fixed').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  assert.deepEqual(resized[1][0], {venue: 320});
 });
 
-test('a fit that only needs a little touches the title alone, and a shrink hands the surplus back to it', async () => {
+test('a column wider than its text shrinks to it, and a narrower one grows to it', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML(`<html><body><div id="tbl">
     <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="cell year"><span>Year</span></div><div class="cell venue"><div class="resizer venue"></div><span>Venue</span></div><div class="cell journal"><div class="resizer journal"></div><span>Journal</span></div></div>
@@ -1921,12 +1913,12 @@ test('a fit that only needs a little touches the title alone, and a shrink hands
   const state = {listeners: []};
   plugin.attachColumnFit(window, state);
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
-  // 22 characters at 7 px plus padding: 170. The 130 come from the title alone.
-  assert.deepEqual(resized[0][0], {title: 370, venue: 170});
-  // The same edge with the venue already wider than its text: the surplus goes back to the title.
-  size.venue = 300; size.title = 240;
+  // 22 characters at 7 px plus padding: 170.
+  assert.deepEqual(resized[0][0], {venue: 170});
+  // The same edge with the venue already wider than its text.
+  size.venue = 300;
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
-  assert.deepEqual(resized[1][0], {title: 370, venue: 170});
+  assert.deepEqual(resized[1][0], {venue: 170});
 });
 
 test('a second double-click on a fitted column changes nothing, and a cell wider than its text does not grow by its padding', async () => {
@@ -1952,8 +1944,8 @@ test('a second double-click on a fitted column changes nothing, and a cell wider
   const state = {listeners: []};
   plugin.attachColumnFit(window, state);
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
-  // 154 of text, 16 of cell padding, 16 of room: 186, all of it from the title.
-  assert.deepEqual(resized[0][0], {title: 354, venue: 186});
+  // 154 of text, 16 of cell padding, 16 of room: 186.
+  assert.deepEqual(resized[0][0], {venue: 186});
   // Now 186 wide: nothing overflows, scrollWidth is just the box again.
   size.venue = 186; size.title = 354; box(186, 186);
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
@@ -1963,7 +1955,43 @@ test('a second double-click on a fitted column changes nothing, and a cell wider
   size.venue = 260; size.title = 280; box(260, 260);
   document.querySelector('.resizer.journal').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
   assert.equal(resized.length, 2);
-  assert.deepEqual(resized[1][0], {title: 354, venue: 186});
+  assert.deepEqual(resized[1][0], {venue: 186});
+});
+
+test('when the columns add up to more than the list, the list rolls sideways and the header follows', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML(`<html><body><div id="tbl"><div class="virtualized-table">
+    <div class="virtualized-table-header"><div class="cell title"><span>Title</span></div><div class="cell year"><span>Year</span></div><div class="cell venue"><span>Venue</span></div></div>
+    <div class="virtualized-table-body"><div class="windowed-list"></div></div>
+  </div></div></body></html>`);
+  const {plugin} = fixture();
+  const rules = {title: {flexBasis: '284px'}, year: {minWidth: '60px'}, venue: {flexBasis: '184px'}};
+  const columns = [{dataKey: 'title'}, {dataKey: 'year', staticWidth: true, width: 60}, {dataKey: 'venue'}];
+  window.ZoteroPane = {itemsView: {tree: {props: {id: 'tbl'}, _getVisibleColumns: () => columns,
+    _columns: {onResize() {}, _stylesheet: {sheet: {cssRules: [{style: rules.title}, {style: rules.year}, {style: rules.venue}]}}, _columnStyleMap: {title: 0, year: 1, venue: 2}}}}};
+  window.CSS = {escape: s => s};
+  const body = document.querySelector('.virtualized-table-body'), header = document.querySelector('.virtualized-table-header');
+  const list = document.querySelector('.windowed-list'), table = document.querySelector('.virtualized-table');
+  Object.defineProperty(body, 'clientWidth', {value: 516, configurable: true}); // 500 of columns after the 16 of padding
+  header.style.setProperty('--scrollbar-width', '15px');
+  const state = {listeners: []};
+  // 300 + 60 + 200 = 560 wanted, 500 available: the rows and the header are made 560 wide.
+  assert.deepEqual(plugin.rollTable(window, state), {wanted: 560, available: 500, rolling: true});
+  assert.equal(list.style.minWidth, '560px');
+  assert.equal(header.style.width, '591px', 'the header adds its padding and the scrollbar it leaves room for');
+  assert.equal(table.style.overflow, 'hidden');
+  // The user scrolls the body: the header is moved by as much.
+  body.scrollLeft = 120;
+  plugin.attachTableRoll(window, state);
+  body.dispatchEvent(new window.Event('scroll'));
+  assert.equal(header.style.transform, 'translateX(-120px)');
+  // A column shrinks so that everything fits again: the list is a plain list.
+  rules.title.flexBasis = '184px';
+  assert.deepEqual(plugin.rollTable(window, state), {wanted: 460, available: 500, rolling: false});
+  assert.equal(list.style.minWidth, '');
+  assert.equal(header.style.width, '');
+  assert.equal(table.style.overflow, '');
+  state.rollCleanup?.();
 });
 
 test('the tree draws the italics and subscripts of a title instead of its tags', async () => {
