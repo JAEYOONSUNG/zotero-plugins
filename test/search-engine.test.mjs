@@ -217,3 +217,65 @@ test("invalid year ranges are rejected before any provider request", async () =>
 	await assert.rejects(S.search("openalex", { keywords: "editing", yearFrom: 2025, yearTo: 2020 }, { getJSON: async () => { calls++; } }, context), /Start year/);
 	assert.equal(calls, 0);
 });
+
+/* Google Scholar, read directly. The profile page is public; the author search
+   is behind a Google sign-in; a burst of requests earns a CAPTCHA or a 429. */
+const scholarProfileHTML = (rows, { more = false } = {}) => `<html><body>
+<div id="gsc_prf_in">Geoffrey Hinton</div><div class="gsc_prf_il">Emeritus Prof. Comp Sci, U.Toronto</div><div class="gsc_prf_il">Verified email at cs.toronto.edu</div>
+<table id="gsc_rsb_st"><tr><th></th><th>All</th><th>Since 2021</th></tr>
+<tr><td class="gsc_rsb_sc1"><a>Citations</a></td><td class="gsc_rsb_std">1,088,758</td><td class="gsc_rsb_std">623770</td></tr>
+<tr><td class="gsc_rsb_sc1"><a>h-index</a></td><td class="gsc_rsb_std">195</td><td class="gsc_rsb_std">134</td></tr>
+<tr><td class="gsc_rsb_sc1"><a>i10-index</a></td><td class="gsc_rsb_std">550</td><td class="gsc_rsb_std">403</td></tr></table>
+<table><tbody>${rows.map((r, i) => `<tr class="gsc_a_tr"><td class="gsc_a_t"><a href="/citations?view_op=view_citation&amp;hl=en&amp;user=JicYPdAAAAAJ&amp;citation_for_view=JicYPdAAAAAJ:${r.id || "v" + i}" class="gsc_a_at">${r.title}</a><div class="gs_gray">${r.authors}</div><div class="gs_gray">${r.venue}<span class="gs_oph">, ${r.year}</span></div></td><td class="gsc_a_c"><a href="https://scholar.google.com/scholar?oi=bibs&amp;hl=en&amp;cites=${r.cluster || 0}" class="gsc_a_ac gs_ibl">${r.cites}</a></td><td class="gsc_a_y"><span class="gsc_a_h gsc_a_hc gs_ibl">${r.year}</span></td></tr>`).join("")}</tbody></table>
+<button id="gsc_bpf_more"${more ? "" : " disabled"}>Show more</button></body></html>`;
+
+test("a Scholar profile page yields the person, the figures and the rows, and pages until the button is off", async () => {
+	const pages = [];
+	const http = { getText: async url => {
+		const u = new URL(url); pages.push([Number(u.searchParams.get("cstart")), Number(u.searchParams.get("pagesize"))]);
+		const start = Number(u.searchParams.get("cstart"));
+		const rows = Array.from({ length: start === 0 ? 100 : 7 }, (_, i) => ({ title: `Paper ${start + i}`, authors: "E Cambria, G Hinton", venue: "Cognitive Computation 18 (1), 20", year: 2026, cites: 1234, cluster: 99000 + start + i }));
+		return scholarProfileHTML(rows, { more: start === 0 });
+	} };
+	const { profile, records, complete } = await S.scholarProfile("JicYPdAAAAAJ", http, { DOMParser, sleepMs: 0 }, { maxResults: 500 });
+	assert.deepEqual(pages, [[0, 100], [100, 100]]);
+	assert.equal(profile.name, "Geoffrey Hinton");
+	assert.equal(profile.affiliation, "Emeritus Prof. Comp Sci, U.Toronto", "the verified-email line is not an affiliation");
+	assert.deepEqual([profile.citations, profile.hIndex, profile.i10], [1088758, 195, 550]);
+	assert.equal(records.length, 107);
+	assert.equal(complete, true);
+	assert.equal(records[0].title, "Paper 0");
+	assert.equal(records[0].venue, "Cognitive Computation", "volume, issue, pages and year are stripped from the venue line");
+	assert.equal(records[0].year, 2026);
+	assert.equal(records[0].citations, 1234);
+	assert.equal(records[0].scholarCluster, "99000");
+	assert.equal(records[0].authors[1].lastName, "Hinton");
+	assert.equal(records[0].sourceId, "JicYPdAAAAAJ:v0");
+	assert.equal(records[0].searchBackend, "scholar-profile");
+});
+
+test("Scholar's sign-in page is a login wall, its CAPTCHA page a captcha wall, and a 429 counts as one", async () => {
+	const signin = `<!doctype html><html><head><base href="https://accounts.google.com/v3/signin/"></head><body>flowName=GlifWebSignIn</body></html>`;
+	await assert.rejects(S.scholarAuthors("Geoffrey Hinton", { getText: async () => signin }, { DOMParser }), e => e.wall === "login" && /signed in/.test(e.message) && /search_authors/.test(e.url));
+	const captcha = `<html><body><div id="gs_captcha_ccl"></div>Our systems have detected unusual traffic</body></html>`;
+	await assert.rejects(S.scholarProfile("JicYPdAAAAAJ", { getText: async () => captcha }, { DOMParser }), e => e.wall === "captcha" && e.captcha === true);
+	const limited = { getText: async () => { const e = new Error("HTTP 429"); e.status = 429; throw e; } };
+	await assert.rejects(S.scholarCitedBy("12345", limited, { DOMParser }), e => e.wall === "captcha" && e.cause?.status === 429);
+});
+
+test("the Scholar author search page yields profiles with their ids, affiliations and citation counts", async () => {
+	const html = `<html><body><div class="gsc_1usr"><h3 class="gs_ai_name"><a href="/citations?hl=en&amp;user=JicYPdAAAAAJ">Geoffrey Hinton</a></h3><div class="gs_ai_aff">University of Toronto</div><div class="gs_ai_eml">Verified email at cs.toronto.edu</div><div class="gs_ai_cby">Cited by 1,088,758</div></div>
+	<div class="gsc_1usr"><h3 class="gs_ai_name"><a href="/citations?hl=en&amp;user=kukA0LcAAAAJ">Yoshua Bengio</a></h3><div class="gs_ai_aff">Mila</div><div class="gs_ai_cby">Cited by 900,000</div></div></body></html>`;
+	const found = await S.scholarAuthors("Hinton", { getText: async () => html }, { DOMParser });
+	assert.deepEqual(found.map(p => [p.id, p.name, p.affiliation, p.citations]), [["JicYPdAAAAAJ", "Geoffrey Hinton", "University of Toronto", 1088758], ["kukA0LcAAAAJ", "Yoshua Bengio", "Mila", 900000]]);
+	assert.equal(found[0].url, "https://scholar.google.com/citations?user=JicYPdAAAAAJ");
+});
+
+test("a Scholar result row carries the authors that have profiles and the cluster behind Cited by", async () => {
+	const html = `<html><body><div class="gs_r gs_or gs_scl" data-cid="abc"><h3 class="gs_rt"><a href="/scholar_url?url=https://example.org/p">A paper</a></h3><div class="gs_a"><a href="/citations?user=JicYPdAAAAAJ&amp;hl=en">G Hinton</a>, A Other - Nature, 2015 - nature.com</div><div class="gs_fl"><a href="/scholar?cites=5566778899&amp;as_sdt=2005">Cited by 84,735</a></div></div></body></html>`;
+	const [rec] = S.parseScholarPage(html, DOMParser);
+	assert.deepEqual(rec.scholarAuthors, [{ name: "G Hinton", id: "JicYPdAAAAAJ" }]);
+	assert.equal(rec.scholarCluster, "abc");
+	assert.equal(rec.citations, 84735);
+	assert.equal(rec.url, "https://scholar.google.com/scholar_url?url=https://example.org/p", "a relative link becomes absolute");
+});

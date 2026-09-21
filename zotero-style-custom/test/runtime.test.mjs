@@ -1807,10 +1807,10 @@ test('a patent PDF sitting as a bare attachment gets a chip in the title cell', 
   assert.equal(row.querySelector('.style-custom-kind'), null);
 });
 
-test('double-clicking a column resizer fits the column to its widest visible cell', async () => {
+test('double-clicking the edge at the right of a column fits that column to its widest visible cell', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML(`<html><body><div id="tbl">
-    <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="resizer title"></div><div class="cell year"><span>Year</span></div></div>
+    <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="cell year"><div class="resizer year"></div><span>Year</span></div></div>
     <div class="virtualized-table-body"><div class="row"><span class="cell title">short</span></div><div class="row"><span class="cell title">a much longer title text</span></div></div>
   </div></body></html>`);
   const {plugin} = fixture();
@@ -1828,7 +1828,7 @@ test('double-clicking a column resizer fits the column to its widest visible cel
   const state = {listeners: []};
   plugin.attachColumnFit(window, state);
   const event = new window.Event('dblclick', {bubbles: true});
-  document.querySelector('.resizer.title').dispatchEvent(event);
+  document.querySelector('.resizer.year').dispatchEvent(event);
   assert.equal(resized.length, 1, 'one resize, applied through the table\'s own onResize');
   const [widths, store] = resized[0];
   assert.equal(store, true, 'stored, so it persists like a drag');
@@ -1845,7 +1845,7 @@ test('a fit borrows width from every column to the right, not only the one besid
      pixels with 152 of text. A column further right had room to spare. */
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML(`<html><body><div id="tbl">
-    <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="resizer title"></div><div class="cell year"><span>Year</span></div><div class="cell journal"><span>Journal</span></div><div class="cell fixed"><span>F</span></div></div>
+    <div class="virtualized-table-header"><div class="cell title"><span class="cell-text">Title</span></div><div class="cell year"><div class="resizer year"></div><span>Year</span></div><div class="cell journal"><span>Journal</span></div><div class="cell fixed"><span>F</span></div></div>
     <div class="virtualized-table-body"><div class="row"><span class="cell title">a much longer title text</span></div></div>
   </div></body></html>`);
   const {plugin} = fixture();
@@ -1859,7 +1859,7 @@ test('a fit borrows width from every column to the right, not only the one besid
   for (const [key, width] of Object.entries(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width});
   const state = {listeners: []};
   plugin.attachColumnFit(window, state);
-  document.querySelector('.resizer.title').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  document.querySelector('.resizer.year').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
   assert.equal(resized.length, 1);
   const [widths] = resized[0];
   // Wants 24 * 7 + 16 = 184. The year column has no room (36 = 20 + 16), so

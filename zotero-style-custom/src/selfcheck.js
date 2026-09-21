@@ -235,8 +235,11 @@
       if (!resizers.length) throw new Error('no column resizers in the items header');
       const tree = win.ZoteroPane?.itemsView?.tree;
       const visible = tree?._getVisibleColumns?.() || [];
-      const target = resizers.find(node => { const key = [...node.classList].find(n => !['resizer', 'draggable'].includes(n)); const i = visible.findIndex(c => c.dataKey === key); return i >= 0 && i < visible.length - 1; }) || resizers[0];
-      const key = [...target.classList].find(n => !['resizer', 'draggable'].includes(n));
+      const target = resizers.find(node => { const key = [...node.classList].find(n => !['resizer', 'draggable'].includes(n)); const i = visible.findIndex(c => c.dataKey === key); return i >= 1; }) || resizers[0];
+      // The resizer is named after the column at whose left edge it sits; the
+      // fit is of the column before it, as in a spreadsheet.
+      const edge = [...target.classList].find(n => !['resizer', 'draggable'].includes(n));
+      const key = visible[visible.findIndex(c => c.dataKey === edge) - 1]?.dataKey || edge;
       const cell = () => win.document.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
       const before = cell()?.getBoundingClientRect().width;
       target.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, cancelable: true, view: win }));

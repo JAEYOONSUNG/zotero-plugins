@@ -22,16 +22,17 @@
 		return m ? m[0] : null;
 	}
 
+	const scholarMode = args.mode === "scholar";
 	function init() {
 		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "auto", Zotero.locale);
 		t = ZotPoPI18N.make(locale);
-		document.title = t("loginTitle");
+		document.title = t(scholarMode ? "scholarSessionTitle" : "loginTitle");
 		$("pl-check").textContent = t("loginCheck");
 		$("pl-close").textContent = t("loginClose");
-		$("pl-intro").textContent = t("loginIntro");
+		$("pl-intro").textContent = t(scholarMode ? "scholarSessionIntro" : "loginIntro");
 		$("pl-status").textContent = "";
 
-		let base = proxyBase();
+		let base = scholarMode ? (args.url || "https://scholar.google.com/") : proxyBase();
 		if (!base) {
 			$("pl-status").textContent = t("proxyNotSet");
 			$("pl-check").disabled = true;
@@ -64,8 +65,26 @@
 		$("pl-check").addEventListener("click", checkSession);
 	}
 
+	// Scholar: one small search; a CAPTCHA, a 429 or the sign-in page mean not yet.
+	async function checkScholar() {
+		$("pl-check").disabled = true;
+		$("pl-status").textContent = t("loginChecking");
+		try {
+			let xhr = await Zotero.HTTP.request("GET", "https://scholar.google.com/scholar?hl=en&q=zotero", { responseType: "text", timeout: 45000, errorDelayMax: 0, successCodes: false });
+			let html = xhr.responseText || "";
+			let walled = xhr.status === 429 || /gs_captcha|recaptcha|unusual traffic|accounts\.google\.com\/(?:v3\/)?signin/i.test(html);
+			$("pl-status").textContent = walled ? t("scholarSessionNotYet") : t("scholarSessionOk");
+			$("pl-status").style.color = walled ? "var(--warn)" : "var(--ok)";
+		}
+		catch (e) {
+			$("pl-status").textContent = t("loginCheckFailed", e.message || String(e));
+			$("pl-status").style.color = "var(--err)";
+		}
+		finally { $("pl-check").disabled = false; }
+	}
 	// Ask the proxy for a known DOI and see whether it hands back the publisher or its login page
 	async function checkSession() {
+		if (scholarMode) return checkScholar();
 		let prefix = (PREF("proxyPrefix") || "").trim();
 		if (!prefix) return;
 		$("pl-check").disabled = true;

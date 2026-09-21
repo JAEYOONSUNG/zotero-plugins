@@ -6,7 +6,7 @@ The repository README has the illustrated tour: [../README.md](../README.md). Th
 
 ## What it adds
 
-**Columns in the item list.** IF (JCR 2025 impact factor), Citations, Read time, Status (unread / reading / read), Rating, Journal mark (each journal in its own colour and abbreviation), First-author institution with country, File kinds. Right-click → *Switch to custom columns* turns them on together and hides the corresponding columns of the older Ethereal Style plugin if it is installed. Double-click a column edge to fit it to its content. Long titles scroll while the pointer rests on them and return when it leaves; the system's reduced-motion setting is respected.
+**Columns in the item list.** IF (JCR 2025 impact factor), Citations, Read time, Status (unread / reading / read), Rating, Journal mark (each journal in its own colour and abbreviation), First-author institution with country, File kinds. Right-click → *Switch to custom columns* turns them on together and hides the corresponding columns of the older Ethereal Style plugin if it is installed. Double-click a column's right edge to fit it to its content, as in a spreadsheet. Long titles scroll while the pointer rests on them and return when it leaves; the system's reduced-motion setting is respected.
 
 **The panel.** Floating or docked in a Zotero tab. Nineteen tabs in four groups:
 
@@ -44,6 +44,10 @@ Email addresses and API keys are sent only to the service they belong to, and on
 ## Self-check
 
 When the pref `extensions.style-custom.selfCheck` is set and Zotero starts, the plugin runs its checks against the real library and writes `style-custom-selfcheck.json` next to its data file: column registration, every tab drawing, every safe button surviving a press, the panel docking into a tab, the item menu's signs and English, the translation coverage, the citation dialog, the reading history, the watchlist, and the live APIs. It opens no window. The flag clears itself.
+
+## Updates
+
+The plugin keeps itself current: while Zotero is open it reads the release feed named in its manifest once a day and, when a newer release is listed, has Zotero's add-on manager download it, verify the hash and apply it without a restart. The **Updates** section of the preferences pane turns this off or runs a check now; the check is skipped while a self-check runs. `src/updater.js` holds the decisions and is shared with ZotPoP, whose build copies it.
 
 ## Background updates
 

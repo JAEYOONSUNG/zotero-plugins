@@ -1586,13 +1586,49 @@ var ZotPoPSources = (function () {
 		return parts.join(" ");
 	}
 
-	function parseScholarPage(html, DOMParserImpl) {
-		let doc = new DOMParserImpl().parseFromString(html, "text/html");
-		if (doc.querySelector("#gs_captcha_ccl, #captcha, form#gs_captcha_f, #recaptcha") || /Our systems have detected unusual traffic/i.test(html)) {
-			let e = new Error("Google Scholar is asking for a CAPTCHA. Open scholar.google.com in Zotero (or a browser) and solve it, then retry.");
-			e.captcha = true;
+	/* Google Scholar has no API. Publish or Perish reads its pages; so does this.
+	   Two walls stand in the way and they are told apart, because the cure is
+	   different: a CAPTCHA (or a 429) wants a human to answer it once, in a
+	   browser that shares Zotero's cookies; the sign-in page on author search
+	   wants a Google account signed in the same way. Either way the error names
+	   the wall and the page, and the window can offer to open it. */
+	const SCHOLAR = "https://scholar.google.com";
+	function scholarWall(html, url, status) {
+		let text = String(html || "");
+		let captcha = status === 429 || /gs_captcha|id="captcha"|recaptcha|Our systems have detected unusual traffic/i.test(text);
+		let login = /accounts\.google\.com\/(?:v3\/)?signin|flowName=GlifWebSignIn|<base href="https:\/\/accounts\.google\.com/i.test(text);
+		if (!captcha && !login) return null;
+		let e = new Error(login
+			? "Google Scholar wants a Google account signed in for this page. Open Scholar inside Zotero, sign in, then retry."
+			: "Google Scholar is asking for a CAPTCHA. Open Scholar inside Zotero, answer it, then retry.");
+		e.wall = login ? "login" : "captcha"; e.captcha = !login; e.url = url || SCHOLAR; e.source = "scholar";
+		return e;
+	}
+	function scholarAbsolute(href) {
+		if (!href) return null;
+		if (/^https?:\/\//i.test(href)) return href;
+		return SCHOLAR + (href.startsWith("/") ? "" : "/") + href;
+	}
+	function scholarProfileIdFrom(href) {
+		let m = String(href || "").match(/[?&]user=([A-Za-z0-9_-]{12})/);
+		return m ? m[1] : null;
+	}
+	async function scholarGet(url, http, ctx) {
+		let html;
+		try { html = await http.getText(url, { "Accept-Language": "en-US,en;q=0.9" }); }
+		catch (e) {
+			if (e?.status === 429 || e?.status === 403) { let wall = scholarWall("", url, 429); wall.cause = e; throw wall; }
 			throw e;
 		}
+		let wall = scholarWall(html, url);
+		if (wall) throw wall;
+		return html;
+	}
+
+	function parseScholarPage(html, DOMParserImpl) {
+		let doc = new DOMParserImpl().parseFromString(html, "text/html");
+		let wall = scholarWall(html);
+		if (wall) throw wall;
 		let recs = [];
 		for (let div of doc.querySelectorAll(".gs_r.gs_or.gs_scl, .gs_r")) {
 			let h3 = div.querySelector("h3.gs_rt");
@@ -1615,7 +1651,13 @@ var ZotPoPSources = (function () {
 			if (cites == null) cites = 0;
 			let pdfA = div.querySelector(".gs_or_ggsm a, .gs_ggs a");
 			let clusterId = (div.getAttribute("data-cid") || div.querySelector("[data-cid]")?.getAttribute("data-cid") || "").trim();
+			// The authors that have a profile: a way from a paper to its people without a name search.
+			let authorProfiles = [...div.querySelectorAll(".gs_a a[href*='citations?user='], .gs_a a[href*='citations?hl=en&user=']")]
+				.map(link => ({ name: link.textContent.trim(), id: scholarProfileIdFrom(link.getAttribute("href")) })).filter(x => x.id);
+			let citedByLink = [...div.querySelectorAll(".gs_fl a")].map(link => link.getAttribute("href") || "").find(href => /[?&]cites=\d+/.test(href)) || null;
+			let citesCluster = citedByLink ? (citedByLink.match(/[?&]cites=(\d+)/) || [])[1] || null : null;
 			recs.push(makeRecord({
+				scholarAuthors: authorProfiles, scholarCluster: clusterId || citesCluster || null,
 				source: "scholar",
 				sourceId: clusterId || title.toLowerCase(),
 				title,
@@ -1623,13 +1665,119 @@ var ZotPoPSources = (function () {
 				authors: authorsSeg.split(",").map(s => s.trim()).filter(s => s && !/^\d+$/.test(s)).map(parseName),
 				year,
 				venue,
-				url: a?.getAttribute("href") || null,
-				pdfUrl: pdfA?.getAttribute("href") || null,
+				url: scholarAbsolute(a?.getAttribute("href")) || null,
+				pdfUrl: scholarAbsolute(pdfA?.getAttribute("href")) || null,
 				citations: cites,
 				itemType: /arxiv|biorxiv|medrxiv|preprint/i.test(venueSeg) ? "preprint" : "journalArticle"
 			}));
 		}
 		return recs;
+	}
+
+	/* A profile page (citations?user=ID) is public and needs no sign-in. Its rows
+	   carry title, the by-line, the venue with the year, and the count of
+	   citing papers; the header carries the name, affiliation and the h-index. */
+	function parseScholarProfilePage(html, DOMParserImpl, id) {
+		let wall = scholarWall(html);
+		if (wall) throw wall;
+		let doc = new DOMParserImpl().parseFromString(html, "text/html");
+		let name = doc.querySelector("#gsc_prf_in")?.textContent?.trim() || "";
+		let details = [...doc.querySelectorAll(".gsc_prf_il")].map(el => el.textContent.trim());
+		let affiliation = details.find(t => t && !/^Verified email/i.test(t)) || "";
+		let stats = {};
+		for (let tr of doc.querySelectorAll("#gsc_rsb_st tr")) {
+			let label = tr.querySelector(".gsc_rsb_sc1")?.textContent?.trim().toLowerCase() || "";
+			let cells = [...tr.querySelectorAll(".gsc_rsb_std")].map(td => parseInt(td.textContent.replace(/,/g, ""), 10));
+			if (!label || !cells.length) continue;
+			if (/^citations/.test(label)) stats.citations = cells[0]; else if (/h-index/.test(label)) stats.hIndex = cells[0]; else if (/i10/.test(label)) stats.i10 = cells[0];
+		}
+		let rows = [];
+		for (let tr of doc.querySelectorAll("tr.gsc_a_tr")) {
+			let a = tr.querySelector("a.gsc_a_at");
+			let title = a?.textContent?.trim();
+			if (!title) continue;
+			let grays = [...tr.querySelectorAll(".gs_gray")].map(el => el.textContent.trim());
+			let authorsLine = grays[0] || "", venueLine = grays[1] || "";
+			let year = parseInt(tr.querySelector(".gsc_a_y .gsc_a_h")?.textContent?.trim() || "", 10) || yearOf(venueLine) || null;
+			let venue = venueLine.replace(/,\s*(1[5-9]\d{2}|20\d{2})\s*$/, "").replace(/\s+\d+\s*\(\d+\)\s*,\s*[\d-–]+\s*$/, "").replace(/\s+\d+\s*,\s*[\d-–]+\s*$/, "").trim();
+			let citesA = tr.querySelector(".gsc_a_c a");
+			let cites = parseInt((citesA?.textContent || "").replace(/,/g, ""), 10);
+			let citesCluster = (citesA?.getAttribute("href") || "").match(/[?&]cites=(\d+)/)?.[1] || null;
+			let viewId = (a.getAttribute("href") || "").match(/citation_for_view=([^&]+)/)?.[1] || null;
+			rows.push({ title, authors: authorsLine.split(",").map(x => x.trim()).filter(Boolean), venue, year, cites: Number.isFinite(cites) ? cites : 0,
+				citesCluster, id: viewId ? decodeURIComponent(viewId) : null, url: scholarAbsolute(a.getAttribute("href")) });
+		}
+		let more = !!doc.querySelector("#gsc_bpf_more:not([disabled])");
+		return { profile: { id, name, affiliation, url: SCHOLAR + "/citations?user=" + encodeURIComponent(id), ...stats }, rows, more };
+	}
+	async function scholarProfile(id, http, ctx = {}, options = {}) {
+		if (!/^[A-Za-z0-9_-]{12}$/.test(String(id || ""))) throw new Error("Invalid Google Scholar profile ID");
+		if (typeof ctx.DOMParser !== "function") throw new Error("Google Scholar requires a DOM parser");
+		let max = Math.max(1, Math.min(2000, Number(options.maxResults) || 200));
+		let sort = options.sort === "date" ? "&sortby=pubdate" : "";
+		let profile = null, rows = [], start = 0, pageSize = 100;
+		while (rows.length < max) {
+			throwIfCancelled(ctx);
+			let url = `${SCHOLAR}/citations?user=${encodeURIComponent(id)}&hl=en&cstart=${start}&pagesize=${pageSize}${sort}`;
+			let html = await scholarGet(url, http, ctx);
+			let page = parseScholarProfilePage(html, ctx.DOMParser, id);
+			if (!profile) profile = page.profile;
+			rows.push(...page.rows);
+			ctx.onProgress?.(`Google Scholar: ${rows.length}`, rows.length, max);
+			if (!page.rows.length || !page.more || page.rows.length < pageSize) break;
+			start += pageSize;
+			await sleep(1200 + Math.random() * 800, ctx);
+		}
+		rows = rows.slice(0, max);
+		let records = rows.map(r => makeRecord({
+			source: "scholar", sourceId: r.id || r.title.toLowerCase(), searchBackend: "scholar-profile",
+			title: r.title, authors: r.authors.map(parseName), year: r.year, venue: r.venue, url: r.url,
+			citations: r.cites, scholarCluster: r.citesCluster, itemType: /arxiv|biorxiv|medrxiv|preprint/i.test(r.venue) ? "preprint" : "journalArticle"
+		}));
+		return { profile, records, complete: rows.length < max || !records.length };
+	}
+	/* The author search page needs a signed-in Google account; without one it
+	   answers with the sign-in page, which scholarWall names as a login wall. */
+	function parseScholarAuthorsPage(html, DOMParserImpl) {
+		let wall = scholarWall(html);
+		if (wall) throw wall;
+		let doc = new DOMParserImpl().parseFromString(html, "text/html");
+		let out = [];
+		for (let box of doc.querySelectorAll(".gsc_1usr, .gs_ai")) {
+			let link = box.querySelector(".gs_ai_name a, a[href*='user=']");
+			let id = scholarProfileIdFrom(link?.getAttribute("href"));
+			if (!id) continue;
+			let cby = (box.querySelector(".gs_ai_cby")?.textContent || "").match(/([\d,]+)/);
+			out.push({ provider: "scholar", id, name: link.textContent.trim(), affiliation: box.querySelector(".gs_ai_aff")?.textContent?.trim() || "",
+				email: box.querySelector(".gs_ai_eml")?.textContent?.trim() || "", citations: cby ? parseInt(cby[1].replace(/,/g, ""), 10) : null,
+				url: SCHOLAR + "/citations?user=" + encodeURIComponent(id) });
+		}
+		return out;
+	}
+	async function scholarAuthors(name, http, ctx = {}) {
+		if (typeof ctx.DOMParser !== "function") throw new Error("Google Scholar requires a DOM parser");
+		let url = `${SCHOLAR}/citations?view_op=search_authors&hl=en&mauthors=${enc(String(name || "").trim())}`;
+		let html = await scholarGet(url, http, ctx);
+		return parseScholarAuthorsPage(html, ctx.DOMParser);
+	}
+	/* The papers that cite one paper: the same result page, keyed by cluster. */
+	async function scholarCitedBy(cluster, http, ctx = {}, options = {}) {
+		if (!/^\d+$/.test(String(cluster || ""))) throw new Error("Invalid Google Scholar cluster id");
+		if (typeof ctx.DOMParser !== "function") throw new Error("Google Scholar requires a DOM parser");
+		let max = Math.max(1, Math.min(1000, Number(options.maxResults) || 100)), out = [], start = 0;
+		while (out.length < max) {
+			throwIfCancelled(ctx);
+			let url = `${SCHOLAR}/scholar?hl=en&as_sdt=0,5&num=20&cites=${cluster}&start=${start}`;
+			let html = await scholarGet(url, http, ctx);
+			let recs = parseScholarPage(html, ctx.DOMParser);
+			if (!recs.length) break;
+			out.push(...recs);
+			ctx.onProgress?.(`Google Scholar: ${out.length}`, out.length, max);
+			if (recs.length < 10) break;
+			start += recs.length;
+			await sleep(2500 + Math.random() * 2000, ctx);
+		}
+		return out.slice(0, max);
 	}
 
 	async function searchScholar(q, http, ctx) {
@@ -1663,7 +1811,7 @@ var ZotPoPSources = (function () {
 			throwIfCancelled(ctx);
 			let url = "https://scholar.google.com/scholar?hl=en&as_sdt=0,5&num=20" + (q.sort === "date" ? "&scisbd=1" : "") + "&q=" + enc(query)
 				+ (q.yearFrom ? "&as_ylo=" + q.yearFrom : "") + (q.yearTo ? "&as_yhi=" + q.yearTo : "") + "&start=" + start;
-			let html = await http.getText(url, { "Accept-Language": "en-US,en;q=0.9" });
+			let html = await scholarGet(url, http, ctx);
 			let recs = parseScholarPage(html, ctx.DOMParser);
 			if (!recs.length) break;
 			out.push(...recs);
@@ -2145,7 +2293,7 @@ var ZotPoPSources = (function () {
 		preprint: { label: "Preprints (bioRxiv, medRxiv, ChemRxiv, Research Square, arXiv, OSF)", search: searchPreprints, hasCitations: true },
 		arxiv: { label: "arXiv", search: searchArxiv, hasCitations: false },
 		osf: { label: "OSF Preprints (PsyArXiv, SocArXiv, engrXiv, bioHackrXiv, ...)", search: searchOSF, hasCitations: false },
-		scholar: { label: "Google Scholar (experimental)", search: searchScholar, hasCitations: true }
+		scholar: { label: "Google Scholar", search: searchScholar, hasCitations: true }
 	};
 	SOURCES.multi = { label: "Combined (OpenAlex + Crossref + Europe PMC + arXiv)", search: searchMulti, hasCitations: true, multi: true };
 
@@ -2206,7 +2354,7 @@ var ZotPoPSources = (function () {
 	}
 
 	return {
-		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, filterRecords: matchingRecords, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
+		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();

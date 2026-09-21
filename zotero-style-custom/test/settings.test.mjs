@@ -30,7 +30,7 @@ function fixture(schema){
  return {doc,win,runtime,values,calls,status,mount,row,input,edit,click};
 }
 test('real schema renders all ten categories and every typed runtime-bound setting',async()=>{
- const f=fixture(Schema.schema),pane=f.mount();await pane.ready;assert.equal(f.doc.querySelectorAll('.scs-nav button').length,10);assert.equal(f.doc.querySelectorAll('[data-setting]').length,Schema.schema.settings.length);assert.ok(Schema.schema.settings.length>=100);
+ const f=fixture(Schema.schema),pane=f.mount();await pane.ready;assert.equal(f.doc.querySelectorAll('.scs-nav button').length,11);assert.equal(f.doc.querySelectorAll('[data-setting]').length,Schema.schema.settings.length);assert.ok(Schema.schema.settings.length>=100);
  for(const spec of Schema.schema.settings){const row=f.row(spec.key);assert.ok(row.querySelector('.scs-help'));assert.ok(row.querySelector('[aria-describedby]'));if(spec.secret)assert.equal(f.input(spec.key).type,'password');}
  pane.destroy();
 });

@@ -232,9 +232,27 @@
 		p.max = Math.max(1, max || 100);
 		p.value = Math.min(p.max, value);
 	}
-	function showBanner(text) {
+	let bannerAction = null;
+	function showBanner(text, action) {
 		$("banner-text").textContent = text;
+		// A banner can carry one verb: what to do about what it says.
+		bannerAction = action && typeof action.run === "function" ? action : null;
+		let btn = $("banner-action");
+		if (btn) { btn.hidden = !bannerAction; btn.textContent = bannerAction ? bannerAction.label : ""; }
 		$("banner").hidden = false;
+	}
+	/* Scholar's two walls, and the one cure for both: a window inside Zotero,
+	   sharing its cookies, where the human answers the CAPTCHA or signs in.
+	   When that window closes, the interrupted search runs again by itself. */
+	function scholarWallBanner(error, retry) {
+		let key = error.wall === "login" ? "scholarWallLogin" : "scholarWallCaptcha";
+		showBanner(t(key), { label: t("scholarOpen"), run: () => {
+			let plugin = typeof Zotero !== "undefined" ? Zotero.ZotPoP : null;
+			let win = plugin && typeof plugin.openScholarSession === "function" ? plugin.openScholarSession(error.url) : null;
+			if (!win) { Zotero.launchURL(error.url || "https://scholar.google.com"); return; }
+			hideBanner();
+			try { win.addEventListener("unload", () => { setTimeout(() => { if (typeof retry === "function") retry(); }, 400); }, { once: true }); } catch (e) { log("scholar session: " + e.message); }
+		} });
 	}
 	function hideBanner() { $("banner").hidden = true; }
 
@@ -306,6 +324,7 @@
 		$("clear-btn").addEventListener("click", clearAll);
 		$("history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(); });
 		$("banner-close").addEventListener("click", hideBanner);
+		$("banner-action")?.addEventListener("click", () => { if (bannerAction) bannerAction.run(); });
 		// A beat after the last key, not per key: with a thousand rows every
 		// keystroke rebuilt the table, and Hangul composition fires one per jamo.
 		let filterTimer = null;
@@ -728,7 +747,7 @@
 		$("author-search-btn").disabled = true; $("author-name-btn").disabled = true; $("author-stop-btn").disabled = false;
 		$("search-btn").disabled = true; $("busy").hidden = action === "profiles"; $("busy-text").textContent = message;
 		setStatus(message); hideBanner(); renderAuthorProfiles(); render();
-		let ctx = { signal: controller.signal, isCancelled: () => controller.signal.aborted, errors: [], scholarInputKind: q.authorInputKind || "auto",
+		let ctx = { signal: controller.signal, isCancelled: () => controller.signal.aborted, errors: [], scholarInputKind: q.authorInputKind || "auto", DOMParser: window.DOMParser,
 			popSearchSource: typeof ZotPoPPoPBridge !== "undefined" && ZotPoPPoPBridge.searchSource ? (source, query, context) => ZotPoPPoPBridge.searchSource(source, query, context) : undefined,
 			onProgress: (msg, n, total) => { if (active()) { setStatus(msg); setProgress(n, total); } },
 			onResults: records => { if (active()) { received = records; state.sortKey = records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc"; displaySearchResults(records); } }, log };
@@ -767,6 +786,7 @@
 			else if (action === "profiles" && q.authorProvider === "scholar" && error.reason === "login" && q.authorInputKind !== "profile" && !/https?:\/\//i.test(input)) {
 				fallbackToName = true; setStatus(t("searchFailed", error.message || error), "err");
 			}
+			else if (error.wall) { setStatus(t("searchFailed", error.message || error), "err"); scholarWallBanner(error, () => runAuthorAction(action, profile)); }
 			else { setStatus(t("searchFailed", error.message || error), "err"); showBanner(t("searchFailed", error.message || error)); }
 		} finally {
 			if (state.searchController === controller || !state.searchController) { state.searching = false; state.searchController = null;
@@ -1490,7 +1510,8 @@
 				let quota = e?.status === 429 && /budget|insufficient|credit/i.test(e?.body || e?.message || "");
 				let text = quota ? t("openAlexQuota") : t("searchFailed", e.message || e);
 				setStatus(text, "err");
-				showBanner(text);
+				// Scholar's walls carry their own cure: a window inside Zotero and a retry.
+				if (e.wall) scholarWallBanner(e, () => runSearch()); else showBanner(text);
 				if (state.records.length) rememberSearch(sourceKey, q, state.records, true);
 			}
 		}

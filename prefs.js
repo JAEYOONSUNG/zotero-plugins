@@ -28,3 +28,5 @@ pref("extensions.zotpop.historySize", 30);
 // Native PoP output is an explicit mode; ordinary direct/combined searches remain available.
 pref("extensions.zotpop.searchEngine", "direct");
 pref("extensions.zotpop.popDefaultSource", "scholar");
+// New releases on GitHub are installed by the plugin itself, once a day while Zotero is open.
+pref("extensions.zotpop.autoUpdate", true);

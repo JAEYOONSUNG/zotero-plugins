@@ -161,11 +161,48 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if(action==='workbench')return this.openWorkbench(win);
     if(action==='columns')return this.useColumns(win);
     if(action==='cancelCitations'){this.citationJob?.controller.abort();return;}
+    if(action==='updates')return this.checkUpdatesNow();
     if(!selected.length)throw new Error('문헌 목록에서 대상 문헌을 선택하세요.');
     if(action==='citations')return this.refreshCitations(selected,{force:true});
     if(action==='journals')return this.refreshJournalMetrics(selected,win.DOMParser);
     if(action==='ranks')return this.refreshPublicationRanks(selected);
     throw new Error('Unknown action');
+  }
+  /* The feed named in the manifest, read through Zotero's add-on manager so
+     the new file is verified against its hash and swapped in without a
+     restart. Every decision lives in updater.js, where it is tested. */
+  async createUpdater() {
+    const Updater = globalThis.PluginUpdater;
+    if (!Updater || !this.id || !this.rootURI) return null;
+    const manifest = await this.Z.HTTP.request('GET', this.rootURI + 'manifest.json', { responseType: 'json' });
+    const updateURL = manifest?.response?.applications?.zotero?.update_url;
+    if (!/^https:\/\//.test(String(updateURL || ''))) return null;
+    return Updater.create({
+      id: this.id, version: this.version, updateURL, appVersion: this.Z.version,
+      request: async url => (await this.Z.HTTP.request('GET', url, { responseType: 'json', timeout: 20000, errorDelayMax: 0 })).response,
+      install: entry => this.installAddon(entry),
+      compare: (a, b) => globalThis.Services?.vc ? globalThis.Services.vc.compare(a, b) : Updater.compareVersions(a, b),
+      prefs: { get: name => this.pref(name, undefined), set: (name, value) => this.Z.Prefs.set('extensions.style-custom.' + name, value, true) },
+      busy: () => !!this.citationJob || this.settingWriteDepth > 0,
+      log: message => this.Z.debug('Style Custom: ' + message)
+    });
+  }
+  async installAddon(entry) {
+    const { AddonManager } = ChromeUtils.importESModule('resource://gre/modules/AddonManager.sys.mjs');
+    const install = await AddonManager.getInstallForURL(entry.update_link, { hash: entry.update_hash, name: 'Style Custom', version: entry.version });
+    await new Promise((resolve, reject) => {
+      const fail = what => () => reject(new Error(what + (install.error ? ' (' + install.error + ')' : '')));
+      install.addListener({ onInstallEnded: () => resolve(), onInstallFailed: fail('install failed'), onDownloadFailed: fail('download failed'),
+        onInstallCancelled: fail('install cancelled'), onDownloadCancelled: fail('download cancelled') });
+      install.install();
+    });
+  }
+  async checkUpdatesNow() {
+    if (!this.updater) throw new Error('이 설치본에는 업데이트 주소가 없습니다. GitHub 배포 목록에서 받은 파일로 다시 설치하세요.');
+    const result = await this.updater.run({ reason: 'user', force: true });
+    if (result.status === 'error') throw new Error(result.message);
+    if (result.status === 'installed') return this.t('{0} 버전을 설치했습니다. 새 버전은 바로 적용됩니다.').replace('{0}', result.entry.version);
+    return this.t('최신 버전입니다 ({0}).').replace('{0}', this.version || '');
   }
   getSettingsStatus() {
     const win=this.Z.getMainWindow?.(),selected=win?this.selected(win):[];const reader=win?.Zotero_Tabs&&this.Z.Reader?.getByTabID?.(win.Zotero_Tabs.selectedID),attachment=reader&&this.Z.Items.get(reader.itemID),item=(attachment?.parentID&&this.Z.Items.get(attachment.parentID))||selected[0];
@@ -240,6 +277,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.syncFeatureColumns();
     try{this.setCustomFields(this.pref('customFields',''),{persist:false});}catch(error){this.Z.logError(error);}
     this.prefPane = await this.Z.PreferencePanes.register({ pluginID: id, src: rootURI + "content/preferences.xhtml", label: "Style Custom",image:rootURI+"content/icons/style-custom.svg",scripts:[rootURI+"src/settings.js"],stylesheets:[rootURI+"content/preferences.css"] });
+    // A copy installed once keeps itself current from the GitHub feed. Not
+    // during a self-check: its run must not be cut short by an upgrade.
+    try { this.updater = await this.createUpdater(); if (this.updater && !this.Z.Prefs.get('extensions.style-custom.selfCheck', true)) this.updater.start(); }
+    catch (error) { this.Z.logError(error); }
     for (const name of ["marquee", "hoverDelay", "scrollSpeed", "recordReading", "autoStatus", "autoCitations", "metadataCitations"]) {
       this.observers.push(this.Z.Prefs.registerObserver("extensions.style-custom." + name, () => {
         if (!this.active||this.settingWriteDepth) return;
@@ -3523,12 +3564,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       state.columnFit.seen++;
       const tree = win.ZoteroPane?.itemsView?.tree;
       if (!tree?._columns?.onResize || !tree.props?.id) { state.columnFit.last = 'no tree: ' + [!!tree, !!tree?._columns?.onResize, tree?.props?.id].join(','); return; }
-      const dataKey = [...resizer.classList].find(name => !['resizer', 'draggable', 'react-draggable'].includes(name) && !name.startsWith('react-draggable-'));
-      if (!dataKey) { state.columnFit.last = 'no key in ' + resizer.className; return; }
+      const edgeKey = [...resizer.classList].find(name => !['resizer', 'draggable', 'react-draggable'].includes(name) && !name.startsWith('react-draggable-'));
+      if (!edgeKey) { state.columnFit.last = 'no key in ' + resizer.className; return; }
       const visible = tree._getVisibleColumns?.() || [];
-      const index = visible.findIndex(column => column.dataKey === dataKey);
+      /* Zotero draws each column's resizer at that column's LEFT edge and
+         names it after that column, so the edge the user sees at the right of
+         "Publication" is the resizer of the column after it. A double-click
+         there fits the column to the LEFT of the edge, as a spreadsheet does;
+         fitting the resizer's own column squeezed Publication instead, since
+         the room came out of its neighbours. */
+      const index = visible.findIndex(column => column.dataKey === edgeKey) - 1;
       const column = visible[index], neighbour = visible[index + 1];
-      if (!column || !neighbour) { state.columnFit.last = 'no pair for ' + dataKey; return; }
+      if (!column || !neighbour) { state.columnFit.last = 'no pair at ' + edgeKey; return; }
+      const dataKey = column.dataKey;
       event.stopPropagation(); event.preventDefault();
       const escape = win.CSS.escape(dataKey);
       const head = doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${escape}`);
@@ -3909,6 +3957,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async stop({keepColumns=false}={}) {
     if(this.stopPromise)return this.stopPromise;
     this.stopping=true;
+    try { this.updater?.stop(); } catch (ignored) {}
     this.stopPromise=(async()=>{
       const errors=[];
       const attempt=async fn=>{try{await fn();}catch(error){errors.push(error);}};

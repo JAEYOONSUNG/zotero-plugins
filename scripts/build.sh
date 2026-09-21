@@ -16,6 +16,10 @@ fi
 if [ -f zotero-style-custom/data/journal-registry.json ]; then
 	cp zotero-style-custom/data/journal-registry.json content/journal-registry.json
 fi
+# The updater is written once, in Style Custom, and copied here the same way.
+if [ -f zotero-style-custom/src/updater.js ]; then
+	cp zotero-style-custom/src/updater.js content/updater.js
+fi
 VERSION=$(node -p "require('./manifest.json').version")
 mkdir -p build
 OUT="build/zotpop-${VERSION}.xpi"

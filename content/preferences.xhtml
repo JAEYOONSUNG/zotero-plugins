@@ -61,6 +61,16 @@
 	</groupbox>
 
 	<groupbox>
+		<label><html:h2 data-i18n="prefUpdateTitle"></html:h2></label>
+		<checkbox id="zotpop-autoupdate" data-i18n-label="prefAutoUpdate" preference="extensions.zotpop.autoUpdate"/>
+		<hbox align="center">
+			<button id="zotpop-update-check" data-i18n-label="prefUpdateCheck" oncommand="Zotero.ZotPoP.checkUpdatesNow(document);"/>
+			<label id="zotpop-update-status" style="color: gray" value=""/>
+		</hbox>
+		<html:p style="color: gray" data-i18n="prefUpdateNote"></html:p>
+	</groupbox>
+
+	<groupbox>
 		<label><html:h2 data-i18n="prefNotesTitle"></html:h2></label>
 		<html:p style="color: gray" data-i18n="prefNoteScholar"></html:p>
 		<html:p style="color: gray" data-i18n="prefNoteFeed"></html:p>

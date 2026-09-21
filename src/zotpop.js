@@ -50,7 +50,71 @@ Zotero.ZotPoP = {
 		catch (e) {
 			Zotero.logError(e);
 		}
+		// A copy installed once from a file keeps itself current from the
+		// GitHub feed named in the manifest. See content/updater.js.
+		try { this.updater = await this.createUpdater(); if (this.updater) this.updater.start(); }
+		catch (e) { Zotero.logError(e); }
 		Zotero.debug(`ZotPoP ${version} initialized`);
+	},
+
+	async createUpdater() {
+		let Updater = typeof PluginUpdater !== "undefined" ? PluginUpdater : null;
+		if (!Updater || !this.id || !this.rootURI) return null;
+		let manifest = await Zotero.HTTP.request("GET", this.rootURI + "manifest.json", { responseType: "json" });
+		let updateURL = manifest?.response?.applications?.zotero?.update_url;
+		if (!/^https:\/\//.test(String(updateURL || ""))) return null;
+		return Updater.create({
+			id: this.id, version: this.version, updateURL, appVersion: Zotero.version,
+			request: async url => (await Zotero.HTTP.request("GET", url, { responseType: "json", timeout: 20000, errorDelayMax: 0 })).response,
+			install: entry => this.installAddon(entry),
+			compare: (a, b) => typeof Services !== "undefined" && Services.vc ? Services.vc.compare(a, b) : Updater.compareVersions(a, b),
+			prefs: {
+				get: name => Zotero.Prefs.get("extensions.zotpop." + name, true),
+				set: (name, value) => Zotero.Prefs.set("extensions.zotpop." + name, value, true)
+			},
+			// An upgrade reloads the plugin and closes its windows: not in the
+			// middle of a search or a session the user is signing in to.
+			busy: () => !!(this._window && !this._window.closed) || !!this._tabID
+				|| !!(this._loginWindow && !this._loginWindow.closed) || !!(this._scholarWindow && !this._scholarWindow.closed),
+			log: message => Zotero.debug("ZotPoP: " + message)
+		});
+	},
+
+	// Zotero's own add-on manager fetches the file, checks it against the
+	// feed's hash and swaps it in; a bootstrapped plugin needs no restart.
+	async installAddon(entry) {
+		let { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
+		let install = await AddonManager.getInstallForURL(entry.update_link, { hash: entry.update_hash, name: "ZotPoP", version: entry.version });
+		await new Promise((resolve, reject) => {
+			let fail = what => () => reject(new Error(what + (install.error ? " (" + install.error + ")" : "")));
+			install.addListener({
+				onInstallEnded: () => resolve(), onInstallFailed: fail("install failed"), onDownloadFailed: fail("download failed"),
+				onInstallCancelled: fail("install cancelled"), onDownloadCancelled: fail("download cancelled")
+			});
+			install.install();
+		});
+	},
+
+	// The preferences pane: what the last check found, and a check on demand.
+	updateStatusText(result) {
+		if (!result) return this.t("updateStatusNever");
+		let when = result.at ? " · " + new Date(result.at).toLocaleString() : "";
+		let t = this.t.bind(this);
+		let text = result.status === "current" ? t("updateStatusCurrent")(result.version)
+			: result.status === "installed" ? t("updateStatusInstalled")(result.latest)
+			: result.status === "deferred" ? t("updateStatusDeferred")(result.latest)
+			: result.status === "error" ? t("updateStatusError")(result.message || "")
+			: result.status === "off" ? t("updateStatusOff")
+			: t("updateStatusNever");
+		return text + when;
+	},
+
+	async checkUpdatesNow(doc) {
+		let label = doc.getElementById("zotpop-update-status");
+		if (!this.updater) { if (label) label.value = this.t("updateStatusNoFeed"); return; }
+		if (label) label.value = this.t("updateChecking");
+		let result = await this.updater.run({ reason: "user", force: true });
+		if (label) label.value = this.updateStatusText(result);
 	},
 
 	// Fill a preference pane: data-i18n (text), data-i18n-value / data-i18n-label (XUL attributes)
@@ -59,10 +123,28 @@ Zotero.ZotPoP = {
 			for (let el of doc.querySelectorAll("[data-i18n]")) el.textContent = this.t(el.getAttribute("data-i18n"));
 			for (let el of doc.querySelectorAll("[data-i18n-value]")) el.setAttribute("value", this.t(el.getAttribute("data-i18n-value")));
 			for (let el of doc.querySelectorAll("[data-i18n-label]")) el.setAttribute("label", this.t(el.getAttribute("data-i18n-label")));
+			let status = doc.getElementById("zotpop-update-status");
+			if (status) status.value = this.updateStatusText(this.updater ? this.updater.lastResult() : null);
 		}
 		catch (e) {
 			Zotero.logError(e);
 		}
+	},
+
+	// Scholar inside Zotero: the page that refused, in a window that shares
+	// Zotero's cookies, so a CAPTCHA answered or an account signed in there
+	// counts for every request the plugin makes afterwards.
+	openScholarSession(url) {
+		if (this._scholarWindow && !this._scholarWindow.closed) { this._scholarWindow.focus(); return this._scholarWindow; }
+		let opener = Zotero.getMainWindow();
+		let target = /^https:\/\/scholar\.google\./i.test(String(url || "")) ? url : "https://scholar.google.com/";
+		this._scholarWindow = opener.openDialog(
+			"chrome://zotpop/content/proxylogin.xhtml",
+			"zotpop-scholar-session",
+			"chrome,centerscreen,resizable=yes,dialog=no,width=1000,height=780",
+			{ Zotero, plugin: this, mode: "scholar", url: target }
+		);
+		return this._scholarWindow;
 	},
 
 	openProxyLogin() {
@@ -232,6 +314,8 @@ Zotero.ZotPoP = {
 	},
 
 	shutdown() {
+		try { this.updater?.stop(); } catch (e) {}
+		this.updater = null;
 		this.closeSearchTab();
 		if (this._window && !this._window.closed) this._window.close();
 		this._window = null;

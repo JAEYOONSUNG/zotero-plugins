@@ -52,6 +52,11 @@
       "id": "ai",
       "label": "번역·AI",
       "description": "사용할 모델과 요청 문구를 직접 설정합니다. 요청은 사용자가 실행할 때만 전송됩니다."
+    },
+    {
+      "id": "updates",
+      "label": "업데이트",
+      "description": "GitHub에 올라온 새 버전을 확인하고 설치합니다. Zotero를 켜 둔 동안 하루 한 번 확인합니다."
     }
   ],
   "settings": [
@@ -1190,6 +1195,22 @@
       "type": "action",
       "default": null,
       "action": "ranks"
+    },
+    {
+      "key": "autoUpdate",
+      "category": "updates",
+      "label": "새 버전 자동 설치",
+      "type": "boolean",
+      "default": true,
+      "description": "GitHub 배포 목록에 새 버전이 올라오면 내려받아 바로 적용합니다. 다시 시작하지 않아도 됩니다."
+    },
+    {
+      "key": "check-updates",
+      "category": "updates",
+      "label": "지금 새 버전 확인",
+      "type": "action",
+      "default": null,
+      "action": "updates"
     }
   ]
 };

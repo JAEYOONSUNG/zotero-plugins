@@ -24,3 +24,5 @@ pref("extensions.style-custom.touchDateOnRead", false);
 // Optional override. Left empty, the key ZotPoP already holds is used, so
 // the two plugins share one OpenAlex budget instead of competing for it.
 pref("extensions.style-custom.openalexApiKey", "");
+// New releases on GitHub are installed by the plugin itself, once a day while Zotero is open.
+pref("extensions.style-custom.autoUpdate", true);

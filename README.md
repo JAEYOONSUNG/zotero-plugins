@@ -20,7 +20,7 @@ The item list above is Zotero's own, with Style Custom's columns switched on. Ev
 3. Click the gear at the top right → **Install Add-on From File…** and choose the downloaded file.
 4. Restart Zotero. The two buttons shown above appear in the items toolbar.
 
-New versions arrive through Zotero's add-on updater. Zotero 7 or later is required; development and verification were done on Zotero 9.0.
+New versions install themselves. While Zotero is open, each plugin checks this repository's release list once a day, downloads a newer release, verifies it against the hash in the feed and applies it without a restart; Zotero's own add-on updater reads the same feed. The check can be turned off, and run by hand, in each plugin's preferences pane (ZotPoP → **Updates**; Style Custom → **업데이트 / Updates**). Zotero 7 or later is required; development and verification were done on Zotero 9.0.
 
 ### Worth entering at the start (all optional)
 
@@ -69,7 +69,7 @@ Open it from the **panel** button in the items toolbar, **Tools → Style Custom
 
 ### Columns in the item list
 
-Installing adds columns to the item list, as in the picture at the top of this page: **IF** (JCR 2025 impact factor), **Cited count** with a bar against the library's most-cited paper, **Status** (unread, reading, read) with a half-filled circle while a paper is being read, **Journal** as a mark in the journal's own colour, **Rating** as stars you can click, **Read time** recorded from the PDF reader, **Files** (PDF, supplementary, duplicates), and **Corresponding institution** with its tier and country flag. Patents and theses are labelled as such. Right-click → **Switch to custom columns** turns them on together; the column header's own menu shows or hides each one. **Double-click a column edge** to fit that column to its content.
+Installing adds columns to the item list, as in the picture at the top of this page: **IF** (JCR 2025 impact factor), **Cited count** with a bar against the library's most-cited paper, **Status** (unread, reading, read) with a half-filled circle while a paper is being read, **Journal** as a mark in the journal's own colour, **Rating** as stars you can click, **Read time** recorded from the PDF reader, **Files** (PDF, supplementary, duplicates), and **Corresponding institution** with its tier and country flag. Patents and theses are labelled as such. Right-click → **Switch to custom columns** turns them on together; the column header's own menu shows or hides each one. **Double-click a column's right edge** to fit that column to its content, as in a spreadsheet.
 
 ### The right-click menu (item → Style Custom)
 

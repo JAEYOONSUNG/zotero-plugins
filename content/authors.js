@@ -158,6 +158,31 @@ var ZotPoPAuthors = (function () {
 			return profiles;
 		}
 		if (/https?:|\/|[?&]user=/i.test(value)) throw new Error("Enter a valid Google Scholar profile URL or 12-character profile ID");
+		/* Scholar's own author search, read directly. It is behind a Google
+		   sign-in, and the error says so when it is; the Publish or Perish tool,
+		   if one is configured, is asked only after that, and fails the same way. */
+		if (typeof http?.getText === "function" && typeof ctx.DOMParser === "function") {
+			let wall = null;
+			try {
+				const found = await cancellable(() => Sources.scholarAuthors(value, http, ctx), ctx);
+				const provenance = { provider: "scholar", method: "scholar-author-search", complete: true, identityConfirmed: true, capturedAt: new Date().toISOString() };
+				const profiles = found.map(p => ({ provider: "scholar", id: p.id, name: p.name, affiliation: p.affiliation, url: p.url, citations: p.citations, mode: "profile", identityConfirmed: true, provenance: clone(provenance) }));
+				profiles.authorProvenance = clone(provenance);
+				return profiles;
+			}
+			catch (error) {
+				if (error.name === "AbortError") throw error;
+				if (!error.wall || typeof ctx.popSearchSource !== "function") { if (error.wall) error.reason = error.wall; throw error; }
+				wall = error;
+			}
+			try {
+				const result = await scholarQuery("scholarauthor", { engine: "pop", authors: value, maxResults: 20, popOutputSort: "rank" }, ctx);
+				const profiles = result.rows.map(row => scholarProfileRow(row, result.provenance));
+				profiles.authorProvenance = clone(result.provenance);
+				return profiles;
+			}
+			catch (error) { if (error.name === "AbortError") throw error; wall.reason = wall.wall; throw wall; }
+		}
 		const result = await scholarQuery("scholarauthor", { engine: "pop", authors: value, maxResults: 20, popOutputSort: "rank" }, ctx);
 		const profiles = result.rows.map(row => scholarProfileRow(row, result.provenance));
 		profiles.authorProvenance = clone(result.provenance);
@@ -207,6 +232,29 @@ var ZotPoPAuthors = (function () {
 		if (profile.provider === "scholar") {
 			const identity = parseScholarProfile(profile.id);
 			if (!identity) throw new Error("Invalid Google Scholar profile ID");
+			if (typeof http?.getText === "function" && typeof ctx.DOMParser === "function") {
+				let wall = null;
+				try {
+					const page = await cancellable(() => Sources.scholarProfile(identity.id, http, ctx, { maxResults, sort: options.sort }), ctx);
+					const actual = { ...profile, id: identity.id, url: identity.url, name: page.profile.name || profile.name, affiliation: page.profile.affiliation || profile.affiliation,
+						hIndex: page.profile.hIndex ?? null, citations: page.profile.citations ?? null, identityConfirmed: true };
+					const provenance = { provider: "scholar", mode: "profile", method: "scholar-profile-page", authorId: identity.id, capturedAt: new Date().toISOString(),
+						identityConfirmed: true, complete: page.complete, returned: page.records.length, truncated: !page.complete, citationCountsAvailable: true, authorListComplete: false };
+					return attach(page.records, actual, provenance, ctx);
+				}
+				catch (error) {
+					if (error.name === "AbortError") throw error;
+					if (!error.wall || typeof ctx.popSearchSource !== "function") { if (error.wall) error.reason = error.wall; throw error; }
+					wall = error;
+				}
+				try {
+					const result = await scholarQuery("scholarprofile", { engine: "pop", authors: identity.id, maxResults, popOutputSort: options.popOutputSort || "rank" }, ctx);
+					const records = Sources.normalizePoPExactRecords(result.rows, "scholarprofile", result.provenance);
+					const actual = { ...profile, id: identity.id, url: identity.url, identityConfirmed: profile.identityConfirmed === true || result.rows.length > 0 };
+					return attach(records, actual, { ...clone(result.provenance), provider: "scholar", mode: "profile", authorId: identity.id, identityConfirmed: actual.identityConfirmed }, ctx);
+				}
+				catch (error) { if (error.name === "AbortError") throw error; wall.reason = wall.wall; throw wall; }
+			}
 			const result = await scholarQuery("scholarprofile", { engine: "pop", authors: identity.id, maxResults, popOutputSort: options.popOutputSort || "rank" }, ctx);
 			const records = Sources.normalizePoPExactRecords(result.rows, "scholarprofile", result.provenance);
 			const actual = { ...profile, id: identity.id, url: identity.url, identityConfirmed: profile.identityConfirmed === true || result.rows.length > 0 };

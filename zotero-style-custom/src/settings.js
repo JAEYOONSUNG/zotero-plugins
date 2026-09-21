@@ -112,7 +112,7 @@
    const label=node('label',spec.label,row,{for:id,class:'scs-label'});const line=node('div',null,row,{class:'scs-value'});
    if(spec.type==='action'){
     state.input=node('button',spec.label,line,{type:'button',id});label.hidden=true;
-    state.input.addEventListener('click',async()=>{if(state.pending||destroyed)return;state.pending=true;state.feedback.textContent=t('실행하는 중…');sync(state);try{await runtime.runSettingAction(spec.action);if(!destroyed){state.feedback.textContent=t('실행했습니다.');await refreshStatus();}}catch(error){if(!destroyed){state.error=true;state.feedback.textContent='실행하지 못했습니다: '+(error.message||error);}}finally{state.pending=false;if(!destroyed)sync(state);}});
+    state.input.addEventListener('click',async()=>{if(state.pending||destroyed)return;state.pending=true;state.feedback.textContent=t('실행하는 중…');sync(state);try{const answer=await runtime.runSettingAction(spec.action);if(!destroyed){state.feedback.textContent=typeof answer==='string'&&answer?answer:t('실행했습니다.');await refreshStatus();}}catch(error){if(!destroyed){state.error=true;state.feedback.textContent='실행하지 못했습니다: '+(error.message||error);}}finally{state.pending=false;if(!destroyed)sync(state);}});
    }else{
     if(spec.type==='select'){state.input=node('select',null,line,{id});for(const option of spec.options||[])node('option',option.label,state.input,{value:option.value});}
     else if(spec.type==='textarea'){state.input=node('textarea',null,line,{id,rows:spec.rows||4});}
