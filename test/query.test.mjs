@@ -398,3 +398,127 @@ test("short and generic titles require corroborating year and author metadata", 
 	}
 	assert.equal(Q.isSafeDOIMatch({ title: "Editorial", year: 2016, authors: [{}] }, candidate({ title: "Editorial", authors: [{}] })), false);
 });
+
+test("title words carry their plural, their possessive and their truncation", () => {
+	assert.equal(Q.matchesTitle("Alzheimer disease", "Alzheimer’s disease biomarkers"), true);
+	assert.equal(Q.matchesTitle("genome", "Editing human genomes"), true);
+	assert.equal(Q.matchesTitle("genomes", "Editing the human genome"), true);
+	assert.equal(Q.matchesTitle("mRNA vaccine", "mRNAs in vaccines"), true);
+	assert.equal(Q.matchesTitle('"genome editing"', "Precise genome editings"), true, "phrases keep their order");
+	assert.equal(Q.matchesTitle("recombin*", "Recombinant protein expression"), true);
+	assert.equal(Q.matchesTitle("recombin*", "Combinatorial library design"), false);
+	assert.equal(Q.matchesTitle('"genome edit*"', "Precise genome editing methods"), true);
+	assert.equal(Q.matchesTitle("Cas9", "Cas12 editing"), false, "a truncation is asked for, never assumed");
+	assert.equal(Q.matchesTitle("editing", "Methods for preediting"), false);
+});
+
+test("a hyphen inside an interleukin or a gene name is not a difference", () => {
+	assert.equal(Q.matchesTitle("IL6", "IL-6 drives inflammation"), true);
+	assert.equal(Q.matchesTitle("IL-6", "IL6 drives inflammation"), true);
+	assert.equal(Q.matchesTitle("beta-catenin", "β-catenin signalling in cells"), true);
+	assert.equal(Q.matchesTitle("TNF-alpha", "TNF-α in sepsis"), true);
+	assert.equal(Q.matchesTitle("β-catenin", "beta-catenin signalling"), true);
+	assert.equal(Q.titleIdentity("β-catenin in living cells"), Q.titleIdentity("beta-catenin in living cells"));
+	assert.equal(Q.titleIdentity("TNF-&alpha; levels rise"), Q.titleIdentity("TNF-alpha levels rise"));
+	assert.equal(Q.titleIdentity("Smith&rsquo;s law of &beta; decay"), Q.titleIdentity("Smiths law of beta decay"));
+});
+
+test("a given name written joined is the same given name", () => {
+	assert.equal(Q.matchesAuthor("Jae Yoon Sung", [{ firstName: "Jaeyoon", lastName: "Sung" }]), true);
+	assert.equal(Q.matchesAuthor("Jaeyoon Sung", [sung]), true);
+	assert.equal(Q.matchesAuthor("Xiaoming Li", [{ firstName: "Xiao-Ming", lastName: "Li" }]), true);
+	assert.equal(Q.matchesAuthor("Xiao-Ming Li", [{ firstName: "Xiaoming", lastName: "Li" }]), true);
+	assert.equal(Q.matchesAuthor("Jae Young Sung", [sung]), false, "Jae Young is not Jae Yoon");
+	assert.equal(Q.matchesAuthor("Jaeyoung Sung", [sung]), false);
+});
+
+test("either half of a compound surname finds the person who carries it", () => {
+	const marquez = { firstName: "Gabriel", lastName: "García Márquez" };
+	for (const query of ["García", "Márquez", "Gabriel Marquez", "Garcia Marquez G"]) {
+		assert.equal(Q.matchesAuthor(query, [marquez]), true, query);
+	}
+	assert.equal(Q.matchesAuthor("Smith", [{ firstName: "A", lastName: "Smith-Jones" }]), true);
+	assert.equal(Q.matchesAuthor("Jones", [{ firstName: "A", lastName: "Smith-Jones" }]), true);
+	assert.equal(Q.matchesAuthor("Newton", ["Olivia Newton-John"]), true);
+	assert.equal(Q.matchesAuthor("Waals", ["Johannes Diderik van der Waals"]), true);
+	assert.equal(Q.matchesAuthor("van", ["Johannes Diderik van der Waals"]), false, "a particle is not a surname");
+	assert.equal(Q.matchesAuthor("Sheila Ingemann", [{ firstName: "Sheila I.", lastName: "Stewart" }]), false);
+});
+
+test("an all-caps byline still says which token is the surname", () => {
+	for (const query of ["Liu", "David Liu", "Liu DR", "D R Liu"]) assert.equal(Q.matchesAuthor(query, ["LIU DR"]), true, query);
+	assert.equal(Q.matchesAuthor("Sung", ["LIU DR"]), false);
+	assert.equal(Q.matchesAuthor("David Sung", ["LIU DR"]), false);
+	assert.equal(Q.matchesAuthor("LIU DR", [liu]), true, "an all-caps author query keeps its initials");
+});
+
+test("a generational suffix is not a surname", () => {
+	for (const author of ["John Smith Jr", "Smith Jr, John", { lastName: "Smith Jr." }, "John Smith III", { firstName: "John", lastName: "Smith", name: "John Smith Jr" }]) {
+		assert.equal(Q.matchesAuthor("Smith", [author]), true, JSON.stringify(author));
+	}
+	assert.equal(Q.matchesAuthor("John Smith Jr", [{ firstName: "John", lastName: "Smith" }]), true);
+	assert.equal(Q.matchesAuthor("Jones", ["John Smith Jr"]), false);
+});
+
+test("a transliterated surname is the same surname", () => {
+	assert.equal(Q.matchesAuthor("Mueller", [{ firstName: "Anna", lastName: "Müller" }]), true);
+	assert.equal(Q.matchesAuthor("Müller", [{ firstName: "Anna", lastName: "Mueller" }]), true);
+	assert.equal(Q.matchesAuthor("Orsted", [{ firstName: "Hans", lastName: "Ørsted" }]), true);
+	assert.equal(Q.matchesAuthor("Lovborg", [{ firstName: "Eilert", lastName: "Løvborg" }]), true);
+	assert.equal(Q.matchesAuthor("Lukasz Nowak", [{ firstName: "Łukasz", lastName: "Nowak" }]), true);
+	assert.equal(Q.matchesAuthor("Dang", [{ lastName: "Đặng" }]), true);
+	assert.equal(Q.titleIdentity("Straße research on growth"), Q.titleIdentity("Strasse research on growth"));
+	assert.equal(Q.matchesAuthor("Bae", [{ lastName: "Ba" }]), false, "a fold that leaves no surname is not a transliteration");
+	assert.equal(Q.matchesAuthor("Mueller", [{ firstName: "Anna", lastName: "Miller" }]), false);
+});
+
+test("journal abbreviations resolve without an entry for every clipped word", () => {
+	for (const [query, venue] of [
+		["Sci Rep", "Scientific Reports"],
+		["Appl Environ Microbiol", "Applied and Environmental Microbiology"],
+		["Metab Eng", "Metabolic Engineering"],
+		["Front Microbiol", "Frontiers in Microbiology"],
+		["PNAS", "Proceedings of the National Academy of Sciences of the United States of America"],
+		["Scientific Reports", "Sci Rep"]
+	]) assert.equal(Q.matchesVenue(query, { venue }), true, query);
+	assert.equal(Q.matchesVenue("Sci Rep", { venue: "Some Other Journal", journalAbbreviation: "Sci Rep" }), true);
+	assert.equal(Q.matchesVenue("Cell", { venue: "Cells" }), false, "one clipped word is not evidence of an abbreviation");
+	assert.equal(Q.matchesVenue("Cell", { venue: "Cellular" }), false);
+	assert.equal(Q.matchesVenue("Science", { venue: "Sciences" }), false);
+	assert.equal(Q.matchesVenue("Sci Rep", { venue: "Scientific American" }), false);
+});
+
+test("scientific title identity folds formula subscripts and every written hyphen", () => {
+	for (const [a, b] of [
+		["CO<sub>2</sub> capture in cells", "CO2 capture in cells"],
+		["CO₂ capture in cells", "CO2 capture in cells"],
+		["Growth between 25‐30 °C", "Growth between 25-30 °C"],
+		["Growth between 25‑30 °C", "Growth between 25-30 °C"],
+		["Growth between 25‒30 °C", "Growth between 25-30 °C"]
+	]) assert.equal(Q.titleIdentity(a), Q.titleIdentity(b), a);
+	assert.notEqual(Q.titleIdentity("Measuring x₂ in living cells"), Q.titleIdentity("Measuring x2 in living cells"));
+	assert.notEqual(Q.titleIdentity("Bacterial growth at +10 C"), Q.titleIdentity("Bacterial growth at -10 C"));
+});
+
+test("pasted titles and curly quotes survive the expression parser", () => {
+	assert.equal(Q.matchesTitle("WHY NOT TO USE ANTIBIOTICS", "Why not to use antibiotics"), true);
+	assert.equal(Q.matchesTitle("WHY NOT TO USE ANTIBIOTICS", "Why antibiotics are useful"), false);
+	assert.equal(Q.matchesTitle("CRISPR NOT cancer", "CRISPR editing in cancer"), false, "a written expression still reads as one");
+	assert.deepEqual(Q.parseExpression("“genome editing” OR CRISPR"), {
+		kind: "OR", left: { kind: "term", value: "genome editing", phrase: true }, right: { kind: "term", value: "CRISPR" }
+	});
+	assert.equal(Q.matchesAuthor("“Smith J”", [{ firstName: "John", lastName: "Smith" }]), true);
+	assert.equal(Q.matchesTitle("“genome editing”", "Editing the human genome"), false, "curly quotes still mean a phrase");
+});
+
+test("ORCID identifiers are accepted as printed, pasted and linked", () => {
+	for (const value of ["0000 0002 1825 0097", "orcid.org/0000-0002-1825-0097", "ORCID.ORG/0000000218250097", "0000-0002 1825-0097"]) {
+		assert.deepEqual(Q.parseAuthorIdentifier(value), { type: "orcid", id: "0000-0002-1825-0097" }, value);
+	}
+	for (const value of ["0000 0002 1825 0098", "https://other.example/0000 0002 1825 0097", "0000 0002 1825"]) {
+		assert.equal(Q.parseAuthorIdentifier(value), null, value);
+	}
+	const author = { ...liu, orcid: "https://orcid.org/0000-0002-1825-0097" };
+	assert.equal(Q.matchesAuthor("0000 0002 1825 0097", [author]), true);
+	assert.equal(Q.matchesAuthor("0000 0002 1825 0097", [liu]), false);
+});

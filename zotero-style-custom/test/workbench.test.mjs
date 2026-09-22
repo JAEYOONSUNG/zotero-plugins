@@ -88,7 +88,8 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog}={}){
  const findButton=label=>[...bench.panel.querySelectorAll('button')]
    .find(b=>b.textContent===label||b.getAttribute('title')===label||b.getAttribute('aria-label')===label);
  const click=async label=>{const b=findButton(label);assert.ok(b,'button: '+label);b.dispatchEvent(new win.Event('click',{bubbles:true}));await settle();};
- const input=(label,value)=>{const el=bench.panel.querySelector('[aria-label="'+label+'"]');assert.ok(el,label);el.value=value;el.dispatchEvent(new win.Event('input',{bubbles:true}));return el;};
+ // The panel search waits 150ms before it acts; a test types and then looks.
+ const input=(label,value)=>{const el=bench.panel.querySelector('[aria-label="'+label+'"]');assert.ok(el,label);el.value=value;el.dispatchEvent(new win.Event('input',{bubbles:true}));bench.flushSearch?.();return el;};
  return {win,doc,bench,runtime,library,reader,assist,calls,errors,papers,refs,body,click,input,findButton,setLibrary:id=>{libraryID=id;},setSelection:ids=>{mainSelection=ids.map(id=>refs.get(id));},notify:()=>notify(),record};
 }
 
@@ -1687,5 +1688,107 @@ test('a comparison table shows field names in its headings and its CSV', async (
  const heads = [...f.body().querySelectorAll('.sc-matrix th')].map(th => th.textContent);
  assert.ok(heads.length > 1, 'there are headings');
  assert.ok(!heads.some(h => /^(title|impactFactor|authors)$/.test(h)), 'no raw field keys: ' + heads.join(','));
+ f.bench.destroy();
+});
+
+test('the panel search names what it searches and puts the typed title first',async()=>{
+ const f=fixture();f.papers.splice(0);
+ for(let n=1;n<=3;n++){f.papers.push({id:String(n),title:'Notes about base editing '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ f.papers.push({id:'9',title:'Base editing',itemType:'journalArticle',tags:[]});
+ await f.bench.show('explore');
+ assert.equal(f.bench.panel.querySelector('[aria-label="작업 패널 검색"]').getAttribute('placeholder'),'제목·저자·태그·DOI·초록 검색',
+  'the box no longer promises less than it does');
+ f.input('작업 패널 검색','Base editing');await settle();
+ assert.deepEqual([...f.body().querySelectorAll('.sc-paper-list > article')].map(n=>n.dataset.itemId),['9','1','2','3'],
+  'the paper with exactly that title leads');
+ f.bench.destroy();
+});
+
+test('a year, an accent and a dash typed into the panel search all find their paper',async()=>{
+ const f=fixture();
+ f.papers[0].authors='Hans Müller';f.papers[1].title='protein–protein interaction';
+ await f.bench.show('explore');
+ const titles=()=>[...f.body().querySelectorAll('.sc-paper-list > article')].map(n=>n.dataset.itemId);
+ f.input('작업 패널 검색','2024');await settle();assert.deepEqual(titles(),['2'],'a year is part of the haystack');
+ f.input('작업 패널 검색','Muller');await settle();assert.deepEqual(titles(),['1'],'an unaccented query finds the accented author');
+ f.input('작업 패널 검색','protein-protein');await settle();assert.deepEqual(titles(),['2'],'a hyphen finds an en dash');
+ f.input('작업 패널 검색','H. Müller');await settle();assert.deepEqual(titles(),['1'],'an initial matches the given name');
+ f.bench.destroy();
+});
+
+test('the note paper picker offers the exact title rather than the first twelve in library order',async()=>{
+ const f=fixture();f.reader.tabs=()=>[];f.papers.splice(0);
+ for(let n=1;n<=20;n++){f.papers.push({id:String(n),title:'Base editing review '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ f.papers.push({id:'99',title:'Base editing',itemType:'journalArticle',tags:[]});f.refs.set(99,{id:99});
+ await f.bench.show('notes');f.bench.state.selected=new Set();await f.bench.render();
+ f.input('작업 패널 검색','Base editing');await settle();
+ const picks=[...f.body().querySelectorAll('[data-pick]')].map(b=>b.dataset.pick);
+ assert.equal(picks.length,12,'twelve are still offered');
+ assert.equal(picks[0],'99','and the one with exactly that title is among them');
+ f.bench.destroy();
+});
+
+test('note and attachment searches take the same words in either order',async()=>{
+ const f=fixture();
+ await f.bench.show('notes');
+ f.input('작업 패널 검색','note Rich');await settle();
+ assert.match(f.body().textContent,/Rich note/,'the note list is tokenised like the paper list');
+ await f.bench.show('attachments');
+ f.input('작업 패널 검색','two PDF');await settle();
+ assert.match(f.body().textContent,/PDF two/);
+ assert.equal(f.body().textContent.includes('PDF one'),false);
+ f.bench.destroy();
+});
+
+test('annotation, collection and watched-author searches are tokenised too',async()=>{
+ const f=fixture();
+ await f.bench.show('annotations');
+ f.bench.state.query='Comment Highlight';await f.bench.render();
+ assert.match(f.body().textContent,/Highlight/,'the annotation matches both words in either order');
+ f.library.collections=async()=>[{id:'4',name:'Research notes',count:2,parentID:null},{id:'5',name:'Teaching',count:1,parentID:null}];
+ f.bench.state.query='';await f.bench.show('collections');
+ f.input('컬렉션 검색','notes Research');await new Promise(resolve=>setTimeout(resolve,160));await settle();
+ assert.match(f.body().textContent,/Research notes/);
+ assert.equal(f.body().textContent.includes('Teaching'),false);
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A7',name:'Sam Okafor',institution:'MIT Media Lab',seen:[],news:[]},
+  {id:'A8',name:'Kim Nguyen',institution:'Yonsei',seen:[],news:[]}];
+ await f.bench.show('authors');await f.click('목록 관리');
+ f.input('관심 저자 찾기','Media Sam');await settle();
+ const names=[...f.body().querySelectorAll('.sc-watch-table tbody tr')].map(tr=>tr.querySelector('button').textContent);
+ assert.deepEqual(names,['Sam Okafor']);
+ f.bench.destroy();
+});
+
+test('the panel search waits out a burst of typing and does not re-read the notes for each search',async()=>{
+ const f=fixture();
+ await f.bench.show('notes');
+ const box=f.bench.panel.querySelector('[aria-label="작업 패널 검색"]');
+ for(const value of ['R','Ri','Ric','Rich']){box.value=value;box.dispatchEvent(new f.win.Event('input',{bubbles:true}));}
+ await settle();
+ assert.equal(f.bench.state.query,'','a keystroke does not redraw the tab on its own');
+ await new Promise(resolve=>setTimeout(resolve,260));await settle();
+ assert.equal(f.bench.state.query,'Rich','the last value wins once the typing stops');
+ const after=f.calls.filter(c=>c[0]==='notes').length;
+ f.input('작업 패널 검색','note');await settle();
+ assert.equal(f.calls.filter(c=>c[0]==='notes').length,after,'the scope notes read for this load are reused');
+ await f.bench.load();await settle();
+ assert.ok(f.calls.filter(c=>c[0]==='notes').length>after,'a reload reads them again');
+ f.bench.destroy();
+});
+
+test('the journals tab finds a journal by a dotted abbreviation and by an ISSN written either way',async()=>{
+ const f=fixture();
+ f.runtime.journalIdentity={identify:()=>({abbreviation:'Nat Commun',issns:['2041-1723']})};
+ for(const paper of f.papers)paper.venue='Nature Communications';
+ await f.bench.show('journals');
+ const names=()=>[...f.body().querySelectorAll('.sc-journal-name')].map(n=>n.textContent);
+ assert.deepEqual(names(),['Nature Communications']);
+ const box=f.bench.panel.querySelector('[aria-label="저널 검색"]');
+ const type=async value=>{box.value=value;box.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+  await new Promise(resolve=>setTimeout(resolve,180));await settle();};
+ await type('Nat. Commun.');assert.deepEqual(names(),['Nature Communications'],'the dots come out of the query');
+ await type('2041-1723');assert.deepEqual(names(),['Nature Communications']);
+ await type('20411723');assert.deepEqual(names(),['Nature Communications'],'an ISSN typed without its hyphen');
+ await type('no such journal');assert.deepEqual(names(),[]);
  f.bench.destroy();
 });

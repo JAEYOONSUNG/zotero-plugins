@@ -1,0 +1,56 @@
+{
+  "version": "0.36.6",
+  "success": true,
+  "idle": {
+    "tracked": 414,
+    "visible": 98,
+    "active": 0,
+    "speed": 42,
+    "pause": 1000,
+    "mode": "hover",
+    "reducedMotion": false,
+    "paused": false,
+    "pendingFrames": 0,
+    "pendingTimers": 0,
+    "cells": [],
+    "nonzero": 0
+  },
+  "hover": {
+    "tracked": 414,
+    "visible": 98,
+    "active": 1,
+    "speed": 42,
+    "pause": 1000,
+    "mode": "hover",
+    "reducedMotion": false,
+    "paused": false,
+    "pendingFrames": 1,
+    "pendingTimers": 0,
+    "cells": [
+      {
+        "field": "title",
+        "phase": "forward",
+        "distance": 610,
+        "offset": 45,
+        "text": "Fundamentals of Gas Phase Ion Chemistry. Keith R. Jennings, ed. NATO ASI Series, Kluwer Dordrecht, 1991, pp. 456, Dfl 220.00, £75.00, ISBN O‐7923‐1423‐9"
+      }
+    ],
+    "targetOffset": 45,
+    "otherMoving": 0
+  },
+  "leave": {
+    "tracked": 414,
+    "visible": 98,
+    "active": 0,
+    "speed": 42,
+    "pause": 1000,
+    "mode": "hover",
+    "reducedMotion": false,
+    "paused": false,
+    "pendingFrames": 0,
+    "pendingTimers": 0,
+    "cells": [],
+    "nonzero": 0
+  },
+  "syntheticHoverEvents": true
+}

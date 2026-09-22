@@ -1,5 +1,5 @@
 {
-  "version": "0.51.22",
+  "version": "0.52.0",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -2333,6 +2333,62 @@
       ],
       "status": "verified",
       "review": "패널: 메뉴나 ⌘K로 탭에 갈 때 패널이 든 선택을 잃지 않고, 여러 편이 선택되면 그중 하나를 고르게 하며, 읽기 탭은 읽은 기록을 먼저 보이고 리더 모양은 접어 두고, 주석 묶음은 논문 제목으로 부르고, 카드 자체를 눌러 고르고, 노트는 어느 문헌에 붙는지 말하고, 비교표 머리글은 필드 이름이다. 열: IF는 잘리지 않고 보이는 값으로 정렬되며, 상태 열은 우리말로 말하고 눌러서 바꾸며, 기관 열은 사람을 기관으로 보이지 않고, 인용 수·IF 숫자를 누르면 설명하는 탭이 열린다. 메뉴: 서재 전체에 걸리는 일곱 항목은 「라이브러리 정리」 아래로, 현재 상태·별점은 회색으로, 도구 메뉴에 설정 문이 생겼다. 설정: 먼저 할 것의 순서와 이유, AI 항목 설명, 읽기 시간 표기. 사전: 자리표시자 안의 문구를 추출기가 보게 되어 스물한 개가 드러났고, 조합 문구는 조각별로 번역한다."
+    },
+    {
+      "round": "R83",
+      "title": "패널 검색이 이름의 점, 줄표, 약어를 넘어 찾아낸다",
+      "gap": "Five read-only audits of the search paths found the panel's own boxes losing papers the user can see on the screen. One normaliser lowercased and nothing else, so \"Muller\" never reached Hans Müller and \"protein-protein\" never reached protein–protein. The JCR browser ships an empty abbreviation for all 22,643 journals, so \"Nat Commun\", \"J Biol Chem\" and \"PNAS\" found nothing or the wrong journal, a hyphenless ISSN found nothing, and a journal name typed on the group page listed nothing at all. The Notes picker sliced twelve papers out of library order, so the paper whose title was exactly the query was not among them; five other boxes matched the whole phrase instead of its words; a typed year matched nothing; and every keystroke on the Notes tab read the whole library's notes again.",
+      "entryPoint": "연구 작업 패널 검색 상자 · 노트 탭 · 저널 지표 → 공식 JCR 카테고리",
+      "sources": [
+        {
+          "file": "src/workspace.js",
+          "marker": "const norm=value=>text(value).normalize('NFKD')"
+        },
+        {
+          "file": "src/workspace.js",
+          "marker": "function matches(value,query){"
+        },
+        {
+          "file": "src/jcr-browser.js",
+          "marker": "const key=issnKey(query);"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "function scopeNotes(scope){"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "a search folds accents, fullwidth letters and every kind of dash"
+        },
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "Korean survives the fold and is still searchable syllable by syllable"
+        },
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "a typed year, item type or ISSN finds the paper"
+        },
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "an initial matches a given name rather than any letter in the record"
+        },
+        {
+          "file": "test/jcr-browser.test.mjs",
+          "name": "a journal in a category is found by its derived abbreviation and by an ISSN written either way"
+        },
+        {
+          "file": "test/jcr-browser.test.mjs",
+          "name": "typing a journal name on the group view lists the journal instead of nothing"
+        },
+        {
+          "file": "test/library.test.mjs",
+          "name": "the snapshot carries the ISSN so a journal number can be searched for"
+        }
+      ],
+      "status": "verified",
+      "review": "한 곳의 정규화로 발음구별부호·전각·모든 줄표를 접어 \"Muller\"가 Hans Müller를, \"protein-protein\"이 protein–protein을 찾고 한국어는 음절 그대로 검색된다. 노트·첨부·주석·컬렉션·저자 감시가 문장 통째 대신 단어 단위로 맞춰지고, 연도·자료형·ISSN이 검색 대상에 들어갔다. 노트 탭 논문 선택기는 제목이 정확히 일치하는 논문을 먼저 올리고, 입력마다 라이브러리 전체 노트를 다시 읽지 않는다. JCR 브라우저는 제목에서 만든 약어와 하이픈 없는 ISSN으로 저널을 찾고, 그룹 화면에서 저널 이름을 쳐도 해당 저널을 보여 준다."
     }
   ],
   "introducedInVersion": "0.6.0"

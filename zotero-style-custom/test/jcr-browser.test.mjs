@@ -269,3 +269,76 @@ test('a category name keeps its initialisms and joiners when made readable', () 
   assert.equal(link.textContent, 'Shared Category');
   f.browser.destroy();
 });
+
+/* The captured JCR rows carry no abbreviation of their own, so the browser
+   derives one from the plugin's journal identity table. Loading it here is
+   what the plugin does: both files are scripts on the same global. */
+import '../src/journal-identity.js';
+
+function realistic(){
+ const source={provider:'Clarivate',product:'JCR',url:'https://jcr.clarivate.com/jcr/browse-categories',
+  capturedAt:'2026-09-20T04:52:59.928Z',datasetUpdated:'2026-06-17',releaseYear:2026,metricYear:2025,
+  complete:{groups:true,categories:true,journals:false}};
+ return {schemaVersion:1,source,groups:[
+  {key:'Agricultural Sciences',name:'Agricultural Sciences',categoryCount:1,journalCount:1,citableItems:5,categoryKeys:['AGRICULTURE, MULTIDISCIPLINARY']},
+  {key:'Multidisciplinary',name:'Multidisciplinary',categoryCount:1,journalCount:3,citableItems:10,categoryKeys:['MULTIDISCIPLINARY SCIENCES']}
+ ],categories:[
+  {key:'AGRICULTURE, MULTIDISCIPLINARY',name:'AGRICULTURE, MULTIDISCIPLINARY',groupKeys:['Agricultural Sciences'],editions:['SCIE'],journalCount:1,citableItems:5,totalCitations:50,medianJIF:1},
+  {key:'MULTIDISCIPLINARY SCIENCES',name:'MULTIDISCIPLINARY SCIENCES',groupKeys:['Multidisciplinary'],editions:['SCIE'],journalCount:3,citableItems:10,totalCitations:100,medianJIF:3}
+ ],journals:[
+  {key:'natcommun',title:'Nature Communications',issns:['2041-1723'],categoryKeys:['MULTIDISCIPLINARY SCIENCES'],jif:18.1,year:2025},
+  {key:'pnas',title:'PROCEEDINGS OF THE NATIONAL ACADEMY OF SCIENCES OF THE UNITED STATES OF AMERICA',issns:['0027-8424','1091-6490'],categoryKeys:['MULTIDISCIPLINARY SCIENCES'],jif:9.4,year:2025},
+  {key:'pnasnexus',title:'PNAS Nexus',issns:['2752-6542'],categoryKeys:['MULTIDISCIPLINARY SCIENCES'],jif:30,year:2025},
+  {key:'agri',title:'Agricultural Journal',issns:[],categoryKeys:['AGRICULTURE, MULTIDISCIPLINARY'],jif:1,year:2025}
+ ]};
+}
+const journalKeys=host=>[...host.querySelectorAll('[data-journal-key]')].map(node=>node.dataset.journalKey);
+
+test('a journal in a category is found by its derived abbreviation and by an ISSN written either way',()=>{
+ const f=fixture({data:realistic(),initialState:{view:'journals',categoryKey:'MULTIDISCIPLINARY SCIENCES'}});
+ assert.deepEqual(journalKeys(f.host).length,3);
+ f.search('nat commun');assert.deepEqual(journalKeys(f.host),['natcommun'],'the abbreviation JCR never captured');
+ f.search('2041-1723');assert.deepEqual(journalKeys(f.host),['natcommun']);
+ f.search('20411723');assert.deepEqual(journalKeys(f.host),['natcommun'],'an ISSN typed without its hyphen');
+ f.search('Nature Communications');assert.deepEqual(journalKeys(f.host),['natcommun']);
+ f.browser.destroy();
+});
+
+test('an exact abbreviation outranks the journal that merely starts with the same letters',()=>{
+ const f=fixture({data:realistic(),initialState:{view:'journals',categoryKey:'MULTIDISCIPLINARY SCIENCES'}});
+ f.search('PNAS');
+ assert.deepEqual(journalKeys(f.host),['pnas','pnasnexus'],'PNAS itself comes before PNAS Nexus despite the lower JIF');
+ f.browser.destroy();
+});
+
+test('typing a journal name on the group view lists the journal instead of nothing',()=>{
+ const f=fixture({data:realistic()});
+ f.search('Nature Communications');
+ assert.equal(f.host.querySelectorAll('.sc-jcr-group').length,0,'no group is named that');
+ assert.deepEqual(journalKeys(f.host),['natcommun']);
+ assert.equal(f.host.querySelector('[data-found-by="journal-search"]').querySelector('.sc-jcr-abbreviation').textContent,'Nat Commun');
+ f.click(f.host.querySelector('[data-found-by="journal-search"] .sc-jcr-category-link'));
+ assert.equal(f.browser.state.view,'journals');
+ assert.equal(f.browser.state.categoryKey,'MULTIDISCIPLINARY SCIENCES','the journal opens the category it sits in');
+ f.browser.destroy();
+});
+
+test('the journal fallback on the category view hands the journal to the same search action',()=>{
+ const f=fixture({data:realistic(),initialState:{view:'categories'}});
+ f.search('2041-1723');
+ assert.equal(f.host.querySelectorAll('[data-category-key] td').length,0,'no category is named that');
+ const action=[...f.host.querySelectorAll('[data-found-by="journal-search"] button')].at(-1);
+ assert.equal(action.getAttribute('data-opens'),'window','a button that opens a window still says so');
+ f.click(action);
+ const call=f.calls.filter(c=>c[0]==='journal').at(-1);
+ assert.deepEqual(call.slice(1),['natcommun',{categoryKey:'MULTIDISCIPLINARY SCIENCES'}]);
+ f.browser.destroy();
+});
+
+test('a group found by its own name comes before one found through a member category',()=>{
+ const f=fixture({data:realistic()});
+ f.search('multidisciplinary');
+ assert.deepEqual([...f.host.querySelectorAll('.sc-jcr-group')].map(n=>n.dataset.groupKey),
+  ['Multidisciplinary','Agricultural Sciences'],'name before membership, though the alphabet says otherwise');
+ f.browser.destroy();
+});

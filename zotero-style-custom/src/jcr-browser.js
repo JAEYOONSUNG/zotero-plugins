@@ -6,6 +6,38 @@
  const HTML='http://www.w3.org/1999/xhtml';
  const DEFAULT_ORDER={groups:['name','asc'],categories:['journalCount','desc'],journals:['jif','desc']};
  let sequence=0;
+ /* What a row can be found by.
+
+    The captured JCR rows carry no abbreviation at all — the field is empty on
+    every one of the twenty-two thousand — so a reader typing "nat commun",
+    "J Biol Chem" or "PNAS" found nothing. The abbreviation is derived here
+    from the plugin's own journal identity table, the ISSNs go in with and
+    without their hyphen, and the whole thing is folded the way the panel's
+    other search boxes fold. Building it is not free at this size, so each row
+    keeps its index for as long as the catalog object lives. */
+ const DASHES=/[\u2010-\u2015\u2212]/g;
+ const fold=value=>String(value==null?'':value).normalize('NFKD').replace(/\p{M}+/gu,'').normalize('NFC').toLowerCase().replace(DASHES,'-');
+ const issnKey=value=>String(value==null?'':value).replace(/[^0-9xX]/g,'').toUpperCase();
+ const INDEX=new WeakMap();
+ function abbreviationsFor(row,identity){
+  const title=String(row.title||row.name||''),found=[];
+  if(row.abbreviation)found.push(String(row.abbreviation));
+  if(identity&&title){
+   try{const derived=identity.abbreviate&&identity.abbreviate(title);if(derived)found.push(String(derived));}catch(_){}
+   const table=identity.ABBREVIATIONS;
+   if(table)for(const key of [title,title.replace(/^The\s+/i,'')]){const value=table[key];if(value)found.push(String(value));}
+  }
+  return [...new Set(found)];
+ }
+ function indexFor(row,identity){
+  let entry=INDEX.get(row);
+  if(entry)return entry;
+  const issns=(row.issns||[]).map(String),abbreviations=abbreviationsFor(row,identity);
+  entry={name:fold(row.name||row.title||''),abbreviations:abbreviations.map(fold),issnKeys:issns.map(issnKey).filter(key=>key.length===8),
+   text:fold([row.name,row.title,...abbreviations,...issns,...issns.map(issn=>issn.replace(/-/g,'')),
+    ...(row.groupKeys||[]),...(row.categoryKeys||[])].filter(Boolean).join(' '))};
+  INDEX.set(row,entry);return entry;
+ }
  function mount(host,options={}){
   if(!host?.ownerDocument)throw new TypeError('JCR browser requires a DOM host');
   let catalog=options.catalog;
@@ -78,20 +110,81 @@
    message='';render();emit();
   }
   function openSource(){invoke(options.onOpenSource,catalog.source.url,{view:state.view,categoryKey:state.categoryKey});}
-  function textFor(row){return [row.name,row.title,row.abbreviation,...(row.issns||[]),...(row.groupKeys||[]),...(row.categoryKeys||[])].filter(Boolean).join(' ').toLocaleLowerCase();}
+  const identity=()=>options.identity||root.CustomStyleJournalIdentity||null;
+  function textFor(row){return indexFor(row,identity()).text;}
+  /* A query typed in full is an ISSN when what is left after dropping the
+     punctuation is the eight characters an ISSN has. */
+  function hits(row,query){
+   if(!query)return true;
+   if(textFor(row).includes(query))return true;
+   const key=issnKey(query);
+   return key.length===8&&indexFor(row,identity()).issnKeys.includes(key);
+  }
+  /* Searching "multidisciplinary" used to put Agricultural Sciences on top,
+     because the word sits in one of its member categories. A row found by its
+     own name comes before a row found only through what it contains. */
+  function tier(row,query){
+   if(!query)return 0;
+   const entry=indexFor(row,identity());
+   if(entry.name===query||entry.abbreviations.includes(query))return 0;
+   if(entry.name.includes(query))return 1;
+   const key=issnKey(query);
+   if(entry.abbreviations.some(value=>value.includes(query))||entry.issnKeys.some(value=>value.includes(key)&&key.length>=4))return 2;
+   return 3;
+  }
   function sorted(rows){
-   const query=state.query.trim().toLocaleLowerCase(),direction=state.sortDir==='desc'?-1:1;
-   return rows.filter(row=>!query||textFor(row).includes(query)).slice().sort((a,b)=>{
+   const query=fold(state.query.trim()),direction=state.sortDir==='desc'?-1:1;
+   const order=(a,b)=>{
     if(state.sortKey==='name')return direction*String(a.name||a.title||'').localeCompare(String(b.name||b.title||''));
     const x=a[state.sortKey],y=b[state.sortKey],knownX=typeof x==='number'&&Number.isFinite(x),knownY=typeof y==='number'&&Number.isFinite(y);
     if(knownX!==knownY)return knownX?-1:1;
     return (knownX?direction*(x-y):0)||String(a.name||a.title||'').localeCompare(String(b.name||b.title||''));
-   });
+   };
+   const found=rows.filter(row=>hits(row,query)).slice();
+   return query?found.sort((a,b)=>tier(a,query)-tier(b,query)||order(a,b)):found.sort(order);
+  }
+  /* A journal name typed on the groups or categories view used to find
+     nothing: those views hold groups and categories only. When they have
+     nothing to show, the catalog's journals answer instead, in the same table
+     the category view uses, so the journal is one press away. */
+  function journalMatches(){
+   const query=fold(state.query.trim());
+   if(!query)return [];
+   return catalog.journals.filter(row=>hits(row,query))
+    .sort((a,b)=>tier(a,query)-tier(b,query)||String(a.title||'').localeCompare(String(b.title||''))).slice(0,200);
+  }
+  function journalFallback(parent){
+   const found=journalMatches();
+   if(!found.length)return false;
+   el('p',`${t('검색에 맞는 저널')} ${found.length.toLocaleString()}`,parent,{class:'sc-jcr-coverage',role:'status'});
+   const headings=[['title','저널'],['categories','JCR 카테고리'],['issns','ISSN'],['jif','JIF'],['year','지표 연도']];
+   if(typeof options.onSearchJournal==='function')headings.push(['action','검색']);
+   const body=table(parent,headings,'검색된 저널 표');
+   for(const journal of found){
+    const row=el('tr',null,body,{'data-journal-key':journal.key,'data-found-by':'journal-search'});
+    const name=el('td',null,row);
+    el('span',journal.title,name,{class:'sc-jcr-journal-title'});
+    const abbreviation=journal.abbreviation||abbreviationsFor(journal,identity())[0]||'';
+    if(abbreviation)el('span',abbreviation,name,{class:'sc-jcr-abbreviation'});
+    const memberships=el('ul',null,el('td',null,row),{class:'sc-jcr-memberships'});
+    for(const key of journal.categoryKeys||[]){
+     const item=el('li',null,memberships);
+     const label=catalog.category(key)?.name||key;
+     if(catalog.category(key))button(displayName(label),item,()=>navigate('journals',key),{class:'sc-jcr-category-link','data-category-key':key,title:label});
+     else el('span',displayName(label),item);
+    }
+    el('td',journal.issns?.length?journal.issns.join(' · '):'—',row,{'data-column':'issns'});
+    el('td',metric(journal.jifDisplay??journal.jif),row,{'data-column':'jif',class:'sc-jcr-number'});
+    el('td',journal.year??'—',row,{'data-column':'year',class:'sc-jcr-number'});
+    if(typeof options.onSearchJournal==='function')
+     button(t(options.searchJournalLabel||'저널 검색'),el('td',null,row),()=>invoke(options.onSearchJournal,journal,{categoryKey:(journal.categoryKeys||[])[0]||null}),{'data-opens':'window'});
+   }
+   return true;
   }
   function controls(parent){
    const toolbar=el('div',null,parent,{class:'sc-jcr-controls'});
    const input=el('input',null,toolbar,{type:'search',class:'sc-jcr-search','data-focus-key':'search',
-    'aria-label':t(state.view==='journals'?'카테고리 안에서 저널 검색':'그룹·카테고리 검색'),placeholder:t(state.view==='journals'?'저널명·약어·ISSN 검색':'그룹·카테고리 이름 검색')});
+    'aria-label':t(state.view==='journals'?'카테고리 안에서 저널 검색':'그룹·카테고리·저널 검색'),placeholder:t(state.view==='journals'?'저널명·약어·ISSN 검색':'그룹·카테고리 이름 또는 저널명·약어·ISSN')});
    input.value=state.query;
    input.addEventListener('input',()=>{if(destroyed)return;state.query=input.value;state.page=0;render();emit();});
    const label=el('label',t('정렬'),toolbar,{class:'sc-jcr-sort-label',for:id+'-sort'});
@@ -121,7 +214,7 @@
    const rows=sorted(catalog.groups);
    const headings=el('div',null,parent,{class:'sc-jcr-group-head','aria-hidden':'true'});
    for(const heading of ['그룹','카테고리 수','저널 수','인용 가능 항목',''])el('span',t(heading),headings);
-   if(!rows.length){el('p',t('검색에 맞는 그룹이 없습니다.'),parent,{class:'sc-jcr-empty',role:'status'});return;}
+   if(!rows.length){if(journalFallback(parent))return;el('p',t('검색에 맞는 그룹이 없습니다.'),parent,{class:'sc-jcr-empty',role:'status'});return;}
    for(const group of rows){
     const section=el('section',null,parent,{class:'sc-jcr-group','data-group-key':group.key});
     const groupId=id+'-group-'+catalog.groups.indexOf(group),isOpen=state.expandedGroupKeys.has(group.key);
@@ -169,7 +262,9 @@
    return shown;
   }
   function categories(parent){
-   controls(parent);const rows=sorted(catalog.categories),shown=page(rows,parent);
+   controls(parent);const rows=sorted(catalog.categories);
+   if(!rows.length&&journalFallback(parent))return;
+   const shown=page(rows,parent);
    if(!rows.length){el('p',t('검색에 맞는 카테고리가 없습니다.'),parent,{class:'sc-jcr-empty'});return;}
    const body=table(parent,[['name','카테고리'],['groups','그룹'],['editions','색인'],['journalCount','저널 수'],
     ['citableItems','인용 가능 항목'],['totalCitations','총 인용'],['medianJIF','JIF 중앙값']],'JCR 카테고리 표');

@@ -97,7 +97,7 @@
       const byKey=new Map(items.map(i=>[i.key,String(i.id)]));
       for(let n=0;n<items.length;n++) {
         const item=items[n],creators=safe(()=>item.getCreators(),[]);
-        output.push({id:String(item.id),key:item.key,libraryID:item.libraryID,title:field(item,'title'),year:field(item,'date').match(/\b\d{4}\b/)?.[0]||'',authors:creators.map(c=>[c.firstName,c.lastName||c.name].filter(Boolean).join(' ')).join('; '),venue:field(item,'publicationTitle'),doi:field(item,'DOI'),url:field(item,'url'),tags:safe(()=>item.getTags(),[]).map(t=>t.tag),related:safe(()=>item.relatedItems,[]).map(k=>byKey.get(k)).filter(Boolean),itemType:safe(()=>Z.ItemTypes.getName(item.itemTypeID)),abstract:field(item,'abstractNote')});
+        output.push({id:String(item.id),key:item.key,libraryID:item.libraryID,title:field(item,'title'),year:field(item,'date').match(/\b\d{4}\b/)?.[0]||'',authors:creators.map(c=>[c.firstName,c.lastName||c.name].filter(Boolean).join(' ')).join('; '),venue:field(item,'publicationTitle'),doi:field(item,'DOI'),issn:field(item,'ISSN'),url:field(item,'url'),tags:safe(()=>item.getTags(),[]).map(t=>t.tag),related:safe(()=>item.relatedItems,[]).map(k=>byKey.get(k)).filter(Boolean),itemType:safe(()=>Z.ItemTypes.getName(item.itemTypeID)),abstract:field(item,'abstractNote')});
         if(n%100===99)await pause();
       }
       return output;

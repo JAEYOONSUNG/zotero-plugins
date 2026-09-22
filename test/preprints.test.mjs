@@ -176,7 +176,9 @@ test("a malformed archive response is discarded rather than thrown out of the se
 	const records = await S.search("preprint", { keywords: "phage defence", maxResults: 10 }, http, context);
 	assert.ok(records.some(r => r.sourceId === "PPR5"), "the archive that answered properly is kept");
 	assert.ok(records.every(r => r.title), "no untitled husk is offered as a result");
-	assert.deepEqual(context.errors, []);
+	// The archive that answered with something that is not a feed is named, because a
+	// broken response read as "no preprints" is indistinguishable from an honest zero.
+	assert.deepEqual(context.errors, ["arXiv: arXiv returned a response that is not an Atom feed"]);
 });
 
 test("cancelling a preprint search stops every archive, not just the slow one", async () => {

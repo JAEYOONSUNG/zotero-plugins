@@ -1,11 +1,11 @@
 {
   "name": "zotpop",
-  "version": "0.38.3",
+  "version": "0.39.0",
   "private": true,
   "description": "Publish or Perish-style literature search and import for Zotero",
   "scripts": {
     "test": "node --test --test-concurrency=1 test/*.test.mjs",
-    "test:offline": "node --test test/query.test.mjs test/benchmark-search.test.mjs test/pop-bridge.test.mjs test/pop-equivalence.test.mjs test/pop-fidelity.test.mjs test/import-types.test.mjs test/authors.test.mjs test/search-engine.test.mjs test/search-quality.test.mjs test/search-expansion.test.mjs test/preprints.test.mjs test/source-default.test.mjs test/brand-icons.test.mjs test/search-ui.test.mjs test/search-cancellation-ui.test.mjs test/preview.test.mjs test/marquee.test.mjs test/columns.test.mjs test/history.test.mjs test/affiliations.test.mjs test/institutions.test.mjs test/journal-marks.test.mjs test/jcr.test.mjs",
+    "test:offline": "node --test test/query.test.mjs test/benchmark-search.test.mjs test/pop-bridge.test.mjs test/pop-equivalence.test.mjs test/pop-fidelity.test.mjs test/import-types.test.mjs test/authors.test.mjs test/search-engine.test.mjs test/search-quality.test.mjs test/search-expansion.test.mjs test/search-identifiers.test.mjs test/preprints.test.mjs test/source-default.test.mjs test/brand-icons.test.mjs test/search-ui.test.mjs test/search-cancellation-ui.test.mjs test/preview.test.mjs test/marquee.test.mjs test/columns.test.mjs test/history.test.mjs test/affiliations.test.mjs test/institutions.test.mjs test/journal-marks.test.mjs test/jcr.test.mjs",
     "benchmark": "node scripts/benchmark-search.mjs --config benchmark/queries.json --out build/pop-parity/latest --dom-parser-module linkedom",
     "build": "sh scripts/build.sh",
     "install": "sh scripts/install.sh"

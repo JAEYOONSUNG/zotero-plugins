@@ -4,6 +4,7 @@
 pref("extensions.zotpop.language", "auto");
 pref("extensions.zotpop.email", "");
 pref("extensions.zotpop.s2ApiKey", "");
+pref("extensions.zotpop.ncbiApiKey", "");
 pref("extensions.zotpop.openAlexApiKey", "");
 pref("extensions.zotpop.popExecutable", "");
 pref("extensions.zotpop.popDataDir", "");

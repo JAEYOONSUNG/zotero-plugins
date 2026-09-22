@@ -1,0 +1,33 @@
+{
+  "source": "multi",
+  "query": {
+    "authors": "Sheila Ingemann",
+    "venue": "",
+    "title": "",
+    "keywords": "",
+    "yearFrom": null,
+    "yearTo": null,
+    "maxResults": 1000,
+    "sort": "relevance"
+  },
+  "savedAt": "2026-09-18T07:47:28.785Z",
+  "partial": false,
+  "count": 69,
+  "earliest": [
+    {
+      "title": "Statutes, Orders, and Official Statements Relating to Canadian War-Time Economic Controls",
+      "year": 1947,
+      "authors": [
+        {
+          "firstName": "Sheila I.",
+          "lastName": "Stewart",
+          "name": "Sheila I. Stewart"
+        }
+      ],
+      "source": "crossref",
+      "doi": "10.2307/137603",
+      "citations": 0,
+      "citationSource": "crossref"
+    }
+  ]
+}

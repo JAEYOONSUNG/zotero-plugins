@@ -1,0 +1,53 @@
+[
+  {
+    "term": "CRISPR[ti] AND Cas9[ti] AND assisted[ti] AND recombineering[ti] AND in[ti] AND Lactobacillus[ti] AND reuteri[ti]",
+    "status": 200,
+    "result": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "0",
+        "retmax": "0",
+        "retstart": "0",
+        "idlist": [],
+        "translationset": [],
+        "querytranslation": "CRISPR[ti] AND Cas9[ti] AND assisted[ti] AND recombineering[ti] AND in[ti] AND Lactobacillus[ti] AND reuteri[ti]",
+        "errorlist": {
+          "phrasesnotfound": [
+            "in"
+          ],
+          "fieldsnotfound": []
+        },
+        "warninglist": {
+          "phrasesignored": [],
+          "quotedphrasesnotfound": [],
+          "outputmessages": [
+            "No items found."
+          ]
+        }
+      }
+    }
+  },
+  {
+    "term": "CRISPR[ti] AND Cas9[ti] AND assisted[ti] AND recombineering[ti] AND Lactobacillus[ti] AND reuteri[ti]",
+    "status": 200,
+    "result": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "1",
+        "retmax": "1",
+        "retstart": "0",
+        "idlist": [
+          "25074379"
+        ],
+        "translationset": [],
+        "querytranslation": "\"CRISPR\"[Title] AND \"Cas9\"[Title] AND \"assisted\"[Title] AND \"recombineering\"[Title] AND \"Lactobacillus\"[Title] AND \"reuteri\"[Title]"
+      }
+    }
+  }
+]

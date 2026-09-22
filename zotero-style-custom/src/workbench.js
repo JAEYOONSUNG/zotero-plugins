@@ -297,8 +297,25 @@
   setIcon(button('',()=>openCommands(),headerActions,{'aria-keyshortcuts':'Meta+K Control+K','aria-label':'기능 찾기',title:'기능 찾기 · ⌘/Ctrl K',class:'sc-icon-button'}),'search');
   setIcon(button('',()=>toggle(false),headerActions,{'aria-label':'작업 패널 닫기',title:'닫기',class:'sc-icon-button sc-close'}),'close');
   const controls=node('div',null,panel,{class:'sc-controls sc-search-row'});
-  const search=node('input',null,controls,{type:'search',placeholder:'제목·저자·태그 검색','aria-label':'작업 패널 검색'});
-  search.addEventListener('input',()=>{state.query=search.value;render();});
+  const search=node('input',null,controls,{type:'search',placeholder:'제목·저자·태그·DOI·초록 검색','aria-label':'작업 패널 검색'});
+  /* Every keystroke used to redraw the tab, and on the Notes tab a redraw
+     reads the scope's notes back out of Zotero. A short wait costs nothing
+     to the eye and turns a burst of typing into one pass. */
+  let searchTimer=null;
+  function applySearch(){
+   if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}
+   if(disposed||state.query===search.value)return;
+   state.query=search.value;
+   return render();
+  }
+  const runSearch=()=>Promise.resolve(applySearch()).catch(error=>runtime.Z?.logError?.(error));
+  search.addEventListener('input',()=>{
+   if(searchTimer)win.clearTimeout(searchTimer);
+   searchTimer=win.setTimeout(()=>{searchTimer=null;runSearch();},150);
+  });
+  // Enter, and the box's own clear cross, take effect at once instead of waiting.
+  search.addEventListener('keydown',event=>{if(event.key==='Enter')runSearch();});
+  search.addEventListener('search',runSearch);
   const scope=node('select',null,controls,{'aria-label':'표시 범위'});node('option','라이브러리',scope,{value:'library'});node('option','선택한 문헌',scope,{value:'selected'});node('option','현재 컬렉션',scope,{value:'collection'});node('option','현재 컬렉션과 하위 컬렉션',scope,{value:'collection-recursive'});
   scope.addEventListener('change',()=>{state.scope=scope.value;state.annotationIDs.clear();run(load);});
   const type=node('select',null,null,{'aria-label':'문헌 유형 필터'});node('option','모든 유형',type,{value:''});
@@ -404,9 +421,27 @@
   const selected=()=>state.items.filter(i=>state.selected.has(String(i.id)));
   function bindAI(itemID){if(state.aiItemID!==itemID){aiEpoch++;state.aiItemID=itemID;state.aiTask=null;state.aiOutput=null;}}
   const scoped=()=>state.scope==='selected'?selected():state.scope.startsWith('collection')?state.items.filter(i=>(state.collectionIDs||[]).includes(String(i.id))):state.items;
-  const rows=()=>model.sortItems(model.filter(scoped(),{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo}),state.sort);
+  /* With a search typed and no explicit order chosen, the paper whose title
+     is what was typed comes first, then the ones that begin with it, then the
+     ones that merely contain it. Any other sort the user picked still wins. */
+  const rows=()=>{
+   const found=model.filter(scoped(),{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
+   return state.query&&state.sort==='library'?model.rankByQuery(found,state.query):model.sortItems(found,state.sort);
+  };
   const parentOptions=()=>({type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
   const ids=()=>Object.values(parentOptions()).some(Boolean)?model.filter(scoped(),parentOptions()).map(item=>String(item.id)):state.scope==='selected'?[...state.selected]:state.scope.startsWith('collection')?[...(state.collectionIDs||[])]:undefined;
+  /* Searching notes re-ran the whole library's note read on every keystroke.
+     The scope's notes only change when the library is reloaded or a note is
+     written, so they are read once per load and kept until then. */
+  let noteCache=null;
+  function scopeNotes(scope){
+   const key=scope===undefined?'*':[...scope].map(String).sort().join(',');
+   if(noteCache&&noteCache.token===loadEpoch&&noteCache.key===key)return noteCache.promise;
+   const promise=library.notes(scope);
+   noteCache={token:loadEpoch,key,promise};
+   promise.catch(()=>{if(noteCache&&noteCache.promise===promise)noteCache=null;});
+   return promise;
+  }
   function updateSelectionUI(){
    const nativeJCR=state.tab==='journals'&&state.journalBrowser!=='openalex';
    footer.hidden=nativeJCR||state.tab==='collections';
@@ -883,7 +918,9 @@
    const when=v=>typeof v==='number'?(Number.isFinite(v)?v:0):(Date.parse(v||'')||0);
    const activity=it=>Math.max(when(it.lastRead),when(it.dateModified),when(it.dateAdded));
    const list=rows();
-   const shown=(state.query?list:[...list].sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id)))).slice(0,12);
+   // Twelve of them fit. When a title was typed, the twelve are the closest
+   // matches, not the first twelve the library happens to hold.
+   const shown=(state.query?model.rankByQuery(list,state.query):[...list].sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id)))).slice(0,12);
    node('h3',state.query?(list.length>12?`검색 결과 ${list.length}편 중 12편`:`검색 결과 ${list.length}편`):'최근 문헌',body);
    if(shown.length){const b=bar();for(const it of shown)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
    else empty(state.query?'검색에 맞는 문헌이 없습니다. 검색어를 바꿔 보세요.':'이 범위에 문헌이 없습니다. 범위를 라이브러리로 바꾸세요.');
@@ -893,18 +930,18 @@
    if(target.length!==1){if(target.length>1){node('p',`선택한 ${target.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});const pickBar=bar();for(const it of target.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar,{'data-pick':String(it.id)});}else notePaperChooser();}
    else{
     const head=node('p',`${target[0].title}에 새 노트`,body,{class:'sc-muted'});button('다른 문헌 고르기',()=>{state.selected=new Set();render();},head,{class:'sc-inline'});
-    const draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar();const saveNote=button('새 노트 저장',async()=>{const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
+    const draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar();const saveNote=button('새 노트 저장',async()=>{const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);noteCache=null;finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
     if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions,{'data-opens':'window'});}
    }
    // The notes: the chosen paper's own when it sits in the scope and nothing
    // is being searched; otherwise the scope's, newest first, as a note search.
    const own=target.length===1&&!state.query&&scoped().some(i=>String(i.id)===String(target[0].id));
-   const notes=await library.notes(own?[String(target[0].id)]:ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>!state.query||(n.title+' '+n.text).toLowerCase().includes(state.query.toLowerCase())).sort((a,b)=>String(b.modified||'').localeCompare(String(a.modified||'')));const paperTitle=id=>state.items.find(i=>String(i.id)===String(id))?.title;
+   const notes=await scopeNotes(own?[String(target[0].id)]:ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>model.matches(n.title+' '+n.text,state.query)).sort((a,b)=>String(b.modified||'').localeCompare(String(a.modified||'')));const paperTitle=id=>state.items.find(i=>String(i.id)===String(id))?.title;
    const CAP=40;const listed=own?matching:matching.slice(0,CAP);
    node('h3',own?`이 문헌의 노트 ${matching.length}개`:state.query?`검색된 노트 ${matching.length}개`:(matching.length>CAP?`최근 노트 ${CAP}개 (전체 ${matching.length}개)`:`이 범위의 노트 ${matching.length}개`),body);
    for(const n of listed){const c=card(n.title,[paperTitle(n.parentID),String(n.modified||'').slice(0,10)].filter(Boolean).join(' · '));const text=node('p',n.text.length>1200?n.text.slice(0,1200)+'…':n.text,c,{class:'sc-note-text'});if(n.text.length>1200)button('전체 내용 보기',()=>{text.textContent=n.text;},c);if(!own&&n.parentID&&paperTitle(n.parentID))button('이 문헌에 노트 쓰기',()=>{state.selected=new Set([String(n.parentID)]);state.query=search.value='';render();},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
     // The list had no way to let a note go. Trash, not delete: Zotero's trash keeps it.
-    button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':own?'이 문헌에는 아직 노트가 없습니다. 위에 첫 노트를 쓰세요.':'이 범위에 노트가 없습니다. 위에서 문헌을 골라 첫 노트를 쓰세요.');}
+    button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);noteCache=null;await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':own?'이 문헌에는 아직 노트가 없습니다. 위에 첫 노트를 쓰세요.':'이 범위에 노트가 없습니다. 위에서 문헌을 골라 첫 노트를 쓰세요.');}
   /* Reading back through what you marked up.
 
      The list was a stack of boxed cards, each with a four-pixel colour bar down
@@ -943,7 +980,7 @@
    button('선택 주석을 노트로',async()=>{
     const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
     if(!chosen.length)throw new Error('현재 범위의 주석을 선택하세요.');
-    const id=await library.noteFromAnnotations(chosen);
+    const id=await library.noteFromAnnotations(chosen);noteCache=null;
     await library.openItem(id);message('출처 링크가 포함된 노트를 만들었습니다.');
    },selectionTools,{'data-opens':'window'});
    button('선택 주석 병합',async()=>{
@@ -960,7 +997,7 @@
    const filtered=list.filter(a=>
     (!setting('annotationIgnoreFigures',false)||!/^(?:figure|fig\.?|table|그림|표)\s*\d/i.test((a.text||'').trim()))
     &&(!state.color||a.color.toLowerCase()===state.color.toLowerCase())
-    &&(!state.query||(a.text+' '+a.comment).toLowerCase().includes(state.query.toLowerCase())));
+    &&model.matches(a.text+' '+a.comment,state.query));
    state.annotationIDs=new Set([...state.annotationIDs].filter(id=>filtered.some(a=>a.id===id)));
 
    if(!filtered.length){
@@ -1236,7 +1273,7 @@
    await drawFindings(token);
    if(token!==epoch||disposed)return;
    if(list.length)node('h3',`선택한 문헌의 첨부파일 · ${list.length}`,body,{class:'sc-hit-group'});
-   const matching=list.filter(a=>!state.query||(a.title+' '+a.contentType).toLowerCase().includes(state.query.toLowerCase()));
+   const matching=list.filter(a=>model.matches(a.title+' '+a.contentType,state.query));
    const kindWord=type=>({'application/pdf':'PDF','application/epub+zip':'EPUB','application/epub':'EPUB','text/html':T('스냅샷')})[type]||(type?String(type).split('/')[0]:'');
    for(const a of matching){const c=card(a.title,kindWord(a.contentType));button('열기',()=>library.openItem(a.id),c,{'data-opens':'window'});
     const supported=['application/pdf','application/epub+zip','application/epub','text/html'].includes(a.contentType)||/^(image|audio|video)\//.test(a.contentType||'');
@@ -1446,7 +1483,7 @@
    output.hidden=!have;if(have)output.value=state.compareOutput;
    const actions=bar(section);actions.classList.add('sc-compare-actions');actions.hidden=!have;
    button('결과 복사',()=>copy(output.value),actions);
-   button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 「비교 분석」을 눌러 결과를 받으세요.');await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
+   button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 「비교 분석」을 눌러 결과를 받으세요.');noteCache=null;await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
   }
   /* Collections as a tree, each with a bar for how much it holds. A list of
      boxed cards, one per collection with a button and a checkbox, said no
@@ -1466,11 +1503,11 @@
    function draw(){
     list.replaceChildren();
     const favorites=runtime.cache.favoriteCollections||[];
-    const q=find.value.trim().toLowerCase();
+    const q=find.value.trim();
     const byParent=new Map();
     for(const c of collections){const key=c.parentID||'';if(!byParent.has(key))byParent.set(key,[]);byParent.get(key).push(c);}
     const order=(x,y)=>!enabled('sortCollectionItem')?0:sort.value==='count'?y.count-x.count:sort.value==='favorite'?Number(favorites.includes(y.id))-Number(favorites.includes(x.id))||x.name.localeCompare(y.name):x.name.localeCompare(y.name);
-    const matches=c=>!q||c.name.toLowerCase().includes(q);
+    const matches=c=>model.matches(c.name,q);
     const subtree=c=>[c,...(byParent.get(c.id)||[]).flatMap(subtree)];
     let drawn=0;
     const walk=(parent,depth)=>{
@@ -1808,10 +1845,10 @@
     redraw();
    }
    function drawWatchTable(watched,host,count){
-    const q=String(state.watchQuery||'').toLowerCase();
+    const q=String(state.watchQuery||'');
     const sort=state.watchSort||'news';
     const order={news:(a,b)=>((b.news?.length||0)+(b.newPatents?.length||0))-((a.news?.length||0)+(a.newPatents?.length||0))||a.name.localeCompare(b.name),name:(a,b)=>a.name.localeCompare(b.name),place:(a,b)=>String(a.institution||'').localeCompare(String(b.institution||''))||a.name.localeCompare(b.name),checked:(a,b)=>String(a.sweptAt||'').localeCompare(String(b.sweptAt||''))||a.name.localeCompare(b.name),added:(a,b)=>String(b.checkedAt||'').localeCompare(String(a.checkedAt||''))}[sort];
-    const shown=watched.filter(p=>!q||`${p.name} ${p.institution||''} ${p.institutionGiven||''}`.toLowerCase().includes(q)).sort(order);
+    const shown=watched.filter(p=>model.matches(`${p.name} ${p.institution||''} ${p.institutionGiven||''}`,q)).sort(order);
     count.textContent=`${shown.length}/${watched.length}`+T('명');
     const table=node('table',null,host,{class:'sc-watch-table'});
     const thead=node('thead',null,table);const head=node('tr',null,thead);
@@ -2190,10 +2227,16 @@
    const listArea=node('div',null,body,{class:'sc-journal-list'});
    journalView.redraw=()=>{
    listArea.replaceChildren();
-   const q=String(journalView.query||'').trim().toLowerCase();
+   /* "Nat. Commun." and "2041-1723" are how a reader writes a journal down,
+      so the dots come out of both sides and the ISSNs go in, with and
+      without their hyphen. */
+   const plainQuery=text=>model.norm(text).replace(/\./g,'').trim();
+   const q=plainQuery(journalView.query||'');
    const found=j=>{
     if(!q)return true;
-    if(j.haystack===undefined)j.haystack=[j.venue,j.abbreviation,j.publisher,...j.levels.flatMap(l=>[l.domain,l.field,l.subfield])].map(v=>String(v||'').toLowerCase()).join('\u0000');
+    if(j.haystack===undefined)j.haystack=plainQuery([j.venue,j.abbreviation,j.publisher,...(j.issns||[]),
+     ...(j.issns||[]).map(issn=>String(issn).replace(/-/g,'')),...j.levels.flatMap(l=>[l.domain,l.field,l.subfield])]
+     .filter(Boolean).join('\u0000'));
     return j.haystack.includes(q);
    };
    const shownAll=all.filter(j=>matches(j)&&found(j)).sort(order);
@@ -2388,12 +2431,12 @@
    // panel must write it, not discard it.
    for(const flush of memoFields)Promise.resolve(flush()).catch(error=>runtime.Z.logError?.(error));
    memoFields=[];
-   disposed=true;win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
+   disposed=true;win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
   const accent=runtime.pref('accentColor','#374151');if(/^#[a-f\d]{6}$/i.test(accent)&&!['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=Math.max(11,Math.min(20,Number(runtime.pref('panelFontSize',13))||13))+'px';
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};
-  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
+  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

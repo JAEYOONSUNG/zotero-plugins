@@ -158,3 +158,11 @@ test("only valid author profile cards allow history without publication rows and
 	}
 	assert.equal(await history.save({ source: "orcid", query: { ...query, mode: "papers" }, records: [] }), null);
 });
+
+test("the menu tells two combined searches over different sources apart", () => {
+	const base = { keywords: "geobacillus" };
+	assert.equal(History.describe(base), "geobacillus");
+	assert.equal(History.describe({ ...base, sources: ["openalex", "crossref"] }), "geobacillus · openalex+crossref");
+	assert.notEqual(History.describe({ ...base, sources: ["openalex", "crossref"] }),
+		History.describe({ ...base, sources: ["openalex", "crossref", "pubmed"] }));
+});

@@ -1,0 +1,9 @@
+{
+  "gitHead": "d47dc7fde2eae18085561dfa7ee4f290581b137e",
+  "sourceHashes": {
+    "content/query.js": "d6c9496723f760b6b7b45a546209d6f5c5f3510f8b19a31d4f01cc8f2f710ce4",
+    "content/sources.js": "ded35c7e181249d07db555fb9f8af712409b244362a64f365658c2b880c2dd19",
+    "scripts/benchmark-search.mjs": "9b6ee46c2562f9221ebd6cdd88eca441c77c07ae4d2899e0cc766318a0ed985a",
+    "scripts/lib/pop-reference.mjs": "c85c5b951132689b92b0104e4e263947c5c8c509d5942352e1e81e6dee1e3f66"
+  }
+}

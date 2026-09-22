@@ -77,6 +77,9 @@ var ZotPoPHistory = (function () {
 		if (query.authors) bits.push(String(query.authors).trim());
 		if (query.venue) bits.push(String(query.venue).trim());
 		if (query.yearFrom || query.yearTo) bits.push([query.yearFrom || "", query.yearTo || ""].join("–"));
+		// Two combined searches over different sources are different searches, and the
+		// menu showed both as the same words.
+		if (Array.isArray(query.sources) && query.sources.length) bits.push(query.sources.join("+"));
 		return bits.join(" · ");
 	}
 

@@ -884,3 +884,34 @@ test("the keyboard reaches what the mouse reaches: copy, deselect, jump to eithe
 	assert.equal(ui.copied.at(-1), "10.1/first", "⇧⌘C copies the DOI");
 	assert.match(ui.get("status").textContent, /copiedDoi|DOI/);
 });
+
+test("a result limit that is not a whole number reaches the validator instead of becoming 200", async () => {
+	// The engine refuses "Result limit must be an integer from 1 to 2000"; it never saw
+	// the mistake, because the box turned 0 and "twenty" into a silent 200.
+	for (const [typed, expected] of [["0", 0], ["twenty", "twenty"], ["-4", -4], ["", 200], ["50", 50]]) {
+		let asked;
+		const ui = uiHarness({ search: async (_source, query) => { asked = query; return []; } });
+		ui.get("maxResults").value = typed;
+		ui.get("keywords").value = "geobacillus";
+		await ui.runSearch();
+		assert.deepEqual(asked.maxResults, expected, `"${typed}" is passed on as typed`);
+	}
+	await assert.rejects(() => Sources.search("openalex", { keywords: "x", maxResults: "twenty" }, { getJSON: async () => ({}) }, {}),
+		/Result limit must be an integer/);
+});
+
+test("an empty table after a search that ran says so, and says when a source failed", async () => {
+	const ui = uiHarness({ search: async () => [] });
+	ui.render();
+	assert.match(String(ui.get("empty").textContent), /emptyInitial/, "before any search");
+	ui.get("keywords").value = "geobacillus";
+	await ui.runSearch();
+	assert.match(String(ui.get("empty").textContent), /emptyAfterSearch/, "after a search that ran");
+
+	// Sources.search is what normally creates ctx.errors, and it is mocked out here.
+	const failed = uiHarness({ search: async (_source, _query, _http, context) => { context.errors = ["OpenAlex: HTTP 429"]; return []; } });
+	failed.get("keywords").value = "geobacillus";
+	await failed.runSearch();
+	assert.match(String(failed.get("empty").textContent), /emptyAfterPartial/,
+		"nothing found plus a failed source is not the same as no such paper");
+});

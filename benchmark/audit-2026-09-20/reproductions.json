@@ -1,0 +1,89 @@
+{
+  "authorFalsePositive": true,
+  "combinedCap": {
+    "requested": 1000,
+    "returned": 800,
+    "backendCaps": {
+      "openalex": 200,
+      "crossref": 200,
+      "europepmc": 200,
+      "arxiv": 200
+    }
+  },
+  "titleQueries": {
+    "epmc": "TITLE:\"cancer OR genome\"",
+    "pubmedNegation": "cancer[ti]",
+    "pubmedTitle": "CRISPR[ti] AND Cas9[ti] AND assisted[ti] AND recombineering[ti] AND in[ti] AND Lactobacillus[ti] AND reuteri[ti]"
+  },
+  "signedTitleDedupe": {
+    "input": [
+      "Bacterial growth at +10 C",
+      "Bacterial growth at -10 C"
+    ],
+    "output": [
+      "Bacterial growth at +10 C"
+    ]
+  },
+  "unrelatedVersions": [
+    {
+      "title": "Introduction",
+      "year": 2024,
+      "publishedAs": {
+        "doi": "10.9999/unrelated",
+        "venue": "Nature",
+        "year": 1947
+      }
+    },
+    {
+      "title": "Introduction",
+      "year": 1947,
+      "preprintOf": {
+        "doi": "10.9999/preprint",
+        "venue": null
+      }
+    }
+  ],
+  "citationProvenance": {
+    "citations": 42,
+    "citationSource": null
+  },
+  "credentialRouting": [
+    {
+      "host": "api.openalex.org",
+      "receivesOpenAlexKey": true
+    },
+    {
+      "host": "api.crossref.org",
+      "receivesOpenAlexKey": true
+    },
+    {
+      "host": "api.semanticscholar.org",
+      "receivesOpenAlexKey": false
+    }
+  ],
+  "scorer": {
+    "reversed": {
+      "status": "pass",
+      "topRecall": 1,
+      "fullRecall": 1
+    },
+    "nineOnly": {
+      "status": "pass",
+      "topRecall": 0.9,
+      "fullRecall": 0.3
+    },
+    "wrongMetadata": {
+      "status": "pass",
+      "topRecall": 1,
+      "fullRecall": 1
+    },
+    "inequalityTitleMatched": 1
+  },
+  "historical": {
+    "date": "2026-09-12T21:11:12.689Z",
+    "cases": 12,
+    "records": 302,
+    "judged": 0,
+    "topMatches": 102
+  }
+}

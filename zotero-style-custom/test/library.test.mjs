@@ -226,3 +226,12 @@ test('R15 rollback preserves edits made to the survivor while an extra save fail
 test('R15 reader change after survivor save rolls back before deleting the other annotation',async()=>{
  const f=mergeFixture();let active=true;f.annotation.save=async()=>{active=false;};await assert.rejects(f.service.mergeAnnotations([3,5],{isCurrent:()=>active}),/changed/);assert.equal(f.annotation.annotationText,'First paragraph');assert.equal(f.second.deleted,undefined);
 });
+
+test('the snapshot carries the ISSN so a journal number can be searched for',async()=>{
+ const f=fixture();f.parent.fields.ISSN='2041-1723';
+ const rows=await f.service.snapshot(1);
+ assert.equal(rows[0].issn,'2041-1723');
+ const bare=f.add('journalArticle',8);
+ const all=await f.service.snapshot(1);
+ assert.equal(all.find(r=>r.id===String(bare.id)).issn,'','an item with no ISSN gets an empty string, never undefined');
+});

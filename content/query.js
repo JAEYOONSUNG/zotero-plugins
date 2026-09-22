@@ -16,6 +16,21 @@ var ZotPoPQuery = (function () {
 		sci: ["science", "sciences", "scientific"], soc: ["society"], stat: ["statistics", "statistical"],
 		technol: ["technology", "technological"], trans: ["transactions"], tr: ["transactions"]
 	};
+	const GREEK_LETTERS = {
+		"\u03b1": "alpha", "\u03b2": "beta", "\u03b3": "gamma", "\u03b4": "delta", "\u03b5": "epsilon", "\u03b6": "zeta",
+		"\u03b7": "eta", "\u03b8": "theta", "\u03b9": "iota", "\u03ba": "kappa", "\u03bb": "lambda", "\u03bc": "mu",
+		"\u03bd": "nu", "\u03be": "xi", "\u03bf": "omicron", "\u03c0": "pi", "\u03c1": "rho", "\u03c2": "sigma",
+		"\u03c3": "sigma", "\u03c4": "tau", "\u03c5": "upsilon", "\u03c6": "phi", "\u03c7": "chi", "\u03c8": "psi", "\u03c9": "omega"
+	};
+	const TRANSLITERATIONS = {
+		"\u00f8": "o", "\u00d8": "O", "\u0142": "l", "\u0141": "L", "\u0111": "d", "\u0110": "D",
+		"\u00df": "ss", "\u00e6": "ae", "\u00c6": "Ae", "\u0153": "oe", "\u0152": "Oe"
+	};
+	const ENTITIES = {
+		amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "\u2013", mdash: "\u2014", minus: "\u2212",
+		rsquo: "\u2019", lsquo: "\u2018", rdquo: "\u201d", ldquo: "\u201c", alpha: "\u03b1", beta: "\u03b2",
+		gamma: "\u03b3", delta: "\u03b4", kappa: "\u03ba", micro: "\u00b5", deg: "\u00b0"
+	};
 	const GENERIC_TITLE = /^(?:editorial|introduction|conclusions?|discussion|summary|abstract|acknowledg(?:e)?ments?|preface|foreword|correction|erratum|retraction|commentary|book review|letter to the editor)$/;
 
 	function clean(value) {
@@ -24,7 +39,7 @@ var ZotPoPQuery = (function () {
 				let n = /^x/i.test(code) ? parseInt(code.slice(1), 16) : parseInt(code, 10);
 				return n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : whole;
 			})
-			.replace(/&(amp|lt|gt|quot|apos|nbsp|ndash|mdash|minus);/gi, (_, entity) => ({ amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "–", mdash: "—", minus: "−" })[entity.toLowerCase()]);
+			.replace(new RegExp("&(" + Object.keys(ENTITIES).join("|") + ");", "gi"), (_, entity) => ENTITIES[entity.toLowerCase()]);
 		// Strip paired markup, not arbitrary angle brackets that may be inequalities.
 		for (let i = 0; i < 8; i++) {
 			let unwrapped = text.replace(/<([a-z][\w:-]*)(?:\s[^<>]*?)?>([\s\S]*?)<\/\1\s*>/gi, "$2");
@@ -34,6 +49,14 @@ var ZotPoPQuery = (function () {
 		return text.replace(/<br\s*\/?>/gi, " ").normalize("NFKD")
 			// Fold Latin accents without erasing mathematical negation overlays or CJK marks.
 			.replace(/(\p{Script=Latin})(\p{M}+)/gu, (_, letter, marks) => letter + marks.replace(/[\u0300-\u0314\u031b\u0323-\u0328\u032d-\u0331]/g, ""))
+			// Greek letters are written out as often as they are typed, and journals
+			// transliterate the letters no accent rule can reach (Muller, Orsted, Strasse).
+			.replace(/([\u0391-\u03a9\u03b1-\u03c9])[\u0300-\u036f]*/g, (whole, letter) => {
+				let name = GREEK_LETTERS[letter.toLowerCase()];
+				if (!name) return whole;
+				return letter === letter.toLowerCase() ? name : name[0].toUpperCase() + name.slice(1);
+			})
+			.replace(/[\u00f8\u00d8\u0142\u0141\u0111\u0110\u00df\u00e6\u00c6\u0153\u0152]/g, letter => TRANSLITERATIONS[letter])
 			.normalize("NFC").replace(/\u00ad/g, "");
 	}
 
@@ -48,9 +71,10 @@ var ZotPoPQuery = (function () {
 		let raw = String(value ?? "").trim();
 		let openalex = raw.match(/^(?:(?:https?:\/\/(?:api\.)?openalex\.org\/)?(?:authors\/)?)?(A[1-9]\d*)\/?$/i);
 		if (openalex) return { type: "openalex", id: openalex[1].toUpperCase() };
-		let orcid = raw.match(/^(?:https?:\/\/orcid\.org\/|orcid:\s*)?(\d{4}-\d{4}-\d{4}-\d{3}[\dX]|\d{15}[\dX])\/?$/i);
+		// ORCID is printed with hyphens, pasted with spaces and linked without a scheme.
+		let orcid = raw.match(/^(?:(?:https?:\/\/)?orcid\.org\/|orcid:\s*)?(\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{3}[\dX])\/?$/i);
 		if (!orcid) return null;
-		let digits = orcid[1].replace(/-/g, "").toUpperCase(), total = 0;
+		let digits = orcid[1].replace(/[\s-]/g, "").toUpperCase(), total = 0;
 		// ISO 7064 MOD 11-2, as specified by ORCID's identifier structure documentation.
 		for (let i = 0; i < 15; i++) total = (total + Number(digits[i])) * 2;
 		let checksum = (12 - total % 11) % 11;
@@ -59,13 +83,22 @@ var ZotPoPQuery = (function () {
 	}
 
 	function authorIdentifierLike(value) {
-		return /^(?:https?:\/\/|(?:authors\/)?[A-Za-z]\d|orcid:|\d{4}-?\d{4}-?\d{4}-?\d)/i.test(String(value).trim());
+		return /^(?:https?:\/\/|orcid\.org\/|(?:authors\/)?[A-Za-z]\d|orcid:|\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d)/i.test(String(value).trim());
 	}
 
 	// Names and venue names are whole atoms; title words are separate atoms.
 	// Operators inside quotes remain literal. Malformed expressions fail closed.
 	function expressionTokens(value, wholeAtoms, ignoreOperatorCase) {
-		let pieces = String(value).match(/"(?:\\.|[^"\\])*"|[();]|[^\s();"]+|"[^\"]*$/g) || [];
+		// Word processors and browsers hand back curly quotes; they still mean a phrase.
+		let text = String(value).replace(/[\u201c\u201d\u201e]/g, '"').replace(/[\u2018\u2019]/g, "'");
+		// A pasted all-caps title is text, not Boolean logic: "WHY NOT TO USE ANTIBIOTICS".
+		// Only a run of four plain words reads as prose; a short or punctuated expression
+		// is still an expression. Author and venue atoms keep the case "LIU DR" needs.
+		if (!wholeAtoms && text === text.toUpperCase() && /\p{Lu}/u.test(text) && !/["()]/.test(text)
+			&& text.split(/[\s;]+/).filter(piece => piece && !["AND", "OR", "NOT", "ANDNOT"].includes(piece)).length >= 4) {
+			text = text.toLowerCase();
+		}
+		let pieces = text.match(/"(?:\\.|[^"\\])*"|[();]|[^\s();"]+|"[^\"]*$/g) || [];
 		let tokens = [], pending = [];
 		let flush = () => { if (pending.length) tokens.push({ kind: "term", value: pending.join(" ") }); pending = []; };
 		for (let piece of pieces) {
@@ -227,23 +260,46 @@ var ZotPoPQuery = (function () {
 	}
 
 	function nameTokens(value) { return clean(value).replace(/['’ʼ]/g, "").match(/[\p{L}\p{M}]+/gu) || []; }
+	// A hyphen binds a written name together: "Newton-John" is one surname and
+	// "J-Y" one pair of initials, even though each half is a word of its own.
+	function compoundTokens(value) {
+		return clean(value).replace(/['’ʼ]/g, "").match(/[\p{L}\p{M}]+(?:-[\p{L}\p{M}]+)*/gu) || [];
+	}
+	const NAME_SUFFIX = /^(?:jr|sr|ii|iii|iv)\.?$/i;
+	// "Smith Jr" and "Smith III" are Smith; a generational suffix is never the surname.
+	function withoutSuffixes(tokens) {
+		let kept = tokens.filter(token => !NAME_SUFFIX.test(token));
+		return kept.length ? kept : tokens;
+	}
+	function droppedSuffixes(value) {
+		let tokens = String(value).split(/\s+/).filter(Boolean);
+		let kept = withoutSuffixes(tokens);
+		return kept.length === tokens.length ? String(value) : kept.join(" ");
+	}
 	function compactInitials(value) { return /^[A-Z]{2,3}$/.test(value); }
 	function initialToken(value) { return value.length === 1 || compactInitials(value); }
 
 	function nameParts(author) {
 		if (author && typeof author === "object" && present(author.lastName)) {
-			return { family: String(author.lastName), given: String(author.firstName || "") };
+			return { family: droppedSuffixes(author.lastName), given: String(author.firstName || "") };
 		}
 		let raw = typeof author === "string" ? author : author?.name || "";
 		if (raw.includes(",")) {
 			let [family, ...given] = raw.split(",");
-			return { family, given: given.join(" ") };
+			return { family: droppedSuffixes(family), given: droppedSuffixes(given.join(" ")) };
 		}
-		let parts = nameTokens(raw);
-		if (parts.length < 2) return { family: raw, given: "" };
+		let tokens = compoundTokens(raw);
+		let parts = withoutSuffixes(tokens);
+		if (parts.length < 2) return { family: parts.length === tokens.length ? raw : parts.join(" "), given: "" };
 		let end = parts.length;
-		while (end > 0 && initialToken(parts[end - 1])) end--;
+		while (end > 0 && initialToken(parts[end - 1].replace(/-/g, ""))) end--;
 		if (end > 0 && end < parts.length) return { family: parts.slice(0, end).join(" "), given: parts.slice(end).join(" ") };
+		// An all-caps byline ("LIU DR") hides which token is the surname, because every
+		// token reads as initials. The longest token is the name; the rest are initials.
+		if (end === 0) {
+			let chosen = parts.reduce((best, part, i) => part.length > parts[best].length ? i : best, 0);
+			return { family: parts[chosen], given: parts.filter((_, i) => i !== chosen).join(" ") };
+		}
 		let start = parts.length - 1;
 		while (start > 0 && PARTICLES.has(parts[start - 1].toLowerCase())) start--;
 		return { family: parts.slice(start).join(" "), given: parts.slice(0, start).join(" ") };
@@ -261,6 +317,9 @@ var ZotPoPQuery = (function () {
 		if (!present(candidate)) return false;
 		for (let a of givenForms(query)) for (let b of givenForms(candidate)) {
 			if (!a.length || !b.length) continue;
+			// Korean and Chinese given names are written joined as often as apart:
+			// "Jae Yoon" and "Jaeyoon", "Xiao-Ming" and "Xiaoming", are one person.
+			if (a.join("") === b.join("")) return true;
 			// A query may omit middle names; explicitly requested initials need evidence.
 			if (a.length > b.length) continue;
 			if (a.every((part, i) => part === b[i]
@@ -297,6 +356,16 @@ var ZotPoPQuery = (function () {
 		return false;
 	}
 
+	// Journals transliterate the same surname both ways: Mueller is Muller, Boehm is Bohm.
+	// Only a fold that leaves a real surname behind counts, so "Bae" is not "Ba".
+	function transliteratedFamily(value) {
+		let folded = value.replace(/([aou])e/g, "$1");
+		return folded.length >= 4 ? folded : value;
+	}
+	function sameFamily(typed, wanted) {
+		return typed === wanted || transliteratedFamily(typed) === transliteratedFamily(wanted);
+	}
+
 	function authorMatches(query, author) {
 		let { family, given } = nameParts(author);
 		// CJK names are commonly written without a space between family and given name.
@@ -308,14 +377,17 @@ var ZotPoPQuery = (function () {
 		let withoutParticles = [...families[0]];
 		while (withoutParticles.length > 1 && PARTICLES.has(withoutParticles[0])) withoutParticles.shift();
 		families.push(withoutParticles);
-		let terms = nameTokens(query);
+		// A compound surname is searched by either half: "Garcia Marquez" answers to
+		// "Garcia" and to "Marquez", and "Newton-John" to "Newton".
+		if (withoutParticles.length > 1) families.push(...withoutParticles.filter(word => !PARTICLES.has(word)).map(word => [word]));
+		let terms = withoutSuffixes(nameTokens(query));
 		for (let familyWords of families) {
 			let wanted = familyWords.join("");
 			if (!wanted) continue;
 			for (let length = 1; length <= terms.length; length++) {
-				if (terms.slice(0, length).join("").toLowerCase() === wanted
+				if (sameFamily(terms.slice(0, length).join("").toLowerCase(), wanted)
 					&& givenMatches(terms.slice(length).join(" "), given)) return true;
-				if (terms.slice(-length).join("").toLowerCase() === wanted
+				if (sameFamily(terms.slice(-length).join("").toLowerCase(), wanted)
 					&& givenMatches(terms.slice(0, -length).join(" "), given)) return true;
 			}
 		}
@@ -338,14 +410,35 @@ var ZotPoPQuery = (function () {
 		}, true, true);
 	}
 
+	// A letter/digit boundary is a word boundary in a title, so IL6 reads as IL-6.
+	function titleWords(value) {
+		return words(value).flatMap(word => word.match(/[\p{L}\p{M}]+|\p{N}+/gu) || []);
+	}
+
+	// Plurals and possessives are the same word: "Alzheimer" finds "Alzheimer's",
+	// "genome" finds "genomes". Three letters is too short to be a stem.
+	function titleStem(word) { return word.length > 3 && word.endsWith("s") ? word.slice(0, -1) : word; }
+
+	// A trailing asterisk is truncation, the way PubMed and Scopus write it.
+	function titleNeedles(term) {
+		let pieces = clean(term).replace(/['’ʼ]/g, "").toLowerCase().match(/[\p{L}\p{M}\p{N}]+\*?/gu) || [];
+		return pieces.flatMap(piece => {
+			let truncated = piece.endsWith("*");
+			let parts = (truncated ? piece.slice(0, -1) : piece).match(/[\p{L}\p{M}]+|\p{N}+/gu) || [];
+			return parts.map((word, i) => ({ word, stem: titleStem(word), prefix: truncated && i === parts.length - 1 }));
+		});
+	}
+
 	function matchesTitle(query, title) {
-		let haystack = words(title), set = new Set(haystack);
+		let haystack = titleWords(title), stems = haystack.map(titleStem);
 		if (present(query) && !haystack.length) return false;
+		let hit = (needle, i) => i < haystack.length
+			&& (needle.prefix ? haystack[i].startsWith(needle.word) : stems[i] === needle.stem);
 		return evaluate(query, (term, phrase) => {
-			let needles = words(term);
+			let needles = titleNeedles(term);
 			if (!needles.length) return false;
-			if (!phrase) return needles.every(word => set.has(word));
-			return haystack.some((_, start) => needles.every((word, i) => haystack[start + i] === word));
+			if (!phrase) return needles.every(needle => haystack.some((_, i) => hit(needle, i)));
+			return haystack.some((_, start) => needles.every((needle, i) => hit(needle, start + i)));
 		});
 	}
 
@@ -356,12 +449,20 @@ var ZotPoPQuery = (function () {
 		a = a.filter(word => !VENUE_JOINERS.has(word));
 		b = b.filter(word => !VENUE_JOINERS.has(word));
 		if (!a.length || !b.length) return false;
-		// A supplied acronym must actually be written as an acronym.
+		// A supplied acronym must actually be written as an acronym. PNAS stops short of
+		// "of the United States of America", so an acronym may end the initials early.
 		let acronym = clean(query).replace(/[.\s]/g, "");
-		if (/^[A-Z]{2,10}$/.test(acronym) && b.length > 1 && acronym.toLowerCase() === b.map(w => w[0]).join("")) return true;
+		if (/^[A-Z]{2,10}$/.test(acronym) && b.length > 1) {
+			let initials = b.map(w => w[0]).join(""), lower = acronym.toLowerCase();
+			if (lower === initials || (lower.length >= 3 && initials.startsWith(lower))) return true;
+		}
 		if (a.length !== b.length) return false;
+		// "Sci Rep" is Scientific Reports. One clipped word alone is not evidence
+		// (Cell is not Cellular), so truncation only counts across a multi-word name.
+		let truncation = (short, full) => a.length > 1 && short.length >= 3 && full.length > short.length && full.startsWith(short);
 		return a.every((word, i) => word === b[i]
-			|| VENUE_ABBREVIATIONS[word]?.includes(b[i]) || VENUE_ABBREVIATIONS[b[i]]?.includes(word));
+			|| VENUE_ABBREVIATIONS[word]?.includes(b[i]) || VENUE_ABBREVIATIONS[b[i]]?.includes(word)
+			|| truncation(word, b[i]) || truncation(b[i], word));
 	}
 
 	function matchesVenue(query, record) {
@@ -397,9 +498,12 @@ var ZotPoPQuery = (function () {
 		let scripted = String(value ?? "")
 			.replace(/<(sup|sub)(?:\s[^<>]*?)?>([\s\S]*?)<\/\1\s*>/gi, (_, tag, text) => (tag.toLowerCase() === "sup" ? "^" : "_") + text)
 			.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾]+/g, text => "^" + text.normalize("NFKD"))
-			.replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]+/g, text => "_" + text.normalize("NFKD"));
+			.replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]+/g, text => "_" + text.normalize("NFKD"))
+			// A formula subscript on a multi-letter symbol is typed both ways: CO2 is CO₂.
+			// A single letter keeps its script, where x₂ and x² are different expressions.
+			.replace(/(\p{L}{2,})_(\d)/gu, "$1$2");
 		return clean(scripted).toLowerCase().replace(/['’ʼ]/g, "").replace(/&/g, " and ")
-			.replace(/[−–—]/g, "-")
+			.replace(/[−–—‐‑‒]/g, "-")
 			// Ordinary word hyphenation is typographic. Numeric ranges, signed values,
 			// ionic charges and single-letter mathematical subtraction carry identity.
 			.replace(/([\p{L}\p{M}]+)-(?=([\p{L}\p{M}]+))/gu, (_, left, right) => left + (left.length === 1 && right.length === 1 ? "-" : " "))

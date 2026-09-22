@@ -1,0 +1,1114 @@
+{
+  "capturedAt": "2026-09-19T21:25:22.972Z",
+  "candidateVersion": "0.36.6",
+  "mode": "public APIs, no API keys, no enrichment; smoke probe, not matched PoP parity",
+  "cases": [
+    {
+      "id": "sheila-combined",
+      "source": "multi",
+      "query": {
+        "authors": "Sheila Ingemann",
+        "maxResults": 1000,
+        "sort": "relevance"
+      },
+      "elapsedMs": 90004,
+      "firstResultMs": 1987,
+      "error": {
+        "name": "AbortError",
+        "message": "Search cancelled"
+      },
+      "providerErrors": [
+        "OpenAlex: HTTP 429 from api.openalex.org"
+      ],
+      "returned": 0,
+      "partial": 36,
+      "sourceCounts": {},
+      "requests": [
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/authors?search=Sheila%20Ingemann&per-page=25&select=id,display_name,display_name_alternatives,works_count",
+          "startedAt": "2026-09-19T21:25:22.975Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 178.08
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=0",
+          "startedAt": "2026-09-19T21:25:23.055Z",
+          "status": 200,
+          "bytes": 158250,
+          "latencyMs": 1891.82
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=*&query=AUTH%3A%22Sheila%20Ingemann%22",
+          "startedAt": "2026-09-19T21:25:23.056Z",
+          "status": 200,
+          "bytes": 188,
+          "latencyMs": 1188.01
+        },
+        {
+          "method": "GET",
+          "type": "text",
+          "url": "https://export.arxiv.org/api/query?search_query=(au%3A%22Sheila%20Ingemann%22)&start=0&max_results=100&sortBy=relevance",
+          "startedAt": "2026-09-19T21:25:23.058Z",
+          "status": 200,
+          "bytes": 723,
+          "latencyMs": 665.87
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/authors?search=Sheila%20Ingemann&per-page=25&select=id,display_name,display_name_alternatives,works_count",
+          "startedAt": "2026-09-19T21:25:24.654Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 38.62
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=100",
+          "startedAt": "2026-09-19T21:25:24.960Z",
+          "status": 200,
+          "bytes": 167963,
+          "latencyMs": 825.36
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=200",
+          "startedAt": "2026-09-19T21:25:25.793Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 208.39
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=200",
+          "startedAt": "2026-09-19T21:25:27.504Z",
+          "status": 200,
+          "bytes": 174288,
+          "latencyMs": 1115.71
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/authors?search=Sheila%20Ingemann&per-page=25&select=id,display_name,display_name_alternatives,works_count",
+          "startedAt": "2026-09-19T21:25:27.694Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 39.38
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=300",
+          "startedAt": "2026-09-19T21:25:28.629Z",
+          "status": 200,
+          "bytes": 170079,
+          "latencyMs": 647.55
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=400",
+          "startedAt": "2026-09-19T21:25:29.288Z",
+          "status": 200,
+          "bytes": 101588,
+          "latencyMs": 722.2
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=500",
+          "startedAt": "2026-09-19T21:25:30.016Z",
+          "status": 200,
+          "bytes": 109166,
+          "latencyMs": 1043.41
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=600",
+          "startedAt": "2026-09-19T21:25:31.070Z",
+          "status": 200,
+          "bytes": 106812,
+          "latencyMs": 806.62
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=700",
+          "startedAt": "2026-09-19T21:25:31.882Z",
+          "status": 200,
+          "bytes": 107683,
+          "latencyMs": 666.6
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/authors?search=Sheila%20Ingemann&per-page=25&select=id,display_name,display_name_alternatives,works_count",
+          "startedAt": "2026-09-19T21:25:32.237Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 132.05
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/works?filter=raw_author_name.search:%22Sheila%20Ingemann%22&select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids&per-page=200&page=1",
+          "startedAt": "2026-09-19T21:25:32.370Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 80.23
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=800",
+          "startedAt": "2026-09-19T21:25:32.560Z",
+          "status": 200,
+          "bytes": 119639,
+          "latencyMs": 922.71
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=900",
+          "startedAt": "2026-09-19T21:25:33.494Z",
+          "status": 200,
+          "bytes": 116214,
+          "latencyMs": 614.83
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/works?filter=raw_author_name.search:%22Sheila%20Ingemann%22&select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids&per-page=200&page=1",
+          "startedAt": "2026-09-19T21:25:33.952Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 37.2
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1000",
+          "startedAt": "2026-09-19T21:25:34.127Z",
+          "status": 200,
+          "bytes": 114543,
+          "latencyMs": 784.61
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1100",
+          "startedAt": "2026-09-19T21:25:34.920Z",
+          "status": 200,
+          "bytes": 97846,
+          "latencyMs": 798.57
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1200",
+          "startedAt": "2026-09-19T21:25:35.727Z",
+          "status": 200,
+          "bytes": 120777,
+          "latencyMs": 848.71
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1300",
+          "startedAt": "2026-09-19T21:25:36.597Z",
+          "status": 200,
+          "bytes": 96080,
+          "latencyMs": 940.09
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/works?filter=raw_author_name.search:%22Sheila%20Ingemann%22&select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids&per-page=200&page=1",
+          "startedAt": "2026-09-19T21:25:36.991Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 47.56
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1400",
+          "startedAt": "2026-09-19T21:25:37.547Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 206.01
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1400",
+          "startedAt": "2026-09-19T21:25:39.253Z",
+          "status": 200,
+          "bytes": 119427,
+          "latencyMs": 969.06
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1500",
+          "startedAt": "2026-09-19T21:25:40.228Z",
+          "status": 200,
+          "bytes": 99806,
+          "latencyMs": 1012.84
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1600",
+          "startedAt": "2026-09-19T21:25:41.248Z",
+          "status": 200,
+          "bytes": 108326,
+          "latencyMs": 809.61
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/works?filter=raw_author_name.search:%22Sheila%20Ingemann%22&select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids&per-page=200&page=1",
+          "startedAt": "2026-09-19T21:25:41.540Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 261.81
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1700",
+          "startedAt": "2026-09-19T21:25:42.073Z",
+          "status": 200,
+          "bytes": 106088,
+          "latencyMs": 729.15
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1800",
+          "startedAt": "2026-09-19T21:25:42.809Z",
+          "status": 200,
+          "bytes": 92391,
+          "latencyMs": 728.3
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=1900",
+          "startedAt": "2026-09-19T21:25:43.549Z",
+          "status": 200,
+          "bytes": 106567,
+          "latencyMs": 870.32
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2000",
+          "startedAt": "2026-09-19T21:25:44.424Z",
+          "status": 200,
+          "bytes": 104416,
+          "latencyMs": 991.41
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2100",
+          "startedAt": "2026-09-19T21:25:45.428Z",
+          "status": 200,
+          "bytes": 122014,
+          "latencyMs": 734.06
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2200",
+          "startedAt": "2026-09-19T21:25:46.177Z",
+          "status": 200,
+          "bytes": 99298,
+          "latencyMs": 1036.62
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2300",
+          "startedAt": "2026-09-19T21:25:47.220Z",
+          "status": 200,
+          "bytes": 122993,
+          "latencyMs": 924.9
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2400",
+          "startedAt": "2026-09-19T21:25:48.151Z",
+          "status": 200,
+          "bytes": 104297,
+          "latencyMs": 703.83
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2500",
+          "startedAt": "2026-09-19T21:25:48.860Z",
+          "status": 200,
+          "bytes": 106513,
+          "latencyMs": 882.24
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2600",
+          "startedAt": "2026-09-19T21:25:49.748Z",
+          "status": 200,
+          "bytes": 110897,
+          "latencyMs": 885.29
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2700",
+          "startedAt": "2026-09-19T21:25:50.639Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 203.23
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2700",
+          "startedAt": "2026-09-19T21:25:52.344Z",
+          "status": 200,
+          "bytes": 106434,
+          "latencyMs": 1178.9
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2800",
+          "startedAt": "2026-09-19T21:25:53.528Z",
+          "status": 200,
+          "bytes": 111987,
+          "latencyMs": 1344.48
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=2900",
+          "startedAt": "2026-09-19T21:25:54.879Z",
+          "status": 200,
+          "bytes": 98400,
+          "latencyMs": 1012.48
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3000",
+          "startedAt": "2026-09-19T21:25:55.897Z",
+          "status": 200,
+          "bytes": 104539,
+          "latencyMs": 863.42
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3100",
+          "startedAt": "2026-09-19T21:25:56.767Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 203.02
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3100",
+          "startedAt": "2026-09-19T21:25:58.471Z",
+          "status": 200,
+          "bytes": 101358,
+          "latencyMs": 718.88
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3200",
+          "startedAt": "2026-09-19T21:25:59.196Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 351.08
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3200",
+          "startedAt": "2026-09-19T21:26:01.047Z",
+          "status": 200,
+          "bytes": 115306,
+          "latencyMs": 1201.44
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3300",
+          "startedAt": "2026-09-19T21:26:02.257Z",
+          "status": 200,
+          "bytes": 98765,
+          "latencyMs": 972.88
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3400",
+          "startedAt": "2026-09-19T21:26:03.239Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 205.9
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3400",
+          "startedAt": "2026-09-19T21:26:04.946Z",
+          "status": 200,
+          "bytes": 106008,
+          "latencyMs": 893.08
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3500",
+          "startedAt": "2026-09-19T21:26:05.846Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 204.2
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3500",
+          "startedAt": "2026-09-19T21:26:07.552Z",
+          "status": 200,
+          "bytes": 98510,
+          "latencyMs": 1434.48
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3600",
+          "startedAt": "2026-09-19T21:26:08.991Z",
+          "status": 200,
+          "bytes": 118326,
+          "latencyMs": 1091.47
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3700",
+          "startedAt": "2026-09-19T21:26:10.088Z",
+          "status": 200,
+          "bytes": 103952,
+          "latencyMs": 993.49
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3800",
+          "startedAt": "2026-09-19T21:26:11.087Z",
+          "status": 200,
+          "bytes": 106823,
+          "latencyMs": 752.79
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=3900",
+          "startedAt": "2026-09-19T21:26:11.845Z",
+          "status": 200,
+          "bytes": 103051,
+          "latencyMs": 1003.44
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4000",
+          "startedAt": "2026-09-19T21:26:12.853Z",
+          "status": 200,
+          "bytes": 108854,
+          "latencyMs": 854.5
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4100",
+          "startedAt": "2026-09-19T21:26:13.713Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 204.56
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4100",
+          "startedAt": "2026-09-19T21:26:15.419Z",
+          "status": 200,
+          "bytes": 105950,
+          "latencyMs": 908.32
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4200",
+          "startedAt": "2026-09-19T21:26:16.332Z",
+          "status": 200,
+          "bytes": 101850,
+          "latencyMs": 729.06
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4300",
+          "startedAt": "2026-09-19T21:26:17.066Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 304.75
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4300",
+          "startedAt": "2026-09-19T21:26:18.872Z",
+          "status": 200,
+          "bytes": 110635,
+          "latencyMs": 1879.64
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4400",
+          "startedAt": "2026-09-19T21:26:20.757Z",
+          "status": 200,
+          "bytes": 94310,
+          "latencyMs": 611.52
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4500",
+          "startedAt": "2026-09-19T21:26:21.373Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 206.09
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4500",
+          "startedAt": "2026-09-19T21:26:23.081Z",
+          "status": 200,
+          "bytes": 106419,
+          "latencyMs": 1165.02
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4600",
+          "startedAt": "2026-09-19T21:26:24.253Z",
+          "status": 200,
+          "bytes": 105737,
+          "latencyMs": 984.83
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4700",
+          "startedAt": "2026-09-19T21:26:25.245Z",
+          "status": 200,
+          "bytes": 98661,
+          "latencyMs": 567.99
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4800",
+          "startedAt": "2026-09-19T21:26:25.821Z",
+          "status": 200,
+          "bytes": 94911,
+          "latencyMs": 1015.95
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=4900",
+          "startedAt": "2026-09-19T21:26:26.842Z",
+          "status": 200,
+          "bytes": 119066,
+          "latencyMs": 1207.08
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5000",
+          "startedAt": "2026-09-19T21:26:28.055Z",
+          "status": 200,
+          "bytes": 104883,
+          "latencyMs": 884.75
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5100",
+          "startedAt": "2026-09-19T21:26:28.945Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 203.03
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5100",
+          "startedAt": "2026-09-19T21:26:30.648Z",
+          "status": 200,
+          "bytes": 113546,
+          "latencyMs": 1205.66
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5200",
+          "startedAt": "2026-09-19T21:26:31.861Z",
+          "status": 200,
+          "bytes": 94811,
+          "latencyMs": 840.29
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5300",
+          "startedAt": "2026-09-19T21:26:32.707Z",
+          "status": 200,
+          "bytes": 119120,
+          "latencyMs": 1160.53
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5400",
+          "startedAt": "2026-09-19T21:26:33.873Z",
+          "status": 200,
+          "bytes": 89641,
+          "latencyMs": 801.56
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5500",
+          "startedAt": "2026-09-19T21:26:34.680Z",
+          "status": 200,
+          "bytes": 115247,
+          "latencyMs": 2824.97
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5600",
+          "startedAt": "2026-09-19T21:26:37.511Z",
+          "status": 200,
+          "bytes": 91491,
+          "latencyMs": 1360.21
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5700",
+          "startedAt": "2026-09-19T21:26:38.876Z",
+          "status": 200,
+          "bytes": 108366,
+          "latencyMs": 2819.68
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5800",
+          "startedAt": "2026-09-19T21:26:41.701Z",
+          "status": 200,
+          "bytes": 97662,
+          "latencyMs": 912.79
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=5900",
+          "startedAt": "2026-09-19T21:26:42.619Z",
+          "status": 200,
+          "bytes": 118363,
+          "latencyMs": 1045.31
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=6000",
+          "startedAt": "2026-09-19T21:26:43.670Z",
+          "status": 200,
+          "bytes": 103732,
+          "latencyMs": 1264.37
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=6100",
+          "startedAt": "2026-09-19T21:26:44.939Z",
+          "status": 200,
+          "bytes": 114506,
+          "latencyMs": 988.66
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=6200",
+          "startedAt": "2026-09-19T21:26:45.933Z",
+          "status": 200,
+          "bytes": 91096,
+          "latencyMs": 818.09
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=6300",
+          "startedAt": "2026-09-19T21:26:46.757Z",
+          "status": 200,
+          "bytes": 102851,
+          "latencyMs": 504.17
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=6400",
+          "startedAt": "2026-09-19T21:26:47.266Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.crossref.org",
+            "status": 429
+          },
+          "latencyMs": 203.41
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=6400",
+          "startedAt": "2026-09-19T21:26:48.971Z",
+          "status": 200,
+          "bytes": 110668,
+          "latencyMs": 1440.6
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=6500",
+          "startedAt": "2026-09-19T21:26:50.418Z",
+          "status": 200,
+          "bytes": 109596,
+          "latencyMs": 1034.66
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=6600",
+          "startedAt": "2026-09-19T21:26:51.458Z",
+          "status": 200,
+          "bytes": 108333,
+          "latencyMs": 1044.95
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query.author=Sheila%20Ingemann&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=6700",
+          "startedAt": "2026-09-19T21:26:52.509Z",
+          "error": {
+            "name": "AbortError",
+            "message": "This operation was aborted"
+          },
+          "latencyMs": 465.88
+        }
+      ]
+    },
+    {
+      "id": "geobacillus-combined",
+      "source": "multi",
+      "query": {
+        "keywords": "geobacillus",
+        "maxResults": 1000,
+        "sort": "relevance"
+      },
+      "elapsedMs": 9588,
+      "firstResultMs": 3229,
+      "error": null,
+      "providerErrors": [
+        "OpenAlex: HTTP 429 from api.openalex.org"
+      ],
+      "returned": 397,
+      "partial": 397,
+      "sourceCounts": {
+        "crossref": 200,
+        "europepmc": 200
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/works?search=geobacillus&select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids&per-page=200&page=1",
+          "startedAt": "2026-09-19T21:26:52.980Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 128.05
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=0",
+          "startedAt": "2026-09-19T21:26:52.982Z",
+          "status": 200,
+          "bytes": 120514,
+          "latencyMs": 3713.45
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=*&query=(geobacillus)",
+          "startedAt": "2026-09-19T21:26:52.982Z",
+          "status": 200,
+          "bytes": 632042,
+          "latencyMs": 3204.8
+        },
+        {
+          "method": "GET",
+          "type": "text",
+          "url": "https://export.arxiv.org/api/query?search_query=(all%3Ageobacillus)&start=0&max_results=100&sortBy=relevance",
+          "startedAt": "2026-09-19T21:26:52.983Z",
+          "status": 200,
+          "bytes": 709,
+          "latencyMs": 566.53
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/works?search=geobacillus&select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids&per-page=200&page=1",
+          "startedAt": "2026-09-19T21:26:54.610Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 41.29
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=100&cursorMark=AoIIQBHZ%2FSg1Mjk1MTMyNg%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T21:26:56.209Z",
+          "status": 200,
+          "bytes": 678191,
+          "latencyMs": 1324.88
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=100&offset=100",
+          "startedAt": "2026-09-19T21:26:56.713Z",
+          "status": 200,
+          "bytes": 108736,
+          "latencyMs": 1300.27
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=6&cursorMark=AoIIP%2BuCBSg1MjMyNjMyOQ%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T21:26:57.558Z",
+          "status": 200,
+          "bytes": 33019,
+          "latencyMs": 373.85
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/works?search=geobacillus&select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids&per-page=200&page=1",
+          "startedAt": "2026-09-19T21:26:57.652Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 128.92
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core&pageSize=1&cursorMark=AoIIP%2BjFGyg1MTYxODkyMg%3D%3D&query=(geobacillus)",
+          "startedAt": "2026-09-19T21:26:57.956Z",
+          "status": 200,
+          "bytes": 6898,
+          "latencyMs": 312.47
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=1&offset=200",
+          "startedAt": "2026-09-19T21:26:58.042Z",
+          "status": 200,
+          "bytes": 1179,
+          "latencyMs": 1022.09
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=1&offset=201",
+          "startedAt": "2026-09-19T21:26:59.090Z",
+          "status": 200,
+          "bytes": 1240,
+          "latencyMs": 789.22
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.crossref.org/works?query=geobacillus&select=DOI,title,author,issued,posted,relation,resource,container-title,publisher,is-referenced-by-count,volume,issue,page,URL,type,abstract,link,ISSN&rows=1&offset=202",
+          "startedAt": "2026-09-19T21:26:59.907Z",
+          "status": 200,
+          "bytes": 5563,
+          "latencyMs": 571.76
+        },
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://api.openalex.org/works?search=geobacillus&select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,open_access,best_oa_location,locations,abstract_inverted_index,ids&per-page=200&page=1",
+          "startedAt": "2026-09-19T21:27:02.282Z",
+          "status": 429,
+          "error": {
+            "name": "Error",
+            "message": "HTTP 429 from api.openalex.org",
+            "status": 429
+          },
+          "latencyMs": 222.87
+        }
+      ]
+    },
+    {
+      "id": "known-title-pubmed",
+      "source": "pubmed",
+      "query": {
+        "title": "CRISPR Cas9 assisted recombineering in Lactobacillus reuteri",
+        "maxResults": 10,
+        "sort": "relevance"
+      },
+      "elapsedMs": 508,
+      "firstResultMs": null,
+      "error": null,
+      "providerErrors": [],
+      "returned": 0,
+      "partial": 0,
+      "sourceCounts": {},
+      "requests": [
+        {
+          "method": "GET",
+          "type": "json",
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax=30&term=CRISPR%5Bti%5D%20AND%20Cas9%5Bti%5D%20AND%20assisted%5Bti%5D%20AND%20recombineering%5Bti%5D%20AND%20in%5Bti%5D%20AND%20Lactobacillus%5Bti%5D%20AND%20reuteri%5Bti%5D&tool=zotpop",
+          "startedAt": "2026-09-19T21:27:02.585Z",
+          "status": 200,
+          "bytes": 429,
+          "latencyMs": 507.49
+        }
+      ]
+    }
+  ]
+}

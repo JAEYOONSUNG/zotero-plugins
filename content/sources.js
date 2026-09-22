@@ -127,7 +127,12 @@ var ZotPoPSources = (function () {
 		let terms = keywordTerms(query.keywords);
 		return records.filter(r => {
 			if (!r) return false;
-			if (r.source === "scholar") return Query ? Query.matchesRecord(r, { yearFrom: query.yearFrom, yearTo: query.yearTo }) : true;
+			// Scholar applied the year range itself, and a snippet without a year is not
+			// evidence that the paper falls outside it.
+			if (r.source === "scholar") return !Query || !r.year || Query.matchesRecord(r, { yearFrom: query.yearFrom, yearTo: query.yearTo });
+			// A lookup was asked for one paper. Nothing else it returned is an answer,
+			// and no other box narrows it.
+			if (query.identifier) return recordHasIdentifier(r, query.identifier);
 			if (Query && !Query.matchesRecord(r, query)) return false;
 			if (["crossref", "osf"].includes(r.source) && structuredQuery(query.keywords)
 				&& !Query.matchesTitle(query.keywords, [r.title, r.abstract].filter(Boolean).join(" "))) return false;
@@ -183,6 +188,46 @@ var ZotPoPSources = (function () {
 		s = s.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").replace(/^doi:\s*/i, "");
 		s = s.toLowerCase();
 		return /^10\.\d{4,9}\/\S+$/.test(s) ? s : null;
+	}
+
+	// A pasted identifier is not a phrase to search for. Crossref answered the query
+	// "10.1038/s41467-020-19056-6" with 6,528,758 free-text candidates and kept paging
+	// until it was rate-limited, while every source here can look that DOI up exactly.
+	// Only a box holding nothing but the identifier counts: a title that happens to
+	// contain one is still a title.
+	function identifierQuery(q) {
+		for (let field of ["keywords", "title"]) {
+			let raw = String(q?.[field] || "").trim().replace(/[).,;]+$/, "");
+			if (!raw || /\s/.test(raw)) continue;
+			let doi = normalizeDOI(raw);
+			if (doi) return { kind: "doi", value: doi, field };
+			let pmc = /^(?:pmcid[:=]?)?(PMC\d{4,})$/i.exec(raw) || /pmc\/articles\/(PMC\d+)/i.exec(raw);
+			if (pmc) return { kind: "pmcid", value: pmc[1].toUpperCase(), field };
+			let arxiv = /^(?:arxiv[:=])?(\d{4}\.\d{4,5})(?:v\d+)?$/i.exec(raw)
+				|| /arxiv\.org\/(?:abs|pdf)\/(.+?)(?:v\d+)?(?:\.pdf)?$/i.exec(raw)
+				|| /^(?:arxiv[:=])?([a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?$/i.exec(raw);
+			if (arxiv) return { kind: "arxiv", value: arxiv[1], field };
+			let pmid = /^(?:pmid[:=]?)?(\d{7,8})$/i.exec(raw) || /pubmed\.ncbi\.nlm\.nih\.gov\/(\d+)/i.exec(raw);
+			if (pmid) return { kind: "pmid", value: pmid[1], field };
+		}
+		return null;
+	}
+
+	// The DOI arXiv registers for a posting, which is how OpenAlex and Crossref index it.
+	function arxivDOI(id) { return "10.48550/arxiv." + String(id).toLowerCase(); }
+
+	// A lookup answers with the record that carries the identifier, or with nothing.
+	function recordHasIdentifier(r, id) {
+		if (!id) return true;
+		let same = (a, b) => Boolean(a) && String(a).toLowerCase() === String(b).toLowerCase();
+		let bare = v => String(v || "").replace(/^arxiv:/i, "").replace(/v\d+$/i, "").toLowerCase();
+		if (id.kind === "doi") return same(r.doi, id.value) || same(r.publishedDoi, id.value)
+			|| (Boolean(r.arxiv) && same(arxivDOI(r.arxiv), id.value));
+		if (id.kind === "pmid") return same(r.pmid, id.value) || same(r.publishedPmid, id.value);
+		if (id.kind === "pmcid") return same(r.pmcid, id.value);
+		if (id.kind === "arxiv") return bare(r.arxiv) === bare(id.value)
+			|| bare(r.doi).replace("10.48550/arxiv.", "") === bare(id.value);
+		return true;
 	}
 
 	function parseName(full) {
@@ -280,7 +325,8 @@ var ZotPoPSources = (function () {
 		const decodedTitle = decodeEntities(rec.title);
 		rec.titleMarkup = /<\/?(i|b|em|strong|sub|sup)>/i.test(String(decodedTitle)) ? String(decodedTitle).replace(/<(?!\/?(?:i|b|em|strong|sub|sup)>)[^>]*>/gi, "").replace(/\s+/g, " ").trim() : null;
 		rec.title = stripTags(decodedTitle);
-		rec.key = rec.source + ":" + (rec.sourceId || rec.doi || rec.title.toLowerCase());
+		rec.key = rec.source + ":" + (rec.sourceId || rec.doi
+			|| [rec.title.toLowerCase(), rec.year || "", rec.authors?.[0]?.lastName || ""].join("|"));
 		if (!rec.sources) rec.sources = [rec.source];
 		if (rec.citations != null && !rec.citationSource) rec.citationSource = rec.source;
 		if (!rec.url && rec.doi) rec.url = "https://doi.org/" + rec.doi;
@@ -305,7 +351,10 @@ var ZotPoPSources = (function () {
 					|| /^(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT|UND_ERR_SOCKET)$/.test(e.code || e.cause?.code || "")
 					|| (e.name === "TypeError" && /fetch failed|failed to fetch|network request failed|networkerror/i.test(e.message || ""));
 				if (isQuotaError(e) || (!retryOn.includes(e.status) && !transientTransport) || i === tries - 1) throw e;
-				await sleep(delay * (i + 1), ctx);
+				// A provider that says how long to wait knows better than a fixed backoff.
+				let after = Number(e.retryAfter ?? e.headers?.["retry-after"] ?? e.headers?.["Retry-After"]);
+				let asked = Number.isFinite(after) && after > 0 ? Math.min(after * 1000, 30000) : 0;
+				await sleep(Math.max(delay * (i + 1), asked), ctx);
 			}
 		}
 		throw lastErr;
@@ -326,7 +375,7 @@ var ZotPoPSources = (function () {
 	}
 
 	function hasAny(q) {
-		return Boolean((q.keywords || "").trim() || (q.authors || "").trim() || (q.title || "").trim() || (q.venue || "").trim());
+		return Boolean(q.identifier || (q.keywords || "").trim() || (q.authors || "").trim() || (q.title || "").trim() || (q.venue || "").trim());
 	}
 
 	// ---------------------------------------------------------------- OpenAlex
@@ -371,25 +420,50 @@ var ZotPoPSources = (function () {
 
 	async function openAlexAuthorFilter(name, http, ctx) {
 		let url = "https://api.openalex.org/authors?search=" + enc(name)
-			+ "&per-page=25&select=id,display_name,display_name_alternatives,works_count" + openAlexAuth(ctx);
+			+ "&per-page=25&select=id,display_name,display_name_alternatives,works_count,last_known_institutions" + openAlexAuth(ctx);
 		let data = await withRetry(() => http.getJSON(url), {}, ctx);
-		let ids = [];
+		let ids = [], matched = [];
 		if ((data.meta?.count || 0) > 25) warn(ctx, "openalex", "Only the first 25 author profiles were checked; use an OpenAlex author ID or ORCID to disambiguate.");
 		for (let a of data.results || []) {
 			let names = [a.display_name, ...(a.display_name_alternatives || [])].filter(Boolean);
 			if (!names.some(n => Query.matchesAuthor(name, [{ name: n }]))) continue;
 			let id = String(a.id || "").replace("https://openalex.org/", "");
-			if (id) ids.push(id);
+			if (id) { ids.push(id); matched.push(a); }
 			if (ids.length >= 25) break;
 		}
+		// Two people share a written name more often than not: "Jae Yoon Sung" resolved to a
+		// battery researcher and a biotechnologist at once, and the mixed list looked like
+		// one person's work. Name them so the difference is visible, not silently merged.
+		if (matched.length > 1) {
+			let who = matched.slice(0, 5).map(a => (a.display_name || "?")
+				+ (a.last_known_institutions?.[0]?.display_name ? ", " + a.last_known_institutions[0].display_name : "")
+				+ (a.works_count != null ? " (" + a.works_count + " works)" : ""));
+			warn(ctx, "openalex", matched.length + " author profiles match this name and their papers are combined: "
+				+ who.join("; ") + (matched.length > 5 ? "; and more" : "")
+				+ ". Enter an ORCID or OpenAlex author ID to search one person.");
+		}
 		return ids.length ? "authorships.author.id:" + ids.join("|") : null;
+	}
+
+	// OpenAlex splits a filter list on "," and one filter's values on "|", after decoding
+	// the query string, so neither character can survive inside a filter value: a title
+	// holding a comma made the whole request a 403.
+	function openAlexSearchValue(value) {
+		return enc(String(value).replace(/[,|]+/g, " ").replace(/\s+/g, " ").trim());
+	}
+
+	function openAlexIdFilter(id) {
+		if (id.kind === "pmid") return "pmid:" + id.value;
+		if (id.kind === "pmcid") return "pmcid:" + id.value;
+		return "doi:" + (id.kind === "arxiv" ? arxivDOI(id.value) : id.value);
 	}
 
 	async function searchOpenAlex(q, http, ctx) {
 		let params = [];
 		let filters = [];
+		if (q.identifier) filters.push(openAlexIdFilter(q.identifier));
 		if (q.keywords?.trim()) params.push("search=" + enc(q.keywords.trim()));
-		if (q.title?.trim()) filters.push("title.search:" + enc(q.title.trim()));
+		if (q.title?.trim()) filters.push("title.search:" + openAlexSearchValue(q.title.trim()));
 		if (q.authors?.trim()) {
 			let identifier = Query.parseAuthorIdentifier(q.authors);
 			let resolved = identifier ? (identifier.type === "openalex" ? "authorships.author.id:" : "authorships.author.orcid:") + enc(identifier.id) : null;
@@ -400,7 +474,7 @@ var ZotPoPSources = (function () {
 					ctx.log?.("OpenAlex author lookup failed, falling back to name search: " + e.message);
 				}
 			}
-			filters.push(resolved || ("raw_author_name.search:" + enc(Query.compileAuthors(q.authors,
+			filters.push(resolved || ("raw_author_name.search:" + openAlexSearchValue(Query.compileAuthors(q.authors,
 				name => '"' + searchableSurname(name).replace(/"/g, "") + '"'))));
 		}
 		if (q.yearFrom) filters.push("from_publication_date:" + q.yearFrom + "-01-01");
@@ -514,6 +588,8 @@ var ZotPoPSources = (function () {
 			catch (e) {
 				if (e.name === "AbortError") throw e;
 				ctx.log?.("OpenAlex enrichment failed: " + e.message);
+				// Otherwise the citation column is simply blank, with nothing said.
+				warn(ctx, "openalex", "Citation counts are unavailable: " + e.message);
 			}
 			ctx.onProgress?.(`Citation counts: ${Math.min(i + 50, dois.length)} / ${dois.length}`, i + 50, dois.length);
 		}
@@ -841,6 +917,14 @@ var ZotPoPSources = (function () {
 			if (field === "keywords" && structuredQuery(q[field])) warn(ctx, "crossref", "Boolean and phrase keyword checks use deposited titles and abstracts; missing metadata can limit coverage.");
 		}
 		let filters = [];
+		if (q.identifier) {
+			// Crossref indexes DOIs, and an arXiv posting has one it registered itself.
+			if (!["doi", "arxiv"].includes(q.identifier.kind)) {
+				warn(ctx, "crossref", "Crossref cannot look up a " + q.identifier.kind.toUpperCase() + "; use OpenAlex, PubMed or Europe PMC for that identifier.");
+				return [];
+			}
+			filters.push("doi:" + (q.identifier.kind === "arxiv" ? arxivDOI(q.identifier.value) : q.identifier.value));
+		}
 		// "posted-content" is Crossref's type for a preprint posting. It is the whole preprint
 		// landscape in one index -- bioRxiv, ChemRxiv, Research Square, SSRN, Preprints.org --
 		// and it carries the posting date, so it is what makes the archives searchable here.
@@ -870,7 +954,9 @@ var ZotPoPSources = (function () {
 		let offset = 0;
 		while (out.length < max) {
 			throwIfCancelled(ctx);
-			let rows = Math.min(100, max - out.length);
+			// Crossref serves 1000 rows a page. Asking for 100 made a large search ten
+			// times as many requests, and ten times as likely to be rate-limited.
+			let rows = Math.min(1000, max - out.length);
 			let url = endpoint + "?" + params.join("&") + "&rows=" + rows + "&offset=" + offset;
 			let data = await withRetry(() => http.getJSON(url), {}, ctx);
 			let items = data.message?.items || [];
@@ -986,7 +1072,25 @@ var ZotPoPSources = (function () {
 		});
 	}
 
+	// One paper by its identifier. Semantic Scholar resolves DOI, PMID, PMCID and arXiv
+	// ids through the same endpoint, so a pasted identifier costs exactly one request.
+	async function searchSemanticScholarById(id, http, ctx) {
+		const PREFIX = { doi: "DOI:", pmid: "PMID:", pmcid: "PMCID:", arxiv: "arXiv:" };
+		let headers = ctx.s2ApiKey ? { "x-api-key": ctx.s2ApiKey } : {};
+		let url = "https://api.semanticscholar.org/graph/v1/paper/" + enc(PREFIX[id.kind] + id.value) + "?fields=" + S2_FIELDS;
+		try {
+			let data = await withRetry(() => http.getJSON(url, headers), { tries: 3, delay: 4000 }, ctx);
+			return data?.paperId ? [semanticScholarRecord(data)] : [];
+		}
+		catch (e) {
+			if (e.name === "AbortError") throw e;
+			if (e.status === 404) return [];
+			throw e;
+		}
+	}
+
 	async function searchSemanticScholar(q, http, ctx) {
+		if (q.identifier) return searchSemanticScholarById(q.identifier, http, ctx);
 		if ([q.keywords, q.title].some(structuredQuery)) throw new Error("Semantic Scholar relevance search does not support Boolean or quoted expressions; use OpenAlex, PubMed, Europe PMC or arXiv for these queries");
 		let terms = [q.keywords, q.title].map(x => (x || "").trim()).filter(Boolean);
 		// The paper relevance endpoint searches paper text, not author bylines.
@@ -1093,12 +1197,21 @@ var ZotPoPSources = (function () {
 		return "(" + value + ")";
 	}
 
-	function pubmedTerm(q) {
+	function pubmedTerm(q, dropped = null) {
+		if (q.identifier) {
+			let id = q.identifier;
+			if (id.kind === "doi") return '"' + id.value + '"[aid]';
+			if (id.kind === "pmid") return id.value + "[uid]";
+			// PubMed has no PMCID field; the identifier appears in the record and the
+			// answer is verified against it afterwards.
+			if (id.kind === "pmcid") return id.value + "[All Fields]";
+			return null;
+		}
 		let parts = [];
 		// PoP uses Text Word, not PubMed's unrestricted automatic term mapping.
 		// Preserve phrases/Boolean operators while tagging the actual search terms.
-		if (q.keywords?.trim()) parts.push(pubmedFieldQuery(q.keywords, "Text Word"));
-		if (q.title?.trim()) parts.push(pubmedFieldQuery(q.title, "ti"));
+		if (q.keywords?.trim()) parts.push(pubmedFieldQuery(q.keywords, "Text Word", dropped));
+		if (q.title?.trim()) parts.push(pubmedFieldQuery(q.title, "ti", dropped));
 		if (q.authors?.trim()) parts.push(Query.compileAuthors(q.authors, name => name + "[au]", { binaryNot: true }));
 		if (q.venue?.trim()) parts.push('"' + q.venue.trim() + '"[ta]');
 		if (q.yearFrom || q.yearTo) parts.push((q.yearFrom || "1800") + ":" + (q.yearTo || "3000") + "[dp]");
@@ -1174,23 +1287,62 @@ var ZotPoPSources = (function () {
 	// (including complemented atoms) in the candidate query; matchesTitle checks
 	// the complete original title afterward. Quoted phrases use proximity zero,
 	// which includes stopwords and is independent of PubMed's phrase index.
-	const PUBMED_TITLE_STOPWORDS = new Set(["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he", "in", "is", "it", "its", "of", "on", "or", "that", "the", "to", "was", "were", "will", "with"]);
-	function pubmedFieldQuery(value, field) {
+	// NLM's own stopword list. The short guess that stood here covered "in" but not
+	// "into", so a real paper whose title contains "into" came back as nothing at all.
+	const PUBMED_STOPWORDS = new Set(("a about again all almost also although always among an and another any are as at "
+		+ "be because been before being between both but by can could did do does done due during each either enough "
+		+ "especially etc for found from further had has have having here how however i if in into is it its itself "
+		+ "just kg km made mainly make may me mg might ml mm most mostly must nearly neither no nor obtained of often "
+		+ "on our overall perhaps pmid quite rather really regarding seem seen several should show showed shown shows "
+		+ "significantly since so some such than that the their theirs them then there therefore these they this those "
+		+ "through thus to upon use used using various very was we were what when which while with within without would")
+		.split(" "));
+	// PubMed does not index a standalone stopword or a bare number in [ti] either: the
+	// title "CRISPR-Cas 9 ..." compiled to "9[ti]" and matched nothing. Broaden those
+	// atoms and let matchesTitle check the complete original title afterwards.
+	// PubMed indexes "CRISPR-Cas9" as a single word, so a title typed "CRISPR Cas 9"
+	// asks for "Cas" and for "9" and matches neither. Join a short number back onto
+	// the word before it, unless that word is one PubMed does not index anyway.
+	function glueDigits(value) {
+		return String(value || "").replace(/(\p{L}{3,})\s+(\d{1,3})\b/gu,
+			(whole, word, number) => PUBMED_STOPWORDS.has(word.toLowerCase()) ? whole : word + number);
+	}
+
+	function pubmedOmissions(value, field, dropped) {
+		let omitted = new Set();
+		if (!["ti", "Text Word"].includes(field) && !dropped?.size) return omitted;
+		for (let token of String(value || "").split(/[^\p{L}\p{N}*]+/u)) {
+			let key = token.toLowerCase();
+			if (!key) continue;
+			if (dropped?.has(key) || PUBMED_STOPWORDS.has(key) || /^\d{1,3}$/.test(key)) omitted.add(key);
+		}
+		return omitted;
+	}
+	function pubmedFieldQuery(value, field, dropped = null) {
+		let omitted = pubmedOmissions(value, field, dropped);
 		return fieldExpression(value, (term, phrase) => {
 			let atom = phrase ? '"' + term.replace(/"/g, "") + '"' : term;
 			return atom + "[" + field + (phrase && field === "ti" && /\s/.test(term) ? ":~0" : "") + "]";
 		}, { universe: "all[sb]", nativeFields: true,
-			omit: field === "ti" ? term => PUBMED_TITLE_STOPWORDS.has(term.toLowerCase()) : null });
+			omit: omitted.size ? (term, phrase) => !phrase && omitted.has(String(term).toLowerCase()) : null });
 	}
 
 	async function searchPubMed(q, http, ctx) {
 		if (!hasAny(q)) return [];
 		let max = q.maxResults || 200;
 		let base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/";
-		let tool = "&tool=zotpop" + (ctx.email ? "&email=" + enc(ctx.email) : "");
+		// Without a key NCBI allows 3 requests a second; with one, 10.
+		let tool = "&tool=zotpop" + (ctx.email ? "&email=" + enc(ctx.email) : "")
+			+ (ctx.ncbiApiKey ? "&api_key=" + enc(String(ctx.ncbiApiKey).trim()) : "");
 		let sort = q.sort === "date" ? "pub_date" : "relevance";
 		let out = [], scanned = 0, total = null;
-		let term = enc(pubmedTerm(q));
+		let dropped = null, retried = false, glued = false;
+		let compiled = pubmedTerm(q, dropped);
+		if (!compiled) {
+			warn(ctx, "pubmed", "PubMed does not index arXiv identifiers; use arXiv, OpenAlex or Semantic Scholar for this one.");
+			return [];
+		}
+		let term = enc(compiled);
 		while (out.length < max && scanned < PAGE_WALK_LIMIT) {
 			let retmax = Math.min(1000, Math.max(200, max * 3), PAGE_WALK_LIMIT - scanned);
 			let es = await withRetry(() => http.getJSON(base + "esearch.fcgi?db=pubmed&retmode=json&sort=" + sort + "&retmax=" + retmax + "&retstart=" + scanned + "&term=" + term + tool), {}, ctx);
@@ -1199,7 +1351,29 @@ var ZotPoPSources = (function () {
 			total = toInt(es.esearchresult?.count) ?? ids.length;
 			let issues = es.esearchresult?.errorlist;
 			if (issues?.fieldsnotfound?.length) throw new Error("PubMed does not recognize fields: " + issues.fieldsnotfound.join(", "));
-			if (issues?.phrasesnotfound?.length) warn(ctx, "pubmed", "PubMed could not find query terms: " + issues.phrasesnotfound.join(", "));
+			if (issues?.phrasesnotfound?.length) {
+				// PubMed answers a term it does not index with zero results, not an error.
+				// Drop exactly those terms and ask once more before reporting nothing.
+				let unusable = issues.phrasesnotfound.map(x => String(x).toLowerCase());
+				if (!retried && !ids.length && !q.identifier) {
+					retried = true;
+					dropped = new Set([...(dropped || []), ...unusable]);
+					let rebuilt = pubmedTerm(q, dropped);
+					if (rebuilt && enc(rebuilt) !== term) {
+						term = enc(rebuilt);
+						warn(ctx, "pubmed", "PubMed does not index " + unusable.join(", ") + "; the search was widened without " + (unusable.length > 1 ? "those terms" : "that term") + " and the titles were checked here.");
+						continue;
+					}
+				}
+				warn(ctx, "pubmed", "PubMed could not find query terms: " + issues.phrasesnotfound.join(", "));
+			}
+			if (!ids.length && !glued && !q.identifier) {
+				glued = true;
+				let joined = Object.assign({}, q, { title: glueDigits(q.title), keywords: glueDigits(q.keywords) });
+				let rebuilt = pubmedTerm(joined, dropped);
+				// The original title is still what every returned record is checked against.
+				if (rebuilt && enc(rebuilt) !== term) { term = enc(rebuilt); continue; }
+			}
 			for (let i = 0; i < ids.length && out.length < max; i += 200) {
 				throwIfCancelled(ctx);
 				let chunk = ids.slice(i, i + 200);
@@ -1223,6 +1397,9 @@ var ZotPoPSources = (function () {
 						}),
 						year: pubmedYear(d),
 						venue: d.fulljournalname || d.source || "",
+						// PubMed matched [ta] on the abbreviation, so the abbreviation is
+						// what a venue query has to be checked against as well.
+						journalAbbreviation: d.source || "",
 						issn: d.issn || d.essn || null,
 						doi,
 						pmid: uid,
@@ -1256,20 +1433,35 @@ var ZotPoPSources = (function () {
 		return m ? decodeEntities(m[1]).replace(/\s+/g, " ").trim() : "";
 	}
 
+	// arXiv's own field prefixes. Any other word ending in a colon -- "enzymes:" out of
+	// a subtitle -- is a search term, and sending it bare broke the whole query.
+	const ARXIV_FIELDS = /^(?:ti|au|abs|co|jr|cat|rn|id|all):/i;
+	// Lucene reads a leading "-" as NOT and a ":" as a field separator, so "-10" and
+	// "structure-function:" have to travel quoted.
+	function luceneAtom(term) {
+		let value = String(term).replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-").replace(/:+$/, "");
+		return /^[\p{L}\p{N}*]+$/u.test(value) ? value : '"' + value.replace(/"/g, "") + '"';
+	}
 	function arxivFieldQuery(value, field) {
-		return fieldExpression(value, (term, phrase) => /^[a-z_]+:/i.test(term) ? term
-			: field + ":" + (phrase ? '"' + term.replace(/"/g, "") + '"' : term),
+		return fieldExpression(value, (term, phrase) => ARXIV_FIELDS.test(term) ? term
+			: field + ":" + (phrase ? '"' + term.replace(/"/g, "") + '"' : luceneAtom(term)),
 			{ nativeFields: true, binaryNot: "ANDNOT" });
 	}
 
 	async function searchArxiv(q, http, ctx) {
+		let idList = q.identifier?.kind === "arxiv" ? q.identifier.value : null;
+		if (q.identifier && !idList) {
+			warn(ctx, "arxiv", "arXiv can only be searched by an arXiv identifier, not by a " + q.identifier.kind.toUpperCase() + ".");
+			return [];
+		}
 		let parts = [];
 		if (q.keywords?.trim()) parts.push(arxivFieldQuery(q.keywords, "all"));
 		if (q.title?.trim()) parts.push(arxivFieldQuery(q.title, "ti"));
-		if (q.authors?.trim()) parts.push(Query.compileAuthors(q.authors, name => 'au:"' + name.replace(/"/g, "") + '"', { notOperator: "ANDNOT" }));
+		// arXiv indexes "Jae Yoon Sung"; the PoP form "Sung JY" is not a phrase it holds.
+		if (q.authors?.trim()) parts.push(Query.compileAuthors(q.authors, name => 'au:"' + searchableSurname(name).replace(/"/g, "") + '"', { notOperator: "ANDNOT" }));
 		if (q.venue?.trim()) parts.push('jr:"' + q.venue.trim() + '"');
-		if (!parts.length) return [];
-		if (q.yearFrom || q.yearTo) parts.push("submittedDate:[" + (q.yearFrom || "1990") + "01010000 TO " + (q.yearTo || "2100") + "12312359]");
+		if (!parts.length && !idList) return [];
+		if (!idList && (q.yearFrom || q.yearTo)) parts.push("submittedDate:[" + (q.yearFrom || "1990") + "01010000 TO " + (q.yearTo || "2100") + "12312359]");
 		let query = parts.map(grouped).join(" AND ");
 		let max = q.maxResults || 200;
 		let out = [];
@@ -1277,9 +1469,21 @@ var ZotPoPSources = (function () {
 		let total = null;
 		while (out.length < max) {
 			throwIfCancelled(ctx);
-			let n = Math.min(100, max - out.length);
-			let url = "https://export.arxiv.org/api/query?search_query=" + enc(query) + "&start=" + start + "&max_results=" + n + (q.sort === "date" ? "&sortBy=submittedDate&sortOrder=descending" : "&sortBy=relevance");
-			let xml = await withRetry(() => http.getText(url), { tries: 5, delay: 4000 }, ctx);
+			// arXiv asks for three seconds between requests, so a page of 100 spent 36
+			// seconds asleep on a 1000-row search. It serves up to 2000 at once but
+			// returns short pages on large asks, which would read as exhausted here.
+			let n = Math.min(500, max - out.length);
+			let url = "https://export.arxiv.org/api/query?" + (idList ? "id_list=" + enc(idList) : "search_query=" + enc(query))
+				+ "&start=" + start + "&max_results=" + n + (q.sort === "date" ? "&sortBy=submittedDate&sortOrder=descending" : "&sortBy=relevance");
+			// arXiv answered twice with nothing at all where the same query had papers.
+			// An empty body is worth asking again for; a body that is not a feed is a
+			// failure, and either one read as "no papers" is how a search loses them.
+			let xml = await withRetry(async () => {
+				let body = String(await http.getText(url) || "");
+				if (!body.trim()) throw Object.assign(new Error("arXiv returned an empty response"), { status: 503 });
+				if (!/<feed[\s>]|\/api\/errors/.test(body)) throw new Error("arXiv returned a response that is not an Atom feed");
+				return body;
+			}, { tries: 5, delay: 4000 }, ctx);
 			if (total == null) total = toInt(xmlText(xml, "opensearch:totalResults")) ?? 0;
 			let entries = xml.match(/<entry>[\s\S]*?<\/entry>/g) || [];
 			for (let e of entries) {
@@ -1331,12 +1535,34 @@ var ZotPoPSources = (function () {
 	// ---------------------------------------------------------------- Europe PMC
 	// Indexes PubMed + PMC and, crucially, the preprint servers: bioRxiv, medRxiv
 	// and Research Square. Used both as a general source and as the preprint source.
+	// Europe PMC indexes a byline surname first -- "Sung JY", "Sung Jae Yoon". Sent as
+	// written, "J. Y. Sung" matched a single unrelated paper from 1998.
+	function epmcAuthorAtom(name) {
+		let parsed = parseName(name);
+		let initialsLast = /^[A-Za-z]{1,3}$/.test(String(parsed.lastName || "").replace(/\./g, ""));
+		let family = (initialsLast ? parsed.firstName : parsed.lastName) || "";
+		let given = (initialsLast ? parsed.lastName : parsed.firstName) || "";
+		let clean = v => String(v).replace(/"/g, "").replace(/\s+/g, " ").trim();
+		if (!family || !given) return 'AUTH:"' + clean(name) + '"';
+		let initials = given.replace(/\./g, " ").split(/[\s-]+/).filter(Boolean).map(w => w[0].toUpperCase()).join("");
+		let forms = [...new Set([clean(family + " " + given), clean(family + " " + initials)])];
+		return forms.length === 1 ? 'AUTH:"' + forms[0] + '"'
+			: "(" + forms.map(f => 'AUTH:"' + f + '"').join(" OR ") + ")";
+	}
+
 	function epmcQuery(q, preprintsOnly) {
+		if (q.identifier) {
+			let id = q.identifier;
+			if (id.kind === "doi") return 'DOI:"' + id.value + '"';
+			if (id.kind === "pmid") return "(EXT_ID:" + id.value + " AND SRC:MED)";
+			if (id.kind === "pmcid") return "PMCID:" + id.value;
+			return "";
+		}
 		let parts = [];
 		if (q.keywords?.trim()) parts.push("(" + q.keywords.trim() + ")");
-		if (q.title?.trim()) parts.push(fieldExpression(q.title, (term, phrase) => "TITLE:" + (phrase ? '"' + term.replace(/"/g, "") + '"' : term)));
+		if (q.title?.trim()) parts.push(fieldExpression(q.title, (term, phrase) => "TITLE:" + (phrase ? '"' + term.replace(/"/g, "") + '"' : luceneAtom(term))));
 		if (q.authors?.trim()) {
-			parts.push(Query.compileAuthors(q.authors, name => 'AUTH:"' + name.replace(/"/g, "") + '"'));
+			parts.push(Query.compileAuthors(q.authors, epmcAuthorAtom));
 		}
 		if (q.venue?.trim()) {
 			let v = q.venue.trim().replace(/"/g, "");
@@ -1419,10 +1645,19 @@ var ZotPoPSources = (function () {
 		let cursor = "*", seen = 0;
 		while (out.length < max) {
 			throwIfCancelled(ctx);
-			let pageSize = Math.min(100, max - out.length);
+			let pageSize = Math.min(1000, max - out.length);
 			let url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core"
 				+ "&pageSize=" + pageSize + "&cursorMark=" + enc(cursor) + sort + "&query=" + enc(query);
-			let data = await withRetry(() => http.getJSON(url), {}, ctx);
+			// Europe PMC answered a valid query with HTTP 200 and a 17-byte body; the
+			// control request 60 seconds later reported 10,784 hits. Read as an empty
+			// result set, that silently becomes "no such paper".
+			let data = await withRetry(async () => {
+				let body = await http.getJSON(url);
+				if (!body || typeof body !== "object" || (body.hitCount == null && body.resultList == null)) {
+					throw Object.assign(new Error("Europe PMC returned an incomplete response"), { status: 503 });
+				}
+				return body;
+			}, {}, ctx);
 			let items = data.resultList?.result || [];
 			seen += items.length;
 			for (let r of items) out.push(epmcRecord(r));
@@ -1493,6 +1728,10 @@ var ZotPoPSources = (function () {
 	}
 
 	async function searchOSF(q, http, ctx, seed = null) {
+		if (q.identifier) {
+			sourceStatus(ctx, "osf", { retrieved: 0, scanned: 0, total: null, limit: q.maxResults || 200, exhausted: true, truncated: false, reason: "unsupported-query" });
+			return [];
+		}
 		let value = q.title?.trim() || q.keywords?.trim();
 		if (!value) {
 			warn(ctx, "osf", "Author-only and journal-only searches are unavailable in the OSF API; add a title or keyword.");
@@ -2036,7 +2275,11 @@ var ZotPoPSources = (function () {
 		if (r.doi) keys.push("doi:" + r.doi);
 		if (r.pmid) keys.push("pmid:" + r.pmid);
 		if (r.pmcid) keys.push("pmcid:" + r.pmcid);
-		if (r.arxiv) keys.push("arxiv:" + String(r.arxiv).replace(/v\d+$/, ""));
+		if (r.arxiv) keys.push("arxiv:" + String(r.arxiv).replace(/v\d+$/i, "").toLowerCase());
+		// OpenAlex and Crossref carry an arXiv posting under the DOI arXiv registers for it.
+		// Without this the same preprint stays two rows whenever the two titles differ.
+		let posted = /^10\.48550\/arxiv\.(.+)$/i.exec(r.doi || "");
+		if (posted) keys.push("arxiv:" + posted[1].replace(/v\d+$/i, "").toLowerCase());
 		if (r.source && r.sourceId) keys.push("source:" + r.source + ":" + r.sourceId);
 		return keys;
 	}
@@ -2055,8 +2298,13 @@ var ZotPoPSources = (function () {
 		// Generic titles (e.g. Introduction) need corroborating metadata.
 		let generic = /^(editorial|editorial board|introduction|acknowledg(e)?ments|preface|foreword|contents|table of contents|references|abstract|summary|conclusion|conclusions|correction|erratum|corrigendum)$/i.test(title);
 		if (generic && (!normalizedText(a.venue) || normalizedText(a.venue) !== normalizedText(b.venue))) return false;
+		// "Deep learning" by the same author in the same year is a Nature review in one
+		// venue and a tutorial in another. A title too short to identify a paper on its
+		// own may not be merged over a venue that disagrees.
+		let venueA = normalizedText(a.venue), venueB = normalizedText(b.venue);
+		let venuesDiffer = Boolean(venueA && venueB && venueA !== venueB);
 		return (!generic && (title.length >= 24 || title.split(" ").length >= 3))
-			|| Boolean(a.year && a.year === b.year && authorsAgree);
+			|| Boolean(a.year && a.year === b.year && authorsAgree && !venuesDiffer);
 	}
 
 	function sortSearchResults(records, q, fused = false) {
@@ -2147,7 +2395,9 @@ var ZotPoPSources = (function () {
 					}
 				}
 				else { entry = { record: r }; entries.push(entry); }
-				for (let id of ids) byID.set(id, entry);
+				// Keep the first entry an identifier reached: root() follows the merges from
+				// there, so the outcome no longer depends on the order the sources answered.
+				for (let id of ids) if (!byID.has(id)) byID.set(id, entry);
 				if (title) {
 					if (!byTitle.has(title)) byTitle.set(title, []);
 					byTitle.get(title).push(entry);
@@ -2195,6 +2445,9 @@ var ZotPoPSources = (function () {
 	}
 
 	const MULTI_SOURCES = ["openalex", "crossref", "europepmc", "arxiv"];
+	// Google Scholar and OSF have no identifier index, so a pasted DOI stays text there.
+	const ID_CAPABLE = new Set(["openalex", "crossref", "pubmed", "europepmc", "arxiv", "semanticscholar"]);
+	const IDENTIFIER_SOURCES = new Set([...ID_CAPABLE, "multi", "preprint"]);
 
 	// A wider pool lets reciprocal-rank fusion reward agreement below each
 	// source's displayed top N. Small searches overfetch threefold; large ones
@@ -2228,6 +2481,9 @@ var ZotPoPSources = (function () {
 			});
 			try {
 				let providerQuery = source.key === "scholar" ? Object.assign({}, subQuery, { maxResults: Math.min(2000, subQuery.maxResults) }) : subQuery;
+				if (providerQuery.identifier && !ID_CAPABLE.has(source.key)) {
+					providerQuery = Object.assign({}, providerQuery, { identifier: null, keywords: providerQuery.identifier.raw || "" });
+				}
 				lists[index] = await source.search(providerQuery, http, sub);
 				succeeded++;
 			}
@@ -2259,8 +2515,11 @@ var ZotPoPSources = (function () {
 				throwIfCancelled(ctx);
 				let previous = lists[index];
 				try {
-					lists[index] = await source.search(Object.assign({}, q, { maxResults: pool }), http,
+					// A refill that comes back shorter than the last pass must not take rows
+					// off the screen that the user is already looking at.
+					let refilled = await source.search(Object.assign({}, q, { maxResults: pool }), http,
 						Object.assign({}, ctx, { enrichCitations: false, onResults: records => { lists[index] = mergeRecords([previous, records]); publish(); } }));
+					lists[index] = mergeRecords([previous, refilled]);
 				}
 				catch (e) {
 					if (e.name === "AbortError") throw e;
@@ -2309,6 +2568,13 @@ var ZotPoPSources = (function () {
 		throwIfCancelled(ctx);
 		query = Object.assign({ sort: "relevance", maxResults: 200 }, query);
 		for (let key of ["keywords", "title", "authors", "venue"]) query[key] = String(query[key] || "").trim();
+		// A DOI, PMID, PMCID or arXiv id pasted on its own names one paper. Searched as
+		// text it named 6,528,758 candidates on Crossref and found none of them.
+		let pasted = IDENTIFIER_SOURCES.has(sourceKey) ? identifierQuery(query) : null;
+		if (pasted) {
+			pasted.raw = query[pasted.field];
+			query = Object.assign({}, query, { identifier: pasted, keywords: "", title: "", authors: "", venue: "" });
+		}
 		if (sourceKey === "multi" && query.sources !== undefined) {
 			let allowed = [...MULTI_SOURCES, "pubmed", "semanticscholar", "scholar"];
 			if (!Array.isArray(query.sources) || !query.sources.length || query.sources.some(key => !allowed.includes(key))) throw new Error("Combined search requires at least one supported source");
@@ -2345,6 +2611,9 @@ var ZotPoPSources = (function () {
 		let recs = matchingRecords(dedupe(await src.search(query, transport, ctx)), query);
 		sortSearchResults(recs, query);
 		recs = recs.slice(0, query.maxResults);
+		// A single source can hold a posting and its journal version too: Europe PMC
+		// returned the bioRxiv and the Nature Communications copy of the same paper.
+		linkPreprintVersions(recs);
 		publishResults(recs, query, ctx);
 		if (ctx.journalMetrics !== false) await enrichJournalMetrics(recs, transport, ctx);
 		if (ctx.institutionMetrics !== false) await enrichInstitutions(recs, transport, ctx);

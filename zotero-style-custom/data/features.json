@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "0.51.22",
+  "version": "0.52.0",
   "baseline": "Installed Ethereal Style 6.0.76: all 50 simple and dotted preference feature IDs plus requested workflows",
   "sourceFeatureIDs": [
     "AIGenerateRemark",
@@ -556,7 +556,7 @@
       "name": "문헌 상세에 노트 직접 표시",
       "implementation": {
         "file": "src/workbench.js",
-        "marker": "const notes=await library.notes("
+        "marker": "const notes=await scopeNotes("
       },
       "tests": [
         "test/workbench.test.mjs"

@@ -81,6 +81,8 @@
 		checking: false,
 		sortDir: "asc",
 		searching: false,
+		searched: false,
+		lastPartial: false,
 		searchController: null,
 		importing: false,
 		cancelled: false,
@@ -1394,9 +1396,17 @@
 
 	function readQuery() {
 		let num = id => { let v = parseInt($(id).value, 10); return Number.isFinite(v) ? v : null; };
+		// An empty box means the default. "0" or "twenty" is a number the user meant, and
+		// silently searching for 200 instead hides the mistake; the validator names it.
+		let limit = () => {
+			let raw = String($("maxResults").value || "").trim();
+			if (!raw) return 200;
+			let value = Number(raw);
+			return Number.isInteger(value) ? value : raw;
+		};
 		return {
 			authors: $("authors").value, venue: $("venue").value, title: $("title").value, keywords: $("keywords").value,
-			yearFrom: num("yearFrom"), yearTo: num("yearTo"), maxResults: num("maxResults") || 200,
+			yearFrom: num("yearFrom"), yearTo: num("yearTo"), maxResults: limit(),
 			sort: $("sort").value || "relevance",
 			...(engineValue() === "pop" ? { engine: "pop", popProfile: String(PREF("popDataDir") || "pop-default"),
 				...Object.fromEntries(POP_FIELDS.map(key => [key, $(key).value || (key === "popOutputSort" ? "rank" : key === "popCachePolicy" ? "refresh" : "")])) }
@@ -1456,6 +1466,7 @@
 		let ctx = {
 			email: PREF("email") || "",
 			s2ApiKey: PREF("s2ApiKey") || "",
+			ncbiApiKey: PREF("ncbiApiKey") || "",
 			openAlexApiKey: PREF("openAlexApiKey") || "",
 			enrichCitations: PREF("enrichCitations") !== false,
 			journalMetrics: PREF("journalMetrics") !== false,
@@ -1476,10 +1487,13 @@
 		try {
 			let recs = await ZotPoPSources.search(sourceKey, q, http, ctx);
 			if (!active()) throw abortError();
+			// Decided before the first draw: the empty-table message depends on it.
+			state.searched = true;
+			state.lastPartial = Boolean(ctx.errors?.length || recs.partial || recs.popProvenance?.complete === false);
 			displaySearchResults(recs);
 			await refreshLibraryFlags();
 			if (!active()) throw abortError();
-			let partial = Boolean(ctx.errors?.length || recs.partial || recs.popProvenance?.complete === false);
+			let partial = state.lastPartial;
 			setStatus(partial ? t("incompleteResults", label, recs.length) : t("resultCount", label, recs.length, false));
 			rememberSearch(sourceKey, q, recs, partial);
 			if (q.engine === "pop") showBanner(t("popModeNotice") + (recs.popProvenance?.cached ? " " + t("popCachedNotice") : ""));
@@ -1517,6 +1531,7 @@
 		}
 		finally {
 			state.searching = false;
+			state.searched = true;
 			state.searchController = null;
 			searchDone?.();
 			$("search-btn").disabled = false;
@@ -1682,7 +1697,11 @@
 		else marquee.refresh();
 
 		$("empty").hidden = list.length > 0 || !$("busy").hidden;
-		$("empty").textContent = state.records.length ? t("emptyFiltered") : t(searchSurface === "authors" ? "emptyInitialAuthors" : "emptyInitial");
+		// "Enter a query above" after a search that ran and found nothing reads as though
+		// nothing happened, which is exactly when a user needs to know a source failed.
+		$("empty").textContent = state.records.length ? t("emptyFiltered")
+			: state.searched ? t(state.lastPartial ? "emptyAfterPartial" : "emptyAfterSearch")
+			: t(searchSurface === "authors" ? "emptyInitialAuthors" : "emptyInitial");
 		updateCounts();
 		renderMetrics(list);
 		renderDetail();

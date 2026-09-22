@@ -2,12 +2,51 @@
 (function(root){
  'use strict';
  const text=value=>String(value??'');
- const norm=value=>text(value).normalize('NFKC').toLowerCase();
+ /* One normaliser for every box in the panel.
+
+    "Muller" has to find Hans Müller, "protein-protein" has to find
+    protein–protein, and Ｃａｓ９ typed fullwidth has to find cas9. So the
+    haystack and the query both go through the same fold: decompose, drop the
+    combining marks the decomposition exposed, recompose, lowercase, and pull
+    every dash-like character onto the plain hyphen. Hangul survives the round
+    trip because its jamo are letters, not marks, and NFC puts them back. */
+ const DASHES=/[‐-―−]/g;
+ const norm=value=>text(value).normalize('NFKD').replace(/\p{M}+/gu,'').normalize('NFC').toLowerCase().replace(DASHES,'-');
+ const tokenize=query=>[...norm(query).matchAll(/"([^"]+)"|(\S+)/g)].map(m=>m[1]||m[2]);
+ /* A lone letter is an initial, not a substring: "J. Y. Sung" is looking for
+    Jae Yoon Sung, not for every title with a j in it. */
+ const INITIAL=/^\p{L}\.?$/u;
+ const wordsOf=hay=>hay.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+ function hit(hay,token,starts){
+  if(!INITIAL.test(token))return hay.includes(token);
+  const letter=token.replace(/\.$/,'');
+  return (starts||wordsOf(hay)).some(word=>word.startsWith(letter));
+ }
+ /* The same test, for the boxes that search notes, attachments, annotations,
+    collections and watched authors: every token has to be in the haystack. */
+ function matches(value,query){
+  const tokens=tokenize(query);if(!tokens.length)return true;
+  const hay=norm(value),starts=tokens.some(t=>INITIAL.test(t))?wordsOf(hay):null;
+  return tokens.every(t=>hit(hay,t,starts));
+ }
+ /* Typing a whole title should put that title first, not bury it in library
+    order behind everything else the words happen to appear in. */
+ function relevance(item,query){
+  const q=norm(query).trim();if(!q)return 0;
+  const title=norm(item&&item.title);
+  return title===q?0:title.startsWith(q)?1:title.includes(q)?2:3;
+ }
+ function rankByQuery(items,query){
+  if(!norm(query).trim())return [...items];
+  return items.map((item,index)=>({item,index,tier:relevance(item,query)}))
+   .sort((a,b)=>a.tier-b.tier||a.index-b.index).map(entry=>entry.item);
+ }
  function filter(items,options={}) {
-  const tokens=[...norm(options.query).matchAll(/"([^"]+)"|(\S+)/g)].map(m=>m[1]||m[2]);
+  const tokens=tokenize(options.query),initials=tokens.some(t=>INITIAL.test(t));
   return items.filter(item=>{
-   const hay=norm([item.title,item.authors,item.venue,item.doi,item.abstract,...(item.tags||[])].join(' '));
-   return tokens.every(t=>hay.includes(t)) && (!options.type||item.itemType===options.type)
+   const hay=norm([item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,...(item.tags||[])].join(' '));
+   const starts=initials?wordsOf(hay):null;
+   return tokens.every(t=>hit(hay,t,starts)) && (!options.type||item.itemType===options.type)
     && (!options.tag||(item.tags||[]).some(t=>t===options.tag||t.startsWith(options.tag+'/')))
     && (!options.status||item.status===options.status)
     && (!options.ratingMin||Number(item.rating)>=Number(options.ratingMin))
@@ -65,6 +104,6 @@
  function unlinkCards(board,from,to){const before=board.edges.length;board.edges=board.edges.filter(e=>!((e.source===from&&e.target===to)||(e.source===to&&e.target===from)));return before-board.edges.length;}
  function deleteBoard(cache,id){const board=(cache.boards||[]).find(b=>b.id===id);if(!board)return null;cache.boards=cache.boards.filter(b=>b.id!==id);cache.boardTrash=[...(cache.boardTrash||[]),board].slice(-20);return board;}
  function restoreBoard(cache){const board=cache.boardTrash?.at(-1);if(!board)return null;if((cache.boards||[]).some(b=>b.id===board.id))throw new Error('같은 이름의 보드가 이미 있습니다. 다른 이름을 쓰세요.');cache.boardTrash.pop();cache.boards=[...(cache.boards||[]),board];return board;}
- const api={filter,sortItems,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
+ const api={filter,sortItems,norm,matches,relevance,rankByQuery,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
  root.CustomStyleWorkspace=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

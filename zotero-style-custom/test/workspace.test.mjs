@@ -18,3 +18,57 @@ test('canvas can rename boards edit card appearance and unlink without removing 
  assert.throws(()=>W.updateCard(board,a.id,{label:'Must not apply',color:'url(bad)'}));assert.equal(a.label,'Edited');
  assert.equal(W.unlinkCards(board,b.id,a.id),1);assert.equal(board.nodes.length,2);assert.equal(board.nodes[0].itemID,'1');assert.equal(board.edges.length,0);
 });
+
+test('a search folds accents, fullwidth letters and every kind of dash',()=>{
+ const items=[
+  {id:'a',title:'Kinetics of translation',authors:'Hans Müller',tags:[]},
+  {id:'b',title:'protein–protein interaction',authors:'Jae Yoon Sung',tags:[]},
+  {id:'c',title:'Ｃａｓ９ delivery',authors:'Zhang',tags:[]}];
+ assert.deepEqual(W.filter(items,{query:'Muller'}).map(i=>i.id),['a'],'an unaccented query finds the accented author');
+ assert.deepEqual(W.filter(items,{query:'Müller'}).map(i=>i.id),['a'],'and the accented query still works');
+ assert.deepEqual(W.filter(items,{query:'protein-protein'}).map(i=>i.id),['b'],'a hyphen finds an en dash');
+ assert.deepEqual(W.filter(items,{query:'protein—protein'}).map(i=>i.id),['b'],'and an em dash finds it too');
+ assert.deepEqual(W.filter(items,{query:'cas9'}).map(i=>i.id),['c'],'fullwidth letters fold to their plain form');
+});
+
+test('Korean survives the fold and is still searchable syllable by syllable',()=>{
+ const items=[{id:'k',title:'단백질 접힘 연구',authors:'성재윤',tags:['효소']}];
+ assert.equal(W.norm('단백질'),'단백질','the syllables come back composed');
+ assert.deepEqual(W.filter(items,{query:'접힘'}).map(i=>i.id),['k']);
+ assert.deepEqual(W.filter(items,{query:'효소'}).map(i=>i.id),['k']);
+});
+
+test('a typed year, item type or ISSN finds the paper',()=>{
+ const items=[
+  {id:'1',title:'Old work',year:1998,itemType:'journalArticle',issn:'2041-1723',tags:[]},
+  {id:'2',title:'New work',year:2025,itemType:'patent',issn:'',tags:[]}];
+ assert.deepEqual(W.filter(items,{query:'1998'}).map(i=>i.id),['1']);
+ assert.deepEqual(W.filter(items,{query:'patent'}).map(i=>i.id),['2']);
+ assert.deepEqual(W.filter(items,{query:'2041-1723'}).map(i=>i.id),['1']);
+});
+
+test('an initial matches a given name rather than any letter in the record',()=>{
+ const items=[
+  {id:'1',title:'Folding',authors:'Jae Yoon Sung',tags:[]},
+  {id:'2',title:'Junk',authors:'Amy Sung',tags:[]}];
+ assert.deepEqual(W.filter(items,{query:'J. Y. Sung'}).map(i=>i.id),['1']);
+ assert.deepEqual(W.filter(items,{query:'A Sung'}).map(i=>i.id),['2']);
+ assert.deepEqual(W.filter(items,{query:'z Sung'}).map(i=>i.id),[],'a letter no word starts with matches nothing');
+});
+
+test('the shared text matcher takes every token, in any order',()=>{
+ assert.equal(W.matches('Reading notes on Müller 2019','muller notes'),true);
+ assert.equal(W.matches('Reading notes on Müller 2019','muller absent'),false);
+ assert.equal(W.matches('anything at all',''),true,'an empty query matches everything');
+ assert.equal(W.matches('protein–protein','protein-protein'),true);
+});
+
+test('a typed title is ranked ahead of the papers that merely contain it',()=>{
+ const items=[
+  {id:'1',title:'Notes on base editing in plants'},
+  {id:'2',title:'Base editing'},
+  {id:'3',title:'Base editing in mice'},
+  {id:'4',title:'Unrelated'}];
+ assert.deepEqual(W.rankByQuery(items,'Base editing').map(i=>i.id),['2','3','1','4']);
+ assert.deepEqual(W.rankByQuery(items,'').map(i=>i.id),['1','2','3','4'],'with no query the library order stands');
+});

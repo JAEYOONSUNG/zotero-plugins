@@ -74,7 +74,8 @@ test("a 10000-candidate walk limit is visible instead of a silent empty complete
 		count++;
 		return { message: { "total-results": 20000, items: Array.from({ length: size }, (_, i) => ({ ...cr(offset + i), author: [{ given: "Bob", family: "Brown" }] })) } };
 	} }, ctx);
-	assert.equal(rows.length, 0); assert.equal(count, 100);
+	// Crossref serves 1000 rows a page, so the same 10000 candidates cost ten requests.
+	assert.equal(rows.length, 0); assert.equal(count, 10);
 	assert.equal(ctx.sourceStatus.crossref.scanned, 10000);
 	assert.equal(ctx.sourceStatus.crossref.reason, "candidate-limit");
 	assert.ok(ctx.errors.some(error => /10000 candidates/.test(error)));
@@ -221,7 +222,8 @@ test("PubMed refills IDs when local author checks exhaust the initial candidate 
 });
 
 test("Europe PMC title Boolean expressions remain fielded alternatives and quoted phrases stay phrases", () => {
-	assert.equal(S.epmcQuery({ title: "cancer OR genome", authors: "Alice Smith" }), '(TITLE:cancer OR TITLE:genome) AND (AUTH:"Alice Smith")');
+	// Europe PMC indexes a byline surname first, so both written forms are asked for.
+	assert.equal(S.epmcQuery({ title: "cancer OR genome", authors: "Alice Smith" }), '(TITLE:cancer OR TITLE:genome) AND (AUTH:"Smith Alice" OR AUTH:"Smith A")');
 	assert.equal(S.epmcQuery({ title: '"cancer genome" OR editing' }), '(TITLE:"cancer genome" OR TITLE:editing)');
 	assert.equal(S.epmcQuery({ title: "cancer genome" }), '(TITLE:cancer AND TITLE:genome)');
 });
