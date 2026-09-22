@@ -37,7 +37,7 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog}={}){
  const record=(name,result)=>async(...args)=>{calls.push([name,...args]);return typeof result==='function'?result(...args):result;};
  const runtime={rootURI:'file:///plugin/',cache,dirty:false,selected:()=>mainSelection,pref:(key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||=( {}),state:()=>({citations:3,impactFactor:4,status:'reading'}),flush:record('flush'),refreshWindows:record('refresh'),publicationTags:()=>['Q1'],refreshJournalMetrics:record('journal',{updated:1,failed:0,unknown:0}),setPanelCSS:record('css'),toggleAppTheme:record('appTheme'),setCustomFields:record('customFields'),refreshPublicationRanks:record('ranks'),pageProgress:()=>({pages:{0:2,550:7},total:601,visited:2,percent:0,attachmentID:'99'})};
  runtime.jcrBrowser=JCRBrowser;
- if(nativeJCR)runtime.jcrCatalog=catalog===null?null:catalog||JCRCategories.create(JSON.parse(fs.readFileSync(new URL('../data/jcr-categories.json',import.meta.url),'utf8')));
+ if(nativeJCR)runtime.jcrCatalog=catalog===null?null:catalog||shippedCatalog();
  // Discovery goes out to OpenAlex; the panel only needs the shapes it returns.
  let watched=[];
  const suggestion=(id,source)=>({id,source,title:'Paper '+id,year:2024,venue:'Journal',citations:5,
@@ -1463,15 +1463,35 @@ test('journal table only shares a JIF year when every visible row has that same 
  f.bench.destroy();
 });
 
+/* The shipped taxonomy, parsed once. A clean checkout has only the openly
+   licensed catalogue: the captured JCR tables are licensed to their reader and
+   are not in the repository.
+
+   These tests are about the panel around the catalog, not about its 89,510
+   journals, and holding a frozen copy of all of them made the rest of this
+   file crawl. So the real groups and categories go in and the journal list is
+   whatever the test needs, with complete.journals false to say so.
+   JCRCategories.create copies everything it is handed, so one parsed payload
+   safely backs every catalog built here. */
+let SHIPPED=null,SHIPPED_CATALOG=null;
+function shippedPayload(){return SHIPPED||=JSON.parse(fs.readFileSync(new URL('../data/journal-catalog.json',import.meta.url),'utf8'));}
+function shippedTaxonomy(journals,categoryCount){
+ const shipped=shippedPayload();
+ const original=shipped.categories.find(row=>row.journalCount>0&&row.groupKeys.length);
+ const category=categoryCount==null?original:{...original,journalCount:categoryCount};
+ return {payload:{...shipped,
+  source:{...shipped.source,complete:{...shipped.source.complete,journals:false}},
+  categories:shipped.categories.map(row=>row===original?category:row),
+  journals},category};
+}
+function shippedCatalog(){return SHIPPED_CATALOG||=JCRCategories.create(shippedTaxonomy([]).payload);}
 function capturedJCRControl(){
- const payload=JSON.parse(fs.readFileSync(new URL('../data/jcr-categories.json',import.meta.url),'utf8'));
- // Real captured 21/254 taxonomy; this deliberately named unit-test journal
- // exercises callbacks/metric cells and is never written to the shipped data.
- const category=payload.categories.find(row=>row.journalCount>0&&row.groupKeys.length);
- payload.source.complete.journals=false;
+ /* One deliberately named unit-test journal, so the callbacks and the metric
+    cells are exercised against a row whose figures are known. It is never
+    written to the shipped data. */
+ const {payload,category}=shippedTaxonomy([],100);
  payload.journals=[{key:'integration-control',title:'Integration control journal',abbreviation:'CONTROL',issns:['1234-5678'],
-  categoryKeys:[category.key],jif:5.2,year:payload.source.metricYear,
-  categoryMetrics:[{categoryKey:category.key,editions:category.editions.slice(0,1),rank:3,rankTotal:100,quartile:1,percentile:97.5}]}];
+  categoryKeys:[category.key],citedness:5.2,citednessRanks:[3],citednessQuartiles:[1],citednessPercentiles:[97.5]}];
  return {catalog:JCRCategories.create(payload),category};
 }
 
@@ -1481,17 +1501,19 @@ test('actual journal tab defaults to all captured JCR groups despite old OpenAle
  Object.assign(f.bench.state,{query:'a paper filter with no journal matches',scope:'selected'});
  await f.bench.show('journals');
  assert.equal(f.bench.state.journalBrowser,'jcr');
- assert.equal(f.body().querySelectorAll('.sc-jcr-group').length,21);
+ assert.equal(f.body().querySelectorAll('.sc-jcr-group').length,shippedPayload().groups.length);
  assert.equal(f.body().querySelector('.sc-journal-table'),null);
  assert.equal(f.body().querySelector('select[data-level]'),null);
  assert.equal(f.bench.panel.querySelector('.sc-search-row').hidden,true);
  const find=new f.win.Event('keydown',{bubbles:true,cancelable:true});Object.defineProperties(find,{key:{value:'f'},ctrlKey:{value:true}});
  f.bench.panel.dispatchEvent(find);assert.equal(f.doc.activeElement,f.body().querySelector('.sc-jcr-search'));
- assert.match(f.body().textContent,/Clarivate|JCR/);
- assert.ok(f.findButton('전체 카테고리 · 254'));
- await f.click('전체 카테고리 · 254');
+ const categories=shippedPayload().categories.length;
+ assert.match(f.body().textContent,/OpenAlex/);
+ assert.doesNotMatch(f.body().textContent,/Clarivate/);
+ assert.ok(f.findButton(`전체 카테고리 · ${categories}`));
+ await f.click(`전체 카테고리 · ${categories}`);
  assert.equal(f.body().querySelectorAll('tr[data-category-key]').length,25);
- assert.match(f.body().querySelector('.sc-jcr-pagination').textContent,/254/);
+ assert.match(f.body().querySelector('.sc-jcr-pagination').textContent,new RegExp(String(categories)));
  assert.equal(f.runtime.cache.workbenchUI.jcrBrowserState.view,'categories');
  f.bench.destroy();
 });
@@ -1514,13 +1536,13 @@ test('native JCR category journals use actual model/component, preserve official
  assert.match(f.body().querySelector('.sc-jcr-coverage').textContent,/수집 미완료/);
  await f.click('저널 검색');
  const call=f.calls.find(c=>c[0]==='journalSearch');assert.equal(call[1],f.win);assert.deepEqual(call[2],{venue:'Integration control journal'});
- await f.click('JCR 원본 열기');assert.deepEqual(f.calls.find(c=>c[0]==='sourceOpen'),['sourceOpen','https://jcr.clarivate.com/jcr/browse-categories']);
+ await f.click('OpenAlex 원본 열기');assert.deepEqual(f.calls.find(c=>c[0]==='sourceOpen'),['sourceOpen','https://api.openalex.org/sources']);
  f.bench.destroy();
 });
 
 test('OpenAlex is an explicit remembered alternative with a native JCR return control and preserved JCR navigation',async()=>{
  const {catalog}=capturedJCRControl(),f=fixture(undefined,undefined,{nativeJCR:true,catalog});
- await f.bench.show('journals');await f.click('전체 카테고리 · 254');await f.click('OpenAlex 주제로 탐색');
+ await f.bench.show('journals');await f.click(`전체 카테고리 · ${shippedPayload().categories.length}`);await f.click('OpenAlex 주제로 탐색');
  assert.equal(f.bench.state.journalBrowser,'openalex');assert.ok(f.body().querySelector('.sc-journal-table'));
  assert.equal(f.body().querySelector('.sc-jcr-browser'),null);assert.equal(f.runtime.cache.workbenchUI.journalBrowser,'openalex');
  const cache=structuredClone(f.runtime.cache);f.bench.destroy();
@@ -1579,13 +1601,13 @@ test('a missing ZotPoP journal-search integration is reported without opening or
 test('native JCR remount and workbench destruction remove old callbacks and their stylesheet',async()=>{
  const {catalog}=capturedJCRControl(),f=fixture(undefined,undefined,{nativeJCR:true,catalog});
  f.runtime.Z.launchURL=url=>f.calls.push(['sourceOpen',url]);
- await f.bench.show('journals');const stale=f.findButton('JCR 원본 열기'),old=f.body().querySelector('.sc-jcr-browser');
+ await f.bench.show('journals');const stale=f.findButton('OpenAlex 원본 열기'),old=f.body().querySelector('.sc-jcr-browser');
  await f.bench.show('explore');assert.equal(old.isConnected,false);
  stale.dispatchEvent(new f.win.Event('click'));await settle();assert.equal(f.calls.some(c=>c[0]==='sourceOpen'),false);
  await f.bench.show('journals');await f.bench.render();await f.bench.render();
  assert.equal(f.doc.querySelectorAll('.sc-jcr-browser').length,1);
- await f.click('JCR 원본 열기');assert.equal(f.calls.filter(c=>c[0]==='sourceOpen').length,1);
- const latest=f.findButton('JCR 원본 열기');f.bench.destroy();latest.dispatchEvent(new f.win.Event('click'));await settle();
+ await f.click('OpenAlex 원본 열기');assert.equal(f.calls.filter(c=>c[0]==='sourceOpen').length,1);
+ const latest=f.findButton('OpenAlex 원본 열기');f.bench.destroy();latest.dispatchEvent(new f.win.Event('click'));await settle();
  assert.equal(f.calls.filter(c=>c[0]==='sourceOpen').length,1);
  assert.equal(f.doc.querySelectorAll('.sc-jcr-browser').length,0);
  assert.equal([...f.doc.querySelectorAll('link')].some(link=>link.getAttribute('href').endsWith('jcr-browser.css')),false);

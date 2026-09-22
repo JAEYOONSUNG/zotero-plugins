@@ -29,6 +29,45 @@
     }
   }
 
+  /* Journal figures arrive in two layers. The archive carries only what may be
+     passed on, built from OpenAlex under CC0; that figure is a two-year mean
+     citedness, not a Journal Impact Factor. Figures an institution licenses to
+     a reader are never packaged and never published: they sit in a folder in
+     the Zotero data directory and win wherever they exist.
+
+     Which layer each table came from is the whole point, so the report says it
+     per file, with the record count, the file's own date and size when it is
+     the reader's own, and one named record with its figure. That last part is
+     what makes the line checkable: a reader can look at the IF column, find
+     that journal, and see the same number. Nothing here opens anything. */
+  async function journalLayerReport(runtime, {io = null, join = null} = {}) {
+    const {dir, tables} = runtime.journalFigureLayers();
+    if (!tables.length) throw new Error('the runtime records no journal tables');
+    const catalog = Array.isArray(runtime.catalog) ? runtime.catalog : [];
+    const highest = catalog.reduce((best, row) =>
+      Number.isFinite(row && row.impactFactor) && (!best || row.impactFactor > best.impactFactor) ? row : best, null);
+    const said = [];
+    for (const table of tables) {
+      if (!table.layer) { said.push(`${table.file}: 읽지 않음`); continue; }
+      const parts = [table.layer === 'local' ? '내 폴더' : '배포본', `${table.count}건`];
+      if (table.layer === 'local' && io && dir) {
+        try {
+          const stat = await io.stat(join ? join(dir, table.file) : dir.replace(/\/+$/, '') + '/' + table.file);
+          const when = stat && stat.lastModified ? new Date(stat.lastModified).toISOString().slice(0, 10) : null;
+          if (when) parts.push(when);
+          if (stat && Number.isFinite(stat.size)) parts.push(Math.round(stat.size / 1024) + 'KB');
+        } catch (ignored) { /* the figures loaded; only the file's date is missing */ }
+      }
+      if (table.file === 'if-catalog.json' && highest) {
+        parts.push(`최고 ${highest.title} ${highest.impactFactor}`);
+        if (highest.authority) parts.push('authority ' + highest.authority);
+      }
+      said.push(`${table.file}: ${parts.join(' · ')}`);
+    }
+    if (!catalog.length) throw new Error('no journal figures loaded from either layer: ' + said.join(' · '));
+    return `폴더 ${dir || '없음'} · ` + said.join(' / ');
+  }
+
   async function run(Zotero, runtime, {network = true, repair = false, fill = false, shots = false, seed = ''} = {}) {
     const results = [];
     const win = Zotero.getMainWindow && Zotero.getMainWindow();
@@ -447,6 +486,12 @@
       return said.slice(0, 60) + '…';
     }));
 
+    // Whether the figures on screen are the reader's own or the ones the archive
+    // ships. Read-only, and it opens nothing.
+    results.push(await attempt('where each journal table came from: the reader\'s own folder or the shipped archive', () =>
+      journalLayerReport(runtime, {io: typeof IOUtils !== 'undefined' ? IOUtils : null,
+      join: typeof PathUtils !== 'undefined' ? ((a, b) => PathUtils.join(a, b)) : null})));
+
     // What the Files column actually says, for one item of each kind. A verdict
     // that never reaches the cell is a verdict nobody sees.
     // How much of this library's own journal list gets a real colour, now that
@@ -830,7 +875,7 @@
     };
   }
 
-  const api = {run};
+  const api = {run, journalLayerReport};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleSelfCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

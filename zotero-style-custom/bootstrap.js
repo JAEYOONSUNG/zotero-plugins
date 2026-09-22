@@ -1,6 +1,9 @@
 /* global Zotero, Services, IOUtils, PathUtils */
 "use strict";
 var customStyle = null;
+// Where a reader puts journal figures their institution licenses to them. Nothing in
+// this folder is ever packaged into the archive or published.
+const JOURNAL_OVERLAY_DIR = "style-custom-journals";
 var readerWindowObserver = null;
 function install() {}
 function uninstall() {}
@@ -16,24 +19,43 @@ async function startup({ id, version, rootURI }) {
       const oldPath = PathUtils.join(Zotero.DataDirectory.dir, "zoterostyle.json");
       if (await IOUtils.exists(oldPath) && (await IOUtils.stat(oldPath)).size <= 50 * 1024 * 1024) legacy = JSON.parse(await IOUtils.readUTF8(oldPath));
     } catch (error) { Zotero.logError(error); }
-    const catalogResponse = await Zotero.HTTP.request("GET", rootURI + "data/if-catalog.json", { responseType: "json" });
-    const catalog = catalogResponse.response;
-    // The local journal registry combines stored JIF metadata with OpenAlex
-    // subject paths. It is not an official JCR category/rank database.
-    // Optional for older builds; missing records remain unknown.
+    // Journal figures arrive in two layers. The plugin ships only what it may pass on:
+    // OpenAlex, which is CC0. Licensed figures -- a Journal Citation Reports export the
+    // reader's institution entitles them to -- are never packaged and never published;
+    // they are read from this folder in the Zotero data directory, and where one exists
+    // it wins, so a subscriber keeps seeing their own numbers.
+    const journalDir = PathUtils.join(Zotero.DataDirectory.dir, JOURNAL_OVERLAY_DIR);
+    const journalLayers = {};
+    const localJournalData = async name => {
+      try {
+        const file = PathUtils.join(journalDir, name);
+        if (!await IOUtils.exists(file)) return null;
+        if ((await IOUtils.stat(file)).size > 200 * 1024 * 1024) throw new Error(name + " is too large to read");
+        return JSON.parse(await IOUtils.readUTF8(file));
+      } catch (error) { Zotero.logError(error); return null; }
+    };
+    const journalData = async (localName, shippedName = localName) => {
+      const local = await localJournalData(localName);
+      if (local) { journalLayers[localName] = "local"; return local; }
+      const response = await Zotero.HTTP.request("GET", rootURI + "data/" + shippedName, { responseType: "json" });
+      journalLayers[localName] = "shipped";
+      return response.response;
+    };
+    const catalog = await journalData("if-catalog.json");
+    // The registry combines the metric with OpenAlex subject paths. Optional for older
+    // builds; missing records stay unknown rather than guessed at.
     try {
-      const registry = await Zotero.HTTP.request("GET", rootURI + "data/journal-registry.json", { responseType: "json" });
-      if (registry && registry.response && globalThis.CustomStyleJournalIdentity) {
-        globalThis.CustomStyleJournalIdentity.loadRegistry(registry.response);
+      const registry = await journalData("journal-registry.json");
+      if (registry && globalThis.CustomStyleJournalIdentity) {
+        globalThis.CustomStyleJournalIdentity.loadRegistry(registry);
       }
     } catch (error) { Zotero.debug("Style Custom: journal registry not loaded: " + (error && error.message)); }
     let jcrCatalog = null, jcrCatalogError = null;
     try {
-      const response = await Zotero.HTTP.request("GET", rootURI + "data/jcr-categories.json", { responseType: "json" });
-      jcrCatalog = globalThis.CustomStyleJCRCategories.create(response.response);
+      jcrCatalog = globalThis.CustomStyleJCRCategories.create(await journalData("jcr-categories.json", "journal-catalog.json"));
     } catch (error) {
       jcrCatalogError = String(error && error.message || error);
-      Zotero.debug("Style Custom: official JCR catalog not loaded: " + jcrCatalogError);
+      Zotero.debug("Style Custom: journal category catalog not loaded: " + jcrCatalogError);
     }
     customStyle = new globalThis.CustomStyleRuntime({ Zotero, catalog, io: IOUtils, paths: PathUtils,
       model: globalThis.CustomStyleData, marquee: globalThis.CustomStyleMarquee,
@@ -53,6 +75,8 @@ async function startup({ id, version, rootURI }) {
     });
     customStyle.jcrCatalog = jcrCatalog;
     customStyle.jcrCatalogError = jcrCatalogError;
+    customStyle.journalLayers = journalLayers;
+    customStyle.journalDir = journalDir;
     customStyle.jcrBrowser = globalThis.CustomStyleJCRBrowser;
     await customStyle.start({ id, version, rootURI });
     Zotero.StyleCustom = customStyle;

@@ -6,3 +6,8 @@ zotero-focus/
 
 # Copied from ../zotero-style-custom/data at build time
 content/journal-registry.json
+
+# Journal Citation Reports figures are licensed to their reader. They live in the
+# Zotero data directory (zotpop/journals/), never in this repository or the archive.
+content/jcr-2025-data.js
+content/journal-registry.json

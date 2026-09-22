@@ -114,6 +114,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   getSetting(key) {
     const definition=this.settingDefinition(key);if(!definition)throw new Error('Unknown setting: '+key);
+    // A note is read, never written: its text is what the runtime found, not a
+    // stored preference, so it never reaches the preference store or validate().
+    if(definition.type==='note')return this.journalFigureSummary();
     let value=this.pref(key,undefined);
     if(value===undefined){
       const reader=this.cache.readerSettings||{},margin=reader.marginOptions||{};
@@ -136,7 +139,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   async resetSettings(category) {
     if(!this.settingsSchema.categories.some(row=>row.id===category))throw new Error('Unknown category');
-    const rows=this.settingsSchema.settings.filter(row=>row.category===category&&row.type!=='action'&&!row.secret);
+    const rows=this.settingsSchema.settings.filter(row=>row.category===category&&row.type!=='action'&&row.type!=='note'&&!row.secret);
     for(const row of rows)await this.setSetting(row.key,row.default,{apply:false});
     await this.applySettings(rows.map(row=>row.key));return {reset:rows.length,secretsPreserved:true};
   }
@@ -156,6 +159,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     await this.flush();await this.refreshWindows();
   }
   async runSettingAction(action) {
+    // Revealing a folder is the one action with nothing to do with the library
+    // window, so it is answered before one is demanded.
+    if(action==='journalFolder')return this.revealJournalFolder();
     const win=this.Z.getMainWindow?.();if(!win)throw new Error('Zotero 문헌 창을 열어 주세요.');
     const selected=this.selected(win);
     if(action==='workbench')return this.openWorkbench(win);
@@ -167,6 +173,43 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if(action==='journals')return this.refreshJournalMetrics(selected,win.DOMParser);
     if(action==='ranks')return this.refreshPublicationRanks(selected);
     throw new Error('Unknown action');
+  }
+  /* Journal figures arrive in two layers. The archive carries only what may be
+     passed on: OpenAlex, which is CC0. Figures an institution licenses to a
+     reader -- a Journal Citation Reports export -- are never packaged and never
+     published; they are read from a folder in the Zotero data directory and win
+     wherever they exist. bootstrap.js records which layer each table came from;
+     this is how the reader is told, and how the self-check reports it. */
+  journalFigureLayers() {
+    const layers=this.journalLayers||{};
+    const table=(file,count)=>({file,layer:layers[file]||null,count:Number.isFinite(count)?count:0});
+    return {
+      dir:this.journalDir||'',
+      tables:[
+        table('if-catalog.json',Array.isArray(this.catalog)?this.catalog.length:0),
+        table('journal-registry.json',this.journalIdentity?._registrySize?.()||0),
+        table('jcr-categories.json',this.jcrCatalog?.journals?.length||0)
+      ]
+    };
+  }
+  journalFigureSummary() {
+    const {dir,tables}=this.journalFigureLayers();
+    const word=layer=>this.t(layer==='local'?'내 폴더':layer==='shipped'?'배포본':'읽지 않음');
+    const parts=tables.map(row=>row.file+' '+word(row.layer));
+    parts.push(this.t('폴더 {0}').replace('{0}',dir||this.t('읽지 않음')));
+    return parts.join(' · ');
+  }
+  // Reveals the folder in the file manager, which is outside Zotero: the button
+  // that calls this carries data-opens so no sweep presses it.
+  async revealJournalFolder() {
+    const dir=this.journalDir;
+    if(!dir)throw new Error('지표 폴더 위치를 읽지 못했습니다. Zotero를 다시 시작하세요.');
+    try{await this.io?.makeDirectory?.(dir,{ignoreExisting:true,createAncestors:true});}catch(error){this.Z.debug?.('Style Custom: '+(error&&error.message));}
+    if(typeof this.Z.File?.reveal==='function')await this.Z.File.reveal(dir);
+    else if(typeof this.Z.launchFile==='function')this.Z.launchFile(dir);
+    else if(typeof this.Z.launchURL==='function')this.Z.launchURL('file://'+dir);
+    else throw new Error('이 Zotero에서는 폴더를 열 수 없습니다. 파일 관리자에서 직접 여세요.');
+    return this.t('파일 관리자에서 폴더를 열었습니다.');
   }
   /* The feed named in the manifest, read through Zotero's add-on manager so
      the new file is verified against its hash and swapped in without a

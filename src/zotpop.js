@@ -29,13 +29,23 @@ Zotero.ZotPoP = {
 		this.id = id;
 		this.version = version;
 		this.rootURI = rootURI;
-		// The journal registry shared with Style Custom: a publisher, JCR
-		// abbreviation and quartile for every JCR journal, so a result whose
-		// source says nothing about its publisher still gets the house colour.
+		// The journal registry shared with Style Custom: a publisher, abbreviation and
+		// quartile per journal, so a result whose source says nothing about its
+		// publisher still gets the house colour. It is read from the reader's own
+		// folder first, because a registry built from licensed figures may not be
+		// packaged; the archive carries only the openly licensed one.
 		try {
-			let registry = await Zotero.HTTP.request("GET", rootURI + "content/journal-registry.json", { responseType: "json" });
-			if (registry && registry.response && Zotero.ZotPoPJournalMarks && Zotero.ZotPoPJournalMarks.loadRegistry) {
-				Zotero.ZotPoPJournalMarks.loadRegistry(registry.response);
+			let registry = null;
+			if (typeof IOUtils !== "undefined" && typeof PathUtils !== "undefined" && Zotero.DataDirectory?.dir) {
+				let local = PathUtils.join(Zotero.DataDirectory.dir, "zotpop", "journals", "journal-registry.json");
+				if (await IOUtils.exists(local)) registry = JSON.parse(await IOUtils.readUTF8(local));
+			}
+			if (!registry) {
+				let response = await Zotero.HTTP.request("GET", rootURI + "content/journal-registry.json", { responseType: "json" });
+				registry = response && response.response;
+			}
+			if (registry && Zotero.ZotPoPJournalMarks && Zotero.ZotPoPJournalMarks.loadRegistry) {
+				Zotero.ZotPoPJournalMarks.loadRegistry(registry);
 			}
 		}
 		catch (e) { Zotero.debug("ZotPoP: journal registry not loaded: " + (e && e.message)); }

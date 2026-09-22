@@ -6,7 +6,10 @@ import Browser from '../src/jcr-browser.js';
 import Categories from '../src/jcr-categories.js';
 
 const settle=async()=>{for(let i=0;i<3;i++)await new Promise(resolve=>setImmediate(resolve));};
-const path=new URL('../data/jcr-categories.json',import.meta.url);
+// The shipped taxonomy. A clean checkout has only the openly licensed one:
+// the captured JCR tables are licensed to their reader and are not in the
+// repository, so the large-scale render tests run against this.
+const path=new URL('../data/journal-catalog.json',import.meta.url);
 function payload(){
  const source={provider:'Clarivate',product:'JCR',url:'https://jcr.clarivate.com/jcr/browse-categories',
   capturedAt:'2026-09-20T04:52:59.928Z',datasetUpdated:'2026-06-17',releaseYear:2026,metricYear:2025,
@@ -185,27 +188,33 @@ test('catalog updates fill journal membership without losing category selection,
  f.browser.destroy();
 });
 
-test('captured JCR catalog renders the actual 21 group structure, all 254 categories and exact group membership',()=>{
+test('the shipped catalog renders its whole group structure, every category and exact group membership',()=>{
  const data=JSON.parse(fs.readFileSync(path,'utf8')),f=fixture({data,pageSize:200});
- assert.equal(f.host.querySelectorAll('.sc-jcr-group').length,21);
- assert.equal(f.button('전체 카테고리 · 254').textContent,'전체 카테고리 · 254');
+ const groups=data.groups.length,categories=data.categories.length;
+ assert.ok(groups>=20&&categories>=200,'the real thing, not a stub');
+ assert.equal(f.host.querySelectorAll('.sc-jcr-group').length,groups);
+ assert.equal(f.button(`전체 카테고리 · ${categories}`).textContent,`전체 카테고리 · ${categories}`);
  for(const group of data.groups){
   const row=f.group(group.key);assert.ok(row);const values=[...row.querySelectorAll('.sc-jcr-group-metric')].map(n=>n.textContent);
   assert.deepEqual(values,[group.categoryCount,group.journalCount,group.citableItems].map(n=>n==null?'—':Number(n).toLocaleString()));
  }
- f.click(f.group('Agricultural Sciences').querySelector('button'));
- assert.equal(f.group('Agricultural Sciences').querySelectorAll('.sc-jcr-category-link').length,7);
- f.click(f.button('전체 카테고리 · 254'));assert.equal(f.host.querySelectorAll('tbody tr').length,200);
- f.click(f.button('다음'));assert.equal(f.host.querySelectorAll('tbody tr').length,54);
+ const first=data.groups[0];
+ f.click(f.group(first.key).querySelector('button'));
+ assert.equal(f.group(first.key).querySelectorAll('.sc-jcr-category-link').length,first.categoryCount);
+ f.click(f.button(`전체 카테고리 · ${categories}`));assert.equal(f.host.querySelectorAll('tbody tr').length,200);
+ f.click(f.button('다음'));assert.equal(f.host.querySelectorAll('tbody tr').length,categories-200);
  f.browser.destroy();
 });
 
-test('visible page-size choices match JCR and persist while resetting the current page',()=>{
- const f=fixture({data:JSON.parse(fs.readFileSync(path,'utf8'))});f.click(f.button('전체 카테고리 · 254'));
+test('visible page-size choices match the catalog and persist while resetting the current page',()=>{
+ const data=JSON.parse(fs.readFileSync(path,'utf8')),f=fixture({data});
+ f.click(f.button(`전체 카테고리 · ${data.categories.length}`));
  const size=()=>f.host.querySelector('[data-focus-key="page-size"]');
  assert.deepEqual([...size().querySelectorAll('option')].map(n=>n.value),['25','50','75','100','200']);
  assert.equal(f.host.querySelectorAll('tbody tr').length,25);
- assert.equal(f.host.querySelector('tbody tr').dataset.categoryKey,'EDUCATION & EDUCATIONAL RESEARCH');
+ // The default order is by journal count, so the biggest category leads.
+ const biggest=[...data.categories].sort((a,b)=>b.journalCount-a.journalCount||String(a.name).localeCompare(String(b.name)))[0];
+ assert.equal(f.host.querySelector('tbody tr').dataset.categoryKey,biggest.key);
  f.click(f.button('다음'));assert.equal(f.browser.state.page,1);
  size().value='75';size().dispatchEvent(new f.win.Event('change',{bubbles:true}));
  assert.equal(f.browser.state.page,0);assert.equal(f.browser.state.pageSize,75);assert.equal(f.host.querySelectorAll('tbody tr').length,75);

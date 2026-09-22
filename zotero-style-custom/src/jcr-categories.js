@@ -1,4 +1,5 @@
-/* Official JCR groups, categories and observed journal memberships.
+/* Groups, categories and observed journal memberships, from either the
+ * captured JCR tables or the openly licensed OpenAlex catalogue.
  * Names are the captured display names, not invented Clarivate identifiers.
  * Counts remain captured values; no ranks, quartiles or taxonomy are inferred.
  */
@@ -127,13 +128,27 @@
     }
     return row;
   }
+  /* Two catalogues load through this module. The captured one comes from
+     Clarivate's JCR. The open one is built from OpenAlex, whose data is CC0
+     and may be redistributed, so the plugin can ship a journal catalogue
+     without anyone's proprietary figures. A payload has to declare which it
+     is and then satisfy that provenance exactly: an OpenAlex file can never
+     present itself as JCR, and the Clarivate rules are unchanged. */
+  const PROVENANCE = [
+    {provider: 'Clarivate', product: 'JCR', host: 'jcr.clarivate.com', expected: 'an official HTTPS JCR URL'},
+    {provider: 'OpenAlex', product: 'Sources', host: 'api.openalex.org', expected: 'an HTTPS OpenAlex API URL', license: 'CC0-1.0'}
+  ];
   function sourceOf(value) {
     const source = copy(object(value, 'source'));
-    if (source.provider !== 'Clarivate' || source.product !== 'JCR') invalid('source', 'requires Clarivate JCR provenance');
+    const provenance = PROVENANCE.find(entry => entry.provider === source.provider && entry.product === source.product);
+    if (!provenance) invalid('source', 'requires Clarivate JCR or OpenAlex Sources provenance');
+    if (provenance.license && source.license !== provenance.license) {
+      invalid('source.license', 'requires the ' + provenance.license + ' licence this data is published under');
+    }
     let url;
-    try { url = new URL(source.url); } catch (_) { invalid('source.url', 'expected an official HTTPS JCR URL'); }
-    if (url.protocol !== 'https:' || url.hostname.toLowerCase() !== 'jcr.clarivate.com' || url.username || url.password || url.port) {
-      invalid('source.url', 'expected an official HTTPS JCR URL');
+    try { url = new URL(source.url); } catch (_) { invalid('source.url', 'expected ' + provenance.expected); }
+    if (url.protocol !== 'https:' || url.hostname.toLowerCase() !== provenance.host || url.username || url.password || url.port) {
+      invalid('source.url', 'expected ' + provenance.expected);
     }
     if (typeof source.capturedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(source.capturedAt)
       || !Number.isFinite(Date.parse(source.capturedAt))) invalid('source.capturedAt', 'expected a capture timestamp with timezone');

@@ -255,8 +255,13 @@ test('CommonJS and Zotero global APIs agree without runtime dependencies or netw
   assert.equal(catalog.journalsForCategory('MULTIDISCIPLINARY SCIENCES')[0].title, 'Journal A');
 });
 
-test('actual captured JCR taxonomy validates exact group and category membership coverage', () => {
-  const data = JSON.parse(readFileSync(new URL('../data/jcr-categories.json', import.meta.url), 'utf8'));
+/* The shipped taxonomy, whatever is in the archive. It used to be the captured
+   JCR tables; those are licensed to their reader and no longer live in this
+   repository, so a clean checkout has only the openly licensed catalogue. The
+   multiple-parent case the JCR tables provided is covered by the fixture above,
+   because an OpenAlex subfield sits under exactly one field. */
+test('the shipped taxonomy validates exact group and category membership coverage', () => {
+  const data = JSON.parse(readFileSync(new URL('../data/journal-catalog.json', import.meta.url), 'utf8'));
   const catalog = Model.create(data);
   assert.equal(catalog.groups.length, data.groups.length);
   assert.equal(catalog.categories.length, data.categories.length);
@@ -265,7 +270,7 @@ test('actual captured JCR taxonomy validates exact group and category membership
     assert.equal(catalog.categoriesForGroup(group.key).length, group.categoryCount);
     for (const category of catalog.categoriesForGroup(group.key)) assert.ok(category.groupKeys.includes(group.key));
   }
-  assert.ok(catalog.categories.some(category => category.groupKeys.length > 1));
-  assert.equal(catalog.source.provider, 'Clarivate');
-  assert.equal(catalog.source.product, 'JCR');
+  assert.ok(catalog.journals.some(journal => journal.categoryKeys.length > 1), 'a journal in several categories');
+  assert.equal(catalog.source.provider, 'OpenAlex');
+  assert.equal(catalog.source.product, 'Sources');
 });

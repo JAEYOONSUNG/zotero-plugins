@@ -4,8 +4,43 @@
 (function(root){
  'use strict';
  const HTML='http://www.w3.org/1999/xhtml';
- const DEFAULT_ORDER={groups:['name','asc'],categories:['journalCount','desc'],journals:['jif','desc']};
+ /* The journal list opens on the figure, whatever this catalog's figure is
+    called, so the default order follows the loaded metric rather than a field
+    name written in here. */
+ const ORDER=figure=>({groups:['name','asc'],categories:['journalCount','desc'],journals:[figure.key,'desc']});
  let sequence=0;
+ /* Which figure the loaded catalog carries, and what this table is allowed to
+    call it. A reader's own JCR export carries the Journal Impact Factor. The
+    openly licensed catalog carries OpenAlex's two-year mean citedness, which
+    is an estimate of a different thing over a different corpus: it is drawn
+    with the leading ~ the rest of the plugin already uses for it, and nothing
+    here — column, tooltip or sort menu — calls it a JIF. A catalog that
+    declares no metric keeps the JCR fields and shows dashes when they are
+    absent, which is what happened before any of this existed.
+
+    JCR states a journal's standing per category, and per edition inside it,
+    in categoryMetrics. The open catalog states the same three figures in
+    arrays that run alongside categoryKeys, and names them in source.ranking,
+    so neither the field names nor the count of them is written in here. */
+ const JCR_METRIC={key:'jif',medianKey:'medianJIF',estimate:false,ranks:null,quartiles:null,percentiles:null,percentile:true,
+  value:'JIF',median:'JIF 중앙값',rank:'JIF 순위',quartile:'JIF Q',percentileLabel:'JIF 백분위',note:null,
+  categories:'JCR 카테고리',categoryTable:'JCR 카테고리 표',journalTable:'JCR 카테고리의 저널 표',
+  browse:'JCR 카테고리 탐색',open:'JCR 원본 열기',check:'JCR 원본에서 저널 확인',journalCount:'JCR 저널 수',sort:'JCR 목록 정렬'};
+ const OPEN_METRIC={key:'citedness',medianKey:'medianCitedness',estimate:true,ranks:'citednessRanks',
+  quartiles:'citednessQuartiles',percentiles:'citednessPercentiles',percentile:true,
+  value:'2년 평균 피인용',median:'2년 평균 피인용 중앙값',rank:'피인용 순위',quartile:'피인용 4분위',percentileLabel:'피인용 백분위',
+  note:'공식 JIF가 아니라 OpenAlex 2년 평균 피인용 추정치입니다.',
+  categories:'OpenAlex 분야',categoryTable:'OpenAlex 분야 표',journalTable:'OpenAlex 분야의 저널 표',
+  browse:'OpenAlex 분야 탐색',open:'OpenAlex 원본 열기',check:'OpenAlex 원본에서 저널 확인',journalCount:'OpenAlex 저널 수',
+  sort:'OpenAlex 목록 정렬'};
+ function metricFor(catalog){
+  const declared=catalog&&catalog.source&&catalog.source.metric;
+  if(!declared||typeof declared.field!=='string'||!declared.field)return JCR_METRIC;
+  const fields=Array.isArray(catalog.source.ranking?.fields)?catalog.source.ranking.fields:[];
+  const ranks=fields[0]||OPEN_METRIC.ranks,quartiles=fields[1]||OPEN_METRIC.quartiles,percentiles=fields[2]||null;
+  return {...OPEN_METRIC,key:declared.field,estimate:declared.isEstimate===true,
+   ranks,quartiles,percentiles,percentile:!!percentiles};
+ }
  /* What a row can be found by.
 
     The captured JCR rows carry no abbreviation at all — the field is empty on
@@ -45,6 +80,9 @@
    &&['group','category','categoriesForGroup','journalsForCategory'].every(k=>typeof value[k]==='function');
   if(!validCatalog(catalog))throw new TypeError('JCR browser requires a validated category catalog');
   const doc=host.ownerDocument,t=typeof options.t==='function'?options.t:value=>value;
+  // What this catalog's figure is and what it may be called. Re-read whenever
+  // the catalog is swapped, because the two catalogs name different fields.
+  let figure=metricFor(catalog),DEFAULT_ORDER=ORDER(figure);
   const id='sc-jcr-'+(++sequence),initial=options.initialState||{};
   const initialView=['groups','categories','journals'].includes(initial.view)?initial.view:'groups';
   let destroyed=false,message='';
@@ -56,7 +94,7 @@
    history:Array.isArray(initial.history)?initial.history.filter(frame=>frame&&['groups','categories','journals'].includes(frame.view)).slice(-20).map(frame=>({
     view:frame.view,categoryKey:frame.categoryKey||null,query:typeof frame.query==='string'?frame.query:'',sortKey:frame.sortKey||DEFAULT_ORDER[frame.view][0],
     sortDir:['asc','desc'].includes(frame.sortDir)?frame.sortDir:DEFAULT_ORDER[frame.view][1],page:Number.isInteger(frame.page)&&frame.page>=0?frame.page:0})):[]};
-  const element=doc.createElementNS(HTML,'section');element.classList.add('sc-jcr-browser');element.setAttribute('aria-label',t('JCR 카테고리 탐색'));host.appendChild(element);
+  const element=doc.createElementNS(HTML,'section');element.classList.add('sc-jcr-browser');element.setAttribute('aria-label',t(figure.browse));host.appendChild(element);
   function snapshot(){return {...state,expandedGroupKeys:[...state.expandedGroupKeys],history:state.history.map(frame=>({...frame}))};}
   function emit(){invoke(options.onStateChange,snapshot());}
   function el(tag,text,parent,attrs={}){
@@ -81,6 +119,16 @@
    node.addEventListener('click',()=>{if(!destroyed)action(node);});return node;
   }
   function metric(value){return typeof value==='number'&&Number.isFinite(value)?value.toLocaleString():value==null||value===''?'—':String(value);}
+  /* The figure itself. An estimate is drawn with the leading ~ that the item
+     tree and the workbench already use for this same number, and carries the
+     reason in its tooltip, so the column can never be read as a JIF. */
+  function figureCell(parent,value,attrs={}){
+   const shown=metric(value);
+   const cell=el('td',shown==='—'||!figure.estimate?shown:'~'+shown,parent,
+    {class:'sc-jcr-number',...attrs,...(figure.note&&shown!=='—'?{title:t(figure.note)}:{})});
+   if(figure.estimate&&shown!=='—')cell.dataset.estimate='true';
+   return cell;
+  }
   /* JCR prints its categories in capitals. Two hundred and fifty lines of
      capitals is a wall; the same names in title case read as names. The key
      and the original spelling stay on the element for anything that matches
@@ -157,7 +205,7 @@
    const found=journalMatches();
    if(!found.length)return false;
    el('p',`${t('검색에 맞는 저널')} ${found.length.toLocaleString()}`,parent,{class:'sc-jcr-coverage',role:'status'});
-   const headings=[['title','저널'],['categories','JCR 카테고리'],['issns','ISSN'],['jif','JIF'],['year','지표 연도']];
+   const headings=[['title','저널'],['categories',figure.categories],['issns','ISSN'],[figure.key,figure.value],['year','지표 연도']];
    if(typeof options.onSearchJournal==='function')headings.push(['action','검색']);
    const body=table(parent,headings,'검색된 저널 표');
    for(const journal of found){
@@ -174,7 +222,7 @@
      else el('span',displayName(label),item);
     }
     el('td',journal.issns?.length?journal.issns.join(' · '):'—',row,{'data-column':'issns'});
-    el('td',metric(journal.jifDisplay??journal.jif),row,{'data-column':'jif',class:'sc-jcr-number'});
+    figureCell(row,journal[figure.key+'Display']??journal[figure.key],{'data-column':figure.key});
     el('td',journal.year??'—',row,{'data-column':'year',class:'sc-jcr-number'});
     if(typeof options.onSearchJournal==='function')
      button(t(options.searchJournalLabel||'저널 검색'),el('td',null,row),()=>invoke(options.onSearchJournal,journal,{categoryKey:(journal.categoryKeys||[])[0]||null}),{'data-opens':'window'});
@@ -188,11 +236,11 @@
    input.value=state.query;
    input.addEventListener('input',()=>{if(destroyed)return;state.query=input.value;state.page=0;render();emit();});
    const label=el('label',t('정렬'),toolbar,{class:'sc-jcr-sort-label',for:id+'-sort'});
-   const select=el('select',null,label,{id:id+'-sort','aria-label':t('JCR 목록 정렬'),'data-focus-key':'sort',
+   const select=el('select',null,label,{id:id+'-sort','aria-label':t(figure.sort),'data-focus-key':'sort',
     title:t('숫자 정렬에서 범위값과 미확인 값은 마지막에 표시합니다.')});
    const choices=state.view==='groups'?[['name',t('이름')],['categoryCount',t('카테고리 수')],['journalCount',t('저널 수')],['citableItems',t('인용 가능 항목')]]
-    :state.view==='categories'?[['name',t('이름')],['journalCount',t('저널 수')],['citableItems',t('인용 가능 항목')],['totalCitations',t('총 인용')],['medianJIF',t('JIF 중앙값')]]
-     :[['name',t('저널명')],['jif','JIF'],['year',t('지표 연도')]];
+    :state.view==='categories'?[['name',t('이름')],['journalCount',t('저널 수')],['citableItems',t('인용 가능 항목')],['totalCitations',t('총 인용')],[figure.medianKey,t(figure.median)]]
+     :[['name',t('저널명')],[figure.key,t(figure.value)],['year',t('지표 연도')]];
    if(!choices.some(([key])=>key===state.sortKey))state.sortKey=choices[0][0];
    for(const[key,name]of choices)el('option',name,select,{value:key,...(key===state.sortKey?{selected:'selected'}:{})});
    select.value=state.sortKey;
@@ -267,7 +315,7 @@
    const shown=page(rows,parent);
    if(!rows.length){el('p',t('검색에 맞는 카테고리가 없습니다.'),parent,{class:'sc-jcr-empty'});return;}
    const body=table(parent,[['name','카테고리'],['groups','그룹'],['editions','색인'],['journalCount','저널 수'],
-    ['citableItems','인용 가능 항목'],['totalCitations','총 인용'],['medianJIF','JIF 중앙값']],'JCR 카테고리 표');
+    ['citableItems','인용 가능 항목'],['totalCitations','총 인용'],[figure.medianKey,figure.median]],figure.categoryTable);
    const most=Math.max(0,...rows.map(c=>typeof c.journalCount==='number'?c.journalCount:0));
    for(const category of shown){
     const row=el('tr',null,body,{'data-category-key':category.key}),name=el('td',null,row,{'data-column':'name'});
@@ -277,33 +325,51 @@
     if(!category.groupKeys.length)groupCell.textContent='—';
     const editions=el('td',null,row,{'data-column':'editions'});
     if(category.editions?.length)pills(editions,category.editions,'sc-jcr-editions');else editions.textContent='—';
-    for(const key of ['journalCount','citableItems','totalCitations','medianJIF']){
-     const cell=el('td',null,row,{'data-column':key,class:'sc-jcr-number'});
-     el('span',metric(category[key+'Display']??category[key]),cell,{class:'sc-jcr-figure'});
+    for(const key of ['journalCount','citableItems','totalCitations',figure.medianKey]){
+     const value=category[key+'Display']??category[key],median=key===figure.medianKey;
+     const cell=el('td',null,row,{'data-column':key,class:'sc-jcr-number',
+      ...(median&&figure.note&&value!=null&&value!==''?{title:t(figure.note)}:{})});
+     el('span',(median&&figure.estimate&&value!=null&&value!==''?'~':'')+metric(value),cell,{class:'sc-jcr-figure'});
      if(key==='journalCount')bar(cell,category.journalCount,most);
-     if(key==='medianJIF'&&tone(category.medianJIF))cell.dataset.tone=tone(category.medianJIF);
+     if(median&&tone(category[figure.medianKey]))cell.dataset.tone=tone(category[figure.medianKey]);
     }
    }
+  }
+  /* One rank and one quarter, pulled out of the arrays that run alongside
+     categoryKeys, in the shape the JCR rows already have. rankTotal is the
+     category's own journal count, which is what the rank was taken against. */
+  function standing(journal,category){
+   const index=(journal.categoryKeys||[]).indexOf(category.key);
+   if(index<0)return [];
+   const rank=(journal[figure.ranks]||[])[index],quartile=(journal[figure.quartiles]||[])[index];
+   const percentile=figure.percentiles?(journal[figure.percentiles]||[])[index]:null;
+   if(rank==null&&quartile==null&&percentile==null)return [];
+   return [{categoryKey:category.key,editions:[],rank:rank??null,
+    rankTotal:typeof category.journalCount==='number'?category.journalCount:null,
+    quartile:quartile??null,percentile:percentile??null}];
   }
   function journals(parent){
    const category=catalog.category(state.categoryKey);
    if(!category){el('p',t('이 카테고리를 수집 자료에서 찾을 수 없습니다.'),parent,{class:'sc-jcr-empty'});return;}
    const context=el('div',null,parent,{class:'sc-jcr-category-context'});
    pills(context,category.groupKeys.map(key=>catalog.group(key)?.name||key),'sc-jcr-parents');
-   stats(context,[['JCR 저널 수',category.journalCount],['인용 가능 항목',category.citableItems],['총 인용',category.totalCitations],['JIF 중앙값',category.medianJIFDisplay??category.medianJIF]]);
+   stats(context,[[figure.journalCount,category.journalCount],['인용 가능 항목',category.citableItems],['총 인용',category.totalCitations],
+    [figure.median,category[figure.medianKey+'Display']??category[figure.medianKey]]]);
    const captured=catalog.journalsForCategory(category.key);
    el('p',`${t('수집된 저널')} ${captured.length.toLocaleString()}${category.journalCount!=null?' / '+metric(category.journalCount):''}`+
     (catalog.source.complete?.journals===true?'':' · '+t('전체 저널 목록 수집 미완료')),parent,{class:'sc-jcr-coverage',role:'status'});
    if(!captured.length){
     el('p',t(catalog.source.complete?.journals===true?'이 카테고리에 표시할 저널이 없습니다.':'이 카테고리의 저널 목록은 아직 수집되지 않았습니다.'),parent,{class:'sc-jcr-empty'});
-    if(typeof options.onOpenSource==='function')button(t('JCR 원본에서 저널 확인'),parent,openSource,{'data-opens':'external'});
+    if(typeof options.onOpenSource==='function')button(t(figure.check),parent,openSource,{'data-opens':'external'});
     return;
    }
    controls(parent);const found=sorted(captured),shown=page(found,parent);
    if(!found.length){el('p',t('검색에 맞는 저널이 없습니다.'),parent,{class:'sc-jcr-empty'});return;}
-   const headings=[['title','저널'],['categories','JCR 카테고리'],['issns','ISSN'],['jif','JIF'],['rank','JIF 순위'],['quartile','JIF Q'],['percentile','JIF 백분위'],['year','지표 연도']];
+   const ranked=['rank','quartile',...(figure.percentile?['percentile']:[])];
+   const headings=[['title','저널'],['categories',figure.categories],['issns','ISSN'],[figure.key,figure.value],
+    ['rank',figure.rank],['quartile',figure.quartile],...(figure.percentile?[['percentile',figure.percentileLabel]]:[]),['year','지표 연도']];
    if(typeof options.onSearchJournal==='function')headings.push(['action','검색']);
-   const body=table(parent,headings,'JCR 카테고리의 저널 표');
+   const body=table(parent,headings,figure.journalTable);
    for(const journal of shown){
     const row=el('tr',null,body,{'data-journal-key':journal.key}),name=el('td',null,row);
     el('span',journal.title,name,{class:'sc-jcr-journal-title'});
@@ -311,9 +377,14 @@
     const memberships=el('ul',null,el('td',null,row),{class:'sc-jcr-memberships'});
     for(const key of journal.categoryKeys)el('li',displayName(catalog.category(key)?.name||key),memberships,{title:catalog.category(key)?.name||key});
     el('td',journal.issns?.length?journal.issns.join(' · '):'—',row,{'data-column':'issns'});
-    el('td',metric(journal.jifDisplay??journal.jif),row,{'data-column':'jif',class:'sc-jcr-number'});
-    const official=(journal.categoryMetrics||[]).filter(m=>m.categoryKey===category.key);
-    for(const key of ['rank','quartile','percentile']){
+    figureCell(row,journal[figure.key+'Display']??journal[figure.key],{'data-column':figure.key});
+    /* JCR states a journal's standing per category, and per edition inside it,
+       in categoryMetrics. The open catalog has one rank and one quarter per
+       category, in arrays that run alongside categoryKeys, so they are shaped
+       into the same rows here and the table below does not have to know
+       which catalog it is drawing. */
+    const official=figure.ranks?standing(journal,category):(journal.categoryMetrics||[]).filter(m=>m.categoryKey===category.key);
+    for(const key of ranked){
      const cell=el('td',null,row,{'data-column':key,class:'sc-jcr-number'});
      if(!official.length){cell.textContent='—';continue;}
      const values=el('ul',null,cell,{class:'sc-jcr-memberships'});
@@ -342,7 +413,7 @@
    const navigation=el('div',null,header,{class:'sc-jcr-navigation'});
    if(state.view!=='groups')button(`${t('그룹 보기')} · ${catalog.groups.length}`,navigation,()=>navigate('groups'));
    if(state.view!=='categories')button(`${t(catalog.source.complete?.categories===true?'전체 카테고리':'수집된 카테고리')} · ${catalog.categories.length}`,navigation,()=>navigate('categories'));
-   if(typeof options.onOpenSource==='function')button(t('JCR 원본 열기'),navigation,openSource,{'data-opens':'external'});
+   if(typeof options.onOpenSource==='function')button(t(figure.open),navigation,openSource,{'data-opens':'external'});
    if(typeof options.onOpenAlex==='function')button(t('OpenAlex 주제로 탐색'),navigation,()=>invoke(options.onOpenAlex,state.categoryKey?{categoryKey:state.categoryKey,name:displayName(catalog.category(state.categoryKey)?.name||'')}:null));
    if(catalog.source.complete?.groups!==true||catalog.source.complete?.categories!==true)
     el('p',t('그룹 또는 카테고리 목록이 일부만 수집되어 있습니다.'),header,{class:'sc-jcr-coverage'});
@@ -358,6 +429,8 @@
   render();
   return {get state(){return snapshot();},element,render,
    updateCatalog(value){if(destroyed)return;if(!validCatalog(value))throw new TypeError('Invalid JCR category catalog');catalog=value;
+    figure=metricFor(catalog);DEFAULT_ORDER=ORDER(figure);
+    if(state.view==='journals'&&state.sortKey!=='name'&&state.sortKey!=='year')state.sortKey=figure.key;
     state.expandedGroupKeys=new Set([...state.expandedGroupKeys].filter(key=>catalog.group(key)));render();emit();},
    destroy(){if(destroyed)return;destroyed=true;element.remove();}};
  }

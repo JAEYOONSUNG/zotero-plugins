@@ -29,7 +29,7 @@
   // before the category list, and only while they are still blank.
   const FIRST=['openalexApiKey','aiEndpoint','citationEmail'];let refreshFirst=()=>{};
   const valueOf=state=>state.spec.type==='boolean'?state.input.checked:state.input.value;
-  function display(state,value){if(state.spec.type==='boolean')state.input.checked=!!value;else state.input.value=String(value??'');}
+  function display(state,value){if(state.spec.type==='boolean')state.input.checked=!!value;else if(state.spec.type==='note')state.input.textContent=String(value??'');else state.input.value=String(value??'');}
   function sync(state){
    if(FIRST.includes(state.spec.key))refreshFirst();
    const busy=state.pending||categories.get(state.spec.category)?.pending;
@@ -110,8 +110,15 @@
    const state={spec,row,revision:0,original:spec.default,dirty:false,pending:false,loading:spec.type!=='action',error:false};
    const descriptionID=id+'-help',feedbackID=id+'-feedback';
    const label=node('label',spec.label,row,{for:id,class:'scs-label'});const line=node('div',null,row,{class:'scs-value'});
-   if(spec.type==='action'){
+   if(spec.type==='note'){
+    /* Read-only: what the runtime found, not a value anybody sets. It still
+       loads through hydrate, so it is current every time the pane opens. */
+    state.input=node('output',null,line,{id,class:'scs-note'});
+   }else if(spec.type==='action'){
     state.input=node('button',spec.label,line,{type:'button',id});label.hidden=true;
+    /* A button that opens something outside the panel says so, so the running
+       self-check leaves it alone rather than putting a window on the screen. */
+    if(spec.opens)state.input.setAttribute('data-opens',spec.opens);
     state.input.addEventListener('click',async()=>{if(state.pending||destroyed)return;state.pending=true;state.feedback.textContent=t('실행하는 중…');sync(state);try{const answer=await runtime.runSettingAction(spec.action);if(!destroyed){state.feedback.textContent=typeof answer==='string'&&answer?answer:t('실행했습니다.');await refreshStatus();}}catch(error){if(!destroyed){state.error=true;state.feedback.textContent='실행하지 못했습니다: '+(error.message||error);}}finally{state.pending=false;if(!destroyed)sync(state);}});
    }else{
     if(spec.type==='select'){state.input=node('select',null,line,{id});for(const option of spec.options||[])node('option',option.label,state.input,{value:option.value});}
@@ -130,6 +137,7 @@
    state.input.setAttribute('aria-describedby',descriptionID+' '+feedbackID);
    const helpText=[spec.description,spec.help].filter(Boolean).map(t).join(' ')
     ||(spec.type==='number'?t('기본 {0} · 허용 {1}–{2}').replace('{0}',String(spec.default)).replace('{1}',spec.min??'∞').replace('{2}',spec.max??'∞')+(spec.step&&spec.step!==1&&spec.step!=='any'?' · '+t('{0} 단위').replace('{0}',String(spec.step)):'')
+    :spec.type==='note'?t('읽기 전용입니다. 값을 바꾸지 않습니다.')
     :secret(spec)?t('비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.'):t('이 값은 해당 기능에 적용됩니다.'));
    const help=node('p',null,row,{id:descriptionID,class:'scs-help'});help.textContent=helpText;
    state.feedback=node('p','',row,{id:feedbackID,class:'scs-feedback',role:'status','aria-live':'polite'});states.set(spec.key,state);sync(state);

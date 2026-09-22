@@ -1197,6 +1197,25 @@
       "action": "ranks"
     },
     {
+      "key": "journalFigureLayers",
+      "category": "metrics",
+      "label": "저널 지표 출처",
+      "type": "note",
+      "default": "",
+      "description": "소속 기관이 이용 권한을 준 지표는 이 폴더에서 읽으며, 배포본에 넣거나 공개하지 않습니다.",
+      "help": "if-catalog.json · journal-registry.json · jcr-categories.json 세 파일을 이 폴더에서 먼저 찾고, 없으면 배포본을 씁니다."
+    },
+    {
+      "key": "open-journal-folder",
+      "category": "metrics",
+      "label": "지표 폴더 열기",
+      "type": "action",
+      "default": null,
+      "action": "journalFolder",
+      "opens": "external",
+      "description": "파일 관리자에서 이 폴더를 엽니다. 폴더가 없으면 만듭니다."
+    },
+    {
       "key": "autoUpdate",
       "category": "updates",
       "label": "새 버전 자동 설치",
@@ -1214,7 +1233,7 @@
     }
   ]
 };
- function validate(key,value){const setting=schema.settings.find(row=>row.key===key);if(!setting||setting.type==='action')throw new Error('Unknown setting: '+key);
+ function validate(key,value){const setting=schema.settings.find(row=>row.key===key);if(!setting||setting.type==='action'||setting.type==='note')throw new Error('Unknown setting: '+key);
   if(setting.type==='boolean'){if(typeof value!=='boolean')throw new Error('참/거짓 값을 선택하세요.');}
   else if(setting.type==='number'){if(typeof value!=='number'||!Number.isFinite(value)||value<setting.min||value>setting.max||setting.step&&!Number.isInteger((value-setting.min)/setting.step))throw new Error(`${setting.min}–${setting.max} 범위의 값을 입력하세요.`);}
   else if(setting.type==='select'){if(!setting.options.some(option=>option.value===value))throw new Error('목록의 값을 선택하세요.');}

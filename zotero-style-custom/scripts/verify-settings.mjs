@@ -18,11 +18,11 @@ function consumers(row){
  if(!found.length&&types.some(type=>row.key==='marginShow'+type)&&source['src/reader-tools.js'].includes("'marginShow'+type[0].toUpperCase()"))found.push('src/reader-tools.js');
  assert.ok(found.length,'No consumer for '+row.key);return found;
 }
-for(const row of rows){assert.ok(Schema.schema.categories.some(category=>category.id===row.category));if(row.type!=='action')Schema.validate(row.key,row.default);consumers(row);}
+for(const row of rows){assert.ok(Schema.schema.categories.some(category=>category.id===row.category));if(row.type!=='action'&&row.type!=='note')Schema.validate(row.key,row.default);consumers(row);}
 assert.throws(()=>consumers({key:'missing-control-negative-proof',type:'text'}),/No consumer/);
 assert.throws(()=>Schema.validate('recordIntervalMs',777));
 assert.throws(()=>Schema.validate('feature.IFColumn','false'));
 const manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));
-const coverage={version:manifest.version,categories:Schema.schema.categories.length,persistedSettings:rows.filter(row=>row.type!=='action').length,actions:rows.filter(row=>row.type==='action').length,method:'Static consumer links plus independent DOM/backend effect regressions; source links alone do not prove native activation.',entries:rows.map(row=>({key:row.key,label:row.label,category:row.category,type:row.type,consumers:consumers(row)}))};
+const coverage={version:manifest.version,categories:Schema.schema.categories.length,persistedSettings:rows.filter(row=>row.type!=='action'&&row.type!=='note').length,actions:rows.filter(row=>row.type==='action').length,notes:rows.filter(row=>row.type==='note').length,method:'Static consumer links plus independent DOM/backend effect regressions; source links alone do not prove native activation.',entries:rows.map(row=>({key:row.key,label:row.label,category:row.category,type:row.type,consumers:consumers(row)}))};
 fs.writeFileSync(path.join(root,'docs/settings-coverage.json'),JSON.stringify(coverage,null,2)+'\n');
 console.log(`Settings bindings verified: ${rows.length} rows (${coverage.persistedSettings} stored settings + ${coverage.actions} explicit actions), ${coverage.categories} categories`);

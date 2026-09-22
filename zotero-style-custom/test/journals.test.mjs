@@ -46,11 +46,25 @@ test('official CSV uses impact_factor and if_year rather than adjacent five-year
  assert.equal(J.parsePage(csv+'\nCell,45,50,70,2025',record,DOMParser),null);
 });
 
-test("a renamed journal is found under the title the JCR lists now", () => {
-  const j = J.create(JSON.parse(fs.readFileSync(new URL("../data/if-jcr-2025.json", import.meta.url), "utf8")));
+/* The rename table lives in src/journals.js, so this needs a catalog carrying
+   the current titles and nothing more. It used to read the Journal Citation
+   Reports export, which is licensed to whoever subscribes to it and is no
+   longer in this repository. Every value below is invented; only the titles,
+   which are the module's own table, and the shape are real. */
+test("a renamed journal is found under the title the catalog lists now", () => {
+  const record = (title, impactFactor) => ({title, aliases: [], issns: [], impactFactor, year: 2025,
+    sourceURL: "https://www.nature.com/invented-for-this-test", checkedAt: "2026-01-02",
+    evidence: "Invented figure for the rename test."});
+  const j = J.create([
+    record("Biotechnology for Biofuels and Bioproducts", 4.2),
+    record("FEBS Journal", 3.3),
+    record("Angewandte Chemie International Edition", 17.6),
+    record("Microbiology Sgm", 1.1)
+  ]);
   const item = f => ({getField: k => f[k] || ""});
   assert.equal(j.lookup(item({publicationTitle: "Biotechnology for Biofuels"})).title, "Biotechnology for Biofuels and Bioproducts");
   assert.equal(j.lookup(item({publicationTitle: "European Journal of Biochemistry"})).title, "FEBS Journal");
+  assert.equal(j.lookup(item({publicationTitle: "Journal of General Microbiology"})).title, "Microbiology Sgm");
   assert.equal(j.lookup(item({publicationTitle: "Angewandte Chemie"})).impactFactor, 17.6);
-  assert.equal(j.lookup(item({publicationTitle: "Science of The Total Environment"})), null, "not in the 2026 release, so no figure");
+  assert.equal(j.lookup(item({publicationTitle: "Science of The Total Environment"})), null, "not in this catalog, so no figure");
 });

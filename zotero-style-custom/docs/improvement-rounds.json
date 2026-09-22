@@ -2214,7 +2214,7 @@
       "tests": [
         {
           "file": "test/journal-identity.test.mjs",
-          "name": "actual registry counterexamples keep Genetics parents separate, JIF ties equal and Nature Methods classifications stable"
+          "name": "shipped registry counterexamples keep Genetics parents separate, ties equal and classifications stable"
         },
         {
           "file": "test/workbench.test.mjs",
@@ -2259,11 +2259,11 @@
       "tests": [
         {
           "file": "test/jcr-categories.test.mjs",
-          "name": "actual captured JCR taxonomy validates exact group and category membership coverage"
+          "name": "the shipped taxonomy validates exact group and category membership coverage"
         },
         {
           "file": "test/jcr-browser.test.mjs",
-          "name": "captured JCR catalog renders the actual 21 group structure, all 254 categories and exact group membership"
+          "name": "the shipped catalog renders its whole group structure, every category and exact group membership"
         },
         {
           "file": "test/workbench.test.mjs",
@@ -2389,6 +2389,62 @@
       ],
       "status": "verified",
       "review": "한 곳의 정규화로 발음구별부호·전각·모든 줄표를 접어 \"Muller\"가 Hans Müller를, \"protein-protein\"이 protein–protein을 찾고 한국어는 음절 그대로 검색된다. 노트·첨부·주석·컬렉션·저자 감시가 문장 통째 대신 단어 단위로 맞춰지고, 연도·자료형·ISSN이 검색 대상에 들어갔다. 노트 탭 논문 선택기는 제목이 정확히 일치하는 논문을 먼저 올리고, 입력마다 라이브러리 전체 노트를 다시 읽지 않는다. JCR 브라우저는 제목에서 만든 약어와 하이픈 없는 ISSN으로 저널을 찾고, 그룹 화면에서 저널 이름을 쳐도 해당 저널을 보여 준다."
+    },
+    {
+      "round": "R84",
+      "title": "라이선스 있는 지표는 읽는 사람 것, 배포본은 공개 데이터만",
+      "gap": "The plugin shipped the whole Journal Citation Reports inside the archive and inside a public repository: 22,643 journals' impact factors in the category catalogue, 22,594 more with quartiles and abbreviations in the journal registry, the impact-factor table itself, and the same figures again in ZotPoP. Clarivate licenses those to a subscriber, not to everyone who downloads a plugin, and no in-app permission check can change that while the numbers travel inside the file. The feature could not simply be dropped either: without it the plugin loses the thing people install it for.",
+      "entryPoint": "설정 → 인용 수·IF → 저널 지표 데이터 · 연구 작업 패널 → 저널 지표",
+      "sources": [
+        {
+          "file": "bootstrap.js",
+          "marker": "const JOURNAL_OVERLAY_DIR = \"style-custom-journals\";"
+        },
+        {
+          "file": "src/jcr-categories.js",
+          "marker": "is and then satisfy that provenance exactly: an OpenAlex file can never"
+        },
+        {
+          "file": "scripts/build-open-catalog.mjs",
+          "marker": "async function fetchAll(endpoint, params = {})"
+        },
+        {
+          "file": "src/jcr-browser.js",
+          "marker": "const OPEN_METRIC={key:'citedness',medianKey:'medianCitedness',estimate:true,ranks:'citednessRanks',"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "journalFigureLayers() {"
+        },
+        {
+          "file": "scripts/build.py",
+          "marker": "assert not _licensed, \"the build would package licensed journal figures: %s\""
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/bootstrap.test.mjs",
+          "name": "a reader's own licensed catalog wins over the one in the archive"
+        },
+        {
+          "file": "test/open-catalog.test.mjs",
+          "name": "the loader accepts an OpenAlex catalogue and reads back its taxonomy"
+        },
+        {
+          "file": "test/open-catalog.test.mjs",
+          "name": "a licensed JCR catalogue still loads, and still refuses an OpenAlex url"
+        },
+        {
+          "file": "test/journal-layers.test.mjs",
+          "name": "the runtime says, per table, whether the figures came from the reader\\'s folder or the archive"
+        },
+        {
+          "file": "test/journal-layers.test.mjs",
+          "name": "the button that reveals the folder says it opens something, so the self-check leaves it alone"
+        }
+      ],
+      "status": "verified",
+      "review": "저널 지표가 두 층이 됐다. 배포본에는 넘겨줄 수 있는 것만 담는다. OpenAlex를 CC0로 받아 만든 26분야 252세부분야 89,510저널 카탈로그다. 구독자에게만 허락된 JCR 수치는 아카이브에 넣지 않고 Zotero 데이터 폴더의 style-custom-journals에서 읽으며, 파일이 있으면 그쪽이 이긴다. 그래서 구독이 있는 사람 화면은 전과 똑같고, 없는 사람도 빈 화면 대신 2년 평균 피인용을 본다. 그 값은 JIF가 아니므로 물결 표시와 추정치 문구를 달고, 어디서도 JIF라 부르지 않는다. 빌드는 라이선스 파일을 이름으로 거부하고, 설정과 자체 점검이 지금 어느 층을 쓰는지 알려 준다."
     }
   ],
   "introducedInVersion": "0.6.0"

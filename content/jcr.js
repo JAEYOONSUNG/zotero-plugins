@@ -2,11 +2,16 @@
  * The Journal Impact Factor, from the JCR itself.
  *
  * OpenAlex's two-year mean citedness follows the JIF formula on open data, and it
- * is what the results table used to show as "IF". It is not the figure people mean
- * by that word. This module answers with the Clarivate figure -- the user's own
- * export of the JCR 2026 release (JIF 2025), 22,594 journals -- matched by ISSN
- * first, then by title or JCR abbreviation. What it cannot name falls back to the
- * OpenAlex estimate, which the table then marks as one.
+ * is what the results table shows as "IF" by default. It is not the figure people
+ * mean by that word. This module answers with the Clarivate figure instead, matched
+ * by ISSN first, then by title or JCR abbreviation, for a reader who holds a JCR
+ * entitlement of their own.
+ *
+ * That figure is licensed to its reader, so the plugin does not carry it: nothing
+ * is built in, and the table stays empty until load() is handed rows read from the
+ * reader's own export in the Zotero data directory. Until then, and for any journal
+ * the export does not name, the OpenAlex estimate answers and the table marks it as
+ * an estimate.
  * Environment-agnostic: loads in the Zotero window and in Node for tests.
  */
 var ZotPoPJCR = (function () {
@@ -67,8 +72,10 @@ var ZotPoPJCR = (function () {
 	}
 
 	let table = null;
+	// Rows as the export gives them: [title, abbreviation, issn, eIssn, jif].
+	function load(rows) { table = build(Array.isArray(rows) ? rows : []); return table; }
 	function shared() {
-		if (!table) table = build(typeof ZotPoPJCRData !== "undefined" ? ZotPoPJCRData : typeof require === "function" ? require("./jcr-2025-data.js") : []);
+		if (!table) table = build(typeof ZotPoPJCRData !== "undefined" ? ZotPoPJCRData : []);
 		return table;
 	}
 
@@ -88,7 +95,7 @@ var ZotPoPJCR = (function () {
 		return n;
 	}
 
-	return { EDITION, build, shared, apply, flat, issnKey };
+	return { EDITION, build, load, shared, apply, flat, issnKey };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPJCR;

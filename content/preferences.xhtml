@@ -43,6 +43,11 @@
 		</hbox>
 		<checkbox id="zotpop-enrich" data-i18n-label="prefEnrich" preference="extensions.zotpop.enrichCitations"/>
 		<checkbox id="zotpop-jif" data-i18n-label="prefJIF" preference="extensions.zotpop.journalMetrics"/>
+		<hbox align="center">
+			<label data-i18n-value="prefJournalFolder" control="zotpop-journal-folder"/>
+			<html:input id="zotpop-journal-folder" type="text" readonly="readonly" value="zotpop/journals" style="width: 240px"/>
+		</hbox>
+		<html:p style="color: gray" data-i18n="prefJournalFolderNote"></html:p>
 		<checkbox id="zotpop-inst" data-i18n-label="prefInstitutions" preference="extensions.zotpop.institutionMetrics"/>
 	</groupbox>
 

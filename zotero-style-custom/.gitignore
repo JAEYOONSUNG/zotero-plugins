@@ -4,3 +4,12 @@ __pycache__/
 node_modules/
 # The sweep cache for the registry subjects: input to --merge, not shipped.
 data/journal-fields.json
+
+# Journal Citation Reports figures are licensed to their reader. They live in the
+# Zotero data directory (style-custom-journals/), never here or in the archive.
+data/jcr-categories.json
+data/if-catalog.json
+data/journal-registry.json
+data/if-jcr-2025.json
+# Assembled by scripts/build.py from the if-*.json sources; not a source itself.
+data/if-catalog.open.json

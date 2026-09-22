@@ -14,16 +14,37 @@ test("loads in Gecko without CommonJS", () => {
 	assert.equal(context.ZotPoPJCR.shared().find({ issn: "0028-0836" }).jif, 56.1);
 });
 
-test("the shipped table is the JCR 2026 release and answers by ISSN, title, abbreviation or alias", () => {
-	const t = J.shared();
-	assert.ok(t.size > 30000, "ISSN index built from the export");
+// Rows exactly as a Journal Citation Reports export gives them. The plugin ships no
+// such table: it is licensed to whoever subscribes, and is read at runtime from the
+// reader's own folder in the Zotero data directory. These nine stand for that file.
+const EXPORT = [
+	["CA-A CANCER JOURNAL FOR CLINICIANS", "CA-CANCER J CLIN", "0007-9235", "1542-4863", 685.2],
+	["NATURE", "NATURE", "0028-0836", "1476-4687", 56.1],
+	["NUCLEIC ACIDS RESEARCH", "NUCLEIC ACIDS RES", "0305-1048", "1362-4962", 15],
+	["Nature Communications", "NAT COMMUN", "", "2041-1723", 18.1],
+	["PROCEEDINGS OF THE NATIONAL ACADEMY OF SCIENCES OF THE UNITED STATES OF AMERICA", "P NATL ACAD SCI USA", "0027-8424", "1091-6490", 9.5],
+	["ISME Journal", "ISME J", "1751-7362", "1751-7370", 10.2],
+	["Biotechnology for Biofuels and Bioproducts", "BIOTECHNOL BIOF BIOP", "", "2731-3654", 6],
+	["MICROBIOLOGY-SGM", "MICROBIOL-SGM", "1350-0872", "1465-2080", 4.3],
+	["ANGEWANDTE CHEMIE-INTERNATIONAL EDITION", "ANGEW CHEM INT EDIT", "1433-7851", "1521-3773", 17.6]
+];
+
+test("nothing is built in: the table is empty until the reader's own export is loaded", () => {
+	assert.equal(J.shared().size, 0, "no licensed figure travels with the plugin");
+	assert.equal(J.shared().find({ issn: "0028-0836" }), null);
+	assert.equal(J.apply([{ venue: "Nature", issn: "0028-0836", journalIF: null }]), 0,
+		"and an unmatched journal is left to the OpenAlex estimate");
+});
+
+test("a loaded export answers by ISSN, title, abbreviation or alias", () => {
+	const t = J.load(EXPORT);
 	assert.equal(t.find({ issn: "0028-0836" }).jif, 56.1, "Nature by ISSN");
 	assert.equal(t.find({ issns: ["1362-4962"] }).jif, 15, "Nucleic Acids Research by e-ISSN");
 	assert.equal(t.find({ venue: "Nature Communications" }).jif, 18.1);
 	assert.equal(t.find({ venue: "Nat. Commun." }).jif, 18.1, "the JCR abbreviation, punctuation aside");
 	assert.equal(t.find({ venue: "Proceedings of the National Academy of Sciences" }).jif, 9.5, "Zotero's short PNAS title");
 	assert.equal(t.find({ venue: "The ISME Journal" }).jif, 10.2, "a leading article is not part of the name");
-	assert.equal(t.find({ venue: "eLife" }), null, "eLife left the JCR; no number is invented");
+	assert.equal(t.find({ venue: "eLife" }), null, "a journal the export does not carry invents no number");
 	assert.equal(t.find({ venue: "Biotechnology for Biofuels" }).name, "Biotechnology for Biofuels and Bioproducts", "a renamed journal answers under its current title");
 	assert.equal(t.find({ venue: "Journal of General Microbiology" }).jif, 4.3);
 	assert.equal(t.find({ venue: "Angewandte Chemie" }).jif, 17.6, "the German edition shares the International Edition's figure");

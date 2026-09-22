@@ -292,8 +292,12 @@ test('registry revision changes on reload and invalidates previous rank caches',
   assert.notEqual(journals.registryFieldRanks(row.title), old);
 });
 
-test('actual registry counterexamples keep Genetics parents separate, JIF ties equal and Nature Methods classifications stable', () => {
-  const payload = JSON.parse(readFileSync(new URL('../data/journal-registry.json', import.meta.url), 'utf8'));
+/* Counterexamples out of the shipped registry. The licensed export is not in
+   the repository any more, so these are the rows that carry the same shapes in
+   the openly licensed build: Genetics really does sit under two different
+   fields, and two journals really do land on the same figure. */
+test('shipped registry counterexamples keep Genetics parents separate, ties equal and classifications stable', () => {
+  const payload = JSON.parse(readFileSync(new URL('../data/journal-registry.open.json', import.meta.url), 'utf8'));
   journals.loadRegistry(payload);
   const all = journals.registryRanked();
   const geneticPaths = [
@@ -310,25 +314,35 @@ test('actual registry counterexamples keep Genetics parents separate, JIF ties e
     keys.push(rank.pathKey);
   }
   assert.notEqual(keys[0], keys[1]);
+  // Two journals on the same figure in the same subfield rank identically.
   const oncology = title => journals.registryFieldRanks(title).find(rank => rank.level === 'subfield' && rank.name === 'Oncology');
-  const medical = oncology('Medical Oncology'), oncologist = oncology('Oncologist');
-  assert.equal(all.find(row => row.title === 'Medical Oncology').impactFactor.toFixed(1), all.find(row => row.title === 'Oncologist').impactFactor.toFixed(1));
-  assert.deepEqual([medical.rank, medical.of, medical.quartile, medical.percentile], [oncologist.rank, oncologist.of, oncologist.quartile, oncologist.percentile]);
+  const tied = ['Journal of NeuroVirology', 'Biomarkers in Medicine'].map(title => all.find(row => row.title === title));
+  assert.ok(tied.every(Boolean), 'both tied journals are in the registry');
+  assert.equal(tied[0].impactFactor, tied[1].impactFactor, 'the tie this case is about');
+  const [first, second] = tied.map(row => oncology(row.title));
+  assert.deepEqual([first.rank, first.of, first.quartile, first.percentile],
+    [second.rank, second.of, second.quartile, second.percentile]);
+  /* A journal's canonical path does not move because a profile was handed in
+     alongside it: the registry row decides. */
+  const stable = all.find(row => row.levels.length > 1);
   const profile = {topics: [{domain: 'Life Sciences', field: 'Biochemistry, Genetics and Molecular Biology', subfield: 'Biophysics'},
     {domain: 'Life Sciences', field: 'Biochemistry, Genetics and Molecular Biology', subfield: 'Biophysics'}]};
-  const canonical = journals.resolveLevels('Nature Methods', profile);
-  assert.deepEqual(canonical, journals.resolveLevels('Nature Methods', null));
-  for (const subfield of ['Molecular Biology', 'Biophysics', 'Spectroscopy', 'Structural Biology']) assert.ok(canonical.some(path => path.subfield === subfield), subfield);
-  assert.equal(canonical.length, 4);
+  const canonical = journals.resolveLevels(stable.title, profile);
+  assert.deepEqual(canonical, journals.resolveLevels(stable.title, null));
+  assert.equal(canonical.length, stable.levels.length);
+  for (const level of stable.levels) assert.ok(canonical.some(path => path.subfield === level.subfield), level.subfield);
 });
 
-test('actual journals with colliding normalized titles retain distinct metrics and rank identities', () => {
-  const payload = JSON.parse(readFileSync(new URL('../data/journal-registry.json', import.meta.url), 'utf8'));
+/* Two journals whose names reduce to the same normalized string but are not
+   the same journal. A collision used to hand one of them the other's
+   memberships and ranks. Both pairs are real rows in the shipped registry. */
+test('shipped journals with colliding normalized titles retain distinct metrics and rank identities', () => {
+  const payload = JSON.parse(readFileSync(new URL('../data/journal-registry.open.json', import.meta.url), 'utf8'));
   journals.loadRegistry(payload);
   const all = journals.registryRanked();
   assert.equal(new Set(all.map(row => row.key)).size, all.length);
-  for (const titles of [['Space-science & Technology', 'Space Science and Technology'],
-    ['Journal of Computer Science and Technology', 'Journal of Computer Science & Technology']]) {
+  for (const titles of [['Modern Philology', 'Modern philology.'],
+    ['Journal of Religion & Film', 'Journal of Religion and Film']]) {
     const rows = titles.map(title => all.find(row => row.title === title));
     assert.ok(rows.every(Boolean));
     assert.notEqual(rows[0].key, rows[1].key);
@@ -341,29 +355,68 @@ test('actual journals with colliding normalized titles retain distinct metrics a
       for (const issn of row.issns) assert.equal(journals.registryByIssn(issn.replace('-', '')).title, row.title);
     }
   }
-  for (const ambiguous of ['Space Science & Technology', 'Journal-of-Computer-Science-and-Technology']) {
+  // Neither spelling is either journal's own title, but both reduce to the
+  // shared normalized key, so the registry has to answer with nothing.
+  for (const ambiguous of ['Modern-Philology', 'Journal-of-Religion-and-Film']) {
     assert.equal(journals.registryLookup(ambiguous), null);
     assert.equal(journals.registryRank(ambiguous), null);
     assert.deepEqual(journals.registryLevels(ambiguous), []);
     assert.deepEqual(journals.registryFieldRanks(ambiguous), []);
     assert.equal(journals.identify(ambiguous).impactFactor, null);
   }
-  // Independently aggregate every returned row identity. A normalized-title
-  // collision previously duplicated another journal's memberships and ranks.
-  const groups = new Map();
-  for (const row of all) for (const rank of journals.registryFieldRanks(row.title)) {
-    const list = groups.get(rank.pathKey) || [];
-    list.push({key: row.key, jif: row.impactFactor.toFixed(1), ...rank});
-    groups.set(rank.pathKey, list);
+  /* Independently aggregate every returned row identity. A normalized-title
+     collision previously duplicated another journal's memberships and ranks.
+
+     Two journals whose names reduce to the same string cannot be reached
+     through a title lookup at all, because registryLookup answers null for
+     both by design. So the walk covers the rows it can reach, and the
+     denominator is counted separately, off the level paths every row carries,
+     which needs no lookup. */
+  const pathKeysOf = row => {
+    const keys = new Set();
+    for (const level of row.levels) {
+      const path = ['domain', 'field', 'subfield'].map(key => typeof level?.[key] === 'string' ? level[key].trim() : '');
+      if (!path.every(Boolean)) continue;
+      keys.add(JSON.stringify(['subfield', ...path]));
+      keys.add(JSON.stringify(['field', path[0], path[1]]));
+    }
+    return keys;
+  };
+  const sizes = new Map();
+  for (const row of all) {
+    if (!Number.isFinite(Number(row.impactFactor)) || Number(row.impactFactor) < 0) continue;
+    for (const key of pathKeysOf(row)) sizes.set(key, (sizes.get(key) || 0) + 1);
   }
-  for (const members of groups.values()) {
+  // registryRanked hands back decorated copies, so a row is "reachable" when
+  // its own printed name resolves back to a row that is unmistakably it.
+  const reachable = row => {
+    const found = journals.registryLookup(row.title);
+    return !!found && found.title === row.title && found.impactFactor === row.impactFactor;
+  };
+  const groups = new Map();
+  for (const row of all) {
+    if (!reachable(row)) continue;
+    for (const rank of journals.registryFieldRanks(row.title)) {
+      const list = groups.get(rank.pathKey) || [];
+      list.push({key: row.key, jif: row.impactFactor.toFixed(1), ...rank});
+      groups.set(rank.pathKey, list);
+    }
+  }
+  assert.ok(groups.size > 100, 'the whole subject tree, not a corner of it');
+  for (const [pathKey, members] of groups) {
     assert.equal(new Set(members.map(row => row.key)).size, members.length);
-    assert.ok(members.every(row => row.of === members.length), members[0].pathKey);
-    let previous = null, rank = 0;
-    members.forEach((row, index) => {
-      if (previous !== row.jif) rank = index + 1;
-      assert.equal(row.rank, rank, row.key);
+    assert.ok(members.every(row => row.of === sizes.get(pathKey)), pathKey);
+    // Members arrive in figure order, so a rank never goes backwards and two
+    // journals showing the same figure share one rank.
+    let previous = null, previousRank = 0;
+    for (const row of members) {
+      assert.ok(row.rank >= 1 && row.rank <= row.of, row.key);
+      if (previous !== null) {
+        if (row.jif === previous) assert.equal(row.rank, previousRank, 'a tie shares its rank: ' + row.key);
+        else assert.ok(row.rank > previousRank, 'a lower figure ranks lower: ' + row.key);
+      }
       previous = row.jif;
-    });
+      previousRank = row.rank;
+    }
   }
 });

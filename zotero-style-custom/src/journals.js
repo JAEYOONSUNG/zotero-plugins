@@ -1,7 +1,13 @@
 /* Verified journal-level JIF data. This module never infers JIF from citations. */
 (function(root) {
   'use strict';
-  const hosts = /(^|\.)(nature\.com|springer\.com|springernature\.com|academic\.oup\.com|science\.org|pnas\.org|asm\.org|cell\.com|sciencedirect\.com|elsevier\.com|wiley\.com|acs\.org|frontiersin\.org|plos\.org|microbiologyresearch\.org|mdpi\.com|annualreviews\.org|royalsocietypublishing\.org|jmb\.or\.kr|biomedcentral\.com|embopress\.org|clarivate\.com)$/i;
+  /* Where a figure is allowed to have come from. openalex.org is here because
+     the openly licensed catalogue is built from it; what it publishes is a
+     two-year mean citedness and not a JIF, so a record sourced there carries
+     metric:"openalex-2yr-mean-citedness" and the display layer keeps the two
+     apart. This list is also what parsePage is allowed to re-read, and the
+     plugin already talks to api.openalex.org in src/journal-metrics.js. */
+  const hosts = /(^|\.)(nature\.com|springer\.com|springernature\.com|academic\.oup\.com|science\.org|pnas\.org|asm\.org|cell\.com|sciencedirect\.com|elsevier\.com|wiley\.com|acs\.org|frontiersin\.org|plos\.org|microbiologyresearch\.org|mdpi\.com|annualreviews\.org|royalsocietypublishing\.org|jmb\.or\.kr|biomedcentral\.com|embopress\.org|clarivate\.com|openalex\.org)$/i;
   // A leading article is not part of a journal's name ("The ISME Journal" is
   // "ISME Journal" in the JCR); the JCR spells out what Zotero abbreviates; and a
   // journal that was renamed is listed only under its current title, so the old

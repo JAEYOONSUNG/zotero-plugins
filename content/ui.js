@@ -115,6 +115,21 @@
 	function dataPath(...parts) {
 		return typeof PathUtils !== "undefined" && Zotero.DataDirectory?.dir ? PathUtils.join(Zotero.DataDirectory.dir, "zotpop", ...parts) : parts.join("/");
 	}
+	// The Journal Impact Factor is licensed to whoever subscribes to it, so the plugin
+	// ships none. A reader who holds an entitlement puts their own export here and the
+	// IF column shows those figures instead of the OpenAlex estimate.
+	async function loadJournalFigures() {
+		try {
+			let io = diskIO();
+			if (!io) return;
+			let path = dataPath("journals", "jcr.json");
+			if (!await io.exists(path)) return;
+			let rows = JSON.parse(await io.readText(path));
+			if (Array.isArray(rows) && rows.length) ZotPoPJCR.load(rows);
+		}
+		catch (e) { Zotero.debug("ZotPoP: local journal figures not loaded: " + (e && e.message)); }
+	}
+
 	function setupStorage() {
 		let io = diskIO() || ZotPoPHistory.memoryIO();
 		let size = parseInt(PREF("historySize"), 10);
@@ -265,6 +280,7 @@
 
 	// ------------------------------------------------------------ init
 	function init() {
+		loadJournalFigures();
 		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "auto", Zotero.locale || Services.locale?.appLocaleAsBCP47);
 		t = ZotPoPI18N.make(locale);
 		document.documentElement.setAttribute("lang", locale);

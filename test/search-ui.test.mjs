@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { deferred, mockElement, paper, uiHarness } from "./helpers/search-ui-harness.mjs";
 import Sources from "../content/sources.js";
 import Authors from "../content/authors.js";
+import JCR from "../content/jcr.js";
 
 for (const sort of ["relevance", "date", "citations"]) {
 	test(`UI displays requested ${sort} order after a previous column sort`, async () => {
@@ -423,7 +424,21 @@ test("a paper already on the shelf without a DOI is still recognised", async () 
   await assert.rejects(() => api.findByDOI(1, "10.1/x"), /duplicates/);
 });
 
+test("without the reader's own export every figure is the OpenAlex estimate", async () => {
+	// The Journal Impact Factor is licensed to whoever subscribes to it, so the plugin
+	// carries none and nothing on screen may claim to be one until an export is loaded.
+	JCR.load([]);
+	const ui = uiHarness({ search: async () => [paper("nc", { venue: "Nature Communications", issn: "2041-1723", journalIF: 17.5 })] });
+	await ui.runSearch();
+	const row = ui.state.records.find(r => r.key === "nc");
+	assert.equal(row.journalIF, 17.5, "the OpenAlex figure stands");
+	assert.notEqual(row.journalIFEstimate, false, "and is not passed off as the JCR figure");
+});
+
 test("a restored or freshly displayed result gets the JCR impact factor, and an OpenAlex-only figure is marked as an estimate", async () => {
+	// As it is after the reader has put their own Journal Citation Reports export in
+	// the Zotero data directory; the plugin reads it from there at window load.
+	JCR.load([["Nature Communications", "NAT COMMUN", "", "2041-1723", 18.1]]);
 	const files = new Map();
 	const ui = uiHarness({ historyFiles: files, search: async () => [
 		paper("nc", { venue: "Nature Communications", issn: "2041-1723", journalIF: 17.5 }),
@@ -443,6 +458,7 @@ test("a restored or freshly displayed result gets the JCR impact factor, and an 
 	await again.openHistoryEntry(entry.id);
 	assert.equal(again.state.records.find(r => r.key === "nc").journalIF, 18.1);
 	assert.equal(again.state.records.find(r => r.key === "odd").journalIFEstimate, true);
+	JCR.load([]);
 });
 
 test("a paper handed over from the item list opens the search already filled in and running", async () => {
