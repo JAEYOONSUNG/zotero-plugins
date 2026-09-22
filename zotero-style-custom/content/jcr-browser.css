@@ -46,7 +46,7 @@
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-link { border: 0; background: transparent; border-radius: var(--sc-radius-sm, 7px); color: inherit; font: inherit; padding: 2px 0; text-align: left; text-decoration: underline; text-decoration-color: var(--jcr-line); text-underline-offset: 3px; white-space: normal; overflow-wrap: anywhere; cursor: pointer; box-shadow: none; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-category-link:hover { text-decoration-color: currentColor; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--jcr-line); border-radius: var(--sc-radius-sm, 7px); background: var(--jcr-bg); }
-:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table { border-collapse: collapse; border: 0; margin: 0; min-width: 860px; width: 100%; table-layout: auto; }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table { border-collapse: collapse; border: 0; margin: 0; min-width: 0; width: 100%; table-layout: auto; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table :is(th,td) { border: 0; border-bottom: 1px solid var(--jcr-line); padding: 10px 12px; text-align: left; vertical-align: top; white-space: normal; font-size: 12px; line-height: 1.45; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th { background: var(--jcr-fill); font-weight: 600; }
 :is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th:first-child { min-width: 190px; }
@@ -90,3 +90,15 @@
 @media (forced-colors: active) {
  .sc-jcr-browser { --jcr-line: CanvasText; --jcr-focus: Highlight; }
 }
+
+/* The figure the table is about. The old rule named the JCR's field, so on the
+   openly licensed catalogue the number the reader came for kept the muted ink. */
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table td.sc-jcr-primary { font-weight: 600; color: var(--sc-text, inherit); }
+
+/* The estimate mark is drawn, not written into the cell, so copying a column
+   yields the number rather than "~7.64". */
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-number[data-estimate]::before { content: "~"; color: var(--jcr-muted); }
+/* Which column the table is sorted by, said on the column rather than only in
+   the select above it. */
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th[aria-sort]::after { content: "\25B2"; margin-inline-start: 4px; font-size: 9px; color: var(--jcr-muted); }
+:is(.sc-jcr-browser, #style-custom-workbench .sc-jcr-browser) .sc-jcr-table th[aria-sort="descending"]::after { content: "\25BC"; }

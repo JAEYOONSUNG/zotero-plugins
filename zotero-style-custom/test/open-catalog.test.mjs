@@ -346,8 +346,12 @@ test('the browser renders this catalogue with its own figure, never as a JIF', (
   assert.notEqual(cell('issns').textContent, '', 'the ISSN column is filled');
   assert.equal(cell('jif'), null, 'there is no JIF column');
   const value = cell('citedness');
-  assert.match(value.textContent, /^~[\d,.]+$/, 'the figure is drawn as an estimate');
-  assert.match(value.getAttribute('title'), /추정치/, 'and says so when pointed at');
+  // The tilde is drawn by the stylesheet from data-estimate, so the cell itself
+  // holds the number and a copied column is usable.
+  assert.match(value.textContent, /^[\d,.]+$/, 'the cell carries the number, not a marked-up string');
+  assert.equal(value.dataset.estimate, 'true', 'and is marked as an estimate');
+  const header = host.querySelector('th[data-column="citedness"]');
+  assert.match(header.getAttribute('title'), /추정치/, 'the column says so once, over itself');
   assert.match(cell('rank').textContent, /^\d[\d,]*\/\d[\d,]*$/, 'a rank out of the category total');
   assert.match(cell('quartile').textContent, /^Q[1-4]$/);
   assert.match(cell('percentile').textContent, /^\d+(\.\d)?$/, 'and how far up the category it sits');

@@ -416,7 +416,7 @@
   let toolbar;
   const target=doc.getElementById('zotero-items-toolbar');
   if(target){toolbar=doc.createXULElement?doc.createXULElement('toolbarbutton'):node('button');toolbar.id='style-custom-workbench-button';toolbar.className='zotero-tb-button';toolbar.setAttribute('image',runtime.rootURI+'content/icons/style-custom-toolbar.svg');
-   toolbar.setAttribute('tooltiptext',T('Style Custom 연구 작업 패널'));toolbar.setAttribute('label',T('워크벤치'));toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});
+   toolbar.setAttribute('tooltiptext',T('Style Custom 연구 작업 패널'));toolbar.setAttribute('label',T('연구 작업 패널'));toolbar.addEventListener('command',()=>run(()=>toggle()));toolbar.addEventListener('click',()=>{if(!doc.createXULElement)run(()=>toggle());});
    placeInToolbar(target,toolbar);}
   const selected=()=>state.items.filter(i=>state.selected.has(String(i.id)));
   function bindAI(itemID){if(state.aiItemID!==itemID){aiEpoch++;state.aiItemID=itemID;state.aiTask=null;state.aiOutput=null;}}
@@ -460,7 +460,7 @@
    if(applicable&&state.scope==='selected'){if(!back){back=button('전체 목록으로',()=>{state.scope='library';scope.value='library';render();},null,{class:'sc-scope-back'});context.insertBefore(back,contextDetail.nextSibling);}}
    else back?.remove();
    {const scopeName=T(({library:'라이브러리',selected:'선택한 문헌',collection:'현재 컬렉션','collection-recursive':'현재·하위 컬렉션'})[state.scope]||'라이브러리'),inside=['notes','annotations','attachments'].includes(state.tab),n=(inside?model.filter(scoped(),parentOptions()):rows()).length;
-   contextDetail.textContent=nativeJCR?'Clarivate Journal Citation Reports':applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`)
+   contextDetail.textContent=nativeJCR?[runtime.jcrCatalog?.source?.provider,runtime.jcrCatalog?.source?.product].filter(Boolean).join(' · ')||T('저널 지표'):applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`)
     :state.tab==='matrix'?T(`비교 중 ${(selected().length||rows().length)}편`):state.tab==='collections'?''
     :['related','authors','backlinks'].includes(state.tab)&&selected().length===1?selected()[0].title
     :state.selected.size===1?T('선택한 문헌 1개'):state.selected.size?T(`선택한 문헌 ${state.selected.size}개`):'';}
@@ -920,9 +920,11 @@
    const list=rows();
    // Twelve of them fit. When a title was typed, the twelve are the closest
    // matches, not the first twelve the library happens to hold.
-   const shown=(state.query?model.rankByQuery(list,state.query):[...list].sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id)))).slice(0,12);
+   const offered=new Set(open.map(i=>String(i.id)));
+   const rest=list.filter(i=>!offered.has(String(i.id)));
+   const shown=(state.query?model.rankByQuery(rest,state.query):[...rest].sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id)))).slice(0,12);
    node('h3',state.query?(list.length>12?`검색 결과 ${list.length}편 중 12편`:`검색 결과 ${list.length}편`):'최근 문헌',body);
-   if(shown.length){const b=bar();for(const it of shown)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
+   if(shown.length){const b=bar();for(const it of shown)button(String(it.title||'').slice(0,60),()=>pick(it),b,{'data-pick':String(it.id),title:it.title});}
    else empty(state.query?'검색에 맞는 문헌이 없습니다. 검색어를 바꿔 보세요.':'이 범위에 문헌이 없습니다. 범위를 라이브러리로 바꾸세요.');
    const acts=bar();button('현재 선택 가져오기',()=>{const picked=runtime.selected(win);if(!picked.length){message('Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.',true);return;}state.selected=new Set(picked.slice(0,1).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});
   }
@@ -1017,8 +1019,9 @@
    const summary=bar();
    node('span',`주석 ${filtered.length}개`,summary,{class:'sc-muted'});
    for(const [hex,n] of [...counts].sort((a,b)=>b[1]-a[1])){
-    const chip=node('button',null,summary,{class:'sc-annot-swatch',type:'button','aria-pressed':String(state.color===hex),
-     title:state.color===hex?`${hex} · ${n}개 · 다시 눌러 색 필터 해제`:`${hex||T('색 없음')} · ${n}개 · 눌러서 이 색만 보기`});
+    const on=!!state.color&&state.color===hex;
+    const chip=node('button',null,summary,{class:'sc-annot-swatch',type:'button','aria-pressed':String(on),
+     title:on?`${hex} · ${n}개 · 다시 눌러 색 필터 해제`:`${hex||T('색 없음')} · ${n}개 · 눌러서 이 색만 보기`});
     node('span',null,chip,{class:'sc-annot-dot',style:`background:${/^#[0-9a-f]{6}$/i.test(hex)?hex:'var(--sc-faint)'}`});
     node('span',String(n),chip);
     chip.addEventListener('click',()=>{state.color=state.color===hex?'':hex;render();});
@@ -1071,7 +1074,7 @@
      row.style.setProperty('--sc-annot',tint);
      const head=node('div',null,row,{class:'sc-annot-head'});
      node('span',`p.${a.pageLabel||((a.pageIndex??0)+1)}`,head,{class:'sc-annot-page'});
-     node('span',({highlight:'하이라이트',underline:'밑줄',note:'메모',image:'그림',ink:'필기',text:'텍스트'})[a.type]||a.type,head,{class:'sc-annot-kind'});
+     if(a.type&&a.type!=='highlight')node('span',({underline:'밑줄',note:'메모',image:'그림',ink:'필기',text:'텍스트'})[a.type]||a.type,head,{class:'sc-annot-kind'});
      const actions=node('div',null,head,{class:'sc-annot-actions'});
      button('원문',()=>library.openItem(a.id),actions,{'data-opens':'window'});
      button('내용 복사',()=>copy(a.text+(a.comment?'\n'+a.comment:'')),actions);
@@ -1303,6 +1306,8 @@
    for(const {item,ref,p,entry} of ranked.filter(r=>r.seconds||r.p.total).sort((a,b)=>b.seconds-a.seconds)){
     const time=runtime.formatReadTime?runtime.formatReadTime(entry.seconds):Math.floor(entry.seconds||0)+'초';
     const c=card(item.title,p.total?`읽은 시간 ${time} · 전체 ${p.total}쪽 중 ${p.visited}쪽`:`읽은 시간 ${time} · 아직 페이지 기록 없음`,list);
+    if(p.total){const box=node('div',null,c,{class:'sc-collection-bar','aria-hidden':'true'});
+     node('span',null,box,{class:'sc-collection-fill'}).style.width=`${Math.round(100*p.visited/p.total)}%`;}
     button('열기',()=>library.openItem(item.id),c,{'data-opens':'window'});
     const rangeSize=100,total=Math.max(0,Number(p.total)||0);let start=pageRanges.get(item.id)||0;
     if(start>=total)start=0;pageRanges.set(item.id,start);

@@ -130,7 +130,7 @@ test('search, direction, pagination and back navigation preserve the route being
  f.click(f.button('다음'));assert.equal(f.browser.state.page,1);
  assert.equal(f.button('다음').disabled,true);
  f.click(f.category('MEDICINE').querySelector('button'));assert.equal(f.browser.state.view,'journals');
- assert.equal(f.host.querySelector('[data-column="jif"].sc-jcr-number').textContent,'<0.1');
+ assert.equal(f.host.querySelector('td[data-column="jif"].sc-jcr-number').textContent,'<0.1');
  f.click(f.button('뒤로'));assert.equal(f.browser.state.view,'categories');assert.equal(f.browser.state.page,1);
  f.search('AGRON');assert.equal(f.browser.state.page,0);assert.equal(f.host.querySelectorAll('tbody tr').length,1);
  f.click(f.category('AGRONOMY').querySelector('button'));

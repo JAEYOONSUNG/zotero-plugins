@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { uiHarness, paper, deferred } from "./helpers/search-ui-harness.mjs";
 
+// The saved widths carry the version that wrote them. Read it from the window's
+// own source so a bump does not quietly turn these fixtures into stale ones.
+const COL_VERSION = Number(/const COL_VERSION = (\d+)/.exec(
+	readFileSync(new URL("../content/ui.js", import.meta.url), "utf8"))[1]);
+
 const keys = parent => [...parent.children].map(node => node.dataset.k);
 function event(node, type, extra = {}) {
 	const value = { clientX: 25, button: 0, ...extra, defaultPrevented: false, stopped: false };
@@ -51,7 +56,7 @@ test("the shipped header, colgroup and actual generated cells share all stable f
 });
 
 test("header drag moves keyed cells and widths in place while preserving checkbox, links and marquee", () => {
-	const launches = [], prefs = { colWidthsVersion: 8, colWidths: JSON.stringify({ title: 411, year: 83 }) };
+	const launches = [], prefs = { colWidthsVersion: COL_VERSION, colWidths: JSON.stringify({ title: 411, year: 83 }) };
 	let refreshed = 0;
 	const h = setup({ prefs, launchURL: url => launches.push(url), marquee: { attach: () => ({ refresh: () => refreshed++, refreshCell() {} }) } });
 	const rec = paper("one", { rank: 1, url: "https://example.test/paper", title: "Paper", year: 2024, authorString: "Example" });
@@ -120,7 +125,7 @@ test("drop after target works both directions and checkbox column stays fixed", 
 
 test("invalid saved orders retain known unique fields, append new fields and leave widths unchanged", () => {
 	for (const saved of ["bad JSON", "{}", "null", '"title"', '["title","bad","title","chk",4,null]']) {
-		const prefs = { colOrder: saved, colWidthsVersion: 8, colWidths: '{"title":480,"year":77}' };
+		const prefs = { colOrder: saved, colWidthsVersion: COL_VERSION, colWidths: '{"title":480,"year":77}' };
 		const h = setup({ prefs }), order = keys(h.get("cols"));
 		assert.equal(order.length, 16); assert.equal(new Set(order).size, 16); assert.equal(order[0], "chk");
 		if (saved.startsWith("[")) assert.equal(order[1], "title");

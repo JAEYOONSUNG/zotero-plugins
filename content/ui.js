@@ -16,12 +16,13 @@
 	// author list two names, and every one of them rolled at once.
 	const DEFAULT_COLS = {
 		chk: 28, citations: 56, cpy: 74, rank: 60, authorString: 190, title: 320,
-		year: 58, venue: 150, journalIF: 48, affiliation: 150, country: 62, tier: 56,
+		year: 58, venue: 150, journalIF: 64, affiliation: 150, country: 62, tier: 56,
 		doi: 150, pdf: 44, inLibrary: 44, status: 96
 	};
 
 	// 8: Year, Rank and Per year were narrower than their own digits ("20…", "Ra…").
-	const COL_VERSION = 8;
+	// 9: the IF column gained a leading ~ for an estimate and 48px clipped it.
+	const COL_VERSION = 9;
 	const COLUMN_KEYS = Object.keys(DEFAULT_COLS);
 	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~56px with its padding)
 	const MIN_COL = 40;

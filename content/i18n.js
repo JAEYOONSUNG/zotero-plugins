@@ -334,7 +334,7 @@ var ZotPoPI18N = (function () {
 			historyMissing: "That saved search is no longer on disk.",
 			historyRestored: n => `Showing ${n} saved results — no API budget spent.`,
 			historyRevalidated: n => `${n} saved result(s) no longer match the search fields and were excluded from this view.`,
-			incompleteResults: (label, n) => `${n} results from ${label} — search incomplete.`,
+			incompleteResults: (label, n) => `${n} result${n === 1 ? "" : "s"} from ${label} — search incomplete.`,
 			historyRestoredNotice: (when, partial) => `These results were saved ${when}${partial ? " from an incomplete search" : ""}. Press Search to fetch them afresh.`,
 
 			thInst: "1st author inst.",

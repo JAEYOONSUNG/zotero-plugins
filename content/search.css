@@ -193,7 +193,9 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 #results-table th .rz:hover { background: var(--accent); opacity: .5; }
 /* The sort mark sits outside the header's text, so "Rank" does not become "Ra…" the moment it is sorted. */
 #results-table th[data-sort] { padding-right: 18px; }
+#results-table th.num[data-sort] { padding: 6px 8px 6px 18px; }
 #results-table th.sorted-asc::after, #results-table th.sorted-desc::after { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 8px; color: var(--accent); }
+#results-table th.num.sorted-asc::after, #results-table th.num.sorted-desc::after { right: auto; left: 6px; }
 #results-table th.sorted-asc::after { content: "▲"; }
 #results-table th.sorted-desc::after { content: "▼"; }
 #results-table td.num, #results-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -204,7 +206,7 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 #results-table td[role="button"]:hover { color: var(--accent); }
 .marquee-text { display: block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; scroll-behavior: auto; }
 /* At rest a cell shows its beginning with an ellipsis; the row under the pointer rolls once. */
-#results-table tbody tr:hover td { background: var(--row-hover); }
+#results-table tbody tr:hover:not(.selected) td { background: var(--row-hover); }
 #results-table td.title { font-weight: 500; }
 .marquee-overflow .marquee-text { text-overflow: ellipsis; }
 .marquee-overflow.marquee-active .marquee-text { text-overflow: clip; }
@@ -225,7 +227,7 @@ td.pdf { color: var(--accent); }
 td.status.ok { color: var(--ok); }
 td.status.warn { color: var(--warn); }
 td.status.err { color: var(--err); }
-.empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--muted); pointer-events: none; }
+.empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 9px; padding-inline: max(24px, calc(50% - 22ch)); text-align: center; text-wrap: pretty; color: var(--muted); pointer-events: none; }
 #busy { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
 .spinner { width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -240,7 +242,7 @@ td.status.err { color: var(--err); }
 .badge.cite { background: var(--accent); color: var(--accent-text); font-weight: 650; }
 .badge.lib { background: var(--ok); color: var(--accent-text); }
 .badge.if { background: var(--warn); color: var(--accent-text); font-weight: 650; }
-td.if { color: var(--warn); font-weight: 600; }
+td.if { color: var(--text); font-weight: 650; }
 td.if.estimate { color: var(--muted); font-weight: 500; }
 
 /* ---------------------------------------------------------------- journal mark */
@@ -260,7 +262,7 @@ td.if.estimate { color: var(--muted); font-weight: 500; }
 td.country { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .tier { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 650; line-height: 1.5; white-space: nowrap; }
 .tier-t1 { background: var(--accent); color: var(--accent-text); }
-.tier-t2 { background: var(--accent-soft); color: var(--accent); }
+.tier-t2 { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
 .tier-t3 { background: var(--chip); color: var(--muted); }
 .tier-t4 { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
 .d-where { margin-top: 4px; color: var(--muted); line-height: 1.5; }
@@ -288,6 +290,7 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 #selected-count { font-variant-numeric: tabular-nums; color: var(--muted); }
 #statusbar { display: flex; align-items: center; gap: 10px; padding: 5px 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; background: var(--bg-tint); }
 #statusbar.err #status { color: var(--err); }
+#statusbar.warn #status { color: var(--warn); }
 #progress { width: 190px; }
 
 /* ---------------------------------------------------------------- context menu */
@@ -356,3 +359,10 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 .pop-native-fields { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-top: 8px; }
 .pop-native-fields label { display: flex; flex: 1 1 150px; flex-direction: column; gap: 4px; }
 .pop-native-fields .pop-raw-field { flex-basis: 100%; }
+
+/* A banner that reports a failure cannot look like one that offers a hint. */
+.banner.warn { background: linear-gradient(rgba(155, 109, 69, .16), rgba(155, 109, 69, .16)), var(--glass); }
+/* An identifier is not prose: a DOI is read character by character. */
+#results-table td[data-k="doi"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+/* Korean at the Latin size reads a step small; the lang attribute is already set. */
+html[lang="ko"] .field label, html[lang="ko"] .hint, html[lang="ko"] #results-table th { font-size: 11.5px; }

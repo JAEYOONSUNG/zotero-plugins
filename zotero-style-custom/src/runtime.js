@@ -928,7 +928,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     cell.className = "cell " + (column.className || "");
     Object.assign(cell.style, { overflow: "hidden", textOverflow: "ellipsis", alignItems: "center", display: "flex", gap: "5px" });
     const P = this.palette(doc);
-    if (["if","citations","time"].includes(key)) cell.style.fontVariantNumeric = "tabular-nums";
+    if (["if","citations","time","progress","tagCount","noteCount","annotationCount"].includes(key)) cell.style.fontVariantNumeric = "tabular-nums";
+    // Five stars are one rating, not five marks spread across the cell.
+    if (key === "rating") cell.style.gap = "1px";
     const item = doc.defaultView?.ZoteroPane?.itemsView?.getRow(index)?.ref;
     // Read current data when painting: do not reuse a previously cached empty cell.
     if (this.isRegular(item)) {value=this.value(key,item);if(['time','status'].includes(key)){cell.dataset.styleCustomReading=key;cell.dataset.itemId=String(item.id);}}
@@ -944,7 +946,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         }
         this.paintJournal(cell, item, doc, P, {figure: null, estimate: false});
         cell.style.color = P.faint;
-        cell.title = item.getField("publicationTitle") ? "이 저널의 공식 IF를 아직 확인하지 못했습니다. 저널명과 ISSN을 확인하세요." : "저널 정보가 없습니다. 프리프린트·책·데이터셋에는 저널 IF가 적용되지 않을 수 있습니다.";
+        cell.title = this.t(item.getField("publicationTitle") ? "이 저널의 공식 IF를 아직 확인하지 못했습니다. 저널명과 ISSN을 확인하세요." : "저널 정보가 없습니다. 프리프린트·책·데이터셋에는 저널 IF가 적용되지 않을 수 있습니다.");
       }
       if (key === "citations" && this.isRegular(item)) {
         const state=this.entry(item), id=this.citationTools.identity(this.citationRecord(item));
@@ -968,7 +970,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const where = this.affiliationOf(item);
         cell.textContent = "—";
         cell.style.color = P.faint;
-        cell.title = where ? this.affiliationNote(where) : "아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기";
+        cell.title = where ? this.affiliationNote(where) : this.t("아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기");
       }
       return cell;
     }
@@ -1036,7 +1038,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       cell.title = this.t(`실제로 읽은 시간 ${Math.floor(seconds)}초`);
     } else if (key === "progress") {
       const p=this.isRegular(item)?this.pageProgress(item):{percent:Number(value)};
-      cell.textContent=p.percent+'%';cell.style.backgroundImage=`linear-gradient(90deg,#245c7830 ${p.percent}%,transparent ${p.percent}%)`;
+      cell.textContent=p.percent+'%';
+      cell.style.backgroundImage=`linear-gradient(90deg,${this.tint(P.blue,P.dark?0.34:0.18)} ${p.percent}%,transparent ${p.percent}%)`;
       cell.title=p.total?this.t(`${p.total}쪽 중 ${p.visited}쪽 읽음`):cell.textContent;
     } else if (key === "files" && this.isRegular(item)) {
       // Three different things turn up as "an extra PDF", and they are not the
@@ -1121,7 +1124,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!where) {
         cell.textContent = "—";
         cell.style.color = P.faint;
-        cell.title = "아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기";
+        cell.title = this.t("아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기");
         return cell;
       }
       if (key === "institutionTier") {
@@ -1154,7 +1157,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!where) {
         cell.textContent = "—";
         cell.style.color = P.faint;
-        cell.title = "아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기";
+        cell.title = this.t("아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기");
         return cell;
       }
       const line = (row, role) => this.affiliationLine(doc, row, role, P);
@@ -1207,7 +1210,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       track.title = young ? `출판 3년 이내 (${year}) — 아직 인용이 쌓이는 중이라 회색 · 길이는 로그 눈금` : '피인용 수 · 길이는 로그 눈금';
       track.appendChild(fill); cell.appendChild(track);
     } else { cell.textContent = label; }
-    if (!["time","progress","annotationCount"].includes(key)) cell.title = key === "rating" && this.isRegular(item) ? this.t("별점 · 클릭해서 매깁니다") : label;
+    // Only where nothing better was written above: this line used to replace the
+    // journal name and tier with the bare figure, and the status with raw English.
+    if (!["time","progress","annotationCount"].includes(key) && !cell.title) {
+      cell.title = key === "rating" && this.isRegular(item) ? this.t("별점 · 클릭해서 매깁니다") : this.t(label);
+    }
     if (this.isRegular(item) && ["if","citations"].includes(key)) {
       // The number is a door: citations to the papers around this one, IF to the journal's page.
       cell.style.cursor = "pointer";

@@ -2410,7 +2410,7 @@
         },
         {
           "file": "src/jcr-browser.js",
-          "marker": "const OPEN_METRIC={key:'citedness',medianKey:'medianCitedness',estimate:true,ranks:'citednessRanks',"
+          "marker": "const OPEN_METRIC={key:'citedness',medianKey:'medianCitedness',estimate:true,tones:[1.5,.8,.3],ranks:'citednessRanks',"
         },
         {
           "file": "src/runtime.js",

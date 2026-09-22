@@ -647,9 +647,18 @@
     if (identity?.exact) return tonesFor(identity.hex, dark);
     const hue = identity?.hue ?? 0;
     const known = !!identity?.known;
+    // A journal the registry never heard of used to get a hue from its own name,
+    // separated from a real house colour only by a saturation step nobody can see
+    // on a chip this size. With most of the shipped registry carrying no publisher,
+    // that dressed four rows in five in a brand that does not exist. Absence is
+    // drawn as absence: grey, so a colour on the column always means something.
     return dark
-      ? {ink: hsl(hue, known ? 62 : 40, 74), fill: hsl(hue, known ? 44 : 26, 24), edge: hsl(hue, known ? 44 : 26, 36)}
-      : {ink: hsl(hue, known ? 62 : 40, 40), fill: hsl(hue, known ? 62 : 36, 93), edge: hsl(hue, known ? 52 : 30, 84)};
+      ? known
+        ? {ink: hsl(hue, 62, 74), fill: hsl(hue, 44, 24), edge: hsl(hue, 44, 36)}
+        : {ink: hsl(hue, 0, 62), fill: hsl(hue, 0, 22), edge: hsl(hue, 0, 30)}
+      : known
+        ? {ink: hsl(hue, 62, 40), fill: hsl(hue, 62, 93), edge: hsl(hue, 52, 84)}
+        : {ink: hsl(hue, 0, 45), fill: hsl(hue, 0, 94), edge: hsl(hue, 0, 88)};
   }
 
   const hsl = (h, s, l) => `hsl(${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%)`;

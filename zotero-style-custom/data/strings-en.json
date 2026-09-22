@@ -1394,5 +1394,6 @@
  "확인한 결과를 저장했습니다.": "The result you checked was saved.",
  "활성 PDF 읽기 시간 기록": "Record reading time for the active PDF",
  "후보가 둘입니다 — 직접 고르세요: {0}": "There are two candidates — choose one: {0}",
- "휴지통으로": "Move to trash"
+ "휴지통으로": "Move to trash",
+ "피인용 백분위": "Citedness percentile"
 }

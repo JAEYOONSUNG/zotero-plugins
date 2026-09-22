@@ -11,6 +11,7 @@
   --sc-muted: #6A6A6F;
   --sc-faint: #7C7C85;
   --sc-accent: #4A6CA5;
+  --sc-accent-ink: #fff;
   --sc-accent-soft: #EDF1F7;
   --sc-selection: #4A6CA5;
   --sc-border: rgba(0, 0, 0, .07);
@@ -116,12 +117,12 @@
 #style-custom-workbench textarea:focus-visible,
 #style-custom-workbench select:focus-visible {
   outline: 0;
-  box-shadow: inset 0 0 0 1px var(--sc-accent), 0 0 0 3px var(--sc-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--sc-accent), 0 0 0 2px color-mix(in srgb, var(--sc-accent) 35%, transparent);
 }
 #style-custom-workbench button:hover { background: var(--sc-fill-hover); }
 #style-custom-workbench button:active { background: var(--sc-fill-active); }
 #style-custom-workbench button:disabled { opacity: .6; cursor: default; }
-#style-custom-workbench button[aria-busy=true] { opacity: 1; cursor: progress; color: var(--sc-accent); background: var(--sc-accent-soft); border-color: var(--sc-accent); border-block-end: 2px solid var(--sc-accent); }
+#style-custom-workbench button[aria-busy=true] { opacity: 1; cursor: progress; color: var(--sc-accent); background: var(--sc-accent-soft); box-shadow: inset 0 -2px 0 var(--sc-accent); }
 #style-custom-workbench input::placeholder,
 #style-custom-workbench textarea::placeholder { color: var(--sc-muted); opacity: 1; }
 #style-custom-workbench :focus-visible { outline: 2px solid var(--sc-accent); outline-offset: 2px; }
@@ -189,7 +190,7 @@
 #style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] .sc-nav-icon { color: currentColor; }
 #style-custom-workbench .sc-shell nav button[data-tab]:hover { background: rgba(0, 0, 0, .05); }
 #style-custom-workbench .sc-shell nav button[data-tab].active,
-#style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-accent); color: #fff; font-weight: 500; }
+#style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-accent); color: var(--sc-accent-ink); font-weight: 500; }
 #style-custom-workbench .sc-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
 #style-custom-workbench .sc-context { flex-shrink: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; padding: 16px var(--sc-content-padding) 12px; border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-section-title { margin: 0; font: 600 19px/1.35 var(--sc-title-font); letter-spacing: -.02em; }
@@ -199,7 +200,7 @@
 #style-custom-workbench > footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; padding: 10px 16px; border-block-start: 1px solid var(--sc-border); background: var(--sc-surface); }
 #style-custom-workbench .sc-selection-bar > span:first-child,
 #style-custom-workbench > footer > span:first-child { margin-inline-end: auto; color: var(--sc-muted); font-size: 12px; }
-#style-custom-workbench .sc-selection-bar[data-selected=true] { border-block-start: 2px solid var(--sc-selection); background: var(--sc-accent-soft); }
+#style-custom-workbench .sc-selection-bar[data-selected=true] { border-block-start-color: var(--sc-selection); box-shadow: inset 0 1px 0 var(--sc-selection); background: var(--sc-accent-soft); }
 #style-custom-workbench .sc-selection-bar[data-selected=true] > span:first-child { color: var(--sc-text); font-weight: 650; }
 
 /* Paper hierarchy: status rail, title, provenance, then metrics and actions. */
@@ -234,7 +235,13 @@
   border-radius: var(--sc-radius);
   box-shadow: none;
   background: transparent;
-  border-block-end: 1px solid var(--sc-border);
+  border-block-end: 0;
+}
+/* The divider belongs between two rows, not around the corner of one: a border on
+   a 10px-rounded card thins to a wedge at each end, and hangs under the last row. */
+#style-custom-workbench .sc-paper-card + .sc-paper-card::after {
+  content: ""; position: absolute; inset-inline: 0; inset-block-start: -1px;
+  height: 1px; background: var(--sc-border);
 }
 #style-custom-workbench .sc-paper-card:hover { background: var(--sc-surface); }
 /* Reading state as a dot at the start of the row, not a slab down its edge. */
@@ -246,6 +253,10 @@
 #style-custom-workbench .sc-paper-card[data-status=done]::before { background: var(--sc-done); }
 #style-custom-workbench .sc-paper-card:focus-within { background: var(--sc-surface); }
 #style-custom-workbench .sc-paper-card[data-selected=true] { background: var(--sc-accent-soft); outline: 1px solid var(--sc-accent); outline-offset: -1px; }
+/* Hover fills with pure white, which in light mode is brighter than the selected
+   fill. Without this the row under the pointer shouts over the chosen one. */
+#style-custom-workbench .sc-paper-card[data-selected=true] { outline-width: 2px; }
+#style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-title { color: var(--sc-accent); font-weight: 600; }
 #style-custom-workbench .sc-paper-identity { flex: 1; min-width: 0; }
 /* One line: mark, checkbox, title, source, then the figures. The title takes
    the slack so the numbers stay in a column the eye can run down. */
@@ -255,8 +266,8 @@
 #style-custom-workbench .sc-paper-card:hover .sc-check,
 #style-custom-workbench .sc-paper-card:focus-within .sc-check,
 #style-custom-workbench .sc-paper-card[data-selected=true] .sc-check { opacity: 1; }
-#style-custom-workbench .sc-paper-title { flex: 0 1 auto; min-width: 0; margin: 0; font: 500 13px/1.45 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#style-custom-workbench .sc-paper-meta { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.5; }
+#style-custom-workbench .sc-paper-title { flex: 1 1 auto; min-width: 0; margin: 0; font: 500 13px/1.45 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-paper-meta { display: flex; align-items: center; flex: 0 3 auto; min-width: 7ch; color: var(--sc-muted); font-size: 11px; line-height: 1.5; }
 #style-custom-workbench .sc-metrics { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; padding-block-start: 8px; color: var(--sc-muted); font: 11px/1.6 var(--sc-mono); }
 #style-custom-workbench .sc-metric { white-space: nowrap; }
 /* Held out of the way until the row is wanted, so the list reads as a list. */
@@ -278,7 +289,8 @@
   #style-custom-workbench .sc-paper-actions { transition: none; }
 }
 #style-custom-workbench .sc-check { display: inline-flex; align-items: center; gap: 6px; margin: 4px 8px 4px 0; }
-#style-custom-workbench .sc-empty { margin: 0; padding: 32px 16px; color: var(--sc-muted); text-align: center; }
+#style-custom-workbench .sc-empty { margin: 0 auto; padding: 32px 16px; max-width: 46ch; color: var(--sc-muted); text-align: center; text-wrap: pretty; }
+#style-custom-workbench .sc-empty + .sc-actions { justify-content: center; }
 #style-custom-workbench details:not(.sc-filters) { padding-inline-start: 12px; }
 #style-custom-workbench summary { cursor: pointer; }
 
@@ -320,6 +332,10 @@
 #style-custom-workbench .sc-canvas-card button { color: #252a31 !important; background: #ffffff !important; }
 #style-custom-workbench .sc-canvas-card textarea { min-height: 44px !important; }
 #style-custom-workbench .sc-matrix { border-collapse: separate; border-spacing: 0; font-size: 12px; width: max-content; min-width: 100%; }
+/* Which paper a column belongs to has to survive scrolling sideways, or the
+   comparison is between four unnamed columns. */
+#style-custom-workbench .sc-matrix tr > *:first-child { position: sticky; inset-inline-start: 0; z-index: 2; background: var(--sc-surface); }
+#style-custom-workbench .sc-matrix tr:first-child > *:first-child { z-index: 3; }
 #style-custom-workbench .sc-matrix th,
 #style-custom-workbench .sc-matrix td { min-width: 120px; max-width: 360px; padding: 10px 12px; border-inline-end: 1px solid var(--sc-border); border-block-end: 1px solid var(--sc-border); background: var(--sc-surface); color: var(--sc-text); overflow-wrap: anywhere; vertical-align: top; text-align: start; }
 #style-custom-workbench .sc-matrix th { position: sticky; top: 0; z-index: 1; background: var(--sc-surface-alt); font-weight: 600; }
@@ -477,10 +493,10 @@
 #style-custom-workbench .sc-journal-table .sc-journal-if-none { color: var(--sc-faint); font-weight: 400; }
 #style-custom-workbench .sc-journal-fields { display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-chip-tiny { padding: 0 6px; font-size: 10px; line-height: 16px; }
-#style-custom-workbench .sc-chip-on { background: var(--sc-accent); color: #fff; }
+#style-custom-workbench .sc-chip-on { background: var(--sc-accent); color: var(--sc-accent-ink); }
 #style-custom-workbench .sc-chip-button { border: 0; cursor: pointer; min-height: 0; font: inherit; font-size: 11px; line-height: 18px; }
 #style-custom-workbench .sc-chip-button:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
-#style-custom-workbench .sc-chip-button[aria-pressed=true] { background: var(--sc-accent); color: #fff; }
+#style-custom-workbench .sc-chip-button[aria-pressed=true] { background: var(--sc-accent); color: var(--sc-accent-ink); }
 #style-custom-workbench .sc-journal-count { font-size: 11px; }
 /* The profile: a two-column list of facts, a sign before each. */
 #style-custom-workbench .sc-journal-profile { margin: 0; padding: 6px 0 0; border-radius: 0; background: transparent; }
@@ -509,7 +525,7 @@
 #style-custom-workbench .sc-metric[data-metric=time] .sc-metric-value { min-width: 3.4em; }
 #style-custom-workbench .sc-metric[data-tone] { font-weight: 600; }
 #style-custom-workbench .sc-metric[data-tone] svg { opacity: 1; }
-#style-custom-workbench .sc-stars .sc-metric-value { color: #978144; letter-spacing: -1px; font-size: 10px; min-width: 4em; }
+#style-custom-workbench .sc-stars .sc-metric-value { color: #978144; letter-spacing: -1px; font-size: 10px; min-width: 4.8em; }
 /* The colour a paper has been given wins over its reading state. */
 #style-custom-workbench .sc-paper-card[data-mark]::before { background: var(--sc-mark); }
 #style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #BD6C6E; }
@@ -748,11 +764,11 @@
 #style-custom-workbench .sc-annot-swatch:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
 
 /* A JCR quartile, shaded by rank: Q1 reads as the strongest, Q4 the faintest. */
-#style-custom-workbench .sc-quartile { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: 100px; font: 700 10px/16px var(--sc-mono); text-align: center; color: #fff; }
+#style-custom-workbench .sc-quartile { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: 100px; font: 700 10px/16px var(--sc-mono); text-align: center; color: var(--sc-accent-ink); }
 #style-custom-workbench .sc-quartile[data-q="1"] { background: var(--sc-done); }
 #style-custom-workbench .sc-quartile[data-q="2"] { background: var(--sc-accent); }
 #style-custom-workbench .sc-quartile[data-q="3"] { background: var(--sc-muted); }
-#style-custom-workbench .sc-quartile[data-q="4"] { background: var(--sc-faint); color: var(--sc-surface); }
+#style-custom-workbench .sc-quartile[data-q="4"] { background: var(--sc-fill); color: var(--sc-muted); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 
 /* An unrefereed manuscript, said in one word before the venue. */
 #style-custom-workbench .sc-tag, #style-custom-workbench .sc-preprint, #style-custom-workbench .sc-new { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 9px/14px var(--sc-font); letter-spacing: .02em; vertical-align: middle; }
@@ -1095,3 +1111,7 @@
 
 /* A verb that removes something: quiet until hovered, then in the error ink. */
 #style-custom-workbench .sc-danger-soft:hover { color: var(--sc-error); border-color: var(--sc-error); }
+
+/* A paper chosen from a list of papers: the button says enough of the title to
+   recognise it, and the whole title is on the pointer. */
+#style-custom-workbench .sc-actions button[data-pick] { display: block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

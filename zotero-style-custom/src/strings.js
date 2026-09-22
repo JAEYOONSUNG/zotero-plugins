@@ -1341,6 +1341,7 @@
  "플러그인이 꺼져 있습니다. 도구 → 부가 기능에서 Style Custom을 켜세요.": "The plugin is turned off. Turn Style Custom on under Tools → Add-ons.",
  "피인용": "Citations",
  "피인용 4분위": "Citedness quarter",
+ "피인용 백분위": "Citedness percentile",
  "피인용 수 · 길이는 로그 눈금": "Citation count · length is on a log scale",
  "피인용 순위": "Citedness rank",
  "핀란드": "Finland",
