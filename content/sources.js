@@ -1223,14 +1223,18 @@ var ZotPoPSources = (function () {
 	function fieldExpression(value, formatAtom, { wholeAtoms = false, ignoreOperatorCase = false,
 		universe = null, binaryNot = null, nativeFields = false, omit = null } = {}) {
 		let fields = [];
-		let input = String(value || ""), prefix = "ZOTPOPFIELD";
-		while (input.includes(prefix)) prefix += "X";
+		// Mixed case on purpose. The parser reads a title written entirely in capitals as
+		// prose and lowercases it, and an all-capital placeholder made "CRISPR[All Fields]
+		// AND EDITING" look like such a title, which cost the query its AND. The match
+		// below is case-insensitive too, so a fold anywhere else cannot lose the atom.
+		let input = String(value || ""), prefix = "ZotPoPField";
+		while (input.toUpperCase().includes(prefix.toUpperCase())) prefix += "x";
 		if (nativeFields) input = input.replace(/(?:"(?:\\.|[^"\\])*"|[^\s()"]+)\[[^\]]+\]|[a-z_]+:"(?:\\.|[^"\\])*"/gi,
 			atom => { let token = prefix + fields.length; fields.push(atom); return token; });
 		let tree = Query.parseExpression(input, wholeAtoms, ignoreOperatorCase);
 		if (!tree) throw new SyntaxError("Invalid search expression: check quotes, operators and parentheses");
 		function term(node) {
-			let field = new RegExp("^" + prefix + "(\\d+)$").exec(node.value);
+			let field = new RegExp("^" + prefix + "(\\d+)$", "i").exec(node.value);
 			return field && fields[Number(field[1])] ? fields[Number(field[1])] : formatAtom(node.value, node.phrase === true);
 		}
 		function render(node, negative = false) {

@@ -286,3 +286,16 @@ test("a combined search resolves a pasted DOI once per source and merges the ans
 	assert.deepEqual(rows[0].sources.sort(), ["crossref", "europepmc", "openalex"]);
 	assert.ok(urls.length <= 5, "and it costs one request per source, not a paging walk: " + urls.length);
 });
+
+test("a field tag written inside a title in capitals survives the prose rule", () => {
+	// The parser reads an all-capital title as prose and lowercases it. The internal
+	// placeholder that carries a fielded atom used to be all capitals too, so
+	// "CRISPR[All Fields] AND EDITING" looked like prose and lost both its atom and
+	// its AND, going out as the literal word "zotpopfield0".
+	const term = S.pubmedTerm({ title: "CRISPR[All Fields] AND EDITING IN BACTERIA" });
+	assert.ok(/CRISPR\[All Fields\]/.test(term), "the atom the user wrote is still there");
+	assert.ok(!/zotpopfield/i.test(term), "and no placeholder leaked into the query");
+	assert.ok(/EDITING\[ti\]/.test(term), "AND is still an operator, so the words stay separate atoms");
+	// A capitalised title with no field tag is still read as prose.
+	assert.ok(/why\[ti\]/.test(S.pubmedTerm({ title: "WHY NOT TO USE ANTIBIOTICS IN FARMING" })));
+});
