@@ -30,7 +30,7 @@ rm -f "$OUT"
 python3 - "$OUT" <<'PY'
 import os, sys, zipfile
 out = sys.argv[1]
-roots = ["manifest.json", "bootstrap.js", "prefs.js", "src", "content"]
+roots = ["manifest.json", "bootstrap.js", "prefs.js", "LICENSE", "LICENSES.md", "src", "content"]
 # Licensed journal figures are never packaged. They live in the reader's own Zotero
 # data directory and are loaded from there at runtime.
 skip = {".DS_Store", "jcr-2025-data.js"}

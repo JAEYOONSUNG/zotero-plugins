@@ -118,3 +118,24 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+
+## OpenAlex journal catalogue — `data/journal-catalog.json`, `data/if-catalog.json`, `data/journal-registry.json`
+
+The taxonomy of 26 fields and 252 subfields, and the names, ISSNs, subject
+paths and two-year mean citedness of 89,510 journals, built from the OpenAlex
+`sources`, `subfields`, `fields` and `domains` endpoints by
+`scripts/build-open-catalog.mjs`.
+
+OpenAlex data is released into the public domain under CC0 1.0
+(https://creativecommons.org/publicdomain/zero/1.0/), so it may be
+redistributed here. The two-year mean citedness follows the same formula as
+the Journal Impact Factor over OpenAlex's open citation graph, but it is a
+different figure and is never presented as a JIF.
+
+Eighty-six impact factors come instead from the publishers' own metrics pages,
+each record naming the page it was read from and the date it was checked.
+
+Journal Citation Reports figures are licensed to their subscriber and are not
+distributed with this plugin. A reader who holds an entitlement puts their own
+export in `style-custom-journals/` in the Zotero data directory, where the
+plugin reads it and where it wins over the figures above.

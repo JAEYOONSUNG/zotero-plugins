@@ -118,3 +118,19 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+
+## OpenAlex journal catalogue — `content/journal-registry.json`
+
+Journal names, ISSNs, subject paths and a two-year mean citedness for every
+journal, built from the OpenAlex `sources` API by
+`zotero-style-custom/scripts/build-open-catalog.mjs`.
+
+OpenAlex data is released into the public domain under CC0 1.0
+(https://creativecommons.org/publicdomain/zero/1.0/), so it may be
+redistributed here. The two-year mean citedness follows the same formula as
+the Journal Impact Factor over OpenAlex's open citation graph, but it is a
+different figure and is never presented as a JIF.
+
+Journal Citation Reports figures are licensed to their subscriber and are not
+distributed with this plugin. A reader who holds an entitlement puts their own
+export in the Zotero data directory, where the plugin reads it.

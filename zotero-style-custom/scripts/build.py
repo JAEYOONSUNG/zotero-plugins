@@ -9,7 +9,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ["src/jcr-categories.js", "src/jcr-browser.js", "content/jcr-browser.css", "data/journal-catalog.json", "manifest.json", "bootstrap.js", "prefs.js", "src/data.js", "src/reading.js", "src/marquee.js",
-         "src/workspace.js", "src/assist.js", "src/library.js", "src/reader-tools.js", "src/workbench.js", "content/workbench.css", "content/citation.css", "src/updater.js", "src/runtime.js", "src/citations.js", "src/citation-formats.js", "src/supplementary.js", "src/discover.js", "src/paper-signals.js", "src/legacy-reading.js", "src/journal-metrics.js", "src/selfcheck.js", "src/failures.js", "src/brand-icons.js", "src/i18n.js", "src/strings.js", "src/author-portrait.js", "src/attachment-kinds.js", "src/item-kinds.js", "src/patents.js", "src/journal-identity.js", "src/affiliations.js", "src/paper-graph.js", "LICENSES.md", "src/journals.js", "data/if-catalog.json", "data/journal-registry.json", "data/features.json", "content/preferences.xhtml", "content/preferences.css", "src/settings-schema.js", "src/settings.js", "content/icons/style-custom.svg", "content/icons/style-custom-toolbar.svg", *[f"content/icons/style-custom-{size}.png" for size in [16,24,32,48,96,128,256]]]
+         "src/workspace.js", "src/assist.js", "src/library.js", "src/reader-tools.js", "src/workbench.js", "content/workbench.css", "content/citation.css", "src/updater.js", "src/runtime.js", "src/citations.js", "src/citation-formats.js", "src/supplementary.js", "src/discover.js", "src/paper-signals.js", "src/legacy-reading.js", "src/journal-metrics.js", "src/selfcheck.js", "src/failures.js", "src/brand-icons.js", "src/i18n.js", "src/strings.js", "src/author-portrait.js", "src/attachment-kinds.js", "src/item-kinds.js", "src/patents.js", "src/journal-identity.js", "src/affiliations.js", "src/paper-graph.js", "LICENSES.md", "LICENSE", "src/journals.js", "data/if-catalog.json", "data/journal-registry.json", "data/features.json", "content/preferences.xhtml", "content/preferences.css", "src/settings-schema.js", "src/settings.js", "content/icons/style-custom.svg", "content/icons/style-custom-toolbar.svg", *[f"content/icons/style-custom-{size}.png" for size in [16,24,32,48,96,128,256]]]
 
 # Every module bootstrap.js loads has to be in the archive: 0.51.12 shipped
 # without src/updater.js and the plugin died at startup with nothing on screen.
@@ -27,7 +27,9 @@ assert not _missing, "bootstrap.js loads modules the build does not pack: %s" % 
 # The openly licensed build of each table is kept under a name that says so, and is
 # packed under the name the plugin reads, so bootstrap.js needs no second code path.
 SOURCE_OF = {"data/if-catalog.json": "data/if-catalog.open.json",
-             "data/journal-registry.json": "data/journal-registry.open.json"}
+             "data/journal-registry.json": "data/journal-registry.open.json",
+             # One licence covers both plugins, so it lives at the repository root.
+             "LICENSE": "../LICENSE"}
 def source_of(name):
     return SOURCE_OF.get(name, name)
 

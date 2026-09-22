@@ -20,7 +20,7 @@ The item list above is Zotero's own, with Style Custom's columns switched on. Ev
 3. Click the gear at the top right → **Install Add-on From File…** and choose the downloaded file.
 4. Restart Zotero. The two buttons shown above appear in the items toolbar.
 
-New versions install themselves. While Zotero is open, each plugin checks this repository's release list once a day, downloads a newer release, verifies it against the hash in the feed and applies it without a restart; Zotero's own add-on updater reads the same feed. The check can be turned off, and run by hand, in each plugin's preferences pane (ZotPoP → **Updates**; Style Custom → **업데이트 / Updates**). Zotero 7 or later is required; development and verification were done on Zotero 9.0.
+New versions install themselves. While Zotero is open, each plugin checks this repository's release list once a day, downloads a newer release, verifies it against the hash in the feed and applies it without a restart; Zotero's own add-on updater reads the same feed. The check can be turned off, and run by hand, in each plugin's preferences pane (ZotPoP → **Updates**; Style Custom → **Updates**). Zotero 7 or later is required; development and verification were done on Zotero 9.0.
 
 ### Worth entering at the start (all optional)
 
@@ -139,4 +139,25 @@ sh scripts/build.sh                                   # build/zotpop-<version>.x
 cd zotero-style-custom && python3 scripts/build.py    # build/style-custom-<version>.xpi
 ```
 
-Style Custom's reference is [zotero-style-custom/README.md](zotero-style-custom/README.md). Every improvement round of Style Custom is recorded in [zotero-style-custom/docs/improvement-rounds.json](zotero-style-custom/docs/improvement-rounds.json). Third-party notices are in each directory's `LICENSES.md`.
+Style Custom's reference is [zotero-style-custom/README.md](zotero-style-custom/README.md). Every improvement round of Style Custom is recorded in [zotero-style-custom/docs/improvement-rounds.json](zotero-style-custom/docs/improvement-rounds.json).
+
+## Licence
+
+The code is under the [MIT licence](LICENSE).
+
+The journal figures the plugins carry are not the author's to license, so they
+are stated separately. What ships is built from OpenAlex, which releases its
+data into the public domain under CC0 1.0, plus eighty-six impact factors read
+from publishers' own metrics pages, each record naming the page and the date.
+The two-year mean citedness that OpenAlex publishes follows the same formula as
+the Journal Impact Factor over an open citation graph; it is a different figure
+and the plugins never present it as a JIF.
+
+Journal Citation Reports figures are licensed to their subscriber, so they are
+not distributed here at all. A reader who holds an entitlement puts their own
+export in `style-custom-journals/` (Style Custom) or `zotpop/journals/`
+(ZotPoP) in the Zotero data directory; the plugin reads it from there and
+prefers it over the figures above. Both preference panes show which of the two
+is in use and open the folder.
+
+Third-party notices are in each directory's `LICENSES.md`.

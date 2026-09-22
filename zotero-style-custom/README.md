@@ -64,4 +64,4 @@ python3 scripts/build-strings.py                # + data/strings-en.json → src
 
 Korean strings in the source are the keys; every one must have an English entry, and a test fails otherwise. `manifest.json`, `package.json`, `data/features.json` and `docs/improvement-rounds.json` must carry the same version. Every improvement round is recorded in `docs/improvement-rounds.json` with the source marker and the test that cover it, and a test checks that both still exist.
 
-Third-party notices: [LICENSES.md](LICENSES.md).
+Licence: [MIT](../LICENSE) for the code. The journal figures that ship with the plugin come from OpenAlex under CC0 1.0 and from publishers' own metrics pages; Journal Citation Reports figures are licensed to their subscriber and are not distributed, but are read from `style-custom-journals/` in the Zotero data directory when a reader puts their own export there. Third-party notices: [LICENSES.md](LICENSES.md).
