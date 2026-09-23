@@ -1814,3 +1814,93 @@ test('the journals tab finds a journal by a dotted abbreviation and by an ISSN w
  await type('no such journal');assert.deepEqual(names(),[]);
  f.bench.destroy();
 });
+
+async function pathFixture({owned = [], show} = {}) {
+ const f = fixture();
+ const pathTools = (await import('../src/reading-path.js')).default;
+ const subjects = {topic: new Set(['T']), subfield: new Set(['S']), field: new Set(['F']), domain: new Set(['D'])};
+ const w = (id, references, extra = {}) => ({id, title: 'Work ' + id, year: 2015, citations: 5, doi: '10.1/' + id, type: 'article', references, subjects, authors: [], ...extra});
+ const refs = [w('A', ['X'], {year: 2008}), w('B', ['A', 'X', 'Y'], {year: 2012}), w('C', ['A', 'B', 'X', 'Y'], {year: 2014}),
+  w('D', ['A', 'B', 'X', 'Y'], {year: 2015}), w('E', ['A', 'B', 'X', 'Y'], {year: 2016}), w('X', [], {year: 2000}), w('Y', [], {year: 2001})];
+ const plan = pathTools.plan(w('S', ['A', 'B', 'C', 'D', 'E', 'X', 'Y'], {year: 2022}), {
+  refs, citers: [w('L', ['S', 'A', 'B', 'C', 'X'], {year: 2024}), w('M', ['S', 'A', 'B', 'D', 'X'], {year: 2025})]
+ }, {show});
+ f.runtime.pathTools = pathTools;
+ f.runtime.libraryDOIs = () => new Set(owned.map(id => '10.1/' + id.toLowerCase()));
+ f.runtime.readingPathCached = async (ref, {onProgress} = {}) => { f.calls.push(['path']); onProgress?.(1, 3); return plan; };
+ return {...f, plan};
+}
+
+test('the related tab opens on the short reading path: a handful of numbered steps, one start, the rest one click away', async () => {
+ const f = await pathFixture();
+ try {
+  await f.bench.show('related');
+  assert.ok(f.calls.find(c => c[0] === 'path'), 'the reading order is looked up on open');
+  assert.ok(!f.calls.find(c => c[0] === 'related'), 'the flat list is not fetched until asked for');
+  const rows = [...f.body().querySelectorAll('.sc-path-row[data-step]')];
+  const numbers = rows.map(r => r.dataset.step);
+  assert.deepEqual(numbers, numbers.map((_, i) => String(i + 1)), 'numbers run over what is on screen');
+  assert.ok(rows.length <= 7, 'the short path is short: ' + rows.length);
+  assert.equal(f.body().querySelectorAll('.sc-path-start').length, 1, 'exactly one place to start');
+  const seed = f.body().querySelector('.sc-path-seed');
+  assert.ok(seed && !seed.dataset.step, 'the paper itself is the reference point, not a numbered step');
+  assert.equal(f.body().querySelectorAll('.sc-path-more').length, 0, 'no per-section tails in the short path');
+  const toggle = [...f.body().querySelectorAll('.sc-path-depth')][0];
+  assert.match(toggle.textContent, /전체 순서 보기 · \d+편 더/);
+  await f.click(toggle.textContent);
+  assert.ok(f.body().querySelectorAll('.sc-path-row[data-step]').length > rows.length, 'the full path shows more');
+  assert.ok(f.body().querySelector('.sc-path-depth').textContent.includes('짧게 보기'));
+  await f.click('전체 목록');
+  assert.ok(f.calls.find(c => c[0] === 'related'), 'the list view still has its own lookup');
+  assert.equal(f.body().querySelectorAll('.sc-path-row').length, 0);
+ } finally { f.bench.destroy(); }
+});
+
+test('a paper already owned reads as one "보유" line, is not numbered, and does not use up its section', async () => {
+ const f = await pathFixture({owned: ['A', 'X']});
+ try {
+  await f.bench.show('related');
+  const ownedRows = [...f.body().querySelectorAll('.sc-path-owned')];
+  assert.ok(ownedRows.length >= 1, 'owned works are shown as owned');
+  for (const row of ownedRows) {
+   assert.equal(row.dataset.step, undefined);
+   assert.equal(row.querySelector('.sc-path-step').textContent, '보유');
+   assert.equal(row.querySelector('.sc-path-finding'), null, 'one line, no finding, no reasons');
+  }
+  // One start, marked either on a row to fetch or on an owned line -- an owned
+  // start is the cheapest one, as there is nothing to fetch.
+  const marked = f.body().querySelectorAll('.sc-path-start').length
+   + [...f.body().querySelectorAll('.sc-path-owned .sc-hit-title')].filter(p => p.textContent.startsWith('여기부터')).length;
+  assert.equal(marked, 1);
+  for (const row of ownedRows) assert.ok(!row.querySelector('.sc-path-why'), 'an owned line carries no reasons');
+  const foundation = [...f.body().querySelectorAll('.sc-path-head')].find(h => h.textContent.startsWith('기초'));
+  assert.ok(foundation, 'the foundation section is there');
+ } finally { f.bench.destroy(); }
+});
+
+test('a "read first" link names the step by its number on screen and moves focus to it', async () => {
+ const f = await pathFixture();
+ try {
+  await f.bench.show('related');
+  await f.click(f.body().querySelector('.sc-path-depth').textContent);
+  const link = f.body().querySelector('.sc-path-jump');
+  if (link) {
+   const n = link.textContent.replace('번', '');
+   assert.ok(f.body().querySelector(`[data-step="${n}"]`), 'the step it names is on screen');
+  }
+ } finally { f.bench.destroy(); }
+});
+
+test('a reading-order lookup that fails after the user has moved on stays silent', async () => {
+ const f = fixture();
+ let reject;
+ f.runtime.pathTools = (await import('../src/reading-path.js')).default;
+ f.runtime.readingPathCached = () => new Promise((_, no) => { reject = no; });
+ try {
+  await f.bench.show('related');
+  await f.bench.show('explore');
+  reject(Object.assign(new Error('OpenAlex 오늘 한도를 다 썼습니다'), {status: 429}));
+  await settle();
+  assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error, 'true', 'the explore tab is not told about it');
+ } finally { f.bench.destroy(); }
+});

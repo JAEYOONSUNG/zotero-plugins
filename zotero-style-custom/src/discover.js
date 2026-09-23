@@ -23,14 +23,21 @@
   const WATCH_FIELDS = 'id,doi,title,publication_year,publication_date,cited_by_count,type,'
     + 'primary_location,authorships,open_access';
 
+  /* The reading order reads two hundred works for their reference lists and
+     shows about thirty. Authorships were 57% of those bytes (measured on nine
+     papers), so they are asked for afterwards, for the rows on screen only. */
+  const PATH_FIELDS = 'id,doi,title,publication_year,cited_by_count,type,'
+    + 'primary_location,referenced_works,open_access,topics';
+
   function workURL(record, options = {}) {
     const doi = bareDOI(record?.DOI || record?.doi);
-    if (doi) return `${API}works/doi:${encodeURIComponent(doi)}?select=${WORK_FIELDS}${credentials(options)}`;
+    const fields = options.fields || WORK_FIELDS;
+    if (doi) return `${API}works/doi:${encodeURIComponent(doi)}?select=${fields}${credentials(options)}`;
     const title = text(record?.title);
     if (!title) return null;
     // Without a DOI, the title search is the only handle, so ask for one result.
-    return `${API}works?per_page=1&filter=${encodeURIComponent('title.search:' + title)}`
-      + `&select=${WORK_FIELDS}${credentials(options)}`;
+    return `${API}works?per_page=${options.candidates || 1}&filter=${encodeURIComponent('title.search:' + title)}`
+      + `&select=${fields}${credentials(options)}`;
   }
 
   // OpenAlex caps a filter list; batching keeps the URL inside its limits.
@@ -39,7 +46,7 @@
     if (!list.length) return null;
     return `${API}works?per_page=${list.length}`
       + `&filter=${encodeURIComponent('openalex_id:' + list.join('|'))}`
-      + `&select=${WORK_FIELDS}${credentials(options)}`;
+      + `&select=${options.fields || WORK_FIELDS}${credentials(options)}`;
   }
 
   // OpenAlex classifies a work at four widening levels. Keeping all four lets a
@@ -98,7 +105,8 @@
       .filter(a => a.name);
     const authors = people.map(a => a.name);
     return {
-      id, doi: bareDOI(raw.doi), title: text(raw.title),
+      // Some records carry the manuscript's running-title line as the title.
+      id, doi: bareDOI(raw.doi), title: text(raw.title).replace(/^running title:\s*/i, ''),
       year: Number.isInteger(raw.publication_year) ? raw.publication_year : null,
       date: /^\d{4}-\d{2}-\d{2}$/.test(String(raw.publication_date || '')) ? raw.publication_date : null,
       citations: Number.isInteger(raw.cited_by_count) ? raw.cited_by_count : null,
@@ -108,8 +116,88 @@
       pdfURL: text(raw.primary_location?.pdf_url) || text(raw.open_access?.oa_url),
       related: (Array.isArray(raw.related_works) ? raw.related_works : []).map(shortID).filter(Boolean),
       references: (Array.isArray(raw.referenced_works) ? raw.referenced_works : []).map(shortID).filter(Boolean),
-      subjects: subjectsOf(raw)
+      subjects: subjectsOf(raw),
+      // The primary topic's name, so a grouping by topic can say what it is.
+      topic: text(Array.isArray(raw.topics) ? raw.topics[0]?.display_name : ''),
+      // Kept only for the paper in hand (the only record asked for with it):
+      // what kind of paper it is is best read from its own words.
+      abstract: raw.abstract_inverted_index ? abstractOf(raw.abstract_inverted_index).slice(0, 3000) : '',
+      finding: raw.abstract_inverted_index ? findingOf(abstractOf(raw.abstract_inverted_index),
+        {review: /review/i.test(text(raw.type)) || /\b(review|overview|perspective)\b/i.test(text(raw.title))}) : ''
     };
+  }
+
+  /* OpenAlex keeps an abstract as an index of word -> positions (a licensing
+     workaround); put it back into text. */
+  function abstractOf(index) {
+    if (!index || typeof index !== 'object') return '';
+    const words = [];
+    for (const [word, places] of Object.entries(index)) {
+      for (const at of Array.isArray(places) ? places : []) if (Number.isInteger(at) && at >= 0 && at < 5000) words[at] = word;
+    }
+    return text(words.filter(Boolean).join(' ').replace(/<[^>]+>/g, ''));
+  }
+
+  /* The one sentence of an abstract that says what the paper established. A
+     title and a citation count tell a reader nothing unless they already know
+     the field; this is what they would skim the abstract for. The sentence
+     that reports ("Here we show", "We find") beats the last one, which is
+     often an outlook. */
+  // A result, in the order a reader would want it: what was shown, then what
+  // was set out to be done, then the scope of a review; never an outlook.
+  const RESULT = /\b(we (show|demonstrate|find|found|reveal|revealed|identify|identified|establish|discover|discovered)|(results|findings|data|structures?|analyses) (show|reveal|suggest|indicate|demonstrate|establish))\b/i;
+  const INTENT = /\b(here,? we|in this (study|work|paper)|we (report|describe|present|developed?|engineered|designed|determined|solved))\b/i;
+  const SCOPE = /\b(this review|we review|here,? we (review|summari[sz]e|discuss|provide|outline)|we summari[sz]e|we discuss)\b/i;
+  const OUTLOOK = /\b(outlook|future|finally|perspectives?|remain(s)? to be|challenges|anticipate|we expect|will (provide|enable|facilitate|pave)|pave the way)\b/i;
+  function findingOf(abstract, {max = 220, review = false} = {}) {
+    const body = text(abstract).replace(/^(abstract|summary)[:.\s]+/i, '');
+    if (!body) return '';
+    const sentences = body.split(/(?<=[.!?])\s+(?=[A-Z0-9(])/).map(text).filter(line => line.length > 20);
+    // Publisher boilerplate ("Science, this issue p. 123") is not a sentence.
+    const useful = sentences.filter(line => !OUTLOOK.test(line) && !/this issue p\.|©|copyright|all rights reserved/i.test(line));
+    /* No line that reports or states an aim: nothing, rather than the field's
+       opening platitude ("DNA methylation occurs throughout the living
+       world"), which reads like an answer and is not one. */
+    const CONCLUDES = /\b(show|shows|reveal|reveals|suggest|suggests|indicate|indicates|demonstrate|demonstrates|results|thus|therefore|together)\b/i;
+    const last = useful[useful.length - 1] || '';
+    const pick = (review ? useful.find(line => SCOPE.test(line)) || ''
+      : useful.find(line => RESULT.test(line)) || useful.find(line => INTENT.test(line)) || (CONCLUDES.test(last) ? last : '')
+        // A review not recognised as one still says what it covers.
+        || useful.find(line => SCOPE.test(line))) || '';
+    if (pick.length <= max) return pick;
+    const cut = pick.slice(0, max);
+    return cut.slice(0, cut.lastIndexOf(' ') > max * 0.6 ? cut.lastIndexOf(' ') : max).replace(/[,;:\s]+$/, '') + '…';
+  }
+
+  /* Abstracts OpenAlex does not have. Measured on 60 of the reading order's
+     blank rows: Europe PMC had 58 (Nature, Cell, Science, PNAS and pre-2000
+     all complete); PubMed, Crossref and Semantic Scholar together added none
+     it lacked. Thirty DOIs fit one request. No key; the sentence shown is a
+     quotation with its source named. */
+  const EUROPE_PMC = 'https://www.ebi.ac.uk/europepmc/webservices/rest/';
+  function abstractsURL(dois) {
+    const list = [...new Set((dois || []).map(bareDOI).filter(Boolean))].slice(0, 30);
+    if (!list.length) return null;
+    const query = list.map(doi => 'DOI:"' + doi.replace(/"/g, '') + '"').join(' OR ');
+    return `${EUROPE_PMC}search?query=${encodeURIComponent(query)}&resultType=core&format=json&pageSize=${list.length * 2}`;
+  }
+  const cleanAbstract = html => text(String(html || '')
+    .replace(/<h4>[^<]*<\/h4>/gi, ' ').replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
+  /* DOI -> abstract text for the DOIs asked about. null when the answer is not
+     a real answer (Europe PMC has returned 200 with a 17-byte body), so a
+     failure is never recorded as "no abstract". */
+  function readAbstracts(payload, dois) {
+    if (!payload || typeof payload !== 'object' || (payload.hitCount == null && !payload.resultList)) return null;
+    const want = new Set((dois || []).map(bareDOI).filter(Boolean));
+    const out = {};
+    for (const row of payload.resultList?.result || []) {
+      const doi = bareDOI(row?.doi);
+      if (!want.has(doi)) continue;
+      const body = cleanAbstract(row.abstractText);
+      if (body && (!out[doi] || row.source === 'MED')) out[doi] = body;
+    }
+    return out;
   }
 
   // A /works/doi: lookup returns the work itself; a title search returns a list.
@@ -158,8 +246,27 @@
   const citingURL = (workID, options = {}) => shortID(workID).startsWith('W')
     ? `${API}works?per_page=${Math.min(50, options.limit || 25)}`
       + `&filter=${encodeURIComponent('cites:' + shortID(workID))}`
-      + `&sort=cited_by_count:desc&select=${WORK_FIELDS}${credentials(options)}`
+      + `&sort=${options.sort || 'cited_by_count:desc'}&select=${options.fields || WORK_FIELDS}${credentials(options)}`
     : null;
+
+  /* Whether a title search found the paper that was asked about. A search
+     always answers with something; without a DOI to pin it, the top hit can
+     be a different paper with a similar title, and everything built on it
+     would be confidently about the wrong work. */
+  const titleWords = value => new Set(text(value).toLowerCase().normalize('NFKD')
+    .replace(/<[^>]+>/g, ' ').replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 2));
+  function sameTitle(a, b, {threshold = 0.8} = {}) {
+    const x = titleWords(a), y = titleWords(b);
+    if (!x.size || !y.size) return false;
+    let shared = 0;
+    for (const word of x) if (y.has(word)) shared++;
+    return shared / Math.max(x.size, y.size) >= threshold;
+  }
+  function pickByTitle(works, record) {
+    const year = Number(String(record?.year || record?.date || '').match(/\d{4}/)?.[0]) || null;
+    return (works || []).find(work => sameTitle(work.title, record?.title)
+      && (!year || !work.year || Math.abs(work.year - year) <= 1)) || null;
+  }
 
   // Matching an author by name alone picks the wrong person often enough to be
   // useless. An institution narrows it decisively, so it is scored first and a
@@ -642,7 +749,7 @@
 
   const api = {API, GROUPS, scoreAuthor, pickAuthor, authorQueries, institutionAgrees, topicsAgree,
     worksByDOIsURL, institutionsURL, readInstitutions,
-    workURL, worksByIDsURL, citingURL, readWork, readWorks, mergeSuggestions, relevance,
+    workURL, worksByIDsURL, citingURL, PATH_FIELDS, abstractOf, findingOf, abstractsURL, readAbstracts, cleanAbstract, sameTitle, pickByTitle, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials,
     watchedWorksURL, watchedProfilesURL, readProfiles, authorBatches, attribute, AUTHOR_BATCH};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

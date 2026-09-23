@@ -10,7 +10,7 @@ function uninstall() {}
 async function startup({ id, version, rootURI }) {
   try {
     await Zotero.initializationPromise;
-    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "patents", "journal-identity", "jcr-categories", "jcr-browser", "affiliations", "paper-graph", "failures", "brand-icons", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "updater", "runtime"]) {
+    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "patents", "journal-identity", "jcr-categories", "jcr-browser", "affiliations", "paper-graph", "reading-path", "failures", "brand-icons", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "reading", "updater", "runtime"]) {
       Services.scriptloader.loadSubScript(rootURI + "src/" + name + ".js", globalThis);
     }
     const path = PathUtils.join(Zotero.DataDirectory.dir, "style-custom.json");

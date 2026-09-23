@@ -2172,3 +2172,125 @@ test('an error message tells the reader what to do next', () => {
  }
  assert.deepEqual(dead, [], 'every error ends with what to do about it');
 });
+
+/* The reading order's fetch. A fake OpenAlex that answers by the shape of the
+   URL, and can be told to fail one kind of request. */
+function pathFixture({fields = {title: 'A seed paper', DOI: '10.1/seed', date: '2022'}, fail = () => null, searchHits, europe} = {}) {
+  const f = fixture();
+  const ref = f.item(1);
+  ref.getField = key => fields[key] || '';
+  ref.getCreators = () => [];
+  const asked = [];
+  const W = (id, title, refs, extra = {}) => ({id: 'https://openalex.org/' + id, title, publication_year: 2015,
+    doi: 'https://doi.org/10.1/' + id.toLowerCase(), cited_by_count: 50, type: 'article', topics: [TOPIC],
+    referenced_works: refs.map(r => 'https://openalex.org/' + r), ...extra});
+  const seed = W('W1', 'A seed paper', ['W7', 'W8', 'W9'], {publication_year: 2022});
+  f.Z.HTTP = {request: async (method, url) => {
+    asked.push(url);
+    const failure = fail(url);
+    if (failure) throw failure;
+    if (/\/works\/doi:/.test(url)) return {response: seed};
+    if (/title\.search/.test(url)) return {response: {results: searchHits ?? [seed]}};
+    if (/europepmc/.test(url)) return {response: europe ?? {hitCount: 1, resultList: {result: [
+      {doi: '10.1/w8', source: 'MED', abstractText: 'Background here. <i>We show</i> that the first paper binds DNA.'}]}}};
+    if (/authorships/.test(decodeURIComponent(url)) && !/referenced_works/.test(decodeURIComponent(url))) return {response: {results: [
+      {id: 'https://openalex.org/W7', authorships: [{author: {display_name: 'Ada Lovelace'}}]}]}};
+    if (/cites/.test(url)) return {response: {results: []}};
+    return {response: {results: [W('W7', 'An earlier paper', ['W8'], {publication_year: 2010}),
+      W('W9', 'Another earlier paper', ['W8'], {publication_year: 2011}),
+      W('W8', 'The first paper', [], {publication_year: 2005})]}};
+  }};
+  return {...f, ref, asked};
+}
+const budget = () => Object.assign(new Error('Insufficient budget'), {status: 429});
+
+test('the reading order asks for authors only for the rows it shows, and keeps the plan across restarts', async () => {
+  const f = pathFixture();
+  const plan = await f.plugin.readingPathCached(f.ref);
+  assert.ok(plan.steps.some(step => step.key === 'seed'));
+  assert.ok(!f.asked.some(url => /openalex_id/.test(url) && /authorships/.test(url) && /referenced_works/.test(url)),
+    'the bulk reference batches do not carry authorships');
+  const rows = plan.steps.flatMap(step => [...step.works, ...step.more]).concat(plan.rest);
+  assert.deepEqual(rows.find(w => w.id === 'W7')?.authors, ['Ada Lovelace']);
+  assert.ok(f.plugin.cache.readingPaths[f.plugin.identity(f.ref)], 'kept on disk');
+  assert.ok(!/"(references|builtOn)":\[/.test(JSON.stringify(f.plugin.cache.readingPaths)), 'without the reference lists');
+  const asked = f.asked.length;
+  f.plugin.discoverCache.clear();
+  await f.plugin.readingPathCached(f.ref);
+  assert.equal(f.asked.length, asked, 'a restart (empty memory cache) is served from disk');
+  f.plugin.forgetReadingPath(f.ref);
+  await f.plugin.readingPathCached(f.ref);
+  assert.ok(f.asked.length > asked, 'asking again really asks again');
+});
+
+test('a plan with a failed part says so and is not kept, and a spent budget is an error, not an empty plan', async () => {
+  const f = pathFixture({fail: url => /cites/.test(url) ? budget() : null});
+  const plan = await f.plugin.readingPathCached(f.ref);
+  assert.deepEqual(plan.partial, ['citers']);
+  assert.equal(plan.budgetGone, true);
+  assert.equal(f.plugin.cache.readingPaths?.[f.plugin.identity(f.ref)], undefined, 'not kept');
+  assert.equal(f.plugin.discoverCache.has('path:' + f.plugin.identity(f.ref)), false, 'not remembered in memory either');
+
+  const g = pathFixture({fail: url => /\/works\/doi:/.test(url) ? null : budget()});
+  await assert.rejects(() => g.plugin.readingPath(g.ref), /한도/);
+});
+
+test('without a DOI, a title search that finds a different paper is refused rather than analysed', async () => {
+  const f = pathFixture({fields: {title: 'A seed paper', date: '2022'},
+    searchHits: [{id: 'https://openalex.org/W99', title: 'Something else entirely about yeast', publication_year: 2022}]});
+  await assert.rejects(() => f.plugin.readingPath(f.ref), /제목이 다릅니다/);
+  const g = pathFixture({fields: {title: 'A seed paper.', date: '2022'}});
+  const plan = await g.plugin.readingPath(g.ref);
+  assert.equal(plan.titleMatched, true, 'a matching hit is used, and the panel is told it came from a title');
+});
+
+test('rows OpenAlex has no abstract for get their line from Europe PMC, and a bad answer is not taken for "none"', async () => {
+  const f = pathFixture();
+  const plan = await f.plugin.readingPath(f.ref);
+  const w8 = plan.steps.flatMap(step => [...step.works, ...step.more]).concat(plan.rest).find(w => w.id === 'W8');
+  assert.equal(w8.finding, 'We show that the first paper binds DNA.');
+  assert.equal(w8.findingSource, 'Europe PMC');
+  assert.equal(f.asked.filter(url => /europepmc/.test(url)).length, 1, 'one request for all the blank rows');
+
+  const g = pathFixture({europe: {}});
+  const again = await g.plugin.readingPath(g.ref);
+  const blank = again.steps.flatMap(step => [...step.works, ...step.more]).concat(again.rest).find(w => w.id === 'W8');
+  assert.ok(!blank.finding && !blank.findingSource, 'a 200 with an empty body leaves the row as it was');
+});
+
+test('a stored plan from an older algorithm is asked again, not drawn in a shape the panel no longer knows', async () => {
+  const f = pathFixture();
+  f.plugin.cache.readingPaths = {[f.plugin.identity(f.ref)]: {at: new Date().toISOString(), plan: {steps: [{key: 'seed', works: []}]}}};
+  const plan = await f.plugin.readingPathCached(f.ref);
+  assert.equal(plan.v, f.plugin.PATH_VERSION);
+  assert.ok(f.asked.length > 0);
+  assert.ok(plan.rest.length <= 60 && plan.restTotal >= plan.rest.length, 'the leftover list is kept short');
+});
+
+test('a caller handed a lookup another caller abandoned asks again instead of showing the abort', async () => {
+  const f = pathFixture();
+  let first = true;
+  const original = f.plugin.readingPath.bind(f.plugin);
+  f.plugin.readingPath = async (item, options) => {
+    if (first) { first = false; await new Promise(resolve => setTimeout(resolve, 5)); throw Object.assign(new Error('aborted'), {name: 'AbortError'}); }
+    return original(item, options);
+  };
+  const [a, b] = await Promise.allSettled([
+    f.plugin.readingPathCached(f.ref, {signal: {aborted: true}}),
+    f.plugin.readingPathCached(f.ref, {signal: {aborted: false}})
+  ]);
+  assert.equal(a.status, 'rejected', 'the caller that aborted sees its abort');
+  assert.equal(b.status, 'fulfilled', 'the other caller gets a plan');
+});
+
+test('a failed lookup does not evict a newer one under the same key', async () => {
+  const f = pathFixture();
+  let reject;
+  const old = f.plugin.discoverCached('k', () => new Promise((_, no) => { reject = no; }));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  f.plugin.discoverCache.delete('k');
+  const fresh = f.plugin.discoverCached('k', async () => 'new');
+  reject(new Error('stale'));
+  await old.catch(() => {});
+  assert.equal(f.plugin.discoverCache.get('k'), fresh);
+});

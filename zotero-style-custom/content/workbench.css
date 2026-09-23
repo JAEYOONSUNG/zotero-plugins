@@ -466,6 +466,55 @@
 #style-custom-workbench .sc-hit:focus-within .sc-hit-actions { opacity: 1; }
 #style-custom-workbench .sc-hit-actions button { min-height: 24px; padding: 2px 8px; font-size: 11px; }
 #style-custom-workbench .sc-hit-owned { grid-column: 2; grid-row: 1; align-self: center; color: var(--sc-done); font-size: 11px; font-weight: 600; white-space: nowrap; }
+/* Reading order: a step number in its own column, and one line saying why
+   the paper sits at that step. */
+#style-custom-workbench .sc-path-row { grid-template-columns: 22px 1fr auto; }
+#style-custom-workbench .sc-path-row > .sc-hit-title,
+#style-custom-workbench .sc-path-row > .sc-hit-meta,
+#style-custom-workbench .sc-path-row > .sc-hit-authors,
+#style-custom-workbench .sc-path-row > .sc-path-why { grid-column: 2; }
+#style-custom-workbench .sc-path-row > .sc-hit-actions,
+#style-custom-workbench .sc-path-row > .sc-hit-owned { grid-column: 3; }
+#style-custom-workbench .sc-path-step { grid-column: 1; grid-row: 1 / span 4; color: var(--sc-muted); font: 600 12px/1.45 var(--sc-font); font-variant-numeric: tabular-nums; text-align: right; padding-inline-end: 4px; }
+#style-custom-workbench .sc-path-why { margin: 0; color: var(--sc-text); font-size: 11px; line-height: 1.5; }
+#style-custom-workbench .sc-path-seed { background: var(--sc-fill); }
+/* The finding line is read, not scanned: muted and held to two lines so it
+   does not outweigh the section heading above it. */
+#style-custom-workbench .sc-path-row > .sc-path-finding { grid-column: 2; margin: 2px 0 0; color: var(--sc-muted); font-size: 11px; line-height: 1.45; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+/* Korean does not uppercase; a path heading is a label to read, not a caption. */
+#style-custom-workbench .sc-path-head { color: var(--sc-text); font: 650 12px/1.5 var(--sc-font); letter-spacing: 0; text-transform: none; }
+#style-custom-workbench .sc-path-row > .sc-path-start { grid-column: 2; justify-self: start; color: var(--sc-accent); font-size: 11px; font-weight: 650; }
+#style-custom-workbench .sc-path-owned { display: grid; grid-template-columns: 22px 1fr; gap: 0 12px; align-items: baseline; padding: 5px 2px; border-bottom: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-path-owned > .sc-path-step { grid-row: auto; padding-inline-end: 0; white-space: nowrap; font-size: 10px; font-weight: 600; }
+#style-custom-workbench .sc-path-owned-group > summary { cursor: pointer; list-style: none; }
+#style-custom-workbench .sc-path-owned-group > summary::-webkit-details-marker { display: none; }
+#style-custom-workbench .sc-path-owned-list { margin: 0 0 4px 34px; padding: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.6; }
+#style-custom-workbench .sc-path-owned > .sc-hit-title { grid-column: 2; color: var(--sc-muted); font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The PDF stays in sight; the other actions wait for the row to be wanted. */
+#style-custom-workbench .sc-path-row .sc-hit-actions:has(.sc-hit-pdf) { opacity: 1; }
+#style-custom-workbench .sc-path-row:not(:hover):not(:focus-within) .sc-hit-actions > :not(.sc-hit-pdf) { visibility: hidden; }
+#style-custom-workbench .sc-path-seed { border-top: 1px solid var(--sc-border-strong); border-bottom: 1px solid var(--sc-border-strong); }
+#style-custom-workbench .sc-path-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 12px 0 4px; font-size: 11px; }
+#style-custom-workbench .sc-path-depth { font-size: 12px; }
+#style-custom-workbench [aria-busy="true"] { opacity: .6; }
+#style-custom-workbench .sc-path-row:focus { outline: 2px solid var(--sc-accent); outline-offset: -2px; }
+#style-custom-workbench .sc-path-jump { min-height: 0; padding: 0 2px; border: 0; background: none; color: var(--sc-accent); font: inherit; text-decoration: underline; cursor: pointer; }
+#style-custom-workbench .sc-path-note { margin: 4px 0 8px; font-size: 11px; }
+#style-custom-workbench .sc-path-more { margin: 2px 0 6px; }
+#style-custom-workbench .sc-path-more > summary { cursor: pointer; color: var(--sc-muted); font-size: 11px; padding: 4px 0 4px 24px; }
+#style-custom-workbench .sc-path-tools { margin-top: 14px; }
+#style-custom-workbench .sc-path-tools > summary { padding-inline-start: 0; font-size: 12px; }
+@container sc-workbench (max-width: 440px) {
+  #style-custom-workbench .sc-path-row { grid-template-columns: 18px 1fr; }
+  #style-custom-workbench .sc-path-row > .sc-hit-actions,
+  #style-custom-workbench .sc-path-row > .sc-hit-owned { grid-column: 2; grid-row: auto; }
+  #style-custom-workbench .sc-path-row > .sc-hit-actions { display: none; }
+  #style-custom-workbench .sc-path-row:focus-within > .sc-hit-actions,
+  #style-custom-workbench .sc-path-row > .sc-hit-actions:has(.sc-hit-pdf) { display: flex; }
+  #style-custom-workbench .sc-path-row > .sc-hit-authors { display: none; }
+}
+#style-custom-workbench .sc-path-rest { margin-top: 14px; }
+#style-custom-workbench .sc-path-rest > summary { cursor: pointer; color: var(--sc-muted); font-size: 12px; padding: 4px 0; }
 #style-custom-workbench .sc-hit-group { margin: 18px 0 0; padding: 0 0 6px; color: var(--sc-muted); font: 650 10px/1.6 var(--sc-font); letter-spacing: .6px; text-transform: uppercase; }
 #style-custom-workbench .sc-hit-group:first-child { margin-top: 4px; }
 /* The subject a profile actually publishes in, kept readable at a glance. */

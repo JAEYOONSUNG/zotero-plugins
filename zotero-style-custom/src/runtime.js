@@ -24,9 +24,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.journalIdentity = typeof CustomStyleJournalIdentity !== "undefined" ? CustomStyleJournalIdentity : require("./journal-identity.js");
     this.affiliationTools = typeof CustomStyleAffiliations !== "undefined" ? CustomStyleAffiliations : require("./affiliations.js");
     this.graphTools = typeof CustomStylePaperGraph !== "undefined" ? CustomStylePaperGraph : require("./paper-graph.js");
+    this.pathTools = typeof CustomStyleReadingPath !== "undefined" ? CustomStyleReadingPath : require("./reading-path.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
     this.DISCOVER_CACHE_LIMIT = 60;
+    // Raised whenever the reading-order algorithm or the stored plan's shape
+    // changes: a plan kept by an older version is asked again.
+    this.PATH_VERSION = 5;
     this.citationJob = null;
     this.citationProgress = null;
     this.metadataIDs = new Set();
@@ -2616,8 +2620,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       return value;
     }
     const pending = Promise.resolve().then(build).catch(error => {
-      // A failed lookup must not be remembered as the answer.
-      this.discoverCache.delete(key);
+      // A failed lookup must not be remembered as the answer -- but only this
+      // lookup's entry goes: a newer one under the same key may already be
+      // running after a "search again".
+      if (this.discoverCache.get(key) === pending) this.discoverCache.delete(key);
       throw error;
     });
     this.discoverCache.set(key, pending);
@@ -2809,6 +2815,195 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     ]);
     return {work, suggestions: this.discoverTools.mergeSuggestions(work, found,
       {have: have ?? this.libraryDOIs(), limit, citing})};
+  }
+
+  /* Everything the reading order is built from: the paper, its references
+     fifty at a time (each arrives with its own list, which is what makes the
+     layers), the works citing it -- the most cited and the newest, since a
+     well-cited paper's fifty most-cited citers are years old -- and one batch
+     for the classics the references agree on and the paper leaves out.
+
+     The batches run together. One that fails costs only its own fifty, and the
+     plan says it is partial rather than passing a gap off as an answer; running
+     out of the day's OpenAlex budget before anything came back is an error the
+     panel explains, not an empty plan. */
+  async readingPath(item, {signal, have, onProgress, maxReferences = 150} = {}) {
+    const options = {...this.discoverOptions(), fields: this.discoverTools.PATH_FIELDS};
+    const tools = this.discoverTools;
+    const record = this.bibliographyRecord(item);
+    const hasDOI = !!tools.bareDOI(record.DOI);
+    const url = tools.workURL(record, {...options, fields: options.fields + ',abstract_inverted_index', candidates: 5});
+    if (!url) throw new Error('이 문헌에는 DOI나 제목이 없어 조회할 수 없습니다. 둘 중 하나를 채운 뒤 다시 실행하세요.');
+    const payload = await this.discoverJSON(url, {signal});
+    const seed = hasDOI ? tools.readWork(payload) : tools.pickByTitle(tools.readWorks(payload), record);
+    if (!seed) {
+      if (!hasDOI && tools.readWorks(payload).length) {
+        throw new Error('OpenAlex가 찾은 논문이 선택한 문헌과 제목이 다릅니다. 문헌에 DOI를 채운 뒤 다시 찾으세요.');
+      }
+      return null;
+    }
+    const partial = [];
+    let budgetGone = false;
+    const settle = async (label, promise) => {
+      try { return await promise; } catch (error) {
+        if (signal?.aborted) throw error;
+        if (this.outOfBudget(error)) budgetGone = true;
+        this.Z.logError(error);
+        partial.push(label);
+        return null;
+      }
+    };
+    const ids = seed.references.slice(0, maxReferences);
+    const chunks = [];
+    for (let start = 0; start < ids.length; start += 50) chunks.push(ids.slice(start, start + 50));
+    let done = 0;
+    const total = chunks.length + 2;
+    const tick = () => onProgress?.(++done, total);
+    const fetchWorks = list => {
+      const batchURL = tools.worksByIDsURL(list, options);
+      return batchURL ? this.discoverJSON(batchURL, {signal}).then(tools.readWorks) : Promise.resolve([]);
+    };
+    const citing = sort => {
+      // Fifty most cited, because the obvious sequel is often among them (the
+      // evolved CAST paper, cited 103 times, sat at 31st); twenty-five newest.
+      const citingURL = tools.citingURL(seed.id, {...options, sort, limit: sort.startsWith('cited') ? 50 : 25});
+      return citingURL ? this.discoverJSON(citingURL, {signal}).then(tools.readWorks) : Promise.resolve([]);
+    };
+    const [refChunks, cited, recent] = await Promise.all([
+      Promise.all(chunks.map(list => settle('references', fetchWorks(list)).finally(tick))),
+      settle('citers', citing('cited_by_count:desc')).finally(tick),
+      settle('citers', citing('publication_date:desc')).finally(tick)
+    ]);
+    signal?.throwIfAborted?.();
+    const refs = refChunks.flatMap(list => list || []);
+    const citers = [...(cited || []), ...(recent || [])];
+    if (ids.length && !refs.length && !citers.length && budgetGone) {
+      const error = new Error('OpenAlex 오늘 한도를 다 써서 참고문헌을 읽지 못했습니다. 설정에서 OpenAlex 키를 넣거나 내일 다시 찾으세요.');
+      error.status = 429;
+      throw error;
+    }
+    const wanted = this.pathTools.foundationCandidates(seed, refs);
+    const found = wanted.length ? await settle('foundations', fetchWorks(wanted.map(row => row.id))) || [] : [];
+    signal?.throwIfAborted?.();
+    // A merged record answers under a new id; its count belongs to the old one
+    // and cannot be matched, so it is left out rather than shown as "0 papers".
+    const count = new Map(wanted.map(row => [row.id, row.count]));
+    const foundations = found.filter(work => count.has(work.id)).map(work => ({...work, count: count.get(work.id)}));
+    const plan = this.pathTools.plan(seed, {refs, citers, foundations, have: have ?? this.libraryDOIs()});
+    if (!plan) return null;
+    // Authors for what is on screen: one small request, and a plan without
+    // them is still a plan.
+    const shown = [...plan.steps.flatMap(step => [...step.works, ...step.more]), ...plan.rest.slice(0, 20)];
+    // The same request brings each shown paper's abstract, for the line that
+    // says what it established.
+    // Title and type come along so a review's line is its scope, not a result.
+    const authorURL = tools.worksByIDsURL(shown.map(work => work.id).slice(0, 50), {...options, fields: 'id,title,type,authorships,abstract_inverted_index'});
+    if (authorURL) {
+      const people = await settle('authors', this.discoverJSON(authorURL, {signal}).then(tools.readWorks));
+      const byID = new Map((people || []).map(work => [work.id, work]));
+      for (const work of [...shown, ...plan.rest]) {
+        const hit = byID.get(work.id);
+        if (!hit) continue;
+        work.authors = hit.authors;
+        if (hit.finding) work.finding = hit.finding;
+      }
+    }
+    // Only the steps show a finding line; the leftover list does not.
+    await this.fillAbstracts(plan.steps.flatMap(step => [...step.works, ...step.more]).filter(work => !work.finding && !work.seed), {signal});
+    plan.counts.total = seed.references.length;
+    plan.counts.fetched = refs.length;
+    plan.counts.citedBy = seed.citations;
+    plan.partial = [...new Set(partial)];
+    plan.budgetGone = budgetGone;
+    plan.titleMatched = !hasDOI;
+    return plan;
+  }
+
+  /* The rows OpenAlex has no abstract for, from Europe PMC: one request per
+     thirty. A failed request leaves the rows as they were and is not taken
+     for "no abstract". */
+  async fillAbstracts(works, {signal} = {}) {
+    const tools = this.discoverTools;
+    const need = (works || []).filter(work => !work.finding && work.doi);
+    for (let start = 0; start < need.length; start += 30) {
+      const chunk = need.slice(start, start + 30);
+      const url = tools.abstractsURL(chunk.map(work => work.doi));
+      if (!url) continue;
+      let found = null;
+      try { found = tools.readAbstracts(await this.discoverJSON(url, {signal}), chunk.map(work => work.doi)); }
+      catch (error) { if (signal?.aborted) throw error; this.Z.logError(error); }
+      if (!found) continue;
+      for (const work of chunk) {
+        const body = found[tools.bareDOI(work.doi)];
+        if (!body) continue;
+        const finding = tools.findingOf(body, {review: this.pathTools.isReview(work)});
+        if (finding) { work.finding = finding; work.findingSource = 'Europe PMC'; }
+      }
+    }
+  }
+
+  /* Kept on disk, so a paper opened again after a restart costs nothing: a
+     plan is about thirty rows once the reference lists it was computed from
+     are dropped. Three weeks, then asked again, since the citing side grows.
+     A plan with holes in it is shown but not kept: the next visit asks again. */
+  readingPathStore() {
+    const store = this.cache.readingPaths;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.readingPaths = {});
+  }
+
+  compactPlan(plan) {
+    // The abstract is read once, to decide the plan's mode; never stored.
+    const keep = ['id', 'doi', 'title', 'year', 'citations', 'venue', 'type', 'openAccess', 'pdfURL', 'cited', 'after',
+      'seed', 'start', 'step', 'needs', 'needIDs', 'shared', 'refCiters', 'review', 'versions', 'finding', 'findingSource', 'rank', 'sameSubject'];
+    const slim = work => {
+      const out = {};
+      for (const key of keep) if (work[key] !== undefined && work[key] !== null && work[key] !== false) out[key] = work[key];
+      // Twelve names are enough for the row's "외 N명" to stay right for most papers.
+      if (work.authors?.length) out.authors = work.authors.slice(0, 12);
+      return out;
+    };
+    // The leftover references are a list to scan, not to rank: sixty rows of
+    // the bare facts keep a stored plan near 15 KB instead of 40.
+    const bare = work => ({id: work.id, doi: work.doi, title: work.title, year: work.year, citations: work.citations,
+      venue: work.venue, type: work.type, pdfURL: work.pdfURL, openAccess: work.openAccess || undefined,
+      refCiters: work.refCiters, shared: work.shared, ...(work.authors?.length ? {authors: work.authors.slice(0, 5)} : {})});
+    return {...plan, v: this.PATH_VERSION, steps: plan.steps.map(step => ({key: step.key, works: step.works.map(slim), more: step.more.map(slim)})),
+      rest: plan.rest.slice(0, 60).map(bare), restTotal: plan.rest.length};
+  }
+
+  forgetReadingPath(item) {
+    const key = this.identity(item);
+    this.discoverCache.delete('path:' + key);
+    if (this.readingPathStore()[key]) { delete this.readingPathStore()[key]; this.dirty = true; }
+  }
+
+  readingPathCached(item, options = {}) {
+    const key = this.identity(item);
+    const saved = this.readingPathStore()[key];
+    const age = saved ? Date.now() - Date.parse(saved.at) : Infinity;
+    // A plan kept by an older version of the algorithm is asked again, not
+    // shown in a shape the panel no longer draws.
+    if (saved?.plan?.v === this.PATH_VERSION && age < 21 * 864e5) return Promise.resolve(saved.plan);
+    const keep = plan => {
+      if (!plan) return plan;
+      if (plan.partial?.length) { this.discoverCache.delete('path:' + key); return plan; }
+      const store = this.readingPathStore();
+      store[key] = {at: new Date().toISOString(), plan: this.compactPlan(plan)};
+      const keys = Object.keys(store).sort((a, b) => Date.parse(store[a].at) - Date.parse(store[b].at));
+      while (keys.length > 40) delete store[keys.shift()];
+      this.dirty = true;
+      this.flush?.();
+      return store[key].plan;
+    };
+    /* The lookup is shared: a second caller can be handed a promise the first
+       caller has since abandoned. Its abort is not this caller's, so it asks
+       again -- and the retry's plan, already kept, is not kept twice. */
+    return this.discoverCached('path:' + key, () => this.readingPath(item, options)).then(keep, error => {
+      if (error?.name === 'AbortError' && !options.signal?.aborted && !options.retried) {
+        return this.readingPathCached(item, {...options, retried: true});
+      }
+      throw error;
+    });
   }
 
   // Resolved from the paper's own authorships, never from the name alone.

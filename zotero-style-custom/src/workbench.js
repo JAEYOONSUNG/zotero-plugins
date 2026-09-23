@@ -6,7 +6,7 @@
  const GROUPS=[['탐색',['explore','recent','related','authors','collections','journals']],['읽기',['reading','notes','annotations','attachments','backlinks']],['정리',['tags','graph','canvas','matrix']],['도구',['tabs','views','assist','appearance']]];
  const FILTER_TABS=new Set(['explore','recent','collections','journals','reading','notes','annotations','attachments','tags','graph']);
  function attach(win,{runtime,library,reader,model,assist}){
-  const doc=win.document;let disposed=false,epoch=0,loadEpoch=0,previewEpoch=0,aiEpoch=0,preview=null,notifier=null,reloadTimer=null,draftTimer=null,jcrMount=null;
+  const doc=win.document;let pathAbort=null;let disposed=false,epoch=0,loadEpoch=0,previewEpoch=0,aiEpoch=0,preview=null,notifier=null,reloadTimer=null,draftTimer=null,jcrMount=null;
   // Every self-saving memo currently on screen, so an edit still inside its
   // one-second wait is written when the panel closes rather than lost.
   let memoFields=[];
@@ -1556,7 +1556,7 @@
   // the way until the row is hovered.
   function hitRow(work,parent){
    const row=node('div',null,parent||null,{class:'sc-hit'});
-   if(work.doi&&!work.inLibrary){const open=node('button',work.title||'제목 없음',row,{class:'sc-hit-title sc-hit-title-link',type:'button',title:'doi.org에서 열기'});open.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+encodeURI(work.doi));}catch(e){message(readable(e),true);}});}
+   if(work.doi&&!work.inLibrary){const open=node('button',work.title||'제목 없음',row,{class:'sc-hit-title sc-hit-title-link',type:'button',title:'doi.org에서 열기','data-opens':'browser'});open.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+encodeURI(work.doi));}catch(e){message(readable(e),true);}});}
    else node('p',work.title||'제목 없음',row,{class:'sc-hit-title'});
    const meta=node('p',null,row,{class:'sc-hit-meta'});
    // The publisher mark leads the line: it is the one thing in a row of grey
@@ -1591,7 +1591,7 @@
     message(`추가했습니다 — ${saved[0]?.getField('title')||work.doi}`);
    }),actions);
    if(work.doi)button('DOI',()=>copy(work.doi),actions);
-   if(work.pdfURL)button('PDF',()=>win.Zotero.launchURL(work.pdfURL),actions);
+   if(work.pdfURL)button('PDF',()=>win.Zotero.launchURL(work.pdfURL),actions,{'data-opens':'browser'});
    return row;
   }
 
@@ -1601,6 +1601,16 @@
    return list;
   }
 
+  const PATH_LABELS={overview:'개관',foundation:'기초',predecessor:'직계 선행연구',primary:'원논문',seed:'이 논문',continuation:'후속 연구',uses:'이 방법을 쓴 연구',tools:'방법·도구'};
+  const PATH_NOTES={
+   overview:'분야 전체를 먼저 잡아 주는 리뷰 — 여기서 시작하세요',
+   foundation:'참고문헌 여러 편이 공통으로 인용한 논문 — 이 분야가 전제로 깔고 있는 연구',
+   predecessor:'이 논문과 참고문헌을 많이 공유하는 선행연구 — 같은 문제를 먼저 다룬 논문',
+   seed:'위 단계를 읽고 나면 이 논문이 무엇을 보탰는지 보입니다',
+   primary:'이 리뷰의 참고문헌들이 가장 많이 인용한 원논문',
+   continuation:'이 논문을 인용하고 같은 선행연구 줄기를 잇는 논문 — 실제로 이어 받은 연구',
+   uses:'이 방법을 쓴 연구 가운데 선행연구를 가장 많이 공유하는 논문',
+   tools:'널리 쓰이는 방법·도구·교재 — 순서대로 읽을 필요 없이 필요할 때 찾아보세요'};
   const GROUP_NOTES={citing:'이 논문 이후에 나온 논문 중 이 논문을 참고문헌에 올린 것 — 후속 연구',reference:'이 논문이 참고문헌으로 든 문헌 — 바탕이 된 연구',related:'참고문헌을 많이 공유하거나 OpenAlex가 주제를 가깝게 본 논문 — 옆 연구'};
   async function drawRelated(token){
    let item;try{item=one();}catch(_){
@@ -1608,7 +1618,8 @@
        of a single line that read as an error. */
     const guide=node('div',null,body,{class:'sc-guide'});
     node('h2','관련 논문',guide);
-    node('p','문헌을 하나 고르면 OpenAlex에서 세 가지를 찾아 옵니다.',guide);
+    node('p','문헌을 하나 고르면 참고문헌과 인용 관계를 분석해 무엇을 어떤 순서로 읽을지 짜 드립니다: 개관 → 기초 → 직계 선행연구 → 이 논문 → 후속 연구.',guide);
+    node('p','전체 목록 보기에서는 OpenAlex에서 찾은 세 묶음을 모두 볼 수 있습니다.',guide);
     const steps=node('ul',null,guide,{class:'sc-guide-list'});
     for(const [key,label] of Object.entries(GROUP_LABELS)){const li=node('li',null,steps);node('strong',label,li);node('span',' — '+T(GROUP_NOTES[key]),li);}
     node('p','보유하지 않은 논문은 행의 버튼으로 ZotPoP에서 바로 찾거나 가져올 수 있습니다.',guide,{class:'sc-muted'});
@@ -1621,7 +1632,278 @@
    }
    node('h2',item.title,body);
    const b=bar();
+   /* Two answers to two questions: the reading order says what to read first
+      and why; the list is everything, grouped by where it came from. */
+   if(!state.relatedView)state.relatedView=ui.relatedView==='list'?'list':'path';
+   if(!state.pathDepth)state.pathDepth=ui.pathDepth==='full'?'full':'min';
+   const canPath=typeof runtime.readingPathCached==='function';
+   const view=canPath?state.relatedView:'list';
+   if(canPath){
+    const modes=node('div',null,b,{class:'sc-segmented',role:'group','aria-label':'관련 논문 보기'});
+    for(const[key,label]of [['path','읽기 순서'],['list','전체 목록']])
+     button(label,()=>run(async()=>{state.relatedView=key;await saveUI({relatedView:key});await render();body.querySelector('.sc-segmented [aria-pressed="true"]')?.focus?.();}),modes,{'aria-pressed':view===key});
+   }
    const list=node('div',null,body);
+   async function path({refresh=false}={}){
+    const ref=runtime.Z.Items.get(Number(item.id));
+    if(refresh){if(typeof runtime.forgetReadingPath==='function')runtime.forgetReadingPath(ref);else runtime.discoverCache.delete('path:'+runtime.identity(ref));}
+    // A lookup for a paper the user has left is stopped, not left running up
+    // the OpenAlex budget in the background.
+    pathAbort?.abort?.();
+    const controller=typeof win.AbortController==='function'?new win.AbortController():typeof AbortController==='function'?new AbortController():null;
+    pathAbort=controller;
+    const current=()=>token===epoch&&!disposed&&state.tab==='related';
+    message('참고문헌과 인용 관계로 읽기 순서를 짜는 중…');
+    if(list.childElementCount)list.setAttribute('aria-busy','true');
+    else node('p','참고문헌과 인용 관계로 읽기 순서를 짜는 중…',list,{class:'sc-muted sc-path-note',role:'status'});
+    let plan;
+    try{
+     plan=await runtime.readingPathCached(ref,{signal:controller?.signal,onProgress:(done,total)=>{
+      if(!current()){controller?.abort?.();return;}
+      message(`OpenAlex에서 참고문헌과 인용 관계를 읽는 중… ${done}/${total}`);
+     }});
+    }catch(error){
+     // An error from a lookup the user has already left belongs to nobody.
+     if(!current()||controller?.signal?.aborted)return;
+     list.removeAttribute('aria-busy');
+     list.querySelector('[role=status]')?.remove();
+     throw error;
+    }
+    if(!current())return;
+    list.replaceChildren();
+    list.removeAttribute('aria-busy');
+    if(!plan){message('이 논문을 OpenAlex에서 찾지 못했습니다. DOI를 확인한 뒤 다시 찾으세요.',true);return;}
+    drawPath(plan);
+   }
+   /* Two depths. The short path is what a reader acts on: where to start, two
+      foundations, two predecessors, the paper, one continuation -- about seven
+      rows, the rest one click away. The full path is every section with its
+      tail. Papers already owned read as "보유" and are not steps: there is
+      nothing to fetch, and counting them hid the ones that are missing. */
+   const MIN_QUOTA={overview:1,foundation:2,predecessor:2,primary:4,seed:1,continuation:1,uses:1};
+   function drawPath(plan){
+    list.replaceChildren();
+    const depth=state.pathDepth||(ui.pathDepth==='full'?'full':'min');
+    const short=depth==='min';
+    const owned=typeof runtime.libraryDOIs==='function'?runtime.libraryDOIs():null;
+    // The paper itself is in the library by definition, even when it was found
+    // by title and its DOI is not on the item: it must never offer "추가".
+    const own=work=>{if(work.seed){work.inLibrary=true;return;}if(owned&&work.doi)work.inLibrary=owned.has(String(work.doi).toLowerCase());};
+    const steps=(plan.steps||[]).map(step=>({...step,works:step.works||[],more:step.more||[]}));
+    const rest=plan.rest||[];
+    for(const step of steps)for(const work of [...step.works,...step.more])own(work);
+    const planStart=steps.flatMap(step=>step.works).find(work=>work.start);
+    // What each section shows at this depth. The short path keeps its quota of
+    // rows still to fetch; owned rows met on the way are shown but not counted.
+    const shown=new Map();
+    for(const step of steps){
+     if(step.key==='tools')continue;
+     if(!short){shown.set(step.key,step.works);continue;}
+     // Chosen by importance, shown in reading order.
+     const order=[...step.works,...step.more];
+     let pool=[...order].sort((a,b)=>(a.rank??99)-(b.rank??99));
+     if(step.key==='continuation'||step.key==='uses'){
+      pool=[...pool].sort((a,b)=>(b.shared||0)-(a.shared||0));
+      // One continuation is a claim: a preprint from last month with nothing
+      // in common but the citation does not get to make it.
+      const solid=pool.filter(w=>(w.shared||0)>=5||(w.citations||0)>=5);
+      if(solid.length)pool=solid;
+     }
+     // The overview earns a place in the short path only as the start.
+     if(step.key==='overview'){if(planStart&&pool.includes(planStart))shown.set(step.key,[planStart]);continue;}
+     const out=[];let unowned=0;const quota=MIN_QUOTA[step.key]??1;
+     for(const work of pool){
+      if(unowned>=quota)break;
+      out.push(work);
+      if(!work.inLibrary||work.seed)unowned++;
+     }
+     if(planStart&&pool.includes(planStart)&&!out.includes(planStart))out.unshift(planStart);
+     if(out.length)shown.set(step.key,step.key==='continuation'||step.key==='uses'?out.sort((a,b)=>(a.year||0)-(b.year||0)):out.sort((a,b)=>order.indexOf(a)-order.indexOf(b)));
+    }
+    /* A short-path row that stands on a hidden one brings it along -- at most
+       two -- rather than losing the "read first" silently. */
+    if(short){
+     const byID=new Map(steps.flatMap(step=>[...step.works,...step.more].map(work=>[work.id,[work,step.key]])));
+     let added=0;
+     for(const rows of [...shown.values()])for(const work of rows)for(const [id] of work.needIDs||[]){
+      if(added>=2)break;
+      const hit=byID.get(id);if(!hit)continue;
+      const [target,key]=hit;
+      // A method is looked up, not read in order; it stays in its box.
+      if(key==='tools'||key==='seed')continue;
+      const list=shown.get(key)||[];
+      if(list.includes(target)||target.inLibrary)continue;
+      const order=steps.find(step=>step.key===key);const all=[...order.works,...order.more];
+      shown.set(key,[...list,target].sort((a,b)=>all.indexOf(a)-all.indexOf(b)));added++;
+     }
+    }
+    // Numbers follow what is on screen: a step is a paper to read, so the
+    // paper itself and the ones already owned are not numbered.
+    const number=new Map();let n=0;
+    for(const step of steps)for(const work of shown.get(step.key)||[])if(!work.seed&&!work.inLibrary)number.set(work.id,++n);
+    // A start already on the shelf is still the start -- the best one, as it
+    // costs nothing to open.
+    const start=(planStart&&steps.some(step=>(shown.get(step.key)||[]).includes(planStart))?planStart:null)
+     ||steps.flatMap(step=>shown.get(step.key)||[]).find(work=>number.has(work.id));
+    const sectionOf=new Map(steps.flatMap(step=>(shown.get(step.key)||[]).map(work=>[work.id,step.key])));
+    const c=plan.counts||{},fetched=c.fetched??c.references??0;
+    const total=c.total&&c.total>fetched?`${fetched}/${c.total}`:String(fetched);
+    const gaps=plan.partial?.length?T(plan.budgetGone?' · OpenAlex 한도로 일부를 읽지 못했습니다':' · 일부 조회가 실패했습니다'):'';
+    message(c.total||fetched?`참고문헌 ${total}편 · 인용한 논문 ${c.citers||0}편에서 ${n}편을 골랐습니다${gaps}`
+     :`OpenAlex에 이 논문의 참고문헌 목록이 없어 인용한 논문 ${c.citers||0}편만 살폈습니다${gaps}`);
+    const notes=[];
+    if(plan.titleMatched)notes.push('DOI가 없어 제목으로 찾은 논문입니다. 아래 "이 논문" 줄이 맞는지 확인하세요.');
+    if(plan.mode==='review')notes.push('이 문헌은 리뷰라서, 뒤에 읽을 선행연구 대신 리뷰가 딛고 선 원논문을 보여 줍니다.');
+    if(plan.mode==='method')notes.push('방법 논문이라, 이 논문을 인용한 논문은 후속 연구가 아니라 이 방법을 쓴 연구입니다.');
+    for(const text of notes)node('p',text,list,{class:'sc-muted sc-path-note'});
+    if(plan.partial?.length){
+     const note=node('p','빠진 부분이 있는 결과는 저장하지 않습니다.',list,{class:'sc-muted sc-path-note'});
+     button('다시 찾기',()=>run(()=>path({refresh:true})),note,{class:'sc-path-jump'});
+    }
+    if(!n&&sectionOf.size>1)node('p','순서에 든 논문을 모두 보유하고 있습니다. 이 논문부터 읽어도 됩니다.',list,{class:'sc-muted sc-path-note'});
+    else if(!n){
+     const box=node('div',null,list,{class:'sc-empty'});
+     node('p',c.total?'이 논문의 참고문헌에서 순서를 매길 만한 논문을 찾지 못했습니다.':'OpenAlex에 이 논문의 참고문헌 목록이 없어 순서를 짤 수 없습니다.',box);
+     button('전체 목록 보기',()=>run(async()=>{state.relatedView='list';await saveUI({relatedView:'list'});await render();}),bar(box));
+    }
+    const edges=new Map(steps.flatMap(step=>[...step.works,...step.more].map(work=>[work.id,(work.needIDs||[]).map(([id])=>id)])));
+    const reached=new Map();
+    const reach=(id,trail=new Set())=>{
+     if(reached.has(id))return reached.get(id);
+     if(trail.has(id))return new Set();
+     trail.add(id);
+     const out=new Set();
+     for(const next of edges.get(id)||[]){out.add(next);for(const far of reach(next,trail))out.add(far);}
+     trail.delete(id);out.delete(id);reached.set(id,out);
+     return out;
+    };
+    const jump=id=>{
+     const target=list.querySelector(`[data-work="${String(id).replace(/"/g,'')}"]`);
+     if(!target)return;
+     target.scrollIntoView?.({block:'center',behavior:'smooth'});
+     target.focus?.();
+    };
+    /* Owned works of a section fold into one line: "보유 3편 · first title 외".
+       The start, when owned, keeps a line of its own. */
+    /* Owned works of a section fold into one line: "보유 3편 · first title 외",
+       which opens to the list -- the reader can see what was folded, not
+       wonder whether it was dropped. The start, when owned, keeps its own line. */
+    const ownedRow=(works,parent,{isStart=false}={})=>{
+     const list=Array.isArray(works)?works:[works];
+     const line=work=>`${work.title||'제목 없음'}${work.year?` · ${work.year}`:''}`;
+     const label=list.length>1?`${T(`${list.length}편`)} · ${line(list[0])} ${T('외')}`:line(list[0]);
+     if(list.length===1){
+      const row=node('div',null,parent,{class:'sc-path-row sc-path-owned',tabindex:'-1','data-work':list[0].id});
+      node('span','보유',row,{class:'sc-path-step'});
+      node('p',(isStart?T('여기부터')+' · ':'')+label,row,{class:'sc-hit-title'});
+      return row;
+     }
+     const box=node('details',null,parent,{class:'sc-path-owned-group'});
+     const row=node('summary',null,box,{class:'sc-path-row sc-path-owned','data-work':list[0].id});
+     node('span','보유',row,{class:'sc-path-step'});
+     node('p',label,row,{class:'sc-hit-title'});
+     const inner=node('ul',null,box,{class:'sc-path-owned-list'});
+     for(const work of list)node('li',line(work),inner);
+     return box;
+    };
+    const pathRow=(work,key,parent,{brief=false}={})=>{
+     if(work.inLibrary&&!work.seed)return ownedRow(work,parent,{isStart:work===start});
+     const row=hitRow(work,parent);
+     row.classList.add('sc-path-row');
+     row.setAttribute('tabindex','-1');
+     row.dataset.work=work.id;
+     if(work.seed){row.classList.add('sc-path-seed');row.querySelector('.sc-hit-owned')?.remove();}
+     const num=number.get(work.id);
+     if(num)row.dataset.step=String(num);
+     // The PDF is the one action a reader takes from this list without
+     // hovering first; it stays in sight.
+     row.querySelector('.sc-hit-actions [data-opens="browser"]')?.classList.add('sc-hit-pdf');
+     row.insertBefore(node('span',num?String(num):work.seed?'':'·',null,{class:'sc-path-step',...(num?{}:{'aria-hidden':'true'})}),row.firstChild);
+     if(work===start)row.insertBefore(node('span','여기부터',null,{class:'sc-path-start'}),row.children[1]||null);
+     if(work.finding&&!work.seed)node('p',work.finding,row,{class:'sc-path-finding',lang:'en',...(work.findingSource?{title:`초록 출처: ${work.findingSource}`}:{})});
+     let parts=runtime.pathTools.reasons(work,key).filter(part=>!/^먼저: /.test(part));
+     if(brief)parts=parts.slice(0,1);
+     // "Read first" names a numbered step in another section, by its number
+     // on this screen -- reached through steps that are owned or hidden, and
+     // reduced over what is shown so it names only the nearest.
+     const reachable=[...reach(work.id)].filter(id=>number.has(id)&&sectionOf.get(id)!==key&&number.get(id)<(num||Infinity));
+     const needs=reachable.filter(id=>!reachable.some(other=>other!==id&&reach(other).has(id))).sort((a,b)=>number.get(a)-number.get(b)).slice(0,3);
+     if(!parts.length&&!needs.length)return row;
+     const why=node('p',null,row,{class:'sc-path-why'});
+     if(parts.length)why.appendChild(doc.createTextNode(parts.map(part=>T(part)).join(' · ')));
+     if(needs.length){
+      why.appendChild(doc.createTextNode((parts.length?' · ':'')+T('먼저:')+' '));
+      for(const [i,id] of needs.entries()){
+       if(i)why.appendChild(doc.createTextNode(', '));
+       button(`${number.get(id)}번`,()=>jump(id),why,{class:'sc-path-jump','aria-label':`${number.get(id)}번으로 이동`});
+      }
+     }
+     return row;
+    };
+    for(const step of steps){
+     if(step.key==='tools')continue;
+     const rows=shown.get(step.key);
+     if(!rows?.length)continue;
+     const nums=rows.map(work=>number.get(work.id)).filter(Boolean);
+     const range=step.key==='seed'||!nums.length?'':' · '+T(nums.length===1?`${nums[0]}번`:`${nums[0]}–${nums[nums.length-1]}번`);
+     const head=node('h3',`${T(PATH_LABELS[step.key])}${range}`,list,{class:'sc-hit-group sc-path-head'});
+     const note=plan.mode==='review'&&step.key==='seed'?'원논문과 나란히 읽으면 이 리뷰가 무엇을 근거로 삼는지 보입니다':PATH_NOTES[step.key];
+     if(short)head.setAttribute('title',T(note));else node('p',note,list,{class:'sc-muted sc-hit-group-note'});
+     const box=node('div',null,list,{class:'sc-hits'});
+     const ownedHere=rows.filter(work=>work.inLibrary&&!work.seed&&work!==start);
+     for(const work of rows){if(!ownedHere.includes(work))pathRow(work,step.key,box,{brief:short});}
+     if(ownedHere.length)ownedRow(ownedHere,box);
+     if(!short&&step.more.length){
+      const more=node('details',null,list,{class:'sc-path-more'});
+      node('summary',`${T(PATH_LABELS[step.key])} · ${T(`${step.more.length}편 더`)}`,more);
+      let drawn=false;
+      more.addEventListener('toggle',()=>{if(more.open&&!drawn){drawn=true;const inner=node('div',null,more,{class:'sc-hits'});for(const work of step.more)pathRow(work,step.key,inner);}});
+     }
+    }
+    const tools=steps.find(step=>step.key==='tools');
+    const restCount=plan.restTotal??rest.length;
+    const hidden=steps.filter(step=>step.key!=='tools').reduce((sum,step)=>sum+step.works.length+step.more.length,0)-sectionOf.size;
+    const foot=node('div',null,list,{class:'sc-path-foot'});
+    button(short?`전체 순서 보기 · ${hidden}편 더`:'짧게 보기',()=>run(async()=>{
+     const focused=doc.activeElement?.closest?.('[data-work]')?.dataset.work;
+     state.pathDepth=short?'full':'min';await saveUI({pathDepth:state.pathDepth});
+     drawPath(plan);
+     // The toggle itself was redrawn: keep the reader where they were.
+     const target=(focused&&list.querySelector(`[data-work="${focused}"]`))||list.querySelector('.sc-path-depth');
+     target?.focus?.({preventScroll:true});target?.scrollIntoView?.({block:'nearest'});
+    }),foot,{class:'sc-path-depth'});
+    if(short){
+     // The boxes the short path leaves out are one press away, opened.
+     const open=selector=>run(async()=>{state.pathDepth='full';await saveUI({pathDepth:'full'});drawPath(plan);const box=list.querySelector(selector);if(box){box.open=true;box.dispatchEvent(new win.Event('toggle'));box.scrollIntoView?.({block:'start'});}});
+     if(tools?.more.length)button(`${T(PATH_LABELS.tools)} ${tools.more.length}`,()=>open('.sc-path-tools'),foot,{class:'sc-path-jump'});
+     if(restCount)button(`${T('나머지 참고문헌')} ${restCount}`,()=>open('.sc-path-rest'),foot,{class:'sc-path-jump'});
+     return;
+    }
+    if(tools?.more.length){
+     const box=node('details',null,list,{class:'sc-path-more sc-path-tools'});
+     node('summary',`${T(PATH_LABELS.tools)} · ${T(`${tools.more.length}편`)}`,box);
+     node('p',PATH_NOTES.tools,box,{class:'sc-muted sc-hit-group-note'});
+     const inner=node('div',null,box,{class:'sc-hits'});
+     for(const work of tools.more)pathRow(work,'tools',inner);
+    }
+    if(rest.length){
+     const more=node('details',null,list,{class:'sc-path-rest'});
+     node('summary',`나머지 참고문헌 ${restCount}편`,more);
+     let drawn=false;
+     more.addEventListener('toggle',()=>{if(more.open&&!drawn){drawn=true;for(const work of rest)own(work);hitList(rest,more);}});
+    }
+   }
+   // Up and down (or j and k) walk the rows; Enter opens the one in focus.
+   list.addEventListener('keydown',event=>{
+    if(event.metaKey||event.ctrlKey||event.altKey||event.isComposing)return;
+    if(event.target.matches?.('input,textarea,select,[contenteditable]'))return;
+    const rows=[...list.querySelectorAll('.sc-path-row')].filter(row=>!row.closest('details:not([open])'));
+    const at=rows.indexOf(event.target.closest?.('.sc-path-row'));
+    if(at<0)return;
+    const move=/^(ArrowDown|j)$/.test(event.key)?1:/^(ArrowUp|k)$/.test(event.key)?-1:0;
+    if(move){event.preventDefault();rows[Math.max(0,Math.min(rows.length-1,at+move))]?.focus?.();return;}
+    if(event.key==='Enter'&&event.target===rows[at]){event.preventDefault();rows[at].querySelector('.sc-hit-title-link')?.click();}
+   });
    async function find({refresh=false}={}){
     if(refresh)runtime.discoverCache.delete('related:'+runtime.identity(runtime.Z.Items.get(Number(item.id))));
     message('OpenAlex에서 관련 논문을 찾는 중…');
@@ -1639,10 +1921,11 @@
      hitList(rows,list);
     }
    }
-   button('다시 찾기',()=>run(()=>find({refresh:true})),b);
+   const go=view==='path'?path:find;
+   button('다시 찾기',()=>run(()=>go({refresh:true})),b);
    button('저자로 이동',()=>run(async()=>{await navigate('authors');}),b);
    // The tab was asked for; do not make the user ask twice.
-   run(()=>find());
+   run(()=>go());
   }
 
   async function drawAuthors(token){
