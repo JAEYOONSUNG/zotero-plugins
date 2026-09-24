@@ -639,6 +639,16 @@
    try{return !!win.matchMedia&&win.matchMedia('(prefers-color-scheme: dark)').matches;}catch(error){return false;}
   }
 
+  /* The frame follows the map: three papers do not need the height of thirty.
+     Both drawing paths go through here, because the one that did not set the
+     count fell back to twelve and drew taller than the fixed frame it replaced. */
+  function graphCanvas(W,H,nodes,label){
+   const svg=doc.createElementNS(SVG,'svg');
+   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
+   svg.style.setProperty('--sc-graph-nodes',String(Math.max(1,nodes||0)));
+   svg.setAttribute('aria-label',label);body.appendChild(svg);
+   return svg;
+  }
   function drawGraph(){
    const b=bar();
    const modes=node('div',null,b,{class:'sc-segmented',role:'group','aria-label':'그래프 종류'});
@@ -701,11 +711,7 @@
     empty('이 범위에서는 서로 인용하거나 참고문헌을 공유하는 논문이 없습니다. 범위를 넓혀보세요.');
     return;
    }
-   const svg=doc.createElementNS(SVG,'svg');
-   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
-   // Three papers do not need the height of thirty: the frame follows the map.
-   svg.style.setProperty('--sc-graph-nodes',String(graph.nodes.length));
-   svg.setAttribute('aria-label','인용 관계 그래프');body.appendChild(svg);
+   const svg=graphCanvas(W,H,graph.nodes.length,'인용 관계 그래프');
    const defs=doc.createElementNS(SVG,'defs');
    const marker=doc.createElementNS(SVG,'marker');
    for(const[k,v]of Object.entries({id:'sc-arrow',viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'5',markerHeight:'5',orient:'auto-start-reverse'}))marker.setAttribute(k,v);
@@ -878,9 +884,7 @@
     return {nodes:old.nodes.map(n=>({...n,id:String(n.id),r:5,degree:degree.get(String(n.id))||0}))};
    })();
    node('p',`문헌 ${laid.nodes.length} · 연결 ${built.edges.length}`,body,{class:'sc-muted'});
-   const svg=doc.createElementNS(SVG,'svg');
-   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
-   svg.setAttribute('aria-label','문헌 관계 그래프');body.appendChild(svg);
+   const svg=graphCanvas(W,H,laid.nodes.length,'문헌 관계 그래프');
    const group=doc.createElementNS(SVG,'g');svg.appendChild(group);
    const pos=new Map(laid.nodes.map(n=>[n.id,n]));
    for(const e of built.edges){
@@ -1350,7 +1354,11 @@
      if((n-start)%20===0)node('span',String(n+1),cells,{class:'sc-page-row','aria-hidden':'true'});
      const sec=Number(p.pages[n])||0;
      const level=sec<5?0:sec>=most*0.75?4:sec>=most*0.4?3:sec>=most*0.15?2:1;
-     const cell=node('button','',cells,{class:'sc-page-cell',type:'button','data-level':String(level),'aria-label':`${n+1}페이지, ${Math.round(sec)}초`,title:`${n+1}페이지 · ${Math.round(sec)}초`});
+     /* A page glanced at for three seconds is not a page never opened; both
+        drew as the same empty cell, so the strip read as less read than it was. */
+     const seen=Object.prototype.hasOwnProperty.call(p.pages||{},n);
+     const cell=node('button','',cells,{class:'sc-page-cell',type:'button','data-level':String(level),'aria-label':`${n+1}페이지, ${seen?`${Math.round(sec)}초`:T('안 엶')}`,title:`${n+1}페이지 · ${seen?`${Math.round(sec)}초`:T('안 엶')}`});
+     if(seen&&!level)cell.dataset.visited='1';
      cell.addEventListener('click',()=>run(()=>{if(!p.attachmentID)throw new Error('어느 파일의 몇 쪽인지 기록이 없습니다. 그 PDF를 한 번 열어 읽은 뒤 다시 보세요.');return library.openItem(p.attachmentID,{pageIndex:n});}));
      cell.disabled=!p.attachmentID;
     }

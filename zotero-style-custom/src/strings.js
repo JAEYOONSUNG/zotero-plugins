@@ -791,6 +791,7 @@
  "아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기": "Not looked up yet. Research panel → Organise › Citation map → Fetch reference lists",
  "아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.": "This citation count has not been looked up, which is not the same as zero.",
  "아직 확인하지 않음": "not looked up yet",
+ "안 엶": "not opened",
  "안 읽은 제목 굵게": "Bold unread titles",
  "안 읽음": "unread",
  "알겠어요": "Got it",
