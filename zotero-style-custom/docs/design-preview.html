@@ -411,15 +411,16 @@
 /* A rating is out of five; the bare "4" beside a row of stars was ambiguous. */
 #style-custom-workbench .sc-matrix td[data-field=rating]::after { content: ' /5'; color: var(--sc-muted); }
 /* The shape of the table that could not be loaded. */
-#style-custom-workbench .sc-jcr-skeleton { margin-block-start: 10px; opacity: .5; }
-/* The skeleton holds the real proportions, or the page jumps when the table
-   it stands in for arrives. */
-#style-custom-workbench .sc-jcr-skeleton th:first-child,
-#style-custom-workbench .sc-jcr-skeleton td:first-child { width: 64px; min-width: 64px; }
-#style-custom-workbench .sc-jcr-skeleton th:nth-child(2),
-#style-custom-workbench .sc-jcr-skeleton td:nth-child(2) { width: 100%; }
-#style-custom-workbench .sc-jcr-skeleton th:nth-child(n+3),
-#style-custom-workbench .sc-jcr-skeleton td:nth-child(n+3) { width: 96px; min-width: 96px; }
+/* The shape of the table that could not be loaded: its own class, because the
+   real table's presence is what tells the two states apart, but the same
+   column classes so the widths carry over and nothing jumps when data lands. */
+#style-custom-workbench .sc-jcr-skeleton { width: 100%; border-collapse: collapse; margin-block-start: 10px; opacity: .45; }
+#style-custom-workbench .sc-jcr-skeleton th, #style-custom-workbench .sc-jcr-skeleton td { padding: 6px; border-block-end: 1px solid var(--sc-border); font-size: 11px; text-align: start; }
+#style-custom-workbench .sc-jcr-skeleton th { color: var(--sc-muted); font-weight: 650; }
+#style-custom-workbench .sc-jcr-skeleton .sc-col-rank { width: 76px; text-align: end; }
+#style-custom-workbench .sc-jcr-skeleton .sc-col-name { width: 24%; }
+#style-custom-workbench .sc-jcr-skeleton .sc-col-q { width: 52px; }
+#style-custom-workbench .sc-jcr-skeleton .sc-col-n, #style-custom-workbench .sc-jcr-skeleton .sc-col-if { text-align: end; }
 #style-custom-workbench .sc-matrix .sc-figure-cell { min-width: 72px; text-align: end; white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 #style-custom-workbench .sc-matrix th { position: sticky; top: 0; z-index: 1; background: var(--sc-surface-alt); font-weight: 600; }
 #style-custom-workbench .sc-matrix th[scope=row] { inset-inline-start: 0; top: auto; z-index: 2; }
@@ -4554,11 +4555,15 @@
    if(!runtime.jcrCatalog||typeof browser?.mount!=='function'){
     node('p','공식 JCR 카테고리 자료를 불러오지 못했습니다. 플러그인 업데이트를 확인하세요.',body,{class:'sc-jcr-unavailable',role:'alert'});
     /* The columns that belong here, named but empty: a page with one sentence
-       on it does not say what it would have shown. */
-    const skeleton=node('table',null,body,{class:'sc-matrix sc-jcr-skeleton','aria-hidden':'true'});
-    const headRow=node('tr',null,skeleton);
-    for(const label of ['순위','저널','분위','피인용도'])node('th',T(label),headRow,{scope:'col'});
-    for(let i=0;i<3;i++){const tr=node('tr',null,skeleton);for(let j=0;j<4;j++)node('td','—',tr);}
+       on it does not say what it would have shown. They are the real table's
+       own columns and classes, so nothing moves when the data arrives. */
+    const skeleton=node('table',null,body,{class:'sc-jcr-skeleton','aria-hidden':'true'});
+    const headRow=node('tr',null,node('thead',null,skeleton),{class:'sc-journal-head'});
+    const columns=[['로컬 JIF 순번','sc-col-rank'],['저널','sc-col-name'],['저장 Q','sc-col-q'],['약어','sc-col-abbr'],
+     ['출판사','sc-col-pub'],['내 문헌','sc-col-n'],['OpenAlex 분야','sc-col-fields'],['로컬 분야 순위','sc-col-fieldrank'],['JIF','sc-col-if']];
+    for(const [label,cls] of columns)node('th',T(label),headRow,{scope:'col',class:cls});
+    const skeletonBody=node('tbody',null,skeleton);
+    for(let i=0;i<3;i++){const tr=node('tr',null,skeletonBody);for(const [,cls] of columns)node('td','—',tr,{class:cls});}
     const actions=bar();
     button('JCR 원본 열기',()=>runtime.Z.launchURL?.('https://jcr.clarivate.com/jcr/browse-categories'),actions);
     button('OpenAlex 주제로 탐색',()=>switchBrowser('openalex'),actions);

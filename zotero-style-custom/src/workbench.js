@@ -2453,11 +2453,15 @@
    if(!runtime.jcrCatalog||typeof browser?.mount!=='function'){
     node('p','공식 JCR 카테고리 자료를 불러오지 못했습니다. 플러그인 업데이트를 확인하세요.',body,{class:'sc-jcr-unavailable',role:'alert'});
     /* The columns that belong here, named but empty: a page with one sentence
-       on it does not say what it would have shown. */
-    const skeleton=node('table',null,body,{class:'sc-matrix sc-jcr-skeleton','aria-hidden':'true'});
-    const headRow=node('tr',null,skeleton);
-    for(const label of ['순위','저널','분위','피인용도'])node('th',T(label),headRow,{scope:'col'});
-    for(let i=0;i<3;i++){const tr=node('tr',null,skeleton);for(let j=0;j<4;j++)node('td','—',tr);}
+       on it does not say what it would have shown. They are the real table's
+       own columns and classes, so nothing moves when the data arrives. */
+    const skeleton=node('table',null,body,{class:'sc-jcr-skeleton','aria-hidden':'true'});
+    const headRow=node('tr',null,node('thead',null,skeleton),{class:'sc-journal-head'});
+    const columns=[['로컬 JIF 순번','sc-col-rank'],['저널','sc-col-name'],['저장 Q','sc-col-q'],['약어','sc-col-abbr'],
+     ['출판사','sc-col-pub'],['내 문헌','sc-col-n'],['OpenAlex 분야','sc-col-fields'],['로컬 분야 순위','sc-col-fieldrank'],['JIF','sc-col-if']];
+    for(const [label,cls] of columns)node('th',T(label),headRow,{scope:'col',class:cls});
+    const skeletonBody=node('tbody',null,skeleton);
+    for(let i=0;i<3;i++){const tr=node('tr',null,skeletonBody);for(const [,cls] of columns)node('td','—',tr,{class:cls});}
     const actions=bar();
     button('JCR 원본 열기',()=>runtime.Z.launchURL?.('https://jcr.clarivate.com/jcr/browse-categories'),actions);
     button('OpenAlex 주제로 탐색',()=>switchBrowser('openalex'),actions);

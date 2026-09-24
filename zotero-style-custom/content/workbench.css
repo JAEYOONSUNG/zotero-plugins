@@ -411,15 +411,16 @@
 /* A rating is out of five; the bare "4" beside a row of stars was ambiguous. */
 #style-custom-workbench .sc-matrix td[data-field=rating]::after { content: ' /5'; color: var(--sc-muted); }
 /* The shape of the table that could not be loaded. */
-#style-custom-workbench .sc-jcr-skeleton { margin-block-start: 10px; opacity: .5; }
-/* The skeleton holds the real proportions, or the page jumps when the table
-   it stands in for arrives. */
-#style-custom-workbench .sc-jcr-skeleton th:first-child,
-#style-custom-workbench .sc-jcr-skeleton td:first-child { width: 64px; min-width: 64px; }
-#style-custom-workbench .sc-jcr-skeleton th:nth-child(2),
-#style-custom-workbench .sc-jcr-skeleton td:nth-child(2) { width: 100%; }
-#style-custom-workbench .sc-jcr-skeleton th:nth-child(n+3),
-#style-custom-workbench .sc-jcr-skeleton td:nth-child(n+3) { width: 96px; min-width: 96px; }
+/* The shape of the table that could not be loaded: its own class, because the
+   real table's presence is what tells the two states apart, but the same
+   column classes so the widths carry over and nothing jumps when data lands. */
+#style-custom-workbench .sc-jcr-skeleton { width: 100%; border-collapse: collapse; margin-block-start: 10px; opacity: .45; }
+#style-custom-workbench .sc-jcr-skeleton th, #style-custom-workbench .sc-jcr-skeleton td { padding: 6px; border-block-end: 1px solid var(--sc-border); font-size: 11px; text-align: start; }
+#style-custom-workbench .sc-jcr-skeleton th { color: var(--sc-muted); font-weight: 650; }
+#style-custom-workbench .sc-jcr-skeleton .sc-col-rank { width: 76px; text-align: end; }
+#style-custom-workbench .sc-jcr-skeleton .sc-col-name { width: 24%; }
+#style-custom-workbench .sc-jcr-skeleton .sc-col-q { width: 52px; }
+#style-custom-workbench .sc-jcr-skeleton .sc-col-n, #style-custom-workbench .sc-jcr-skeleton .sc-col-if { text-align: end; }
 #style-custom-workbench .sc-matrix .sc-figure-cell { min-width: 72px; text-align: end; white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 #style-custom-workbench .sc-matrix th { position: sticky; top: 0; z-index: 1; background: var(--sc-surface-alt); font-weight: 600; }
 #style-custom-workbench .sc-matrix th[scope=row] { inset-inline-start: 0; top: auto; z-index: 2; }
