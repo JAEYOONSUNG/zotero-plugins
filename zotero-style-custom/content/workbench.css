@@ -31,7 +31,10 @@
   --sc-font: -apple-system, system-ui, sans-serif;
   --sc-title-font: -apple-system, system-ui, sans-serif;
   --sc-mono: -apple-system, system-ui, sans-serif;
+  /* One vertical rhythm for the window's own bands. They had drifted to
+     4, 7, 10, 12 and 16px, each set where it was written. */
   --sc-space: 4px;
+  --sc-band: 10px;
   /* Small, plain corners: enough to soften an edge, not enough to read as a
      pill. A 24px button at 10px was nearly one. */
   --sc-radius-sm: 4px;
@@ -177,13 +180,15 @@
   padding: 12px 16px; border-block-end: 1px solid var(--sc-border); background: var(--sc-surface);
 }
 #style-custom-workbench .sc-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
-#style-custom-workbench .sc-brand img { flex: none; display: block; }
+/* The app's colour tile belongs on a shelf of applications, not in this
+   window's own title bar; here it reads as a sticker beside the name. */
+#style-custom-workbench .sc-brand img { flex: none; display: block; width: 16px; height: 16px; opacity: .75; }
 #style-custom-workbench .sc-brand strong { line-height: 1; }
 #style-custom-workbench .sc-brand strong,
 #style-custom-workbench > header > strong { font: 600 15px/1.35 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; }
 #style-custom-workbench .sc-header-actions { display: flex; align-items: center; gap: 6px; margin-inline-start: auto; flex-shrink: 0; }
 #style-custom-workbench .sc-header-actions button { font-size: 12px; }
-#style-custom-workbench .sc-status { flex-shrink: 0; padding: 4px 16px 8px; color: var(--sc-muted); background: var(--sc-surface); border-block-end: 0; font: 11px/1.5 var(--sc-font); overflow-wrap: anywhere; }
+#style-custom-workbench .sc-status { flex-shrink: 0; padding: 4px var(--sc-content-padding) 8px; color: var(--sc-muted); background: var(--sc-surface); border-block-end: 0; font: 11px/1.5 var(--sc-font); overflow-wrap: anywhere; }
 #style-custom-workbench .sc-status:empty { display: none; }
 #style-custom-workbench .sc-status[data-error=true] { color: var(--sc-error); background: var(--sc-error-bg); }
 #style-custom-workbench .sc-controls,
@@ -191,13 +196,13 @@
 #style-custom-workbench .sc-search-row,
 #style-custom-workbench .sc-filter-fields { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #style-custom-workbench .sc-controls,
-#style-custom-workbench .sc-search-row { flex-shrink: 0; padding: 12px 16px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-search-row { flex-shrink: 0; padding: var(--sc-band) var(--sc-content-padding); border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-controls input[type=search],
 #style-custom-workbench .sc-search-row input[type=search] { flex: 1 1 220px; min-width: 120px; padding-inline-start: 11px; }
 #style-custom-workbench .sc-search-row select { max-width: 168px; }
 #style-custom-workbench .sc-actions { padding: 8px 0; }
 #style-custom-workbench .sc-actions input:not([type=checkbox]):not([type=color]):not([type=number]) { flex: 1 1 150px; min-width: 100px; }
-#style-custom-workbench .sc-filters { flex-shrink: 0; padding: 0 16px; border-block-end: 0; }
+#style-custom-workbench .sc-filters { flex-shrink: 0; padding: 0 var(--sc-content-padding); border-block-end: 0; }
 #style-custom-workbench .sc-filters[open] { border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-filters > summary { padding: 7px 0; color: var(--sc-muted); font-size: 12px; cursor: pointer; }
 #style-custom-workbench .sc-filters[open] > summary { color: var(--sc-text); }
@@ -226,15 +231,18 @@
 #style-custom-workbench .sc-shell nav button[data-tab].active .sc-nav-icon,
 #style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] .sc-nav-icon { color: currentColor; }
 #style-custom-workbench .sc-shell nav button[data-tab]:hover { background: rgba(0, 0, 0, .05); }
+/* The only saturated slab in a neutral shell pulled the eye to the rail and
+   held it there. The current section is marked, not lit: a soft ground, the
+   accent on the word itself, and a bar on the edge it belongs to. */
 #style-custom-workbench .sc-shell nav button[data-tab].active,
-#style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-accent); color: var(--sc-accent-ink); font-weight: 500; }
+#style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-accent-soft); color: var(--sc-accent); font-weight: 600; box-shadow: inset 2px 0 0 var(--sc-accent); }
 #style-custom-workbench .sc-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
-#style-custom-workbench .sc-context { flex-shrink: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; padding: 16px var(--sc-content-padding) 12px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-context { flex-shrink: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; padding: calc(var(--sc-band) + 4px) var(--sc-content-padding) var(--sc-band); border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-section-title { margin: 0; font: 600 19px/1.35 var(--sc-title-font); letter-spacing: -.02em; }
 #style-custom-workbench .sc-context-detail { color: var(--sc-muted); font-size: 11px; }
 #style-custom-workbench .sc-body { flex: 1 1 auto; min-width: 0; min-height: 0; padding: var(--sc-content-padding); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 #style-custom-workbench .sc-selection-bar,
-#style-custom-workbench > footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; padding: 10px 16px; border-block-start: 1px solid var(--sc-border); background: var(--sc-surface); }
+#style-custom-workbench > footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; padding: var(--sc-band) var(--sc-content-padding); border-block-start: 1px solid var(--sc-border); background: var(--sc-surface); }
 #style-custom-workbench .sc-selection-bar > span:first-child,
 #style-custom-workbench > footer > span:first-child { margin-inline-end: auto; color: var(--sc-muted); font-size: 12px; }
 #style-custom-workbench .sc-selection-bar[data-selected=true] { border-block-start-color: var(--sc-selection); box-shadow: inset 0 1px 0 var(--sc-selection); background: var(--sc-accent-soft); }
@@ -397,6 +405,21 @@
 #style-custom-workbench .sc-matrix td { min-width: 120px; max-width: 360px; padding: 10px 12px; border-block-end: 1px solid var(--sc-border); background: var(--sc-surface); color: var(--sc-text); overflow-wrap: anywhere; vertical-align: top; text-align: start; }
 /* A column of figures is read down, not across: flush right, one glyph width
    per digit, so 128 and 9 line up on their last digit. */
+/* The title column takes the slack, so the figure columns stay next to their
+   headings instead of drifting a finger's width apart. */
+#style-custom-workbench .sc-matrix tr > *:first-child { width: 100%; }
+/* A rating is out of five; the bare "4" beside a row of stars was ambiguous. */
+#style-custom-workbench .sc-matrix td[data-field=rating]::after { content: ' /5'; color: var(--sc-muted); }
+/* The shape of the table that could not be loaded. */
+#style-custom-workbench .sc-jcr-skeleton { margin-block-start: 10px; opacity: .5; }
+/* The skeleton holds the real proportions, or the page jumps when the table
+   it stands in for arrives. */
+#style-custom-workbench .sc-jcr-skeleton th:first-child,
+#style-custom-workbench .sc-jcr-skeleton td:first-child { width: 64px; min-width: 64px; }
+#style-custom-workbench .sc-jcr-skeleton th:nth-child(2),
+#style-custom-workbench .sc-jcr-skeleton td:nth-child(2) { width: 100%; }
+#style-custom-workbench .sc-jcr-skeleton th:nth-child(n+3),
+#style-custom-workbench .sc-jcr-skeleton td:nth-child(n+3) { width: 96px; min-width: 96px; }
 #style-custom-workbench .sc-matrix .sc-figure-cell { min-width: 72px; text-align: end; white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 #style-custom-workbench .sc-matrix th { position: sticky; top: 0; z-index: 1; background: var(--sc-surface-alt); font-weight: 600; }
 #style-custom-workbench .sc-matrix th[scope=row] { inset-inline-start: 0; top: auto; z-index: 2; }
@@ -533,6 +556,10 @@
 #style-custom-workbench .sc-hit:hover { background: var(--sc-surface); }
 #style-custom-workbench .sc-hit-title { grid-column: 1; margin: 0; font: 600 13px/1.45 var(--sc-title-font); overflow-wrap: anywhere; }
 #style-custom-workbench .sc-hit-meta { grid-column: 1; margin: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+/* 520 and 9 were the same grey: the two figures a reader ranks by take the
+   full ink, and the rest of the line stays behind them. */
+#style-custom-workbench .sc-hit-year { color: var(--sc-text); }
+#style-custom-workbench .sc-hit-cited { color: var(--sc-text); font-weight: 550; }
 #style-custom-workbench .sc-hit-authors { grid-column: 1; margin: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-hit-actions { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 4px; align-items: center; opacity: 0; transition: opacity .12s; }
 #style-custom-workbench .sc-hit:hover .sc-hit-actions,
@@ -585,6 +612,9 @@
 #style-custom-workbench .sc-path-depth { font-size: 12px; }
 #style-custom-workbench [aria-busy="true"] { opacity: .6; }
 #style-custom-workbench .sc-path-row:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -2px; }
+/* An action beside a set of view toggles: a verb, not a surface. */
+#style-custom-workbench .sc-quiet-action { background: transparent; color: var(--sc-accent); }
+#style-custom-workbench .sc-quiet-action:hover { background: var(--sc-accent-soft); }
 #style-custom-workbench .sc-path-jump { min-height: 0; padding: 0 2px; border: 0; background: none; color: var(--sc-accent); font: inherit; text-decoration: underline; cursor: pointer; }
 #style-custom-workbench .sc-path-note { margin: 4px 0 8px; font-size: 11px; }
 #style-custom-workbench .sc-path-more { margin: 2px 0 6px; }
@@ -759,7 +789,7 @@
 /* --- What is missing, said where the user already is --- */
 #style-custom-workbench .sc-notice {
   flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 7px 16px; border-block-end: 1px solid var(--sc-border);
+  padding: var(--sc-band) var(--sc-content-padding); border-block-end: 1px solid var(--sc-border);
   background: var(--sc-accent-soft); color: var(--sc-text);
   font: 11.5px/1.5 var(--sc-font);
 }
@@ -1138,7 +1168,7 @@
 }
 
 /* The first-open line: the notice's look, its own class so nothing mistakes it for the backfill notice. */
-#style-custom-workbench .sc-welcome { flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 16px; border-block-end: 1px solid var(--sc-border); background: var(--sc-accent-soft); color: var(--sc-text); font: 11.5px/1.5 var(--sc-font); }
+#style-custom-workbench .sc-welcome { flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: var(--sc-band) var(--sc-content-padding); border-block-end: 1px solid var(--sc-border); background: var(--sc-accent-soft); color: var(--sc-text); font: 11.5px/1.5 var(--sc-font); }
 #style-custom-workbench .sc-welcome button { margin-inline-start: auto; }
 /* One banner slot. Two stacked pushed the work down by two rows before the
    reader had done anything; what is missing can wait until the greeting is

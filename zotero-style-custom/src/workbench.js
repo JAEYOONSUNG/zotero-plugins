@@ -358,14 +358,18 @@
      all -- by the height of a row every time the reader changed tabs. */
   /* The page's own title is the first line of the column; a notice goes under
      it and its search row, so the title never moves when one appears. */
-  content.append(controls,filterPanel,filterChips,welcome,notice);
+  /* The status line belongs to the page that wrote it, beside the notices; on
+     top of the shell it moved the rail and the title every time a message
+     appeared, which is the shake the banners were moved to stop. */
+  content.append(controls,filterPanel,filterChips,status,welcome,notice);
   const body=node('div',null,content,{class:'sc-body',tabindex:'-1'});
   const navButtons=new Map();
   async function navigate(id,{focus=false}={}){if(!TABS.some(([key])=>key===id)||hiddenTabs().has(id))return;const request=++navigationEpoch;
    /* An error belongs to the page that raised it. "OpenAlex에서 이 논문의 저자를
       찾지 못했습니다" followed the reader into reading, notes and comparison and
       sat there in red. */
-   if(status.dataset.error==='true')message('');
+   // A message belongs to the page that wrote it, error or not.
+   message('');
    state.tab=id;await render();navButtons.get(id)?.scrollIntoView?.({block:'nearest',inline:'nearest'});if(disposed||panel.hidden||request!==navigationEpoch||state.tab!==id)return;await saveUI({lastTab:id});if(focus&&!disposed&&!panel.hidden&&request===navigationEpoch&&state.tab===id&&commands.hidden)body.focus?.();}
   // The label stays: an icon alone would be a guessing game for nineteen tabs.
   // The icon is what makes the right one findable without reading all of them.
@@ -1486,7 +1490,7 @@
    // Figures are compared down a column, so they set flush right in tabular
    // numerals; the field's own row or column carries the mark.
    const NUMERIC=new Set(['year','citations','impactFactor','rating','seconds']);
-   shown.forEach((row,i)=>{const tr=node('tr',null,table);row.forEach((value,j)=>{const heading=state.transpose?j===0:i===0;const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):String(value),tr);if(NUMERIC.has(state.transpose?String(row[0]):String(shown[0]?.[j])))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',state.transpose?'row':'col');const field=state.transpose?fields[i]:fields[j];if(!heading&&field)cell.dataset.field=field;});});
+   shown.forEach((row,i)=>{const tr=node('tr',null,table);row.forEach((value,j)=>{const heading=state.transpose?j===0:i===0;const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):String(value),tr);const field=state.transpose?fields[i]:fields[j];if(NUMERIC.has(field))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',state.transpose?'row':'col');if(!heading&&field)cell.dataset.field=field;});});
    drawCompareInsight(values);
   }
   /* The papers in the table, read together by the model: what each claims,
@@ -1614,7 +1618,13 @@
      title:rank>=3?'철회된 논문입니다. 인용하기 전에 철회 사유를 확인하세요.':rank>=2?'우려 표명(expression of concern)이 게시된 논문입니다.':'정정·정오표가 게시된 논문입니다.'});
     chip.style.marginInlineEnd='6px';
    }
-   meta.appendChild(doc.createTextNode([work.year||T('연도 미상'),work.venue,work.citations==null?null:T(`인용 ${work.citations}`),work.openAccess?T('오픈액세스'):null].filter(Boolean).join(' · ')));
+   /* The year and the citation count are what a reader sorts by; the journal
+      and the access note are there to identify the paper. Only the first two
+      take the full ink. */
+   node('span',String(work.year||T('연도 미상')),meta,{class:'sc-hit-year'});
+   const rest=[work.venue,work.openAccess?T('오픈액세스'):null].filter(Boolean);
+   if(work.citations!=null){meta.appendChild(doc.createTextNode(' · '));node('span',T(`인용 ${work.citations}`),meta,{class:'sc-hit-cited'});}
+   if(rest.length)meta.appendChild(doc.createTextNode(' · '+rest.join(' · ')));
    if(work.authors?.length)node('p',work.authors.slice(0,4).join(', ')+(work.authors.length>4?` 외 ${work.authors.length-4}명`:''),row,{class:'sc-hit-authors'});
    if(work.inLibrary){node('span','보유 중',row,{class:'sc-hit-owned'});return row;}
    const actions=node('div',null,row,{class:'sc-hit-actions'});
@@ -1983,8 +1993,10 @@
     }
    }
    const go=view==='path'?path:find;
-   button('다시 찾기',()=>run(()=>go({refresh:true})),b);
-   button('저자로 이동',()=>run(async()=>{await navigate('authors');}),b);
+   // A view is chosen, an action is taken: the segmented control above holds
+   // the views, and these two stop wearing its clothes.
+   button('다시 찾기',()=>run(()=>go({refresh:true})),b,{class:'sc-quiet-action'});
+   button('저자로 이동',()=>run(async()=>{await navigate('authors');}),b,{class:'sc-quiet-action'});
    // The tab was asked for; do not make the user ask twice.
    run(()=>go());
   }
@@ -2440,6 +2452,12 @@
    const browser=runtime.jcrBrowser||root.CustomStyleJCRBrowser;
    if(!runtime.jcrCatalog||typeof browser?.mount!=='function'){
     node('p','공식 JCR 카테고리 자료를 불러오지 못했습니다. 플러그인 업데이트를 확인하세요.',body,{class:'sc-jcr-unavailable',role:'alert'});
+    /* The columns that belong here, named but empty: a page with one sentence
+       on it does not say what it would have shown. */
+    const skeleton=node('table',null,body,{class:'sc-matrix sc-jcr-skeleton','aria-hidden':'true'});
+    const headRow=node('tr',null,skeleton);
+    for(const label of ['순위','저널','분위','피인용도'])node('th',T(label),headRow,{scope:'col'});
+    for(let i=0;i<3;i++){const tr=node('tr',null,skeleton);for(let j=0;j<4;j++)node('td','—',tr);}
     const actions=bar();
     button('JCR 원본 열기',()=>runtime.Z.launchURL?.('https://jcr.clarivate.com/jcr/browse-categories'),actions);
     button('OpenAlex 주제로 탐색',()=>switchBrowser('openalex'),actions);
@@ -2748,7 +2766,10 @@
   function drawAppearance(){
    const menus=bar();menus.hidden=!enabled('menuVisibility');node('strong','작업 메뉴 표시',menus);
    for(const [id,label]of TABS)if(id!=='appearance')check(T(label)+' 메뉴 표시',!hiddenTabs().has(id),on=>run(async()=>{const hidden=hiddenTabs();on?hidden.delete(id):hidden.add(id);runtime.cache.hiddenWorkbenchTabs=[...hidden];runtime.dirty=true;await runtime.flush();render();}),menus);
-   button('메뉴 기본값 복원',async()=>{runtime.cache.hiddenWorkbenchTabs=[];runtime.dirty=true;await runtime.flush();render();},menus);
+   /* Resetting every menu at once does not belong in the row of eighteen
+      checkboxes it undoes; it sits under them, marked as a verb that removes. */
+   const menuReset=bar();menuReset.hidden=menus.hidden;
+   button('메뉴 기본값 복원',async()=>{runtime.cache.hiddenWorkbenchTabs=[];runtime.dirty=true;await runtime.flush();render();},menuReset,{class:'sc-danger-soft'});
    button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),body);check('문서 탭 활동 시 수정일 갱신',runtime.pref('touchDateOnRead',false),on=>runtime.Z.Prefs.set('extensions.style-custom.touchDateOnRead',on,true),body);
    node('p','Custom 패널과 추가 열의 표시를 조절합니다. PDF 색상은 읽기 진행에서 설정하세요.',body);const form=bar();const accent=node('input',null,form,{type:'color','aria-label':'강조 색상'});accent.value=runtime.pref('accentColor','#374151');const size=node('input',null,form,{type:'number',min:'11',max:'20','aria-label':'패널 글꼴 크기'});size.value=runtime.pref('panelFontSize',13);button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);},form);
    check('제목 옆 색상·별점 태그',runtime.pref('titleTags',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleTags',on,true);runtime.refreshWindows();},body);check('안 읽은 제목 굵게',runtime.pref('unreadBold',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.unreadBold',on,true);runtime.refreshWindows();},body);check('제목 읽기 히트맵',runtime.pref('titleHeatmap',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleHeatmap',on,true);runtime.refreshWindows();},body);check('항목 아이콘 클릭으로 유형 필터',runtime.pref('quickTypeFilter',true),on=>runtime.Z.Prefs.set('extensions.style-custom.quickTypeFilter',on,true),body);
