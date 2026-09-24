@@ -217,8 +217,10 @@ Zotero.ZotPoP = {
 		btn.className = "zotero-tb-button";
 		btn.setAttribute("tooltiptext", this.t("toolbarTip"));
 		btn.setAttribute("image", "chrome://zotpop/content/icons/zotpop-toolbar.svg");
-		// The icon carries its own colours now, so it must not be repainted in
-		// the toolbar's text colour the way a context-fill glyph is.
+		// A context-fill glyph, painted in the toolbar's ink exactly as
+		// Zotero paints its own buttons (#zotero-tb-lookup and the rest).
+		btn.style.setProperty("fill", "currentColor");
+		btn.style.setProperty("-moz-context-properties", "fill, fill-opacity");
 		btn.addEventListener("command", () => this.openSearch(window));
 		/* At the right-hand end of the tools, after the note button.
 

@@ -5,10 +5,11 @@ import {fileURLToPath} from 'node:url';
 import {parseHTML} from 'linkedom';
 import Workbench from '../src/workbench.js';
 import Model from '../src/workspace.js';
+import ReadingPath from '../src/reading-path.js';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 
 // Fictional papers and memory-only services: never reads the user's library.
-async function mountDemo(win,Workbench,Model){
+async function mountDemo(win,Workbench,Model,ReadingPath){
  const doc=win.document;
  const papers=[
   {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; J. Park',year:'2025',venue:'Example Cell Research',doi:'',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
@@ -65,7 +66,45 @@ async function mountDemo(win,Workbench,Model){
   watchedAuthorsByNews:()=>watched.slice().sort((a,b)=>(b.news?.length||0)-(a.news?.length||0)),
   sweepWatchedAuthors:async()=>({authors:watched.length,withNews:2,works:3,requests:1,budgetGone:false,remaining:0}),
   clearAuthorNews:demoAction,watchAuthor:demoAction,unwatchAuthor:demoAction,markAuthorSeen:demoAction,
+  // The panel's own formatter, so the preview shows what Zotero shows.
+  formatReadTime:seconds=>{const v=Math.max(0,Math.floor(Number(seconds)||0));const h=Math.floor(v/3600),m=Math.floor(v%3600/60),x=v%60;return h?`${h}h ${m}m ${x}s`:m?`${m}m ${x}s`:`${x}s`;},
   authorsOfCached:async()=>[],
+  /* The reading order, drawn by the real planner over a fictional citation
+     graph: eight made-up works whose reference lists point at each other, so
+     the preview shows the same rows Zotero would draw, with no network. */
+  pathTools:ReadingPath,
+  libraryDOIs:()=>new Set(['10.5555/demo-f2','10.5555/demo-p1']),
+  forgetReadingPath:()=>{},
+  identity:ref=>'demo:'+ref?.id,
+  readingPathCached:async()=>{
+   const topics={topic:new Set(['t1']),subfield:new Set(['s1']),field:new Set(['f1'])};
+   const W=(id,year,title,references,extra={})=>({id,doi:'10.5555/demo-'+id.toLowerCase(),title,year,
+    venue:extra.venue||'Example Journal',type:extra.type||'article',citations:extra.citations??60,
+    authors:extra.authors||['M. Kim','A. Rivera'],references,related:[],subjects:topics,
+    abstract:'',finding:extra.finding||'',openAccess:!!extra.oa,pdfURL:''});
+   const F1=W('F1',2014,'An earlier method for measuring tissue repair',[],{citations:940,
+    finding:'예시 요약입니다. 이 방법이 이후 연구가 기대는 기준이 되었습니다.'});
+   const F2=W('F2',2016,'A reference atlas of repair-stage cell states',[F1.id],{citations:610,
+    finding:'예시 요약입니다. 단계별 세포 상태를 정리한 표준 지도를 제시합니다.'});
+   const F3=W('F3',2018,'Limits of the earlier measurement approach',[F1.id,F2.id],{citations:280,
+    finding:'예시 요약입니다. 기존 방법이 놓치는 구간을 짚습니다.'});
+   const R1=W('R1',2021,'Measuring tissue repair: a review',[F1.id,F2.id,F3.id],{type:'review',
+    citations:520,venue:'Example Reviews',finding:'예시 요약입니다. 분야 전체의 지도와 남은 질문을 정리합니다.'});
+   const P1=W('P1',2022,'Mapping repair responses in a single tissue',[F1.id,F2.id,F3.id],{citations:210,
+    finding:'예시 요약입니다. 한 조직에서 이 논문의 접근을 먼저 시험했습니다.'});
+   const P2=W('P2',2023,'Mapping repair responses across two tissues',[F1.id,F2.id,F3.id,P1.id],{citations:150,oa:true,
+    finding:'예시 요약입니다. 같은 접근을 두 조직으로 넓혔습니다.'});
+   const seed=W('S',2025,papers[0].title,[F1.id,F2.id,F3.id,R1.id,P1.id,P2.id],
+    {venue:'Example Cell Research',citations:128});
+   const C1=W('C1',2026,'Repair maps applied to a new tissue',[seed.id,P2.id,F2.id],{citations:18,oa:true,
+    finding:'예시 요약입니다. 이 논문의 지도를 다른 조직에 적용했습니다.'});
+   const C2=W('C2',2026,'A shared vocabulary for repair-stage maps',[seed.id,P1.id,P2.id,F3.id],{citations:9,
+    finding:'예시 요약입니다. 서로 다른 지도를 견줄 공통 용어를 제안합니다.'});
+   const refs=[F1,F2,F3,R1,P1,P2];
+   return ReadingPath.plan(seed,{refs,citers:[C1,C2],foundations:[F1,F2,F3],
+    have:new Set(['10.5555/demo-f2','10.5555/demo-p1'])});
+  },
+  relatedWorksCached:async()=>({work:{id:'S'},suggestions:[]}),
   authorUpdates:async()=>({profile:{name:'Jennifer A. Doudna',hIndex:178,works:512,citations:198432,
     institutions:['UC Berkeley'],topics:[{name:'CRISPR',count:212},{name:'RNA biology',count:88},{name:'Genome editing',count:64}],
     orcid:'https://orcid.org/0000-0001-0000-0000'},
@@ -87,7 +126,7 @@ async function mountDemo(win,Workbench,Model){
 const css=fs.readFileSync(path.join(root,'content/workbench.css'),'utf8');
 const {window:win,document:doc}=parseHTML('<html><head></head><body></body></html>');
 Object.defineProperty(win.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this._value??this.querySelector('option')?.getAttribute('value')??'';},set(value){this._value=String(value);}});
-const {bench}=await mountDemo(win,Workbench,Model);
+const {bench}=await mountDemo(win,Workbench,Model,ReadingPath);
 const icon='data:image/svg+xml;base64,'+Buffer.from(fs.readFileSync(path.join(root,'content/icons/style-custom.svg'))).toString('base64');
 bench.panel.querySelector('.sc-brand img').src=icon;
 assert.equal(bench.panel.querySelectorAll('nav [data-tab]').length,19);
@@ -97,7 +136,7 @@ assert.equal(bench.panel.querySelector('.sc-command-palette').hidden,true);
 const snapshot=bench.panel.outerHTML;
 bench.destroy();
 const inline=file=>fs.readFileSync(path.join(root,file),'utf8').replace(/<\/script/gi,'<\\/script');
-const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta id="demo-icon" content="${icon}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Style Custom 0.8.0 · 디자인 미리보기</title><style>body{margin:0;background:#e5e7eb;font:12px system-ui;color:#374151}.demo-bar{height:40px;display:flex;align-items:center;gap:12px;padding:0 18px}.demo-bar strong{font-weight:650}.demo-bar span{color:#4b5563}.demo-feedback{position:fixed;bottom:4px;left:18px;right:18px;font-size:11px} ${css}</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div>${snapshot}<script>${inline('src/workspace.js')}</script><script>${inline('src/workbench.js')}</script><script>document.getElementById('style-custom-workbench').remove();(${mountDemo.toString()})(window,CustomStyleWorkbench,CustomStyleWorkspace);</script></body></html>`;
+const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta id="demo-icon" content="${icon}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Style Custom 0.8.0 · 디자인 미리보기</title><style>body{margin:0;background:#e5e7eb;font:12px system-ui;color:#374151}.demo-bar{height:40px;display:flex;align-items:center;gap:12px;padding:0 18px}.demo-bar strong{font-weight:650}.demo-bar span{color:#4b5563}.demo-feedback{position:fixed;bottom:4px;left:18px;right:18px;font-size:11px} ${css}</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div>${snapshot}<script>${inline('src/workspace.js')}</script><script>${inline('src/reading-path.js')}</script><script>${inline('src/workbench.js')}</script><script>document.getElementById('style-custom-workbench').remove();(${mountDemo.toString()})(window,CustomStyleWorkbench,CustomStyleWorkspace,CustomStyleReadingPath);</script></body></html>`;
 assert.ok(!html.includes('<script src=')&&!html.includes('<link '));
 const target=path.join(root,'docs/design-preview.html');fs.writeFileSync(target,html);
 console.log('Offline design preview verified: actual workbench DOM, 19 sections, 3 fictional papers, no external assets: '+target);

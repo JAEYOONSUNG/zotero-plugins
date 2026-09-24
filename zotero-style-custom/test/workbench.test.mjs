@@ -315,16 +315,19 @@ test('tab and view editing plus margin and reset controls reach the reader servi
 
 test('paper detail displays status without available metrics and includes scoped notes and annotations inline',async()=>{
  const f=fixture();f.runtime.state=()=>({citations:null,impactFactor:null,status:'done',rating:4,seconds:19});await f.bench.show('explore');
- // Each figure carries its own mark now, so the row reads without a header and
- // the reading state is the dot rather than a word taking up the line.
+ /* Each figure is named where the reader looks, and a figure nobody has looked
+    up yet is dashed rather than blank: a blank one read as broken, and its
+    missing width pulled the row out of line with the rows above it. */
  const row=f.body().querySelector('.sc-paper-card');
  const value=name=>row.querySelector(`[data-metric=${name}] .sc-metric-value`).textContent;
- assert.equal(value('impact'),'','an unknown figure is left blank, not dashed');
- assert.equal(value('citations'),'');
+ const unit=name=>row.querySelector(`[data-metric=${name}] .sc-metric-unit`)?.textContent;
+ assert.equal(value('impact'),'—','an unknown figure is dashed, not blank');
+ assert.equal(row.querySelector('[data-metric=impact]').dataset.empty,'true');
+ assert.equal(value('citations'),'—');
  assert.equal(value('time'),'19초');
  assert.equal(value('rating'),'★★★★☆');
  assert.equal(row.dataset.status,'done');
- for(const name of ['impact','citations','time'])assert.ok(row.querySelector(`[data-metric=${name}] svg`),name+' needs its icon');
+ assert.deepEqual([unit('impact'),unit('citations'),unit('time')],['IF','인용','읽기']);
  await f.click('자세히');assert.match(f.body().textContent,/Rich note/);assert.match(f.body().textContent,/Highlight/);assert.ok(f.findButton('문헌 노트 편집'));assert.ok(f.findButton('주석 원문 열기'));assert.deepEqual(f.calls.find(c=>c[0]==='notes')[1],['1']);assert.deepEqual(f.calls.find(c=>c[0]==='annotations')[1],['1']);assert.equal(f.body().querySelector('script'),null);f.bench.destroy();
 });
 
@@ -397,7 +400,7 @@ test('disabled reader features block workbench recolor merge and backlink action
 });
 
 test('configured page size and live reading metrics update existing paper cards without replacing editors',async()=>{
- const f=fixture();f.runtime.getSetting=key=>({explorePageSize:25,inlineEvidenceCount:5,maxExcerptLength:1200,workbenchDensity:'comfortable'})[key];f.runtime.formatReadTime=seconds=>Math.floor(seconds||0)+'s';f.papers.splice(0);for(let id=1;id<=30;id++){f.papers.push({id:String(id),title:'Paper '+id,itemType:'journalArticle',tags:[]});f.refs.set(id,{id});}let seconds=0;f.runtime.state=()=>({seconds,status:seconds?'reading':'unread',citations:null,impactFactor:null});await f.bench.show('explore');assert.equal(f.body().querySelectorAll('.sc-paper-card').length,25);const card=f.body().querySelector('[data-item-id="1"]');assert.equal(card.querySelector('[data-metric=time]').textContent,'','unread: no time is shown');seconds=1;f.bench.refreshMetrics();assert.equal(f.body().querySelector('[data-item-id="1"]'),card);assert.match(card.querySelector('[data-metric=time]').textContent,/1s/);assert.equal(card.dataset.status,'reading');f.bench.destroy();
+ const f=fixture();f.runtime.getSetting=key=>({explorePageSize:25,inlineEvidenceCount:5,maxExcerptLength:1200,workbenchDensity:'comfortable'})[key];f.runtime.formatReadTime=seconds=>Math.floor(seconds||0)+'s';f.papers.splice(0);for(let id=1;id<=30;id++){f.papers.push({id:String(id),title:'Paper '+id,itemType:'journalArticle',tags:[]});f.refs.set(id,{id});}let seconds=0;f.runtime.state=()=>({seconds,status:seconds?'reading':'unread',citations:null,impactFactor:null});await f.bench.show('explore');assert.equal(f.body().querySelectorAll('.sc-paper-card').length,25);const card=f.body().querySelector('[data-item-id="1"]');assert.equal(card.querySelector('[data-metric=time] .sc-metric-value').textContent,'—','unread: the time is dashed, not blank');seconds=1;f.bench.refreshMetrics();assert.equal(f.body().querySelector('[data-item-id="1"]'),card);assert.match(card.querySelector('[data-metric=time] .sc-metric-value').textContent,/1s/);assert.equal(card.dataset.status,'reading');f.bench.destroy();
 });
 
 test('opening the related tab searches straight away instead of waiting for a second click',async()=>{
@@ -574,14 +577,12 @@ test('the toolbar button survives a document that rejects innerHTML on SVG',asyn
  }
 });
 
-test('the toolbar button does not repaint its icon in the toolbar ink', async () => {
-  // The icon carries its own colours now. Passing fill: currentColor through
-  // would flatten all three of them back to one grey.
+test('the toolbar button takes the toolbar ink, as Zotero paints its own', async () => {
+  // The outline is context-fill, so the button sits among Zotero's tools as a
+  // peer rather than as a coloured badge; the button must pass the ink through.
   const {readFileSync} = await import('node:fs');
   const source = readFileSync(new URL('../src/workbench.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /-moz-context-properties/,
-    'a context-fill glyph was replaced by a coloured one');
-  assert.doesNotMatch(source, /toolbar\.style\.fill\s*=/);
+  assert.match(source, /-moz-context-properties/, 'the ink reaches the glyph');
   const f = fixture();
   const button = f.doc.getElementById('style-custom-workbench-button');
   assert.ok(button);

@@ -1,5 +1,5 @@
 {
-  "version": "0.52.1",
+  "version": "0.52.2",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -2176,17 +2176,17 @@
       "sources": [
         {
           "file": "content/icons/style-custom-toolbar.svg",
-          "marker": "Zotero's 20-pixel grid and its"
+          "marker": "Zotero's 20-pixel grid"
         }
       ],
       "tests": [
         {
           "file": "test/styles.test.mjs",
-          "name": "the toolbar icons carry their own colour rather than the toolbar ink"
+          "name": "the toolbar icons are drawn in the toolbar ink with one accent that finds them"
         }
       ],
       "status": "verified",
-      "review": "두 아이콘을 Zotero 자체 아이콘과 같은 20픽셀 격자, 같은 1.25픽셀 선으로 다시 그렸다. ZotPoP은 Zotero의 돋보기 기하를 그대로 쓰고 손잡이 끝을 둥글렸으며 안에 둥근 막대 셋을 두었다. Style Custom은 패널의 모습 그대로 모서리가 둥근 틀, 제목줄, 왼쪽 탭 띠, 안의 둥근 행 둘이다. 색은 전과 같은 세 가지를 두 아이콘이 나눠 써서 한 쌍으로 읽힌다. 밝은 툴바와 어두운 툴바에서 렌더링해 확인했다."
+      "review": "두 아이콘을 Zotero 자체 아이콘과 같은 20픽셀 격자, 같은 1.25픽셀 선으로 다시 그렸다. ZotPoP은 Zotero의 돋보기 기하를 그대로 쓰고 손잡이 끝을 둥글렸으며 안에 둥근 막대 셋을 두었다. Style Custom은 패널의 모습 그대로 모서리가 둥근 틀, 제목줄, 왼쪽 탭 띠, 안의 둥근 행 둘이다. 색은 전과 같은 세 가지를 두 아이콘이 나눠 써서 한 쌍으로 읽힌다. 밝은 툴바와 어두운 툴바에서 렌더링해 확인했다. 이후(2026-09-24) 다시 손봤다: 윤곽선은 Zotero 자신의 잉크(context-fill)를 쓰고, 강조색은 한 가지만 남겨 두 버튼이 프로그램의 도구들 사이에 같은 급으로 앉되 찾을 수는 있게 했다."
     },
     {
       "round": "R79",
@@ -2445,6 +2445,34 @@
       ],
       "status": "verified",
       "review": "저널 지표가 두 층이 됐다. 배포본에는 넘겨줄 수 있는 것만 담는다. OpenAlex를 CC0로 받아 만든 26분야 252세부분야 89,510저널 카탈로그다. 구독자에게만 허락된 JCR 수치는 아카이브에 넣지 않고 Zotero 데이터 폴더의 style-custom-journals에서 읽으며, 파일이 있으면 그쪽이 이긴다. 그래서 구독이 있는 사람 화면은 전과 똑같고, 없는 사람도 빈 화면 대신 2년 평균 피인용을 본다. 그 값은 JIF가 아니므로 물결 표시와 추정치 문구를 달고, 어디서도 JIF라 부르지 않는다. 빌드는 라이선스 파일을 이름으로 거부하고, 설정과 자체 점검이 지금 어느 층을 쓰는지 알려 준다."
+    },
+    {
+      "round": "R85",
+      "title": "패널 전체 디자인 정리와 툴바 아이콘 다시 그리기",
+      "gap": "The toolbar buttons were two coloured badges among Zotero's grey tools. Inside the panel, two banners stacked above the work, the search row sat above the shell so hiding it lifted the rail and title by a row on every tab change, an unknown figure was blank and pulled its row out of line, a reading-progress bar never drew, seventeen rules each restated a small button's size, --sc-faint set words at 3:1, and a disabled button outweighed a live one.",
+      "entryPoint": "아이템 툴바 → 연구 작업 패널",
+      "sources": [
+        {
+          "file": "content/workbench.css",
+          "marker": "Two button steps, not four"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "A figure the panel has not looked up yet"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/styles.test.mjs",
+          "name": "every ink token reads against the surface it is drawn on, in both themes"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "paper detail displays status without available metrics and includes scoped notes and annotations inline"
+        }
+      ],
+      "status": "verified",
+      "review": "읽기 전용 디자인 감사 네 건(읽기 순서·셸·데이터·컨트롤)을 세 라운드 돌려 48건을 받아 반영했다. 툴바 아이콘은 Zotero 자신의 잉크를 쓰고 강조색 하나만 남겼다. 패널은 배너 한 칸, 콘텐츠 칼럼 안의 검색줄, 이름이 붙은 지표(IF·인용·읽기)와 미확인 값의 줄표, 24px 한 단으로 모은 작은 버튼, 4/6/8/10 모서리, 4.5:1을 넘는 가장 옅은 잉크로 정리했다. 평가자가 지적한 회귀 두 건(비활성이 활성보다 무거워짐, 섹션 설명이 단어 중간에서 잘림)도 같은 라운드에서 되돌렸다."
     }
   ],
   "introducedInVersion": "0.6.0"

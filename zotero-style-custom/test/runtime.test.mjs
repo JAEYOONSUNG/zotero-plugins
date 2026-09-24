@@ -1183,11 +1183,11 @@ test('the toolbar button uses the flat toolbar mark, in its own colours', async 
   assert.equal(image[1], 'content/icons/style-custom-toolbar.svg');
   const glyph = readFileSync(new URL('../' + image[1], import.meta.url), 'utf8');
   assert.match(glyph, /viewBox="0 0 20 20"/, 'Zotero draws its toolbar icons on a 20px grid');
-  // It was a context-fill glyph, painted in the toolbar's own text colour, which
-  // left it indistinguishable from Zotero's tools at a glance. The colours are
-  // now the plugin's, picked to read on the light chrome and the dark one alike.
-  assert.doesNotMatch(glyph, /context-fill/, 'nothing takes its colour from the toolbar any more');
-  assert.ok((glyph.match(/fill="#[0-9A-Fa-f]{6}"/g) || []).length >= 3, 'drawn in more than one colour');
+  /* The outline takes the toolbar's own ink, as Zotero's tools do, so the two
+     plugin buttons sit among them as peers; one accent, on the rows of work,
+     is what finds this one without making it a badge. */
+  assert.match(glyph, /fill="context-fill"/, "the outline takes the toolbar's ink");
+  assert.deepEqual([...new Set((glyph.match(/fill="#[0-9A-Fa-f]{6}"/g) || []))], ['fill="#4072E5"'], 'one accent');
   // Still the flat mark rather than the app icon: a filled colour squircle in a
   // toolbar looks like a sticker.
   assert.doesNotMatch(glyph, /<rect[^>]*rx="[4-9]/, 'not the rounded app tile');

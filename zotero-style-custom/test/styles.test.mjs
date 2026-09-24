@@ -164,14 +164,8 @@ test('nothing is left at a radius that reads as a square corner', async () => {
   assert.ok(step('-sm') < step('') && step('') < step('-card') && step('-card') < step('-panel'));
 });
 
-test('the toolbar icons carry their own colour rather than the toolbar ink', async () => {
+test('the toolbar icons are drawn in the toolbar ink with one accent that finds them', async () => {
   const fs = await import('node:fs');
-  const svg = fs.readFileSync(new URL('../content/icons/style-custom-toolbar.svg', import.meta.url), 'utf8');
-  // A context-fill glyph is painted in the toolbar's text colour, which made
-  // the button one more grey outline among Zotero's own tools.
-  assert.doesNotMatch(svg, /context-fill/, 'nothing is left taking its colour from the toolbar');
-  const fills = [...svg.matchAll(/fill="(#[0-9A-Fa-f]{6})"/g)].map(m => m[1]);
-  assert.ok(fills.length >= 3, 'the mark is drawn in more than one colour');
   const luminance = hex => {
     const n = parseInt(hex.slice(1), 16);
     const channel = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
@@ -181,11 +175,16 @@ test('the toolbar icons carry their own colour rather than the toolbar ink', asy
     const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
     return (hi + 0.05) / (lo + 0.05);
   };
-  // It has to read on the light chrome and on the dark one; 3:1 is the bar for
-  // a mark rather than for text.
-  for (const fill of new Set(fills)) {
-    assert.ok(ratio(fill, '#F2F2F4') >= 2.9, `${fill} on the light toolbar`);
-    assert.ok(ratio(fill, '#2B2B2E') >= 2.9, `${fill} on the dark toolbar`);
+  for (const file of ['../content/icons/style-custom-toolbar.svg', '../../content/icons/zotpop-toolbar.svg']) {
+    const svg = fs.readFileSync(new URL(file, import.meta.url), 'utf8');
+    // The outline is Zotero's own ink, so the buttons sit among its tools as
+    // peers rather than as two blue badges...
+    assert.match(svg, /fill="context-fill"/, `${file}: the outline takes the toolbar's ink`);
+    // ...and a single accent, not a palette, is what finds them.
+    const fills = new Set([...svg.matchAll(/fill="(#[0-9A-Fa-f]{6})"/g)].map(m => m[1].toUpperCase()));
+    assert.deepEqual([...fills], ['#4072E5'], `${file}: one accent, Zotero's blue`);
+    // 3:1 is the bar for a mark, on the light chrome and on the dark one.
+    assert.ok(ratio('#4072E5', '#F2F2F4') >= 3 && ratio('#4072E5', '#2B2B2E') >= 2.9);
   }
 });
 
@@ -206,8 +205,9 @@ test('every ink token reads against the surface it is drawn on, in both themes',
    assert.ok(ratio(tokens[ink], tokens['sc-fill']) >= 4.4,
     `${name} ${ink} ${tokens[ink]} on ${tokens['sc-fill']} is ${ratio(tokens[ink], tokens['sc-fill']).toFixed(2)}:1`);
   }
-  // The faintest tier is for things that are barely there, but it is still seen.
-  assert.ok(ratio(tokens['sc-faint'], tokens['sc-fill']) >= 3,
+  /* The faintest tier is quieter, not less legible: it labels ranks, table
+     heads and abbreviations, which are all read. */
+  assert.ok(ratio(tokens['sc-faint'], tokens['sc-fill']) >= 4.4,
    `${name} faint ${tokens['sc-faint']} is ${ratio(tokens['sc-faint'], tokens['sc-fill']).toFixed(2)}:1`);
  }
 });
