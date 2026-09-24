@@ -101,8 +101,10 @@ async function mountDemo(win,Workbench,Model,ReadingPath){
    const C2=W('C2',2026,'A shared vocabulary for repair-stage maps',[seed.id,P1.id,P2.id,F3.id],{citations:9,
     finding:'예시 요약입니다. 서로 다른 지도를 견줄 공통 용어를 제안합니다.'});
    const refs=[F1,F2,F3,R1,P1,P2];
-   return ReadingPath.plan(seed,{refs,citers:[C1,C2],foundations:[F1,F2,F3],
-    have:new Set(['10.5555/demo-f2','10.5555/demo-p1'])});
+   const have=new Set(['10.5555/demo-f2','10.5555/demo-p1']);
+   const plan=ReadingPath.plan(seed,{refs,citers:[C1,C2],foundations:[F1,F2,F3],have});
+   plan.milestones=ReadingPath.milestones(seed,refs,[...refs,C1,C2],{have});
+   return plan;
   },
   relatedWorksCached:async()=>({work:{id:'S'},suggestions:[]}),
   authorUpdates:async()=>({profile:{name:'Jennifer A. Doudna',hIndex:178,works:512,citations:198432,

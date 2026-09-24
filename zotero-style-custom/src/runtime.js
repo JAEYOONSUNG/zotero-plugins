@@ -30,7 +30,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.DISCOVER_CACHE_LIMIT = 60;
     // Raised whenever the reading-order algorithm or the stored plan's shape
     // changes: a plan kept by an older version is asked again.
-    this.PATH_VERSION = 5;
+    this.PATH_VERSION = 6;
     this.citationJob = null;
     this.citationProgress = null;
     this.metadataIDs = new Set();
@@ -2891,6 +2891,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const foundations = found.filter(work => count.has(work.id)).map(work => ({...work, count: count.get(work.id)}));
     const plan = this.pathTools.plan(seed, {refs, citers, foundations, have: have ?? this.libraryDOIs()});
     if (!plan) return null;
+    /* The line of development behind the paper. Most of what it needs is
+       already here -- the references and their own reference lists -- so this
+       is at most one more request, for the works a generation above that the
+       foundation pass did not already fetch. */
+    const wantedMilestones = this.pathTools.milestoneCandidates(seed, refs);
+    const known = new Map([...refs, ...found].filter(Boolean).map(work => [work.id, work]));
+    const missing = wantedMilestones.map(row => row.id).filter(id => !known.has(id)).slice(0, 50);
+    const extra = missing.length ? await settle('milestones', fetchWorks(missing)) || [] : [];
+    signal?.throwIfAborted?.();
+    plan.milestones = this.pathTools.milestones(seed, refs, [...known.values(), ...extra],
+      {have: have ?? this.libraryDOIs()});
     // Authors for what is on screen: one small request, and a plan without
     // them is still a plan.
     const shown = [...plan.steps.flatMap(step => [...step.works, ...step.more]), ...plan.rest.slice(0, 20)];
@@ -2968,6 +2979,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       venue: work.venue, type: work.type, pdfURL: work.pdfURL, openAccess: work.openAccess || undefined,
       refCiters: work.refCiters, shared: work.shared, ...(work.authors?.length ? {authors: work.authors.slice(0, 5)} : {})});
     return {...plan, v: this.PATH_VERSION, steps: plan.steps.map(step => ({key: step.key, works: step.works.map(slim), more: step.more.map(slim)})),
+      // The timeline's own rows: the support count is what the line is made of.
+      milestones: plan.milestones ? {...plan.milestones,
+        line: plan.milestones.line.map(work => ({...bare(work), support: work.support, cited: work.cited || undefined, inLibrary: work.inLibrary || undefined}))} : undefined,
       rest: plan.rest.slice(0, 60).map(bare), restTotal: plan.rest.length};
   }
 

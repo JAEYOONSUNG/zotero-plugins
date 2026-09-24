@@ -212,6 +212,151 @@
       .map(([id, count]) => ({id, count}));
   }
 
+  /* A lab manual is cited by everyone and marks nothing; it is not a step in
+     any line of development. */
+  const MANUAL = /\b(experiments in molecular genetics|molecular cloning|a laboratory manual|current protocols|methods in enzymology|short protocols|numerical recipes|the art of)\b/i;
+
+  /* How many of a paper's references stand on a given work. A work inside the
+     bibliography counts the siblings that cite it; one a generation above
+     counts the same way, and the paper's own citation is worth one more.
+     This is what tells a work the whole line leans on from one that is merely
+     famous: the field's vote, counted inside this paper's own lineage. */
+  function lineageSupport(seed, refs) {
+    const support = new Map();
+    for (const ref of refs || []) {
+      for (const id of new Set(ref?.references || [])) support.set(id, (support.get(id) || 0) + 1);
+    }
+    for (const id of seed?.references || []) support.set(id, (support.get(id) || 0) + 1);
+    support.delete(seed?.id);
+    return support;
+  }
+
+  /* The works to fetch metadata for before a timeline can be drawn: everything
+     the lineage leans on at the loosest bar, since the bar is only known once
+     the line is laid out. */
+  function milestoneCandidates(seed, refs, {limit = 60, share = 0.03, floor = 3} = {}) {
+    const counted = (refs || []).filter(ref => ref?.references?.length).length;
+    const bar = Math.max(floor, Math.ceil(counted * share));
+    return [...lineageSupport(seed, refs).entries()]
+      .filter(([, n]) => n >= bar)
+      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+      .slice(0, limit)
+      .map(([id, count]) => ({id, count}));
+  }
+
+  /* The line of development behind a paper: in each era, the one work the most
+     of this paper's lineage leans on. Read down, it is the order in which the
+     field arrived at the paper on screen.
+
+     The bar drops until the line is long enough to read as a development
+     rather than until enough candidates exist -- a single era can swallow any
+     number of candidates and still show one step. */
+  function milestones(seed, refs, works, {have = new Set(), eras = 7, want = 5} = {}) {
+    if (!seed?.id) return null;
+    const support = lineageSupport(seed, refs);
+    const byID = new Map((works || []).filter(Boolean).map(work => [work.id, work]));
+    for (const ref of refs || []) if (!byID.has(ref?.id) && ref?.id) byID.set(ref.id, ref);
+    const owned = new Set([...have].map(value => text(value).toLowerCase()).filter(Boolean));
+    const counted = (refs || []).filter(ref => ref?.references?.length).length;
+    const cites = new Set(seed.references || []);
+    const usable = work => work && work.year && !isTool(work) && !MANUAL.test(text(work.title))
+      && !/^book$/i.test(text(work.type));
+    /* Specificity is a gate, not a ranking. As a ranking it deleted the papers
+       that made the field -- Yoshida 2016 is 0.56% of its citations and PETase
+       exists because of it -- because breaking out of your own lineage is what
+       a milestone does, and the citations that follow are the evidence. So:
+       everything that clears a low bar, ranked by how much this line of work
+       actually leans on it. */
+    const specificity = work => (work.support || 0) / Math.max(40, work.citations || 0);
+    /* A review summarises a step; it is not one. It can still hold an era when
+       nothing else does, but it yields to work that reported something. */
+    const strength = work => (work.support || 0) * (isReview(work) ? 0.5 : 1);
+    const lay = rows => {
+      const years = rows.map(work => work.year).sort((a, b) => a - b);
+      const first = years[0] || seed.year, last = seed.year || years[years.length - 1];
+      const step = Math.max(2, Math.ceil(((last - first) || 1) / eras));
+      /* One step an era, and a second only when the era holds another work
+         the lineage leans on nearly as hard -- two branches met in the same
+         years more than once, and taking one of them lost the turn. */
+      const eraRows = new Map();
+      for (const work of rows) {
+        const era = Math.floor((work.year - first) / step);
+        eraRows.set(era, [...(eraRows.get(era) || []), work]);
+      }
+      /* One step an era, and a second only when the era holds another line of
+         work the lineage leans on nearly as hard. Across the whole line a
+         subject appears once: four rows on the same protein are one step
+         reported four times, not four steps. */
+      const chosen = [];
+      // Same subject, not merely a shared word: "Work A" and "Work B" overlap
+      // by half and have nothing in common.
+      const fresh = work => !chosen.some(held => sameSubject(held.title, work.title));
+      for (const era of [...eraRows.keys()].sort((a, b) => a - b)) {
+        const ranked = [...eraRows.get(era)].sort((a, b) => strength(b) - strength(a));
+        const first = ranked.find(fresh);
+        if (!first) continue;
+        chosen.push(first);
+        const second = ranked.find(work => work !== first && strength(work) >= strength(first) * 0.8
+          && !sameSubject(work.title, first.title) && fresh(work));
+        if (second) chosen.push(second);
+      }
+      return {step, line: chosen.sort((a, b) => a.year - b.year || strength(b) - strength(a)).slice(0, 8)};
+    };
+    /* Specificity, not weight of citation. BLAST is cited by eight of a
+       paper's references and by ninety-five thousand works besides: the field
+       at large leans on it, this line of work does not stand on it. A work
+       this lineage owns shows a far larger share of its citations here --
+       Klompe 2019 is 22 of 755. Sorting on that share is what separates a
+       turning point from something everyone cites, and it generalises where a
+       blacklist of tool names does not. */
+    /* A milestone has to be both: leaned on by this line of work, and noticed
+       by the field. Specificity alone raised a 1950 kinetics note with 67
+       citations; citations alone raised the transposon vector everybody uses.
+       A work the lineage leans on twice as hard as the bar is kept whatever
+       its citation count -- that is a small field, not an obscure paper. */
+    const noticed = (work, bar) => (work.citations || 0) >= 100 || work.support >= bar * 2;
+    /* The last few years are a blind spot by construction: a paper's siblings
+       were written before the work that came out beside them, so nothing in
+       the bibliography can cite it yet. BREX is missing from a 2017 paper for
+       that reason and present in a 2026 one. In that window the gate comes
+       off and the weight of the lineage decides alone. */
+    /* Two years, not three: at three, a 2012 paper on another subject entirely
+       -- cited five thousand times, a tenth of a percent of them from here --
+       walked into a 2015 paper's history through the exemption. The window
+       still covers what siblings truly could not have cited, and inside it the
+       gate is loosened rather than lifted. */
+    const RECENT = 2;
+    const recent = work => seed.year && work.year >= seed.year - RECENT;
+    let bar = 0, laid = {step: 0, line: []};
+    /* The gate is a floor and stays where it is: letting it fall with the
+       support bar put two m6A papers, 0.1% of their citations, into a type III
+       restriction enzyme's history. */
+    const GATE = 0.003;
+    for (const share of [0.15, 0.1, 0.07, 0.05, 0.03]) {
+      bar = Math.max(3, Math.ceil(counted * share));
+      const rows = [...support.entries()].filter(([, n]) => n >= bar)
+        .sort((a, b) => b[1] - a[1]).slice(0, 80)
+        .map(([id, n]) => { const work = byID.get(id); return work && {...work, support: n}; })
+        .filter(work => usable(work) && noticed(work, bar)
+          && specificity(work) >= (recent(work) ? GATE / 2 : GATE))
+        .sort((a, b) => strength(b) - strength(a) || (b.citations || 0) - (a.citations || 0));
+      laid = lay(rows);
+      if (laid.line.length >= want) break;
+    }
+    const line = laid.line.map(work => ({...work,
+      inLibrary: !!work.doi && owned.has(text(work.doi).toLowerCase()),
+      cited: cites.has(work.id)}));
+    /* A bibliography too small or too scattered to carry a lineage gets no
+       line. An arbitrary one is worse than none: the reader recognises it as
+       wrong and stops trusting the rest of the panel. */
+    /* One work leaned on six times is not a lineage -- a twelve-reference
+       paper can produce that by accident, and then every other row sits at
+       three. Three works at five or more is what a line of development looks
+       like from below. */
+    if (line.length < 3 || line.filter(work => (work.support || 0) >= 5).length < 3) return null;
+    return {line, span: laid.step, bar, seedYear: seed.year || null};
+  }
+
   /* Depth in the dependency order: 0 for a work that builds on nothing else in
      the set, otherwise one more than the deepest thing it builds on. A citation
      to a work more than a year newer is a data error and ignored; a cycle is
@@ -677,7 +822,7 @@
   const reason = (work, key) => reasons(work, key).join(' · ');
 
   const api = {plan, reason, reasons, foundationCandidates, depths, coupling, relevance, isReview, isTool,
-    mergeVersions, titleKey};
+    mergeVersions, titleKey, milestones, milestoneCandidates, lineageSupport};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleReadingPath = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

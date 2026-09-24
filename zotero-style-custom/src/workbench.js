@@ -1694,13 +1694,13 @@
    const b=bar();
    /* Two answers to two questions: the reading order says what to read first
       and why; the list is everything, grouped by where it came from. */
-   if(!state.relatedView)state.relatedView=ui.relatedView==='list'?'list':'path';
+   if(!state.relatedView)state.relatedView=['list','line'].includes(ui.relatedView)?ui.relatedView:'path';
    if(!state.pathDepth)state.pathDepth=ui.pathDepth==='full'?'full':'min';
    const canPath=typeof runtime.readingPathCached==='function';
    const view=canPath?state.relatedView:'list';
    if(canPath){
     const modes=node('div',null,b,{class:'sc-segmented',role:'group','aria-label':'관련 논문 보기'});
-    for(const[key,label]of [['path','읽기 순서'],['list','전체 목록']])
+    for(const[key,label]of [['path','읽기 순서'],['line','발전 과정'],['list','전체 목록']])
      button(label,()=>run(async()=>{state.relatedView=key;await saveUI({relatedView:key});await render();body.querySelector('.sc-segmented [aria-pressed="true"]')?.focus?.();}),modes,{'aria-pressed':view===key});
    }
    const list=node('div',null,body);
@@ -1992,7 +1992,65 @@
      hitList(rows,list);
     }
    }
-   const go=view==='path'?path:find;
+   /* The line of development: what had to be done before this paper could be
+      written, in the order it happened. The reading order answers what to read
+      first; this answers how the field arrived here. */
+   async function timeline({refresh=false}={}){
+    const ref=runtime.Z.Items.get(Number(item.id));
+    if(refresh&&typeof runtime.forgetReadingPath==='function')runtime.forgetReadingPath(ref);
+    pathAbort?.abort?.();
+    const controller=typeof win.AbortController==='function'?new win.AbortController():typeof AbortController==='function'?new AbortController():null;
+    pathAbort=controller;
+    const current=()=>token===epoch&&!disposed&&state.tab==='related';
+    message('참고문헌의 계보에서 마일스톤을 찾는 중…');
+    if(!list.childElementCount)node('p','참고문헌의 계보에서 마일스톤을 찾는 중…',list,{class:'sc-muted sc-path-note',role:'status'});
+    let plan;
+    try{plan=await runtime.readingPathCached(ref,{signal:controller?.signal,onProgress:(done,total)=>{
+     if(!current()){controller?.abort?.();return;}
+     message(`OpenAlex에서 참고문헌과 인용 관계를 읽는 중… ${done}/${total}`);
+    }});}catch(error){
+     if(!current()||controller?.signal?.aborted)return;
+     list.removeAttribute('aria-busy');list.querySelector('[role=status]')?.remove();
+     throw error;
+    }
+    if(!current())return;
+    list.replaceChildren();
+    if(!plan){message('이 논문을 OpenAlex에서 찾지 못했습니다. DOI를 확인한 뒤 다시 찾으세요.',true);return;}
+    drawTimeline(plan);
+   }
+   function drawTimeline(plan){
+    list.replaceChildren();
+    const found=plan.milestones;
+    if(!found?.line?.length){
+     const box=node('div',null,list,{class:'sc-empty'});
+     node('p','이 논문의 참고문헌들이 공통으로 기대는 논문을 찾지 못했습니다. 서로 다른 갈래를 폭넓게 인용한 논문에서 자주 생깁니다.',box);
+     button('읽기 순서 보기',()=>run(async()=>{state.relatedView='path';await saveUI({relatedView:'path'});await render();}),bar(box));
+     return;
+    }
+    message(`${found.line.length}단계 · 참고문헌 ${found.bar}편 이상이 기대는 논문`);
+    node('p','이 논문이 나오기까지 이 갈래가 지나온 단계입니다. 참고문헌들이 공통으로 인용한 정도로 골랐습니다.',list,{class:'sc-muted sc-path-note'});
+    const line=node('ol',null,list,{class:'sc-line'});
+    for(const work of found.line){
+     const row=node('li',null,line,{class:'sc-line-row'});
+     node('span',String(work.year||''),row,{class:'sc-line-year'});
+     const body2=node('div',null,row,{class:'sc-line-body'});
+     const title=node('p',work.title||T('제목 없음'),body2,{class:'sc-hit-title'});
+     if(work.inLibrary)node('span','보유',title,{class:'sc-line-owned'});
+     const why=[T(`참고문헌 ${work.support}편이 인용`)];
+     if(work.cited)why.push(T('이 논문이 인용'));
+     if(work.citations!=null)why.push(T(`인용 ${work.citations}`));
+     node('p',why.join(' · '),body2,{class:'sc-path-why'});
+     if(work.venue)node('p',work.venue,body2,{class:'sc-hit-meta'});
+     if(!work.inLibrary&&work.doi){
+      const acts=node('div',null,body2,{class:'sc-hit-actions'});
+      button('doi.org에서 열기',()=>{try{win.Zotero?.launchURL?.('https://doi.org/'+work.doi);}catch(_){}},acts,{'data-opens':'browser'});
+     }
+    }
+    const last=node('li',null,line,{class:'sc-line-row sc-line-seed'});
+    node('span',String(plan.milestones.seedYear||item.year||''),last,{class:'sc-line-year'});
+    node('p',item.title||T('제목 없음'),node('div',null,last,{class:'sc-line-body'}),{class:'sc-hit-title'});
+   }
+   const go=view==='path'?path:view==='line'?timeline:find;
    // A view is chosen, an action is taken: the segmented control above holds
    // the views, and these two stop wearing its clothes.
    button('다시 찾기',()=>run(()=>go({refresh:true})),b,{class:'sc-quiet-action'});

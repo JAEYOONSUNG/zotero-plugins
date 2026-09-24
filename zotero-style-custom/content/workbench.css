@@ -567,6 +567,31 @@
 #style-custom-workbench .sc-hit:focus-within .sc-hit-actions { opacity: 1; }
 
 #style-custom-workbench .sc-hit-owned { grid-column: 2; grid-row: 1; align-self: center; color: var(--sc-done); font-size: 11px; font-weight: 600; white-space: nowrap; }
+/* The line of development: a year in its own column, a rule running down
+   between the years, and a dot on each step. It reads down, like a timeline,
+   because that is the order the work happened in. */
+#style-custom-workbench .sc-line { list-style: none; margin: 8px 0 0; padding: 0; }
+#style-custom-workbench .sc-line-row { position: relative; display: grid; grid-template-columns: 48px 1fr; gap: 0 14px; padding: 0 0 16px; }
+#style-custom-workbench .sc-line-row::before { content: ""; position: absolute; inset-block: 6px -6px; inset-inline-start: 54px; width: 1px; background: var(--sc-border-strong); }
+#style-custom-workbench .sc-line-row:last-child::before { display: none; }
+#style-custom-workbench .sc-line-row::after { content: ""; position: absolute; inset-block-start: 4px; inset-inline-start: 51px; width: 7px; height: 7px; border-radius: 100px; background: var(--sc-accent); }
+#style-custom-workbench .sc-line-year { grid-column: 1; color: var(--sc-text); font: 600 12px/1.45 var(--sc-font); font-variant-numeric: tabular-nums; text-align: end; }
+#style-custom-workbench .sc-line-body { grid-column: 2; min-width: 0; padding-inline-start: 10px; }
+#style-custom-workbench .sc-line-body > p { margin: 0; }
+#style-custom-workbench .sc-line-owned { margin-inline-start: 6px; color: var(--sc-done); font-size: 10px; font-weight: 600; }
+/* The paper the reader has open closes the line: a filled marker, no dot. */
+#style-custom-workbench .sc-line-seed::after { width: 9px; height: 9px; inset-inline-start: 50px; background: var(--sc-text); }
+#style-custom-workbench .sc-line-seed { padding-block-end: 0; }
+#style-custom-workbench .sc-line-row .sc-hit-actions { opacity: 0; margin-block-start: 4px; }
+#style-custom-workbench .sc-line-row:hover .sc-hit-actions,
+#style-custom-workbench .sc-line-row:focus-within .sc-hit-actions { opacity: 1; }
+@container sc-workbench (max-width: 560px) {
+  #style-custom-workbench .sc-line-row { grid-template-columns: 38px 1fr; }
+  #style-custom-workbench .sc-line-row::before { inset-inline-start: 44px; }
+  #style-custom-workbench .sc-line-row::after { inset-inline-start: 41px; }
+  #style-custom-workbench .sc-line-seed::after { inset-inline-start: 40px; }
+}
+
 /* Reading order: a step number in its own column, and one line saying why
    the paper sits at that step. */
 #style-custom-workbench .sc-path-row { grid-template-columns: 22px 1fr auto; }

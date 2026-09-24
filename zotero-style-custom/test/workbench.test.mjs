@@ -1832,9 +1832,18 @@ async function pathFixture({owned = [], show} = {}) {
  const w = (id, references, extra = {}) => ({id, title: 'Work ' + id, year: 2015, citations: 5, doi: '10.1/' + id, type: 'article', references, subjects, authors: [], ...extra});
  const refs = [w('A', ['X'], {year: 2008}), w('B', ['A', 'X', 'Y'], {year: 2012}), w('C', ['A', 'B', 'X', 'Y'], {year: 2014}),
   w('D', ['A', 'B', 'X', 'Y'], {year: 2015}), w('E', ['A', 'B', 'X', 'Y'], {year: 2016}), w('X', [], {year: 2000}), w('Y', [], {year: 2001})];
- const plan = pathTools.plan(w('S', ['A', 'B', 'C', 'D', 'E', 'X', 'Y'], {year: 2022}), {
+ const seed = w('S', ['A', 'B', 'C', 'D', 'E', 'X', 'Y'], {year: 2022});
+ const plan = pathTools.plan(seed, {
   refs, citers: [w('L', ['S', 'A', 'B', 'C', 'X'], {year: 2024}), w('M', ['S', 'A', 'B', 'D', 'X'], {year: 2025})]
  }, {show});
+ /* The view is what is under test here; which works deserve to be on the line
+    is settled in the reading-path tests, against a lineage large enough to
+    have one. */
+ plan.milestones = {span: 6, bar: 4, seedYear: 2022, line: [
+  {id: 'X', title: 'Work X', year: 2000, citations: 400, venue: 'Journal', doi: '10.1/x', support: 9, cited: true},
+  {id: 'A', title: 'Work A', year: 2008, citations: 300, venue: 'Journal', doi: '10.1/a', support: 7, cited: true,
+   inLibrary: owned.includes('A')},
+  {id: 'C', title: 'Work C', year: 2014, citations: 200, venue: 'Journal', doi: '10.1/c', support: 5}]};
  f.runtime.pathTools = pathTools;
  f.runtime.libraryDOIs = () => new Set(owned.map(id => '10.1/' + id.toLowerCase()));
  f.runtime.readingPathCached = async (ref, {onProgress} = {}) => { f.calls.push(['path']); onProgress?.(1, 3); return plan; };
@@ -1912,5 +1921,43 @@ test('a reading-order lookup that fails after the user has moved on stays silent
   reject(Object.assign(new Error('OpenAlex 오늘 한도를 다 썼습니다'), {status: 429}));
   await settle();
   assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error, 'true', 'the explore tab is not told about it');
+ } finally { f.bench.destroy(); }
+});
+
+test('the line of development runs down the years and ends at the paper on screen', async () => {
+ const f = await pathFixture({owned: ['A']});
+ try {
+  await f.bench.show('related');
+  await f.click('발전 과정');
+  const rows = [...f.body().querySelectorAll('.sc-line-row')];
+  assert.ok(rows.length >= 2, 'a line, not a single step');
+  const years = rows.map(row => Number(row.querySelector('.sc-line-year').textContent));
+  assert.deepEqual(years, [...years].sort((a, b) => a - b), 'it reads forwards in time');
+  // The paper the reader has open closes the line, and is not offered for fetching.
+  const last = rows[rows.length - 1];
+  assert.ok(last.classList.contains('sc-line-seed'));
+  assert.equal(last.querySelector('.sc-hit-actions'), null);
+  assert.equal(Number(last.querySelector('.sc-line-year').textContent), 2022);
+  // Every earlier step says how much of the lineage leans on it.
+  for (const row of rows.slice(0, -1)) assert.match(row.querySelector('.sc-path-why').textContent, /참고문헌 \d+편이 인용/);
+  // A step already on the shelf says so rather than offering to fetch it.
+  const ownedRow = rows.find(row => row.querySelector('.sc-line-owned'));
+  if (ownedRow) assert.equal(ownedRow.querySelector('.sc-hit-actions'), null);
+  // And the choice is remembered.
+  assert.equal(f.bench.state.relatedView, 'line');
+  await f.click('읽기 순서');
+  assert.equal(f.body().querySelector('.sc-line'), null);
+ } finally { f.bench.destroy(); }
+});
+
+test('a paper whose references share no lineage says so instead of drawing a history', async () => {
+ const f = await pathFixture();
+ try {
+  f.runtime.readingPathCached = async () => ({...f.plan, milestones: null});
+  await f.bench.show('related');
+  await f.click('발전 과정');
+  assert.ok(f.body().querySelector('.sc-empty'), 'an empty state, not an empty list');
+  assert.equal(f.body().querySelector('.sc-line'), null);
+  assert.ok(f.findButton('읽기 순서 보기'), 'and a way on from it');
  } finally { f.bench.destroy(); }
 });

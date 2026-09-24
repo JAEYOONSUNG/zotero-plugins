@@ -353,3 +353,68 @@ test("what a title rules out is not its subject: 'without double-strand breaks'"
   const plan = path.plan(f.seed, f);
   assert.notEqual([...all(plan), ...plan.rest].find(w => w.id === "KO")?.sameSubject, true);
 });
+
+test("the milestones are the works this paper's own lineage leans on, one per era", () => {
+  const sub = {topic: new Set(["T"]), subfield: new Set(["S"]), field: new Set(["F"])};
+  const W = (id, year, refs, extra = {}) => ({id, doi: "10.5555/" + id, title: extra.title || ("Work " + id),
+    year, type: extra.type || "article", citations: extra.citations ?? 50, venue: "Journal",
+    references: refs, related: [], subjects: sub, authors: ["A"], abstract: ""});
+  // An origin every later work stands on, a turn the field took, and the step
+  // just before the paper -- plus a manual everybody cites and nobody builds on.
+  // Citation counts the field would actually show: a milestone is one the
+  // field noticed, so the fixture gives them each a few hundred.
+  const origin = W("ORIGIN", 1990, [], {citations: 400});
+  const turn = W("TURN", 2004, ["ORIGIN"], {citations: 300});
+  const near = W("NEAR", 2018, ["ORIGIN", "TURN"], {citations: 200});
+  const manual = W("MANUAL", 1972, [], {title: "Experiments in Molecular Genetics", citations: 20000});
+  const refs = [];
+  for (let i = 0; i < 10; i++) refs.push(W("R" + i, 2010 + (i % 6), ["ORIGIN", "TURN", "MANUAL"].concat(i > 5 ? ["NEAR"] : [])));
+  refs.push(near);
+  const seed = W("SEED", 2022, [...refs.map(r => r.id), "ORIGIN"]);
+  const found = path.milestones(seed, refs, [...refs, origin, turn, near, manual], {have: new Set(["10.5555/TURN"])});
+  const ids = found.line.map(w => w.id);
+  assert.ok(ids.includes("ORIGIN") && ids.includes("NEAR"), "the origin and the step before it are both steps");
+  assert.ok(!ids.includes("MANUAL"), "a manual everyone cites is not a milestone");
+  assert.deepEqual(ids, [...ids].sort((a, b) => found.line.find(w => w.id === a).year - found.line.find(w => w.id === b).year),
+    "the line reads forwards in time");
+  assert.equal(found.line.find(w => w.id === "TURN").inLibrary, true, "a milestone already owned says so");
+  assert.equal(found.line.find(w => w.id === "ORIGIN").cited, true, "the paper cites its own origin");
+  /* A bibliography that shares almost nothing has no line of development to
+     show, and two papers out of ten is not one. Saying nothing is the honest
+     answer; drawing a timeline from that would invent a history. */
+  const loose = [];
+  for (let i = 0; i < 10; i++) loose.push(W("L" + i, 2000 + i, ["X" + i]));
+  loose[0].references = ["ORIGIN"]; loose[1].references = ["ORIGIN"]; loose[2].references = ["TURN"];
+  assert.equal(path.milestones(W("S2", 2020, loose.map(r => r.id)), loose, [...loose, origin, turn]), null);
+});
+
+test("no milestones rather than a line of one", () => {
+  assert.equal(path.milestones({id: "S", year: 2020, references: []}, [], []), null);
+});
+
+test("specificity is a gate at a fixed floor, and a lineage too thin to draw draws nothing", () => {
+  const sub = {topic: new Set(["T"]), subfield: new Set(["S"]), field: new Set(["F"])};
+  const W = (id, year, refs, extra = {}) => ({id, doi: "10.5555/" + id, title: extra.title || ("Work " + id),
+    year, type: "article", citations: extra.citations ?? 300, venue: "J", references: refs, related: [],
+    subjects: sub, authors: ["A"], abstract: ""});
+  /* The paper the field was built on: eight of ten references stand on it, and
+     the citations that followed are the evidence it broke out, not a reason to
+     drop it. Beside it, a work cited by the whole world and leaned on here by
+     the same eight -- a thousandth of its citations -- is not a step. */
+  const axis = W("AXIS", 2010, [], {title: "A bacterium that eats the polymer", citations: 1400});
+  const step = W("STEP", 2014, ["AXIS"], {title: "Engineering the enzyme for activity", citations: 600});
+  const late = W("LATE", 2019, ["AXIS", "STEP"], {title: "A depolymerase that recycles bottles", citations: 900});
+  const everywhere = W("EVERY", 1990, [], {title: "A tool for sequence alignment", citations: 90000});
+  const refs = [];
+  for (let i = 0; i < 10; i++) refs.push(W("R" + i, 2016 + (i % 4), i < 8 ? ["AXIS", "STEP", "LATE", "EVERY"] : ["EVERY"]));
+  const seed = W("SEED", 2022, refs.map(r => r.id));
+  const found = path.milestones(seed, refs, [...refs, axis, step, late, everywhere]);
+  const ids = found.line.map(w => w.id);
+  assert.ok(ids.includes("AXIS"), "the paper the field stands on survives its own citation count");
+  assert.ok(!ids.includes("EVERY"), "what everyone cites is not this paper's history");
+
+  // Too few of the references share anything: no line rather than a wrong one.
+  const loose = [];
+  for (let i = 0; i < 12; i++) loose.push(W("L" + i, 2012 + i, i < 4 ? ["AXIS"] : ["Z" + i]));
+  assert.equal(path.milestones(W("S2", 2024, loose.map(r => r.id)), loose, [...loose, axis]), null);
+});

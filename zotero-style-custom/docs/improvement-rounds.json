@@ -1,5 +1,5 @@
 {
-  "version": "0.52.6",
+  "version": "0.53.0",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -2473,6 +2473,34 @@
       ],
       "status": "verified",
       "review": "읽기 전용 디자인 감사 네 건(읽기 순서·셸·데이터·컨트롤)을 세 라운드 돌려 48건을 받아 반영했다. 툴바 아이콘은 Zotero 자신의 잉크를 쓰고 강조색 하나만 남겼다. 패널은 배너 한 칸, 콘텐츠 칼럼 안의 검색줄, 이름이 붙은 지표(IF·인용·읽기)와 미확인 값의 줄표, 24px 한 단으로 모은 작은 버튼, 4/6/8/10 모서리, 4.5:1을 넘는 가장 옅은 잉크로 정리했다. 평가자가 지적한 회귀 두 건(비활성이 활성보다 무거워짐, 섹션 설명이 단어 중간에서 잘림)도 같은 라운드에서 되돌렸다."
+    },
+    {
+      "round": "R86",
+      "title": "논문 한 편의 발전 과정: 계보가 기대는 마일스톤 타임라인",
+      "gap": "The panel could say what to read first, but not how the field arrived at the paper on screen. The foundation section came closest and could not: by construction it only counts works outside the bibliography, so the paper's own direct ancestors -- Klompe 2019 under a CAST paper, Yoshida 2016 under a PETase one -- could never appear in it.",
+      "entryPoint": "연구 작업 패널 → 탐색 › 관련 논문 → 발전 과정",
+      "sources": [
+        {
+          "file": "src/reading-path.js",
+          "marker": "function milestones"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "function drawTimeline"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reading-path.test.mjs",
+          "name": "specificity is a gate at a fixed floor, and a lineage too thin to draw draws nothing"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the line of development runs down the years and ends at the paper on screen"
+        }
+      ],
+      "status": "verified",
+      "review": "관련 논문 탭에 세 번째 보기를 더했다. 이 논문의 참고문헌들이 공통으로 기대는 논문을 시대별로 한 편씩 뽑아 연표로 그린다. 자료는 읽기 순서가 이미 가져온 것을 쓰므로 요청은 0~2회 늘 뿐이다. 연구자 평가자에게 사용자의 논문 20편으로 네 라운드를 받았다(3.6 → 3.45 → 4.0). 2라운드에서 특이도를 정렬 기준으로 쓴 것이 Yoshida·Tournier·Klompe처럼 분야를 만든 논문을 지우는 역효과를 냈고, 평가자 지적대로 정렬이 아니라 문턱으로 바꿔 되살렸다. 인용망이 계보를 못 받치는 논문에는 선을 그리지 않는다."
     }
   ],
   "introducedInVersion": "0.6.0"
