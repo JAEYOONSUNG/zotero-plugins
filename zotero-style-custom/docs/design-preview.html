@@ -231,11 +231,13 @@
 #style-custom-workbench .sc-shell nav button[data-tab].active .sc-nav-icon,
 #style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] .sc-nav-icon { color: currentColor; }
 #style-custom-workbench .sc-shell nav button[data-tab]:hover { background: rgba(0, 0, 0, .05); }
-/* The only saturated slab in a neutral shell pulled the eye to the rail and
-   held it there. The current section is marked, not lit: a soft ground, the
-   accent on the word itself, and a bar on the edge it belongs to. */
+/* The current section is a plain grey row in the text's own ink, a step
+   darker than hover -- the way a list marks its selection. A coloured bar on
+   the row's rounded edge read as a painted fingernail (2026-09-25), and a
+   saturated fill before it pulled the eye to the rail; the user wants the
+   chrome plain, so the colour stays out of it. */
 #style-custom-workbench .sc-shell nav button[data-tab].active,
-#style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-accent-soft); color: var(--sc-accent); font-weight: 600; box-shadow: inset 3px 0 0 var(--sc-accent); }
+#style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-fill-active); color: var(--sc-text); font-weight: 600; box-shadow: none; }
 #style-custom-workbench .sc-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
 #style-custom-workbench .sc-context { flex-shrink: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; padding: calc(var(--sc-band) + 4px) var(--sc-content-padding) var(--sc-band); border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-section-title { margin: 0; font: 600 19px/1.35 var(--sc-title-font); letter-spacing: -.02em; }
@@ -1206,9 +1208,10 @@
 #style-custom-workbench .sc-welcome:has(~ .sc-notice:not([hidden])) { display: none; }
 @media (prefers-color-scheme: dark) {
   /* The soft accent fill sits within a hair of the header's own colour in the
-     dark theme, so the banner read as more chrome. An edge says it instead. */
+     dark theme, so the banner read as more chrome. A lighter surface and a
+     plain rule part it from the page -- no coloured bar down its edge. */
   #style-custom-workbench .sc-notice,
-  #style-custom-workbench .sc-welcome { background: var(--sc-surface-alt); box-shadow: inset 3px 0 0 var(--sc-accent); }
+  #style-custom-workbench .sc-welcome { background: var(--sc-fill); box-shadow: none; border-block-color: var(--sc-border-strong); }
 }
 
 /* Arrived from the item menu on one person: the paper they came from, and the
@@ -1709,12 +1712,16 @@
     const cites = new Set(seed.references || []);
     const usable = work => work && work.year && !isTool(work) && !MANUAL.test(text(work.title))
       && !/^book$/i.test(text(work.type));
-    /* How hard this line of work leans on a work, as a share of everything
-       that cites it. */
-    const strength = work => (work.support || 0) / Math.max(40, work.citations || 0)
-      /* A review summarises a step; it is not one. It can still hold an era
-         when nothing else does, but it yields to work that reported something. */
-      * (isReview(work) ? 0.5 : 1);
+    /* Specificity is a gate, not a ranking. As a ranking it deleted the papers
+       that made the field -- Yoshida 2016 is 0.56% of its citations and PETase
+       exists because of it -- because breaking out of your own lineage is what
+       a milestone does, and the citations that follow are the evidence. So:
+       everything that clears a low bar, ranked by how much this line of work
+       actually leans on it. */
+    const specificity = work => (work.support || 0) / Math.max(40, work.citations || 0);
+    /* A review summarises a step; it is not one. It can still hold an era when
+       nothing else does, but it yields to work that reported something. */
+    const strength = work => (work.support || 0) * (isReview(work) ? 0.5 : 1);
     const lay = rows => {
       const years = rows.map(work => work.year).sort((a, b) => a - b);
       const first = years[0] || seed.year, last = seed.year || years[years.length - 1];
@@ -1727,12 +1734,21 @@
         const era = Math.floor((work.year - first) / step);
         eraRows.set(era, [...(eraRows.get(era) || []), work]);
       }
+      /* One step an era, and a second only when the era holds another line of
+         work the lineage leans on nearly as hard. Across the whole line a
+         subject appears once: four rows on the same protein are one step
+         reported four times, not four steps. */
       const chosen = [];
-      for (const list of eraRows.values()) {
-        const ranked = [...list].sort((a, b) => strength(b) - strength(a));
-        chosen.push(ranked[0]);
-        const second = ranked.find(work => work !== ranked[0] && strength(work) >= strength(ranked[0]) * 0.8
-          && titleOverlap(work.title, ranked[0].title) < 0.4);
+      // Same subject, not merely a shared word: "Work A" and "Work B" overlap
+      // by half and have nothing in common.
+      const fresh = work => !chosen.some(held => sameSubject(held.title, work.title));
+      for (const era of [...eraRows.keys()].sort((a, b) => a - b)) {
+        const ranked = [...eraRows.get(era)].sort((a, b) => strength(b) - strength(a));
+        const first = ranked.find(fresh);
+        if (!first) continue;
+        chosen.push(first);
+        const second = ranked.find(work => work !== first && strength(work) >= strength(first) * 0.8
+          && !sameSubject(work.title, first.title) && fresh(work));
         if (second) chosen.push(second);
       }
       return {step, line: chosen.sort((a, b) => a.year - b.year || strength(b) - strength(a)).slice(0, 8)};
@@ -1750,21 +1766,46 @@
        A work the lineage leans on twice as hard as the bar is kept whatever
        its citation count -- that is a small field, not an obscure paper. */
     const noticed = (work, bar) => (work.citations || 0) >= 100 || work.support >= bar * 2;
+    /* The last few years are a blind spot by construction: a paper's siblings
+       were written before the work that came out beside them, so nothing in
+       the bibliography can cite it yet. BREX is missing from a 2017 paper for
+       that reason and present in a 2026 one. In that window the gate comes
+       off and the weight of the lineage decides alone. */
+    /* Two years, not three: at three, a 2012 paper on another subject entirely
+       -- cited five thousand times, a tenth of a percent of them from here --
+       walked into a 2015 paper's history through the exemption. The window
+       still covers what siblings truly could not have cited, and inside it the
+       gate is loosened rather than lifted. */
+    const RECENT = 2;
+    const recent = work => seed.year && work.year >= seed.year - RECENT;
     let bar = 0, laid = {step: 0, line: []};
-    for (const [share, least] of [[0.15, 0.008], [0.1, 0.008], [0.07, 0.006], [0.05, 0.004], [0.03, 0]]) {
+    /* The gate is a floor and stays where it is: letting it fall with the
+       support bar put two m6A papers, 0.1% of their citations, into a type III
+       restriction enzyme's history. */
+    const GATE = 0.003;
+    for (const share of [0.15, 0.1, 0.07, 0.05, 0.03]) {
       bar = Math.max(3, Math.ceil(counted * share));
       const rows = [...support.entries()].filter(([, n]) => n >= bar)
         .sort((a, b) => b[1] - a[1]).slice(0, 80)
         .map(([id, n]) => { const work = byID.get(id); return work && {...work, support: n}; })
-        .filter(work => usable(work) && strength(work) >= least && noticed(work, bar))
-        .sort((a, b) => strength(b) - strength(a) || b.support - a.support);
+        .filter(work => usable(work) && noticed(work, bar)
+          && specificity(work) >= (recent(work) ? GATE / 2 : GATE))
+        .sort((a, b) => strength(b) - strength(a) || (b.citations || 0) - (a.citations || 0));
       laid = lay(rows);
       if (laid.line.length >= want) break;
     }
     const line = laid.line.map(work => ({...work,
       inLibrary: !!work.doi && owned.has(text(work.doi).toLowerCase()),
       cited: cites.has(work.id)}));
-    return line.length ? {line, span: laid.step, bar, seedYear: seed.year || null} : null;
+    /* A bibliography too small or too scattered to carry a lineage gets no
+       line. An arbitrary one is worse than none: the reader recognises it as
+       wrong and stops trusting the rest of the panel. */
+    /* One work leaned on six times is not a lineage -- a twelve-reference
+       paper can produce that by accident, and then every other row sits at
+       three. Three works at five or more is what a line of development looks
+       like from below. */
+    if (line.length < 3 || line.filter(work => (work.support || 0) >= 5).length < 3) return null;
+    return {line, span: laid.step, bar, seedYear: seed.year || null};
   }
 
   /* Depth in the dependency order: 0 for a work that builds on nothing else in

@@ -231,11 +231,13 @@
 #style-custom-workbench .sc-shell nav button[data-tab].active .sc-nav-icon,
 #style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] .sc-nav-icon { color: currentColor; }
 #style-custom-workbench .sc-shell nav button[data-tab]:hover { background: rgba(0, 0, 0, .05); }
-/* The only saturated slab in a neutral shell pulled the eye to the rail and
-   held it there. The current section is marked, not lit: a soft ground, the
-   accent on the word itself, and a bar on the edge it belongs to. */
+/* The current section is a plain grey row in the text's own ink, a step
+   darker than hover -- the way a list marks its selection. A coloured bar on
+   the row's rounded edge read as a painted fingernail (2026-09-25), and a
+   saturated fill before it pulled the eye to the rail; the user wants the
+   chrome plain, so the colour stays out of it. */
 #style-custom-workbench .sc-shell nav button[data-tab].active,
-#style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-accent-soft); color: var(--sc-accent); font-weight: 600; box-shadow: inset 3px 0 0 var(--sc-accent); }
+#style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-fill-active); color: var(--sc-text); font-weight: 600; box-shadow: none; }
 #style-custom-workbench .sc-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
 #style-custom-workbench .sc-context { flex-shrink: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; padding: calc(var(--sc-band) + 4px) var(--sc-content-padding) var(--sc-band); border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-section-title { margin: 0; font: 600 19px/1.35 var(--sc-title-font); letter-spacing: -.02em; }
@@ -1206,9 +1208,10 @@
 #style-custom-workbench .sc-welcome:has(~ .sc-notice:not([hidden])) { display: none; }
 @media (prefers-color-scheme: dark) {
   /* The soft accent fill sits within a hair of the header's own colour in the
-     dark theme, so the banner read as more chrome. An edge says it instead. */
+     dark theme, so the banner read as more chrome. A lighter surface and a
+     plain rule part it from the page -- no coloured bar down its edge. */
   #style-custom-workbench .sc-notice,
-  #style-custom-workbench .sc-welcome { background: var(--sc-surface-alt); box-shadow: inset 3px 0 0 var(--sc-accent); }
+  #style-custom-workbench .sc-welcome { background: var(--sc-fill); box-shadow: none; border-block-color: var(--sc-border-strong); }
 }
 
 /* Arrived from the item menu on one person: the paper they came from, and the
