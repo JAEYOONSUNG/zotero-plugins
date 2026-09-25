@@ -490,7 +490,11 @@ test('following an author adds them to the panel and surfaces what is new next t
  // Everything already published becomes the baseline.
  const saved=f.calls.find(c=>c[0]==='watchAuthor')[1];
  assert.deepEqual(saved.seen,['W9']);
- assert.match(f.body().textContent,/마지막 확인 이후 새 논문 1/);
+ // What is new sits in one box under the name, headed by the date it counts from.
+ const news=f.body().querySelector('.sc-author-news');
+ assert.ok(news,'the news has a box of its own');
+ assert.match(news.querySelector('.sc-author-head').textContent,/^마지막 확인 이후/);
+ assert.match(news.textContent,/새 논문 1편/);
 
  // Re-opening the tab lists them, so they can be checked without the paper in hand.
  await f.bench.show('explore');await f.bench.show('authors');

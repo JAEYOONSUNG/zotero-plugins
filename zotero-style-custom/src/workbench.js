@@ -2063,8 +2063,19 @@
    // The watchlist is drawn first and unconditionally: it is a list of people
    // being followed, and hiding it until a paper happened to be selected made
    // every followed author invisible.
-   const watchArea=node('div',null,body);
-   const list=node('div',null,body);
+   const watchArea=node('div',null,body,{class:'sc-author-watch'});
+   // The person being looked at is a region of its own, ruled off from the
+   // watchlist above it: the two ran together as one page of names.
+   const list=node('div',null,body,{class:'sc-author-page'});
+   /* A section of the author page: its name in the text's ink with the count
+      beside it, over a rule. The generic group label (10px, grey, capitals)
+      was smaller than the rows under it, so every section ran into the next. */
+   const section=(label,count,parent=list)=>{
+    const h=node('h3',null,parent,{class:'sc-hit-group sc-author-head'});
+    node('span',T(label),h,{class:'sc-author-head-name'});
+    if(count!=null&&count!=='')node('span',String(count),h,{class:'sc-author-head-count'});
+    return h;
+   };
    let item=null;
    try{item=one();}catch(_){item=null;}
    async function show(person){
@@ -2114,46 +2125,45 @@
       await show(person);
      }),follow);
     }
-    if(watching&&fresh.length){
-     node('h3',`마지막 확인 이후 새 논문 ${fresh.length}`,list,{class:'sc-hit-group'});
-     hitList(fresh,list);
-    }
+    /* Everything new since the last look sits in one box, first: a new paper,
+       a first-time co-author, a move and a new filing are one answer to one
+       question -- what has this person done lately -- and were four sections
+       scattered down the page. */
     const stored=(runtime.watchedAuthors?.()||[]).find(row=>row.id===person.id);
-    if(stored&&stored.newCoauthors&&stored.newCoauthors.length){
-     /* A name not on any of their earlier papers is a collaboration starting,
-        which tends to come before the topic shift it produces. */
-     node('h3',`처음 함께 낸 저자 ${stored.newCoauthors.length}`,list,{class:'sc-hit-group'});
-     const fresh=node('div',null,list,{class:'sc-network'});
-     for(const name of stored.newCoauthors){
-      const chip=node('span',name,fresh,{class:'sc-network-node sc-network-fresh',title:'마지막 확인 이후 처음 같이 낸 저자'});
+    const newCoauthors=stored?.newCoauthors||[];
+    const moved=stored?.moved?.to?stored.moved:null;
+    const newPatents=stored?.newPatents?.length||0;
+    const hasNews=(watching&&fresh.length)||newCoauthors.length||moved||newPatents;
+    const news=hasNews?node('section',null,list,{class:'sc-author-news','aria-label':T('마지막 확인 이후')}):null;
+    if(news){
+     section('마지막 확인 이후',checkedAt?checkedAt.slice(0,10):'',news);
+     if(moved){
+      const line=node('p',null,news,{class:'sc-author-news-line'});
+      node('span',T('소속 이동'),line,{class:'sc-author-news-label'});
+      node('span',`${moved.from||'?'} → ${moved.to}${moved.since?` · ${moved.since}년부터`:''}`,line);
      }
-    }
-    if(stored&&stored.moved&&stored.moved.to){
-     const callout=node('div',null,list,{class:'sc-watch-callout'});setIcon(callout,'backlinks');node('span',stored.moved.since?`소속 이동 · ${stored.moved.from||'?'} → ${stored.moved.to} · ${stored.moved.since}년부터 · ${stored.moved.at||''} 확인`:`소속 이동 · ${stored.moved.from||'?'} → ${stored.moved.to} · ${stored.moved.at||''} 확인`,callout);
-     head.insertAdjacentElement('afterend',callout);
-    }
-    if(stored&&stored.patents&&stored.patents.length){
-     /* A filing is the earliest public sign of where a lab is heading, often
-        a year before the paper; the new ones since the last look are marked. */
-     node('h3',stored.newPatents?.length?`특허 ${stored.patents.length} · 새 ${stored.newPatents.length}`:`특허 ${stored.patents.length}`,list,{class:'sc-hit-group'});
-     const box=node('div',null,list,{class:'sc-hits'});
-     for(const patent of stored.patents){
-      const c=node('div',null,box,{class:'sc-hit sc-patent'+(patent.fresh?' sc-patent-fresh':'')});
-      const head=node('p',null,c,{class:'sc-hit-title'});
-      if(patent.fresh)node('span','새',head,{class:'sc-tag sc-new',title:'마지막 확인 이후 새로 보인 특허'});
-      node('span',patent.title,head);
-      node('p',[patent.id,patent.granted?`등록 ${patent.granted}`:patent.filed?`출원 ${patent.filed}`:'',patent.applicants?.[0]||'',patent.status||''].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
-      const actions=node('div',null,c,{class:'sc-hit-actions'});
-      if(patent.link)button('열기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(patent.link),actions);
+     if(newCoauthors.length){
+      /* A name not on any of their earlier papers is a collaboration starting,
+         which tends to come before the topic shift it produces. */
+      const line=node('p',null,news,{class:'sc-author-news-line'});
+      node('span',T('처음 함께 낸 저자'),line,{class:'sc-author-news-label'});
+      node('span',newCoauthors.join(', '),line,{title:'마지막 확인 이후 처음 같이 낸 저자'});
      }
-    }else if(stored&&typeof runtime.patentsKey==='function'&&!runtime.patentsKey()){
-     node('p','특허 확인은 설정에 USPTO Open Data Portal 키를 넣으면 켜집니다 (무료).',list,{class:'sc-muted'});
+     if(newPatents){
+      const line=node('p',null,news,{class:'sc-author-news-line'});
+      node('span',T('새 특허'),line,{class:'sc-author-news-label'});
+      node('span',T(`${newPatents}건 · 아래 특허 목록에 표시`),line);
+     }
+     if(watching&&fresh.length){
+      node('p',T(`새 논문 ${fresh.length}편`),news,{class:'sc-author-news-label sc-author-news-sub'});
+      hitList(fresh,news);
+     }
     }
     // The circle of colleagues, out of the works already in hand: no request of
     // its own, and an edge exists because two names are on the same paper.
     const circle=runtime.coauthorsOf?.(person.id,works)||[];
     if(circle.length){
-     node('h3',`함께 낸 저자 ${circle.length}`,list,{class:'sc-hit-group'});
+     section('함께 낸 저자',circle.length);
      const net=node('div',null,list,{class:'sc-network'});
      const most=circle[0].papers||1;
      for(const mate of circle){
@@ -2171,9 +2181,29 @@
       chip.title=[mate.name,mate.institution,`공저 ${mate.papers}편`,...(mate.titles||[])].filter(Boolean).join('\n');
      }
     }
-    node('h3',`최근 논문 ${works.length}`,list,{class:'sc-hit-group'});
+    section('최근 논문',works.length);
     if(!works.length)node('p','최근 논문을 찾지 못했습니다.',list,{class:'sc-muted'});
     else hitList(works,list);
+    // Filings last: they are the rarest and the least often read, and the new
+    // ones are already named in the box at the top.
+    if(stored&&stored.patents&&stored.patents.length){
+     /* A filing is the earliest public sign of where a lab is heading, often
+        a year before the paper; the new ones since the last look are marked. */
+     section('특허',stored.newPatents?.length?`${stored.patents.length} · 새 ${stored.newPatents.length}`:stored.patents.length);
+     const box=node('div',null,list,{class:'sc-hits'});
+     for(const patent of stored.patents){
+      const c=node('div',null,box,{class:'sc-hit sc-patent'+(patent.fresh?' sc-patent-fresh':'')});
+      const head=node('p',null,c,{class:'sc-hit-title'});
+      if(patent.fresh)node('span','새',head,{class:'sc-tag sc-new',title:'마지막 확인 이후 새로 보인 특허'});
+      node('span',patent.title,head);
+      node('p',[patent.id,patent.granted?`등록 ${patent.granted}`:patent.filed?`출원 ${patent.filed}`:'',patent.applicants?.[0]||'',patent.status||''].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
+      const actions=node('div',null,c,{class:'sc-hit-actions'});
+      if(patent.link)button('열기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(patent.link),actions);
+     }
+    }else if(stored&&typeof runtime.patentsKey==='function'&&!runtime.patentsKey()){
+     node('p','특허 확인은 설정에 USPTO Open Data Portal 키를 넣으면 켜집니다 (무료).',list,{class:'sc-muted'});
+    }
+
     message(`${works.length}편 · 이미 보유 ${works.filter(w=>w.inLibrary).length}편`
      +(watching?` · 새 논문 ${fresh.length}편`+(checkedAt?` · 마지막 확인 ${checkedAt.slice(0,10)}`:''):''));
    }
@@ -2317,7 +2347,7 @@
      list.insertBefore(back,list.firstChild);
      return;
     }
-    node('h3',`이 논문의 저자 ${people.length}`,list,{class:'sc-hit-group'});
+    section('이 논문의 저자',people.length);
     message(`저자 ${people.length}명. 이름을 눌러 최근 작업을 확인하세요.`);
     const authors=node('div',null,list,{class:'sc-hits'});
     for(const person of people){

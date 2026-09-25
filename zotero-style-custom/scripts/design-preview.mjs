@@ -28,7 +28,11 @@ async function mountDemo(win,Workbench,Model,ReadingPath){
    news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},
          {id:'W2',title:'A portable recombinase toolkit',venue:'Nature Methods',date:'2026-07-18'}]},
   {id:'A2',name:'Jennifer A. Doudna',institution:'UC Berkeley',seen:[],
-   news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21'}]},
+   news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21'}],
+   newCoauthors:['Priya Natarajan','Luis Ortega'],
+   moved:{from:'UC Berkeley',to:'Gladstone Institutes',since:2026,at:'2026-09-01'},
+   patents:[{id:'US 12,345,678',title:'Compositions for programmable RNA targeting',granted:'2026-05-12',applicants:['Example University'],fresh:true,link:''}],
+   newPatents:[{id:'US 12,345,678'}]},
   {id:'A3',name:'George M. Church',institution:'Harvard University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A4',name:'Brian Hie',institution:'Stanford University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A5',name:'Tom Ellis',institution:'Imperial College London',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
@@ -52,6 +56,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath){
   },
   backfillSummary:()=>'철회·공개접근 신호: 1145편 확인 · 1편은 기록 없음\n저널 지표: 160종 확인 · 9종은 OpenAlex에도 없음\n관심 저자: 2명이 새 논문 3편',
   watchedAuthors:()=>watched,
+  patentsKey:()=>'demo',
   coauthorsOf:()=>[
    {id:'A21',name:'Samuel H. Sternberg',institution:'Columbia University',papers:9,last:2026,titles:['A shared paper']},
    {id:'A22',name:'Martin Jinek',institution:'University of Zurich',papers:6,last:2025,titles:[]},
@@ -68,7 +73,11 @@ async function mountDemo(win,Workbench,Model,ReadingPath){
   clearAuthorNews:demoAction,watchAuthor:demoAction,unwatchAuthor:demoAction,markAuthorSeen:demoAction,
   // The panel's own formatter, so the preview shows what Zotero shows.
   formatReadTime:seconds=>{const v=Math.max(0,Math.floor(Number(seconds)||0));const h=Math.floor(v/3600),m=Math.floor(v%3600/60),x=v%60;return h?`${h}h ${m}m ${x}s`:m?`${m}m ${x}s`:`${x}s`;},
-  authorsOfCached:async()=>[],
+  // The paper's authors, fictional, so the author page draws every section.
+  authorsOfCached:async()=>[
+   {id:'A2',name:'Jennifer A. Doudna',institution:'UC Berkeley',position:'last'},
+   {id:'A30',name:'Mina Kim',institution:'Example University',position:'first'},
+   {id:'A31',name:'Alex Rivera',institution:'Example Institute',position:'middle'}],
   /* The reading order, drawn by the real planner over a fictional citation
      graph: eight made-up works whose reference lists point at each other, so
      the preview shows the same rows Zotero would draw, with no network. */
@@ -110,8 +119,12 @@ async function mountDemo(win,Workbench,Model,ReadingPath){
   authorUpdates:async()=>({profile:{name:'Jennifer A. Doudna',hIndex:178,works:512,citations:198432,
     institutions:['UC Berkeley'],topics:[{name:'CRISPR',count:212},{name:'RNA biology',count:88},{name:'Genome editing',count:64}],
     orcid:'https://orcid.org/0000-0001-0000-0000'},
-   works:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna','S. Sternberg']},
-    {id:'W2',title:'Structural basis of a compact RNA-guided nuclease',venue:'Nature',year:2026,citations:4,openAccess:false,authors:['J. Doudna']}],
+   works:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna','S. Sternberg','P. Natarajan']},
+    {id:'W2',title:'Structural basis of a compact RNA-guided nuclease',venue:'Nature',year:2026,citations:4,openAccess:false,authors:['J. Doudna','L. Ortega']},
+    {id:'W4',title:'Delivery of editing enzymes across tissue barriers',venue:'Cell',year:2025,citations:61,openAccess:true,authors:['J. Doudna','S. Sternberg']},
+    {id:'W5',title:'Guide design rules learned from a million targets',venue:'Nature Biotechnology',year:2025,citations:88,openAccess:false,authors:['J. Doudna','M. Jinek']},
+    {id:'W6',title:'An RNA-guided transposase for large insertions',venue:'Science',year:2025,citations:140,openAccess:true,authors:['J. Doudna','S. Sternberg','M. Jinek']},
+    {id:'W7',title:'Off-target profiling in primary human cells',venue:'Nature Methods',year:2024,citations:203,openAccess:false,authors:['J. Doudna','B. Oakes']}],
    fresh:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna']}],
    watching:true,checkedAt:'2026-09-18'}),selected:()=>[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,pageProgress:()=>({total:8,visited:4,percent:50,pages:{0:140,1:600,3:100,5:400},attachmentID:'9'})};
  runtime.Z={Items:{get:id=>refs.get(id),getAsync:async id=>refs.get(id)},Libraries:{userLibraryID:1},Prefs:{set:()=>{}},Utilities:{Internal:{copyTextToClipboard:()=>hint('예시 CSV를 만들었습니다. 이 미리보기에서는 클립보드를 변경하지 않습니다.')}},logError:error=>hint(String(error.message||error))};
