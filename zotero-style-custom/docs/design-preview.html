@@ -364,7 +364,7 @@
 /* Existing scientific views stay usable in both color schemes. */
 /* The map is as tall as it has papers to place; a fixed 16:10 frame left three
    nodes floating in an empty half-screen. */
-#style-custom-workbench .sc-graph { display: block; width: 100%; height: clamp(220px, calc(90px + var(--sc-graph-nodes, 6) * 46px), 70cqh); aspect-ratio: auto; max-height: 70cqh; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
+#style-custom-workbench .sc-graph { display: block; width: 100%; height: min(var(--sc-graph-height, 360px), 70cqh); aspect-ratio: auto; max-height: 70cqh; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
 #style-custom-workbench .sc-graph text { font: 11px var(--sc-font); }
 #style-custom-workbench .sc-graph-label[data-kind=external] { fill: var(--sc-external); }
 #style-custom-workbench .sc-segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--sc-radius); background: var(--sc-fill); }
@@ -846,11 +846,21 @@
    and a step larger than the grey label it replaces. */
 #style-custom-workbench .sc-author-page:not(:empty) { margin-block-start: 20px; padding-block-start: 14px; border-block-start: 1px solid var(--sc-border-strong); }
 #style-custom-workbench .sc-author-watch:empty + .sc-author-page { margin-block-start: 0; padding-block-start: 0; border-block-start: 0; }
-#style-custom-workbench .sc-author-head { display: flex; align-items: baseline; gap: 8px; margin: 26px 0 6px; padding: 0 0 6px;
+/* A settings page in parts: a heading, one line saying what the part changes,
+   its options one per line, its action under them. */
+#style-custom-workbench .sc-settings-part { margin-block-end: 8px; }
+#style-custom-workbench .sc-settings-note { margin: 0 0 8px; font-size: 12px; line-height: 1.5; }
+#style-custom-workbench .sc-settings-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+#style-custom-workbench .sc-settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 16px; }
+#style-custom-workbench .sc-settings-label { color: var(--sc-muted); font-size: 12px; }
+#style-custom-workbench .sc-settings-part textarea { min-height: 96px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+/* The heading every page's sections share (sectionHead in workbench.js). */
+#style-custom-workbench .sc-section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin: 26px 0 6px; padding: 0 0 6px;
   border-block-end: 1px solid var(--sc-border); color: var(--sc-text); font: 650 13px/1.4 var(--sc-font); letter-spacing: 0; text-transform: none; }
-#style-custom-workbench .sc-author-head-count { color: var(--sc-muted); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-section-head:first-child { margin-block-start: 4px; }
+#style-custom-workbench .sc-section-head-count { color: var(--sc-muted); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
 /* The heading's rule is the list's top edge; a second one under it read as a double line. */
-#style-custom-workbench .sc-author-head + .sc-hits { border-top: 0; }
+#style-custom-workbench .sc-section-head + .sc-hits { border-top: 0; }
 /* What is new since the last look: one plain box, first under the name. */
 #style-custom-workbench .sc-author-news { margin: 14px 0 0; padding: 10px 14px 6px; border-radius: var(--sc-radius-card);
   background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border); }
@@ -2310,6 +2320,461 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleReadingPath = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
+</script><script>/* A citation graph, built the way the paper-map tools build one.
+
+   The old graph joined papers that shared a tag or an author and drew every
+   node as the same grey dot. Sharing a tag is a fact about how the library was
+   filed, not about the papers; a graph of it tells you what you already typed.
+
+   What the field's tools actually map is the citation record. Two measures come
+   out of it, and only one is computable from what a library holds:
+
+     - bibliographic coupling: two papers that cite many of the same works are
+       working on the same problem. Both reference lists are in hand, so this is
+       arithmetic and costs no extra request.
+     - co-citation: two papers cited together by later work. That needs the
+       citing side, which means a request per paper and a far larger index, so
+       it is not attempted rather than approximated badly.
+
+   Direct citation is drawn too, and drawn differently: a paper citing another
+   is a stated fact, while coupling is an inference, and the picture should not
+   present the two as the same kind of line.
+
+   The third thing those tools give you is the work you have not got: a paper
+   that many of your own papers cite, which is not in the library. That falls
+   out of the same reference lists for free. */
+(function (root) {
+  'use strict';
+
+  const text = value => String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+  const pairKey = (a, b) => (a < b ? a + '>' + b : b + '>' + a);
+
+  /* Bibliographic coupling, normalised.
+
+     A plain count of shared references rewards review articles for having long
+     bibliographies. Dividing by the geometric mean of the two lengths asks
+     instead what fraction of each paper's reading the two have in common, which
+     is the question the picture is meant to answer. */
+  function coupling(a, b) {
+    if (!a || !b || !a.size || !b.size) return 0;
+    const small = a.size <= b.size ? a : b;
+    const large = a.size <= b.size ? b : a;
+    let shared = 0;
+    for (const id of small) if (large.has(id)) shared++;
+    if (!shared) return 0;
+    return {shared, score: shared / Math.sqrt(a.size * b.size)};
+  }
+
+  /* The work that cites yours, which your own shelf cannot tell you.
+
+     References point backwards: they say what a paper was built on. Who built
+     on it afterwards is the other half, and it is the half that says whether a
+     thread is still moving. It cannot be derived from a library -- the citing
+     papers are by definition ones you may not hold -- so it is fetched, and
+     folded in here as a third kind of node.
+
+     citedBy: {paperID: [{id, title, year, citations, venue}]}, from outside. */
+  function foldCitedBy(nodes, edges, citedBy, {minCiters = 2, maxNodes = 120} = {}) {
+    const byWork = new Map();
+    for (const node of nodes) if (node.openalex) byWork.set(node.openalex, node);
+    const outside = new Map();
+    for (const [paperID, list] of Object.entries(citedBy || {})) {
+      for (const citer of Array.isArray(list) ? list : []) {
+        const id = text(citer && citer.id);
+        if (!id || byWork.has(id)) continue;
+        const row = outside.get(id) || {
+          id: 'W:' + id, openalex: id, kind: 'external',
+          label: text(citer.title) || id, year: Number(citer.year) || null,
+          citations: Number(citer.citations) || 0, venue: text(citer.venue),
+          inLibrary: false, degree: 0, cites: []
+        };
+        row.cites.push(String(paperID));
+        outside.set(id, row);
+      }
+    }
+    /* Only work that cites more than one of your papers.
+
+       A paper that cites one of yours is the long tail -- thousands of them,
+       and almost all noise on a map of your own field. A paper that cites two
+       or three is working on your problem, which is the thing worth seeing. */
+    const kept = [...outside.values()]
+      .filter(row => new Set(row.cites).size >= minCiters)
+      .sort((a, b) => new Set(b.cites).size - new Set(a.cites).size || b.citations - a.citations)
+      .slice(0, maxNodes);
+    const added = [];
+    for (const row of kept) {
+      const {cites, ...node} = row;
+      added.push(node);
+      for (const paperID of new Set(cites)) {
+        edges.push({source: node.id, target: String(paperID), kind: 'cites', weight: 1, shared: 0, external: true});
+      }
+    }
+    return added;
+  }
+
+  /* papers: [{id, title, year, citations, venue, openalex, references: [...]}]
+
+     minShared guards against two papers that happen to share one methods
+     citation being drawn as neighbours; minScore against a pair that overlaps
+     only because both cite everything. */
+  function build(papers, {minShared = 3, minScore = 0.06, maxEdges = 900, missingFloor = 3,
+      citedBy = null, minCiters = 2, maxCiters = 120} = {}) {
+    const list = (Array.isArray(papers) ? papers : []).filter(paper => paper && paper.id != null);
+    const nodes = list.map(paper => ({
+      id: String(paper.id),
+      label: text(paper.title) || '(제목 없음)',
+      year: Number(paper.year) || null,
+      citations: Number(paper.citations) || 0,
+      venue: text(paper.venue),
+      openalex: text(paper.openalex),
+      references: new Set((Array.isArray(paper.references) ? paper.references : []).map(text).filter(Boolean)),
+      inLibrary: true, degree: 0
+    }));
+    const byWork = new Map();
+    for (const node of nodes) if (node.openalex) byWork.set(node.openalex, node);
+
+    const edges = [];
+    // Direct citation: a stated fact, and the only edge with a direction.
+    for (const node of nodes) {
+      for (const reference of node.references) {
+        const target = byWork.get(reference);
+        if (target && target !== node) {
+          edges.push({source: node.id, target: target.id, kind: 'cites', weight: 1, shared: 0});
+        }
+      }
+    }
+    const stated = new Set(edges.map(edge => pairKey(edge.source, edge.target)));
+
+    /* Coupling: an inference, drawn as an undirected thread.
+
+       Found through an inverted index rather than by comparing every pair.
+       Intersecting all n(n-1)/2 reference sets took 199ms at 600 papers and
+       grows as the square: most of that work compared two papers with nothing
+       whatever in common. Walking each shared reference instead only ever
+       touches pairs that do share something, and the vast majority of
+       references are cited by exactly one paper and cost nothing at all. */
+    const citers = new Map();
+    for (const [index, node] of nodes.entries()) {
+      for (const reference of node.references) {
+        const list = citers.get(reference);
+        if (list) list.push(index); else citers.set(reference, [index]);
+      }
+    }
+    const shared = new Map();
+    for (const list of citers.values()) {
+      if (list.length < 2) continue;
+      for (let a = 0; a < list.length; a++) {
+        for (let b = a + 1; b < list.length; b++) {
+          const key = list[a] * nodes.length + list[b];
+          shared.set(key, (shared.get(key) || 0) + 1);
+        }
+      }
+    }
+    for (const [key, count] of shared) {
+      if (count < minShared) continue;
+      const i = Math.floor(key / nodes.length), j = key % nodes.length;
+      const score = count / Math.sqrt(nodes[i].references.size * nodes[j].references.size);
+      if (score < minScore) continue;
+      if (stated.has(pairKey(nodes[i].id, nodes[j].id))) continue;
+      edges.push({source: nodes[i].id, target: nodes[j].id, kind: 'coupled',
+        weight: score, shared: count});
+    }
+
+    // The strongest threads first, so trimming a dense library keeps the
+    // structure rather than whichever pairs happened to be compared first.
+    edges.sort((a, b) => (b.kind === 'cites') - (a.kind === 'cites') || b.weight - a.weight);
+    const kept = edges.slice(0, maxEdges);
+    const byID = new Map(nodes.map(node => [node.id, node]));
+    for (const edge of kept) {
+      byID.get(edge.source).degree++;
+      byID.get(edge.target).degree++;
+    }
+
+    // Work the library cites but does not hold. This is the one thing a citation
+    // map tells you that reading your own shelf cannot.
+    const counts = new Map();
+    for (const node of nodes) {
+      for (const reference of node.references) {
+        if (byWork.has(reference)) continue;
+        const row = counts.get(reference) || {id: reference, citedBy: []};
+        row.citedBy.push(node.id);
+        counts.set(reference, row);
+      }
+    }
+    const missing = [...counts.values()]
+      .filter(row => row.citedBy.length >= missingFloor)
+      .sort((a, b) => b.citedBy.length - a.citedBy.length);
+
+    /* A paper nothing connects to is not part of the picture.
+
+       Drawn anyway, the unconnected ones form a ring around the outside -- the
+       repulsion has nothing to hold them in and gravity stops them leaving --
+       and that ring is most of the ink while carrying none of the structure.
+       They are counted and named instead, which is the useful form of the same
+       fact: these are the papers your library has nothing else about. */
+    const shaped = nodes.map(node => Object.assign({}, node,
+      {references: node.references.size, kind: 'paper', inLibrary: true}));
+    // The work that cites yours joins before the connectedness is decided: a
+    // paper of yours that nothing on your shelf touches may still sit under
+    // three later papers, and that is not an isolated paper.
+    const external = citedBy ? foldCitedBy(shaped, kept, citedBy, {minCiters, maxCiters}) : [];
+    const byID2 = new Map([...shaped, ...external].map(node => [node.id, node]));
+    for (const edge of kept) {
+      if (!edge.external) continue;
+      const a = byID2.get(edge.source), b = byID2.get(edge.target);
+      if (a) a.degree++;
+      if (b) b.degree++;
+    }
+    const everything = [...shaped, ...external];
+    const rank = pagerank(everything, kept);
+    for (const node of everything) node.rank = rank.get(node.id) || 0;
+    const connected = everything.filter(node => node.degree > 0);
+    const isolated = shaped.filter(node => !node.degree);
+    return {
+      nodes: connected, isolated, edges: kept, missing, external,
+      truncated: edges.length > kept.length,
+      counted: {direct: kept.filter(edge => edge.kind === 'cites' && !edge.external).length,
+        coupled: kept.filter(edge => edge.kind === 'coupled').length,
+        incoming: kept.filter(edge => edge.external).length,
+        external: external.length,
+        isolated: isolated.length}
+    };
+  }
+
+  /* How central a paper is inside this collection, rather than in the world.
+
+     Citation count answers "how famous is this"; it is the same number whether
+     you hold one paper or a thousand, and in a library of one field almost
+     everything famous is famous. What a map of your own reading should size by
+     is how much of *your* structure runs through a paper -- the review everyone
+     on your shelf cites, the method three of your threads depend on.
+
+     PageRank over the citation edges answers that. A paper gains weight from
+     being cited by papers that are themselves cited, and the damping factor is
+     the usual 0.85: with probability 0.15 a reader jumps somewhere at random
+     rather than following a reference. */
+  function pagerank(nodes, edges, {damping = 0.85, iterations = 40} = {}) {
+    const index = new Map(nodes.map((node, i) => [node.id, i]));
+    const n = nodes.length;
+    if (!n) return new Map();
+    const out = new Array(n).fill(0);
+    const links = [];
+    for (const edge of edges) {
+      // Only stated citations carry rank. A shared-reading thread is an
+      // inference about similarity, not a vote.
+      if (edge.kind !== 'cites') continue;
+      const from = index.get(String(edge.source)), to = index.get(String(edge.target));
+      if (from == null || to == null || from === to) continue;
+      links.push([from, to]);
+      out[from]++;
+    }
+    let rank = new Array(n).fill(1 / n);
+    for (let step = 0; step < iterations; step++) {
+      const next = new Array(n).fill((1 - damping) / n);
+      let sunk = 0;
+      for (let i = 0; i < n; i++) if (!out[i]) sunk += rank[i];
+      // A paper that cites nothing in the collection would otherwise leak its
+      // rank out of the graph entirely.
+      const spill = damping * sunk / n;
+      for (let i = 0; i < n; i++) next[i] += spill;
+      for (const [from, to] of links) next[to] += damping * rank[from] / out[from];
+      rank = next;
+    }
+    const top = Math.max(...rank);
+    return new Map(nodes.map((node, i) => [node.id, top > 0 ? rank[i] / top : 0]));
+  }
+
+  // A repeatable pseudo-random source: the same library has to lay out the same
+  // way twice, or every redraw looks like a different graph.
+  function seeded(seed) {
+    let state = (seed >>> 0) || 1;
+    return () => {
+      state ^= state << 13; state >>>= 0;
+      state ^= state >> 17;
+      state ^= state << 5; state >>>= 0;
+      return state / 4294967296;
+    };
+  }
+
+  /* Force-directed layout. Edges pull, every pair pushes, and the whole thing is
+     nudged toward the middle so a component with no edges out of it does not
+     drift off the canvas. */
+  function layout(graph, {width = 760, height = 480, iterations = 400, seed = 7, pad = 30} = {}) {
+    const nodes = ((graph && graph.nodes) || []).map(node => Object.assign({}, node));
+    if (!nodes.length) {
+      return {nodes: [], edges: (graph && graph.edges) || [], missing: (graph && graph.missing) || [],
+        isolated: (graph && graph.isolated) || []};
+    }
+    const random = seeded(seed);
+    /* How far apart the layout wants unrelated nodes.
+
+       These four numbers were swept against this library's real citation graph
+       rather than chosen: strong repulsion with a weak pull, run long. At the
+       first values 410 pairs of the 124 connected papers sat closer together
+       than their own labels; at these, 40 do, and the drawing uses a third more
+       of the canvas. */
+    const k = Math.sqrt(width * height / nodes.length) * 2.8;
+    const index = new Map();
+    nodes.forEach((node, i) => {
+      index.set(node.id, i);
+      // A spiral start rather than a random one: deterministic, and it settles
+      // faster because it begins with the nodes already spread out.
+      const angle = i * 2.399963;
+      const radius = Math.sqrt(i / nodes.length) * Math.min(width, height) * 0.42;
+      node.x = width / 2 + Math.cos(angle) * radius + (random() - 0.5) * 4;
+      node.y = height / 2 + Math.sin(angle) * radius + (random() - 0.5) * 4;
+      node.vx = 0; node.vy = 0;
+      // Every node keeps its drawn size, so the layout can refuse to let two of
+      // them sit on top of each other.
+      node.r = radiusOf(node.citations);
+    });
+    const edges = ((graph && graph.edges) || [])
+      .map(edge => Object.assign({}, edge, {a: index.get(String(edge.source)), b: index.get(String(edge.target))}))
+      .filter(edge => edge.a != null && edge.b != null);
+
+    for (let step = 0; step < iterations; step++) {
+      const cooling = 1 - step / iterations;
+      for (const node of nodes) { node.vx = 0; node.vy = 0; }
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          let dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+          let distance = Math.hypot(dx, dy);
+          if (distance < 0.01) { dx = random() - 0.5; dy = random() - 0.5; distance = 0.01; }
+          const force = (k * k) / distance;
+          const fx = dx / distance * force, fy = dy / distance * force;
+          nodes[i].vx += fx; nodes[i].vy += fy;
+          nodes[j].vx -= fx; nodes[j].vy -= fy;
+        }
+      }
+      for (const edge of edges) {
+        const a = nodes[edge.a], b = nodes[edge.b];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const distance = Math.max(0.01, Math.hypot(dx, dy));
+        /* The pull is linear in distance, not quadratic.
+
+           Squared, a tight cluster collapsed into a single unreadable blob: the
+           closer two papers got the harder they were dragged together, so the
+           middle of the graph became one dot with forty labels on it. Linear
+           attraction settles at a spacing instead of at a point. */
+        const pull = distance / k * 4 * (edge.kind === 'cites' ? 1.2 : 0.5 + edge.weight);
+        const fx = dx / distance * pull, fy = dy / distance * pull;
+        a.vx -= fx; a.vy -= fy;
+        b.vx += fx; b.vy += fy;
+      }
+      const limit = Math.max(2, Math.min(width, height) / 14 * cooling);
+      for (const node of nodes) {
+        // Just enough gravity to keep a detached component on the canvas.
+        node.vx += (width / 2 - node.x) * 0.004;
+        node.vy += (height / 2 - node.y) * 0.004;
+        const speed = Math.hypot(node.vx, node.vy) || 1;
+        const scale = Math.min(1, limit / speed);
+        node.x += node.vx * scale;
+        node.y += node.vy * scale;
+      }
+      // Nothing may sit on top of anything else. Without this the dense middle
+      // of a real library is a pile of circles with the labels unreadable.
+      /* Overlap resolution every fourth step, and on the last dozen.
+
+         Run every step it was half the layout's cost for nothing: the forces
+         move nodes a little each iteration, so pushing circles apart on every
+         one of them redoes work the next iteration undoes. Measured over this
+         library's graph, every fourth step reaches the same spacing -- forty
+         crowded pairs either way -- and the run drops from 302ms to 124ms.
+         The final passes are what actually settle it. */
+      if (step % 4 === 0 || step > iterations - 12) {
+        separate(nodes, random, step > iterations * 0.4 ? 1 : 0.5);
+      }
+    }
+    for (let extra = 0; extra < 14; extra++) separate(nodes, random, 1);
+
+    // Fit to the box, leaving room for a label.
+    const xs = nodes.map(node => node.x), ys = nodes.map(node => node.y);
+    const minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+    const minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+    const scale = Math.min((width - pad * 2) / Math.max(1, maxX - minX),
+      (height - pad * 2) / Math.max(1, maxY - minY));
+    for (const node of nodes) {
+      node.x = pad + (node.x - minX) * scale;
+      node.y = pad + (node.y - minY) * scale;
+      delete node.vx; delete node.vy;
+      // Kept, because label placement has to know how far out to start.
+      node.r = radiusOf(node.citations) * (0.7 + 0.6 * (node.rank || 0));
+    }
+    return {nodes, edges: (graph && graph.edges) || [], missing: (graph && graph.missing) || [],
+      isolated: (graph && graph.isolated) || [],
+      truncated: !!(graph && graph.truncated), counted: graph && graph.counted};
+  }
+
+  // Push apart any two nodes whose drawn circles overlap, plus a gap for the
+  // stroke. Run inside the loop so the forces settle around real sizes.
+  function separate(nodes, random, strength) {
+    const gap = 9;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const want = a.r + b.r + gap;
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let distance = Math.hypot(dx, dy);
+        if (distance >= want) continue;
+        if (distance < 0.01) { dx = random() - 0.5; dy = random() - 0.5; distance = 0.01; }
+        const shift = (want - distance) / distance * 0.5 * strength;
+        const ox = dx * shift, oy = dy * shift;
+        a.x -= ox; a.y -= oy;
+        b.x += ox; b.y += oy;
+      }
+    }
+  }
+
+  /* Which nodes get a label, decided by whether the label fits.
+
+     Showing a label for everything above a threshold put forty of them on top
+     of each other in the middle of a real graph, which is worse than showing
+     none: overlapping text is not readable and it hides the nodes underneath.
+
+     So labels are placed in order of what matters most and each is kept only if
+     its box misses everything already placed. The result is that the busiest
+     part of the picture -- where the labels would collide -- shows the few that
+     earned it, and the sparse edges show many. */
+  function placeLabels(nodes, {charWidth = 5.2, lineHeight = 11, limit = 60, pad = 2} = {}) {
+    const wanted = [...nodes]
+      // Work you do not hold is the payoff of the whole map, so it is offered a
+      // label before a paper already on the shelf.
+      .sort((a, b) => (b.kind === 'external') - (a.kind === 'external')
+        || (b.rank || 0) - (a.rank || 0) || b.degree - a.degree);
+    const placed = [];
+    const shown = new Set();
+    for (const node of wanted) {
+      if (shown.size >= limit) break;
+      const text = String(node.labelText == null ? node.label : node.labelText);
+      if (!text) continue;
+      const r = node.r || 6;
+      const box = {
+        x: node.x + r + 3 - pad,
+        y: node.y - lineHeight / 2 - pad,
+        w: text.length * charWidth + pad * 2,
+        h: lineHeight + pad * 2
+      };
+      const clash = placed.some(other =>
+        box.x < other.x + other.w && box.x + box.w > other.x
+        && box.y < other.y + other.h && box.y + box.h > other.y);
+      if (clash) continue;
+      placed.push(box);
+      shown.add(node.id);
+    }
+    return shown;
+  }
+
+  // Node size: citation counts span orders of magnitude, so the radius follows
+  // the log, and a paper with none is still a dot rather than a point.
+  function radiusOf(citations, {min = 3.5, max = 13} = {}) {
+    const value = Math.max(0, Number(citations) || 0);
+    return min + (max - min) * Math.min(1, Math.log10(value + 1) / Math.log10(2001));
+  }
+
+  const api = {build, layout, coupling, radiusOf, seeded, pagerank, foldCitedBy, placeLabels};
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.CustomStylePaperGraph = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
 </script><script>/* User-opened, in-window research workspace. Never opens itself or another app. */
 (function(root){
  'use strict';
@@ -2830,6 +3295,18 @@
   // The headline and its detail go in their own block so that everything a
   // caller appends afterwards -- buttons, checkboxes, selects -- lands in one
   // row beside them instead of stacking into a ninety-pixel card.
+  /* A section of a page: its name in the text's ink, the count beside it in
+     grey, over a rule. Every tab used to make its own -- an 11px grey capital
+     label on one, a 19px title on another, none on a third -- so no two pages
+     could be read the same way. */
+  function sectionHead(label,count,parent=body,extra=''){
+   const h=node('h3',null,parent,{class:'sc-hit-group sc-section-head'+(extra?' '+extra:'')});
+   node('span',T(label),h,{class:'sc-section-head-name'});
+   // A real space between name and count, not only the gap the layout draws:
+   // read as text, "논문1" is one word.
+   if(count!=null&&count!==''){h.appendChild(doc.createTextNode(' '));node('span',String(count),h,{class:'sc-section-head-count'});}
+   return h;
+  }
   function card(title,subtitle,parent=body){
    const c=node('article',null,parent,{class:'sc-card'});
    const text=node('div',null,c,{class:'sc-card-text'});
@@ -2958,10 +3435,15 @@
   /* The frame follows the map: three papers do not need the height of thirty.
      Both drawing paths go through here, because the one that did not set the
      count fell back to twelve and drew taller than the fixed frame it replaced. */
+  /* The drawing's own height follows the frame's. Shrinking only the frame
+     left an 860x540 drawing fitted into 228 pixels, which scaled 11px labels to
+     under 5px. Same formula as the CSS height, so the scale stays near one. */
+  const graphHeight=nodes=>Math.max(220,Math.min(540,90+Math.max(1,nodes||0)*46));
   function graphCanvas(W,H,nodes,label){
    const svg=doc.createElementNS(SVG,'svg');
    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
-   svg.style.setProperty('--sc-graph-nodes',String(Math.max(1,nodes||0)));
+   // The frame takes the drawing's own height, so the two cannot disagree.
+   svg.style.setProperty('--sc-graph-height',H+'px');
    svg.setAttribute('aria-label',label);body.appendChild(svg);
    return svg;
   }
@@ -3008,7 +3490,7 @@
     drawLegacyGraph(b);
     return;
    }
-   const W=860,H=540;
+   const W=860,H=graphHeight(chosen.length);
    const items=chosen.map(paper=>runtime.Z.Items.get(Number(paper.id))).filter(Boolean);
    const citedBy=typeof runtime.citedByFor==='function'?runtime.citedByFor(items):null;
    const withCiters=Object.keys(citedBy||{}).length;
@@ -3139,7 +3621,7 @@
    node('span','실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 네모는 내가 갖고 있지 않은 논문 · 크기는 이 라이브러리 안에서의 중심성 · 색은 출판사',zoomBar,{class:'sc-muted'});
    // The one thing a citation map tells you that reading your own shelf cannot.
    if(graph.missing.length){
-    node('h3',`내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문 ${graph.missing.length}`,body,{class:'sc-hit-group'});
+    sectionHead('내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문',graph.missing.length);
     const list=node('div',null,body,{class:'sc-hits'});
     for(const row of graph.missing.slice(0,25)){
      const c=node('div',null,list,{class:'sc-hit'});
@@ -3152,7 +3634,7 @@
    // The papers nothing connects to are named rather than drawn: as a ring round
    // the outside they were most of the ink and none of the structure.
    if(graph.isolated&&graph.isolated.length){
-    node('h3',`이 범위에서 연결이 없는 논문 ${graph.isolated.length}`,body,{class:'sc-hit-group'});
+    sectionHead('이 범위에서 연결이 없는 논문',graph.isolated.length);
     const list=node('div',null,body,{class:'sc-hits'});
     for(const n of graph.isolated.slice(0,30)){
      const c=node('div',null,list,{class:'sc-hit'});
@@ -3176,7 +3658,7 @@
    const limit=setting('graphNodeLimit',180);
    const raw=library.graph(rows().slice(0,limit),{mode:state.graphMode==='citations'?'related':state.graphMode});
    if(!raw.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
-   const W=860,H=540;
+   const W=860,H=graphHeight(raw.nodes.length);
    /* The good layout when it is there, the old placer when it is not.
 
       The layout lives on the runtime as an optional module. Reaching for it
@@ -3256,7 +3738,7 @@
    node('p','노트를 붙일 문헌을 하나 고르세요. 열려 있는 논문·최근 문헌에서 누르거나, 위 검색창으로 찾으세요.',body,{class:'sc-muted'});
    const open=[];
    try{for(const tab of (typeof reader?.tabs==='function'?reader.tabs(win):[])){if(!tab.itemID)continue;const ref=runtime.Z?.Items?.get?.(Number(tab.itemID));const paper=(ref?.parentID&&byId(ref.parentID))||byId(tab.itemID);if(paper&&!open.some(i=>String(i.id)===String(paper.id)))open.push(paper);}}catch(error){runtime.Z?.logError?.(error);}
-   if(open.length){node('h3','지금 열려 있는 논문',body);const b=bar();for(const it of open)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
+   if(open.length){sectionHead('지금 열려 있는 논문',open.length);const b=bar();for(const it of open)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
    const when=v=>typeof v==='number'?(Number.isFinite(v)?v:0):(Date.parse(v||'')||0);
    const activity=it=>Math.max(when(it.lastRead),when(it.dateModified),when(it.dateAdded));
    const list=rows();
@@ -3265,7 +3747,8 @@
    const offered=new Set(open.map(i=>String(i.id)));
    const rest=list.filter(i=>!offered.has(String(i.id)));
    const shown=(state.query?model.rankByQuery(rest,state.query):[...rest].sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id)))).slice(0,12);
-   node('h3',state.query?(list.length>12?`검색 결과 ${list.length}편 중 12편`:`검색 결과 ${list.length}편`):'최근 문헌',body);
+   if(state.query)sectionHead('검색 결과',list.length>12?`${list.length}편 중 12편`:`${list.length}편`);
+   else sectionHead('최근 문헌',list.length?`${list.length}편`:'');
    if(shown.length){const b=bar();for(const it of shown)button(String(it.title||'').slice(0,60),()=>pick(it),b,{'data-pick':String(it.id),title:it.title});}
    else empty(state.query?'검색에 맞는 문헌이 없습니다. 검색어를 바꿔 보세요.':'이 범위에 문헌이 없습니다. 범위를 라이브러리로 바꾸세요.');
    const acts=bar();button('현재 선택 가져오기',()=>{const picked=runtime.selected(win);if(!picked.length){message('Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.',true);return;}state.selected=new Set(picked.slice(0,1).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});
@@ -3282,7 +3765,8 @@
    const own=target.length===1&&!state.query&&scoped().some(i=>String(i.id)===String(target[0].id));
    const notes=await scopeNotes(own?[String(target[0].id)]:ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>model.matches(n.title+' '+n.text,state.query)).sort((a,b)=>String(b.modified||'').localeCompare(String(a.modified||'')));const paperTitle=id=>state.items.find(i=>String(i.id)===String(id))?.title;
    const CAP=40;const listed=own?matching:matching.slice(0,CAP);
-   node('h3',own?`이 문헌의 노트 ${matching.length}개`:state.query?`검색된 노트 ${matching.length}개`:(matching.length>CAP?`최근 노트 ${CAP}개 (전체 ${matching.length}개)`:`이 범위의 노트 ${matching.length}개`),body);
+   sectionHead(own?'이 문헌의 노트':state.query?'검색된 노트':matching.length>CAP?'최근 노트':'이 범위의 노트',
+    matching.length>CAP&&!own&&!state.query?`${CAP}개 · 전체 ${matching.length}개`:`${matching.length}개`);
    for(const n of listed){const c=card(n.title,[paperTitle(n.parentID),String(n.modified||'').slice(0,10)].filter(Boolean).join(' · '));const text=node('p',n.text.length>1200?n.text.slice(0,1200)+'…':n.text,c,{class:'sc-note-text'});if(n.text.length>1200)button('전체 내용 보기',()=>{text.textContent=n.text;},c);if(!own&&n.parentID&&paperTitle(n.parentID))button('이 문헌에 노트 쓰기',()=>{state.selected=new Set([String(n.parentID)]);state.query=search.value='';render();},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
     // The list had no way to let a note go. Trash, not delete: Zotero's trash keeps it.
     button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);noteCache=null;await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':own?'이 문헌에는 아직 노트가 없습니다. 위에 첫 노트를 쓰세요.':'이 범위에 노트가 없습니다. 위에서 문헌을 골라 첫 노트를 쓰세요.');}
@@ -3559,7 +4043,7 @@
    }
    const section=(title,rows,tone,act)=>{
     if(!rows.length)return;
-    node('h3',`${title} ${rows.length}`,body,{class:'sc-hit-group'});
+    sectionHead(title,rows.length);
     const list=node('div',null,body,{class:'sc-hits'});
     for(const row of rows.slice(0,200)){
      const c=node('div',null,list,{class:'sc-hit'+(tone?' sc-hit-'+tone:'')});
@@ -3617,7 +4101,7 @@
    const list=await library.attachments(ids());if(token!==epoch||disposed)return;
    await drawFindings(token);
    if(token!==epoch||disposed)return;
-   if(list.length)node('h3',`선택한 문헌의 첨부파일 · ${list.length}`,body,{class:'sc-hit-group'});
+   if(list.length)sectionHead('선택한 문헌의 첨부파일',list.length);
    const matching=list.filter(a=>model.matches(a.title+' '+a.contentType,state.query));
    const kindWord=type=>({'application/pdf':'PDF','application/epub+zip':'EPUB','application/epub':'EPUB','text/html':T('스냅샷')})[type]||(type?String(type).split('/')[0]:'');
    for(const a of matching){const c=card(a.title,kindWord(a.contentType));button('열기',()=>library.openItem(a.id),c,{'data-opens':'window'});
@@ -3731,7 +4215,7 @@
      button('이 탭 외 문서 탭 닫기',()=>{const result=reader.closeOtherTabs(win,tab.id);render();message(`${result.closed}개 문서 탭을 닫았습니다.`);},c);
     }
    }
-   node('h2','저장된 탭 그룹',body);
+   sectionHead('저장된 탭 그룹');
    for(const group of reader.tabGroups()){
     const c=card(group.name,`${group.tabs.length}개 탭`),title=node('input',null,c,{'aria-label':'저장된 탭 그룹 이름'});title.value=group.name;title.dataset.draftKey=JSON.stringify(['tab-group-name',group.id]);
     button('복원',async()=>{const result=await reader.restoreTabGroup(win,group.id);await render();message(`복원 ${result.opened} · 찾지 못함 ${result.missing}`);},c);
@@ -3814,7 +4298,7 @@
    const chosen=values.slice(0,6);
    const key=JSON.stringify(chosen.map(paper=>paper.id));
    const section=node('section',null,body,{class:'sc-compare-insight','aria-label':'AI 논지·논쟁 분석'});
-   node('h3','주장·논리 흐름·논쟁 여지',section,{class:'sc-hit-group'});
+   sectionHead('주장·논리 흐름·논쟁 여지',null,section);
    const b=bar(section);
    if(!String(runtime.pref('aiEndpoint','')||'').trim())node('p','번역·AI 설정에 AI 서버 주소와 모델을 넣으면 켜집니다.',section,{class:'sc-muted'});
    node('span','언어',b,{class:'sc-muted'});
@@ -4299,7 +4783,7 @@
     for(const group of runtime.discoverTools.GROUPS){
      const rows=suggestions.filter(s=>s.source===group);
      if(!rows.length)continue;
-     node('h3',`${GROUP_LABELS[group]} ${rows.length}`,list,{class:'sc-hit-group'});
+     sectionHead(GROUP_LABELS[group],rows.length,list);
      node('p',GROUP_NOTES[group],list,{class:'sc-muted sc-hit-group-note'});
      hitList(rows,list);
     }
@@ -4382,12 +4866,7 @@
    /* A section of the author page: its name in the text's ink with the count
       beside it, over a rule. The generic group label (10px, grey, capitals)
       was smaller than the rows under it, so every section ran into the next. */
-   const section=(label,count,parent=list)=>{
-    const h=node('h3',null,parent,{class:'sc-hit-group sc-author-head'});
-    node('span',T(label),h,{class:'sc-author-head-name'});
-    if(count!=null&&count!=='')node('span',String(count),h,{class:'sc-author-head-count'});
-    return h;
-   };
+   const section=(label,count,parent=list)=>sectionHead(label,count,parent,'sc-author-head');
    let item=null;
    try{item=one();}catch(_){item=null;}
    async function show(person){
@@ -5167,18 +5646,47 @@
    for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);
    const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary'});
   }
+  /* The settings page as sections, each with its name, one line saying what it
+     changes, its options one per line, and its action under them. It was one
+     run of twenty-four checkboxes, a colour well, a number and two text boxes
+     with no headings, and nothing said which control belonged to which. */
   function drawAppearance(){
-   const menus=bar();menus.hidden=!enabled('menuVisibility');node('strong','작업 메뉴 표시',menus);
-   for(const [id,label]of TABS)if(id!=='appearance')check(T(label)+' 메뉴 표시',!hiddenTabs().has(id),on=>run(async()=>{const hidden=hiddenTabs();on?hidden.delete(id):hidden.add(id);runtime.cache.hiddenWorkbenchTabs=[...hidden];runtime.dirty=true;await runtime.flush();render();}),menus);
-   /* Resetting every menu at once does not belong in the row of eighteen
-      checkboxes it undoes; it sits under them, marked as a verb that removes. */
-   const menuReset=bar();menuReset.hidden=menus.hidden;
-   button('메뉴 기본값 복원',async()=>{runtime.cache.hiddenWorkbenchTabs=[];runtime.dirty=true;await runtime.flush();render();},menuReset,{class:'sc-danger-soft'});
-   button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),body);check('문서 탭 활동 시 수정일 갱신',runtime.pref('touchDateOnRead',false),on=>runtime.Z.Prefs.set('extensions.style-custom.touchDateOnRead',on,true),body);
-   node('p','Custom 패널과 추가 열의 표시를 조절합니다. PDF 색상은 읽기 진행에서 설정하세요.',body);const form=bar();const accent=node('input',null,form,{type:'color','aria-label':'강조 색상'});accent.value=runtime.pref('accentColor','#374151');const size=node('input',null,form,{type:'number',min:'11',max:'20','aria-label':'패널 글꼴 크기'});size.value=runtime.pref('panelFontSize',13);button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);},form);
-   check('제목 옆 색상·별점 태그',runtime.pref('titleTags',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleTags',on,true);runtime.refreshWindows();},body);check('안 읽은 제목 굵게',runtime.pref('unreadBold',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.unreadBold',on,true);runtime.refreshWindows();},body);check('제목 읽기 히트맵',runtime.pref('titleHeatmap',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleHeatmap',on,true);runtime.refreshWindows();},body);check('항목 아이콘 클릭으로 유형 필터',runtime.pref('quickTypeFilter',true),on=>runtime.Z.Prefs.set('extensions.style-custom.quickTypeFilter',on,true),body);
-   const customFields=node('input',null,body,{'aria-label':'추가 문헌 열','placeholder':'DOI, publisher, language'});customFields.value=runtime.pref('customFields','');button('추가 열 적용',async()=>{await runtime.setCustomFields(customFields.value);message('추가 열을 적용했습니다.');},body);
-   const css=node('textarea',null,body,{'aria-label':'Custom 패널 CSS',placeholder:'.sc-card { font-size: 13px; }'});css.value=runtime.pref('panelCSS','');css.hidden=!enabled('styleEditor');button('패널 CSS 적용',()=>runtime.setPanelCSS(css.value),body).hidden=!enabled('styleEditor');
+   const part=(label,note)=>{const box=node('section',null,body,{class:'sc-settings-part'});sectionHead(label,null,box);if(note)node('p',note,box,{class:'sc-muted sc-settings-note'});return box;};
+   const menusOn=enabled('menuVisibility');
+   if(menusOn){
+    const menus=part('작업 메뉴','왼쪽 목록에 보일 기능을 고릅니다. 숨긴 기능은 ⌘/Ctrl K 검색에서도 빠집니다.');
+    const grid=node('div',null,menus,{class:'sc-settings-grid'});
+    // The grid's heading says what these are, so each shows only its name; a
+    // screen reader, reaching one on its own, still hears the whole phrase.
+    for(const [id,label]of TABS)if(id!=='appearance')check(T(label),!hiddenTabs().has(id),on=>run(async()=>{const hidden=hiddenTabs();on?hidden.delete(id):hidden.add(id);runtime.cache.hiddenWorkbenchTabs=[...hidden];runtime.dirty=true;await runtime.flush();render();}),grid)
+     .setAttribute('aria-label',T(label)+' '+T('메뉴 표시'));
+    // Resetting every menu undoes the grid above it, so it sits under the grid as a verb that removes.
+    button('메뉴 기본값 복원',async()=>{runtime.cache.hiddenWorkbenchTabs=[];runtime.dirty=true;await runtime.flush();render();},bar(menus),{class:'sc-danger-soft'});
+   }
+   const look=part('패널 모양','강조 색과 글꼴 크기는 이 패널에만 적용됩니다. PDF 색상은 읽기 진행에서 설정하세요.');
+   const form=bar(look);
+   node('span',T('강조 색'),form,{class:'sc-settings-label'});
+   const accent=node('input',null,form,{type:'color','aria-label':'강조 색상'});accent.value=runtime.pref('accentColor','#374151');
+   node('span',T('글꼴 크기'),form,{class:'sc-settings-label'});
+   const size=node('input',null,form,{type:'number',min:'11',max:'20','aria-label':'패널 글꼴 크기'});size.value=runtime.pref('panelFontSize',13);
+   button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);},form,{'data-variant':'primary'});
+   button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),bar(look));
+   const list=part('목록 표시','Zotero 문헌 목록의 제목 열과 항목 아이콘에 적용됩니다.');
+   const opts=node('div',null,list,{class:'sc-settings-stack'});
+   check('제목 옆 색상·별점 태그',runtime.pref('titleTags',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleTags',on,true);runtime.refreshWindows();},opts);
+   check('안 읽은 제목 굵게',runtime.pref('unreadBold',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.unreadBold',on,true);runtime.refreshWindows();},opts);
+   check('제목 읽기 히트맵',runtime.pref('titleHeatmap',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleHeatmap',on,true);runtime.refreshWindows();},opts);
+   check('항목 아이콘 클릭으로 유형 필터',runtime.pref('quickTypeFilter',true),on=>runtime.Z.Prefs.set('extensions.style-custom.quickTypeFilter',on,true),opts);
+   check('문서 탭 활동 시 수정일 갱신',runtime.pref('touchDateOnRead',false),on=>runtime.Z.Prefs.set('extensions.style-custom.touchDateOnRead',on,true),opts);
+   const fields=part('추가 열','문헌 목록에 열로 보일 Zotero 필드 이름을 쉼표로 적습니다.');
+   const fieldRow=bar(fields);
+   const customFields=node('input',null,fieldRow,{'aria-label':'추가 문헌 열','placeholder':'DOI, publisher, language'});customFields.value=runtime.pref('customFields','');
+   button('추가 열 적용',async()=>{await runtime.setCustomFields(customFields.value);message('추가 열을 적용했습니다.');},fieldRow);
+   if(enabled('styleEditor')){
+    const edit=part('패널 CSS','이 패널 안에만 적용됩니다. 외부 파일을 불러오는 규칙(@import, url())은 받지 않습니다.');
+    const css=node('textarea',null,edit,{'aria-label':'Custom 패널 CSS',placeholder:'.sc-card { font-size: 13px; }'});css.value=runtime.pref('panelCSS','');
+    button('패널 CSS 적용',()=>runtime.setPanelCSS(css.value),bar(edit));
+   }
   }
   async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';
    /* "선택한 문헌" with nothing selected showed an empty list that read as
@@ -5223,7 +5731,7 @@
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
-</script><script>document.getElementById('style-custom-workbench').remove();(async function mountDemo(win,Workbench,Model,ReadingPath){
+</script><script>document.getElementById('style-custom-workbench').remove();(async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const doc=win.document;
  const papers=[
   {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; J. Park',year:'2025',venue:'Example Cell Research',doi:'',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
@@ -5296,6 +5804,8 @@
      graph: eight made-up works whose reference lists point at each other, so
      the preview shows the same rows Zotero would draw, with no network. */
   pathTools:ReadingPath,
+  // The graph layout Zotero uses, so the preview does not fall back to the old placer.
+  graphTools:PaperGraph,
   libraryDOIs:()=>new Set(['10.5555/demo-f2','10.5555/demo-p1']),
   forgetReadingPath:()=>{},
   identity:ref=>'demo:'+ref?.id,
@@ -5351,4 +5861,4 @@
  const bench=Workbench.attach(win,{runtime,library,reader,model:Model,assist:{run:async()=> '이것은 실제 AI 호출 없이 표시한 예시 결과입니다.',cancel(){}}});
  doc.querySelector('link[href="content/workbench.css"]')?.remove();
  if(icon)bench.panel.querySelector('.sc-brand img').src=icon;await bench.show('explore');return {bench,runtime};
-})(window,CustomStyleWorkbench,CustomStyleWorkspace,CustomStyleReadingPath);</script></body></html>
+})(window,CustomStyleWorkbench,CustomStyleWorkspace,CustomStyleReadingPath,CustomStylePaperGraph);</script></body></html>

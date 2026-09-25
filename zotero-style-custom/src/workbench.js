@@ -518,6 +518,18 @@
   // The headline and its detail go in their own block so that everything a
   // caller appends afterwards -- buttons, checkboxes, selects -- lands in one
   // row beside them instead of stacking into a ninety-pixel card.
+  /* A section of a page: its name in the text's ink, the count beside it in
+     grey, over a rule. Every tab used to make its own -- an 11px grey capital
+     label on one, a 19px title on another, none on a third -- so no two pages
+     could be read the same way. */
+  function sectionHead(label,count,parent=body,extra=''){
+   const h=node('h3',null,parent,{class:'sc-hit-group sc-section-head'+(extra?' '+extra:'')});
+   node('span',T(label),h,{class:'sc-section-head-name'});
+   // A real space between name and count, not only the gap the layout draws:
+   // read as text, "논문1" is one word.
+   if(count!=null&&count!==''){h.appendChild(doc.createTextNode(' '));node('span',String(count),h,{class:'sc-section-head-count'});}
+   return h;
+  }
   function card(title,subtitle,parent=body){
    const c=node('article',null,parent,{class:'sc-card'});
    const text=node('div',null,c,{class:'sc-card-text'});
@@ -646,10 +658,15 @@
   /* The frame follows the map: three papers do not need the height of thirty.
      Both drawing paths go through here, because the one that did not set the
      count fell back to twelve and drew taller than the fixed frame it replaced. */
+  /* The drawing's own height follows the frame's. Shrinking only the frame
+     left an 860x540 drawing fitted into 228 pixels, which scaled 11px labels to
+     under 5px. Same formula as the CSS height, so the scale stays near one. */
+  const graphHeight=nodes=>Math.max(220,Math.min(540,90+Math.max(1,nodes||0)*46));
   function graphCanvas(W,H,nodes,label){
    const svg=doc.createElementNS(SVG,'svg');
    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
-   svg.style.setProperty('--sc-graph-nodes',String(Math.max(1,nodes||0)));
+   // The frame takes the drawing's own height, so the two cannot disagree.
+   svg.style.setProperty('--sc-graph-height',H+'px');
    svg.setAttribute('aria-label',label);body.appendChild(svg);
    return svg;
   }
@@ -696,7 +713,7 @@
     drawLegacyGraph(b);
     return;
    }
-   const W=860,H=540;
+   const W=860,H=graphHeight(chosen.length);
    const items=chosen.map(paper=>runtime.Z.Items.get(Number(paper.id))).filter(Boolean);
    const citedBy=typeof runtime.citedByFor==='function'?runtime.citedByFor(items):null;
    const withCiters=Object.keys(citedBy||{}).length;
@@ -827,7 +844,7 @@
    node('span','실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 네모는 내가 갖고 있지 않은 논문 · 크기는 이 라이브러리 안에서의 중심성 · 색은 출판사',zoomBar,{class:'sc-muted'});
    // The one thing a citation map tells you that reading your own shelf cannot.
    if(graph.missing.length){
-    node('h3',`내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문 ${graph.missing.length}`,body,{class:'sc-hit-group'});
+    sectionHead('내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문',graph.missing.length);
     const list=node('div',null,body,{class:'sc-hits'});
     for(const row of graph.missing.slice(0,25)){
      const c=node('div',null,list,{class:'sc-hit'});
@@ -840,7 +857,7 @@
    // The papers nothing connects to are named rather than drawn: as a ring round
    // the outside they were most of the ink and none of the structure.
    if(graph.isolated&&graph.isolated.length){
-    node('h3',`이 범위에서 연결이 없는 논문 ${graph.isolated.length}`,body,{class:'sc-hit-group'});
+    sectionHead('이 범위에서 연결이 없는 논문',graph.isolated.length);
     const list=node('div',null,body,{class:'sc-hits'});
     for(const n of graph.isolated.slice(0,30)){
      const c=node('div',null,list,{class:'sc-hit'});
@@ -864,7 +881,7 @@
    const limit=setting('graphNodeLimit',180);
    const raw=library.graph(rows().slice(0,limit),{mode:state.graphMode==='citations'?'related':state.graphMode});
    if(!raw.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
-   const W=860,H=540;
+   const W=860,H=graphHeight(raw.nodes.length);
    /* The good layout when it is there, the old placer when it is not.
 
       The layout lives on the runtime as an optional module. Reaching for it
@@ -944,7 +961,7 @@
    node('p','노트를 붙일 문헌을 하나 고르세요. 열려 있는 논문·최근 문헌에서 누르거나, 위 검색창으로 찾으세요.',body,{class:'sc-muted'});
    const open=[];
    try{for(const tab of (typeof reader?.tabs==='function'?reader.tabs(win):[])){if(!tab.itemID)continue;const ref=runtime.Z?.Items?.get?.(Number(tab.itemID));const paper=(ref?.parentID&&byId(ref.parentID))||byId(tab.itemID);if(paper&&!open.some(i=>String(i.id)===String(paper.id)))open.push(paper);}}catch(error){runtime.Z?.logError?.(error);}
-   if(open.length){node('h3','지금 열려 있는 논문',body);const b=bar();for(const it of open)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
+   if(open.length){sectionHead('지금 열려 있는 논문',open.length);const b=bar();for(const it of open)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
    const when=v=>typeof v==='number'?(Number.isFinite(v)?v:0):(Date.parse(v||'')||0);
    const activity=it=>Math.max(when(it.lastRead),when(it.dateModified),when(it.dateAdded));
    const list=rows();
@@ -953,7 +970,8 @@
    const offered=new Set(open.map(i=>String(i.id)));
    const rest=list.filter(i=>!offered.has(String(i.id)));
    const shown=(state.query?model.rankByQuery(rest,state.query):[...rest].sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id)))).slice(0,12);
-   node('h3',state.query?(list.length>12?`검색 결과 ${list.length}편 중 12편`:`검색 결과 ${list.length}편`):'최근 문헌',body);
+   if(state.query)sectionHead('검색 결과',list.length>12?`${list.length}편 중 12편`:`${list.length}편`);
+   else sectionHead('최근 문헌',list.length?`${list.length}편`:'');
    if(shown.length){const b=bar();for(const it of shown)button(String(it.title||'').slice(0,60),()=>pick(it),b,{'data-pick':String(it.id),title:it.title});}
    else empty(state.query?'검색에 맞는 문헌이 없습니다. 검색어를 바꿔 보세요.':'이 범위에 문헌이 없습니다. 범위를 라이브러리로 바꾸세요.');
    const acts=bar();button('현재 선택 가져오기',()=>{const picked=runtime.selected(win);if(!picked.length){message('Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.',true);return;}state.selected=new Set(picked.slice(0,1).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});
@@ -970,7 +988,8 @@
    const own=target.length===1&&!state.query&&scoped().some(i=>String(i.id)===String(target[0].id));
    const notes=await scopeNotes(own?[String(target[0].id)]:ids());if(token!==epoch||disposed)return;const matching=notes.filter(n=>model.matches(n.title+' '+n.text,state.query)).sort((a,b)=>String(b.modified||'').localeCompare(String(a.modified||'')));const paperTitle=id=>state.items.find(i=>String(i.id)===String(id))?.title;
    const CAP=40;const listed=own?matching:matching.slice(0,CAP);
-   node('h3',own?`이 문헌의 노트 ${matching.length}개`:state.query?`검색된 노트 ${matching.length}개`:(matching.length>CAP?`최근 노트 ${CAP}개 (전체 ${matching.length}개)`:`이 범위의 노트 ${matching.length}개`),body);
+   sectionHead(own?'이 문헌의 노트':state.query?'검색된 노트':matching.length>CAP?'최근 노트':'이 범위의 노트',
+    matching.length>CAP&&!own&&!state.query?`${CAP}개 · 전체 ${matching.length}개`:`${matching.length}개`);
    for(const n of listed){const c=card(n.title,[paperTitle(n.parentID),String(n.modified||'').slice(0,10)].filter(Boolean).join(' · '));const text=node('p',n.text.length>1200?n.text.slice(0,1200)+'…':n.text,c,{class:'sc-note-text'});if(n.text.length>1200)button('전체 내용 보기',()=>{text.textContent=n.text;},c);if(!own&&n.parentID&&paperTitle(n.parentID))button('이 문헌에 노트 쓰기',()=>{state.selected=new Set([String(n.parentID)]);state.query=search.value='';render();},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
     // The list had no way to let a note go. Trash, not delete: Zotero's trash keeps it.
     button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);noteCache=null;await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':own?'이 문헌에는 아직 노트가 없습니다. 위에 첫 노트를 쓰세요.':'이 범위에 노트가 없습니다. 위에서 문헌을 골라 첫 노트를 쓰세요.');}
@@ -1247,7 +1266,7 @@
    }
    const section=(title,rows,tone,act)=>{
     if(!rows.length)return;
-    node('h3',`${title} ${rows.length}`,body,{class:'sc-hit-group'});
+    sectionHead(title,rows.length);
     const list=node('div',null,body,{class:'sc-hits'});
     for(const row of rows.slice(0,200)){
      const c=node('div',null,list,{class:'sc-hit'+(tone?' sc-hit-'+tone:'')});
@@ -1305,7 +1324,7 @@
    const list=await library.attachments(ids());if(token!==epoch||disposed)return;
    await drawFindings(token);
    if(token!==epoch||disposed)return;
-   if(list.length)node('h3',`선택한 문헌의 첨부파일 · ${list.length}`,body,{class:'sc-hit-group'});
+   if(list.length)sectionHead('선택한 문헌의 첨부파일',list.length);
    const matching=list.filter(a=>model.matches(a.title+' '+a.contentType,state.query));
    const kindWord=type=>({'application/pdf':'PDF','application/epub+zip':'EPUB','application/epub':'EPUB','text/html':T('스냅샷')})[type]||(type?String(type).split('/')[0]:'');
    for(const a of matching){const c=card(a.title,kindWord(a.contentType));button('열기',()=>library.openItem(a.id),c,{'data-opens':'window'});
@@ -1419,7 +1438,7 @@
      button('이 탭 외 문서 탭 닫기',()=>{const result=reader.closeOtherTabs(win,tab.id);render();message(`${result.closed}개 문서 탭을 닫았습니다.`);},c);
     }
    }
-   node('h2','저장된 탭 그룹',body);
+   sectionHead('저장된 탭 그룹');
    for(const group of reader.tabGroups()){
     const c=card(group.name,`${group.tabs.length}개 탭`),title=node('input',null,c,{'aria-label':'저장된 탭 그룹 이름'});title.value=group.name;title.dataset.draftKey=JSON.stringify(['tab-group-name',group.id]);
     button('복원',async()=>{const result=await reader.restoreTabGroup(win,group.id);await render();message(`복원 ${result.opened} · 찾지 못함 ${result.missing}`);},c);
@@ -1502,7 +1521,7 @@
    const chosen=values.slice(0,6);
    const key=JSON.stringify(chosen.map(paper=>paper.id));
    const section=node('section',null,body,{class:'sc-compare-insight','aria-label':'AI 논지·논쟁 분석'});
-   node('h3','주장·논리 흐름·논쟁 여지',section,{class:'sc-hit-group'});
+   sectionHead('주장·논리 흐름·논쟁 여지',null,section);
    const b=bar(section);
    if(!String(runtime.pref('aiEndpoint','')||'').trim())node('p','번역·AI 설정에 AI 서버 주소와 모델을 넣으면 켜집니다.',section,{class:'sc-muted'});
    node('span','언어',b,{class:'sc-muted'});
@@ -1987,7 +2006,7 @@
     for(const group of runtime.discoverTools.GROUPS){
      const rows=suggestions.filter(s=>s.source===group);
      if(!rows.length)continue;
-     node('h3',`${GROUP_LABELS[group]} ${rows.length}`,list,{class:'sc-hit-group'});
+     sectionHead(GROUP_LABELS[group],rows.length,list);
      node('p',GROUP_NOTES[group],list,{class:'sc-muted sc-hit-group-note'});
      hitList(rows,list);
     }
@@ -2070,12 +2089,7 @@
    /* A section of the author page: its name in the text's ink with the count
       beside it, over a rule. The generic group label (10px, grey, capitals)
       was smaller than the rows under it, so every section ran into the next. */
-   const section=(label,count,parent=list)=>{
-    const h=node('h3',null,parent,{class:'sc-hit-group sc-author-head'});
-    node('span',T(label),h,{class:'sc-author-head-name'});
-    if(count!=null&&count!=='')node('span',String(count),h,{class:'sc-author-head-count'});
-    return h;
-   };
+   const section=(label,count,parent=list)=>sectionHead(label,count,parent,'sc-author-head');
    let item=null;
    try{item=one();}catch(_){item=null;}
    async function show(person){
@@ -2855,18 +2869,47 @@
    for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);
    const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary'});
   }
+  /* The settings page as sections, each with its name, one line saying what it
+     changes, its options one per line, and its action under them. It was one
+     run of twenty-four checkboxes, a colour well, a number and two text boxes
+     with no headings, and nothing said which control belonged to which. */
   function drawAppearance(){
-   const menus=bar();menus.hidden=!enabled('menuVisibility');node('strong','작업 메뉴 표시',menus);
-   for(const [id,label]of TABS)if(id!=='appearance')check(T(label)+' 메뉴 표시',!hiddenTabs().has(id),on=>run(async()=>{const hidden=hiddenTabs();on?hidden.delete(id):hidden.add(id);runtime.cache.hiddenWorkbenchTabs=[...hidden];runtime.dirty=true;await runtime.flush();render();}),menus);
-   /* Resetting every menu at once does not belong in the row of eighteen
-      checkboxes it undoes; it sits under them, marked as a verb that removes. */
-   const menuReset=bar();menuReset.hidden=menus.hidden;
-   button('메뉴 기본값 복원',async()=>{runtime.cache.hiddenWorkbenchTabs=[];runtime.dirty=true;await runtime.flush();render();},menuReset,{class:'sc-danger-soft'});
-   button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),body);check('문서 탭 활동 시 수정일 갱신',runtime.pref('touchDateOnRead',false),on=>runtime.Z.Prefs.set('extensions.style-custom.touchDateOnRead',on,true),body);
-   node('p','Custom 패널과 추가 열의 표시를 조절합니다. PDF 색상은 읽기 진행에서 설정하세요.',body);const form=bar();const accent=node('input',null,form,{type:'color','aria-label':'강조 색상'});accent.value=runtime.pref('accentColor','#374151');const size=node('input',null,form,{type:'number',min:'11',max:'20','aria-label':'패널 글꼴 크기'});size.value=runtime.pref('panelFontSize',13);button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);},form);
-   check('제목 옆 색상·별점 태그',runtime.pref('titleTags',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleTags',on,true);runtime.refreshWindows();},body);check('안 읽은 제목 굵게',runtime.pref('unreadBold',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.unreadBold',on,true);runtime.refreshWindows();},body);check('제목 읽기 히트맵',runtime.pref('titleHeatmap',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleHeatmap',on,true);runtime.refreshWindows();},body);check('항목 아이콘 클릭으로 유형 필터',runtime.pref('quickTypeFilter',true),on=>runtime.Z.Prefs.set('extensions.style-custom.quickTypeFilter',on,true),body);
-   const customFields=node('input',null,body,{'aria-label':'추가 문헌 열','placeholder':'DOI, publisher, language'});customFields.value=runtime.pref('customFields','');button('추가 열 적용',async()=>{await runtime.setCustomFields(customFields.value);message('추가 열을 적용했습니다.');},body);
-   const css=node('textarea',null,body,{'aria-label':'Custom 패널 CSS',placeholder:'.sc-card { font-size: 13px; }'});css.value=runtime.pref('panelCSS','');css.hidden=!enabled('styleEditor');button('패널 CSS 적용',()=>runtime.setPanelCSS(css.value),body).hidden=!enabled('styleEditor');
+   const part=(label,note)=>{const box=node('section',null,body,{class:'sc-settings-part'});sectionHead(label,null,box);if(note)node('p',note,box,{class:'sc-muted sc-settings-note'});return box;};
+   const menusOn=enabled('menuVisibility');
+   if(menusOn){
+    const menus=part('작업 메뉴','왼쪽 목록에 보일 기능을 고릅니다. 숨긴 기능은 ⌘/Ctrl K 검색에서도 빠집니다.');
+    const grid=node('div',null,menus,{class:'sc-settings-grid'});
+    // The grid's heading says what these are, so each shows only its name; a
+    // screen reader, reaching one on its own, still hears the whole phrase.
+    for(const [id,label]of TABS)if(id!=='appearance')check(T(label),!hiddenTabs().has(id),on=>run(async()=>{const hidden=hiddenTabs();on?hidden.delete(id):hidden.add(id);runtime.cache.hiddenWorkbenchTabs=[...hidden];runtime.dirty=true;await runtime.flush();render();}),grid)
+     .setAttribute('aria-label',T(label)+' '+T('메뉴 표시'));
+    // Resetting every menu undoes the grid above it, so it sits under the grid as a verb that removes.
+    button('메뉴 기본값 복원',async()=>{runtime.cache.hiddenWorkbenchTabs=[];runtime.dirty=true;await runtime.flush();render();},bar(menus),{class:'sc-danger-soft'});
+   }
+   const look=part('패널 모양','강조 색과 글꼴 크기는 이 패널에만 적용됩니다. PDF 색상은 읽기 진행에서 설정하세요.');
+   const form=bar(look);
+   node('span',T('강조 색'),form,{class:'sc-settings-label'});
+   const accent=node('input',null,form,{type:'color','aria-label':'강조 색상'});accent.value=runtime.pref('accentColor','#374151');
+   node('span',T('글꼴 크기'),form,{class:'sc-settings-label'});
+   const size=node('input',null,form,{type:'number',min:'11',max:'20','aria-label':'패널 글꼴 크기'});size.value=runtime.pref('panelFontSize',13);
+   button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);},form,{'data-variant':'primary'});
+   button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),bar(look));
+   const list=part('목록 표시','Zotero 문헌 목록의 제목 열과 항목 아이콘에 적용됩니다.');
+   const opts=node('div',null,list,{class:'sc-settings-stack'});
+   check('제목 옆 색상·별점 태그',runtime.pref('titleTags',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleTags',on,true);runtime.refreshWindows();},opts);
+   check('안 읽은 제목 굵게',runtime.pref('unreadBold',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.unreadBold',on,true);runtime.refreshWindows();},opts);
+   check('제목 읽기 히트맵',runtime.pref('titleHeatmap',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleHeatmap',on,true);runtime.refreshWindows();},opts);
+   check('항목 아이콘 클릭으로 유형 필터',runtime.pref('quickTypeFilter',true),on=>runtime.Z.Prefs.set('extensions.style-custom.quickTypeFilter',on,true),opts);
+   check('문서 탭 활동 시 수정일 갱신',runtime.pref('touchDateOnRead',false),on=>runtime.Z.Prefs.set('extensions.style-custom.touchDateOnRead',on,true),opts);
+   const fields=part('추가 열','문헌 목록에 열로 보일 Zotero 필드 이름을 쉼표로 적습니다.');
+   const fieldRow=bar(fields);
+   const customFields=node('input',null,fieldRow,{'aria-label':'추가 문헌 열','placeholder':'DOI, publisher, language'});customFields.value=runtime.pref('customFields','');
+   button('추가 열 적용',async()=>{await runtime.setCustomFields(customFields.value);message('추가 열을 적용했습니다.');},fieldRow);
+   if(enabled('styleEditor')){
+    const edit=part('패널 CSS','이 패널 안에만 적용됩니다. 외부 파일을 불러오는 규칙(@import, url())은 받지 않습니다.');
+    const css=node('textarea',null,edit,{'aria-label':'Custom 패널 CSS',placeholder:'.sc-card { font-size: 13px; }'});css.value=runtime.pref('panelCSS','');
+    button('패널 CSS 적용',()=>runtime.setPanelCSS(css.value),bar(edit));
+   }
   }
   async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';
    /* "선택한 문헌" with nothing selected showed an empty list that read as

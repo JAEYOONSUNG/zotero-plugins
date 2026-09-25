@@ -364,7 +364,7 @@
 /* Existing scientific views stay usable in both color schemes. */
 /* The map is as tall as it has papers to place; a fixed 16:10 frame left three
    nodes floating in an empty half-screen. */
-#style-custom-workbench .sc-graph { display: block; width: 100%; height: clamp(220px, calc(90px + var(--sc-graph-nodes, 6) * 46px), 70cqh); aspect-ratio: auto; max-height: 70cqh; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
+#style-custom-workbench .sc-graph { display: block; width: 100%; height: min(var(--sc-graph-height, 360px), 70cqh); aspect-ratio: auto; max-height: 70cqh; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
 #style-custom-workbench .sc-graph text { font: 11px var(--sc-font); }
 #style-custom-workbench .sc-graph-label[data-kind=external] { fill: var(--sc-external); }
 #style-custom-workbench .sc-segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--sc-radius); background: var(--sc-fill); }
@@ -846,11 +846,21 @@
    and a step larger than the grey label it replaces. */
 #style-custom-workbench .sc-author-page:not(:empty) { margin-block-start: 20px; padding-block-start: 14px; border-block-start: 1px solid var(--sc-border-strong); }
 #style-custom-workbench .sc-author-watch:empty + .sc-author-page { margin-block-start: 0; padding-block-start: 0; border-block-start: 0; }
-#style-custom-workbench .sc-author-head { display: flex; align-items: baseline; gap: 8px; margin: 26px 0 6px; padding: 0 0 6px;
+/* A settings page in parts: a heading, one line saying what the part changes,
+   its options one per line, its action under them. */
+#style-custom-workbench .sc-settings-part { margin-block-end: 8px; }
+#style-custom-workbench .sc-settings-note { margin: 0 0 8px; font-size: 12px; line-height: 1.5; }
+#style-custom-workbench .sc-settings-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+#style-custom-workbench .sc-settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 16px; }
+#style-custom-workbench .sc-settings-label { color: var(--sc-muted); font-size: 12px; }
+#style-custom-workbench .sc-settings-part textarea { min-height: 96px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+/* The heading every page's sections share (sectionHead in workbench.js). */
+#style-custom-workbench .sc-section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin: 26px 0 6px; padding: 0 0 6px;
   border-block-end: 1px solid var(--sc-border); color: var(--sc-text); font: 650 13px/1.4 var(--sc-font); letter-spacing: 0; text-transform: none; }
-#style-custom-workbench .sc-author-head-count { color: var(--sc-muted); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-section-head:first-child { margin-block-start: 4px; }
+#style-custom-workbench .sc-section-head-count { color: var(--sc-muted); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
 /* The heading's rule is the list's top edge; a second one under it read as a double line. */
-#style-custom-workbench .sc-author-head + .sc-hits { border-top: 0; }
+#style-custom-workbench .sc-section-head + .sc-hits { border-top: 0; }
 /* What is new since the last look: one plain box, first under the name. */
 #style-custom-workbench .sc-author-news { margin: 14px 0 0; padding: 10px 14px 6px; border-radius: var(--sc-radius-card);
   background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border); }

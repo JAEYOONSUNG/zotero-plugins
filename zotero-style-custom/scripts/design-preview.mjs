@@ -6,10 +6,11 @@ import {parseHTML} from 'linkedom';
 import Workbench from '../src/workbench.js';
 import Model from '../src/workspace.js';
 import ReadingPath from '../src/reading-path.js';
+import PaperGraph from '../src/paper-graph.js';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 
 // Fictional papers and memory-only services: never reads the user's library.
-async function mountDemo(win,Workbench,Model,ReadingPath){
+async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const doc=win.document;
  const papers=[
   {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; J. Park',year:'2025',venue:'Example Cell Research',doi:'',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
@@ -82,6 +83,8 @@ async function mountDemo(win,Workbench,Model,ReadingPath){
      graph: eight made-up works whose reference lists point at each other, so
      the preview shows the same rows Zotero would draw, with no network. */
   pathTools:ReadingPath,
+  // The graph layout Zotero uses, so the preview does not fall back to the old placer.
+  graphTools:PaperGraph,
   libraryDOIs:()=>new Set(['10.5555/demo-f2','10.5555/demo-p1']),
   forgetReadingPath:()=>{},
   identity:ref=>'demo:'+ref?.id,
@@ -141,7 +144,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath){
 const css=fs.readFileSync(path.join(root,'content/workbench.css'),'utf8');
 const {window:win,document:doc}=parseHTML('<html><head></head><body></body></html>');
 Object.defineProperty(win.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this._value??this.querySelector('option')?.getAttribute('value')??'';},set(value){this._value=String(value);}});
-const {bench}=await mountDemo(win,Workbench,Model,ReadingPath);
+const {bench}=await mountDemo(win,Workbench,Model,ReadingPath,PaperGraph);
 const icon='data:image/svg+xml;base64,'+Buffer.from(fs.readFileSync(path.join(root,'content/icons/style-custom.svg'))).toString('base64');
 bench.panel.querySelector('.sc-brand img').src=icon;
 assert.equal(bench.panel.querySelectorAll('nav [data-tab]').length,19);
@@ -151,7 +154,7 @@ assert.equal(bench.panel.querySelector('.sc-command-palette').hidden,true);
 const snapshot=bench.panel.outerHTML;
 bench.destroy();
 const inline=file=>fs.readFileSync(path.join(root,file),'utf8').replace(/<\/script/gi,'<\\/script');
-const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta id="demo-icon" content="${icon}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Style Custom 0.8.0 · 디자인 미리보기</title><style>body{margin:0;background:#e5e7eb;font:12px system-ui;color:#374151}.demo-bar{height:40px;display:flex;align-items:center;gap:12px;padding:0 18px}.demo-bar strong{font-weight:650}.demo-bar span{color:#4b5563}.demo-feedback{position:fixed;bottom:4px;left:18px;right:18px;font-size:11px} ${css}</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div>${snapshot}<script>${inline('src/workspace.js')}</script><script>${inline('src/reading-path.js')}</script><script>${inline('src/workbench.js')}</script><script>document.getElementById('style-custom-workbench').remove();(${mountDemo.toString()})(window,CustomStyleWorkbench,CustomStyleWorkspace,CustomStyleReadingPath);</script></body></html>`;
+const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta id="demo-icon" content="${icon}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Style Custom 0.8.0 · 디자인 미리보기</title><style>body{margin:0;background:#e5e7eb;font:12px system-ui;color:#374151}.demo-bar{height:40px;display:flex;align-items:center;gap:12px;padding:0 18px}.demo-bar strong{font-weight:650}.demo-bar span{color:#4b5563}.demo-feedback{position:fixed;bottom:4px;left:18px;right:18px;font-size:11px} ${css}</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div>${snapshot}<script>${inline('src/workspace.js')}</script><script>${inline('src/reading-path.js')}</script><script>${inline('src/paper-graph.js')}</script><script>${inline('src/workbench.js')}</script><script>document.getElementById('style-custom-workbench').remove();(${mountDemo.toString()})(window,CustomStyleWorkbench,CustomStyleWorkspace,CustomStyleReadingPath,CustomStylePaperGraph);</script></body></html>`;
 assert.ok(!html.includes('<script src=')&&!html.includes('<link '));
 const target=path.join(root,'docs/design-preview.html');fs.writeFileSync(target,html);
 console.log('Offline design preview verified: actual workbench DOM, 19 sections, 3 fictional papers, no external assets: '+target);
