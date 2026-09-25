@@ -211,3 +211,17 @@ test('every ink token reads against the surface it is drawn on, in both themes',
    `${name} faint ${tokens['sc-faint']} is ${ratio(tokens['sc-faint'], tokens['sc-fill']).toFixed(2)}:1`);
  }
 });
+
+test('no text is set below the 11px floor, except letters drawn inside a shape', () => {
+ const css = fs.readFileSync(new URL('../content/workbench.css', import.meta.url), 'utf8');
+ const graphic = ['sc-node-face', 'sc-face-text', 'sc-watch-face', 'sc-quartile'];
+ const small = [];
+ for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+  const [, selector, body] = m;
+  if (graphic.some(name => selector.includes(name))) continue;
+  for (const size of body.matchAll(/(?:font-size:\s*|font:\s*(?:[0-9]+\s+)?)([0-9.]+)px/g)) {
+   if (Number(size[1]) < 11) small.push(`${selector.trim().split('\n').pop()} ${size[1]}px`);
+  }
+ }
+ assert.deepEqual(small, [], 'Korean below 11px loses its strokes');
+});

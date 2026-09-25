@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Style Custom",
-  "version": "0.53.3",
+  "version": "0.53.4",
   "description": "Personal title scrolling, reading status, ratings and literature metrics.",
   "applications": {
     "zotero": {

@@ -184,11 +184,16 @@
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
+      /* And a value only this build's stylesheet has: the 12px secondary line
+         of the type scale, which was 11px before it. Update both marks when a
+         change touches only one of the two files. */
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-hit-meta'
+        && rule.style?.getPropertyValue('font-size') === '12px';
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;
         sheets++;
-        try { for (const rule of sheet.cssRules) if (String(rule.selectorText || '').includes(MARK)) { liveSheet = true; break; } }
+        try { for (const rule of sheet.cssRules) if (SHEET(rule)) { liveSheet = true; break; } }
         catch (error) { throw new Error('the panel stylesheet could not be read: ' + (error.message || error)); }
       }
       const said = `script ${liveScript ? 'current' : 'STALE'} · stylesheet ${sheets ? (liveSheet ? 'current' : 'STALE') : 'not loaded yet'}`;

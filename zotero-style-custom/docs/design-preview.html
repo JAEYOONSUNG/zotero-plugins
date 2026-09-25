@@ -37,6 +37,15 @@
   --sc-band: 10px;
   /* Small, plain corners: enough to soften an edge, not enough to read as a
      pill. A 24px button at 10px was nearly one. */
+  /* Type scale. Four steps and a floor:
+       11px  captions -- dates, counts, badges, the label before a value
+       12px  secondary -- the year and journal line, authors, affiliations
+       13px  body -- titles and running text
+       15/19 headings -- a person's name, a page's title
+     Nothing is set below 11px. Korean at 10px loses its strokes, and 40% of
+     the author page was set between 9 and 11px before this. The only
+     exceptions are letters drawn inside a shape -- initials in an avatar,
+     a quartile in its pill -- which are read as a picture, not as text. */
   --sc-radius-sm: 4px;
   --sc-radius: 6px;
   --sc-radius-card: 8px;
@@ -49,7 +58,7 @@
   --sc-card-title: 600 13px/1.4 var(--sc-title-font);
   --sc-card-meta: 400 11px/1.45 var(--sc-font);
   --sc-card-control-height: 24px;
-  --sc-card-control-font: 11px;
+  --sc-card-control-font: 12px;
   --sc-content-padding: 16px;
   --sc-nav-width: 178px;
   --sc-paper-gap: 8px;
@@ -149,7 +158,7 @@
 #style-custom-workbench .sc-tag-only,
 #style-custom-workbench .sc-welcome button,
 #style-custom-workbench .sc-focus-back button,
-#style-custom-workbench .sc-jcr-back { min-height: 24px; padding: 2px 9px; font-size: 11px; }
+#style-custom-workbench .sc-jcr-back { min-height: 24px; padding: 2px 9px; font-size: 12px; }
 
 #style-custom-workbench button:hover { background: var(--sc-fill-hover); }
 #style-custom-workbench button:active { background: var(--sc-fill-active); }
@@ -188,7 +197,7 @@
 #style-custom-workbench > header > strong { font: 600 15px/1.35 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; }
 #style-custom-workbench .sc-header-actions { display: flex; align-items: center; gap: 6px; margin-inline-start: auto; flex-shrink: 0; }
 #style-custom-workbench .sc-header-actions button { font-size: 12px; }
-#style-custom-workbench .sc-status { flex-shrink: 0; padding: 4px var(--sc-content-padding) 8px; color: var(--sc-muted); background: var(--sc-surface); border-block-end: 0; font: 11px/1.5 var(--sc-font); overflow-wrap: anywhere; }
+#style-custom-workbench .sc-status { flex-shrink: 0; padding: 4px var(--sc-content-padding) 8px; color: var(--sc-muted); background: var(--sc-surface); border-block-end: 0; font: 12px/1.5 var(--sc-font); overflow-wrap: anywhere; }
 #style-custom-workbench .sc-status:empty { display: none; }
 #style-custom-workbench .sc-status[data-error=true] { color: var(--sc-error); background: var(--sc-error-bg); }
 #style-custom-workbench .sc-controls,
@@ -216,12 +225,12 @@
 #style-custom-workbench .sc-kind-chips:empty { display: none; }
 #style-custom-workbench .sc-kind { margin-inline-end: 6px; vertical-align: 2px; }
 /* (border-color said nothing: these buttons have no border to colour.) */
-#style-custom-workbench .sc-filter-chips button { min-height: 24px; padding: 2px 8px; border-radius: var(--sc-radius-sm); color: var(--sc-accent); background: var(--sc-accent-soft); font-size: 11px; }
+#style-custom-workbench .sc-filter-chips button { min-height: 24px; padding: 2px 8px; border-radius: var(--sc-radius-sm); color: var(--sc-accent); background: var(--sc-accent-soft); font-size: 12px; }
 #style-custom-workbench .sc-shell { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; }
 #style-custom-workbench .sc-shell nav { flex: 0 0 var(--sc-nav-width); padding: 14px 10px; overflow: auto; border-inline-end: 1px solid var(--sc-border); background: var(--sc-surface-alt); }
 #style-custom-workbench .sc-nav-group { margin-block-end: 18px; }
 /* 11px at 600 is not large text: it owes the reader the full 4.5:1. */
-#style-custom-workbench .sc-nav-heading { margin: 0 10px 4px; color: var(--sc-muted); font-size: 11px; font-weight: 600; letter-spacing: .02em; }
+#style-custom-workbench .sc-nav-heading { margin: 0 10px 4px; color: var(--sc-muted); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
 #style-custom-workbench .sc-shell nav button[data-tab] { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; margin: 1px 0; padding: 5px 10px; border: 0; border-radius: var(--sc-radius); background: transparent; text-align: start; color: var(--sc-text); font-size: 13px; font-weight: 400; }
 /* Fixed box: icons differ in drawn width, and a ragged left edge is harder to
    scan than no icons at all. */
@@ -241,7 +250,7 @@
 #style-custom-workbench .sc-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
 #style-custom-workbench .sc-context { flex-shrink: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; padding: calc(var(--sc-band) + 4px) var(--sc-content-padding) var(--sc-band); border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-section-title { margin: 0; font: 600 19px/1.35 var(--sc-title-font); letter-spacing: -.02em; }
-#style-custom-workbench .sc-context-detail { color: var(--sc-muted); font-size: 11px; }
+#style-custom-workbench .sc-context-detail { color: var(--sc-muted); font-size: 12px; }
 #style-custom-workbench .sc-body { flex: 1 1 auto; min-width: 0; min-height: 0; padding: var(--sc-content-padding); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 #style-custom-workbench .sc-selection-bar,
 #style-custom-workbench > footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; padding: var(--sc-band) var(--sc-content-padding); border-block-start: 1px solid var(--sc-border); background: var(--sc-surface); }
@@ -325,8 +334,8 @@
 #style-custom-workbench .sc-paper-card:focus-within .sc-check,
 #style-custom-workbench .sc-paper-card[data-selected=true] .sc-check { opacity: 1; }
 #style-custom-workbench .sc-paper-title { flex: 1 1 auto; min-width: 0; margin: 0; font: 500 13px/1.45 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#style-custom-workbench .sc-paper-meta { display: flex; align-items: center; flex: 0 3 auto; min-width: 7ch; color: var(--sc-muted); font-size: 11px; line-height: 1.5; }
-#style-custom-workbench .sc-metrics { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; padding-block-start: 8px; color: var(--sc-muted); font: 11px/1.6 var(--sc-mono); }
+#style-custom-workbench .sc-paper-meta { display: flex; align-items: center; flex: 0 3 auto; min-width: 7ch; color: var(--sc-muted); font-size: 12px; line-height: 1.5; }
+#style-custom-workbench .sc-metrics { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; padding-block-start: 8px; color: var(--sc-muted); font: 12px/1.6 var(--sc-mono); }
 #style-custom-workbench .sc-metric { white-space: nowrap; }
 /* Held out of the way until the row is wanted, so the list reads as a list. */
 #style-custom-workbench .sc-paper-actions {
@@ -356,7 +365,7 @@
 /* The map is as tall as it has papers to place; a fixed 16:10 frame left three
    nodes floating in an empty half-screen. */
 #style-custom-workbench .sc-graph { display: block; width: 100%; height: clamp(220px, calc(90px + var(--sc-graph-nodes, 6) * 46px), 70cqh); aspect-ratio: auto; max-height: 70cqh; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
-#style-custom-workbench .sc-graph text { font: 10px var(--sc-font); }
+#style-custom-workbench .sc-graph text { font: 11px var(--sc-font); }
 #style-custom-workbench .sc-graph-label[data-kind=external] { fill: var(--sc-external); }
 #style-custom-workbench .sc-segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--sc-radius); background: var(--sc-fill); }
 #style-custom-workbench .sc-segmented button { min-height: 26px; padding: 3px 10px; border-radius: var(--sc-radius-sm); background: transparent; color: var(--sc-muted); font-size: 12px; }
@@ -366,7 +375,7 @@
 #style-custom-workbench .sc-page-strip { display: grid; grid-template-columns: 2.6em repeat(20, minmax(0, 1fr)); gap: 3px; align-items: center; padding: 6px 0 2px; max-width: 317px; min-width: 0; flex: 1 1 100%; }
 /* The page number beside a strip of twenty cells: read, so it takes the ink
    that clears the bar for words. */
-#style-custom-workbench .sc-page-row { color: var(--sc-muted); font: 9px/1 var(--sc-font); text-align: end; padding-inline-end: 2px; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-page-row { color: var(--sc-muted); font: 11px/1 var(--sc-font); text-align: end; padding-inline-end: 2px; font-variant-numeric: tabular-nums; }
 #style-custom-workbench button.sc-page-cell, #style-custom-workbench .sc-page-cell { width: 100%; max-width: 11px; aspect-ratio: 1; height: auto; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 25%; background: var(--sc-fill); box-shadow: inset 0 0 0 1px var(--sc-border); cursor: pointer; }
 #style-custom-workbench .sc-page-cell:disabled { cursor: default; }
 /* Opened, but for a few seconds: outlined rather than filled, so it is not
@@ -377,7 +386,7 @@
 #style-custom-workbench .sc-page-cell[data-level="3"] { background: color-mix(in srgb, var(--sc-done) 80%, var(--sc-fill)); }
 #style-custom-workbench .sc-page-cell[data-level="4"] { background: var(--sc-done); }
 #style-custom-workbench .sc-page-cell:hover { box-shadow: inset 0 0 0 1px var(--sc-text); }
-#style-custom-workbench .sc-page-legend { display: flex; align-items: center; justify-content: flex-start; gap: 3px; margin: 0 0 8px; color: var(--sc-faint); font-size: 10px; }
+#style-custom-workbench .sc-page-legend { display: flex; align-items: center; justify-content: flex-start; gap: 3px; margin: 0 0 8px; color: var(--sc-faint); font-size: 11px; }
 #style-custom-workbench .sc-page-legend span:first-child { margin-inline-end: 3px; }
 #style-custom-workbench .sc-page-legend span:last-child { margin-inline-start: 3px; }
 #style-custom-workbench .sc-canvas { position: relative; height: 520px; min-height: 240px; overflow: auto; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background-color: var(--sc-surface-alt); background-image: none; }
@@ -417,7 +426,7 @@
    real table's presence is what tells the two states apart, but the same
    column classes so the widths carry over and nothing jumps when data lands. */
 #style-custom-workbench .sc-jcr-skeleton { width: 100%; border-collapse: collapse; margin-block-start: 10px; opacity: .45; }
-#style-custom-workbench .sc-jcr-skeleton th, #style-custom-workbench .sc-jcr-skeleton td { padding: 6px; border-block-end: 1px solid var(--sc-border); font-size: 11px; text-align: start; }
+#style-custom-workbench .sc-jcr-skeleton th, #style-custom-workbench .sc-jcr-skeleton td { padding: 6px; border-block-end: 1px solid var(--sc-border); font-size: 12px; text-align: start; }
 #style-custom-workbench .sc-jcr-skeleton th { color: var(--sc-muted); font-weight: 650; }
 #style-custom-workbench .sc-jcr-skeleton .sc-col-rank { width: 76px; text-align: end; }
 #style-custom-workbench .sc-jcr-skeleton .sc-col-name { width: 24%; }
@@ -436,9 +445,9 @@
 #style-custom-workbench .sc-command-results { overflow: auto; min-height: 0; }
 #style-custom-workbench .sc-command-option { display: block; width: 100%; margin: 2px 0; text-align: start; }
 #style-custom-workbench .sc-command-option[aria-selected=true] { background: var(--sc-accent-soft); color: var(--sc-accent); box-shadow: inset 0 0 0 1px var(--sc-accent); }
-#style-custom-workbench .sc-command-palette > p { margin: 0; font-size: 11px; }
+#style-custom-workbench .sc-command-palette > p { margin: 0; font-size: 12px; }
 #style-custom-workbench .sc-command-option small { color: var(--sc-muted); margin-inline-start: 8px; }
-#style-custom-workbench kbd { font: 10px var(--sc-mono); padding: 2px 4px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-sm); color: var(--sc-muted); }
+#style-custom-workbench kbd { font: 11px var(--sc-mono); padding: 2px 4px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-sm); color: var(--sc-muted); }
 
 #style-custom-workbench[data-density=compact] { --sc-control-height: 28px; --sc-card-padding: 10px; --sc-content-padding: 12px; --sc-paper-gap: 8px; --sc-nav-width: 148px; }
 #style-custom-workbench[data-density=compact] .sc-header { padding-block: 8px; }
@@ -528,7 +537,7 @@
 }
 @container sc-workbench (max-height: 460px) {
   #style-custom-workbench .sc-selection-bar { max-height: none; overflow: visible; padding-block: 6px; }
-  #style-custom-workbench .sc-selection-bar button { min-height: 24px; padding: 2px 8px; font-size: 11px; }
+  #style-custom-workbench .sc-selection-bar button { min-height: 24px; padding: 2px 8px; font-size: 12px; }
   #style-custom-workbench .sc-context { padding-block: 6px; }
   #style-custom-workbench .sc-context-detail { display: none; }
 }
@@ -558,17 +567,17 @@
 #style-custom-workbench .sc-hit { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: start; padding: 10px 2px; border-bottom: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-hit:hover { background: var(--sc-surface); }
 #style-custom-workbench .sc-hit-title { grid-column: 1; margin: 0; font: 600 13px/1.45 var(--sc-title-font); overflow-wrap: anywhere; }
-#style-custom-workbench .sc-hit-meta { grid-column: 1; margin: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-hit-meta { grid-column: 1; margin: 0; color: var(--sc-muted); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 /* 520 and 9 were the same grey: the two figures a reader ranks by take the
    full ink, and the rest of the line stays behind them. */
 #style-custom-workbench .sc-hit-year { color: var(--sc-text); }
 #style-custom-workbench .sc-hit-cited { color: var(--sc-text); font-weight: 550; }
-#style-custom-workbench .sc-hit-authors { grid-column: 1; margin: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-hit-authors { grid-column: 1; margin: 0; color: var(--sc-muted); font-size: 12px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-hit-actions { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 4px; align-items: center; opacity: 0; transition: opacity .12s; }
 #style-custom-workbench .sc-hit:hover .sc-hit-actions,
 #style-custom-workbench .sc-hit:focus-within .sc-hit-actions { opacity: 1; }
 
-#style-custom-workbench .sc-hit-owned { grid-column: 2; grid-row: 1; align-self: center; color: var(--sc-done); font-size: 11px; font-weight: 600; white-space: nowrap; }
+#style-custom-workbench .sc-hit-owned { grid-column: 2; grid-row: 1; align-self: center; color: var(--sc-done); font-size: 12px; font-weight: 600; white-space: nowrap; }
 /* The line of development: a year in its own column, a rule running down
    between the years, and a dot on each step. It reads down, like a timeline,
    because that is the order the work happened in. */
@@ -580,7 +589,7 @@
 #style-custom-workbench .sc-line-year { grid-column: 1; color: var(--sc-text); font: 600 12px/1.45 var(--sc-font); font-variant-numeric: tabular-nums; text-align: end; }
 #style-custom-workbench .sc-line-body { grid-column: 2; min-width: 0; padding-inline-start: 10px; }
 #style-custom-workbench .sc-line-body > p { margin: 0; }
-#style-custom-workbench .sc-line-owned { margin-inline-start: 6px; color: var(--sc-done); font-size: 10px; font-weight: 600; }
+#style-custom-workbench .sc-line-owned { margin-inline-start: 6px; color: var(--sc-done); font-size: 11px; font-weight: 600; }
 /* The paper the reader has open closes the line: a filled marker, no dot. */
 #style-custom-workbench .sc-line-seed::after { width: 9px; height: 9px; inset-inline-start: 50px; background: var(--sc-text); }
 #style-custom-workbench .sc-line-seed { padding-block-end: 0; }
@@ -615,28 +624,28 @@
 #style-custom-workbench .sc-path-seed { background: none; }
 /* The finding line is read, not scanned: muted and held to two lines so it
    does not outweigh the section heading above it. */
-#style-custom-workbench .sc-path-row > .sc-path-finding { grid-column: 2; margin: 2px 0 0; color: var(--sc-muted); font-size: 11px; line-height: 1.45; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+#style-custom-workbench .sc-path-row > .sc-path-finding { grid-column: 2; margin: 2px 0 0; color: var(--sc-muted); font-size: 12px; line-height: 1.45; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 /* Korean does not uppercase; a path heading is a label to read, not a caption.
    A rule above it groups the rows under it without competing with their titles
    for size. */
 #style-custom-workbench .sc-path-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px;
   margin: 20px 0 2px; padding-block-start: 10px; border-block-start: 1px solid var(--sc-border-strong);
-  color: var(--sc-muted); font: 650 11px/1.6 var(--sc-font); letter-spacing: 0; text-transform: none; }
+  color: var(--sc-muted); font: 650 12px/1.6 var(--sc-font); letter-spacing: 0; text-transform: none; }
 #style-custom-workbench .sc-path-head:first-child { margin-block-start: 4px; padding-block-start: 0; border-block-start: 0; }
 #style-custom-workbench .sc-path-head-name { color: var(--sc-text); }
 #style-custom-workbench .sc-path-head-note { flex: 0 1 auto; min-width: 0; font-weight: 400; color: var(--sc-muted); }
-#style-custom-workbench .sc-path-start { margin-inline-end: 6px; color: var(--sc-accent); font-size: 11px; font-weight: 700; }
+#style-custom-workbench .sc-path-start { margin-inline-end: 6px; color: var(--sc-accent); font-size: 12px; font-weight: 700; }
 #style-custom-workbench .sc-path-owned { display: grid; grid-template-columns: 22px 1fr; gap: 0 12px; align-items: baseline; padding: 5px 2px; border-bottom: 1px solid var(--sc-border); }
-#style-custom-workbench .sc-path-owned > .sc-path-step { grid-row: auto; padding-inline-end: 4px; white-space: nowrap; font-size: 11px; font-weight: 600; }
+#style-custom-workbench .sc-path-owned > .sc-path-step { grid-row: auto; padding-inline-end: 4px; white-space: nowrap; font-size: 12px; font-weight: 600; }
 #style-custom-workbench .sc-path-owned-group > summary { cursor: pointer; list-style: none; }
 #style-custom-workbench .sc-path-owned-group > summary::-webkit-details-marker { display: none; }
-#style-custom-workbench .sc-path-owned-list { margin: 0 0 4px 34px; padding: 0; color: var(--sc-muted); font-size: 11px; line-height: 1.6; }
+#style-custom-workbench .sc-path-owned-list { margin: 0 0 4px 34px; padding: 0; color: var(--sc-muted); font-size: 12px; line-height: 1.6; }
 #style-custom-workbench .sc-path-owned > .sc-hit-title { grid-column: 2; color: var(--sc-muted); font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* The PDF stays in sight; the other actions wait for the row to be wanted. */
 #style-custom-workbench .sc-path-row .sc-hit-actions:has(.sc-hit-pdf) { opacity: 1; }
 #style-custom-workbench .sc-path-row:not(:hover):not(:focus-within) .sc-hit-actions > :not(.sc-hit-pdf) { visibility: hidden; }
 #style-custom-workbench .sc-path-seed { border-top: 1px solid var(--sc-border-strong); border-bottom: 1px solid var(--sc-border-strong); }
-#style-custom-workbench .sc-path-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 12px 0 4px; font-size: 11px; }
+#style-custom-workbench .sc-path-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 12px 0 4px; font-size: 12px; }
 #style-custom-workbench .sc-path-depth { font-size: 12px; }
 #style-custom-workbench [aria-busy="true"] { opacity: .6; }
 #style-custom-workbench .sc-path-row:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -2px; }
@@ -648,9 +657,9 @@
 /* Underlined, so it reads as somewhere to go, but at the weight of the line it
    sits in: it was catching the eye ahead of the start marker itself. */
 #style-custom-workbench .sc-path-jump { min-height: 0; padding: 0 2px; border: 0; background: none; color: var(--sc-accent); font: inherit; font-weight: 400; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-#style-custom-workbench .sc-path-note { margin: 4px 0 8px; font-size: 11px; }
+#style-custom-workbench .sc-path-note { margin: 4px 0 8px; font-size: 12px; }
 #style-custom-workbench .sc-path-more { margin: 2px 0 6px; }
-#style-custom-workbench .sc-path-more > summary { cursor: pointer; color: var(--sc-muted); font-size: 11px; padding: 4px 0 4px 24px; }
+#style-custom-workbench .sc-path-more > summary { cursor: pointer; color: var(--sc-muted); font-size: 12px; padding: 4px 0 4px 24px; }
 #style-custom-workbench .sc-path-tools { margin-top: 14px; }
 #style-custom-workbench .sc-path-tools > summary { padding-inline-start: 0; font-size: 12px; }
 /* The short path is scanned, not read: each row keeps the title, the one line
@@ -670,11 +679,11 @@
 }
 #style-custom-workbench .sc-path-rest { margin-top: 14px; }
 #style-custom-workbench .sc-path-rest > summary { cursor: pointer; color: var(--sc-muted); font-size: 12px; padding: 4px 0; }
-#style-custom-workbench .sc-hit-group { margin: 18px 0 0; padding: 0 0 6px; color: var(--sc-muted); font: 650 10px/1.6 var(--sc-font); letter-spacing: .6px; text-transform: uppercase; }
+#style-custom-workbench .sc-hit-group { margin: 18px 0 0; padding: 0 0 6px; color: var(--sc-muted); font: 650 11px/1.6 var(--sc-font); letter-spacing: .6px; text-transform: uppercase; }
 #style-custom-workbench .sc-hit-group:first-child { margin-top: 4px; }
 /* The subject a profile actually publishes in, kept readable at a glance. */
 #style-custom-workbench .sc-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; }
-#style-custom-workbench .sc-chip { padding: 2px 8px; border-radius: var(--sc-radius-sm); background: var(--sc-accent-soft); color: var(--sc-muted); font-size: 11px; }
+#style-custom-workbench .sc-chip { padding: 2px 8px; border-radius: var(--sc-radius-sm); background: var(--sc-accent-soft); color: var(--sc-muted); font-size: 12px; }
 #style-custom-workbench .sc-profile { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 0; color: var(--sc-muted); font-size: 12px; }
 #style-custom-workbench .sc-profile b { color: var(--sc-text); font-variant-numeric: tabular-nums; }
 
@@ -696,18 +705,18 @@
 #style-custom-workbench .sc-journal-name:hover { text-decoration: underline; }
 #style-custom-workbench .sc-journal-table .sc-journal-if-none { color: var(--sc-faint); font-weight: 400; }
 #style-custom-workbench .sc-journal-fields { display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#style-custom-workbench .sc-chip-tiny { padding: 0 6px; font-size: 10px; line-height: 16px; }
+#style-custom-workbench .sc-chip-tiny { padding: 0 6px; font-size: 11px; line-height: 16px; }
 #style-custom-workbench .sc-chip-on { background: var(--sc-accent); color: var(--sc-accent-ink); }
-#style-custom-workbench .sc-chip-button { border: 0; cursor: pointer; min-height: 0; font: inherit; font-size: 11px; line-height: 18px; }
+#style-custom-workbench .sc-chip-button { border: 0; cursor: pointer; min-height: 0; font: inherit; font-size: 12px; line-height: 18px; }
 #style-custom-workbench .sc-chip-button:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
 #style-custom-workbench .sc-chip-button[aria-pressed=true] { background: var(--sc-accent); color: var(--sc-accent-ink); }
-#style-custom-workbench .sc-journal-count { font-size: 11px; }
+#style-custom-workbench .sc-journal-count { font-size: 12px; }
 /* The profile: a two-column list of facts, a sign before each. */
 #style-custom-workbench .sc-journal-profile { margin: 0; padding: 6px 0 0; border-radius: 0; background: transparent; }
 #style-custom-workbench .sc-journal-table tr.sc-journal-open td, #style-custom-workbench .sc-journal-table .sc-journal-profile-row td { background: var(--sc-surface); }
 #style-custom-workbench .sc-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px 20px; margin: 0; }
 #style-custom-workbench .sc-fact { display: grid; grid-template-columns: 84px 1fr; gap: 2px 8px; align-items: baseline; min-width: 0; }
-#style-custom-workbench .sc-fact dt { display: inline-flex; align-items: baseline; gap: 5px; margin: 0; color: var(--sc-muted); font: 600 10px/1.6 var(--sc-font); letter-spacing: .3px; white-space: normal; overflow-wrap: anywhere; }
+#style-custom-workbench .sc-fact dt { display: inline-flex; align-items: baseline; gap: 5px; margin: 0; color: var(--sc-muted); font: 600 11px/1.6 var(--sc-font); letter-spacing: .3px; white-space: normal; overflow-wrap: anywhere; }
 #style-custom-workbench .sc-fact dt svg { opacity: .7; flex-shrink: 0; }
 #style-custom-workbench .sc-fact dd { margin: 0; color: var(--sc-text); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-fact a { color: var(--sc-accent); text-decoration: none; }
@@ -715,17 +724,17 @@
 #style-custom-workbench .sc-journal-profile .sc-actions { margin-top: 8px; }
 @container sc-workbench (max-width: 520px) { #style-custom-workbench .sc-facts { grid-template-columns: 1fr; } }
 #style-custom-workbench .sc-journal-profile .sc-actions button { display: inline-flex; align-items: center; gap: 5px; }
-#style-custom-workbench .sc-fact-note { margin: 6px 0 0; font-size: 11px; }
+#style-custom-workbench .sc-fact-note { margin: 6px 0 0; font-size: 12px; }
 
 /* Figures sit in a fixed column so they can be compared down the list, each
    with its own mark so the row reads without a header above it. */
 #style-custom-workbench .sc-paper-card { display: block; padding: 6px var(--sc-card-padding, 12px) 6px calc(var(--sc-card-padding, 12px) + 14px); }
 #style-custom-workbench .sc-paper-card .sc-metrics { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; min-height: 24px; flex: 0 0 auto; }
-#style-custom-workbench .sc-metric { display: inline-flex; align-items: center; gap: 3px; color: var(--sc-muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#style-custom-workbench .sc-metric { display: inline-flex; align-items: center; gap: 3px; color: var(--sc-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #style-custom-workbench .sc-metric svg { flex: 0 0 auto; opacity: .55; }
 /* The unit sits quietly before its figure -- but it is text a reader reads, so
    it takes the muted ink that clears 4.5:1, not the faint one. */
-#style-custom-workbench .sc-metric-unit { color: var(--sc-muted); font-size: 10px; }
+#style-custom-workbench .sc-metric-unit { color: var(--sc-muted); font-size: 11px; }
 #style-custom-workbench .sc-metric[data-empty] .sc-metric-value,
 #style-custom-workbench .sc-metric[data-empty] .sc-metric-unit { color: var(--sc-faint); }
 #style-custom-workbench .sc-metric[data-empty] svg { opacity: .3; }
@@ -735,7 +744,7 @@
 #style-custom-workbench .sc-metric[data-metric=time] .sc-metric-value { min-width: 5.2em; }
 #style-custom-workbench .sc-metric[data-tone] { font-weight: 600; }
 #style-custom-workbench .sc-metric[data-tone] svg { opacity: 1; }
-#style-custom-workbench .sc-stars .sc-metric-value { color: #978144; letter-spacing: -1px; font-size: 10px; min-width: 4.8em; }
+#style-custom-workbench .sc-stars .sc-metric-value { color: #978144; letter-spacing: -1px; font-size: 11px; min-width: 4.8em; }
 /* The colour a paper has been given wins over its reading state. */
 #style-custom-workbench .sc-paper-card[data-mark]::before { background: var(--sc-mark); }
 #style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #BD6C6E; }
@@ -782,9 +791,9 @@
 #style-custom-workbench .sc-watch-head .sc-hit-group { margin-bottom: 0; padding-bottom: 0; }
 #style-custom-workbench .sc-watch-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
-#style-custom-workbench .sc-watch-count { color: var(--sc-reading-ink); font: 650 11px/1 var(--sc-font); }
+#style-custom-workbench .sc-watch-count { color: var(--sc-reading-ink); font: 650 12px/1 var(--sc-font); }
 /* "새 논문 없음" is an answer the reader reads, not a watermark. */
-#style-custom-workbench .sc-watch-quiet { color: var(--sc-muted); font: 400 11px/1 var(--sc-font); }
+#style-custom-workbench .sc-watch-quiet { color: var(--sc-muted); font: 400 12px/1 var(--sc-font); }
 /* auto-fill, so a wide panel shows more people rather than more empty space */
 #style-custom-workbench .sc-watch-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
@@ -807,10 +816,10 @@
 #style-custom-workbench .sc-watch-badge {
   flex: none; min-width: 16px; padding: 0 5px; border-radius: 100px;
   background: var(--sc-done); color: #fff;
-  font: 650 10px/16px var(--sc-font); text-align: center;
+  font: 650 11px/16px var(--sc-font); text-align: center;
 }
 #style-custom-workbench .sc-watch-sub {
-  color: var(--sc-faint); font-size: 10.5px; line-height: 1.4;
+  color: var(--sc-faint); font-size: 11px; line-height: 1.4;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #style-custom-workbench .sc-watch-new .sc-watch-sub { color: var(--sc-reading-ink); }
@@ -823,7 +832,7 @@
   flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: var(--sc-band) var(--sc-content-padding); border-block-end: 1px solid var(--sc-border);
   background: var(--sc-accent-soft); color: var(--sc-text);
-  font: 11.5px/1.5 var(--sc-font);
+  font: 12px/1.5 var(--sc-font);
 }
 #style-custom-workbench .sc-notice[hidden] { display: none; }
 #style-custom-workbench .sc-notice-text { flex: 1 1 auto; min-width: 0; }
@@ -840,12 +849,14 @@
 #style-custom-workbench .sc-author-head { display: flex; align-items: baseline; gap: 8px; margin: 26px 0 6px; padding: 0 0 6px;
   border-block-end: 1px solid var(--sc-border); color: var(--sc-text); font: 650 13px/1.4 var(--sc-font); letter-spacing: 0; text-transform: none; }
 #style-custom-workbench .sc-author-head-count { color: var(--sc-muted); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
+/* The heading's rule is the list's top edge; a second one under it read as a double line. */
+#style-custom-workbench .sc-author-head + .sc-hits { border-top: 0; }
 /* What is new since the last look: one plain box, first under the name. */
 #style-custom-workbench .sc-author-news { margin: 14px 0 0; padding: 10px 14px 6px; border-radius: var(--sc-radius-card);
   background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border); }
 #style-custom-workbench .sc-author-news > .sc-author-head { margin: 0 0 6px; padding: 0; border: 0; }
 #style-custom-workbench .sc-author-news-line { display: grid; grid-template-columns: 96px 1fr; gap: 10px; margin: 0 0 6px; font-size: 12px; line-height: 1.5; }
-#style-custom-workbench .sc-author-news-label { color: var(--sc-muted); font-size: 11px; font-weight: 600; }
+#style-custom-workbench .sc-author-news-label { color: var(--sc-muted); font-size: 12px; font-weight: 600; }
 #style-custom-workbench .sc-author-news-sub { margin: 10px 0 2px; }
 #style-custom-workbench .sc-author-news .sc-hits { border-top: 0; }
 #style-custom-workbench .sc-author-news .sc-hit:last-child { border-bottom: 0; }
@@ -885,13 +896,13 @@
   color: var(--sc-text); font: 600 9.5px/1 var(--sc-title-font);
 }
 #style-custom-workbench .sc-node-body { display: flex; flex-direction: column; min-width: 0; gap: 0; }
-#style-custom-workbench .sc-node-name { font: 500 11.5px/1.3 var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#style-custom-workbench .sc-node-meta { font: 400 10px/1.3 var(--sc-font); color: var(--sc-faint); }
+#style-custom-workbench .sc-node-name { font: 500 12px/1.3 var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-node-meta { font: 400 11px/1.3 var(--sc-font); color: var(--sc-faint); }
 
 /* --- A source with its own mark --- */
 #style-custom-workbench .sc-source { display: inline-flex; align-items: center; gap: 5px; }
 #style-custom-workbench .sc-source svg { flex: none; width: 14px; height: 14px; opacity: .85; }
-#style-custom-workbench .sc-source-name { font-size: 11px; }
+#style-custom-workbench .sc-source-name { font-size: 12px; }
 
 /* A finding the user can act on, coloured by how much it matters. */
 #style-custom-workbench .sc-hit-warn { box-shadow: inset 2px 0 0 var(--sc-faint); padding-inline-start: 8px; }
@@ -899,7 +910,7 @@
 #style-custom-workbench .sc-hit-alert .sc-hit-meta { color: var(--sc-error); }
 
 /* The citation map: labels are part of the drawing, not a caption on it. */
-#style-custom-workbench .sc-graph-label { fill: var(--sc-muted); font: 10px var(--sc-font); pointer-events: none; }
+#style-custom-workbench .sc-graph-label { fill: var(--sc-muted); font: 11px var(--sc-font); pointer-events: none; }
 #style-custom-workbench .sc-graph g[role=button]:hover .sc-graph-label,
 #style-custom-workbench .sc-graph g[role=button]:focus-visible .sc-graph-label { fill: var(--sc-text); font-weight: 600; }
 #style-custom-workbench .sc-graph g[role=button] { transition: opacity .12s ease; }
@@ -934,8 +945,8 @@
   flex: none; width: 9px; height: 9px; border-radius: 100px;
   box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .18);
 }
-#style-custom-workbench .sc-annot-page { font: 600 11px var(--sc-mono); color: var(--sc-text); }
-#style-custom-workbench .sc-annot-kind { font-size: 10px; color: var(--sc-faint); }
+#style-custom-workbench .sc-annot-page { font: 600 12px var(--sc-mono); color: var(--sc-text); }
+#style-custom-workbench .sc-annot-kind { font-size: 11px; color: var(--sc-faint); }
 /* The actions appear when the pointer or the keyboard is on the annotation,
    rather than two buttons standing under every line of quoted text. */
 #style-custom-workbench .sc-annot-actions {
@@ -962,7 +973,7 @@
 #style-custom-workbench .sc-annot-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-annot-group-count {
   flex: none; padding: 0 7px; border-radius: 100px; background: var(--sc-fill);
-  color: var(--sc-muted); font: 600 10px/16px var(--sc-mono);
+  color: var(--sc-muted); font: 600 11px/16px var(--sc-mono);
 }
 #style-custom-workbench .sc-annot-more { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 0 4px; }
 
@@ -984,14 +995,14 @@
 #style-custom-workbench .sc-annot-memo[data-state=saved] { box-shadow: inset 0 0 0 1px var(--sc-done); }
 #style-custom-workbench .sc-annot-memo[data-state=failed] { box-shadow: inset 0 0 0 1px var(--sc-error); color: var(--sc-error); }
 #style-custom-workbench .sc-memo { display: flex; flex-direction: column; gap: 2px; padding: 8px 0 4px; }
-#style-custom-workbench .sc-memo-label { font-size: 11px; color: var(--sc-faint); }
+#style-custom-workbench .sc-memo-label { font-size: 12px; color: var(--sc-faint); }
 
 /* The colour tally doubles as a filter. */
 #style-custom-workbench .sc-annot-swatch {
   display: inline-flex; align-items: center; gap: 5px;
   min-height: 24px; padding: 2px 9px; border: 0;
   border-radius: 100px; background: var(--sc-fill);
-  font: 11px var(--sc-font); color: var(--sc-muted); cursor: pointer;
+  font: 12px var(--sc-font); color: var(--sc-muted); cursor: pointer;
 }
 #style-custom-workbench .sc-annot-swatch:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
 
@@ -1003,19 +1014,19 @@
 #style-custom-workbench .sc-quartile[data-q="4"] { background: var(--sc-fill); color: var(--sc-muted); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 
 /* An unrefereed manuscript, said in one word before the venue. */
-#style-custom-workbench .sc-tag, #style-custom-workbench .sc-preprint, #style-custom-workbench .sc-new { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 9px/14px var(--sc-font); letter-spacing: .02em; vertical-align: middle; }
+#style-custom-workbench .sc-tag, #style-custom-workbench .sc-preprint, #style-custom-workbench .sc-new { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 11px/14px var(--sc-font); letter-spacing: .02em; vertical-align: middle; }
 #style-custom-workbench .sc-hit-meta > .sc-tag, #style-custom-workbench .sc-hit-meta > .sc-preprint, #style-custom-workbench .sc-hit-meta > .sc-quartile { margin-inline-end: 6px; }
 #style-custom-workbench .sc-new { color: var(--sc-accent); background: var(--sc-accent-soft); }
 #style-custom-workbench .sc-preprint { color: var(--sc-reading-ink); background: color-mix(in srgb, var(--sc-reading) 14%, transparent); vertical-align: middle; }
 
 /* A lab move on the watched-author card, and a first-time co-author. */
 #style-custom-workbench .sc-watch-moved { color: var(--sc-accent); font-weight: 600; }
-#style-custom-workbench .sc-network-node { display: inline-flex; align-items: center; min-width: 0; padding: 4px 10px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border); font: 500 11.5px/1.3 var(--sc-title-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-network-node { display: inline-flex; align-items: center; min-width: 0; padding: 4px 10px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border); font: 500 12px/1.3 var(--sc-title-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Newness is said by the line it sits in, not by a coloured ring. */
 #style-custom-workbench .sc-network-fresh { box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 
 /* A notice on a paper, worst first: solid red for withdrawn, so it cannot read as a paper. */
-#style-custom-workbench .sc-signal { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 9px/14px var(--sc-font); vertical-align: middle; }
+#style-custom-workbench .sc-signal { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 11px/14px var(--sc-font); vertical-align: middle; }
 #style-custom-workbench .sc-signal-retracted { background: var(--sc-error); color: #fff; }
 #style-custom-workbench .sc-signal-concern { color: var(--sc-reading-ink); background: color-mix(in srgb, var(--sc-reading) 16%, transparent); }
 #style-custom-workbench .sc-signal-corrected { color: var(--sc-muted); background: var(--sc-fill); }
@@ -1025,7 +1036,7 @@
 #style-custom-workbench .sc-patent .sc-preprint { margin-inline-end: 6px; }
 
 /* The map's legend: the commonest journals in it, each in its own mark. */
-#style-custom-workbench .sc-graph-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 8px; font-size: 11px; color: var(--sc-muted); }
+#style-custom-workbench .sc-graph-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 8px; font-size: 12px; color: var(--sc-muted); }
 #style-custom-workbench .sc-legend-entry { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
 #style-custom-workbench .sc-legend-name { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-legend-count { color: var(--sc-faint); font-variant-numeric: tabular-nums; }
@@ -1042,12 +1053,12 @@
 #style-custom-workbench .sc-field-sep { color: var(--sc-faint); font-size: 14px; }
 
 #style-custom-workbench .sc-journal-fields .sc-chip { margin-inline-end: 4px; }
-#style-custom-workbench .sc-field-level { min-width: 52px; color: var(--sc-faint); font: 600 10px/1.6 var(--sc-font); letter-spacing: .4px; text-transform: uppercase; }
+#style-custom-workbench .sc-field-level { min-width: 52px; color: var(--sc-faint); font: 600 11px/1.6 var(--sc-font); letter-spacing: .4px; text-transform: uppercase; }
 
 /* Tending the followed list: a table, tight rows, the place shaded when it moved. */
 #style-custom-workbench .sc-watch-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
 #style-custom-workbench .sc-watch-table th, #style-custom-workbench .sc-watch-table td { box-sizing: border-box; min-width: 0; max-width: none; padding: 6px 8px; border-inline-end: 0; border-block-end: 1px solid var(--sc-border); background: transparent; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; }
-#style-custom-workbench .sc-watch-table th { position: sticky; top: 0; z-index: 1; background: var(--sc-bg); color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; }
+#style-custom-workbench .sc-watch-table th { position: sticky; top: 0; z-index: 1; background: var(--sc-bg); color: var(--sc-faint); font: 650 11px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; }
 #style-custom-workbench .sc-watch-table tr:hover td { background: var(--sc-surface); }
 #style-custom-workbench .sc-watch-table .sc-col-n { width: 64px; text-align: end; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-watch-table .sc-col-date { width: 96px; font-variant-numeric: tabular-nums; color: var(--sc-muted); }
@@ -1065,17 +1076,17 @@
 #style-custom-workbench .sc-journal-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
 #style-custom-workbench .sc-journal-table th, #style-custom-workbench .sc-journal-table td { box-sizing: border-box; }
 #style-custom-workbench .sc-journal-table thead th { position: sticky; top: 0; z-index: 1; }
-#style-custom-workbench .sc-journal-table th { padding: 6px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--sc-bg); color: var(--sc-faint); font: 650 10px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; text-align: start; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-journal-table th { padding: 6px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--sc-bg); color: var(--sc-faint); font: 650 11px/1.6 var(--sc-font); letter-spacing: .5px; text-transform: uppercase; text-align: start; border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-journal-table thead th { white-space: normal; overflow-wrap: anywhere; }
 #style-custom-workbench .sc-journal-table td { padding: 7px 6px; border-block-end: 1px solid var(--sc-border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-journal-table tr.sc-journal { position: relative; }
 #style-custom-workbench .sc-journal-table tr.sc-journal:hover td { background: var(--sc-surface); }
 #style-custom-workbench .sc-journal-table .sc-col-rank { width: 76px; text-align: end; }
-#style-custom-workbench .sc-journal-table td.sc-col-rank { color: var(--sc-faint); font: 600 11px/1 var(--sc-mono); }
+#style-custom-workbench .sc-journal-table td.sc-col-rank { color: var(--sc-faint); font: 600 12px/1 var(--sc-mono); }
 #style-custom-workbench .sc-journal-table .sc-col-name { width: 24%; }
 #style-custom-workbench .sc-journal-table .sc-col-q { width: 52px; }
 #style-custom-workbench .sc-journal-table .sc-col-abbr { width: 10%; }
-#style-custom-workbench .sc-journal-table td.sc-col-abbr { font: 11px/1.5 var(--sc-mono); }
+#style-custom-workbench .sc-journal-table td.sc-col-abbr { font: 12px/1.5 var(--sc-mono); }
 #style-custom-workbench .sc-journal-table .sc-col-pub { width: 12%; }
 #style-custom-workbench .sc-journal-table .sc-col-n { width: 44px; text-align: end; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-journal-table .sc-col-fields { color: var(--sc-muted); }
@@ -1128,7 +1139,7 @@
 
 /* Annotations: the colour down the card's edge, the quote set apart, the memo a quiet line. */
 #style-custom-workbench .sc-annot { border-inline-start: 3px solid var(--sc-annot, var(--sc-faint)); padding-inline-start: 10px; }
-#style-custom-workbench .sc-annot-kind { padding: 0 6px; border-radius: 100px; background: var(--sc-fill); color: var(--sc-muted); font-size: 10px; line-height: 16px; }
+#style-custom-workbench .sc-annot-kind { padding: 0 6px; border-radius: 100px; background: var(--sc-fill); color: var(--sc-muted); font-size: 11px; line-height: 16px; }
 #style-custom-workbench .sc-annot-text { margin: 4px 0 2px; font-size: 13px; line-height: 1.5; color: var(--sc-text); }
 #style-custom-workbench .sc-annot-memo { border: 0; background: transparent; padding: 1px 0; color: var(--sc-muted); font-size: 12px; box-shadow: none; min-height: 20px; }
 #style-custom-workbench .sc-annot-memo::placeholder { color: var(--sc-faint); }
@@ -1137,7 +1148,7 @@
 /* Until something is selected these three verbs have nothing to act on, so
    they say what they are waiting for rather than failing when pressed. */
 #style-custom-workbench .sc-annot-selection[data-armed=false] { opacity: .72; }
-#style-custom-workbench .sc-annot-chosen { font-size: 11px; color: var(--sc-muted); margin-inline-end: 2px; }
+#style-custom-workbench .sc-annot-chosen { font-size: 12px; color: var(--sc-muted); margin-inline-end: 2px; }
 #style-custom-workbench .sc-annot-selection[data-armed=true] .sc-annot-chosen { color: var(--sc-accent); font-weight: 600; }
 
 /* Collections: a tree, each row with a bar for what it holds. */
@@ -1146,12 +1157,12 @@
 #style-custom-workbench .sc-collection:hover { background: var(--sc-surface); }
 #style-custom-workbench .sc-collection:focus-visible { outline-offset: -2px; }
 #style-custom-workbench .sc-collection-line { grid-area: line; display: flex; align-items: center; gap: 6px; min-width: 0; }
-#style-custom-workbench .sc-collection-branch { color: var(--sc-border-strong); font-size: 11px; }
+#style-custom-workbench .sc-collection-branch { color: var(--sc-border-strong); font-size: 12px; }
 #style-custom-workbench .sc-collection-icon { display: inline-flex; color: var(--sc-muted); }
 #style-custom-workbench .sc-collection-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px/1.4 var(--sc-title-font); }
-#style-custom-workbench .sc-collection-favorite .sc-collection-name::after { content: " \2605"; color: #B89944; font-size: 11px; }
-#style-custom-workbench .sc-collection-kids { color: var(--sc-faint); font-size: 11px; }
-#style-custom-workbench .sc-collection-count { margin-inline-start: auto; color: var(--sc-muted); font: 600 11px/1 var(--sc-mono); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-collection-favorite .sc-collection-name::after { content: " \2605"; color: #B89944; font-size: 12px; }
+#style-custom-workbench .sc-collection-kids { color: var(--sc-faint); font-size: 12px; }
+#style-custom-workbench .sc-collection-count { margin-inline-start: auto; color: var(--sc-muted); font: 600 12px/1 var(--sc-mono); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-collection-empty .sc-collection-name { color: var(--sc-muted); font-weight: 400; }
 #style-custom-workbench .sc-collection-empty .sc-collection-count { color: var(--sc-faint); font-weight: 400; }
 /* The same bar serves the collection rows, which are a grid, and the reading
@@ -1168,9 +1179,9 @@
 /* The related tab, before a paper is chosen: what it does, in three lines. */
 #style-custom-workbench .sc-guide { max-width: 560px; padding: 8px 0; }
 #style-custom-workbench .sc-guide h2 { margin: 0 0 6px; }
-#style-custom-workbench .sc-guide-list { margin: 8px 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; line-height: 1.5; }
+#style-custom-workbench .sc-guide-list { margin: 8px 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.5; }
 #style-custom-workbench .sc-guide-list strong { color: var(--sc-text); }
-#style-custom-workbench .sc-hit-group-note { margin: -4px 0 6px; font-size: 11px; }
+#style-custom-workbench .sc-hit-group-note { margin: -4px 0 6px; font-size: 12px; }
 
 #style-custom-workbench .sc-scope-back { margin-inline-start: 8px; }
 
@@ -1222,7 +1233,7 @@
 }
 
 /* The first-open line: the notice's look, its own class so nothing mistakes it for the backfill notice. */
-#style-custom-workbench .sc-welcome { flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: var(--sc-band) var(--sc-content-padding); border-block-end: 1px solid var(--sc-border); background: var(--sc-accent-soft); color: var(--sc-text); font: 11.5px/1.5 var(--sc-font); }
+#style-custom-workbench .sc-welcome { flex-shrink: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: var(--sc-band) var(--sc-content-padding); border-block-end: 1px solid var(--sc-border); background: var(--sc-accent-soft); color: var(--sc-text); font: 12px/1.5 var(--sc-font); }
 #style-custom-workbench .sc-welcome button { margin-inline-start: auto; }
 /* One banner slot. Two stacked pushed the work down by two rows before the
    reader had done anything; what is missing can wait until the greeting is
@@ -1243,7 +1254,7 @@
 /* Where a journal stands inside its own subject: the figure JCR prints. The
    ink is the quartile within that subject, which is not always the JCR one. */
 #style-custom-workbench .sc-col-fieldrank { width: 84px; text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
-#style-custom-workbench .sc-field-rank { font: 600 11.5px/1.5 var(--sc-mono); }
+#style-custom-workbench .sc-field-rank { font: 600 12px/1.5 var(--sc-mono); }
 #style-custom-workbench .sc-field-rank[data-q="1"] { color: var(--sc-tone-top); }
 #style-custom-workbench .sc-field-rank[data-q="2"] { color: var(--sc-tone-high); }
 #style-custom-workbench .sc-field-rank[data-q="3"] { color: var(--sc-tone-mid); }
@@ -1257,7 +1268,7 @@
 #style-custom-workbench .sc-jcr-header { display: flex; flex-direction: column; gap: 6px; }
 #style-custom-workbench .sc-jcr-heading { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 #style-custom-workbench .sc-jcr-heading h2 { margin: 0; font: 600 17px/1.3 var(--sc-font); color: var(--sc-text); }
-#style-custom-workbench .sc-jcr-source { margin: 0; font: 11px/1.5 var(--sc-font); color: var(--sc-faint); }
+#style-custom-workbench .sc-jcr-source { margin: 0; font: 12px/1.5 var(--sc-font); color: var(--sc-faint); }
 #style-custom-workbench .sc-jcr-navigation { display: flex; flex-wrap: wrap; gap: 6px; }
 #style-custom-workbench .sc-jcr-button { min-height: 26px; padding: 3px 10px; font-size: 12px; }
 
@@ -1276,10 +1287,10 @@
 
 /* The table: hairline rows, a header that stays, numbers in columns that line up. */
 #style-custom-workbench .sc-jcr-table-wrap { overflow: auto; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
-#style-custom-workbench .sc-jcr-table { width: 100%; border-collapse: separate; border-spacing: 0; font: 12.5px/1.4 var(--sc-font); }
+#style-custom-workbench .sc-jcr-table { width: 100%; border-collapse: separate; border-spacing: 0; font: 13px/1.4 var(--sc-font); }
 #style-custom-workbench .sc-jcr-table th {
   position: sticky; top: 0; z-index: 1; padding: 8px 10px; text-align: start; white-space: nowrap;
-  font: 600 11px/1.4 var(--sc-font); color: var(--sc-muted); background: var(--sc-fill); border-block-end: 1px solid var(--sc-border);
+  font: 600 12px/1.4 var(--sc-font); color: var(--sc-muted); background: var(--sc-fill); border-block-end: 1px solid var(--sc-border);
 }
 #style-custom-workbench .sc-jcr-table td { padding: 7px 10px; border-block-end: 1px solid var(--sc-border); vertical-align: middle; color: var(--sc-text); }
 #style-custom-workbench .sc-jcr-table tbody tr:last-child td { border-block-end: 0; }
@@ -1307,9 +1318,9 @@
 /* Groups and editions: quiet chips on one line, not two lines of prose. */
 #style-custom-workbench .sc-jcr-memberships, #style-custom-workbench .sc-jcr-pills { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
 #style-custom-workbench .sc-jcr-memberships li, #style-custom-workbench .sc-jcr-pill {
-  padding: 0 7px; border-radius: 100px; background: var(--sc-fill); color: var(--sc-muted); font: 11px/18px var(--sc-font); white-space: nowrap;
+  padding: 0 7px; border-radius: 100px; background: var(--sc-fill); color: var(--sc-muted); font: 12px/18px var(--sc-font); white-space: nowrap;
 }
-#style-custom-workbench .sc-jcr-editions .sc-jcr-pill { font: 600 10px/17px var(--sc-mono); letter-spacing: .02em; background: var(--sc-accent-soft); color: var(--sc-accent); }
+#style-custom-workbench .sc-jcr-editions .sc-jcr-pill { font: 600 11px/17px var(--sc-mono); letter-spacing: .02em; background: var(--sc-accent-soft); color: var(--sc-accent); }
 #style-custom-workbench .sc-jcr-number .sc-jcr-memberships { justify-content: flex-end; }
 
 /* How big a category is, as a bar under its count, against the biggest on the page. */
@@ -1323,13 +1334,13 @@
 #style-custom-workbench .sc-jcr-category-context { display: flex; flex-direction: column; gap: 8px; }
 #style-custom-workbench .sc-jcr-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; }
 #style-custom-workbench .sc-jcr-stats div { display: flex; flex-direction: column; gap: 1px; }
-#style-custom-workbench .sc-jcr-stats dt { font: 11px/1.3 var(--sc-font); color: var(--sc-faint); }
+#style-custom-workbench .sc-jcr-stats dt { font: 12px/1.3 var(--sc-font); color: var(--sc-faint); }
 #style-custom-workbench .sc-jcr-stats dd { margin: 0; font: 600 15px/1.3 var(--sc-font); color: var(--sc-text); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-jcr-journal-title { display: block; font-weight: 500; }
-#style-custom-workbench .sc-jcr-abbreviation { display: block; font: 11px/1.3 var(--sc-mono); color: var(--sc-faint); }
+#style-custom-workbench .sc-jcr-abbreviation { display: block; font: 12px/1.3 var(--sc-mono); color: var(--sc-faint); }
 
 /* The group list: each group a row with its three figures aligned. */
-#style-custom-workbench .sc-jcr-group-head { display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px 120px 24px; gap: 8px; padding: 4px 10px; font: 600 11px/1.4 var(--sc-font); color: var(--sc-muted); }
+#style-custom-workbench .sc-jcr-group-head { display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px 120px 24px; gap: 8px; padding: 4px 10px; font: 600 12px/1.4 var(--sc-font); color: var(--sc-muted); }
 #style-custom-workbench .sc-jcr-group { border: 1px solid var(--sc-border); border-radius: var(--sc-radius); background: var(--sc-surface); }
 #style-custom-workbench .sc-jcr-group + .sc-jcr-group { margin-block-start: 4px; }
 #style-custom-workbench .sc-jcr-group-toggle {
@@ -1342,7 +1353,7 @@
 #style-custom-workbench .sc-jcr-chevron { text-align: center; color: var(--sc-faint); }
 #style-custom-workbench .sc-jcr-group-content { padding: 4px 10px 10px; border-block-start: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-jcr-category-links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; }
-#style-custom-workbench .sc-jcr-category-links .sc-jcr-category-link { font-size: 12.5px; }
+#style-custom-workbench .sc-jcr-category-links .sc-jcr-category-link { font-size: 13px; }
 
 @container sc-workbench (max-width: 1000px) {
   #style-custom-workbench .sc-jcr-table th[data-column="citableItems"], #style-custom-workbench .sc-jcr-table td[data-column="citableItems"],
@@ -4437,7 +4448,7 @@
     const hasNews=(watching&&fresh.length)||newCoauthors.length||moved||newPatents;
     const news=hasNews?node('section',null,list,{class:'sc-author-news','aria-label':T('마지막 확인 이후')}):null;
     if(news){
-     section('마지막 확인 이후',checkedAt?checkedAt.slice(0,10)+' 이후':'',news);
+     section('마지막 확인 이후',checkedAt?checkedAt.slice(0,10):'',news);
      if(moved){
       const line=node('p',null,news,{class:'sc-author-news-line'});
       node('span',T('소속 이동'),line,{class:'sc-author-news-label'});
