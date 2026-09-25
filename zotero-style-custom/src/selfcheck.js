@@ -173,6 +173,29 @@
       return `v${runtime.version} · ${all.length} papers · ${Object.keys(runtime.cache.items || {}).length} cached`;
     }));
 
+    /* The version number comes from the manifest and is read fresh on every
+       start, but the panel's script and stylesheet can come out of Firefox's
+       startup cache -- compiled from an earlier file at the same path. A user
+       then sees the old panel under the new number. So the check reads the
+       code actually running, and the stylesheet actually applied, for a marker
+       of this build. */
+    results.push(await attempt('the running panel is this build, not a cached one', () => {
+      const MARK = 'sc-author-news';
+      const bench = root.CustomStyleWorkbench;
+      const code = bench ? String(bench.attach || '') : '';
+      const liveScript = code.includes(MARK);
+      let liveSheet = false, sheets = 0;
+      for (const sheet of win.document.styleSheets) {
+        if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;
+        sheets++;
+        try { for (const rule of sheet.cssRules) if (String(rule.selectorText || '').includes(MARK)) { liveSheet = true; break; } }
+        catch (error) { throw new Error('the panel stylesheet could not be read: ' + (error.message || error)); }
+      }
+      const said = `script ${liveScript ? 'current' : 'STALE'} · stylesheet ${sheets ? (liveSheet ? 'current' : 'STALE') : 'not loaded yet'}`;
+      if (!liveScript || (sheets && !liveSheet)) throw new Error(said + ' -- delete the startup cache and restart with -purgecaches');
+      return `v${runtime.version} · ${said}`;
+    }));
+
     results.push(await attempt('every column is registered', () => {
       const missing = (runtime.columnDefinitions || []).map(row => row[0])
         .filter(key => !runtime.featureColumns.has(key) && runtime.columnFeature(key) && runtime.featureEnabled(runtime.columnFeature(key)));
