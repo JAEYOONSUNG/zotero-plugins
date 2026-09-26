@@ -370,7 +370,7 @@
       sat there in red. */
    // A message belongs to the page that wrote it, error or not.
    message('');
-   state.tab=id;await render();navButtons.get(id)?.scrollIntoView?.({block:'nearest',inline:'nearest'});if(disposed||panel.hidden||request!==navigationEpoch||state.tab!==id)return;await saveUI({lastTab:id});if(focus&&!disposed&&!panel.hidden&&request===navigationEpoch&&state.tab===id&&commands.hidden)body.focus?.();}
+   state.tab=id;await render();navButtons.get(id)?.scrollIntoView?.({block:'nearest',inline:'center'});if(disposed||panel.hidden||request!==navigationEpoch||state.tab!==id)return;await saveUI({lastTab:id});if(focus&&!disposed&&!panel.hidden&&request===navigationEpoch&&state.tab===id&&commands.hidden)body.focus?.();}
   // The label stays: an icon alone would be a guessing game for nineteen tabs.
   // The icon is what makes the right one findable without reading all of them.
   function leadIcon(element,name){
@@ -473,8 +473,13 @@
    clearSelection.disabled=nativeJCR||!count||clearSelection.dataset.busy==='true';relatedAction.disabled=nativeJCR||count<2||relatedAction.dataset.busy==='true';unlinkAction.disabled=nativeJCR||count<2||unlinkAction.dataset.busy==='true';
    for(const card of body.querySelectorAll('[data-item-id]'))card.dataset.selected=String(state.selected.has(card.dataset.itemId));
   }
+  /* What the search box actually matches, per tab: notes by title and body,
+     annotations by text and memo, attachments by name and type. It used to
+     promise "제목·저자·태그·DOI·초록" everywhere. */
+  const SEARCH_WHAT={notes:'노트 제목·본문 검색',annotations:'주석 본문·메모 검색',attachments:'첨부파일 이름·형식 검색'};
   function updateChrome(){
    sectionTitle.textContent=T(TABS.find(([id])=>id===state.tab)?.[1]||'');
+   search.placeholder=T(SEARCH_WHAT[state.tab]||'제목·저자·태그·DOI·초록 검색');
    const nativeJCR=state.tab==='journals'&&state.journalBrowser!=='openalex';
    const applicable=!nativeJCR&&FILTER_TABS.has(state.tab)&&state.tab!=='collections';controls.hidden=!applicable;filterPanel.hidden=!applicable;kindChips.hidden=!applicable;
    // While the list is narrowed to a selection, the way back is one button, not a menu.
@@ -665,12 +670,31 @@
   /* And its width follows the panel's. Laid out at 860 and fitted into a 640px
      narrow panel, an 11px label came out at 8px (Codex). A graph that scrolls
      sideways is worse to read than one laid out for the room it has. */
+  let graphDrawnWidth=0;
   const graphWidth=()=>{
    const cs=win.getComputedStyle?.(body);
    const inner=(body.clientWidth||0)-(parseFloat(cs?.paddingLeft)||0)-(parseFloat(cs?.paddingRight)||0);
    // No layout (a test DOM, a hidden panel): the old fixed width.
-   return inner>0?Math.max(480,Math.min(1100,Math.round(inner))):860;
+   const width=inner>0?Math.max(280,Math.min(1100,Math.round(inner))):860;
+   graphDrawnWidth=width;
+   return width;
   };
+  /* A graph is laid out for the width it was drawn at. Narrowing the panel
+     afterwards scaled the drawing, and its 11px labels with it, down to 6px
+     (Codex, round 2). When the body's width moves by more than a few pixels
+     while the graph is showing, it is drawn again at the new width. */
+  let graphResize=null,graphResizeTimer=null;
+  if(typeof win.ResizeObserver==='function'){
+   graphResize=new win.ResizeObserver(()=>{
+    if(disposed||panel.hidden||state.tab!=='graph'||!graphDrawnWidth)return;
+    const cs=win.getComputedStyle?.(body);
+    const inner=Math.round((body.clientWidth||0)-(parseFloat(cs?.paddingLeft)||0)-(parseFloat(cs?.paddingRight)||0));
+    if(inner<=0||Math.abs(Math.max(280,Math.min(1100,inner))-graphDrawnWidth)<24)return;
+    if(graphResizeTimer)win.clearTimeout(graphResizeTimer);
+    graphResizeTimer=win.setTimeout(()=>run(render),180);
+   });
+   graphResize.observe(body);
+  }
   function graphCanvas(W,H,nodes,label){
    const svg=doc.createElementNS(SVG,'svg');
    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
@@ -842,14 +866,19 @@
     }
     for(const[key,mark]of marks){
      const near=!id||key===id||neighbours.get(id).has(key);
-     mark.g.setAttribute('opacity',near?1:0.22);
-     if(id&&near)mark.label.setAttribute('opacity','1');
-     else if(!id&&!(labelled.has(key)||state.selected.has(key)))mark.label.setAttribute('opacity','0');
+     /* Focus dims the far marks, not their words: a label at 22% opacity was
+        text at under 2:1. Far labels step out of the way instead, and come
+        back when the focus goes. */
+     mark.g.setAttribute('opacity',1);
+     mark.circle?.setAttribute('opacity',near?1:0.22);
+     if(id)mark.label.setAttribute('opacity',near?'1':'0');
+     else mark.label.setAttribute('opacity',labelled.has(key)||state.selected.has(key)?'1':'0');
     }
    }
    const zoomBar=bar();let zoom=1;
    button('확대',()=>{zoom=Math.min(3,zoom+.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},zoomBar);
-   button('축소',()=>{zoom=Math.max(.5,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},zoomBar);
+   // Zoom goes in, not out past the fitted drawing: below 1 it shrank 11px labels to 5px.
+   button('축소',()=>{zoom=Math.max(1,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},zoomBar);
    node('span','실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 네모는 내가 갖고 있지 않은 논문 · 크기는 이 라이브러리 안에서의 중심성 · 색은 출판사',zoomBar,{class:'sc-muted'});
    // The one thing a citation map tells you that reading your own shelf cannot.
    if(graph.missing.length){
@@ -951,7 +980,7 @@
    }
    let zoom=1;
    button('확대',()=>{zoom=Math.min(3,zoom+.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
-   button('축소',()=>{zoom=Math.max(.5,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
+   button('축소',()=>{zoom=Math.max(1,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
    if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body,{class:'sc-muted'});
   }
   function drawTags(){sectionHead('선택 문헌의 태그',state.selected.size?`${state.selected.size}편`:'');const b=bar(),value=node('input',null,b,{placeholder:'추가·제거할 정확한 태그 (쉼표로 구분)','aria-label':'추가할 태그'});button('선택 문헌에 태그 추가',async()=>{await library.addTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('선택 문헌에서 태그 제거',async()=>{await library.removeTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('태그 필터 해제',()=>{state.tag='';render();},b);
@@ -1000,7 +1029,12 @@
    const CAP=40;const listed=own?matching:matching.slice(0,CAP);
    sectionHead(own?'이 문헌의 노트':state.query?'검색된 노트':matching.length>CAP?'최근 노트':'이 범위의 노트',
     matching.length>CAP&&!own&&!state.query?`${CAP}개 · 전체 ${matching.length}개`:`${matching.length}개`);
-   for(const n of listed){const c=card(n.title,[paperTitle(n.parentID),String(n.modified||'').slice(0,10)].filter(Boolean).join(' · '));const text=node('p',n.text.length>1200?n.text.slice(0,1200)+'…':n.text,c,{class:'sc-note-text'});if(n.text.length>1200)button('전체 내용 보기',()=>{text.textContent=n.text;},c);if(!own&&n.parentID&&paperTitle(n.parentID))button('이 문헌에 노트 쓰기',()=>{state.selected=new Set([String(n.parentID)]);state.query=search.value='';render();},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
+   for(const n of listed){const c=card(n.title,[paperTitle(n.parentID),String(n.modified||'').slice(0,10)].filter(Boolean).join(' · '));const text=node('p',n.text.length>1200?n.text.slice(0,1200)+'…':n.text,c,{class:'sc-note-text'});/* "전체 내용 보기" replaced the text but left the four-line clamp on, so
+    nothing opened; and a note under 1,200 characters but over four lines was
+    clamped with no way to open it. The button appears when the note is cut
+    either way, and opening removes the clamp. */
+   const more=button('전체 내용 보기',()=>{text.textContent=n.text;text.classList.add('sc-note-open');more.remove();},c);
+   more.hidden=!(n.text.length>1200||n.text.split('\n').length>4||n.text.length>320);if(!own&&n.parentID&&paperTitle(n.parentID))button('이 문헌에 노트 쓰기',()=>{state.selected=new Set([String(n.parentID)]);state.query=search.value='';render();},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
     // The list had no way to let a note go. Trash, not delete: Zotero's trash keeps it.
     button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);noteCache=null;await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':own?'이 문헌에는 아직 노트가 없습니다. 위에 첫 노트를 쓰세요.':'이 범위에 노트가 없습니다. 위에서 문헌을 골라 첫 노트를 쓰세요.');}
   /* Reading back through what you marked up.
@@ -1015,17 +1049,9 @@
      a colour dot and the page, the text at reading size, the comment under it
      as an editable memo, and the actions only on hover. */
   async function drawAnnotations(token){
-   const tools=bar();
-   // The panel-wide search box already narrows annotations by their text and
-   // comment, but nothing here said so. A box of its own makes that plain and
-   // keeps the query where the eye is.
-   const find=node('input',null,tools,{type:'search',placeholder:'주석 본문·메모 검색','aria-label':'주석 검색',class:'sc-annot-search'});
-   find.value=state.query;
-   let findTimer=null;
-   find.addEventListener('input',()=>{
-    if(findTimer)win.clearTimeout(findTimer);
-    findTimer=win.setTimeout(async()=>{state.query=find.value.trim();await render();const again=body.querySelector('.sc-annot-search');if(again){again.focus?.();again.setSelectionRange?.(again.value.length,again.value.length);}},250);
-   });
+   /* One search box, the panel's own: it narrows annotations by their text and
+      memo, and says so in its placeholder on this tab. A second box here held
+      the same query in two places (Codex, round 2). */
    // The three things done to a selection sit with the selection, after the
    // list's summary; the colour swatches there filter by colour, so the hex
    // box and its button are gone.
@@ -2963,6 +2989,7 @@
   if(runtime.Z.Notifier){notifier=runtime.Z.Notifier.registerObserver({notify:()=>{if(disposed||panel.hidden)return;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(()=>run(load),200);}},['item','item-tag','collection','tab'],'style-custom-workbench');}
   const selectionTimer=win.setInterval(()=>{if(!disposed&&!win.closed&&!panel.hidden&&scopeContext()!==observedContext)run(load);},500);
   function destroy(){if(disposed)return;
+   graphResize?.disconnect?.();if(graphResizeTimer)win.clearTimeout(graphResizeTimer);
    if(tabID){const id=tabID;tabID=null;closingSelf=true;moveBack();try{win.Zotero_Tabs.close(id);}catch(_){}closingSelf=false;}
    // An edit typed a moment ago is still waiting out its timer. Closing the
    // panel must write it, not discard it.

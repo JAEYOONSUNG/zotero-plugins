@@ -509,7 +509,9 @@
   #style-custom-workbench .sc-shell nav::-webkit-scrollbar { height: 0; }
   /* The last section fades rather than stopping at a hard edge, so the row
      reads as "there is more this way" instead of as a clipped list. */
-  #style-custom-workbench .sc-shell nav { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); scroll-snap-type: x proximity; }
+  /* The fade over the last section hid words, and snapping pulled the current
+     one out of view; the current section is centred on arrival instead. */
+  #style-custom-workbench .sc-shell nav { -webkit-mask-image: none; mask-image: none; scroll-snap-type: none; }
   #style-custom-workbench .sc-nav-group { scroll-snap-align: start; }
   #style-custom-workbench .sc-nav-group { flex: 0 0 auto; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; margin: 0; }
   /* The group boundary still reads, without a heading to print. */
@@ -654,7 +656,10 @@
 /* The PDF stays in sight; the other actions wait for the row to be wanted. */
 #style-custom-workbench .sc-path-row .sc-hit-actions:has(.sc-hit-pdf) { opacity: 1; }
 #style-custom-workbench .sc-path-row:not(:hover):not(:focus-within) .sc-hit-actions > :not(.sc-hit-pdf) { visibility: hidden; }
-#style-custom-workbench .sc-path-seed { border-top: 1px solid var(--sc-border-strong); border-bottom: 1px solid var(--sc-border-strong); }
+/* The section heading's rule is its top edge now; a second one six pixels
+   under it read as a double line (Codex, round 2). */
+#style-custom-workbench .sc-path-seed { border-top: 0; border-bottom: 1px solid var(--sc-border-strong); }
+#style-custom-workbench .sc-path-head + .sc-hit-group-note + .sc-hits { border-block-start: 0; }
 #style-custom-workbench .sc-path-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 12px 0 4px; font-size: 12px; }
 #style-custom-workbench .sc-path-depth { font-size: 12px; }
 /* A list being refreshed stays readable: the status line says it is loading.
@@ -784,7 +789,7 @@
   #style-custom-workbench .sc-page-cell[data-level="1"] { background: color-mix(in srgb, var(--sc-done) 55%, var(--sc-fill)); }
   #style-custom-workbench .sc-page-cell[data-level="2"] { background: color-mix(in srgb, var(--sc-done) 64%, var(--sc-fill)); }
   #style-custom-workbench .sc-page-cell[data-level="3"] { background: color-mix(in srgb, var(--sc-done) 84%, var(--sc-fill)); }
-  #style-custom-workbench .sc-watch-badge, #style-custom-workbench .sc-signal-retracted { color: #10131a; }
+  #style-custom-workbench .sc-signal-retracted { color: #10131a; }
   /* Only the filled chips take the accent ink here: the IF figure is bare
      coloured text, and dark ink on a dark surface is invisible. */
   #style-custom-workbench .sc-chip-on, #style-custom-workbench .sc-chip-button[aria-pressed=true] { color: var(--sc-accent-ink); }
@@ -826,8 +831,8 @@
 #style-custom-workbench .sc-watch-new .sc-watch-name { font-weight: 650; }
 /* The only row that should catch the eye is one with something new on it. */
 #style-custom-workbench .sc-watch-badge {
-  flex: none; min-width: 16px; padding: 0 5px; border-radius: 100px;
-  background: var(--sc-done); color: #fff;
+  flex: none; min-width: 16px; padding: 0 5px; border-radius: var(--sc-radius-sm);
+  background: var(--sc-fill); color: var(--sc-text);
   font: 650 11px/16px var(--sc-font); text-align: center;
 }
 #style-custom-workbench .sc-watch-sub {
@@ -847,7 +852,9 @@
   font: 12px/1.5 var(--sc-font);
 }
 #style-custom-workbench .sc-notice[hidden] { display: none; }
-#style-custom-workbench .sc-notice { flex-wrap: nowrap; gap: 8px; }
+/* The same notice heads every page, so it is the quietest band there is. */
+#style-custom-workbench .sc-notice { flex-wrap: nowrap; gap: 8px; padding-block: 6px; background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-notice-actions { flex: 0 0 auto; margin-inline-start: 0; }
 #style-custom-workbench .sc-notice-text { flex: 1 1 0; min-width: 0; }
 #style-custom-workbench .sc-notice-actions { display: flex; gap: 6px; margin-left: auto; }
 
@@ -1056,7 +1063,7 @@
 #style-custom-workbench .sc-signal-corrected { color: var(--sc-muted); background: var(--sc-fill); }
 
 /* A patent among the papers: the same row, a filing mark before its title. */
-#style-custom-workbench .sc-watch-patent { background: color-mix(in srgb, var(--sc-reading) 18%, transparent); color: var(--sc-reading-ink); }
+#style-custom-workbench .sc-watch-patent { background: var(--sc-fill); color: var(--sc-text); }
 #style-custom-workbench .sc-patent .sc-preprint { margin-inline-end: 6px; }
 
 /* The map's legend: the commonest journals in it, each in its own mark. */
@@ -1151,6 +1158,7 @@
 /* A note's text is what the reader came for: body size, full ink. .sc-card > p
    (a card's caption) is more specific and was setting it at 11px grey. */
 #style-custom-workbench .sc-card > .sc-note-text { font: 400 13px/1.55 var(--sc-font); color: var(--sc-text); }
+#style-custom-workbench .sc-note-text.sc-note-open { display: block; -webkit-line-clamp: unset; overflow: visible; }
 #style-custom-workbench .sc-note-text { font-size: 12px; color: var(--sc-text); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 #style-custom-workbench .sc-annot-search { flex: 1 1 200px; max-width: 320px; }
 #style-custom-workbench .sc-card-text p { font-variant-numeric: tabular-nums; }
