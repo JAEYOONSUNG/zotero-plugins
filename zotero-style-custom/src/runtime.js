@@ -29,7 +29,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.discoverCache = new Map();
     // Portrait records older than this were made by the ORCID-homepage-only
     // search; their misses are asked again once, with Wikidata.
-    this.PORTRAIT_VERSION = 2;
+    this.PORTRAIT_VERSION = 3;
     this.DISCOVER_CACHE_LIMIT = 60;
     // Raised whenever the reading-order algorithm or the stored plan's shape
     // changes: a plan kept by an older version is asked again.
@@ -2484,7 +2484,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      A miss is remembered for two months; a busy Wikidata is not a miss. */
   async findPortraits(people, {signal, onProgress, refresh = false} = {}) {
     const tools = this.portraitTools, store = this.portraitCache(), discover = this.discoverTools;
-    const result = {asked: 0, found: 0, wikimedia: 0, homepage: 0, none: 0, busy: false, requests: 0};
+    const result = {asked: 0, found: 0, wikimedia: 0, scholar: 0, homepage: 0, none: 0, busy: false, requests: 0};
     const want = (Array.isArray(people) ? people : [])
       .map(person => ({...person, id: discover.shortID(person?.id)}))
       .filter(person => person.id.startsWith('A'))
@@ -2545,6 +2545,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         record.page = tools.commonsPage(known.image);
         record.source = 'Wikimedia Commons';
         result.wikimedia++;
+      } else if (known?.scholar && await this.scholarHasPhoto(known.scholar, result, signal)) {
+        record.url = tools.scholarPhoto(known.scholar);
+        record.page = tools.scholarPage(known.scholar);
+        record.source = 'Google Scholar';
+        result.scholar++;
       } else {
         const pages = known?.site ? [known.site] : [];
         const listURL = tools.orcidURL(orcid);
@@ -2576,14 +2581,27 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return result;
   }
 
-  async isImage(url, {signal} = {}) {
+  // What a HEAD request says a URL is: null when it did not answer, '' when it
+  // answered without a type.
+  async imageType(url, {signal} = {}) {
     try {
       const response = await this.Z.HTTP.request('HEAD', url, {timeout: 10000, successCodes: false});
       signal?.throwIfAborted?.();
-      const type = String(response?.getResponseHeader?.('Content-Type') || '');
-      // A server that will not say is given the benefit; one that says HTML is not.
-      return response?.status >= 200 && response?.status < 400 && (!type || /^image\//i.test(type));
-    } catch (error) { if (error?.name === 'AbortError') throw error; return false; }
+      if (!(response?.status >= 200 && response?.status < 400)) return null;
+      return String(response?.getResponseHeader?.('Content-Type') || '');
+    } catch (error) { if (error?.name === 'AbortError') throw error; return null; }
+  }
+
+  // Scholar's photo when the person uploaded one, not its grey placeholder.
+  async scholarHasPhoto(id, result, signal) {
+    result.requests++;
+    return this.portraitTools.scholarIsPhoto(await this.imageType(this.portraitTools.scholarPhoto(id), {signal}));
+  }
+
+  async isImage(url, options = {}) {
+    const type = await this.imageType(url, options);
+    // A server that will not say is given the benefit; one that says HTML is not.
+    return type != null && (!type || /^image\//i.test(type));
   }
 
   // One author, when their page is opened: the same search, for one.
@@ -2595,8 +2613,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
 
   // Every followed author at once, from the watchlist's button.
+  // One search at a time: the button and the quiet pass after a news sweep
+  // share it rather than asking Wikidata twice.
   async findWatchedPortraits(options = {}) {
-    return this.findPortraits(this.watchedAuthors(), options);
+    if (this.portraitJob) return this.portraitJob;
+    this.portraitJob = this.findPortraits(this.watchedAuthors(), options);
+    try { return await this.portraitJob; } finally { this.portraitJob = null; }
+  }
+
+  // How many followed authors have never been looked for, or are due again.
+  portraitsDue() {
+    const store = this.portraitCache(), tools = this.portraitTools;
+    return this.watchedAuthors().filter(person => {
+      const known = store[this.discoverTools.shortID(person?.id)];
+      return !known || tools.stale(known.checkedAt) || (!known.url && (known.v || 1) < this.PORTRAIT_VERSION);
+    }).length;
   }
 
   // No extra requests: the works the author tab already fetched carry every

@@ -123,8 +123,8 @@ test("Wikidata is searched by ORCID and read back to a freely licensed photo and
     Q3: {id: "Q3", claims: {P18: [snak("Nobody.jpg")]}}
   }});
   // The preferred image, not merely the first; nothing without an ORCID.
-  assert.deepEqual(found.get("0000-0001-9161-999X"), {qid: "Q1", image: "Jane Roe 2024.jpg", site: "https://roe-lab.example.org/"});
-  assert.deepEqual(found.get("0000-0002-1234-5678"), {qid: "Q2", image: "", site: ""});
+  assert.deepEqual(found.get("0000-0001-9161-999X"), {qid: "Q1", image: "Jane Roe 2024.jpg", site: "https://roe-lab.example.org/", scholar: ""});
+  assert.deepEqual(found.get("0000-0002-1234-5678"), {qid: "Q2", image: "", site: "", scholar: ""});
   assert.equal(found.size, 2);
   assert.equal(portrait.commonsThumb("Jane Roe 2024.jpg", 160), "https://commons.wikimedia.org/wiki/Special:FilePath/Jane_Roe_2024.jpg?width=160");
   assert.equal(portrait.commonsPage("Jane Roe 2024.jpg"), "https://commons.wikimedia.org/wiki/File:Jane_Roe_2024.jpg");
@@ -144,4 +144,13 @@ test("a Wikidata item with several ORCIDs answers to each of them", () => {
     P18: [{...snak("George Church in 2023 06.jpg"), rank: "preferred"}]}}}});
   for (const orcid of ["0000-0001-6232-9969", "0000-0002-0775-2913", "0000-0003-3535-2076"])
     assert.equal(found.get(orcid)?.image, "George Church in 2023 06.jpg", orcid);
+});
+
+test("a Google Scholar ID from Wikidata becomes that profile's photo, and only a JPEG counts", () => {
+  assert.equal(portrait.scholarID("lcNi1RUAAAAJ"), "lcNi1RUAAAAJ");
+  assert.equal(portrait.scholarID("../evil?x=1"), "", "anything but a Scholar ID is dropped");
+  assert.equal(portrait.scholarPhoto("lcNi1RUAAAAJ"), "https://scholar.googleusercontent.com/citations?view_op=view_photo&user=lcNi1RUAAAAJ&citpid=2");
+  assert.equal(portrait.scholarIsPhoto("image/jpeg"), true);
+  assert.equal(portrait.scholarIsPhoto("image/png"), false, "the grey placeholder is a PNG");
+  assert.equal(portrait.scholarIsPhoto(null), false);
 });

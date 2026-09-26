@@ -210,19 +210,21 @@
    const last=parts.length>1?parts[parts.length-1][0]:'';
    return (first+last).toUpperCase();
   }
+  // A found photograph over the initials; the initials stay if it fails to load.
+  function showFace(face,found){
+   if(disposed||!face||!found?.url)return;
+   const img=doc.createElementNS(HTML,'img');
+   img.src=found.url;img.alt='';img.setAttribute('aria-hidden','true');
+   img.addEventListener('error',()=>img.remove());
+   img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});
+   face.appendChild(img);
+   face.title=found.page?`사진 출처: ${found.page}`:'';
+  }
   async function paintPortrait(face,person){
    if(!runtime.fetchPortrait||!person?.id)return;
    if(runtime.pref?.('authorPortraits',true)===false)return;
    const known=runtime.portraitOf?.(person.id);
-   const draw=found=>{
-    if(disposed||!face.isConnected||!found?.url)return;
-    const img=doc.createElementNS(HTML,'img');
-    img.src=found.url;img.alt='';img.setAttribute('aria-hidden','true');
-    img.addEventListener('error',()=>img.remove());
-    img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});
-    face.appendChild(img);
-    face.title=found.page?`사진 출처: ${found.page}`:'';
-   };
+   const draw=found=>{if(face.isConnected)showFace(face,found);};
    if(known){draw(known);return;}
    try{draw(await runtime.fetchPortrait(person));}catch(error){runtime.Z.logError?.(error);}
   }
@@ -2253,7 +2255,10 @@
       chip.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}});
       // Thickness stands for how often, which is the only quantity here.
       chip.style.setProperty('--sc-tie',String(Math.max(0.18,mate.papers/most)));
-      node('span',initials(mate.name),chip,{class:'sc-node-face'});
+      const mateFace=node('span',null,chip,{class:'sc-node-face'});
+      node('span',initials(mate.name),mateFace,{class:'sc-face-text'});
+      // Only a face already found: a circle of twenty does not cost twenty searches.
+      showFace(mateFace,runtime.portraitOf?.(mate.id));
       const body=node('span',null,chip,{class:'sc-node-body'});
       node('span',mate.name,body,{class:'sc-node-name'});
       node('span',`${mate.papers}편${mate.last?` · ${mate.last}`:''}`,body,{class:'sc-node-meta'});
@@ -2312,6 +2317,14 @@
        ? `${result.withNews}명이 새 논문 ${result.works}편을 냈습니다. 요청 ${result.requests}회.`
        : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`,
       result.budgetGone);
+     /* Faces follow the news without a second press: only for people never
+        looked for or due again, off the OpenAlex budget, in the background. */
+     if(!result.budgetGone&&runtime.pref?.('authorPortraits',true)!==false&&runtime.portraitsDue?.()>0){
+      runtime.findWatchedPortraits().then(found=>{
+       if(disposed||state.tab!=='authors'||!found?.found)return;
+       refreshWatched();
+      }).catch(error=>runtime.Z.logError?.(error));
+     }
     }),tools);
     /* Faces for everyone on the list at once: Wikidata first (a freely licensed
        photograph, by ORCID), then each person's own pages. About two dozen
@@ -2319,7 +2332,7 @@
     if(typeof runtime.findWatchedPortraits==='function'&&runtime.pref?.('authorPortraits',true)!==false){
      const withFace=watched.filter(person=>runtime.portraitOf?.(person.id)).length;
      button(withFace?`사진 다시 찾기 (${withFace}명 있음)`:'사진 찾기',()=>run(async()=>{
-      message('관심 저자의 사진을 찾는 중… Wikidata와 각자의 홈페이지를 확인합니다.');
+      message('관심 저자의 사진을 찾는 중… Wikidata, Google Scholar, 각자의 홈페이지를 확인합니다.');
       const result=await runtime.findWatchedPortraits({onProgress:(stage,done,total)=>
        message(stage==='wikidata'?`Wikidata에서 찾는 중 ${Math.min(done+15,total)}/${total}`:`홈페이지에서 찾는 중 ${done+1}/${total}`)});
       if(token!==epoch||disposed||state.tab!=='authors')return;
@@ -2327,7 +2340,7 @@
       const total=watched.filter(person=>runtime.portraitOf?.(person.id)).length;
       message(!result.asked
        ? `확인할 사람이 없습니다. 사진이 있는 ${total}명 외에는 최근 두 달 안에 이미 찾아봤습니다.`
-       : `사진 ${total}명 · 이번에 찾음 ${result.found}명 (Wikimedia ${result.wikimedia} · 홈페이지 ${result.homepage}) · 요청 ${result.requests}회`
+       : `사진 ${total}명 · 이번에 찾음 ${result.found}명 (Wikimedia ${result.wikimedia} · Google Scholar ${result.scholar||0} · 홈페이지 ${result.homepage}) · 요청 ${result.requests}회`
          +(result.busy?' · Wikidata가 요청을 제한해 일부는 다음에 다시 찾습니다.':''),
        result.busy);
      }),tools);
@@ -2350,10 +2363,7 @@
      row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
      const face=node('span',null,row,{class:'sc-face sc-watch-face','aria-hidden':'true'});
      node('span',initials(person.name),face,{class:'sc-face-text'});
-     {const known=runtime.portraitOf?.(person.id);
-      if(known?.url){const img=doc.createElementNS(HTML,'img');img.src=known.url;img.alt='';
-       img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});img.addEventListener('error',()=>img.remove());face.appendChild(img);
-       face.title=known.page?`사진 출처: ${known.page}`:'';}}
+     showFace(face,runtime.portraitOf?.(person.id));
      const line=node('div',null,row,{class:'sc-watch-line'});
      node('span',person.name,line,{class:'sc-watch-name'});
      if(count)node('span',String(count),line,{class:'sc-watch-badge',title:`마지막 확인 이후 새 논문 ${count}편`});

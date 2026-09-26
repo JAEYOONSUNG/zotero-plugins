@@ -252,10 +252,22 @@
       if (!orcids.length) continue;
       const image = text(claim(entity, 'P18'));
       const site = absolute('https://www.wikidata.org/', claim(entity, 'P856'));
-      for (const orcid of orcids) out.set(orcid, {qid: text(entity?.id), image, site});
+      const scholar = scholarID(claim(entity, 'P1960'));
+      for (const orcid of orcids) out.set(orcid, {qid: text(entity?.id), image, site, scholar});
     }
     return out;
   }
+  /* A Google Scholar profile's own photo, by the profile ID Wikidata records
+     (P1960): one image request, no search page read. A profile without a
+     photo answers with Scholar's grey placeholder, which is a PNG; the
+     photos people upload come back as JPEG, so only a JPEG counts. */
+  const scholarID = value => /^[\w-]{12}$/.test(text(value)) ? text(value) : '';
+  const scholarPhoto = id => scholarID(id)
+    ? `https://scholar.googleusercontent.com/citations?view_op=view_photo&user=${scholarID(id)}&citpid=2` : '';
+  const scholarPage = id => scholarID(id)
+    ? `https://scholar.google.com/citations?user=${scholarID(id)}` : '';
+  const scholarIsPhoto = type => /^image\/jpe?g\b/i.test(text(type));
+
   // A Commons file, at the size it will be drawn, and the page that credits it.
   const commonsFile = name => text(name).replace(/ /g, '_');
   const commonsThumb = (name, width = 160) => name
@@ -298,7 +310,7 @@
   const api = {choose, readPage, personImage, orcidURL, readResearcherURLs, stale, coauthors,
     normalise, absolute, CACHE_DAYS, MIN_SCORE, MARGIN,
     bareOrcid, wikidataSearchURL, readWikidataSearch, wikidataEntitiesURL, readWikidataEntities,
-    commonsThumb, commonsPage, WIKIDATA_SEARCH_BATCH, WIKIDATA_ENTITY_BATCH};
+    commonsThumb, commonsPage, scholarID, scholarPhoto, scholarPage, scholarIsPhoto, WIKIDATA_SEARCH_BATCH, WIKIDATA_ENTITY_BATCH};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleAuthorPortrait = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
