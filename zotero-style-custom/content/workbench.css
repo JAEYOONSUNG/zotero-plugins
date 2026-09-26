@@ -102,7 +102,8 @@
   max-width: none; max-height: none; border-radius: var(--sc-radius-card); resize: none;
 }
 #style-custom-workbench .sc-header .sc-brand { cursor: default; user-select: none; }
-#style-custom-workbench sub, #style-custom-workbench sup { font-size: .75em; line-height: 0; }
+/* CO₂ in a 13px title set its 2 at 9.75px; the floor holds there too. */
+#style-custom-workbench sub, #style-custom-workbench sup { font-size: max(11px, .75em); line-height: 0; }
 #style-custom-workbench[hidden],
 #style-custom-workbench [hidden] { display: none !important; }
 #style-custom-workbench *,
@@ -367,7 +368,7 @@
 /* Existing scientific views stay usable in both color schemes. */
 /* The map is as tall as it has papers to place; a fixed 16:10 frame left three
    nodes floating in an empty half-screen. */
-#style-custom-workbench .sc-graph { display: block; width: 100%; height: min(var(--sc-graph-height, 360px), 70cqh); aspect-ratio: auto; max-height: 70cqh; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
+#style-custom-workbench .sc-graph { display: block; width: 100%; height: var(--sc-graph-height, 360px); aspect-ratio: auto; max-height: 70cqh; min-height: 220px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
 #style-custom-workbench .sc-graph text { font: 11px var(--sc-font); }
 #style-custom-workbench .sc-graph-label[data-kind=external] { fill: var(--sc-external); }
 #style-custom-workbench .sc-segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--sc-radius); background: var(--sc-fill); }
@@ -402,6 +403,7 @@
 #style-custom-workbench .sc-canvas-card h3,
 #style-custom-workbench .sc-canvas-card p,
 #style-custom-workbench .sc-canvas-card .sc-check,
+#style-custom-workbench .sc-canvas-card summary,
 #style-custom-workbench .sc-canvas-card .sc-actions { color: #252a31; background: #ffffff; border-radius: var(--sc-radius-sm); padding: 4px; }
 #style-custom-workbench .sc-canvas-card input,
 #style-custom-workbench .sc-canvas-card textarea,
@@ -585,7 +587,9 @@
 #style-custom-workbench .sc-hit:hover .sc-hit-actions,
 #style-custom-workbench .sc-hit:focus-within .sc-hit-actions { opacity: 1; }
 
-#style-custom-workbench .sc-hit-owned { grid-column: 2; grid-row: 1; align-self: center; color: var(--sc-done); font-size: 12px; font-weight: 600; white-space: nowrap; }
+/* "보유" is one mark wherever it appears: the quiet grey word the reading
+   order uses. It was green "보유 중" in the list and green 11px on the timeline. */
+#style-custom-workbench .sc-hit-owned { grid-column: 2; grid-row: 1; align-self: center; color: var(--sc-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
 /* The line of development: a year in its own column, a rule running down
    between the years, and a dot on each step. It reads down, like a timeline,
    because that is the order the work happened in. */
@@ -597,7 +601,7 @@
 #style-custom-workbench .sc-line-year { grid-column: 1; color: var(--sc-text); font: 600 12px/1.45 var(--sc-font); font-variant-numeric: tabular-nums; text-align: end; }
 #style-custom-workbench .sc-line-body { grid-column: 2; min-width: 0; padding-inline-start: 10px; }
 #style-custom-workbench .sc-line-body > p { margin: 0; }
-#style-custom-workbench .sc-line-owned { margin-inline-start: 6px; color: var(--sc-done); font-size: 11px; font-weight: 600; }
+#style-custom-workbench .sc-line-owned { margin-inline-start: 6px; color: var(--sc-muted); font-size: 12px; font-weight: 600; }
 /* The paper the reader has open closes the line: a filled marker, no dot. */
 #style-custom-workbench .sc-line-seed::after { width: 9px; height: 9px; inset-inline-start: 50px; background: var(--sc-text); }
 #style-custom-workbench .sc-line-seed { padding-block-end: 0; }
@@ -923,7 +927,9 @@
 #style-custom-workbench .sc-node-face {
   flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  background: color-mix(in srgb, var(--sc-accent) calc(var(--sc-tie) * 100%), var(--sc-fill));
+  /* Tinted by how often they co-publish, the strongest tie put the initials
+     at 2.3:1 in the dark theme. The "9편" beside it already says how often. */
+  background: var(--sc-fill);
   color: var(--sc-text); font: 600 9.5px/1 var(--sc-title-font);
 }
 #style-custom-workbench .sc-node-body { display: flex; flex-direction: column; min-width: 0; gap: 0; }
@@ -1038,7 +1044,8 @@
 #style-custom-workbench .sc-annot-swatch:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
 
 /* A JCR quartile, shaded by rank: Q1 reads as the strongest, Q4 the faintest. */
-#style-custom-workbench .sc-quartile { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: 100px; font: 700 10px/16px var(--sc-mono); text-align: center; color: var(--sc-accent-ink); }
+/* The quartile's colour is the figure itself (Q1..Q4), so it stays; its pill ends go. */
+#style-custom-workbench .sc-quartile { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 10px/16px var(--sc-mono); text-align: center; color: var(--sc-accent-ink); }
 #style-custom-workbench .sc-quartile[data-q="1"] { background: var(--sc-done); }
 #style-custom-workbench .sc-quartile[data-q="2"] { background: var(--sc-accent); }
 #style-custom-workbench .sc-quartile[data-q="3"] { background: var(--sc-muted); }
@@ -1059,6 +1066,11 @@
 /* A notice on a paper, worst first: solid red for withdrawn, so it cannot read as a paper. */
 #style-custom-workbench .sc-signal { display: inline-block; padding: 0 5px; border-radius: var(--sc-radius-sm); font: 700 11px/14px var(--sc-font); vertical-align: middle; }
 #style-custom-workbench .sc-signal-retracted { background: var(--sc-error); color: #fff; }
+@media (prefers-color-scheme: dark) {
+  /* Declared after the light rule, so it is the one that wins in the dark:
+     white on the light red of the dark theme was 2.7:1. */
+  #style-custom-workbench .sc-signal-retracted { color: #10131a; }
+}
 #style-custom-workbench .sc-signal-concern { color: var(--sc-reading-ink); background: color-mix(in srgb, var(--sc-reading) 16%, transparent); }
 #style-custom-workbench .sc-signal-corrected { color: var(--sc-muted); background: var(--sc-fill); }
 
@@ -1365,9 +1377,9 @@
 /* Groups and editions: quiet chips on one line, not two lines of prose. */
 #style-custom-workbench .sc-jcr-memberships, #style-custom-workbench .sc-jcr-pills { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
 #style-custom-workbench .sc-jcr-memberships li, #style-custom-workbench .sc-jcr-pill {
-  padding: 0 7px; border-radius: 100px; background: var(--sc-fill); color: var(--sc-muted); font: 12px/18px var(--sc-font); white-space: nowrap;
+  padding: 0 7px; border-radius: var(--sc-radius-sm); background: var(--sc-fill); color: var(--sc-muted); font: 12px/18px var(--sc-font); white-space: nowrap;
 }
-#style-custom-workbench .sc-jcr-editions .sc-jcr-pill { font: 600 11px/17px var(--sc-mono); letter-spacing: .02em; background: var(--sc-accent-soft); color: var(--sc-accent); }
+#style-custom-workbench .sc-jcr-editions .sc-jcr-pill { font: 600 11px/17px var(--sc-mono); letter-spacing: .02em; background: var(--sc-fill); color: var(--sc-text); }
 #style-custom-workbench .sc-jcr-number .sc-jcr-memberships { justify-content: flex-end; }
 
 /* How big a category is, as a bar under its count, against the biggest on the page. */

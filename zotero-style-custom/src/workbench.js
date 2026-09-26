@@ -636,7 +636,13 @@
    const activity=item=>Math.max(timestamp(item.lastRead),timestamp(item.dateModified),timestamp(item.dateAdded));
    const cap=setting('recentCount',50);
    const recent=rows().filter(item=>activity(item)>0).sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id))).slice(0,cap);
-   node('p',`마지막 읽기·수정·추가 시각이 최근인 순서로 ${recent.length}편입니다.`,body,{class:'sc-muted'});
+   /* With nothing recent, "…최근인 순서로 0편입니다" sat over an empty-state
+      message and the two read as a page that had failed. The order is said
+      only when there is something in it. */
+   if(recent.length)node('p',`마지막 읽기·수정·추가 시각이 최근인 순서로 ${recent.length}편입니다.`,body,{class:'sc-muted'});
+   // Nothing recent in a scope that has papers is not a search that missed:
+   // "검색어나 필터를 지우세요" pointed at filters that were not set.
+   if(!recent.length&&rows().length){empty('이 범위에는 최근 활동 시각이 기록된 문헌이 없습니다. 문헌을 열어 읽거나 추가·수정하면 여기에 표시됩니다.');return;}
    await paperList(recent);
   }
   /* The citation map.
@@ -683,10 +689,19 @@
      afterwards scaled the drawing, and its 11px labels with it, down to 6px
      (Codex, round 2). When the body's width moves by more than a few pixels
      while the graph is showing, it is drawn again at the new width. */
+  function syncNoteOverflow(){
+   for(const text of body.querySelectorAll('.sc-note-text:not(.sc-note-open)')){
+    const more=text.parentElement?.querySelector('.sc-note-more');
+    if(!more)continue;
+    more.hidden=!(text.dataset.truncated==='true'||text.scrollHeight>text.clientHeight+1);
+   }
+  }
   let graphResize=null,graphResizeTimer=null;
   if(typeof win.ResizeObserver==='function'){
    graphResize=new win.ResizeObserver(()=>{
-    if(disposed||panel.hidden||state.tab!=='graph'||!graphDrawnWidth)return;
+    if(disposed||panel.hidden)return;
+    if(state.tab==='notes'){syncNoteOverflow();return;}
+    if(state.tab!=='graph'||!graphDrawnWidth)return;
     const cs=win.getComputedStyle?.(body);
     const inner=Math.round((body.clientWidth||0)-(parseFloat(cs?.paddingLeft)||0)-(parseFloat(cs?.paddingRight)||0));
     if(inner<=0||Math.abs(Math.max(280,Math.min(1100,inner))-graphDrawnWidth)<24)return;
@@ -1033,8 +1048,12 @@
     nothing opened; and a note under 1,200 characters but over four lines was
     clamped with no way to open it. The button appears when the note is cut
     either way, and opening removes the clamp. */
-   const more=button('전체 내용 보기',()=>{text.textContent=n.text;text.classList.add('sc-note-open');more.remove();},c);
-   more.hidden=!(n.text.length>1200||n.text.split('\n').length>4||n.text.length>320);if(!own&&n.parentID&&paperTitle(n.parentID))button('이 문헌에 노트 쓰기',()=>{state.selected=new Set([String(n.parentID)]);state.query=search.value='';render();},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
+   const more=button('전체 내용 보기',()=>{text.textContent=n.text;text.classList.add('sc-note-open');more.remove();},c,{class:'sc-note-more'});
+   // Cut by length, or by the four-line clamp at the width it is shown at; the
+   // second can only be measured once laid out, and again when the width changes.
+   text.dataset.truncated=String(n.text.length>1200);
+   more.hidden=!(n.text.length>1200||n.text.split('\n').length>4);
+   win.requestAnimationFrame?.(syncNoteOverflow);if(!own&&n.parentID&&paperTitle(n.parentID))button('이 문헌에 노트 쓰기',()=>{state.selected=new Set([String(n.parentID)]);state.query=search.value='';render();},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
     // The list had no way to let a note go. Trash, not delete: Zotero's trash keeps it.
     button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);noteCache=null;await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':own?'이 문헌에는 아직 노트가 없습니다. 위에 첫 노트를 쓰세요.':'이 범위에 노트가 없습니다. 위에서 문헌을 골라 첫 노트를 쓰세요.');}
   /* Reading back through what you marked up.
@@ -1499,8 +1518,11 @@
    if(!reader.viewGroups().length)empty('열 표시·순서·너비·정렬을 조절한 뒤 현재 뷰를 저장하세요.');
   }
   function drawCanvas(){const b=bar(),name=node('input',null,b,{placeholder:'새 보드 이름','aria-label':'보드 이름'});button('보드 만들기',async()=>{const board=model.createBoard(runtime.cache,name.value);state.boardID=board.id;runtime.dirty=true;await runtime.flush();render();},b,{'data-variant':'primary'});const select=node('select',null,b,{'aria-label':'캔버스 선택'});node('option','보드 선택',select,{value:''});for(const board of runtime.cache.boards||[])node('option',board.name,select,{value:board.id});select.value=state.boardID||'';select.addEventListener('change',()=>{state.boardID=select.value;state.cardIDs.clear();render();});const board=(runtime.cache.boards||[]).find(b=>b.id===state.boardID);
-   button('보드 삭제',async()=>{if(!board)throw new Error('삭제할 보드를 선택하세요.');deletedCardSelections.set(board.id,[...state.cardIDs]);model.deleteBoard(runtime.cache,board.id);state.boardID=null;state.cardIDs.clear();runtime.dirty=true;await runtime.flush();render();},b,{class:'sc-danger-soft'});
-   button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b);
+   button('보드 삭제',async()=>{if(!board)throw new Error('삭제할 보드를 선택하세요.');deletedCardSelections.set(board.id,[...state.cardIDs]);model.deleteBoard(runtime.cache,board.id);state.boardID=null;state.cardIDs.clear();runtime.dirty=true;await runtime.flush();render();},b,{class:'sc-danger-soft'}).disabled=!board;
+   // Nothing to act on is shown as off, as the matrix's paging and the tab
+   // manager's moves already are, instead of an error after the press.
+   select.disabled=!(runtime.cache.boards||[]).length;
+   button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b).disabled=!(deletedCardSelections.size||(runtime.cache.boardTrash||[]).length);
    if(!board){empty('보드를 만들고 선택한 문헌을 카드로 추가하세요.');return;}
    const save=async()=>{runtime.dirty=true;await runtime.flush();render();};button('선택 문헌 추가',async()=>{model.addToBoard(runtime.cache,board,selected());await save();},b);button('메모 카드 추가',async()=>{model.addBoardNote(runtime.cache,board,'새 메모');await save();},b);button('카드 연결',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('두 카드를 선택하세요.');model.linkCards(board,...ids);await save();},b);button('선택 카드 삭제',async()=>{for(const id of state.cardIDs)model.removeCard(board,id);state.cardIDs.clear();await save();},b);
    const boardName=node('input',null,b,{'aria-label':'현재 보드 이름'});boardName.value=board.name;boardName.dataset.draftKey=JSON.stringify(['board-name',board.id]);
@@ -1685,7 +1707,7 @@
    if(work.citations!=null){meta.appendChild(doc.createTextNode(' · '));node('span',T(`인용 ${work.citations}`),meta,{class:'sc-hit-cited'});}
    if(rest.length)meta.appendChild(doc.createTextNode(' · '+rest.join(' · ')));
    if(work.authors?.length)node('p',work.authors.slice(0,4).join(', ')+(work.authors.length>4?` 외 ${work.authors.length-4}명`:''),row,{class:'sc-hit-authors'});
-   if(work.inLibrary){node('span','보유 중',row,{class:'sc-hit-owned'});return row;}
+   if(work.inLibrary){node('span','보유',row,{class:'sc-hit-owned'});return row;}
    const actions=node('div',null,row,{class:'sc-hit-actions'});
    if(!work.doi&&!work.inLibrary&&typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 찾기',()=>runtime.Z.ZotPoP.openSearch(win,{title:work.title||'',year:work.year||''}),actions);
    if(work.doi)button('추가',()=>run(async()=>{
@@ -2596,17 +2618,9 @@
    }
    const browser=runtime.jcrBrowser||root.CustomStyleJCRBrowser;
    if(!runtime.jcrCatalog||typeof browser?.mount!=='function'){
-    node('p','공식 JCR 카테고리 자료를 불러오지 못했습니다. 플러그인 업데이트를 확인하세요.',body,{class:'sc-jcr-unavailable',role:'alert'});
-    /* The columns that belong here, named but empty: a page with one sentence
-       on it does not say what it would have shown. They are the real table's
-       own columns and classes, so nothing moves when the data arrives. */
-    const skeleton=node('table',null,body,{class:'sc-jcr-skeleton','aria-hidden':'true'});
-    const headRow=node('tr',null,node('thead',null,skeleton),{class:'sc-journal-head'});
-    const columns=[['로컬 JIF 순번','sc-col-rank'],['저널','sc-col-name'],['저장 Q','sc-col-q'],['약어','sc-col-abbr'],
-     ['출판사','sc-col-pub'],['내 문헌','sc-col-n'],['OpenAlex 분야','sc-col-fields'],['로컬 분야 순위','sc-col-fieldrank'],['JIF','sc-col-if']];
-    for(const [label,cls] of columns)node('th',T(label),headRow,{scope:'col',class:cls});
-    const skeletonBody=node('tbody',null,skeleton);
-    for(let i=0;i<3;i++){const tr=node('tr',null,skeletonBody);for(const [,cls] of columns)node('td','—',tr,{class:cls});}
+    node('p','공식 JCR 카테고리 자료를 불러오지 못했습니다. 플러그인 업데이트를 확인하거나 아래에서 다른 탐색 방법을 고르세요.',body,{class:'sc-jcr-unavailable sc-empty',role:'alert'});
+    /* A failure says so and offers the ways on. Rows of dashes under real
+       column names read as data that had come back empty (Codex, round 3). */
     const actions=bar();
     button('JCR 원본 열기',()=>runtime.Z.launchURL?.('https://jcr.clarivate.com/jcr/browse-categories'),actions);
     button('OpenAlex 주제로 탐색',()=>switchBrowser('openalex'),actions);

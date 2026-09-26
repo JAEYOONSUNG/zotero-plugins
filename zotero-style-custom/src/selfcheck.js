@@ -180,14 +180,15 @@
        code actually running, and the stylesheet actually applied, for a marker
        of this build. */
     results.push(await attempt('the running panel is this build, not a cached one', () => {
-      const MARK = 'graphDrawnWidth';
+      const MARK = 'syncNoteOverflow';
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
       /* And a value only this build's stylesheet has: the 12px secondary line
          of the type scale, which was 11px before it. Update both marks when a
          change touches only one of the two files. */
-      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-note-text.sc-note-open';
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench sub, #style-custom-workbench sup'
+        && String(rule.style?.getPropertyValue('font-size') || '').includes('max');
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;

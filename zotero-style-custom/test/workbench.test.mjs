@@ -426,7 +426,8 @@ test('actions stay hidden until a row is wanted, and importing redraws that row 
  const call=f.calls.find(c=>c[0]==='importWork');
  assert.equal(call[1].doi,'10.1/W5');
  const redrawn=f.body().querySelector('.sc-hit');
- assert.equal(redrawn.querySelector('.sc-hit-owned').textContent,'보유 중');
+ // One word for owned, as the reading order and the timeline write it.
+ assert.equal(redrawn.querySelector('.sc-hit-owned').textContent,'보유');
  assert.equal(redrawn.querySelector('.sc-hit-actions'),null,'an owned paper has nothing left to do');
  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/Imported paper/);
  f.bench.destroy();
@@ -1588,15 +1589,11 @@ test('missing official catalog is visible in JCR mode and never silently display
  await f.bench.show('journals');
  assert.ok(f.body().querySelector('.sc-jcr-unavailable[role="alert"]'));
  assert.equal(f.body().querySelector('.sc-journal-table'),null);assert.equal(f.bench.state.journalBrowser,'jcr');
- /* A sentence saying the load failed does not say what would have been here,
-    so the columns are drawn empty -- in their own table, because the real
-    one's presence is what tells "loaded" from "could not load". */
- const skeleton=f.body().querySelector('.sc-jcr-skeleton');
- assert.ok(skeleton,'the columns that could not be filled are still named');
- assert.deepEqual([...skeleton.querySelectorAll('thead th')].map(th=>th.textContent),
-  ['로컬 JIF 순번','저널','저장 Q','약어','출판사','내 문헌','OpenAlex 분야','로컬 분야 순위','JIF'],
-  'the same columns the real table has, so nothing moves when it arrives');
- assert.equal(skeleton.getAttribute('aria-hidden'),'true','a screen reader is told by the sentence, not by dashes');
+ /* A failure says so and offers the ways on. An empty table skeleton was
+    tried and read as data that had come back empty, so there is none. */
+ assert.equal(f.body().querySelector('.sc-jcr-skeleton'),null,'no rows of dashes under real column names');
+ assert.match(f.body().querySelector('.sc-jcr-unavailable').textContent,/다른 탐색 방법/);
+ assert.ok(f.findButton('OpenAlex 주제로 탐색'),'and a way on from it');
  await f.click('OpenAlex 주제로 탐색');assert.ok(f.body().querySelector('.sc-journal-table'));
  await f.click('JCR 카테고리로 돌아가기');assert.ok(f.body().querySelector('.sc-jcr-unavailable'));
  f.bench.destroy();
