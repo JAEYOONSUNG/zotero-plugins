@@ -42,17 +42,19 @@
     } catch (ignored) { return ''; }
   }
 
-  const attrs = tag => {
-    const found = {};
-    for (const match of String(tag).matchAll(/([a-zA-Z_:][-\w:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
-      found[match[1].toLowerCase()] = match[3] ?? match[4] ?? match[5] ?? '';
-    }
-    return found;
-  };
-
   const decode = value => String(value)
     .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'")
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+
+  /* Attribute values are HTML: "…?view_op=view_photo&amp;user=…" is the URL
+     with an ampersand in it, and was being fetched with the "&amp;" intact. */
+  const attrs = tag => {
+    const found = {};
+    for (const match of String(tag).matchAll(/([a-zA-Z_:][-\w:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
+      found[match[1].toLowerCase()] = decode(match[3] ?? match[4] ?? match[5] ?? '');
+    }
+    return found;
+  };
 
   // Enough of a parse to read the three things that matter: what the page says
   // its headings are, what its images claim to be, and any JSON-LD Person.
@@ -209,6 +211,58 @@
     return urls.sort((a, b) => a.rank - b.rank).map(row => row.url).slice(0, 3);
   }
 
+  /* Wikidata, by ORCID: the one public record that ties a researcher's
+     identifier to a freely licensed photograph (P18, on Wikimedia Commons) and
+     to an official website (P856). Found through the ordinary search API, not
+     the query service, which rate-limits to one request a minute when busy.
+
+     Two requests cover fifty people: a search for the items carrying these
+     ORCIDs, then the items themselves. */
+  const ORCID = /(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/i;
+  const bareOrcid = value => ((ORCID.exec(text(value)) || [])[1] || '').toUpperCase();
+  const WIKIDATA = 'https://www.wikidata.org/w/api.php?format=json&formatversion=2&origin=*';
+  const WIKIDATA_SEARCH_BATCH = 15;
+  const WIKIDATA_ENTITY_BATCH = 50;
+  function wikidataSearchURL(orcids) {
+    const ids = [...new Set((orcids || []).map(bareOrcid).filter(Boolean))].slice(0, WIKIDATA_SEARCH_BATCH);
+    if (!ids.length) return null;
+    return `${WIKIDATA}&action=query&list=search&srlimit=50&srsearch=${encodeURIComponent('haswbstatement:' + ids.map(id => 'P496=' + id).join('|'))}`;
+  }
+  const readWikidataSearch = payload => (payload?.query?.search || [])
+    .map(hit => text(hit?.title)).filter(title => /^Q\d+$/.test(title));
+  function wikidataEntitiesURL(qids) {
+    const ids = [...new Set((qids || []).filter(id => /^Q\d+$/.test(id)))].slice(0, WIKIDATA_ENTITY_BATCH);
+    return ids.length ? `${WIKIDATA}&action=wbgetentities&props=claims&ids=${ids.join('|')}` : null;
+  }
+  const claim = (entity, property) => {
+    const rows = entity?.claims?.[property];
+    const row = Array.isArray(rows) ? rows.find(r => r?.rank === 'preferred') || rows.find(r => r?.rank !== 'deprecated') : null;
+    return row?.mainsnak?.datavalue?.value ?? null;
+  };
+  // ORCID -> what Wikidata says about the person it belongs to.
+  function readWikidataEntities(payload) {
+    const out = new Map();
+    const entities = payload?.entities || {};
+    for (const entity of Object.values(entities)) {
+      /* Every ORCID on the item, not the first: George Church's carries three,
+         and OpenAlex knows him by the third. */
+      const orcids = (Array.isArray(entity?.claims?.P496) ? entity.claims.P496 : [])
+        .filter(row => row?.rank !== 'deprecated')
+        .map(row => bareOrcid(row?.mainsnak?.datavalue?.value)).filter(Boolean);
+      if (!orcids.length) continue;
+      const image = text(claim(entity, 'P18'));
+      const site = absolute('https://www.wikidata.org/', claim(entity, 'P856'));
+      for (const orcid of orcids) out.set(orcid, {qid: text(entity?.id), image, site});
+    }
+    return out;
+  }
+  // A Commons file, at the size it will be drawn, and the page that credits it.
+  const commonsFile = name => text(name).replace(/ /g, '_');
+  const commonsThumb = (name, width = 160) => name
+    ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(commonsFile(name))}?width=${width}` : '';
+  const commonsPage = name => name
+    ? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(commonsFile(name))}` : '';
+
   const stale = (checkedAt, now = Date.now()) => {
     const when = Date.parse(text(checkedAt));
     return !Number.isFinite(when) || now - when > CACHE_DAYS * 24 * 3600 * 1000;
@@ -242,7 +296,9 @@
   }
 
   const api = {choose, readPage, personImage, orcidURL, readResearcherURLs, stale, coauthors,
-    normalise, absolute, CACHE_DAYS, MIN_SCORE, MARGIN};
+    normalise, absolute, CACHE_DAYS, MIN_SCORE, MARGIN,
+    bareOrcid, wikidataSearchURL, readWikidataSearch, wikidataEntitiesURL, readWikidataEntities,
+    commonsThumb, commonsPage, WIKIDATA_SEARCH_BATCH, WIKIDATA_ENTITY_BATCH};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleAuthorPortrait = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

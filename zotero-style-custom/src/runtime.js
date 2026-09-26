@@ -27,6 +27,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.pathTools = typeof CustomStyleReadingPath !== "undefined" ? CustomStyleReadingPath : require("./reading-path.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
+    // Portrait records older than this were made by the ORCID-homepage-only
+    // search; their misses are asked again once, with Wikidata.
+    this.PORTRAIT_VERSION = 2;
     this.DISCOVER_CACHE_LIMIT = 60;
     // Raised whenever the reading-order algorithm or the stored plan's shape
     // changes: a plan kept by an older version is asked again.
@@ -2330,6 +2333,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         return (!!acronym(a) && acronym(a) === letters(b)) || (!!acronym(b) && acronym(b) === letters(a));
       };
       const profile = profiles.get(row.id);
+      // Kept for the portrait search: Wikidata is found by ORCID.
+      if (profile?.orcid) row.orcid = profile.orcid;
       const now = profile ? profile.places : [];
       if (now.length) {
         const had = Array.isArray(row.places) ? row.places : null;
@@ -2441,37 +2446,157 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return body.length > limit ? body.slice(0, limit) : body;
   }
 
-  // On demand only, and remembered for two months either way: a portrait is a
-  // nice-to-have, and nobody should pay for it on every panel open. A miss is
-  // cached too, or an author with no homepage costs three requests every time.
+  /* Wikidata's API, gently. It sheds load with 429 when busy; the answer is
+     to wait what it asks (up to half a minute) once, and then to give up for
+     this round rather than to hammer it or to record "no photo". */
+  async wikidataJSON(url, {signal} = {}) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 20000, successCodes: false,
+        headers: {'Api-User-Agent': `StyleCustomZoteroPlugin/${this.version || 'dev'} (Zotero plugin; author portraits)`}});
+      signal?.throwIfAborted?.();
+      if (response?.status === 200) return response.response;
+      if (response?.status === 429 && attempt === 0) {
+        const wait = Math.min(30, Number(response.getResponseHeader?.('Retry-After')) || 10);
+        await this.pause(wait * 1000);
+        continue;
+      }
+      const error = new Error(response?.status === 429 ? 'Wikidata is limiting requests right now' : `Wikidata answered ${response?.status}`);
+      error.busy = response?.status === 429;
+      throw error;
+    }
+    return null;
+  }
+
+  /* Faces for followed authors, for one or for the whole watchlist.
+
+     It used to look in one place: a homepage the author had listed on ORCID,
+     asked for once, when that author's page was opened. Most researchers list
+     none, and the ORCID request never said it wanted JSON, which ORCID does not
+     send unless asked -- 109 watched authors had 4 lookups and 0 faces.
+
+     Now, in order, and in batches where the source allows:
+       1. the ORCID, from the watchlist's own profile sweep, else OpenAlex's
+          profile batch (50 people a request);
+       2. Wikidata by ORCID -- a freely licensed photograph on Wikimedia Commons
+          (two requests per 50 people), and the person's official website;
+       3. failing a photograph, that website and the ones listed on ORCID, read
+          for a portrait named as this person (author-portrait.js decides).
+     A miss is remembered for two months; a busy Wikidata is not a miss. */
+  async findPortraits(people, {signal, onProgress, refresh = false} = {}) {
+    const tools = this.portraitTools, store = this.portraitCache(), discover = this.discoverTools;
+    const result = {asked: 0, found: 0, wikimedia: 0, homepage: 0, none: 0, busy: false, requests: 0};
+    const want = (Array.isArray(people) ? people : [])
+      .map(person => ({...person, id: discover.shortID(person?.id)}))
+      .filter(person => person.id.startsWith('A'))
+      .filter(person => {
+        const known = store[person.id];
+        return refresh || !known || tools.stale(known.checkedAt) || (!known.url && (known.v || 1) < this.PORTRAIT_VERSION);
+      });
+    result.asked = want.length;
+    if (!want.length) return result;
+
+    const lacking = want.filter(person => !tools.bareOrcid(person.orcid)).map(person => person.id);
+    for (let i = 0; i < lacking.length; i += discover.AUTHOR_BATCH) {
+      const url = discover.watchedProfilesURL(lacking.slice(i, i + discover.AUTHOR_BATCH), this.discoverOptions());
+      if (!url) continue;
+      try {
+        result.requests++;
+        for (const profile of discover.readProfiles(await this.discoverJSON(url, {signal}))) {
+          const person = want.find(row => row.id === profile.id);
+          if (person && profile.orcid) person.orcid = profile.orcid;
+        }
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error;
+        if (this.outOfBudget(error)) break;
+        this.Z.logError(error);
+      }
+    }
+
+    const byOrcid = new Map();
+    const orcids = [...new Set(want.map(person => tools.bareOrcid(person.orcid)).filter(Boolean))];
+    try {
+      const qids = [];
+      for (let i = 0; i < orcids.length; i += tools.WIKIDATA_SEARCH_BATCH) {
+        onProgress?.('wikidata', i, orcids.length);
+        result.requests++;
+        qids.push(...tools.readWikidataSearch(await this.wikidataJSON(tools.wikidataSearchURL(orcids.slice(i, i + tools.WIKIDATA_SEARCH_BATCH)), {signal})));
+        await this.pause(800);
+      }
+      for (let i = 0; i < qids.length; i += tools.WIKIDATA_ENTITY_BATCH) {
+        result.requests++;
+        const found = tools.readWikidataEntities(await this.wikidataJSON(tools.wikidataEntitiesURL(qids.slice(i, i + tools.WIKIDATA_ENTITY_BATCH)), {signal}));
+        for (const [orcid, row] of found) byOrcid.set(orcid, row);
+        await this.pause(800);
+      }
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error;
+      result.busy = !!error?.busy;
+      this.Z.logError(error);
+    }
+
+    for (const [index, person] of want.entries()) {
+      signal?.throwIfAborted?.();
+      onProgress?.('pages', index, want.length);
+      const orcid = tools.bareOrcid(person.orcid);
+      const known = byOrcid.get(orcid);
+      const record = {url: '', source: '', page: '', orcid, v: this.PORTRAIT_VERSION, checkedAt: new Date().toISOString()};
+      if (known?.image) {
+        record.url = tools.commonsThumb(known.image, 160);
+        record.page = tools.commonsPage(known.image);
+        record.source = 'Wikimedia Commons';
+        result.wikimedia++;
+      } else {
+        const pages = known?.site ? [known.site] : [];
+        const listURL = tools.orcidURL(orcid);
+        if (listURL) {
+          try {
+            result.requests++;
+            pages.push(...tools.readResearcherURLs(await this.discoverJSON(listURL, {signal, headers: {Accept: 'application/json'}})));
+          } catch (error) { if (error?.name === 'AbortError') throw error; this.Z.logError(error); }
+        }
+        for (const page of [...new Set(pages)].slice(0, 2)) {
+          let markup = null;
+          try { result.requests++; markup = await this.fetchText(page, {signal}); }
+          catch (error) { if (error?.name === 'AbortError') throw error; this.Z.logError(error); continue; }
+          const found = markup ? tools.choose(markup, page, person.name) : null;
+          // A page's own claim about its picture can point at another page:
+          // one DTU profile's "image" answered with HTML. Only an image counts.
+          if (found && !(await this.isImage(found.url, {signal}))) continue;
+          if (found) { record.url = found.url; record.source = found.source; record.page = page; result.homepage++; break; }
+        }
+        // Wikidata could not be asked: this is not an answer, so nothing is kept.
+        if (!record.url && result.busy) continue;
+        await this.pause(150);
+      }
+      store[person.id] = record;
+      if (record.url) result.found++; else result.none++;
+      this.dirty = true;
+    }
+    await this.flush();
+    return result;
+  }
+
+  async isImage(url, {signal} = {}) {
+    try {
+      const response = await this.Z.HTTP.request('HEAD', url, {timeout: 10000, successCodes: false});
+      signal?.throwIfAborted?.();
+      const type = String(response?.getResponseHeader?.('Content-Type') || '');
+      // A server that will not say is given the benefit; one that says HTML is not.
+      return response?.status >= 200 && response?.status < 400 && (!type || /^image\//i.test(type));
+    } catch (error) { if (error?.name === 'AbortError') throw error; return false; }
+  }
+
+  // One author, when their page is opened: the same search, for one.
   async fetchPortrait(person, {signal, refresh = false} = {}) {
     const id = this.discoverTools.shortID(person?.id);
     if (!id.startsWith('A')) return null;
-    const store = this.portraitCache();
-    const known = store[id];
-    if (!refresh && known && !this.portraitTools.stale(known.checkedAt)) return known.url ? known : null;
+    await this.findPortraits([{...person, id}], {signal, refresh});
+    return this.portraitOf(id);
+  }
 
-    const record = {url: '', source: '', page: '', checkedAt: new Date().toISOString()};
-    const listURL = this.portraitTools.orcidURL(person?.orcid);
-    let pages = [];
-    if (listURL) {
-      try {
-        const payload = await this.discoverJSON(listURL, {signal});
-        pages = this.portraitTools.readResearcherURLs(payload);
-      } catch (error) { this.Z.logError(error); }
-    }
-    for (const page of pages.slice(0, 2)) {
-      let markup = null;
-      try { markup = await this.fetchText(page, {signal}); }
-      catch (error) { this.Z.logError(error); continue; }
-      if (!markup) continue;
-      const found = this.portraitTools.choose(markup, page, person.name);
-      if (found) { record.url = found.url; record.source = found.source; record.page = page; break; }
-    }
-    store[id] = record;
-    this.dirty = true;
-    await this.flush();
-    return record.url ? record : null;
+  // Every followed author at once, from the watchlist's button.
+  async findWatchedPortraits(options = {}) {
+    return this.findPortraits(this.watchedAuthors(), options);
   }
 
   // No extra requests: the works the author tab already fetched carry every

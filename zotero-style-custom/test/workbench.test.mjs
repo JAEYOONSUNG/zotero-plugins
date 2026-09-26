@@ -1962,3 +1962,29 @@ test('a paper whose references share no lineage says so instead of drawing a his
   assert.ok(f.findButton('읽기 순서 보기'), 'and a way on from it');
  } finally { f.bench.destroy(); }
 });
+
+test('the watchlist shows a face for each person and finds the missing ones in one press', async () => {
+ const f=fixture();
+ const rows=[{id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[]},{id:'A2',name:'George M. Church',institution:'Harvard',seen:[]}];
+ const faces=new Map([['A2',{url:'https://commons.wikimedia.org/wiki/Special:FilePath/George_Church.jpg?width=160',page:'https://commons.wikimedia.org/wiki/File:George_Church.jpg'}]]);
+ let searched=0;
+ f.runtime.watchedAuthors=()=>rows;
+ f.runtime.watchedAuthorsByNews=()=>rows;
+ f.runtime.portraitOf=id=>faces.get(id)||null;
+ f.runtime.findWatchedPortraits=async()=>{searched++;faces.set('A1',{url:'https://example.org/voigt.jpg',page:'https://example.org/'});return {asked:1,found:1,wikimedia:0,homepage:1,none:0,requests:3};};
+ f.setSelection([]);
+ try{
+  await f.bench.show('authors');
+  const card=name=>[...f.body().querySelectorAll('.sc-watch')].find(c=>c.querySelector('.sc-watch-name').textContent===name);
+  // Initials until a photo is known; the photo, credited, once it is.
+  assert.equal(card('Christopher A. Voigt').querySelector('.sc-watch-face .sc-face-text').textContent,'CV');
+  assert.equal(card('Christopher A. Voigt').querySelector('.sc-watch-face img'),null);
+  assert.match(card('George M. Church').querySelector('.sc-watch-face img').getAttribute('src'),/George_Church/);
+  assert.match(card('George M. Church').querySelector('.sc-watch-face').getAttribute('title'),/commons\.wikimedia\.org/);
+  // The button says how many already have one, and runs the search for all.
+  await f.click('사진 다시 찾기 (1명 있음)');
+  assert.equal(searched,1);
+  assert.match(card('Christopher A. Voigt').querySelector('.sc-watch-face img').getAttribute('src'),/voigt/);
+  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/사진 2명 · 이번에 찾음 1명/);
+ } finally { f.bench.destroy(); }
+});

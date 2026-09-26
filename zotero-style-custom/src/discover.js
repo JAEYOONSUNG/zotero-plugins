@@ -654,7 +654,7 @@
       .map(shortID).filter(id => id.startsWith('A')))].slice(0, AUTHOR_BATCH);
     if (!ids.length) return null;
     return `${API}authors?per_page=${AUTHOR_BATCH}&filter=${encodeURIComponent('ids.openalex:' + ids.join('|'))}`
-      + `&select=id,display_name,last_known_institutions,affiliations${credentials(options)}`;
+      + `&select=id,display_name,orcid,last_known_institutions,affiliations${credentials(options)}`;
   }
 
   function readProfiles(payload) {
@@ -670,7 +670,9 @@
           const years = affiliations.find(y => (y.ror && y.ror === x.ror) || y.name === x.name)?.years || [];
           return {...x, since: years.length ? years[years.length - 1] : null, until: years.length ? years[0] : null};
         });
-      return {id, name: text(a?.display_name), places, affiliations};
+      // The ORCID rides along for free: it is what finds a face on Wikidata.
+      const orcid = (/(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/i.exec(text(a?.orcid)) || [])[1] || '';
+      return {id, name: text(a?.display_name), orcid: orcid.toUpperCase(), places, affiliations};
     }).filter(Boolean);
   }
 

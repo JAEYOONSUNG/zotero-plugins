@@ -2313,6 +2313,25 @@
        : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`,
       result.budgetGone);
     }),tools);
+    /* Faces for everyone on the list at once: Wikidata first (a freely licensed
+       photograph, by ORCID), then each person's own pages. About two dozen
+       requests for a hundred people; what is found stays for two months. */
+    if(typeof runtime.findWatchedPortraits==='function'&&runtime.pref?.('authorPortraits',true)!==false){
+     const withFace=watched.filter(person=>runtime.portraitOf?.(person.id)).length;
+     button(withFace?`사진 다시 찾기 (${withFace}명 있음)`:'사진 찾기',()=>run(async()=>{
+      message('관심 저자의 사진을 찾는 중… Wikidata와 각자의 홈페이지를 확인합니다.');
+      const result=await runtime.findWatchedPortraits({onProgress:(stage,done,total)=>
+       message(stage==='wikidata'?`Wikidata에서 찾는 중 ${Math.min(done+15,total)}/${total}`:`홈페이지에서 찾는 중 ${done+1}/${total}`)});
+      if(token!==epoch||disposed||state.tab!=='authors')return;
+      refreshWatched();
+      const total=watched.filter(person=>runtime.portraitOf?.(person.id)).length;
+      message(!result.asked
+       ? `확인할 사람이 없습니다. 사진이 있는 ${total}명 외에는 최근 두 달 안에 이미 찾아봤습니다.`
+       : `사진 ${total}명 · 이번에 찾음 ${result.found}명 (Wikimedia ${result.wikimedia} · 홈페이지 ${result.homepage}) · 요청 ${result.requests}회`
+         +(result.busy?' · Wikidata가 요청을 제한해 일부는 다음에 다시 찾습니다.':''),
+       result.busy);
+     }),tools);
+    }
     if(!fresh.length&&swept)node('span','새 논문 없음',tools,{class:'sc-watch-quiet'});
     // One chip keeps only the people with something new; a hundred quiet cards hide the ten that matter.
     if(state.watchFreshOnly&&!fresh.length)state.watchFreshOnly=false; // nothing new: an empty grid would say nothing
@@ -2329,6 +2348,12 @@
      const open=()=>run(()=>show(person));
      row.addEventListener('click',open);
      row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
+     const face=node('span',null,row,{class:'sc-face sc-watch-face','aria-hidden':'true'});
+     node('span',initials(person.name),face,{class:'sc-face-text'});
+     {const known=runtime.portraitOf?.(person.id);
+      if(known?.url){const img=doc.createElementNS(HTML,'img');img.src=known.url;img.alt='';
+       img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});img.addEventListener('error',()=>img.remove());face.appendChild(img);
+       face.title=known.page?`사진 출처: ${known.page}`:'';}}
      const line=node('div',null,row,{class:'sc-watch-line'});
      node('span',person.name,line,{class:'sc-watch-name'});
      if(count)node('span',String(count),line,{class:'sc-watch-badge',title:`마지막 확인 이후 새 논문 ${count}편`});

@@ -111,3 +111,37 @@ test("an empty or unknown author gives an empty network, not a crash", () => {
   assert.deepEqual(portrait.coauthors(null, "A1"), []);
   assert.deepEqual(portrait.coauthors([work("W1", [person("A2", "Sam")])], "A1"), []);
 });
+
+test("Wikidata is searched by ORCID and read back to a freely licensed photo and a website", () => {
+  const url = portrait.wikidataSearchURL(["https://orcid.org/0000-0001-9161-999x", "0000-0002-1234-5678", "not an orcid"]);
+  assert.match(decodeURIComponent(url), /haswbstatement:P496=0000-0001-9161-999X\|P496=0000-0002-1234-5678$/);
+  assert.deepEqual(portrait.readWikidataSearch({query: {search: [{title: "Q42"}, {title: "Property:P1"}]}}), ["Q42"]);
+  const snak = value => ({mainsnak: {datavalue: {value}}, rank: "normal"});
+  const found = portrait.readWikidataEntities({entities: {
+    Q1: {id: "Q1", claims: {P496: [snak("0000-0001-9161-999X")], P18: [snak("Old photo.jpg"), {...snak("Jane Roe 2024.jpg"), rank: "preferred"}], P856: [snak("https://roe-lab.example.org/")]}},
+    Q2: {id: "Q2", claims: {P496: [snak("0000-0002-1234-5678")]}},
+    Q3: {id: "Q3", claims: {P18: [snak("Nobody.jpg")]}}
+  }});
+  // The preferred image, not merely the first; nothing without an ORCID.
+  assert.deepEqual(found.get("0000-0001-9161-999X"), {qid: "Q1", image: "Jane Roe 2024.jpg", site: "https://roe-lab.example.org/"});
+  assert.deepEqual(found.get("0000-0002-1234-5678"), {qid: "Q2", image: "", site: ""});
+  assert.equal(found.size, 2);
+  assert.equal(portrait.commonsThumb("Jane Roe 2024.jpg", 160), "https://commons.wikimedia.org/wiki/Special:FilePath/Jane_Roe_2024.jpg?width=160");
+  assert.equal(portrait.commonsPage("Jane Roe 2024.jpg"), "https://commons.wikimedia.org/wiki/File:Jane_Roe_2024.jpg");
+});
+
+test("an image address written with &amp; is fetched with an ampersand", () => {
+  const found = portrait.choose(page(`
+    <h1>Jane Q. Roe</h1>
+    <img src="https://photos.example.org/view?id=7&amp;size=large" alt="Jane Q. Roe portrait" width="300" height="300">`), at, "Jane Q. Roe");
+  assert.equal(found.url, "https://photos.example.org/view?id=7&size=large");
+});
+
+test("a Wikidata item with several ORCIDs answers to each of them", () => {
+  const snak = value => ({mainsnak: {datavalue: {value}}, rank: "normal"});
+  const found = portrait.readWikidataEntities({entities: {Q3298995: {id: "Q3298995", claims: {
+    P496: [snak("0000-0001-6232-9969"), snak("0000-0002-0775-2913"), snak("0000-0003-3535-2076")],
+    P18: [{...snak("George Church in 2023 06.jpg"), rank: "preferred"}]}}}});
+  for (const orcid of ["0000-0001-6232-9969", "0000-0002-0775-2913", "0000-0003-3535-2076"])
+    assert.equal(found.get(orcid)?.image, "George Church in 2023 06.jpg", orcid);
+});

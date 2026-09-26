@@ -828,6 +828,12 @@
 #style-custom-workbench .sc-watch:active, #style-custom-workbench .sc-node:active { background: var(--sc-fill-active); }
 #style-custom-workbench .sc-watch:focus-visible { outline-offset: -2px; }
 #style-custom-workbench .sc-watch-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* A face beside the name and its line: the photo once found, the initials
+   until then. A person is quicker to find in a grid of faces than of names. */
+#style-custom-workbench .sc-watch { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 8px; align-items: center; }
+#style-custom-workbench .sc-watch > .sc-watch-face { grid-row: 1 / span 2; width: 28px; height: 28px; }
+#style-custom-workbench .sc-watch > :not(.sc-watch-face) { grid-column: 2; }
+#style-custom-workbench .sc-watch-face .sc-face-text { font-size: 10px; }
 #style-custom-workbench .sc-watch-name {
   font: 500 12px/1.35 var(--sc-title-font); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

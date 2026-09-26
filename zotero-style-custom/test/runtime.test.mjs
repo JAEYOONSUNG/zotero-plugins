@@ -2294,3 +2294,70 @@ test('a failed lookup does not evict a newer one under the same key', async () =
   await old.catch(() => {});
   assert.equal(f.plugin.discoverCache.get('k'), fresh);
 });
+
+/* Faces for followed authors: Wikidata by ORCID first, then the person's own
+   pages, and a busy Wikidata is never written down as "no photo". */
+function portraitFixture({wikidataBusy = false, imageType = 'image/jpeg'} = {}) {
+  const f = fixture();
+  const requests = [];
+  f.plugin.pause = async () => {};
+  f.plugin.flush = async () => {};
+  f.plugin.cache.watchedAuthors = [
+    {id: 'A1', name: 'Jane Q. Roe', orcid: '0000-0001-0000-0001'},
+    {id: 'A2', name: 'Sam Okafor', orcid: '0000-0002-0000-0002'},
+    {id: 'A3', name: 'No Trace', orcid: '0000-0003-0000-0003'}];
+  f.Z.HTTP = {request: async (method, url, options = {}) => {
+    requests.push({url, accept: options.headers?.Accept});
+    const json = response => ({status: 200, response, getResponseHeader: () => ''});
+    if (/wikidata\.org/.test(url)) {
+      if (wikidataBusy) return {status: 429, response: null, getResponseHeader: name => name === 'Retry-After' ? '1' : ''};
+      if (/list=search/.test(url)) return json({query: {search: [{title: 'Q1'}, {title: 'Q2'}, {title: 'Q3'}]}});
+      const snak = value => ({mainsnak: {datavalue: {value}}, rank: 'normal'});
+      return json({entities: {
+        Q1: {id: 'Q1', claims: {P496: [snak('0000-0001-0000-0001')], P18: [snak('Jane Roe.jpg')]}},
+        Q2: {id: 'Q2', claims: {P496: [snak('0000-0002-0000-0002')], P856: [snak('https://okafor-lab.example.org/')]}},
+        Q3: {id: 'Q3', claims: {P496: [snak('0000-0003-0000-0003')]}}}});
+    }
+    if (/pub\.orcid\.org/.test(url)) return {response: {'researcher-url': []}};
+    if (method === 'HEAD') return {status: 200, getResponseHeader: name => /content-type/i.test(name) ? imageType : ''};
+    if (/okafor-lab/.test(url)) return {status: 200, getResponseHeader: () => 'text/html',
+      responseText: '<h1>Sam Okafor</h1><img src="/people/sam-okafor.jpg" alt="Sam Okafor portrait" width="300" height="300">'};
+    return {status: 404, getResponseHeader: () => 'text/html', responseText: ''};
+  }};
+  return {...f, requests};
+}
+
+test('followed authors get a Commons photo from Wikidata, else one from their own page', async () => {
+  const f = portraitFixture();
+  const result = await f.plugin.findWatchedPortraits();
+  assert.deepEqual({asked: result.asked, found: result.found, wikimedia: result.wikimedia, homepage: result.homepage, none: result.none},
+    {asked: 3, found: 2, wikimedia: 1, homepage: 1, none: 1});
+  assert.equal(f.plugin.portraitOf('A1').url, 'https://commons.wikimedia.org/wiki/Special:FilePath/Jane_Roe.jpg?width=160');
+  assert.equal(f.plugin.portraitOf('A1').page, 'https://commons.wikimedia.org/wiki/File:Jane_Roe.jpg', 'the credit goes with the photo');
+  assert.equal(f.plugin.portraitOf('A2').url, 'https://okafor-lab.example.org/people/sam-okafor.jpg');
+  assert.equal(f.plugin.portraitOf('A3'), null);
+  // ORCID answers in XML unless asked for JSON; the old search never asked.
+  for (const r of f.requests.filter(r => /pub\.orcid\.org/.test(r.url))) assert.equal(r.accept, 'application/json');
+  // Two Wikidata requests cover everyone, not one per person.
+  assert.equal(f.requests.filter(r => /wikidata\.org/.test(r.url)).length, 2);
+  // And the answer is kept: a second press asks nobody.
+  const again = await f.plugin.findWatchedPortraits();
+  assert.equal(again.asked, 0);
+});
+
+test('a busy Wikidata is not recorded as "no photo", so the next press tries again', async () => {
+  const f = portraitFixture({wikidataBusy: true});
+  const result = await f.plugin.findWatchedPortraits();
+  assert.equal(result.busy, true);
+  assert.equal(f.plugin.portraitOf('A1'), null);
+  assert.equal(f.plugin.portraitCache().A1, undefined, 'no miss written for someone Wikidata could not be asked about');
+  assert.equal(f.plugin.portraitCache().A3, undefined);
+});
+
+test('a homepage "photo" that answers with a web page is not counted as a face', async () => {
+  const f = portraitFixture({imageType: 'text/html; charset=utf-8'});
+  const result = await f.plugin.findWatchedPortraits();
+  assert.equal(result.homepage, 0);
+  assert.equal(f.plugin.portraitOf('A2'), null, 'Sam Okafor has no photo rather than a broken one');
+  assert.ok(f.plugin.portraitOf('A1'), 'the Commons photo is unaffected');
+});

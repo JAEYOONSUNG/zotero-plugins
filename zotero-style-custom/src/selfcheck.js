@@ -180,15 +180,15 @@
        code actually running, and the stylesheet actually applied, for a marker
        of this build. */
     results.push(await attempt('the running panel is this build, not a cached one', () => {
-      const MARK = 'syncNoteOverflow';
+      const MARK = 'findWatchedPortraits';
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
-      /* And a value only this build's stylesheet has: the 12px secondary line
-         of the type scale, which was 11px before it. Update both marks when a
+      /* And a rule only this build's stylesheet has: the author photo that
+         spans both lines of a watched-author card. Update both marks when a
          change touches only one of the two files. */
-      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench sub, #style-custom-workbench sup'
-        && String(rule.style?.getPropertyValue('font-size') || '').includes('max');
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-watch > .sc-watch-face'
+        && String(rule.style?.getPropertyValue('grid-row') || '').includes('span 2');
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;
