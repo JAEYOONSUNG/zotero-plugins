@@ -662,6 +662,15 @@
      left an 860x540 drawing fitted into 228 pixels, which scaled 11px labels to
      under 5px. Same formula as the CSS height, so the scale stays near one. */
   const graphHeight=nodes=>Math.max(220,Math.min(540,90+Math.max(1,nodes||0)*46));
+  /* And its width follows the panel's. Laid out at 860 and fitted into a 640px
+     narrow panel, an 11px label came out at 8px (Codex). A graph that scrolls
+     sideways is worse to read than one laid out for the room it has. */
+  const graphWidth=()=>{
+   const cs=win.getComputedStyle?.(body);
+   const inner=(body.clientWidth||0)-(parseFloat(cs?.paddingLeft)||0)-(parseFloat(cs?.paddingRight)||0);
+   // No layout (a test DOM, a hidden panel): the old fixed width.
+   return inner>0?Math.max(480,Math.min(1100,Math.round(inner))):860;
+  };
   function graphCanvas(W,H,nodes,label){
    const svg=doc.createElementNS(SVG,'svg');
    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
@@ -713,7 +722,7 @@
     drawLegacyGraph(b);
     return;
    }
-   const W=860,H=graphHeight(chosen.length);
+   const W=graphWidth(),H=graphHeight(chosen.length);
    const items=chosen.map(paper=>runtime.Z.Items.get(Number(paper.id))).filter(Boolean);
    const citedBy=typeof runtime.citedByFor==='function'?runtime.citedByFor(items):null;
    const withCiters=Object.keys(citedBy||{}).length;
@@ -881,7 +890,7 @@
    const limit=setting('graphNodeLimit',180);
    const raw=library.graph(rows().slice(0,limit),{mode:state.graphMode==='citations'?'related':state.graphMode});
    if(!raw.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
-   const W=860,H=graphHeight(raw.nodes.length);
+   const W=graphWidth(),H=graphHeight(raw.nodes.length);
    /* The good layout when it is there, the old placer when it is not.
 
       The layout lives on the runtime as an optional module. Reaching for it
@@ -945,11 +954,12 @@
    button('축소',()=>{zoom=Math.max(.5,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
    if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body,{class:'sc-muted'});
   }
-  function drawTags(){const b=bar(),value=node('input',null,b,{placeholder:'추가·제거할 정확한 태그 (쉼표로 구분)','aria-label':'추가할 태그'});button('선택 문헌에 태그 추가',async()=>{await library.addTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('선택 문헌에서 태그 제거',async()=>{await library.removeTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('태그 필터 해제',()=>{state.tag='';render();},b);
+  function drawTags(){sectionHead('선택 문헌의 태그',state.selected.size?`${state.selected.size}편`:'');const b=bar(),value=node('input',null,b,{placeholder:'추가·제거할 정확한 태그 (쉼표로 구분)','aria-label':'추가할 태그'});button('선택 문헌에 태그 추가',async()=>{await library.addTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('선택 문헌에서 태그 제거',async()=>{await library.removeTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('태그 필터 해제',()=>{state.tag='';render();},b);
+   sectionHead('태그 경로 이름 바꾸기');
    const rename=bar(),from=node('input',null,rename,{'aria-label':'기존 태그 경로',placeholder:'기존 태그 경로'}),to=node('input',null,rename,{'aria-label':'새 태그 경로',placeholder:'새 태그 경로'});let subtree=true;
    check('하위 태그도 변경',true,on=>{subtree=on;},rename);
    button('선택 문헌 태그 이름 변경',async()=>{const result=await library.renameTagBranch([...state.selected],from.value,to.value,{subtree});await load();message(`태그 변경 ${result.updatedItems}개 문헌 · 병합 ${result.mergedTags}개`);},rename);
-   const tree=library.tagTree(rows());function branch(nodes,parent){for(const n of nodes){const details=node('details',null,parent);const summary=node('summary',null,details);node('span',`${n.name} (${n.count})`,summary,{class:'sc-tag-name'});const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},summary,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(n.children.length)branch(n.children,details);}}branch(tree,body);if(!tree.length)empty('태그가 없습니다. 문헌을 선택하고 태그를 추가하세요.');
+   const tree=library.tagTree(rows());sectionHead('태그 목록',tree.length);function branch(nodes,parent){for(const n of nodes){const details=node('details',null,parent);const summary=node('summary',null,details);node('span',`${n.name} (${n.count})`,summary,{class:'sc-tag-name'});const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},summary,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(n.children.length)branch(n.children,details);}}branch(tree,body);if(!tree.length)empty('태그가 없습니다. 문헌을 선택하고 태그를 추가하세요.');
   }
   /* A note needs a paper. Opening this tab with the whole library in scope
      used to show a disabled editor and "select a paper", with no paper to
@@ -1119,7 +1129,7 @@
      visibleAnnotationIDs.add(a.id);
      const tint=/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'var(--sc-faint)';
      const row=node('article',null,stack,{class:'sc-annot',tabindex:'0','data-selected':String(state.annotationIDs.has(a.id))});
-     // The annotation's colour runs down the card's edge, as it does in the PDF.
+     // The annotation's colour, shown as a square before its page (see the CSS).
      row.style.setProperty('--sc-annot',tint);
      const head=node('div',null,row,{class:'sc-annot-head'});
      node('span',`p.${a.pageLabel||((a.pageIndex??0)+1)}`,head,{class:'sc-annot-page'});
@@ -1430,6 +1440,7 @@
    const b=bar();check('세로 탭 목록 표시',!!runtime.cache.readerSettings?.verticalTabs,on=>run(()=>reader.setVerticalTabs(win,on)),b);
    const name=node('input',null,b,{placeholder:'탭 그룹 이름','aria-label':'탭 그룹 이름'});button('열린 탭 저장',async()=>{await reader.saveTabGroup(win,name.value);render();},b);
    const tabs=reader.tabs(win);
+   sectionHead('열린 탭',tabs.length);
    for(const [index,tab]of tabs.entries()){
     const c=card(tab.title,tab.selected?'현재 탭':'');button('이동',()=>reader.selectTab(win,tab.id),c);
     if(tab.itemID){button('닫기',async()=>{await reader.closeTab(win,tab.id);render();},c);
@@ -1438,8 +1449,11 @@
      button('이 탭 외 문서 탭 닫기',()=>{const result=reader.closeOtherTabs(win,tab.id);render();message(`${result.closed}개 문서 탭을 닫았습니다.`);},c);
     }
    }
-   sectionHead('저장된 탭 그룹');
-   for(const group of reader.tabGroups()){
+   const groups=reader.tabGroups();
+   sectionHead('저장된 탭 그룹',groups.length||'');
+   // A heading over nothing reads as a page that failed to load.
+   if(!groups.length)node('p','저장한 탭 그룹이 없습니다. 위에서 이름을 적고 「열린 탭 저장」을 누르면 지금 열린 문서 탭을 한 묶음으로 저장합니다.',body,{class:'sc-muted sc-settings-note'});
+   for(const group of groups){
     const c=card(group.name,`${group.tabs.length}개 탭`),title=node('input',null,c,{'aria-label':'저장된 탭 그룹 이름'});title.value=group.name;title.dataset.draftKey=JSON.stringify(['tab-group-name',group.id]);
     button('복원',async()=>{const result=await reader.restoreTabGroup(win,group.id);await render();message(`복원 ${result.opened} · 찾지 못함 ${result.missing}`);},c);
     button('탭 그룹 이름 변경',async()=>{const submitted=title.value;await reader.renameTabGroup(group.id,submitted);finishDraft(title,submitted);render();},c);
@@ -2041,6 +2055,9 @@
     list.replaceChildren();
     const found=plan.milestones;
     if(!found?.line?.length){
+     // "찾는 중" stayed on the status line above the answer, so the reader
+     // could not tell whether to wait.
+     message('발전 과정 분석 완료 · 공통으로 기대는 논문 없음');
      const box=node('div',null,list,{class:'sc-empty'});
      node('p','이 논문의 참고문헌들이 공통으로 기대는 논문을 찾지 못했습니다. 서로 다른 갈래를 폭넓게 인용한 논문에서 자주 생깁니다.',box);
      button('읽기 순서 보기',()=>run(async()=>{state.relatedView='path';await saveUI({relatedView:'path'});await render();}),bar(box));
@@ -2861,9 +2878,15 @@
    }
    if(j.openAlexID){const b=button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions);journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
   }
-  function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.');pickOne();return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
+  function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.');pickOne();return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
    const aiReady=!!(String(runtime.pref('aiEndpoint','')||'').trim()&&String(runtime.pref('aiModel','')||'').trim());
-   if(!aiReady)node('p','Zotero 설정 → Style Custom → 번역·AI에 AI 서버 주소·모델·API 키를 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.',body,{class:'sc-muted'});
+   /* Two parts, named: what to ask, and what came back. The request row and
+      the result box used to run together under the paper's title, and the
+      note saying the service was not set up sat below the box it explained. */
+   const askHead=sectionHead('요청',null,body);body.insertBefore(askHead,b);
+   if(!aiReady)body.insertBefore(node('p','Zotero 설정 → Style Custom → 번역·AI에 AI 서버 주소·모델·API 키를 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.',null,{class:'sc-muted sc-settings-note'}),b);
+   b.insertBefore(node('span',T('출력 언어'),null,{class:'sc-settings-label'}),language);
+   body.insertBefore(sectionHead('결과',null,body),output);
    // Nothing to stop until something is running.
    const stopAI=button('요청 중지',()=>{aiEpoch++;assist.cancel?.();message('AI 요청을 중지했습니다.');stopAI.hidden=true;},b,{class:'sc-danger-soft'});stopAI.hidden=true;
    for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);

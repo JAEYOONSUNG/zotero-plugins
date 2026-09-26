@@ -180,14 +180,14 @@
        code actually running, and the stylesheet actually applied, for a marker
        of this build. */
     results.push(await attempt('the running panel is this build, not a cached one', () => {
-      const MARK = 'sc-settings-part';
+      const MARK = 'graphWidth';
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
       /* And a value only this build's stylesheet has: the 12px secondary line
          of the type scale, which was 11px before it. Update both marks when a
          change touches only one of the two files. */
-      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-section-head';
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-hit-group.sc-path-head';
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;

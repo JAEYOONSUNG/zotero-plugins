@@ -256,7 +256,9 @@
 #style-custom-workbench > footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; padding: var(--sc-band) var(--sc-content-padding); border-block-start: 1px solid var(--sc-border); background: var(--sc-surface); }
 #style-custom-workbench .sc-selection-bar > span:first-child,
 #style-custom-workbench > footer > span:first-child { margin-inline-end: auto; color: var(--sc-muted); font-size: 12px; }
-#style-custom-workbench .sc-selection-bar[data-selected=true] { border-block-start-color: var(--sc-selection); box-shadow: inset 0 1px 0 var(--sc-selection); background: var(--sc-accent-soft); }
+/* With a selection the bar says so in its words and its weight; the blue
+   double line and tint made it louder than any section above it (Codex). */
+#style-custom-workbench .sc-selection-bar[data-selected=true] { border-block-start: 1px solid var(--sc-border-strong); box-shadow: none; background: var(--sc-surface); }
 #style-custom-workbench .sc-selection-bar[data-selected=true] > span:first-child { color: var(--sc-text); font-weight: 650; }
 /* With nothing selected the bar has nothing to act on: it says so and keeps
    the buttons out of the way rather than showing three dead ones. */
@@ -334,7 +336,8 @@
 #style-custom-workbench .sc-paper-card:focus-within .sc-check,
 #style-custom-workbench .sc-paper-card[data-selected=true] .sc-check { opacity: 1; }
 #style-custom-workbench .sc-paper-title { flex: 1 1 auto; min-width: 0; margin: 0; font: 500 13px/1.45 var(--sc-title-font); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#style-custom-workbench .sc-paper-meta { display: flex; align-items: center; flex: 0 3 auto; min-width: 7ch; color: var(--sc-muted); font-size: 12px; line-height: 1.5; }
+/* The title identifies the paper; the source line gives way to it. */
+#style-custom-workbench .sc-paper-meta { display: flex; align-items: center; flex: 0 3 28%; max-width: 26ch; min-width: 7ch; color: var(--sc-muted); font-size: 12px; line-height: 1.5; }
 #style-custom-workbench .sc-metrics { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; padding-block-start: 8px; color: var(--sc-muted); font: 12px/1.6 var(--sc-mono); }
 #style-custom-workbench .sc-metric { white-space: nowrap; }
 /* Held out of the way until the row is wanted, so the list reads as a list. */
@@ -425,7 +428,10 @@
 /* The shape of the table that could not be loaded: its own class, because the
    real table's presence is what tells the two states apart, but the same
    column classes so the widths carry over and nothing jumps when data lands. */
-#style-custom-workbench .sc-jcr-skeleton { width: 100%; border-collapse: collapse; margin-block-start: 10px; opacity: .45; }
+#style-custom-workbench .sc-jcr-skeleton { width: 100%; border-collapse: collapse; margin-block-start: 10px; }
+/* The column names are read; only the empty cells are faint. Fading the whole
+   table put its headings at 1.8:1. */
+#style-custom-workbench .sc-jcr-skeleton td { color: var(--sc-faint); }
 #style-custom-workbench .sc-jcr-skeleton th, #style-custom-workbench .sc-jcr-skeleton td { padding: 6px; border-block-end: 1px solid var(--sc-border); font-size: 12px; text-align: start; }
 #style-custom-workbench .sc-jcr-skeleton th { color: var(--sc-muted); font-weight: 650; }
 #style-custom-workbench .sc-jcr-skeleton .sc-col-rank { width: 76px; text-align: end; }
@@ -628,12 +634,16 @@
 /* Korean does not uppercase; a path heading is a label to read, not a caption.
    A rule above it groups the rows under it without competing with their titles
    for size. */
-#style-custom-workbench .sc-path-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px;
-  margin: 20px 0 2px; padding-block-start: 10px; border-block-start: 1px solid var(--sc-border-strong);
-  color: var(--sc-muted); font: 650 12px/1.6 var(--sc-font); letter-spacing: 0; text-transform: none; }
-#style-custom-workbench .sc-path-head:first-child { margin-block-start: 4px; padding-block-start: 0; border-block-start: 0; }
+/* The reading order's sections take the same heading as every other page:
+   at 12px in grey they were quieter than the paper titles under them, and the
+   step from one section to the next had to be read to be found (Codex). */
+#style-custom-workbench .sc-hit-group.sc-path-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px;
+  margin: 22px 0 6px; padding: 0 0 6px; border-block-start: 0; border-block-end: 1px solid var(--sc-border);
+  color: var(--sc-text); font: 650 13px/1.4 var(--sc-font); letter-spacing: 0; text-transform: none; }
+#style-custom-workbench .sc-hit-group.sc-path-head:first-child { margin-block-start: 4px; }
+#style-custom-workbench .sc-path-head + .sc-hits { border-block-start: 0; }
 #style-custom-workbench .sc-path-head-name { color: var(--sc-text); }
-#style-custom-workbench .sc-path-head-note { flex: 0 1 auto; min-width: 0; font-weight: 400; color: var(--sc-muted); }
+#style-custom-workbench .sc-path-head-note { flex: 0 1 auto; min-width: 0; font-size: 12px; font-weight: 400; color: var(--sc-muted); }
 #style-custom-workbench .sc-path-start { margin-inline-end: 6px; color: var(--sc-accent); font-size: 12px; font-weight: 700; }
 #style-custom-workbench .sc-path-owned { display: grid; grid-template-columns: 22px 1fr; gap: 0 12px; align-items: baseline; padding: 5px 2px; border-bottom: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-path-owned > .sc-path-step { grid-row: auto; padding-inline-end: 4px; white-space: nowrap; font-size: 12px; font-weight: 600; }
@@ -647,7 +657,9 @@
 #style-custom-workbench .sc-path-seed { border-top: 1px solid var(--sc-border-strong); border-bottom: 1px solid var(--sc-border-strong); }
 #style-custom-workbench .sc-path-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 12px 0 4px; font-size: 12px; }
 #style-custom-workbench .sc-path-depth { font-size: 12px; }
-#style-custom-workbench [aria-busy="true"] { opacity: .6; }
+/* A list being refreshed stays readable: the status line says it is loading.
+   Dimming it to 60% put its secondary text at 2.3:1. */
+#style-custom-workbench [aria-busy="true"] { opacity: 1; cursor: progress; }
 #style-custom-workbench .sc-path-row:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -2px; }
 /* An action beside a set of view toggles: a verb, not a surface. */
 /* The accent marks where the reader is and where a link goes; an action beside
@@ -744,7 +756,7 @@
 #style-custom-workbench .sc-metric[data-metric=time] .sc-metric-value { min-width: 5.2em; }
 #style-custom-workbench .sc-metric[data-tone] { font-weight: 600; }
 #style-custom-workbench .sc-metric[data-tone] svg { opacity: 1; }
-#style-custom-workbench .sc-stars .sc-metric-value { color: #978144; letter-spacing: -1px; font-size: 11px; min-width: 4.8em; }
+#style-custom-workbench .sc-stars .sc-metric-value { color: #756027; letter-spacing: -1px; font-size: 11px; min-width: 4.8em; }
 /* The colour a paper has been given wins over its reading state. */
 #style-custom-workbench .sc-paper-card[data-mark]::before { background: var(--sc-mark); }
 #style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #BD6C6E; }
@@ -764,7 +776,7 @@
 #style-custom-workbench .sc-paper-card:hover .sc-paper-actions,
 #style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions { display: flex; opacity: 1; }
 #style-custom-workbench .sc-paper-card:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -2px; }
-#style-custom-workbench .sc-hit-title-link { border: 0; background: none; padding: 0; margin: 0; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-hit-title-link { min-height: 0; border: 0; background: none; padding: 0; margin: 0; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
 #style-custom-workbench .sc-hit-title-link:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
 
 @media (prefers-color-scheme: dark) {
@@ -835,7 +847,8 @@
   font: 12px/1.5 var(--sc-font);
 }
 #style-custom-workbench .sc-notice[hidden] { display: none; }
-#style-custom-workbench .sc-notice-text { flex: 1 1 auto; min-width: 0; }
+#style-custom-workbench .sc-notice { flex-wrap: nowrap; gap: 8px; }
+#style-custom-workbench .sc-notice-text { flex: 1 1 0; min-width: 0; }
 #style-custom-workbench .sc-notice-actions { display: flex; gap: 6px; margin-left: auto; }
 
 /* --- A person, not a row of statistics --- */
@@ -849,6 +862,7 @@
 /* A settings page in parts: a heading, one line saying what the part changes,
    its options one per line, its action under them. */
 #style-custom-workbench .sc-settings-part { margin-block-end: 8px; }
+#style-custom-workbench .sc-settings-part + .sc-settings-part { margin-block-start: 20px; }
 #style-custom-workbench .sc-settings-note { margin: 0 0 8px; font-size: 12px; line-height: 1.5; }
 #style-custom-workbench .sc-settings-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #style-custom-workbench .sc-settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 16px; }
@@ -1134,6 +1148,9 @@
 /* Hover darkens on a light theme and lightens on a dark one: mixing toward
    black on the dark accent pushed it back toward the surface. */
 #style-custom-workbench button[data-variant=primary]:hover { background: color-mix(in srgb, var(--sc-accent) 88%, var(--sc-text)); }
+/* A note's text is what the reader came for: body size, full ink. .sc-card > p
+   (a card's caption) is more specific and was setting it at 11px grey. */
+#style-custom-workbench .sc-card > .sc-note-text { font: 400 13px/1.55 var(--sc-font); color: var(--sc-text); }
 #style-custom-workbench .sc-note-text { font-size: 12px; color: var(--sc-text); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 #style-custom-workbench .sc-annot-search { flex: 1 1 200px; max-width: 320px; }
 #style-custom-workbench .sc-card-text p { font-variant-numeric: tabular-nums; }
@@ -1147,9 +1164,15 @@
 #style-custom-workbench .sc-paper-identity { flex: 1 1 auto; min-width: 0; }
 #style-custom-workbench .sc-metric .sc-metric-value:empty::before { content: ""; }
 
-/* Annotations: the colour down the card's edge, the quote set apart, the memo a quiet line. */
-#style-custom-workbench .sc-annot { border-inline-start: 3px solid var(--sc-annot, var(--sc-faint)); padding-inline-start: 10px; }
-#style-custom-workbench .sc-annot-kind { padding: 0 6px; border-radius: 100px; background: var(--sc-fill); color: var(--sc-muted); font-size: 11px; line-height: 16px; }
+/* Annotations: the highlight's colour as a small square before the page,
+   the way Zotero's own annotation list shows it. It was a 3px bar down the
+   card's edge, and on a rounded card the bar curved at both ends into the
+   fingernail shape the user has asked twice to have removed. */
+#style-custom-workbench .sc-annot { border-inline-start: 0; padding-inline-start: 10px; }
+#style-custom-workbench .sc-annot-page { display: inline-flex; align-items: center; gap: 6px; }
+#style-custom-workbench .sc-annot-page::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: var(--sc-radius-sm);
+  background: var(--sc-annot, var(--sc-faint)); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+#style-custom-workbench .sc-annot-kind { padding: 0 6px; border-radius: var(--sc-radius-sm); background: var(--sc-fill); color: var(--sc-muted); font-size: 11px; line-height: 16px; }
 #style-custom-workbench .sc-annot-text { margin: 4px 0 2px; font-size: 13px; line-height: 1.5; color: var(--sc-text); }
 #style-custom-workbench .sc-annot-memo { border: 0; background: transparent; padding: 1px 0; color: var(--sc-muted); font-size: 12px; box-shadow: none; min-height: 20px; }
 #style-custom-workbench .sc-annot-memo::placeholder { color: var(--sc-faint); }
@@ -1157,7 +1180,8 @@
 #style-custom-workbench .sc-annot-selection { display: inline-flex; flex-wrap: wrap; max-width: 100%; align-items: center; gap: 4px; margin-inline-start: auto; }
 /* Until something is selected these three verbs have nothing to act on, so
    they say what they are waiting for rather than failing when pressed. */
-#style-custom-workbench .sc-annot-selection[data-armed=false] { opacity: .72; }
+/* Unarmed, the row still has instructions to read; the disabled buttons show the state. */
+#style-custom-workbench .sc-annot-selection[data-armed=false] { opacity: 1; }
 #style-custom-workbench .sc-annot-chosen { font-size: 12px; color: var(--sc-muted); margin-inline-end: 2px; }
 #style-custom-workbench .sc-annot-selection[data-armed=true] .sc-annot-chosen { color: var(--sc-accent); font-weight: 600; }
 
@@ -1182,7 +1206,11 @@
    width it read as an underline, and it repeats the strip below it. */
 #style-custom-workbench .sc-card > .sc-collection-bar { flex: 0 0 120px; width: 120px; height: 3px; align-self: center; }
 #style-custom-workbench .sc-collection-bar { grid-area: bar; height: 4px; border-radius: 100px; background: var(--sc-fill); overflow: hidden; }
-#style-custom-workbench .sc-collection-fill { display: block; height: 100%; border-radius: 100px; background: var(--sc-accent); opacity: .75; }
+/* A long blue rule under each name read as an underline before the name did.
+   The bar is short, beside the count it pictures, and grey. */
+#style-custom-workbench .sc-collection-fill { display: block; height: 100%; border-radius: var(--sc-radius-sm); background: var(--sc-muted); opacity: 1; }
+#style-custom-workbench .sc-collection { grid-template-columns: minmax(0, 1fr) 96px auto; grid-template-areas: "line bar actions"; }
+#style-custom-workbench .sc-collection > .sc-collection-bar { height: 3px; border-radius: var(--sc-radius-sm); }
 #style-custom-workbench .sc-collection-actions { grid-area: actions; display: flex; align-items: center; gap: 8px; opacity: 0; }
 #style-custom-workbench .sc-collection:hover .sc-collection-actions, #style-custom-workbench .sc-collection:focus-within .sc-collection-actions { opacity: 1; }
 
@@ -1202,7 +1230,8 @@
 
 /* --- Narrow panels: what folds, what hides, what wraps (from the responsive audit) --- */
 @container sc-workbench (max-width: 760px) {
-  #style-custom-workbench .sc-graph { width: max(100%, 640px); max-height: none; }
+  /* Laid out at the panel's own width now (graphWidth), so it fits rather than scrolls. */
+  #style-custom-workbench .sc-graph { width: 100%; max-height: none; }
   #style-custom-workbench .sc-journal-table .sc-col-fields { position: static; }
   #style-custom-workbench .sc-journal-table .sc-hit-actions { inset-inline-end: 0; }
 }
@@ -1230,7 +1259,7 @@
   #style-custom-workbench .sc-selection-bar > span:first-child { flex-basis: 100%; margin-inline-end: 0; }
   #style-custom-workbench .sc-selection-bar button { flex: 1 1 auto; min-height: 26px; padding: 3px 8px; font-size: 12px; }
   #style-custom-workbench .sc-watch-tools { flex-wrap: wrap; margin-left: 0; flex-basis: 100%; }
-  #style-custom-workbench .sc-collection { grid-template-columns: 1fr; grid-template-areas: "line" "bar"; padding-inline-start: calc(8px + var(--sc-depth, 0) * 10px); }
+  #style-custom-workbench .sc-collection { grid-template-columns: minmax(0, 1fr) 64px; grid-template-areas: "line bar"; padding-inline-start: calc(8px + var(--sc-depth, 0) * 10px); }
   #style-custom-workbench .sc-collection-actions { position: absolute; inset-inline-end: 6px; inset-block-start: 4px; padding: 2px 4px; border-radius: var(--sc-radius-sm); background: var(--sc-surface); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
 }
 @container sc-workbench (max-width: 480px) {
@@ -3439,6 +3468,15 @@
      left an 860x540 drawing fitted into 228 pixels, which scaled 11px labels to
      under 5px. Same formula as the CSS height, so the scale stays near one. */
   const graphHeight=nodes=>Math.max(220,Math.min(540,90+Math.max(1,nodes||0)*46));
+  /* And its width follows the panel's. Laid out at 860 and fitted into a 640px
+     narrow panel, an 11px label came out at 8px (Codex). A graph that scrolls
+     sideways is worse to read than one laid out for the room it has. */
+  const graphWidth=()=>{
+   const cs=win.getComputedStyle?.(body);
+   const inner=(body.clientWidth||0)-(parseFloat(cs?.paddingLeft)||0)-(parseFloat(cs?.paddingRight)||0);
+   // No layout (a test DOM, a hidden panel): the old fixed width.
+   return inner>0?Math.max(480,Math.min(1100,Math.round(inner))):860;
+  };
   function graphCanvas(W,H,nodes,label){
    const svg=doc.createElementNS(SVG,'svg');
    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph');
@@ -3490,7 +3528,7 @@
     drawLegacyGraph(b);
     return;
    }
-   const W=860,H=graphHeight(chosen.length);
+   const W=graphWidth(),H=graphHeight(chosen.length);
    const items=chosen.map(paper=>runtime.Z.Items.get(Number(paper.id))).filter(Boolean);
    const citedBy=typeof runtime.citedByFor==='function'?runtime.citedByFor(items):null;
    const withCiters=Object.keys(citedBy||{}).length;
@@ -3658,7 +3696,7 @@
    const limit=setting('graphNodeLimit',180);
    const raw=library.graph(rows().slice(0,limit),{mode:state.graphMode==='citations'?'related':state.graphMode});
    if(!raw.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
-   const W=860,H=graphHeight(raw.nodes.length);
+   const W=graphWidth(),H=graphHeight(raw.nodes.length);
    /* The good layout when it is there, the old placer when it is not.
 
       The layout lives on the runtime as an optional module. Reaching for it
@@ -3722,11 +3760,12 @@
    button('축소',()=>{zoom=Math.max(.5,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
    if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body,{class:'sc-muted'});
   }
-  function drawTags(){const b=bar(),value=node('input',null,b,{placeholder:'추가·제거할 정확한 태그 (쉼표로 구분)','aria-label':'추가할 태그'});button('선택 문헌에 태그 추가',async()=>{await library.addTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('선택 문헌에서 태그 제거',async()=>{await library.removeTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('태그 필터 해제',()=>{state.tag='';render();},b);
+  function drawTags(){sectionHead('선택 문헌의 태그',state.selected.size?`${state.selected.size}편`:'');const b=bar(),value=node('input',null,b,{placeholder:'추가·제거할 정확한 태그 (쉼표로 구분)','aria-label':'추가할 태그'});button('선택 문헌에 태그 추가',async()=>{await library.addTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('선택 문헌에서 태그 제거',async()=>{await library.removeTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('태그 필터 해제',()=>{state.tag='';render();},b);
+   sectionHead('태그 경로 이름 바꾸기');
    const rename=bar(),from=node('input',null,rename,{'aria-label':'기존 태그 경로',placeholder:'기존 태그 경로'}),to=node('input',null,rename,{'aria-label':'새 태그 경로',placeholder:'새 태그 경로'});let subtree=true;
    check('하위 태그도 변경',true,on=>{subtree=on;},rename);
    button('선택 문헌 태그 이름 변경',async()=>{const result=await library.renameTagBranch([...state.selected],from.value,to.value,{subtree});await load();message(`태그 변경 ${result.updatedItems}개 문헌 · 병합 ${result.mergedTags}개`);},rename);
-   const tree=library.tagTree(rows());function branch(nodes,parent){for(const n of nodes){const details=node('details',null,parent);const summary=node('summary',null,details);node('span',`${n.name} (${n.count})`,summary,{class:'sc-tag-name'});const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},summary,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(n.children.length)branch(n.children,details);}}branch(tree,body);if(!tree.length)empty('태그가 없습니다. 문헌을 선택하고 태그를 추가하세요.');
+   const tree=library.tagTree(rows());sectionHead('태그 목록',tree.length);function branch(nodes,parent){for(const n of nodes){const details=node('details',null,parent);const summary=node('summary',null,details);node('span',`${n.name} (${n.count})`,summary,{class:'sc-tag-name'});const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},summary,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(n.children.length)branch(n.children,details);}}branch(tree,body);if(!tree.length)empty('태그가 없습니다. 문헌을 선택하고 태그를 추가하세요.');
   }
   /* A note needs a paper. Opening this tab with the whole library in scope
      used to show a disabled editor and "select a paper", with no paper to
@@ -3896,7 +3935,7 @@
      visibleAnnotationIDs.add(a.id);
      const tint=/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'var(--sc-faint)';
      const row=node('article',null,stack,{class:'sc-annot',tabindex:'0','data-selected':String(state.annotationIDs.has(a.id))});
-     // The annotation's colour runs down the card's edge, as it does in the PDF.
+     // The annotation's colour, shown as a square before its page (see the CSS).
      row.style.setProperty('--sc-annot',tint);
      const head=node('div',null,row,{class:'sc-annot-head'});
      node('span',`p.${a.pageLabel||((a.pageIndex??0)+1)}`,head,{class:'sc-annot-page'});
@@ -4207,6 +4246,7 @@
    const b=bar();check('세로 탭 목록 표시',!!runtime.cache.readerSettings?.verticalTabs,on=>run(()=>reader.setVerticalTabs(win,on)),b);
    const name=node('input',null,b,{placeholder:'탭 그룹 이름','aria-label':'탭 그룹 이름'});button('열린 탭 저장',async()=>{await reader.saveTabGroup(win,name.value);render();},b);
    const tabs=reader.tabs(win);
+   sectionHead('열린 탭',tabs.length);
    for(const [index,tab]of tabs.entries()){
     const c=card(tab.title,tab.selected?'현재 탭':'');button('이동',()=>reader.selectTab(win,tab.id),c);
     if(tab.itemID){button('닫기',async()=>{await reader.closeTab(win,tab.id);render();},c);
@@ -4215,8 +4255,11 @@
      button('이 탭 외 문서 탭 닫기',()=>{const result=reader.closeOtherTabs(win,tab.id);render();message(`${result.closed}개 문서 탭을 닫았습니다.`);},c);
     }
    }
-   sectionHead('저장된 탭 그룹');
-   for(const group of reader.tabGroups()){
+   const groups=reader.tabGroups();
+   sectionHead('저장된 탭 그룹',groups.length||'');
+   // A heading over nothing reads as a page that failed to load.
+   if(!groups.length)node('p','저장한 탭 그룹이 없습니다. 위에서 이름을 적고 「열린 탭 저장」을 누르면 지금 열린 문서 탭을 한 묶음으로 저장합니다.',body,{class:'sc-muted sc-settings-note'});
+   for(const group of groups){
     const c=card(group.name,`${group.tabs.length}개 탭`),title=node('input',null,c,{'aria-label':'저장된 탭 그룹 이름'});title.value=group.name;title.dataset.draftKey=JSON.stringify(['tab-group-name',group.id]);
     button('복원',async()=>{const result=await reader.restoreTabGroup(win,group.id);await render();message(`복원 ${result.opened} · 찾지 못함 ${result.missing}`);},c);
     button('탭 그룹 이름 변경',async()=>{const submitted=title.value;await reader.renameTabGroup(group.id,submitted);finishDraft(title,submitted);render();},c);
@@ -4818,6 +4861,9 @@
     list.replaceChildren();
     const found=plan.milestones;
     if(!found?.line?.length){
+     // "찾는 중" stayed on the status line above the answer, so the reader
+     // could not tell whether to wait.
+     message('발전 과정 분석 완료 · 공통으로 기대는 논문 없음');
      const box=node('div',null,list,{class:'sc-empty'});
      node('p','이 논문의 참고문헌들이 공통으로 기대는 논문을 찾지 못했습니다. 서로 다른 갈래를 폭넓게 인용한 논문에서 자주 생깁니다.',box);
      button('읽기 순서 보기',()=>run(async()=>{state.relatedView='path';await saveUI({relatedView:'path'});await render();}),bar(box));
@@ -5638,9 +5684,15 @@
    }
    if(j.openAlexID){const b=button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions);journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
   }
-  function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.');pickOne();return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
+  function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.');pickOne();return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
    const aiReady=!!(String(runtime.pref('aiEndpoint','')||'').trim()&&String(runtime.pref('aiModel','')||'').trim());
-   if(!aiReady)node('p','Zotero 설정 → Style Custom → 번역·AI에 AI 서버 주소·모델·API 키를 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.',body,{class:'sc-muted'});
+   /* Two parts, named: what to ask, and what came back. The request row and
+      the result box used to run together under the paper's title, and the
+      note saying the service was not set up sat below the box it explained. */
+   const askHead=sectionHead('요청',null,body);body.insertBefore(askHead,b);
+   if(!aiReady)body.insertBefore(node('p','Zotero 설정 → Style Custom → 번역·AI에 AI 서버 주소·모델·API 키를 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.',null,{class:'sc-muted sc-settings-note'}),b);
+   b.insertBefore(node('span',T('출력 언어'),null,{class:'sc-settings-label'}),language);
+   body.insertBefore(sectionHead('결과',null,body),output);
    // Nothing to stop until something is running.
    const stopAI=button('요청 중지',()=>{aiEpoch++;assist.cancel?.();message('AI 요청을 중지했습니다.');stopAI.hidden=true;},b,{class:'sc-danger-soft'});stopAI.hidden=true;
    for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);
