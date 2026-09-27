@@ -184,6 +184,8 @@
 		let err = new Error(msg + " · " + host);
 		err.url = url.split("?")[0];
 		err.status = status;
+		// The server's own wait, so the retry waits that long instead of 1.5 s and failing as a bare 429.
+		try { let after = e?.xmlhttp?.getResponseHeader?.("Retry-After"); if (after != null && after !== "") err.retryAfter = after; } catch (ignored) {}
 		// sources.js distinguishes an exhausted OpenAlex budget from a transient 429
 		err.body = String(body).slice(0, 400);
 		return err;
@@ -1346,7 +1348,7 @@
 	function showInLibrary(r) {
 		try {
 			let key = r.doi && ZotPoPSources.normalizeDOI ? ZotPoPSources.normalizeDOI(r.doi) : r.doi;
-			let id = key && state.doiMap.get(key);
+			let id = r.libraryItemID || (key && state.doiMap.get(key));
 			let pane = mainWindow?.ZoteroPane;
 			if (id && pane?.selectItem) { pane.selectItem(id); setStatus(t("shownInLibrary"), "", { transient: true }); }
 			else setStatus(t("thLibTip"), "", { transient: true });
@@ -1511,7 +1513,11 @@
 			await refreshLibraryFlags();
 			if (!active()) throw abortError();
 			let partial = state.lastPartial;
-			setStatus(partial ? t("incompleteResults", label, recs.length) : t("resultCount", label, recs.length, false));
+			/* The source had more than the result limit let through. The status
+			   said "200건" and the h-index beside it covered the top 200 by
+			   relevance of fifteen thousand, with nothing to say so. */
+			let capped = Object.values(ctx.sourceStatus || {}).find(s => s && s.reason === "result-limit" && Number(s.total) > recs.length);
+			setStatus(partial ? t("incompleteResults", label, recs.length) : t("resultCount", label, recs.length, false, capped ? Number(capped.total) : 0));
 			rememberSearch(sourceKey, q, recs, partial);
 			if (q.engine === "pop") showBanner(t("popModeNotice") + (recs.popProvenance?.cached ? " " + t("popCachedNotice") : ""));
 			if (ctx.errors?.length) {
@@ -1562,11 +1568,21 @@
 
 	async function refreshLibraryFlags() {
 		let { libraryID } = currentTarget();
-		if (libraryID !== state.libraryID || !state.doiMap.size) {
-			state.libraryID = libraryID;
-			state.doiMap = await ZotPoPImporter.getLibraryDOIMap(libraryID);
+		/* Read again at every search: a paper saved from the browser meanwhile
+		   stayed unmarked while the map was kept for the window's life. And a
+		   result the library holds without a DOI is found by title and year,
+		   the same rule the import uses -- the row said "not here" and the
+		   import then said "already there". */
+		state.libraryID = libraryID;
+		state.doiMap = await ZotPoPImporter.getLibraryDOIMap(libraryID);
+		for (let r of state.records) {
+			let id = r.doi ? state.doiMap.get(r.doi) : null;
+			if (!id && typeof ZotPoPImporter.findByTitle === "function" && r.title) {
+				try { id = await ZotPoPImporter.findByTitle(libraryID, r.title, r.year); } catch (e) { id = null; }
+			}
+			r.inLibrary = Boolean(id);
+			if (id) r.libraryItemID = id;
 		}
-		for (let r of state.records) r.inLibrary = Boolean(r.doi && state.doiMap.has(r.doi));
 		render();
 	}
 
@@ -1650,8 +1666,16 @@
 	}
 
 	// ------------------------------------------------------------ affiliation
+	const affiliationMemo = new WeakMap();
 	function affiliationOf(r) {
-		return typeof ZotPoPAffiliations !== "undefined" && r?.people ? ZotPoPAffiliations.summarise(r.people) : null;
+		if (typeof ZotPoPAffiliations === "undefined" || !r?.people) return null;
+		/* Asked on every comparison of a sort and every keystroke of the filter:
+		   with two thousand rows, tens of thousands of summaries of the same
+		   author lists. One per list of people, kept while the list lives. */
+		if (typeof r.people !== "object") return ZotPoPAffiliations.summarise(r.people);
+		let held = affiliationMemo.get(r.people);
+		if (held === undefined) { held = ZotPoPAffiliations.summarise(r.people); affiliationMemo.set(r.people, held); }
+		return held;
 	}
 	function tierLabel(key) {
 		return key ? key.toUpperCase() : "";
@@ -1864,11 +1888,11 @@
 		if ($("metrics-hint")) $("metrics-hint").textContent = t("metricsHint");
 		let m = ZotPoPMetrics.compute(list);
 		let set = (id, v) => { $(id).textContent = v; };
-		let hint = $("metrics-hint"); if (hint) { hint.hidden = list.length > 0; $("metrics-table").hidden = !list.length; }
+		let hint = $("metrics-hint"); if (hint) { hint.hidden = list.length > 0 && !m.unknownCitations; $("metrics-table").hidden = !list.length; if (list.length && m.unknownCitations) hint.textContent = t("metricsUnknown", m.unknownCitations, list.length); }
 		set("m-years", m.minYear ? `${m.minYear}–${m.maxYear}` : "–");
 		set("m-cyears", m.minYear ? String(m.citationYears) : "–");
 		set("m-papers", String(m.papers));
-		set("m-citations", String(m.citations));
+		set("m-citations", m.unknownCitations === m.papers && m.papers ? "–" : String(m.citations));
 		set("m-cpy", fmt(m.citesPerYear));
 		set("m-cpp", fmt(m.citesPerPaper));
 		set("m-cpa", fmt(m.citesPerAuthor));
@@ -2116,15 +2140,25 @@
 		if (!mod && !e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); openPreview(); return; }
 		if (!state.visible.length) return;
 		let idx = state.visible.findIndex(r => r.key === state.focusKey);
-		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+		if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "PageDown" || e.key === "PageUp") {
 			e.preventDefault();
-			let next = e.key === "ArrowDown"
-				? Math.min(state.visible.length - 1, idx < 0 ? 0 : idx + 1)
-				: Math.max(0, idx < 0 ? 0 : idx - 1);
+			let step = e.key === "PageDown" ? 10 : e.key === "PageUp" ? -10 : e.key === "ArrowDown" ? 1 : -1;
+			let next = Math.max(0, Math.min(state.visible.length - 1, idx < 0 ? 0 : idx + step));
 			let r = state.visible[next];
+			/* Shift extends a range from where it began, as in every list: the
+			   starting row is in it, and going back shrinks it. It used to add
+			   only the row arrived at, and never took one away. */
+			if (e.shiftKey) {
+				if (state.anchorKey == null || !state.visible.some(v => v.key === state.anchorKey)) state.anchorKey = idx >= 0 ? state.visible[idx].key : r.key;
+				let from = state.visible.findIndex(v => v.key === state.anchorKey);
+				if (state.rangeKeys) for (let key of state.rangeKeys) state.selected.delete(key);
+				let lo = Math.min(from, next), hi = Math.max(from, next);
+				state.rangeKeys = state.visible.slice(lo, hi + 1).map(v => v.key);
+				for (let key of state.rangeKeys) state.selected.add(key);
+			}
+			else { state.anchorKey = null; state.rangeKeys = null; }
 			state.focusKey = r.key;
 			state.detailKey = r.key;
-			if (e.shiftKey) state.selected.add(r.key);
 			paintRows();
 			renderDetail();
 			document.querySelector(`#results-body tr[data-key="${CSS.escape(r.key)}"]`)?.scrollIntoView({ block: "nearest" });
@@ -2257,6 +2291,7 @@
 			if (res.status === "added") {
 				added++;
 				r.inLibrary = true;
+				r.libraryItemID = res.item?.id;
 				if (r.doi) state.doiMap.set(r.doi, res.item.id);
 				let gotPDF = res.pdf.startsWith("pdf");
 				if (res.proxyLoginNeeded) proxyLoginNeeded = true;
@@ -2269,7 +2304,9 @@
 			else if (res.status === "exists") {
 				exists++;
 				r.inLibrary = true;
-				setRowStatus(r, t("statusExists"), "warn");
+				// The tick then leads to the copy found, whether or not it has a DOI.
+				r.libraryItemID = res.item?.id;
+				setRowStatus(r, res.addedToCollection ? t("statusExistsFiled") : t("statusExists"), "warn");
 			}
 			else {
 				failed++;

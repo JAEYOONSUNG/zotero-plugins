@@ -125,7 +125,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const definition=this.settingDefinition(key);if(!definition)throw new Error('Unknown setting: '+key);
     // A note is read, never written: its text is what the runtime found, not a
     // stored preference, so it never reaches the preference store or validate().
-    if(definition.type==='note')return this.journalFigureSummary();
+    if(definition.type==='note')return key==='updateStatus'?this.updateSummary():this.journalFigureSummary();
     let value=this.pref(key,undefined);
     if(value===undefined){
       const reader=this.cache.readerSettings||{},margin=reader.marginOptions||{};
@@ -140,17 +140,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // Anything remembered from a preference is dropped the moment one is set.
     this.timeFormatMemo = null;
     this.bumpState();
-    if (key === 'language') { this.applyLocale(); }
     this.settingWriteDepth=(this.settingWriteDepth||0)+1;
     try{if(key==='customFields')this.setCustomFields(value);else if(key==='panelCSS')this.setPanelCSS(value);else this.Z.Prefs.set('extensions.style-custom.'+key,value,true);}finally{this.settingWriteDepth--; }
+    // After the write: read before it, the language applied was the one being replaced.
+    if (key === 'language') { this.applyLocale(); }
     if(key==='workbenchDensity'){this.cache.workbenchUI={...(this.cache.workbenchUI||{}),density:value};this.dirty=true;}
     if(apply)await this.applySettings([key]);return this.getSetting(key);
   }
   async resetSettings(category) {
     if(!this.settingsSchema.categories.some(row=>row.id===category))throw new Error('Unknown category');
-    const rows=this.settingsSchema.settings.filter(row=>row.category===category&&row.type!=='action'&&row.type!=='note'&&!row.secret);
+    // What the reader typed -- a server address, a model name, an email, CSS -- is kept, as keys are: a reset brings back defaults, not blanks.
+    const rows=this.settingsSchema.settings.filter(row=>row.category===category&&row.type!=='action'&&row.type!=='note'&&!row.secret&&!row.keepOnReset);
     for(const row of rows)await this.setSetting(row.key,row.default,{apply:false});
-    await this.applySettings(rows.map(row=>row.key));return {reset:rows.length,secretsPreserved:true};
+    await this.applySettings(rows.map(row=>row.key));return {reset:rows.length,secretsPreserved:true,kept:this.settingsSchema.settings.filter(row=>row.category===category&&row.keepOnReset).map(row=>row.key)};
   }
   async applySettings(keys=[]) {
     if(!this.active||this.stopping)return;
@@ -252,9 +254,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async checkUpdatesNow() {
     if (!this.updater) throw new Error('이 설치본에는 업데이트 주소가 없습니다. GitHub 배포 목록에서 받은 파일로 다시 설치하세요.');
     const result = await this.updater.run({ reason: 'user', force: true });
-    if (result.status === 'error') throw new Error(result.message);
+    if (result.status === 'error') throw new Error(this.t('새 버전을 확인하지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요. ({0})').replace('{0}', result.message));
     if (result.status === 'installed') return this.t('{0} 버전을 설치했습니다. 새 버전은 바로 적용됩니다.').replace('{0}', result.entry.version);
     return this.t('최신 버전입니다 ({0}).').replace('{0}', this.version || '');
+  }
+  /* The daily check wrote its result and nothing read it: a feed that kept
+     failing looked exactly like being up to date. */
+  updateSummary() {
+    const last = this.updater?.lastResult?.();
+    if (!last) return this.t('아직 확인하지 않았습니다.');
+    const when = this.localStamp(last.at);
+    const at = when ? this.formatStamp(when) : '';
+    const said = {installed: this.t(`${last.latest || ''} 설치함`), current: this.t('최신'), available: this.t(`${last.latest || ''} 있음`), off: this.t('자동 설치 꺼짐'), deferred: this.t('사용 중이라 다음에 설치'), error: this.t(`실패 · ${last.message || ''}`)}[last.status] || String(last.status || '');
+    return `${at} · ${said}`;
   }
   getSettingsStatus() {
     const win=this.Z.getMainWindow?.(),selected=win?this.selected(win):[];const reader=win?.Zotero_Tabs&&this.Z.Reader?.getByTabID?.(win.Zotero_Tabs.selectedID),attachment=reader&&this.Z.Items.get(reader.itemID),item=(attachment?.parentID&&this.Z.Items.get(attachment.parentID))||selected[0];
@@ -275,6 +287,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
     }
   }
+  /* A stored time as a Date: Zotero's "YYYY-MM-DD HH:MM:SS" is UTC with no
+     zone written, and the plugin's own ISO strings carry theirs. */
+  localStamp(value) {
+    const text = String(value || '').trim();
+    if (!text) return null;
+    const utc = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(text) ? text.replace(' ', 'T') + 'Z' : text;
+    const time = Date.parse(utc);
+    return Number.isFinite(time) ? new Date(time) : null;
+  }
+  formatStamp(date) {
+    const two = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`;
+  }
+
   formatReadTime(seconds) {
     // Both settings are read for every cell in the column. They are preferences,
     // so they change when a preference changes and not once per row; the memo
@@ -289,11 +315,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if(format==='clock')return [h,m,s].map(n=>String(n).padStart(2,'0')).join(':');
     return h?`${h}h ${m}m ${s}s`:m?`${m}m ${s}s`:`${s}s`;
   }
-  refreshReadingDisplays() {
+  /* One reading tick changes one paper. Every tick used to repaint every
+     reading cell in the list, recomputing each row's state and the palette
+     per cell; now only that paper's cells, with the palette once per window.
+     The status cell is drawn as renderCell draws it -- this path used to put
+     the stored English word ("reading") back into a Korean list. */
+  refreshReadingDisplays(itemID) {
+    const only = itemID != null ? `[data-item-id="${String(itemID).replace(/[^\w-]/g, '')}"]` : '';
     for(const [win,state]of this.windows){if(win.closed)continue;
-      for(const cell of win.document.querySelectorAll?.('[data-style-custom-reading]')||[]){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);const P=this.palette(win.document);
+      const cells=win.document.querySelectorAll?.('[data-style-custom-reading]'+only)||[];
+      if(cells.length){const P=this.palette(win.document);
+      for(const cell of cells){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);
         if(cell.dataset.styleCustomReading==='time'){cell.textContent=this.formatReadTime(value.seconds);cell.style.color=value.seconds<=0?P.faint:value.seconds>=3600?P.blue:P.text;cell.style.fontWeight=value.seconds>=3600?'590':'';}
-        else if(cell.firstChild&&cell.lastChild){const tone={unread:P.muted,reading:P.orange,done:P.green}[value.status];cell.firstChild.textContent={unread:'\u25cb',reading:'\u25d0',done:'\u25cf'}[value.status];cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status;cell.lastChild.style.color=value.status==='unread'?P.muted:tone;cell.lastChild.style.fontWeight=value.status==='unread'?'400':'590';}}
+        else if(cell.firstChild&&cell.lastChild){const tone={unread:P.muted,reading:P.reading,done:P.done}[value.status]||P.muted;cell.firstChild.textContent={unread:'\u25cb',reading:'\u25d0',done:'\u25cf'}[value.status]||'\u25cb';cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status==='unread'?'':this.t({reading:'읽는 중',done:'읽음'}[value.status]||'');cell.lastChild.style.color=value.status==='unread'?P.muted:tone;cell.lastChild.style.fontWeight=value.status==='unread'?'400':'590';}}}
       state.workbench?.refreshMetrics?.();
     }
   }
@@ -473,7 +507,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   value(key, item) {
     try {
       const state = this.state(item);
-      if (key === "if") { if (state.impactFactor != null) return String(state.impactFactor); const estimate = this.journalCitedness(item); return estimate ? String(estimate.citedness) : ""; }
+      /* Three decimals always: Zotero sorts these as numeric-aware text, which
+         compares the digits after the point as a number, so "12.5" landed
+         below "12.25". The cell draws the figure without the padding. */
+      if (key === "if") { const fixed = n => Number.isFinite(Number(n)) ? Number(n).toFixed(3) : ""; if (state.impactFactor != null) return fixed(state.impactFactor); const estimate = this.journalCitedness(item); return estimate ? fixed(estimate.citedness) : ""; }
       if (key === "journalMark") return this.journalAbbreviationOf(item);
       if (key === "citations") return state.citations == null ? "" : String(state.citations);
       if (key === "status") return String({unread:0,reading:1,done:2}[state.status]);
@@ -508,7 +545,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (key === "venue") return ['publicationTitle','proceedingsTitle','university','publisher'].map(field=>item.getField(field)).find(Boolean)||'';
       if (key === "authors") return (item.getCreators?.()||[]).map(c=>[c.firstName,c.lastName||c.name].filter(Boolean).join(' ')).join('; ');
       if (key === "added"||key === "modified")return String(item.getField(key==='added'?'dateAdded':'dateModified')||'');
-      if (key === "lastRead")return String(this.entry(item).lastRead||'').replace('T',' ').slice(0,16);
+      // Kept in UTC so it sorts; drawn in the reader's own clock (see localStamp).
+      if (key === "lastRead")return String(this.entry(item).lastRead||'');
       if (key === "tagCount")return String(item.getTags().filter(t=>!/^style-custom:/.test(t.tag)).length);
       if (key === "noteCount")return String(item.getNotes?.().length||0);
       // An ordinal key, not a label: the column has to sort the worst news to
@@ -872,9 +910,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   pill(doc, text, color, p) {
     const el = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     el.textContent = text;
-    el.style.cssText = `display:inline-flex;align-items:center;border-radius:100px;padding:1px 7px;`
+    /* A word in its colour, not a capsule: the tinted, fully rounded pill was
+       the decoration the reader asked to have taken off. The colour stays
+       where it means something (a tag's, a retraction's); the shape goes. */
+    el.style.cssText = `display:inline-flex;align-items:center;border-radius:3px;padding:0 2px;`
       + `font-size:11px;font-weight:590;line-height:15px;letter-spacing:-0.01em;white-space:nowrap;`
-      + `background:${this.tint(color, p.tint)};color:${color};`;
+      + `color:${color};`;
     return el;
   }
   // Log scale: citation counts span several orders of magnitude, so a linear bar
@@ -994,7 +1035,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const tone = {unread: P.muted, reading: P.reading, done: P.done}[label];
       const dot = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       dot.textContent = {unread: "○", reading: "◐", done: "●"}[label];
-      dot.style.cssText = `font-size:10px;line-height:1;color:${tone};`;
+      dot.style.cssText = `font-size:11px;line-height:1;color:${tone};`;
       const text = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       // Thirty rows saying "unread" were the column's texture; the hollow circle says it alone.
       text.textContent = label === "unread" ? "" : this.t({unread: "안 읽음", reading: "읽는 중", done: "읽음"}[label]);
@@ -1003,7 +1044,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (this.isRegular(item)) {
         cell.title = this.t({unread: "안 읽음", reading: "읽는 중", done: "읽음"}[label]) + " · " + this.t("클릭하면 다음 상태로 바꿉니다");
         cell.style.cursor = "pointer";
-        cell.addEventListener("click", event => { event.stopPropagation(); if (!this.canEdit(item)) return; const next = {unread: "reading", reading: "done", done: "unread"}[label]; this.edit([item], {status: next}).catch(e => this.Z.logError(e)); });
+        // The first click on a row selects it, as everywhere in Zotero; only a click on a row already selected changes it.
+        const armed = this.guardClick(cell, doc, index);
+        cell.addEventListener("click", event => { if (!armed()) return; event.stopPropagation(); if (!this.canEdit(item)) return; const next = {unread: "reading", reading: "done", done: "unread"}[label]; this.edit([item], {status: next}).catch(e => this.Z.logError(e)); });
       }
     } else if (key === "rating") {
       const rating = Number(value);
@@ -1014,7 +1057,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         // A filled star is a mark, not text: it can be the light warm colour a
         // star is supposed to be instead of the dark ochre that reads as dirt.
         star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.star:P.faint};`;
-        star.addEventListener("click", event => { event.stopPropagation(); if (this.canEdit(item)) this.edit([item], {rating:n===rating?0:n}).catch(e=>this.Z.logError(e)); });
+        const armed = this.guardClick(star, doc, index);
+        star.addEventListener("click", event => { if (!armed()) return; event.stopPropagation(); if (this.canEdit(item)) this.edit([item], {rating:n===rating?0:n}).catch(e=>this.Z.logError(e)); });
         cell.appendChild(star);
       }
     } else if (key === "tags" && this.isRegular(item)) {
@@ -1035,8 +1079,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
       cell.appendChild(strip);cell.title=`주석 ${value}개 · ${pages.length}개 페이지에 분포${pages.length>120?' · 앞 120개 위치 표시':''}. 색 막대를 클릭하면 해당 PDF 페이지로 이동합니다.`;
     } else if(['added','modified'].includes(key)&&this.getSetting('dateDisplay')==='relative') {
-      const timestamp=Date.parse(value),age=Math.max(0,Date.now()-timestamp),minutes=Math.floor(age/60000),hours=Math.floor(minutes/60),days=Math.floor(hours/24);
+      /* Zotero stores these in UTC without a zone; read as local time, a paper
+         added a minute ago in Seoul said "9시간 전". */
+      const when=this.localStamp(value),timestamp=when?when.getTime():NaN,age=Math.max(0,Date.now()-timestamp),minutes=Math.floor(age/60000),hours=Math.floor(minutes/60),days=Math.floor(hours/24);
       cell.textContent=Number.isFinite(timestamp)?days?days+'일 전':hours?hours+'시간 전':minutes?minutes+'분 전':'방금':value;
+    } else if(['added','modified','lastRead'].includes(key)) {
+      const when=this.localStamp(value);
+      cell.textContent=when?this.formatStamp(when):String(value||'');
     } else if (key === "time") {
       const seconds = Number(value);
       label = this.formatReadTime(seconds);
@@ -1176,7 +1225,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (where.corresponding && where.corresponding.institution !== where.first?.institution) {
         const arrow = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
         arrow.textContent = "→";
-        arrow.style.cssText = `font-size:10px;color:${P.faint};flex:none;`;
+        arrow.style.cssText = `font-size:11px;color:${P.faint};flex:none;`;
         cell.appendChild(arrow);
         const second = line(where.corresponding, "corresponding");
         if (second) cell.appendChild(second);
@@ -1193,7 +1242,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       cell.title = mark?.title || "";
       return cell;
     } else if (key === "if") {
-      this.paintJournal(cell, item, doc, P, {figure: label, estimate: false});
+      this.paintJournal(cell, item, doc, P, {figure: label === "" ? label : String(Number(label)), estimate: false});
     } else if (key === "citations") {
       const count = Number(value);
       const number = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -1227,7 +1276,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (this.isRegular(item) && ["if","citations"].includes(key)) {
       // The number is a door: citations to the papers around this one, IF to the journal's page.
       cell.style.cursor = "pointer";
-      cell.addEventListener("click", () => { const win = doc.defaultView; this.windows.get(win)?.workbench?.show(key === "citations" ? "related" : "journals"); });
+      const armed = this.guardClick(cell, doc, index);
+      cell.addEventListener("click", () => { if (!armed()) return; const win = doc.defaultView; this.windows.get(win)?.workbench?.show(key === "citations" ? "related" : "journals"); });
       const metrics = this.metrics(item);
       const source = metrics[key === "if" ? "impactSource" : "citationSource"] || this.t("저장된 메타데이터");
       if (key === "if" && cell.title) cell.title += ` · ${source}`; else cell.title = `${label} · ${source}`;
@@ -1536,7 +1586,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         else strip?.remove();
       }else strip?.remove();
       if(this.featureEnabled('titleColumn')&&this.pref('titleTags',false)) {
-        if(!tags){tags=win.document.createElementNS('http://www.w3.org/1999/xhtml','span');tags.className='style-custom-title-tags';tags.style.cssText='font-size:10px;opacity:.85;white-space:nowrap;pointer-events:none;';cell.appendChild(tags);state.titleNodes.add(tags);}
+        if(!tags){tags=win.document.createElementNS('http://www.w3.org/1999/xhtml','span');tags.className='style-custom-title-tags';tags.style.cssText='font-size:11px;white-space:nowrap;pointer-events:none;';cell.appendChild(tags);state.titleNodes.add(tags);}
         tags.replaceChildren();const visible=this.displayTags(item).slice(0,this.getSetting('titleTagLimit'));const rating=this.state(item).rating;if(rating)visible.unshift({tag:'★'.repeat(rating),color:null});
         for(const value of visible){const badge=win.document.createElementNS('http://www.w3.org/1999/xhtml','span');badge.textContent=value.tag;badge.title=value.tag;badge.style.marginInlineStart='4px';if(value.color)badge.style.color=value.color;tags.appendChild(badge);}
       }else tags?.remove();
@@ -2596,6 +2646,26 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     } catch (error) { if (error?.name === 'AbortError') throw error; return null; }
   }
 
+  // Whether the row under a click was already selected before it: an unknown answer counts as yes, so nothing stops working where the tree cannot say.
+  rowSelected(doc, index) {
+    const selection = doc?.defaultView?.ZoteroPane?.itemsView?.selection;
+    return typeof selection?.isSelected === 'function' ? !!selection.isSelected(index) : true;
+  }
+  /* Zotero selects a row on mousedown, so by the click it is always selected.
+     The cell asks on its own mousedown, which runs before the tree's, and the
+     click reads that answer. */
+  guardClick(cell, doc, index) {
+    cell.addEventListener('mousedown', () => { cell.dataset.wasSelected = String(this.rowSelected(doc, index)); });
+    return () => cell.dataset.wasSelected !== 'false';
+  }
+
+  // A menu choice is "already so" only when every selected paper is already so.
+  alreadySo(items, key, value) {
+    const states = (items || []).filter(item => this.isRegular(item)).map(item => this.state(item));
+    const same = state => key === 'rating' ? Number(state.rating || 0) === Number(value) : state[key] === value;
+    return states.length > 0 && states.every(same);
+  }
+
   // Scholar's photo when the person uploaded one, not its grey placeholder.
   async scholarHasPhoto(id, result, signal) {
     result.requests++;
@@ -3497,6 +3567,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return report;
   }
 
+  async exportWithTranslator(items, translatorID) {
+    try {
+      const Export = this.Z.Translate?.Export;
+      if (typeof Export !== 'function' || !items?.length) return '';
+      const translation = new Export();
+      translation.setItems(items);
+      translation.setTranslator(translatorID);
+      await translation.translate();
+      return String(translation.string || '').trim();
+    } catch (error) { this.Z.logError?.(error); return ''; }
+  }
   // Zotero's own CSL processor is authoritative when the style is installed;
   // the local formatter only covers the case where it is not.
   async citationText(items, style) {
@@ -3508,8 +3589,26 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (produced) return produced;
       } catch (error) { this.Z.logError(error); }
     }
-    if (style.key === 'bibtex') return records.map(r => this.citationFormats.bibtex(r)).join('\n\n');
+    /* The export formats go through Zotero's own translators first: they know
+       every item type (a book is not @article) and give two "smith2020"s
+       distinct keys. The hand-written ones below are the fallback. */
+    const EXPORT_TRANSLATORS = {bibtex: '9cb70025-a888-4a29-a210-93ec52da40d4', ris: '32d59d2d-b65a-4da4-b0a3-bdd3cfb979e7', endnote: '881f60f2-0802-411a-9228-ce5f47b64c7d'};
+    if (EXPORT_TRANSLATORS[style.key]) {
+      const produced = await this.exportWithTranslator(items, EXPORT_TRANSLATORS[style.key]);
+      if (produced) return produced;
+    }
+    if (style.key === 'bibtex') {
+      const seen = new Map();
+      return records.map(r => {
+        const text = this.citationFormats.bibtex(r);
+        const key = /^@\w+\{([^,]+),/.exec(text)?.[1] || 'ref';
+        const n = seen.get(key) || 0; seen.set(key, n + 1);
+        return n ? text.replace(`{${key},`, `{${key}${String.fromCharCode(96 + n)},`) : text;
+      }).join('\n\n');
+    }
     if (style.key === 'ris') return records.map(r => this.citationFormats.ris(r)).join('\n\n');
+    // EndNote had a button and no branch: every press ended in "Unknown citation style".
+    if (style.key === 'endnote') return records.map(r => this.citationFormats.endnote(r)).join('\n\n');
     return records.map(r => this.citationFormats.format(style.key, r)).join('\n\n');
   }
   // Google Scholar shows every style at once and lets you pick by eye. A stack of
@@ -3840,7 +3939,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     record.seconds += seconds; record.unreadOverride = false; this.dirty = true;
     record.lastRead=new Date().toISOString();
     if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0&&Number.isInteger(location.pageIndex)&&location.pageIndex>=0&&location.pageIndex<100000&&Number.isInteger(location.totalPages)&&location.totalPages>location.pageIndex&&location.totalPages<=100000){record.readingAttachments||={};const bucket=record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:location.totalPages};bucket.pageTimes||={};bucket.pageTimes[location.pageIndex]=(Number(bucket.pageTimes[location.pageIndex])||0)+seconds;bucket.totalPages=location.totalPages;bucket.lastRead=record.lastRead;record.readingAttachmentID=location.attachmentID;}
-    this.refreshReadingDisplays();
+    this.refreshReadingDisplays(item.id);
     /* The cells are already repainted in place. A full store write and an item
        tree rebuild every second was the rest of this method; the seconds are
        now written at most twice a minute, and on stop. */
@@ -4351,7 +4450,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const ratingItems={};
       for(let rating=0;rating<=5;rating++)ratingItems[rating]=action(rating?"★".repeat(rating):"별점 지우기",()=>this.edit(this.selected(win),{rating}),ratings);
       make("menuseparator",null,body);
-      const suppl=make("menupopup",null,iconic(make("menu","보충자료 내려받기",body),"download"));
+      // It marks and unmarks as well as downloads, so it is named for what it holds.
+      const suppl=make("menupopup",null,iconic(make("menu","보충자료",body),"download"));
       action("선택한 파일을 보충자료로 표시",async()=>{
         const files=this.selectedAttachments(win);
         if(!files.length)throw new Error("첨부파일을 선택하세요.");
@@ -4448,11 +4548,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       },body,"authors","마지막에 이름을 올린 저자를 이 논문의 책임저자로 보고, 그 사람의 최근 논문·소속 이동·특허를 엽니다.");
       make("menuseparator",null,body);
       body.addEventListener("popupshowing",()=>{
-        // Greyed means "already so": the current status and rating cannot be chosen again.
+        /* Greyed means "already so" -- for every selected paper, not the first:
+           with twenty selected and the first already read, "읽음" was greyed
+           and the other nineteen could not be marked. */
         try{
-          const first=this.selected(win)[0], current=first?this.state(first):null;
-          for(const [status,node] of Object.entries(statusItems))node.disabled=!!current&&current.status===status;
-          for(const [rating,node] of Object.entries(ratingItems))node.disabled=!!current&&Number(current.rating||0)===Number(rating);
+          const chosen=this.selected(win);
+          for(const [status,node] of Object.entries(statusItems))node.disabled=this.alreadySo(chosen,'status',status);
+          for(const [rating,node] of Object.entries(ratingItems))node.disabled=this.alreadySo(chosen,'rating',rating);
           stopItem.hidden=!this.citationJob;
         }catch(error){this.Z.logError(error);}
       });
@@ -4497,9 +4599,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const view=win.ZoteroPane?.itemsView;
         const rows=[...doc.querySelectorAll("#zotero-items-tree .row")];
         const records=rows.map(row=>view?.getRow(Number(row.id.match(/-row-(\d+)$/)?.[1]))?.ref).filter(item=>this.isRegular(item));
-        const signature=JSON.stringify(records.map(item=>[this.identity(item),this.state(item)]));
+        /* Reading time and the last-read stamp change every second a paper is
+           open; their cells are repainted in place (refreshReadingDisplays).
+           Counted here, they rebuilt the whole list every five seconds, and the
+           flush beside them rewrote the store as often. */
+        const signature=JSON.stringify(records.map(item=>{const {seconds,lastRead,...rest}=this.state(item);return [this.identity(item),rest];}));
         if(state.signature!==null && signature!==state.signature) await view?.refreshAndMaintainSelection();
-        state.signature=signature;this.enhanceTitles(win,state,records); await this.flush();
+        state.signature=signature;this.enhanceTitles(win,state,records); if(this.dirty)this.scheduleFlush(30000);
         if(this.featureEnabled("citedCountColumn")&&this.pref("autoCitations",true)&&!this.citationJob&&!this.stopping) {
           // Without a key, OpenAlex list requests come out of a budget of about
           // ten a day shared with ZotPoP's searches; the background job waits

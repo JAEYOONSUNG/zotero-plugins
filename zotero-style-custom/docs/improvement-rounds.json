@@ -1,5 +1,5 @@
 {
-  "version": "0.53.11",
+  "version": "0.53.12",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -2941,6 +2941,350 @@
       ],
       "status": "verified",
       "review": "각 동작이 무엇을 했는지 알린다. 추가 열은 '머리글을 오른쪽 클릭해 켜세요'라고 안내한다. 문헌이 없는 탭에서는 선택 막대를 숨긴다."
+    },
+    {
+      "round": "R107",
+      "title": "PDF 리더 메뉴를 한국어로, 동작마다 결과 한 줄",
+      "gap": "The reader's Style menu, vertical tab rail, card labels and colour names were English only; every action and both save buttons reported failure to the log alone.",
+      "entryPoint": "PDF 리더 → 스타일 메뉴",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "const settle=promise=>"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "the reader menu speaks Korean to a Korean Zotero and says what each action did"
+        }
+      ],
+      "status": "verified",
+      "review": "메뉴·세로 탭·색 이름이 패널과 같은 사전을 거쳐 한국어(영어 Zotero에서는 영어)로 나온다. 메뉴 맨 위 한 줄이 '적용했습니다' 또는 실패 이유를 말한다."
+    },
+    {
+      "round": "R108",
+      "title": "여백 주석 카드의 색 막대를 작은 색 사각형으로",
+      "gap": "A margin card carried a 5px coloured bar on its rounded edge (the nail shape the reader asked to remove) and the palette buttons a 2px coloured ring; the margin font could go to 10px.",
+      "entryPoint": "PDF 리더 → 여백 주석",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "no-repeat 8px 12px / 10px 10px"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "a margin card carries its colour as a small square, not a bar on its edge, and never below 11px"
+        }
+      ],
+      "status": "verified",
+      "review": "카드는 회색 1px 테두리의 사각형이고, 주석 색은 라벨 앞 10px 사각형으로 남는다. 글자는 11px 아래로 내려가지 않는다."
+    },
+    {
+      "round": "R109",
+      "title": "여백 주석은 화면의 PDF만 1초마다 계산",
+      "gap": "Every second, every open reader including background tabs, and every page filtering every annotation: O(pages x annotations) per tick.",
+      "entryPoint": "PDF 리더 → 여백 주석",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "const host=tabHost(win),shown=host?.Zotero_Tabs?.selectedID;"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "margin cards are drawn for the reader on screen only, not for every background tab each second"
+        }
+      ],
+      "status": "verified",
+      "review": "보이는 탭의 리더만 그리고, 주석은 한 번에 쪽별로 나눈다."
+    },
+    {
+      "round": "R110",
+      "title": "읽는 동안 목록을 다시 만들지 않음",
+      "gap": "A reading tick repainted every reading cell in the list; the 5-second poll counted reading seconds as a change, rebuilt the whole item list and rewrote the 4.5 MB store each time; the repaint put the English word 'reading' into the status cell.",
+      "entryPoint": "문헌 목록 · 읽기 시간 열",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "refreshReadingDisplays(itemID) {"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "const {seconds,lastRead,...rest}=this.state(item)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a reading tick repaints only that paper"
+        }
+      ],
+      "status": "verified",
+      "review": "그 논문의 칸만 다시 칠하고, 읽기 시간은 목록 재구성 이유에서 뺐다. 저장은 30초마다 한 번으로 모은다."
+    },
+    {
+      "round": "R111",
+      "title": "스크롤로 지나친 쪽은 읽은 쪽이 아님",
+      "gap": "Any page with any time counted as read, so wheeling from page 1 to the references in ten seconds 'read' ten pages.",
+      "entryPoint": "읽기 진행 · 진행률 열",
+      "sources": [
+        {
+          "file": "src/workspace.js",
+          "marker": "Number(pages[k])>=5"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "a page scrolled past is not a page read: five seconds on it is the line"
+        }
+      ],
+      "status": "verified",
+      "review": "한 쪽에 5초 이상 머물러야 읽은 쪽으로 센다. 페이지 막대가 훑어봄과 읽음을 나누는 기준과 같다."
+    },
+    {
+      "round": "R112",
+      "title": "왼쪽 여백 카드가 잘리지 않음, 사용자 색은 저장값으로",
+      "gap": "At page-width zoom, left-side cards overflowed where no scroll reaches; the custom colour wells always opened at white and navy, not the saved theme.",
+      "entryPoint": "PDF 리더 → 여백 주석 · 스타일 메뉴",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "const room=Number(page.offsetLeft)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "left-side cards move to the right on a page with no room to its left"
+        }
+      ],
+      "status": "verified",
+      "review": "왼쪽에 자리가 없는 쪽은 카드를 오른쪽에 둔다. 색 입력칸은 저장한 배경·글자색으로 열린다."
+    },
+    {
+      "round": "R113",
+      "title": "날짜 열이 9시간 어긋나지 않음",
+      "gap": "Zotero stores Date Added/Modified in UTC without a zone; the columns showed UTC and the relative mode read it as local time, so a paper added a minute ago in Seoul said '9시간 전'. 최근 문헌 ranked a paper read this morning below one added last night.",
+      "entryPoint": "문헌 목록 · 추가일/수정일/마지막 읽음 · 최근 문헌",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "localStamp(value) {"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "zone-less UTC dates are drawn in the reader"
+        }
+      ],
+      "status": "verified",
+      "review": "정렬 값은 UTC로 두고 화면에는 한국 시간으로 그린다. 최근 문헌의 순서도 같은 기준으로 맞췄다."
+    },
+    {
+      "round": "R114",
+      "title": "인용 내보내기: Zotero 변환기 먼저, EndNote 복구",
+      "gap": "The EndNote export had a button and no branch ('Unknown citation style: endnote'); BibTeX was always @article and two smith2020s got one key.",
+      "entryPoint": "문헌 목록 → 인용 대화상자",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "async exportWithTranslator(items, translatorID)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "exports through Zotero"
+        }
+      ],
+      "status": "verified",
+      "review": "BibTeX·RIS·EndNote는 Zotero 내장 변환기로 먼저 만든다(항목 유형과 키 중복을 Zotero가 처리). 변환기가 없을 때의 자체 형식도 EndNote와 키 구분을 한다."
+    },
+    {
+      "round": "R115",
+      "title": "여러 편 선택 시 읽기 상태·별점 메뉴",
+      "gap": "Only the first selected paper decided which status/rating entries were greyed: with twenty selected and the first already read, the other nineteen could not be marked read.",
+      "entryPoint": "문헌 목록 → 우클릭 → Style Custom",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "alreadySo(items, key, value) {"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a status or rating is greyed in the menu only when every selected paper already has it"
+        }
+      ],
+      "status": "verified",
+      "review": "선택한 모든 문헌이 이미 그 상태일 때만 흐리게 한다."
+    },
+    {
+      "round": "R116",
+      "title": "IF 정렬이 숫자 순서대로",
+      "gap": "Zotero sorts column values as numeric-aware text, which reads the digits after the point as a number, so 12.5 sorted below 12.25.",
+      "entryPoint": "문헌 목록 · IF 열",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "Number(n).toFixed(3)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "impact factors sort by value under Zotero"
+        }
+      ],
+      "status": "verified",
+      "review": "정렬 값은 소수 셋째 자리까지 고정하고, 칸에는 원래 자릿수로 그린다. JCR 값과 OpenAlex 추정치가 한 열에서 섞여 정렬되는 문제는 사용자 결정이 필요해 그대로 두었다."
+    },
+    {
+      "round": "R117",
+      "title": "목록의 알약 배지를 색 글자로, 11px 아래 없음",
+      "gap": "Institution tier, tags, file kinds and signals were tinted, fully rounded capsules; the status glyph, affiliation arrow and title tags were 10px.",
+      "entryPoint": "문헌 목록 · 여러 열",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "A word in its colour, not a capsule"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a label in the item list is a word in its colour, not a tinted capsule"
+        }
+      ],
+      "status": "verified",
+      "review": "색은 의미가 있는 곳(태그·철회)에만 글자색으로 남고 캡슐 모양은 없앴다. 보충자료 메뉴 이름도 하는 일에 맞게 '보충자료'로 바꿨다."
+    },
+    {
+      "round": "R118",
+      "title": "행을 고르는 클릭이 값을 바꾸지 않음",
+      "gap": "Zotero selects a row on mousedown, so the first click on an unselected row also cycled its status, set a rating or opened the panel.",
+      "entryPoint": "문헌 목록 · 상태/별점/IF/인용 열",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "guardClick(cell, doc, index) {"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "the click that selects a row does not also change its status; a click on a selected row does"
+        }
+      ],
+      "status": "verified",
+      "review": "처음 클릭은 선택만 하고, 이미 선택된 행을 클릭할 때 바뀐다."
+    },
+    {
+      "round": "R119",
+      "title": "언어 설정이 바로 그 언어로",
+      "gap": "setSetting('language') applied the locale before writing the preference, so choosing English left Korean and choosing Korean switched to English.",
+      "entryPoint": "설정 → 메뉴·디자인 → 언어",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "read before it, the language applied was the one being replaced"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/settings-runtime.test.mjs",
+          "name": "choosing a language applies that language at once, not the one it replaces"
+        }
+      ],
+      "status": "verified",
+      "review": "값을 쓴 뒤 적용한다."
+    },
+    {
+      "round": "R120",
+      "title": "형식이 틀린 이메일·서버 주소는 입력할 때 거절",
+      "gap": "An email without @ and an AI endpoint without a scheme were saved with '적용했습니다' and failed later, far from the setting; the first-steps box counted them as filled.",
+      "entryPoint": "설정 → 인용 수·IF / 번역·AI",
+      "sources": [
+        {
+          "file": "src/settings-schema.js",
+          "marker": "이메일 형식이 아니니"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/settings-runtime.test.mjs",
+          "name": "an email or server address that cannot work is refused when typed, and blank still means unset"
+        }
+      ],
+      "status": "verified",
+      "review": "이메일과 https/localhost 주소 형식을 확인한다. 빈 값은 여전히 '사용 안 함'."
+    },
+    {
+      "round": "R121",
+      "title": "자동 업데이트 결과가 설정에 보임",
+      "gap": "The daily check wrote its result and nothing read it, so a feed that kept failing looked like being current; a manual check threw the updater's English message.",
+      "entryPoint": "설정 → 업데이트",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "updateSummary() {"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/settings-runtime.test.mjs",
+          "name": "the updates section says when the last check ran and why it failed, in words"
+        }
+      ],
+      "status": "verified",
+      "review": "'마지막 확인' 줄이 시각과 결과(최신·설치함·실패와 이유)를 보여 준다. 수동 확인 실패는 한국어 문장으로 알린다."
+    },
+    {
+      "round": "R122",
+      "title": "설정 동작 버튼과 숫자 범위",
+      "gap": "An action that failed once stayed in the error style after a later success; a number field with a description never showed its allowed range.",
+      "entryPoint": "설정 창 전반",
+      "sources": [
+        {
+          "file": "src/settings.js",
+          "marker": "state.error=false;state.feedback"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/settings.test.mjs",
+          "name": "an action that failed once shows its later success as a success, and number fields always say their range"
+        }
+      ],
+      "status": "verified",
+      "review": "다시 누르면 오류 표시를 지우고 시작한다. 숫자 설정은 설명 옆에 기본값과 허용 범위를 늘 적는다."
+    },
+    {
+      "round": "R123",
+      "title": "분류 초기화가 직접 입력한 값을 지우지 않음",
+      "gap": "Resetting 번역·AI cleared the server address and model but kept the key; resetting 메뉴·디자인 wiped the panel CSS and language; 열 표시 wiped the extra columns.",
+      "entryPoint": "설정 → 분류 기본값 복원",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "!row.keepOnReset"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/settings-runtime.test.mjs",
+          "name": "resetting a category brings back defaults but keeps the server address and model the reader typed"
+        }
+      ],
+      "status": "verified",
+      "review": "서버 주소·모델·이메일·패널 CSS·추가 열·언어는 키처럼 남기고, 확인 문구가 그렇게 말한다."
     }
   ],
   "introducedInVersion": "0.6.0"

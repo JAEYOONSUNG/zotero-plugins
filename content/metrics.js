@@ -38,7 +38,13 @@ var ZotPoPMetrics = (function () {
 
 	function compute(records, now = new Date().getFullYear()) {
 		let n = records.length;
-		let cites = records.map(r => r.citations || 0);
+		/* A record whose count never arrived (no DOI, a spent OpenAlex budget)
+		   is unknown, not zero. Counted as zero it pulled citations per paper
+		   down by every such paper; the per-paper figures now divide by the
+		   papers whose counts are known, and say how many were left out. */
+		let known = records.filter(r => r.citations != null && Number.isFinite(Number(r.citations)));
+		let unknownCitations = n - known.length;
+		let cites = records.map(r => Number(r.citations) || 0);
 		let citations = cites.reduce((a, b) => a + b, 0);
 		let years = records.map(r => r.year).filter(y => Number.isFinite(y));
 		let minYear = years.length ? Math.min(...years) : null;
@@ -56,7 +62,8 @@ var ZotPoPMetrics = (function () {
 			minYear, maxYear,
 			citationYears,
 			citesPerYear: n ? citations / citationYears : 0,
-			citesPerPaper: n ? citations / n : 0,
+			citesPerPaper: known.length ? citations / known.length : 0,
+			unknownCitations,
 			citesPerAuthor: normCites.reduce((a, b) => a + b, 0),
 			papersPerAuthor: nAuthors.reduce((a, b) => a + 1 / b, 0),
 			authorsPerPaper: n ? nAuthors.reduce((a, b) => a + b, 0) / n : 0,

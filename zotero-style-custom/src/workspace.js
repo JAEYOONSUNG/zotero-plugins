@@ -82,7 +82,8 @@
  function progress(entry={}){
   const pages=entry.pageTimes&&typeof entry.pageTimes==='object'?entry.pageTimes:{};
   const total=Number.isInteger(entry.totalPages)&&entry.totalPages>0?entry.totalPages:0;
-  const visited=Object.keys(pages).filter(k=>/^\d+$/.test(k)&&Number(k)<total&&Number(pages[k])>0).length;
+  // A page counts as read after five seconds on it, the same line the page strip draws between a glance and reading; scrolling from the first page to the references in ten seconds used to "read" ten pages.
+  const visited=Object.keys(pages).filter(k=>/^\d+$/.test(k)&&Number(k)<total&&Number(pages[k])>=5).length;
   return {total,visited,percent:total?Math.round(visited/total*100):null,pages};
  }
  function id(cache,prefix){cache.workspaceSequence=(Number(cache.workspaceSequence)||0)+1;return prefix+'-'+cache.workspaceSequence+'-'+Date.now().toString(36);}

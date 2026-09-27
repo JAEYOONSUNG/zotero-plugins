@@ -4,11 +4,14 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
   const CUSTOM_ID='style-custom-palette';
-  const COLORS={'#ffd400':'Yellow','#ff6666':'Red','#5fb236':'Green','#2ea8e5':'Blue','#a28ae5':'Purple','#e56eee':'Magenta','#f19837':'Orange','#aaaaaa':'Gray'};
+  // Zotero's own colour names, in the reader's language.
+  const COLORS={'#ffd400':'노란색','#ff6666':'빨간색','#5fb236':'초록색','#2ea8e5':'파란색','#a28ae5':'보라색','#e56eee':'자홍색','#f19837':'주황색','#aaaaaa':'회색'};
   const copy=value=>JSON.parse(JSON.stringify(value));
   const color=value=>typeof value==='string'&&/^#[\da-f]{6}$/i.test(value)?value.toLowerCase():null;
   function create({Zotero:Z,runtime}){
     const windows=new Map(),detached=new WeakSet();let stopped=false,sequence=0;
+    // The reader's own words go through the panel's dictionary: Korean, or English for an English Zotero.
+    const t=value=>typeof runtime.t==='function'?runtime.t(value):value;
     const toolbarOwner=(runtime.id||'style-custom')+'/reader-tools-'+Math.random().toString(36).slice(2);
     let toolbarRegistered=false,backlinkRevision=0,backlinkObserver=null;
     const backlinkCache=new Map();let backlinkQueue=Promise.resolve();
@@ -84,9 +87,17 @@
     function paintCards(win,state){
       const present=new Set();
       if(!state.margins||!enabled('marginAnnotation')){removeCards(state);return;}
+      /* Every second, for every open reader: background tabs included, and every
+         page filtering every annotation. Now only the reader on screen, and the
+         annotations are sorted onto their pages once per pass. */
+      const host=tabHost(win),shown=host?.Zotero_Tabs?.selectedID;
+      const display=marginDisplay(),options=marginOptions();
       for(const reader of readers(win)){
         if(reader.type!=='pdf')continue;
+        if(shown&&reader.tabID&&reader.tabID!==shown)continue;
         const annotations=reader._internalReader._state?.annotations||[];
+        const byPage=new Map();
+        for(const a of annotations){if(a._hidden||!a.id||display.types[a.type||'highlight']===false)continue;const at=a.position?.pageIndex;if(!Number.isInteger(at))continue;if(!byPage.has(at))byPage.set(at,[]);byPage.get(at).push(a);}
         for(const view of [reader._internalReader._primaryView,reader._internalReader._secondaryView]){
         const doc=view?._iframeWindow?.document;
         if(!doc)continue;
@@ -94,10 +105,10 @@
         for(const page of pages){
           const pageIndex=Number(page.getAttribute('data-page-number'))-1;
           if(!Number.isInteger(pageIndex)||pageIndex<0)continue;
-          const display=marginDisplay();const matching=annotations.filter(a=>!a._hidden&&a.position?.pageIndex===pageIndex&&a.id&&display.types[a.type||'highlight']!==false);
+          const matching=byPage.get(pageIndex)||[];
           if(!matching.length)continue;
           present.add(page);
-          const options=marginOptions();const signature=JSON.stringify([matching,settings().colorLabels,options,display,enabled('showAnnotationColorName')]);
+          const signature=JSON.stringify([matching,settings().colorLabels,options,display,enabled('showAnnotationColorName')]);
           let aside=state.cards.get(page);
           if(aside?.dataset.signature===signature)continue;
           if(aside)removeCard(aside);aside=doc.createElement('aside');
@@ -107,18 +118,21 @@
           page.style.setProperty('overflow','visible','important');
           aside._restorePageOverflow=()=>{if(page.style.getPropertyValue('overflow')==='visible'){if(overflow)page.style.setProperty('overflow',overflow,priority);else page.style.removeProperty('overflow');}};
           aside.className='style-custom-margin';aside.dataset.signature=signature;
-          aside.setAttribute('aria-label','Page '+(pageIndex+1)+' annotations');
-          aside.style.cssText='position:absolute;'+(options.side==='left'?'right':'left')+':calc(100% + 10px);top:8px;width:'+options.width+'px;max-height:calc(100% - 16px);overflow:auto;z-index:5;display:flex;flex-direction:column;gap:6px;font:'+display.fontSize+'px system-ui;text-align:start;';
+          aside.setAttribute('aria-label',t(`${pageIndex+1}쪽 주석`));
+          // A page with no room on its left (page-width zoom) takes its cards on the right, where they can be scrolled to.
+          const room=Number(page.offsetLeft),side=options.side==='left'&&(!Number.isFinite(room)||room>=options.width+10)?'left':'right';
+          aside.style.cssText='position:absolute;'+(side==='left'?'right':'left')+':calc(100% + 10px);top:8px;width:'+options.width+'px;max-height:calc(100% - 16px);overflow:auto;z-index:5;display:flex;flex-direction:column;gap:6px;font:'+display.fontSize+'px system-ui;text-align:start;';
           for(const annotation of matching.slice(0,200)){
             const button=doc.createElement('button'),hex=color(annotation.color)||'#aaaaaa';
-            const label=settings().colorLabels?.[hex]||COLORS[hex]||hex;
-            button.type='button';button.style.cssText='font:inherit;display:block;text-align:start;padding:8px;border:1px solid #888;border-inline-start:5px solid '+hex+';border-radius:2px;background:Canvas;color:CanvasText;white-space:pre-wrap;overflow-wrap:anywhere;cursor:pointer;';
+            const label=settings().colorLabels?.[hex]||(COLORS[hex]?t(COLORS[hex]):hex);
+            // A plain card; the colour is a small square before the label, as in the panel's annotation list, not a bar on the edge.
+            button.type='button';button.style.cssText='font:inherit;display:block;text-align:start;padding:8px 8px 8px 24px;border:1px solid GrayText;border-radius:0;background:linear-gradient('+hex+','+hex+') no-repeat 8px 12px / 10px 10px,Canvas;color:CanvasText;white-space:pre-wrap;overflow-wrap:anywhere;cursor:pointer;';
             const parts=[];if(display.showQuote&&annotation.text)parts.push(String(annotation.text));if(display.showComment&&annotation.comment)parts.push(String(annotation.comment));
             const text=parts.join('\n');button.textContent=(enabled('showAnnotationColorName')?label+' · ':'')+(annotation.pageLabel||pageIndex+1)+(text?'\n'+text.slice(0,options.textLimit):'');
             button.addEventListener('click',event=>{event.stopPropagation();Promise.resolve(reader.navigate({annotationID:annotation.id})).catch(report);});
             aside.appendChild(button);
           }
-          if(matching.length>200){const note=doc.createElement('span');note.textContent=`Showing 200 of ${matching.length} annotations on this page`;aside.appendChild(note);}
+          if(matching.length>200){const note=doc.createElement('span');note.textContent=t(`이 쪽 주석 ${matching.length}개 중 200개`);aside.appendChild(note);}
           page.appendChild(aside);state.cards.set(page,aside);
         }
         }
@@ -175,7 +189,7 @@
     }
     function marginDisplay(){
       const font=Number(preference('marginFontSize',13));const types={};for(const type of ['highlight','underline','note','image','text','ink'])types[type]=preference('marginShow'+type[0].toUpperCase()+type.slice(1),true)!==false;
-      return {fontSize:Number.isFinite(font)?Math.max(10,Math.min(24,font)):13,showQuote:preference('marginShowQuote',true)!==false,showComment:preference('marginShowComment',true)!==false,types};
+      return {fontSize:Number.isFinite(font)?Math.max(11,Math.min(24,font)):13,showQuote:preference('marginShowQuote',true)!==false,showComment:preference('marginShowComment',true)!==false,types};
     }
     async function setMarginOptions(win,patch){
       alive();if(!patch||typeof patch!=='object'||Array.isArray(patch)||Object.keys(patch).some(k=>!['width','side','textLimit'].includes(k)))throw new Error('Invalid margin options');
@@ -250,20 +264,20 @@
       if(!state.verticalTabs||!enabled('verticalTabManager')){state.rail?.remove();state.rail=null;state.railSignature='';return;}
       const data=tabs(win),signature=JSON.stringify(data);if(state.rail&&state.railSignature===signature)return;
       state.rail?.remove();const doc=win.document;if(!doc?.documentElement)return;
-      const rail=doc.createElementNS('http://www.w3.org/1999/xhtml','aside');rail.className='style-custom-vertical-tabs';rail.setAttribute('aria-label','Document tabs');
+      const rail=doc.createElementNS('http://www.w3.org/1999/xhtml','aside');rail.className='style-custom-vertical-tabs';rail.setAttribute('aria-label',t('문서 탭'));
       rail.style.cssText='position:fixed;left:8px;top:82px;bottom:26px;width:172px;z-index:9000;background:Canvas;color:CanvasText;border:1px solid GrayText;border-radius:2px;padding:7px;overflow:auto;font:12px system-ui;';
       const make=(tag,text,parent)=>{const n=doc.createElementNS('http://www.w3.org/1999/xhtml',tag);n.textContent=text;parent.appendChild(n);return n;};
-      make('strong','Document tabs',rail);const hide=make('button','×',rail);hide.setAttribute('aria-label','Hide vertical tabs');hide.addEventListener('click',()=>setVerticalTabs(win,false).catch(report));
+      make('strong',t('문서 탭'),rail);const hide=make('button','×',rail);hide.setAttribute('aria-label',t('세로 탭 숨기기'));hide.addEventListener('click',()=>setVerticalTabs(win,false).catch(report));
       for(const tab of data){
         const row=make('div','',rail);row.style.cssText='display:flex;gap:3px;margin-top:5px;';
         const select=make('button',tab.title,row);select.setAttribute('aria-current',tab.selected?'page':'false');select.title=tab.title;
         select.style.cssText='flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:start;padding:6px;';
         select.addEventListener('click',()=>{try{selectTab(win,tab.id);state.railSignature='';paintRail(win,state);}catch(e){report(e);}});
-        if(tab.itemID){const close=make('button','×',row);close.setAttribute('aria-label','Close '+tab.title);close.addEventListener('click',()=>{try{closeTab(win,tab.id);state.railSignature='';paintRail(win,state);}catch(e){report(e);}});}
+        if(tab.itemID){const close=make('button','×',row);close.setAttribute('aria-label',t(`${tab.title} 닫기`));close.addEventListener('click',()=>{try{closeTab(win,tab.id);state.railSignature='';paintRail(win,state);}catch(e){report(e);}});}
       }
       const selected=data.find(t=>t.selected&&t.itemID);
-      if(selected){const actions=make('div','',rail);for(const[label,fn]of [['↑',()=>moveTab(win,selected.id,Math.max(1,data.findIndex(t=>t.id===selected.id)-1))],['↓',()=>moveTab(win,selected.id,Math.min(data.length-1,data.findIndex(t=>t.id===selected.id)+1))],['Close other tabs',()=>closeOtherTabs(win,selected.id)]]){const b=make('button',label,actions);b.setAttribute('aria-label',label==='↑'?'Move selected tab up':label==='↓'?'Move selected tab down':label);b.addEventListener('click',()=>{try{fn();}catch(e){report(e);}});}}
-      if(!data.length)make('p','No main-window document tabs',rail);
+      if(selected){const actions=make('div','',rail);for(const[label,fn]of [['↑',()=>moveTab(win,selected.id,Math.max(1,data.findIndex(t=>t.id===selected.id)-1))],['↓',()=>moveTab(win,selected.id,Math.min(data.length-1,data.findIndex(t=>t.id===selected.id)+1))],[t('다른 탭 닫기'),()=>closeOtherTabs(win,selected.id)]]){const b=make('button',label,actions);b.setAttribute('aria-label',label==='↑'?t('선택한 탭 위로'):label==='↓'?t('선택한 탭 아래로'):label);b.addEventListener('click',()=>{try{fn();}catch(e){report(e);}});}}
+      if(!data.length)make('p',t('열린 문서 탭이 없습니다'),rail);
       doc.documentElement.appendChild(rail);state.rail=rail;state.railSignature=signature;
     }
     function readerContext(win){
@@ -294,7 +308,7 @@
     function mergeMenuHook({reader,params,append}){
       if(stopped||!enabled('reader.mergeAnnotations')||!reader?._window||typeof append!=='function')return;
       const keys=Array.isArray(params?.ids)?[...params.ids]:[];
-      append({label:'Merge selected annotations',disabled:keys.length<2||keys.length>50||!!reader._internalReader?._state?.readOnly,
+      append({label:t('선택한 주석 병합'),disabled:keys.length<2||keys.length>50||!!reader._internalReader?._state?.readOnly,
         onCommand(){if(stopped||activeReader(reader._window)!==reader)return;return mergeSelectedAnnotations(reader._window,keys).catch(report);}});
     }
     async function attachmentVersions(win){
@@ -333,15 +347,15 @@
       if(!windows.has(win))attach(win);const state=windows.get(win);
       for(const old of state.backlinkHeaders)if(old.reader===reader&&old.key===key){old.remove();state.backlinkHeaders.delete(old);}
       const node=doc.createElement('span'),button=doc.createElement('button'),menu=doc.createElement('div');
-      button.type='button';button.textContent='Notes';button.disabled=true;button.title='Finding linked notes';button.setAttribute('aria-label','Notes referencing this annotation');node.appendChild(button);
-      menu.hidden=true;menu.style.cssText='position:fixed;right:10px;top:80px;z-index:10000;max-width:320px;max-height:50vh;overflow:auto;background:Canvas;color:CanvasText;border:1px solid GrayText;padding:8px;';menu.setAttribute('aria-label','Annotation backlinks');(doc.body||doc.documentElement).appendChild(menu);
+      button.type='button';button.textContent=t('노트');button.disabled=true;button.title=t('연결된 노트를 찾는 중');button.setAttribute('aria-label',t('이 주석을 참조한 노트'));node.appendChild(button);
+      menu.hidden=true;menu.style.cssText='position:fixed;right:10px;top:80px;z-index:10000;max-width:320px;max-height:50vh;overflow:auto;background:Canvas;color:CanvasText;border:1px solid GrayText;padding:8px;';menu.setAttribute('aria-label',t('주석 역링크'));(doc.body||doc.documentElement).appendChild(menu);
       let active=true;const current=()=>active&&!stopped&&!win.closed&&windows.get(win)===state&&node.isConnected&&readers(win).includes(reader);
       const keydown=e=>{if(e.key==='Escape')menu.hidden=true;};doc.addEventListener('keydown',keydown);
       let loadEpoch=0;const record={reader,key,node,current,annotationID:null,remove(){active=false;doc.removeEventListener('keydown',keydown);node.remove();menu.remove();}};state.backlinkHeaders.add(record);append(node);
       button.addEventListener('click',()=>{if(current())menu.hidden=!menu.hidden;});
       function reload(){
       const epoch=++loadEpoch,revision=backlinkRevision,isCurrent=()=>current()&&epoch===loadEpoch&&revision===backlinkRevision;
-      button.textContent='Notes';button.disabled=true;menu.hidden=true;menu.replaceChildren();
+      button.textContent=t('노트');button.disabled=true;menu.hidden=true;menu.replaceChildren();
       Promise.resolve().then(async()=>{
         const attachment=Z.Items.get(reader.itemID);if(!attachment||attachment.deleted)throw new Error('PDF attachment is unavailable');
         const annotation=await(Z.Items.getByLibraryAndKeyAsync?.(attachment.libraryID,key)??Z.Items.getByLibraryAndKey?.(attachment.libraryID,key));
@@ -349,9 +363,9 @@
         if(!annotation||annotation.deleted||!annotation.isAnnotation?.()||annotation.parentID!==reader.itemID||annotation.libraryID!==attachment.libraryID)throw new Error('Annotation identity no longer matches this PDF');
         const service=runtime.libraryService;if(typeof service?.backlinks!=='function')throw new Error('Annotation backlinks are unavailable');
         record.annotationID=annotation.id;const links=await backlinkLookup(annotation.id,service);if(!isCurrent())return;
-        if(links===null)return;const notes=links.filter(link=>link.kind==='note');button.textContent=notes.length+' notes';button.title=notes.length+' notes reference this annotation';button.disabled=!notes.length;
-        for(const note of notes){const action=doc.createElement('button');action.type='button';action.textContent=String(note.title||'Untitled note');action.style.cssText='display:block;text-align:start;width:100%;margin:3px 0;';action.addEventListener('click',()=>{if(current())Promise.resolve().then(()=>{if(current())return service.openItem(note.id);}).catch(report);});menu.appendChild(action);}
-      }).catch(error=>{if(isCurrent()){button.textContent='Notes unavailable';button.title=error.message;report(error);}});
+        if(links===null)return;const notes=links.filter(link=>link.kind==='note');button.textContent=t(`노트 ${notes.length}`);button.title=t(`이 주석을 참조한 노트 ${notes.length}개`);button.disabled=!notes.length;
+        for(const note of notes){const action=doc.createElement('button');action.type='button';action.textContent=String(note.title||t('제목 없는 노트'));action.style.cssText='display:block;text-align:start;width:100%;margin:3px 0;';action.addEventListener('click',()=>{if(current())Promise.resolve().then(()=>{if(current())return service.openItem(note.id);}).catch(report);});menu.appendChild(action);}
+      }).catch(error=>{if(isCurrent()){button.textContent=t('노트 확인 불가');button.title=error.message;report(error);}});
       }
       record.reload=reload;reload();
     }
@@ -360,47 +374,53 @@
       const win=reader._window;if(win.closed||detached.has(win))return;if(!windows.has(win))attach(win);const state=windows.get(win);
       state.toolbars.get(reader)?.remove();
       const container=doc.createElement('span'),button=doc.createElement('button'),menu=doc.createElement('div');
-      button.type='button';button.textContent='Style';button.className='toolbar-button';button.title='Style Custom reader tools';button.setAttribute('aria-expanded','false');button.setAttribute('aria-label','Style Custom reader tools');container.appendChild(button);
-      menu.hidden=true;menu.setAttribute('aria-label','Reader appearance and workspace');
+      button.type='button';button.textContent=t('스타일');button.className='toolbar-button';button.title=t('Style Custom 리더 도구');button.setAttribute('aria-expanded','false');button.setAttribute('aria-label',t('Style Custom 리더 도구'));container.appendChild(button);
+      menu.hidden=true;menu.setAttribute('aria-label',t('리더 모양과 작업 공간'));
       menu.style.cssText='position:fixed;right:8px;top:42px;z-index:10000;padding:10px;width:235px;max-height:calc(100vh - 58px);overflow:auto;border:1px solid GrayText;border-radius:2px;background:Canvas;color:CanvasText;font:12px system-ui;';
-      const action=(label,fn)=>{const b=doc.createElement('button');b.type='button';b.textContent=label;b.style.cssText='display:block;width:100%;text-align:start;margin:3px 0;padding:5px;';b.addEventListener('click',()=>Promise.resolve().then(fn).catch(report));menu.appendChild(b);return b;};
-      if(enabled('PDFStyles')){for(const theme of ['original','light','dark','sepia'])action(theme==='original'?'Original PDF':theme==='light'?'Light PDF':theme==='dark'?'Dark PDF':'Sepia PDF',()=>applyTheme(win,theme));
-      const bg=doc.createElement('input'),fg=doc.createElement('input');bg.type=fg.type='color';bg.value='#ffffff';fg.value='#202d46';bg.setAttribute('aria-label','Custom background');fg.setAttribute('aria-label','Custom text');menu.appendChild(bg);menu.appendChild(fg);
-      action('Apply custom palette',()=>applyTheme(win,{background:bg.value,foreground:fg.value}));}
-      if(enabled('annotationColors')){const paletteSelect=doc.createElement('select');paletteSelect.setAttribute('aria-label','Saved annotation palette');
+      /* Every action said nothing: a bad palette line, a margin width of 900 or
+         a delete with no palette chosen went to the log only. One line at the
+         top of the menu now says what happened, in the reader's language. */
+      const status=doc.createElement('p');status.setAttribute('role','status');status.setAttribute('aria-live','polite');status.style.cssText='margin:0 0 6px;min-height:1.3em;font:inherit;';menu.appendChild(status);
+      const describe=error=>{const f=globalThis.CustomStyleFailures;return t(f?f.describe(error):String(error?.message||error));};
+      const settle=promise=>Promise.resolve(promise).then(()=>{status.textContent=t('적용했습니다.');status.dataset.error='false';},error=>{status.textContent=describe(error);status.dataset.error='true';report(error);});
+      const action=(label,fn)=>{const b=doc.createElement('button');b.type='button';b.textContent=label;b.style.cssText='display:block;width:100%;text-align:start;margin:3px 0;padding:5px;';b.addEventListener('click',()=>settle(Promise.resolve().then(fn)));menu.appendChild(b);return b;};
+      if(enabled('PDFStyles')){for(const theme of ['original','light','dark','sepia'])action(theme==='original'?t('원래 PDF'):theme==='light'?t('밝은 PDF'):theme==='dark'?t('어두운 PDF'):t('세피아 PDF'),()=>applyTheme(win,theme));
+      const bg=doc.createElement('input'),fg=doc.createElement('input');bg.type=fg.type='color';{const saved=settings().theme;const pick=(key,value,fallback)=>color(typeof saved==='object'&&saved?saved[value]:null)||color(preference(key,null))||fallback;bg.value=pick('readerCustomBackground','background','#ffffff');fg.value=pick('readerCustomForeground','foreground','#202d46');}bg.setAttribute('aria-label',t('사용자 배경색'));fg.setAttribute('aria-label',t('사용자 글자색'));menu.appendChild(bg);menu.appendChild(fg);
+      action(t('사용자 색 적용'),()=>applyTheme(win,{background:bg.value,foreground:fg.value}));}
+      if(enabled('annotationColors')){const paletteSelect=doc.createElement('select');paletteSelect.setAttribute('aria-label',t('저장한 주석 팔레트'));
       const option=(label,value)=>{const o=doc.createElement('option');o.textContent=label;o.value=value;paletteSelect.appendChild(o);};
-      option('Default annotation colors','');for(const p of annotationPalettes())option(p.name,p.id);paletteSelect.value=settings().annotationPaletteID||'';menu.appendChild(paletteSelect);
-      action('Apply selected palette',()=>applyAnnotationPalette(win,paletteSelect.value||null));
+      option(t('기본 주석 색'),'');for(const p of annotationPalettes())option(p.name,p.id);paletteSelect.value=settings().annotationPaletteID||'';menu.appendChild(paletteSelect);
+      action(t('선택한 팔레트 적용'),()=>applyAnnotationPalette(win,paletteSelect.value||null));
       const chosen=annotationPalettes().find(p=>p.id===settings().annotationPaletteID);
-      const entries=chosen?paletteEntries(chosen.entries):Object.entries(COLORS).map(([hex,label])=>({color:hex,label:settings().colorLabels?.[hex]||label}));
-      const colors=doc.createElement('div');colors.setAttribute('aria-label','Annotation colors');colors.style.cssText='display:flex;gap:4px;flex-wrap:wrap;margin:6px 0;';menu.appendChild(colors);
-      for(const entry of entries){const b=doc.createElement('button');b.type='button';b.textContent=entry.label;b.title=entry.label+' '+entry.color;b.setAttribute('aria-label','Use '+entry.label+' annotation color');b.style.cssText='border:2px solid '+entry.color+';padding:5px;background:Canvas;color:CanvasText;';b.addEventListener('click',()=>{try{setAnnotationColor(win,entry.color);}catch(e){report(e);}});colors.appendChild(b);}
-      const editor=doc.createElement('details'),summary=doc.createElement('summary');summary.textContent='Save a color palette';editor.appendChild(summary);menu.appendChild(editor);
-      const paletteName=doc.createElement('input');paletteName.placeholder='Palette name';paletteName.setAttribute('aria-label','New annotation palette name');editor.appendChild(paletteName);
-      const paletteText=doc.createElement('textarea');paletteText.setAttribute('aria-label','Palette colors: one hex color and label per line');paletteText.value=entries.map(e=>e.color+' '+e.label).join('\n');editor.appendChild(paletteText);
-      const save=doc.createElement('button');save.type='button';save.textContent='Save palette';save.addEventListener('click',()=>Promise.resolve().then(()=>{
+      const entries=chosen?paletteEntries(chosen.entries):Object.entries(COLORS).map(([hex,label])=>({color:hex,label:settings().colorLabels?.[hex]||t(label)}));
+      const colors=doc.createElement('div');colors.setAttribute('aria-label',t('주석 색'));colors.style.cssText='display:flex;gap:4px;flex-wrap:wrap;margin:6px 0;';menu.appendChild(colors);
+      for(const entry of entries){const b=doc.createElement('button');b.type='button';b.textContent=entry.label;b.title=entry.label+' '+entry.color;b.setAttribute('aria-label',t(`${entry.label} 주석 색 쓰기`));b.style.cssText='border:1px solid GrayText;padding:5px 5px 5px 20px;background:linear-gradient('+entry.color+','+entry.color+') no-repeat 5px 50% / 10px 10px,Canvas;color:CanvasText;';b.addEventListener('click',()=>{try{setAnnotationColor(win,entry.color);}catch(e){report(e);}});colors.appendChild(b);}
+      const editor=doc.createElement('details'),summary=doc.createElement('summary');summary.textContent=t('색 팔레트 저장');editor.appendChild(summary);menu.appendChild(editor);
+      const paletteName=doc.createElement('input');paletteName.placeholder=t('팔레트 이름');paletteName.setAttribute('aria-label',t('새 주석 팔레트 이름'));editor.appendChild(paletteName);
+      const paletteText=doc.createElement('textarea');paletteText.setAttribute('aria-label',t('팔레트 색: 한 줄에 #RRGGBB와 이름'));paletteText.value=entries.map(e=>e.color+' '+e.label).join('\n');editor.appendChild(paletteText);
+      const save=doc.createElement('button');save.type='button';save.textContent=t('팔레트 저장');save.addEventListener('click',()=>settle(Promise.resolve().then(()=>{
         const values=paletteText.value.split(/\r?\n/).filter(line=>line.trim()).map(line=>{const m=line.trim().match(/^(#[a-f\d]{6})\s+(.+)$/i);if(!m)throw new Error('Each line needs #RRGGBB and a label');return {color:m[1],label:m[2]};});
         return saveAnnotationPalette(paletteName.value,values);
-      }).catch(report));editor.appendChild(save);
-      action('Delete selected palette',()=>{if(!paletteSelect.value)throw new Error('Choose a saved palette');return deleteAnnotationPalette(paletteSelect.value);});}
-      action('Restore original reader appearance',()=>resetAppearance(win));
-      if(enabled('marginAnnotation')){const margin=doc.createElement('details'),marginTitle=doc.createElement('summary');marginTitle.textContent='Margin display';margin.appendChild(marginTitle);menu.appendChild(margin);
+      })));editor.appendChild(save);
+      action(t('선택한 팔레트 삭제'),()=>{if(!paletteSelect.value)throw new Error('Choose a saved palette');return deleteAnnotationPalette(paletteSelect.value);});}
+      action(t('리더 모양 원래대로'),()=>resetAppearance(win));
+      if(enabled('marginAnnotation')){const margin=doc.createElement('details'),marginTitle=doc.createElement('summary');marginTitle.textContent=t('여백 주석 표시');margin.appendChild(marginTitle);menu.appendChild(margin);
       const options=marginOptions(),width=doc.createElement('input'),side=doc.createElement('select'),limit=doc.createElement('input');
-      width.type=limit.type='number';width.min='160';width.max='480';width.value=String(options.width);limit.min='100';limit.max='5000';limit.value=String(options.textLimit);width.setAttribute('aria-label','Margin width');limit.setAttribute('aria-label','Annotation text limit');side.setAttribute('aria-label','Margin side');
-      for(const value of ['left','right']){const o=doc.createElement('option');o.value=value;o.textContent=value;side.appendChild(o);}side.value=options.side;margin.appendChild(width);margin.appendChild(side);margin.appendChild(limit);
-      const saveMargin=doc.createElement('button');saveMargin.type='button';saveMargin.textContent='Apply margin display';saveMargin.addEventListener('click',()=>setMarginOptions(win,{width:Number(width.value),side:side.value,textLimit:Number(limit.value)}).catch(report));margin.appendChild(saveMargin);
-      action('Toggle margin annotations',()=>setMarginAnnotations(win,!state.margins));}
-      if(enabled('toogleSidebar'))action('Toggle reader sidebar',()=>setSidebar(win,!reader._internalReader?._state?.sidebarOpen));
-      if(enabled('verticalTabManager'))action('Toggle vertical tabs',()=>setVerticalTabs(win,!state.verticalTabs));
-      if(enabled('reader.mergeAnnotations'))action('Merge selected annotations',()=>{if(activeReader(win)!==reader)throw new Error('The active reader changed');return mergeSelectedAnnotations(win);});
-      if(enabled('reader.attachmentVersionSwitch')){const versions=doc.createElement('div');versions.setAttribute('aria-label','Attachment versions');menu.appendChild(versions);
-      action('Show attachment versions',async()=>{
+      width.type=limit.type='number';width.min='160';width.max='480';width.value=String(options.width);limit.min='100';limit.max='5000';limit.value=String(options.textLimit);width.setAttribute('aria-label',t('여백 너비'));limit.setAttribute('aria-label',t('주석 글자 수 제한'));side.setAttribute('aria-label',t('여백 위치'));
+      for(const value of ['left','right']){const o=doc.createElement('option');o.value=value;o.textContent=value==='left'?t('왼쪽'):t('오른쪽');side.appendChild(o);}side.value=options.side;margin.appendChild(width);margin.appendChild(side);margin.appendChild(limit);
+      const saveMargin=doc.createElement('button');saveMargin.type='button';saveMargin.textContent=t('여백 설정 적용');saveMargin.addEventListener('click',()=>settle(setMarginOptions(win,{width:Number(width.value),side:side.value,textLimit:Number(limit.value)})));margin.appendChild(saveMargin);
+      action(t('여백 주석 켜기/끄기'),()=>setMarginAnnotations(win,!state.margins));}
+      if(enabled('toogleSidebar'))action(t('리더 사이드바 켜기/끄기'),()=>setSidebar(win,!reader._internalReader?._state?.sidebarOpen));
+      if(enabled('verticalTabManager'))action(t('세로 탭 켜기/끄기'),()=>setVerticalTabs(win,!state.verticalTabs));
+      if(enabled('reader.mergeAnnotations'))action(t('선택한 주석 병합'),()=>{if(activeReader(win)!==reader)throw new Error('The active reader changed');return mergeSelectedAnnotations(win);});
+      if(enabled('reader.attachmentVersionSwitch')){const versions=doc.createElement('div');versions.setAttribute('aria-label',t('첨부 버전'));menu.appendChild(versions);
+      action(t('첨부 버전 보기'),async()=>{
         const data=await attachmentVersions(win);if(stopped||win.closed||!menu.isConnected||activeReader(win)!==reader)return;versions.replaceChildren();
         for(const item of data){const b=doc.createElement('button');b.type='button';b.textContent=(item.selected?'✓ ':'')+item.title;b.addEventListener('click',()=>{if(!stopped&&menu.isConnected&&activeReader(win)===reader)switchAttachmentVersion(win,item.id).catch(report);});versions.appendChild(b);}
-        if(!data.length){const text=doc.createElement('span');text.textContent='No locally available PDF versions';versions.appendChild(text);}
+        if(!data.length){const text=doc.createElement('span');text.textContent=t('이 컴퓨터에 있는 다른 PDF 버전이 없습니다');versions.appendChild(text);}
       });
       }
-      action('Open research workspace',()=>{if(typeof runtime.openWorkbench!=='function')throw new Error('Research workspace is unavailable');return runtime.openWorkbench(win);});
+      action(t('연구 작업 패널 열기'),()=>{if(typeof runtime.openWorkbench!=='function')throw new Error('Research workspace is unavailable');return runtime.openWorkbench(win);});
       const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');};
       button.addEventListener('click',()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));});
       const key=event=>{if(event.key==='Escape')close();};doc.addEventListener('keydown',key);

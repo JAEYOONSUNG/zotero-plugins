@@ -447,6 +447,89 @@ test('annotation distribution includes both pages of a merged highlight without 
  assert.deepEqual(plugin.annotationDistribution(ref).map(p=>p.pageIndex),[4,5]);assert.equal(plugin.value('annotationCount',ref),'1');
 });
 
+test('Zotero\'s zone-less UTC dates are drawn in the reader\'s clock, and "9시간 전" is no longer a minute ago',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin}=fixture();
+ window.ZoteroPane=undefined;// no row behind the cell: the value given is the one drawn
+ const stored='2026-09-27 03:00:00';
+ assert.equal(plugin.localStamp(stored).toISOString(),'2026-09-27T03:00:00.000Z','read as UTC, not as local time');
+ assert.equal(plugin.localStamp('2026-09-27T03:00:00.000Z').toISOString(),'2026-09-27T03:00:00.000Z');
+ assert.equal(plugin.localStamp(''),null);
+ const local=new Date(Date.UTC(2026,8,27,3,0,0));
+ const two=n=>String(n).padStart(2,'0');
+ plugin.getSetting=key=>key==='dateDisplay'?'absolute':undefined;
+ assert.equal(plugin.renderCell('added',0,stored,{},document).textContent,`${local.getFullYear()}-${two(local.getMonth()+1)}-${two(local.getDate())} ${two(local.getHours())}:${two(local.getMinutes())}`);
+ plugin.getSetting=key=>key==='dateDisplay'?'relative':undefined;
+ const minuteAgo=new Date(Date.now()-60000).toISOString().replace('T',' ').slice(0,19);
+ assert.equal(plugin.renderCell('added',0,minuteAgo,{},document).textContent,'1분 전');
+});
+
+test('the citation dialog exports through Zotero\'s translators, and EndNote and duplicate BibTeX keys work without them',async()=>{
+ const {plugin,item,Z}=fixture();const a=item(1),b=item(2);
+ plugin.bibliographyRecord=()=>({title:'Same title',year:2020,venue:'Cell',creators:[{lastName:'Smith',firstName:'A',creatorType:'author'}]});
+ delete Z.Translate;
+ const endnote=await plugin.citationText([a],{key:'endnote'});
+ assert.match(endnote,/^%0 Journal Article/m,'EndNote no longer ends in "Unknown citation style"');
+ const bib=await plugin.citationText([a,b],{key:'bibtex'});
+ const keys=[...bib.matchAll(/^@\w+\{([^,]+),/gm)].map(m=>m[1]);
+ assert.equal(new Set(keys).size,2,'two smith2020s get two keys');
+ let used=null;Z.Translate={Export:class{setItems(){}setTranslator(id){used=id;}async translate(){this.string='@book{smith2020book,\n}';}}};
+ assert.equal(await plugin.citationText([a],{key:'bibtex'}),'@book{smith2020book,\n}','Zotero\'s own translator is asked first');
+ assert.equal(used,'9cb70025-a888-4a29-a210-93ec52da40d4');
+});
+
+test('a status or rating is greyed in the menu only when every selected paper already has it',()=>{
+ const {plugin,item}=fixture();const a=item(1),b=item(2);
+ plugin.isRegular=()=>true;
+ plugin.state=ref=>ref===a?{status:'done',rating:3}:{status:'unread',rating:0};
+ assert.equal(plugin.alreadySo([a,b],'status','done'),false,'the second paper can still be marked read');
+ assert.equal(plugin.alreadySo([a],'status','done'),true);
+ assert.equal(plugin.alreadySo([a,b],'rating','3'),false);
+ assert.equal(plugin.alreadySo([],'status','done'),false);
+});
+
+test('impact factors sort by value under Zotero\'s numeric-aware collation',()=>{
+ const {plugin,item}=fixture();const ref=item(1);
+ const key=n=>{plugin.state=()=>({impactFactor:n});return plugin.value('if',ref);};
+ const collate=new Intl.Collator(undefined,{numeric:true}).compare;
+ const sorted=[12.25,12.5,4.123,4.5,50].map(key).sort(collate);
+ assert.deepEqual(sorted.map(Number),[4.123,4.5,12.25,12.5,50],'12.5 above 12.25, as numbers go');
+});
+
+test('a label in the item list is a word in its colour, not a tinted capsule',async()=>{
+ const {parseHTML}=await import('linkedom');const {document}=parseHTML('<html><body></body></html>');const {plugin}=fixture();
+ const P=plugin.palette(document);
+ const chip=plugin.pill(document,'철회','#c62828',P);
+ assert.doesNotMatch(chip.style.cssText,/background/,'no tinted fill');
+ assert.doesNotMatch(chip.style.cssText,/border-radius:100px/,'no rounded capsule ends');
+ assert.match(chip.style.cssText,/color:#c62828/,'the colour that means something stays');
+ assert.match(chip.style.cssText,/font-size:11px/);
+});
+
+test('a reading tick repaints only that paper\'s cells, and the status reads in words',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item,Z}=fixture();
+ const a=item(1),b=item(2);Z.Items={get:id=>({1:a,2:b})[id]};plugin.isRegular=()=>true;
+ const asked=[];plugin.state=ref=>{asked.push(ref.id);return {seconds:120,status:'reading'};};
+ const cell=(id,kind)=>{const c=document.createElement('span');c.dataset.styleCustomReading=kind;c.dataset.itemId=String(id);if(kind==='status'){c.append(document.createElement('span'),document.createElement('span'));}document.body.append(c);return c;};
+ cell(1,'time');const status=cell(1,'status');cell(2,'time');cell(2,'status');
+ window.closed=false;plugin.windows=new Map([[window,{}]]);
+ plugin.refreshReadingDisplays(1);
+ assert.deepEqual([...new Set(asked)],[1],'the other row is left alone');
+ assert.equal(status.lastChild.textContent,'읽는 중','not the stored word "reading"');
+});
+
+test('the click that selects a row does not also change its status; a click on a selected row does',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item}=fixture();const ref=item(1);
+ let selected=false;window.ZoteroPane={itemsView:{getRow:()=>({ref}),selection:{isSelected:()=>selected}}};
+ plugin.isRegular=()=>true;plugin.canEdit=()=>true;plugin.value=()=>'0';const edits=[];plugin.edit=async(items,change)=>{edits.push(change);};
+ const cell=plugin.renderCell('status',0,'0',{},document);
+ const press=()=>{cell.dispatchEvent(new window.Event('mousedown',{bubbles:true}));selected=true;cell.dispatchEvent(new window.Event('click',{bubbles:true}));};
+ press();
+ assert.equal(edits.length,0,'the first click only selected the row');
+ press();
+ assert.deepEqual(edits,[{status:'reading'}],'the second, on a selected row, changes it');
+ window.ZoteroPane=undefined;
+});
+
 test('supplementary attachments are told apart from the main PDF by publisher naming conventions',async()=>{
  const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item,Z}=fixture();const ref=item(1);
  const file=(id,name)=>[id,{id,attachmentFilename:name,isFileAttachment:()=>true,attachmentContentType:'application/pdf'}];

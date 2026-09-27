@@ -54,3 +54,37 @@ test('relative date display leaves native sort values intact and citation retry 
  const f=fixture();await f.start();const {document,window}=parseHTML('<html><body></body></html>');window.ZoteroPane={itemsView:{getRow:()=>({ref:f.paper})}};await f.runtime.setSetting('dateDisplay','relative');const cell=f.runtime.renderCell('added',0,'',{},document);assert.match(cell.textContent,/일 전/);assert.equal(f.runtime.value('added',f.paper),'2020-01-01');
  const identity=f.runtime.citationTools.identity(f.runtime.citationRecord(f.paper));f.runtime.entry(f.paper).citationAttempt={status:'error',identity,checkedAt:new Date(Date.now()-10*60000).toISOString()};assert.equal(f.runtime.citationDue(f.paper),false);await f.runtime.setSetting('citationRetryMinutes',5);assert.equal(f.runtime.citationDue(f.paper),true);await f.runtime.stop();
 });
+test('choosing a language applies that language at once, not the one it replaces',async()=>{
+ const f=fixture();await f.start();
+ await f.runtime.setSetting('language','en-US');
+ assert.equal(f.runtime.t('설정을 불러왔습니다.'),'Settings loaded.','English the moment English is chosen');
+ await f.runtime.setSetting('language','ko-KR');
+ assert.equal(f.runtime.t('설정을 불러왔습니다.'),'설정을 불러왔습니다.');
+ await f.runtime.stop();
+});
+test('an email or server address that cannot work is refused when typed, and blank still means unset',async()=>{
+ const f=fixture();await f.start();
+ await assert.rejects(f.runtime.setSetting('citationEmail','not-an-email'),/이메일 형식/);
+ await assert.rejects(f.runtime.setSetting('aiEndpoint','api.example.com/v1'),/https:\/\//);
+ await f.runtime.setSetting('citationEmail','');await f.runtime.setSetting('aiEndpoint','https://api.example.com/v1/chat/completions');
+ await f.runtime.setSetting('aiEndpoint','http://localhost:1234/v1');
+ await f.runtime.stop();
+});
+test('the updates section says when the last check ran and why it failed, in words',async()=>{
+ const f=fixture();await f.start();
+ f.runtime.updater={lastResult:()=>({status:'error',at:'2026-09-27T05:02:00.000Z',message:'download failed'}),run:async()=>({status:'error',message:'download failed'})};
+ assert.match(f.runtime.getSetting('updateStatus'),/실패 · download failed/);
+ await assert.rejects(f.runtime.checkUpdatesNow(),/새 버전을 확인하지 못했습니다/);
+ f.runtime.updater.lastResult=()=>null;
+ assert.equal(f.runtime.getSetting('updateStatus'),'아직 확인하지 않았습니다.');
+ await f.runtime.stop();
+});
+test('resetting a category brings back defaults but keeps the server address and model the reader typed',async()=>{
+ const f=fixture();await f.start();
+ await f.runtime.setSetting('aiEndpoint','https://api.example.com/v1/chat/completions');await f.runtime.setSetting('aiModel','my-model');
+ const result=await f.runtime.resetSettings('ai');
+ assert.equal(f.runtime.getSetting('aiEndpoint'),'https://api.example.com/v1/chat/completions');
+ assert.equal(f.runtime.getSetting('aiModel'),'my-model');
+ assert.ok(result.kept.includes('aiEndpoint'));
+ await f.runtime.stop();
+});

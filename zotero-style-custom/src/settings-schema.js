@@ -571,6 +571,7 @@
     },
     {
       "key": "customFields",
+      "keepOnReset": true,
       "category": "columns",
       "label": "추가 필드 열",
       "type": "text",
@@ -805,7 +806,7 @@
       "label": "여백 주석 글자 크기",
       "type": "number",
       "default": 13,
-      "min": 10,
+      "min": 11,
       "max": 22,
       "step": 1
     },
@@ -891,6 +892,7 @@
     },
     {
       "key": "language",
+      "keepOnReset": true,
       "category": "menus",
       "label": "언어 / Language",
       "help": "자동은 Zotero 자체 언어를 따릅니다. English follows Zotero's own language when set to Auto.",
@@ -1009,6 +1011,7 @@
     },
     {
       "key": "panelCSS",
+      "keepOnReset": true,
       "category": "menus",
       "label": "Custom 패널 CSS",
       "type": "textarea",
@@ -1052,6 +1055,7 @@
     },
     {
       "key": "citationEmail",
+      "keepOnReset": true,
       "category": "metrics",
       "label": "연락 이메일 (선택)",
       "help": "계정이 아닙니다. OpenAlex와 Crossref는 요청 URL에 ?mailto=주소를 붙이면 익명 요청보다 빠른 대기열(polite pool)에 넣어 줍니다. 대신 입력한 주소가 두 서비스의 서버 기록에 매 요청마다 남습니다. 비워 두면 아무것도 보내지 않고, 조회는 그대로 동작하되 느린 쪽 대기열을 씁니다. Zotero 로그인 계정을 대신 쓰는 일은 없습니다.",
@@ -1095,6 +1099,7 @@
     },
     {
       "key": "aiEndpoint",
+      "keepOnReset": true,
       "description": "Chat Completions 형식 주소. 예: https://api.openai.com/v1/chat/completions, 로컬 Ollama는 http://localhost:11434/v1/chat/completions",
       "category": "ai",
       "label": "AI 서버 주소 (Chat Completions)",
@@ -1103,6 +1108,7 @@
     },
     {
       "key": "aiModel",
+      "keepOnReset": true,
       "description": "서버가 받는 모델 이름 그대로. 예: gpt-4o-mini, llama3",
       "category": "ai",
       "label": "모델 이름",
@@ -1224,6 +1230,14 @@
       "description": "GitHub 배포 목록에 새 버전이 올라오면 내려받아 바로 적용합니다. 다시 시작하지 않아도 됩니다."
     },
     {
+      "key": "updateStatus",
+      "category": "updates",
+      "label": "마지막 확인",
+      "type": "note",
+      "default": "",
+      "description": "하루 한 번 뒤에서 새 버전을 확인한 결과입니다. 실패가 이어지면 여기에 이유가 남습니다."
+    },
+    {
       "key": "check-updates",
       "category": "updates",
       "label": "지금 새 버전 확인",
@@ -1237,7 +1251,11 @@
   if(setting.type==='boolean'){if(typeof value!=='boolean')throw new Error('참/거짓 값을 선택하세요.');}
   else if(setting.type==='number'){if(typeof value!=='number'||!Number.isFinite(value)||value<setting.min||value>setting.max||setting.step&&!Number.isInteger((value-setting.min)/setting.step))throw new Error(`${setting.min}–${setting.max} 범위의 값을 입력하세요.`);}
   else if(setting.type==='select'){if(!setting.options.some(option=>option.value===value))throw new Error('목록의 값을 선택하세요.');}
-  else {if(typeof value!=='string'||value.length>50000)throw new Error('입력한 값이 너무 깁니다. 짧게 줄여서 다시 저장하세요.');if(setting.type==='color'&&!/^#[a-f0-9]{6}$/i.test(value))throw new Error('#RRGGBB 색상을 입력하세요.');}
+  else {if(typeof value!=='string'||value.length>50000)throw new Error('입력한 값이 너무 깁니다. 짧게 줄여서 다시 저장하세요.');if(setting.type==='color'&&!/^#[a-f0-9]{6}$/i.test(value))throw new Error('#RRGGBB 색상을 입력하세요.');
+   // An address that cannot work was saved with "적용했습니다" and failed later, far from here. Empty still means "not set".
+   const v=value.trim();
+   if(v&&setting.type==='email'&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v))throw new Error('이메일 형식이 아니니 name@example.org처럼 입력하세요.');
+   if(v&&setting.type==='url'&&!/^https:\/\/[a-z0-9.-]+(?::\d+)?(\/[^\s]*)?$/i.test(v)&&!/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(\/[^\s]*)?$/i.test(v))throw new Error('https:// 또는 http://localhost로 시작하는 주소를 입력하세요.');}
   return value;
  }
  const api={schema,validate};root.CustomStyleSettingsSchema=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;

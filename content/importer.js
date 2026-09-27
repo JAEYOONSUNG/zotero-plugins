@@ -205,6 +205,27 @@ var ZotPoPImporter = (function () {
 		return item;
 	}
 
+	/* A DOI translator builds the item from Crossref, which often has no
+	   abstract and never has the PubMed IDs the search result carried. What
+	   the result knew and the item lacks is filled in; nothing is overwritten. */
+	async function backfill(item, rec) {
+		let changed = false;
+		try {
+			if (rec.abstract && !String(item.getField("abstractNote") || "").trim()
+				&& Zotero.ItemFields.isValidForType(Zotero.ItemFields.getID("abstractNote"), item.itemTypeID)) {
+				item.setField("abstractNote", rec.abstract); changed = true;
+			}
+		}
+		catch (e) { /* a type without an abstract field */ }
+		let extra = String(item.getField("extra") || "");
+		let add = [];
+		if (rec.pmid && !/^\s*PMID:/im.test(extra)) add.push("PMID: " + rec.pmid);
+		if (rec.pmcid && !/^\s*PMCID:/im.test(extra)) add.push("PMCID: " + rec.pmcid);
+		if (add.length) { item.setField("extra", [extra, ...add].filter(Boolean).join("\n")); changed = true; }
+		if (changed) await item.saveTx();
+		return changed;
+	}
+
 	async function recordCitations(item, rec) {
 		if (rec.citations == null && rec.journalIF == null) return;
 		let extra = item.getField("extra") || "";
@@ -300,14 +321,15 @@ var ZotPoPImporter = (function () {
 				if (existingID) {
 					let existing = await Zotero.Items.getAsync(existingID);
 					if (skipDuplicates) {
+						let addedToCollection = false;
 						if (collections.length) {
-							let changed = false;
 							for (let c of collections) {
-								if (!existing.inCollection(c)) { existing.addToCollection(c); changed = true; }
+								if (!existing.inCollection(c)) { existing.addToCollection(c); addedToCollection = true; }
 							}
-							if (changed) await existing.saveTx();
+							if (addedToCollection) await existing.saveTx();
 						}
-						return { status: "exists", item: existing };
+						// Said, so the row can read "이미 있음 · 컬렉션에 추가" rather than a bare "already there".
+						return { status: "exists", item: existing, addedToCollection };
 					}
 				}
 			}
@@ -324,6 +346,7 @@ var ZotPoPImporter = (function () {
 				item = await createManually(rec, libraryID, collections);
 				how = "manual";
 			}
+			await backfill(item, rec);
 			if (citationsInExtra) await recordCitations(item, rec);
 
 			let pdf = "skipped";
@@ -378,5 +401,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { manualItemType, importRecord, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
+	return { manualItemType, importRecord, backfill, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
 })();

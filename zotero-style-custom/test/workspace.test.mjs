@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import W fr
 test('nested tag and type search preserve scientific phrases and empty filters',()=>{const items=[{id:'1',title:'Base editing without Cas9',authors:'Liu',tags:['genetics/editing'],itemType:'journalArticle',year:2025},{id:'2',title:'Base editing with Cas9',tags:['genetics'],itemType:'preprint',year:2024}];assert.deepEqual(W.filter(items,{query:'"base editing" without',tag:'genetics',type:'journalArticle'}).map(i=>i.id),['1']);assert.equal(W.filter(items,{}).length,2);assert.equal(W.filter(items,{yearFrom:2025}).length,1);});
 test('matrix transposes comparable values and CSV does not execute metadata formulas',()=>{const rows=W.matrix([{title:'=DANGEROUS()',year:2025},{title:'A, "B"',year:2024}],['title','year']);assert.deepEqual(W.matrix([{title:'A',year:2025}],['title','year'],true),[['title','A'],['year',2025]]);const csv=W.csv(rows);assert.match(csv,/"'=DANGEROUS\(\)"/);assert.match(csv,/"A, ""B"""/);assert.match(csv,/"2025"/);});
 test('graph layout is deterministic, bounded and removes dangling edges',()=>{const graph={nodes:Array.from({length:200},(_,i)=>({id:String(i),label:'Paper '+i})),edges:[{source:'0',target:'1'},{source:'0',target:'missing'}]};const first=W.layout(graph),second=W.layout(graph);assert.deepEqual(first,second);assert.equal(first.nodes.length,180);assert.equal(first.edges.length,1);assert.equal(first.truncated,true);assert.ok(first.nodes.every(n=>n.x>=25&&n.x<=735&&n.y>=25&&n.y<=455));});
-test('reading progress never counts invalid or out-of-range pages',()=>{assert.deepEqual(W.progress({pageTimes:{0:10,1:0,2:3,999:50,bad:1},totalPages:3}),{total:3,visited:2,percent:67,pages:{0:10,1:0,2:3,999:50,bad:1}});assert.equal(W.progress({}).percent,null);});
+test('reading progress never counts invalid or out-of-range pages',()=>{assert.deepEqual(W.progress({pageTimes:{0:10,1:0,2:6,999:50,bad:1},totalPages:3}),{total:3,visited:2,percent:67,pages:{0:10,1:0,2:6,999:50,bad:1}});assert.equal(W.progress({}).percent,null);});
 test('canvas supports independent cards, saved positions, notes, unique edges and deletion cleanup',()=>{const cache={};const board=W.createBoard(cache,'Reading map');W.addToBoard(cache,board,[{id:1,title:'First'},{id:2,title:'Second'},{id:1,title:'duplicate'}]);assert.equal(board.nodes.length,2);const note=W.addBoardNote(cache,board,'Question');assert.equal(note.itemID,null);const[a,b]=board.nodes;assert.equal(W.moveCard(board,a.id,-100,150),true);assert.equal(a.x,0);assert.equal(a.y,150);W.linkCards(board,a.id,b.id);W.linkCards(board,b.id,a.id);assert.equal(board.edges.length,1);assert.throws(()=>W.linkCards(board,a.id,a.id));W.removeCard(board,a.id);assert.equal(board.edges.length,0);assert.equal(JSON.parse(JSON.stringify(cache)).boards[0].nodes.length,2);});
 test('board deletion is undoable and restores cards and edges exactly',()=>{const cache={};const board=W.createBoard(cache,'Map');W.addToBoard(cache,board,[{id:'1',title:'Paper'}]);const original=JSON.stringify(board);assert.equal(W.deleteBoard(cache,board.id).id,board.id);assert.equal(cache.boards.length,0);assert.equal(JSON.stringify(W.restoreBoard(cache)),original);assert.equal(cache.boards.length,1);assert.equal(W.restoreBoard(cache),null);});
 
@@ -71,4 +71,10 @@ test('a typed title is ranked ahead of the papers that merely contain it',()=>{
   {id:'4',title:'Unrelated'}];
  assert.deepEqual(W.rankByQuery(items,'Base editing').map(i=>i.id),['2','3','1','4']);
  assert.deepEqual(W.rankByQuery(items,'').map(i=>i.id),['1','2','3','4'],'with no query the library order stands');
+});
+
+test('a page scrolled past is not a page read: five seconds on it is the line',()=>{
+ const scrolled=W.progress({pageTimes:{0:1,1:1,2:1,3:30},totalPages:4});
+ assert.equal(scrolled.visited,1,'three pages passed at one second each are not read');
+ assert.equal(scrolled.percent,25);
 });

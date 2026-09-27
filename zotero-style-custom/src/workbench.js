@@ -649,7 +649,8 @@
    })());
   }await Promise.all(details);}
   async function drawRecent(){
-   const timestamp=value=>{if(typeof value==='number')return Number.isFinite(value)?value:0;const parsed=Date.parse(value||'');return Number.isFinite(parsed)?parsed:0;};
+   // Zotero's dates are UTC without a zone, the reading record's carry one: both are read as UTC, or a paper read this morning ranked below one added last night.
+   const timestamp=value=>{if(typeof value==='number')return Number.isFinite(value)?value:0;const parsed=runtime.localStamp?runtime.localStamp(value)?.getTime():Date.parse(value||'');return Number.isFinite(parsed)?parsed:0;};
    const activity=item=>Math.max(timestamp(item.lastRead),timestamp(item.dateModified),timestamp(item.dateAdded));
    const cap=setting('recentCount',50);
    const recent=rows().filter(item=>activity(item)>0).sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id))).slice(0,cap);
@@ -1074,7 +1075,7 @@
    const open=[];
    try{for(const tab of (typeof reader?.tabs==='function'?reader.tabs(win):[])){if(!tab.itemID)continue;const ref=runtime.Z?.Items?.get?.(Number(tab.itemID));const paper=(ref?.parentID&&byId(ref.parentID))||byId(tab.itemID);if(paper&&!open.some(i=>String(i.id)===String(paper.id)))open.push(paper);}}catch(error){runtime.Z?.logError?.(error);}
    if(open.length){sectionHead('지금 열려 있는 논문',open.length);const b=bar();for(const it of open)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
-   const when=v=>typeof v==='number'?(Number.isFinite(v)?v:0):(Date.parse(v||'')||0);
+   const when=v=>typeof v==='number'?(Number.isFinite(v)?v:0):((runtime.localStamp?runtime.localStamp(v)?.getTime():Date.parse(v||''))||0);
    const activity=it=>Math.max(when(it.lastRead),when(it.dateModified),when(it.dateAdded));
    const list=rows();
    // Twelve of them fit. When a title was typed, the twelve are the closest

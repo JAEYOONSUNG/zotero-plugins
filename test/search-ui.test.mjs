@@ -193,6 +193,10 @@ test("an HTTP error never throws while reading the response body", () => {
 	assert.match(err.body, /Insufficient budget/, "the parsed body is used instead of responseText");
 	assert.equal(err.status, 429);
 
+	// The server's Retry-After travels with the error, so the retry waits as long as it was told to.
+	const limited = { response: null, responseType: "json", status: 429, getResponseHeader: name => name === "Retry-After" ? "7" : null };
+	assert.equal(make({ status: 429, xmlhttp: limited }, "https://api.semanticscholar.org/graph/v1/paper/search").retryAfter, "7");
+
 	const textual = { responseType: "text", responseText: "plain failure", status: 503, response: null };
 	assert.match(make({ status: 503, xmlhttp: textual }, "https://x/y").body, /plain failure/);
 
@@ -930,4 +934,80 @@ test("an empty table after a search that ran says so, and says when a source fai
 	await failed.runSearch();
 	assert.match(String(failed.get("empty").textContent), /emptyAfterPartial/,
 		"nothing found plus a failed source is not the same as no such paper");
+});
+
+test("a search cut at the result limit says how many the source had", async () => {
+	const ui = uiHarness({ search: async (_source, _query, _http, ctx) => {
+		ctx.sourceStatus = { pubmed: { retrieved: 2, total: 5000, limit: 2, reason: "result-limit" } };
+		return [paper("a", { citations: 1 }), paper("b", { citations: 2 })];
+	} });
+	await ui.runSearch();
+	assert.match(ui.get("status").textContent, /^resultCount\|.*\|2\|false\|5000$/, "the total the source reported reaches the status line");
+});
+
+test("the in-library mark leads to the copy an import found, even without a DOI", async () => {
+	const picked = [];
+	const ui = uiHarness({ mainWindow: { ZoteroPane: { selectItem: id => picked.push(id) } } });
+	ui.showInLibrary({ title: "No DOI here", libraryItemID: 42 });
+	assert.deepEqual(picked, [42]);
+});
+
+test("Shift with the arrows selects a range from the starting row, and going back shrinks it", async () => {
+	const ui = uiHarness({ search: async () => [paper("r0"), paper("r1"), paper("r2"), paper("r3")] });
+	await ui.runSearch();
+	const press = (key, extra = {}) => ui.onKeyDown({ key, preventDefault() {}, ...extra });
+	ui.state.focusKey = ui.state.visible[0].key;
+	ui.state.selected.clear();
+	press("ArrowDown", { shiftKey: true });
+	press("ArrowDown", { shiftKey: true });
+	assert.deepEqual([...ui.state.selected].sort(), [0, 1, 2].map(i => ui.state.visible[i].key).sort(), "the starting row is in the range");
+	press("ArrowUp", { shiftKey: true });
+	assert.deepEqual([...ui.state.selected].sort(), [0, 1].map(i => ui.state.visible[i].key).sort(), "going back shrinks it");
+});
+
+test("an item a DOI translator made keeps the abstract and PubMed IDs the search result had", async () => {
+	const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+	const sandbox = { Zotero: { logError() {}, ItemFields: { getID: () => 1, isValidForType: () => true } }, ZotPoPSources: {}, module: { exports: {} } };
+	sandbox.globalThis = sandbox;
+	const vm = await import("node:vm");
+	vm.createContext(sandbox);
+	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+	const fields = { abstractNote: "", extra: "Citations: 3" };
+	let saved = 0;
+	const item = { itemTypeID: 1, getField: k => fields[k] || "", setField: (k, v) => { fields[k] = v; }, saveTx: async () => { saved++; } };
+	assert.equal(await sandbox.__api.backfill(item, { abstract: "What the paper found.", pmid: "123", pmcid: "PMC9" }), true);
+	assert.equal(fields.abstractNote, "What the paper found.");
+	assert.match(fields.extra, /^Citations: 3\nPMID: 123\nPMCID: PMC9$/);
+	fields.abstractNote = "The translator's own";
+	assert.equal(await sandbox.__api.backfill(item, { abstract: "Other", pmid: "123" }), false, "nothing is overwritten or added twice");
+	assert.equal(saved, 1);
+});
+
+test("a result the library holds without a DOI is marked by title, as the import would find it", async () => {
+	const importer = {
+		getLibraryDOIMap: async () => new Map([["10.1/owned", 5]]),
+		findByTitle: async (_lib, title) => title === "Held without a DOI on the shelf" ? 9 : null
+	};
+	const ui = uiHarness({ importer, search: async () => [
+		paper("a", { doi: "10.1/owned" }), paper("b", { title: "Held without a DOI on the shelf" }), paper("c", { title: "Not here at all in this library" })] });
+	await ui.runSearch();
+	const mark = key => ui.state.records.find(r => r.key === key).inLibrary;
+	assert.equal(mark("a"), true);
+	assert.equal(mark("b"), true, "found by title and year");
+	assert.equal(mark("c"), false);
+	assert.equal(ui.state.records.find(r => r.key === "b").libraryItemID, 9);
+});
+
+test("sorting by affiliation summarises each author list once, not once per comparison", async () => {
+	const Aff = (await import("../content/affiliations.js")).default;
+	const real = Aff.summarise;
+	let calls = 0;
+	Aff.summarise = people => { calls++; return real(people); };
+	try {
+		const ui = uiHarness();
+		const records = Array.from({ length: 200 }, (_, i) => paper("p" + i, { people: [{ name: "A" + i, institutions: [] }] }));
+		for (let round = 0; round < 3; round++) for (const r of records) ui.sortValue(r, "affiliation");
+		assert.ok(calls > 0, "the summary is really asked for");
+		assert.ok(calls <= records.length, `${calls} summaries for ${records.length} records over three passes`);
+	} finally { Aff.summarise = real; }
 });

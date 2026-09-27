@@ -83,7 +83,7 @@ export function mockElement(tagName = "div") {
 }
 
 export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {
-}, historyFiles = new Map(), prefs = {} } = {}) {
+}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null } = {}) {
 	const copied = [];
 	const elements = new Map(), errors = [], events = new Map();
 	const get = id => {
@@ -127,9 +127,10 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		paper("popular", { title: "Broad review", citations: 10000, year: 2020 })];
 	const context = vm.createContext({
 		AbortController,
-		window: { addEventListener(name, fn) { events.set(name, fn); winEvents.addEventListener(name, fn); }, openDialog },
+		window: { addEventListener(name, fn) { events.set(name, fn); winEvents.addEventListener(name, fn); }, openDialog, arguments: mainWindow ? [{ mainWindow }] : undefined },
 		document,
 		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set: (key, value) => { prefs[key.replace("extensions.zotpop.", "")] = value; } }, debug() {}, logError: e => errors.push(e), launchURL, Utilities: { Internal: { copyTextToClipboard: text => copied.push(String(text)) } },
+			Libraries: { userLibraryID: 1 },
 			HTTP: { request: request || (() => { throw new Error("Unexpected HTTP request"); }) } },
 		ZotPoPI18N: { make: () => (key, ...args) => key === "csvHead" ? ["head"] : [key, ...args].join("|") },
 		ZotPoPSources: { SOURCES: { openalex: { label: "OpenAlex" } }, POP_SOURCES: Sources.POP_SOURCES, normalizeDOI: Sources.normalizeDOI, filterRecords: (records, query) => Sources.filterRecords ? Sources.filterRecords(records, query) : records,
@@ -144,18 +145,19 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPMarquee: marquee || { attach: () => ({ refresh() {}, refreshCell() {} }) },
 		ZotPoPMetrics: { citesPerYear: () => 1 },
 		CSS: { escape: value => value },
+		ZotPoPImporter: importer || undefined,
 		refreshFlags: refreshLibraryFlags || (async () => {})
 	});
 	let code = fs.readFileSync(new URL("../../content/ui.js", import.meta.url), "utf8");
 	// Exercise the actual query, search, HTTP adapter and render functions. Isolate
 	// native Zotero library access and individual row/detail widgets only.
 	code = code.replace('window.addEventListener("load", init);', `
-		refreshLibraryFlags = globalThis.refreshFlags;
+		if (!globalThis.ZotPoPImporter) refreshLibraryFlags = globalThis.refreshFlags;
 		${realRows ? "" : 'buildRow = () => document.createElement("tr");'}
 		const originalRenderMetrics = renderMetrics;
 		renderMetrics = renderDetail = () => {};
 		cacheIO = setupStorage();
-		globalThis.harness = { state, runSearch, render, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
+		globalThis.harness = { state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
 			wireEvents, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			searchMode: () => searchSurface, authorSessions,

@@ -196,8 +196,13 @@
         try { for (const rule of sheet.cssRules) if (SHEET(rule)) { liveSheet = true; break; } }
         catch (error) { throw new Error('the panel stylesheet could not be read: ' + (error.message || error)); }
       }
-      const said = `script ${liveScript ? 'current' : 'STALE'} · stylesheet ${sheets ? (liveSheet ? 'current' : 'STALE') : 'not loaded yet'}`;
-      if (!liveScript || (sheets && !liveSheet)) throw new Error(said + ' -- delete the startup cache and restart with -purgecaches');
+      // The runtime and the reader tools change without the panel: each gets a mark of its own.
+      const RUNTIME_MARK = 'guardClick', READER_MARK = 'const settle=promise=>';
+      const liveRuntime = typeof runtime[RUNTIME_MARK] === 'function';
+      const readerCode = String(root.CustomStyleReaderTools?.create || '');
+      const liveReader = !readerCode || readerCode.includes(READER_MARK);
+      const said = `script ${liveScript ? 'current' : 'STALE'} · runtime ${liveRuntime ? 'current' : 'STALE'} · reader ${liveReader ? 'current' : 'STALE'} · stylesheet ${sheets ? (liveSheet ? 'current' : 'STALE') : 'not loaded yet'}`;
+      if (!liveScript || !liveRuntime || !liveReader || (sheets && !liveSheet)) throw new Error(said + ' -- delete the startup cache and restart with -purgecaches');
       return `v${runtime.version} · ${said}`;
     }));
 

@@ -95,3 +95,12 @@ test('the start-here block lists only the blank keys and sends each to its field
  assert.ok(!shown().includes('citationEmail'),'a filled key leaves the block');
  pane.destroy();
 });
+test('an action that failed once shows its later success as a success, and number fields always say their range',async()=>{
+ const f=fixture();let fail=true;f.runtime.runSettingAction=async()=>{if(fail){fail=false;throw new Error('선택한 문헌이 없습니다.');}return '조회했습니다.';};
+ const pane=f.mount();await pane.ready;pane.selectCategory('metrics');
+ await f.click('지표 새로고침');assert.equal(f.row('refresh').dataset.error,'true');
+ await f.click('지표 새로고침');assert.equal(f.row('refresh').dataset.error,'false','not left in the error style');
+ pane.selectCategory('reader');
+ assert.match(f.row('speed').querySelector('.scs-help').textContent,/허용 10–500/,'the range beside the description, not instead of it');
+ pane.destroy();
+});

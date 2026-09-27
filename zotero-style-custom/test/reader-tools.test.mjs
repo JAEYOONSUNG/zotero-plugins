@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import tools from '../src/reader-tools.js';
+import I18N from '../src/i18n.js';
+import Strings from '../src/strings.js';
+// These tests read the reader's words in English: an English Zotero, through the same dictionary the panel uses.
+I18N.load(Strings.en);I18N.use('en-US');
 class Style {
  constructor(){this.values=new Map();}
  getPropertyValue(k){return this.values.get(k)?.value||'';}
@@ -34,7 +38,7 @@ function fixture(){
  toggleHidden(i){calls.push(['hidden',i]);this._columns[i].hidden=!this._columns[i].hidden;},onResize(widths,persist){calls.push(['resize',widths,persist]);for(const c of this._columns)if(widths[c.dataKey])c.width=widths[c.dataKey];},
  toggleSort(i){calls.push(['sort',i]);this._columns.forEach((c,j)=>{if(i!==j)delete c.sortDirection;else c.sortDirection=c.sortDirection?-c.sortDirection:1;});}};
  win.ZoteroPane={itemsView:{tree:{_columns:columns},async refreshAndMaintainSelection(){calls.push(['refresh']);}}};
- const runtime={cache:{},dirty:false,writes:0,async flush(){this.writes++;}};
+ const runtime={cache:{},dirty:false,writes:0,async flush(){this.writes++;},t:I18N.t};
  const Z={Notifier:{listeners:new Map(),registerObserver(ref){const id=this.listeners.size+1;this.listeners.set(id,ref);return id;},unregisterObserver(id){this.listeners.delete(id);}},getMainWindow:()=>win,Items:{get:id=>items.get(id),getByLibraryAndKeyAsync:async(lib,key)=>[...items.values()].find(i=>i.libraryID===lib&&i.key===key)},Reader:{_registeredListeners:[],registerEventListener(type,handler,pluginID){this._registeredListeners.push({type,handler,pluginID});},_unregisterEventListenerByPluginID(id){this._registeredListeners=this._registeredListeners.filter(l=>l.pluginID!==id);},_readers:[reader],getByTabID:id=>id==='reader1'?reader:null,async open(id,location,options){opened.push({id,location,options});win.Zotero_Tabs._tabs.push({id:'new'+id,type:'reader',title:'New',data:{itemID:id}});}},logError:e=>errors.push(e)};
  return {win,core,reader,page,pages,doc,timers,items,opened,navigations,calls,columns,runtime,Z,errors,service:tools.create({Zotero:Z,runtime}),tick(){for(const fn of timers.values())fn();}};
 }
@@ -302,4 +306,46 @@ test('root legacy margin-font fallback survives preference application and width
  f.runtime.getSetting=key=>key==='marginFontSize'?(f.runtime.cache.readerSettings.marginOptions.fontSize??13):undefined;
  await f.service.applyPreferences(f.win);assert.equal(f.runtime.cache.readerSettings.marginOptions.fontSize,20);assert.match(f.page.children[0].style.cssText,/font:20px/);
  await f.service.setMarginOptions(f.win,{width:300});assert.equal(f.runtime.cache.readerSettings.marginOptions.fontSize,20);assert.match(f.page.children[0].style.cssText,/font:20px/);f.service.stop();
+});
+test('the reader menu speaks Korean to a Korean Zotero and says what each action did',async()=>{
+ I18N.use('ko-KR');
+ try{
+  const f=fixture();const listener=f.Z.Reader._registeredListeners[0],appended=[];
+  listener.handler({reader:f.reader,doc:f.doc,append:node=>appended.push(node)});
+  appended[0].children[0].emit('click');
+  const menu=f.doc.documentElement.children.find(n=>n.attrs['aria-label']==='리더 모양과 작업 공간');
+  assert.ok(menu,'the menu is labelled in Korean');
+  assert.ok(menu.children.some(n=>n.textContent==='연구 작업 패널 열기'));
+  const status=menu.children.find(n=>n.attrs.role==='status');
+  assert.ok(status,'one line for what happened');
+  f.runtime.openWorkbench=()=>{throw new Error('Research workspace is unavailable');};
+  menu.children.find(n=>n.textContent==='연구 작업 패널 열기').emit('click');
+  for(let i=0;i<4;i++)await Promise.resolve();
+  assert.notEqual(status.textContent,'','a failure is shown, not only logged');
+  f.service.stop();
+ }finally{I18N.use('en-US');}
+});
+test('a margin card carries its colour as a small square, not a bar on its edge, and never below 11px',async()=>{
+ const f=fixture();f.Z.Prefs={get:key=>key.endsWith('marginFontSize')?9:undefined,set(){}};
+ await f.service.setMarginAnnotations(f.win,true);
+ const card=f.page.children[0].children[0];
+ assert.doesNotMatch(card.style.cssText,/border-inline-start/,'no coloured edge');
+ assert.match(card.style.cssText,/linear-gradient\(#ffd400,#ffd400\)/,'the annotation colour stays, as a swatch');
+ assert.match(f.page.children[0].style.cssText,/font:(1[1-9]|2\d)px/);
+ f.service.stop();
+});
+test('margin cards are drawn for the reader on screen only, not for every background tab each second',async()=>{
+ const f=fixture();f.reader.tabID='reader1';f.win.Zotero_Tabs.selectedID='library';
+ await f.service.setMarginAnnotations(f.win,true);
+ assert.equal(f.page.children.length,0,'a reader in a background tab is left alone');
+ f.win.Zotero_Tabs.selectedID='reader1';f.tick();
+ assert.equal(f.page.children.length,1,'and drawn when its tab is shown');
+ f.service.stop();
+});
+test('left-side cards move to the right on a page with no room to its left',async()=>{
+ const f=fixture();f.page.offsetLeft=40;
+ await f.service.setMarginOptions(f.win,{side:'left'});await f.service.setMarginAnnotations(f.win,true);
+ assert.match(f.page.children[0].style.cssText,/left:calc\(100% \+ 10px\)/,'drawn where it can be reached');
+ f.page.offsetLeft=900;f.service.applyPreferences?await f.service.applyPreferences(f.win):null;f.tick();
+ f.service.stop();
 });

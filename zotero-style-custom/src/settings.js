@@ -79,14 +79,14 @@
   async function reset(category){
    const section=categories.get(category);if(section.pending||destroyed)return;
    // Twenty values change at once and there is no undo: ask first when the window can.
-   if(typeof win.confirm==='function'&&!win.confirm(t('{0} 분류의 설정을 모두 기본값으로 되돌릴까요? API 키·비밀번호는 유지됩니다.').replace('{0}',t(section.label))))return;
+   if(typeof win.confirm==='function'&&!win.confirm(t('{0} 분류의 설정을 모두 기본값으로 되돌릴까요? API 키·비밀번호와 직접 입력한 주소·모델·이메일·CSS는 유지됩니다.').replace('{0}',t(section.label))))return;
    const members=[...states.values()].filter(state=>state.spec.category===category);
    if(members.some(state=>state.pending)){notify('진행 중인 적용이 끝난 뒤 기본값으로 되돌리세요.',true);return;}
    const revisions=new Map(members.map(state=>[state,state.revision]));section.pending=true;section.reset.disabled=true;members.forEach(sync);notify(section.label+' 기본값을 적용하는 중…');
    try{
     await runtime.resetSettings(category);if(destroyed)return;
     await Promise.all(members.filter(state=>!secret(state.spec)).map(state=>hydrate(state,{force:true,expectedRevision:revisions.get(state)})));
-    notify(t('{0} 설정을 기본값으로 되돌렸습니다. API 키·비밀번호는 유지했습니다.').replace('{0}',t(section.label)));if(section.status)section.status.textContent=t('기본값으로 되돌렸습니다.');await refreshStatus();
+    notify(t('{0} 설정을 기본값으로 되돌렸습니다. API 키·비밀번호와 직접 입력한 주소·모델·이메일·CSS는 유지했습니다.').replace('{0}',t(section.label)));if(section.status)section.status.textContent=t('기본값으로 되돌렸습니다.');await refreshStatus();
    }catch(error){notify('기본값으로 되돌리지 못했습니다: '+(error.message||error),true);}
    finally{section.pending=false;section.reset.disabled=false;if(!destroyed)members.forEach(sync);}
   }
@@ -119,7 +119,7 @@
     /* A button that opens something outside the panel says so, so the running
        self-check leaves it alone rather than putting a window on the screen. */
     if(spec.opens)state.input.setAttribute('data-opens',spec.opens);
-    state.input.addEventListener('click',async()=>{if(state.pending||destroyed)return;state.pending=true;state.feedback.textContent=t('실행하는 중…');sync(state);try{const answer=await runtime.runSettingAction(spec.action);if(!destroyed){state.feedback.textContent=typeof answer==='string'&&answer?answer:t('실행했습니다.');await refreshStatus();}}catch(error){if(!destroyed){state.error=true;state.feedback.textContent='실행하지 못했습니다: '+(error.message||error);}}finally{state.pending=false;if(!destroyed)sync(state);}});
+    state.input.addEventListener('click',async()=>{if(state.pending||destroyed)return;state.pending=true;state.error=false;state.feedback.textContent=t('실행하는 중…');sync(state);try{const answer=await runtime.runSettingAction(spec.action);if(!destroyed){state.feedback.textContent=typeof answer==='string'&&answer?answer:t('실행했습니다.');await refreshStatus();}}catch(error){if(!destroyed){state.error=true;state.feedback.textContent='실행하지 못했습니다: '+(error.message||error);}}finally{state.pending=false;if(!destroyed)sync(state);}});
    }else{
     if(spec.type==='select'){state.input=node('select',null,line,{id});for(const option of spec.options||[])node('option',option.label,state.input,{value:option.value});}
     else if(spec.type==='textarea'){state.input=node('textarea',null,line,{id,rows:spec.rows||4});}
@@ -135,9 +135,10 @@
     state.input.addEventListener('keydown',event=>{if(event.key==='Enter'&&spec.type!=='textarea'){event.preventDefault();void save(state);}});
    }
    state.input.setAttribute('aria-describedby',descriptionID+' '+feedbackID);
-   const helpText=[spec.description,spec.help].filter(Boolean).map(t).join(' ')
-    ||(spec.type==='number'?t('기본 {0} · 허용 {1}–{2}').replace('{0}',String(spec.default)).replace('{1}',spec.min??'∞').replace('{2}',spec.max??'∞')+(spec.step&&spec.step!==1&&spec.step!=='any'?' · '+t('{0} 단위').replace('{0}',String(spec.step)):'')
-    :spec.type==='note'?t('읽기 전용입니다. 값을 바꾸지 않습니다.')
+   // A number's range is said whether or not it has a description: it was the fallback only, so most number fields never showed it.
+   const range=spec.type==='number'?t('기본 {0} · 허용 {1}–{2}').replace('{0}',String(spec.default)).replace('{1}',spec.min??'∞').replace('{2}',spec.max??'∞')+(spec.step&&spec.step!==1&&spec.step!=='any'?' · '+t('{0} 단위').replace('{0}',String(spec.step)):''):'';
+   const helpText=[...[spec.description,spec.help].filter(Boolean).map(t),range].filter(Boolean).join(' ')
+    ||(spec.type==='note'?t('읽기 전용입니다. 값을 바꾸지 않습니다.')
     :secret(spec)?t('비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.'):t('이 값은 해당 기능에 적용됩니다.'));
    const help=node('p',null,row,{id:descriptionID,class:'scs-help'});help.textContent=helpText;
    state.feedback=node('p','',row,{id:feedbackID,class:'scs-feedback',role:'status','aria-live':'polite'});states.set(spec.key,state);sync(state);
