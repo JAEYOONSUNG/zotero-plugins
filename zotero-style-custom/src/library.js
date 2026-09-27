@@ -200,7 +200,7 @@
           if(annotationAttachment){if(annotationNoteMatch(html,target,annotationAttachment,route))out.push({id:String(item.id),title:safe(()=>item.getNoteTitle()),kind:'note'});if(n%100===99)await pause();continue;}
           const decoded=safe(()=>decodeURIComponent(html),html);
           const links=Array.from(decoded.matchAll(/zotero:\/\/(?:select|open-pdf)\/(library|groups\/\d+)\/items\/([A-Z0-9]+)(?=[/?#"'&\s<]|$)/g)).filter(m=>m[1]===route).map(m=>m[2]);
-          if(links.some(k=>keys.has(k))||uris.some(uri=>decoded.includes(uri+'"')||decoded.includes(uri+'&quot;')))out.push({id:String(item.id),title:safe(()=>item.getNoteTitle()),kind:'note'});
+          if(links.some(k=>keys.has(k))||uris.some(uri=>decoded.includes(uri+'"')||decoded.includes(uri+'&quot;')))out.push({id:String(item.id),title:safe(()=>item.getNoteTitle()),kind:'note',parentTitle:item.parentID?safe(()=>field(Z.Items.get(item.parentID),'title'),''):''});
         }
         if(n%100===99)await pause();
       }
@@ -451,7 +451,8 @@
       library(libraryID);const output=[];
       for(const collection of Z.Collections.getByLibrary(Number(libraryID),true,false)) {
         const children=collection.getChildItems(false,false)||[];
-        output.push({id:String(collection.id),name:collection.name,count:children.filter(i=>valid(i)&&i.isRegularItem?.()).length,parentID:collection.parentID?String(collection.parentID):null});
+        const papers=children.filter(i=>valid(i)&&i.isRegularItem?.());
+        output.push({id:String(collection.id),name:collection.name,count:papers.length,itemIDs:papers.map(i=>i.id),parentID:collection.parentID?String(collection.parentID):null});
         if(output.length%100===0)await pause();
       }
       return output;

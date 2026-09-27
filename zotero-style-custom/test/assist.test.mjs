@@ -38,3 +38,11 @@ test('the reader can replace the outline for reading together; the language and 
  assert.match(system,/Write in Korean/);assert.match(system,/do not invent/);
  h.api.stop();
 });
+
+test('an empty or overlong answer from the AI server is reported as such, not as a connection problem',async()=>{
+ const h=harness();
+ h.respond({status:200,response:{choices:[{message:{content:''}}]}});
+ await assert.rejects(h.api.run('translate',{title:'T'}),/모델 이름/);
+ h.respond({status:200,response:{choices:[{message:{content:'x'.repeat(100001)}}]}});
+ await assert.rejects(h.api.run('translate',{title:'T'}),/너무 깁니다/);
+});

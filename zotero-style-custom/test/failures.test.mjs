@@ -56,3 +56,11 @@ test("nothing in, nothing out", () => {
   assert.equal(failures.status({}), 0);
   assert.equal(failures.service(""), "");
 });
+
+test('a guard the library or reader tools raise in English reaches the reader as a Korean sentence', () => {
+  assert.equal(failures.describe(new Error('Select at least two annotations')), '병합할 주석을 두 개 이상 선택하세요.');
+  assert.equal(failures.describe(new Error('A group name is required')), '탭 그룹 이름을 입력하세요.');
+  assert.equal(failures.describe(new Error('Merge requires the same annotation color')), '색이 같은 주석만 병합할 수 있습니다.');
+  // A sentence written for the reader already passes through untouched.
+  assert.equal(failures.describe(new Error('주석을 먼저 선택하세요.')), '주석을 먼저 선택하세요.');
+});

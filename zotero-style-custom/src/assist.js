@@ -62,7 +62,7 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
     if(output.length>100000)throw new Error('AI 서버 응답이 너무 깁니다. 더 짧은 글을 고르거나 모델을 바꾸세요.');
     if(task==='tags'){let parsed;try{parsed=JSON.parse(output.replace(/^```(?:json)?\s*|\s*```$/g,''));}catch(_){throw new Error('AI가 태그를 목록으로 주지 않았습니다. 다시 시도하거나 다른 모델을 쓰세요.');}if(!Array.isArray(parsed)||!parsed.length||parsed.length>20||parsed.some(t=>typeof t!=='string'||!t.trim()||t.length>100||/[\r\n]/.test(t)))throw new Error('태그 목록으로 읽을 수 없는 답이 왔습니다. 다시 시도하세요.');return [...new Set(parsed.map(t=>t.trim()))];}
     return output.trim();
-   }catch(error){if(/^AI 서비스|요청|태그|올바른/.test(error.message))throw error;throw new Error('AI 요청을 완료하지 못했습니다. 연결 설정을 확인하세요.');}
+   }catch(error){if(error?.own||/^AI 서|요청|태그|올바른/.test(error.message))throw error;throw new Error('AI 요청을 완료하지 못했습니다. 연결 설정을 확인하세요.');}
    finally{jobs.delete(job);}
   }
   function cancel(){for(const job of jobs)job.abort?.();}

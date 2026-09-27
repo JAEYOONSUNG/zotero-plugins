@@ -319,7 +319,7 @@ test('enriching a missing author preserves an existing same-title legacy total w
 
 test('automatic metadata writes preserve unrelated Extra, verified zero and own notifier marker without repeat saves',async()=>{
  const {plugin,item}=fixture();plugin.active=true;const ref=citationItem(item,1);ref.fields.extra='PMID: 123\nNotes: keep this\nCitations: 999 (Old source, 2020-01-01)';
- let saves=0;ref.setField=(k,v)=>ref.fields[k]=v;ref.saveTx=async options=>{saves++;assert.equal(options.notifierData.styleCustomCitations,true);assert.equal(options.skipSelect,true);};
+ let saves=0;ref.setField=(k,v)=>ref.fields[k]=v;ref.saveTx=async options=>{saves++;assert.equal(options.notifierData.styleCustomCitations,true);assert.equal(options.skipSelect,true);assert.equal(options.skipDateModifiedUpdate,true,'a background count is not an edit');};
  const result={status:'ok',count:0,source:'OpenAlex',checkedAt:new Date().toISOString(),identity:plugin.citationTools.identity(plugin.citationRecord(ref))};
  assert.equal(await plugin.persistCitation(ref,result),true);assert.match(ref.fields.extra,/PMID: 123\nNotes: keep this\nCitations: 0 \(OpenAlex,/);
  assert.equal(await plugin.persistCitation(ref,result),false);assert.equal(saves,1);
@@ -915,6 +915,39 @@ test('following an author records what was already published, so later news is g
   // Marking as read clears it, and does not re-flag it next time.
   await f.plugin.markAuthorSeen('A1', later.works);
   assert.deepEqual((await f.plugin.authorUpdates('A1')).fresh, []);
+});
+
+test('the author page counts news as the watchlist card does, and asks OpenAlex once a session', async () => {
+  const f = discoverFixture();
+  await f.plugin.watchAuthor({id: 'A1', name: 'A Zongo', seen: []});
+  f.plugin.discoverCache.clear();
+  const original = f.Z.HTTP.request;
+  let asked = 0;
+  f.Z.HTTP.request = async (method, url) => {
+    if (/author\.id/.test(url)) { asked++; return {response: {results: [
+      {id: 'https://openalex.org/W77', title: 'A paper', publication_year: 2026, type: 'article', cited_by_count: 0},
+      {id: 'https://openalex.org/W78', title: 'A repository deposit', publication_year: 2026, type: 'dataset', cited_by_count: 0}]}}; }
+    return original(method, url);
+  };
+  const first = await f.plugin.authorUpdates('A1');
+  assert.deepEqual(first.fresh.map(w => w.title), ['A paper'], 'a dataset is not a new paper here either');
+  await f.plugin.authorUpdates('A1');
+  assert.equal(asked, 1, 'opening the page again costs nothing');
+});
+
+test('titles for bare OpenAlex IDs are asked once and remembered', async () => {
+  const f = discoverFixture();
+  let asked = 0;
+  f.Z.HTTP.request = async (method, url) => {
+    asked++;
+    return {response: {results: [{id: 'https://openalex.org/W99', title: 'The paper everyone cites', publication_year: 2001, doi: 'https://doi.org/10.1/W99'}]}};
+  };
+  f.plugin.flush = async () => {};
+  const first = await f.plugin.worksByID(['W99', 'https://openalex.org/W99']);
+  assert.equal(first.W99.title, 'The paper everyone cites');
+  assert.equal(first.W99.doi, '10.1/w99');
+  await f.plugin.worksByID(['W99']);
+  assert.equal(asked, 1, 'the second time costs nothing');
 });
 
 test('an author who is not followed is never reported as having news', async () => {

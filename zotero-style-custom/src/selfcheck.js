@@ -180,15 +180,15 @@
        code actually running, and the stylesheet actually applied, for a marker
        of this build. */
     results.push(await attempt('the running panel is this build, not a cached one', () => {
-      const MARK = 'portraitsDue';
+      const MARK = 'scheduleReload';
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
-      /* And a rule only this build's stylesheet has: the photo inside a
-         co-author's chip. Update both marks when a
+      /* And a rule only this build's stylesheet has: the action row under
+         an owned paper's "보유". Update both marks when a
          change touches only one of the two files. */
-      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-node-face img'
-        && String(rule.style?.getPropertyValue('object-fit') || '').includes('cover');
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-hit-owned ~ .sc-hit-actions'
+        && String(rule.style?.getPropertyValue('grid-row') || '').includes('span 2');
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;

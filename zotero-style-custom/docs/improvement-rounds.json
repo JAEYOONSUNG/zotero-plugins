@@ -1,5 +1,5 @@
 {
-  "version": "0.53.10",
+  "version": "0.53.11",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -2501,6 +2501,446 @@
       ],
       "status": "verified",
       "review": "관련 논문 탭에 세 번째 보기를 더했다. 이 논문의 참고문헌들이 공통으로 기대는 논문을 시대별로 한 편씩 뽑아 연표로 그린다. 자료는 읽기 순서가 이미 가져온 것을 쓰므로 요청은 0~2회 늘 뿐이다. 연구자 평가자에게 사용자의 논문 20편으로 네 라운드를 받았다(3.6 → 3.45 → 4.0). 2라운드에서 특이도를 정렬 기준으로 쓴 것이 Yoshida·Tournier·Klompe처럼 분야를 만든 논문을 지우는 역효과를 냈고, 평가자 지적대로 정렬이 아니라 문턱으로 바꿔 되살렸다. 인용망이 계보를 못 받치는 논문에는 선을 그리지 않는다."
+    },
+    {
+      "round": "R87",
+      "title": "인용 수 백그라운드 기록이 '최근 문헌'을 덮지 않음",
+      "gap": "A citation backfill saved each paper without skipDateModifiedUpdate, so every refreshed paper jumped to the top of 최근 문헌, which ranks by Date Modified.",
+      "entryPoint": "보유 문헌 → 인용 수 채우기 / 최근 문헌",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "styleCustomCitations:true},skipSelect:true,skipDateModifiedUpdate:true"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "automatic metadata writes preserve unrelated Extra, verified zero and own notifier marker without repeat saves"
+        }
+      ],
+      "status": "verified",
+      "review": "자동 인용 수 기록은 편집이 아니므로 수정일을 바꾸지 않는다. 1,200편을 채워도 최근 문헌이 그대로 남는다."
+    },
+    {
+      "round": "R88",
+      "title": "컬렉션을 누르면 그 문헌으로, 문헌 수는 한 번씩",
+      "gap": "Opening a collection left the panel on the tree; the header summed memberships (a paper in three collections counted three times) and a parent holding papers only in subcollections read as empty.",
+      "entryPoint": "정리 › 컬렉션",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "하위 포함 ${c.deepCount}편"
+        },
+        {
+          "file": "src/library.js",
+          "marker": "itemIDs:papers.map"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a collection opens onto its papers and counts each paper once"
+        }
+      ],
+      "status": "verified",
+      "review": "컬렉션을 누르면 보유 문헌 탭이 그 컬렉션 범위로 열린다. 머리글은 서로 다른 문헌 수를 세고, 하위에만 문헌이 있는 상위 컬렉션은 '하위 포함 N편'으로 열린다."
+    },
+    {
+      "round": "R89",
+      "title": "읽기 진행: 최근 읽은 순, 30편씩",
+      "gap": "Every paper ever read was drawn at once, each with up to a hundred page cells, rebuilt on every refresh; the note said '읽은 순서' while the list was sorted by seconds.",
+      "entryPoint": "읽기 › 읽기 진행",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "state.readingSort==='time'"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "reading history opens on the most recently read, thirty to a page, and can sort by time"
+        }
+      ],
+      "status": "verified",
+      "review": "기본은 최근 읽은 순, 한 번에 30편. 읽은 시간 긴 순을 고를 수 있다. 300편이면 3만 개였던 버튼이 3천 개 이하로 준다."
+    },
+    {
+      "round": "R90",
+      "title": "논문 비교 표를 말로 읽기",
+      "gap": "Cells showed unread/reading/done and raw seconds; titles led nowhere; with nothing selected the table silently compared the whole list; two messages named the wrong thing.",
+      "entryPoint": "정리 › 논문 비교",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "const STATUS={unread:'안 읽음'"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the comparison table reads in words and its titles open the paper"
+        }
+      ],
+      "status": "verified",
+      "review": "상태는 한국어, 시간은 '1시간 5분'. 제목을 누르면 논문이 열린다. 선택이 없으면 '현재 목록 전체'라고 밝힌다. '주석가 없습니다' 같은 문법 오류도 고쳤다."
+    },
+    {
+      "round": "R91",
+      "title": "저자 화면의 새 논문 수가 카드와 같음",
+      "gap": "The watchlist card left out datasets and repository deposits; the author page counted them, so the card said 2 and the page 5. The page also re-asked OpenAlex on every visit.",
+      "entryPoint": "탐색 › 저자 추적 → 저자 화면",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "static NOT_A_PAPER"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "the author page counts news as the watchlist card does, and asks OpenAlex once a session"
+        }
+      ],
+      "status": "verified",
+      "review": "같은 기준으로 센다. 저자 화면은 세션 동안 한 번만 요청하고, '새 논문 확인'을 누르면 다시 묻는다."
+    },
+    {
+      "round": "R92",
+      "title": "'보유' 논문에서 그 논문으로, 발전 과정에서 바로 추가",
+      "gap": "Owned rows were dead ends; the line of development kept a weeks-old ownership and offered only doi.org; unfollowing on the author page took one press and dropped the baseline.",
+      "entryPoint": "탐색 › 관련 논문 · 저자 추적",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "itemForDOI(doi) {"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "A milestone worth reading is worth keeping"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "an owned paper leads to itself, and unfollowing from the author page takes two presses"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the line of development runs down the years and ends at the paper on screen"
+        }
+      ],
+      "status": "verified",
+      "review": "보유 행의 '보기'가 Zotero 목록에서 그 논문을 선택한다. 발전 과정은 보유 여부를 지금 다시 확인하고 '추가'를 준다. 관심 해제는 두 번 눌러야 된다."
+    },
+    {
+      "round": "R93",
+      "title": "관계 그래프: 'W2091…' 대신 제목",
+      "gap": "The list of papers the library cites but lacks showed bare OpenAlex IDs; its only action left Zotero, and papers owned but outside the range were listed as lacking.",
+      "entryPoint": "정리 › 관계 그래프",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "async worksByID(ids"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "runtime.worksByID(shown.map"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the citation map names the papers it says you lack, and asks only about what it has not asked"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "titles for bare OpenAlex IDs are asked once and remembered"
+        }
+      ],
+      "status": "verified",
+      "review": "25편의 제목을 요청 한 번으로 받아 저장한다. 각 행은 제목·연도·저널과 '추가'가 있는 논문 행이 되고, 이미 가진 논문은 '보유'로 표시된다."
+    },
+    {
+      "round": "R94",
+      "title": "관계 그래프의 '남음'이 0이 됨",
+      "gap": "Papers OpenAlex did not know, or without a DOI, were counted as remaining forever, so the button stayed and did nothing; the cited-by sweep did not say it costs a request per paper.",
+      "entryPoint": "정리 › 관계 그래프",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "const unasked=chosen.filter"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the citation map names the papers it says you lack, and asks only about what it has not asked"
+        }
+      ],
+      "status": "verified",
+      "review": "'남음'은 아직 묻지 않은 논문만 센다. 0이면 버튼이 사라지고, 인용한 논문 가져오기는 '요청 최대 N회'를 미리 밝힌다."
+    },
+    {
+      "round": "R95",
+      "title": "논문의 저자 목록에서 바로 관심 등록",
+      "gap": "Following a paper's authors meant opening each one; the list did not show who was already followed.",
+      "entryPoint": "탐색 › 저자 추적 → 이 논문의 저자",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "Following a paper's authors used to mean opening each in turn"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "author list says who is followed and follows the rest in one press"
+        }
+      ],
+      "status": "verified",
+      "review": "이미 등록된 저자는 '관심 저자'로 표시되고, 나머지는 한 번 눌러 등록된다. 지금까지의 논문이 기준선이 되어 옛 논문이 새 소식으로 뜨지 않는다."
+    },
+    {
+      "round": "R96",
+      "title": "메모를 쓰는 동안 패널이 다시 그려지지 않음",
+      "gap": "A memo's autosave is an item change; the notifier reloaded the panel a second after each pause, rebuilding the field under the cursor and jumping a long list to the top.",
+      "entryPoint": "읽기 › 주석 · 이 문헌 메모",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "const scheduleReload="
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a memo being typed is not rebuilt by its own save; the reload waits until the field is left"
+        }
+      ],
+      "status": "verified",
+      "review": "패널 안에서 입력 중이면 새로고침을 미루고, 입력칸을 떠날 때 반영한다."
+    },
+    {
+      "round": "R97",
+      "title": "주석 색 필터가 다른 색을 지우지 않음",
+      "gap": "Choosing one colour hid every other colour chip, and each click listed every attachment in scope and checked each file on disk just to name the groups.",
+      "entryPoint": "읽기 › 주석",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "const unfiltered=list.filter"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "choosing one annotation colour keeps the other colours on offer, and no file scan runs for group names"
+        }
+      ],
+      "status": "verified",
+      "review": "색 칩은 색 필터 전의 목록에서 센다. 그룹 이름은 화면에 있는 PDF에서 바로 읽는다."
+    },
+    {
+      "round": "R98",
+      "title": "영어 오류 70여 개를 한국어 문장으로, 병합은 두 개부터",
+      "gap": "The library and reader tools refused in English ('Select at least two annotations'); merge was pressable with one annotation selected.",
+      "entryPoint": "주석 · 태그 · 탭 관리 · 리더 전반",
+      "sources": [
+        {
+          "file": "src/failures.js",
+          "marker": "const OWN = {"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "btn.dataset.needs==='2'"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/failures.test.mjs",
+          "name": "a guard the library or reader tools raise in English reaches the reader as a Korean sentence"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the three annotation verbs wait until something is selected"
+        }
+      ],
+      "status": "verified",
+      "review": "영문 가드 메시지는 로그용으로 두고, 사용자에게는 한국어 문장(영어 UI에서는 영어)으로 보인다. '선택 주석 병합'은 두 개를 고르면 켜진다."
+    },
+    {
+      "round": "R99",
+      "title": "태그 추가·제거가 말을 함, 제거는 되돌리기",
+      "gap": "With no paper selected or an empty box both verbs did nothing silently; success said nothing; a removal could not be undone.",
+      "entryPoint": "정리 › 중첩 태그",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "Who actually carried each tag"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the tag verbs refuse in words, say what they did, and a removal can be undone"
+        }
+      ],
+      "status": "verified",
+      "review": "무엇이 빠졌는지 말하고, 몇 편에 했는지 알린다. 제거 뒤 '되돌리기'는 그 태그를 갖고 있던 문헌에만 다시 붙인다."
+    },
+    {
+      "round": "R100",
+      "title": "캔버스: 방향키로 계속 이동, 카드 삭제 되돌리기",
+      "gap": "An arrow key moved a card once and the redraw took the keyboard away; every mouse release redrew even without a move; deleted cards and their memos were gone for good.",
+      "entryPoint": "정리 › 캔버스",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "undo.dataset.role='card-undo'"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a canvas card keeps the keyboard as it moves, and deleted cards come back with their links"
+        }
+      ],
+      "status": "verified",
+      "review": "움직인 카드가 포커스를 유지한다. 클릭만 하면 다시 그리지 않는다. 지운 카드는 연결선과 함께 되돌릴 수 있다."
+    },
+    {
+      "round": "R101",
+      "title": "역링크·첨부·빈 노트",
+      "gap": "Backlinks showed a blank page during the library-wide scan, listed a note twice and did not say which paper a note sits under; attachments listed every file in scope under a heading that said 'selected'; an empty draft made a blank note.",
+      "entryPoint": "읽기 › 역링크 · 첨부 미리보기 · 노트",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "노트 · ${link.parentTitle}"
+        },
+        {
+          "file": "src/library.js",
+          "marker": "parentTitle:item.parentID"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "backlinks name the paper a note sits under, once each; attachments come a hundred at a time; an empty note is not made"
+        }
+      ],
+      "status": "verified",
+      "review": "검색 중임을 알리고, 노트가 달린 논문을 밝히며, 중복을 지운다. 첨부는 범위에 맞는 제목과 100개 단위로 보인다. 빈 노트는 만들지 않는다."
+    },
+    {
+      "round": "R102",
+      "title": "탭 그룹·뷰 저장",
+      "gap": "An empty name or no open document was refused in English after the press; the name stayed in the box, so a second press made a second group of the same name.",
+      "entryPoint": "도구 › 탭 관리 · 뷰 그룹",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "const syncSave="
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a tab group needs a name and an open document, says it was saved, and clears the name"
+        }
+      ],
+      "status": "verified",
+      "review": "이름과 PDF 탭이 있어야 버튼이 켜진다. 저장하면 이름과 문서 수를 알리고 입력칸을 비운다."
+    },
+    {
+      "round": "R103",
+      "title": "번역·AI: 안 될 요청은 누르기 전에 꺼짐",
+      "gap": "All four requests were pressable with no AI server or no abstract and failed afterwards; an empty or overlong model answer was reported as a connection problem; the waiting line said 'selected text'.",
+      "entryPoint": "도구 › 번역 · AI",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "const NEEDS_ABSTRACT="
+        },
+        {
+          "file": "src/assist.js",
+          "marker": "error?.own||/^AI 서"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the AI requests are off until a server is set, and those that need an abstract say so"
+        },
+        {
+          "file": "test/assist.test.mjs",
+          "name": "an empty or overlong answer from the AI server is reported as such, not as a connection problem"
+        }
+      ],
+      "status": "verified",
+      "review": "서버가 없으면 모두 꺼지고, 초록이 없으면 제목 번역만 켜진다. 모델의 빈 답은 '모델 이름을 확인하세요'로 알린다."
+    },
+    {
+      "round": "R104",
+      "title": "왼쪽 메뉴를 방향키로",
+      "gap": "The rail's nineteen entries were nineteen Tab stops between the reader and the page.",
+      "entryPoint": "패널 전체 · 왼쪽 메뉴",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "Nineteen menu entries were nineteen Tab stops"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the menu rail is one Tab stop walked with the arrow keys"
+        }
+      ],
+      "status": "verified",
+      "review": "현재 메뉴만 Tab 정지점이고, ↑↓·Home·End로 이동한다."
+    },
+    {
+      "round": "R105",
+      "title": "⌘K 목록이 선택을 따라 스크롤",
+      "gap": "Arrowing past the visible part of the command list moved the choice out of sight.",
+      "entryPoint": "패널 전체 · ⌘/Ctrl K",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "commandResults.children[commandIndex]?.scrollIntoView"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the command finder keeps the chosen line in view as the arrows move it"
+        }
+      ],
+      "status": "verified",
+      "review": "선택한 줄이 항상 보이도록 목록을 스크롤한다."
+    },
+    {
+      "round": "R106",
+      "title": "설정 동작이 결과를 알리고, 선택 막대는 문헌 탭에만",
+      "gap": "스타일 저장 and 패널 CSS 적용 said nothing; 추가 열 적용 said 'applied' for columns registered hidden; linking said nothing of how many; the selection bar offered linking on tabs, views and settings.",
+      "entryPoint": "도구 › 스타일 편집 · 선택 막대",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "['collections','tabs','views','appearance'].includes(state.tab)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "settings actions say what they did, and the selection bar stays off pages with no papers"
+        }
+      ],
+      "status": "verified",
+      "review": "각 동작이 무엇을 했는지 알린다. 추가 열은 '머리글을 오른쪽 클릭해 켜세요'라고 안내한다. 문헌이 없는 탭에서는 선택 막대를 숨긴다."
     }
   ],
   "introducedInVersion": "0.6.0"

@@ -1,6 +1,8 @@
 /* global module */
 "use strict";
 var CustomStyleRuntime = class CustomStyleRuntime {
+  // What OpenAlex files that is not a paper: repository deposits, datasets, reviews of reviews.
+  static NOT_A_PAPER = /^(dataset|other|paratext|peer-review|grant|libguides|supplementary-materials)$/i;
   constructor({ Zotero, model, marquee, reading, storage, legacy = {}, catalog = [], citations, io, paths }) {
     Object.assign(this, { Z: Zotero, model, marquee, reading, storage, legacy, io, paths });
     this.windows = new Map(); this.columns = []; this.observers = [];
@@ -2173,6 +2175,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const rows = this.watchedAuthors();
     const result = {authors: rows.length, withNews: 0, works: 0, requests: 0, budgetGone: false, remaining: 0};
     if (!rows.length) return result;
+    // A sweep is a request for what is new: the author pages asked earlier are forgotten.
+    for (const key of [...(this.discoverCache?.keys?.() || [])]) if (String(key).startsWith('author:')) this.discoverCache.delete(key);
     const options = this.discoverOptions();
     const byID = new Map(rows.map(row => [this.discoverTools.shortID(row.id), row]));
     const batches = this.discoverTools.authorBatches(rows.map(row => row.id));
@@ -2259,7 +2263,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          already published, filed as datasets. OpenAlex types them; the type
          used to be fetched and thrown away, so a bioRxiv preprint could not
          be shown as one either. */
-      const papers = fresh.filter(work => !/^(dataset|other|paratext|peer-review|grant|libguides|supplementary-materials)$/i.test(String(work.type || '')));
+      const papers = fresh.filter(work => !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || '')));
       row.news = papers.slice(0, 8).map(work => ({
         id: work.id, title: work.title, venue: work.venue, doi: work.doi,
         type: String(work.type || ''),
@@ -2640,9 +2644,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async authorUpdates(authorID, {limit = 25, signal} = {}) {
     const id = this.discoverTools.shortID(authorID);
     const watched = this.watchedAuthors().find(row => row.id === id);
-    const {profile, works} = await this.authorActivity(id, {limit, signal});
+    /* Asked once per session: the card, 관심 등록, 확인함 and every co-author
+       chip reopened this page and each paid two metered requests. */
+    const {profile, works} = await this.authorActivityCached(id, {limit, signal});
     const seen = new Set(watched?.seen || []);
-    const fresh = watched ? works.filter(work => !seen.has(work.id)) : [];
+    // The same count as the card on the watchlist, which leaves out datasets.
+    const fresh = watched ? works.filter(work => !seen.has(work.id) && !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || ''))) : [];
     return {profile, works, fresh, watching: !!watched, checkedAt: watched?.checkedAt || null};
   }
 
@@ -2755,6 +2762,44 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const response = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 30000, ...(headers ? {headers} : {})});
     signal?.throwIfAborted?.();
     return response?.response;
+  }
+
+  /* Titles for bare OpenAlex IDs -- the papers a citation map knows only as
+     "W2091…". One request per fifty, remembered in the store, so the list
+     under the graph costs nothing the second time. */
+  async worksByID(ids, {signal} = {}) {
+    const tools = this.discoverTools;
+    const store = this.cache.workMeta && typeof this.cache.workMeta === 'object' ? this.cache.workMeta : (this.cache.workMeta = {});
+    const want = [...new Set((ids || []).map(id => tools.shortID(id)).filter(Boolean))];
+    const missing = want.filter(id => !store[id]);
+    for (let i = 0; i < missing.length; i += 50) {
+      const url = tools.worksByIDsURL(missing.slice(i, i + 50), this.discoverOptions());
+      if (!url) continue;
+      for (const work of tools.readWorks(await this.discoverJSON(url, {signal}))) {
+        const id = tools.shortID(work.id);
+        store[id] = {id, title: work.title || '', year: work.year || null, venue: work.venue || '', doi: work.doi || '',
+          authors: (work.authors || []).slice(0, 5), citations: work.citations ?? null, type: work.type || ''};
+      }
+      this.dirty = true;
+    }
+    // Only the most recent few hundred stay; the store is not a second library.
+    const keys = Object.keys(store);
+    if (keys.length > 600) for (const key of keys.slice(0, keys.length - 600)) delete store[key];
+    if (missing.length) await this.flush();
+    return Object.fromEntries(want.filter(id => store[id]).map(id => [id, store[id]]));
+  }
+
+  // The paper on the shelf behind a DOI a suggestion names, so "보유" can lead to it.
+  itemForDOI(doi) {
+    const want = this.discoverTools.bareDOI(doi);
+    if (!want) return null;
+    for (const [identity, entry] of Object.entries(this.cache.items || {})) {
+      if (this.discoverTools.bareDOI(entry?.doi) !== want) continue;
+      const [libraryID, key] = identity.split(':');
+      const item = this.Z.Items.getByLibraryAndKey?.(Number(libraryID), key);
+      if (item && !item.deleted) return item;
+    }
+    return null;
   }
 
   // Every DOI already on the shelf, so a suggestion can say "you have this".
@@ -3647,7 +3692,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const after=[...lines.filter(l=>!owned.test(l)),line].join("\n").replace(/^\n/,"");
     if(before===after)return false;
     item.setField("extra",after);
-    try {await item.saveTx({notifierData:{styleCustomCitations:true},skipSelect:true});}
+    // A count refreshed in the background is not an edit: left to bump Date
+    // Modified, one backfill made every paper in the library "recent".
+    try {await item.saveTx({notifierData:{styleCustomCitations:true},skipSelect:true,skipDateModifiedUpdate:true});}
     catch(error){if(item.getField("extra")===after)item.setField("extra",before);throw error;}
     this.entry(item).citationExtra={identity:result.identity,line};this.dirty=true;if(flush)await this.flush();return true;
   }

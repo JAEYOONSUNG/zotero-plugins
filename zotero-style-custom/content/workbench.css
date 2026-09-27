@@ -1442,3 +1442,8 @@
 /* A paper chosen from a list of papers: the button says enough of the title to
    recognise it, and the whole title is on the pointer. */
 #style-custom-workbench .sc-actions button[data-pick] { display: block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A title in the comparison table opens the paper: text that reads as a title, a link on hover. */
+#style-custom-workbench .sc-matrix .sc-link-button { min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-matrix .sc-link-button:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
+/* An owned row keeps its "보유" on the first line and its one action under it. */
+#style-custom-workbench .sc-hit-owned ~ .sc-hit-actions { grid-row: 2 / span 2; }
