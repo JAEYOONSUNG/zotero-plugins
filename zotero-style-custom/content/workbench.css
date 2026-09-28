@@ -1451,7 +1451,7 @@
 
 /* 이어 읽기: three rows, title · pages and when · the page to go back to. Plain, as the list under it. */
 #style-custom-workbench .sc-resume { display: flex; flex-direction: column; margin: 0 0 12px; border-block-end: 1px solid var(--sc-border); }
-#style-custom-workbench .sc-resume-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 6px 2px; }
+#style-custom-workbench .sc-resume-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 12px; align-items: center; padding: 6px 2px; }
 #style-custom-workbench .sc-resume-row + .sc-resume-row { border-block-start: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-resume-title { font: 600 13px/1.4 var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-resume-meta { color: var(--sc-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -1628,3 +1628,21 @@
 #style-custom-workbench .sc-annot-group-meta { margin: -2px 0 6px; font-size: 12px; color: var(--sc-muted); }
 #style-custom-workbench .sc-annot-via { font-size: 11px; color: var(--sc-muted); }
 #style-custom-workbench .sc-annot-group-more { margin: 0 0 10px; min-height: 24px; font-size: 12px; }
+/* Round 5: the reader's own memo on the row. */
+#style-custom-workbench .sc-paper-remark { display: block; margin-top: 1px; font-size: 12px; color: var(--sc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#style-custom-workbench .sc-paper-remark-label { color: var(--sc-muted); margin-inline-end: 6px; }
+/* Round 5: the reading state, set where the reading is. */
+#style-custom-workbench .sc-reading-status { display: inline-flex; }
+#style-custom-workbench .sc-reading-status button { min-height: 22px; padding: 0 7px; font-size: 12px; }
+#style-custom-workbench .sc-local-reading-links { font-size: 12px; }
+#style-custom-workbench .sc-local-reading-links > summary { cursor: pointer; color: var(--sc-muted); width: max-content; max-width: 100%; }
+#style-custom-workbench .sc-local-reading-links[open] > summary { color: var(--sc-text); }
+#style-custom-workbench .sc-local-reading-note { margin: 2px 0 4px; font-size: 12px; }
+#style-custom-workbench .sc-local-reading-link { display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 2px 0; }
+#style-custom-workbench .sc-local-reading-link .sc-hit-title-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+#style-custom-workbench .sc-local-reading-count { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--sc-text); }
+#style-custom-workbench .sc-local-reading-from { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container sc-workbench (max-width: 640px) {
+ #style-custom-workbench .sc-local-reading-link { grid-template-columns: minmax(0, 1fr) auto; }
+ #style-custom-workbench .sc-local-reading-from { grid-column: 1 / -1; }
+}

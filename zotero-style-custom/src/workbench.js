@@ -351,7 +351,7 @@
   selectFilter('ratingMin','최소 별점',[['','모든 별점'],...Array.from({length:5},(_,i)=>[String(i+1),`${i+1}점 이상`])]);
   for(const[key,label]of [['yearFrom','시작 연도'],['yearTo','마지막 연도']]){const input=node('input',null,filters,{type:'number',min:1,max:9999,placeholder:label,'aria-label':label});input.addEventListener('input',()=>{state[key]=input.value;render();});filterInputs.set(key,input);}
   selectFilter('sort','문헌 정렬',[['library','기본 순서'],['title','제목순'],['year-desc','최신 발행순'],['if-desc','IF 높은 순'],['citations-desc','인용 많은 순'],['rating-desc','별점 높은 순'],['time-desc','읽기 시간순']]);
-  button('필터 초기화',()=>{for(const key of ['status','ratingMin','yearFrom','yearTo']){state[key]='';filterInputs.get(key).value='';}state.query=search.value='';state.type=type.value='';state.tag='';state.color='';state.sort='library';filterInputs.get('sort').value='library';render();},filters);
+  const resetFilters=button('필터 초기화',()=>{for(const key of ['status','ratingMin','yearFrom','yearTo']){state[key]='';filterInputs.get(key).value='';}state.query=search.value='';state.type=type.value='';state.tag='';state.color='';state.sort='library';filterInputs.get('sort').value='library';render();},filters);
   const shell=node('div',null,panel,{class:'sc-shell'}),nav=node('nav',null,shell,{'aria-label':'작업 종류'}),content=node('div',null,shell,{class:'sc-content'});
   const context=node('div',null,content,{class:'sc-context'}),sectionTitle=node('h2','보유 문헌',context,{class:'sc-section-title'}),contextDetail=node('span',null,context,{class:'sc-context-detail'});context.appendChild(kindChips);
   /* The search row and its filters belong to the page they narrow, so they sit
@@ -494,7 +494,7 @@
   /* What the search box actually matches, per tab: notes by title and body,
      annotations by text and memo, attachments by name and type. It used to
      promise "제목·저자·태그·DOI·초록" everywhere. */
-  const SEARCH_WHAT={notes:'노트 제목·본문 검색',annotations:'주석 본문·메모 검색',attachments:'첨부파일 이름·형식 검색'};
+  const SEARCH_WHAT={notes:'노트 제목·본문 검색',annotations:'주석·메모·문헌 제목·저자 검색',attachments:'첨부파일 이름·형식 검색'};
   function updateChrome(){
    sectionTitle.textContent=T(TABS.find(([id])=>id===state.tab)?.[1]||'');
    search.placeholder=T(SEARCH_WHAT[state.tab]||'제목·저자·태그·DOI·초록 검색');
@@ -590,7 +590,10 @@
   async function paperList(items,{why}={}){
    if(!items.length){
     if(!state.items.length){empty('라이브러리에 문헌이 없습니다. ZotPoP으로 논문을 찾아 추가하세요.');if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP 열기',()=>runtime.Z.ZotPoP.openSearch(win),bar(),{'data-variant':'primary'});return;}
-    empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');return;
+    empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');
+    // The summary that set a filter is gone with the papers; the way back stays on the page.
+    if(state.query||state.status||Object.values(parentOptions()).some(Boolean))button('검색과 필터 지우기',()=>resetFilters.click(),bar(),{'data-variant':'primary'});
+    return;
    }
    const pageSize=setting('explorePageSize',100),key=JSON.stringify([state.tab,state.scope,items.map(i=>i.id)]);
    if(state.pageKey!==key){state.pageKey=key;state.pageIndex=0;}
@@ -632,6 +635,32 @@
     const withdrawn=it=>{const ref=runtime.Z.Items.get(Number(it.id));return Number(ref&&runtime.signalsOf?.(ref)?.rank)>=3;};
     const picks=items.filter(it=>it.status!=='done'&&it.status!=='reading'&&Number(it.citations)>0&&Number(it.year)&&!withdrawn(it))
      .map(it=>({it,rate:Number(it.citations)/Math.max(1,year-Number(it.year)+1)})).sort((a,b)=>b.rate-a.rate).slice(0,3);
+    /* What the papers being read, or read, cite among the unread ones here:
+       the reading this library's own work leans on, from the reference lists
+       the citation map already keeps -- nothing is asked for. Direct
+       citations only, each counted once per citing paper. */
+    const works=typeof runtime.paperWorks==='function'?runtime.paperWorks():{};
+    const workOf=p=>works[p.libraryID+':'+p.key]||works[String(p.id)]||null;
+    const bareOA=v=>String(v||'').split('/').pop().toUpperCase();
+    const bases=scoped().filter(p=>p.status==='done'||p.status==='reading');
+    const recorded=bases.filter(p=>Array.isArray(workOf(p)?.references)&&workOf(p).references.length);
+    if(bases.length){
+     const byOA=new Map();
+     for(const it of items){if(it.status==='done'||it.status==='reading'||withdrawn(it))continue;const oa=bareOA(workOf(it)?.openalex);if(oa)byOA.set(oa,{it,from:[]});}
+     for(const base of recorded)for(const ref of new Set(workOf(base).references.map(bareOA)))byOA.get(ref)?.from.push(base);
+     const linked=[...byOA.values()].filter(x=>x.from.length).sort((a,b)=>b.from.length-a.from.length||(Number(b.it.citations)||0)-(Number(a.it.citations)||0));
+     const fold=node('details',null,box,{class:'sc-local-reading-links'});
+     if(state.localLinksOpen)fold.open=true;
+     fold.addEventListener('toggle',()=>{state.localLinksOpen=fold.open;});
+     node('summary',recorded.length?T(`읽는 중·완료 문헌이 인용한 안 읽은 문헌 ${linked.length}편`):T('읽는 중·완료 문헌의 참고문헌 기록 없음'),fold);
+     node('p',T(`기준 ${bases.length}편 중 참고문헌 기록 ${recorded.length}편`)+(recorded.length<bases.length?' · '+T('관계 그래프에서 인용 목록을 가져오면 늘어납니다'):''),fold,{class:'sc-muted sc-local-reading-note'});
+     for(const {it,from} of linked.slice(0,10)){
+      const line=node('div',null,fold,{class:'sc-local-reading-link'});
+      button(String(it.title||T('제목 없음')),()=>{state.selected=new Set([String(it.id)]);state.scope='selected';scope.value='selected';render();},line,{class:'sc-hit-title-link',title:it.title||''});
+      node('span',T(`${from.length}편에서 인용`),line,{class:'sc-local-reading-count'});
+      node('span',from.slice(0,3).map(b=>String(b.title||'').slice(0,48)).join(' · ')+(from.length>3?' …':''),line,{class:'sc-muted sc-local-reading-from',title:from.map(b=>b.title).join('\n')});
+     }
+    }
     if(picks.length&&n.unread>1){
      const line=node('p',null,box,{class:'sc-overview-picks'});
      node('span',T('안 읽은 문헌 · 연도 보정 인용순'),line,{class:'sc-overview-picks-label',title:T('안 읽은 문헌 중 출판 후 해마다 가장 많이 인용된 순서입니다. 철회된 문헌은 뺐습니다.')});
@@ -692,6 +721,12 @@
    const reason=why?.(item);
    if(reason)node('span',reason,meta,{class:'sc-paper-why'});
    node('span',[item.year,item.venue,item.authors].filter(Boolean).join(' · '),meta,{class:'sc-paper-meta-text'});
+   /* What the reader wrote about the paper, first line, under what it is:
+      the note that says why it was kept is worth more on the row than a
+      third line of authors. Only when there is one. */
+   const noteRef=runtime.Z.Items.get(Number(item.id));
+   const own=String((noteRef&&runtime.entry?.(noteRef)?.remark)||'').trim();
+   if(own){const line=node('span',null,identity,{class:'sc-paper-remark',title:own.slice(0,600)});node('span',T('메모'),line,{class:'sc-paper-remark-label'});line.appendChild(doc.createTextNode(own.split('\n')[0].slice(0,160)));}
    const metrics=node('div',null,heading,{class:'sc-metrics'});
    metric(metrics,{unit:'IF',name:'impact',text:item.impactFactor??'',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
    metric(metrics,{unit:'인용',name:'citations',text:item.citations??'',label:item.citationSource?`인용 수 · ${item.citationSource}`:'인용 수 · 출처 미확인'});
@@ -708,9 +743,15 @@
     if(p?.total&&timeCell){const meter=node('span',null,timeCell,{class:'sc-row-progress',role:'img','aria-label':T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`),title:T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`)});
      node('span',null,meter,{class:'sc-row-progress-fill'}).style.width=Math.round(100*p.visited/p.total)+'%';
      node('span',`${p.visited}/${p.total}`,timeCell,{class:'sc-row-progress-text','aria-hidden':'true'});}}
-   const actions=bar(heading);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-opens':'window','data-variant':'primary'});button('자세히',()=>{state.selected=new Set([item.id]);state.scope='selected';scope.value='selected';render();},actions);
-   if(state.scope==='selected'){node('p',item.abstract||'초록이 없습니다.',c);const ref=runtime.Z.Items.get(Number(item.id));const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);message('메모를 저장했습니다.');},c);}
-   if(state.scope==='selected'&&items.length===1)details.push((async()=>{
+   const actions=bar(heading);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-opens':'window','data-variant':'primary'});/* 자세히 opens the paper under its own row: the list keeps its search,
+      filters, page, selection and place. One at a time; pressed again, it
+      closes and the focus goes back to it. */
+   const open_=state.expandedPaperID===String(item.id);
+   button(open_?'접기':'자세히',()=>{state.expandedPaperID=open_?'':String(item.id);state.focusPaper=String(item.id);render();},actions,{'aria-expanded':String(open_),'data-detail-for':String(item.id)});
+   if(open_)c.dataset.expanded='true';
+   const detailed=state.scope==='selected'||state.expandedPaperID===String(item.id);
+   if(detailed){node('p',item.abstract||'초록이 없습니다.',c,{class:'sc-paper-detail'});const ref=runtime.Z.Items.get(Number(item.id));const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);message('메모를 저장했습니다.');},c);}
+   if(detailed&&(state.scope!=='selected'||items.length===1))details.push((async()=>{
     const results=await Promise.allSettled([library.notes([item.id]),library.annotations([item.id])]);
     if(disposed||epoch!==generation||!c.isConnected)return;
     for(const [index,result]of results.entries()){
@@ -724,28 +765,39 @@
      append(setting('inlineEvidenceCount',5));if(visible<result.value.length)more=button(label+' 더 보기 · '+(result.value.length-visible)+'개 남음',()=>append(20),section);
     }
    })());
-  }await Promise.all(details);}
+  }
+   // Back to the 자세히 that was pressed, so the keyboard does not lose its place.
+   if(state.focusPaper){body.querySelector(`[data-detail-for="${state.focusPaper}"]`)?.focus?.();state.focusPaper='';}
+   await Promise.all(details);}
   async function drawRecent(){
    // Zotero's dates are UTC without a zone, the reading record's carry one: both are read as UTC, or a paper read this morning ranked below one added last night.
    const timestamp=value=>{if(typeof value==='number')return Number.isFinite(value)?value:0;const parsed=runtime.localStamp?runtime.localStamp(value)?.getTime():Date.parse(value||'');return Number.isFinite(parsed)?parsed:0;};
    const activity=item=>Math.max(timestamp(item.lastRead),timestamp(item.dateModified),timestamp(item.dateAdded));
    const cap=setting('recentCount',50);
-   const recent=rows().filter(item=>activity(item)>0).sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id))).slice(0,cap);
+   // A week fact pressed narrows the list to that kind of activity in the last seven days.
+   const weekStart=Date.now()-7*864e5,kinds={read:'lastRead',added:'dateAdded',edited:'dateModified'};
+   const kindField=kinds[state.recentKind];
+   const recent=rows().filter(item=>activity(item)>0&&(!kindField||timestamp(item[kindField])>=weekStart)).sort((a,b)=>(kindField?timestamp(b[kindField])-timestamp(a[kindField]):activity(b)-activity(a))||String(a.id).localeCompare(String(b.id))).slice(0,cap);
    /* With nothing recent, "…최근인 순서로 0편입니다" sat over an empty-state
       message and the two read as a page that had failed. The order is said
       only when there is something in it. */
    if(recent.length)node('p',`마지막 읽기·수정·추가 시각이 최근인 순서로 ${recent.length}편입니다.`,body,{class:'sc-muted'});
    /* The week in one line: how many papers were read, added and edited in
       the last seven days, across the whole scope rather than the fifty shown. */
-   const week=Date.now()-7*864e5,all=rows();
+   const week=weekStart,all=rows();
    const inWeek=field=>all.filter(item=>timestamp(item[field])>=week).length;
    const weekRead=all.filter(item=>timestamp(item.lastRead)>=week);
    const weekSeconds=weekRead.reduce((n,item)=>n+(Number(item.seconds)||0),0);
-   if(recent.length&&(weekRead.length||inWeek('dateAdded'))){
+   if((recent.length||state.recentKind)&&(weekRead.length||inWeek('dateAdded')||inWeek('dateModified'))){
     const line=node('p',null,body,{class:'sc-overview-facts sc-recent-week'});
-    const fact=(label,value)=>{const span=node('span',null,line);node('b',String(value),span);span.appendChild(doc.createTextNode(T(label)));};
+    const fact=(label,value,kind)=>{
+     const on=state.recentKind===kind;
+     const b=button('',()=>{state.recentKind=on?'':kind;render();},line,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 모두 보기':'이것만 보기')});
+     node('b',String(value),b);b.appendChild(doc.createTextNode(T(label)));
+     if(!value)b.disabled=true;
+    };
     node('span',T('지난 7일'),line);
-    fact('편 읽음',weekRead.length);fact('편 추가',inWeek('dateAdded'));fact('편 수정',inWeek('dateModified'));
+    fact('편 읽음',weekRead.length,'read');fact('편 추가',inWeek('dateAdded'),'added');fact('편 수정',inWeek('dateModified'),'edited');
     if(weekSeconds>0)node('span',T(`읽은 문헌의 누적 시간 ${runtime.formatReadTime?runtime.formatReadTime(weekSeconds):Math.round(weekSeconds/60)+'분'}`),line,{title:T('이번 주에 읽은 문헌들이 지금까지 쌓은 전체 읽기 시간입니다')});
    }
    // Nothing recent in a scope that has papers is not a search that missed:
@@ -754,8 +806,9 @@
    const today=new Date();today.setHours(0,0,0,0);
    const what=item=>{
     const read=timestamp(item.lastRead),added=timestamp(item.dateAdded),changed=timestamp(item.dateModified);
-    const at=Math.max(read,added,changed);
-    const kind=at===read?'읽음':at===added?'추가':'수정';
+    // Narrowed to one kind, the row says that kind's date, not whichever came last.
+    const at=kindField?timestamp(item[kindField]):Math.max(read,added,changed);
+    const kind=kindField?{lastRead:'읽음',dateAdded:'추가',dateModified:'수정'}[kindField]:at===read?'읽음':at===added?'추가':'수정';
     const days=Math.max(0,Math.ceil((today.getTime()-at)/864e5));
     return T(kind)+' · '+(at>=today.getTime()?T('오늘'):T(`${days}일 전`));
    };
@@ -1295,13 +1348,14 @@
    if(chosenPapers.length===1)drawPaperMemo(chosenPapers[0]);
 
    const counts=new Map();
-   for(const a of unfiltered)counts.set(a.color||'',(counts.get(a.color||'')||0)+1);
+   // #FFD400 and #ffd400 are one colour: one chip, one count, one filter.
+   for(const a of unfiltered){const hex=String(a.color||'').toLowerCase();counts.set(hex,(counts.get(hex)||0)+1);}
    const labels=runtime.cache.readerSettings?.colorLabels||{};
    const colorMeaning=hex=>{const key=Object.keys(labels).find(k=>k.toLowerCase()===String(hex||'').toLowerCase());return key?String(labels[key]||'').trim().slice(0,24):'';};
    const summary=bar();
    node('span',`주석 ${filtered.length}개`,summary,{class:'sc-muted'});
    for(const [hex,n] of [...counts].sort((a,b)=>b[1]-a[1])){
-    const on=!!state.color&&state.color===hex;
+    const on=!!state.color&&state.color.toLowerCase()===hex;
     const chip=node('button',null,summary,{class:'sc-annot-swatch',type:'button','aria-pressed':String(on),
      title:on?`${hex} · ${n}개 · 다시 눌러 색 필터 해제`:`${hex||T('색 없음')} · ${n}개 · 눌러서 이 색만 보기`});
     node('span',null,chip,{class:'sc-annot-dot',style:`background:${/^#[0-9a-f]{6}$/i.test(hex)?hex:'var(--sc-faint)'}`});
@@ -1309,7 +1363,7 @@
     const meaning=colorMeaning(hex);
     if(meaning)node('span',meaning,chip,{class:'sc-annot-meaning'});
     node('span',String(n),chip);
-    chip.addEventListener('click',()=>{state.color=state.color===hex?'':hex;render();});
+    chip.addEventListener('click',()=>{state.color=on?'':hex;render();});
    }
    button('보이는 주석 전체 선택',()=>{state.annotationIDs=new Set(visibleAnnotationIDs);render();},summary);
    if(state.annotationIDs.size)button(`선택 해제 (${state.annotationIDs.size})`,()=>{state.annotationIDs=new Set();render();},summary,{'data-role':'annot-clear'});
@@ -1336,15 +1390,17 @@
       library.attachments for them listed every attachment in scope and
       checked each file on disk -- on every colour click. */
    const titles=new Map(),parents=new Map();
+   // Each annotation already says which paper it is in; that names the group before any lookup.
+   for(const a of filtered)if(a.attachmentID&&a.parentID&&!parents.has(a.attachmentID))parents.set(a.attachmentID,String(a.parentID));
    let unresolved=false;
    for(const id of byDocument.keys()){
     const doc_=id?runtime.Z.Items.get?.(Number(id)):null;
     if(!doc_){if(id)unresolved=true;continue;}
-    titles.set(id,String(doc_.getField?.('title')||''));if(doc_.parentID)parents.set(id,String(doc_.parentID));
+    titles.set(id,String(doc_.getField?.('title')||''));if(doc_.parentID&&!parents.has(id))parents.set(id,String(doc_.parentID));
    }
    if(unresolved){
     const attachmentRows=await library.attachments(ids());
-    for(const a of attachmentRows)if(!titles.has(a.id)){titles.set(a.id,a.title);parents.set(a.id,a.parentID);}
+    for(const a of attachmentRows)if(!titles.has(a.id)){titles.set(a.id,a.title);if(!parents.has(a.id))parents.set(a.id,a.parentID);}
    }
    // Three groups all called "Full text PDF" say nothing; the paper's title does.
    const paperOf=id=>{const parent=parents.get(id);return parent?state.items.find(i=>String(i.id)===String(parent))?.title:null;};
@@ -1357,7 +1413,6 @@
    for(const [attachmentID,group] of byDocument){
     if(budget<=0){rest.push([attachmentID,group]);continue;}
     group.sort((a,b)=>(a.pageIndex??1e9)-(b.pageIndex??1e9));
-    budget-=group.length;
     /* Every group is named, one paper or many, with what it is: its year,
        journal and reading state, and how many annotations matched. With
        several papers each shows three first, so one long paper does not push
@@ -1371,6 +1426,8 @@
      node('p',[paper.year,paper.venue,status,state.query?T(`일치 주석 ${group.length}개`):''].filter(Boolean).join(' · '),body,{class:'sc-annot-group-meta'});
     }
     const capped=byDocument.size>1&&!openAnnotGroups.has(attachmentID)&&group.length>3;
+    // What is drawn is what is spent: three shown from a long paper leave room for the next paper.
+    budget-=capped?3:group.length;
     const stack=node('div',null,body,{class:'sc-annots'});
     for(const a of capped?group.slice(0,3):group){
      visibleAnnotationIDs.add(a.id);
@@ -1653,9 +1710,13 @@
     const p=chosen&&files.includes(chosen)?runtime.pageProgress(r.ref,Number(chosen)):r.p;
     const total=Number(p.total)||0;
     const next=Number.isInteger(p.lastPageIndex)&&p.lastPageIndex<total?p.lastPageIndex:null;
-    const status=runtime.state?.(r.ref)?.status;
+    // A status just set on this page counts before the runtime has re-read the tags.
+    const status=r.item.status??runtime.state?.(r.ref)?.status;
     const fileSeconds=Object.values(p.pages||{}).reduce((n,v)=>n+(Number(v)||0),0);
-    return {...r,p,files,fileSeconds,when,total,next,status};
+    // The date shown is the chosen file's; the paper's own decides whether it is in 이어 읽기 at all.
+    const fileRead=files.length>1?r.entry.readingAttachments?.[String(p.attachmentID)]?.lastRead:null;
+    const fileWhen=fileRead?(runtime.localStamp?runtime.localStamp(fileRead)?.getTime():Date.parse(fileRead)):NaN;
+    return {...r,p,files,fileSeconds,when,shownWhen:Number.isFinite(fileWhen)?fileWhen:when,total,next,status};
    }).filter(r=>r.status!=='done'&&(r.seconds>0||r.total)&&Number.isFinite(r.when)&&now-r.when<=14*DAY)
     .sort((a,b)=>b.when-a.when).slice(0,3);
    const resumed=new Set(resume.map(r=>String(r.item.id)));
@@ -1689,6 +1750,24 @@
      cell.addEventListener('click',()=>run(()=>{if(!p.attachmentID)throw new Error('어느 파일의 몇 쪽인지 기록이 없습니다. 그 PDF를 한 번 열어 읽은 뒤 다시 보세요.');return library.openItem(p.attachmentID,{pageIndex:n});}));
      cell.disabled=!p.attachmentID;
     }
+   };
+   /* 안 읽음 · 읽는 중 · 완료, set where the reading is recorded: back from
+      the PDF, the paper is closed out here, and leaves 이어 읽기 for the list
+      below, where it can be changed again. Page records and time stay as
+      they are; visiting every page never marks a paper done by itself. */
+   const readingStatus=(parent,item,ref)=>{
+    if(!ref||typeof runtime.edit!=='function'||runtime.canEdit?.(ref)===false)return;
+    const group=node('span',null,parent,{class:'sc-segmented sc-reading-status',role:'group','aria-label':T(`${item.title} 읽기 상태`)});
+    const now=item.status==='done'?'done':item.status==='reading'?'reading':'unread';
+    for(const [key,label] of [['unread','안 읽음'],['reading','읽는 중'],['done','완료']])
+     button(label,()=>run(async()=>{
+      if(key===now)return;
+      await runtime.edit([ref],{status:key});
+      if(disposed)return;
+      item.status=key;
+      message(T(`「${String(item.title||'').slice(0,40)}」 · ${T(label)}`));
+      refreshReading();
+     }),group,{'aria-pressed':String(key===now)});
    };
    /* 주석이 있는 쪽: the pages this PDF was marked on, with the time spent
       there and the first words of what was written, so "where did I note
@@ -1765,7 +1844,7 @@
      // What the reader meant to check, if they wrote it down: the memo comes back with the page.
      const remark=String(r.entry.remark||'').trim();
      if(remark)node('span',remark.split('\n')[0].slice(0,140),text,{class:'sc-resume-remark'});
-     const days=Math.floor((now-r.when)/DAY);
+     const days=Math.floor((now-r.shownWhen)/DAY);
      // With files to choose between, the time is this file's, and says so; the paper's total is the list's.
      const seconds=r.files.length>1?r.fileSeconds:r.seconds;
      const timeText=seconds>0&&runtime.formatReadTime?runtime.formatReadTime(seconds):'';
@@ -1774,6 +1853,7 @@
      const target=r.p.attachmentID||r.item.id;
      button(r.next!=null?`${r.next+1}쪽에서`:'이어 읽기',()=>run(()=>library.openItem(target,r.next!=null?{pageIndex:r.next}:undefined)),row,{'data-opens':'window',title:T(r.next!=null?'마지막으로 보던 쪽에서 엽니다':'Zotero가 기억하는 위치에서 엽니다')});
      // The page-by-page record is not listed below for these, so it folds in here.
+     readingStatus(row,r.item,r.ref);
      const folds=node('div',null,row,{class:'sc-resume-folds'});
      if(r.total){
       const more=node('details',null,folds,{class:'sc-resume-pages'});
@@ -1821,6 +1901,7 @@
     if(p.total){const box=node('div',null,c,{class:'sc-collection-bar','aria-hidden':'true'});
      node('span',null,box,{class:'sc-collection-fill'}).style.width=`${Math.round(100*p.visited/p.total)}%`;}
     button('열기',()=>library.openItem(item.id),c,{'data-opens':'window'});
+    readingStatus(c,item,ref);
     pageStrip(c,item,p);
     readingEvidence(c,item,p);
     drewStrip=true;
@@ -2058,11 +2139,15 @@
    const deepIDs=c=>{if(deep.has(c.id))return deep.get(c.id);const ids=new Set(c.itemIDs||[]);deep.set(c.id,ids);for(const kid of kidsOf.get(c.id)||[])for(const id of deepIDs(kid))ids.add(id);return ids;};
    for(const c of collections)c.deepCount=c.itemIDs?deepIDs(c).size:c.count;
    const distinct=new Set(collections.flatMap(c=>c.itemIDs||[])).size||collections.reduce((n,c)=>n+c.count,0);
-   const most=Math.max(1,...collections.map(c=>c.count));
+   // The bar, its split and its figure all count the same papers: the collection with what is filed below it.
+   const most=Math.max(1,...collections.map(c=>c.deepCount||0));
    node('span',`컬렉션 ${collections.length}개 · 서로 다른 문헌 ${distinct}편 · 빈 컬렉션 ${collections.filter(c=>!c.deepCount).length}개`,b,{class:'sc-muted'});
    const list=node('div',null,body,{class:'sc-collection-tree'});
    const statusByID=new Map(state.items.map(i=>[String(i.id),i.status]));
-   const readingMix=ids=>{const mix={done:0,reading:0,unread:0,known:0};for(const id of ids){if(!statusByID.has(String(id)))continue;const st=statusByID.get(String(id));mix[st==='done'?'done':st==='reading'?'reading':'unread']++;mix.known++;}return mix;};
+   const readByID=new Map(state.items.map(i=>[String(i.id),runtime.localStamp?runtime.localStamp(i.lastRead)?.getTime():Date.parse(i.lastRead||'')]));
+   // What is read in each, and when anything in it was last read: which projects are live, and which are shelved.
+   const readingMix=ids=>{const mix={done:0,reading:0,unread:0,known:0,last:0};for(const id of ids){if(!statusByID.has(String(id)))continue;const st=statusByID.get(String(id));mix[st==='done'?'done':st==='reading'?'reading':'unread']++;mix.known++;const at=readByID.get(String(id));if(Number.isFinite(at)&&at>mix.last)mix.last=at;}return mix;};
+   const ago=at=>{const days=Math.floor((Date.now()-at)/864e5);return days<1?T('오늘 읽음'):days<60?T(`${days}일 전 읽음`):T(`${Math.round(days/30)}개월 전 읽음`);};
    function draw(){
     list.replaceChildren();
     const favorites=runtime.cache.favoriteCollections||[];
@@ -2099,17 +2184,17 @@
       node('span',c.name,nameLine,{class:'sc-collection-name',title:c.name});
       const kids=(byParent.get(c.id)||[]).length;
       if(kids)node('span',`하위 ${kids}`,nameLine,{class:'sc-collection-kids'});
-      if(enabled('collectionItemCount'))node('span',c.count?`${c.count}편`:c.deepCount?`하위 포함 ${c.deepCount}편`:'비어 있음',nameLine,{class:'sc-collection-count'});
+      if(enabled('collectionItemCount'))node('span',c.deepCount>c.count?`하위 포함 ${c.deepCount}편`:c.count?`${c.count}편`:'비어 있음',nameLine,{class:'sc-collection-count',title:c.deepCount>c.count?T(`이 컬렉션 ${c.count}편 · 하위 컬렉션까지 ${c.deepCount}편`):''});
       /* The bar's length is still the collection's size; inside it, how much
          has been read -- the summary's three tones -- so a collection that was
          filed and never opened shows as one. Read off the loaded papers. */
       const barBox=node('div',null,row,{class:'sc-collection-bar','aria-hidden':'true'});
-      const fill=node('span',null,barBox,{class:'sc-collection-fill'});fill.style.width=`${Math.round(100*c.count/most)}%`;
+      const fill=node('span',null,barBox,{class:'sc-collection-fill'});fill.style.width=`${Math.round(100*(c.deepCount||0)/most)}%`;
       const mix=readingMix(deepIDs(c));
       if(mix.known){
        fill.classList.add('sc-collection-mix');
        for(const key of ['done','reading','unread'])if(mix[key])node('span',null,fill,{class:'sc-overview-'+key}).style.flexGrow=String(mix[key]);
-       node('span',[mix.done&&T(`완료 ${mix.done}`),mix.reading&&T(`읽는 중 ${mix.reading}`),mix.unread&&T(`안 읽음 ${mix.unread}`)].filter(Boolean).join(' · '),nameLine,{class:'sc-collection-mixtext'});
+       node('span',[mix.done&&T(`완료 ${mix.done}`),mix.reading&&T(`읽는 중 ${mix.reading}`),mix.unread&&T(`안 읽음 ${mix.unread}`),mix.last&&ago(mix.last)].filter(Boolean).join(' · '),nameLine,{class:'sc-collection-mixtext'});
       }
       const actions=node('div',null,row,{class:'sc-collection-actions'});
       button('컬렉션 열기',open,actions);
@@ -3299,7 +3384,7 @@
     if(!groups.has(key))groups.set(key,{venue:item.venue||T('저널 미기재'),items:[]});
     groups.get(key).items.push(item);
    }
-   if(!groups.size||(groups.size===1&&groups.has('\u0000none')))return;
+   if(!groups.size)return;
    // The shares' denominators are the whole of what is in view, fixed whatever the order or how many rows show.
    const totalPapers=scope.length,totalSeconds=scope.reduce((n,i)=>n+(Number(i.seconds)||0),0);
    const median=list=>{const s=[...list].sort((a,b)=>a-b);return s.length?(s.length%2?s[(s.length-1)/2]:(s[s.length/2-1]+s[s.length/2])/2):null;};

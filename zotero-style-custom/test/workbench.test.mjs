@@ -789,7 +789,7 @@ test('collections show how much of each has been read, colour chips say what the
  await f.bench.show('collections');
  const row=f.body().querySelector('.sc-collection');
  assert.equal(row.querySelectorAll('.sc-collection-mix > span').length,2,'done and unread, in the bar');
- assert.equal(row.querySelector('.sc-collection-mixtext').textContent,'완료 1 · 안 읽음 1');
+ assert.equal(row.querySelector('.sc-collection-mixtext').textContent,'완료 1 · 안 읽음 1 · 2일 전 읽음');
  f.runtime.cache.readerSettings={...(f.runtime.cache.readerSettings||{}),colorLabels:{'#FFD400':'핵심 결과'}};
  await f.bench.show('annotations');
  assert.equal(f.body().querySelector('.sc-annot-swatch .sc-annot-meaning')?.textContent,'핵심 결과','matched regardless of case');
@@ -829,6 +829,70 @@ test('a paper read in its article and its supplement resumes in either, each wit
  assert.equal(shown.length,1);
  assert.match(shown[0].textContent,/문헌 정보로 찾음/);
  assert.match(f.body().querySelector('.sc-annot-group-meta').textContent,/Science.*일치 주석 1개/);
+ f.bench.destroy();
+});
+
+test('a row carries the reader’s own memo; a collection says when it was last read; the week’s facts narrow 최근 문헌',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ f.runtime.cache.items[1]={remark:'Why kept: the control\nsecond line'};
+ const known={1:{status:'done',lastRead:new Date(now-3*day).toISOString()},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.library.snapshot=async()=>[{...f.papers[0],dateAdded:new Date(now-40*day).toISOString()},{...f.papers[1],dateAdded:new Date(now-2*day).toISOString()}];
+ await f.bench.show('explore');
+ assert.equal(f.body().querySelector('[data-item-id="1"] .sc-paper-remark').textContent,'메모Why kept: the control','first line only');
+ assert.equal(f.body().querySelector('[data-item-id="2"] .sc-paper-remark'),null);
+ f.library.collections=async()=>[{id:'4',name:'Research',count:2,itemIDs:[1,2],parentID:null}];
+ await f.bench.show('collections');
+ assert.match(f.body().querySelector('.sc-collection-mixtext').textContent,/3일 전 읽음/);
+ await f.bench.show('recent');
+ const titles=()=>[...f.body().querySelectorAll('.sc-paper-title')].map(n=>n.textContent);
+ assert.equal(titles().length,2);
+ await f.click('1편 추가');
+ assert.deepEqual(titles(),['Paper Beta'],'only what was added this week');
+ assert.match(f.body().querySelector('.sc-paper-why').textContent,/^추가/);
+ await f.click('1편 추가');
+ assert.equal(titles().length,2,'pressed again, all of them');
+ f.bench.destroy();
+});
+
+test('a paper is closed out on 읽기 진행, opened in place in the list, and the unread papers the read ones cite are named',async()=>{
+ const f=fixture();
+ const recent=new Date(Date.now()-864e5).toISOString();
+ const known={1:{status:'reading',lastRead:recent},2:{status:''},5:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.cache.items[1]={seconds:300,lastRead:recent};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{2:300},total:12,visited:1,percent:8,attachmentID:100,lastPageIndex:2}:{pages:{},total:0,visited:0,percent:0};
+ const edits=[];f.runtime.canEdit=()=>true;f.runtime.edit=async(items,patch)=>{edits.push([items[0].id,patch]);};
+ await f.bench.show('reading');
+ const resume=()=>f.body().querySelector('.sc-resume-row');
+ const done=[...resume().querySelectorAll('.sc-reading-status button')].find(b=>b.textContent==='완료');
+ done.click();await new Promise(r=>setTimeout(r,10));
+ assert.deepEqual(edits,[[1,{status:'done'}]]);
+ assert.equal(resume(),null,'closed out: out of 이어 읽기');
+ const card=[...f.body().querySelectorAll('[data-reading-progress] .sc-card')].find(c=>/Paper Alpha/.test(c.textContent));
+ assert.equal([...card.querySelectorAll('.sc-reading-status button')].find(b=>b.getAttribute('aria-pressed')==='true').textContent,'완료','and in the list, where it can be changed back');
+ // 자세히 opens under the row and leaves the list as it was.
+ await f.bench.show('explore');
+ const before=f.body().querySelectorAll('.sc-paper-card').length;
+ f.body().querySelector('[data-detail-for="2"]').click();await new Promise(r=>setTimeout(r,10));
+ assert.equal(f.bench.state.scope,'library');
+ assert.equal(f.body().querySelectorAll('.sc-paper-card').length,before);
+ assert.equal(f.body().querySelector('[data-item-id="2"]').dataset.expanded,'true');
+ assert.equal(f.body().querySelector('[data-detail-for="2"]').getAttribute('aria-expanded'),'true');
+ f.body().querySelector('[data-detail-for="2"]').click();await new Promise(r=>setTimeout(r,10));
+ assert.equal(f.body().querySelector('[data-item-id="2"]').dataset.expanded,undefined);
+ // Read papers' reference lists name the unread one they both cite, once each.
+ const extra={id:'5',key:'K5',libraryID:1,title:'Cited background',authors:'X',year:'2020',venue:'Cell',itemType:'journalArticle',tags:[]};
+ f.refs.set(5,{id:5});
+ f.library.snapshot=async()=>[...f.papers,extra];
+ known[2].status='done';
+ f.runtime.paperWorks=()=>({'1:K1':{openalex:'https://openalex.org/W1',references:['W5','W5']},'1:K2':{openalex:'W2',references:['https://openalex.org/W5']},'1:K5':{openalex:'W5',references:[]}});
+ await f.bench.load();await f.bench.show('explore');
+ const fold=f.body().querySelector('.sc-local-reading-links');
+ assert.match(fold.querySelector('summary').textContent,/인용한 안 읽은 문헌 1편/);
+ assert.match(fold.textContent,/기준 2편 중 참고문헌 기록 2편/);
+ assert.match(fold.querySelector('.sc-local-reading-link').textContent,/Cited background.*2편에서 인용/);
  f.bench.destroy();
 });
 
@@ -1624,7 +1688,8 @@ test('the journals tab shows the stored catalog with local positions and absent-
 test('a selection scope with nothing selected falls back to the library, and the way back is a button',async()=>{
  const f=fixture();
  await f.bench.show('explore');
- await f.click('자세히');
+ // 자세히 now opens a paper in place; the selection scope is reached through the scope itself.
+ f.bench.state.selected=new Set(['1']);f.bench.state.scope='selected';await f.bench.render();
  assert.equal(f.bench.state.scope,'selected');
  assert.ok(f.findButton('전체 목록으로'),'the way back is offered while narrowed');
  // The selection goes away (a click elsewhere in the tree): the list must not stay empty.
