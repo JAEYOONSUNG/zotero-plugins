@@ -98,6 +98,7 @@
     },
     {
       "key": "feature.ReadUnreadStatus",
+      "requires": "unreadBold",
       "category": "storage",
       "label": "읽음·안 읽음 제목 구분 사용",
       "type": "boolean",
@@ -251,6 +252,7 @@
     },
     {
       "key": "feature.itemTypeFilter",
+      "requires": "quickTypeFilter",
       "category": "columns",
       "label": "항목 유형 빠른 필터 사용",
       "type": "boolean",
@@ -260,6 +262,7 @@
     },
     {
       "key": "feature.marginAnnotation",
+      "requires": "marginEnabled",
       "category": "reader",
       "label": "여백 주석과 위치·너비·표시 길이 설정 사용",
       "type": "boolean",
@@ -467,6 +470,7 @@
     },
     {
       "key": "feature.updateItemDateModified",
+      "requires": "touchDateOnRead",
       "category": "storage",
       "label": "탭 활동 시 수정일 갱신 사용",
       "type": "boolean",
@@ -526,6 +530,7 @@
     },
     {
       "key": "unreadBold",
+      "requires": "feature.ReadUnreadStatus",
       "category": "columns",
       "label": "안 읽은 제목 굵게",
       "type": "boolean",
@@ -594,6 +599,7 @@
     },
     {
       "key": "touchDateOnRead",
+      "requires": "feature.updateItemDateModified",
       "category": "storage",
       "label": "읽는 문헌의 수정일 갱신",
       "type": "boolean",
@@ -768,6 +774,7 @@
     },
     {
       "key": "marginEnabled",
+      "requires": "feature.marginAnnotation",
       "category": "reader",
       "label": "여백 주석 표시",
       "type": "boolean",
@@ -987,6 +994,7 @@
     },
     {
       "key": "quickTypeFilter",
+      "requires": "feature.itemTypeFilter",
       "category": "columns",
       "label": "항목 아이콘으로 유형 필터",
       "type": "boolean",

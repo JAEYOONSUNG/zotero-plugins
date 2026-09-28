@@ -11,3 +11,9 @@ test("a paper with no citation count is left out of citations per paper, not cou
 	assert.equal(m.hIndex, 1);
 	assert.equal(M.compute([{ citations: 0, year: 2020 }], 2026).unknownCitations, 0, "a real zero is a count");
 });
+
+test("counts from more than one index are named, so the h-index is read as a reference figure", () => {
+	const m = M.compute([{ citations: 8, citationSource: "crossref", year: 2020 }, { citations: 12, citationSource: "europepmc", year: 2021 }], 2026);
+	assert.deepEqual([...m.citationSources].sort(), ["crossref", "europepmc"]);
+	assert.equal(M.compute([{ citations: 3, source: "openalex" }]).citationSources.length, 1);
+});

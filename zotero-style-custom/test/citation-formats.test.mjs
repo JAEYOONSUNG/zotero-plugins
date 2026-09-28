@@ -62,3 +62,8 @@ test("an unknown style is refused rather than silently producing nothing", () =>
   assert.throws(() => formats.format("vancouverr", paper), RangeError);
   assert.throws(() => formats.format("apa", null), TypeError);
 });
+
+test("the dialog's styles name the CSL style they stand for, so an installed one is used first", () => {
+  for (const key of ["mla", "apa", "chicago", "harvard", "vancouver"])
+    assert.match(formats.PANEL_STYLES.find(s => s.key === key).url, /^http:\/\/www\.zotero\.org\/styles\//, key);
+});

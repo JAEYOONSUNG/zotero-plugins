@@ -7,11 +7,11 @@ import { createRequire } from "node:module";
 import vm from "node:vm";
 
 // Each test gets its own module so the caches in one cannot answer for another.
-function freshSources() {
+function freshSources(globals = {}) {
 	const module = { exports: {} };
 	vm.runInNewContext(readFileSync(new URL("../content/sources.js", import.meta.url), "utf8"), {
 		module, require: createRequire(new URL("../content/sources.js", import.meta.url)),
-		setTimeout: fn => setTimeout(fn, 0), clearTimeout, setInterval, clearInterval
+		setTimeout: fn => setTimeout(fn, 0), clearTimeout, setInterval, clearInterval, ...globals
 	});
 	return module.exports;
 }
@@ -160,4 +160,35 @@ test("institution lookups can be switched off and are skipped on a cancelled sea
 	const records = await S.search("openalex", { keywords: "x", maxResults: 5 }, http, { enrichCitations: false, journalMetrics: false, institutionMetrics: false });
 	assert.equal(records[0].people[0].country, "KR", "the country a source already knows needs no lookup");
 	assert.equal(institutionCalls, 0);
+});
+
+test("a cached journal figure is used for six months and a 'not found' for one; older ones are asked again", () => {
+	const T = freshSources();
+	const day = 86400000, now = Date.parse("2026-09-28T00:00:00Z");
+	const snapshot = { version: 1, savedAt: new Date(now).toISOString(), journals: [
+		["S-fresh", { id: "S-fresh", if2y: 3 }, now - 10 * day],
+		["S-old", { id: "S-old", if2y: 3 }, now - 400 * day],
+		["S-miss-new", null, now - 5 * day],
+		["S-miss-old", null, now - 60 * day]], institutions: [] };
+	assert.equal(T.importCaches(snapshot, now), 2, "the fresh figure and the recent miss");
+	const kept = JSON.parse(JSON.stringify(T.exportCaches().journals.map(([key]) => key).sort()));
+	assert.deepEqual(kept, ["S-fresh", "S-miss-new"]);
+	assert.ok(T.exportCaches().journals.every(entry => Number.isFinite(entry[2])), "every answer carries its date");
+});
+
+test("an answer that ages while the window stays open is asked again", async () => {
+	const day = 86400000;
+	let offset = 0;
+	class Clock extends Date { static now() { return Date.now() + offset; } }
+	const T = freshSources({ Date: Clock });
+	const now = Date.now();
+	T.importCaches({ version: 1, savedAt: new Date(now).toISOString(), journals: [["S-aging", null, now - 29 * day]], institutions: [] }, now);
+	let asked = 0;
+	const http = { getJSON: async () => { asked++; return { results: [] }; } };
+	const record = () => ({ title: "x", journalId: "S-aging", issn: null, journalIF: null, journalH: null, people: [] });
+	await T.enrichJournalMetrics([record()], http, { jcr: false });
+	assert.equal(asked, 0, "a recent 'not found' is used");
+	offset = 2 * day;
+	await T.enrichJournalMetrics([record()], http, { jcr: false });
+	assert.equal(asked, 1, "two days later it is thirty-one days old and asked again");
 });

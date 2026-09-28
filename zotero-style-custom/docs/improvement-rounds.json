@@ -1,5 +1,5 @@
 {
-  "version": "0.53.12",
+  "version": "0.53.13",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -3134,7 +3134,7 @@
       "sources": [
         {
           "file": "src/runtime.js",
-          "marker": "Number(n).toFixed(3)"
+          "marker": "sortKey(figure) {"
         }
       ],
       "tests": [
@@ -3285,6 +3285,342 @@
       ],
       "status": "verified",
       "review": "서버 주소·모델·이메일·패널 CSS·추가 열·언어는 키처럼 남기고, 확인 문구가 그렇게 말한다."
+    },
+    {
+      "round": "R124",
+      "title": "주석 수 열: 바뀔 때만 계산, Tab 정지점 없음",
+      "gap": "Every paint re-parsed every annotation's position JSON for every visible row, and each row put up to 120 tabbable page marks in the tree.",
+      "entryPoint": "문헌 목록 · 주석 수 열",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "annotationPagesOf(item) {"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "marker.tabIndex=-1"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "the annotation strip is worked out once per change"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "strip memo when Zotero says so"
+        }
+      ],
+      "status": "verified",
+      "review": "GPT-6 Astra와 의논: 개수·수정시각 비교만으로는 같은 초의 위치·색 변경을 놓친다는 지적을 받아 Zotero 알림(동기화 중 포함)으로 해당 논문의 기억을 지우도록 보강했다."
+    },
+    {
+      "round": "R125",
+      "title": "기본 주석 색으로 돌아가면 팔레트 이름도 돌아감",
+      "gap": "Applying the default colours kept the previous palette's names (yellow stayed 'Key point').",
+      "entryPoint": "PDF 리더 → 스타일 메뉴",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "paletteColorLabels"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "going back to the default colours takes a palette"
+        }
+      ],
+      "status": "verified",
+      "review": "팔레트가 붙인 이름은 팔레트 것으로 기억해 기본으로 돌아가면 걷어 내고, 직접 붙인 이름은 남긴다."
+    },
+    {
+      "round": "R126",
+      "title": "짝이 필요한 설정은 그 짝을 말함",
+      "gap": "Four switches did nothing without a partner switch, sometimes in another section, and nothing said so.",
+      "entryPoint": "설정 창",
+      "sources": [
+        {
+          "file": "src/settings.js",
+          "marker": "function syncNeeds(){"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/settings.test.mjs",
+          "name": "a switch that needs a partner says which, while the partner is off"
+        }
+      ],
+      "status": "verified",
+      "review": "네 쌍에 requires를 적고, 짝이 꺼져 있는 동안 '…도 켜야 동작합니다'를 보인다."
+    },
+    {
+      "round": "R127",
+      "title": "언어를 바꾸면 열 이름은 재시작 후라고 말함",
+      "gap": "Zotero takes a column's name at registration; after a language change the list kept the old names with no word why.",
+      "entryPoint": "설정 → 언어",
+      "sources": [
+        {
+          "file": "src/settings.js",
+          "marker": "문헌 목록의 열 이름은 Zotero를 다시 시작하면 바뀝니다."
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/settings.test.mjs",
+          "name": "choosing a language says the item list keeps its column names until Zotero restarts"
+        }
+      ],
+      "status": "verified",
+      "review": "적용 알림 뒤에 한 문장을 붙인다."
+    },
+    {
+      "round": "R128",
+      "title": "인용 대화상자가 설치된 CSL을 먼저 씀",
+      "gap": "The dialog's MLA/APA/Chicago/Harvard/Vancouver carried no style URL, so Zotero's installed CSL styles were never used.",
+      "entryPoint": "문헌 목록 → 인용 대화상자",
+      "sources": [
+        {
+          "file": "src/citation-formats.js",
+          "marker": "const styleURL = key =>"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/citation-formats.test.mjs",
+          "name": "styles name the CSL style they stand for"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "an installed CSL style draws the dialog"
+        }
+      ],
+      "status": "verified",
+      "review": "설치돼 있으면 Zotero 인용 처리기가 그리고, 없으면 자체 형식을 쓴다."
+    },
+    {
+      "round": "R129",
+      "title": "IF 열은 JIF만, OpenAlex 값은 별도 열",
+      "gap": "The IF column mixed Clarivate JIF with OpenAlex two-year citedness in one sort order: two scales, one ranking.",
+      "entryPoint": "문헌 목록 · IF 열 · OA 2년 평균 피인용 열",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "displayValue(key, item) {"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "[\"oaCitedness\",\"OA 2년 평균 피인용\",\"110\"]"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "blanks last either way"
+        }
+      ],
+      "status": "verified",
+      "review": "GPT-6 Astra 권고대로 기존 IF 열(키 유지, 배치 보존)은 JIF만 보이고, JIF가 없고 OpenAlex 값만 있으면 '—'와 새 열 안내 툴팁을 보인다. 새 열은 기본 숨김."
+    },
+    {
+      "round": "R130",
+      "title": "IF·인용 정렬에서 빈 칸은 양방향 모두 마지막",
+      "gap": "Zotero multiplies the comparison by the direction, so blank rows came first whenever the list ran highest first.",
+      "entryPoint": "문헌 목록 · IF/인용/OA 열 정렬",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "return direction === 1 ? \"2|\" : \"0|\";"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "blanks last either way"
+        }
+      ],
+      "status": "verified",
+      "review": "GPT-6 Astra가 Zotero 9.0.6 itemTree.js에서 확인한 비교 경로(Intl.Collator numeric, 방향 곱)와 getSortDirection()에 맞춘 정렬 키: 값은 double의 비트 순서를 20자리로, 빈 칸은 방향에 따라 2|/0|. 칸은 displayValue로 그린다."
+    },
+    {
+      "round": "R131",
+      "title": "OpenAlex 한도 소진 뒤에는 요청을 보내지 않음",
+      "gap": "Every loop stopped at a budget refusal, but the next feature asked again, and the next.",
+      "entryPoint": "관련 논문 · 저자 추적 · 관계 그래프 · 사진",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "openAlexSpentUntil"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "after OpenAlex refuses for budget, no OpenAlex request is sent until it resets"
+        }
+      ],
+      "status": "verified",
+      "review": "한도 거절을 UTC 자정까지 기억하고, 그동안 OpenAlex 요청은 보내지 않고 즉시 한도 오류로 끝낸다. 다른 서비스는 영향받지 않는다."
+    },
+    {
+      "round": "R132",
+      "title": "노트가 인용한 주석은 병합으로 지우지 않음",
+      "gap": "A merge trashed the annotations after the first; a note quoting one kept a link to an annotation in the trash.",
+      "entryPoint": "주석 · 리더 → 선택 주석 병합",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "병합하면 사라질 주석을 노트"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "a merge that would trash an annotation a note quotes stops first and names the note"
+        }
+      ],
+      "status": "verified",
+      "review": "병합 전에 사라질 주석을 인용한 노트를 찾아, 있으면 병합하지 않고 노트 이름을 알린다. 링크 자동 재지정은 HTML 오치환 위험 때문에 하지 않았다."
+    },
+    {
+      "round": "R133",
+      "title": "리더 역링크가 노트를 주석마다 다시 읽지 않음",
+      "gap": "Each annotation shown in the reader read every note's HTML in the library again.",
+      "entryPoint": "PDF 리더 → 주석 머리글의 노트 수",
+      "sources": [
+        {
+          "file": "src/library.js",
+          "marker": "let noteSnapshot=null;"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/library.test.mjs",
+          "name": "backlinks read each note once while the notes are unchanged"
+        }
+      ],
+      "status": "verified",
+      "review": "리더가 노트 변경 revision을 넘기면 그동안 라이브러리 항목과 노트 본문을 한 번만 읽는다."
+    },
+    {
+      "round": "R134",
+      "title": "PDF 사용자 테마의 대비 4.5:1",
+      "gap": "Any two different colours were accepted: white on #eeeeee was applied and could not be read.",
+      "entryPoint": "PDF 리더 → 사용자 색 적용 · 설정",
+      "sources": [
+        {
+          "file": "src/reader-tools.js",
+          "marker": "function contrast(a,b){"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-tools.test.mjs",
+          "name": "a custom PDF theme whose text cannot be read against its background is refused, and the theme stays"
+        }
+      ],
+      "status": "verified",
+      "review": "대비가 4.5:1 미만이면 적용하지 않고 이유를 말한다."
+    },
+    {
+      "round": "R135",
+      "title": "DOI 없는 논문을 제목 검색 첫 결과로 단정하지 않음",
+      "gap": "Related papers and a paper's authors took the first title-search hit as the paper, and showed another lab's authors for a paper without a DOI.",
+      "entryPoint": "관련 논문 · 저자 추적",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "async seedWork(item, {signal, fields} = {}) {"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a paper without a DOI is matched among five title hits, not taken as the first one"
+        }
+      ],
+      "status": "verified",
+      "review": "읽기 순서의 검증을 공통화: 후보 다섯 중 제목·연도가 맞는 것을 쓰고, 없으면 추측하지 않고 알린다."
+    },
+    {
+      "round": "R136",
+      "title": "DOI를 고치면 옛 DOI의 조회 결과를 버림",
+      "gap": "A cached reference list, citers and reading plan were kept after a DOI was filled in or corrected, so the old paper's network stayed.",
+      "entryPoint": "관계 그래프 · 관련 논문",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "forgetIfIdentityChanged(item) {"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a DOI filled in or corrected drops what was fetched for the old one, and asks nothing"
+        }
+      ],
+      "status": "verified",
+      "review": "편집 알림에서 DOI(없으면 제목·연도) 지문을 비교해 해당 논문의 저장 결과만 지우고, 요청은 다음에 볼 때 한다."
+    },
+    {
+      "round": "R137",
+      "title": "기관 조회 실패를 영구 '정보 없음'으로 두지 않음",
+      "gap": "A failed, cancelled or never-sent batch wrote every institution in it as unknown, for good.",
+      "entryPoint": "문헌 목록 · 소속 열",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "NOT_FOUND_DAYS = 90"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "an institution lookup that failed is asked again"
+        }
+      ],
+      "status": "verified",
+      "review": "응답을 받은 묶음에서 빠진 것만 '찾지 못함'으로 90일 기억한다. 실패한 묶음은 기록하지 않는다."
+    },
+    {
+      "round": "R138",
+      "title": "관심 저자 확인 중 서버 오류가 소식을 지우지 않음",
+      "gap": "A 503 on one batch wiped its authors' news and moved their last-checked date on; a batch cut at the page limit was recorded as complete.",
+      "entryPoint": "저자 추적 → 새 논문 확인",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "const failed = new Set(), unfinished = new Set();"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "a batch that failed leaves its authors' news and last-checked date as they were"
+        }
+      ],
+      "status": "verified",
+      "review": "실패한 묶음의 저자는 그대로 두고 몇 명인지 알린다. 페이지 한도(8쪽)에 걸린 묶음은 확인 날짜를 옮기지 않아 다음 확인이 이어서 본다."
+    },
+    {
+      "round": "R139",
+      "title": "사진 찾기가 Google Scholar 페이지를 읽지 않음",
+      "gap": "ORCID researcher-urls could hand the portrait finder a Google Scholar profile page to fetch.",
+      "entryPoint": "저자 추적 → 사진 찾기",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "!/^https?:\\/\\/scholar\\.google\\./i.test(url)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "a Google Scholar page listed on ORCID is never fetched for a photo"
+        }
+      ],
+      "status": "verified",
+      "review": "GPT-6 Astra는 Scholar 수집 경로 전체 제거를 제안했지만, ZotPoP의 Scholar 저자 검색은 사용자가 쓰는 기능이라 두고 사진 경로만 막는 데 합의했다."
     }
   ],
   "introducedInVersion": "0.6.0"

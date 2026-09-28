@@ -97,6 +97,7 @@
     "Annotation palette not found": "주석 팔레트를 찾을 수 없습니다.",
     "At most 50 annotation palettes can be saved": "주석 팔레트는 50개까지 저장할 수 있습니다.",
     "Background and text colors must differ": "배경색과 글자색이 달라야 합니다.",
+    "Text and background need a contrast of at least 4.5:1": "글자와 배경의 대비가 4.5:1 이상이어야 읽을 수 있습니다. 더 어둡거나 밝은 색을 고르세요.",
     "Choose a saved palette": "저장한 팔레트를 고르세요.",
     "Each line needs #RRGGBB and a label": "한 줄에 '#RRGGBB, 이름' 형식으로 적으세요.",
     "Margin width must be 160\u2013480, text limit 100\u20135000, and side left or right": "여백 너비는 160–480, 글자 수는 100–5000 사이여야 합니다.",

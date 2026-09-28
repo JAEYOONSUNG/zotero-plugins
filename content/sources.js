@@ -350,6 +350,8 @@ var ZotPoPSources = (function () {
 				let transientTransport = e.status === 0
 					|| /^(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT|UND_ERR_SOCKET)$/.test(e.code || e.cause?.code || "")
 					|| (e.name === "TypeError" && /fetch failed|failed to fetch|network request failed|networkerror/i.test(e.message || ""));
+				// OpenAlex's refusal is remembered on the run, so the search's own request and every later enrichment agree it is spent.
+				if (isQuotaError(e) && /openalex\.org/i.test(String(e.url || ""))) ctx.openAlexSpent = true;
 				if (isQuotaError(e) || (!retryOn.includes(e.status) && !transientTransport) || i === tries - 1) throw e;
 				// A provider that says how long to wait knows better than a fixed backoff.
 				let after = Number(e.retryAfter ?? e.headers?.["retry-after"] ?? e.headers?.["Retry-After"]);
@@ -570,6 +572,7 @@ var ZotPoPSources = (function () {
 		let dois = [...byDoi.keys()];
 		for (let i = 0; i < dois.length; i += 50) {
 			throwIfCancelled(ctx);
+			if (ctx.openAlexSpent) break;
 			let chunk = dois.slice(i, i + 50);
 			let url = "https://api.openalex.org/works?filter=doi:" + chunk.map(enc).join("|") + "&per-page=50&select=doi,ids,cited_by_count,best_oa_location,open_access,locations" + openAlexAuth(ctx);
 			try {
@@ -587,6 +590,8 @@ var ZotPoPSources = (function () {
 			}
 			catch (e) {
 				if (e.name === "AbortError") throw e;
+				// A spent budget is not asked again in this run: each further request would only be refused.
+				if (isQuotaError(e)) ctx.openAlexSpent = true;
 				ctx.log?.("OpenAlex enrichment failed: " + e.message);
 				// Otherwise the citation column is simply blank, with nothing said.
 				warn(ctx, "openalex", "Citation counts are unavailable: " + e.message);
@@ -599,7 +604,24 @@ var ZotPoPSources = (function () {
 	// ---------------------------------------------------------------- journal metrics
 	// OpenAlex publishes a 2-year mean citedness per source: the Journal Impact Factor
 	// formula computed over OpenAlex's open citation graph. Free, no key needed.
-	const JOURNAL_CACHE = new Map(); // "S123" | "issn:0028-0836" -> stats | null
+	/* Each answer remembers when it was had. The snapshot on disk was read back
+	   whole whatever its age, so a journal's figure from years ago, or a "not
+	   found" from one bad day, was used for good. */
+	const CACHE_TTL = { found: 180 * 86400000, missing: 30 * 86400000 };
+	// The age is checked on every read, not only when the file is loaded: a window left open for weeks keeps asking.
+	class TimedMap extends Map {
+		set(key, value) { (this.times ||= new Map()).set(key, Date.now()); return super.set(key, value); }
+		setAt(key, value, at) { super.set(key, value); (this.times ||= new Map()).set(key, at); return this; }
+		at(key) { return this.times?.get(key) ?? null; }
+		expired(key) {
+			let at = this.at(key);
+			if (at == null || !super.has(key)) return false;
+			return Date.now() - at > (super.get(key) === null ? CACHE_TTL.missing : CACHE_TTL.found);
+		}
+		has(key) { if (this.expired(key)) { this.delete(key); this.times.delete(key); return false; } return super.has(key); }
+		get(key) { return this.has(key) ? super.get(key) : undefined; }
+	}
+	const JOURNAL_CACHE = new TimedMap(); // "S123" | "issn:0028-0836" -> stats | null
 
 	function journalStats(s) {
 		let ss = s.summary_stats || {};
@@ -673,6 +695,7 @@ var ZotPoPSources = (function () {
 			let keys = [...map.keys()];
 			for (let i = 0; i < keys.length; i += 50) {
 				throwIfCancelled(ctx);
+				if (ctx.openAlexSpent) break;
 				let chunk = keys.slice(i, i + 50);
 				let url = "https://api.openalex.org/sources?filter=" + filterName + ":" + chunk.map(enc).join("|") + "&per-page=50&" + SELECT + mailto;
 				try {
@@ -692,6 +715,8 @@ var ZotPoPSources = (function () {
 				}
 				catch (e) {
 					if (e.name === "AbortError") throw e;
+					// A spent budget is not asked again in this run: each further request would only be refused.
+					if (isQuotaError(e)) ctx.openAlexSpent = true;
 					ctx.log?.("Journal metrics lookup failed: " + e.message);
 				}
 				done += chunk.length;
@@ -702,6 +727,7 @@ var ZotPoPSources = (function () {
 		await fetchChunks(byIssn, "issn", s => s.issn || []);
 		for (let [key, group] of byName) {
 			throwIfCancelled(ctx);
+			if (ctx.openAlexSpent) break;
 			let name = key.slice("name:".length);
 			let url = "https://api.openalex.org/sources?search=" + enc(group[0].venue.trim()) + "&per-page=5&" + SELECT + mailto;
 			try {
@@ -719,6 +745,8 @@ var ZotPoPSources = (function () {
 			}
 			catch (e) {
 				if (e.name === "AbortError") throw e;
+				// A spent budget is not asked again in this run: each further request would only be refused.
+				if (isQuotaError(e)) ctx.openAlexSpent = true;
 				ctx.log?.("Journal lookup by name failed: " + e.message);
 			}
 			done++;
@@ -730,7 +758,7 @@ var ZotPoPSources = (function () {
 	// ---------------------------------------------------------------- institutions
 	// An institution's standing as OpenAlex measures it: the h-index of everything it has
 	// published. Asked once per lab, not once per paper, and remembered across searches.
-	const INSTITUTION_CACHE = new Map(); // "I123" -> { id, name, country, hIndex } | null
+	const INSTITUTION_CACHE = new TimedMap(); // "I123" -> { id, name, country, hIndex } | null
 
 	function institutionStats(i) {
 		return {
@@ -769,6 +797,7 @@ var ZotPoPSources = (function () {
 		let ids = [...byId.keys()];
 		for (let i = 0; i < ids.length; i += 50) {
 			throwIfCancelled(ctx);
+			if (ctx.openAlexSpent) break;
 			let chunk = ids.slice(i, i + 50);
 			let url = "https://api.openalex.org/institutions?filter=ids.openalex:" + chunk.join("|")
 				+ "&per-page=50&select=id,display_name,country_code,summary_stats" + openAlexAuth(ctx);
@@ -788,6 +817,8 @@ var ZotPoPSources = (function () {
 			}
 			catch (e) {
 				if (e.name === "AbortError") throw e;
+				// A spent budget is not asked again in this run: each further request would only be refused.
+				if (isQuotaError(e)) ctx.openAlexSpent = true;
 				ctx.log?.("Institution lookup failed: " + e.message);
 			}
 			ctx.onProgress?.(`Institutions: ${Math.min(i + 50, ids.length)} / ${ids.length}`, i + 50, ids.length);
@@ -799,17 +830,20 @@ var ZotPoPSources = (function () {
 	// every one of them cost a metered request, and none of them changes week to week.
 	const CACHE_EXPORT_LIMIT = 6000;
 	function exportCaches() {
-		let tail = map => [...map.entries()].slice(-CACHE_EXPORT_LIMIT);
+		let tail = map => [...map.entries()].slice(-CACHE_EXPORT_LIMIT).map(([key, value]) => [key, value, map.at(key) ?? Date.now()]);
 		return { version: 1, savedAt: new Date().toISOString(), journals: tail(JOURNAL_CACHE), institutions: tail(INSTITUTION_CACHE) };
 	}
-	function importCaches(snapshot) {
+	function importCaches(snapshot, now = Date.now()) {
 		if (!snapshot || snapshot.version !== 1) return 0;
-		let n = 0;
+		let n = 0, saved = Date.parse(snapshot.savedAt || "") || 0;
 		for (let [map, entries] of [[JOURNAL_CACHE, snapshot.journals], [INSTITUTION_CACHE, snapshot.institutions]]) {
 			for (let entry of Array.isArray(entries) ? entries : []) {
 				if (!Array.isArray(entry) || typeof entry[0] !== "string" || map.has(entry[0])) continue;
 				if (entry[1] !== null && (typeof entry[1] !== "object" || Array.isArray(entry[1]))) continue;
-				map.set(entry[0], entry[1]);
+				// An answer past its age is asked again; "not found" ages faster than a figure.
+				let at = Number.isFinite(entry[2]) ? entry[2] : saved;
+				if (now - at > (entry[1] === null ? CACHE_TTL.missing : CACHE_TTL.found)) continue;
+				map.setAt(entry[0], entry[1], at);
 				n++;
 			}
 		}
@@ -2492,6 +2526,8 @@ var ZotPoPSources = (function () {
 				succeeded++;
 			}
 			catch (e) {
+				// The sub-run's spent budget is the run's: the enrichment after the merge must not ask again.
+				if (isQuotaError(e) && /openalex\.org/i.test(String(e.url || "")) || sub.openAlexSpent) ctx.openAlexSpent = true;
 				if (e.name !== "AbortError") {
 					errors.push(`${SOURCES[source.key].label}: ${e.message}`);
 					sourceStatus(ctx, source.key, { retrieved: lists[index].length, truncated: true, reason: "source-error" });
@@ -2499,6 +2535,7 @@ var ZotPoPSources = (function () {
 				}
 			}
 			finally {
+				if (sub.openAlexSpent) ctx.openAlexSpent = true;
 				done++;
 				publish();
 				ctx.onProgress?.(`${done}/${sources.length}`, done, sources.length);
@@ -2627,7 +2664,7 @@ var ZotPoPSources = (function () {
 	}
 
 	return {
-		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
+		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, withRetry, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();

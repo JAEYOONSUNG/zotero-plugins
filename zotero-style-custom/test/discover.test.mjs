@@ -383,3 +383,10 @@ test("an author is searched by display name, not by the loose search parameter",
   assert.match(url, /display_name\.search/);
   assert.doesNotMatch(url, /[?&]search=/);
 });
+
+test("titles in Korean match themselves and tell different Korean titles apart", () => {
+  assert.equal(discover.sameTitle("한국 사회의 변화", "한국 사회의 변화"), true);
+  assert.equal(discover.sameTitle("한국 사회의 변화.", "한국 사회의 변화"), true, "punctuation aside");
+  assert.equal(discover.sameTitle("한국 사회의 변화", "일본 경제의 성장"), false);
+  assert.equal(discover.sameTitle("Café society in Paris", "Cafe society in Paris"), true, "accents still come off");
+});

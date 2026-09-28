@@ -64,6 +64,8 @@ var ZotPoPMetrics = (function () {
 			citesPerYear: n ? citations / citationYears : 0,
 			citesPerPaper: known.length ? citations / known.length : 0,
 			unknownCitations,
+			// Counts from more than one citation index are not one network: the h-index over them is a reference figure.
+			citationSources: [...new Set(known.map(r => r.citationSource || r.source).filter(Boolean))],
 			citesPerAuthor: normCites.reduce((a, b) => a + b, 0),
 			papersPerAuthor: nAuthors.reduce((a, b) => a + 1 / b, 0),
 			authorsPerPaper: n ? nAuthors.reduce((a, b) => a + b, 0) / n : 0,

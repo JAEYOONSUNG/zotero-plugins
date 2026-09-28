@@ -89,7 +89,16 @@ var ZotPoPImporter = (function () {
 			+ "(SELECT IDV2.value FROM itemData ID2 "
 			+ " JOIN itemDataValues IDV2 ON ID2.valueID = IDV2.valueID "
 			+ " JOIN fields F2 ON ID2.fieldID = F2.fieldID AND F2.fieldName = 'date' "
-			+ " WHERE ID2.itemID = I.itemID) AS date "
+			+ " WHERE ID2.itemID = I.itemID) AS date, "
+			// The DOI comes with the title, so a candidate can be judged without loading the item.
+			+ "(SELECT IDV3.value FROM itemData ID3 "
+			+ " JOIN itemDataValues IDV3 ON ID3.valueID = IDV3.valueID "
+			+ " JOIN fields F3 ON ID3.fieldID = F3.fieldID AND F3.fieldName = 'DOI' "
+			+ " WHERE ID3.itemID = I.itemID) AS doi, "
+			+ "(SELECT IDV4.value FROM itemData ID4 "
+			+ " JOIN itemDataValues IDV4 ON ID4.valueID = IDV4.valueID "
+			+ " JOIN fields F4 ON ID4.fieldID = F4.fieldID AND F4.fieldName = 'extra' "
+			+ " WHERE ID4.itemID = I.itemID) AS extra "
 			+ "FROM items I "
 			+ "JOIN itemData ID ON I.itemID = ID.itemID "
 			+ "JOIN itemDataValues IDV ON ID.valueID = IDV.valueID "
@@ -109,7 +118,11 @@ var ZotPoPImporter = (function () {
 		titleRuns.set(libraryID, {at: Date.now(), rows: byTitle});
 		return byTitle;
 	}
-	async function findByTitle(libraryID, title, year) {
+	/* Every candidate with this title and year is looked at, not the first:
+	   with a preprint (another DOI) and the published copy (no DOI) on the
+	   shelf, refusing the preprint must still find the copy. A candidate whose
+	   DOI disagrees with the one asked about is a different version. */
+	async function findByTitle(libraryID, title, year, { doi } = {}) {
 		let wanted = flatTitle(title);
 		// A short title is not evidence: "Introduction" or "Erratum" would match
 		// half a library.
@@ -124,6 +137,9 @@ var ZotPoPImporter = (function () {
 					// papers with one name, which does happen.
 					if (theirs && theirs[0] !== wantedYear[0]) continue;
 				}
+				// Types without a DOI field keep it in Extra as "DOI: …".
+				let theirs = row.doi || (String(row.extra || "").match(/^\s*DOI:\s*(\S+)/im) || [])[1];
+				if (doi && theirs && normDOI(theirs) !== normDOI(doi)) continue;
 				return row.itemID;
 			}
 		}
@@ -162,6 +178,20 @@ var ZotPoPImporter = (function () {
 		return rec.engine === "pop" || rec.popOriginal ? "document" : "journalArticle";
 	}
 
+	/* The day when the source gave one: a preprint saved as "2026" sorted
+	   among a year of papers, though the result said which week it appeared.
+	   A malformed or impossible date falls back to the year. */
+	function publicationDate(rec) {
+		let raw = String(rec.publicationDate || "").trim();
+		let m = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(raw);
+		if (m) {
+			let [, y, mo, d] = m, month = Number(mo || 1), day = Number(d || 1);
+			let valid = month >= 1 && month <= 12 && day >= 1 && day <= new Date(Date.UTC(Number(y), month, 0)).getUTCDate();
+			if (valid && (!rec.year || Number(y) === Number(rec.year))) return [y, mo, d].filter(Boolean).join("-");
+		}
+		return rec.year ? String(rec.year) : "";
+	}
+
 	async function createManually(rec, libraryID, collections) {
 		let itemType = manualItemType(rec);
 		let item = new Zotero.Item(itemType);
@@ -178,7 +208,7 @@ var ZotPoPImporter = (function () {
 		// Zotero keeps inline markup in the title field; an italic organism
 		// name imported as plain text would be lost for good.
 		setIf("title", rec.titleMarkup || rec.title);
-		setIf("date", rec.year ? String(rec.year) : "");
+		setIf("date", publicationDate(rec));
 		setIf("publicationTitle", rec.venue);
 		setIf("proceedingsTitle", rec.itemType === "conferencePaper" ? rec.venue : "");
 		setIf("publisher", rec.publisher);
@@ -226,6 +256,19 @@ var ZotPoPImporter = (function () {
 		return changed;
 	}
 
+	const normDOI = value => String(value || "").trim().toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, "").replace(/^doi:\s*/, "");
+
+	function sameWorkIdentifiers(rec, item) {
+		let field = key => { try { return String(item?.getField?.(key) || ""); } catch (e) { return ""; } };
+		let norm = value => String(value || "").trim().toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, "").replace(/^doi:\s*/, "");
+		let theirs = norm(field("DOI") || (field("extra").match(/^\s*DOI:\s*(\S+)/im) || [])[1]);
+		return !rec.doi || !theirs || norm(rec.doi) === theirs;
+	}
+
+	function journalFigureLabel(rec) {
+		return rec.journalIFEstimate === false && rec.journalIFSource ? String(rec.journalIFSource) : "OpenAlex 2y";
+	}
+
 	async function recordCitations(item, rec) {
 		if (rec.citations == null && rec.journalIF == null) return;
 		let extra = item.getField("extra") || "";
@@ -235,7 +278,8 @@ var ZotPoPImporter = (function () {
 			let label = ZotPoPSources.SOURCES[srcKey]?.label || srcKey;
 			lines.push(`Citations: ${rec.citations} (${label}, ${today()})`);
 		}
-		if (rec.journalIF != null) lines.push(`Journal IF (OpenAlex 2y): ${rec.journalIF.toFixed(2)} (${today()})`);
+		// Which figure it is travels with it: a JCR impact factor was written down as "OpenAlex 2y".
+		if (rec.journalIF != null) lines.push(`Journal IF (${journalFigureLabel(rec)}): ${rec.journalIF.toFixed(2)} (${today()})`);
 		item.setField("extra", lines.filter(Boolean).join("\n"));
 		await item.saveTx();
 	}
@@ -317,7 +361,11 @@ var ZotPoPImporter = (function () {
 				// The DOI is the reliable answer; the title is what is left when
 				// one side has no DOI to compare.
 				let existingID = rec.doi ? await findByDOI(libraryID, rec.doi) : null;
-				if (!existingID && skipDuplicates) existingID = await findByTitle(libraryID, rec.title, rec.year);
+				/* Same title and year, different DOIs: a preprint and the paper it
+				   became, or two versions -- two records, not one. The title is the
+				   fallback for when one side has no DOI, never an override of two
+				   DOIs that disagree. */
+				if (!existingID && skipDuplicates) existingID = await findByTitle(libraryID, rec.title, rec.year, { doi: rec.doi });
 				if (existingID) {
 					let existing = await Zotero.Items.getAsync(existingID);
 					if (skipDuplicates) {
@@ -401,5 +449,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { manualItemType, importRecord, backfill, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
+	return { manualItemType, importRecord, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
 })();

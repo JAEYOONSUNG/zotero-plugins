@@ -32,7 +32,11 @@
     }
     function preferredState(state){
       const theme=preference('readerTheme',settings().theme);
-      state.theme=enabled('PDFStyles')?(theme==='original'?undefined:theme==='custom'?{background:preference('readerCustomBackground',settings().theme?.background||'#ffffff'),foreground:preference('readerCustomForeground',settings().theme?.foreground||'#252a31')}:theme):undefined;
+      let chosen=enabled('PDFStyles')?(theme==='original'?undefined:theme==='custom'?{background:preference('readerCustomBackground',settings().theme?.background||'#ffffff'),foreground:preference('readerCustomForeground',settings().theme?.foreground||'#252a31')}:theme):undefined;
+      // A custom pair saved before the contrast rule, or set through the settings pane, is not painted if it cannot be read: the last readable theme stays.
+      const readable=pair=>pair&&typeof pair==='object'&&color(pair.background)&&color(pair.foreground)&&contrast(color(pair.background),color(pair.foreground))>=4.5;
+      if(chosen&&typeof chosen==='object'&&!readable(chosen))chosen=readable(state.theme)?state.theme:undefined;
+      state.theme=chosen;
       state.margins=enabled('marginAnnotation')&&!!preference('marginEnabled',settings().marginAnnotations===true);
       state.sidebarVisible=enabled('toogleSidebar')?preference('readerSidebar',settings().sidebarVisible):undefined;
       state.verticalTabs=enabled('verticalTabManager')&&!!preference('verticalTabs',settings().verticalTabs===true);
@@ -49,10 +53,15 @@
       const clone=globalThis.Cu?.cloneInto||globalThis.Components?.utils?.cloneInto;
       return clone?clone(value,reader._iframeWindow):copy(value);
     }
+    function contrast(a,b){
+      const lum=hex=>{const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(c=>c<=0.03928?c/12.92:((c+0.055)/1.055)**2.4);return 0.2126*r+0.7152*g+0.0722*b;};
+      const [x,y]=[lum(a),lum(b)].sort((p,q)=>q-p);return (x+0.05)/(y+0.05);
+    }
     function palette(theme){
       if(['light','dark','sepia'].includes(theme))return theme;
       if(theme&&typeof theme==='object'&&color(theme.background)&&color(theme.foreground)){
-        if(color(theme.background)===color(theme.foreground))throw new Error('Background and text colors must differ');
+        // Different is not enough: white on #eeeeee "differs" and cannot be read. The same 4.5:1 the panel keeps.
+        if(contrast(color(theme.background),color(theme.foreground))<4.5)throw new Error('Text and background need a contrast of at least 4.5:1');
         return {background:color(theme.background),foreground:color(theme.foreground)};
       }
       throw new Error('Choose light, dark, sepia, or a palette with six-digit background and foreground colors');
@@ -174,11 +183,19 @@
       requireFeature('marginAnnotation');attach(win);const state=windows.get(win);state.margins=!!enabled;
       runtime.cache.readerSettings={...settings(),marginAnnotations:!!enabled};syncPreference('marginEnabled',!!enabled);refresh(win,state);await persist();return !!enabled;
     }
+    // The reader's own names, sorted out of an older store the first time they are needed: the active palette's names are its, the rest the reader's.
+    function labelsByOwner(){
+      if(settings().userColorLabels)return {...settings().userColorLabels};
+      let owned=settings().paletteColorLabels;
+      if(!owned){const active=annotationPalettes().find(p=>p.id===settings().annotationPaletteID);owned=active?Object.fromEntries(paletteEntries(active.entries).map(e=>[e.color,e.label])):{};}
+      const user={};for(const[c,l]of Object.entries(settings().colorLabels||{}))if(owned[c]!==l)user[c]=l;
+      return user;
+    }
     async function setColorLabel(hex,label){
       alive();hex=color(hex);if(!hex)throw new Error('Invalid annotation color');
-      const labels={...(settings().colorLabels||{})};
-      if(typeof label==='string'&&label.trim())labels[hex]=label.trim().slice(0,80);else delete labels[hex];
-      runtime.cache.readerSettings={...settings(),colorLabels:labels};for(const[win,state]of windows)refresh(win,state);await persist();
+      const labels={...(settings().colorLabels||{})},user=labelsByOwner();
+      if(typeof label==='string'&&label.trim()){labels[hex]=label.trim().slice(0,80);user[hex]=labels[hex];}else{delete labels[hex];delete user[hex];}
+      runtime.cache.readerSettings={...settings(),colorLabels:labels,userColorLabels:user};for(const[win,state]of windows)refresh(win,state);await persist();
     }
     function marginOptions(){
       const cached=settings().marginOptions||{},value={width:preference('marginWidth',cached.width),side:preference('marginSide',cached.side),textLimit:preference('marginTextLimit',cached.textLimit)};return {
@@ -235,11 +252,21 @@
       core.setTool(cloneFor({type,color:hex},reader));return hex;
     }
     async function applyAnnotationPalette(win,id){
-      requireFeature('annotationColors');const record=id?annotationPalettes().find(p=>p.id===id):{id:null,entries:Object.entries(COLORS).map(([color,label])=>({color,label:settings().colorLabels?.[color]||label}))};if(!record)throw new Error('Annotation palette not found');
+      requireFeature('annotationColors');
+      /* The names a palette gave its colours are remembered as the palette's,
+         so going back to the default colours takes them away again; the
+         yellow stayed "Key point" after the palette was gone. Names the
+         reader set by hand are kept either way. */
+      // Kept apart: the names the reader set by hand, and the names the palette in use gave.
+      // A store from before this split: the active palette's own names are its, the rest the reader's.
+      const user=labelsByOwner();
+      const record=id?annotationPalettes().find(p=>p.id===id):{id:null,entries:Object.entries(COLORS).map(([color,label])=>({color,label:user[color]||t(label)}))};if(!record)throw new Error('Annotation palette not found');
       const entries=paletteEntries(record.entries),reader=activeReader(win);let applied=0;
       if(reader){setAnnotationColor(win,entries[0].color);applied=1;}
-      const colorLabels={...(settings().colorLabels||{})};for(const entry of entries)colorLabels[entry.color]=entry.label;
-      runtime.cache.readerSettings={...settings(),colorLabels};if(id)runtime.cache.readerSettings.annotationPaletteID=id;else delete runtime.cache.readerSettings.annotationPaletteID;
+      const given={};
+      if(id)for(const entry of entries)given[entry.color]=entry.label;
+      const colorLabels={...user,...given};
+      runtime.cache.readerSettings={...settings(),colorLabels,userColorLabels:user,paletteColorLabels:given};if(id)runtime.cache.readerSettings.annotationPaletteID=id;else delete runtime.cache.readerSettings.annotationPaletteID;
       for(const[w,state]of windows)refresh(w,state);await persist();redrawToolbars();return {id,applied};
     }
     async function deleteAnnotationPalette(id){
@@ -309,7 +336,10 @@
       if(stopped||!enabled('reader.mergeAnnotations')||!reader?._window||typeof append!=='function')return;
       const keys=Array.isArray(params?.ids)?[...params.ids]:[];
       append({label:t('선택한 주석 병합'),disabled:keys.length<2||keys.length>50||!!reader._internalReader?._state?.readOnly,
-        onCommand(){if(stopped||activeReader(reader._window)!==reader)return;return mergeSelectedAnnotations(reader._window,keys).catch(report);}});
+        onCommand(){if(stopped||activeReader(reader._window)!==reader)return;return mergeSelectedAnnotations(reader._window,keys).catch(error=>{report(error);
+          // A refusal says why where the reader is, not only in the log: which notes quote the annotation, or what does not match.
+          const f=globalThis.CustomStyleFailures,said=t(f?f.describe(error):String(error?.message||error));
+          try{const w=reader._window;if(typeof runtime.say==='function')runtime.say(w,said);else w.alert?.(said);}catch(_){}});}});
     }
     async function attachmentVersions(win){
       requireFeature('reader.attachmentVersionSwitch');const context=readerContext(win),{attachment}=context,parent=attachment.parentID&&Z.Items.get(attachment.parentID);if(!parent||parent.deleted)return [];
@@ -333,7 +363,7 @@
       const hasConsumer=()=>[...windows.values()].some(state=>[...state.backlinkHeaders].some(h=>String(h.annotationID)===key&&h.current()));
       entry.promise=backlinkQueue.then(async()=>{
         if(stopped||revision!==backlinkRevision||!hasConsumer()){if(backlinkCache.get(key)===entry)backlinkCache.delete(key);return null;}
-        return service.backlinks(annotationID);
+        return service.backlinks(annotationID,{revision:'reader-'+revision});
       }).catch(error=>{if(backlinkCache.get(key)===entry)backlinkCache.delete(key);throw error;}).finally(()=>{
         entry.settled=true;
         // Bound retained results; never evict an in-flight request and duplicate it.
@@ -542,7 +572,7 @@
     }},['item'],toolbarOwner+'-backlinks');
     const hookEntries=[['renderToolbar',toolbarHook],['renderSidebarAnnotationHeader',backlinkHook],['createAnnotationContextMenu',mergeMenuHook]];
     if(typeof Z.Reader?.registerEventListener==='function'){for(const[type,handler]of hookEntries)Z.Reader.registerEventListener(type,handler,toolbarOwner);toolbarRegistered=true;}
-    return Object.freeze({attach,applyPreferences,applyTheme,resetAppearance,marginOptions,setMarginOptions,setMarginAnnotations,setColorLabel,setSidebar,setVerticalTabs,mergeSelectedAnnotations,attachmentVersions,switchAttachmentVersion,annotationPalettes,saveAnnotationPalette,applyAnnotationPalette,deleteAnnotationPalette,setAnnotationColor,tabs,selectTab,closeTab,moveTab,closeOtherTabs,tabGroups,saveTabGroup,renameTabGroup,updateTabGroup,restoreTabGroup,deleteTabGroup,viewGroups,saveView,renameView,updateView,applyView,deleteView,stop});
+    return Object.freeze({contrast,attach,applyPreferences,applyTheme,resetAppearance,marginOptions,setMarginOptions,setMarginAnnotations,setColorLabel,setSidebar,setVerticalTabs,mergeSelectedAnnotations,attachmentVersions,switchAttachmentVersion,annotationPalettes,saveAnnotationPalette,applyAnnotationPalette,deleteAnnotationPalette,setAnnotationColor,tabs,selectTab,closeTab,moveTab,closeOtherTabs,tabGroups,saveTabGroup,renameTabGroup,updateTabGroup,restoreTabGroup,deleteTabGroup,viewGroups,saveView,renameView,updateView,applyView,deleteView,stop});
   }
   return Object.freeze({create});
 });

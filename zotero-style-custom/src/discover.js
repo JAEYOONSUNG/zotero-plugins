@@ -253,9 +253,17 @@
      always answers with something; without a DOI to pin it, the top hit can
      be a different paper with a similar title, and everything built on it
      would be confidently about the wrong work. */
-  const titleWords = value => new Set(text(value).toLowerCase().normalize('NFKD')
-    .replace(/<[^>]+>/g, ' ').replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 2));
+  /* Letters of any script: the comparison kept a-z only, so "한국 사회의
+     변화" had no words at all and never matched itself. Accents come off
+     (NFKD, marks dropped) and Hangul is put back together (NFC). A Latin word
+     needs three letters to count; a word in another script, two. */
+  const plainTitle = value => text(value).replace(/<[^>]+>/g, ' ').toLowerCase().normalize('NFKD')
+    .replace(/\p{M}+/gu, '').normalize('NFC').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const titleWords = value => new Set(plainTitle(value).split(' ')
+    .filter(w => /[^a-z0-9]/.test(w) ? w.length >= 2 : w.length > 2));
   function sameTitle(a, b, {threshold = 0.8} = {}) {
+    const pa = plainTitle(a), pb = plainTitle(b);
+    if (pa && pa === pb) return true;
     const x = titleWords(a), y = titleWords(b);
     if (!x.size || !y.size) return false;
     let shared = 0;

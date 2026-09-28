@@ -235,3 +235,23 @@ test('the snapshot carries the ISSN so a journal number can be searched for',asy
  const all=await f.service.snapshot(1);
  assert.equal(all.find(r=>r.id===String(bare.id)).issn,'','an item with no ISSN gets an empty string, never undefined');
 });
+test('a merge that would trash an annotation a note quotes stops first and names the note',async()=>{
+ const f=mergeFixture();
+ f.add('note',9,{html:'<a href="zotero://open-pdf/library/items/K2?annotation=K5">Second quote</a>',getNoteTitle(){return 'Reading notes';}});
+ await assert.rejects(f.service.mergeAnnotations([3,5]),/노트 1개가 인용/);
+ assert.equal(f.second.deleted,undefined,'nothing was trashed');
+ // The backlinks view being off does not switch the check off, nor block a safe merge.
+ const g=mergeFixture();g.runtime.featureEnabled=id=>id!=='backlinks';
+ assert.equal(await g.service.mergeAnnotations([5,3]),'3');
+});
+test('the reader\'s backlinks read each note once while the notes are unchanged',async()=>{
+ const f=fixture();
+ let reads=0;const html='<a href="zotero://open-pdf/library/items/K2?annotation=K3">Quote</a>';
+ f.note.getNote=()=>{reads++;return html;};
+ await f.service.backlinks(3,{revision:'r1'});await f.service.backlinks(3,{revision:'r1'});
+ assert.equal(reads,1,'the second annotation reuses the first read');
+ await f.service.backlinks(3,{revision:'r2'});
+ assert.equal(reads,2,'a changed note (a new revision) is read again');
+ await f.service.backlinks(3);await f.service.backlinks(3);
+ assert.equal(reads,4,'without a revision, nothing is kept');
+});

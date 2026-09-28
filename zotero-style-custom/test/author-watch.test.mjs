@@ -407,3 +407,27 @@ test("patents run only with a USPTO key, take the first look as the baseline, an
   result = await h.sweepWatchedPatents();
   assert.equal(result.unauthorized, true);
 });
+
+test("a batch that failed leaves its authors' news and last-checked date as they were", async () => {
+  const rows = Array.from({length: 60}, (_, n) => person("A" + (n + 1), n === 55 ? {news: [{id: "W5", title: "Old news"}], sweptAt: "2026-01-01T00:00:00Z"} : {}));
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const down = Object.assign(new Error("HTTP 503"), {status: 503});
+  const h = host({rows, pages: [page([work("W1", ["A1"])]), down]});
+  const result = await h.sweepWatchedAuthors();
+  assert.equal(result.failed, 10, "the ten authors of the second batch");
+  const kept = h.cache.watchedAuthors.find(row => row.id === "A56");
+  assert.deepEqual(kept.news.map(n => n.id), ["W5"], "their news is not wiped by a server error");
+  assert.equal(kept.sweptAt, "2026-01-01T00:00:00Z", "and they are not marked as checked");
+  assert.ok(h.cache.watchedAuthors.find(row => row.id === "A1").sweptAt > "2026-01-01", "the batch that answered is");
+});
+
+test("a batch stopped by the budget after its first page is part-read: news is added, the date is not moved", async () => {
+  const rows = [person("A1", {news: [{id: "W0", title: "Earlier news"}], sweptAt: "2026-01-01T00:00:00Z"})];
+  const quota = Object.assign(new Error("Insufficient budget"), {status: 429});
+  const h = host({rows, pages: [{results: [work("W1", ["A1"])], meta: {next_cursor: "c2"}}, quota]});
+  const result = await h.sweepWatchedAuthors();
+  assert.equal(result.budgetGone, true);
+  const row = h.cache.watchedAuthors[0];
+  assert.deepEqual(row.news.map(n => n.id).sort(), ["W0", "W1"], "what page one found is added to what was there");
+  assert.equal(row.sweptAt, "2026-01-01T00:00:00Z", "and the next check starts from the old date");
+});

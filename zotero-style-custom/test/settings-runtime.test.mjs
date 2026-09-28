@@ -88,3 +88,10 @@ test('resetting a category brings back defaults but keeps the server address and
  assert.ok(result.kept.includes('aiEndpoint'));
  await f.runtime.stop();
 });
+test('resetting the reader section with white text on black is not stopped halfway by the contrast check',async()=>{
+ const f=fixture();await f.start();
+ await f.runtime.setSetting('readerCustomBackground','#000000');await f.runtime.setSetting('readerCustomForeground','#ffffff');
+ await f.runtime.resetSettings('reader');
+ assert.notEqual(f.runtime.getSetting('readerCustomBackground'),'#000000','the whole set went back');
+ await f.runtime.stop();
+});

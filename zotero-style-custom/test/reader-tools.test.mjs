@@ -349,3 +349,50 @@ test('left-side cards move to the right on a page with no room to its left',asyn
  f.page.offsetLeft=900;f.service.applyPreferences?await f.service.applyPreferences(f.win):null;f.tick();
  f.service.stop();
 });
+test('going back to the default colours takes a palette\'s names away, and keeps the reader\'s own',async()=>{
+ const f=fixture();f.core.setTool=function(params){this._state.tool={...this._state.tool,...params};};f.core._state.tool={type:'highlight',color:'#ffd400'};
+ await f.service.setColorLabel('#ff6666','Check source');
+ const palette=await f.service.saveAnnotationPalette('Research',[{color:'#ffd400',label:'Key point'},{color:'#5fb236',label:'Method'}]);
+ await f.service.applyAnnotationPalette(f.win,palette.id);
+ assert.equal(f.runtime.cache.readerSettings.colorLabels['#ffd400'],'Key point');
+ await f.service.applyAnnotationPalette(f.win,null);
+ assert.equal(f.runtime.cache.readerSettings.colorLabels['#ffd400'],undefined,'yellow is yellow again');
+ assert.equal(f.runtime.cache.readerSettings.colorLabels['#ff6666'],'Check source','a name set by hand stays');
+ f.service.stop();
+});
+test('a custom PDF theme whose text cannot be read against its background is refused, and the theme stays',async()=>{
+ const f=fixture();
+ await assert.rejects(f.service.applyTheme(f.win,{background:'#ffffff',foreground:'#eeeeee'}),/4\.5:1/);
+ await assert.rejects(f.service.applyTheme(f.win,{background:'#ffffff',foreground:'#949494'}),/4\.5:1/,'just under the line');
+ assert.equal(f.runtime.cache.readerSettings?.theme,undefined,'nothing was applied');
+ await f.service.applyTheme(f.win,{background:'#ffffff',foreground:'#767676'});
+ assert.deepEqual(f.runtime.cache.readerSettings.theme,{background:'#ffffff',foreground:'#767676'},'4.54:1 is enough');
+ f.service.stop();
+});
+test('a palette over a hand-set name gives it back on the way to the default colours, and an older store is sorted out',async()=>{
+ const f=fixture();f.core.setTool=function(params){this._state.tool={...this._state.tool,...params};};f.core._state.tool={type:'highlight',color:'#ffd400'};
+ await f.service.setColorLabel('#ffd400','My yellow');
+ const palette=await f.service.saveAnnotationPalette('Research',[{color:'#ffd400',label:'Key point'}]);
+ await f.service.applyAnnotationPalette(f.win,palette.id);
+ assert.equal(f.runtime.cache.readerSettings.colorLabels['#ffd400'],'Key point');
+ await f.service.applyAnnotationPalette(f.win,null);
+ assert.equal(f.runtime.cache.readerSettings.colorLabels['#ffd400'],'My yellow','the name set by hand comes back');
+ // An older store: labels written by an active palette, no record of whose they were.
+ const g=fixture();g.core.setTool=f.core.setTool;g.core._state.tool={type:'highlight',color:'#ffd400'};
+ const old=await g.service.saveAnnotationPalette('Old',[{color:'#5fb236',label:'Method'}]);
+ g.runtime.cache.readerSettings={...g.runtime.cache.readerSettings,annotationPaletteID:old.id,colorLabels:{'#5fb236':'Method','#ff6666':'Mine'}};
+ await g.service.applyAnnotationPalette(g.win,null);
+ assert.equal(g.runtime.cache.readerSettings.colorLabels['#5fb236'],undefined,'the old palette\'s name goes');
+ assert.equal(g.runtime.cache.readerSettings.colorLabels['#ff6666'],'Mine');
+ f.service.stop();g.service.stop();
+});
+test('a name set by hand before the palette split survives a palette and the way back',async()=>{
+ const f=fixture();f.core.setTool=function(params){this._state.tool={...this._state.tool,...params};};f.core._state.tool={type:'highlight',color:'#ffd400'};
+ f.runtime.cache.readerSettings={colorLabels:{'#ff6666':'Check source'}};
+ await f.service.setColorLabel('#5fb236','Method');
+ const palette=await f.service.saveAnnotationPalette('P',[{color:'#ff6666',label:'Palette red'}]);
+ await f.service.applyAnnotationPalette(f.win,palette.id);await f.service.applyAnnotationPalette(f.win,null);
+ assert.equal(f.runtime.cache.readerSettings.colorLabels['#ff6666'],'Check source','the older hand-set name is kept');
+ assert.equal(f.runtime.cache.readerSettings.colorLabels['#5fb236'],'Method');
+ f.service.stop();
+});

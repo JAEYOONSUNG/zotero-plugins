@@ -273,7 +273,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return {version:this.version||'',recordReading:this.getSetting('recordReading'),selectedTitle:item?String(item.getField('title')||''):'선택한 문헌 없음',readSeconds:item?this.state(item).seconds:0,citationStatus:this.citationJob?'조회 중':'대기',storagePath:this.Z.DataDirectory?.dir?this.Z.DataDirectory.dir+'/style-custom.json':'Zotero 데이터 폴더/style-custom.json'};
   }
   columnFeature(key) {
-    return {if:'IFColumn',citations:'citedCountColumn',status:'statusColumn',rating:'ratingColumn',time:'readTimeColumn',tags:'tagsColumn',progress:'readTimeColumn',remark:'remarkColumn',publication:'publicationTagsColumn',authors:'creatorColumn',added:'dateAddedColumn',modified:'dateAddedColumn',lastRead:'Recent',tagCount:'textTagsColumn',summary:'tldr',annotationCount:'annotationColumn',noteCount:'renderItemNotes',venue:'publicationColumn'}[key];
+    return {if:'IFColumn',oaCitedness:'IFColumn',citations:'citedCountColumn',status:'statusColumn',rating:'ratingColumn',time:'readTimeColumn',tags:'tagsColumn',progress:'readTimeColumn',remark:'remarkColumn',publication:'publicationTagsColumn',authors:'creatorColumn',added:'dateAddedColumn',modified:'dateAddedColumn',lastRead:'Recent',tagCount:'textTagsColumn',summary:'tldr',annotationCount:'annotationColumn',noteCount:'renderItemNotes',venue:'publicationColumn'}[key];
   }
   syncFeatureColumns() {
     this.featureColumns||=new Map();
@@ -283,7 +283,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(existing){this.Z.ItemTreeManager.unregisterColumn(existing);this.columns=this.columns.filter(key=>key!==existing);this.featureColumns.delete(dataKey);}continue;
       }
       if(existing)continue;
-      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:dataKey==='if'?56:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):'',renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
+      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:['if','oaCitedness'].includes(dataKey)?56:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):(['if','oaCitedness','citations'].includes(dataKey)?this.sortKey(''):''),renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
       if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
     }
   }
@@ -356,6 +356,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       ["lastRead","마지막 읽음","130"],["tagCount","태그 수","70"],
       ["translatedTitle","번역 제목","220"],["summary","요약","220"],
       ["annotationCount","주석 수","90"],["noteCount","노트 수","70"],["venue","출판물","170"],
+      // A different scale from the JIF beside it, so a column of its own, hidden until asked for.
+      ["oaCitedness","OA 2년 평균 피인용","110"],
       ["signals","신호","160"],["affiliation","소속","210"],
       // The same facts as Affiliation, one to a column, so each can be sorted and
       // read on its own: who did the work, who answers for it, and how their lab stands.
@@ -376,6 +378,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }, true));
     }
     if (this.Z.Notifier) this.itemObserver = this.Z.Notifier.registerObserver({notify:(event,type,ids,extraData)=>{
+      /* An annotation moved or recoloured within the same second as the last
+         paint has the same count and the same date, so the strip's memo is
+         also dropped here, for the paper whose annotation changed -- during a
+         sync too. A deletion may leave nothing to look up; then all of it. */
+      if(type==='item'&&this.annotationMemo?.size){
+        for(const id of ids||[]){
+          const changed=this.Z.Items?.get?.(id);
+          if(!changed||['delete','trash'].includes(event)){this.annotationMemo.clear();break;}
+          if(!changed.isAnnotation?.())continue;
+          // Moved to another paper's PDF, it changes two strips, and the old parent is no longer on the item: moves clear all.
+          const paper=this.Z.Items.get(changed.parentID)?.parentID;
+          if(paper!=null&&event!=='modify')this.annotationMemo.delete(paper);else{this.annotationMemo.clear();break;}
+        }
+      }
+      if(type==='item'&&event==='modify')for(const id of ids||[]){try{const changed=this.Z.Items?.get?.(id);if(changed)this.forgetIfIdentityChanged(changed);}catch(error){this.Z.logError?.(error);}}
       /* A sync rewrites every item it touches. Answering each one queues a
          lookup per paper, so the queue is left alone while a sync runs and the
          plugin's own writes are never treated as news. */
@@ -507,12 +524,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   value(key, item) {
     try {
       const state = this.state(item);
-      /* Three decimals always: Zotero sorts these as numeric-aware text, which
-         compares the digits after the point as a number, so "12.5" landed
-         below "12.25". The cell draws the figure without the padding. */
-      if (key === "if") { const fixed = n => Number.isFinite(Number(n)) ? Number(n).toFixed(3) : ""; if (state.impactFactor != null) return fixed(state.impactFactor); const estimate = this.journalCitedness(item); return estimate ? fixed(estimate.citedness) : ""; }
+      /* A sort key, not the figure: see sortKey. The cell draws the figure
+         from displayValue. The IF column is Clarivate's JIF alone; OpenAlex's
+         two-year citedness, a different scale, has its own column. */
+      if (key === "if" || key === "oaCitedness" || key === "citations") return this.sortKey(this.displayValue(key, item));
       if (key === "journalMark") return this.journalAbbreviationOf(item);
-      if (key === "citations") return state.citations == null ? "" : String(state.citations);
+
       if (key === "status") return String({unread:0,reading:1,done:2}[state.status]);
       if (key === "rating") return String(state.rating);
       if (key === "time") return String(state.seconds);
@@ -759,7 +776,27 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (result.items) { await this.flush(); await this.refreshWindows(); }
     return result;
   }
+  /* Painting a row re-parsed every annotation's position JSON, every paint,
+     for every visible row. The answer is kept per paper until its annotations
+     change: count and latest modification, read without parsing anything. */
   annotationDistribution(item) {
+    /* While the notifier is watching, its word is the invalidation: a held
+       answer is used without touching a single annotation. Without it (a
+       test, a window not yet watched), attachments and counts are compared. */
+    this.annotationMemo ||= new Map();
+    const held=this.annotationMemo.get(item.id);
+    const attachments=(item.getAttachments?.()||[]).join(',');
+    if(held&&this.itemObserver!=null&&held.attachments===attachments)return held.pages;
+    const signature=[];
+    for(const id of item.getAttachments?.()||[]){const attachment=this.Z.Items.get(id);if(!attachment||attachment.deleted)continue;const list=attachment.getAnnotations?.()||[];let latest='';for(const a of list)if(String(a.dateModified||'')>latest)latest=String(a.dateModified);signature.push(id+':'+list.length+':'+latest);}
+    const key=signature.join('|');
+    if(held&&held.key===key){held.attachments=attachments;return held.pages;}
+    const pages=this.annotationPagesOf(item);
+    this.annotationMemo.set(item.id,{key,pages,attachments});
+    if(this.annotationMemo.size>3000)this.annotationMemo.delete(this.annotationMemo.keys().next().value);
+    return pages;
+  }
+  annotationPagesOf(item) {
     const pages=new Map();
     for(const id of item.getAttachments?.()||[]) {
       const attachment=this.Z.Items.get(id);if(!attachment||attachment.deleted)continue;
@@ -978,24 +1015,23 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     cell.className = "cell " + (column.className || "");
     Object.assign(cell.style, { overflow: "hidden", textOverflow: "ellipsis", alignItems: "center", display: "flex", gap: "5px" });
     const P = this.palette(doc);
-    if (["if","citations","time","progress","tagCount","noteCount","annotationCount"].includes(key)) cell.style.fontVariantNumeric = "tabular-nums";
+    if (["if","oaCitedness","citations","time","progress","tagCount","noteCount","annotationCount"].includes(key)) cell.style.fontVariantNumeric = "tabular-nums";
     // Five stars are one rating, not five marks spread across the cell.
     if (key === "rating") cell.style.gap = "1px";
     const item = doc.defaultView?.ZoteroPane?.itemsView?.getRow(index)?.ref;
     // Read current data when painting: do not reuse a previously cached empty cell.
-    if (this.isRegular(item)) {value=this.value(key,item);if(['time','status'].includes(key)){cell.dataset.styleCustomReading=key;cell.dataset.itemId=String(item.id);}}
+    if (this.isRegular(item)) {value=["if","oaCitedness","citations"].includes(key)?this.displayValue(key,item):this.value(key,item);if(['time','status'].includes(key)){cell.dataset.styleCustomReading=key;cell.dataset.itemId=String(item.id);}}
+    // A sort key handed in without its row is never drawn as text.
+    else if (typeof value === "string" && /^[012]\|/.test(value)) value = "";
     if (value === "") {
       if (key === "if" && this.isRegular(item)) {
         // The catalogue covers 86 journals; this library spans 255. Rather than
         // a blank, show OpenAlex's two-year mean citedness -- a different figure
         // from a Clarivate JIF, so it is marked and never presented as one.
         const estimate = this.journalCitedness(item);
-        if (estimate) {
-          this.paintJournal(cell, item, doc, P, {figure: String(estimate.citedness), estimate: true, name: estimate.name});
-          return cell;
-        }
         this.paintJournal(cell, item, doc, P, {figure: null, estimate: false});
         cell.style.color = P.faint;
+        if (estimate) { cell.title = this.t("공식 JIF 미확인. OpenAlex 값은 ‘OA 2년 평균 피인용’ 열에서 확인할 수 있습니다."); return cell; }
         cell.title = this.t(item.getField("publicationTitle") ? "이 저널의 공식 IF를 아직 확인하지 못했습니다. 저널명과 ISSN을 확인하세요." : "저널 정보가 없습니다. 프리프린트·책·데이터셋에는 저널 IF가 적용되지 않을 수 있습니다.");
       }
       if (key === "citations" && this.isRegular(item)) {
@@ -1072,7 +1108,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       strip.setAttribute('aria-label','주석 위치 분포');strip.style.cssText='display:flex;gap:2px;overflow:hidden;flex:1;align-items:center;';
       for(const page of pages.slice(0,120)){
         const marker=doc.createElementNS('http://www.w3.org/1999/xhtml','button');marker.type='button';marker.title=`첨부 ${page.attachmentID} · ${page.pageIndex+1}페이지 · 주석 ${page.count}개`;
-        marker.setAttribute('aria-label',marker.title);marker.style.cssText='border:0;padding:0;min-width:4px;flex:1;height:12px;cursor:pointer;';
+        marker.setAttribute('aria-label',marker.title);marker.tabIndex=-1;marker.style.cssText='border:0;padding:0;min-width:4px;flex:1;height:12px;cursor:pointer;';
         let start=0;const stops=[];for(const[color,count]of page.colors){const end=start+count/page.count*100;stops.push(`${color} ${start}% ${end}%`);start=end;}
         marker.style.background=stops.length===1?page.colors[0][0]:`linear-gradient(0deg,${stops.join(',')})`;
         marker.addEventListener('click',event=>{event.stopPropagation();this.libraryService.openItem(page.attachmentID,{pageIndex:page.pageIndex}).catch(error=>this.Z.logError(error));});strip.appendChild(marker);
@@ -1242,7 +1278,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       cell.title = mark?.title || "";
       return cell;
     } else if (key === "if") {
-      this.paintJournal(cell, item, doc, P, {figure: label === "" ? label : String(Number(label)), estimate: false});
+      this.paintJournal(cell, item, doc, P, {figure: label, estimate: false});
+    } else if (key === "oaCitedness") {
+      const estimate = this.isRegular(item) ? this.journalCitedness(item) : null;
+      this.paintJournal(cell, item, doc, P, {figure: label, estimate: true, name: estimate?.name});
     } else if (key === "citations") {
       const count = Number(value);
       const number = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
@@ -2274,6 +2313,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       await this.pause(150);
     }
     if (result.budgetGone) return result;
+    /* A batch that failed (a 503, a timeout) used to fall through as "checked,
+       nothing new": its authors' news was replaced by nothing and their
+       last-checked date moved on. They are now left exactly as they were, and
+       a batch cut off at the page limit keeps its authors' old date, so the
+       next sweep starts where this one could not reach. */
+    const failed = new Set(), unfinished = new Set();
     for (const [index, batch] of batches.entries()) {
       if (signal?.aborted) { result.remaining = batches.length - index; break; }
       onProgress?.(index, batches.length);
@@ -2281,7 +2326,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       try {
         // Cursor paging, because a batch of fifty active labs clears 200 works
         // easily and a truncated page would silently under-report the news.
-        for (let page = 0; page < 5 && cursor; page++) {
+        for (let page = 0; page < 8 && cursor; page++) {
           const url = this.discoverTools.watchedWorksURL(batch, {...options, since: sinceFor(batch), cursor});
           if (!url) break;
           const payload = await this.discoverJSON(url, {signal});
@@ -2293,17 +2338,22 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           cursor = works.length ? payload?.meta?.next_cursor || '' : '';
           if (cursor) await this.pause(150);
         }
+        if (cursor) for (const id of batch) unfinished.add(id);
       } catch (error) {
-        if (this.outOfBudget(error)) { result.budgetGone = true; result.remaining = batches.length - index; break; }
+        // The batch whose later pages the budget stopped is part-read: kept as such, not called complete.
+        if (this.outOfBudget(error)) { result.budgetGone = true; result.remaining = batches.length - index; for (const id of batch) unfinished.add(id); break; }
         this.Z.logError(error);
+        for (const id of batch) failed.add(id);
       }
     }
+    result.failed = failed.size;result.unfinished = unfinished.size;
     const owned = this.libraryDOIs();
     const checkedAt = new Date().toISOString();
     for (const row of rows) {
       // A batch that never ran must not be recorded as "checked, nothing new" --
       // that would hide real news behind a clean-looking row.
       if (!found.has(row.id) && (result.budgetGone || result.remaining)) continue;
+      if (failed.has(this.discoverTools.shortID(row.id)) || failed.has(row.id)) continue;
       const seen = new Set(row.seen || []);
       const fresh = (found.get(row.id) || [])
         .filter(work => !seen.has(work.id))
@@ -2314,6 +2364,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          used to be fetched and thrown away, so a bioRxiv preprint could not
          be shown as one either. */
       const papers = fresh.filter(work => !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || '')));
+      const partial = unfinished.has(this.discoverTools.shortID(row.id)) || unfinished.has(row.id);
+      const earlier = partial ? (row.news || []) : [];
       row.news = papers.slice(0, 8).map(work => ({
         id: work.id, title: work.title, venue: work.venue, doi: work.doi,
         type: String(work.type || ''),
@@ -2324,6 +2376,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         // without another request.
         people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean)
       }));
+      // A batch that was not read to the end adds to what the row said; it does not replace it.
+      if (partial) row.news = [...row.news, ...earlier.filter(old => !row.news.some(fresh => fresh.id === old.id))].slice(0, 8);
       /* Two things the same records say for free.
 
          Where the author signs from now. The watched row remembers the lab it
@@ -2439,7 +2493,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       row.newCoauthors = seenNames.size ? fresherNames.slice(0, 8) : [];
       for (const name of fresherNames) seenNames.add(name);
       row.coauthorsSeen = [...seenNames].slice(-400);
-      row.sweptAt = checkedAt;
+      if (!unfinished.has(this.discoverTools.shortID(row.id)) && !unfinished.has(row.id)) row.sweptAt = checkedAt;
       if (fresh.length) result.withNews++;
       result.works += fresh.length;
     }
@@ -2494,6 +2548,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
        headers: {Accept: 'text/html,application/xhtml+xml'}});
     signal?.throwIfAborted?.();
     if (response?.status !== 200) return null;
+    // A homepage that redirects to Google Scholar is not read either: the page that answered is what counts.
+    if (/^https?:\/\/scholar\.google\./i.test(String(response.responseURL || ''))) return null;
     const type = String(response.getResponseHeader?.('Content-Type') || '');
     if (type && !/text\/html|application\/xhtml/i.test(type)) return null;
     const body = String(response.responseText || response.response || '');
@@ -2613,7 +2669,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
             pages.push(...tools.readResearcherURLs(await this.discoverJSON(listURL, {signal, headers: {Accept: 'application/json'}})));
           } catch (error) { if (error?.name === 'AbortError') throw error; this.Z.logError(error); }
         }
-        for (const page of [...new Set(pages)].slice(0, 2)) {
+        // A Google Scholar profile page is not read: the photo there is taken, if at all, by its ID from Wikidata above.
+        for (const page of [...new Set(pages)].filter(url => !/^https?:\/\/scholar\.google\./i.test(url)).slice(0, 2)) {
           let markup = null;
           try { result.requests++; markup = await this.fetchText(page, {signal}); }
           catch (error) { if (error?.name === 'AbortError') throw error; this.Z.logError(error); continue; }
@@ -2657,6 +2714,33 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   guardClick(cell, doc, index) {
     cell.addEventListener('mousedown', () => { cell.dataset.wasSelected = String(this.rowSelected(doc, index)); });
     return () => cell.dataset.wasSelected !== 'false';
+  }
+
+  /* The figure a metric column draws: '' when there is none. */
+  displayValue(key, item) {
+    const state = this.state(item);
+    if (key === "if") return state.impactFactor != null && Number.isFinite(Number(state.impactFactor)) ? String(state.impactFactor) : "";
+    if (key === "oaCitedness") { const estimate = this.journalCitedness(item); return estimate && Number.isFinite(Number(estimate.citedness)) ? String(estimate.citedness) : ""; }
+    if (key === "citations") return state.citations == null ? "" : String(state.citations);
+    return "";
+  }
+  /* Zotero compares column values as numeric-aware text (Intl.Collator
+     numeric) and multiplies the result by the direction, so "12.5" sorted
+     below "12.25" and blank rows came first whenever the list ran highest
+     first. A number becomes the ordered bits of its double, twenty digits,
+     behind "1|"; a blank becomes "2|" going up and "0|" going down, so it is
+     last both ways. (Zotero 9.0.6 itemTree.js: compareString, the direction
+     multiply, getSortDirection.) */
+  sortKey(figure) {
+    const n = figure === "" || figure == null ? NaN : Number(figure);
+    if (!Number.isFinite(n) || n < 0) {
+      let direction = 1;
+      try { direction = this.Z.getMainWindow?.()?.ZoteroPane?.itemsView?.getSortDirection?.() === -1 ? -1 : 1; } catch (_) {}
+      return direction === 1 ? "2|" : "0|";
+    }
+    const view = new DataView(new ArrayBuffer(8));
+    view.setFloat64(0, n === 0 ? 0 : n, false);
+    return "1|" + view.getBigUint64(0, false).toString().padStart(20, "0");
   }
 
   // A menu choice is "already so" only when every selected paper is already so.
@@ -2828,10 +2912,30 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     };
   }
 
+  /* Once OpenAlex has said the day's budget is spent, every loop that met the
+     refusal stopped -- but the next feature asked again, and the next. The
+     refusal is remembered until the budget resets (midnight UTC), and an
+     OpenAlex request in that window fails at once without being sent. */
   async discoverJSON(url, {signal, headers} = {}) {
-    const response = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 30000, ...(headers ? {headers} : {})});
-    signal?.throwIfAborted?.();
-    return response?.response;
+    const openAlex = /^https:\/\/api\.openalex\.org\//.test(String(url));
+    if (openAlex && this.openAlexSpentUntil && Date.now() < this.openAlexSpentUntil) {
+      throw Object.assign(new Error('OpenAlex insufficient budget (held until reset)'), {status: 429, held: true});
+    }
+    try {
+      const response = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 30000, ...(headers ? {headers} : {})});
+      signal?.throwIfAborted?.();
+      return response?.response;
+    } catch (error) {
+      // Only OpenAlex's own refusal: a 429 whose body says so. The message carries the URL, and a title with "budget" in it is not a spent budget.
+      const status = Number(error?.status ?? error?.xmlhttp?.status ?? 0);
+      let body = '';
+      try { const raw = error?.xmlhttp?.response; body = typeof raw === 'string' ? raw : JSON.stringify(raw || ''); } catch (_) {}
+      if (openAlex && status === 429 && /insufficient budget|budget exceeded|daily .*limit/i.test(body)) {
+        const now = new Date();
+        this.openAlexSpentUntil = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+      }
+      throw error;
+    }
   }
 
   /* Titles for bare OpenAlex IDs -- the papers a citation map knows only as
@@ -2905,13 +3009,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
 
   relatedWorksCached(item, options = {}) {
-    return this.discoverCached('related:' + this.identity(item), () => this.relatedWorks(item, options));
+    const seed = this.workFingerprint(item);this.noteFingerprint(item, seed);
+    return this.discoverCached('related:' + this.identity(item) + '|' + seed, () => this.relatedWorks(item, options));
   }
   authorActivityCached(authorID, options = {}) {
     return this.discoverCached('author:' + this.discoverTools.shortID(authorID), () => this.authorActivity(authorID, options));
   }
   authorsOfCached(item, options = {}) {
-    return this.discoverCached('authors:' + this.identity(item), () => this.authorsOf(item, options));
+    const seed = this.workFingerprint(item);this.noteFingerprint(item, seed);
+    return this.discoverCached('authors:' + this.identity(item) + '|' + seed, () => this.authorsOf(item, options));
   }
 
   /* One sweep for the citation map and the affiliations alike.
@@ -2937,8 +3043,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     for (const item of [...new Set(items)]) {
       if (!this.isRegular(item)) continue;
       const key = this.identity(item);
-      if (!refetch && store[key]) { report.already++; continue; }
       const doi = this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI);
+      // Kept only while it was fetched for the DOI the paper still has.
+      if (!refetch && store[key] && (store[key].doi || '') === (doi || '')) { report.already++; continue; }
       if (!doi) { report.noDOI++; store[key] = {doi: '', missing: true, checkedAt: new Date().toISOString()}; continue; }
       wanted.push({key, doi, item});
     }
@@ -3039,25 +3146,36 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async sweepInstitutions({signal} = {}) {
     const known = this.institutionTable();
     const works = Object.values(this.paperWorks());
+    /* "Not found" is an answer only from a batch OpenAlex answered, and it
+       expires after ninety days. A failed, cancelled or never-sent batch used
+       to write "unknown" for good, and those institutions were never asked
+       again. */
+    const now = Date.now(), NOT_FOUND_DAYS = 90;
+    for (const [ror, row] of Object.entries(known)) {
+      if (row?.unknown && (!row.checkedAt || now - Date.parse(row.checkedAt) > NOT_FOUND_DAYS * 864e5)) delete known[ror];
+    }
     const wanted = this.affiliationTools.institutionsNeeded(works.map(work => ({people: work?.people})), known);
     if (!wanted.length) return 0;
     const options = this.discoverOptions();
     let added = 0;
     for (let start = 0; start < wanted.length; start += 50) {
       if (signal?.aborted || !this.active || this.stopping) break;
-      const url = this.discoverTools.institutionsURL(wanted.slice(start, start + 50), options);
+      const batch = wanted.slice(start, start + 50);
+      const url = this.discoverTools.institutionsURL(batch, options);
       if (!url) continue;
       try {
         for (const row of this.discoverTools.readInstitutions(await this.discoverJSON(url, {signal}))) {
           known[row.ror] = row;
           added++;
         }
+        const checkedAt = new Date().toISOString();
+        for (const ror of batch) if (!known[ror]) known[ror] = {ror, name: '', hIndex: null, unknown: true, checkedAt};
         this.dirty = true;
-      } catch (error) { this.Z.logError(error); }
+      } catch (error) {
+        this.Z.logError(error);
+        if (this.outOfBudget(error)) break;
+      }
     }
-    // A ROR nobody answered for is recorded as asked, so the sweep does not
-    // keep asking the same unanswerable question every run.
-    for (const ror of wanted) if (!known[ror]) known[ror] = {ror, name: '', hIndex: null, unknown: true};
     return added;
   }
 
@@ -3070,9 +3188,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   async relatedWorks(item, {limit = 40, signal, have} = {}) {
     const options = this.discoverOptions();
-    const url = this.discoverTools.workURL(this.bibliographyRecord(item), options);
-    if (!url) throw new Error('이 문헌에는 DOI나 제목이 없어 조회할 수 없습니다. 둘 중 하나를 채운 뒤 다시 실행하세요.');
-    const work = this.discoverTools.readWork(await this.discoverJSON(url, {signal}));
+    if (!this.discoverTools.workURL(this.bibliographyRecord(item), options)) throw new Error('이 문헌에는 DOI나 제목이 없어 조회할 수 없습니다. 둘 중 하나를 채운 뒤 다시 실행하세요.');
+    const work = await this.seedWork(item, {signal});
     if (!work) return {work: null, suggestions: []};
     const ids = [...work.references, ...work.related].slice(0, 50);
     const batchURL = this.discoverTools.worksByIDsURL(ids, options);
@@ -3256,9 +3373,46 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       rest: plan.rest.slice(0, 60).map(bare), restTotal: plan.rest.length};
   }
 
+  /* What a paper is, to OpenAlex: its DOI, or its title and year when it has
+     none. Everything looked up for it is only good while this stays the same. */
+  workFingerprint(item) {
+    const record = this.bibliographyRecord(item);
+    const doi = this.discoverTools.bareDOI(record.DOI);
+    return doi ? 'doi:' + doi : 'title:' + String(record.title || '').toLowerCase().normalize('NFC').replace(/[^\p{L}\p{N}]+/gu, ' ').trim() + '|' + (record.year || '');
+  }
+  /* A DOI filled in or corrected: the reference list, the citers, the reading
+     plan and the session's lookups made for the old one are dropped, and the
+     next look asks again. Nothing is requested here. */
+  // "다시 찾기": the session's answer for this paper, under any identity it has had, is dropped.
+  forgetLookup(item, prefix) {
+    const key = this.identity(item);
+    for (const cached of [...this.discoverCache.keys()]) if (cached === prefix + key || String(cached).startsWith(prefix + key + '|')) this.discoverCache.delete(cached);
+  }
+  // Remembered when a lookup starts, so the first edit after it is judged against what was looked up.
+  noteFingerprint(item, seed = this.workFingerprint(item)) {
+    (this.fingerprints ||= new Map()).set(this.identity(item), seed);
+  }
+  forgetIfIdentityChanged(item) {
+    if (!this.isRegular(item)) return false;
+    const key = this.identity(item), now = this.workFingerprint(item);
+    this.fingerprints ||= new Map();
+    // The first change seen this session is judged against the DOI the stored reference list was fetched for.
+    const stored = this.paperWorks()[key];
+    const before = this.fingerprints.get(key) ?? (stored?.doi ? 'doi:' + stored.doi : undefined);
+    this.fingerprints.set(key, now);
+    if (before === undefined || before === now) return false;
+    const works = this.paperWorks(), citers = this.citedByStore();
+    if (works[key]) delete works[key];
+    if (citers[key]) delete citers[key];
+    this.forgetReadingPath(item);
+    for (const cached of [...this.discoverCache.keys()]) if (['related:', 'authors:'].some(prefix => String(cached).startsWith(prefix + key + '|'))) this.discoverCache.delete(cached);
+    this.dirty = true;
+    return true;
+  }
+
   forgetReadingPath(item) {
     const key = this.identity(item);
-    this.discoverCache.delete('path:' + key);
+    for (const cached of [...this.discoverCache.keys()]) if (String(cached).startsWith('path:' + key + '|') || cached === 'path:' + key) this.discoverCache.delete(cached);
     if (this.readingPathStore()[key]) { delete this.readingPathStore()[key]; this.dirty = true; }
   }
 
@@ -3266,14 +3420,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const key = this.identity(item);
     const saved = this.readingPathStore()[key];
     const age = saved ? Date.now() - Date.parse(saved.at) : Infinity;
+    const seed = this.workFingerprint(item);
     // A plan kept by an older version of the algorithm is asked again, not
-    // shown in a shape the panel no longer draws.
-    if (saved?.plan?.v === this.PATH_VERSION && age < 21 * 864e5) return Promise.resolve(saved.plan);
+    // shown in a shape the panel no longer draws; nor one made for a DOI the
+    // paper no longer has.
+    // A plan kept without the identity it was made for is asked again once: it cannot be told apart from one made for an old DOI.
+    if (saved?.plan?.v === this.PATH_VERSION && age < 21 * 864e5 && saved.seed === seed) return Promise.resolve(saved.plan);
+    this.noteFingerprint(item, seed);
     const keep = plan => {
       if (!plan) return plan;
-      if (plan.partial?.length) { this.discoverCache.delete('path:' + key); return plan; }
+      if (plan.partial?.length) { this.discoverCache.delete('path:' + key + '|' + seed); return plan; }
+      // The paper changed identity while this was being worked out: shown, not kept under the new one.
+      if (this.workFingerprint(item) !== seed) return plan;
       const store = this.readingPathStore();
-      store[key] = {at: new Date().toISOString(), plan: this.compactPlan(plan)};
+      store[key] = {at: new Date().toISOString(), seed, plan: this.compactPlan(plan)};
       const keys = Object.keys(store).sort((a, b) => Date.parse(store[a].at) - Date.parse(store[b].at));
       while (keys.length > 40) delete store[keys.shift()];
       this.dirty = true;
@@ -3283,7 +3443,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     /* The lookup is shared: a second caller can be handed a promise the first
        caller has since abandoned. Its abort is not this caller's, so it asks
        again -- and the retry's plan, already kept, is not kept twice. */
-    return this.discoverCached('path:' + key, () => this.readingPath(item, options)).then(keep, error => {
+    return this.discoverCached('path:' + key + '|' + seed, () => this.readingPath(item, options)).then(keep, error => {
       if (error?.name === 'AbortError' && !options.signal?.aborted && !options.retried) {
         return this.readingPathCached(item, {...options, retried: true});
       }
@@ -3292,11 +3452,25 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
 
   // Resolved from the paper's own authorships, never from the name alone.
+  /* The paper OpenAlex means by this item. By DOI it is the answer; by title
+     the first search hit was taken as the paper, and a paper without a DOI
+     showed another lab's authors and another paper's neighbours. Five hits
+     are asked for and one must match the title and year, as the reading
+     order already required. */
+  async seedWork(item, {signal, fields} = {}) {
+    const tools = this.discoverTools, record = this.bibliographyRecord(item);
+    const hasDOI = !!tools.bareDOI(record.DOI);
+    const url = tools.workURL(record, {...this.discoverOptions(), ...(fields ? {fields} : {}), candidates: 5});
+    if (!url) return null;
+    const payload = await this.discoverJSON(url, {signal});
+    const work = hasDOI ? tools.readWork(payload) : tools.pickByTitle(tools.readWorks(payload), record);
+    if (!work && !hasDOI && tools.readWorks(payload).length)
+      throw new Error('OpenAlex가 찾은 논문이 선택한 문헌과 제목이 다릅니다. 문헌에 DOI를 채운 뒤 다시 찾으세요.');
+    return work;
+  }
+
   async authorsOf(item, {signal} = {}) {
-    const options = this.discoverOptions();
-    const url = this.discoverTools.workURL(this.bibliographyRecord(item), options);
-    if (!url) return [];
-    const work = this.discoverTools.readWork(await this.discoverJSON(url, {signal}));
+    const work = await this.seedWork(item, {signal});
     return work?.people?.filter(person => person.id) || [];
   }
 
@@ -3503,7 +3677,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const record = this.journalRecord(item);
       if (!record.name && !record.issn) continue;
       // Only journals the curated catalogue does not already answer.
-      if (this.value('if', item) !== '') continue;
+      if (this.displayValue('if', item) !== '' || this.displayValue('oaCitedness', item) !== '') continue;
       const key = this.journalTools2.cacheKey(record);
       if (!this.journalCache()[key]) journals.add(key);
     }

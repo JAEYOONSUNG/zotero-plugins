@@ -2234,7 +2234,7 @@
     if(event.key==='Enter'&&event.target===rows[at]){event.preventDefault();rows[at].querySelector('.sc-hit-title-link')?.click();}
    });
    async function find({refresh=false}={}){
-    if(refresh)runtime.discoverCache.delete('related:'+runtime.identity(runtime.Z.Items.get(Number(item.id))));
+    if(refresh){const ref=runtime.Z.Items.get(Number(item.id));if(typeof runtime.forgetLookup==='function')runtime.forgetLookup(ref,'related:');else runtime.discoverCache.delete('related:'+runtime.identity(ref));}
     message('OpenAlex에서 관련 논문을 찾는 중…');
     const {work,suggestions}=await runtime.relatedWorksCached(runtime.Z.Items.get(Number(item.id)));
     if(token!==epoch||disposed||state.tab!=='related')return;
@@ -2503,12 +2503,14 @@
       message(`새 논문 확인 중 ${done+1}/${total}`)});
      if(token!==epoch||disposed||state.tab!=='authors')return;
      refreshWatched();
-     message(result.budgetGone
+     message(T(result.budgetGone
       ? `OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}묶음이 남았고, 한국 시간 오전 9시에 초기화됩니다. 지금까지 확인한 결과는 저장했습니다.`
       : result.withNews
        ? `${result.withNews}명이 새 논문 ${result.works}편을 냈습니다. 요청 ${result.requests}회.`
-       : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`,
-      result.budgetGone);
+       : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`)
+      +(result.failed?' '+T(`${result.failed}명은 서버 오류로 확인하지 못해 이전 소식을 그대로 두었습니다. 다시 확인을 누르세요.`):'')
+      +(result.unfinished?' '+T(`${result.unfinished}명은 논문이 많아 끝까지 읽지 못했습니다. 다음 확인이 이어서 봅니다.`):''),
+      result.budgetGone||!!result.failed);
      /* Faces follow the news without a second press: only for people never
         looked for or due again, off the OpenAlex budget, in the background. */
      if(!result.budgetGone&&runtime.pref?.('authorPortraits',true)!==false&&runtime.portraitsDue?.()>0){
@@ -2689,7 +2691,7 @@
    // Named on the line above, in the context bar.
    const b=bar();
    button('새로고침',()=>run(async()=>{
-    runtime.discoverCache.delete('authors:'+runtime.identity(runtime.Z.Items.get(Number(item.id))));
+    {const ref=runtime.Z.Items.get(Number(item.id));if(typeof runtime.forgetLookup==='function')runtime.forgetLookup(ref,'authors:');else runtime.discoverCache.delete('authors:'+runtime.identity(ref));}
     await loadAuthors();
    }),b);
    run(loadAuthors);

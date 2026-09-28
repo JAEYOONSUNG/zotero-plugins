@@ -374,3 +374,26 @@ test("cancelling after the first large page keeps its snapshot and schedules no 
 	} }, { ...context(), signal: controller.signal, onResults(rows) { shown = rows; controller.abort(); } }), { name: "AbortError" });
 	assert.equal(calls, 1); assert.equal(shown.length, 200);
 });
+
+test("once OpenAlex says the budget is spent, no further OpenAlex request is sent in that run", async () => {
+	let asked = 0;
+	const http = { getJSON: async () => { asked++; throw Object.assign(new Error("HTTP 429"), { status: 429, body: "Insufficient budget" }); } };
+	const records = Array.from({ length: 120 }, (_, i) => ({ doi: "10.1/" + i, citations: null, pdfUrls: [] }));
+	const ctx = {};
+	await S.enrichFromOpenAlex(records, http, ctx);
+	assert.equal(asked, 1, "three chunks of fifty, one refused request");
+	assert.equal(ctx.openAlexSpent, true);
+	await S.enrichInstitutions([{ people: [{ institutionId: "I1" }] }], http, ctx);
+	assert.equal(asked, 1, "the next step does not ask either");
+});
+
+test("a budget refusal on the search's own OpenAlex request stops the enrichment after it", async () => {
+	let asked = 0;
+	const refuse = () => { asked++; throw Object.assign(new Error("HTTP 429 · api.openalex.org"), { status: 429, body: "Insufficient budget", url: "https://api.openalex.org/works" }); };
+	const ctx = {};
+	await assert.rejects(S.withRetry ? S.withRetry(refuse, {}, ctx) : Promise.reject(new Error("no withRetry")));
+	if (!S.withRetry) return;
+	assert.equal(ctx.openAlexSpent, true);
+	await S.enrichFromOpenAlex([{ doi: "10.1/x", citations: null, pdfUrls: [] }], { getJSON: refuse }, ctx);
+	assert.equal(asked, 1, "the enrichment does not ask again");
+});

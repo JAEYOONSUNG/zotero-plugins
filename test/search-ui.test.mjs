@@ -1011,3 +1011,65 @@ test("sorting by affiliation summarises each author list once, not once per comp
 		assert.ok(calls <= records.length, `${calls} summaries for ${records.length} records over three passes`);
 	} finally { Aff.summarise = real; }
 });
+
+test("an item made by hand keeps the day the source gave, and a bad date falls back to the year", async () => {
+	const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+	const sandbox = { Zotero: { logError() {} }, ZotPoPSources: {}, module: { exports: {} } };
+	sandbox.globalThis = sandbox;
+	const vm = await import("node:vm");
+	vm.createContext(sandbox);
+	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+	const date = sandbox.__api.publicationDate;
+	assert.equal(date({ publicationDate: "2026-09-14", year: 2026 }), "2026-09-14");
+	assert.equal(date({ publicationDate: "2026-09", year: 2026 }), "2026-09");
+	assert.equal(date({ publicationDate: "2026-02-30", year: 2026 }), "2026", "no such day");
+	assert.equal(date({ publicationDate: "2025-12-01", year: 2026 }), "2026", "a date that disagrees with the year is not trusted");
+	assert.equal(date({ year: 2020 }), "2020");
+});
+
+test("a JCR impact factor is saved and exported as JCR, an OpenAlex figure as OpenAlex", async () => {
+	const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+	const sandbox = { Zotero: { logError() {} }, ZotPoPSources: {}, module: { exports: {} } };
+	sandbox.globalThis = sandbox;
+	const vm = await import("node:vm");
+	vm.createContext(sandbox);
+	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+	const label = sandbox.__api.journalFigureLabel;
+	assert.equal(label({ journalIF: 56.1, journalIFSource: "JCR 2025", journalIFEstimate: false }), "JCR 2025");
+	assert.equal(label({ journalIF: 18.9, journalIFEstimate: true }), "OpenAlex 2y");
+	const ui = uiHarness({ search: async () => [paper("a", { journalIF: 56.1, journalIFSource: JCR.EDITION, journalIFEstimate: false })] });
+	await ui.runSearch();
+	assert.ok(ui.csvText().split("\n")[1].includes(`"56.10","${JCR.EDITION}"`), "the CSV says which figure it is");
+});
+
+test("a preprint and the paper it became are two records, though their titles match", async () => {
+	const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+	const sandbox = { Zotero: { logError() {} }, ZotPoPSources: {}, module: { exports: {} } };
+	sandbox.globalThis = sandbox;
+	const vm = await import("node:vm");
+	vm.createContext(sandbox);
+	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+	const same = sandbox.__api.sameWorkIdentifiers;
+	const item = doi => ({ getField: k => k === "DOI" ? doi : "" });
+	assert.equal(same({ doi: "10.1101/2024.01.01.123" }, item("10.1038/s41586-024-1")), false, "different DOIs: not a duplicate");
+	assert.equal(same({ doi: "https://doi.org/10.1/ABC" }, item("10.1/abc")), true, "one DOI written two ways");
+	assert.equal(same({ doi: "10.1/x" }, item("")), true, "no DOI on the shelf: the title decides");
+});
+
+test("a title match skips the preprint with another DOI and finds the copy without one", async () => {
+	const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+	const rows = [
+		{ itemID: 3, title: "A thermostable type I-B CRISPR-Cas system", date: "2023", doi: "10.1101/2023.01.01.500" },
+		{ itemID: 4, title: "A thermostable type I-B CRISPR-Cas system", date: "2023", doi: null }];
+	const sandbox = { Zotero: { logError() {}, DB: { queryAsync: async () => rows } }, ZotPoPSources: {}, module: { exports: {} } };
+	sandbox.globalThis = sandbox;
+	const vm = await import("node:vm");
+	vm.createContext(sandbox);
+	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+	const api = sandbox.__api;
+	assert.equal(await api.findByTitle(1, "A thermostable type I-B CRISPR-Cas system", "2023", { doi: "10.1038/s41586-023-1" }), 4, "the copy without a DOI, not the preprint");
+	assert.equal(await api.findByTitle(1, "A thermostable type I-B CRISPR-Cas system", "2023", { doi: "https://doi.org/10.1101/2023.01.01.500" }), 3, "the same DOI written another way");
+	rows[1].extra = "DOI: 10.9/elsewhere";
+	api.forgetTitleIndex();
+	assert.equal(await api.findByTitle(1, "A thermostable type I-B CRISPR-Cas system", "2023", { doi: "10.1038/s41586-023-1" }), null, "a DOI kept in Extra counts as a DOI");
+});

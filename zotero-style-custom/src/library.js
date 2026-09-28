@@ -184,9 +184,22 @@
       }
       return false;
     }
-    async function backlinks(itemID) {
+    /* The reader asks this once per annotation shown, and each call read every
+       note's HTML in the library again. A caller that knows when notes last
+       changed passes that as a revision; while it holds, the library's items
+       and their note text are read once and reused. */
+    let noteSnapshot=null;
+    async function backlinks(itemID,options={}) {
       if(runtime?.featureEnabled?.('backlinks')===false)throw new Error('역링크 기능이 꺼져 있습니다. 설정 → Style Custom → 보기에서 켜세요.');
-      const target=await get(itemID),items=await all(target.libraryID),out=[];
+      return findBacklinks(itemID,options);
+    }
+    // The search itself, without the feature switch: the merge's safety check needs it whether or not the backlinks view is on.
+    async function findBacklinks(itemID,{revision}={}) {
+      const target=await get(itemID),out=[];
+      const reuse=revision!=null&&noteSnapshot&&noteSnapshot.libraryID===target.libraryID&&noteSnapshot.revision===revision;
+      if(!reuse)noteSnapshot=revision!=null?{libraryID:target.libraryID,revision,items:await all(target.libraryID),html:new Map()}:null;
+      const items=noteSnapshot&&revision!=null?noteSnapshot.items:await all(target.libraryID);
+      const noteHTML=item=>{if(!noteSnapshot||revision==null)return safe(()=>item.getNote());if(!noteSnapshot.html.has(item.id))noteSnapshot.html.set(item.id,safe(()=>item.getNote()));return noteSnapshot.html.get(item.id);};
       const keys=new Set([target.key]);if(target.isRegularItem?.())for(const id of target.getAttachments())keys.add((await get(id)).key);
       const route=target.libraryID===Z.Libraries.userLibraryID?'library':'groups/'+safe(()=>Z.Groups.getGroupIDFromLibraryID(target.libraryID),'unavailable');
       const annotationAttachment=target.isAnnotation?.()?await get(target.parentID):null;
@@ -196,7 +209,7 @@
         const item=items[n];if(item.id===target.id)continue;
         if(!annotationAttachment&&safe(()=>item.relatedItems,[]).includes(target.key))out.push({id:String(item.id),title:field(item,'title'),kind:'related'});
         if(item.isNote?.()) {
-          const html=safe(()=>item.getNote());
+          const html=noteHTML(item);
           if(annotationAttachment){if(annotationNoteMatch(html,target,annotationAttachment,route))out.push({id:String(item.id),title:safe(()=>item.getNoteTitle()),kind:'note'});if(n%100===99)await pause();continue;}
           const decoded=safe(()=>decodeURIComponent(html),html);
           const links=Array.from(decoded.matchAll(/zotero:\/\/(?:select|open-pdf)\/(library|groups\/\d+)\/items\/([A-Z0-9]+)(?=[/?#"'&\s<]|$)/g)).filter(m=>m[1]===route).map(m=>m[2]);
@@ -348,6 +361,16 @@
       for(const item of input){await item.loadDataType?.('annotationDeferred');current();}
       const fields=['Type','Text','Comment','Color','PageLabel','SortIndex','Position','AuthorName','IsExternal'].map(name=>'annotation'+name);
       const capture=item=>Object.fromEntries([...fields.map(field=>[field,item[field]]),['tags',item.getTags().map(tag=>({...tag}))]]);
+      /* The merge keeps the first annotation and trashes the rest. A note that
+         quoted one of the rest kept a link to an annotation in the trash, and
+         nothing said so. The merge now stops first and names the notes. */
+      {
+        const page=item=>{try{const p=JSON.parse(item.annotationPosition);return Number.isSafeInteger(p?.pageIndex)?p.pageIndex:1e9;}catch(_){return 1e9;}};
+        const first=[...input].sort((a,b)=>page(a)-page(b)||String(a.annotationSortIndex||'').localeCompare(String(b.annotationSortIndex||''))||a.id-b.id)[0];
+        const quoting=new Map();
+        for(const item of input){if(item===first)continue;for(const link of await findBacklinks(item.id))if(link.kind==='note')quoting.set(link.id,link.title||'');current();}
+        if(quoting.size){const names=[...quoting.values()].map(title=>title||'제목 없는 노트').slice(0,3).join(', ');throw new Error(`병합하면 사라질 주석을 노트 ${quoting.size}개가 인용하고 있어 병합하지 않았습니다(${names}). 노트의 인용을 먼저 정리하세요.`);}
+      }
       let survivor=null,written=null;const deleted=[];
       try{return await Z.DB.executeTransaction(async()=>{
         current();guard([...input,...parents]);

@@ -1575,10 +1575,15 @@
 		   import then said "already there". */
 		state.libraryID = libraryID;
 		state.doiMap = await ZotPoPImporter.getLibraryDOIMap(libraryID);
+		// The title index is read again too: a DOI corrected since the last search counts.
+		ZotPoPImporter.forgetTitleIndex?.();
 		for (let r of state.records) {
 			let id = r.doi ? state.doiMap.get(r.doi) : null;
 			if (!id && typeof ZotPoPImporter.findByTitle === "function" && r.title) {
-				try { id = await ZotPoPImporter.findByTitle(libraryID, r.title, r.year); } catch (e) { id = null; }
+				try {
+					// A copy with another DOI is another version, as the import decides.
+					id = await ZotPoPImporter.findByTitle(libraryID, r.title, r.year, { doi: r.doi });
+				} catch (e) { id = null; }
 			}
 			r.inLibrary = Boolean(id);
 			if (id) r.libraryItemID = id;
@@ -1888,7 +1893,9 @@
 		if ($("metrics-hint")) $("metrics-hint").textContent = t("metricsHint");
 		let m = ZotPoPMetrics.compute(list);
 		let set = (id, v) => { $(id).textContent = v; };
-		let hint = $("metrics-hint"); if (hint) { hint.hidden = list.length > 0 && !m.unknownCitations; $("metrics-table").hidden = !list.length; if (list.length && m.unknownCitations) hint.textContent = t("metricsUnknown", m.unknownCitations, list.length); }
+		let hint = $("metrics-hint"); if (hint) { hint.hidden = list.length > 0 && !m.unknownCitations; $("metrics-table").hidden = !list.length; if (list.length && m.unknownCitations) hint.textContent = t("metricsUnknown", m.unknownCitations, list.length);
+			// Several indexes each counted citations; the highest was kept per paper, so the figures below mix networks.
+			if (list.length && m.citationSources?.length > 1) { hint.hidden = false; hint.textContent = (m.unknownCitations ? hint.textContent + " " : "") + t("metricsMixed", m.citationSources.map(key => ZotPoPSources.SOURCES?.[key]?.label || key).join(", ")); } }
 		set("m-years", m.minYear ? `${m.minYear}–${m.maxYear}` : "–");
 		set("m-cyears", m.minYear ? String(m.citationYears) : "–");
 		set("m-papers", String(m.papers));
@@ -2202,7 +2209,7 @@
 		for (let r of state.visible) {
 			lines.push([
 				r.citations ?? "", fmt(ZotPoPMetrics.citesPerYear(r)), r.popOriginal ? r.popRank : r.rank, r.authorString, r.title,
-				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2),
+				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2), r.journalIF == null ? "" : (r.journalIFEstimate === false && r.journalIFSource ? r.journalIFSource : "OpenAlex 2y"),
 				affiliationOf(r)?.first?.institution ?? "", (affiliationOf(r)?.countries || []).join("/"), affiliationOf(r)?.hIndex ?? "",
 				r.publisher, r.doi ?? "", r.url ?? "",
 				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo")

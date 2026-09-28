@@ -38,6 +38,30 @@
    state.row.setAttribute('aria-busy',String(!!busy||state.loading));
    state.row.dataset.error=String(!!state.error);state.row.dataset.dirty=String(!!state.dirty);
    state.input.setAttribute('aria-invalid',String(!!state.error));
+   syncNeeds();
+  }
+  /* Four switches do nothing on their own: each needs a partner, sometimes in
+     another section. While the partner is off, the row says which one. */
+  /* A PDF colour pair is set one field at a time, so a pass through an
+     unreadable pair cannot be refused (going from dark-on-light to
+     light-on-dark crosses one). The reader does not paint such a pair; the
+     pane says so under the text colour while it stands. */
+  function syncContrast(){
+   const bg=states.get('readerCustomBackground'),fg=states.get('readerCustomForeground');if(!bg||!fg||!fg.contrastNote)return;
+   const lum=hex=>{const m=/^#([0-9a-f]{6})$/i.exec(String(hex||''));if(!m)return null;return [0,2,4].map(i=>parseInt(m[1].slice(i,i+2),16)/255).map(c=>c<=0.03928?c/12.92:((c+0.055)/1.055)**2.4).reduce((sum,c,i)=>sum+c*[0.2126,0.7152,0.0722][i],0);};
+   const a=lum(bg.input.value),b=lum(fg.input.value);
+   const ratio=a==null||b==null?null:(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);
+   fg.contrastNote.hidden=!(ratio!=null&&ratio<4.5);
+   if(!fg.contrastNote.hidden)fg.contrastNote.textContent=t('글자와 배경의 대비가 {0}:1이라 이 조합은 PDF에 칠하지 않습니다. 4.5:1 이상이 되게 고르세요.').replace('{0}',ratio.toFixed(2));
+  }
+  function syncNeeds(){
+   syncContrast();
+   for(const state of states.values()){
+    const need=state.need,partner=state.spec.requires&&states.get(state.spec.requires);if(!need||!partner)continue;
+    const on=state.spec.type==='boolean'?!!state.input.checked:!!state.original,partnerOn=partner.spec.type==='boolean'?!!partner.input.checked:!!partner.original;
+    need.hidden=!(on&&!partnerOn);
+    if(!need.hidden)need.textContent=t("'{0}'({1})도 켜야 동작합니다.").replace('{0}',t(partner.spec.label)).replace('{1}',t(categories.get(partner.spec.category)?.label||partner.spec.category));
+   }
   }
   function changed(state){state.revision++;state.dirty=state.spec.type==='boolean'?state.input.checked!==state.original:String(state.input.value)!==String(state.original??'');state.error=false;state.feedback.textContent=state.dirty?t('아직 적용하지 않았습니다.'):'';sync(state);}
   function parse(state){
@@ -72,6 +96,8 @@
     if(state.revision===revision)display(state,committed);
     state.dirty=state.spec.type==='boolean'?state.input.checked!==committed:String(state.input.value)!==String(committed??'');state.error=false;
     state.feedback.textContent=t(state.revision===revision||!state.dirty?'적용했습니다.':'이전 값을 적용했습니다. 새 입력은 아직 적용하지 않았습니다.');
+    // Zotero takes a column's name when it is registered: the list keeps the old language until the next start, and says so.
+    if(state.spec.key==='language')state.feedback.textContent+=' '+t('문헌 목록의 열 이름은 Zotero를 다시 시작하면 바뀝니다.');
     await refreshStatus();
    }catch(error){if(!destroyed){state.error=true;state.dirty=true;state.feedback.textContent=t('적용하지 못했습니다: {0}').replace('{0}',error.message||error);}}
    finally{state.pending=false;if(!destroyed)sync(state);}
@@ -141,6 +167,8 @@
     ||(spec.type==='note'?t('읽기 전용입니다. 값을 바꾸지 않습니다.')
     :secret(spec)?t('비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.'):t('이 값은 해당 기능에 적용됩니다.'));
    const help=node('p',null,row,{id:descriptionID,class:'scs-help'});help.textContent=helpText;
+   if(spec.requires){state.need=node('p','',row,{class:'scs-help scs-need'});state.need.hidden=true;}
+   if(spec.key==='readerCustomForeground'){state.contrastNote=node('p','',row,{class:'scs-help scs-need'});state.contrastNote.hidden=true;}
    state.feedback=node('p','',row,{id:feedbackID,class:'scs-feedback',role:'status','aria-live':'polite'});states.set(spec.key,state);sync(state);
   }
   async function refreshStatus(){

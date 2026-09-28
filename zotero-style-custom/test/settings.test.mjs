@@ -104,3 +104,30 @@ test('an action that failed once shows its later success as a success, and numbe
  assert.match(f.row('speed').querySelector('.scs-help').textContent,/허용 10–500/,'the range beside the description, not instead of it');
  pane.destroy();
 });
+test('a switch that needs a partner says which, while the partner is off',async()=>{
+ const f=fixture(Schema.schema);f.values['feature.ReadUnreadStatus']=true;f.values.unreadBold=false;
+ const pane=f.mount();await pane.ready;
+ const need=f.row('feature.ReadUnreadStatus').querySelector('.scs-need');
+ assert.ok(need&&!need.hidden,'the notice shows');
+ assert.match(need.textContent,/안 읽은 제목 굵게/);
+ f.edit('unreadBold',true,'change');await settle();
+ assert.equal(need.hidden,true,'and goes once the partner is on');
+ pane.destroy();
+});
+test('choosing a language says the item list keeps its column names until Zotero restarts',async()=>{
+ const f=fixture(Schema.schema);const pane=f.mount();await pane.ready;
+ const row=f.row('language');const select=row.querySelector('select');
+ const other=[...select.querySelectorAll('option')].map(o=>o.getAttribute('value')).find(v=>v!==select.value);
+ f.edit('language',other,'change');await settle();
+ assert.match(row.querySelector('.scs-feedback').textContent,/다시 시작하면 바뀝니다/);
+ pane.destroy();
+});
+test('an unreadable PDF colour pair is saved on the way to another but the pane says it is not painted',async()=>{
+ const f=fixture(Schema.schema);f.values.readerCustomBackground='#000000';f.values.readerCustomForeground='#252a31';
+ const pane=f.mount();await pane.ready;
+ const note=f.row('readerCustomForeground').querySelector('.scs-need');
+ assert.equal(note.hidden,false);assert.match(note.textContent,/PDF에 칠하지 않습니다/);
+ f.edit('readerCustomForeground','#ffffff');await settle();
+ assert.equal(note.hidden,true,'white on black reads, and the note goes');
+ pane.destroy();
+});

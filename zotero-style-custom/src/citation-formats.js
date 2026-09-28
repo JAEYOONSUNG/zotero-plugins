@@ -148,10 +148,15 @@
   }
 
   // What Google Scholar's citation popup shows, in its order.
+  /* Each carries the CSL style it stands for, so the dialog asks Zotero's own
+     processor first when that style is installed; the formatters above are
+     what is drawn when it is not. Without the url, the installed style was
+     never used. */
+  const styleURL = key => (STYLES.find(style => style.key === key) || {}).url;
   const PANEL_STYLES = [
     {key: 'mla', label: 'MLA'}, {key: 'apa', label: 'APA'}, {key: 'iso690', label: 'ISO 690'},
     {key: 'chicago', label: 'Chicago'}, {key: 'harvard', label: 'Harvard'}, {key: 'vancouver', label: 'Vancouver'}
-  ];
+  ].map(style => styleURL(style.key) ? {...style, url: styleURL(style.key)} : style);
   const EXPORTS = [
     {key: 'bibtex', label: 'BibTeX', extension: 'bib'},
     {key: 'endnote', label: 'EndNote', extension: 'enw'},

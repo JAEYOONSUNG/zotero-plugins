@@ -66,7 +66,7 @@ function fixture() {
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
   const { plugin, columns, observers } = fixture();
   await plugin.start({ id: 'test@focus', version: '0.1', rootURI: 'file:///focus/' });
-  assert.equal(columns.size, 26);
+  assert.equal(columns.size, 27);
   assert.equal(observers.size, 7);
   await plugin.stop();
   assert.equal(columns.size, 0);
@@ -367,9 +367,9 @@ test('legacy unbound progress is not assigned to a PDF or another library',()=>{
 });
 test('custom columns are validated and registration failure keeps previous fields intact',async()=>{
  const {plugin,Z,columns,item}=fixture();await plugin.start({id:'custom',version:'0.5',rootURI:'file:///custom/'});
- Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,28);
+ Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,29);
  const original=Z.ItemTreeManager.registerColumn;Z.ItemTreeManager.registerColumn=options=>options.dataKey==='field-pages'?false:original(options);
- assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,28);assert.ok(plugin.dynamicFieldMap.has('issue'));
+ assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,29);assert.ok(plugin.dynamicFieldMap.has('issue'));
  assert.throws(()=>plugin.setCustomFields('unknown'));const ref=item(1);ref.getField=key=>key==='volume'?'12':'';assert.equal(plugin.value('field-volume',ref),'12');await plugin.stop();
 });
 test('panel CSS is scoped and cannot load remote content or escape its rules',()=>{
@@ -487,12 +487,19 @@ test('a status or rating is greyed in the menu only when every selected paper al
  assert.equal(plugin.alreadySo([],'status','done'),false);
 });
 
-test('impact factors sort by value under Zotero\'s numeric-aware collation',()=>{
- const {plugin,item}=fixture();const ref=item(1);
- const key=n=>{plugin.state=()=>({impactFactor:n});return plugin.value('if',ref);};
- const collate=new Intl.Collator(undefined,{numeric:true}).compare;
- const sorted=[12.25,12.5,4.123,4.5,50].map(key).sort(collate);
- assert.deepEqual(sorted.map(Number),[4.123,4.5,12.25,12.5,50],'12.5 above 12.25, as numbers go');
+test('impact factors sort by value under Zotero\'s numeric-aware collation, with blanks last either way',()=>{
+ const {plugin,item,Z}=fixture();const ref=item(1);
+ let direction=1;Z.getMainWindow=()=>({ZoteroPane:{itemsView:{getSortDirection:()=>direction}}});
+ const key=n=>{plugin.state=()=>({impactFactor:n});return [plugin.value('if',ref),n];};
+ // Zotero 9.0.6: Intl.Collator numeric compare, the result times the direction.
+ const collate=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'}).compare;
+ const order=values=>values.map(key).sort((a,b)=>collate(a[0],b[0])*direction).map(pair=>pair[1]);
+ assert.deepEqual(order([12.25,12.5,null,4.123,0,4.5,50]),[0,4.123,4.5,12.25,12.5,50,null],'up: 12.5 above 12.25, the blank last');
+ direction=-1;
+ assert.deepEqual(order([12.25,12.5,null,4.123,0,4.5,50]),[50,12.5,12.25,4.5,4.123,0,null],'down: highest first, the blank still last');
+ plugin.state=()=>({impactFactor:null});plugin.journalCitedness=()=>({citedness:18.9,name:'Nature'});
+ assert.equal(plugin.displayValue('if',ref),'','the IF column is the JIF alone');
+ assert.equal(plugin.displayValue('oaCitedness',ref),'18.9','OpenAlex\'s figure has its own column');
 });
 
 test('a label in the item list is a word in its colour, not a tinted capsule',async()=>{
@@ -528,6 +535,63 @@ test('the click that selects a row does not also change its status; a click on a
  press();
  assert.deepEqual(edits,[{status:'reading'}],'the second, on a selected row, changes it');
  window.ZoteroPane=undefined;
+});
+
+test('the annotation strip is worked out once per change, and its page marks are not Tab stops',async()=>{
+ const {plugin,item,Z}=fixture(),ref=item(1);ref.getAttachments=()=>[9];
+ let parses=0;const note={annotationColor:'#ffd400',dateModified:'2026-09-01 00:00:00',get annotationPosition(){parses++;return JSON.stringify({pageIndex:2,rects:[[0,0,1,1]]});}};
+ const list=[note];Z.Items={get:()=>({getAnnotations:()=>list})};
+ plugin.annotationDistribution(ref);plugin.annotationDistribution(ref);
+ assert.equal(parses,1,'the second paint reuses the first answer');
+ list.push({...note,dateModified:'2026-09-02 00:00:00',annotationPosition:JSON.stringify({pageIndex:5,rects:[[0,0,1,1]]})});
+ assert.equal(plugin.annotationDistribution(ref).length,2,'a new annotation is seen');
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');
+ window.ZoteroPane={itemsView:{getRow:()=>({ref})}};plugin.isRegular=()=>true;plugin.value=()=>'2';
+ const cell=plugin.renderCell('annotationCount',0,'2',{},document);
+ const marks=[...cell.querySelectorAll('button')];assert.ok(marks.length>0,'the strip is drawn');
+ for(const b of marks)assert.equal(String(b.tabIndex??b.getAttribute('tabindex')),'-1');
+ window.ZoteroPane=undefined;
+});
+
+test('an installed CSL style draws the dialog\'s citation, and the hand-made format stands in when it is missing',async()=>{
+ const {plugin,item,Z}=fixture();const a=item(1);
+ plugin.bibliographyRecord=()=>({title:'T',year:2020,venue:'Cell',creators:[{lastName:'Kim',firstName:'A',creatorType:'author'}]});
+ const apa=plugin.citationFormats.PANEL_STYLES.find(s=>s.key==='apa');
+ let asked=null;Z.QuickCopy={getContentFromItems:async(items,format)=>{asked=format;return {text:'Kim, A. (2020). T. Cell.'};}};
+ assert.equal(await plugin.citationText([a],apa),'Kim, A. (2020). T. Cell.');
+ assert.equal(asked,'bibliography=http://www.zotero.org/styles/apa');
+ Z.QuickCopy={getContentFromItems:async()=>({text:''})};
+ assert.match(await plugin.citationText([a],apa),/Kim/,'the local format when the style is not installed');
+});
+
+test('a changed annotation drops its paper\'s strip memo when Zotero says so, even mid-sync',async()=>{
+ const {plugin,Z}=fixture();let observer;
+ Z.Notifier={registerObserver:o=>{observer=o;return 'observer';},unregisterObserver:()=>{}};
+ await plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+ const annotation={id:30,parentID:20,isAnnotation:()=>true},pdf={id:20,parentID:10};
+ Z.Items={...Z.Items,get:id=>({30:annotation,20:pdf})[id]};
+ plugin.annotationMemo=new Map([[10,{key:'k',pages:[]}],[11,{key:'k',pages:[]}]]);
+ Z.Sync={Runner:{syncInProgress:true}};
+ observer.notify('add','item',[30],{});
+ assert.equal(plugin.annotationMemo.has(10),false,'a new annotation: the paper it was added to');
+ assert.equal(plugin.annotationMemo.has(11),true,'and no other');
+ observer.notify('modify','item',[30],{});
+ assert.equal(plugin.annotationMemo.has(11),false,'a changed one may have moved between papers: all');
+ plugin.annotationMemo.set(12,{key:'k',pages:[]});
+ observer.notify('delete','item',[99],{});
+ assert.equal(plugin.annotationMemo.size,0,'a deletion clears all');
+ await plugin.stop();
+});
+
+test('while Zotero\'s notifier watches, a painted strip reads no annotation at all until told something changed',()=>{
+ const {plugin,item,Z}=fixture(),ref=item(1);ref.getAttachments=()=>[9];
+ let touched=0;Z.Items={get:()=>({getAnnotations:()=>{touched++;return [{annotationColor:'#ffd400',annotationPosition:JSON.stringify({pageIndex:1,rects:[[0,0,1,1]]})}];}})};
+ plugin.itemObserver='watching';
+ plugin.annotationDistribution(ref);const first=touched;
+ plugin.annotationDistribution(ref);plugin.annotationDistribution(ref);
+ assert.equal(touched,first,'the second and third paints read nothing');
+ plugin.annotationMemo.delete(ref.id);plugin.annotationDistribution(ref);
+ assert.ok(touched>first,'after the notifier drops it, it is read again');
 });
 
 test('supplementary attachments are told apart from the main PDF by publisher naming conventions',async()=>{
@@ -770,7 +834,7 @@ test('citation bars all start at the same x, so their lengths can be compared', 
   const ref = item(1);
   window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
   const track = count => {
-    plugin.value = key => key === 'citations' ? String(count) : '';
+    plugin.displayValue = key => key === 'citations' ? String(count) : '';
     const cell = plugin.renderCell('citations', 0, '', {}, document);
     return {number: cell.firstChild.style, bar: cell.lastChild.firstChild.style.width};
   };
@@ -1031,6 +1095,78 @@ test('titles for bare OpenAlex IDs are asked once and remembered', async () => {
   assert.equal(first.W99.doi, '10.1/w99');
   await f.plugin.worksByID(['W99']);
   assert.equal(asked, 1, 'the second time costs nothing');
+});
+
+test('after OpenAlex refuses for budget, no OpenAlex request is sent until it resets', async () => {
+  const f = discoverFixture();
+  let sent = 0;
+  f.Z.HTTP.request = async (method, url) => { sent++; throw Object.assign(new Error('HTTP 429 ' + url), {status: 429, xmlhttp: {status: 429, response: {error: 'Insufficient budget'}}}); };
+  await assert.rejects(f.plugin.discoverJSON('https://api.openalex.org/works?filter=x'));
+  await assert.rejects(f.plugin.discoverJSON('https://api.openalex.org/authors/A1'), error => error.held === true);
+  assert.equal(sent, 1, 'the second request never left');
+  assert.equal(f.plugin.outOfBudget({status: 429}), true, 'and reads as a spent budget to every loop');
+  f.Z.HTTP.request = async () => ({response: {ok: true}});
+  assert.deepEqual(await f.plugin.discoverJSON('https://pub.orcid.org/v3.0/x'), {ok: true}, 'other services are not held');
+  // A 404 for a paper whose title says "budget" is a 404.
+  const g = discoverFixture();
+  let sentAfter = 0;
+  g.Z.HTTP.request = async (method, url) => { sentAfter++; if (sentAfter === 1) throw Object.assign(new Error('HTTP 404 ' + url), {status: 404}); return {response: {ok: true}}; };
+  await assert.rejects(g.plugin.discoverJSON('https://api.openalex.org/works?filter=title.search:budget%20allocation'));
+  assert.deepEqual(await g.plugin.discoverJSON('https://api.openalex.org/works?filter=x'), {ok: true}, 'the next request is sent');
+});
+
+test('a paper without a DOI is matched among five title hits, not taken as the first one', async () => {
+  const f = discoverFixture();
+  const fields = {title: 'An antiplasmid system in Vibrio', date: '2024'};
+  f.ref.getField = key => fields[key] || '';
+  const hit = (id, title, author) => ({id: 'https://openalex.org/' + id, title, publication_year: 2024,
+    authorships: [{author: {id: 'https://openalex.org/' + author, display_name: author}, author_position: 'first', institutions: []}]});
+  f.Z.HTTP.request = async (method, url) => /title\.search/.test(decodeURIComponent(url))
+    ? {response: {results: [hit('W1', 'Plasmid systems in yeast', 'AWrong'), hit('W2', 'An antiplasmid system in Vibrio.', 'ARight')]}}
+    : {response: {results: []}};
+  const people = await f.plugin.authorsOf(f.ref);
+  assert.deepEqual(people.map(p => p.name), ['ARight'], 'the second hit, which is this paper');
+  f.Z.HTTP.request = async () => ({response: {results: [hit('W1', 'Plasmid systems in yeast', 'AWrong')]}});
+  await assert.rejects(f.plugin.authorsOf(f.ref), /제목이 다릅니다/, 'no match is said, not guessed');
+});
+
+test('a DOI filled in or corrected drops what was fetched for the old one, and asks nothing', async () => {
+  const f = discoverFixture();
+  const fields = {title: 'An antiplasmid system', DOI: '10.1/old', date: '2024'};
+  f.ref.getField = key => fields[key] || '';
+  const key = f.plugin.identity(f.ref);
+  f.plugin.paperWorks()[key] = {doi: '10.1/old', references: ['W7']};
+  f.plugin.citedByStore()[key] = {citers: []};
+  f.plugin.readingPathStore()[key] = {at: new Date().toISOString(), seed: 'doi:10.1/old', plan: {v: f.plugin.PATH_VERSION}};
+  assert.equal(f.plugin.forgetIfIdentityChanged(f.ref), false, 'the same DOI: nothing to drop');
+  fields.DOI = '10.1/new';
+  let asked = 0; f.Z.HTTP.request = async () => { asked++; return {response: {}}; };
+  assert.equal(f.plugin.forgetIfIdentityChanged(f.ref), true);
+  assert.equal(f.plugin.paperWorks()[key], undefined);
+  assert.equal(f.plugin.citedByStore()[key], undefined);
+  assert.equal(f.plugin.readingPathStore()[key], undefined);
+  assert.equal(asked, 0, 'the next look asks, not the edit');
+});
+
+test('an institution lookup that failed is asked again; "not found" holds for ninety days only', async () => {
+  const f = discoverFixture();
+  const key = 'x';
+  f.plugin.paperWorks()[key] = {doi: '10.1/a', people: [{name: 'A', position: 'first', corresponding: true, ror: 'https://ror.org/0abc'}]};
+  f.plugin.active = true;
+  let fail = true, asked = 0;
+  f.Z.HTTP.request = async () => { asked++; if (fail) throw Object.assign(new Error('HTTP 503'), {status: 503}); return {response: {results: []}}; };
+  await f.plugin.sweepInstitutions();
+  assert.equal(Object.keys(f.plugin.institutionTable()).length, 0, 'a failed batch writes nothing');
+  fail = false;
+  await f.plugin.sweepInstitutions();
+  assert.equal(asked, 2, 'so the next sweep asks again');
+  const row = Object.values(f.plugin.institutionTable())[0];
+  assert.equal(row.unknown, true, 'an answered batch without it is "not found"');
+  await f.plugin.sweepInstitutions();
+  assert.equal(asked, 2, 'which is not asked again soon');
+  row.checkedAt = new Date(Date.now() - 100 * 864e5).toISOString();
+  await f.plugin.sweepInstitutions();
+  assert.equal(asked, 3, 'but is after ninety days');
 });
 
 test('an author who is not followed is never reported as having news', async () => {
@@ -1711,7 +1847,7 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   assert.match(mark.firstChild.style.cssText, /background:\s*#ca2015/, 'the badge wears the exact AAAS red #ca2015');
   assert.equal(mark.firstChild.style.color, '#ffffff', 'white lettering on it');
   assert.equal(mark.title, 'Science · Science');
-  plugin.value = (key, target) => key === 'if' ? '56.1' : '';
+  plugin.displayValue = (key, target) => key === 'if' ? '56.1' : '';
   const cell = plugin.renderCell('if', 0, '56.1', {}, document);
   assert.equal(cell.textContent, '56.1', 'the figure stands alone; the mark is in its own column');
   delete plugin.value;
@@ -1829,7 +1965,7 @@ test('the citation bar is grey while a paper is too young to judge, not while it
     const ref = item(1);
     ref.getField = key => key === 'date' ? String(year) : '';
     window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
-    plugin.value = key => key === 'citations' ? String(citations) : '';
+    plugin.displayValue = key => key === 'citations' ? String(citations) : '';
     const cell = plugin.renderCell('citations', 0, '', {}, document);
     const track = cell.lastChild;
     return {colour: track.firstChild.style.background, title: track.title};
@@ -1858,7 +1994,7 @@ test('impact factors read to one decimal and sit on the right, so the points lin
   const ref = item(1);
   window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
   const shown = value => {
-    plugin.value = key => key === 'if' ? String(value) : '';
+    plugin.displayValue = key => key === 'if' ? String(value) : '';
     const cell = plugin.renderCell('if', 0, '', {}, document);
     return cell.lastChild;
   };
@@ -2339,10 +2475,23 @@ test('the reading order asks for authors only for the rows it shows, and keeps t
   assert.ok(f.asked.length > asked, 'asking again really asks again');
 });
 
+test('a reading plan made for one DOI is not kept under a DOI changed while it was being made', async () => {
+  const fields = {title: 'A seed paper', DOI: '10.1/seed', date: '2022'};
+  const f = pathFixture({fields});
+  const making = f.plugin.readingPathCached(f.ref);
+  fields.DOI = '10.1/other';
+  await making;
+  assert.equal(f.plugin.readingPathStore()[f.plugin.identity(f.ref)], undefined, 'not stored as the new paper\'s plan');
+  f.plugin.readingPathStore()[f.plugin.identity(f.ref)] = {at: new Date().toISOString(), plan: {v: f.plugin.PATH_VERSION, stale: true}};
+  const again = await f.plugin.readingPathCached(f.ref);
+  assert.notEqual(again.stale, true, 'a plan kept without its identity is asked again');
+});
+
 test('a plan with a failed part says so and is not kept, and a spent budget is an error, not an empty plan', async () => {
   const f = pathFixture({fail: url => /cites/.test(url) ? budget() : null});
   const plan = await f.plugin.readingPathCached(f.ref);
-  assert.deepEqual(plan.partial, ['citers']);
+  // A spent budget is spent for every part asked after it, as it is in OpenAlex.
+  assert.ok(plan.partial.includes('citers'));
   assert.equal(plan.budgetGone, true);
   assert.equal(f.plugin.cache.readingPaths?.[f.plugin.identity(f.ref)], undefined, 'not kept');
   assert.equal(f.plugin.discoverCache.has('path:' + f.plugin.identity(f.ref)), false, 'not remembered in memory either');
@@ -2413,7 +2562,7 @@ test('a failed lookup does not evict a newer one under the same key', async () =
 
 /* Faces for followed authors: Wikidata by ORCID first, then the person's own
    pages, and a busy Wikidata is never written down as "no photo". */
-function portraitFixture({wikidataBusy = false, imageType = 'image/jpeg'} = {}) {
+function portraitFixture({wikidataBusy = false, imageType = 'image/jpeg', orcidPages = []} = {}) {
   const f = fixture();
   const requests = [];
   f.plugin.pause = async () => {};
@@ -2437,7 +2586,7 @@ function portraitFixture({wikidataBusy = false, imageType = 'image/jpeg'} = {}) 
         Q3: {id: 'Q3', claims: {P496: [snak('0000-0003-0000-0003')], P1960: [snak('noPhoto0AAAJ')]}},
         Q4: {id: 'Q4', claims: {P496: [snak('0000-0004-0000-0004')], P1960: [snak('hanPhoto0AAJ')]}}}});
     }
-    if (/pub\.orcid\.org/.test(url)) return {response: {'researcher-url': []}};
+    if (/pub\.orcid\.org/.test(url)) return {response: {'researcher-url': orcidPages.map(value => ({url: {value}}))}};
     if (method === 'HEAD' && /scholar\.googleusercontent/.test(url))
       return {status: 200, getResponseHeader: name => /content-type/i.test(name) ? (/noPhoto/.test(url) ? 'image/png' : 'image/jpeg') : ''};
     if (method === 'HEAD') return {status: 200, getResponseHeader: name => /content-type/i.test(name) ? imageType : ''};
@@ -2468,6 +2617,12 @@ test('followed authors get a Commons photo from Wikidata, else one from their ow
   // And the answer is kept: a second press asks nobody.
   const again = await f.plugin.findWatchedPortraits();
   assert.equal(again.asked, 0);
+});
+
+test('a Google Scholar page listed on ORCID is never fetched for a photo', async () => {
+  const f = portraitFixture({orcidPages: ['https://scholar.google.com/citations?user=abcdefghijkl']});
+  await f.plugin.findWatchedPortraits();
+  assert.equal(f.requests.some(r => /scholar\.google\./.test(r.url)), false);
 });
 
 test('the button and the pass after a news sweep share one search', async () => {
