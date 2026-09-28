@@ -1447,3 +1447,60 @@
 #style-custom-workbench .sc-matrix .sc-link-button:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
 /* An owned row keeps its "보유" on the first line and its one action under it. */
 #style-custom-workbench .sc-hit-owned ~ .sc-hit-actions { grid-row: 2 / span 2; }
+
+/* 이어 읽기: three rows, title · pages and when · the page to go back to. Plain, as the list under it. */
+#style-custom-workbench .sc-resume { display: flex; flex-direction: column; margin: 0 0 12px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-resume-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 6px 2px; }
+#style-custom-workbench .sc-resume-row + .sc-resume-row { border-block-start: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-resume-title { font: 600 13px/1.4 var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-resume-meta { color: var(--sc-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The list's one-line summary: a thin status meter in the status column's tones, then the figures, bold number first. */
+#style-custom-workbench .sc-overview { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 10px; }
+#style-custom-workbench .sc-overview-meter { display: flex; height: 4px; overflow: hidden; background: var(--sc-fill); }
+#style-custom-workbench .sc-overview-done { background: #2D7854; }
+#style-custom-workbench .sc-overview-reading { background: #7FA995; }
+#style-custom-workbench .sc-overview-unread { background: var(--sc-border); }
+#style-custom-workbench .sc-overview-facts { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--sc-muted); }
+#style-custom-workbench .sc-overview-facts b { color: var(--sc-text); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* Pages read, as a short grey meter after the reading time. */
+#style-custom-workbench .sc-row-progress { display: inline-block; width: 28px; height: 4px; margin-inline-start: 4px; background: var(--sc-fill); vertical-align: middle; overflow: hidden; }
+#style-custom-workbench .sc-row-progress-fill { display: block; height: 100%; background: var(--sc-muted); }
+
+/* 저장된 새 논문: two lines a paper -- title, then date · journal · who -- and what the library knows, at the right. */
+#style-custom-workbench .sc-author-inbox { display: flex; flex-direction: column; margin: 0 0 14px; }
+#style-custom-workbench .sc-author-inbox-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; padding: 7px 2px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-author-inbox-row > .sc-hit-title, #style-custom-workbench .sc-author-inbox-row > .sc-hit-meta { grid-column: 1; margin: 0; }
+#style-custom-workbench .sc-inbox-status { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--sc-muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-inbox-note { margin: -2px 0 6px; font-size: 12px; }
+
+/* A step already on the shelf but not finished: one quiet line of what the library knows. */
+#style-custom-workbench .sc-path-local { margin: 0; font-size: 12px; color: var(--sc-muted); }
+
+/* The list as a table without lines: a title over its journal and authors on
+   the left, the figures in fixed columns on the right under one header, and
+   the two actions in a slot of their own that shows on hover -- nothing laid
+   over the numbers. */
+#style-custom-workbench .sc-paper-card .sc-paper-heading,
+#style-custom-workbench .sc-paper-columns { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 104px; align-items: center; column-gap: 10px; }
+#style-custom-workbench .sc-paper-card .sc-paper-identity { flex-direction: column; align-items: stretch; gap: 0; min-width: 0; }
+#style-custom-workbench .sc-paper-card .sc-paper-meta { flex: none; max-width: none; min-width: 0; }
+#style-custom-workbench .sc-paper-card .sc-metrics { margin: 0; justify-content: flex-end; gap: 12px; }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric], #style-custom-workbench .sc-paper-column { justify-content: flex-end; flex: none; }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric=impact], #style-custom-workbench .sc-paper-column[data-metric=impact] { width: 64px; }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric=citations], #style-custom-workbench .sc-paper-column[data-metric=citations] { width: 72px; }
+#style-custom-workbench .sc-paper-card .sc-stars, #style-custom-workbench .sc-paper-column[data-metric=rating] { width: 64px; }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric=time], #style-custom-workbench .sc-paper-column[data-metric=time] { width: 124px; }
+#style-custom-workbench .sc-paper-card .sc-metric-unit { display: none; }
+#style-custom-workbench .sc-paper-card .sc-paper-actions { display: flex; position: static; transform: none; box-shadow: none; background: transparent; padding: 0; visibility: hidden; justify-content: flex-end; }
+#style-custom-workbench .sc-paper-card:hover .sc-paper-actions,
+#style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions { visibility: visible; }
+#style-custom-workbench .sc-paper-columns { padding: 0 var(--sc-card-padding, 12px) 4px calc(var(--sc-card-padding, 12px) + 14px); margin: 0 0 2px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-paper-columns-lead { grid-column: 1 / span 2; }
+#style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: 3; }
+#style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) repeat(4, auto) 104px; }
+#style-custom-workbench .sc-paper-columns-lead { grid-column: 1; }
+#style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: auto; }
+#style-custom-workbench .sc-paper-column { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; display: flex; color: var(--sc-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+#style-custom-workbench .sc-paper-column:hover, #style-custom-workbench .sc-paper-column[aria-pressed=true] { color: var(--sc-text); }

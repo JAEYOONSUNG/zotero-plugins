@@ -55,7 +55,7 @@
  }
  function sortItems(items,order='library'){
   const result=[...items];
-  const field=({'year-desc':'year','citations-desc':'citations','rating-desc':'rating','time-desc':'seconds'})[order];
+  const field=({'year-desc':'year','citations-desc':'citations','rating-desc':'rating','time-desc':'seconds','if-desc':'impactFactor'})[order];
   if(order==='title')result.sort((a,b)=>text(a.title).localeCompare(text(b.title))||text(a.id).localeCompare(text(b.id)));
   else if(field)result.sort((a,b)=>{const value=item=>item[field]!==null&&item[field]!==undefined&&item[field]!==''&&Number.isFinite(Number(item[field]))?Number(item[field]):-Infinity;return (value(b)-value(a)||0)||text(a.title).localeCompare(text(b.title))||text(a.id).localeCompare(text(b.id));});
   return result;

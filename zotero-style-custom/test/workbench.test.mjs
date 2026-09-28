@@ -2169,15 +2169,18 @@ test('the related tab opens on the short reading path: a handful of numbered ste
  } finally { f.bench.destroy(); }
 });
 
-test('a paper already owned reads as one "보유" line, is not numbered, and does not use up its section', async () => {
+test('a paper already read reads as one "완료" line, is not numbered, and does not use up its section', async () => {
  const f = await pathFixture({owned: ['A', 'X']});
+ const base = f.library.snapshot;
+ f.library.snapshot = async () => [...await base(), {...f.papers[0], id: '50', key: 'K50', doi: '10.1/a', status: 'done'}, {...f.papers[0], id: '51', key: 'K51', doi: '10.1/x', status: 'done'}];
  try {
+  await f.bench.load?.();
   await f.bench.show('related');
   const ownedRows = [...f.body().querySelectorAll('.sc-path-owned')];
   assert.ok(ownedRows.length >= 1, 'owned works are shown as owned');
   for (const row of ownedRows) {
    assert.equal(row.dataset.step, undefined);
-   assert.equal(row.querySelector('.sc-path-step').textContent, '보유');
+   assert.equal(row.querySelector('.sc-path-step').textContent, '완료');
    assert.equal(row.querySelector('.sc-path-finding'), null, 'one line, no finding, no reasons');
   }
   // One start, marked either on a row to fetch or on an owned line -- an owned
@@ -2188,6 +2191,21 @@ test('a paper already owned reads as one "보유" line, is not numbered, and doe
   for (const row of ownedRows) assert.ok(!row.querySelector('.sc-path-why'), 'an owned line carries no reasons');
   const foundation = [...f.body().querySelectorAll('.sc-path-head')].find(h => h.textContent.startsWith('기초'));
   assert.ok(foundation, 'the foundation section is there');
+ } finally { f.bench.destroy(); }
+});
+
+test('a paper saved but not read keeps its number and its reasons, and says how far it has gone', async () => {
+ const f = await pathFixture({owned: ['A']});
+ const base = f.library.snapshot;
+ f.library.snapshot = async () => [...await base(), {...f.papers[0], id: '50', key: 'K50', doi: '10.1/a', status: 'reading', seconds: 1240}];
+ try {
+  await f.bench.load?.();
+  await f.bench.show('related');
+  const row = f.body().querySelector('[data-work="A"]');
+  assert.ok(row, 'the owned paper is on the path');
+  assert.ok(row.dataset.step, 'with a number, as a paper still to read');
+  assert.match(row.querySelector('.sc-path-local')?.textContent || '', /보유 · 읽는 중/);
+  assert.equal(row.classList.contains('sc-path-owned'), false, 'not folded away');
  } finally { f.bench.destroy(); }
 });
 

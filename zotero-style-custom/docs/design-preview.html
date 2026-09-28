@@ -828,6 +828,12 @@
 #style-custom-workbench .sc-watch:active, #style-custom-workbench .sc-node:active { background: var(--sc-fill-active); }
 #style-custom-workbench .sc-watch:focus-visible { outline-offset: -2px; }
 #style-custom-workbench .sc-watch-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* A face beside the name and its line: the photo once found, the initials
+   until then. A person is quicker to find in a grid of faces than of names. */
+#style-custom-workbench .sc-watch { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 8px; align-items: center; }
+#style-custom-workbench .sc-watch > .sc-watch-face { grid-row: 1 / span 2; width: 28px; height: 28px; }
+#style-custom-workbench .sc-watch > :not(.sc-watch-face) { grid-column: 2; }
+#style-custom-workbench .sc-watch-face .sc-face-text { font-size: 10px; }
 #style-custom-workbench .sc-watch-name {
   font: 500 12px/1.35 var(--sc-title-font); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -932,6 +938,10 @@
   background: var(--sc-fill);
   color: var(--sc-text); font: 600 9.5px/1 var(--sc-title-font);
 }
+#style-custom-workbench .sc-node-face { position: relative; overflow: hidden; }
+#style-custom-workbench .sc-node-face .sc-face-text { font: inherit; color: inherit; letter-spacing: 0; }
+#style-custom-workbench .sc-node-face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+#style-custom-workbench .sc-node-face[data-has-photo=true] .sc-face-text { display: none; }
 #style-custom-workbench .sc-node-body { display: flex; flex-direction: column; min-width: 0; gap: 0; }
 #style-custom-workbench .sc-node-name { font: 500 12px/1.3 var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-node-meta { font: 400 11px/1.3 var(--sc-font); color: var(--sc-faint); }
@@ -1432,7 +1442,69 @@
 /* A paper chosen from a list of papers: the button says enough of the title to
    recognise it, and the whole title is on the pointer. */
 #style-custom-workbench .sc-actions button[data-pick] { display: block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div><section style="font-size:13px" data-maximized="false" role="region" data-density="comfortable" aria-label="Style Custom 연구 작업 패널" id="style-custom-workbench"><header class="sc-header"><div class="sc-brand"><img aria-hidden="true" alt="" height="24" width="24" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJTdHlsZSBDdXN0b206IGEgbGlicmFyeSByb3cgbWFya2VkIj4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjI4IiBmaWxsPSIjMkIzMjQwIi8+CiAgPGcgZmlsbD0iI0ZGRkZGRiIgb3BhY2l0eT0iMC41Ij4KICAgIDxjaXJjbGUgY3g9IjMxIiBjeT0iNDEiIHI9IjYiLz48Y2lyY2xlIGN4PSIzMSIgY3k9IjY0IiByPSI2Ii8+PGNpcmNsZSBjeD0iMzEiIGN5PSI4NyIgcj0iNiIvPgogIDwvZz4KICA8ZyBmaWxsPSIjRkZGRkZGIj4KICAgIDxyZWN0IHg9IjQ2IiB5PSIzNCIgd2lkdGg9IjU2IiBoZWlnaHQ9IjE0IiByeD0iNyIvPgogICAgPHJlY3QgeD0iNDYiIHk9IjgwIiB3aWR0aD0iNDAiIGhlaWdodD0iMTQiIHJ4PSI3Ii8+CiAgPC9nPgogIDxyZWN0IHg9IjQ2IiB5PSI1NyIgd2lkdGg9IjUwIiBoZWlnaHQ9IjE0IiByeD0iNyIgZmlsbD0iI0U5QTgxQyIvPgo8L3N2Zz4K"><strong>Style Custom</strong><span class="sc-subtitle">연구 작업 패널</span></div><div class="sc-header-actions"><button aria-pressed="false" title="간격 좁게" class="sc-icon-button" aria-label="화면 밀도 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="8" x2="13" y1="8" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /></svg></button><button hidden aria-pressed="false" class="sc-icon-button sc-dock" title="탭으로 열기" aria-label="탭으로 열기 / 창으로 띄우기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="8.4" width="10.8" y="4.6" x="2.6" /><path d="M2.6 7.4h10.8M5.2 4.6V3h4.4v1.6" /></svg></button><button aria-pressed="false" class="sc-icon-button sc-maximize" title="전체 화면" aria-label="전체 화면 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4" /></svg></button><button class="sc-icon-button" title="기능 찾기 · ⌘/Ctrl K" aria-label="기능 찾기" aria-keyshortcuts="Meta+K Control+K" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="4.25" cy="7.25" cx="7.25" /><line y2="13.5" x2="13.5" y1="10.5" x1="10.5" /></svg></button><button class="sc-icon-button sc-close" title="닫기" aria-label="작업 패널 닫기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="12" x2="12" y1="4" x1="4" /><line y2="12" x2="4" y1="4" x1="12" /></svg></button></div></header><div class="sc-shell"><nav aria-label="작업 종류"><div class="sc-nav-group"><div class="sc-nav-heading">탐색</div><button class="active" aria-current="page" data-tab="explore" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.8" height="10" width="3" y="3" x="2.75" /><rect rx="0.8" height="10" width="3" y="3" x="7.25" /><path d="M11.9 3.6l1.9.5-2.2 9.1-1.2-.3" /></svg></span>보유 문헌</button><button aria-current="false" data-tab="recent" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="5.25" cy="8" cx="8" /><path d="M8 5.1V8l2.2 1.7" /></svg></span>최근 문헌</button><button aria-current="false" data-tab="related" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.1" cy="11.4" cx="4.4" /><circle r="2.1" cy="4.6" cx="11.5" /><line y2="6.1" x2="10" y1="9.9" x1="6" /></svg></span>관련 논문</button><button aria-current="false" data-tab="authors" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.5" cy="5.6" cx="8" /><path d="M3.3 13.1c.7-2.5 2.5-3.8 4.7-3.8s4 1.3 4.7 3.8" /></svg></span>저자 추적</button><button aria-current="false" data-tab="collections" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.7 12.6V4.2h3.9l1.4 1.7h5.3v6.7z" /></svg></span>컬렉션</button><button aria-current="false" data-tab="journals" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="8.6" x2="4" y1="12.6" x1="4" /><line y2="5" x2="8" y1="12.6" x1="8" /><line y2="10" x2="12" y1="12.6" x1="12" /><line y2="12.6" x2="13.6" y1="12.6" x1="2.4" /></svg></span>저널 지표</button></div><div class="sc-nav-group"><div class="sc-nav-heading">읽기</div><button aria-current="false" data-tab="reading" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z" /><line y2="13.4" x2="8" y1="4.8" x1="8" /></svg></span>읽기 진행</button><button aria-current="false" data-tab="notes" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M4 2.6h5.4L12.4 5.6v7.8H4z" /><path d="M9.2 2.7v3h3.1" /><line y2="9" x2="10.4" y1="9" x1="6" /><line y2="11.2" x2="9" y1="11.2" x1="6" /></svg></span>노트</button><button aria-current="false" data-tab="annotations" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.9" height="2.6" width="10.8" y="9.6" x="2.6" /><path d="M5.2 9.5l5.6-6 2.3 2.3-5.5 5.7" /></svg></span>주석</button><button aria-current="false" data-tab="attachments" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M11.5 7.2l-4.6 4.6a2.4 2.4 0 01-3.4-3.4l5.4-5.4a1.7 1.7 0 012.4 2.4l-5.2 5.2a.9.9 0 01-1.3-1.3l4.5-4.5" /></svg></span>첨부 미리보기</button><button aria-current="false" data-tab="backlinks" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M13.2 11.6a4.2 4.2 0 00-4.2-4.2H3.5" /><path d="M6.2 4.6L3.2 7.4l3 2.8" /></svg></span>역링크</button></div><div class="sc-nav-group"><div class="sc-nav-heading">정리</div><button aria-current="false" data-tab="tags" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8.4 2.6H13v4.6l-6 6a1.1 1.1 0 01-1.6 0L2.8 10.2a1.1 1.1 0 010-1.6z" /><circle r="0.95" cy="5.1" cx="10.5" /></svg></span>중첩 태그</button><button aria-current="false" data-tab="graph" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="1.7" cy="3.6" cx="8" /><circle r="1.7" cy="11.8" cx="3.7" /><circle r="1.7" cy="11.8" cx="12.3" /><line y2="10.2" x2="4.6" y1="5.1" x1="6.9" /><line y2="10.2" x2="11.4" y1="5.1" x1="9.1" /><line y2="11.8" x2="10.6" y1="11.8" x1="5.4" /></svg></span>관계 그래프</button><button aria-current="false" data-tab="canvas" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.4" height="9.4" width="10.8" y="3.3" x="2.6" /><circle r="1.1" cy="6.6" cx="5.9" /><path d="M3 11.6l3.1-3 2.2 2 2.1-2.4 2.6 3" /></svg></span>캔버스</button><button aria-current="false" data-tab="matrix" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="9.6" width="10.8" y="3.2" x="2.6" /><line y2="12.8" x2="8" y1="3.2" x1="8" /><line y2="6.4" x2="13.4" y1="6.4" x1="2.6" /></svg></span>논문 비교</button></div><div class="sc-nav-group"><div class="sc-nav-heading">도구</div><button aria-current="false" data-tab="tabs" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.6 12.6V6.2h4.1l1.3-1.8h5.4v8.2z" /><path d="M4.4 4.4h3.2" /></svg></span>탭 관리</button><button aria-current="false" data-tab="views" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1" height="4.6" width="4.6" y="2.8" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="2.8" x="8.6" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="8.6" /></svg></span>뷰 그룹</button><button aria-current="false" data-tab="assist" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M6 2.9l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" /><path d="M11.4 8.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg></span>번역 · AI</button><button aria-current="false" data-tab="appearance" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /><circle r="1.6" cy="5" cx="6.4" /><circle r="1.6" cy="11" cx="10" /></svg></span>스타일 편집</button></div></nav><div class="sc-content"><div class="sc-context"><h2 class="sc-section-title">보유 문헌</h2><span class="sc-context-detail">라이브러리 · 3개 문헌</span><div aria-label="문헌 종류" class="sc-kind-chips"><button data-kind="" title="모든 종류" aria-pressed="true" type="button" class="sc-chip sc-chip-button">전체 3</button><button data-kind="journalArticle" title="논문만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">논문 2</button><button data-kind="preprint" title="프리프린트만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">프리프린트 1</button></div></div><div class="sc-controls sc-search-row"><input aria-label="작업 패널 검색" placeholder="제목·저자·태그·DOI·초록 검색" type="search"><select aria-label="표시 범위"><option value="library">라이브러리</option><option value="selected">선택한 문헌</option><option value="collection">현재 컬렉션</option><option value="collection-recursive">현재 컬렉션과 하위 컬렉션</option></select><button type="button">현재 선택 가져오기</button><button type="button">새로고침</button></div><details class="sc-filters"><summary>상세 필터</summary><div aria-label="문헌 상세 필터" class="sc-filter-fields"><select aria-label="문헌 유형 필터"><option value="">모든 유형</option><option value="journalArticle">논문</option><option value="preprint">프리프린트</option></select><select aria-label="읽기 상태 필터"><option value="">모든 읽기 상태</option><option value="unread">안 읽음</option><option value="reading">읽는 중</option><option value="done">완료</option></select><select aria-label="최소 별점"><option value="">모든 별점</option><option value="1">1점 이상</option><option value="2">2점 이상</option><option value="3">3점 이상</option><option value="4">4점 이상</option><option value="5">5점 이상</option></select><input aria-label="시작 연도" placeholder="시작 연도" max="9999" min="1" type="number"><input aria-label="마지막 연도" placeholder="마지막 연도" max="9999" min="1" type="number"><select aria-label="문헌 정렬"><option value="library">기본 순서</option><option value="title">제목순</option><option value="year-desc">최신 발행순</option><option value="citations-desc">인용 많은 순</option><option value="rating-desc">별점 높은 순</option><option value="time-desc">읽기 시간순</option></select><button type="button">필터 초기화</button></div></details><div hidden aria-label="적용 중인 필터" class="sc-filter-chips"></div><div data-error="false" aria-live="polite" role="status" class="sc-status"></div><div class="sc-welcome"><span>처음 여셨네요. 왼쪽 탭이 기능이고, ⌘/Ctrl K로 기능을 찾습니다. 문헌은 목록에서 고른 뒤 「현재 선택 가져오기」로 넘기고, 열 경계를 두 번 클릭하면 너비가 내용에 맞춰집니다.</span><button type="button">알겠어요</button></div><div class="sc-notice"><span class="sc-notice-text">철회 여부 미확인 1146편 · 지표 없는 저널 169종 · 확인 안 한 관심 저자 109명</span><div class="sc-notice-actions"><button type="button">지금 채우기</button><button type="button">나중에</button></div></div><div tabindex="-1" class="sc-body"><div class="sc-actions"><button type="button">현재 페이지 선택</button><button type="button">현재 페이지 선택 해제</button><button type="button">검색 결과 전체 선택</button></div><div class="sc-paper-list"><article tabindex="0" data-selected="true" data-status="reading" data-item-id="1" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|0" aria-label="Mapping cellular responses across tissue repair 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><h3 title="Mapping cellular responses across tissue repair" class="sc-paper-title">Mapping cellular responses across tissue repair</h3><span title="M. Kim; A. Rivera; J. Park · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · M. Kim; A. Rivera; J. Park</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">128</span></span><span data-metric="rating" title="별점 4/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★☆</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">20m 40s</span></span></div><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button type="button">자세히</button></div></div></article><article tabindex="0" data-selected="false" data-status="done" data-item-id="2" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|1" aria-label="A practical framework for reproducible literature synthesis 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><h3 title="A practical framework for reproducible literature synthesis" class="sc-paper-title">A practical framework for reproducible literature synthesis</h3><span title="S. Lee; L. Chen · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Methods · S. Lee; L. Chen</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">64</span></span><span data-metric="rating" title="별점 5/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★★</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">53m 20s</span></span></div><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button type="button">자세히</button></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="3" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|2" aria-label="Spatial context and cell-state transitions in regeneration 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><h3 title="Spatial context and cell-state transitions in regeneration" class="sc-paper-title"><span title="프리프린트" class="sc-preprint sc-kind">프리프린트</span>Spatial context and cell-state transitions in regeneration</h3><span title="E. Morgan; H. Choi · Example Biology" class="sc-paper-meta"><span class="sc-paper-meta-text">2026 · Example Biology · E. Morgan; H. Choi</span></span></div><div class="sc-metrics"><span data-empty="true" data-metric="impact" title="저널 영향력 지수 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">—</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button type="button">자세히</button></div></div></article></div></div></div></div><footer data-selected="true" class="sc-selection-bar"><span title="Mapping cellular responses across tissue repair" class="sc-selection-label">문헌 1개 선택</span><button type="button">선택 해제</button><button disabled data-variant="primary" type="button">관련 문헌으로 연결</button><button disabled type="button">선택 문헌끼리 연결 해제</button></footer><div hidden aria-label="기능 바로 찾기" aria-modal="true" role="dialog" class="sc-command-palette"><input aria-controls="sc-command-results" aria-label="찾을 기능 이름" aria-autocomplete="list" aria-expanded="false" role="combobox" placeholder="예: 주석, 비교, 탭…" class="sc-command-search" type="search"><div aria-label="검색된 기능" role="listbox" class="sc-command-results" id="sc-command-results"></div><p class="sc-muted">↑↓ 이동 · Enter 열기 · Esc 닫기</p></div></section><script>/* Pure workspace operations shared by the panel and background regressions. */
+/* A title in the comparison table opens the paper: text that reads as a title, a link on hover. */
+#style-custom-workbench .sc-matrix .sc-link-button { min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-matrix .sc-link-button:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
+/* An owned row keeps its "보유" on the first line and its one action under it. */
+#style-custom-workbench .sc-hit-owned ~ .sc-hit-actions { grid-row: 2 / span 2; }
+
+/* 이어 읽기: three rows, title · pages and when · the page to go back to. Plain, as the list under it. */
+#style-custom-workbench .sc-resume { display: flex; flex-direction: column; margin: 0 0 12px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-resume-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 6px 2px; }
+#style-custom-workbench .sc-resume-row + .sc-resume-row { border-block-start: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-resume-title { font: 600 13px/1.4 var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-resume-meta { color: var(--sc-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The list's one-line summary: a thin status meter in the status column's tones, then the figures, bold number first. */
+#style-custom-workbench .sc-overview { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 10px; }
+#style-custom-workbench .sc-overview-meter { display: flex; height: 4px; overflow: hidden; background: var(--sc-fill); }
+#style-custom-workbench .sc-overview-done { background: #2D7854; }
+#style-custom-workbench .sc-overview-reading { background: #7FA995; }
+#style-custom-workbench .sc-overview-unread { background: var(--sc-border); }
+#style-custom-workbench .sc-overview-facts { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--sc-muted); }
+#style-custom-workbench .sc-overview-facts b { color: var(--sc-text); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* Pages read, as a short grey meter after the reading time. */
+#style-custom-workbench .sc-row-progress { display: inline-block; width: 28px; height: 4px; margin-inline-start: 4px; background: var(--sc-fill); vertical-align: middle; overflow: hidden; }
+#style-custom-workbench .sc-row-progress-fill { display: block; height: 100%; background: var(--sc-muted); }
+
+/* 저장된 새 논문: two lines a paper -- title, then date · journal · who -- and what the library knows, at the right. */
+#style-custom-workbench .sc-author-inbox { display: flex; flex-direction: column; margin: 0 0 14px; }
+#style-custom-workbench .sc-author-inbox-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; padding: 7px 2px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-author-inbox-row > .sc-hit-title, #style-custom-workbench .sc-author-inbox-row > .sc-hit-meta { grid-column: 1; margin: 0; }
+#style-custom-workbench .sc-inbox-status { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--sc-muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-inbox-note { margin: -2px 0 6px; font-size: 12px; }
+
+/* A step already on the shelf but not finished: one quiet line of what the library knows. */
+#style-custom-workbench .sc-path-local { margin: 0; font-size: 12px; color: var(--sc-muted); }
+
+/* The list as a table without lines: a title over its journal and authors on
+   the left, the figures in fixed columns on the right under one header, and
+   the two actions in a slot of their own that shows on hover -- nothing laid
+   over the numbers. */
+#style-custom-workbench .sc-paper-card .sc-paper-heading,
+#style-custom-workbench .sc-paper-columns { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 104px; align-items: center; column-gap: 10px; }
+#style-custom-workbench .sc-paper-card .sc-paper-identity { flex-direction: column; align-items: stretch; gap: 0; min-width: 0; }
+#style-custom-workbench .sc-paper-card .sc-paper-meta { flex: none; max-width: none; min-width: 0; }
+#style-custom-workbench .sc-paper-card .sc-metrics { margin: 0; justify-content: flex-end; gap: 12px; }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric], #style-custom-workbench .sc-paper-column { justify-content: flex-end; flex: none; }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric=impact], #style-custom-workbench .sc-paper-column[data-metric=impact] { width: 64px; }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric=citations], #style-custom-workbench .sc-paper-column[data-metric=citations] { width: 72px; }
+#style-custom-workbench .sc-paper-card .sc-stars, #style-custom-workbench .sc-paper-column[data-metric=rating] { width: 64px; }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric=time], #style-custom-workbench .sc-paper-column[data-metric=time] { width: 124px; }
+#style-custom-workbench .sc-paper-card .sc-metric-unit { display: none; }
+#style-custom-workbench .sc-paper-card .sc-paper-actions { display: flex; position: static; transform: none; box-shadow: none; background: transparent; padding: 0; visibility: hidden; justify-content: flex-end; }
+#style-custom-workbench .sc-paper-card:hover .sc-paper-actions,
+#style-custom-workbench .sc-paper-card:focus-within .sc-paper-actions { visibility: visible; }
+#style-custom-workbench .sc-paper-columns { padding: 0 var(--sc-card-padding, 12px) 4px calc(var(--sc-card-padding, 12px) + 14px); margin: 0 0 2px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-paper-columns-lead { grid-column: 1 / span 2; }
+#style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: 3; }
+#style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) repeat(4, auto) 104px; }
+#style-custom-workbench .sc-paper-columns-lead { grid-column: 1; }
+#style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: auto; }
+#style-custom-workbench .sc-paper-column { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; display: flex; color: var(--sc-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+#style-custom-workbench .sc-paper-column:hover, #style-custom-workbench .sc-paper-column[aria-pressed=true] { color: var(--sc-text); }
+</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div><section style="font-size:13px" data-maximized="false" role="region" data-density="comfortable" aria-label="Style Custom 연구 작업 패널" id="style-custom-workbench"><header class="sc-header"><div class="sc-brand"><img aria-hidden="true" alt="" height="24" width="24" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJTdHlsZSBDdXN0b206IGEgbGlicmFyeSByb3cgbWFya2VkIj4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjI4IiBmaWxsPSIjMkIzMjQwIi8+CiAgPGcgZmlsbD0iI0ZGRkZGRiIgb3BhY2l0eT0iMC41Ij4KICAgIDxjaXJjbGUgY3g9IjMxIiBjeT0iNDEiIHI9IjYiLz48Y2lyY2xlIGN4PSIzMSIgY3k9IjY0IiByPSI2Ii8+PGNpcmNsZSBjeD0iMzEiIGN5PSI4NyIgcj0iNiIvPgogIDwvZz4KICA8ZyBmaWxsPSIjRkZGRkZGIj4KICAgIDxyZWN0IHg9IjQ2IiB5PSIzNCIgd2lkdGg9IjU2IiBoZWlnaHQ9IjE0IiByeD0iNyIvPgogICAgPHJlY3QgeD0iNDYiIHk9IjgwIiB3aWR0aD0iNDAiIGhlaWdodD0iMTQiIHJ4PSI3Ii8+CiAgPC9nPgogIDxyZWN0IHg9IjQ2IiB5PSI1NyIgd2lkdGg9IjUwIiBoZWlnaHQ9IjE0IiByeD0iNyIgZmlsbD0iI0U5QTgxQyIvPgo8L3N2Zz4K"><strong>Style Custom</strong><span class="sc-subtitle">연구 작업 패널</span></div><div class="sc-header-actions"><button aria-pressed="false" title="간격 좁게" class="sc-icon-button" aria-label="화면 밀도 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="8" x2="13" y1="8" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /></svg></button><button hidden aria-pressed="false" class="sc-icon-button sc-dock" title="탭으로 열기" aria-label="탭으로 열기 / 창으로 띄우기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="8.4" width="10.8" y="4.6" x="2.6" /><path d="M2.6 7.4h10.8M5.2 4.6V3h4.4v1.6" /></svg></button><button aria-pressed="false" class="sc-icon-button sc-maximize" title="전체 화면" aria-label="전체 화면 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4" /></svg></button><button class="sc-icon-button" title="기능 찾기 · ⌘/Ctrl K" aria-label="기능 찾기" aria-keyshortcuts="Meta+K Control+K" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="4.25" cy="7.25" cx="7.25" /><line y2="13.5" x2="13.5" y1="10.5" x1="10.5" /></svg></button><button class="sc-icon-button sc-close" title="닫기" aria-label="작업 패널 닫기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="12" x2="12" y1="4" x1="4" /><line y2="12" x2="4" y1="4" x1="12" /></svg></button></div></header><div class="sc-shell"><nav aria-label="작업 종류"><div class="sc-nav-group"><div class="sc-nav-heading">탐색</div><button tabindex="0" class="active" aria-current="page" data-tab="explore" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.8" height="10" width="3" y="3" x="2.75" /><rect rx="0.8" height="10" width="3" y="3" x="7.25" /><path d="M11.9 3.6l1.9.5-2.2 9.1-1.2-.3" /></svg></span>보유 문헌</button><button tabindex="-1" aria-current="false" data-tab="recent" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="5.25" cy="8" cx="8" /><path d="M8 5.1V8l2.2 1.7" /></svg></span>최근 문헌</button><button tabindex="-1" aria-current="false" data-tab="related" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.1" cy="11.4" cx="4.4" /><circle r="2.1" cy="4.6" cx="11.5" /><line y2="6.1" x2="10" y1="9.9" x1="6" /></svg></span>관련 논문</button><button tabindex="-1" aria-current="false" data-tab="authors" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.5" cy="5.6" cx="8" /><path d="M3.3 13.1c.7-2.5 2.5-3.8 4.7-3.8s4 1.3 4.7 3.8" /></svg></span>저자 추적</button><button tabindex="-1" aria-current="false" data-tab="collections" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.7 12.6V4.2h3.9l1.4 1.7h5.3v6.7z" /></svg></span>컬렉션</button><button tabindex="-1" aria-current="false" data-tab="journals" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="8.6" x2="4" y1="12.6" x1="4" /><line y2="5" x2="8" y1="12.6" x1="8" /><line y2="10" x2="12" y1="12.6" x1="12" /><line y2="12.6" x2="13.6" y1="12.6" x1="2.4" /></svg></span>저널 지표</button></div><div class="sc-nav-group"><div class="sc-nav-heading">읽기</div><button tabindex="-1" aria-current="false" data-tab="reading" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z" /><line y2="13.4" x2="8" y1="4.8" x1="8" /></svg></span>읽기 진행</button><button tabindex="-1" aria-current="false" data-tab="notes" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M4 2.6h5.4L12.4 5.6v7.8H4z" /><path d="M9.2 2.7v3h3.1" /><line y2="9" x2="10.4" y1="9" x1="6" /><line y2="11.2" x2="9" y1="11.2" x1="6" /></svg></span>노트</button><button tabindex="-1" aria-current="false" data-tab="annotations" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.9" height="2.6" width="10.8" y="9.6" x="2.6" /><path d="M5.2 9.5l5.6-6 2.3 2.3-5.5 5.7" /></svg></span>주석</button><button tabindex="-1" aria-current="false" data-tab="attachments" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M11.5 7.2l-4.6 4.6a2.4 2.4 0 01-3.4-3.4l5.4-5.4a1.7 1.7 0 012.4 2.4l-5.2 5.2a.9.9 0 01-1.3-1.3l4.5-4.5" /></svg></span>첨부 미리보기</button><button tabindex="-1" aria-current="false" data-tab="backlinks" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M13.2 11.6a4.2 4.2 0 00-4.2-4.2H3.5" /><path d="M6.2 4.6L3.2 7.4l3 2.8" /></svg></span>역링크</button></div><div class="sc-nav-group"><div class="sc-nav-heading">정리</div><button tabindex="-1" aria-current="false" data-tab="tags" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8.4 2.6H13v4.6l-6 6a1.1 1.1 0 01-1.6 0L2.8 10.2a1.1 1.1 0 010-1.6z" /><circle r="0.95" cy="5.1" cx="10.5" /></svg></span>중첩 태그</button><button tabindex="-1" aria-current="false" data-tab="graph" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="1.7" cy="3.6" cx="8" /><circle r="1.7" cy="11.8" cx="3.7" /><circle r="1.7" cy="11.8" cx="12.3" /><line y2="10.2" x2="4.6" y1="5.1" x1="6.9" /><line y2="10.2" x2="11.4" y1="5.1" x1="9.1" /><line y2="11.8" x2="10.6" y1="11.8" x1="5.4" /></svg></span>관계 그래프</button><button tabindex="-1" aria-current="false" data-tab="canvas" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.4" height="9.4" width="10.8" y="3.3" x="2.6" /><circle r="1.1" cy="6.6" cx="5.9" /><path d="M3 11.6l3.1-3 2.2 2 2.1-2.4 2.6 3" /></svg></span>캔버스</button><button tabindex="-1" aria-current="false" data-tab="matrix" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="9.6" width="10.8" y="3.2" x="2.6" /><line y2="12.8" x2="8" y1="3.2" x1="8" /><line y2="6.4" x2="13.4" y1="6.4" x1="2.6" /></svg></span>논문 비교</button></div><div class="sc-nav-group"><div class="sc-nav-heading">도구</div><button tabindex="-1" aria-current="false" data-tab="tabs" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.6 12.6V6.2h4.1l1.3-1.8h5.4v8.2z" /><path d="M4.4 4.4h3.2" /></svg></span>탭 관리</button><button tabindex="-1" aria-current="false" data-tab="views" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1" height="4.6" width="4.6" y="2.8" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="2.8" x="8.6" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="8.6" /></svg></span>뷰 그룹</button><button tabindex="-1" aria-current="false" data-tab="assist" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M6 2.9l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" /><path d="M11.4 8.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg></span>번역 · AI</button><button tabindex="-1" aria-current="false" data-tab="appearance" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /><circle r="1.6" cy="5" cx="6.4" /><circle r="1.6" cy="11" cx="10" /></svg></span>스타일 편집</button></div></nav><div class="sc-content"><div class="sc-context"><h2 class="sc-section-title">보유 문헌</h2><span class="sc-context-detail">라이브러리 · 3개 문헌</span><div aria-label="문헌 종류" class="sc-kind-chips"><button data-kind="" title="모든 종류" aria-pressed="true" type="button" class="sc-chip sc-chip-button">전체 3</button><button data-kind="journalArticle" title="논문만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">논문 2</button><button data-kind="preprint" title="프리프린트만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">프리프린트 1</button></div></div><div class="sc-controls sc-search-row"><input aria-label="작업 패널 검색" placeholder="제목·저자·태그·DOI·초록 검색" type="search"><select aria-label="표시 범위"><option value="library">라이브러리</option><option value="selected">선택한 문헌</option><option value="collection">현재 컬렉션</option><option value="collection-recursive">현재 컬렉션과 하위 컬렉션</option></select><button type="button">현재 선택 가져오기</button><button type="button">새로고침</button></div><details class="sc-filters"><summary>상세 필터</summary><div aria-label="문헌 상세 필터" class="sc-filter-fields"><select aria-label="문헌 유형 필터"><option value="">모든 유형</option><option value="journalArticle">논문</option><option value="preprint">프리프린트</option></select><select aria-label="읽기 상태 필터"><option value="">모든 읽기 상태</option><option value="unread">안 읽음</option><option value="reading">읽는 중</option><option value="done">완료</option></select><select aria-label="최소 별점"><option value="">모든 별점</option><option value="1">1점 이상</option><option value="2">2점 이상</option><option value="3">3점 이상</option><option value="4">4점 이상</option><option value="5">5점 이상</option></select><input aria-label="시작 연도" placeholder="시작 연도" max="9999" min="1" type="number"><input aria-label="마지막 연도" placeholder="마지막 연도" max="9999" min="1" type="number"><select aria-label="문헌 정렬"><option value="library">기본 순서</option><option value="title">제목순</option><option value="year-desc">최신 발행순</option><option value="if-desc">IF 높은 순</option><option value="citations-desc">인용 많은 순</option><option value="rating-desc">별점 높은 순</option><option value="time-desc">읽기 시간순</option></select><button type="button">필터 초기화</button></div></details><div hidden aria-label="적용 중인 필터" class="sc-filter-chips"></div><div data-error="false" aria-live="polite" role="status" class="sc-status"></div><div class="sc-welcome"><span>처음 여셨네요. 왼쪽 탭이 기능이고, ⌘/Ctrl K로 기능을 찾습니다. 문헌은 목록에서 고른 뒤 「현재 선택 가져오기」로 넘기고, 열 경계를 두 번 클릭하면 너비가 내용에 맞춰집니다.</span><button type="button">알겠어요</button></div><div class="sc-notice"><span class="sc-notice-text">철회 여부 미확인 1146편 · 지표 없는 저널 169종 · 확인 안 한 관심 저자 109명</span><div class="sc-notice-actions"><button type="button">지금 채우기</button><button type="button">나중에</button></div></div><div tabindex="-1" class="sc-body"><div aria-label="이 목록 요약" role="group" class="sc-overview"><div aria-hidden="true" class="sc-overview-meter"><span style="flex-grow:1" class="sc-overview-done"></span><span style="flex-grow:1" class="sc-overview-reading"></span><span style="flex-grow:1" class="sc-overview-unread"></span></div><p class="sc-overview-facts"><span><b>1</b> 완료</span><span><b>1</b> 읽는 중</span><span><b>1</b> 안 읽음</span><span><b>1h 14m 0s</b> 읽음</span><span><b>10.3</b> IF 중앙값</span><span><b>96</b> 인용 중앙값</span></p></div><div class="sc-actions"><button type="button">현재 페이지 선택</button><button type="button">현재 페이지 선택 해제</button><button type="button">검색 결과 전체 선택</button></div><div aria-label="정렬할 열" role="group" class="sc-paper-columns"><span class="sc-paper-columns-lead"></span><button title="높은 순으로 정렬" aria-pressed="false" data-metric="impact" class="sc-paper-column" type="button">IF</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="citations" class="sc-paper-column" type="button">인용</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="rating" class="sc-paper-column" type="button">별점</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="time" class="sc-paper-column" type="button">읽기</button><span class="sc-paper-columns-tail"></span></div><div class="sc-paper-list"><article tabindex="0" data-selected="true" data-status="reading" data-item-id="1" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|0" aria-label="Mapping cellular responses across tissue repair 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><h3 title="Mapping cellular responses across tissue repair" class="sc-paper-title">Mapping cellular responses across tissue repair</h3><span title="M. Kim; A. Rivera; J. Park · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · M. Kim; A. Rivera; J. Park</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">128</span></span><span data-metric="rating" title="별점 4/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★☆</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">20m 40s</span><span title="전체 8쪽 중 4쪽 읽음" aria-label="전체 8쪽 중 4쪽 읽음" role="img" class="sc-row-progress"><span style="width:50%" class="sc-row-progress-fill"></span></span></span></div><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button type="button">자세히</button></div></div></article><article tabindex="0" data-selected="false" data-status="done" data-item-id="2" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|1" aria-label="A practical framework for reproducible literature synthesis 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><h3 title="A practical framework for reproducible literature synthesis" class="sc-paper-title">A practical framework for reproducible literature synthesis</h3><span title="S. Lee; L. Chen · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Methods · S. Lee; L. Chen</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">64</span></span><span data-metric="rating" title="별점 5/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★★</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">53m 20s</span><span title="전체 8쪽 중 4쪽 읽음" aria-label="전체 8쪽 중 4쪽 읽음" role="img" class="sc-row-progress"><span style="width:50%" class="sc-row-progress-fill"></span></span></span></div><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button type="button">자세히</button></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="3" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|2" aria-label="Spatial context and cell-state transitions in regeneration 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><h3 title="Spatial context and cell-state transitions in regeneration" class="sc-paper-title"><span title="프리프린트" class="sc-preprint sc-kind">프리프린트</span>Spatial context and cell-state transitions in regeneration</h3><span title="E. Morgan; H. Choi · Example Biology" class="sc-paper-meta"><span class="sc-paper-meta-text">2026 · Example Biology · E. Morgan; H. Choi</span></span></div><div class="sc-metrics"><span data-empty="true" data-metric="impact" title="저널 영향력 지수 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">—</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span><span title="전체 8쪽 중 4쪽 읽음" aria-label="전체 8쪽 중 4쪽 읽음" role="img" class="sc-row-progress"><span style="width:50%" class="sc-row-progress-fill"></span></span></span></div><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button type="button">자세히</button></div></div></article></div></div></div></div><footer data-selected="true" class="sc-selection-bar"><span title="Mapping cellular responses across tissue repair" class="sc-selection-label">문헌 1개 선택</span><button type="button">선택 해제</button><button disabled data-variant="primary" type="button">관련 문헌으로 연결</button><button disabled type="button">선택 문헌끼리 연결 해제</button></footer><div hidden aria-label="기능 바로 찾기" aria-modal="true" role="dialog" class="sc-command-palette"><input aria-controls="sc-command-results" aria-label="찾을 기능 이름" aria-autocomplete="list" aria-expanded="false" role="combobox" placeholder="예: 주석, 비교, 탭…" class="sc-command-search" type="search"><div aria-label="검색된 기능" role="listbox" class="sc-command-results" id="sc-command-results"></div><p class="sc-muted">↑↓ 이동 · Enter 열기 · Esc 닫기</p></div></section><script>/* Pure workspace operations shared by the panel and background regressions. */
 (function(root){
  'use strict';
  const text=value=>String(value??'');
@@ -1489,7 +1561,7 @@
  }
  function sortItems(items,order='library'){
   const result=[...items];
-  const field=({'year-desc':'year','citations-desc':'citations','rating-desc':'rating','time-desc':'seconds'})[order];
+  const field=({'year-desc':'year','citations-desc':'citations','rating-desc':'rating','time-desc':'seconds','if-desc':'impactFactor'})[order];
   if(order==='title')result.sort((a,b)=>text(a.title).localeCompare(text(b.title))||text(a.id).localeCompare(text(b.id)));
   else if(field)result.sort((a,b)=>{const value=item=>item[field]!==null&&item[field]!==undefined&&item[field]!==''&&Number.isFinite(Number(item[field]))?Number(item[field]):-Infinity;return (value(b)-value(a)||0)||text(a.title).localeCompare(text(b.title))||text(a.id).localeCompare(text(b.id));});
   return result;
@@ -1516,7 +1588,8 @@
  function progress(entry={}){
   const pages=entry.pageTimes&&typeof entry.pageTimes==='object'?entry.pageTimes:{};
   const total=Number.isInteger(entry.totalPages)&&entry.totalPages>0?entry.totalPages:0;
-  const visited=Object.keys(pages).filter(k=>/^\d+$/.test(k)&&Number(k)<total&&Number(pages[k])>0).length;
+  // A page counts as read after five seconds on it, the same line the page strip draws between a glance and reading; scrolling from the first page to the references in ten seconds used to "read" ten pages.
+  const visited=Object.keys(pages).filter(k=>/^\d+$/.test(k)&&Number(k)<total&&Number(pages[k])>=5).length;
   return {total,visited,percent:total?Math.round(visited/total*100):null,pages};
  }
  function id(cache,prefix){cache.workspaceSequence=(Number(cache.workspaceSequence)||0)+1;return prefix+'-'+cache.workspaceSequence+'-'+Date.now().toString(36);}
@@ -3036,19 +3109,21 @@
    const last=parts.length>1?parts[parts.length-1][0]:'';
    return (first+last).toUpperCase();
   }
+  // A found photograph over the initials; the initials stay if it fails to load.
+  function showFace(face,found){
+   if(disposed||!face||!found?.url)return;
+   const img=doc.createElementNS(HTML,'img');
+   img.src=found.url;img.alt='';img.setAttribute('aria-hidden','true');
+   img.addEventListener('error',()=>img.remove());
+   img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});
+   face.appendChild(img);
+   face.title=found.page?`사진 출처: ${found.page}`:'';
+  }
   async function paintPortrait(face,person){
    if(!runtime.fetchPortrait||!person?.id)return;
    if(runtime.pref?.('authorPortraits',true)===false)return;
    const known=runtime.portraitOf?.(person.id);
-   const draw=found=>{
-    if(disposed||!face.isConnected||!found?.url)return;
-    const img=doc.createElementNS(HTML,'img');
-    img.src=found.url;img.alt='';img.setAttribute('aria-hidden','true');
-    img.addEventListener('error',()=>img.remove());
-    img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});
-    face.appendChild(img);
-    face.title=found.page?`사진 출처: ${found.page}`:'';
-   };
+   const draw=found=>{if(face.isConnected)showFace(face,found);};
    if(known){draw(known);return;}
    try{draw(await runtime.fetchPortrait(person));}catch(error){runtime.Z.logError?.(error);}
   }
@@ -3174,7 +3249,7 @@
   selectFilter('status','읽기 상태 필터',[['','모든 읽기 상태'],['unread','안 읽음'],['reading','읽는 중'],['done','완료']]);
   selectFilter('ratingMin','최소 별점',[['','모든 별점'],...Array.from({length:5},(_,i)=>[String(i+1),`${i+1}점 이상`])]);
   for(const[key,label]of [['yearFrom','시작 연도'],['yearTo','마지막 연도']]){const input=node('input',null,filters,{type:'number',min:1,max:9999,placeholder:label,'aria-label':label});input.addEventListener('input',()=>{state[key]=input.value;render();});filterInputs.set(key,input);}
-  selectFilter('sort','문헌 정렬',[['library','기본 순서'],['title','제목순'],['year-desc','최신 발행순'],['citations-desc','인용 많은 순'],['rating-desc','별점 높은 순'],['time-desc','읽기 시간순']]);
+  selectFilter('sort','문헌 정렬',[['library','기본 순서'],['title','제목순'],['year-desc','최신 발행순'],['if-desc','IF 높은 순'],['citations-desc','인용 많은 순'],['rating-desc','별점 높은 순'],['time-desc','읽기 시간순']]);
   button('필터 초기화',()=>{for(const key of ['status','ratingMin','yearFrom','yearTo']){state[key]='';filterInputs.get(key).value='';}state.query=search.value='';state.type=type.value='';state.tag='';state.color='';state.sort='library';filterInputs.get('sort').value='library';render();},filters);
   const shell=node('div',null,panel,{class:'sc-shell'}),nav=node('nav',null,shell,{'aria-label':'작업 종류'}),content=node('div',null,shell,{class:'sc-content'});
   const context=node('div',null,content,{class:'sc-context'}),sectionTitle=node('h2','보유 문헌',context,{class:'sc-section-title'}),contextDetail=node('span',null,context,{class:'sc-context-detail'});context.appendChild(kindChips);
@@ -3207,12 +3282,24 @@
    element.insertBefore(holder,element.firstChild);
    return element;
   }
+  /* Nineteen menu entries were nineteen Tab stops between the reader and the
+     page. The rail is one stop, on the current entry, and the arrow keys walk
+     it, as the settings window's own list does. */
+  nav.addEventListener('keydown',event=>{
+   if(!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;
+   const shown=[...navButtons.values()].filter(b=>!b.hidden);
+   const at=shown.indexOf(doc.activeElement);if(at<0)return;
+   event.preventDefault();
+   const next=event.key==='Home'?0:event.key==='End'?shown.length-1:Math.max(0,Math.min(shown.length-1,at+(event.key==='ArrowDown'?1:-1)));
+   for(const b of shown)b.setAttribute('tabindex',b===shown[next]?'0':'-1');
+   shown[next].focus();
+  });
   for(const [label,ids]of GROUPS){const group=node('div',null,nav,{class:'sc-nav-group'});node('div',label,group,{class:'sc-nav-heading'});for(const id of ids){const label=TABS.find(([key])=>key===id)[1];navButtons.set(id,leadIcon(button(label,()=>navigate(id),group,{'data-tab':id}),id));}}
   const footer=node('footer',null,panel,{class:'sc-selection-bar'});const selectionLabel=node('span','선택한 문헌 없음',footer,{class:'sc-selection-label'});
   const clearSelection=button('선택 해제',()=>{state.selected.clear();state.annotationIDs.clear();render();},footer);
   // Of the three, linking is what the selection is usually for; the other two
   // undo. Only one of them carries a fill.
-  const relatedAction=button('관련 문헌으로 연결',async()=>{await library.relate([...state.selected]);await load();message('관련 문헌 연결을 저장했습니다.');},footer,{'data-variant':'primary'});
+  const relatedAction=button('관련 문헌으로 연결',async()=>{const n=state.selected.size;await library.relate([...state.selected]);await load();message(`${n}개 문헌을 서로 관련 문헌으로 연결했습니다.`);},footer,{'data-variant':'primary'});
   const unlinkAction=button('선택 문헌끼리 연결 해제',async()=>{const changed=await library.unrelate([...state.selected]);await load();message(`${changed}개 문헌의 상호 연결을 해제했습니다.`);},footer);
   const commands=node('div',null,panel,{class:'sc-command-palette',role:'dialog','aria-modal':'true','aria-label':'기능 바로 찾기'});commands.hidden=true;
   const commandSearch=node('input',null,commands,{type:'search',class:'sc-command-search',placeholder:'예: 주석, 비교, 탭…',role:'combobox','aria-expanded':'false','aria-autocomplete':'list','aria-label':'찾을 기능 이름','aria-controls':'sc-command-results'});
@@ -3224,6 +3311,8 @@
    if(!commandMatches.length){node('p','일치하는 기능이 없습니다.',commandResults);commandSearch.removeAttribute('aria-activedescendant');return;}
    commandMatches.forEach(([id,label],index)=>{const option=button(label,()=>{closeCommands(false);return navigate(id,{focus:true});},commandResults,{class:'sc-command-option',id:'sc-command-'+id,role:'option','aria-selected':String(index===commandIndex),tabindex:-1});});
    commandSearch.setAttribute('aria-activedescendant','sc-command-'+commandMatches[commandIndex][0]);
+   // The list scrolls; the chosen line is kept in view as the arrows move it.
+   commandResults.children[commandIndex]?.scrollIntoView?.({block:'nearest'});
   }
   const inertBefore=new Map();
   function openCommands(){navigationEpoch++;commandFocus=doc.activeElement;for(const element of [head,status,controls,filterPanel,filterChips,shell,footer]){inertBefore.set(element,element.inert);element.inert=true;}commands.hidden=false;commandSearch.setAttribute('aria-expanded','true');commandSearch.value='';commandIndex=0;drawCommands();commandSearch.focus?.();}
@@ -3292,7 +3381,8 @@
    const nativeJCR=state.tab==='journals'&&state.journalBrowser!=='openalex';
    /* On the JCR browser the selection actions cannot act on anything, and a bar
       of buttons that all refuse is worse than no bar. */
-   footer.hidden=nativeJCR||state.tab==='collections';
+   // The selection bar belongs to the pages that act on papers; tabs, views and settings have none to act on.
+   footer.hidden=nativeJCR||['collections','tabs','views','appearance'].includes(state.tab);
    const count=state.selected.size;footer.dataset.selected=String(count>0);const visible=new Set((['notes','annotations','attachments'].includes(state.tab)?model.filter(scoped(),parentOptions()):rows()).map(item=>String(item.id))),outside=[...state.selected].filter(id=>!visible.has(String(id))).length;
    selectionLabel.textContent=count?(count===1?T('문헌 1개 선택'):T(`${count}개 문헌 선택`))+(outside?' · '+T(`현재 결과 밖 ${outside}개 포함`):''):T('문헌을 선택하면 함께 비교하거나 연결할 수 있습니다.');
    selectionLabel.title=selected().slice(0,5).map(item=>item.title).join('\n');
@@ -3403,6 +3493,30 @@
    const pageSize=setting('explorePageSize',100),key=JSON.stringify([state.tab,state.scope,items.map(i=>i.id)]);
    if(state.pageKey!==key){state.pageKey=key;state.pageIndex=0;}
    state.pageIndex=Math.max(0,Math.min(state.pageIndex||0,Math.ceil(items.length/pageSize)-1));
+   /* The list in one line before its first row: how much of it has been
+      read, how long that took, what it is worth by citation and journal, and
+      what came in this month. Read off the rows already in hand; the bar is
+      the reading status in the status column's own three tones. */
+   if(items.length>1){
+    const n={unread:0,reading:0,done:0};let seconds=0,thisMonth=0;const ifs=[],cites=[];
+    const month=new Date();month.setDate(1);month.setHours(0,0,0,0);
+    for(const it of items){n[it.status==='done'?'done':it.status==='reading'?'reading':'unread']++;seconds+=Number(it.seconds)||0;
+     if(Number.isFinite(Number(it.impactFactor))&&it.impactFactor!==null&&it.impactFactor!=='')ifs.push(Number(it.impactFactor));
+     if(Number.isFinite(Number(it.citations))&&it.citations!==null&&it.citations!=='')cites.push(Number(it.citations));
+     const added=runtime.localStamp?runtime.localStamp(it.dateAdded)?.getTime():Date.parse(it.dateAdded||'');if(added>=month.getTime())thisMonth++;}
+    const median=list=>{if(!list.length)return null;const v=[...list].sort((a,b)=>a-b),m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2;};
+    const box=node('div',null,body,{class:'sc-overview',role:'group','aria-label':T('이 목록 요약')});
+    const meter=node('div',null,box,{class:'sc-overview-meter','aria-hidden':'true'});
+    for(const key of ['done','reading','unread'])if(n[key])node('span',null,meter,{class:'sc-overview-'+key}).style.flexGrow=String(n[key]);
+    const facts=node('p',null,box,{class:'sc-overview-facts'});
+    const fact=(label,value)=>{if(value==null||value==='')return;const span=node('span',null,facts);node('b',String(value),span);span.appendChild(doc.createTextNode(' '+T(label)));};
+    fact('완료',n.done);fact('읽는 중',n.reading);fact('안 읽음',n.unread);
+    if(seconds>0)fact('읽음',runtime.formatReadTime?runtime.formatReadTime(seconds):Math.round(seconds/60)+'분');
+    const mi=median(ifs),mc=median(cites);
+    if(mi!=null)fact('IF 중앙값',mi.toFixed(1));
+    if(mc!=null)fact('인용 중앙값',Math.round(mc));
+    if(thisMonth)fact('이번 달 추가',thisMonth);
+   }
    const start=state.pageIndex*pageSize,page=items.slice(start,start+pageSize),paging=bar();
    if(items.length>pageSize){
     node('span',`${start+1}–${start+page.length} / ${items.length}개`,paging,{role:'status','aria-label':'문헌 페이지 범위'});
@@ -3411,6 +3525,17 @@
    }
    const choose=(values,on)=>{state.annotationIDs.clear();for(const item of values)on?state.selected.add(String(item.id)):state.selected.delete(String(item.id));render();};
    button('현재 페이지 선택',()=>choose(page,true),paging);button('현재 페이지 선택 해제',()=>choose(page,false),paging);button('검색 결과 전체 선택',()=>choose(items,true),paging);
+   /* One header over the figures, so a column reads as a column and its name
+      is said once rather than on every row; a name sorts by it, highest first,
+      and pressed again goes back to the library's order. */
+   const columns=node('div',null,body,{class:'sc-paper-columns',role:'group','aria-label':T('정렬할 열')});
+   node('span',null,columns,{class:'sc-paper-columns-lead'});
+   for(const [key,label,sort] of [['impact','IF','if-desc'],['citations','인용','citations-desc'],['rating','별점','rating-desc'],['time','읽기','time-desc']]){
+    const on=state.sort===sort;
+    const b=button(label,()=>{state.sort=on?'library':sort;const select=filterInputs.get?.('sort');if(select)select.value=state.sort;render();},columns,{class:'sc-paper-column','data-metric':key,'aria-pressed':String(on),title:T(on?'다시 누르면 기본 순서':'높은 순으로 정렬')});
+    if(on)b.textContent=T(label)+' ↓';
+   }
+   node('span',null,columns,{class:'sc-paper-columns-tail'});
    const list=node('div',null,body,{class:'sc-paper-list'}),details=[],generation=epoch;for(const item of page){
    const c=node('article',null,list,{class:'sc-card sc-paper-card','data-item-id':item.id,'data-status':['reading','done'].includes(item.status)?item.status:'unread','data-selected':String(state.selected.has(item.id))});
    const heading=node('div',null,c,{class:'sc-paper-heading'}),pick=check('선택',state.selected.has(item.id),on=>selectItem(item.id,on),heading);pick.setAttribute('aria-label',item.title+' 선택');
@@ -3439,7 +3564,13 @@
    // filled only once the paper has been rated.
    const stars=node('span',null,metrics,{class:'sc-metric sc-stars',title:item.rating?`별점 ${item.rating}/5`:'별점 없음'});stars.dataset.metric='rating';
    node('span',item.rating?'\u2605'.repeat(item.rating)+'\u2606'.repeat(5-item.rating):'',stars,{class:'sc-metric-value'});
-   metric(metrics,{unit:'읽기',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
+   const timeCell=metric(metrics,{unit:'읽기',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
+   /* How far in, beside how long: twenty minutes on a paper says little
+      until it is set against four of eight pages. A short grey meter, no
+      colour: the pages read over the pages the PDF has. */
+   {const ref=runtime.Z?.Items?.get?.(Number(item.id)),p=ref&&typeof runtime.pageProgress==='function'?runtime.pageProgress(ref):null;
+    if(p?.total&&timeCell){const meter=node('span',null,timeCell,{class:'sc-row-progress',role:'img','aria-label':T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`),title:T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`)});
+     node('span',null,meter,{class:'sc-row-progress-fill'}).style.width=Math.round(100*p.visited/p.total)+'%';}}
    const actions=bar(heading);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-opens':'window','data-variant':'primary'});button('자세히',()=>{state.selected=new Set([item.id]);state.scope='selected';scope.value='selected';render();},actions);
    if(state.scope==='selected'){node('p',item.abstract||'초록이 없습니다.',c);const ref=runtime.Z.Items.get(Number(item.id));const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);message('메모를 저장했습니다.');},c);}
    if(state.scope==='selected'&&items.length===1)details.push((async()=>{
@@ -3450,7 +3581,7 @@
      const label=index?'주석':'노트',section=node('details',null,c,{class:'sc-evidence'});node('summary',label+(result.status==='fulfilled'?' · '+result.value.length:' · 확인 필요'),section);
      if(result.status==='rejected'){node('p','불러오지 못했습니다. 새로고침으로 다시 시도하세요.',section);continue;}
      if(result.value.length<=setting('inlineEvidenceCount',5))section.setAttribute('open','');
-     if(!result.value.length){node('p',label+'가 없습니다.',section);continue;}
+     if(!result.value.length){node('p',index?'주석이 없습니다.':'노트가 없습니다.',section);continue;}
      const evidence=node('div',null,section);let visible=0,more;
      const append=amount=>{for(const value of result.value.slice(visible,visible+amount)){const detail=card(index?`p.${value.pageLabel||((value.pageIndex??0)+1)}`:value.title,null,evidence),text=String(value.text||'');const paragraph=node('p',text.length>setting('maxExcerptLength',1200)?text.slice(0,setting('maxExcerptLength',1200))+'…':text,detail);if(text.length>setting('maxExcerptLength',1200))button('전체 내용 보기',()=>{paragraph.textContent=text;},detail);if(index&&value.comment)node('p',value.comment,detail);button(index?'주석 원문 열기':'문헌 노트 편집',()=>library.openItem(value.id),detail,{'data-opens':'window'});}visible=Math.min(result.value.length,visible+amount);if(more){more.textContent=label+' 더 보기 · '+(result.value.length-visible)+'개 남음';if(visible>=result.value.length)more.remove();}};
      append(setting('inlineEvidenceCount',5));if(visible<result.value.length)more=button(label+' 더 보기 · '+(result.value.length-visible)+'개 남음',()=>append(20),section);
@@ -3458,7 +3589,8 @@
    })());
   }await Promise.all(details);}
   async function drawRecent(){
-   const timestamp=value=>{if(typeof value==='number')return Number.isFinite(value)?value:0;const parsed=Date.parse(value||'');return Number.isFinite(parsed)?parsed:0;};
+   // Zotero's dates are UTC without a zone, the reading record's carry one: both are read as UTC, or a paper read this morning ranked below one added last night.
+   const timestamp=value=>{if(typeof value==='number')return Number.isFinite(value)?value:0;const parsed=runtime.localStamp?runtime.localStamp(value)?.getTime():Date.parse(value||'');return Number.isFinite(parsed)?parsed:0;};
    const activity=item=>Math.max(timestamp(item.lastRead),timestamp(item.dateModified),timestamp(item.dateAdded));
    const cap=setting('recentCount',50);
    const recent=rows().filter(item=>activity(item)>0).sort((a,b)=>activity(b)-activity(a)||String(a.id).localeCompare(String(b.id))).slice(0,cap);
@@ -3567,7 +3699,11 @@
    });
    const withRefs=papers.filter(paper=>paper.references.length).length;
    if(!papers.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
-   button(`인용 목록 가져오기 · OpenAlex (${papers.length-withRefs}편 남음)`,()=>run(async()=>{
+   /* "Remaining" is what a press would still ask about. A paper OpenAlex does
+      not know, or one with no DOI, is answered already and is skipped by the
+      sweep; counting it kept "3편 남음" on a button that could do nothing. */
+   const unasked=chosen.filter(paper=>!(works[paper.libraryID+':'+paper.key]||works[String(paper.id)])).length;
+   if(unasked)button(`인용 목록 가져오기 · OpenAlex (${unasked}편 남음)`,()=>run(async()=>{
     const wanted=[];
     for(const paper of chosen){
      const found=await runtime.Z.Items.getAsync(Number(paper.id));
@@ -3583,15 +3719,18 @@
     // Nothing fetched yet is not nothing to show. The related-items graph
     // stands in until the reference lists arrive, so the tab is never a blank
     // panel with one button on it.
-    node('p','아직 인용 목록이 없습니다. “인용 목록 가져오기”를 누르면 실제 인용 관계로 바뀝니다. 그때까지는 관련 문헌 연결을 보여줍니다.',body,{class:'sc-muted'});
+    node('p',unasked?'아직 인용 목록이 없습니다. “인용 목록 가져오기”를 누르면 실제 인용 관계로 바뀝니다. 그때까지는 관련 문헌 연결을 보여줍니다.'
+     :'이 범위의 논문은 OpenAlex에 참고문헌 목록이 없습니다. 관련 문헌 연결을 대신 보여줍니다.',body,{class:'sc-muted'});
     drawLegacyGraph(b);
     return;
    }
    const W=graphWidth(),H=graphHeight(chosen.length);
    const items=chosen.map(paper=>runtime.Z.Items.get(Number(paper.id))).filter(Boolean);
    const citedBy=typeof runtime.citedByFor==='function'?runtime.citedByFor(items):null;
-   const withCiters=Object.keys(citedBy||{}).length;
-   button(`인용한 논문 가져오기 (${papers.length-withCiters}편 남음)`,()=>run(async()=>{
+   const citedStore=typeof runtime.citedByStore==='function'?runtime.citedByStore():{};
+   const citersDue=items.filter(ref=>!citedStore[runtime.identity(ref)]&&(works[runtime.identity(ref)]||{}).openalex).length;
+   // One metered request per paper: the button says so before it is pressed.
+   if(citersDue)button(`인용한 논문 가져오기 (${citersDue}편 남음 · 요청 최대 ${citersDue}회)`,()=>run(async()=>{
     const report=await runtime.sweepCitedBy(items,{onProgress:(d,t)=>message(`인용한 논문 ${d+1}/${t}`)});
     message(`${report.found}편에서 인용 ${report.citers}건`
      +(report.noWork?` · 인용 목록 먼저 필요 ${report.noWork}`:'')+(report.errors?` · 실패 ${report.errors}`:''));
@@ -3725,12 +3864,31 @@
    if(graph.missing.length){
     sectionHead('내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문',graph.missing.length);
     const list=node('div',null,body,{class:'sc-hits'});
-    for(const row of graph.missing.slice(0,25)){
+    const shown=graph.missing.slice(0,25),placed=new Map();
+    for(const row of shown){
      const c=node('div',null,list,{class:'sc-hit'});
      node('p',row.id,c,{class:'sc-hit-title'});
      node('p',`내 논문 ${row.citedBy.length}편이 인용합니다`,c,{class:'sc-hit-meta'});
      const actions=node('div',null,c,{class:'sc-hit-actions'});
-     button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${row.id}`),actions);
+     button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${row.id}`),actions,{'data-opens':'browser'});
+     placed.set(row.id,c);
+    }
+    /* An ID is no answer to "should I read this": the titles arrive in one
+       request, and each row becomes a paper with 추가 -- or 보유, for one
+       already on the shelf that this range simply did not draw. */
+    if(typeof runtime.worksByID==='function'){
+     const generation=epoch;
+     runtime.worksByID(shown.map(row=>row.id)).then(found=>{
+      if(disposed||generation!==epoch||!list.isConnected)return;
+      const owned=typeof runtime.libraryDOIs==='function'?runtime.libraryDOIs():new Set();
+      for(const row of shown){
+       const work=found[row.id],old=placed.get(row.id);
+       if(!work||!old?.isConnected)continue;
+       const fresh=hitRow({...work,inLibrary:!!(work.doi&&owned.has(String(work.doi).toLowerCase()))},null);
+       node('p',`내 논문 ${row.citedBy.length}편이 인용합니다`,fresh,{class:'sc-hit-meta sc-hit-because'});
+       old.replaceWith(fresh);
+      }
+     }).catch(error=>runtime.Z.logError?.(error));
     }
    }
    // The papers nothing connects to are named rather than drawn: as a ring round
@@ -3824,11 +3982,35 @@
    button('축소',()=>{zoom=Math.max(1,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
    if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body,{class:'sc-muted'});
   }
-  function drawTags(){sectionHead('선택 문헌의 태그',state.selected.size?`${state.selected.size}편`:'');const b=bar(),value=node('input',null,b,{placeholder:'추가·제거할 정확한 태그 (쉼표로 구분)','aria-label':'추가할 태그'});button('선택 문헌에 태그 추가',async()=>{await library.addTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('선택 문헌에서 태그 제거',async()=>{await library.removeTags([...state.selected],value.value.split(',').map(t=>t.trim()).filter(Boolean));await load();},b);button('태그 필터 해제',()=>{state.tag='';render();},b);
+  function drawTags(){sectionHead('선택 문헌의 태그',state.selected.size?`${state.selected.size}편`:'');const b=bar(),value=node('input',null,b,{placeholder:'추가·제거할 정확한 태그 (쉼표로 구분)','aria-label':'추가할 태그'});
+   /* Both verbs said nothing: with no paper selected or an empty box they did
+      nothing, and when they worked the reader had to go and look. Each now
+      refuses in words, reports what it did, and a removal can be taken back. */
+   const names=()=>value.value.split(',').map(t=>t.trim()).filter(Boolean);
+   const ready=()=>{if(!state.selected.size)throw new Error('태그를 붙일 문헌을 먼저 선택하세요. 보유 문헌에서 고르거나 「현재 선택 가져오기」를 누르세요.');const tags=names();if(!tags.length)throw new Error('여러 개는 쉼표로 구분해 태그 이름을 입력하세요.');return tags;};
+   button('선택 문헌에 태그 추가',async()=>{const tags=ready(),n=state.selected.size;await library.addTags([...state.selected],tags);await load();message(`${n}편에 태그 ${tags.join(', ')}를 붙였습니다.`);},b);
+   button('선택 문헌에서 태그 제거',async()=>{
+    const tags=ready(),ids=[...state.selected];
+    // Who actually carried each tag, so 되돌리기 gives it back to them and no one else.
+    // Which paper carried which of the tags: A with a and B with b get back a and b, not both each.
+    const carried=new Map();
+    for(const id of ids){const own=(state.items.find(i=>String(i.id)===String(id))?.tags||[]).filter(t=>tags.includes(t));if(own.length)carried.set(id,own);}
+    const had=[...carried.keys()];
+    const result=await library.removeTags(ids,tags);await load();
+    // What the library says it took off, with types; the panel's own list only when the service does not say.
+    const removed=Array.isArray(result?.removed)?result.removed:[...carried].flatMap(([id,own])=>own.map(tag=>({id:String(id),tag,type:0})));
+    const papers=new Set(removed.map(row=>row.id)).size;
+    if(!papers){message(`선택한 문헌 중 ${tags.join(', ')} 태그가 있는 문헌이 없습니다.`);return;}
+    message(`${papers}편에서 태그 ${tags.join(', ')}를 뺐습니다.`);
+    const undo=button('되돌리기',async()=>{
+     if(typeof library.restoreTags==='function')await library.restoreTags(removed);
+     else{const groups=new Map();for(const row of removed){if(!groups.has(row.tag))groups.set(row.tag,[]);groups.get(row.tag).push(row.id);}for(const[tag,list]of groups)await library.addTags(list,[tag]);}
+     undo.remove();await load();message(`${papers}편에 태그를 다시 붙였습니다.`);},bar());
+   },b);button('태그 필터 해제',()=>{state.tag='';render();},b);
    sectionHead('태그 경로 이름 바꾸기');
    const rename=bar(),from=node('input',null,rename,{'aria-label':'기존 태그 경로',placeholder:'기존 태그 경로'}),to=node('input',null,rename,{'aria-label':'새 태그 경로',placeholder:'새 태그 경로'});let subtree=true;
    check('하위 태그도 변경',true,on=>{subtree=on;},rename);
-   button('선택 문헌 태그 이름 변경',async()=>{const result=await library.renameTagBranch([...state.selected],from.value,to.value,{subtree});await load();message(`태그 변경 ${result.updatedItems}개 문헌 · 병합 ${result.mergedTags}개`);},rename);
+   button('선택 문헌 태그 이름 변경',async()=>{if(!state.selected.size)throw new Error('이 변경은 선택한 문헌의 태그에만 적용되니, 이름을 바꿀 문헌을 먼저 선택하세요.');if(!from.value.trim()||!to.value.trim())throw new Error('기존 태그 경로와 새 태그 경로를 모두 입력하세요.');const result=await library.renameTagBranch([...state.selected],from.value,to.value,{subtree});await load();message(`태그 변경 ${result.updatedItems}개 문헌 · 병합 ${result.mergedTags}개`);},rename);
    const tree=library.tagTree(rows());sectionHead('태그 목록',tree.length);function branch(nodes,parent){for(const n of nodes){const details=node('details',null,parent);const summary=node('summary',null,details);node('span',`${n.name} (${n.count})`,summary,{class:'sc-tag-name'});const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},summary,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(n.children.length)branch(n.children,details);}}branch(tree,body);if(!tree.length)empty('태그가 없습니다. 문헌을 선택하고 태그를 추가하세요.');
   }
   /* A note needs a paper. Opening this tab with the whole library in scope
@@ -3842,7 +4024,7 @@
    const open=[];
    try{for(const tab of (typeof reader?.tabs==='function'?reader.tabs(win):[])){if(!tab.itemID)continue;const ref=runtime.Z?.Items?.get?.(Number(tab.itemID));const paper=(ref?.parentID&&byId(ref.parentID))||byId(tab.itemID);if(paper&&!open.some(i=>String(i.id)===String(paper.id)))open.push(paper);}}catch(error){runtime.Z?.logError?.(error);}
    if(open.length){sectionHead('지금 열려 있는 논문',open.length);const b=bar();for(const it of open)button(it.title,()=>pick(it),b,{'data-pick':String(it.id)});}
-   const when=v=>typeof v==='number'?(Number.isFinite(v)?v:0):(Date.parse(v||'')||0);
+   const when=v=>typeof v==='number'?(Number.isFinite(v)?v:0):((runtime.localStamp?runtime.localStamp(v)?.getTime():Date.parse(v||''))||0);
    const activity=it=>Math.max(when(it.lastRead),when(it.dateModified),when(it.dateAdded));
    const list=rows();
    // Twelve of them fit. When a title was typed, the twelve are the closest
@@ -3860,7 +4042,7 @@
    if(target.length!==1){if(target.length>1){node('p',`선택한 ${target.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});const pickBar=bar();for(const it of target.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar,{'data-pick':String(it.id)});}else notePaperChooser();}
    else{
     const head=node('p',`${target[0].title}에 새 노트`,body,{class:'sc-muted'});button('다른 문헌 고르기',()=>{state.selected=new Set();render();},head,{class:'sc-inline'});
-    const draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar();const saveNote=button('새 노트 저장',async()=>{const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);noteCache=null;finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
+    const draft=node('textarea',null,body,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar();const saveNote=button('새 노트 저장',async()=>{if(!draft.value.trim())throw new Error('빈 노트는 만들지 않으니 노트 내용을 먼저 입력하세요.');const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);noteCache=null;finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
     if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions,{'data-opens':'window'});}
    }
    // The notes: the chosen paper's own when it sits in the scope and nothing
@@ -3921,15 +4103,16 @@
     const id=await library.mergeAnnotations(chosen,{isCurrent:()=>!disposed&&!panel.hidden&&epoch===mark});
     state.annotationIDs=new Set([String(id)]);
     await render();message('주석을 병합했습니다. 나머지 주석은 휴지통에서 복원할 수 있습니다.');
-   },selectionTools);
+   },selectionTools,{'data-needs':'2',title:'같은 PDF·같은 색의 주석 두 개 이상'});
    body.appendChild(selectionTools);
 
    const list=await library.annotations(ids());
    if(token!==epoch||disposed)return;
-   const filtered=list.filter(a=>
+   // Every filter but colour: the chips count from this, so choosing one colour leaves the others to choose.
+   const unfiltered=list.filter(a=>
     (!setting('annotationIgnoreFigures',false)||!/^(?:figure|fig\.?|table|그림|표)\s*\d/i.test((a.text||'').trim()))
-    &&(!state.color||a.color.toLowerCase()===state.color.toLowerCase())
     &&model.matches(a.text+' '+a.comment,state.query));
+   const filtered=unfiltered.filter(a=>!state.color||String(a.color||'').toLowerCase()===state.color.toLowerCase());
    state.annotationIDs=new Set([...state.annotationIDs].filter(id=>filtered.some(a=>a.id===id)));
 
    if(!filtered.length){
@@ -3945,7 +4128,7 @@
    if(chosenPapers.length===1)drawPaperMemo(chosenPapers[0]);
 
    const counts=new Map();
-   for(const a of filtered)counts.set(a.color||'',(counts.get(a.color||'')||0)+1);
+   for(const a of unfiltered)counts.set(a.color||'',(counts.get(a.color||'')||0)+1);
    const summary=bar();
    node('span',`주석 ${filtered.length}개`,summary,{class:'sc-muted'});
    for(const [hex,n] of [...counts].sort((a,b)=>b[1]-a[1])){
@@ -3963,7 +4146,8 @@
     const n=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id)).length;
     chosenCount.textContent=n?`선택 ${n}개`:T('주석을 눌러 선택하세요');
     selectionTools.dataset.armed=String(n>0);
-    for(const btn of selectionTools.querySelectorAll('button'))btn.disabled=!n;
+    // Merging needs two; the button waits for the second rather than refusing after the press.
+    for(const btn of selectionTools.querySelectorAll('button'))btn.disabled=btn.dataset.needs==='2'?n<2:!n;
     colorEdit.disabled=!n;
    };
    summary.appendChild(selectionTools);
@@ -3976,8 +4160,20 @@
     if(!byDocument.has(key))byDocument.set(key,[]);
     byDocument.get(key).push(a);
    }
-   const attachmentRows=await library.attachments(ids());
-   const titles=new Map(attachmentRows.map(a=>[a.id,a.title])),parents=new Map(attachmentRows.map(a=>[a.id,a.parentID]));
+   /* Group names come from the documents on screen, read directly. Asking
+      library.attachments for them listed every attachment in scope and
+      checked each file on disk -- on every colour click. */
+   const titles=new Map(),parents=new Map();
+   let unresolved=false;
+   for(const id of byDocument.keys()){
+    const doc_=id?runtime.Z.Items.get?.(Number(id)):null;
+    if(!doc_){if(id)unresolved=true;continue;}
+    titles.set(id,String(doc_.getField?.('title')||''));if(doc_.parentID)parents.set(id,String(doc_.parentID));
+   }
+   if(unresolved){
+    const attachmentRows=await library.attachments(ids());
+    for(const a of attachmentRows)if(!titles.has(a.id)){titles.set(a.id,a.title);parents.set(a.id,a.parentID);}
+   }
    // Three groups all called "Full text PDF" say nothing; the paper's title does.
    const paperOf=id=>{const parent=parents.get(id);return parent?state.items.find(i=>String(i.id)===String(parent))?.title:null;};
    const siblings=new Map();for(const id of byDocument.keys()){const key=parents.get(id)||id;siblings.set(key,(siblings.get(key)||0)+1);}
@@ -4121,7 +4317,17 @@
    const chosen=selected();
    if(chosen.length>1){node('p',`선택한 ${chosen.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});const pickBar=bar();for(const it of chosen.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar);}
    const acts=bar();button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});button('보유 문헌에서 고르기',()=>navigate('explore'),acts);};
-  async function drawBacklinks(token){let item;try{item=one();}catch(_){empty('역링크를 확인할 문헌 하나를 선택하세요.');pickOne();return;}const links=await library.backlinks(item.id);if(token!==epoch||disposed)return;for(const link of links){const c=card(link.title,link.kind==='note'?'이 문헌을 참조한 노트':'관련 문헌');button('열기',()=>library.openItem(link.id),c,{'data-opens':'window'});}if(!links.length)empty('이 문헌을 가리키는 노트나 관련 문헌이 없습니다.');}
+  async function drawBacklinks(token){let item;try{item=one();}catch(_){empty('역링크를 확인할 문헌 하나를 선택하세요.');pickOne();return;}
+   // The scan reads every note in the library; the page says so while it runs instead of standing blank.
+   const waiting=node('p','이 문헌을 가리키는 노트와 관련 문헌을 라이브러리 전체에서 찾는 중…',body,{class:'sc-muted'});
+   const found=await library.backlinks(item.id);if(token!==epoch||disposed)return;waiting.remove();
+   // A note that links twice, or is also a related item, is one row per kind.
+   const seen=new Set(),links=found.filter(link=>{const key=link.kind+':'+link.id;if(seen.has(key))return false;seen.add(key);return true;});
+   if(links.length)sectionHead('이 문헌을 가리키는 항목',links.length);
+   for(const link of links){
+    const where=link.kind==='note'?(link.parentTitle?T(`노트 · ${link.parentTitle}`):T('독립 노트')):T('관련 문헌');
+    const c=card(link.title||T('제목 없음'),where);button('열기',()=>library.openItem(link.id),c,{'data-opens':'window'});}
+   if(!links.length)empty('이 문헌을 가리키는 노트나 관련 문헌이 없습니다.');}
   // What the scan found across the whole library, with somewhere to go. The
   // classifier can name 29 supplementary files, 17 duplicates and 6 papers
   // filed under the wrong item; until this existed, none of that was reachable.
@@ -4205,8 +4411,11 @@
    const list=await library.attachments(ids());if(token!==epoch||disposed)return;
    await drawFindings(token);
    if(token!==epoch||disposed)return;
-   if(list.length)sectionHead('선택한 문헌의 첨부파일',list.length);
-   const matching=list.filter(a=>model.matches(a.title+' '+a.contentType,state.query));
+   // The heading names the scope actually listed, and a whole library's files come a hundred at a time.
+   if(list.length)sectionHead(state.scope==='selected'?'선택한 문헌의 첨부파일':'이 범위의 첨부파일',list.length);
+   const every=list.filter(a=>model.matches(a.title+' '+a.contentType,state.query));
+   const limit=state.attachmentLimit||100;
+   const matching=every.slice(0,limit);
    const kindWord=type=>({'application/pdf':'PDF','application/epub+zip':'EPUB','application/epub':'EPUB','text/html':T('스냅샷')})[type]||(type?String(type).split('/')[0]:'');
    for(const a of matching){const c=card(a.title,kindWord(a.contentType));button('열기',()=>library.openItem(a.id),c,{'data-opens':'window'});
     const supported=['application/pdf','application/epub+zip','application/epub','text/html'].includes(a.contentType)||/^(image|audio|video)\//.test(a.contentType||'');
@@ -4224,6 +4433,7 @@
      }catch(error){await discardPreview(p);if(current())throw error;}
     },c);
    }
+   if(every.length>limit){const more=bar();node('span',`${every.length}개 중 ${limit}개`,more,{class:'sc-muted'});button('100개 더 보기',()=>{state.attachmentLimit=limit+100;render();},more);}
    if(!matching.length)empty(state.query?'검색에 맞는 첨부가 없습니다. 검색어를 바꿔 보세요.':'첨부파일이 없습니다. PDF 또는 스냅샷을 첨부하세요.');
   }
   function refreshReading(){
@@ -4232,8 +4442,56 @@
    const list=body.querySelector('[data-reading-progress]');if(!list)return;list.replaceChildren();
    const ranked=rows().map(item=>{const ref=runtime.Z.Items.get(Number(item.id));if(!ref)return null;const entry=runtime.entry(ref),p=runtime.pageProgress(ref);return {item,ref,entry,p,seconds:Number(entry.seconds)||0};}).filter(Boolean);
    const unread=ranked.filter(r=>!r.seconds&&!r.p.total).length;
-   if(unread&&unread<ranked.length)node('p',`아직 읽지 않은 문헌 ${unread}편은 아래 목록에서 뺐습니다. 읽은 순서로 보여 줍니다.`,list,{class:'sc-muted'});
-   for(const {item,ref,p,entry} of ranked.filter(r=>r.seconds||r.p.total).sort((a,b)=>b.seconds-a.seconds)){
+   const read=ranked.filter(r=>r.seconds||r.p.total);
+   /* Most recently read first by default: the question on opening this page
+      is "where was I". Longest-read is one choice away. Thirty to a page: every
+      card carries up to a hundred page cells, and three hundred cards were
+      thirty thousand buttons rebuilt on every refresh. */
+   const bySort=state.readingSort==='time'
+    ?(a,b)=>b.seconds-a.seconds
+    :(a,b)=>String(b.entry.lastRead||'').localeCompare(String(a.entry.lastRead||''))||b.seconds-a.seconds;
+   read.sort(bySort);
+   const PER=30,pages=Math.max(1,Math.ceil(read.length/PER));
+   state.readingPage=Math.max(0,Math.min(state.readingPage||0,pages-1));
+   /* 이어 읽기: what was being read in the last two weeks and is not finished,
+      each with the page to go back to -- the page after the last one the
+      reader spent time on -- one press away. The question on opening this
+      page is "where was I"; the list below answers it only by scrolling. */
+   const DAY=864e5,now=Date.now();
+   const resume=read.map(r=>{
+    const when=runtime.localStamp?runtime.localStamp(r.entry.lastRead)?.getTime():Date.parse(r.entry.lastRead||'');
+    const total=Number(r.p.total)||0,done=total?r.p.visited/total:0;
+    const readPages=Object.entries(r.p.pages||{}).filter(([k,v])=>/^\d+$/.test(k)&&Number(v)>=5).map(([k])=>Number(k));
+    const next=readPages.length?Math.min(total-1,Math.max(...readPages)+1):0;
+    return {...r,when,total,done,next};
+   }).filter(r=>r.total&&r.p.attachmentID&&r.done>=0.05&&r.done<0.9&&Number.isFinite(r.when)&&now-r.when<=14*DAY)
+    .sort((a,b)=>b.when-a.when).slice(0,3);
+   if(resume.length){
+    sectionHead('이어 읽기',resume.length,list);
+    const box=node('div',null,list,{class:'sc-resume'});
+    for(const r of resume){
+     const row=node('div',null,box,{class:'sc-resume-row'});
+     node('span',r.item.title,row,{class:'sc-resume-title',title:r.item.title});
+     const days=Math.floor((now-r.when)/DAY);
+     node('span',days?`${r.p.visited}/${r.total}쪽 · ${days}일 전`:`${r.p.visited}/${r.total}쪽 · 오늘`,row,{class:'sc-resume-meta'});
+     button(`${r.next+1}쪽부터`,()=>run(()=>library.openItem(r.p.attachmentID,{pageIndex:r.next})),row,{'data-opens':'window',title:T('마지막으로 읽던 다음 쪽에서 엽니다')});
+    }
+   }
+   if(read.length){
+    const tools=node('div',null,list,{class:'sc-actions sc-reading-tools'});
+    const order=node('select',null,tools,{'aria-label':'읽기 기록 정렬'});
+    for(const[v,l]of [['recent','최근 읽은 순'],['time','읽은 시간 긴 순']])node('option',l,order,{value:v});
+    order.value=state.readingSort==='time'?'time':'recent';
+    order.addEventListener('change',()=>{state.readingSort=order.value;state.readingPage=0;refreshReading();body.querySelector('[aria-label="읽기 기록 정렬"]')?.focus?.();});
+    if(pages>1){
+     const from=state.readingPage*PER;
+     button('이전',()=>{state.readingPage--;refreshReading();},tools).disabled=!state.readingPage;
+     node('span',`${from+1}–${Math.min(read.length,from+PER)} / ${read.length}편`,tools,{class:'sc-muted'});
+     button('다음',()=>{state.readingPage++;refreshReading();},tools).disabled=state.readingPage>=pages-1;
+    }
+    if(unread)node('span',`아직 읽지 않은 ${unread}편은 뺐습니다.`,tools,{class:'sc-muted'});
+   }
+   for(const {item,ref,p,entry} of read.slice(state.readingPage*PER,(state.readingPage+1)*PER)){
     const time=runtime.formatReadTime?runtime.formatReadTime(entry.seconds):Math.floor(entry.seconds||0)+'초';
     // No recorded time is not "0 seconds read": saying both in one line
     // contradicted the page count beside it.
@@ -4309,8 +4567,15 @@
   }
   function drawTabs(){
    const b=bar();check('세로 탭 목록 표시',!!runtime.cache.readerSettings?.verticalTabs,on=>run(()=>reader.setVerticalTabs(win,on)),b);
-   const name=node('input',null,b,{placeholder:'탭 그룹 이름','aria-label':'탭 그룹 이름'});button('열린 탭 저장',async()=>{await reader.saveTabGroup(win,name.value);render();},b);
    const tabs=reader.tabs(win);
+   /* Saving needs a name and a document open: the button says so by being off,
+      instead of answering the press in English. A saved name is cleared, so a
+      second press does not make a second group of the same name. */
+   const docs=tabs.filter(tab=>tab.itemID).length;
+   const name=node('input',null,b,{placeholder:'탭 그룹 이름','aria-label':'탭 그룹 이름'});
+   const saveGroup=button('열린 탭 저장',async()=>{const submitted=name.value.trim();await reader.saveTabGroup(win,submitted);finishDraft(name,name.value,true);await render();message(`「${submitted}」 탭 그룹을 저장했습니다 · 문서 ${docs}개`);},b,{title:docs?'':T('PDF 탭을 하나 이상 연 뒤 저장할 수 있습니다')});
+   const syncSave=()=>{saveGroup.disabled=!docs||!name.value.trim();};
+   name.addEventListener('input',syncSave);syncSave();
    sectionHead('열린 탭',tabs.length);
    for(const [index,tab]of tabs.entries()){
     const c=card(tab.title,tab.selected?'현재 탭':'');button('이동',()=>reader.selectTab(win,tab.id),c);
@@ -4333,7 +4598,8 @@
    }
   }
   function drawViews(){
-   const b=bar(),name=node('input',null,b,{placeholder:'현재 열 배치 이름','aria-label':'뷰 그룹 이름'});button('현재 뷰 저장',async()=>{await reader.saveView(win,name.value);render();},b);
+   const b=bar(),name=node('input',null,b,{placeholder:'현재 열 배치 이름','aria-label':'뷰 그룹 이름'});const saveView=button('현재 뷰 저장',async()=>{const submitted=name.value.trim();await reader.saveView(win,submitted);finishDraft(name,name.value,true);await render();message(`「${submitted}」 뷰를 저장했습니다.`);},b);
+   {const sync=()=>{saveView.disabled=!name.value.trim();};name.addEventListener('input',sync);sync();}
    for(const view of reader.viewGroups()){
     const c=card(view.name,`${view.columns.length}개 열 설정`),title=node('input',null,c,{'aria-label':'저장된 뷰 그룹 이름'});title.value=view.name;title.dataset.draftKey=JSON.stringify(['view-group-name',view.id]);
     button('적용',()=>run(async()=>{await reader.applyView(win,view.id);message(`${view.name} 뷰를 적용했습니다.`);}),c);
@@ -4350,22 +4616,41 @@
    select.disabled=!(runtime.cache.boards||[]).length;
    button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b).disabled=!(deletedCardSelections.size||(runtime.cache.boardTrash||[]).length);
    if(!board){empty('보드를 만들고 선택한 문헌을 카드로 추가하세요.');return;}
-   const save=async()=>{runtime.dirty=true;await runtime.flush();render();};button('선택 문헌 추가',async()=>{model.addToBoard(runtime.cache,board,selected());await save();},b);button('메모 카드 추가',async()=>{model.addBoardNote(runtime.cache,board,'새 메모');await save();},b);button('카드 연결',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('두 카드를 선택하세요.');model.linkCards(board,...ids);await save();},b);button('선택 카드 삭제',async()=>{for(const id of state.cardIDs)model.removeCard(board,id);state.cardIDs.clear();await save();},b);
+   const save=async()=>{runtime.dirty=true;await runtime.flush();render();};button('선택 문헌 추가',async()=>{const chosen=selected();if(!chosen.length)throw new Error('카드로 올릴 문헌을 먼저 선택하세요.');model.addToBoard(runtime.cache,board,chosen);await save();},b);button('메모 카드 추가',async()=>{model.addBoardNote(runtime.cache,board,'새 메모');await save();},b);button('카드 연결',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('두 카드를 선택하세요.');model.linkCards(board,...ids);await save();},b);button('선택 카드 삭제',async()=>{
+    if(!state.cardIDs.size)throw new Error('지울 카드를 먼저 선택하세요.');
+    /* A board can be restored after deletion; its cards, with their memos,
+       could not. The cards and their links are kept for one 되돌리기. */
+    const gone=board.nodes.filter(n=>state.cardIDs.has(n.id)).map(n=>({...n}));
+    const links=board.edges.filter(e=>state.cardIDs.has(e.source)||state.cardIDs.has(e.target)).map(e=>({...e}));
+    for(const id of state.cardIDs)model.removeCard(board,id);state.cardIDs.clear();await save();
+    message(`카드 ${gone.length}개를 지웠습니다.`);
+    const undo=button('카드 삭제 되돌리기',async()=>{
+     const have=new Set(board.nodes.map(n=>n.id));
+     board.nodes.push(...gone.filter(n=>!have.has(n.id)));
+     const ids=new Set(board.nodes.map(n=>n.id));
+     board.edges.push(...links.filter(e=>ids.has(e.source)&&ids.has(e.target)&&!board.edges.some(x=>x.source===e.source&&x.target===e.target)));
+     await save();message(`카드 ${gone.length}개를 되살렸습니다.`);
+    },bar());undo.dataset.role='card-undo';
+   },b);
    const boardName=node('input',null,b,{'aria-label':'현재 보드 이름'});boardName.value=board.name;boardName.dataset.draftKey=JSON.stringify(['board-name',board.id]);
    button('보드 이름 변경',async()=>{const submitted=boardName.value;model.renameBoard(board,submitted);runtime.dirty=true;await runtime.flush();finishDraft(boardName,submitted);render();},b);
    button('카드 연결 해제',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('연결을 해제할 두 카드를 선택하세요.');model.unlinkCards(board,...ids);await save();},b);
    const canvas=node('div',null,body,{class:'sc-canvas'});const svg=doc.createElementNS(SVG,'svg');svg.setAttribute('class','sc-canvas-lines');svg.setAttribute('width',String(Math.max(2000,...board.nodes.map(n=>n.x+300))));svg.setAttribute('height',String(Math.max(2000,...board.nodes.map(n=>n.y+300))));canvas.appendChild(svg);for(const e of board.edges){const a=board.nodes.find(n=>n.id===e.source),z=board.nodes.find(n=>n.id===e.target);if(!a||!z)continue;const line=doc.createElementNS(SVG,'line');for(const[k,v]of Object.entries({x1:a.x+90,y1:a.y+40,x2:z.x+90,y2:z.y+40,stroke:'var(--sc-graph-line)'}))line.setAttribute(k,v);svg.appendChild(line);}
-   for(const n of board.nodes){const c=card(n.label,null,canvas);c.classList.add('sc-canvas-card');c.style.left=n.x+'px';c.style.top=n.y+'px';c.style.background=/^#[0-9a-f]{6}$/i.test(n.color)?n.color:'#ffffff';check('카드 선택',state.cardIDs.has(n.id),on=>on?state.cardIDs.add(n.id):state.cardIDs.delete(n.id),c);const memo=node('textarea',null,c,{'aria-label':'카드 메모'});memo.dataset.draftKey=JSON.stringify(['board-note',board.id,n.id]);memo.value=n.note;memo.addEventListener('change',()=>run(async()=>{n.note=memo.value.slice(0,50000);runtime.dirty=true;await runtime.flush();}));if(n.itemID)button('문헌 열기',()=>library.openItem(n.itemID),c,{'data-opens':'window'});
+   for(const n of board.nodes){const c=card(n.label,null,canvas);c.classList.add('sc-canvas-card');c.dataset.cardId=n.id;c.style.left=n.x+'px';c.style.top=n.y+'px';c.style.background=/^#[0-9a-f]{6}$/i.test(n.color)?n.color:'#ffffff';check('카드 선택',state.cardIDs.has(n.id),on=>on?state.cardIDs.add(n.id):state.cardIDs.delete(n.id),c);const memo=node('textarea',null,c,{'aria-label':'카드 메모'});memo.dataset.draftKey=JSON.stringify(['board-note',board.id,n.id]);memo.value=n.note;memo.addEventListener('change',()=>run(async()=>{n.note=memo.value.slice(0,50000);runtime.dirty=true;await runtime.flush();}));if(n.itemID)button('문헌 열기',()=>library.openItem(n.itemID),c,{'data-opens':'window'});
     const editor=node('details',null,c);node('summary','카드 편집',editor);
     const title=node('input',null,editor,{'aria-label':'카드 제목'});title.value=n.label;title.dataset.draftKey=JSON.stringify(['board-label',board.id,n.id]);
     const color=node('input',null,editor,{type:'color','aria-label':'카드 색상'});color.value=n.color;color.dataset.draftKey=JSON.stringify(['board-color',board.id,n.id]);
     button('카드 모양 저장',async()=>{const label=title.value,hex=color.value;model.updateCard(board,n.id,{label,color:hex});runtime.dirty=true;await runtime.flush();finishDraft(title,label);finishDraft(color,hex);render();},editor);
-    const handle=c.querySelector('h3');handle.setAttribute('tabindex','0');handle.title=T('드래그하거나 방향키로 이동');if(n.itemID)handle.addEventListener('dblclick',()=>run(()=>library.openItem(n.itemID)));handle.addEventListener('keydown',e=>{const move={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[e.key];if(move){e.preventDefault();model.moveCard(board,n.id,n.x+move[0],n.y+move[1]);run(save);}});
-    handle.addEventListener('pointerdown',e=>{const start={x:e.clientX,y:e.clientY,left:n.x,top:n.y};handle.setPointerCapture?.(e.pointerId);const move=ev=>{model.moveCard(board,n.id,start.left+ev.clientX-start.x,start.top+ev.clientY-start.y);c.style.left=n.x+'px';c.style.top=n.y+'px';};const up=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);run(save);};handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});});
+    const handle=c.querySelector('h3');handle.setAttribute('tabindex','0');handle.title=T('드래그하거나 방향키로 이동');if(n.itemID)handle.addEventListener('dblclick',()=>run(()=>library.openItem(n.itemID)));handle.addEventListener('keydown',e=>{const move={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[e.key];if(move){e.preventDefault();model.moveCard(board,n.id,n.x+move[0],n.y+move[1]);
+     // The board is redrawn to move the lines; the card keeps the keyboard, so a second press moves it again.
+     run(async()=>{await save();body.querySelector(`.sc-canvas-card[data-card-id="${n.id}"] h3`)?.focus?.();});}});
+    handle.addEventListener('pointerdown',e=>{const start={x:e.clientX,y:e.clientY,left:n.x,top:n.y};handle.setPointerCapture?.(e.pointerId);const move=ev=>{model.moveCard(board,n.id,start.left+ev.clientX-start.x,start.top+ev.clientY-start.y);c.style.left=n.x+'px';c.style.top=n.y+'px';};const up=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);
+     // A click is not a move: redrawing on every release rebuilt the card between the two clicks of a double-click.
+     if(n.x!==start.left||n.y!==start.top)run(save);};handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});});
    }
   }
   function drawMatrix(){
-   const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간(초)'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약']];
+   const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약']];
    const defaults=['title','authors','year','venue','doi','citations','impactFactor'];
    const saved=runtime.cache.matrixFields;
    const fields=Array.isArray(saved)?[...new Set(saved.filter(field=>available.some(([key])=>field===key)))]:defaults;
@@ -4376,12 +4661,18 @@
    for(const[key,label]of available)check('비교 항목: '+T(label),fields.includes(key),on=>run(async()=>{
     const latest=Array.isArray(runtime.cache.matrixFields)?[...new Set(runtime.cache.matrixFields.filter(field=>available.some(([id])=>id===field)))]:fields;
     const next=on?[...new Set([...latest,key])]:latest.filter(field=>field!==key);
-    if(!next.length){render();throw new Error('비교하려면 최소 한 편은 남아 있어야 합니다.');}
+    if(!next.length){render();throw new Error('비교 항목을 최소 하나는 남겨 두세요.');}
     runtime.cache.matrixFields=next;runtime.dirty=true;await runtime.flush();render();
    }),options);
+   /* The table is read by people and pasted into sheets: statuses in words,
+      time as "1시간 5분" rather than 3900. */
+   const STATUS={unread:'안 읽음',reading:'읽는 중',done:'완료'};
    const values=(selected().length?model.sortItems(selected(),state.sort):rows()).map(item=>{
     const ref=runtime.Z.Items.get(Number(item.id)),entry=ref?runtime.entry(ref):{};
-    return {...item,tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||''};
+    const seconds=Number(item.seconds)||0;
+    return {...item,tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||'',
+     status:item.status?T(STATUS[item.status]||item.status):'',
+     seconds:seconds>0?(runtime.formatReadTime?runtime.formatReadTime(seconds):`${seconds}초`):''};
    });
    const data=model.matrix(values,fields,state.transpose);
    button('CSV 복사',()=>copy(model.csv(data.map((row,i)=>row.map((value,j)=>(state.transpose?j===0:i===0)?T(fieldNames[value]||String(value)):value)))),b);
@@ -4389,6 +4680,8 @@
    if(state.matrixPageKey!==key){state.matrixPageKey=key;state.matrixPage=0;}
    state.matrixPage=Math.max(0,Math.min(state.matrixPage||0,Math.max(0,total-1)));
    node('span',`전체 ${values.length}개 · ${state.matrixPage+1}/${Math.max(1,total)} 페이지 · CSV는 전체 문헌`,b);
+   // With nothing selected the table is the whole list on screen; it says so.
+   if(!selected().length)node('span','선택 없음 · 현재 목록 전체',b,{class:'sc-muted'});
    button('비교 이전 페이지',()=>{state.matrixPage--;render();},b).disabled=state.matrixPage===0;
    button('비교 다음 페이지',()=>{state.matrixPage++;render();},b).disabled=state.matrixPage+1>=total;
    const shown=model.matrix(values.slice(state.matrixPage*pageSize,(state.matrixPage+1)*pageSize),fields,state.transpose);
@@ -4396,8 +4689,14 @@
    const table=node('table',null,scroll,{class:'sc-matrix'});
    // Figures are compared down a column, so they set flush right in tabular
    // numerals; the field's own row or column carries the mark.
-   const NUMERIC=new Set(['year','citations','impactFactor','rating','seconds']);
-   shown.forEach((row,i)=>{const tr=node('tr',null,table);row.forEach((value,j)=>{const heading=state.transpose?j===0:i===0;const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):String(value),tr);const field=state.transpose?fields[i]:fields[j];if(NUMERIC.has(field))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',state.transpose?'row':'col');if(!heading&&field)cell.dataset.field=field;});});
+   const NUMERIC=new Set(['year','citations','impactFactor','rating']);
+   const pageItems=values.slice(state.matrixPage*pageSize,(state.matrixPage+1)*pageSize);
+   shown.forEach((row,i)=>{const tr=node('tr',null,table);row.forEach((value,j)=>{const heading=state.transpose?j===0:i===0;const field=state.transpose?fields[i]:fields[j];
+    // A title is the way to the paper, as it is everywhere else in the panel.
+    const paper=!heading&&field==='title'?pageItems[(state.transpose?j:i)-1]:null;
+    const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):paper?null:String(value),tr);
+    if(paper)button(String(value),()=>library.openItem(paper.id),cell,{class:'sc-link-button','data-opens':'window',title:'Zotero에서 열기'});
+    if(NUMERIC.has(field))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',state.transpose?'row':'col');if(!heading&&field)cell.dataset.field=field;});});
    drawCompareInsight(values);
   }
   /* The papers in the table, read together by the model: what each claims,
@@ -4437,7 +4736,7 @@
    output.hidden=!have;if(have)output.value=state.compareOutput;
    const actions=bar(section);actions.classList.add('sc-compare-actions');actions.hidden=!have;
    button('결과 복사',()=>copy(output.value),actions);
-   button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 「비교 분석」을 눌러 결과를 받으세요.');noteCache=null;await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
+   button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 「함께 읽기」를 눌러 결과를 받으세요.');noteCache=null;await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
   }
   /* Collections as a tree, each with a bar for how much it holds. A list of
      boxed cards, one per collection with a button and a checkbox, said no
@@ -4451,8 +4750,17 @@
    const sort=node('select',null,b,{'aria-label':'컬렉션 정렬'});sort.hidden=!enabled('sortCollectionItem');
    for(const[v,l]of [['name','이름순'],['count','문헌 많은 순'],['favorite','즐겨찾기 먼저']])node('option',l,sort,{value:v});
    check('빈 컬렉션 숨기기',!!state.collectionsHideEmpty,on=>{state.collectionsHideEmpty=on;draw();},b);
-   const total=collections.reduce((n,c)=>n+c.count,0),most=Math.max(1,...collections.map(c=>c.count));
-   node('span',`컬렉션 ${collections.length}개 · 문헌 ${total}편 · 빈 컬렉션 ${collections.filter(c=>!c.count).length}개`,b,{class:'sc-muted'});
+   /* A paper filed in three collections is one paper: the header counts
+      distinct papers, and a parent that holds its papers only through its
+      subcollections is not "empty". */
+   const kidsOf=new Map();
+   for(const c of collections){const key=c.parentID||'';if(!kidsOf.has(key))kidsOf.set(key,[]);kidsOf.get(key).push(c);}
+   const deep=new Map();
+   const deepIDs=c=>{if(deep.has(c.id))return deep.get(c.id);const ids=new Set(c.itemIDs||[]);deep.set(c.id,ids);for(const kid of kidsOf.get(c.id)||[])for(const id of deepIDs(kid))ids.add(id);return ids;};
+   for(const c of collections)c.deepCount=c.itemIDs?deepIDs(c).size:c.count;
+   const distinct=new Set(collections.flatMap(c=>c.itemIDs||[])).size||collections.reduce((n,c)=>n+c.count,0);
+   const most=Math.max(1,...collections.map(c=>c.count));
+   node('span',`컬렉션 ${collections.length}개 · 서로 다른 문헌 ${distinct}편 · 빈 컬렉션 ${collections.filter(c=>!c.deepCount).length}개`,b,{class:'sc-muted'});
    const list=node('div',null,body,{class:'sc-collection-tree'});
    function draw(){
     list.replaceChildren();
@@ -4468,12 +4776,20 @@
      for(const c of [...(byParent.get(parent)||[])].sort(order)){
       const family=subtree(c);
       if(!family.some(matches))continue;
-      if(state.collectionsHideEmpty&&!family.some(x=>x.count))continue;
+      if(state.collectionsHideEmpty&&!c.deepCount)continue;
       drawn++;
-      const row=node('div',null,list,{class:'sc-collection'+(c.count?'':' sc-collection-empty'),role:'button',tabindex:'0','data-depth':String(depth),'data-id':c.id});
+      const row=node('div',null,list,{class:'sc-collection'+(c.deepCount?'':' sc-collection-empty'),role:'button',tabindex:'0','data-depth':String(depth),'data-id':c.id});
       row.style.setProperty('--sc-depth',String(depth));
-      // The tree moves behind a floating panel; the panel follows, and says so.
-      const open=()=>{win.ZoteroPane.collectionsView.selectCollection(Number(c.id));state.scope='collection';scope.value='collection';message(`${c.name} 컬렉션으로 이동했습니다.`);run(load);};
+      /* Opening a collection shows its papers: the tree moves behind the
+         panel, and the panel goes to 보유 문헌 scoped to it. A parent whose
+         papers all sit below it opens with its subcollections. */
+      const open=()=>run(async()=>{
+       await win.ZoteroPane.collectionsView.selectCollection(Number(c.id));
+       if(disposed)return;
+       state.scope=c.count?'collection':'collection-recursive';scope.value=state.scope;
+       await load();await navigate('explore');
+       message(`${c.name} 컬렉션의 문헌을 보여 줍니다.`);
+      });
       row.addEventListener('click',event=>{if(event.target.closest('button,input,label'))return;open();});
       row.addEventListener('keydown',event=>{if(event.target!==row)return;if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
       const nameLine=node('div',null,row,{class:'sc-collection-line'});
@@ -4482,7 +4798,7 @@
       node('span',c.name,nameLine,{class:'sc-collection-name',title:c.name});
       const kids=(byParent.get(c.id)||[]).length;
       if(kids)node('span',`하위 ${kids}`,nameLine,{class:'sc-collection-kids'});
-      if(enabled('collectionItemCount'))node('span',c.count?`${c.count}편`:'비어 있음',nameLine,{class:'sc-collection-count'});
+      if(enabled('collectionItemCount'))node('span',c.count?`${c.count}편`:c.deepCount?`하위 포함 ${c.deepCount}편`:'비어 있음',nameLine,{class:'sc-collection-count'});
       const barBox=node('div',null,row,{class:'sc-collection-bar','aria-hidden':'true'});
       const fill=node('span',null,barBox,{class:'sc-collection-fill'});fill.style.width=`${Math.round(100*c.count/most)}%`;
       const actions=node('div',null,row,{class:'sc-collection-actions'});
@@ -4533,7 +4849,15 @@
    if(work.citations!=null){meta.appendChild(doc.createTextNode(' · '));node('span',T(`인용 ${work.citations}`),meta,{class:'sc-hit-cited'});}
    if(rest.length)meta.appendChild(doc.createTextNode(' · '+rest.join(' · ')));
    if(work.authors?.length)node('p',work.authors.slice(0,4).join(', ')+(work.authors.length>4?` 외 ${work.authors.length-4}명`:''),row,{class:'sc-hit-authors'});
-   if(work.inLibrary){node('span','보유',row,{class:'sc-hit-owned'});return row;}
+   if(work.inLibrary){
+    node('span','보유',row,{class:'sc-hit-owned'});
+    /* Owned was a dead end: the reader had to go and search their own
+       library for it. 보기 selects it in the list behind the panel. */
+    const mine=work.doi&&typeof runtime.itemForDOI==='function'?runtime.itemForDOI(work.doi):null;
+    if(mine&&win.ZoteroPane?.selectItem){const acts=node('div',null,row,{class:'sc-hit-actions'});
+     button('보기',()=>run(async()=>{await win.ZoteroPane.selectItem(mine.id);message(`목록에서 선택했습니다 — ${String(mine.getField?.('title')||work.title||'').slice(0,60)}`);}),acts,{title:'Zotero 목록에서 이 논문 선택'});}
+    return row;
+   }
    const actions=node('div',null,row,{class:'sc-hit-actions'});
    if(!work.doi&&!work.inLibrary&&typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 찾기',()=>runtime.Z.ZotPoP.openSearch(win,{title:work.title||'',year:work.year||''}),actions);
    if(work.doi)button('추가',()=>run(async()=>{
@@ -4656,7 +4980,13 @@
     const owned=typeof runtime.libraryDOIs==='function'?runtime.libraryDOIs():null;
     // The paper itself is in the library by definition, even when it was found
     // by title and its DOI is not on the item: it must never offer "추가".
-    const own=work=>{if(work.seed){work.inLibrary=true;return;}if(owned&&work.doi)work.inLibrary=owned.has(String(work.doi).toLowerCase());};
+    const own=work=>{if(work.seed){work.inLibrary=true;return;}if(owned&&work.doi)work.inLibrary=owned.has(String(work.doi).toLowerCase());
+     /* Owned is not read. A paper saved and never opened keeps its number, its
+        reason and its "먼저" links; only one marked 완료 folds away. */
+     const mine=work.inLibrary&&work.doi?localByDOI.get(String(work.doi).toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,'')):null;
+     work.local=mine||null;work.readDone=!!mine&&mine.status==='done';};
+    const localByDOI=new Map(state.items.filter(i=>i.doi).map(i=>[String(i.doi).toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,''),i]));
+    const settled=work=>!!work.inLibrary&&!!work.readDone;
     const steps=(plan.steps||[]).map(step=>({...step,works:step.works||[],more:step.more||[]}));
     const rest=plan.rest||[];
     for(const step of steps)for(const work of [...step.works,...step.more])own(work);
@@ -4683,7 +5013,7 @@
      for(const work of pool){
       if(unowned>=quota)break;
       out.push(work);
-      if(!work.inLibrary||work.seed)unowned++;
+      if(!settled(work)||work.seed)unowned++;
      }
      if(planStart&&pool.includes(planStart)&&!out.includes(planStart))out.unshift(planStart);
      if(out.length)shown.set(step.key,step.key==='continuation'||step.key==='uses'?out.sort((a,b)=>(a.year||0)-(b.year||0)):out.sort((a,b)=>order.indexOf(a)-order.indexOf(b)));
@@ -4700,7 +5030,7 @@
       // A method is looked up, not read in order; it stays in its box.
       if(key==='tools'||key==='seed')continue;
       const list=shown.get(key)||[];
-      if(list.includes(target)||target.inLibrary)continue;
+      if(list.includes(target)||settled(target))continue;
       const order=steps.find(step=>step.key===key);const all=[...order.works,...order.more];
       shown.set(key,[...list,target].sort((a,b)=>all.indexOf(a)-all.indexOf(b)));added++;
      }
@@ -4708,7 +5038,7 @@
     // Numbers follow what is on screen: a step is a paper to read, so the
     // paper itself and the ones already owned are not numbered.
     const number=new Map();let n=0;
-    for(const step of steps)for(const work of shown.get(step.key)||[])if(!work.seed&&!work.inLibrary)number.set(work.id,++n);
+    for(const step of steps)for(const work of shown.get(step.key)||[])if(!work.seed&&!settled(work))number.set(work.id,++n);
     // A start already on the shelf is still the start -- the best one, as it
     // costs nothing to open.
     const start=(planStart&&steps.some(step=>(shown.get(step.key)||[]).includes(planStart))?planStart:null)
@@ -4728,7 +5058,7 @@
      const note=node('p','빠진 부분이 있는 결과는 저장하지 않습니다.',list,{class:'sc-muted sc-path-note'});
      button('다시 찾기',()=>run(()=>path({refresh:true})),note,{class:'sc-path-jump'});
     }
-    if(!n&&sectionOf.size>1)node('p','순서에 든 논문을 모두 보유하고 있습니다. 이 논문부터 읽어도 됩니다.',list,{class:'sc-muted sc-path-note'});
+    if(!n&&sectionOf.size>1)node('p','순서에 든 논문을 모두 읽었습니다. 이 논문부터 읽어도 됩니다.',list,{class:'sc-muted sc-path-note'});
     else if(!n){
      const box=node('div',null,list,{class:'sc-empty'});
      node('p',c.total?'이 논문의 참고문헌에서 순서를 매길 만한 논문을 찾지 못했습니다.':'OpenAlex에 이 논문의 참고문헌 목록이 없어 순서를 짤 수 없습니다.',box);
@@ -4762,20 +5092,20 @@
      const label=list.length>1?`${T(`${list.length}편`)} · ${line(list[0])} ${T('외')}`:line(list[0]);
      if(list.length===1){
       const row=node('div',null,parent,{class:'sc-path-row sc-path-owned',tabindex:'-1','data-work':list[0].id});
-      node('span','보유',row,{class:'sc-path-step'});
+      node('span','완료',row,{class:'sc-path-step'});
       node('p',(isStart?T('여기부터')+' · ':'')+label,row,{class:'sc-hit-title'});
       return row;
      }
      const box=node('details',null,parent,{class:'sc-path-owned-group'});
      const row=node('summary',null,box,{class:'sc-path-row sc-path-owned','data-work':list[0].id});
-     node('span','보유',row,{class:'sc-path-step'});
+     node('span','완료',row,{class:'sc-path-step'});
      node('p',label,row,{class:'sc-hit-title'});
      const inner=node('ul',null,box,{class:'sc-path-owned-list'});
      for(const work of list)node('li',line(work),inner);
      return box;
     };
     const pathRow=(work,key,parent,{brief=false}={})=>{
-     if(work.inLibrary&&!work.seed)return ownedRow(work,parent,{isStart:work===start});
+     if(settled(work)&&!work.seed)return ownedRow(work,parent,{isStart:work===start});
      const row=hitRow(work,parent);
      row.classList.add('sc-path-row');
      row.setAttribute('tabindex','-1');
@@ -4783,6 +5113,12 @@
      if(work.seed){row.classList.add('sc-path-seed');row.querySelector('.sc-hit-owned')?.remove();}
      const num=number.get(work.id);
      if(num)row.dataset.step=String(num);
+     // On the shelf but not finished: what the library knows, under the title -- how far it has gone.
+     if(work.inLibrary&&!work.seed&&work.local){
+      const l=work.local,said=[T('보유'),l.status==='reading'?T('읽는 중'):T('안 읽음')];
+      if(Number(l.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(l.seconds));
+      node('p',said.join(' · '),row,{class:'sc-path-local'});
+     }
      // The PDF is the one action a reader takes from this list without
      // hovering first; it stays in sight.
      row.querySelector('.sc-hit-actions [data-opens="browser"]')?.classList.add('sc-hit-pdf');
@@ -4828,7 +5164,7 @@
      if(short)node('span',T(plan.mode==='review'&&step.key==='seed'?note:PATH_NOTES_SHORT[step.key]||note),head,{class:'sc-path-head-note',title:T(note)});
      else node('p',note,list,{class:'sc-muted sc-hit-group-note'});
      const box=node('div',null,list,{class:'sc-hits'});
-     const ownedHere=rows.filter(work=>work.inLibrary&&!work.seed&&work!==start);
+     const ownedHere=rows.filter(work=>settled(work)&&!work.seed&&work!==start);
      for(const work of rows){if(!ownedHere.includes(work))pathRow(work,step.key,box,{brief:short});}
      if(ownedHere.length)ownedRow(ownedHere,box);
      if(!short&&step.more.length){
@@ -4883,7 +5219,7 @@
     if(event.key==='Enter'&&event.target===rows[at]){event.preventDefault();rows[at].querySelector('.sc-hit-title-link')?.click();}
    });
    async function find({refresh=false}={}){
-    if(refresh)runtime.discoverCache.delete('related:'+runtime.identity(runtime.Z.Items.get(Number(item.id))));
+    if(refresh){const ref=runtime.Z.Items.get(Number(item.id));if(typeof runtime.forgetLookup==='function')runtime.forgetLookup(ref,'related:');else runtime.discoverCache.delete('related:'+runtime.identity(ref));}
     message('OpenAlex에서 관련 논문을 찾는 중…');
     const {work,suggestions}=await runtime.relatedWorksCached(runtime.Z.Items.get(Number(item.id)));
     if(token!==epoch||disposed||state.tab!=='related')return;
@@ -4940,7 +5276,10 @@
     message(`${found.line.length}단계 · 참고문헌 ${found.bar}편 이상이 기대는 논문`);
     node('p','이 논문이 나오기까지 이 갈래가 지나온 단계입니다. 참고문헌들이 공통으로 인용한 정도로 골랐습니다.',list,{class:'sc-muted sc-path-note'});
     const line=node('ol',null,list,{class:'sc-line'});
+    // A plan is kept for weeks; what is on the shelf is asked now, as the reading order does.
+    const owned=typeof runtime.libraryDOIs==='function'?runtime.libraryDOIs():null;
     for(const work of found.line){
+     if(owned&&work.doi)work.inLibrary=owned.has(String(work.doi).toLowerCase());
      const row=node('li',null,line,{class:'sc-line-row'});
      node('span',String(work.year||''),row,{class:'sc-line-year'});
      const body2=node('div',null,row,{class:'sc-line-body'});
@@ -4951,10 +5290,20 @@
      if(work.citations!=null)why.push(T(`인용 ${work.citations}`));
      node('p',why.join(' · '),body2,{class:'sc-path-why'});
      if(work.venue)node('p',work.venue,body2,{class:'sc-hit-meta'});
+     const acts=node('div',null,body2,{class:'sc-hit-actions'});
+     const mine=work.inLibrary&&work.doi&&typeof runtime.itemForDOI==='function'?runtime.itemForDOI(work.doi):null;
+     if(mine&&win.ZoteroPane?.selectItem)button('보기',()=>run(async()=>{await win.ZoteroPane.selectItem(mine.id);message(`목록에서 선택했습니다 — ${String(work.title||'').slice(0,60)}`);}),acts,{title:'Zotero 목록에서 이 논문 선택'});
      if(!work.inLibrary&&work.doi){
-      const acts=node('div',null,body2,{class:'sc-hit-actions'});
+      // A milestone worth reading is worth keeping: in, without leaving the panel.
+      const add=button('추가',()=>run(async()=>{
+       message('가져오는 중… '+String(work.title||work.doi).slice(0,50));
+       await runtime.importWork(work,win);
+       work.inLibrary=true;add.remove();node('span','보유',title,{class:'sc-line-owned'});
+       message(`추가했습니다 — ${work.title||work.doi}`);
+      }),acts);
       button('doi.org에서 열기',()=>{try{win.Zotero?.launchURL?.('https://doi.org/'+work.doi);}catch(_){}},acts,{'data-opens':'browser'});
      }
+     if(!acts.childNodes.length)acts.remove();
     }
     const last=node('li',null,line,{class:'sc-line-row sc-line-seed'});
     node('span',String(plan.milestones.seedYear||item.year||''),last,{class:'sc-line-year'});
@@ -5013,7 +5362,11 @@
     const follow=bar(list);
     if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),follow);
     if(watching){
-     button('관심 해제',()=>run(async()=>{await runtime.unwatchAuthor(person.id);refreshWatched();await show(person);}),follow);
+     // As in the list: letting someone go drops their baseline and news, so the first press only arms it.
+     const off=button('관심 해제',()=>{
+      if(!off.dataset.armed){off.dataset.armed='1';off.textContent=T('정말 해제');win.setTimeout(()=>{if(off.isConnected){delete off.dataset.armed;off.textContent=T('관심 해제');}},3000);return;}
+      return run(async()=>{await runtime.unwatchAuthor(person.id);refreshWatched();await show(person);});
+     },follow,{class:'sc-unwatch'});
      if(fresh.length)button(`새 논문 ${fresh.length}편 확인함`,()=>run(async()=>{
       await runtime.markAuthorSeen(person.id,works);
       // The badge on the list is the same news; clearing one must clear both,
@@ -5079,7 +5432,10 @@
       chip.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}});
       // Thickness stands for how often, which is the only quantity here.
       chip.style.setProperty('--sc-tie',String(Math.max(0.18,mate.papers/most)));
-      node('span',initials(mate.name),chip,{class:'sc-node-face'});
+      const mateFace=node('span',null,chip,{class:'sc-node-face'});
+      node('span',initials(mate.name),mateFace,{class:'sc-face-text'});
+      // Only a face already found: a circle of twenty does not cost twenty searches.
+      showFace(mateFace,runtime.portraitOf?.(mate.id));
       const body=node('span',null,chip,{class:'sc-node-body'});
       node('span',mate.name,body,{class:'sc-node-name'});
       node('span',`${mate.papers}편${mate.last?` · ${mate.last}`:''}`,body,{class:'sc-node-meta'});
@@ -5117,6 +5473,40 @@
    // available. A watchlist has exactly one question: who has published since I
    // looked. So the sweep runs once for everyone, the answer lives on the row,
    // and the people with news sort to the top.
+   /* 저장된 새 논문: every followed author's news in one list, newest first,
+      a paper two of them share once with both names on it, and what the
+      library already knows about it -- owned, how far read. Read off what the
+      last sweep kept (at most eight a person), so it asks nothing and marks
+      nothing seen. The cards below stay the way to one person. */
+   function drawAuthorInbox(watched,parent){
+    const merged=new Map();
+    const bare=doi=>String(doi||'').toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
+    for(const person of watched)for(const work of person.news||[]){
+     const key=bare(work.doi)||String(work.id||'');if(!key)continue;
+     if(!merged.has(key))merged.set(key,{work,people:[]});
+     merged.get(key).people.push(person);
+    }
+    if(!merged.size)return;
+    const byDOI=new Map(state.items.filter(i=>i.doi).map(i=>[bare(i.doi),i]));
+    const rows=[...merged.values()].sort((a,b)=>String(b.work.date||'').localeCompare(String(a.work.date||'')));
+    const last=watched.map(p=>p.sweptAt).filter(Boolean).sort().pop();
+    sectionHead('저장된 새 논문',rows.length,parent);
+    if(last)node('p',T(`마지막 확인 ${(runtime.formatStamp&&runtime.localStamp?runtime.formatStamp(runtime.localStamp(last)):String(last).replace('T',' ')).slice(0,16)} · 저자마다 최근 8편까지`),parent,{class:'sc-muted sc-inbox-note'});
+    const box=node('div',null,parent,{class:'sc-author-inbox'});
+    for(const {work,people} of rows.slice(0,state.inboxAll?rows.length:12)){
+     const row=node('div',null,box,{class:'sc-author-inbox-row'});
+     const title=node('p',null,row,{class:'sc-hit-title'});
+     if(work.doi){const link=node('button',work.title||T('제목 없음'),title,{type:'button',class:'sc-hit-title-link','data-opens':'browser',title:T('doi.org에서 열기')});link.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+bare(work.doi));}catch(e){message(readable(e),true);}});}
+     else title.textContent=work.title||T('제목 없음');
+     const meta=[String(work.date||'').slice(0,10),work.venue,people.map(p=>p.name).join(' · ')].filter(Boolean).join(' · ');
+     node('p',meta,row,{class:'sc-hit-meta'});
+     const mine=byDOI.get(bare(work.doi));
+     const status=node('span',null,row,{class:'sc-inbox-status'});
+     if(mine){const said=[T('보유'),mine.status==='done'?T('완료'):mine.status==='reading'?T('읽는 중'):T('안 읽음')];if(Number(mine.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(mine.seconds));status.textContent=said.join(' · ');}
+     else if(work.preprint)status.textContent=T('프리프린트');
+    }
+    if(rows.length>12)button(state.inboxAll?'12편만 보기':`${rows.length}편 모두 보기`,()=>{state.inboxAll=!state.inboxAll;refreshWatched();},bar(parent));
+   }
    function drawWatched(parent){
     const watched=runtime.watchedAuthorsByNews();
     if(!watched.length)return;
@@ -5132,21 +5522,52 @@
       message(`새 논문 확인 중 ${done+1}/${total}`)});
      if(token!==epoch||disposed||state.tab!=='authors')return;
      refreshWatched();
-     message(result.budgetGone
+     message(T(result.budgetGone
       ? `OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}묶음이 남았고, 한국 시간 오전 9시에 초기화됩니다. 지금까지 확인한 결과는 저장했습니다.`
       : result.withNews
        ? `${result.withNews}명이 새 논문 ${result.works}편을 냈습니다. 요청 ${result.requests}회.`
-       : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`,
-      result.budgetGone);
+       : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`)
+      +(result.failed?' '+T(`${result.failed}명은 서버 오류로 확인하지 못해 이전 소식을 그대로 두었습니다. 다시 확인을 누르세요.`):'')
+      +(result.unfinished?' '+T(`${result.unfinished}명은 논문이 많아 끝까지 읽지 못했습니다. 다음 확인이 이어서 봅니다.`):''),
+      result.budgetGone||!!result.failed);
+     /* Faces follow the news without a second press: only for people never
+        looked for or due again, off the OpenAlex budget, in the background. */
+     if(!result.budgetGone&&runtime.pref?.('authorPortraits',true)!==false&&runtime.portraitsDue?.()>0){
+      runtime.findWatchedPortraits().then(found=>{
+       if(disposed||state.tab!=='authors'||!found?.found)return;
+       refreshWatched();
+      }).catch(error=>runtime.Z.logError?.(error));
+     }
     }),tools);
+    /* Faces for everyone on the list at once: Wikidata first (a freely licensed
+       photograph, by ORCID), then each person's own pages. About two dozen
+       requests for a hundred people; what is found stays for two months. */
+    if(typeof runtime.findWatchedPortraits==='function'&&runtime.pref?.('authorPortraits',true)!==false){
+     const withFace=watched.filter(person=>runtime.portraitOf?.(person.id)).length;
+     button(withFace?`사진 다시 찾기 (${withFace}명 있음)`:'사진 찾기',()=>run(async()=>{
+      message('관심 저자의 사진을 찾는 중… Wikidata, Google Scholar, 각자의 홈페이지를 확인합니다.');
+      const result=await runtime.findWatchedPortraits({onProgress:(stage,done,total)=>
+       message(stage==='wikidata'?`Wikidata에서 찾는 중 ${Math.min(done+15,total)}/${total}`:`홈페이지에서 찾는 중 ${done+1}/${total}`)});
+      if(token!==epoch||disposed||state.tab!=='authors')return;
+      refreshWatched();
+      const total=watched.filter(person=>runtime.portraitOf?.(person.id)).length;
+      message(!result.asked
+       ? `확인할 사람이 없습니다. 사진이 있는 ${total}명 외에는 최근 두 달 안에 이미 찾아봤습니다.`
+       : `사진 ${total}명 · 이번에 찾음 ${result.found}명 (Wikimedia ${result.wikimedia} · Google Scholar ${result.scholar||0} · 홈페이지 ${result.homepage}) · 요청 ${result.requests}회`
+         +(result.busy?' · Wikidata가 요청을 제한해 일부는 다음에 다시 찾습니다.':''),
+       result.busy);
+     }),tools);
+    }
     if(!fresh.length&&swept)node('span','새 논문 없음',tools,{class:'sc-watch-quiet'});
     // One chip keeps only the people with something new; a hundred quiet cards hide the ten that matter.
     if(state.watchFreshOnly&&!fresh.length)state.watchFreshOnly=false; // nothing new: an empty grid would say nothing
     if(fresh.length&&fresh.length<watched.length)button(state.watchFreshOnly?'모두 보기':'새 소식만',()=>{state.watchFreshOnly=!state.watchFreshOnly;refreshWatched();},tools,{'aria-pressed':String(!!state.watchFreshOnly)});
     const manage=button(state.watchManage?'카드로 보기':'목록 관리',()=>{state.watchManage=!state.watchManage;refreshWatched();},tools,{'aria-pressed':String(!!state.watchManage)});
     if(state.watchManage){drawWatchManager(watched,parent);return;}
+    drawAuthorInbox(watched,parent);
     // A grid, not a column: at this panel width one name per row turned a
     // hundred people into a scroll, and the whole point is to see them at once.
+    if(fresh.length)sectionHead('관심 저자',watched.length,parent);
     const rows=node('div',null,parent,{class:'sc-watch-grid'});
     for(const person of (state.watchFreshOnly?watched.filter(p=>p.news?.length||p.newPatents?.length||p.moved):watched)){
      const count=person.news?.length||0;
@@ -5155,6 +5576,9 @@
      const open=()=>run(()=>show(person));
      row.addEventListener('click',open);
      row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
+     const face=node('span',null,row,{class:'sc-face sc-watch-face','aria-hidden':'true'});
+     node('span',initials(person.name),face,{class:'sc-face-text'});
+     showFace(face,runtime.portraitOf?.(person.id));
      const line=node('div',null,row,{class:'sc-watch-line'});
      node('span',person.name,line,{class:'sc-watch-name'});
      if(count)node('span',String(count),line,{class:'sc-watch-badge',title:`마지막 확인 이후 새 논문 ${count}편`});
@@ -5263,6 +5687,18 @@
      node('p',[T(person.position==='first'?'제1저자':person.position==='last'?'교신·책임저자':'공저자'),person.institution].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
      const actions=node('div',null,row,{class:'sc-hit-actions'});
      button('최근 논문',()=>run(()=>show(person)),actions);
+     /* Following a paper's authors used to mean opening each in turn. The
+        row says who is already followed; for the rest one press follows,
+        with their current papers as the baseline so nothing old reads new. */
+     const followed=runtime.watchedAuthors?.().some(w=>runtime.discoverTools?.shortID?.(w.id)===runtime.discoverTools?.shortID?.(person.id)||w.id===person.id);
+     if(followed)node('span','관심 저자',row,{class:'sc-hit-owned'});
+     else{const add=button('관심 저자로 등록',()=>run(async()=>{
+      const {profile,works}=await runtime.authorActivityCached(person.id);
+      await runtime.watchAuthor({...person,name:profile?.name||person.name,seen:(works||[]).map(w=>w.id)});
+      if(token!==epoch||disposed)return;
+      refreshWatched();add.remove();actions.before(node('span','관심 저자',null,{class:'sc-hit-owned'}));
+      message(`${profile?.name||person.name}을(를) 관심 저자로 등록했습니다.`);
+     }),actions);}
     }
     // One author is not a choice; go straight to their work.
     if(people.length===1)await show(people[0]);
@@ -5276,7 +5712,7 @@
    // Named on the line above, in the context bar.
    const b=bar();
    button('새로고침',()=>run(async()=>{
-    runtime.discoverCache.delete('authors:'+runtime.identity(runtime.Z.Items.get(Number(item.id))));
+    {const ref=runtime.Z.Items.get(Number(item.id));if(typeof runtime.forgetLookup==='function')runtime.forgetLookup(ref,'authors:');else runtime.discoverCache.delete('authors:'+runtime.identity(ref));}
     await loadAuthors();
    }),b);
    run(loadAuthors);
@@ -5755,7 +6191,13 @@
    body.insertBefore(sectionHead('결과',null,body),output);
    // Nothing to stop until something is running.
    const stopAI=button('요청 중지',()=>{aiEpoch++;assist.cancel?.();message('AI 요청을 중지했습니다.');stopAI.hidden=true;},b,{class:'sc-danger-soft'});stopAI.hidden=true;
-   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message('선택한 텍스트를 설정된 AI 서비스에 요청 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b);
+   /* What each request sends, so a press that cannot succeed is off before
+      it is made: nothing without a server, and nothing that needs an
+      abstract for a paper that has none. */
+   const hasAbstract=!!String(item.abstract||'').trim();
+   const NEEDS_ABSTRACT=new Set(['summary','remark','tags']);
+   if(aiReady&&!hasAbstract)body.insertBefore(node('p','이 문헌에는 초록이 없어 요약·메모·태그 제안은 쓸 수 없습니다. 제목 번역만 됩니다.',null,{class:'sc-muted sc-settings-note'}),b);
+   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message(task==='translate'?'제목을 AI 서버에 보내는 중…':'제목·초록을 AI 서버에 보내는 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b,{title:!aiReady?T('설정에서 AI 서버를 연결하면 켜집니다'):(NEEDS_ABSTRACT.has(task)&&!hasAbstract)?T('초록이 없는 문헌입니다'):''}).disabled=!aiReady||(NEEDS_ABSTRACT.has(task)&&!hasAbstract);
    const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary'});
   }
   /* The settings page as sections, each with its name, one line saying what it
@@ -5781,7 +6223,7 @@
    const accent=node('input',null,form,{type:'color','aria-label':'강조 색상'});accent.value=runtime.pref('accentColor','#374151');
    node('span',T('글꼴 크기'),form,{class:'sc-settings-label'});
    const size=node('input',null,form,{type:'number',min:'11',max:'20','aria-label':'패널 글꼴 크기'});size.value=runtime.pref('panelFontSize',13);
-   button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);},form,{'data-variant':'primary'});
+   button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);message(`패널 모양을 저장했습니다 · 글꼴 ${fontSize}px`);},form,{'data-variant':'primary'});
    button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),bar(look));
    const list=part('목록 표시','Zotero 문헌 목록의 제목 열과 항목 아이콘에 적용됩니다.');
    const opts=node('div',null,list,{class:'sc-settings-stack'});
@@ -5793,11 +6235,14 @@
    const fields=part('추가 열','문헌 목록에 열로 보일 Zotero 필드 이름을 쉼표로 적습니다.');
    const fieldRow=bar(fields);
    const customFields=node('input',null,fieldRow,{'aria-label':'추가 문헌 열','placeholder':'DOI, publisher, language'});customFields.value=runtime.pref('customFields','');
-   button('추가 열 적용',async()=>{await runtime.setCustomFields(customFields.value);message('추가 열을 적용했습니다.');},fieldRow);
+   button('추가 열 적용',async()=>{const fields=await runtime.setCustomFields(customFields.value);
+    // The columns are registered hidden, as Zotero's own are: the message says where to turn them on.
+    const n=Array.isArray(fields)?fields.length:0;
+    message(n?`추가 열 ${n}개를 등록했습니다. 문헌 목록 머리글을 오른쪽 클릭해 켜세요.`:'추가 열을 모두 뺐습니다.');},fieldRow);
    if(enabled('styleEditor')){
     const edit=part('패널 CSS','이 패널 안에만 적용됩니다. 외부 파일을 불러오는 규칙(@import, url())은 받지 않습니다.');
     const css=node('textarea',null,edit,{'aria-label':'Custom 패널 CSS',placeholder:'.sc-card { font-size: 13px; }'});css.value=runtime.pref('panelCSS','');
-    button('패널 CSS 적용',()=>runtime.setPanelCSS(css.value),bar(edit));
+    button('패널 CSS 적용',()=>{runtime.setPanelCSS(css.value);message(css.value.trim()?'패널 CSS를 적용했습니다.':'패널 CSS를 비웠습니다.');},bar(edit));
    }
   }
   async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';
@@ -5805,7 +6250,9 @@
       broken: after 자세히 the scope stayed on the selection, and the
       selection went away with the next click in the tree. With nothing to
       show, the scope falls back to the library. */
-   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';}const token=++epoch;clear();for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);}updateChrome();refreshNotice().catch(()=>{});try{
+   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';}const token=++epoch;clear();for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});
+   // Said in the panel, never in a modal: the first background write into Extra.
+   if(runtime.cache?.citationExtraNoticePending){win.setTimeout(()=>{if(disposed||panel.hidden||!runtime.cache.citationExtraNoticePending)return;message("인용 수를 Extra 필드에 'Citations: N (출처, 날짜)' 한 줄로 기록합니다. 원하지 않으면 설정 → Style Custom → 인용 수·IF → '논문 추가·수정 시 인용 수 조회 후 Extra 저장'을 끄세요.");delete runtime.cache.citationExtraNoticePending;runtime.dirty=true;},0);}try{
    switch(state.tab){case'explore':await paperList(rows());break;case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
@@ -5826,7 +6273,15 @@
    }
    else if(e.key==='Escape'){if(e.target?.closest?.('input,textarea')){e.target.blur();return;}e.stopPropagation();toggle(false);}
   };panel.addEventListener('keydown',keyboard);
-  if(runtime.Z.Notifier){notifier=runtime.Z.Notifier.registerObserver({notify:()=>{if(disposed||panel.hidden)return;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(()=>run(load),200);}},['item','item-tag','collection','tab'],'style-custom-workbench');}
+  /* A memo saves itself as it is typed, and the save is an item change that
+     reloaded the panel: the field was rebuilt under the cursor a second after
+     each pause, and a long list jumped back to the top. While the reader is
+     typing in the panel the reload waits, and runs when they leave the field. */
+  let reloadPending=false;
+  const typing=()=>{const a=doc.activeElement;return !!a&&panel.contains(a)&&(a.localName==='textarea'||a.isContentEditable===true||(a.localName==='input'&&/^(text|search|)$/.test(a.getAttribute('type')||'')));};
+  const scheduleReload=()=>{if(disposed||panel.hidden)return;if(typing()){reloadPending=true;return;}reloadPending=false;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(()=>run(load),200);};
+  panel.addEventListener('focusout',()=>{if(reloadPending)win.setTimeout(()=>{if(reloadPending&&!typing())scheduleReload();},0);});
+  if(runtime.Z.Notifier){notifier=runtime.Z.Notifier.registerObserver({notify:scheduleReload},['item','item-tag','collection','tab'],'style-custom-workbench');}
   const selectionTimer=win.setInterval(()=>{if(!disposed&&!win.closed&&!panel.hidden&&scopeContext()!==observedContext)run(load);},500);
   function destroy(){if(disposed)return;
    graphResize?.disconnect?.();if(graphResizeTimer)win.clearTimeout(graphResizeTimer);
@@ -5857,7 +6312,9 @@
  const icon=doc.getElementById('demo-icon')?.getAttribute('content');
  const hint=text=>{const node=doc.getElementById('demo-feedback');if(node)node.textContent=text;};
  const demoAction=async()=>hint('이 미리보기의 동작은 예시 데이터에만 적용됩니다. 실제 Zotero에는 연결하지 않습니다.');
- const cache={items:{},readerSettings:{},workbenchUI:{density:'comfortable'},boards:[],matrixFields:['title','year','citations','rating']};
+ const daysAgo=n=>new Date(Date.now()-n*864e5).toISOString();
+ // Reading records for the fictional papers, so the reading page shows what a reader sees.
+ const cache={items:{1:{seconds:1240,lastRead:daysAgo(1)},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{},workbenchUI:{density:'comfortable'},boards:[],matrixFields:['title','year','citations','rating']};
  const watched=[
   {id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],
    news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},

@@ -350,7 +350,7 @@
   selectFilter('status','읽기 상태 필터',[['','모든 읽기 상태'],['unread','안 읽음'],['reading','읽는 중'],['done','완료']]);
   selectFilter('ratingMin','최소 별점',[['','모든 별점'],...Array.from({length:5},(_,i)=>[String(i+1),`${i+1}점 이상`])]);
   for(const[key,label]of [['yearFrom','시작 연도'],['yearTo','마지막 연도']]){const input=node('input',null,filters,{type:'number',min:1,max:9999,placeholder:label,'aria-label':label});input.addEventListener('input',()=>{state[key]=input.value;render();});filterInputs.set(key,input);}
-  selectFilter('sort','문헌 정렬',[['library','기본 순서'],['title','제목순'],['year-desc','최신 발행순'],['citations-desc','인용 많은 순'],['rating-desc','별점 높은 순'],['time-desc','읽기 시간순']]);
+  selectFilter('sort','문헌 정렬',[['library','기본 순서'],['title','제목순'],['year-desc','최신 발행순'],['if-desc','IF 높은 순'],['citations-desc','인용 많은 순'],['rating-desc','별점 높은 순'],['time-desc','읽기 시간순']]);
   button('필터 초기화',()=>{for(const key of ['status','ratingMin','yearFrom','yearTo']){state[key]='';filterInputs.get(key).value='';}state.query=search.value='';state.type=type.value='';state.tag='';state.color='';state.sort='library';filterInputs.get('sort').value='library';render();},filters);
   const shell=node('div',null,panel,{class:'sc-shell'}),nav=node('nav',null,shell,{'aria-label':'작업 종류'}),content=node('div',null,shell,{class:'sc-content'});
   const context=node('div',null,content,{class:'sc-context'}),sectionTitle=node('h2','보유 문헌',context,{class:'sc-section-title'}),contextDetail=node('span',null,context,{class:'sc-context-detail'});context.appendChild(kindChips);
@@ -594,6 +594,30 @@
    const pageSize=setting('explorePageSize',100),key=JSON.stringify([state.tab,state.scope,items.map(i=>i.id)]);
    if(state.pageKey!==key){state.pageKey=key;state.pageIndex=0;}
    state.pageIndex=Math.max(0,Math.min(state.pageIndex||0,Math.ceil(items.length/pageSize)-1));
+   /* The list in one line before its first row: how much of it has been
+      read, how long that took, what it is worth by citation and journal, and
+      what came in this month. Read off the rows already in hand; the bar is
+      the reading status in the status column's own three tones. */
+   if(items.length>1){
+    const n={unread:0,reading:0,done:0};let seconds=0,thisMonth=0;const ifs=[],cites=[];
+    const month=new Date();month.setDate(1);month.setHours(0,0,0,0);
+    for(const it of items){n[it.status==='done'?'done':it.status==='reading'?'reading':'unread']++;seconds+=Number(it.seconds)||0;
+     if(Number.isFinite(Number(it.impactFactor))&&it.impactFactor!==null&&it.impactFactor!=='')ifs.push(Number(it.impactFactor));
+     if(Number.isFinite(Number(it.citations))&&it.citations!==null&&it.citations!=='')cites.push(Number(it.citations));
+     const added=runtime.localStamp?runtime.localStamp(it.dateAdded)?.getTime():Date.parse(it.dateAdded||'');if(added>=month.getTime())thisMonth++;}
+    const median=list=>{if(!list.length)return null;const v=[...list].sort((a,b)=>a-b),m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2;};
+    const box=node('div',null,body,{class:'sc-overview',role:'group','aria-label':T('이 목록 요약')});
+    const meter=node('div',null,box,{class:'sc-overview-meter','aria-hidden':'true'});
+    for(const key of ['done','reading','unread'])if(n[key])node('span',null,meter,{class:'sc-overview-'+key}).style.flexGrow=String(n[key]);
+    const facts=node('p',null,box,{class:'sc-overview-facts'});
+    const fact=(label,value)=>{if(value==null||value==='')return;const span=node('span',null,facts);node('b',String(value),span);span.appendChild(doc.createTextNode(' '+T(label)));};
+    fact('완료',n.done);fact('읽는 중',n.reading);fact('안 읽음',n.unread);
+    if(seconds>0)fact('읽음',runtime.formatReadTime?runtime.formatReadTime(seconds):Math.round(seconds/60)+'분');
+    const mi=median(ifs),mc=median(cites);
+    if(mi!=null)fact('IF 중앙값',mi.toFixed(1));
+    if(mc!=null)fact('인용 중앙값',Math.round(mc));
+    if(thisMonth)fact('이번 달 추가',thisMonth);
+   }
    const start=state.pageIndex*pageSize,page=items.slice(start,start+pageSize),paging=bar();
    if(items.length>pageSize){
     node('span',`${start+1}–${start+page.length} / ${items.length}개`,paging,{role:'status','aria-label':'문헌 페이지 범위'});
@@ -602,6 +626,17 @@
    }
    const choose=(values,on)=>{state.annotationIDs.clear();for(const item of values)on?state.selected.add(String(item.id)):state.selected.delete(String(item.id));render();};
    button('현재 페이지 선택',()=>choose(page,true),paging);button('현재 페이지 선택 해제',()=>choose(page,false),paging);button('검색 결과 전체 선택',()=>choose(items,true),paging);
+   /* One header over the figures, so a column reads as a column and its name
+      is said once rather than on every row; a name sorts by it, highest first,
+      and pressed again goes back to the library's order. */
+   const columns=node('div',null,body,{class:'sc-paper-columns',role:'group','aria-label':T('정렬할 열')});
+   node('span',null,columns,{class:'sc-paper-columns-lead'});
+   for(const [key,label,sort] of [['impact','IF','if-desc'],['citations','인용','citations-desc'],['rating','별점','rating-desc'],['time','읽기','time-desc']]){
+    const on=state.sort===sort;
+    const b=button(label,()=>{state.sort=on?'library':sort;const select=filterInputs.get?.('sort');if(select)select.value=state.sort;render();},columns,{class:'sc-paper-column','data-metric':key,'aria-pressed':String(on),title:T(on?'다시 누르면 기본 순서':'높은 순으로 정렬')});
+    if(on)b.textContent=T(label)+' ↓';
+   }
+   node('span',null,columns,{class:'sc-paper-columns-tail'});
    const list=node('div',null,body,{class:'sc-paper-list'}),details=[],generation=epoch;for(const item of page){
    const c=node('article',null,list,{class:'sc-card sc-paper-card','data-item-id':item.id,'data-status':['reading','done'].includes(item.status)?item.status:'unread','data-selected':String(state.selected.has(item.id))});
    const heading=node('div',null,c,{class:'sc-paper-heading'}),pick=check('선택',state.selected.has(item.id),on=>selectItem(item.id,on),heading);pick.setAttribute('aria-label',item.title+' 선택');
@@ -630,7 +665,13 @@
    // filled only once the paper has been rated.
    const stars=node('span',null,metrics,{class:'sc-metric sc-stars',title:item.rating?`별점 ${item.rating}/5`:'별점 없음'});stars.dataset.metric='rating';
    node('span',item.rating?'\u2605'.repeat(item.rating)+'\u2606'.repeat(5-item.rating):'',stars,{class:'sc-metric-value'});
-   metric(metrics,{unit:'읽기',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
+   const timeCell=metric(metrics,{unit:'읽기',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
+   /* How far in, beside how long: twenty minutes on a paper says little
+      until it is set against four of eight pages. A short grey meter, no
+      colour: the pages read over the pages the PDF has. */
+   {const ref=runtime.Z?.Items?.get?.(Number(item.id)),p=ref&&typeof runtime.pageProgress==='function'?runtime.pageProgress(ref):null;
+    if(p?.total&&timeCell){const meter=node('span',null,timeCell,{class:'sc-row-progress',role:'img','aria-label':T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`),title:T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`)});
+     node('span',null,meter,{class:'sc-row-progress-fill'}).style.width=Math.round(100*p.visited/p.total)+'%';}}
    const actions=bar(heading);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-opens':'window','data-variant':'primary'});button('자세히',()=>{state.selected=new Set([item.id]);state.scope='selected';scope.value='selected';render();},actions);
    if(state.scope==='selected'){node('p',item.abstract||'초록이 없습니다.',c);const ref=runtime.Z.Items.get(Number(item.id));const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);message('메모를 저장했습니다.');},c);}
    if(state.scope==='selected'&&items.length===1)details.push((async()=>{
@@ -1513,6 +1554,30 @@
    read.sort(bySort);
    const PER=30,pages=Math.max(1,Math.ceil(read.length/PER));
    state.readingPage=Math.max(0,Math.min(state.readingPage||0,pages-1));
+   /* 이어 읽기: what was being read in the last two weeks and is not finished,
+      each with the page to go back to -- the page after the last one the
+      reader spent time on -- one press away. The question on opening this
+      page is "where was I"; the list below answers it only by scrolling. */
+   const DAY=864e5,now=Date.now();
+   const resume=read.map(r=>{
+    const when=runtime.localStamp?runtime.localStamp(r.entry.lastRead)?.getTime():Date.parse(r.entry.lastRead||'');
+    const total=Number(r.p.total)||0,done=total?r.p.visited/total:0;
+    const readPages=Object.entries(r.p.pages||{}).filter(([k,v])=>/^\d+$/.test(k)&&Number(v)>=5).map(([k])=>Number(k));
+    const next=readPages.length?Math.min(total-1,Math.max(...readPages)+1):0;
+    return {...r,when,total,done,next};
+   }).filter(r=>r.total&&r.p.attachmentID&&r.done>=0.05&&r.done<0.9&&Number.isFinite(r.when)&&now-r.when<=14*DAY)
+    .sort((a,b)=>b.when-a.when).slice(0,3);
+   if(resume.length){
+    sectionHead('이어 읽기',resume.length,list);
+    const box=node('div',null,list,{class:'sc-resume'});
+    for(const r of resume){
+     const row=node('div',null,box,{class:'sc-resume-row'});
+     node('span',r.item.title,row,{class:'sc-resume-title',title:r.item.title});
+     const days=Math.floor((now-r.when)/DAY);
+     node('span',days?`${r.p.visited}/${r.total}쪽 · ${days}일 전`:`${r.p.visited}/${r.total}쪽 · 오늘`,row,{class:'sc-resume-meta'});
+     button(`${r.next+1}쪽부터`,()=>run(()=>library.openItem(r.p.attachmentID,{pageIndex:r.next})),row,{'data-opens':'window',title:T('마지막으로 읽던 다음 쪽에서 엽니다')});
+    }
+   }
    if(read.length){
     const tools=node('div',null,list,{class:'sc-actions sc-reading-tools'});
     const order=node('select',null,tools,{'aria-label':'읽기 기록 정렬'});
@@ -2016,7 +2081,13 @@
     const owned=typeof runtime.libraryDOIs==='function'?runtime.libraryDOIs():null;
     // The paper itself is in the library by definition, even when it was found
     // by title and its DOI is not on the item: it must never offer "추가".
-    const own=work=>{if(work.seed){work.inLibrary=true;return;}if(owned&&work.doi)work.inLibrary=owned.has(String(work.doi).toLowerCase());};
+    const own=work=>{if(work.seed){work.inLibrary=true;return;}if(owned&&work.doi)work.inLibrary=owned.has(String(work.doi).toLowerCase());
+     /* Owned is not read. A paper saved and never opened keeps its number, its
+        reason and its "먼저" links; only one marked 완료 folds away. */
+     const mine=work.inLibrary&&work.doi?localByDOI.get(String(work.doi).toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,'')):null;
+     work.local=mine||null;work.readDone=!!mine&&mine.status==='done';};
+    const localByDOI=new Map(state.items.filter(i=>i.doi).map(i=>[String(i.doi).toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,''),i]));
+    const settled=work=>!!work.inLibrary&&!!work.readDone;
     const steps=(plan.steps||[]).map(step=>({...step,works:step.works||[],more:step.more||[]}));
     const rest=plan.rest||[];
     for(const step of steps)for(const work of [...step.works,...step.more])own(work);
@@ -2043,7 +2114,7 @@
      for(const work of pool){
       if(unowned>=quota)break;
       out.push(work);
-      if(!work.inLibrary||work.seed)unowned++;
+      if(!settled(work)||work.seed)unowned++;
      }
      if(planStart&&pool.includes(planStart)&&!out.includes(planStart))out.unshift(planStart);
      if(out.length)shown.set(step.key,step.key==='continuation'||step.key==='uses'?out.sort((a,b)=>(a.year||0)-(b.year||0)):out.sort((a,b)=>order.indexOf(a)-order.indexOf(b)));
@@ -2060,7 +2131,7 @@
       // A method is looked up, not read in order; it stays in its box.
       if(key==='tools'||key==='seed')continue;
       const list=shown.get(key)||[];
-      if(list.includes(target)||target.inLibrary)continue;
+      if(list.includes(target)||settled(target))continue;
       const order=steps.find(step=>step.key===key);const all=[...order.works,...order.more];
       shown.set(key,[...list,target].sort((a,b)=>all.indexOf(a)-all.indexOf(b)));added++;
      }
@@ -2068,7 +2139,7 @@
     // Numbers follow what is on screen: a step is a paper to read, so the
     // paper itself and the ones already owned are not numbered.
     const number=new Map();let n=0;
-    for(const step of steps)for(const work of shown.get(step.key)||[])if(!work.seed&&!work.inLibrary)number.set(work.id,++n);
+    for(const step of steps)for(const work of shown.get(step.key)||[])if(!work.seed&&!settled(work))number.set(work.id,++n);
     // A start already on the shelf is still the start -- the best one, as it
     // costs nothing to open.
     const start=(planStart&&steps.some(step=>(shown.get(step.key)||[]).includes(planStart))?planStart:null)
@@ -2088,7 +2159,7 @@
      const note=node('p','빠진 부분이 있는 결과는 저장하지 않습니다.',list,{class:'sc-muted sc-path-note'});
      button('다시 찾기',()=>run(()=>path({refresh:true})),note,{class:'sc-path-jump'});
     }
-    if(!n&&sectionOf.size>1)node('p','순서에 든 논문을 모두 보유하고 있습니다. 이 논문부터 읽어도 됩니다.',list,{class:'sc-muted sc-path-note'});
+    if(!n&&sectionOf.size>1)node('p','순서에 든 논문을 모두 읽었습니다. 이 논문부터 읽어도 됩니다.',list,{class:'sc-muted sc-path-note'});
     else if(!n){
      const box=node('div',null,list,{class:'sc-empty'});
      node('p',c.total?'이 논문의 참고문헌에서 순서를 매길 만한 논문을 찾지 못했습니다.':'OpenAlex에 이 논문의 참고문헌 목록이 없어 순서를 짤 수 없습니다.',box);
@@ -2122,20 +2193,20 @@
      const label=list.length>1?`${T(`${list.length}편`)} · ${line(list[0])} ${T('외')}`:line(list[0]);
      if(list.length===1){
       const row=node('div',null,parent,{class:'sc-path-row sc-path-owned',tabindex:'-1','data-work':list[0].id});
-      node('span','보유',row,{class:'sc-path-step'});
+      node('span','완료',row,{class:'sc-path-step'});
       node('p',(isStart?T('여기부터')+' · ':'')+label,row,{class:'sc-hit-title'});
       return row;
      }
      const box=node('details',null,parent,{class:'sc-path-owned-group'});
      const row=node('summary',null,box,{class:'sc-path-row sc-path-owned','data-work':list[0].id});
-     node('span','보유',row,{class:'sc-path-step'});
+     node('span','완료',row,{class:'sc-path-step'});
      node('p',label,row,{class:'sc-hit-title'});
      const inner=node('ul',null,box,{class:'sc-path-owned-list'});
      for(const work of list)node('li',line(work),inner);
      return box;
     };
     const pathRow=(work,key,parent,{brief=false}={})=>{
-     if(work.inLibrary&&!work.seed)return ownedRow(work,parent,{isStart:work===start});
+     if(settled(work)&&!work.seed)return ownedRow(work,parent,{isStart:work===start});
      const row=hitRow(work,parent);
      row.classList.add('sc-path-row');
      row.setAttribute('tabindex','-1');
@@ -2143,6 +2214,12 @@
      if(work.seed){row.classList.add('sc-path-seed');row.querySelector('.sc-hit-owned')?.remove();}
      const num=number.get(work.id);
      if(num)row.dataset.step=String(num);
+     // On the shelf but not finished: what the library knows, under the title -- how far it has gone.
+     if(work.inLibrary&&!work.seed&&work.local){
+      const l=work.local,said=[T('보유'),l.status==='reading'?T('읽는 중'):T('안 읽음')];
+      if(Number(l.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(l.seconds));
+      node('p',said.join(' · '),row,{class:'sc-path-local'});
+     }
      // The PDF is the one action a reader takes from this list without
      // hovering first; it stays in sight.
      row.querySelector('.sc-hit-actions [data-opens="browser"]')?.classList.add('sc-hit-pdf');
@@ -2188,7 +2265,7 @@
      if(short)node('span',T(plan.mode==='review'&&step.key==='seed'?note:PATH_NOTES_SHORT[step.key]||note),head,{class:'sc-path-head-note',title:T(note)});
      else node('p',note,list,{class:'sc-muted sc-hit-group-note'});
      const box=node('div',null,list,{class:'sc-hits'});
-     const ownedHere=rows.filter(work=>work.inLibrary&&!work.seed&&work!==start);
+     const ownedHere=rows.filter(work=>settled(work)&&!work.seed&&work!==start);
      for(const work of rows){if(!ownedHere.includes(work))pathRow(work,step.key,box,{brief:short});}
      if(ownedHere.length)ownedRow(ownedHere,box);
      if(!short&&step.more.length){
@@ -2497,6 +2574,40 @@
    // available. A watchlist has exactly one question: who has published since I
    // looked. So the sweep runs once for everyone, the answer lives on the row,
    // and the people with news sort to the top.
+   /* 저장된 새 논문: every followed author's news in one list, newest first,
+      a paper two of them share once with both names on it, and what the
+      library already knows about it -- owned, how far read. Read off what the
+      last sweep kept (at most eight a person), so it asks nothing and marks
+      nothing seen. The cards below stay the way to one person. */
+   function drawAuthorInbox(watched,parent){
+    const merged=new Map();
+    const bare=doi=>String(doi||'').toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
+    for(const person of watched)for(const work of person.news||[]){
+     const key=bare(work.doi)||String(work.id||'');if(!key)continue;
+     if(!merged.has(key))merged.set(key,{work,people:[]});
+     merged.get(key).people.push(person);
+    }
+    if(!merged.size)return;
+    const byDOI=new Map(state.items.filter(i=>i.doi).map(i=>[bare(i.doi),i]));
+    const rows=[...merged.values()].sort((a,b)=>String(b.work.date||'').localeCompare(String(a.work.date||'')));
+    const last=watched.map(p=>p.sweptAt).filter(Boolean).sort().pop();
+    sectionHead('저장된 새 논문',rows.length,parent);
+    if(last)node('p',T(`마지막 확인 ${(runtime.formatStamp&&runtime.localStamp?runtime.formatStamp(runtime.localStamp(last)):String(last).replace('T',' ')).slice(0,16)} · 저자마다 최근 8편까지`),parent,{class:'sc-muted sc-inbox-note'});
+    const box=node('div',null,parent,{class:'sc-author-inbox'});
+    for(const {work,people} of rows.slice(0,state.inboxAll?rows.length:12)){
+     const row=node('div',null,box,{class:'sc-author-inbox-row'});
+     const title=node('p',null,row,{class:'sc-hit-title'});
+     if(work.doi){const link=node('button',work.title||T('제목 없음'),title,{type:'button',class:'sc-hit-title-link','data-opens':'browser',title:T('doi.org에서 열기')});link.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+bare(work.doi));}catch(e){message(readable(e),true);}});}
+     else title.textContent=work.title||T('제목 없음');
+     const meta=[String(work.date||'').slice(0,10),work.venue,people.map(p=>p.name).join(' · ')].filter(Boolean).join(' · ');
+     node('p',meta,row,{class:'sc-hit-meta'});
+     const mine=byDOI.get(bare(work.doi));
+     const status=node('span',null,row,{class:'sc-inbox-status'});
+     if(mine){const said=[T('보유'),mine.status==='done'?T('완료'):mine.status==='reading'?T('읽는 중'):T('안 읽음')];if(Number(mine.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(mine.seconds));status.textContent=said.join(' · ');}
+     else if(work.preprint)status.textContent=T('프리프린트');
+    }
+    if(rows.length>12)button(state.inboxAll?'12편만 보기':`${rows.length}편 모두 보기`,()=>{state.inboxAll=!state.inboxAll;refreshWatched();},bar(parent));
+   }
    function drawWatched(parent){
     const watched=runtime.watchedAuthorsByNews();
     if(!watched.length)return;
@@ -2554,8 +2665,10 @@
     if(fresh.length&&fresh.length<watched.length)button(state.watchFreshOnly?'모두 보기':'새 소식만',()=>{state.watchFreshOnly=!state.watchFreshOnly;refreshWatched();},tools,{'aria-pressed':String(!!state.watchFreshOnly)});
     const manage=button(state.watchManage?'카드로 보기':'목록 관리',()=>{state.watchManage=!state.watchManage;refreshWatched();},tools,{'aria-pressed':String(!!state.watchManage)});
     if(state.watchManage){drawWatchManager(watched,parent);return;}
+    drawAuthorInbox(watched,parent);
     // A grid, not a column: at this panel width one name per row turned a
     // hundred people into a scroll, and the whole point is to see them at once.
+    if(fresh.length)sectionHead('관심 저자',watched.length,parent);
     const rows=node('div',null,parent,{class:'sc-watch-grid'});
     for(const person of (state.watchFreshOnly?watched.filter(p=>p.news?.length||p.newPatents?.length||p.moved):watched)){
      const count=person.news?.length||0;
