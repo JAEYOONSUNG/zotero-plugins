@@ -180,15 +180,15 @@
        code actually running, and the stylesheet actually applied, for a marker
        of this build. */
     results.push(await attempt('the running panel is this build, not a cached one', () => {
-      const MARK = 'const drawResumeRow=(box,r)=>';
+      const MARK = 'function showInfo(n){';
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
-      /* And a rule only this build's stylesheet has: the citation line
-         split by reading state in 내 문헌 분석. Update both marks when a
+      /* And a rule only this build's stylesheet has: the title of the
+         graph node pinned under the citation map. Update both marks when a
          change touches only one of the two files. */
-      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-journal-citation-line'
-        && String(rule.style?.getPropertyValue('grid-template-columns') || '').includes('76px');
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-graph-info-title'
+        && String(rule.style?.getPropertyValue('font-size') || '').includes('13px');
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;
