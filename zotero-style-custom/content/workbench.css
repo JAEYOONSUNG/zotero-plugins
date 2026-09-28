@@ -1500,7 +1500,8 @@
 #style-custom-workbench .sc-paper-columns { padding: 0 var(--sc-card-padding, 12px) 4px calc(var(--sc-card-padding, 12px) + 14px); margin: 0 0 2px; border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-paper-columns-lead { grid-column: 1 / span 2; }
 #style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: 3; }
-#style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) repeat(4, auto) 88px; }
+#style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) repeat(4, auto); }
+#style-custom-workbench .sc-paper-columns-tail { display: none; }
 /* The two actions, small enough that their slot costs the title little. */
 #style-custom-workbench .sc-paper-card .sc-paper-actions button { min-height: 22px; padding: 0 6px; font-size: 12px; }
 #style-custom-workbench .sc-paper-columns-lead { grid-column: 1; visibility: hidden; }
@@ -1667,3 +1668,46 @@
 #style-custom-workbench .sc-annot-summary-paper { text-align: start !important; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sc-text); }
 #style-custom-workbench .sc-annot-summary-cell { min-height: 20px; min-width: 28px; padding: 0 6px; font: inherit; }
 #style-custom-workbench .sc-annot-summary-cell[aria-pressed=true] { background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border-strong); font-weight: 650; }
+/* Round 7: how much of each tag is read; today on 읽기 진행. */
+#style-custom-workbench .sc-tag-reading { margin-inline-start: 10px; font-size: 11px; color: var(--sc-muted); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-reading-today { margin: 0 0 8px; }
+#style-custom-workbench .sc-local-reading-head { margin: 8px 0 0; font-weight: 600; color: var(--sc-text); font-size: 12px; }
+#style-custom-workbench .sc-local-reading-link { grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr) auto; }
+#style-custom-workbench .sc-local-reading-queue { min-height: 20px; padding: 0 6px; font-size: 11px; }
+#style-custom-workbench .sc-local-reading-queue[aria-pressed=true] { background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
+/* Round 7 (A20): the title's line to itself. The identity dissolves into the
+   row's grid: title and actions across the top, journal line and figures
+   below, the memo under both. */
+#style-custom-workbench .sc-paper-card .sc-paper-heading { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto; row-gap: 1px; align-items: center; }
+#style-custom-workbench .sc-paper-card .sc-paper-heading > .sc-check { grid-column: 1; grid-row: 1 / span 2; }
+#style-custom-workbench .sc-paper-card .sc-paper-identity { display: contents; }
+#style-custom-workbench .sc-paper-mainline { grid-column: 2 / 4; grid-row: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+#style-custom-workbench .sc-paper-mainline > .sc-paper-title { flex: 1 1 auto; min-width: 0; }
+#style-custom-workbench .sc-paper-mainline > .sc-paper-actions { flex: none; }
+#style-custom-workbench .sc-paper-card .sc-paper-meta { grid-column: 2; grid-row: 2; }
+#style-custom-workbench .sc-paper-card .sc-paper-heading > .sc-metrics { grid-column: 3; grid-row: 2; }
+#style-custom-workbench .sc-paper-card .sc-paper-remark { grid-column: 2 / 4; grid-row: 3; }
+@container sc-workbench (max-width: 760px) {
+  #style-custom-workbench .sc-paper-card .sc-paper-heading { grid-template-columns: auto minmax(0, 1fr); }
+  #style-custom-workbench .sc-paper-mainline { grid-column: 2; }
+  #style-custom-workbench .sc-paper-card .sc-paper-heading > .sc-metrics { grid-column: 2; grid-row: 3; }
+  #style-custom-workbench .sc-paper-card .sc-paper-remark { grid-column: 2; grid-row: 4; }
+}
+/* 주석 나란히: two columns of excerpts under their papers, a row per colour meaning. */
+#style-custom-workbench .sc-annot-compare { display: grid; grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr); gap: 0 14px; margin: 4px 0 14px; font-size: 12px; }
+#style-custom-workbench .sc-annot-compare-head { font-weight: 650; color: var(--sc-text); padding: 4px 0; border-bottom: 1px solid var(--sc-border-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-annot-compare-corner { border-bottom: 1px solid var(--sc-border-strong); }
+#style-custom-workbench .sc-annot-compare-meaning { display: flex; align-items: baseline; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--sc-border); color: var(--sc-text); font-weight: 600; }
+#style-custom-workbench .sc-annot-compare-cell { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--sc-border); min-width: 0; }
+#style-custom-workbench .sc-annot-compare-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#style-custom-workbench .sc-annot-compare-where { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; font: inherit; color: var(--sc-muted); text-align: start; cursor: pointer; width: max-content; max-width: 100%; }
+#style-custom-workbench .sc-annot-compare-where:hover { color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-annot-compare-text { margin: 0; color: var(--sc-text); line-height: 1.45; }
+#style-custom-workbench .sc-annot-compare-comment { margin: 0; color: var(--sc-muted); }
+#style-custom-workbench .sc-annot-compare-more { align-self: flex-start; min-height: 20px; font-size: 11px; padding: 0 6px; }
+#style-custom-workbench .sc-annot-compare-pick { margin-inline-end: 6px; vertical-align: -2px; }
+@container sc-workbench (max-width: 640px) {
+ #style-custom-workbench .sc-annot-compare { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+ #style-custom-workbench .sc-annot-compare-corner { display: none; }
+ #style-custom-workbench .sc-annot-compare-meaning { grid-column: 1 / -1; }
+}

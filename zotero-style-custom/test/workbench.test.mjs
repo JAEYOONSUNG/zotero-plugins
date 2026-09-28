@@ -890,7 +890,7 @@ test('a paper is closed out on 읽기 진행, opened in place in the list, and t
  f.runtime.paperWorks=()=>({'1:K1':{openalex:'https://openalex.org/W1',references:['W5','W5']},'1:K2':{openalex:'W2',references:['https://openalex.org/W5']},'1:K5':{openalex:'W5',references:[]}});
  await f.bench.load();await f.bench.show('explore');
  const fold=f.body().querySelector('.sc-local-reading-links');
- assert.match(fold.querySelector('summary').textContent,/인용한 안 읽은 문헌 1편/);
+ assert.match(fold.querySelector('summary').textContent,/인용으로 이어진 안 읽은 문헌 1편/);
  assert.match(fold.textContent,/기준 2편 중 참고문헌 기록 2편/);
  assert.match(fold.querySelector('.sc-local-reading-link').textContent,/Cited background.*2편에서 인용/);
  f.bench.destroy();
@@ -954,6 +954,59 @@ test('any unread paper can wait under 읽기 대기, the search reads the reader
  [...rowOf('Paper Alpha').querySelectorAll('.sc-annot-summary-cell')].find(b=>b.textContent==='2').click();
  await new Promise(r=>setTimeout(r,20));
  assert.deepEqual([...f.body().querySelectorAll('.sc-annot .sc-annot-text')].map(n=>n.textContent).sort(),['m1','m2']);
+ f.bench.destroy();
+});
+
+test('tags say how much is read, 이어 읽기 says the pages left, and 읽기 진행 counts papers opened today',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const known={1:{status:'done',lastRead:new Date(now-5*day).toISOString()},2:{status:'reading',lastRead:new Date(now-60000).toISOString()}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.library.tagTree=()=>[{name:'topic',path:'topic',count:2,children:[]}];
+ f.library.snapshot=async()=>f.papers.map(p=>({...p,tags:['topic/x']}));
+ await f.bench.show('tags');
+ assert.match(f.body().querySelector('.sc-tag-reading').textContent,/완료 1\/2 · 오늘 읽음/);
+ f.runtime.cache.items[2]={seconds:120,lastRead:new Date(now-60000).toISOString()};
+ f.runtime.cache.items[1]={seconds:60,lastRead:new Date(now-5*day).toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===2?{pages:{3:120},total:10,visited:1,percent:10,attachmentID:7,lastPageIndex:3}:{pages:{0:60},total:4,visited:1,percent:25,attachmentID:8,lastPageIndex:0};
+ await f.bench.show('reading');
+ assert.match(f.body().querySelector('.sc-reading-today').textContent,/1편 오늘 연 문헌.*2편 지난 7일/s);
+ assert.match(f.body().querySelector('.sc-resume-meta').textContent,/남은 6쪽/);
+ f.bench.destroy();
+});
+
+test('unread papers that cite the read ones are named too, and two papers’ annotations can be read side by side by meaning',async()=>{
+ const f=fixture();
+ const known={1:{status:'done'},2:{status:''}};
+ f.runtime.state=ref=>({citations:null,impactFactor:4,...known[ref.id]});
+ // Paper 2 is unread and new: no citations, but it cites paper 1, twice in its list.
+ f.runtime.paperWorks=()=>({'1:K1':{openalex:'W1',references:[]},'1:K2':{openalex:'W2',references:['https://openalex.org/W1','W1']}});
+ await f.bench.show('explore');
+ const fold=f.body().querySelector('.sc-local-reading-links');
+ assert.match(fold.textContent,/읽은 문헌을 인용한 안 읽은 문헌/);
+ const line=[...fold.querySelectorAll('.sc-local-reading-link')].find(l=>/Paper Beta/.test(l.textContent));
+ assert.match(line.textContent,/읽은 문헌 1편 인용/,'counted once');
+ line.querySelector('.sc-local-reading-queue').click();await new Promise(r=>setTimeout(r,10));
+ assert.equal(Object.keys(f.runtime.cache.workbenchUI.readingQueue||{}).length,1,'queued from here');
+ // A paper being read is not queued from its row.
+ known[1].status='reading';known[2].status='reading';await f.bench.load();await f.bench.show('explore');
+ f.body().querySelector('[data-detail-for="2"]').click();await new Promise(r=>setTimeout(r,10));
+ assert.equal(f.findButton('읽기 대기'),undefined);
+ // Side by side.
+ f.runtime.cache.readerSettings={...(f.runtime.cache.readerSettings||{}),colorLabels:{'#5fb236':'방법','#ffd400':'결과'}};
+ f.library.annotations=async()=>[{id:'a',parentID:'1',attachmentID:'99',text:'alpha method',color:'#5FB236',pageIndex:0},{id:'b',parentID:'1',attachmentID:'100',text:'alpha supp method',color:'#5fb236',pageIndex:3},{id:'d',parentID:'2',attachmentID:'98',text:'beta result',color:'#ffd400',pageIndex:1}];
+ f.refs.set(99,{id:99,parentID:1,getField:()=>'Main'});f.refs.set(100,{id:100,parentID:1,getField:()=>'Supplement'});
+ await f.bench.show('annotations');
+ for(const box of f.body().querySelectorAll('.sc-annot-compare-pick')){box.checked=true;box.dispatchEvent(new f.win.Event('change'));await new Promise(r=>setTimeout(r,5));}
+ await f.click('주석 나란히');
+ const grid=f.body().querySelector('.sc-annot-compare');
+ assert.ok(grid);
+ const cells=[...grid.querySelectorAll('.sc-annot-compare-cell')].map(c=>c.textContent);
+ assert.equal(cells.length,4,'two meanings × two papers');
+ assert.ok(cells.some(t=>/alpha method/.test(t)&&/alpha supp method/.test(t)&&/Supplement/.test(t)),'both files in one paper column, told apart');
+ assert.ok(cells.some(t=>/이 조건의 주석 없음/.test(t)));
+ await f.click('목록으로');
+ assert.equal(f.body().querySelector('.sc-annot-compare'),null);
  f.bench.destroy();
 });
 

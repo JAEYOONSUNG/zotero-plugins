@@ -1700,7 +1700,7 @@
       "sources": [
         {
           "file": "src/workbench.js",
-          "marker": "const actions=bar(heading);"
+          "marker": "const actions=bar(mainline);"
         }
       ],
       "tests": [
