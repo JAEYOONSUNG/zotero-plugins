@@ -670,6 +670,87 @@ test('the command finder keeps the chosen line in view as the arrows move it',as
  f.bench.destroy();
 });
 
+test('the list opens with a summary whose reading counts filter it, and figures sit under one sortable header',async()=>{
+ const f=fixture();
+ f.library.snapshot=async()=>f.papers.map((p,i)=>({...p,status:i?'done':'reading',seconds:600,impactFactor:i?4:8,citations:10}));
+ await f.bench.load();await f.bench.show('explore');
+ const facts=f.body().querySelector('.sc-overview-facts');
+ assert.ok(facts,'a summary line');
+ assert.match(facts.textContent,/읽는 중/);
+ const reading=[...facts.querySelectorAll('button')].find(b=>/읽는 중/.test(b.textContent));
+ reading.click();await settle();
+ assert.equal(f.bench.state.status,'reading','pressed, the list shows only those');
+ f.bench.state.status='';
+ await f.bench.render();
+ const ifHead=[...f.body().querySelectorAll('.sc-paper-column')].find(b=>b.dataset.metric==='impact');
+ ifHead.click();await settle();
+ assert.equal(f.bench.state.sort,'if-desc');
+ f.bench.destroy();
+});
+
+test('followed authors\' news is one list: a shared paper once with both names, owned ones say how far read',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthorsByNews=()=>[
+  {id:'A1',name:'First Person',seen:[],news:[{id:'W1',title:'Shared paper',doi:'10.1/shared',date:'2026-09-01'}]},
+  {id:'A2',name:'Second Person',seen:[],news:[{id:'W1',title:'Shared paper',doi:'10.1/shared',date:'2026-09-01'},{id:'W2',title:'Owned one',doi:'10.1234/a',date:'2026-08-01'}]}];
+ await f.bench.show('authors');
+ const rows=[...f.body().querySelectorAll('.sc-author-inbox-row')];
+ assert.equal(rows.length,2,'the shared paper once');
+ assert.match(rows[0].textContent,/First Person.*Second Person/s);
+ assert.match(rows[1].querySelector('.sc-inbox-status').textContent,/보유/);
+ f.bench.destroy();
+});
+
+test('a new paper marked 확인함 leaves the unseen list, is found under 확인함, comes back, and the search reads names',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthorsByNews=()=>[
+  {id:'A1',name:'First Person',seen:[],news:[{id:'W1',title:'Shared paper',doi:'10.1/shared',date:'2026-09-01'},{id:'W3',title:'Withdrawn one',doi:'10.1/bad',date:'2026-07-01',signals:{rank:3}}]},
+  {id:'A2',name:'Second Person',seen:[],news:[{id:'W1',title:'Shared paper',doi:'https://doi.org/10.1/SHARED',date:'2026-09-01'},{id:'W2',title:'Owned one',doi:'10.1234/a',date:'2026-08-01'}]}];
+ await f.bench.show('authors');
+ const titles=()=>[...f.body().querySelectorAll('.sc-author-inbox-row .sc-hit-title')].map(n=>n.textContent);
+ assert.match(f.body().querySelector('.sc-watch-count').textContent,/새 논문 3편/,'the heading counts the shared paper once, as the list does');
+ assert.deepEqual(titles(),['Shared paper','Owned one','Withdrawn one']);
+ assert.match(f.body().querySelectorAll('.sc-author-inbox-row')[2].textContent,/철회/,'a withdrawn paper says so');
+ await f.click('확인함');
+ assert.deepEqual(titles(),['Owned one','Withdrawn one'],'out of the unseen list');
+ assert.ok(f.runtime.cache.workbenchUI.inboxSeen,'kept with the panel settings');
+ assert.equal(f.runtime.watchedAuthorsByNews()[0].news.length,2,'the authors’ own news is untouched');
+ await f.click('확인함 1');
+ assert.deepEqual(titles(),['Shared paper']);
+ await f.click('되돌리기');
+ await f.click('미확인 3');
+ assert.deepEqual(titles(),['Shared paper','Owned one','Withdrawn one']);
+ const find=f.body().querySelector('[aria-label="새 논문 검색"]');find.value='second';find.dispatchEvent(new f.win.Event('input'));
+ await new Promise(r=>setTimeout(r,200));
+ assert.deepEqual(titles(),['Shared paper','Owned one'],'by a followed author’s name');
+ f.bench.destroy();
+});
+
+test('recent papers say what brought them there and when; the summary names the unread papers cited most a year; author cards say what the library holds',async()=>{
+ const f=fixture();
+ const day=864e5,now=Date.now();
+ const known={1:{status:'',citations:40,lastRead:new Date(now-2*day).toISOString()},2:{status:'',citations:300},5:{status:'done',citations:900}};
+ f.runtime.state=ref=>({impactFactor:4,...known[ref.id]});
+ const extra={id:'5',key:'K5',libraryID:1,title:'A finished classic',authors:'Grace Hopper',year:'1990',venue:'Nature',itemType:'journalArticle',tags:[]};
+ f.library.snapshot=async()=>[{...f.papers[0],year:String(new Date().getFullYear()),dateAdded:new Date(now-9*day).toISOString()},{...f.papers[1],year:'2000',dateAdded:new Date(now-4*day).toISOString()},extra];
+ f.refs.set(5,{id:5});
+ await f.bench.show('recent');
+ const why=[...f.body().querySelectorAll('.sc-paper-card')].map(c=>[c.querySelector('.sc-paper-title').textContent,c.querySelector('.sc-paper-why')?.textContent]);
+ assert.deepEqual(why.slice(0,2),[['Paper Alpha','읽음 · 2일 전'],['Paper Beta','추가 · 4일 전']]);
+ await f.bench.show('explore');
+ const picks=[...f.body().querySelectorAll('.sc-overview-pick')].map(p=>p.textContent);
+ // Alpha: 40 in its first year; Beta: 300 over 27 years -- about 11 a year. The done paper is not offered.
+ assert.equal(picks.length,2);
+ assert.match(picks[0],/Paper Alpha.*연 40회/);
+ assert.match(picks[1],/Paper Beta.*연 11회/);
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'Ada M. Lovelace',seen:[],news:[]},{id:'A9',name:'Nobody Here',seen:[],news:[]}];
+ await f.bench.show('authors');
+ const cards=[...f.body().querySelectorAll('.sc-watch')];
+ assert.equal(cards[0].querySelector('.sc-watch-mine')?.textContent,'서재 2','family name and initial');
+ assert.equal(cards[1].querySelector('.sc-watch-mine'),null);
+ f.bench.destroy();
+});
+
 test('a single author is opened directly rather than offered as a choice of one',async()=>{
  const f=fixture();
  f.runtime.authorsOfCached=async()=>[{id:'A1',name:'Only Author',institution:'Somewhere',position:'first'}];
@@ -1394,12 +1475,39 @@ test('reading history opens on the most recently read, thirty to a page, and can
  await f.bench.show('reading');
  const titles=()=>[...f.body().querySelectorAll('[data-reading-progress] .sc-card')].map(c=>c.querySelector('h3,h4,strong,.sc-card-title')?.textContent||c.textContent);
  assert.equal(titles().length,30,'thirty cards, not every paper ever opened');
- assert.match(titles()[0],/Read 44/,'the paper read last comes first');
- assert.match(f.body().textContent,/1–30 \/ 35편/);
+ // The three read in the last fortnight and not finished are in 이어 읽기, above, and not listed twice.
+ const resumed=[...f.body().querySelectorAll('.sc-resume-title')].map(t=>t.textContent);
+ assert.equal(resumed.length,3);
+ for(const t of resumed)assert.ok(!titles().some(x=>x.includes(t)),`${t} is listed once`);
+ assert.match(f.body().textContent,/1–30 \/ 32편/);
  await f.click('다음');
- assert.equal(titles().length,5);
+ assert.equal(titles().length,2);
  const order=f.body().querySelector('[aria-label="읽기 기록 정렬"]');order.value='time';order.dispatchEvent(new f.win.Event('change'));
  assert.match(titles()[0],/Read 10/,'longest read first on request');
+ f.bench.destroy();
+});
+
+test('the journals tab opens on what the library does with each journal: held, unread, time read, cited with its count',async()=>{
+ const f=fixture();
+ const extra=[{id:'5',key:'K5',libraryID:1,title:'Nature two',year:'2023',venue:'Nature',itemType:'journalArticle',status:'done',seconds:600,citations:10,tags:[]},
+  {id:'6',key:'K6',libraryID:1,title:'Nature three',year:'2022',venue:'Nature',itemType:'journalArticle',citations:null,tags:[]}];
+ f.library.snapshot=async()=>[...f.papers.map(p=>({...p,citations:p.venue==='Nature'?4:null})),...extra];
+ f.refs.set(5,{id:5});f.refs.set(6,{id:6});
+ // What the runtime knows of each: Beta and Nature three unread, Nature two done, citations as given.
+ const known={1:{status:'reading',citations:null},2:{status:'',citations:4},5:{status:'done',citations:10,seconds:600},6:{status:'',citations:null}};
+ f.runtime.state=ref=>({impactFactor:4,...known[ref.id]});
+ await f.bench.show('journals');
+ const rows=[...f.body().querySelectorAll('.sc-journal-reading-row:not(.sc-journal-reading-header)')];
+ assert.deepEqual(rows.map(r=>r.querySelector('.sc-journal-reading-name').textContent),['Nature','Science'],'most unread first');
+ const cells=[...rows[0].querySelectorAll('[role=cell]')].map(c=>c.textContent);
+ assert.equal(cells[1],'3편');
+ assert.match(cells[2],/^2편/);
+ assert.match(cells[4],/7 · 2\/3편/,'the median of the two known, and on how many');
+ await f.click('2편');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal-reading-paper .sc-hit-title-link')].map(n=>n.textContent).sort(),['Nature three','Paper Beta']);
+ await f.click('읽은 시간순');
+ assert.equal(f.body().querySelector('.sc-journal-reading-row:not(.sc-journal-reading-header) .sc-journal-reading-name').textContent,'Nature');
+ assert.equal(f.calls.filter(c=>/openalex|fetch/i.test(String(c[0]))).length,0,'asks nothing');
  f.bench.destroy();
 });
 

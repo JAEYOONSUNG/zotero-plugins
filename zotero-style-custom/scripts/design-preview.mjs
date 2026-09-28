@@ -15,7 +15,11 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const papers=[
   {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; J. Park',year:'2025',venue:'Example Cell Research',doi:'',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
   {id:'2',title:'A practical framework for reproducible literature synthesis',authors:'S. Lee; L. Chen',year:'2024',venue:'Example Methods',doi:'',tags:['#review/reproducibility'],abstract:'실제 논문이 아닌 화면 구성용 예시 데이터입니다.',itemType:'journalArticle',status:'done',rating:5,citations:64,impactFactor:8.2,seconds:3200},
-  {id:'3',title:'Spatial context and cell-state transitions in regeneration',authors:'E. Morgan; H. Choi',year:'2026',venue:'Example Biology',doi:'',tags:['#methods/spatial'],abstract:'새 문헌의 지표가 아직 없을 때 0과 미확인을 구분해 보여줍니다.',itemType:'preprint',status:'unread',rating:0,citations:null,impactFactor:null,seconds:0}
+  {id:'3',title:'Spatial context and cell-state transitions in regeneration',authors:'E. Morgan; H. Choi',year:'2026',venue:'Example Biology',doi:'',tags:['#methods/spatial'],abstract:'새 문헌의 지표가 아직 없을 때 0과 미확인을 구분해 보여줍니다.',itemType:'preprint',status:'unread',rating:0,citations:null,impactFactor:null,seconds:0},
+  // Three more on the same shelves, unread, so the journals tab has something to weigh.
+  {id:'4',title:'Tissue-scale repair atlases from sparse sampling',authors:'R. Ahn; P. Silva',year:'2025',venue:'Example Cell Research',doi:'10.5555/demo.4',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:41,impactFactor:12.4,seconds:0},
+  {id:'5',title:'Benchmarks for repair-stage classifiers',authors:'K. Oh',year:'2024',venue:'Example Cell Research',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:null,impactFactor:12.4,seconds:0},
+  {id:'6',title:'Preregistered synthesis of repair reviews',authors:'D. Yu; S. Lee',year:'2023',venue:'Example Methods',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:12,impactFactor:8.2,seconds:0}
  ];
  for(const paper of papers){paper.key='DEMO'+paper.id;paper.libraryID=1;}
  const refs=new Map(papers.map(p=>[Number(p.id),{id:Number(p.id),key:p.key,libraryID:1}]));
@@ -31,7 +35,10 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},
          {id:'W2',title:'A portable recombinase toolkit',venue:'Nature Methods',date:'2026-07-18'}]},
   {id:'A2',name:'Jennifer A. Doudna',institution:'UC Berkeley',seen:[],
-   news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21'}],
+   news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21'},
+         {id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},
+         {id:'W6',title:'Tissue-scale repair atlases from sparse sampling',venue:'Example Cell Research',date:'2026-08-30',doi:'10.5555/demo.4'},
+         {id:'W7',title:'Rapid editing screens in primary cells',venue:'bioRxiv',date:'2026-06-10',preprint:true,signals:{rank:3}}],
    newCoauthors:['Priya Natarajan','Luis Ortega'],
    moved:{from:'UC Berkeley',to:'Gladstone Institutes',since:2026,at:'2026-09-01'},
    patents:[{id:'US 12,345,678',title:'Compositions for programmable RNA targeting',granted:'2026-05-12',applicants:['Example University'],fresh:true,link:''}],
@@ -150,7 +157,7 @@ const {bench}=await mountDemo(win,Workbench,Model,ReadingPath,PaperGraph);
 const icon='data:image/svg+xml;base64,'+Buffer.from(fs.readFileSync(path.join(root,'content/icons/style-custom.svg'))).toString('base64');
 bench.panel.querySelector('.sc-brand img').src=icon;
 assert.equal(bench.panel.querySelectorAll('nav [data-tab]').length,19);
-assert.equal(bench.panel.querySelectorAll('.sc-paper-card').length,3);
+assert.equal(bench.panel.querySelectorAll('.sc-paper-card').length,6);
 assert.equal(bench.panel.querySelector('.sc-filters').hasAttribute('open'),false);
 assert.equal(bench.panel.querySelector('.sc-command-palette').hidden,true);
 const snapshot=bench.panel.outerHTML;
@@ -159,4 +166,4 @@ const inline=file=>fs.readFileSync(path.join(root,file),'utf8').replace(/<\/scri
 const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta id="demo-icon" content="${icon}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Style Custom 0.8.0 · 디자인 미리보기</title><style>body{margin:0;background:#e5e7eb;font:12px system-ui;color:#374151}.demo-bar{height:40px;display:flex;align-items:center;gap:12px;padding:0 18px}.demo-bar strong{font-weight:650}.demo-bar span{color:#4b5563}.demo-feedback{position:fixed;bottom:4px;left:18px;right:18px;font-size:11px} ${css}</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div>${snapshot}<script>${inline('src/workspace.js')}</script><script>${inline('src/reading-path.js')}</script><script>${inline('src/paper-graph.js')}</script><script>${inline('src/workbench.js')}</script><script>document.getElementById('style-custom-workbench').remove();(${mountDemo.toString()})(window,CustomStyleWorkbench,CustomStyleWorkspace,CustomStyleReadingPath,CustomStylePaperGraph);</script></body></html>`;
 assert.ok(!html.includes('<script src=')&&!html.includes('<link '));
 const target=path.join(root,'docs/design-preview.html');fs.writeFileSync(target,html);
-console.log('Offline design preview verified: actual workbench DOM, 19 sections, 3 fictional papers, no external assets: '+target);
+console.log('Offline design preview verified: actual workbench DOM, 19 sections, 6 fictional papers, no external assets: '+target);

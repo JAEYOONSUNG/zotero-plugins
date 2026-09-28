@@ -365,8 +365,8 @@ test('page tracking keeps separate PDF attachments and progress never opens an u
  const {plugin,item}=fixture();plugin.active=true;const ref=item(42);
  await plugin.addReading(ref,5,{attachmentID:100,pageIndex:0,totalPages:10});
  await plugin.addReading(ref,7,{attachmentID:200,pageIndex:1,totalPages:3});
- assert.deepEqual(plugin.pageProgress(ref,100),{total:10,visited:1,percent:10,pages:{0:5},attachmentID:100});
- assert.deepEqual(plugin.pageProgress(ref),{total:3,visited:1,percent:33,pages:{1:7},attachmentID:200});
+ assert.deepEqual(plugin.pageProgress(ref,100),{total:10,visited:1,percent:10,pages:{0:5},attachmentID:100,lastPageIndex:0});
+ assert.deepEqual(plugin.pageProgress(ref),{total:3,visited:1,percent:33,pages:{1:7},attachmentID:200,lastPageIndex:1},'the page last open is kept, for 이어 읽기');
  assert.equal(plugin.metrics(ref).seconds,12);assert.ok(plugin.entry(ref).lastRead);
  const before=JSON.stringify(plugin.entry(ref).readingAttachments);await plugin.addReading(ref,1,{attachmentID:200,pageIndex:50,totalPages:3});assert.equal(JSON.stringify(plugin.entry(ref).readingAttachments),before);
 });

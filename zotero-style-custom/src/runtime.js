@@ -1423,7 +1423,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const entry=this.entry(item);let old;
     const id=attachmentID??entry.readingAttachmentID;
     const bucket=id&&entry.readingAttachments?.[String(id)];
-    if(bucket)return {...this.workspaceTools.progress(bucket),attachmentID:Number(id)};
+    // The page the reader was last on, when it was recorded: where 이어 읽기 goes back to.
+    if(bucket)return {...this.workspaceTools.progress(bucket),attachmentID:Number(id),lastPageIndex:Number.isInteger(bucket.lastPageIndex)?bucket.lastPageIndex:null};
     if(id && entry.pageTimes && String(id)===String(entry.readingAttachmentID))return {...this.workspaceTools.progress(entry),attachmentID:Number(id)};
     if(attachmentID!=null)return {...this.workspaceTools.progress({}),attachmentID:Number(attachmentID)};
     try{old=this.Z.ZoteroStyle?.api?.storage?.get(item,'readingTime')||(item.libraryID===this.Z.Libraries.userLibraryID?this.legacy?.[item.key]?.readingTime:null);}catch(_){}
@@ -4250,7 +4251,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (!Number.isFinite(record.seconds)) record.seconds = this.metrics(item).seconds;
     record.seconds += seconds; record.unreadOverride = false; this.dirty = true;
     record.lastRead=new Date().toISOString();
-    if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0&&Number.isInteger(location.pageIndex)&&location.pageIndex>=0&&location.pageIndex<100000&&Number.isInteger(location.totalPages)&&location.totalPages>location.pageIndex&&location.totalPages<=100000){record.readingAttachments||={};const bucket=record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:location.totalPages};bucket.pageTimes||={};bucket.pageTimes[location.pageIndex]=(Number(bucket.pageTimes[location.pageIndex])||0)+seconds;bucket.totalPages=location.totalPages;bucket.lastRead=record.lastRead;record.readingAttachmentID=location.attachmentID;}
+    if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0&&Number.isInteger(location.pageIndex)&&location.pageIndex>=0&&location.pageIndex<100000&&Number.isInteger(location.totalPages)&&location.totalPages>location.pageIndex&&location.totalPages<=100000){record.readingAttachments||={};const bucket=record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:location.totalPages};bucket.pageTimes||={};bucket.pageTimes[location.pageIndex]=(Number(bucket.pageTimes[location.pageIndex])||0)+seconds;bucket.totalPages=location.totalPages;bucket.lastRead=record.lastRead;bucket.lastPageIndex=location.pageIndex;record.readingAttachmentID=location.attachmentID;}
     this.refreshReadingDisplays(item.id);
     /* The cells are already repainted in place. A full store write and an item
        tree rebuild every second was the rest of this method; the seconds are

@@ -1470,9 +1470,9 @@
 
 /* 저장된 새 논문: two lines a paper -- title, then date · journal · who -- and what the library knows, at the right. */
 #style-custom-workbench .sc-author-inbox { display: flex; flex-direction: column; margin: 0 0 14px; }
-#style-custom-workbench .sc-author-inbox-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; padding: 7px 2px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-author-inbox-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 76px; column-gap: 12px; padding: 7px 2px; border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-author-inbox-row > .sc-hit-title, #style-custom-workbench .sc-author-inbox-row > .sc-hit-meta { grid-column: 1; margin: 0; }
-#style-custom-workbench .sc-inbox-status { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--sc-muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-inbox-status { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: flex; gap: 6px; align-items: center; color: var(--sc-muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-inbox-note { margin: -2px 0 6px; font-size: 12px; }
 
 /* A step already on the shelf but not finished: one quiet line of what the library knows. */
@@ -1500,7 +1500,82 @@
 #style-custom-workbench .sc-paper-columns-lead { grid-column: 1 / span 2; }
 #style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: 3; }
 #style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) repeat(4, auto) 104px; }
-#style-custom-workbench .sc-paper-columns-lead { grid-column: 1; }
+#style-custom-workbench .sc-paper-columns-lead { grid-column: 1; visibility: hidden; }
 #style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: auto; }
 #style-custom-workbench .sc-paper-column { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; display: flex; color: var(--sc-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
 #style-custom-workbench .sc-paper-column:hover, #style-custom-workbench .sc-paper-column[aria-pressed=true] { color: var(--sc-text); }
+
+/* Narrow: the title keeps the whole width of its line and the figures go under it,
+   each with its unit back, so a 640px panel reads "Mapping cellular responses…",
+   not "Mappi…". The header folds to one line of sort buttons. */
+@container sc-workbench (max-width: 760px) {
+  #style-custom-workbench .sc-paper-card .sc-paper-heading { grid-template-columns: auto minmax(0, 1fr); row-gap: 2px; }
+  #style-custom-workbench .sc-paper-card .sc-metrics { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; gap: 4px 12px; }
+  #style-custom-workbench .sc-paper-card .sc-metric[data-metric], #style-custom-workbench .sc-paper-card .sc-stars { width: auto; }
+  #style-custom-workbench .sc-paper-card .sc-metric-unit { display: inline; }
+  #style-custom-workbench .sc-paper-card .sc-paper-actions { grid-column: 2; justify-content: flex-start; }
+  #style-custom-workbench .sc-paper-card:not(:hover):not(:focus-within) .sc-paper-actions { display: none; }
+  #style-custom-workbench .sc-paper-columns { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-inline-start: var(--sc-card-padding, 12px); }
+  #style-custom-workbench .sc-paper-columns-lead { visibility: visible; font-size: 12px; color: var(--sc-muted); }
+  #style-custom-workbench .sc-paper-columns-tail { display: none; }
+}
+
+#style-custom-workbench .sc-overview-fact { min-height: 0; padding: 0 3px; margin: 0 -3px; border: 0; background: none; box-shadow: none; font: inherit; color: var(--sc-muted); cursor: pointer; border-radius: 7px; }
+#style-custom-workbench .sc-overview-fact:hover, #style-custom-workbench .sc-overview-fact[aria-pressed=true] { background: var(--sc-fill); color: var(--sc-text); }
+
+#style-custom-workbench .sc-inbox-person { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; font: inherit; color: inherit; cursor: pointer; }
+#style-custom-workbench .sc-inbox-person:hover { color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; }
+
+#style-custom-workbench .sc-resume-text { display: flex; flex-direction: column; min-width: 0; }
+#style-custom-workbench .sc-resume-remark { font-size: 12px; color: var(--sc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-row-progress-text { margin-inline-start: 4px; font-size: 11px; color: var(--sc-muted); }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric=time], #style-custom-workbench .sc-paper-column[data-metric=time] { width: 150px; }
+@container sc-workbench (max-width: 640px) {
+  #style-custom-workbench .sc-resume-row { grid-template-columns: minmax(0, 1fr) auto; }
+  #style-custom-workbench .sc-resume-meta { grid-column: 1; grid-row: 2; }
+}
+/* 내 문헌 분석 (journals tab): a plain table, one grey scale for the bars. */
+#style-custom-workbench .sc-journal-reading { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-journal-reading-title { margin: 0; color: var(--sc-muted); font: 650 11px/1.6 var(--sc-font); letter-spacing: .6px; }
+#style-custom-workbench .sc-journal-reading-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+#style-custom-workbench .sc-journal-reading-head .sc-segmented { margin-left: auto; }
+#style-custom-workbench .sc-journal-reading-table { display: flex; flex-direction: column; }
+#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 56px 150px 84px 118px; gap: 10px; align-items: center; min-height: 28px; padding: 3px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
+#style-custom-workbench .sc-journal-reading-header { font-size: 11px; color: var(--sc-muted); border-top: 0; min-height: 0; }
+#style-custom-workbench .sc-journal-reading-header > span:not(:first-child) { text-align: right; }
+#style-custom-workbench .sc-journal-reading-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--sc-text); }
+#style-custom-workbench .sc-journal-reading-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--sc-text); white-space: nowrap; }
+#style-custom-workbench .sc-journal-reading-unread { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 6px; }
+#style-custom-workbench .sc-journal-reading-unread > :first-child { justify-self: end; }
+#style-custom-workbench .sc-journal-reading-count { min-height: 0; padding: 1px 4px; border: 0; background: none; box-shadow: none; font: inherit; font-variant-numeric: tabular-nums; color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; border-radius: 7px; }
+#style-custom-workbench .sc-journal-reading-count:hover, #style-custom-workbench .sc-journal-reading-count[aria-expanded=true] { background: var(--sc-fill); }
+#style-custom-workbench .sc-journal-reading-bar { display: block; height: 4px; background: var(--sc-fill); }
+#style-custom-workbench .sc-journal-reading-bar > span { display: block; height: 100%; background: var(--sc-muted); }
+#style-custom-workbench .sc-journal-reading-papers { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 8px 12px; border-top: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-journal-reading-paper { display: flex; gap: 8px; align-items: baseline; font-size: 12px; min-width: 0; }
+#style-custom-workbench .sc-journal-reading-paper .sc-hit-title-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+@container sc-workbench (max-width: 640px) {
+ #style-custom-workbench .sc-journal-reading-row { grid-template-columns: 44px minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.2fr); row-gap: 2px; gap: 6px; }
+ #style-custom-workbench .sc-journal-reading-name { grid-column: 1 / -1; }
+ #style-custom-workbench .sc-journal-reading-header > :first-child { display: none; }
+ #style-custom-workbench .sc-journal-reading-unread { grid-template-columns: 40px 1fr; }
+}
+/* Inbox triage: a fixed slot for 확인함 so the buttons line up down the list. */
+#style-custom-workbench .sc-inbox-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 6px; }
+#style-custom-workbench .sc-inbox-tools input[type=search] { flex: 1 1 180px; max-width: 320px; }
+#style-custom-workbench .sc-inbox-actions { grid-column: 3; grid-row: 1 / span 2; align-self: center; justify-self: end; }
+#style-custom-workbench .sc-inbox-empty { margin: 6px 0 14px; font-size: 12px; }
+@container sc-workbench (max-width: 640px) {
+ #style-custom-workbench .sc-author-inbox-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+ #style-custom-workbench .sc-inbox-status { grid-column: 1; grid-row: auto; white-space: normal; flex-wrap: wrap; }
+ #style-custom-workbench .sc-inbox-actions { grid-column: 2; grid-row: 1 / span 2; }
+ #style-custom-workbench .sc-inbox-status:empty { display: none; }
+}
+/* Round 3: why a paper is in 최근 문헌, the unread papers worth reading first, what the library holds of a followed author. */
+#style-custom-workbench .sc-paper-why { color: var(--sc-text); font-weight: 600; margin-inline-end: 6px; }
+#style-custom-workbench .sc-paper-why::after { content: " ·"; font-weight: 400; color: var(--sc-muted); }
+#style-custom-workbench .sc-overview-picks { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; font-size: 12px; min-width: 0; }
+#style-custom-workbench .sc-overview-picks-label { color: var(--sc-muted); }
+#style-custom-workbench .sc-overview-pick { display: inline-flex; gap: 5px; align-items: baseline; min-width: 0; max-width: 100%; }
+#style-custom-workbench .sc-overview-pick .sc-hit-title-link { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+#style-custom-workbench .sc-watch-mine { margin-inline-start: 6px; font-size: 11px; color: var(--sc-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
