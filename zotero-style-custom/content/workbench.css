@@ -1504,7 +1504,8 @@
 #style-custom-workbench .sc-paper-columns-tail { display: none; }
 /* The two actions, small enough that their slot costs the title little. */
 #style-custom-workbench .sc-paper-card .sc-paper-actions button { min-height: 22px; padding: 0 6px; font-size: 12px; }
-#style-custom-workbench .sc-paper-columns-lead { grid-column: 1; visibility: hidden; }
+#style-custom-workbench .sc-paper-columns-lead { grid-column: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+#style-custom-workbench .sc-paper-columns-sortlabel { display: none; }
 #style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: auto; }
 #style-custom-workbench .sc-paper-column { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; display: flex; color: var(--sc-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
 #style-custom-workbench .sc-paper-column:hover, #style-custom-workbench .sc-paper-column[aria-pressed=true] { color: var(--sc-text); }
@@ -1520,7 +1521,8 @@
   #style-custom-workbench .sc-paper-card .sc-paper-actions { grid-column: 2; justify-content: flex-start; }
   #style-custom-workbench .sc-paper-card:not(:hover):not(:focus-within) .sc-paper-actions { display: none; }
   #style-custom-workbench .sc-paper-columns { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-inline-start: var(--sc-card-padding, 12px); }
-  #style-custom-workbench .sc-paper-columns-lead { visibility: visible; font-size: 12px; color: var(--sc-muted); }
+  #style-custom-workbench .sc-paper-columns-lead { font-size: 12px; color: var(--sc-muted); }
+  #style-custom-workbench .sc-paper-columns-sortlabel { display: inline; }
   #style-custom-workbench .sc-paper-columns-tail { display: none; }
   #style-custom-workbench .sc-paper-columns > .sc-paper-column { width: auto; }
 }
@@ -1736,7 +1738,8 @@
 #style-custom-workbench .sc-tag-unread { min-height: 0; padding: 0 4px; margin-inline-start: 8px; border: 0; background: none; box-shadow: none; font: inherit; font-size: 11px; color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; border-radius: 7px; }
 #style-custom-workbench .sc-tag-unread:hover { background: var(--sc-fill); }
 #style-custom-workbench .sc-reading-views { margin: 4px 0 8px; }
-#style-custom-workbench .sc-collection-unread { min-height: 22px; font-size: 12px; }
+#style-custom-workbench .sc-collection-unread { min-height: 0; padding: 0 3px; margin: 0 -3px; border: 0; background: none; box-shadow: none; font: inherit; color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; border-radius: 7px; }
+#style-custom-workbench .sc-collection-unread:hover { background: var(--sc-fill); }
 /* A middle width: the citation split takes its own line under the row, so the journal name keeps its room. */
 @container sc-workbench (max-width: 1060px) {
  #style-custom-workbench .sc-journal-reading-row { grid-template-columns: minmax(0,1fr) 52px 60px 176px 84px; }
@@ -1761,3 +1764,20 @@
 #style-custom-workbench .sc-search-hit { font-weight: 700; text-decoration: underline; text-underline-offset: 2px; color: var(--sc-text); }
 #style-custom-workbench .sc-note-title-hit { margin-inline-start: 8px; font-size: 11px; }
 #style-custom-workbench .sc-note-excerpt { -webkit-line-clamp: unset; display: block; }
+/* 오늘의 읽기: one line of next steps above the list, text buttons, no box. */
+#style-custom-workbench .sc-today { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin: 0 0 8px; font-size: 12px; }
+#style-custom-workbench .sc-today-label { color: var(--sc-muted); font-weight: 600; }
+#style-custom-workbench .sc-today-item { min-height: 0; padding: 1px 4px; margin: 0 -4px; border: 0; background: none; box-shadow: none; font: inherit; color: var(--sc-text); cursor: pointer; border-radius: 7px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-today-item:hover { background: var(--sc-fill); text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-journal-reading-name .sc-hit-title-link { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+/* 상세 필터 in the search row: its summary sits beside the search; opened, the fields take the next line. */
+#style-custom-workbench .sc-search-row > .sc-filters { flex: 0 0 auto; margin: 0; padding: 0; border: 0; background: none; }
+#style-custom-workbench .sc-search-row > .sc-filters[open] { flex-basis: 100%; }
+#style-custom-workbench .sc-paper-columns .sc-selection-tools { font-weight: 400; }
+#style-custom-workbench .sc-paper-columns .sc-selection-tools > summary { padding: 0; }
+/* The chosen node, pinned under the map. */
+#style-custom-workbench .sc-graph-info { margin: 6px 0 10px; padding: 8px 0; border-top: 1px solid var(--sc-border); border-bottom: 1px solid var(--sc-border); font-size: 12px; }
+#style-custom-workbench .sc-graph-info-title { margin: 0 0 2px; font-weight: 650; color: var(--sc-text); font-size: 13px; }
+#style-custom-workbench .sc-graph-info-head { margin: 8px 0 2px; font-weight: 600; color: var(--sc-text); }
+#style-custom-workbench .sc-graph-info-row { display: flex; gap: 8px; align-items: baseline; padding: 1px 0; min-width: 0; }
+#style-custom-workbench .sc-graph-info-row > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

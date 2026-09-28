@@ -472,6 +472,12 @@ test('the citation map names the papers it says you lack, and asks only about wh
  assert.equal(/\bW99\b/.test([...f.body().querySelectorAll('.sc-hit-title')].map(t=>t.textContent).join(' ')),false);
  // The graph in a sentence: one cluster, and the paper the others here stand on.
  assert.match(f.body().querySelector('.sc-graph-insight')?.textContent||'',/묶음 1개.*Paper Alpha \(3편이 인용\)/);
+ // A node chosen is pinned under the map, with who cites it.
+ const alphaNode=[...f.body().querySelectorAll('svg g[tabindex]')].find(g=>/Paper Alpha/.test(g.querySelector('title')?.textContent||''));
+ alphaNode.dispatchEvent(new f.win.Event('click'));
+ const info=f.body().querySelector('.sc-graph-info');
+ assert.equal(info.hidden,false);
+ assert.match(info.textContent,/이 논문을 인용한 문헌 3/);
  const owned=[...f.body().querySelectorAll('.sc-hit')].find(h=>/One I have/.test(h.textContent));
  assert.ok(owned.querySelector('.sc-hit-owned'),'one on the shelf says 보유');
  f.bench.destroy();
@@ -738,7 +744,7 @@ test('recent papers say what brought them there and when; the summary names the 
  f.refs.set(5,{id:5});
  await f.bench.show('recent');
  const why=[...f.body().querySelectorAll('.sc-paper-card')].map(c=>[c.querySelector('.sc-paper-title').textContent,c.querySelector('.sc-paper-why')?.textContent]);
- assert.deepEqual(why.slice(0,2),[['Paper Alpha','읽음 · 2일 전'],['Paper Beta','추가 · 4일 전 · 아직 안 엶']]);
+ assert.deepEqual(why.slice(0,2),[['Paper Alpha','읽음 · 2일 전'],['Paper Beta','추가 · 4일 전 · 읽기 기록 없음']]);
  await f.bench.show('explore');
  const picks=[...f.body().querySelectorAll('.sc-overview-pick')].map(p=>p.textContent);
  // Alpha: 40 in its first year; Beta: 300 over 27 years -- about 11 a year. The done paper is not offered.
@@ -1074,7 +1080,7 @@ test('a collection’s unread papers are one press away, and papers added this w
  f.library.collections=async()=>[{id:'4',name:'Research',count:2,itemIDs:[1,2],parentID:null}];
  await f.bench.show('recent');
  const beta=[...f.body().querySelectorAll('.sc-paper-card')].find(c=>/Paper Beta/.test(c.textContent));
- assert.match(beta.querySelector('.sc-paper-why').textContent,/추가 · 2일 전 · 아직 안 엶/);
+ assert.match(beta.querySelector('.sc-paper-why').textContent,/추가 · 2일 전 · 읽기 기록 없음/);
  await f.bench.show('collections');
  assert.ok(f.findButton('안 읽음 1'));
  f.bench.destroy();
@@ -1093,7 +1099,7 @@ test('the queue keeps why a paper was put by, the selection bar leads to the nex
  await f.bench.show('reading');
  const why=f.body().querySelector('.sc-queue-reason summary');
  assert.equal(why.textContent,'담은 이유: 읽던 1편이 인용');
- assert.match(f.body().querySelector('.sc-queue-reason').textContent,/Paper Alpha · 완료/);
+ assert.match(f.body().querySelector('.sc-queue-reason').textContent,/Paper Alpha · 지금 완료/);
  // Two chosen: compare and side by side are offered; one chosen: notes and annotations.
  await f.bench.show('explore');f.bench.state.selected=new Set(['1','2']);await f.bench.render();
  const visible=label=>{const b=[...f.bench.panel.querySelectorAll('.sc-selection-bar button')].find(x=>x.textContent===label);return !!b&&!b.hidden;};
@@ -1111,6 +1117,61 @@ test('the queue keeps why a paper was put by, the selection bar leads to the nex
  const excerpt=f.body().querySelector('.sc-note-excerpt');
  assert.ok(excerpt);assert.match(excerpt.textContent,/control culture temperature was 30/);
  assert.equal(excerpt.querySelector('.sc-search-hit').textContent,'temperature');
+ f.bench.destroy();
+});
+
+test('the library opens on today’s next steps, and a journal in 내 문헌 분석 opens its papers',async()=>{
+ const f=fixture();
+ const recent=new Date(Date.now()-864e5).toISOString();
+ const known={1:{status:'reading'},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.cache.items[1]={seconds:60,lastRead:recent};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:9,visited:1,percent:11,attachmentID:7,lastPageIndex:4}:{pages:{},total:0,visited:0,percent:0};
+ f.runtime.paperWorks=()=>({'1:K1':{openalex:'W1',references:['W2']},'1:K2':{openalex:'W2',references:[]}});
+ f.setSelection([]);
+ await f.bench.show('explore');f.bench.state.selected=new Set();await f.bench.render();
+ const strip=f.body().querySelector('.sc-today');
+ assert.ok(strip);
+ const items=[...strip.querySelectorAll('.sc-today-item')].map(b=>b.textContent);
+ assert.match(items[0],/이어 읽기 · Paper Alpha · 5쪽/);
+ assert.match(items.join('|'),/인용한 안 읽은 문헌 1편/);
+ strip.querySelector('.sc-today-item').click();await new Promise(r=>setTimeout(r,10));
+ assert.deepEqual(f.calls.filter(c=>c[0]==='open').pop().slice(1),[7,{pageIndex:4}]);
+ await f.bench.show('journals');
+ const natureRow=[...f.body().querySelectorAll('.sc-journal-reading-row')].find(r=>r.querySelector('.sc-journal-reading-name')?.textContent==='Nature');
+ natureRow.querySelector('[role=cell]:nth-child(2) button').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.query,'Nature');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-paper-title')].map(n=>n.textContent),['Paper Beta']);
+ f.bench.destroy();
+});
+
+test('notes are found by their paper, the reading switch survives an empty view, and the kept search comes back when the selection is cleared',async()=>{
+ const f=fixture();
+ const known={1:{status:'reading'},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.library.notes=async()=>[{id:'9',parentID:'1',title:'Checks',text:'the result was reproducible in three runs',modified:'2026-09-01'},{id:'8',parentID:'2',title:'Other',text:'reproducible elsewhere',modified:'2026-09-02'}];
+ f.setSelection([]);
+ await f.bench.show('notes');f.bench.state.selected=new Set();f.bench.state.query='Lovelace reproducible';await f.bench.render();
+ // Both papers are by Ada Lovelace: both notes match, each saying where the author matched.
+ const cards=[...f.body().querySelectorAll('.sc-card')].filter(c=>/Checks|Other/.test(c.textContent));
+ assert.equal(cards.length,2);
+ assert.match(cards[0].textContent,/문헌 정보 일치 — 저자: .*Lovelace/);
+ // Reading: finish the only 읽는 중 paper from its view; the switch stays.
+ f.bench.state.query='';
+ f.runtime.cache.items[1]={seconds:60,lastRead:new Date(Date.now()-40*864e5).toISOString()};
+ f.runtime.pageProgress=()=>({pages:{0:60},total:3,visited:1,percent:33,attachmentID:7,lastPageIndex:0});
+ f.runtime.canEdit=()=>true;f.runtime.edit=async()=>{};
+ await f.bench.show('reading');
+ await f.click('읽는 중 1');
+ const done=[...f.body().querySelectorAll('.sc-reading-status button')].find(b=>b.textContent==='완료');done.click();await new Promise(r=>setTimeout(r,10));
+ assert.ok(f.body().querySelector('.sc-reading-views'),'the switch is still there');
+ assert.equal(f.bench.state.readingView,'');
+ // A search set aside by the selection bar comes back when the selection is cleared.
+ await f.bench.show('explore');f.bench.state.query='Alpha';f.bench.state.selected=new Set(['1']);await f.bench.render();
+ [...f.bench.panel.querySelectorAll('.sc-selection-bar button')].find(b=>b.textContent==='주석').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(f.bench.state.query,'');
+ await f.click('선택 해제');
+ assert.equal(f.bench.state.query,'Alpha');
  f.bench.destroy();
 });
 
@@ -2678,7 +2739,10 @@ test('a paper saved but not read keeps its number and its reasons, and says how 
   const row = f.body().querySelector('[data-work="A"]');
   assert.ok(row, 'the owned paper is on the path');
   assert.ok(row.dataset.step, 'with a number, as a paper still to read');
-  assert.match(row.querySelector('.sc-path-local')?.textContent || '', /보유 · 읽는 중/);
+  // Said once, in the row's own 보유, not again on a line of its own.
+  assert.match(row.querySelector('.sc-hit-owned')?.textContent || '', /보유 · 읽는 중/);
+  assert.equal(row.querySelectorAll('.sc-hit-owned').length, 1);
+  assert.equal(row.querySelector('.sc-path-local'), null);
   assert.equal(row.classList.contains('sc-path-owned'), false, 'not folded away');
  } finally { f.bench.destroy(); }
 });
