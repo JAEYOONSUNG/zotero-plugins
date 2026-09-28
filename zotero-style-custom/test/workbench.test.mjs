@@ -470,6 +470,8 @@ test('the citation map names the papers it says you lack, and asks only about wh
  assert.equal(/인용 목록 가져오기/.test([...f.bench.panel.querySelectorAll('button')].map(b=>b.textContent).join('|')),false,'every paper has been asked about');
  assert.match(text,/The paper everyone cites/,'a title, not W99');
  assert.equal(/\bW99\b/.test([...f.body().querySelectorAll('.sc-hit-title')].map(t=>t.textContent).join(' ')),false);
+ // The graph in a sentence: one cluster, and the paper the others here stand on.
+ assert.match(f.body().querySelector('.sc-graph-insight')?.textContent||'',/묶음 1개.*Paper Alpha \(3편이 인용\)/);
  const owned=[...f.body().querySelectorAll('.sc-hit')].find(h=>/One I have/.test(h.textContent));
  assert.ok(owned.querySelector('.sc-hit-owned'),'one on the shelf says 보유');
  f.bench.destroy();
@@ -970,8 +972,8 @@ test('tags say how much is read, 이어 읽기 says the pages left, and 읽기 �
  f.runtime.cache.items[1]={seconds:60,lastRead:new Date(now-5*day).toISOString()};
  f.runtime.pageProgress=ref=>ref.id===2?{pages:{3:120},total:10,visited:1,percent:10,attachmentID:7,lastPageIndex:3}:{pages:{0:60},total:4,visited:1,percent:25,attachmentID:8,lastPageIndex:0};
  await f.bench.show('reading');
- assert.match(f.body().querySelector('.sc-reading-today').textContent,/1편 오늘 연 문헌.*2편 지난 7일/s);
- assert.match(f.body().querySelector('.sc-resume-meta').textContent,/남은 6쪽/);
+ assert.match(f.body().querySelector('.sc-reading-today').textContent,/1편 오늘 읽음.*2편 지난 7일/s);
+ assert.match(f.body().querySelector('.sc-resume-meta').textContent,/이 쪽 뒤 6쪽/);
  f.bench.destroy();
 });
 
@@ -983,9 +985,9 @@ test('unread papers that cite the read ones are named too, and two papers’ ann
  f.runtime.paperWorks=()=>({'1:K1':{openalex:'W1',references:[]},'1:K2':{openalex:'W2',references:['https://openalex.org/W1','W1']}});
  await f.bench.show('explore');
  const fold=f.body().querySelector('.sc-local-reading-links');
- assert.match(fold.textContent,/읽은 문헌을 인용한 안 읽은 문헌/);
+ assert.match(fold.textContent,/읽는 중·완료 문헌을 인용한 안 읽은 문헌/);
  const line=[...fold.querySelectorAll('.sc-local-reading-link')].find(l=>/Paper Beta/.test(l.textContent));
- assert.match(line.textContent,/읽은 문헌 1편 인용/,'counted once');
+ assert.match(line.textContent,/읽는 중·완료 문헌 1편 인용/,'counted once');
  line.querySelector('.sc-local-reading-queue').click();await new Promise(r=>setTimeout(r,10));
  assert.equal(Object.keys(f.runtime.cache.workbenchUI.readingQueue||{}).length,1,'queued from here');
  // A paper being read is not queued from its row.
@@ -1007,6 +1009,59 @@ test('unread papers that cite the read ones are named too, and two papers’ ann
  assert.ok(cells.some(t=>/이 조건의 주석 없음/.test(t)));
  await f.click('목록으로');
  assert.equal(f.body().querySelector('.sc-annot-compare'),null);
+ f.bench.destroy();
+});
+
+test('an author page opens with what of theirs is on the shelf, and the comparison table marks the highest figures',async()=>{
+ const f=fixture();
+ const known={1:{status:'done',citations:40,impactFactor:4},2:{status:'',citations:9,impactFactor:4}};
+ f.runtime.state=ref=>({...known[ref.id]});
+ f.runtime.authorsOfCached=async()=>[{id:'A1',name:'Ada Lovelace',institution:'X',position:'first'}];
+ const updates=f.runtime.authorUpdates;f.runtime.authorUpdates=async id=>{const r=await updates(id);return {...r,profile:{...r.profile,name:'Ada Lovelace'}};};
+ await f.bench.show('authors');
+ const shelf=[...f.body().querySelectorAll('.sc-author-shelf-row')].map(r=>r.textContent);
+ assert.equal(shelf.length,2,'both papers by Ada Lovelace');
+ assert.match(shelf.join('|'),/완료/);
+ f.runtime.cache.matrixFields=['title','citations','impactFactor'];
+ f.setSelection([]);f.bench.state.selected=new Set();
+ await f.bench.show('matrix');
+ const best=[...f.body().querySelectorAll('td[data-best="true"]')].map(td=>[td.dataset.field,td.textContent]);
+ assert.deepEqual(best,[['citations','40']],'IF ties at the top, so it is not marked');
+ f.bench.destroy();
+});
+
+test('stalled papers are one view away, journal citations split by reading state, and tags are searched and jumped from',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const known={1:{status:'reading',citations:128},2:{status:'',citations:41}};
+ f.runtime.state=ref=>({impactFactor:4,...known[ref.id]});
+ f.runtime.cache.items[1]={seconds:300,lastRead:new Date(now-20*day).toISOString()};
+ f.runtime.cache.items[2]={seconds:30,lastRead:new Date(now-13*day).toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{2:300},total:10,visited:1,percent:10,attachmentID:7,lastPageIndex:2}:{pages:{0:30},total:4,visited:1,percent:25,attachmentID:8,lastPageIndex:0};
+ await f.bench.show('reading');
+ await f.click('14일 넘게 멈춤 1');
+ const rows=[...f.body().querySelectorAll('.sc-reading-stalled .sc-resume-row')];
+ assert.equal(rows.length,1);
+ assert.match(rows[0].textContent,/Paper Alpha.*3쪽에서/s);
+ assert.equal(f.body().querySelectorAll('[data-reading-progress] .sc-card').length,0,'the list gives way to the view');
+ await f.click('전체 기록 1');
+ // Journals: the two groups each with the count they rest on.
+ f.library.snapshot=async()=>f.papers.map(p=>({...p,venue:'Nature'}));
+ await f.bench.load();await f.bench.show('journals');
+ const lines=[...f.body().querySelectorAll('.sc-journal-citation-line')].map(l=>[l.dataset.group,l.querySelector('.sc-journal-citation-value').textContent]);
+ assert.deepEqual(lines,[['read','128 · 1/1편'],['unread','41 · 1/1편']]);
+ // Tags: searched, and the unread under one a press away.
+ f.library.tagTree=()=>[{name:'methods',path:'methods',count:2,children:[{name:'spatial',path:'methods/spatial',count:1,children:[]},{name:'single',path:'methods/single',count:1,children:[]}]}];
+ f.library.snapshot=async()=>[{...f.papers[0],tags:['methods/single']},{...f.papers[1],tags:['methods/spatial']}];
+ await f.bench.load();await f.bench.show('tags');
+ const find=f.body().querySelector('[aria-label="태그 경로 검색"]');find.value='spatial';find.dispatchEvent(new f.win.Event('input'));
+ await new Promise(r=>setTimeout(r,200));
+ const names=[...f.body().querySelectorAll('.sc-tag-name')].map(n=>n.textContent);
+ assert.deepEqual(names,['methods (2)','spatial (1)'],'the match and its ancestor');
+ assert.equal(f.body().querySelector('.sc-tag-edit').hasAttribute('open'),false,'editing folded');
+ const jump=[...f.body().querySelectorAll('.sc-tag-unread')].find(b=>b.closest('details').querySelector('.sc-tag-name').textContent==='spatial (1)');
+ jump.click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.status,'unread');assert.equal(f.bench.state.tag,'methods/spatial');
  f.bench.destroy();
 });
 
@@ -1762,7 +1817,7 @@ test('the journals tab opens on what the library does with each journal: held, u
  assert.equal(cells[1],'3편');
  assert.match(cells[2],/^2편/);
  assert.match(cells[3],/보유 75%.*시간 100%/s,'three of the four papers, all the reading time');
- assert.match(cells[5],/7 · 2\/3편/,'the median of the two known, and on how many');
+ assert.match(cells[5],/읽는 중·완료\s*10 · 1\/1편.*안 읽음\s*4 · 1\/2편/s,'the median of the known ones in each reading state, and on how many');
  await f.click('2편');
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal-reading-paper .sc-hit-title-link')].map(n=>n.textContent).sort(),['Nature three','Paper Beta']);
  await f.click('읽은 시간순');

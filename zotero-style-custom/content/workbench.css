@@ -1545,7 +1545,7 @@
 #style-custom-workbench .sc-journal-reading-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
 #style-custom-workbench .sc-journal-reading-head .sc-segmented { margin-left: auto; }
 #style-custom-workbench .sc-journal-reading-table { display: flex; flex-direction: column; }
-#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 52px 60px 176px 84px 118px; gap: 10px; align-items: center; min-height: 28px; padding: 3px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
+#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 52px 60px 176px 84px 250px; gap: 10px; align-items: center; min-height: 28px; padding: 3px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
 #style-custom-workbench .sc-journal-reading-header { font-size: 11px; color: var(--sc-muted); border-top: 0; min-height: 0; }
 #style-custom-workbench .sc-journal-reading-header > span:not(:first-child) { text-align: right; }
 #style-custom-workbench .sc-journal-reading-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--sc-text); }
@@ -1711,3 +1711,28 @@
  #style-custom-workbench .sc-annot-compare-corner { display: none; }
  #style-custom-workbench .sc-annot-compare-meaning { grid-column: 1 / -1; }
 }
+#style-custom-workbench .sc-matrix td[data-best=true] { font-weight: 700; color: var(--sc-text); }
+#style-custom-workbench .sc-graph-insight { margin-top: -2px; }
+#style-custom-workbench .sc-author-shelf { display: flex; flex-direction: column; margin: 0 0 12px; }
+#style-custom-workbench .sc-author-shelf-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
+#style-custom-workbench .sc-author-shelf-row .sc-hit-title-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#style-custom-workbench .sc-author-shelf-meta { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* 인용 중앙값 by reading state: two lines, a shared grey scale, a dot and a square. */
+#style-custom-workbench .sc-journal-reading-citation-compare { display: flex; flex-direction: column; gap: 1px; }
+#style-custom-workbench .sc-journal-citation-line { display: grid; grid-template-columns: 12px 64px 76px 1fr; gap: 4px; align-items: center; font-size: 11px; }
+#style-custom-workbench .sc-journal-citation-mark { color: var(--sc-muted); font-size: 11px; text-align: center; }
+#style-custom-workbench .sc-journal-citation-label { color: var(--sc-muted); text-align: start; white-space: nowrap; }
+#style-custom-workbench .sc-journal-citation-value { color: var(--sc-text); text-align: end; white-space: nowrap; }
+#style-custom-workbench .sc-journal-citation-track { position: relative; height: 9px; border-bottom: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-journal-citation-dot { position: absolute; bottom: -4px; transform: translateX(-50%); font-size: 11px; line-height: 11px; color: var(--sc-text); }
+@container sc-workbench (max-width: 640px) {
+ #style-custom-workbench .sc-journal-citation-track { display: none; }
+ #style-custom-workbench .sc-journal-citation-line { grid-template-columns: 10px auto auto; }
+}
+/* Tags: the tree first, editing folded under it. */
+#style-custom-workbench .sc-tag-edit { margin: 14px 0 0; }
+#style-custom-workbench .sc-tag-edit > summary { cursor: pointer; color: var(--sc-muted); font-size: 12px; width: max-content; }
+#style-custom-workbench .sc-tag-edit[open] > summary { color: var(--sc-text); }
+#style-custom-workbench .sc-tag-unread { min-height: 0; padding: 0 4px; margin-inline-start: 8px; border: 0; background: none; box-shadow: none; font: inherit; font-size: 11px; color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; border-radius: 7px; }
+#style-custom-workbench .sc-tag-unread:hover { background: var(--sc-fill); }
+#style-custom-workbench .sc-reading-views { margin: 4px 0 8px; }
