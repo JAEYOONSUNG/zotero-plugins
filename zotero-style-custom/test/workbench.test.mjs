@@ -696,7 +696,7 @@ test('followed authors\' news is one list: a shared paper once with both names, 
  await f.bench.show('authors');
  const rows=[...f.body().querySelectorAll('.sc-author-inbox-row')];
  assert.equal(rows.length,2,'the shared paper once');
- assert.match(rows[0].textContent,/First Person.*Second Person/s);
+ assert.match(rows[0].textContent,/First Person/);assert.match(rows[0].textContent,/Second Person/);
  assert.match(rows[1].querySelector('.sc-inbox-status').textContent,/보유/);
  f.bench.destroy();
 });
@@ -743,11 +743,12 @@ test('recent papers say what brought them there and when; the summary names the 
  assert.equal(picks.length,2);
  assert.match(picks[0],/Paper Alpha.*연 40회/);
  assert.match(picks[1],/Paper Beta.*연 11회/);
- f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'Ada M. Lovelace',seen:[],news:[]},{id:'A9',name:'Nobody Here',seen:[],news:[]}];
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'Ada Lovelace',seen:[],news:[]},{id:'A2',name:'A. M. Lovelace',seen:[],news:[]},{id:'A9',name:'Nobody Here',seen:[],news:[]}];
  await f.bench.show('authors');
  const cards=[...f.body().querySelectorAll('.sc-watch')];
- assert.equal(cards[0].querySelector('.sc-watch-mine')?.textContent,'서재 2','family name and initial');
- assert.equal(cards[1].querySelector('.sc-watch-mine'),null);
+ assert.equal(cards[0].querySelector('.sc-watch-mine')?.textContent,'서재 2','the full name as the library spells it');
+ assert.equal(cards[1].querySelector('.sc-watch-mine')?.textContent,'서재 2?','family name and initial only: said to be a guess');
+ assert.equal(cards[2].querySelector('.sc-watch-mine'),null);
  f.bench.destroy();
 });
 
@@ -775,6 +776,59 @@ test('an owned unread paper from the inbox waits under 읽기 대기 until readi
  const rows=[...f.body().querySelectorAll('.sc-reading-evidence-row')].map(r=>r.textContent);
  assert.equal(rows.length,1,'one page, this PDF only');
  assert.match(rows[0],/4쪽.*주석 2개.*check the control/);
+ f.bench.destroy();
+});
+
+test('collections show how much of each has been read, colour chips say what the colour means, and 최근 문헌 opens on the week',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const known={1:{status:'done',lastRead:new Date(now-2*day).toISOString(),seconds:120},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.library.snapshot=async()=>[{...f.papers[0],dateAdded:new Date(now-20*day).toISOString()},{...f.papers[1],dateAdded:new Date(now-1*day).toISOString()}];
+ f.library.collections=async()=>[{id:'4',name:'Research',count:2,itemIDs:[1,2],parentID:null}];
+ await f.bench.show('collections');
+ const row=f.body().querySelector('.sc-collection');
+ assert.equal(row.querySelectorAll('.sc-collection-mix > span').length,2,'done and unread, in the bar');
+ assert.equal(row.querySelector('.sc-collection-mixtext').textContent,'완료 1 · 안 읽음 1');
+ f.runtime.cache.readerSettings={...(f.runtime.cache.readerSettings||{}),colorLabels:{'#FFD400':'핵심 결과'}};
+ await f.bench.show('annotations');
+ assert.equal(f.body().querySelector('.sc-annot-swatch .sc-annot-meaning')?.textContent,'핵심 결과','matched regardless of case');
+ await f.bench.show('recent');
+ assert.match(f.body().querySelector('.sc-recent-week').textContent,/지난 7일\s*1편 읽음\s*1편 추가/);
+ f.bench.destroy();
+});
+
+test('a paper read in its article and its supplement resumes in either, each with its own page and time; annotations are found by their paper too',async()=>{
+ const f=fixture();
+ const recent=new Date(Date.now()-864e5).toISOString();
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'reading':''});
+ f.runtime.cache.items[1]={seconds:500,lastRead:recent,readingAttachments:{100:{pageTimes:{6:300},totalPages:12,lastPageIndex:6},200:{pageTimes:{1:120},totalPages:4,lastPageIndex:1}},readingAttachmentID:100};
+ f.runtime.formatReadTime=sec=>`${sec}초`;
+ f.refs.set(100,{id:100,getField:()=>'Main article'});f.refs.set(200,{id:200,getField:()=>'Supplementary'});
+ f.runtime.pageProgress=(ref,att)=>ref.id!==1?{pages:{},total:0,visited:0,percent:0}
+  :Number(att)===200?{pages:{1:120},total:4,visited:1,percent:25,attachmentID:200,lastPageIndex:1}
+  :{pages:{6:300},total:12,visited:1,percent:8,attachmentID:100,lastPageIndex:6};
+ await f.bench.show('reading');
+ const row=()=>f.body().querySelector('.sc-resume-row');
+ assert.match(row().textContent,/7쪽에서/);
+ assert.match(row().querySelector('.sc-resume-meta').textContent,/이 파일 300초/,'this file’s time, not the paper’s 500');
+ const pick=row().querySelector('.sc-reading-file');
+ assert.deepEqual([...pick.options].map(o=>o.textContent),['Main article','Supplementary']);
+ pick.value='200';pick.dispatchEvent(new f.win.Event('change'));
+ assert.match(row().textContent,/2쪽에서/,'the supplement opens where it was left');
+ await f.click('2쪽에서');
+ assert.deepEqual(f.calls.filter(c=>c[0]==='open').pop().slice(1),[200,{pageIndex:1}]);
+ // Annotations: a search for the author finds the paper's marks, and says how.
+ f.library.annotations=async()=>[{id:'3',parentID:'1',attachmentID:'99',text:'control condition',comment:'',color:'#ffd400',pageIndex:0},{id:'4',parentID:'2',attachmentID:'98',text:'other',comment:'',color:'#ffd400',pageIndex:0}];
+ f.refs.set(99,{id:99,parentID:1,getField:()=>'PDF'});f.refs.set(98,{id:98,parentID:2,getField:()=>'PDF'});
+ await f.bench.show('annotations');
+ assert.equal(f.body().querySelectorAll('.sc-annot-group').length,2,'each paper named');
+ const search=f.bench.panel.querySelector('[aria-label="작업 패널 검색"]');search.value='Lovelace control';search.dispatchEvent(new f.win.Event('search'));
+ await new Promise(r=>setTimeout(r,20));
+ const shown=[...f.body().querySelectorAll('.sc-annot')];
+ assert.equal(shown.length,1);
+ assert.match(shown[0].textContent,/문헌 정보로 찾음/);
+ assert.match(f.body().querySelector('.sc-annot-group-meta').textContent,/Science.*일치 주석 1개/);
  f.bench.destroy();
 });
 
@@ -1529,7 +1583,8 @@ test('the journals tab opens on what the library does with each journal: held, u
  const cells=[...rows[0].querySelectorAll('[role=cell]')].map(c=>c.textContent);
  assert.equal(cells[1],'3편');
  assert.match(cells[2],/^2편/);
- assert.match(cells[4],/7 · 2\/3편/,'the median of the two known, and on how many');
+ assert.match(cells[3],/보유 75%.*시간 100%/s,'three of the four papers, all the reading time');
+ assert.match(cells[5],/7 · 2\/3편/,'the median of the two known, and on how many');
  await f.click('2편');
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal-reading-paper .sc-hit-title-link')].map(n=>n.textContent).sort(),['Nature three','Paper Beta']);
  await f.click('읽은 시간순');

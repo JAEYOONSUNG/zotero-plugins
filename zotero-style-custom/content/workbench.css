@@ -174,7 +174,7 @@
 #style-custom-workbench input::placeholder,
 #style-custom-workbench textarea::placeholder { color: var(--sc-muted); opacity: 1; }
 #style-custom-workbench :focus-visible { outline: 2px solid var(--sc-accent); outline-offset: 2px; }
-#style-custom-workbench input[type=checkbox] { width: 15px; height: 15px; min-height: 0; margin: 0; accent-color: var(--sc-accent); flex-shrink: 0; }
+#style-custom-workbench input[type=checkbox] { width: 15px; height: 15px; min-height: 0; margin: 0; accent-color: var(--sc-text); flex-shrink: 0; }
 #style-custom-workbench input[type=color] { width: 40px; padding: 3px; flex: 0 0 40px; }
 #style-custom-workbench input[type=number] { width: 96px; min-width: 64px; }
 #style-custom-workbench textarea { display: block; width: 100%; min-height: 88px; resize: vertical; line-height: 1.55; }
@@ -980,13 +980,13 @@
 #style-custom-workbench .sc-annot {
   display: flex; flex-direction: column; gap: 2px;
   padding: 7px 10px; margin-block-end: 6px; border-radius: var(--sc-radius);
-  border-inline-start: 2px solid transparent;
   cursor: default;
 }
 #style-custom-workbench .sc-annot:hover { background: var(--sc-surface); }
 #style-custom-workbench .sc-annot:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -2px; }
+/* Chosen: a plain grey box with a darker edge all round, never a coloured bar on one side. */
 #style-custom-workbench .sc-annot[data-selected=true] {
-  background: var(--sc-accent-soft); border-inline-start-color: var(--sc-accent);
+  background: var(--sc-fill); box-shadow: inset 0 0 0 1px var(--sc-border-strong);
 }
 #style-custom-workbench .sc-annot-head { display: flex; align-items: center; gap: 6px; min-height: 18px; }
 #style-custom-workbench .sc-annot-dot {
@@ -1544,13 +1544,14 @@
 #style-custom-workbench .sc-journal-reading-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
 #style-custom-workbench .sc-journal-reading-head .sc-segmented { margin-left: auto; }
 #style-custom-workbench .sc-journal-reading-table { display: flex; flex-direction: column; }
-#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 56px 150px 84px 118px; gap: 10px; align-items: center; min-height: 28px; padding: 3px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
+#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 52px 60px 176px 84px 118px; gap: 10px; align-items: center; min-height: 28px; padding: 3px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
 #style-custom-workbench .sc-journal-reading-header { font-size: 11px; color: var(--sc-muted); border-top: 0; min-height: 0; }
 #style-custom-workbench .sc-journal-reading-header > span:not(:first-child) { text-align: right; }
 #style-custom-workbench .sc-journal-reading-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--sc-text); }
 #style-custom-workbench .sc-journal-reading-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--sc-text); white-space: nowrap; }
-#style-custom-workbench .sc-journal-reading-unread { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 6px; }
-#style-custom-workbench .sc-journal-reading-unread > :first-child { justify-self: end; }
+#style-custom-workbench .sc-journal-reading-unread { text-align: right; }
+#style-custom-workbench .sc-journal-reading-mix { display: flex; flex-direction: column; gap: 2px; }
+#style-custom-workbench .sc-journal-reading-share { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 6px; font-size: 11px; color: var(--sc-muted); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-journal-reading-count { min-height: 0; padding: 1px 4px; border: 0; background: none; box-shadow: none; font: inherit; font-variant-numeric: tabular-nums; color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; border-radius: 7px; }
 #style-custom-workbench .sc-journal-reading-count:hover, #style-custom-workbench .sc-journal-reading-count[aria-expanded=true] { background: var(--sc-fill); }
 #style-custom-workbench .sc-journal-reading-bar { display: block; height: 4px; background: var(--sc-fill); }
@@ -1559,10 +1560,9 @@
 #style-custom-workbench .sc-journal-reading-paper { display: flex; gap: 8px; align-items: baseline; font-size: 12px; min-width: 0; }
 #style-custom-workbench .sc-journal-reading-paper .sc-hit-title-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 @container sc-workbench (max-width: 640px) {
- #style-custom-workbench .sc-journal-reading-row { grid-template-columns: 44px minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.2fr); row-gap: 2px; gap: 6px; }
+ #style-custom-workbench .sc-journal-reading-row { grid-template-columns: 40px 44px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1.2fr); row-gap: 2px; gap: 6px; }
  #style-custom-workbench .sc-journal-reading-name { grid-column: 1 / -1; }
  #style-custom-workbench .sc-journal-reading-header > :first-child { display: none; }
- #style-custom-workbench .sc-journal-reading-unread { grid-template-columns: 40px 1fr; }
 }
 /* Inbox triage: a fixed slot for 확인함 so the buttons line up down the list. */
 #style-custom-workbench .sc-inbox-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 6px; }
@@ -1585,7 +1585,10 @@
 #style-custom-workbench .sc-overview-pick .sc-hit-title-link { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 #style-custom-workbench .sc-watch-mine { margin-inline-start: 6px; font-size: 11px; color: var(--sc-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-journal-reading-scope { font-size: 12px; color: var(--sc-text); }
-#style-custom-workbench .sc-resume-pages { grid-column: 1 / -1; font-size: 12px; }
+#style-custom-workbench .sc-resume-folds { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+#style-custom-workbench .sc-resume-folds:empty { display: none; }
+#style-custom-workbench .sc-resume-folds > details[open] { flex-basis: 100%; }
+#style-custom-workbench .sc-resume-pages { font-size: 12px; }
 #style-custom-workbench .sc-resume-pages > summary { cursor: pointer; color: var(--sc-muted); width: max-content; }
 #style-custom-workbench .sc-resume-pages[open] > summary { color: var(--sc-text); margin-bottom: 4px; }
 /* 읽기 대기 and 주석이 있는 쪽: rows under a rule, no boxes. */
@@ -1617,3 +1620,11 @@
  #style-custom-workbench .sc-search-row select { flex: 0 1 132px; width: 132px; }
  #style-custom-workbench .sc-search-row button { min-height: 26px; padding-block: 0; font-size: 12px; }
 }
+/* Round 4: reading inside each collection's bar, colour meanings on the annotation chips, the week on 최근 문헌. */
+#style-custom-workbench .sc-collection-fill.sc-collection-mix { display: flex; background: transparent; }
+#style-custom-workbench .sc-collection-mixtext { margin-inline-start: 10px; font-size: 11px; color: var(--sc-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-annot-meaning { font-size: 12px; color: var(--sc-text); }
+#style-custom-workbench .sc-recent-week { margin: 2px 0 10px; }
+#style-custom-workbench .sc-annot-group-meta { margin: -2px 0 6px; font-size: 12px; color: var(--sc-muted); }
+#style-custom-workbench .sc-annot-via { font-size: 11px; color: var(--sc-muted); }
+#style-custom-workbench .sc-annot-group-more { margin: 0 0 10px; min-height: 24px; font-size: 12px; }
