@@ -738,7 +738,7 @@ test('recent papers say what brought them there and when; the summary names the 
  f.refs.set(5,{id:5});
  await f.bench.show('recent');
  const why=[...f.body().querySelectorAll('.sc-paper-card')].map(c=>[c.querySelector('.sc-paper-title').textContent,c.querySelector('.sc-paper-why')?.textContent]);
- assert.deepEqual(why.slice(0,2),[['Paper Alpha','읽음 · 2일 전'],['Paper Beta','추가 · 4일 전']]);
+ assert.deepEqual(why.slice(0,2),[['Paper Alpha','읽음 · 2일 전'],['Paper Beta','추가 · 4일 전 · 아직 안 엶']]);
  await f.bench.show('explore');
  const picks=[...f.body().querySelectorAll('.sc-overview-pick')].map(p=>p.textContent);
  // Alpha: 40 in its first year; Beta: 300 over 27 years -- about 11 a year. The done paper is not offered.
@@ -1065,6 +1065,55 @@ test('stalled papers are one view away, journal citations split by reading state
  f.bench.destroy();
 });
 
+test('a collection’s unread papers are one press away, and papers added this week but never opened say so',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const known={1:{status:'done',lastRead:new Date(now-3*day).toISOString()},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.library.snapshot=async()=>[{...f.papers[0],dateAdded:new Date(now-30*day).toISOString()},{...f.papers[1],dateAdded:new Date(now-2*day).toISOString()}];
+ f.library.collections=async()=>[{id:'4',name:'Research',count:2,itemIDs:[1,2],parentID:null}];
+ await f.bench.show('recent');
+ const beta=[...f.body().querySelectorAll('.sc-paper-card')].find(c=>/Paper Beta/.test(c.textContent));
+ assert.match(beta.querySelector('.sc-paper-why').textContent,/추가 · 2일 전 · 아직 안 엶/);
+ await f.bench.show('collections');
+ assert.ok(f.findButton('안 읽음 1'));
+ f.bench.destroy();
+});
+
+test('the queue keeps why a paper was put by, the selection bar leads to the next task, and a note search shows the passage',async()=>{
+ const f=fixture();
+ const known={1:{status:'done'},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.paperWorks=()=>({'1:K1':{openalex:'W1',references:['W2']},'1:K2':{openalex:'W2',references:[]}});
+ f.setSelection([]);
+ await f.bench.show('explore');f.bench.state.selected=new Set();await f.bench.render();
+ assert.equal(f.bench.panel.querySelector('.sc-selection-bar').hidden,true,'nothing chosen: no bar');
+ const line=[...f.body().querySelectorAll('.sc-local-reading-link')].find(l=>/Paper Beta/.test(l.textContent));
+ line.querySelector('.sc-local-reading-queue').click();await new Promise(r=>setTimeout(r,10));
+ await f.bench.show('reading');
+ const why=f.body().querySelector('.sc-queue-reason summary');
+ assert.equal(why.textContent,'담은 이유: 읽던 1편이 인용');
+ assert.match(f.body().querySelector('.sc-queue-reason').textContent,/Paper Alpha · 완료/);
+ // Two chosen: compare and side by side are offered; one chosen: notes and annotations.
+ await f.bench.show('explore');f.bench.state.selected=new Set(['1','2']);await f.bench.render();
+ const visible=label=>{const b=[...f.bench.panel.querySelectorAll('.sc-selection-bar button')].find(x=>x.textContent===label);return !!b&&!b.hidden;};
+ assert.ok(visible('논문 비교')&&visible('주석 나란히')&&!visible('노트'));
+ f.bench.state.query='Alpha';f.bench.state.selected=new Set(['2']);await f.bench.render();
+ assert.ok(visible('주석')&&visible('노트')&&!visible('논문 비교'));
+ [...f.bench.panel.querySelectorAll('.sc-selection-bar button')].find(x=>x.textContent==='노트').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(f.bench.state.tab,'notes');assert.equal(f.bench.state.scope,'selected');assert.equal(f.bench.state.query,'','a search that would hide it is set aside');
+ await f.click('전체 목록으로');
+ assert.equal(f.bench.state.query,'Alpha','and given back');
+ // A note search shows the passage around the match, far into the note.
+ f.library.notes=async()=>[{id:'9',parentID:'1',title:'Long note',text:'x '.repeat(900)+'the control culture temperature was 30 C '+'y '.repeat(50),modified:'2026-09-01'}];
+ f.bench.state.selected=new Set();f.bench.state.query='temperature';
+ await f.bench.show('notes');
+ const excerpt=f.body().querySelector('.sc-note-excerpt');
+ assert.ok(excerpt);assert.match(excerpt.textContent,/control culture temperature was 30/);
+ assert.equal(excerpt.querySelector('.sc-search-hit').textContent,'temperature');
+ f.bench.destroy();
+});
+
 test('a single author is opened directly rather than offered as a choice of one',async()=>{
  const f=fixture();
  f.runtime.authorsOfCached=async()=>[{id:'A1',name:'Only Author',institution:'Somewhere',position:'first'}];
@@ -1314,7 +1363,8 @@ test('what the scan found is reachable, and a duplicate can be dealt with', asyn
  assert.match(text,/보충자료 1/);
  assert.match(text,/같은 파일이 두 번 1/);
  assert.match(text,/다른 논문이 붙어 있음 1/);
- assert.match(text,/첨부파일 없음 1/);
+ // A paper with no file that has not been read is the one the file stands in front of.
+ assert.match(text,/안 읽었고 파일도 없는 문헌 1/);
  assert.match(text,/never uses the title/);
  await f.click('휴지통으로');
  assert.deepEqual(trashed,['22']);

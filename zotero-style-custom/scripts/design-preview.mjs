@@ -17,8 +17,8 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
   {id:'2',title:'A practical framework for reproducible literature synthesis',authors:'S. Lee; L. Chen',year:'2024',venue:'Example Methods',doi:'',tags:['#review/reproducibility'],abstract:'실제 논문이 아닌 화면 구성용 예시 데이터입니다.',itemType:'journalArticle',status:'done',rating:5,citations:64,impactFactor:8.2,seconds:3200},
   {id:'3',title:'Spatial context and cell-state transitions in regeneration',authors:'E. Morgan; H. Choi',year:'2026',venue:'Example Biology',doi:'',tags:['#methods/spatial'],abstract:'새 문헌의 지표가 아직 없을 때 0과 미확인을 구분해 보여줍니다.',itemType:'preprint',status:'unread',rating:0,citations:null,impactFactor:null,seconds:0},
   // Three more on the same shelves, unread, so the journals tab has something to weigh.
-  {id:'4',title:'Tissue-scale repair atlases from sparse sampling',authors:'R. Ahn; P. Silva',year:'2025',venue:'Example Cell Research',doi:'10.5555/demo.4',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:41,impactFactor:12.4,seconds:0},
-  {id:'5',title:'Benchmarks for repair-stage classifiers',authors:'K. Oh',year:'2024',venue:'Example Cell Research',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:null,impactFactor:12.4,seconds:0},
+  {id:'4',title:'Tissue-scale repair atlases from sparse sampling',authors:'R. Ahn; P. Silva',year:'2025',venue:'Example Cell Research',doi:'10.5555/demo.4',tags:[],abstract:'',itemType:'journalArticle',status:'reading',rating:0,citations:41,impactFactor:12.4,seconds:400},
+  {id:'5',title:'Benchmarks for repair-stage classifiers',authors:'K. Oh; Christopher A. Voigt',year:'2024',venue:'Example Cell Research',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:null,impactFactor:12.4,seconds:0},
   {id:'6',title:'Preregistered synthesis of repair reviews',authors:'D. Yu; S. Lee',year:'2023',venue:'Example Methods',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:12,impactFactor:8.2,seconds:0}
  ];
  for(const paper of papers){paper.key='DEMO'+paper.id;paper.libraryID=1;}
@@ -37,7 +37,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const demoAction=async()=>hint('이 미리보기의 동작은 예시 데이터에만 적용됩니다. 실제 Zotero에는 연결하지 않습니다.');
  const daysAgo=n=>new Date(Date.now()-n*864e5).toISOString();
  // Reading records for the fictional papers, so the reading page shows what a reader sees.
- const cache={items:{1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},workbenchUI:{density:'comfortable'},boards:[],matrixFields:['title','year','citations','rating']};
+ const cache={items:{4:{seconds:400,lastRead:daysAgo(20)},1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},workbenchUI:{density:'comfortable'},boards:[],matrixFields:['title','year','citations','rating']};
  const watched=[
   {id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],
    news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},

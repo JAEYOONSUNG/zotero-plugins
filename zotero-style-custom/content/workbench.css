@@ -1736,3 +1736,28 @@
 #style-custom-workbench .sc-tag-unread { min-height: 0; padding: 0 4px; margin-inline-start: 8px; border: 0; background: none; box-shadow: none; font: inherit; font-size: 11px; color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; border-radius: 7px; }
 #style-custom-workbench .sc-tag-unread:hover { background: var(--sc-fill); }
 #style-custom-workbench .sc-reading-views { margin: 4px 0 8px; }
+#style-custom-workbench .sc-collection-unread { min-height: 22px; font-size: 12px; }
+/* A middle width: the citation split takes its own line under the row, so the journal name keeps its room. */
+@container sc-workbench (max-width: 1060px) {
+ #style-custom-workbench .sc-journal-reading-row { grid-template-columns: minmax(0,1fr) 52px 60px 176px 84px; }
+ #style-custom-workbench .sc-journal-reading-header > :last-child { display: none; }
+ #style-custom-workbench .sc-journal-reading-citation-compare { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; gap: 2px 18px; }
+ #style-custom-workbench .sc-journal-citation-line { grid-template-columns: 12px auto auto 90px; }
+}
+/* ...and below 640px the narrow layout of 내 문헌 분석 again, after the middle one. */
+@container sc-workbench (max-width: 640px) {
+ #style-custom-workbench .sc-journal-reading-row { grid-template-columns: 40px 44px minmax(0,1.6fr) minmax(0,1fr); row-gap: 2px; gap: 6px; }
+ #style-custom-workbench .sc-journal-citation-line { grid-template-columns: 12px auto auto; }
+}
+#style-custom-workbench .sc-queue-reason { font-size: 12px; }
+#style-custom-workbench .sc-queue-reason > summary { cursor: pointer; color: var(--sc-text); width: max-content; max-width: 100%; }
+#style-custom-workbench .sc-queue-reason-paper { margin: 1px 0 0 12px; color: var(--sc-muted); font-size: 12px; }
+/* The selection bar: the next task first, linking folded. */
+#style-custom-workbench .sc-selection-tasks { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+#style-custom-workbench .sc-selection-relations { position: relative; font-size: 12px; }
+#style-custom-workbench .sc-selection-relations > summary { cursor: pointer; color: var(--sc-muted); padding: 4px 2px; }
+#style-custom-workbench .sc-selection-relations[open] { display: inline-flex; gap: 6px; align-items: center; }
+#style-custom-workbench .sc-selection-relations[open] > summary { color: var(--sc-text); }
+#style-custom-workbench .sc-search-hit { font-weight: 700; text-decoration: underline; text-underline-offset: 2px; color: var(--sc-text); }
+#style-custom-workbench .sc-note-title-hit { margin-inline-start: 8px; font-size: 11px; }
+#style-custom-workbench .sc-note-excerpt { -webkit-line-clamp: unset; display: block; }
