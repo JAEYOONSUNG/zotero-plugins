@@ -98,7 +98,11 @@
       if (seconds > 0) {
         const item = active.item;
         const location = previousLocation || locationOf(active.reader);
-        chain = chain.then(() => options.onTick(item, seconds, location)).catch(report);
+        // The time belongs to the page that was up during it; where to resume
+        // is the page up now -- a page turned just before leaving is the one to
+        // come back to.
+        const shown = locationOf(active.reader);
+        chain = chain.then(() => options.onTick(item, seconds, location, shown)).catch(report);
       }
     }
     function sample() {

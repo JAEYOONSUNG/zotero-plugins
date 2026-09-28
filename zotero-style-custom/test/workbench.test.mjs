@@ -751,6 +751,33 @@ test('recent papers say what brought them there and when; the summary names the 
  f.bench.destroy();
 });
 
+test('an owned unread paper from the inbox waits under 읽기 대기 until reading starts, and the pages it was marked on come with their notes',async()=>{
+ const f=fixture();
+ const known={1:{status:''},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news:[{id:'W2',title:'Paper Alpha',doi:'10.1234/a',date:'2026-08-01'}]}];
+ await f.bench.show('authors');
+ await f.click('읽기 대기');
+ assert.equal(f.body().querySelector('.sc-inbox-queue').getAttribute('aria-pressed'),'true');
+ await f.bench.show('reading');
+ const queued=()=>[...f.body().querySelectorAll('.sc-reading-queue-row .sc-resume-title')].map(n=>n.textContent);
+ assert.deepEqual(queued(),['Paper Alpha']);
+ assert.match(f.body().querySelector('.sc-reading-queue-row').textContent,/First Person/,'who it came from');
+ // Reading begins: it leaves the queue for the reading lists.
+ f.runtime.cache.items[1]={...(f.runtime.cache.items[1]||{}),seconds:30,lastRead:new Date(Date.now()+1000).toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{3:60,5:2},total:8,visited:2,percent:25,attachmentID:100,lastPageIndex:5}:{pages:{},total:0,visited:0,percent:0};
+ f.library.annotations=async()=>[{attachmentID:'100',pageIndex:3,pageLabel:'4',comment:'check the control',text:'',color:'#ffd400'},{attachmentID:'100',pageIndex:3,text:'second'},{attachmentID:'200',pageIndex:3,comment:'another PDF'}];
+ await f.bench.show('explore');await f.bench.show('reading');
+ assert.deepEqual(queued(),[]);
+ const evidence=f.body().querySelector('.sc-reading-evidence');
+ evidence.open=true;evidence.dispatchEvent(new f.win.Event('toggle'));
+ await new Promise(r=>setTimeout(r,20));
+ const rows=[...f.body().querySelectorAll('.sc-reading-evidence-row')].map(r=>r.textContent);
+ assert.equal(rows.length,1,'one page, this PDF only');
+ assert.match(rows[0],/4쪽.*주석 2개.*check the control/);
+ f.bench.destroy();
+});
+
 test('a single author is opened directly rather than offered as a choice of one',async()=>{
  const f=fixture();
  f.runtime.authorsOfCached=async()=>[{id:'A1',name:'Only Author',institution:'Somewhere',position:'first'}];

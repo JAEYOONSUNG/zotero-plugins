@@ -208,6 +208,13 @@ test('per-page location is snapshotted at interval start and delivered with the 
  assert.deepEqual(locations[0],{seconds:1,location:{pageIndex:2,totalPages:10,attachmentID:2}});
  await f.advance(1000);assert.equal(locations[1].location.pageIndex,3);await f.cleanup();
 });
+test('the page on screen when time is credited is passed apart from the page the time belongs to',async()=>{
+ const shown=[];const f=fixture({onTick:(item,seconds,location,now)=>shown.push([location.pageIndex,now.pageIndex])});
+ f.reader._internalReader={_state:{primaryViewStats:{pageIndex:2,pagesCount:10}}};f.pdf.emit('wheel');
+ // Turned to page 4 just before the tick: the second went to page 3's reading, the resume point is 4.
+ f.reader._internalReader._state.primaryViewStats.pageIndex=3;await f.advance(1000);
+ assert.deepEqual(shown[0],[2,3]);await f.cleanup();
+});
 test('per-page clock follows active split reader and leaves missing page data unknown',async()=>{
  const locations=[];const f=fixture({onTick:(item,seconds,location)=>locations.push(location)});
  f.reader._internalReader={_lastViewPrimary:false,_secondaryView:{},_state:{primaryViewStats:{pageIndex:0,pagesCount:20},secondaryViewStats:{pageIndex:8,pagesCount:20}}};

@@ -2930,7 +2930,7 @@
       "sources": [
         {
           "file": "src/workbench.js",
-          "marker": "['collections','tabs','views','appearance'].includes(state.tab)"
+          "marker": "['collections','tabs','views','appearance','reading','authors'].includes(state.tab)"
         }
       ],
       "tests": [

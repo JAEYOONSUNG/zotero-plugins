@@ -4245,13 +4245,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (this.active) { this.rebuildJournals(); await this.flush(); await this.refreshWindows(); }
     return result;
   }
-  async addReading(item, seconds, location) {
+  async addReading(item, seconds, location, shown) {
     if (!this.active || !this.isRegular(item) || !Number.isFinite(seconds) || seconds <= 0) return;
     const record = this.entry(item);
     if (!Number.isFinite(record.seconds)) record.seconds = this.metrics(item).seconds;
     record.seconds += seconds; record.unreadOverride = false; this.dirty = true;
     record.lastRead=new Date().toISOString();
-    if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0&&Number.isInteger(location.pageIndex)&&location.pageIndex>=0&&location.pageIndex<100000&&Number.isInteger(location.totalPages)&&location.totalPages>location.pageIndex&&location.totalPages<=100000){record.readingAttachments||={};const bucket=record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:location.totalPages};bucket.pageTimes||={};bucket.pageTimes[location.pageIndex]=(Number(bucket.pageTimes[location.pageIndex])||0)+seconds;bucket.totalPages=location.totalPages;bucket.lastRead=record.lastRead;bucket.lastPageIndex=location.pageIndex;record.readingAttachmentID=location.attachmentID;}
+    if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0&&Number.isInteger(location.pageIndex)&&location.pageIndex>=0&&location.pageIndex<100000&&Number.isInteger(location.totalPages)&&location.totalPages>location.pageIndex&&location.totalPages<=100000){record.readingAttachments||={};const bucket=record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:location.totalPages};bucket.pageTimes||={};bucket.pageTimes[location.pageIndex]=(Number(bucket.pageTimes[location.pageIndex])||0)+seconds;bucket.totalPages=location.totalPages;bucket.lastRead=record.lastRead;bucket.lastPageIndex=shown&&shown.attachmentID===location.attachmentID&&Number.isInteger(shown.pageIndex)&&shown.pageIndex>=0&&shown.pageIndex<bucket.totalPages?shown.pageIndex:location.pageIndex;record.readingAttachmentID=location.attachmentID;}
     this.refreshReadingDisplays(item.id);
     /* The cells are already repainted in place. A full store write and an item
        tree rebuild every second was the rest of this method; the seconds are
@@ -4702,7 +4702,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (this.pref("recordReading",true)) state.readingCleanup = this.reading.attach(win, {
       intervalMs: this.getSetting('recordIntervalMs'),idleMs:this.getSetting('idleSeconds')*1000,
       onSession: (item,location) => { if (this.isRegular(item)) {const record=this.entry(item);record.seconds=this.metrics(item).seconds;if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0){record.readingAttachments||={};record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:Number.isInteger(location.totalPages)?location.totalPages:0};record.readingAttachmentID=location.attachmentID;}} },
-      onTick:(item,seconds,location)=>this.addReading(item,seconds,location), onError:error=>this.Z.logError(error) });}
+      onTick:(item,seconds,location,shown)=>this.addReading(item,seconds,location,shown), onError:error=>this.Z.logError(error) });}
   }
   addWindow(win) {
     if (!this.active || this.stopping || this.windows.has(win)) return;

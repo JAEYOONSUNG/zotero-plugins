@@ -226,7 +226,7 @@
 #style-custom-workbench .sc-kind-chips:empty { display: none; }
 #style-custom-workbench .sc-kind { margin-inline-end: 6px; vertical-align: 2px; }
 /* (border-color said nothing: these buttons have no border to colour.) */
-#style-custom-workbench .sc-filter-chips button { min-height: 24px; padding: 2px 8px; border-radius: var(--sc-radius-sm); color: var(--sc-accent); background: var(--sc-accent-soft); font-size: 12px; }
+#style-custom-workbench .sc-filter-chips button { min-height: 24px; padding: 2px 8px; border-radius: var(--sc-radius-sm); color: var(--sc-text); background: var(--sc-fill); box-shadow: inset 0 0 0 1px var(--sc-border); font-size: 12px; }
 #style-custom-workbench .sc-shell { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; }
 #style-custom-workbench .sc-shell nav { flex: 0 0 var(--sc-nav-width); padding: 14px 10px; overflow: auto; border-inline-end: 1px solid var(--sc-border); background: var(--sc-surface-alt); }
 #style-custom-workbench .sc-nav-group { margin-block-end: 18px; }
@@ -281,7 +281,7 @@
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px;
   padding: 7px var(--sc-card-padding); margin: 0 0 4px; border: 0;
   border-radius: var(--sc-radius-card); background: var(--sc-surface);
-  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 0 0 .5px var(--sc-border);
+  box-shadow: 0 0 0 .5px var(--sc-border);
 }
 #style-custom-workbench .sc-card-text { flex: 1 1 200px; min-width: 0; }
 #style-custom-workbench .sc-card h3 { margin: 0; font: var(--sc-card-title); letter-spacing: -.01em; overflow-wrap: anywhere; }
@@ -322,11 +322,12 @@
 #style-custom-workbench .sc-paper-card[data-status=reading]::before { background: var(--sc-reading); }
 #style-custom-workbench .sc-paper-card[data-status=done]::before { background: var(--sc-done); }
 #style-custom-workbench .sc-paper-card:focus-within { background: var(--sc-surface); }
-#style-custom-workbench .sc-paper-card[data-selected=true] { background: var(--sc-accent-soft); outline: 1px solid var(--sc-accent); outline-offset: -1px; }
+/* Selected is a plain grey row with a darker edge: no blue, no bar. */
+#style-custom-workbench .sc-paper-card[data-selected=true] { background: var(--sc-fill); outline: 1px solid var(--sc-border-strong); outline-offset: -1px; }
 /* Hover fills with pure white, which in light mode is brighter than the selected
    fill. Without this the row under the pointer shouts over the chosen one. */
-#style-custom-workbench .sc-paper-card[data-selected=true] { outline-width: 2px; }
-#style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-title { color: var(--sc-accent); font-weight: 600; }
+#style-custom-workbench .sc-paper-card[data-selected=true] { outline-width: 1px; }
+#style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-title { color: var(--sc-text); font-weight: 650; }
 #style-custom-workbench .sc-paper-identity { flex: 1; min-width: 0; }
 /* One line: mark, checkbox, title, source, then the figures. The title takes
    the slack so the numbers stay in a column the eye can run down. */
@@ -452,7 +453,7 @@
 #style-custom-workbench .sc-command-search { flex-shrink: 0; width: 100%; }
 #style-custom-workbench .sc-command-results { overflow: auto; min-height: 0; }
 #style-custom-workbench .sc-command-option { display: block; width: 100%; margin: 2px 0; text-align: start; }
-#style-custom-workbench .sc-command-option[aria-selected=true] { background: var(--sc-accent-soft); color: var(--sc-accent); box-shadow: inset 0 0 0 1px var(--sc-accent); }
+#style-custom-workbench .sc-command-option[aria-selected=true] { background: var(--sc-fill); color: var(--sc-text); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 #style-custom-workbench .sc-command-palette > p { margin: 0; font-size: 12px; }
 #style-custom-workbench .sc-command-option small { color: var(--sc-muted); margin-inline-start: 8px; }
 #style-custom-workbench kbd { font: 11px var(--sc-mono); padding: 2px 4px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-sm); color: var(--sc-muted); }
@@ -727,10 +728,10 @@
 #style-custom-workbench .sc-journal-table .sc-journal-if-none { color: var(--sc-faint); font-weight: 400; }
 #style-custom-workbench .sc-journal-fields { display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-chip-tiny { padding: 0 6px; font-size: 11px; line-height: 16px; }
-#style-custom-workbench .sc-chip-on { background: var(--sc-accent); color: var(--sc-accent-ink); }
+#style-custom-workbench .sc-chip-on { background: var(--sc-surface); color: var(--sc-text); font-weight: 650; box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 #style-custom-workbench .sc-chip-button { border: 0; cursor: pointer; min-height: 0; font: inherit; font-size: 12px; line-height: 18px; }
 #style-custom-workbench .sc-chip-button:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
-#style-custom-workbench .sc-chip-button[aria-pressed=true] { background: var(--sc-accent); color: var(--sc-accent-ink); }
+#style-custom-workbench .sc-chip-button[aria-pressed=true] { background: var(--sc-surface); color: var(--sc-text); font-weight: 650; box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 #style-custom-workbench .sc-journal-count { font-size: 12px; }
 /* The profile: a two-column list of facts, a sign before each. */
 #style-custom-workbench .sc-journal-profile { margin: 0; padding: 6px 0 0; border-radius: 0; background: transparent; }
@@ -850,7 +851,7 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #style-custom-workbench .sc-watch-new .sc-watch-sub { color: var(--sc-reading-ink); }
-#style-custom-workbench .sc-watch-tools button[aria-pressed=true] { background: var(--sc-accent-soft); color: var(--sc-accent); box-shadow: inset 0 0 0 1px var(--sc-accent); }
+#style-custom-workbench .sc-watch-tools button[aria-pressed=true] { background: var(--sc-surface); color: var(--sc-text); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 #style-custom-workbench .sc-watch-callout { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; padding: 7px 12px; border-radius: var(--sc-radius); background: var(--sc-accent-soft); color: var(--sc-accent); font: 500 12px/1.4 var(--sc-font); }
 #style-custom-workbench .sc-watch-callout svg { flex: none; }
 
@@ -1470,7 +1471,7 @@
 
 /* 저장된 새 논문: two lines a paper -- title, then date · journal · who -- and what the library knows, at the right. */
 #style-custom-workbench .sc-author-inbox { display: flex; flex-direction: column; margin: 0 0 14px; }
-#style-custom-workbench .sc-author-inbox-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 76px; column-gap: 12px; padding: 7px 2px; border-block-end: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-author-inbox-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(76px, auto); column-gap: 12px; padding: 7px 2px; border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-author-inbox-row > .sc-hit-title, #style-custom-workbench .sc-author-inbox-row > .sc-hit-meta { grid-column: 1; margin: 0; }
 #style-custom-workbench .sc-inbox-status { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: flex; gap: 6px; align-items: center; color: var(--sc-muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-inbox-note { margin: -2px 0 6px; font-size: 12px; }
@@ -1483,7 +1484,7 @@
    the two actions in a slot of their own that shows on hover -- nothing laid
    over the numbers. */
 #style-custom-workbench .sc-paper-card .sc-paper-heading,
-#style-custom-workbench .sc-paper-columns { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 104px; align-items: center; column-gap: 10px; }
+#style-custom-workbench .sc-paper-columns { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 88px; align-items: center; column-gap: 10px; }
 #style-custom-workbench .sc-paper-card .sc-paper-identity { flex-direction: column; align-items: stretch; gap: 0; min-width: 0; }
 #style-custom-workbench .sc-paper-card .sc-paper-meta { flex: none; max-width: none; min-width: 0; }
 #style-custom-workbench .sc-paper-card .sc-metrics { margin: 0; justify-content: flex-end; gap: 12px; }
@@ -1499,7 +1500,9 @@
 #style-custom-workbench .sc-paper-columns { padding: 0 var(--sc-card-padding, 12px) 4px calc(var(--sc-card-padding, 12px) + 14px); margin: 0 0 2px; border-block-end: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-paper-columns-lead { grid-column: 1 / span 2; }
 #style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: 3; }
-#style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) repeat(4, auto) 104px; }
+#style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) repeat(4, auto) 88px; }
+/* The two actions, small enough that their slot costs the title little. */
+#style-custom-workbench .sc-paper-card .sc-paper-actions button { min-height: 22px; padding: 0 6px; font-size: 12px; }
 #style-custom-workbench .sc-paper-columns-lead { grid-column: 1; visibility: hidden; }
 #style-custom-workbench .sc-paper-columns > .sc-paper-column:first-of-type { grid-column: auto; }
 #style-custom-workbench .sc-paper-column { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; display: flex; color: var(--sc-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
@@ -1518,6 +1521,7 @@
   #style-custom-workbench .sc-paper-columns { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-inline-start: var(--sc-card-padding, 12px); }
   #style-custom-workbench .sc-paper-columns-lead { visibility: visible; font-size: 12px; color: var(--sc-muted); }
   #style-custom-workbench .sc-paper-columns-tail { display: none; }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-column { width: auto; }
 }
 
 #style-custom-workbench .sc-overview-fact { min-height: 0; padding: 0 3px; margin: 0 -3px; border: 0; background: none; box-shadow: none; font: inherit; color: var(--sc-muted); cursor: pointer; border-radius: 7px; }
@@ -1563,7 +1567,8 @@
 /* Inbox triage: a fixed slot for 확인함 so the buttons line up down the list. */
 #style-custom-workbench .sc-inbox-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 6px; }
 #style-custom-workbench .sc-inbox-tools input[type=search] { flex: 1 1 180px; max-width: 320px; }
-#style-custom-workbench .sc-inbox-actions { grid-column: 3; grid-row: 1 / span 2; align-self: center; justify-self: end; }
+#style-custom-workbench .sc-inbox-actions { grid-column: 3; grid-row: 1 / span 2; align-self: center; justify-self: end; display: flex; gap: 6px; }
+#style-custom-workbench .sc-inbox-queue[aria-pressed=true] { background: var(--sc-surface); color: var(--sc-text); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 #style-custom-workbench .sc-inbox-empty { margin: 6px 0 14px; font-size: 12px; }
 @container sc-workbench (max-width: 640px) {
  #style-custom-workbench .sc-author-inbox-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
@@ -1579,3 +1584,36 @@
 #style-custom-workbench .sc-overview-pick { display: inline-flex; gap: 5px; align-items: baseline; min-width: 0; max-width: 100%; }
 #style-custom-workbench .sc-overview-pick .sc-hit-title-link { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 #style-custom-workbench .sc-watch-mine { margin-inline-start: 6px; font-size: 11px; color: var(--sc-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-journal-reading-scope { font-size: 12px; color: var(--sc-text); }
+#style-custom-workbench .sc-resume-pages { grid-column: 1 / -1; font-size: 12px; }
+#style-custom-workbench .sc-resume-pages > summary { cursor: pointer; color: var(--sc-muted); width: max-content; }
+#style-custom-workbench .sc-resume-pages[open] > summary { color: var(--sc-text); margin-bottom: 4px; }
+/* 읽기 대기 and 주석이 있는 쪽: rows under a rule, no boxes. */
+#style-custom-workbench .sc-reading-queue { display: flex; flex-direction: column; margin: 0 0 12px; }
+#style-custom-workbench .sc-reading-queue-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px 10px; align-items: center; padding: 6px 2px; }
+#style-custom-workbench .sc-reading-queue-row + .sc-reading-queue-row { border-block-start: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-reading-evidence { flex-basis: 100%; font-size: 12px; }
+#style-custom-workbench .sc-reading-evidence > summary { cursor: pointer; color: var(--sc-muted); width: max-content; }
+#style-custom-workbench .sc-reading-evidence[open] > summary { color: var(--sc-text); }
+#style-custom-workbench .sc-reading-evidence-list { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 2px; }
+#style-custom-workbench .sc-reading-evidence-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+#style-custom-workbench .sc-reading-evidence-page { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; font: inherit; color: var(--sc-text); text-align: start; cursor: pointer; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-reading-evidence-page:hover { text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-reading-evidence-text { color: var(--sc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#style-custom-workbench .sc-reading-evidence-swatch { display: inline-block; width: 8px; height: 8px; margin-inline-end: 6px; border-radius: 50%; vertical-align: 1px; }
+#style-custom-workbench .sc-reading-evidence-more { align-self: flex-start; min-height: 22px; font-size: 12px; }
+@container sc-workbench (max-width: 640px) {
+ #style-custom-workbench .sc-reading-evidence-row { grid-template-columns: 1fr; gap: 0; }
+ #style-custom-workbench .sc-reading-queue-row { grid-template-columns: minmax(0, 1fr) auto; }
+ #style-custom-workbench .sc-reading-queue-row > .sc-resume-text { grid-column: 1 / -1; }
+}
+#style-custom-workbench .sc-selection-tools { display: inline-flex; align-items: center; font-size: 12px; }
+#style-custom-workbench .sc-selection-tools > summary { cursor: pointer; color: var(--sc-muted); padding: 2px 0; }
+#style-custom-workbench .sc-selection-tools[open] > summary { color: var(--sc-text); margin-inline-end: 8px; }
+#style-custom-workbench .sc-selection-tools-body { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+/* Narrow: the search and the scope share a line; the two actions sit after them. */
+@container sc-workbench (max-width: 640px) {
+ #style-custom-workbench .sc-search-row input[type=search] { flex: 1 1 160px; }
+ #style-custom-workbench .sc-search-row select { flex: 0 1 132px; width: 132px; }
+ #style-custom-workbench .sc-search-row button { min-height: 26px; padding-block: 0; font-size: 12px; }
+}

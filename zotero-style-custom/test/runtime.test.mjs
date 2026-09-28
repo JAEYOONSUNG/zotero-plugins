@@ -368,6 +368,11 @@ test('page tracking keeps separate PDF attachments and progress never opens an u
  assert.deepEqual(plugin.pageProgress(ref,100),{total:10,visited:1,percent:10,pages:{0:5},attachmentID:100,lastPageIndex:0});
  assert.deepEqual(plugin.pageProgress(ref),{total:3,visited:1,percent:33,pages:{1:7},attachmentID:200,lastPageIndex:1},'the page last open is kept, for 이어 읽기');
  assert.equal(plugin.metrics(ref).seconds,12);assert.ok(plugin.entry(ref).lastRead);
+ // Time to the page it was spent on, resume at the page up when it was counted -- on the same PDF only.
+ await plugin.addReading(ref,4,{attachmentID:100,pageIndex:0,totalPages:10},{attachmentID:100,pageIndex:5,totalPages:10});
+ assert.equal(plugin.pageProgress(ref,100).lastPageIndex,5);assert.equal(plugin.pageProgress(ref,100).pages[0],9);
+ await plugin.addReading(ref,1,{attachmentID:100,pageIndex:0,totalPages:10},{attachmentID:200,pageIndex:2,totalPages:3});
+ assert.equal(plugin.pageProgress(ref,100).lastPageIndex,0,'another PDF on screen is not this one’s place');
  const before=JSON.stringify(plugin.entry(ref).readingAttachments);await plugin.addReading(ref,1,{attachmentID:200,pageIndex:50,totalPages:3});assert.equal(JSON.stringify(plugin.entry(ref).readingAttachments),before);
 });
 test('legacy unbound progress is not assigned to a PDF or another library',()=>{

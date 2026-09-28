@@ -59,7 +59,7 @@ test('resizable panel has container-based width/height adaptation and small-view
 test('all existing data-view families and new interaction hooks retain explicit styling',()=>{
  for(const selector of ['.sc-native-preview','.sc-graph','.sc-canvas','.sc-canvas-lines','.sc-canvas-card','.sc-matrix','.sc-page-strip','.sc-ai-output','.sc-command-palette','.sc-command-results','.sc-filter-chips','.sc-filter-fields','.sc-paper-title','.sc-paper-actions','.sc-selection-bar','.sc-content'])assert.ok(rules.some(r=>r.selectorText?.includes(selector)),selector);
  assert.equal(rule('#style-custom-workbench .sc-content').getPropertyValue('min-height'),'0');assert.equal(rule('#style-custom-workbench .sc-body').getPropertyValue('overflow'),'auto');
- assert.equal(rule('#style-custom-workbench .sc-command-results').getPropertyValue('overflow'),'auto');assert.equal(rule('#style-custom-workbench .sc-command-option[aria-selected=true]').getPropertyValue('color'),'var(--sc-accent)');
+ assert.equal(rule('#style-custom-workbench .sc-command-results').getPropertyValue('overflow'),'auto');assert.equal(rule('#style-custom-workbench .sc-command-option[aria-selected=true]').getPropertyValue('color'),'var(--sc-text)','the chosen command is marked in grey, not blue');
 });
 test('canvas labels and controls stay legible over arbitrary saved card colors in either theme',()=>{
  const label=rule('#style-custom-workbench .sc-canvas-card h3');const control=rule('#style-custom-workbench .sc-canvas-card textarea');
@@ -82,7 +82,7 @@ test('hidden dialogs, keyboard focus, reading status and motion/forced-color acc
  assert.ok([...parsed.sheet.cssRules].some(r=>r.media?.mediaText.includes('prefers-reduced-motion')));assert.ok([...parsed.sheet.cssRules].some(r=>r.media?.mediaText.includes('forced-colors')));
 });
 test('selected papers preserve status rails and busy controls use visible non-animated feedback',()=>{
- const selected=rule('#style-custom-workbench .sc-paper-card[data-selected=true]');assert.equal(selected.getPropertyValue('background'),'var(--sc-accent-soft)');assert.ok(selected.getPropertyValue('outline'));assert.equal(selected.getPropertyValue('box-shadow'),'');assert.equal(selected.getPropertyValue('border-inline-start-color'),'');
+ const selected=rule('#style-custom-workbench .sc-paper-card[data-selected=true]');assert.equal(selected.getPropertyValue('background'),'var(--sc-fill)','selection is a plain grey row');assert.ok(selected.getPropertyValue('outline'));assert.equal(selected.getPropertyValue('box-shadow'),'');assert.equal(selected.getPropertyValue('border-inline-start-color'),'');
  // Actions are held at zero opacity until wanted, so they must come back for
  // keyboard users who can reach them without a pointer.
  assert.equal(rule('#style-custom-workbench .sc-paper-actions').getPropertyValue('opacity'),'0');
