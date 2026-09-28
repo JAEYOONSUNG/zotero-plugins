@@ -44,7 +44,8 @@
  function filter(items,options={}) {
   const tokens=tokenize(options.query),initials=tokens.some(t=>INITIAL.test(t));
   return items.filter(item=>{
-   const hay=norm([item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,...(item.tags||[])].join(' '));
+   // The reader's own memo counts: a paper is found by what was written about it.
+   const hay=norm([item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,item.remark,...(item.tags||[])].join(' '));
    const starts=initials?wordsOf(hay):null;
    return tokens.every(t=>hit(hay,t,starts)) && (!options.type||item.itemType===options.type)
     && (!options.tag||(item.tags||[]).some(t=>t===options.tag||t.startsWith(options.tag+'/')))

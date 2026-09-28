@@ -896,6 +896,67 @@ test('a paper is closed out on 읽기 진행, opened in place in the list, and t
  f.bench.destroy();
 });
 
+test('notes name the finished papers with nothing written, owned results say how far read, collections sort by last read and by unread',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const known={1:{status:'done',seconds:600,lastRead:new Date(now-30*day).toISOString()},2:{status:'done',lastRead:new Date(now-2*day).toISOString()}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.formatReadTime=sec=>`${sec}초`;
+ // Paper 1 has a note; paper 2 has neither note nor memo.
+ f.library.notes=async()=>[{id:'9',parentID:'1',title:'On Alpha',text:'x',modified:'2026-09-01'}];
+ f.setSelection([]);
+ await f.bench.show('notes');f.bench.state.selected=new Set();await f.bench.render();
+ const missing=f.body().querySelector('.sc-notes-missing');
+ assert.match(missing.querySelector('summary').textContent,/노트도 메모도 없는 문헌 1편/);
+ assert.match(missing.textContent,/Paper Beta/);
+ assert.doesNotMatch(missing.textContent,/Paper Alpha/);
+ // An owned paper in a result list: its reading state beside 보유 (paper 1 carries the result's DOI here).
+ f.library.snapshot=async()=>[{...f.papers[0],doi:'https://doi.org/10.1/W5'},f.papers[1]];
+ f.setSelection([1]);f.bench.state.selected=new Set(['1']);
+ await f.bench.load();
+ await f.bench.show('related');
+ await f.click('추가');
+ assert.equal(f.body().querySelector('.sc-hit .sc-hit-owned').textContent,'보유 · 완료 · 600초');
+ f.library.collections=async()=>[{id:'4',name:'A-old',count:1,itemIDs:[1],parentID:null},{id:'5',name:'B-live',count:1,itemIDs:[2],parentID:null}];
+ await f.bench.show('collections');
+ const sort=f.body().querySelector('[aria-label="컬렉션 정렬"]');sort.value='lastRead';sort.dispatchEvent(new f.win.Event('change'));
+ assert.deepEqual([...f.body().querySelectorAll('.sc-collection-name')].map(n=>n.textContent),['B-live','A-old']);
+ f.bench.destroy();
+});
+
+test('any unread paper can wait under 읽기 대기, the search reads the reader’s memo, and annotations can be read paper by colour',async()=>{
+ const f=fixture();
+ f.runtime.cache.items[2]={remark:'first line\nthe control was sham-operated'};
+ const known={1:{status:'reading'},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.setSelection([]);
+ await f.bench.show('explore');f.bench.state.selected=new Set(['1','2']);await f.bench.render();
+ await f.click('안 읽은 문헌 1편 읽기 대기에 추가');
+ assert.deepEqual(Object.keys(f.runtime.cache.workbenchUI.readingQueue).map(k=>k.split(':').pop()),['2'],'only the unread one');
+ // Again from its row: already waiting, so the button takes it out, and nothing is duplicated.
+ f.body().querySelector('[data-detail-for="2"]').click();await new Promise(r=>setTimeout(r,10));
+ assert.ok(f.findButton('읽기 대기에서 빼기'));
+ // The memo is searched, and the row shows the part that matched.
+ const search=f.bench.panel.querySelector('[aria-label="작업 패널 검색"]');search.value='sham';search.dispatchEvent(new f.win.Event('search'));
+ await new Promise(r=>setTimeout(r,20));
+ const cards=[...f.body().querySelectorAll('.sc-paper-card')];
+ assert.equal(cards.length,1);
+ assert.match(cards[0].querySelector('.sc-paper-remark').textContent,/^메모 일치.*sham-operated/);
+ search.value='';search.dispatchEvent(new f.win.Event('search'));await new Promise(r=>setTimeout(r,20));
+ // Paper x colour.
+ f.runtime.cache.readerSettings={...(f.runtime.cache.readerSettings||{}),colorLabels:{'#5fb236':'방법'}};
+ f.library.annotations=async()=>[{id:'a',parentID:'1',attachmentID:'99',text:'m1',color:'#5FB236',pageIndex:0},{id:'b',parentID:'1',attachmentID:'100',text:'m2',color:'#5fb236',pageIndex:1},{id:'c',parentID:'1',attachmentID:'99',text:'k',color:'#ffd400',pageIndex:2},{id:'d',parentID:'2',attachmentID:'98',text:'m3',color:'#5fb236',pageIndex:0}];
+ await f.bench.show('annotations');
+ const table=f.body().querySelector('.sc-annot-summary-table');
+ assert.ok(table,'two papers: the table is offered');
+ const rowOf=title=>[...table.querySelectorAll('tbody tr')].find(tr=>tr.textContent.includes(title));
+ assert.deepEqual([...rowOf('Paper Alpha').querySelectorAll('td')].slice(1).map(td=>td.textContent),['2','1'],'both PDFs of one paper, and #5FB236 with #5fb236');
+ [...rowOf('Paper Alpha').querySelectorAll('.sc-annot-summary-cell')].find(b=>b.textContent==='2').click();
+ await new Promise(r=>setTimeout(r,20));
+ assert.deepEqual([...f.body().querySelectorAll('.sc-annot .sc-annot-text')].map(n=>n.textContent).sort(),['m1','m2']);
+ f.bench.destroy();
+});
+
 test('a single author is opened directly rather than offered as a choice of one',async()=>{
  const f=fixture();
  f.runtime.authorsOfCached=async()=>[{id:'A1',name:'Only Author',institution:'Somewhere',position:'first'}];
@@ -2262,7 +2323,7 @@ test('the panel search names what it searches and puts the typed title first',as
  for(let n=1;n<=3;n++){f.papers.push({id:String(n),title:'Notes about base editing '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
  f.papers.push({id:'9',title:'Base editing',itemType:'journalArticle',tags:[]});
  await f.bench.show('explore');
- assert.equal(f.bench.panel.querySelector('[aria-label="작업 패널 검색"]').getAttribute('placeholder'),'제목·저자·태그·DOI·초록 검색',
+ assert.equal(f.bench.panel.querySelector('[aria-label="작업 패널 검색"]').getAttribute('placeholder'),'제목·저자·태그·DOI·초록·내 메모 검색',
   'the box no longer promises less than it does');
  f.input('작업 패널 검색','Base editing');await settle();
  assert.deepEqual([...f.body().querySelectorAll('.sc-paper-list > article')].map(n=>n.dataset.itemId),['9','1','2','3'],
