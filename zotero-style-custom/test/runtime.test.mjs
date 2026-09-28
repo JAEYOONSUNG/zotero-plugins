@@ -317,6 +317,16 @@ test('enriching a missing author preserves an existing same-title legacy total w
  assert.equal(plugin.citationDue(ref),true);ref.fields.title='A completely different research title';assert.equal(plugin.metrics(ref).citations,null);
 });
 
+test('the first background write into Extra is explained in the panel later, never by a modal alert',async()=>{
+ const {plugin,item,Z}=fixture();plugin.active=true;const ref=citationItem(item,1);ref.fields.extra='';
+ ref.setField=(k,v)=>ref.fields[k]=v;ref.saveTx=async()=>{};ref.getCreators=()=>[{creatorTypeID:8,lastName:'Author'}];
+ let alerts=0;Z.alert=()=>{alerts++;};Z.getMainWindow=()=>({});
+ const result={status:'ok',count:4,source:'OpenAlex',checkedAt:new Date().toISOString(),identity:plugin.citationTools.identity(plugin.citationRecord(ref))};
+ await plugin.persistCitation(ref,result);
+ assert.equal(alerts,0,'nothing stops the reader');
+ assert.equal(plugin.cache.citationExtraNoticePending,true,'the panel says it next time it is open');
+});
+
 test('automatic metadata writes preserve unrelated Extra, verified zero and own notifier marker without repeat saves',async()=>{
  const {plugin,item}=fixture();plugin.active=true;const ref=citationItem(item,1);ref.fields.extra='PMID: 123\nNotes: keep this\nCitations: 999 (Old source, 2020-01-01)';
  let saves=0;ref.setField=(k,v)=>ref.fields[k]=v;ref.saveTx=async options=>{saves++;assert.equal(options.notifierData.styleCustomCitations,true);assert.equal(options.skipSelect,true);assert.equal(options.skipDateModifiedUpdate,true,'a background count is not an edit');};
@@ -592,6 +602,17 @@ test('while Zotero\'s notifier watches, a painted strip reads no annotation at a
  assert.equal(touched,first,'the second and third paints read nothing');
  plugin.annotationMemo.delete(ref.id);plugin.annotationDistribution(ref);
  assert.ok(touched>first,'after the notifier drops it, it is read again');
+});
+
+test('an installed CSL style draws any number of papers through one processor, not Quick Copy\'s fifty',async()=>{
+ const {plugin,item,Z}=fixture();const items=Array.from({length:51},(_,i)=>item(i+1));
+ plugin.bibliographyRecord=()=>({title:'T',year:2020,creators:[]});
+ let freed=0,given=0;Z.Styles={get:url=>({getCiteProc:()=>({free(){freed++;}})})};
+ Z.Cite={makeFormattedBibliographyOrCitationList:(cp,list)=>{given=list.length;return 'fifty-one entries';}};
+ Z.QuickCopy={getContentFromItems:async()=>{throw new Error('should not be needed');}};
+ const apa=plugin.citationFormats.PANEL_STYLES.find(s=>s.key==='apa');
+ assert.equal(await plugin.citationText(items,apa),'fifty-one entries');
+ assert.equal(given,51,'all of them, in one go');assert.equal(freed,1,'and the processor is let go');
 });
 
 test('supplementary attachments are told apart from the main PDF by publisher naming conventions',async()=>{
@@ -1113,6 +1134,15 @@ test('after OpenAlex refuses for budget, no OpenAlex request is sent until it re
   g.Z.HTTP.request = async (method, url) => { sentAfter++; if (sentAfter === 1) throw Object.assign(new Error('HTTP 404 ' + url), {status: 404}); return {response: {ok: true}}; };
   await assert.rejects(g.plugin.discoverJSON('https://api.openalex.org/works?filter=title.search:budget%20allocation'));
   assert.deepEqual(await g.plugin.discoverJSON('https://api.openalex.org/works?filter=x'), {ok: true}, 'the next request is sent');
+  // The citation and signal lookups hold too.
+  let later = 0;
+  f.Z.HTTP.request = async () => { later++; return {status: 200, response: {}}; };
+  const http = f.plugin.citationHTTP(new AbortController().signal);
+  await assert.rejects(http.getJSON('https://api.openalex.org/works/doi:10.1/x'), error => error.held === true);
+  await assert.rejects(f.plugin.signalsJSON('https://api.openalex.org/works/doi:10.1/x'), error => error.held === true);
+  assert.equal(later, 0, 'neither left');
+  await http.getJSON('https://api.crossref.org/works/10.1/x');
+  assert.equal(later, 1, 'Crossref is not held');
 });
 
 test('a paper without a DOI is matched among five title hits, not taken as the first one', async () => {
@@ -1146,6 +1176,10 @@ test('a DOI filled in or corrected drops what was fetched for the old one, and a
   assert.equal(f.plugin.citedByStore()[key], undefined);
   assert.equal(f.plugin.readingPathStore()[key], undefined);
   assert.equal(asked, 0, 'the next look asks, not the edit');
+  f.plugin.entry(f.ref).signals = {status: 'retracted'};
+  fields.DOI = '10.1/third';
+  f.plugin.forgetIfIdentityChanged(f.ref);
+  assert.equal(f.plugin.entry(f.ref).signals, undefined, 'a retraction found for the old DOI is not shown on the new one');
 });
 
 test('an institution lookup that failed is asked again; "not found" holds for ninety days only', async () => {
@@ -1167,6 +1201,18 @@ test('an institution lookup that failed is asked again; "not found" holds for ni
   row.checkedAt = new Date(Date.now() - 100 * 864e5).toISOString();
   await f.plugin.sweepInstitutions();
   assert.equal(asked, 3, 'but is after ninety days');
+});
+
+test('the last author\'s lab is kept when no one is marked corresponding', async () => {
+  const f = discoverFixture();
+  f.plugin.active = true;
+  const person = (name, position) => ({author: {id: 'https://openalex.org/' + name, display_name: name}, author_position: position, institutions: [{id: 'https://openalex.org/I' + name, display_name: name + ' Lab', ror: 'https://ror.org/0' + name}]});
+  f.Z.HTTP.request = async () => ({response: {results: [{id: 'https://openalex.org/W1', doi: 'https://doi.org/10.1038/s41467-024-48219-y', title: 'An antiplasmid system',
+    authorships: [person('First', 'first'), person('Middle', 'middle'), person('Last', 'last')], referenced_works: []}]}});
+  f.plugin.flush = async () => {}; f.plugin.refreshWindows = async () => {}; f.plugin.sweepInstitutions = async () => 0;
+  await f.plugin.sweepPaperWorks([f.ref]);
+  const kept = f.plugin.paperWorks()[f.plugin.identity(f.ref)].people.map(p => p.name);
+  assert.deepEqual(kept, ['First', 'Last'], 'the lab the row names is still there after a restart');
 });
 
 test('an author who is not followed is never reported as having news', async () => {
@@ -1494,6 +1540,33 @@ test('our own tracking wins: importing never shortens a longer record', async ()
   assert.equal(again.skipped, 2);
 });
 
+test('another installed style is found by name, drawn as a row, and offered again next time', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item, Z} = fixture();
+  const ref = item(1);
+  ref.getField = key => ({title: 'A paper', date: '2024'})[key] || '';
+  ref.getCreators = () => [];
+  Z.Utilities = {Internal: {copyTextToClipboard() {}}};
+  Z.QuickCopy = null;
+  Z.Styles = {init: async () => {}, getVisible: () => [{styleID: 'http://www.zotero.org/styles/nucleic-acids-research', title: 'Nucleic Acids Research'}, {styleID: 'http://www.zotero.org/styles/cell', title: 'Cell'}],
+    get: () => ({getCiteProc: () => ({free() {}})})};
+  Z.Cite = {makeFormattedBibliographyOrCitationList: () => 'NAR formatted'};
+  const win = {document, addEventListener() {}, removeEventListener() {}, setTimeout(){}, Event: window.Event};
+  await plugin.citationPanel(win, [ref]);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const find = document.querySelector('.sc-cite-find');
+  find.value = 'nucleic'; find.dispatchEvent(new window.Event('input'));
+  const pick = document.querySelector('.sc-cite-pick');
+  assert.equal(pick.textContent, 'Nucleic Acids Research');
+  pick.dispatchEvent(new window.Event('click'));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const rows = [...document.querySelectorAll('.sc-cite-row')];
+  assert.equal(rows.length, plugin.citationFormats.PANEL_STYLES.length + 1);
+  assert.match(rows.at(-1).textContent, /Nucleic Acids Research.*NAR formatted/s);
+  assert.deepEqual(plugin.cache.citationStyles, ['http://www.zotero.org/styles/nucleic-acids-research'], 'remembered for next time');
+});
+
 test('a citation row grows with its text and stays operable by keyboard', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML('<html><body></body></html>');
@@ -1608,6 +1681,32 @@ test('a lookup that fails leaves a recorded retraction standing', async () => {
   assert.equal(summary.error, 1);
   assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted', 'a blinking network must not clear a retraction');
   assert.equal(f.errors.length, 1);
+});
+
+test('Crossref answering 503 while OpenAlex answers does not turn a recorded retraction into a clean paper', async () => {
+  const f = signalsFixture({answers: [crossrefAnswer(CROSSREF_RETRACTED), openAlexAnswer(OA_GOLD)]});
+  await f.plugin.refreshPaperSignals([f.ref]);
+  assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted');
+  const real = f.Z.HTTP.request;
+  f.Z.HTTP.request = async (method, url, options) => /api\.crossref\.org/.test(url) ? {status: 503, response: null} : real(method, url, options);
+  const summary = await f.plugin.refreshPaperSignals([f.ref]);
+  assert.equal(summary.error, 1, 'a server error is an error, not an answer');
+  assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted');
+});
+
+test('a half answer with OpenAlex out does not overrule a retraction, and signals for another DOI are not shown', async () => {
+  const f = signalsFixture({answers: [crossrefAnswer(CROSSREF_RETRACTED), openAlexAnswer(OA_GOLD)]});
+  await f.plugin.refreshPaperSignals([f.ref]);
+  assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted');
+  f.plugin.entry(f.ref).signals.partial = false;
+  const real = f.Z.HTTP.request;
+  f.Z.HTTP.request = async (method, url, options) => /openalex/.test(url) ? {status: 429, response: {error: 'Insufficient budget'}}
+    : /crossref/.test(url) ? {status: 200, response: {message: CROSSREF_CLEAN}} : real(method, url, options);
+  await f.plugin.refreshPaperSignals([f.ref]);
+  assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted', 'Crossref alone saying nothing does not clear it');
+  const fields = f.ref.getField;
+  f.ref.getField = key => key === 'DOI' ? '10.9/another' : fields(key);
+  assert.equal(f.plugin.signalsOf(f.ref), null, 'a corrected DOI does not inherit the old one\'s retraction');
 });
 
 test('a DOI neither service knows records nothing rather than a clean bill of health', async () => {

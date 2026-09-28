@@ -348,6 +348,10 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 
 /* The metrics sidebar before any search: one line saying what will appear, not a column of dashes. */
 .metrics-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+/* Which index the statistics are read from: plain buttons, the pressed one a step darker. */
+.metrics-basis { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 4px; }
+.metrics-basis button { font-size: 12px; padding: 2px 8px; border-radius: 4px; }
+.metrics-basis button[aria-pressed="true"] { font-weight: 600; }
 
 /* Optional search coverage stays with the query controls. */
 .combined-options { flex: 0 0 auto; padding: 6px 16px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }

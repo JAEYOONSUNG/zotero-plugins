@@ -14,7 +14,7 @@ function fixture() {
   async save(){if(this.fail)throw Error('write failed');items.set(this.id,this);this.dirty=false;return this.id;}
   _clearChanged(){this.dirty=false;}async reload(){if(this.before){Object.assign(this,structuredClone(this.before));}}
  }
- const Z={Item,Relations:{relatedItemPredicate:'dc:relation'},Items:{getAsync:async id=>items.get(id),getAll:async id=>[...items.values()].filter(i=>i.libraryID===id)},Libraries:{userLibraryID:1,get:id=>[1,2].includes(id)?{editable:id===1,libraryType:'user'}:null},ItemTypes:{getName:id=>id},Promise:{delay:async()=>{}},URI:{getItemURI:i=>'http://zotero.org/users/local/abc/items/'+i.key},Collections:{getByLibrary:()=>[{id:4,name:'Research',parentID:null,getChildItems:()=>[...items.values()]}]},DB:{executeTransaction:async fn=>{for(const i of items.values())i.before={tags:structuredClone(i.tags),relatedItems:[...i.relatedItems],dirty:i.dirty};return fn();}},Reader:{open:async(...args)=>opened.push(['reader',...args])},getMainWindow:()=>({ZoteroPane:{openNoteWindow:id=>opened.push(['note',id]),viewItems:list=>opened.push(['items',list.map(i=>i.id)])}}),EditorInstance:{createNoteFromAnnotations:async(input,opts)=>{assert.equal(opts.noSave,true);const note=new Item('note');note.setNote('<div data-schema-version="9"><a href="zotero://open-pdf/library/items/K2?annotation=K3">Source</a><p>'+input[0].annotationText+'</p></div>');return note;}}};
+ const Z={Item,Relations:{relatedItemPredicate:'dc:relation'},Items:{getAsync:async id=>items.get(id),getAll:async id=>[...items.values()].filter(i=>i.libraryID===id)},Libraries:{userLibraryID:1,get:id=>[1,2].includes(id)?{editable:id===1,libraryType:'user'}:null},ItemTypes:{getName:id=>id},Promise:{delay:async()=>{}},URI:{getItemURI:i=>'http://zotero.org/users/local/abc/items/'+i.key},Collections:{getByLibrary:()=>[{id:4,name:'Research',parentID:null,getChildItems:()=>[...items.values()]}]},DB:{executeTransaction:async fn=>{for(const i of items.values())i.before={tags:structuredClone(i.tags),relatedItems:[...i.relatedItems],dirty:i.dirty,deleted:i.deleted};return fn();}},Reader:{open:async(...args)=>opened.push(['reader',...args])},getMainWindow:()=>({ZoteroPane:{openNoteWindow:id=>opened.push(['note',id]),viewItems:list=>opened.push(['items',list.map(i=>i.id)])}}),EditorInstance:{createNoteFromAnnotations:async(input,opts)=>{assert.equal(opts.noSave,true);const note=new Item('note');note.setNote('<div data-schema-version="9"><a href="zotero://open-pdf/library/items/K2?annotation=K3">Source</a><p>'+input[0].annotationText+'</p></div>');return note;}}};
  const runtime={entry:i=>entryCache[i.id]||=( {}),flush:async()=>{}};
  const add=(type,id,props={})=>{const i=new Item(type,id);Object.assign(i,props);items.set(id,i);return i;};
  const parent=add('journalArticle',1,{tags:[{tag:'science/method',type:1},{tag:'science/data',type:0}]});
@@ -254,4 +254,38 @@ test('the reader\'s backlinks read each note once while the notes are unchanged'
  assert.equal(reads,2,'a changed note (a new revision) is read again');
  await f.service.backlinks(3);await f.service.backlinks(3);
  assert.equal(reads,4,'without a revision, nothing is kept');
+});
+test('a merge does not go ahead when a note cannot be read, and a note not yet loaded is loaded first',async()=>{
+ const f=mergeFixture();
+ const quoting=f.add('note',9,{html:'<a href="zotero://open-pdf/library/items/K2?annotation=K5">Second quote</a>',getNoteTitle(){return 'Unloaded';}});
+ let loaded=false;const real=quoting.getNote.bind(quoting);
+ quoting.getNote=()=>{if(!loaded)throw new Error('not loaded');return real();};quoting.loadDataType=async()=>{loaded=true;};
+ await assert.rejects(f.service.mergeAnnotations([3,5]),/노트 1개가 인용/,'loaded, read, and found quoting');
+ const g=mergeFixture();const broken=g.add('note',9,{html:''});broken.getNote=()=>{throw new Error('broken');};broken.loadDataType=async()=>{};
+ await assert.rejects(g.service.mergeAnnotations([3,5]),/읽지 못해/);
+ assert.equal(g.second.deleted,undefined);
+});
+test('a failed memo save puts back only what it wrote, and a failed trash leaves the item where it was',async()=>{
+ const f=fixture();
+ f.annotation.annotationComment='old';
+ f.annotation.saveTx=async()=>{f.annotation.annotationComment='typed in the reader meanwhile';throw new Error('disk full');};
+ await assert.rejects(f.service.setAnnotationComment(3,'from the panel'));
+ assert.equal(f.annotation.annotationComment,'typed in the reader meanwhile','the newer edit is not undone');
+ f.note.save=async()=>{throw new Error('locked');};
+ await assert.rejects(f.service.trashItems([4]));
+ assert.notEqual(f.note.deleted,true,'not left marked deleted after the save failed');
+ const readOnly=f.add('note',55,{libraryID:2});
+ await assert.rejects(f.service.trashItems([readOnly.id]),/read-only/);
+ assert.notEqual(readOnly.deleted,true);
+});
+test('a removed automatic tag comes back automatic, on its own paper, and a whole batch trash is all or none',async()=>{
+ const f=fixture();f.parent.tags=[{tag:'auto',type:1},{tag:'keep',type:0}];
+ const result=await f.service.removeTags([1],['auto']);
+ assert.deepEqual(result.removed,[{id:'1',tag:'auto',type:1}]);
+ f.parent.dirty=false;
+ await f.service.restoreTags(result.removed);
+ assert.deepEqual(f.parent.tags.find(t=>t.tag==='auto'),{tag:'auto',type:1});
+ const a=f.add('note',60,{}),b=f.add('note',61,{libraryID:2});
+ await assert.rejects(f.service.trashItems([60,61]),/read-only/);
+ assert.notEqual(a.deleted,true,'the first is not trashed when the second is refused');
 });

@@ -540,6 +540,14 @@ test('the tag verbs refuse in words, say what they did, and a removal can be und
  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/1편에서 태그 topic\/a를 뺐습니다/);
  await f.click('되돌리기');
  assert.deepEqual(f.calls.filter(c=>c[0]==='addTags').pop().slice(1),[['1'],['topic/a']],'given back only to the paper that carried it');
+ // Two papers, two different tags: each gets back its own.
+ f.bench.state.items.find(i=>i.id==='2').tags=['topic/b'];
+ f.input('추가할 태그','topic/a, topic/b');
+ await f.click('선택 문헌에서 태그 제거');
+ const before=f.calls.filter(c=>c[0]==='addTags').length;
+ await f.click('되돌리기');
+ const back=f.calls.filter(c=>c[0]==='addTags').slice(before).map(c=>c.slice(1));
+ assert.deepEqual(back.sort(),[[['1'],['topic/a']],[['2'],['topic/b']]].sort());
  f.bench.destroy();
 });
 

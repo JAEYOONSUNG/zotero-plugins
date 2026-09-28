@@ -1052,11 +1052,20 @@
    button('선택 문헌에서 태그 제거',async()=>{
     const tags=ready(),ids=[...state.selected];
     // Who actually carried each tag, so 되돌리기 gives it back to them and no one else.
-    const had=ids.filter(id=>(state.items.find(i=>String(i.id)===String(id))?.tags||[]).some(t=>tags.includes(t)));
-    await library.removeTags(ids,tags);await load();
-    if(!had.length){message(`선택한 문헌 중 ${tags.join(', ')} 태그가 있는 문헌이 없습니다.`);return;}
-    message(`${had.length}편에서 태그 ${tags.join(', ')}를 뺐습니다.`);
-    const undo=button('되돌리기',async()=>{await library.addTags(had,tags);undo.remove();await load();message(`${had.length}편에 태그를 다시 붙였습니다.`);},bar());
+    // Which paper carried which of the tags: A with a and B with b get back a and b, not both each.
+    const carried=new Map();
+    for(const id of ids){const own=(state.items.find(i=>String(i.id)===String(id))?.tags||[]).filter(t=>tags.includes(t));if(own.length)carried.set(id,own);}
+    const had=[...carried.keys()];
+    const result=await library.removeTags(ids,tags);await load();
+    // What the library says it took off, with types; the panel's own list only when the service does not say.
+    const removed=Array.isArray(result?.removed)?result.removed:[...carried].flatMap(([id,own])=>own.map(tag=>({id:String(id),tag,type:0})));
+    const papers=new Set(removed.map(row=>row.id)).size;
+    if(!papers){message(`선택한 문헌 중 ${tags.join(', ')} 태그가 있는 문헌이 없습니다.`);return;}
+    message(`${papers}편에서 태그 ${tags.join(', ')}를 뺐습니다.`);
+    const undo=button('되돌리기',async()=>{
+     if(typeof library.restoreTags==='function')await library.restoreTags(removed);
+     else{const groups=new Map();for(const row of removed){if(!groups.has(row.tag))groups.set(row.tag,[]);groups.get(row.tag).push(row.id);}for(const[tag,list]of groups)await library.addTags(list,[tag]);}
+     undo.remove();await load();message(`${papers}편에 태그를 다시 붙였습니다.`);},bar());
    },b);button('태그 필터 해제',()=>{state.tag='';render();},b);
    sectionHead('태그 경로 이름 바꾸기');
    const rename=bar(),from=node('input',null,rename,{'aria-label':'기존 태그 경로',placeholder:'기존 태그 경로'}),to=node('input',null,rename,{'aria-label':'새 태그 경로',placeholder:'새 태그 경로'});let subtree=true;
@@ -3229,7 +3238,9 @@
       broken: after 자세히 the scope stayed on the selection, and the
       selection went away with the next click in the tree. With nothing to
       show, the scope falls back to the library. */
-   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';}const token=++epoch;clear();for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});try{
+   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';}const token=++epoch;clear();for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});
+   // Said in the panel, never in a modal: the first background write into Extra.
+   if(runtime.cache?.citationExtraNoticePending){win.setTimeout(()=>{if(disposed||panel.hidden||!runtime.cache.citationExtraNoticePending)return;message("인용 수를 Extra 필드에 'Citations: N (출처, 날짜)' 한 줄로 기록합니다. 원하지 않으면 설정 → Style Custom → 인용 수·IF → '논문 추가·수정 시 인용 수 조회 후 Extra 저장'을 끄세요.");delete runtime.cache.citationExtraNoticePending;runtime.dirty=true;},0);}try{
    switch(state.tab){case'explore':await paperList(rows());break;case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}

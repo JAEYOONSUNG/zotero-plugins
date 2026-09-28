@@ -194,12 +194,22 @@
       return findBacklinks(itemID,options);
     }
     // The search itself, without the feature switch: the merge's safety check needs it whether or not the backlinks view is on.
-    async function findBacklinks(itemID,{revision}={}) {
+    async function findBacklinks(itemID,{revision,strict=false}={}) {
       const target=await get(itemID),out=[];
       const reuse=revision!=null&&noteSnapshot&&noteSnapshot.libraryID===target.libraryID&&noteSnapshot.revision===revision;
       if(!reuse)noteSnapshot=revision!=null?{libraryID:target.libraryID,revision,items:await all(target.libraryID),html:new Map()}:null;
       const items=noteSnapshot&&revision!=null?noteSnapshot.items:await all(target.libraryID);
-      const noteHTML=item=>{if(!noteSnapshot||revision==null)return safe(()=>item.getNote());if(!noteSnapshot.html.has(item.id))noteSnapshot.html.set(item.id,safe(()=>item.getNote()));return noteSnapshot.html.get(item.id);};
+      /* A note Zotero has not loaded throws on getNote(); read as "", a note
+         quoting the annotation looked like no note at all and a merge went on
+         to trash what it quoted. The note is loaded and read again; one that
+         still cannot be read is counted, and a caller that must be sure (the
+         merge) stops. */
+      let unreadable=0;
+      const readNote=async item=>{
+        try{return item.getNote();}catch(_){}
+        try{await item.loadDataType?.('note');return item.getNote();}catch(_){unreadable++;return '';}
+      };
+      const noteHTML=async item=>{if(!noteSnapshot||revision==null)return readNote(item);if(!noteSnapshot.html.has(item.id))noteSnapshot.html.set(item.id,await readNote(item));return noteSnapshot.html.get(item.id);};
       const keys=new Set([target.key]);if(target.isRegularItem?.())for(const id of target.getAttachments())keys.add((await get(id)).key);
       const route=target.libraryID===Z.Libraries.userLibraryID?'library':'groups/'+safe(()=>Z.Groups.getGroupIDFromLibraryID(target.libraryID),'unavailable');
       const annotationAttachment=target.isAnnotation?.()?await get(target.parentID):null;
@@ -209,7 +219,7 @@
         const item=items[n];if(item.id===target.id)continue;
         if(!annotationAttachment&&safe(()=>item.relatedItems,[]).includes(target.key))out.push({id:String(item.id),title:field(item,'title'),kind:'related'});
         if(item.isNote?.()) {
-          const html=noteHTML(item);
+          const html=await noteHTML(item);
           if(annotationAttachment){if(annotationNoteMatch(html,target,annotationAttachment,route))out.push({id:String(item.id),title:safe(()=>item.getNoteTitle()),kind:'note'});if(n%100===99)await pause();continue;}
           const decoded=safe(()=>decodeURIComponent(html),html);
           const links=Array.from(decoded.matchAll(/zotero:\/\/(?:select|open-pdf)\/(library|groups\/\d+)\/items\/([A-Z0-9]+)(?=[/?#"'&\s<]|$)/g)).filter(m=>m[1]===route).map(m=>m[2]);
@@ -217,6 +227,7 @@
         }
         if(n%100===99)await pause();
       }
+      if(strict&&unreadable)throw new Error(`노트 ${unreadable}개를 읽지 못해 인용 여부를 확인할 수 없습니다. 병합하지 않았습니다. Zotero를 다시 연 뒤 시도하세요.`);
       return out;
     }
     async function createNote(parentID,text) {
@@ -254,7 +265,8 @@
       catch(error){
         // A failed save must not leave the reader showing text that was never
         // written, and must not undo a later edit that did land.
-        if(commentRevisions.get(String(annotationID))===revision){
+        // Put back only what this call wrote: an edit made in the reader meanwhile is the newer text and stays.
+        if(commentRevisions.get(String(annotationID))===revision&&annotation.annotationComment===value){
           annotation.annotationComment=prior;
         }
         throw error;
@@ -287,8 +299,17 @@
     async function removeTags(ids,tags) {
       if(!Array.isArray(ids))throw new Error('Select items explicitly');
       if(!Array.isArray(tags)||tags.some(t=>typeof t!=='string'||!t.trim()))throw new TypeError('Tags must be nonempty strings');
-      const input=await selected(ids),names=new Set(tags.map(t=>t.trim()));
-      return mutate(input,async write=>{for(const item of input)await write(item,()=>{item.setTags(item.getTags().filter(tag=>!names.has(tag.tag)));});return input.length;},['tags']);
+      const input=await selected(ids),names=new Set(tags.map(t=>t.trim())),removed=[];
+      // What was taken off, with its type, so 되돌리기 puts back exactly that: an automatic tag stays automatic.
+      await mutate(input,async write=>{for(const item of input)await write(item,()=>{const before=item.getTags();for(const tag of before)if(names.has(tag.tag))removed.push({id:String(item.id),tag:tag.tag,type:tag.type||0});item.setTags(before.filter(tag=>!names.has(tag.tag)));});return input.length;},['tags']);
+      return {count:input.length,removed};
+    }
+    // Puts back tags a removal took off, each on its own paper with its own type, and only where it is not back already.
+    async function restoreTags(removed) {
+      const byItem=new Map();for(const row of Array.isArray(removed)?removed:[]){if(!byItem.has(row.id))byItem.set(row.id,[]);byItem.get(row.id).push(row);}
+      if(!byItem.size)return 0;
+      const input=await selected([...byItem.keys()]);
+      return mutate(input,async write=>{for(const item of input)await write(item,()=>{const now=item.getTags(),have=new Set(now.map(t=>t.tag));item.setTags([...now,...byItem.get(String(item.id)).filter(row=>!have.has(row.tag)).map(row=>({tag:row.tag,type:row.type}))]);});return input.length;},['tags']);
     }
     async function renameTagBranch(ids,from,to,{subtree=true}={}) {
       if(!Array.isArray(ids)||!ids.length)throw new Error('Select items explicitly');
@@ -368,7 +389,7 @@
         const page=item=>{try{const p=JSON.parse(item.annotationPosition);return Number.isSafeInteger(p?.pageIndex)?p.pageIndex:1e9;}catch(_){return 1e9;}};
         const first=[...input].sort((a,b)=>page(a)-page(b)||String(a.annotationSortIndex||'').localeCompare(String(b.annotationSortIndex||''))||a.id-b.id)[0];
         const quoting=new Map();
-        for(const item of input){if(item===first)continue;for(const link of await findBacklinks(item.id))if(link.kind==='note')quoting.set(link.id,link.title||'');current();}
+        for(const item of input){if(item===first)continue;for(const link of await findBacklinks(item.id,{strict:true}))if(link.kind==='note')quoting.set(link.id,link.title||'');current();}
         if(quoting.size){const names=[...quoting.values()].map(title=>title||'제목 없는 노트').slice(0,3).join(', ');throw new Error(`병합하면 사라질 주석을 노트 ${quoting.size}개가 인용하고 있어 병합하지 않았습니다(${names}). 노트의 인용을 먼저 정리하세요.`);}
       }
       let survivor=null,written=null;const deleted=[];
@@ -482,12 +503,24 @@
     }
     /* Into the trash, never erased: Zotero's own trash keeps it, and the
        reader restores it there. One save per item, outside any transaction. */
+    /* Into the trash, as Zotero does it -- but only what may be changed, and
+       a save that fails does not leave the item marked deleted in memory. */
     async function trashItems(ids) {
-      let moved=0;
-      for(const id of ids){const item=await get(id);if(!item||item.deleted)continue;item.deleted=true;await item.saveTx();moved++;}
-      return moved;
+      // All or none: every item is checked first, and the moves are one transaction, so a refusal halfway leaves nothing half-trashed.
+      const items=[];for(const id of ids){const item=await get(id);if(item&&!item.deleted)items.push(item);}
+      if(!items.length)return 0;
+      guard(items);
+      const changed=[];
+      try{
+        await Z.DB.executeTransaction(async()=>{for(const item of items){item.deleted=true;changed.push(item);await item.save();}});
+      }catch(error){
+        // The rolled-back rows are read again from the database, so memory agrees with it and a retry is not refused.
+        for(const item of changed){try{if(typeof item.reload==='function')await item.reload(['primaryData'],true);else if(item.deleted===true)item.deleted=false;}catch(_){if(item.deleted===true)item.deleted=false;}}
+        throw error;
+      }
+      return items.length;
     }
-    return {trashItems,snapshot,graph,tagTree,notes,annotations,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
+    return {trashItems,snapshot,graph,tagTree,notes,annotations,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

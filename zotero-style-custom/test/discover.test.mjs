@@ -390,3 +390,19 @@ test("titles in Korean match themselves and tell different Korean titles apart",
   assert.equal(discover.sameTitle("한국 사회의 변화", "일본 경제의 성장"), false);
   assert.equal(discover.sameTitle("Café society in Paris", "Cafe society in Paris"), true, "accents still come off");
 });
+
+test("the exact title is chosen over a similar one listed first, and two exact twins are not guessed between", () => {
+  const record = {title: "CRISPR interference in thermophilic bacteria", year: 2021};
+  const similar = {id: "W1", title: "CRISPR interference in thermophilic bacteria and archaea", year: 2021};
+  const exact = {id: "W2", title: "CRISPR Interference in Thermophilic Bacteria.", year: 2021};
+  assert.equal(discover.pickByTitle([similar, exact], record).id, "W2");
+  assert.equal(discover.pickByTitle([exact, {...exact, id: "W3"}], record), null, "two of the same title and year");
+});
+
+test("two similar titles and no exact one: nothing is guessed", () => {
+  const record = {title: "Phage defence by retrons in Escherichia coli bacteria", year: 2022};
+  const a = {id: "W1", title: "Phage defence by retrons in Escherichia coli bacteria cells", year: 2022};
+  const b = {id: "W2", title: "Phage defence by retrons in Escherichia coli bacteria colonies", year: 2022};
+  assert.equal(discover.pickByTitle([a, b], record), null);
+  assert.equal(discover.pickByTitle([a], record).id, "W1", "one near miss alone is taken, as before");
+});

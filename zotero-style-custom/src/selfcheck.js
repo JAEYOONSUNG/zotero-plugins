@@ -180,7 +180,7 @@
        code actually running, and the stylesheet actually applied, for a marker
        of this build. */
     results.push(await attempt('the running panel is this build, not a cached one', () => {
-      const MARK = 'result.unfinished';
+      const MARK = 'const carried=new Map();';
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
@@ -197,7 +197,7 @@
         catch (error) { throw new Error('the panel stylesheet could not be read: ' + (error.message || error)); }
       }
       // The runtime and the reader tools change without the panel: each gets a mark of its own.
-      const RUNTIME_MARK = 'sortKey', READER_MARK = 'labelsByOwner';
+      const RUNTIME_MARK = 'alreadySo', READER_MARK = 'labelsByOwner';
       const liveRuntime = typeof runtime[RUNTIME_MARK] === 'function';
       const readerCode = String(root.CustomStyleReaderTools?.create || '');
       const liveReader = !readerCode || readerCode.includes(READER_MARK);

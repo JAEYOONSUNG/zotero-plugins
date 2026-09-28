@@ -10,6 +10,13 @@ var ZotPoPImporter = (function () {
 		return new Date().toISOString().slice(0, 10);
 	}
 
+	// The DOI a field holds: the DOI field in any written form, or a "DOI:" line in Extra.
+	function doiOf(fieldName, value) {
+		let text = String(value || "");
+		if (fieldName === "extra") return ZotPoPSources.normalizeDOI(/^\s*doi:\s*(\S+)/im.exec(text)?.[1]);
+		return ZotPoPSources.normalizeDOI(text);
+	}
+
 	// Map of normalized DOI -> itemID for every non-deleted regular item in a library
 	async function getLibraryDOIMap(libraryID) {
 		let map = new Map();
@@ -18,12 +25,13 @@ var ZotPoPImporter = (function () {
 				+ "JOIN itemData ID ON I.itemID = ID.itemID "
 				+ "JOIN itemDataValues IDV ON ID.valueID = IDV.valueID "
 				+ "JOIN fields F ON ID.fieldID = F.fieldID "
-				+ "WHERE F.fieldName = 'DOI' AND I.libraryID = ? "
+				+ "WHERE F.fieldName IN ('DOI', 'extra') AND I.libraryID = ? "
 				+ "AND I.itemID NOT IN (SELECT itemID FROM deletedItems)";
-			let rows = await Zotero.DB.queryAsync(sql, [libraryID]);
+			let rows = await Zotero.DB.queryAsync(sql.replace("SELECT I.itemID, IDV.value", "SELECT I.itemID, F.fieldName, IDV.value"), [libraryID]);
+			// The same rule the import uses: the DOI field in any form, or a "DOI:" line in Extra.
 			for (let row of rows) {
-				let doi = ZotPoPSources.normalizeDOI(row.value);
-				if (doi) map.set(doi, row.itemID);
+				let doi = doiOf(row.fieldName || "DOI", row.value) || (row.fieldName ? null : doiOf("extra", row.value));
+				if (doi && !map.has(doi)) map.set(doi, row.itemID);
 			}
 		}
 		catch (e) {
@@ -42,14 +50,20 @@ var ZotPoPImporter = (function () {
 		let target = ZotPoPSources.normalizeDOI(doi);
 		if (!target) return null;
 		try {
-			let sql = "SELECT I.itemID FROM items I "
+			/* Candidates first, then an exact check with the one parser both the
+			   in-library mark and the import use. The LIKE is only a net: its
+			   _ and % are escaped (DOIs contain both), and "abc" inside "abcdef"
+			   is thrown out by the exact check, not taken as a match. */
+			let like = "%" + target.replace(/[\\%_]/g, ch => "\\" + ch) + "%";
+			let sql = "SELECT I.itemID, F.fieldName, IDV.value FROM items I "
 				+ "JOIN itemData ID ON I.itemID = ID.itemID "
 				+ "JOIN itemDataValues IDV ON ID.valueID = IDV.valueID "
 				+ "JOIN fields F ON ID.fieldID = F.fieldID "
-				+ "WHERE F.fieldName = 'DOI' AND I.libraryID = ? AND LOWER(IDV.value) = ? "
-				+ "AND I.itemID NOT IN (SELECT itemID FROM deletedItems) LIMIT 1";
-			let rows = await Zotero.DB.queryAsync(sql, [libraryID, target]);
-			return rows.length ? rows[0].itemID : null;
+				+ "WHERE I.libraryID = ? AND F.fieldName IN ('DOI', 'extra') AND LOWER(IDV.value) LIKE ? ESCAPE '\\' "
+				+ "AND I.itemID NOT IN (SELECT itemID FROM deletedItems)";
+			let rows = await Zotero.DB.queryAsync(sql, [libraryID, like]);
+			let hit = rows.find(row => doiOf(row.fieldName, row.value) === target);
+			return hit ? hit.itemID : null;
 		}
 		catch (e) {
 			// Answering "no" here imports a second copy of a paper already on the
@@ -71,11 +85,14 @@ var ZotPoPImporter = (function () {
 	   have to be identical once punctuation and case are stripped, and the
 	   years have to agree. Two papers that pass both tests and are not the same
 	   paper are rare enough to accept. */
+	/* Letters of every script are kept: flattened to a-z, "α-synuclein" and
+	   "β-synuclein" became one title, and a Korean title became nothing.
+	   Accents still come off (NFKD, marks dropped); Hangul is put back (NFC). */
 	const flatTitle = value => String(value == null ? "" : value)
 		.replace(/<[^>]*>/g, " ")
 		.toLowerCase()
-		.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
-		.replace(/[^a-z0-9]+/g, " ")
+		.normalize("NFKD").replace(/\p{M}+/gu, "").normalize("NFC")
+		.replace(/[^\p{L}\p{N}]+/gu, " ")
 		.trim();
 
 	/* The scan below reads every title in the library. Importing eighty papers
@@ -126,7 +143,8 @@ var ZotPoPImporter = (function () {
 		let wanted = flatTitle(title);
 		// A short title is not evidence: "Introduction" or "Erratum" would match
 		// half a library.
-		if (wanted.split(" ").filter(w => w.length > 2).length < 4) return null;
+		// A Latin word counts from three letters, a word in another script from two.
+		if (wanted.split(" ").filter(w => /[^a-z0-9]/.test(w) ? w.length >= 2 : w.length > 2).length < 4) return null;
 		try {
 			let rows = (await titleIndex(libraryID)).get(wanted) || [];
 			let wantedYear = String(year || "").match(/\b(1[5-9]|20)\d{2}\b/);
@@ -298,6 +316,29 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
+	/* A paper already on the shelf without a PDF gets one, when asked. Any PDF
+	   attachment counts as having one -- including one whose file has not
+	   synced down yet, which is Zotero's to fetch, not a gap to fill twice.
+	   The same paper is never filled by two imports at once. */
+	const filling = new Set();
+	async function fillPDF(item, rec, opts) {
+		if (!item || filling.has(item.id)) return "skipped";
+		filling.add(item.id);
+		try {
+			// A library not opened yet has its children unloaded: they are loaded, not read as "no attachments".
+			try { await item.loadDataType?.("childItems"); } catch (e) { return "skipped"; }
+			let ids = item.getAttachments?.() || [];
+			let atts = ids.length && Zotero.Items.getAsync ? await Zotero.Items.getAsync(ids) : ids.map(id => Zotero.Items.get(id));
+			for (let att of atts || []) {
+				if (att && !att.deleted && att.attachmentContentType === "application/pdf") return "has pdf";
+			}
+			if (!Zotero.Libraries.get?.(item.libraryID)?.filesEditable && Zotero.Libraries.get?.(item.libraryID)) return "no permission";
+			let r = await attachPDF(item, rec, opts);
+			return r.ok ? "pdf:" + r.how : "no pdf";
+		}
+		finally { filling.delete(item.id); }
+	}
+
 	async function attachPDF(item, rec, opts) {
 		let log = opts.log;
 		// 1) Zotero's own resolvers (Unpaywall, DOI page, PMC, custom resolvers)
@@ -352,7 +393,7 @@ var ZotPoPImporter = (function () {
 	 * @return {{status: 'added'|'exists'|'failed', item?: Zotero.Item, pdf?: string, error?: string}}
 	 */
 	async function importRecord(rec, opts) {
-		let { libraryID, collections = [], attachPDF: wantPDF = true, skipDuplicates = true, citationsInExtra = true, http, email, proxyPrefix, log } = opts;
+		let { libraryID, collections = [], attachPDF: wantPDF = true, skipDuplicates = true, citationsInExtra = true, fillMissingPDF = false, http, email, proxyPrefix, log } = opts;
 		try {
 			if (!rec.doi && !rec.pmid && !rec.arxiv && http) {
 				try { await ZotPoPSources.resolveDOIByTitle(rec, http, { email }); } catch (e) { log?.("DOI lookup failed: " + e.message); }
@@ -370,6 +411,8 @@ var ZotPoPImporter = (function () {
 					let existing = await Zotero.Items.getAsync(existingID);
 					if (skipDuplicates) {
 						let addedToCollection = false;
+						// A library not opened yet has an item's collections unloaded; they are loaded before being asked about.
+						if (collections.length) { try { await existing.loadDataType?.("collections"); } catch (e) { log?.("Collections not loaded: " + e.message); } }
 						if (collections.length) {
 							for (let c of collections) {
 								if (!existing.inCollection(c)) { existing.addToCollection(c); addedToCollection = true; }
@@ -377,7 +420,9 @@ var ZotPoPImporter = (function () {
 							if (addedToCollection) await existing.saveTx();
 						}
 						// Said, so the row can read "이미 있음 · 컬렉션에 추가" rather than a bare "already there".
-						return { status: "exists", item: existing, addedToCollection };
+						let pdf = "skipped";
+						if (wantPDF && fillMissingPDF) pdf = await fillPDF(existing, rec, { http, email, proxyPrefix, log });
+						return { status: "exists", item: existing, addedToCollection, pdf };
 					}
 				}
 			}
@@ -394,8 +439,12 @@ var ZotPoPImporter = (function () {
 				item = await createManually(rec, libraryID, collections);
 				how = "manual";
 			}
-			await backfill(item, rec);
-			if (citationsInExtra) await recordCitations(item, rec);
+			/* The item exists from here on. A later step that fails -- the abstract,
+			   the Extra lines -- is reported as that step, not as a failed import:
+			   "실패" for a paper already in the library led to importing it again. */
+			let warnings = [];
+			try { await backfill(item, rec); } catch (e) { log?.("Backfill failed: " + e.message); warnings.push("metadata"); }
+			if (citationsInExtra) { try { await recordCitations(item, rec); } catch (e) { log?.("Extra failed: " + e.message); warnings.push("extra"); } }
 
 			let pdf = "skipped";
 			let proxyLoginNeeded = false;
@@ -404,7 +453,7 @@ var ZotPoPImporter = (function () {
 				pdf = r.ok ? "pdf:" + r.how : "no pdf";
 				if (!r.ok && r.proxyLogin) proxyLoginNeeded = true;
 			}
-			return { status: "added", item, how, pdf, proxyLoginNeeded };
+			return { status: "added", item, how, pdf, proxyLoginNeeded, warnings };
 		}
 		catch (e) {
 			Zotero.logError(e);
@@ -449,5 +498,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { manualItemType, importRecord, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
+	return { manualItemType, importRecord, fillPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
 })();

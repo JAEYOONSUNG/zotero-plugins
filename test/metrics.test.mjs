@@ -17,3 +17,14 @@ test("counts from more than one index are named, so the h-index is read as a ref
 	assert.deepEqual([...m.citationSources].sort(), ["crossref", "europepmc"]);
 	assert.equal(M.compute([{ citations: 3, source: "openalex" }]).citationSources.length, 1);
 });
+
+test("statistics can be read from one index alone: its own counts, unknown where it has none", () => {
+	const records = [
+		{ year: 2020, citations: 3, citationsBy: { openalex: 3, crossref: 0 } },
+		{ year: 2020, citations: 3, citationsBy: { openalex: 0, crossref: 3 } },
+		{ year: 2020, citations: 3, citationsBy: { crossref: 3 } }];
+	assert.equal(M.compute(records, 2026).hIndex, 3, "the highest per paper, as before");
+	assert.equal(M.compute(records, 2026, { provider: "openalex" }).hIndex, 1, "OpenAlex's own network");
+	assert.equal(M.compute(records, 2026, { provider: "openalex" }).unknownCitations, 1, "the paper OpenAlex has no count for is unknown");
+	assert.equal(M.compute(records, 2026, { provider: "crossref" }).hIndex, 2);
+});

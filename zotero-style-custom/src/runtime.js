@@ -2318,16 +2318,28 @@ var CustomStyleRuntime = class CustomStyleRuntime {
        last-checked date moved on. They are now left exactly as they were, and
        a batch cut off at the page limit keeps its authors' old date, so the
        next sweep starts where this one could not reach. */
-    const failed = new Set(), unfinished = new Set();
+    const failed = new Set(), unfinished = new Set(), resumed = new Map();
+    const startedAt = new Date().toISOString();
+    /* A batch cut off last time carries on from where it stopped: the same
+       fifty authors, the same window, the saved cursor. Starting again from
+       the first page re-read what was read and never reached the rest. */
+    const resumeOf = batch => {
+      const key = batch.join(','), saved = byID.get(batch[0])?.resume;
+      return saved && saved.batch === key && saved.cursor && batch.every(id => byID.get(id)?.resume?.batch === key) ? saved : null;
+    };
     for (const [index, batch] of batches.entries()) {
       if (signal?.aborted) { result.remaining = batches.length - index; break; }
       onProgress?.(index, batches.length);
-      let cursor = '*';
+      const carried = resumeOf(batch);
+      let cursor = carried ? carried.cursor : '*';
+      const since = carried ? carried.since : sinceFor(batch);
+      const remember = next => { for (const id of batch) { const row = byID.get(id); if (row) row.resume = {batch: batch.join(','), cursor: next, since, at: carried ? carried.at : startedAt}; } };
+      if (carried) for (const id of batch) resumed.set(id, carried.at);
       try {
         // Cursor paging, because a batch of fifty active labs clears 200 works
         // easily and a truncated page would silently under-report the news.
         for (let page = 0; page < 8 && cursor; page++) {
-          const url = this.discoverTools.watchedWorksURL(batch, {...options, since: sinceFor(batch), cursor});
+          const url = this.discoverTools.watchedWorksURL(batch, {...options, since, cursor});
           if (!url) break;
           const payload = await this.discoverJSON(url, {signal});
           result.requests++;
@@ -2336,14 +2348,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
             found.set(id, [...(found.get(id) || []), ...list]);
           }
           cursor = works.length ? payload?.meta?.next_cursor || '' : '';
-          if (cursor) await this.pause(150);
+          if (cursor) { remember(cursor); await this.pause(150); }
         }
         if (cursor) for (const id of batch) unfinished.add(id);
+        else for (const id of batch) { const row = byID.get(id); if (row) delete row.resume; }
       } catch (error) {
         // The batch whose later pages the budget stopped is part-read: kept as such, not called complete.
-        if (this.outOfBudget(error)) { result.budgetGone = true; result.remaining = batches.length - index; for (const id of batch) unfinished.add(id); break; }
+        if (this.outOfBudget(error)) { result.budgetGone = true; result.remaining = batches.length - index; for (const id of batch) unfinished.add(id); if (cursor !== '*') remember(cursor); break; }
         this.Z.logError(error);
         for (const id of batch) failed.add(id);
+        /* The pages this batch read are thrown away with it, so the place it
+           got to is too: the next run starts where this one started, or it
+           would step over what these pages held. */
+        for (const id of batch) { const row = byID.get(id); if (!row) continue; if (carried) row.resume = {...carried}; else delete row.resume; }
       }
     }
     result.failed = failed.size;result.unfinished = unfinished.size;
@@ -2364,7 +2381,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          used to be fetched and thrown away, so a bioRxiv preprint could not
          be shown as one either. */
       const papers = fresh.filter(work => !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || '')));
-      const partial = unfinished.has(this.discoverTools.shortID(row.id)) || unfinished.has(row.id);
+      const short = this.discoverTools.shortID(row.id);
+      const partial = unfinished.has(short) || unfinished.has(row.id) || resumed.has(short) || resumed.has(row.id);
       const earlier = partial ? (row.news || []) : [];
       row.news = papers.slice(0, 8).map(work => ({
         id: work.id, title: work.title, venue: work.venue, doi: work.doi,
@@ -2377,7 +2395,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean)
       }));
       // A batch that was not read to the end adds to what the row said; it does not replace it.
-      if (partial) row.news = [...row.news, ...earlier.filter(old => !row.news.some(fresh => fresh.id === old.id))].slice(0, 8);
+      // Newest first across both runs, so a carried batch's older finds do not push out the news already shown.
+      if (partial) row.news = [...row.news, ...earlier.filter(old => !row.news.some(fresh => fresh.id === old.id))]
+        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 8);
       /* Two things the same records say for free.
 
          Where the author signs from now. The watched row remembers the lab it
@@ -2493,7 +2513,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       row.newCoauthors = seenNames.size ? fresherNames.slice(0, 8) : [];
       for (const name of fresherNames) seenNames.add(name);
       row.coauthorsSeen = [...seenNames].slice(-400);
-      if (!unfinished.has(this.discoverTools.shortID(row.id)) && !unfinished.has(row.id)) row.sweptAt = checkedAt;
+      /* A finished run moves the date to now. A run that finished a carried
+         batch moves it only to when that batch was begun: works newer than
+         that sit on the pages it skipped, and the next check must see them. */
+      if (!unfinished.has(short) && !unfinished.has(row.id)) row.sweptAt = resumed.get(short) || resumed.get(row.id) || checkedAt;
       if (fresh.length) result.withNews++;
       result.works += fresh.length;
     }
@@ -3069,10 +3092,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
             venue: work.venue, references: (work.references||[]).slice(0, 500),
             // Only the two authorships the row will show. A consortium paper has
             // hundreds, and none of the rest is ever read.
-            people: this.affiliationTools.principals(work.people)
-              ? [work.people.find(person => person.position === 'first') || work.people[0],
-                 ...work.people.filter(person => person.corresponding)].filter(Boolean).slice(0, 4)
-              : [],
+            /* The two the row shows, as principals() picks them: without a
+               corresponding flag the last author stands in, and was dropped
+               here, so the row lost its lab. Kept once each, with the flag. */
+            people: (() => {
+              const picked = this.affiliationTools.principals(work.people);
+              if (!picked) return [];
+              const keep = [picked.first, picked.corresponding, ...work.people.filter(person => person.corresponding)].filter(Boolean);
+              return [...new Set(keep)].slice(0, 4);
+            })(),
             checkedAt: new Date().toISOString()
           };
         }
@@ -3404,6 +3432,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const works = this.paperWorks(), citers = this.citedByStore();
     if (works[key]) delete works[key];
     if (citers[key]) delete citers[key];
+    // The retraction and open-access signals were about the old DOI too.
+    if (this.entry(item).signals) delete this.entry(item).signals;
     this.forgetReadingPath(item);
     for (const cached of [...this.discoverCache.keys()]) if (['related:', 'authors:'].some(prefix => String(cached).startsWith(prefix + key + '|'))) this.discoverCache.delete(cached);
     this.dirty = true;
@@ -3494,21 +3524,40 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   // --- Paper signals: retraction, open access, preprint -> published ---
 
-  signalsOf(item) { return this.entry(item).signals || null; }
+  // Signals found for another DOI than the paper has now are not this paper's.
+  signalsOf(item) {
+    const signals = this.entry(item).signals || null;
+    if (signals?.doi && this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI) !== signals.doi) return null;
+    return signals;
+  }
 
   // Crossref answers 404 for a DOI it has never registered, and OpenAlex
   // answers 404 for a preprint DOI it has merged into the published work.
   // Both are answers about the paper, not transport failures, so they must not
   // abort the other half of the lookup.
   async signalsJSON(url, {signal} = {}) {
+    const openAlex = /^https:\/\/api\.openalex\.org\//.test(String(url));
+    // The same hold as every other OpenAlex request: a spent budget is not asked again today.
+    if (openAlex && this.openAlexSpentUntil && Date.now() < this.openAlexSpentUntil)
+      throw Object.assign(new Error("Insufficient budget"), {status: 429, held: true});
     const response = await this.Z.HTTP.request("GET", url,
       {responseType: "json", timeout: 20000, successCodes: false});
     signal?.throwIfAborted?.();
     // A 429 is not an answer about the paper. Left as null it reads as "no
     // notices found", so a sweep during a budget outage would walk the whole
     // library, learn nothing, and report it as a clean bill of health.
-    if (response?.status === 429) throw Object.assign(new Error("Insufficient budget"), {status: 429});
-    return response?.status === 200 ? response.response : null;
+    if (response?.status === 429) {
+      let body = ''; try { body = typeof response.response === 'string' ? response.response : JSON.stringify(response.response || ''); } catch (_) {}
+      if (openAlex && /insufficient budget|budget exceeded|daily .*limit/i.test(body)) { const now = new Date(); this.openAlexSpentUntil = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1); }
+      throw Object.assign(new Error("Insufficient budget"), {status: 429});
+    }
+    if (response?.status === 200) return response.response;
+    /* Only a 404 says the service does not know the paper. A 503, a 401 or a
+       dropped connection is no answer at all: read as "nothing", it turned a
+       recorded retraction into a clean paper. It is thrown, and the caller
+       leaves the earlier answer standing. */
+    if (response?.status === 404) return null;
+    throw Object.assign(new Error(`HTTP ${response?.status ?? 0} · ${String(url).split('?')[0]}`), {status: Number(response?.status ?? 0)});
   }
 
   async fetchPaperSignals(item, {signal, crossrefOnly = false, record: given = null} = {}) {
@@ -3539,9 +3588,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // A merged preprint is no longer addressable by its own DOI, so the
     // published version is located by title and accepted only when the work
     // found carries this preprint's DOI among its locations.
-    if (!openAlex && (crossref?.isPreprint || this.signalTools.PREPRINT_PREFIXES.test(this.signalTools.bareDOI(record.DOI)))) {
+    // Not when only Crossref was asked for, nor when OpenAlex is out for the day.
+    if (!openAlex && !crossrefOnly && !openAlexOut && (crossref?.isPreprint || this.signalTools.PREPRINT_PREFIXES.test(this.signalTools.bareDOI(record.DOI)))) {
       const titleURL = this.signalTools.openAlexTitleURL(record, options);
-      const hits = titleURL ? await this.signalsJSON(titleURL, {signal}) : null;
+      // The title lookup is extra: its failure does not throw away what Crossref already said.
+      let hits = null;
+      try { hits = titleURL ? await this.signalsJSON(titleURL, {signal}) : null; }
+      catch (error) { if (error?.name === 'AbortError') throw error; if (this.outOfBudget(error)) openAlexOut = true; else this.Z.logError(error); }
       for (const raw of Array.isArray(hits?.results) ? hits.results : []) {
         const work = this.signalTools.readOpenAlex(raw);
         const match = this.signalTools.publishedVersionOf(work, record);
@@ -3565,9 +3618,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!this.active || this.stopping || signal?.aborted) { summary.remaining = queue.length - index; break; }
       onProgress?.(index, queue.length);
       try {
+        // The paper's identity when asked; a host without the lookup (a test stand-in) is not checked.
+        const identify = typeof this.workFingerprint === 'function' ? () => this.workFingerprint(item) : () => null;
+        const asked = identify();
         const {signals, reason, openAlexOut} = await this.fetchPaperSignals(item, {signal});
         if (openAlexOut) summary.partialOnly = (summary.partialOnly || 0) + 1;
+        // The DOI was changed while the answer was on its way: it is about the old one.
+        if (identify() !== asked) { summary.error++; continue; }
         if (!signals) { summary[reason]++; continue; }
+        /* Half an answer does not overrule a whole one: with OpenAlex out, a
+           retraction recorded earlier (perhaps from OpenAlex) stays unless this
+           answer is as bad or worse. */
+        const before = this.entry(item).signals;
+        const sameDOI = !before?.doi || typeof this.bibliographyRecord !== 'function' || before.doi === this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI);
+        if (signals.partial && before && sameDOI && (Number(before.rank) || 0) > (Number(signals.rank) || 0)) { summary.ok++; continue; }
+        if (typeof this.bibliographyRecord === 'function') signals.doi = this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI) || undefined;
         this.entry(item).signals = signals;
         this.dirty = true; summary.ok++;
       } catch (error) {
@@ -3757,6 +3822,26 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async citationText(items, style) {
     const records = items.map(item => this.bibliographyRecord(item));
     if (style.url) {
+      /* Zotero's citation processor, directly, for any number of papers: the
+         Quick Copy route stops at fifty, and past that the dialog fell back to
+         the hand-made format without a word. One processor for the whole
+         selection keeps numbering and same-author disambiguation whole. */
+      if (typeof this.Z.Cite?.makeFormattedBibliographyOrCitationList === 'function' && this.Z.Styles?.get) {
+        let processor = null;
+        try {
+          // The style list is loaded before it is asked; a dialog opened early found nothing and fell back.
+          await this.Z.Styles.init?.();
+          const installed = this.Z.Styles.get(style.url);
+          if (!installed) throw Object.assign(new Error('style not installed'), {quiet: true});
+          // The language Quick Copy is set to write citations in, as Zotero itself uses; the interface's only when none is set.
+          let locale = '';
+          try { locale = this.Z.Prefs.get('export.quickCopy.locale') || ''; } catch (_) {}
+          processor = installed.getCiteProc(locale || this.Z.locale || 'en-US', 'text');
+          const produced = String(this.Z.Cite.makeFormattedBibliographyOrCitationList(processor, items, 'text') || '').trim();
+          if (produced) return produced;
+        } catch (error) { if (!error?.quiet) this.Z.logError(error); }
+        finally { try { processor?.free?.(); } catch (_) {} }
+      }
       try {
         const output = await this.Z.QuickCopy?.getContentFromItems?.(items, 'bibliography=' + style.url);
         const produced = String(output?.text || '').trim();
@@ -3858,7 +3943,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); run(); }
       });
     };
-    for (const style of this.citationFormats.PANEL_STYLES) {
+    const addRow = style => {
       const row = html('div');
       row.className = 'sc-cite-row';
       row.setAttribute('role', 'button');
@@ -3881,7 +3966,55 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         this.Z.Utilities.Internal.copyTextToClipboard(value.textContent);
         flash(row, `${style.label} \uC778\uC6A9\uBB38\uC744 \uBCF5\uC0AC\uD588\uC2B5\uB2C8\uB2E4.`);
       });
-    }
+      return row;
+    };
+    for (const style of this.citationFormats.PANEL_STYLES) addRow(style);
+
+    /* Any style installed in Zotero -- the journal a paper is going to, most
+       often -- found by name here and drawn as one more row, instead of a trip
+       to Zotero's own settings. The last five chosen come back next time.
+       Nothing is downloaded: only what is already installed is offered. */
+    const others = html('div');
+    others.className = 'sc-cite-others';
+    const find = html('input');
+    find.type = 'search';
+    find.className = 'sc-cite-find';
+    find.placeholder = this.t('설치한 다른 인용 스타일 찾기');
+    find.setAttribute('aria-label', find.placeholder);
+    const found = html('div');
+    found.className = 'sc-cite-found';
+    found.setAttribute('role', 'list');
+    others.append(find, found);
+    panel.insertBefore(others, note);
+    const shown = new Set(this.citationFormats.PANEL_STYLES.map(style => style.url).filter(Boolean));
+    const choose = style => {
+      if (shown.has(style.styleID)) return;
+      shown.add(style.styleID);
+      addRow({key: 'csl', label: style.title, url: style.styleID});
+      const recent = (this.cache.citationStyles || []).filter(id => id !== style.styleID);
+      this.cache.citationStyles = [style.styleID, ...recent].slice(0, 5);
+      this.dirty = true;
+    };
+    let installed = [], generation = 0;
+    Promise.resolve(this.Z.Styles?.init?.()).then(() => {
+      installed = (this.Z.Styles?.getVisible?.() || []).filter(style => style?.styleID && style.title);
+      for (const id of this.cache.citationStyles || []) { const style = installed.find(s => s.styleID === id); if (style) choose(style); }
+    }).catch(error => this.Z.logError(error));
+    find.addEventListener('input', () => {
+      const mine = ++generation, q = find.value.trim().toLowerCase();
+      found.replaceChildren();
+      if (!q || mine !== generation) return;
+      for (const style of installed.filter(s => s.title.toLowerCase().includes(q) && !shown.has(s.styleID)).slice(0, 8)) {
+        const pick = html('button');
+        pick.type = 'button';
+        pick.className = 'sc-cite-pick';
+        pick.textContent = style.title;
+        pick.setAttribute('role', 'listitem');
+        pick.addEventListener('click', () => { choose(style); found.replaceChildren(); find.value = ''; });
+        found.appendChild(pick);
+      }
+      if (!found.childNodes.length) { const none = html('p'); none.className = 'sc-cite-note'; none.textContent = this.t('맞는 설치 스타일이 없습니다.'); found.appendChild(none); }
+    });
 
     const exports = html('div');
     exports.className = 'sc-cite-exports';
@@ -3952,10 +4085,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async persistCitation(item,result,{flush=true}={}) {
     if(!this.active||this.stopping||!this.canEdit(item)||item.hasChanged?.()||result?.status!=="ok"||!Number.isSafeInteger(result.count)||result.count<0)return false;
     if(!this.cache.citationExtraNoticeShown){
-      // The first time the plugin writes into a field the user can see, it says so, once.
-      this.cache.citationExtraNoticeShown=true;this.dirty=true;
-      const win=this.Z.getMainWindow?.();
-      if(win)try{this.say(win,"인용 수를 Extra 필드에 'Citations: N (출처, 날짜)' 한 줄로 기록합니다. 원하지 않으면 설정 → Style Custom → 인용 수·IF → '논문 추가·수정 시 인용 수 조회 후 Extra 저장'을 끄세요.");}catch(_){}
+      /* The first time the plugin writes into a field the user can see, it
+         says so, once -- in the panel, the next time it is open. This ran in
+         the background and used a modal alert, which stopped whatever the
+         reader was doing, a PDF included, to say it. */
+      this.cache.citationExtraNoticeShown=true;this.cache.citationExtraNoticePending=true;this.dirty=true;
     }
     if(!["OpenAlex","Crossref"].includes(result.source)||result.identity!==this.citationTools.identity(this.citationRecord(item)))return false;
     if(!Number.isFinite(Date.parse(result.checkedAt)))return false;
@@ -4016,11 +4150,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const abort=()=>{try{cancel?.();}catch(_){}finish(reject,Object.assign(new Error("Citation lookup cancelled"),{name:"AbortError"}));};
       signal.addEventListener("abort",abort,{once:true});
       if(signal.aborted){abort();return;}
+      // The citation lookups honour the same OpenAlex hold as every other request.
+      const openAlex=/^https:\/\/api\.openalex\.org\//.test(String(url));
+      if(openAlex&&this.openAlexSpentUntil&&Date.now()<this.openAlexSpentUntil){finish(reject,Object.assign(new Error("Insufficient budget"),{status:429,held:true}));return;}
       try {
         Promise.resolve(this.Z.HTTP.request("GET",url,{headers,responseType:"json",timeout:15000,successCodes:false,errorDelayMax:0,cancellerReceiver:fn=>{cancel=fn;if(signal.aborted)cancel();}}))
           .then(response=>{
             try {
               const status=Number(response.status??200);
+              if(openAlex&&status===429){let body='';try{body=typeof response.response==='string'?response.response:JSON.stringify(response.response||'');}catch(_){}if(/insufficient budget|budget exceeded|daily .*limit/i.test(body)){const d=new Date();this.openAlexSpentUntil=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1);}}
               if(status<200||status>=300)finish(reject,Object.assign(new Error("Citation HTTP "+status),{status,retryAfter:response.getResponseHeader?.("Retry-After")}));
               else finish(resolve,response.response);
             } catch(error){finish(reject,error);}

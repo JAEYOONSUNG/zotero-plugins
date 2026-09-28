@@ -1073,3 +1073,82 @@ test("a title match skips the preprint with another DOI and finds the copy witho
 	api.forgetTitleIndex();
 	assert.equal(await api.findByTitle(1, "A thermostable type I-B CRISPR-Cas system", "2023", { doi: "10.1038/s41586-023-1" }), null, "a DOI kept in Extra counts as a DOI");
 });
+
+test("a budget spent in one search is remembered by the window for the next", async () => {
+	const seen = [];
+	const ui = uiHarness({ search: async (_s, _q, _h, ctx) => { seen.push(ctx.openAlexSpent); ctx.openAlexSpent = true; return [paper("a")]; } });
+	await ui.runSearch();
+	await ui.runSearch();
+	assert.deepEqual(seen, [false, true], "the second search starts knowing");
+});
+
+test("titles keep α and β and Korean letters, and a DOI is the same however it was written", async () => {
+	const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+	const rows = [{ itemID: 1, value: "https://doi.org/10.1038/ABC.1" }, { itemID: 2, value: "Note\nDOI: 10.1016/j.cell.2020.01.001" }];
+	const sandbox = { Zotero: { logError() {}, DB: { queryAsync: async () => rows } }, ZotPoPSources: { normalizeDOI: Sources.normalizeDOI }, module: { exports: {} } };
+	sandbox.globalThis = sandbox;
+	const vm = await import("node:vm");
+	vm.createContext(sandbox);
+	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+	const api = sandbox.__api;
+	assert.notEqual(api.flatTitle("α-synuclein aggregation in dopaminergic neurons"), api.flatTitle("β-synuclein aggregation in dopaminergic neurons"));
+	assert.equal(api.flatTitle("한국 연구자의 유전체 편집 동향 분석"), "한국 연구자의 유전체 편집 동향 분석");
+	const map = await api.getLibraryDOIMap(1);
+	assert.equal(map.get("10.1038/abc.1"), 1, "a doi.org link in the field");
+	assert.equal(map.get("10.1016/j.cell.2020.01.001"), 2, "a DOI line in Extra");
+});
+
+test("the statistics can be switched from the highest per paper to one index's own counts", async () => {
+	const ui = uiHarness({ metrics: (await import("../content/metrics.js")).default });
+	ui.state.records = ui.state.visible = [
+		paper("a", { citations: 3, year: 2020, citationsBy: { openalex: 3, crossref: 0 } }),
+		paper("b", { citations: 3, year: 2020, citationsBy: { openalex: 0, crossref: 3 } }),
+		paper("c", { citations: 3, year: 2020, citationsBy: { crossref: 3 } })];
+	ui.originalRenderMetrics(ui.state.records);
+	const box = ui.get("metrics-basis");
+	assert.equal(box.hidden, false);
+	const buttons = box.children.filter(c => c.tagName !== "#text");
+	assert.equal(buttons.length, 3, "highest, OpenAlex, Crossref");
+	const hBefore = ui.get("m-h").textContent;
+	buttons.find(b => /openalex/i.test(b.textContent)).emit("click");
+	assert.equal(ui.state.metricsBasis, "openalex");
+	ui.originalRenderMetrics(ui.state.records); // the harness stubs the redraw the click asks for
+	assert.equal(ui.get("m-h").textContent, "1");
+	assert.notEqual(ui.get("m-h").textContent, hBefore, "the h-index is OpenAlex's own now");
+});
+
+test("a paper already on the shelf gets a PDF only when it has none, and never twice at once", async () => {
+	const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+	let tries = 0;
+	const items = new Map([[7, { id: 7, attachmentContentType: "application/pdf" }]]);
+	const sandbox = { Zotero: { logError() {}, Items: { get: id => items.get(id) }, Libraries: { get: () => ({ filesEditable: true }) },
+		Attachments: { addAvailableFile: async () => { tries++; await new Promise(r => setTimeout(r, 5)); return { id: 9 }; } } }, ZotPoPSources: {}, module: { exports: {} } };
+	sandbox.globalThis = sandbox;
+	const vm = await import("node:vm");
+	vm.createContext(sandbox);
+	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+	const api = sandbox.__api;
+	assert.equal(await api.fillPDF({ id: 1, libraryID: 1, getAttachments: () => [7] }, {}, {}), "has pdf", "a PDF record counts, even one still syncing");
+	assert.equal(tries, 0);
+	const bare = { id: 2, libraryID: 1, getAttachments: () => [] };
+	const [a, b] = await Promise.all([api.fillPDF(bare, {}, {}), api.fillPDF(bare, {}, {})]);
+	assert.deepEqual([a, b].sort(), ["pdf:zotero", "skipped"], "the second press does not fetch a second copy");
+	assert.equal(tries, 1);
+});
+
+test("a DOI match is exact: underscores and percent signs are not wildcards, and a longer DOI is not a match", async () => {
+	const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+	let rows = [];
+	const sandbox = { Zotero: { logError() {}, DB: { queryAsync: async () => rows } }, ZotPoPSources: { normalizeDOI: Sources.normalizeDOI }, module: { exports: {} } };
+	sandbox.globalThis = sandbox;
+	const vm = await import("node:vm");
+	vm.createContext(sandbox);
+	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+	const api = sandbox.__api;
+	rows = [{ itemID: 1, fieldName: "DOI", value: "10.1234/aXb" }, { itemID: 2, fieldName: "DOI", value: "10.1234/a_bcdef" }];
+	assert.equal(await api.findByDOI(1, "10.1234/a_b"), null, "neither aXb nor a_bcdef is a_b");
+	rows = [{ itemID: 3, fieldName: "DOI", value: "http://dx.doi.org/10.1234/A_B" }];
+	assert.equal(await api.findByDOI(1, "10.1234/a_b"), 3, "the same DOI written as a link");
+	rows = [{ itemID: 4, fieldName: "extra", value: "PMID: 1\nDOI:10.1234/a_b" }];
+	assert.equal(await api.findByDOI(1, "10.1234/a_b"), 4, "and in Extra");
+});

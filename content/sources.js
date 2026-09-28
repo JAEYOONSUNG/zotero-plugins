@@ -461,6 +461,8 @@ var ZotPoPSources = (function () {
 	}
 
 	async function searchOpenAlex(q, http, ctx) {
+		// Spent for the day: refused here, before a request is sent, as OpenAlex would refuse it.
+		if (ctx?.openAlexSpent) throw Object.assign(new Error("OpenAlex budget spent for today"), { status: 429, body: "Insufficient budget", url: "https://api.openalex.org/works" });
 		let params = [];
 		let filters = [];
 		if (q.identifier) filters.push(openAlexIdFilter(q.identifier));
@@ -860,7 +862,8 @@ var ZotPoPSources = (function () {
 		let out = { openalex: null, crossref: null, semanticscholar: null };
 		let tasks = [];
 		if (doi) {
-			tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/doi:" + enc(doi) + "?select=cited_by_count,primary_location" + auth), {}, ctx).then(w => {
+			// A spent OpenAlex budget is not asked again in this window; Crossref still answers.
+			if (!ctx.openAlexSpent) tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/doi:" + enc(doi) + "?select=cited_by_count,primary_location" + auth), {}, ctx).then(w => {
 				out.openalex = toInt(w.cited_by_count);
 				let src = w.primary_location?.source;
 				if (src?.id && !rec.journalId) rec.journalId = src.id.replace("https://openalex.org/", "");
@@ -872,7 +875,7 @@ var ZotPoPSources = (function () {
 			}).catch(e => ctx.log?.("Crossref: " + e.message)));
 		}
 		else if (rec.source === "openalex" && rec.sourceId) {
-			tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/" + enc(rec.sourceId) + "?select=cited_by_count" + auth), {}, ctx).then(w => {
+			if (!ctx.openAlexSpent) tasks.push(withRetry(() => http.getJSON("https://api.openalex.org/works/" + enc(rec.sourceId) + "?select=cited_by_count" + auth), {}, ctx).then(w => {
 				out.openalex = toInt(w.cited_by_count);
 			}).catch(e => ctx.log?.("OpenAlex: " + e.message)));
 		}
@@ -887,6 +890,8 @@ var ZotPoPSources = (function () {
 		let best = null;
 		for (let [k, v] of Object.entries(out)) if (v != null && (best == null || v > best.n)) best = { n: v, src: k };
 		if (best) { rec.citations = best.n; rec.citationSource = best.src; }
+		// Each index's fresh count replaces its old one, so a statistic read from one index sees the re-check.
+		for (let [k, v] of Object.entries(out)) if (v != null) (rec.citationsBy ||= {})[k] = v;
 		if (rec.journalIF == null && (rec.journalId || rec.issn)) await enrichJournalMetrics([rec], http, ctx);
 		return out;
 	}
@@ -2377,6 +2382,18 @@ var ZotPoPSources = (function () {
 		// The one source that knows a posting is on bioRxiv must not lose that when it merges
 		// with a source that only knows the DOI, or the posting reads as a journal article.
 		if (!a.preprintServer && b.preprintServer) a.preprintServer = b.preprintServer;
+		/* The type follows the evidence: a record that says "preprint" and names
+		   a server, or carries a preprint server's DOI, makes the merged record a
+		   preprint whichever source answered first. Europe PMC's bioRxiv posting
+		   merged into OpenAlex's journal-article guess stayed an article. */
+		const PREPRINT_DOI = /^10\.(1101|21203|48550|20944|31219|31234|36227)\//;
+		if (b.itemType === "preprint" && a.itemType !== "preprint" && (b.preprintServer || PREPRINT_DOI.test(normalizeDOI(b.doi) || ""))) {
+			a.itemType = "preprint";
+			if (!a.preprintServer && b.preprintServer) a.preprintServer = b.preprintServer;
+		}
+		// An italic species name or a subscript survives whichever copy came first, when both are the same title.
+		if (b.titleMarkup && /<(i|em|sub|sup|b|strong)>/i.test(b.titleMarkup) && !/<(i|em|sub|sup|b|strong)>/i.test(a.titleMarkup || "")
+			&& Query.titleIdentity(b.titleMarkup) === Query.titleIdentity(a.titleMarkup || a.title)) a.titleMarkup = b.titleMarkup;
 		if (!a.publishedDoi && b.publishedDoi) a.publishedDoi = b.publishedDoi;
 		if (!a.publishedPmid && b.publishedPmid) a.publishedPmid = b.publishedPmid;
 		if (!a.journalId && b.journalId) a.journalId = b.journalId;
@@ -2391,6 +2408,16 @@ var ZotPoPSources = (function () {
 		// affiliation strings is not a richer one.
 		let placed = people => (people || []).some(p => p.institutionId || p.country);
 		if (b.people && (!a.people || (placed(b.people) && !placed(a.people)))) a.people = b.people;
+		// Each index's own count is kept beside the headline one, so a statistic can be read from one index alone.
+		let by = a.citationsBy || (a.citationsBy = {});
+		for (let rec of [a, b]) {
+			if (rec.citations != null && Number.isFinite(Number(rec.citations))) {
+				let key = rec.citationSource || rec.source;
+				// Counts only grow: the larger of two answers from one index is the later one, whichever merged first.
+				if (key && (by[key] == null || Number(rec.citations) > by[key])) by[key] = Number(rec.citations);
+			}
+			for (let [key, value] of Object.entries(rec.citationsBy || {})) if (value != null && (by[key] == null || value > by[key])) by[key] = value;
+		}
 		if (b.citations != null && (a.citations == null || b.citations > a.citations)) {
 			a.citations = b.citations;
 			a.citationSource = b.citationSource || b.source;

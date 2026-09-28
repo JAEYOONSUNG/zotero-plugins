@@ -36,7 +36,14 @@ var ZotPoPMetrics = (function () {
 		return rec.citations / age;
 	}
 
-	function compute(records, now = new Date().getFullYear()) {
+	/* With a provider named, every figure is that index's alone: its count
+	   where it has one, unknown where it has none. Without one, the per-paper
+	   headline count (the highest any index gave) is used, as before. */
+	function compute(records, now = new Date().getFullYear(), { provider } = {}) {
+		if (provider) records = records.map(r => {
+			let own = r.citationsBy?.[provider] ?? ((r.citationSource || r.source) === provider ? r.citations : null);
+			return Object.assign({}, r, { citations: own ?? null, citationSource: provider, citationsBy: undefined });
+		});
 		let n = records.length;
 		/* A record whose count never arrived (no DOI, a spent OpenAlex budget)
 		   is unknown, not zero. Counted as zero it pulled citations per paper
@@ -65,7 +72,7 @@ var ZotPoPMetrics = (function () {
 			citesPerPaper: known.length ? citations / known.length : 0,
 			unknownCitations,
 			// Counts from more than one citation index are not one network: the h-index over them is a reference figure.
-			citationSources: [...new Set(known.map(r => r.citationSource || r.source).filter(Boolean))],
+			citationSources: [...new Set(known.flatMap(r => Object.keys(r.citationsBy || {}).length ? Object.keys(r.citationsBy) : [r.citationSource || r.source]).filter(Boolean))],
 			citesPerAuthor: normCites.reduce((a, b) => a + b, 0),
 			papersPerAuthor: nAuthors.reduce((a, b) => a + 1 / b, 0),
 			authorsPerPaper: n ? nAuthors.reduce((a, b) => a + b, 0) / n : 0,

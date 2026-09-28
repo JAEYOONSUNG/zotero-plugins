@@ -83,7 +83,7 @@ export function mockElement(tagName = "div") {
 }
 
 export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {
-}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null } = {}) {
+}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null } = {}) {
 	const copied = [];
 	const elements = new Map(), errors = [], events = new Map();
 	const get = id => {
@@ -143,7 +143,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPJournalMarks: JournalMarks,
 		ZotPoPJCR: JCR,
 		ZotPoPMarquee: marquee || { attach: () => ({ refresh() {}, refreshCell() {} }) },
-		ZotPoPMetrics: { citesPerYear: () => 1 },
+		ZotPoPMetrics: metrics || { citesPerYear: () => 1 },
 		CSS: { escape: value => value },
 		ZotPoPImporter: importer || undefined,
 		refreshFlags: refreshLibraryFlags || (async () => {})

@@ -397,3 +397,24 @@ test("a budget refusal on the search's own OpenAlex request stops the enrichment
 	await S.enrichFromOpenAlex([{ doi: "10.1/x", citations: null, pdfUrls: [] }], { getJSON: refuse }, ctx);
 	assert.equal(asked, 1, "the enrichment does not ask again");
 });
+
+test("merging keeps a bioRxiv posting a preprint and an italic species name, whichever source came first", () => {
+	const journal = { source: "openalex", title: "Thermus thermophilus Argonaute cleaves DNA", doi: "10.1101/2024.01.01.555", itemType: "journalArticle", pdfUrls: [] };
+	const posting = { source: "europepmc", title: "Thermus thermophilus Argonaute cleaves DNA", titleMarkup: "<i>Thermus thermophilus</i> Argonaute cleaves DNA", doi: "10.1101/2024.01.01.555", itemType: "preprint", preprintServer: "bioRxiv", pdfUrls: [] };
+	for (const order of [[journal, posting], [posting, journal]]) {
+		const [merged] = S.mergeRecords(order.map(r => [{ ...r, pdfUrls: [] }]));
+		assert.equal(merged.itemType, "preprint");
+		assert.equal(merged.preprintServer, "bioRxiv");
+		assert.match(merged.titleMarkup, /<i>Thermus thermophilus<\/i>/);
+	}
+});
+
+test("a re-check updates each index's own count, and a spent budget refuses the OpenAlex search before sending", async () => {
+	const rec = { doi: "10.1038/s41586-020-1", citations: 3, citationSource: "openalex", citationsBy: { openalex: 3, crossref: 0 }, pdfUrls: [] };
+	const http = { getJSON: async url => /openalex/.test(url) ? { cited_by_count: 10 } : /crossref/.test(url) ? { message: { "is-referenced-by-count": 5 } } : {} };
+	await S.checkCitations(rec, http, {});
+	assert.deepEqual({ ...rec.citationsBy }, { openalex: 10, crossref: 5 });
+	let sent = 0;
+	await assert.rejects(S.search("openalex", { keywords: "x", maxResults: 10 }, { getJSON: async () => { sent++; return {}; } }, { openAlexSpent: true }));
+	assert.equal(sent, 0);
+});

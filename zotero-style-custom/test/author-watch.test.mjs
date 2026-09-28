@@ -431,3 +431,30 @@ test("a batch stopped by the budget after its first page is part-read: news is a
   assert.deepEqual(row.news.map(n => n.id).sort(), ["W0", "W1"], "what page one found is added to what was there");
   assert.equal(row.sweptAt, "2026-01-01T00:00:00Z", "and the next check starts from the old date");
 });
+
+test("a batch cut off at the page limit carries on from its cursor next time, and dates itself from when it began", async () => {
+  const rows = [person("A1", {sweptAt: "2026-01-01T00:00:00Z"})];
+  const full = n => ({results: [work("W" + n, ["A1"])], meta: {next_cursor: "c" + (n + 1)}});
+  const first = host({rows, pages: Array.from({length: 8}, (_, n) => full(n + 1))});
+  const one = await first.sweepWatchedAuthors();
+  assert.equal(one.unfinished, 1);
+  const row = first.cache.watchedAuthors[0];
+  assert.equal(row.resume.cursor, "c9", "where it stopped");
+  const began = row.resume.at;
+  const second = host({rows: first.cache.watchedAuthors, pages: [{results: [work("W9", ["A1"])], meta: {next_cursor: null}}]});
+  await second.sweepWatchedAuthors();
+  const worksCall = second.calls.find(url => /\/works\?/.test(url));
+  assert.match(decodeURIComponent(worksCall), /cursor=c9/, "the second run starts at the saved cursor, not the first page");
+  const after = second.cache.watchedAuthors[0];
+  assert.equal(after.resume, undefined, "finished: nothing left to carry");
+  assert.equal(after.sweptAt, began, "dated from when the batch was begun, so newer works are seen next time");
+  assert.ok(after.news.some(n => n.id === "W9") && after.news.some(n => n.id === "W1"), "what both runs found is kept");
+});
+
+test("a batch that fails after its first page does not keep a cursor past what it threw away", async () => {
+  const rows = [person("A1")];
+  const down = Object.assign(new Error("HTTP 503"), {status: 503});
+  const h = host({rows, pages: [{results: [work("W1", ["A1"])], meta: {next_cursor: "c2"}}, down]});
+  await h.sweepWatchedAuthors();
+  assert.equal(h.cache.watchedAuthors[0].resume, undefined, "the next run starts at the first page, where W1 is");
+});

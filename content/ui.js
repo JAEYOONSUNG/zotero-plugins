@@ -310,6 +310,7 @@
 		restoreAuthorPreferences();
 		searchSurface = PREF("searchSurface") === "authors" ? "authors" : "papers";
 		$("opt-pdf").checked = PREF("attachPDF") !== false;
+		$("opt-fillpdf").checked = PREF("fillMissingPDF") === true;
 		$("opt-skip").checked = PREF("skipDuplicates") !== false;
 		$("opt-extra").checked = PREF("citationsInExtra") !== false;
 
@@ -379,7 +380,7 @@
 		for (let key of COMBINED_SOURCES) $("multi-source-" + key)?.addEventListener("change", () => { cancelCacheRestore(); saveQuery(); });
 
 		setupColumnOrder();
-		for (let id of ["source", "sort", "opt-pdf", "opt-skip", "opt-extra", "maxResults"]) {
+		for (let id of ["source", "sort", "opt-pdf", "opt-skip", "opt-extra", "opt-fillpdf", "maxResults"]) {
 			$(id).addEventListener("change", savePrefs);
 		}
 		// detail actions
@@ -558,6 +559,7 @@
 		PREF(engineValue() === "pop" ? "popDefaultSource" : "defaultSource", $("source").value);
 		PREF("searchEngine", engineValue());
 		PREF("attachPDF", $("opt-pdf").checked);
+		PREF("fillMissingPDF", $("opt-fillpdf").checked);
 		PREF("skipDuplicates", $("opt-skip").checked);
 		PREF("citationsInExtra", $("opt-extra").checked);
 		let m = parseInt($("maxResults").value, 10);
@@ -1501,10 +1503,13 @@
 				setStatus(msg); $("busy-text").textContent = msg; setProgress(n, total);
 			},
 			onResults: records => { if (active()) displaySearchResults(records); },
-			log
+			log,
+			openAlexSpent: openAlexHeld()
 		};
 		try {
-			let recs = await ZotPoPSources.search(sourceKey, q, http, ctx);
+			let recs;
+			try { recs = await ZotPoPSources.search(sourceKey, q, http, ctx); }
+			finally { noteOpenAlexSpent(ctx); }
 			if (!active()) throw abortError();
 			// Decided before the first draw: the empty-table message depends on it.
 			state.searched = true;
@@ -1886,16 +1891,43 @@
 		paintRows();
 	}
 
+	function drawMetricsBasis(sources) {
+		let table = $("metrics-table"), box = $("metrics-basis");
+		if (!box && table?.parentNode) { box = document.createElement("div"); box.id = "metrics-basis"; box.className = "metrics-basis"; box.setAttribute("role", "group"); box.setAttribute("aria-label", t("metricsBasisLabel")); table.parentNode.insertBefore(box, table); }
+		if (!box) return;
+		box.textContent = "";
+		box.hidden = sources.length < 2;
+		if (box.hidden) return;
+		for (let key of [null, ...sources]) {
+			let b = document.createElement("button");
+			b.type = "button";
+			b.textContent = key ? (ZotPoPSources.SOURCES?.[key]?.label || key) : t("metricsBasisMax");
+			b.setAttribute("aria-pressed", String((state.metricsBasis || null) === key));
+			b.addEventListener("click", () => {
+				state.metricsBasis = key; renderMetrics(state.visible || state.records || []);
+				// The buttons are drawn again; the keyboard stays on the one just pressed.
+				$("metrics-basis")?.querySelector?.('[aria-pressed="true"]')?.focus?.();
+			});
+			box.appendChild(b);
+		}
+	}
 	function renderMetrics(list) {
 		if (searchSurface === "authors" && list.length && !list.some(record => record.citations != null && Number.isFinite(Number(record.citations)))) {
 			$("metrics-hint").hidden = false; $("metrics-hint").textContent = t("authorNoCitationData", list.length); $("metrics-table").hidden = true; return;
 		}
 		if ($("metrics-hint")) $("metrics-hint").textContent = t("metricsHint");
-		let m = ZotPoPMetrics.compute(list);
+		let base = ZotPoPMetrics.compute(list);
+		let sources = base.citationSources || [];
+		/* Which index the statistics are read from: the highest per paper (a
+		   reference figure across networks), or one index's own counts. Buttons,
+		   not a <select>: a native popup draws broken over this glass panel. */
+		if (!sources.includes(state.metricsBasis)) state.metricsBasis = null;
+		let m = state.metricsBasis ? ZotPoPMetrics.compute(list, undefined, { provider: state.metricsBasis }) : base;
+		drawMetricsBasis(sources);
 		let set = (id, v) => { $(id).textContent = v; };
 		let hint = $("metrics-hint"); if (hint) { hint.hidden = list.length > 0 && !m.unknownCitations; $("metrics-table").hidden = !list.length; if (list.length && m.unknownCitations) hint.textContent = t("metricsUnknown", m.unknownCitations, list.length);
 			// Several indexes each counted citations; the highest was kept per paper, so the figures below mix networks.
-			if (list.length && m.citationSources?.length > 1) { hint.hidden = false; hint.textContent = (m.unknownCitations ? hint.textContent + " " : "") + t("metricsMixed", m.citationSources.map(key => ZotPoPSources.SOURCES?.[key]?.label || key).join(", ")); } }
+			if (list.length && !state.metricsBasis && sources.length > 1) { hint.hidden = false; hint.textContent = (m.unknownCitations ? hint.textContent + " " : "") + t("metricsMixed", sources.map(key => ZotPoPSources.SOURCES?.[key]?.label || key).join(", ")); } }
 		set("m-years", m.minYear ? `${m.minYear}–${m.maxYear}` : "–");
 		set("m-cyears", m.minYear ? String(m.citationYears) : "–");
 		set("m-papers", String(m.papers));
@@ -2029,6 +2061,16 @@
 	}
 
 	// Re-query every free source for one paper's current citation count and its journal's impact
+	/* A spent OpenAlex budget is remembered by the window until it resets
+	   (midnight UTC), so the next search or check does not ask it again. */
+	let openAlexSpentUntil = 0;
+	const openAlexHeld = () => Date.now() < openAlexSpentUntil;
+	function noteOpenAlexSpent(ctx) {
+		if (!ctx?.openAlexSpent || openAlexHeld()) return;
+		let d = new Date();
+		openAlexSpentUntil = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+	}
+
 	async function checkCitations(r) {
 		if (!r || state.checking) return;
 		state.checking = true;
@@ -2036,7 +2078,9 @@
 		setStatus(t("citeChecking"));
 		try {
 			let checked = r.popOriginal ? Object.assign({}, r) : r;
-			let res = await ZotPoPSources.checkCitations(checked, http, { email: PREF("email") || "", s2ApiKey: PREF("s2ApiKey") || "", openAlexApiKey: PREF("openAlexApiKey") || "", log });
+			let cctx = { email: PREF("email") || "", s2ApiKey: PREF("s2ApiKey") || "", openAlexApiKey: PREF("openAlexApiKey") || "", log, openAlexSpent: openAlexHeld() };
+			let res = await ZotPoPSources.checkCitations(checked, http, cctx);
+			noteOpenAlexSpent(cctx);
 			let parts = [["openalex", res.openalex], ["crossref", res.crossref], ["semanticscholar", res.semanticscholar]]
 				.filter(([, v]) => v != null).map(([k, v]) => sourceLabel(k) + " " + v);
 			if (!parts.length) setStatus(t("citeCheckNone"), "err");
@@ -2134,6 +2178,8 @@
 		// Keys typed into a form field belong to that field, Cmd/Ctrl+A included: hijacking
 		// it made select-all in the query boxes select every result row instead.
 		if (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+		// Enter and Space on a focused button press that button (the statistics basis, say), not the focused result row.
+		if (/^button$/i.test(document.activeElement?.tagName || "") && (e.key === "Enter" || e.key === " ")) return;
 		if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); selectVisible(true); return; }
 		if (mod && e.key.toLowerCase() === "c") {
 			// The focused row's citation, or with Shift its DOI: what a reader reaches for most.
@@ -2277,6 +2323,7 @@
 		let opts = {
 			libraryID, collections,
 			attachPDF: $("opt-pdf").checked,
+			fillMissingPDF: $("opt-fillpdf").checked,
 			skipDuplicates: $("opt-skip").checked,
 			citationsInExtra: $("opt-extra").checked,
 			http, email: PREF("email") || "", proxyPrefix: PREF("proxyPrefix") || "", log
@@ -2306,14 +2353,17 @@
 				let label = res.pdf === "skipped" ? t("statusAdded")
 					: res.pdf === "pdf:proxy" ? t("statusAddedProxy")
 					: gotPDF ? t("statusAddedPdf") : t("statusAddedNoPdf");
-				setRowStatus(r, label, "ok", res.how === "manual" ? t("tipManual") : t("tipTranslator"));
+				if (res.warnings?.length) setRowStatus(r, label + " · " + t("statusPartSaved"), "warn", t("tipPartSaved"));
+				else setRowStatus(r, label, "ok", res.how === "manual" ? t("tipManual") : t("tipTranslator"));
 			}
 			else if (res.status === "exists") {
 				exists++;
 				r.inLibrary = true;
 				// The tick then leads to the copy found, whether or not it has a DOI.
 				r.libraryItemID = res.item?.id;
-				setRowStatus(r, res.addedToCollection ? t("statusExistsFiled") : t("statusExists"), "warn");
+				let filled = String(res.pdf || "").startsWith("pdf");
+				if (filled) pdfs++;
+				setRowStatus(r, (res.addedToCollection ? t("statusExistsFiled") : t("statusExists")) + (filled ? " · " + t("statusPdfFilled") : ""), filled ? "ok" : "warn");
 			}
 			else {
 				failed++;

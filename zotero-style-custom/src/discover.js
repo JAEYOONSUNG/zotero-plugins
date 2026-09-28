@@ -270,10 +270,22 @@
     for (const word of x) if (y.has(word)) shared++;
     return shared / Math.max(x.size, y.size) >= threshold;
   }
+  /* The exact title first, over every candidate: the first merely similar
+     hit was taken even when the paper itself was second. Two exact matches
+     in the same year are not guessed between. */
   function pickByTitle(works, record) {
     const year = Number(String(record?.year || record?.date || '').match(/\d{4}/)?.[0]) || null;
-    return (works || []).find(work => sameTitle(work.title, record?.title)
-      && (!year || !work.year || Math.abs(work.year - year) <= 1)) || null;
+    const near = work => !year || !work.year || Math.abs(work.year - year) <= 1;
+    const list = (works || []).filter(Boolean);
+    const exact = list.filter(work => plainTitle(work.title) && plainTitle(work.title) === plainTitle(record?.title) && near(work));
+    if (exact.length === 1) return exact[0];
+    if (exact.length > 1) {
+      const sameYear = exact.filter(work => year && work.year === year);
+      return sameYear.length === 1 ? sameYear[0] : null;
+    }
+    // Near misses are taken only when one stands alone: two similar titles are not guessed between either.
+    const similar = list.filter(work => sameTitle(work.title, record?.title) && near(work));
+    return similar.length === 1 ? similar[0] : null;
   }
 
   // Matching an author by name alone picks the wrong person often enough to be
