@@ -649,10 +649,12 @@
      for(const it of items){if(it.status==='done'||it.status==='reading'||withdrawn(it))continue;const oa=bareOA(workOf(it)?.openalex);if(oa)byOA.set(oa,{it,from:[]});}
      for(const base of recorded)for(const ref of new Set(workOf(base).references.map(bareOA)))byOA.get(ref)?.from.push(base);
      const linked=[...byOA.values()].filter(x=>x.from.length).sort((a,b)=>b.from.length-a.from.length||(Number(b.it.citations)||0)-(Number(a.it.citations)||0));
-     const fold=node('details',null,box,{class:'sc-local-reading-links'});
+     // Without a single reference list there is nothing to open: one plain line says so and where to get them.
+     if(!recorded.length)node('p',T('읽는 중·완료 문헌의 참고문헌 기록 없음')+' · '+T('관계 그래프에서 인용 목록을 가져오면 늘어납니다'),box,{class:'sc-muted sc-local-reading-note'});
+     const fold=recorded.length?node('details',null,box,{class:'sc-local-reading-links'}):node('div',null,null);
      if(state.localLinksOpen)fold.open=true;
      fold.addEventListener('toggle',()=>{state.localLinksOpen=fold.open;});
-     node('summary',recorded.length?T(`읽는 중·완료 문헌이 인용한 안 읽은 문헌 ${linked.length}편`):T('읽는 중·완료 문헌의 참고문헌 기록 없음'),fold);
+     if(recorded.length)node('summary',T(`읽는 중·완료 문헌이 인용한 안 읽은 문헌 ${linked.length}편`),fold);
      node('p',T(`기준 ${bases.length}편 중 참고문헌 기록 ${recorded.length}편`)+(recorded.length<bases.length?' · '+T('관계 그래프에서 인용 목록을 가져오면 늘어납니다'):''),fold,{class:'sc-muted sc-local-reading-note'});
      for(const {it,from} of linked.slice(0,10)){
       const line=node('div',null,fold,{class:'sc-local-reading-link'});

@@ -1646,3 +1646,4 @@
  #style-custom-workbench .sc-local-reading-link { grid-template-columns: minmax(0, 1fr) auto; }
  #style-custom-workbench .sc-local-reading-from { grid-column: 1 / -1; }
 }
+#style-custom-workbench .sc-reading-file { align-self: flex-start; width: auto; max-width: min(320px, 100%); min-height: 24px; font-size: 12px; }
