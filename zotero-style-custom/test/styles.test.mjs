@@ -56,6 +56,15 @@ test('resizable panel has container-based width/height adaptation and small-view
  // A short window sizes the floating panel only; the docked panel is the tab's, and the body keeps its own scroll.
  const short=[...parsed.sheet.cssRules].find(r=>r.media?.mediaText==='(max-height: 480px)');assert.ok(short);const panel=[...short.cssRules].find(r=>r.selectorText==='#style-custom-workbench:not([data-docked="tab"])');assert.match(panel.style.getPropertyValue('max-height'),/100vh/);assert.equal(panel.style.getPropertyValue('overflow'),'');assert.equal(panel.style.getPropertyValue('min-height'),'0');
 });
+test('the watch table merges 보유/완료/안 읽음 into one auto-width cell and wraps it under 900px instead of crushing name/affiliation',()=>{
+ const reading=rule('#style-custom-workbench .sc-watch-table .sc-col-reading');
+ assert.equal(reading.getPropertyValue('width'),'','no fixed width: it shares the auto space with 이름/소속 instead of three 64px columns');
+ assert.ok(parsed.headers.includes('sc-workbench (max-width: 900px)'),'a container query eases the table before name/affiliation are crushed');
+ const narrow=[...parsed.sheet.cssRules].find(r=>r.media?.mediaText==='(max-width: 900px)');assert.ok(narrow);
+ const narrowRules=[...narrow.cssRules];
+ assert.equal(narrowRules.find(r=>r.selectorText?.includes('.sc-watch-time-bar'))?.style.getPropertyValue('display'),'none','the time bar drops at 900px');
+ assert.equal(narrowRules.find(r=>r.selectorText?.includes('.sc-col-reading'))?.style.getPropertyValue('white-space'),'normal','the reading cell wraps instead of an ellipsis cut');
+});
 test('all existing data-view families and new interaction hooks retain explicit styling',()=>{
  for(const selector of ['.sc-native-preview','.sc-graph','.sc-canvas','.sc-canvas-lines','.sc-canvas-card','.sc-matrix','.sc-page-strip','.sc-ai-output','.sc-command-palette','.sc-command-results','.sc-filter-chips','.sc-filter-fields','.sc-paper-title','.sc-paper-actions','.sc-selection-bar','.sc-content'])assert.ok(rules.some(r=>r.selectorText?.includes(selector)),selector);
  assert.equal(rule('#style-custom-workbench .sc-content').getPropertyValue('min-height'),'0');assert.equal(rule('#style-custom-workbench .sc-body').getPropertyValue('overflow'),'auto');

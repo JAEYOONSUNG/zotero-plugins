@@ -1121,9 +1121,13 @@
 #style-custom-workbench .sc-watch-table tr:hover td { background: var(--sc-surface); }
 #style-custom-workbench .sc-watch-table .sc-col-n { width: 64px; text-align: end; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-watch-table .sc-col-date { width: 96px; font-variant-numeric: tabular-nums; color: var(--sc-muted); }
-/* 보유·완료·안 읽음·읽은 시간: the library-match columns, a plain grey bar
-   for time on one scale shared by every row -- no colour, so it reads as a
-   measurement next to 인용/IF rather than another status pill. */
+/* 보유·완료·안 읽음: one cell, not three fixed 64px columns -- those crushed
+   name/affiliation near an 800px panel. No fixed width: it shares the same
+   auto space as 이름/소속 under table-layout: fixed. */
+#style-custom-workbench .sc-watch-table .sc-col-reading { font-variant-numeric: tabular-nums; }
+/* 읽은 시간: a plain grey bar for time on one scale shared by every row --
+   no colour, so it reads as a measurement next to 인용/IF rather than
+   another status pill. */
 #style-custom-workbench .sc-watch-table .sc-col-time { width: 110px; }
 #style-custom-workbench .sc-watch-time-text { display: block; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-watch-time-bar { display: block; margin-top: 3px; width: 100%; height: 4px; border-radius: 7px; background: var(--sc-fill); overflow: hidden; }
@@ -1285,12 +1289,17 @@
   #style-custom-workbench .sc-paper-card .sc-paper-actions { flex: 1 1 100%; margin-inline-start: 23px; justify-content: flex-start; min-height: 20px; }
   #style-custom-workbench .sc-journal-count { flex-basis: 100%; }
   #style-custom-workbench .sc-journal-controls input[type=search] { flex-basis: 100%; max-width: none; }
-  #style-custom-workbench .sc-watch-table th:nth-child(9), #style-custom-workbench .sc-watch-table td:nth-child(9),
+  /* 특허 is now the 7th column (이름/소속/읽기 상태/읽은 시간/마지막 확인/새 논문/특허/act): the count fewest people watch for. */
+  #style-custom-workbench .sc-watch-table th:nth-child(7), #style-custom-workbench .sc-watch-table td:nth-child(7),
   #style-custom-workbench .sc-watch-table .sc-col-date { display: none; }
-  /* The new library-match columns are the first to fold on a narrow panel: 이름/소속/새 논문 answer more of "who and what" than a count. */
-  #style-custom-workbench .sc-watch-table th:nth-child(3), #style-custom-workbench .sc-watch-table td:nth-child(3),
-  #style-custom-workbench .sc-watch-table th:nth-child(4), #style-custom-workbench .sc-watch-table td:nth-child(4),
-  #style-custom-workbench .sc-watch-table th:nth-child(5), #style-custom-workbench .sc-watch-table td:nth-child(5) { display: none; }
+}
+/* 읽기 상태 (보유·완료·안 읽음, merged) is still meaningful at ~800px, so it
+   is not hidden -- it drops the time bar under it and wraps its own text
+   under 이름 instead of losing a whole column. */
+@container sc-workbench (max-width: 900px) {
+  #style-custom-workbench .sc-watch-table .sc-watch-time-bar { display: none; }
+  #style-custom-workbench .sc-watch-table th, #style-custom-workbench .sc-watch-table td { vertical-align: top; }
+  #style-custom-workbench .sc-watch-table .sc-col-reading { white-space: normal; overflow: visible; text-overflow: clip; }
 }
 @container sc-workbench (max-width: 760px) {
   #style-custom-workbench .sc-watch-table .sc-col-time { display: none; }
@@ -1555,7 +1564,8 @@
 #style-custom-workbench .sc-resume-text { display: flex; flex-direction: column; min-width: 0; }
 #style-custom-workbench .sc-resume-remark { font-size: 12px; color: var(--sc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-row-progress-text { margin-inline-start: 4px; font-size: 11px; color: var(--sc-muted); }
-#style-custom-workbench .sc-row-annotations { margin-inline-start: 4px; font-size: 11px; color: var(--sc-muted); }
+#style-custom-workbench .sc-row-annotations { margin-inline-start: 4px; padding: 0; border: 0; background: none; min-height: 0; font-size: 11px; color: var(--sc-muted); cursor: pointer; }
+#style-custom-workbench .sc-row-annotations:hover { color: var(--sc-accent); text-decoration: underline; }
 #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time], #style-custom-workbench .sc-paper-column[data-metric=time] { width: 150px; }
 @container sc-workbench (max-width: 640px) {
   #style-custom-workbench .sc-resume-row { grid-template-columns: minmax(0, 1fr) auto; }
@@ -1809,7 +1819,7 @@
 #style-custom-workbench .sc-attachment-findings-more { min-height: 22px; font-size: 12px; margin: 2px 0 10px; }
 #style-custom-workbench .sc-attachment-note { color: var(--sc-muted); font-size: 12px; margin: 1px 0 0; }
 </style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div><section style="font-size:13px" data-maximized="false" role="region" data-density="comfortable" aria-label="Style Custom 연구 작업 패널" id="style-custom-workbench"><header class="sc-header"><div class="sc-brand"><img aria-hidden="true" alt="" height="24" width="24" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJTdHlsZSBDdXN0b206IGEgbGlicmFyeSByb3cgbWFya2VkIj4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjI4IiBmaWxsPSIjMkIzMjQwIi8+CiAgPGcgZmlsbD0iI0ZGRkZGRiIgb3BhY2l0eT0iMC41Ij4KICAgIDxjaXJjbGUgY3g9IjMxIiBjeT0iNDEiIHI9IjYiLz48Y2lyY2xlIGN4PSIzMSIgY3k9IjY0IiByPSI2Ii8+PGNpcmNsZSBjeD0iMzEiIGN5PSI4NyIgcj0iNiIvPgogIDwvZz4KICA8ZyBmaWxsPSIjRkZGRkZGIj4KICAgIDxyZWN0IHg9IjQ2IiB5PSIzNCIgd2lkdGg9IjU2IiBoZWlnaHQ9IjE0IiByeD0iNyIvPgogICAgPHJlY3QgeD0iNDYiIHk9IjgwIiB3aWR0aD0iNDAiIGhlaWdodD0iMTQiIHJ4PSI3Ii8+CiAgPC9nPgogIDxyZWN0IHg9IjQ2IiB5PSI1NyIgd2lkdGg9IjUwIiBoZWlnaHQ9IjE0IiByeD0iNyIgZmlsbD0iI0U5QTgxQyIvPgo8L3N2Zz4K"><strong>Style Custom</strong><span class="sc-subtitle">연구 작업 패널</span></div><button title="철회 여부 미확인 1146편 · 지표 없는 저널 169종 · 확인 안 한 관심 저자 109명" aria-pressed="false" class="sc-notice-toggle" type="button">자료 점검 3가지</button><div class="sc-header-actions"><button aria-pressed="false" title="간격 좁게" class="sc-icon-button" aria-label="화면 밀도 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="8" x2="13" y1="8" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /></svg></button><button hidden aria-pressed="false" class="sc-icon-button sc-dock" title="탭으로 열기" aria-label="탭으로 열기 / 창으로 띄우기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="8.4" width="10.8" y="4.6" x="2.6" /><path d="M2.6 7.4h10.8M5.2 4.6V3h4.4v1.6" /></svg></button><button aria-pressed="false" class="sc-icon-button sc-maximize" title="전체 화면" aria-label="전체 화면 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4" /></svg></button><button class="sc-icon-button" title="기능 찾기 · ⌘/Ctrl K" aria-label="기능 찾기" aria-keyshortcuts="Meta+K Control+K" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="4.25" cy="7.25" cx="7.25" /><line y2="13.5" x2="13.5" y1="10.5" x1="10.5" /></svg></button><button class="sc-icon-button sc-close" title="닫기" aria-label="작업 패널 닫기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="12" x2="12" y1="4" x1="4" /><line y2="12" x2="4" y1="4" x1="12" /></svg></button></div></header><div class="sc-shell"><nav aria-label="작업 종류"><div class="sc-nav-group"><div class="sc-nav-heading">탐색</div><button tabindex="0" class="active" aria-current="page" data-tab="explore" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.8" height="10" width="3" y="3" x="2.75" /><rect rx="0.8" height="10" width="3" y="3" x="7.25" /><path d="M11.9 3.6l1.9.5-2.2 9.1-1.2-.3" /></svg></span>보유 문헌</button><button tabindex="-1" aria-current="false" data-tab="recent" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="5.25" cy="8" cx="8" /><path d="M8 5.1V8l2.2 1.7" /></svg></span>최근 문헌</button><button tabindex="-1" aria-current="false" data-tab="related" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.1" cy="11.4" cx="4.4" /><circle r="2.1" cy="4.6" cx="11.5" /><line y2="6.1" x2="10" y1="9.9" x1="6" /></svg></span>관련 논문</button><button tabindex="-1" aria-current="false" data-tab="authors" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.5" cy="5.6" cx="8" /><path d="M3.3 13.1c.7-2.5 2.5-3.8 4.7-3.8s4 1.3 4.7 3.8" /></svg></span>저자 추적</button><button tabindex="-1" aria-current="false" data-tab="collections" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.7 12.6V4.2h3.9l1.4 1.7h5.3v6.7z" /></svg></span>컬렉션</button><button tabindex="-1" aria-current="false" data-tab="journals" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="8.6" x2="4" y1="12.6" x1="4" /><line y2="5" x2="8" y1="12.6" x1="8" /><line y2="10" x2="12" y1="12.6" x1="12" /><line y2="12.6" x2="13.6" y1="12.6" x1="2.4" /></svg></span>저널 지표</button></div><div class="sc-nav-group"><div class="sc-nav-heading">읽기</div><button tabindex="-1" aria-current="false" data-tab="reading" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z" /><line y2="13.4" x2="8" y1="4.8" x1="8" /></svg></span>읽기 진행</button><button tabindex="-1" aria-current="false" data-tab="notes" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M4 2.6h5.4L12.4 5.6v7.8H4z" /><path d="M9.2 2.7v3h3.1" /><line y2="9" x2="10.4" y1="9" x1="6" /><line y2="11.2" x2="9" y1="11.2" x1="6" /></svg></span>노트</button><button tabindex="-1" aria-current="false" data-tab="annotations" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.9" height="2.6" width="10.8" y="9.6" x="2.6" /><path d="M5.2 9.5l5.6-6 2.3 2.3-5.5 5.7" /></svg></span>주석</button><button tabindex="-1" aria-current="false" data-tab="attachments" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M11.5 7.2l-4.6 4.6a2.4 2.4 0 01-3.4-3.4l5.4-5.4a1.7 1.7 0 012.4 2.4l-5.2 5.2a.9.9 0 01-1.3-1.3l4.5-4.5" /></svg></span>첨부 미리보기</button><button tabindex="-1" aria-current="false" data-tab="backlinks" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M13.2 11.6a4.2 4.2 0 00-4.2-4.2H3.5" /><path d="M6.2 4.6L3.2 7.4l3 2.8" /></svg></span>역링크</button></div><div class="sc-nav-group"><div class="sc-nav-heading">정리</div><button tabindex="-1" aria-current="false" data-tab="tags" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8.4 2.6H13v4.6l-6 6a1.1 1.1 0 01-1.6 0L2.8 10.2a1.1 1.1 0 010-1.6z" /><circle r="0.95" cy="5.1" cx="10.5" /></svg></span>중첩 태그</button><button tabindex="-1" aria-current="false" data-tab="graph" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="1.7" cy="3.6" cx="8" /><circle r="1.7" cy="11.8" cx="3.7" /><circle r="1.7" cy="11.8" cx="12.3" /><line y2="10.2" x2="4.6" y1="5.1" x1="6.9" /><line y2="10.2" x2="11.4" y1="5.1" x1="9.1" /><line y2="11.8" x2="10.6" y1="11.8" x1="5.4" /></svg></span>관계 그래프</button><button tabindex="-1" aria-current="false" data-tab="canvas" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.4" height="9.4" width="10.8" y="3.3" x="2.6" /><circle r="1.1" cy="6.6" cx="5.9" /><path d="M3 11.6l3.1-3 2.2 2 2.1-2.4 2.6 3" /></svg></span>캔버스</button><button tabindex="-1" aria-current="false" data-tab="matrix" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="9.6" width="10.8" y="3.2" x="2.6" /><line y2="12.8" x2="8" y1="3.2" x1="8" /><line y2="6.4" x2="13.4" y1="6.4" x1="2.6" /></svg></span>논문 비교</button></div><div class="sc-nav-group"><div class="sc-nav-heading">도구</div><button tabindex="-1" aria-current="false" data-tab="tabs" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.6 12.6V6.2h4.1l1.3-1.8h5.4v8.2z" /><path d="M4.4 4.4h3.2" /></svg></span>탭 관리</button><button tabindex="-1" aria-current="false" data-tab="views" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1" height="4.6" width="4.6" y="2.8" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="2.8" x="8.6" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="8.6" /></svg></span>뷰 그룹</button><button tabindex="-1" aria-current="false" data-tab="assist" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M6 2.9l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" /><path d="M11.4 8.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg></span>번역 · AI</button><button tabindex="-1" aria-current="false" data-tab="appearance" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /><circle r="1.6" cy="5" cx="6.4" /><circle r="1.6" cy="11" cx="10" /></svg></span>스타일 편집</button></div></nav><div class="sc-content"><div class="sc-context"><h2 class="sc-section-title">보유 문헌</h2><span class="sc-context-detail">라이브러리 · 6개 문헌</span><div aria-label="문헌 종류" class="sc-kind-chips"><button data-kind="" title="모든 종류" aria-pressed="true" type="button" class="sc-chip sc-chip-button">전체 6</button><button data-kind="journalArticle" title="논문만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">논문 5</button><button data-kind="preprint" title="프리프린트만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">프리프린트 1</button></div></div><div class="sc-controls sc-search-row"><input aria-label="작업 패널 검색" placeholder="제목·저자·태그·DOI·초록·내 메모 검색" type="search"><select aria-label="표시 범위"><option value="library">라이브러리</option><option value="selected">선택한 문헌</option><option value="collection">현재 컬렉션</option><option value="collection-recursive">현재 컬렉션과 하위 컬렉션</option></select><button type="button">현재 선택 가져오기</button><button type="button">새로고침</button><details class="sc-filters"><summary>상세 필터</summary><div aria-label="문헌 상세 필터" class="sc-filter-fields"><select aria-label="문헌 유형 필터"><option value="">모든 유형</option><option value="journalArticle">논문</option><option value="preprint">프리프린트</option></select><select aria-label="읽기 상태 필터"><option value="">모든 읽기 상태</option><option value="unread">안 읽음</option><option value="reading">읽는 중</option><option value="done">완료</option></select><select aria-label="최소 별점"><option value="">모든 별점</option><option value="1">1점 이상</option><option value="2">2점 이상</option><option value="3">3점 이상</option><option value="4">4점 이상</option><option value="5">5점 이상</option></select><input aria-label="시작 연도" placeholder="시작 연도" max="9999" min="1" type="number"><input aria-label="마지막 연도" placeholder="마지막 연도" max="9999" min="1" type="number"><select aria-label="문헌 정렬"><option value="library">기본 순서</option><option value="title">제목순</option><option value="year-desc">최신 발행순</option><option value="if-desc">IF 높은 순</option><option value="citations-desc">인용 많은 순</option><option value="rating-desc">별점 높은 순</option><option value="time-desc">읽기 시간순</option></select><button type="button">필터 초기화</button></div></details></div><div hidden aria-label="적용 중인 필터" class="sc-filter-chips"></div><div data-error="false" aria-live="polite" role="status" class="sc-status"></div><div hidden="hidden" class="sc-welcome"></div><div hidden class="sc-notice"></div><div tabindex="-1" class="sc-body"><div aria-label="이 목록 요약" role="group" class="sc-overview"><div aria-hidden="true" class="sc-overview-meter"><span style="flex-grow:1" class="sc-overview-done"></span><span style="flex-grow:2" class="sc-overview-reading"></span><span style="flex-grow:3" class="sc-overview-unread"></span></div><p class="sc-overview-facts"><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>1</b> 완료</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>2</b> 읽는 중</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>3</b> 안 읽음</button><span><b>1h 20m 40s</b> 읽음</span><span><b>12.4</b> IF 중앙값 · 5/6편</span><span><b>53</b> 인용 중앙값 · 4/6편</span><span><b>2</b> 이번 달 추가</span></p><details class="sc-local-reading-links"><summary>읽는 중·완료 문헌과 인용으로 이어진 안 읽은 문헌 2편</summary><p class="sc-local-reading-head">읽는 중·완료 문헌이 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">기준 3편 중 참고문헌 기록 2편</p><div class="sc-local-reading-link"><button title="Preregistered synthesis of repair reviews" class="sc-hit-title-link" type="button">Preregistered synthesis of repair reviews</button><span class="sc-local-reading-count">1편에서 인용</span><span title="Mapping cellular responses across tissue repair" class="sc-muted sc-local-reading-from">Mapping cellular responses across tissue repair</span><button aria-pressed="false" class="sc-local-reading-queue" type="button">읽기 대기</button></div><p class="sc-local-reading-head">읽는 중·완료 문헌을 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">안 읽은 3편 중 참고문헌 기록 1편</p><div class="sc-local-reading-link"><button title="Spatial context and cell-state transitions in regeneration" class="sc-hit-title-link" type="button">Spatial context and cell-state transitions in regeneration</button><span class="sc-local-reading-count">읽는 중·완료 문헌 2편 인용</span><span title="Mapping cellular responses across tissue repair
-A practical framework for reproducible literature synthesis" class="sc-muted sc-local-reading-from">Mapping cellular responses across tissue repair · A practical framework for reproducible literatur</span><button aria-pressed="false" class="sc-local-reading-queue" type="button">읽기 대기</button></div></details><p class="sc-overview-picks"><span title="안 읽은 문헌 중 출판 후 해마다 가장 많이 인용된 순서입니다. 철회된 문헌은 뺐습니다." class="sc-overview-picks-label">안 읽은 문헌 · 연도 보정 인용순</span><span class="sc-overview-pick"><button title="Preregistered synthesis of repair reviews" class="sc-hit-title-link" type="button">Preregistered synthesis of repair reviews</button><span class="sc-muted">연 3회</span></span></p></div><div aria-label="정렬할 열" role="group" class="sc-paper-columns"><span class="sc-paper-columns-lead"><details class="sc-selection-tools"><summary>선택 작업</summary><span class="sc-selection-tools-body"><button type="button">현재 페이지 선택</button><button type="button">현재 페이지 선택 해제</button><button type="button">검색 결과 전체 선택</button></span></details><span class="sc-paper-columns-sortlabel">정렬</span></span><button title="높은 순으로 정렬" aria-pressed="false" data-metric="impact" class="sc-paper-column" type="button">IF</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="citations" class="sc-paper-column" type="button">인용</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="rating" class="sc-paper-column" type="button">별점</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="time" class="sc-paper-column" type="button">읽기</button><span class="sc-paper-columns-tail"></span></div><div class="sc-paper-list"><article tabindex="0" data-selected="true" data-status="reading" data-item-id="1" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|0" aria-label="Mapping cellular responses across tissue repair 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Mapping cellular responses across tissue repair" class="sc-paper-title">Mapping cellular responses across tissue repair</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="1" aria-expanded="false" type="button">자세히</button></div></div><span title="M. Kim; A. Rivera; J. Park · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · M. Kim; A. Rivera; J. Park</span></span><span title="Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것" class="sc-paper-remark"><span class="sc-paper-remark-label">메모</span>Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것</span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">128</span></span><span data-metric="rating" title="별점 4/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★☆</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">20m 40s</span><span title="전체 12쪽 중 6쪽 읽음" aria-label="전체 12쪽 중 6쪽 읽음" role="img" class="sc-row-progress"><span style="width:50%" class="sc-row-progress-fill"></span></span><span aria-hidden="true" class="sc-row-progress-text">6/12</span><span class="sc-row-annotations">주석 3</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="done" data-item-id="2" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|1" aria-label="A practical framework for reproducible literature synthesis 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="A practical framework for reproducible literature synthesis" class="sc-paper-title">A practical framework for reproducible literature synthesis</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="2" aria-expanded="false" type="button">자세히</button></div></div><span title="S. Lee; L. Chen · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Methods · S. Lee; L. Chen</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">64</span></span><span data-metric="rating" title="별점 5/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★★</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">53m 20s</span><span title="전체 8쪽 중 8쪽 읽음" aria-label="전체 8쪽 중 8쪽 읽음" role="img" class="sc-row-progress"><span style="width:100%" class="sc-row-progress-fill"></span></span><span aria-hidden="true" class="sc-row-progress-text">8/8</span><span class="sc-row-annotations">주석 2</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="3" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|2" aria-label="Spatial context and cell-state transitions in regeneration 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Spatial context and cell-state transitions in regeneration" class="sc-paper-title"><span title="프리프린트" class="sc-preprint sc-kind">프리프린트</span>Spatial context and cell-state transitions in regeneration</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="3" aria-expanded="false" type="button">자세히</button></div></div><span title="E. Morgan; H. Choi · Example Biology" class="sc-paper-meta"><span class="sc-paper-meta-text">2026 · Example Biology · E. Morgan; H. Choi</span></span></div><div class="sc-metrics"><span data-empty="true" data-metric="impact" title="저널 영향력 지수 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">—</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="reading" data-item-id="4" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|3" aria-label="Tissue-scale repair atlases from sparse sampling 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Tissue-scale repair atlases from sparse sampling" class="sc-paper-title">Tissue-scale repair atlases from sparse sampling</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="4" aria-expanded="false" type="button">자세히</button></div></div><span title="R. Ahn; P. Silva · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · R. Ahn; P. Silva</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">41</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">6m 40s</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="5" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|4" aria-label="Benchmarks for repair-stage classifiers 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Benchmarks for repair-stage classifiers" class="sc-paper-title">Benchmarks for repair-stage classifiers</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="5" aria-expanded="false" type="button">자세히</button></div></div><span title="K. Oh; Christopher A. Voigt · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Cell Research · K. Oh; Christopher A. Voigt</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="6" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|5" aria-label="Preregistered synthesis of repair reviews 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Preregistered synthesis of repair reviews" class="sc-paper-title">Preregistered synthesis of repair reviews</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="6" aria-expanded="false" type="button">자세히</button></div></div><span title="D. Yu; S. Lee · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2023 · Example Methods · D. Yu; S. Lee</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">12</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article></div></div></div></div><footer data-selected="true" class="sc-selection-bar"><span title="Mapping cellular responses across tissue repair" class="sc-selection-label">문헌 1개 선택</span><button type="button">선택 해제</button><span class="sc-selection-tasks"><button type="button">노트</button><button type="button">주석</button><button hidden data-variant="primary" type="button">논문 비교</button><button hidden type="button">주석 나란히</button></span><details hidden class="sc-selection-relations"><summary>연결 작업</summary><button disabled type="button">관련 문헌으로 연결</button><button disabled type="button">선택 문헌끼리 연결 해제</button></details></footer><div hidden aria-label="기능 바로 찾기" aria-modal="true" role="dialog" class="sc-command-palette"><input aria-controls="sc-command-results" aria-label="찾을 기능 이름" aria-autocomplete="list" aria-expanded="false" role="combobox" placeholder="예: 주석, 비교, 탭…" class="sc-command-search" type="search"><div aria-label="검색된 기능" role="listbox" class="sc-command-results" id="sc-command-results"></div><p class="sc-muted">↑↓ 이동 · Enter 열기 · Esc 닫기</p></div></section><script>/* Pure workspace operations shared by the panel and background regressions. */
+A practical framework for reproducible literature synthesis" class="sc-muted sc-local-reading-from">Mapping cellular responses across tissue repair · A practical framework for reproducible literatur</span><button aria-pressed="false" class="sc-local-reading-queue" type="button">읽기 대기</button></div></details><p class="sc-overview-picks"><span title="안 읽은 문헌 중 출판 후 해마다 가장 많이 인용된 순서입니다. 철회된 문헌은 뺐습니다." class="sc-overview-picks-label">안 읽은 문헌 · 연도 보정 인용순</span><span class="sc-overview-pick"><button title="Preregistered synthesis of repair reviews" class="sc-hit-title-link" type="button">Preregistered synthesis of repair reviews</button><span class="sc-muted">연 3회</span></span></p></div><div aria-label="정렬할 열" role="group" class="sc-paper-columns"><span class="sc-paper-columns-lead"><details class="sc-selection-tools"><summary>선택 작업</summary><span class="sc-selection-tools-body"><button type="button">현재 페이지 선택</button><button type="button">현재 페이지 선택 해제</button><button type="button">검색 결과 전체 선택</button></span></details><span class="sc-paper-columns-sortlabel">정렬</span></span><button title="높은 순으로 정렬" aria-pressed="false" data-metric="impact" class="sc-paper-column" type="button">IF</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="citations" class="sc-paper-column" type="button">인용</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="rating" class="sc-paper-column" type="button">별점</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="time" class="sc-paper-column" type="button">읽기</button><span class="sc-paper-columns-tail"></span></div><div class="sc-paper-list"><article tabindex="0" data-selected="true" data-status="reading" data-item-id="1" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|0" aria-label="Mapping cellular responses across tissue repair 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Mapping cellular responses across tissue repair" class="sc-paper-title">Mapping cellular responses across tissue repair</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="1" aria-expanded="false" type="button">자세히</button></div></div><span title="M. Kim; A. Rivera; J. Park · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · M. Kim; A. Rivera; J. Park</span></span><span title="Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것" class="sc-paper-remark"><span class="sc-paper-remark-label">메모</span>Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것</span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">128</span></span><span data-metric="rating" title="별점 4/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★☆</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">20m 40s</span><span title="전체 12쪽 중 6쪽 읽음" aria-label="전체 12쪽 중 6쪽 읽음" role="img" class="sc-row-progress"><span style="width:50%" class="sc-row-progress-fill"></span></span><span aria-hidden="true" class="sc-row-progress-text">6/12</span><button class="sc-row-annotations" type="button">주석 3</button></span></div></div></article><article tabindex="0" data-selected="false" data-status="done" data-item-id="2" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|1" aria-label="A practical framework for reproducible literature synthesis 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="A practical framework for reproducible literature synthesis" class="sc-paper-title">A practical framework for reproducible literature synthesis</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="2" aria-expanded="false" type="button">자세히</button></div></div><span title="S. Lee; L. Chen · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Methods · S. Lee; L. Chen</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">64</span></span><span data-metric="rating" title="별점 5/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★★</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">53m 20s</span><span title="전체 8쪽 중 8쪽 읽음" aria-label="전체 8쪽 중 8쪽 읽음" role="img" class="sc-row-progress"><span style="width:100%" class="sc-row-progress-fill"></span></span><span aria-hidden="true" class="sc-row-progress-text">8/8</span><button class="sc-row-annotations" type="button">주석 2</button></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="3" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|2" aria-label="Spatial context and cell-state transitions in regeneration 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Spatial context and cell-state transitions in regeneration" class="sc-paper-title"><span title="프리프린트" class="sc-preprint sc-kind">프리프린트</span>Spatial context and cell-state transitions in regeneration</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="3" aria-expanded="false" type="button">자세히</button></div></div><span title="E. Morgan; H. Choi · Example Biology" class="sc-paper-meta"><span class="sc-paper-meta-text">2026 · Example Biology · E. Morgan; H. Choi</span></span></div><div class="sc-metrics"><span data-empty="true" data-metric="impact" title="저널 영향력 지수 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">—</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="reading" data-item-id="4" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|3" aria-label="Tissue-scale repair atlases from sparse sampling 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Tissue-scale repair atlases from sparse sampling" class="sc-paper-title">Tissue-scale repair atlases from sparse sampling</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="4" aria-expanded="false" type="button">자세히</button></div></div><span title="R. Ahn; P. Silva · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · R. Ahn; P. Silva</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">41</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">6m 40s</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="5" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|4" aria-label="Benchmarks for repair-stage classifiers 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Benchmarks for repair-stage classifiers" class="sc-paper-title">Benchmarks for repair-stage classifiers</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="5" aria-expanded="false" type="button">자세히</button></div></div><span title="K. Oh; Christopher A. Voigt · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Cell Research · K. Oh; Christopher A. Voigt</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="6" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|5" aria-label="Preregistered synthesis of repair reviews 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Preregistered synthesis of repair reviews" class="sc-paper-title">Preregistered synthesis of repair reviews</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="6" aria-expanded="false" type="button">자세히</button></div></div><span title="D. Yu; S. Lee · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2023 · Example Methods · D. Yu; S. Lee</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">12</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article></div></div></div></div><footer data-selected="true" class="sc-selection-bar"><span title="Mapping cellular responses across tissue repair" class="sc-selection-label">문헌 1개 선택</span><button type="button">선택 해제</button><span class="sc-selection-tasks"><button type="button">노트</button><button type="button">주석</button><button hidden data-variant="primary" type="button">논문 비교</button><button hidden type="button">주석 나란히</button></span><details hidden class="sc-selection-relations"><summary>연결 작업</summary><button disabled type="button">관련 문헌으로 연결</button><button disabled type="button">선택 문헌끼리 연결 해제</button></details></footer><div hidden aria-label="기능 바로 찾기" aria-modal="true" role="dialog" class="sc-command-palette"><input aria-controls="sc-command-results" aria-label="찾을 기능 이름" aria-autocomplete="list" aria-expanded="false" role="combobox" placeholder="예: 주석, 비교, 탭…" class="sc-command-search" type="search"><div aria-label="검색된 기능" role="listbox" class="sc-command-results" id="sc-command-results"></div><p class="sc-muted">↑↓ 이동 · Enter 열기 · Esc 닫기</p></div></section><script>/* Pure workspace operations shared by the panel and background regressions. */
 (function(root){
  'use strict';
  const text=value=>String(value??'');
@@ -3211,7 +3221,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
  const GROUPS=[['탐색',['explore','recent','related','authors','collections','journals']],['읽기',['reading','notes','annotations','attachments','backlinks']],['정리',['tags','graph','canvas','matrix']],['도구',['tabs','views','assist','appearance']]];
  const FILTER_TABS=new Set(['explore','recent','collections','journals','reading','notes','annotations','attachments','tags','graph']);
  function attach(win,{runtime,library,reader,model,assist}){
-  const doc=win.document;let pathAbort=null;let disposed=false,epoch=0,loadEpoch=0,previewEpoch=0,aiEpoch=0,preview=null,notifier=null,reloadTimer=null,draftTimer=null,jcrMount=null;
+  const doc=win.document;let pathAbort=null,freshAbort=null;let disposed=false,epoch=0,loadEpoch=0,previewEpoch=0,aiEpoch=0,preview=null,notifier=null,reloadTimer=null,draftTimer=null,jcrMount=null;
   // Every self-saving memo currently on screen, so an edit still inside its
   // one-second wait is written when the panel closes rather than lost.
   let memoFields=[];
@@ -4138,7 +4148,9 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      node('span',null,meter,{class:'sc-row-progress-fill'}).style.width=Math.round(100*p.visited/p.total)+'%';
      node('span',`${p.visited}/${p.total}`,timeCell,{class:'sc-row-progress-text','aria-hidden':'true'});}}
    // Loaded once per list, grouped by parent (see load()); a paper with no annotations shows nothing extra.
-   if(Number(item.annotations)>0&&timeCell)node('span',T(`주석 ${item.annotations}`),timeCell,{class:'sc-row-annotations'});
+   // A count used to be all it said; a click now takes the reader straight to
+   // just this paper's marks, the scope and everything else on the list kept.
+   if(Number(item.annotations)>0&&timeCell)button(T(`주석 ${item.annotations}`),()=>{state.annotationPaperID=String(item.id);navigate('annotations');},timeCell,{class:'sc-row-annotations'});
    const actions=bar(mainline);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-opens':'window','data-variant':'primary'});/* 자세히 opens the paper under its own row: the list keeps its search,
       filters, page, selection and place. One at a time; pressed again, it
       closes and the focus goes back to it. */
@@ -4306,13 +4318,64 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
 
   // An OpenAlex work named as W1 or as its full URL is one work.
   const bareWork=v=>{const id=String(v||'').split('/').pop();return /^w\d+$/i.test(id)?id.toUpperCase():String(v||'');};
+  /* The papers one chosen paper cites, and the papers that cite it, both
+     found without asking OpenAlex again: outgoing from its own cached
+     reference list, incoming by scanning every other held paper's own
+     cached reference list for this one's openalex id. state.items already
+     holds the whole library, not just the current scope. */
+  function paperNeighbours(centreID,works,limit){
+   const items=state.items;
+   const centre=items.find(i=>String(i.id)===String(centreID));
+   if(!centre)return null;
+   const workOf=item=>works[item.libraryID+':'+item.key]||works[String(item.id)]||null;
+   const centreWork=workOf(centre);
+   const centreOpenalex=bareWork(centreWork&&centreWork.openalex);
+   const centreRefs=new Set((centreWork&&Array.isArray(centreWork.references)?centreWork.references:[]).map(bareWork));
+   const openalexOf=new Map();
+   for(const item of items){
+    if(String(item.id)===String(centreID))continue;
+    const oa=bareWork((workOf(item)||{}).openalex);
+    if(oa&&!openalexOf.has(oa))openalexOf.set(oa,item);
+   }
+   const cites=[...centreRefs].map(oa=>openalexOf.get(oa)).filter(Boolean);
+   const citedBy=centreOpenalex?items.filter(item=>{
+    if(String(item.id)===String(centreID))return false;
+    const w=workOf(item);
+    return !!w&&Array.isArray(w.references)&&w.references.map(bareWork).includes(centreOpenalex);
+   }):[];
+   const seen=new Set([String(centreID)]),neighbours=[];
+   for(const item of[...cites,...citedBy])if(!seen.has(String(item.id))){seen.add(String(item.id));neighbours.push(item);}
+   const cap=Math.max(0,limit-1),shown=neighbours.slice(0,cap);
+   const unread=neighbours.filter(item=>item.status!=='done'&&item.status!=='reading');
+   return {chosen:[centre,...shown],cites,citedBy,unread,total:neighbours.length,shownCount:shown.length,cut:neighbours.length>shown.length};
+  }
   function drawCitationGraph(b){
    // Without the journal registry the nodes still draw, in the neutral tone.
    const graphTools=runtime.graphTools,identity=runtime.journalIdentity||{identify:()=>null,colours:()=>null};
    if(!graphTools||typeof runtime.paperWorks!=='function'){drawLegacyGraph(b);return;}
    const works=runtime.paperWorks();
    const limit=setting('graphNodeLimit',180);
-   const chosen=rows().slice(0,limit);
+   /* 현재 범위 / 선택 문헌 주변: the switch stays on 현재 범위 until one
+      paper is chosen, and leaving it back never sticks -- the mode is read
+      fresh from state.selected + state.graphScope on every draw, nothing
+      else is mutated by it. */
+   const centreID=state.selected.size?[...state.selected][0]:null;
+   const scopeBar=bar();
+   const scopeGroup=node('div',null,scopeBar,{class:'sc-segmented',role:'group','aria-label':'그래프 범위'});
+   const neighbourMode=!!centreID&&state.graphScope==='neighbours';
+   for(const[scopeMode,label]of[['scope','현재 범위'],['neighbours','선택 문헌 주변']])
+    button(label,()=>{state.graphScope=scopeMode;render();},scopeGroup,{'aria-pressed':(neighbourMode?'neighbours':'scope')===scopeMode});
+   if(!centreID)node('span',T('문헌 하나를 고르면 주변을 봅니다'),scopeBar,{class:'sc-muted'});
+   const neighbourInfo=neighbourMode?paperNeighbours(centreID,works,limit):null;
+   if(neighbourMode&&neighbourInfo){
+    const unreadIDs=neighbourInfo.unread.map(item=>String(item.id));
+    const line=node('p',null,body,{class:'sc-muted sc-graph-summary'});
+    node('span',[T(`참고문헌 ${neighbourInfo.cites.length}`),T(`인용한 문헌 ${neighbourInfo.citedBy.length}`)].join(' · ')+' · ',line);
+    const unreadBtn=button(T(`안 읽음 ${unreadIDs.length}`),()=>navigateSelection('explore',unreadIDs),line,{class:'sc-inline'});
+    if(!unreadIDs.length)unreadBtn.disabled=true;
+    if(neighbourInfo.cut)node('p',T(`연결 ${neighbourInfo.total}편 중 ${neighbourInfo.shownCount}편 표시`),body,{class:'sc-muted sc-graph-summary'});
+   }
+   const chosen=neighbourInfo?neighbourInfo.chosen:rows().slice(0,limit);
    const papers=chosen.map(paper=>{
     const work=works[paper.libraryID+':'+paper.key]||works[String(paper.id)]||null;
     return {id:String(paper.id),title:paper.title,year:Number(paper.year)||null,
@@ -4325,7 +4388,8 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
       not know, or one with no DOI, is answered already and is skipped by the
       sweep; counting it kept "3편 남음" on a button that could do nothing. */
    const unasked=chosen.filter(paper=>!(works[paper.libraryID+':'+paper.key]||works[String(paper.id)])).length;
-   if(unasked)button(`인용 목록 가져오기 · OpenAlex (${unasked}편 남음)`,()=>run(async()=>{
+   // 주변 mode draws only from what is already cached; it never offers a fetch.
+   if(!neighbourMode&&unasked)button(`인용 목록 가져오기 · OpenAlex (${unasked}편 남음)`,()=>run(async()=>{
     const wanted=[];
     for(const paper of chosen){
      const found=await runtime.Z.Items.getAsync(Number(paper.id));
@@ -4341,17 +4405,20 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     // Nothing fetched yet is not nothing to show. The related-items graph
     // stands in until the reference lists arrive, so the tab is never a blank
     // panel with one button on it.
-    node('p',unasked?'아직 인용 목록이 없습니다. “인용 목록 가져오기”를 누르면 실제 인용 관계로 바뀝니다. 그때까지는 관련 문헌 연결을 보여줍니다.'
+    node('p',neighbourMode?'이 문헌과 직접 연결된 인용 관계를 캐시에서 찾지 못했습니다.'
+     :unasked?'아직 인용 목록이 없습니다. “인용 목록 가져오기”를 누르면 실제 인용 관계로 바뀝니다. 그때까지는 관련 문헌 연결을 보여줍니다.'
      :'이 범위의 논문은 OpenAlex에 참고문헌 목록이 없습니다. 관련 문헌 연결을 대신 보여줍니다.',body,{class:'sc-muted'});
-    drawLegacyGraph(b);
+    if(!neighbourMode)drawLegacyGraph(b);
     return;
    }
    const W=graphWidth(),H=graphHeight(chosen.length);
    const items=chosen.map(paper=>runtime.Z.Items.get(Number(paper.id))).filter(Boolean);
-   const citedBy=typeof runtime.citedByFor==='function'?runtime.citedByFor(items):null;
-   const citedStore=typeof runtime.citedByStore==='function'?runtime.citedByStore():{};
-   const citersDue=items.filter(ref=>!citedStore[runtime.identity(ref)]&&(works[runtime.identity(ref)]||{}).openalex).length;
+   const citedBy=typeof runtime.citedByFor==='function'&&!neighbourMode?runtime.citedByFor(items):null;
+   const citedStore=typeof runtime.citedByStore==='function'&&!neighbourMode?runtime.citedByStore():{};
+   const citersDue=neighbourMode?0:items.filter(ref=>!citedStore[runtime.identity(ref)]&&(works[runtime.identity(ref)]||{}).openalex).length;
    // One metered request per paper: the button says so before it is pressed.
+   // 주변 mode already found who cites the centre from cached reference
+   // lists, so it never asks OpenAlex for the same thing.
    if(citersDue)button(`인용한 논문 가져오기 (${citersDue}편 남음 · 요청 최대 ${citersDue}회)`,()=>run(async()=>{
     const report=await runtime.sweepCitedBy(items,{onProgress:(d,t)=>message(`인용한 논문 ${d+1}/${t}`)});
     message(`${report.found}편에서 인용 ${report.citers}건`
@@ -4414,8 +4481,12 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    // What each label will say, before deciding which ones fit.
    for(const n of graph.nodes){
     const id=n.kind!=='external'&&n.venue?identity.identify(n.venue):null;
+    // 주변 mode has only a handful of nodes, so a short title says more than
+    // a journal mark and a year -- the centre's own label is always drawn
+    // via the state.selected check below, since it is the chosen paper.
     n.labelText=n.kind==='external'
      ?plain(n.label).slice(0,34)
+     :neighbourMode?plain(n.label).slice(0,24)
      :[id?id.mark:null,n.year].filter(Boolean).join(' ')||plain(n.label).slice(0,30);
    }
    const labelled=graphTools.placeLabels(graph.nodes);
@@ -4742,6 +4813,10 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    const acts=bar();button('현재 선택 가져오기',()=>{const picked=runtime.selected(win);if(!picked.length){message('Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.',true);return;}state.selected=new Set(picked.slice(0,1).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});
   }
   async function drawNotes(token){const target=selected();
+   // 40 at a time, until 더 보기 asks for more; a new query, library, scope
+   // or filter starts back at 40 rather than keeping whatever was reached.
+   const noteContext=JSON.stringify([state.query,state.scope,state.libraryID,state.status,state.ratingMin,state.yearFrom,state.yearTo,state.tag,state.type,state.color]);
+   if(state.noteContext!==noteContext){state.noteContext=noteContext;state.noteLimit=40;}
    if(target.length!==1){if(target.length>1){node('p',`선택한 ${target.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});const pickBar=bar();for(const it of target.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar,{'data-pick':String(it.id)});}else notePaperChooser();}
    else{
     // While searching, the results come first and writing a new note folds.
@@ -4793,9 +4868,9 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      if(bare.length>12)button(state.notesMissingAll?'12편만 보기':T(`${bare.length}편 모두 보기`),()=>{state.notesMissingAll=!state.notesMissingAll;render();},fold,{class:'sc-local-reading-more'});
     }
    }
-   const CAP=40;const listed=own?matching:matching.slice(0,CAP);
-   sectionHead(own?'이 문헌의 노트':state.query?'검색된 노트':matching.length>CAP?'최근 노트':'이 범위의 노트',
-    matching.length>CAP&&!own&&!state.query?`${CAP}개 · 전체 ${matching.length}개`:`${matching.length}개`);
+   const CAP=state.noteLimit||40;const cut=!own&&matching.length>CAP;const listed=own?matching:matching.slice(0,CAP);
+   sectionHead(own?'이 문헌의 노트':state.query?'검색된 노트':cut?'최근 노트':'이 범위의 노트',
+    cut?T(`${listed.length}/${matching.length}개 표시`):`${matching.length}개`);
    for(const n of listed){const c=card(n.title,[paperTitle(n.parentID),paperState(n.parentID),String(n.modified||'').slice(0,10),sourceHit.has(n.id)?T('문헌 정보 일치')+' — '+sourceHit.get(n.id):''].filter(Boolean).join(' · '));const text=node('p',n.text.length>1200?n.text.slice(0,1200)+'…':n.text,c,{class:'sc-note-text'});if(state.query)noteExcerpt(text,n);/* "전체 내용 보기" replaced the text but left the four-line clamp on, so
     nothing opened; and a note under 1,200 characters but over four lines was
     clamped with no way to open it. The button appears when the note is cut
@@ -4809,7 +4884,9 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    if(text.classList.contains('sc-note-excerpt'))more.hidden=false;
    win.requestAnimationFrame?.(syncNoteOverflow);if(!own&&n.parentID&&paperTitle(n.parentID))button('이 문헌에 노트 쓰기',()=>{state.selected=new Set([String(n.parentID)]);state.query=search.value='';render();},c);button('노트 편집',()=>library.openItem(n.id),c,{'data-opens':'window'});button('내용 복사',()=>copy(n.text),c);
     // The list had no way to let a note go. Trash, not delete: Zotero's trash keeps it.
-    button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);noteCache=null;await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':own?'이 문헌에는 아직 노트가 없습니다. 위에 첫 노트를 쓰세요.':'이 범위에 노트가 없습니다. 위에서 문헌을 골라 첫 노트를 쓰세요.');}
+    button('휴지통으로',()=>run(async()=>{await library.trashItems([n.id]);noteCache=null;await render();message('노트를 휴지통으로 옮겼습니다. Zotero 휴지통에서 복원할 수 있습니다.');}),c,{class:'sc-danger-soft',title:'삭제하지 않고 Zotero 휴지통으로 옮깁니다'});}
+   if(cut)button('더 보기',()=>{state.noteLimit=CAP+40;render();},body,{class:'sc-notes-more'});
+   if(!matching.length)empty(state.query?'검색에 맞는 노트가 없습니다. 검색어를 바꿔 보세요.':own?'이 문헌에는 아직 노트가 없습니다. 위에 첫 노트를 쓰세요.':'이 범위에 노트가 없습니다. 위에서 문헌을 골라 첫 노트를 쓰세요.');}
   /* Searching, a note shows where it matched: up to two passages around the
      words, the words themselves in bold and underlined, no background --
      not its first four lines, which may be nowhere near. Matched only in the
@@ -5228,7 +5305,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    const details=node('details',null,parent,{class:'sc-attachment-findings'});
    if(state.attachmentFindingsOpen)details.open=true;
    details.addEventListener('toggle',()=>{state.attachmentFindingsOpen=details.open;});
-   node('summary',T(`자료 점검 · 보충자료 ${found.supplementary.length} · 중복 ${found.duplicate.length} · 다른 논문 ${found.foreign.length} · 보충자료만 ${(found.orphan||[]).length} · 첨부 없음 ${found.missing.length}`),details);
+   node('summary',T(`자료 점검 · 보충자료 ${found.supplementary.length} · 중복 ${found.duplicate.length} · 다른 논문 ${found.foreign.length} · 보충자료만 있는 문헌 ${(found.orphan||[]).length} · 첨부 없음 ${found.missing.length}`),details);
    if(found.unread){
     button(`아직 안 읽은 ${found.unread}개 판별`,()=>run(async()=>{
      const items=await runtime.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
@@ -5299,30 +5376,28 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   }
 
   async function drawAttachments(token){
-   // The per-item list is what this tab is for; it draws first now. The
-   // library-wide scan used to sit above it on every visit -- read once,
-   // then a row of dead weight on every later one -- so it moves into a
-   // collapsed fold below, and what it found about an attachment already
-   // in this list is noted right on that attachment's own card.
+   // The per-item list is what this tab is for; it draws first, from a
+   // fetch scoped to these items. The library-wide scan (findingsReport)
+   // used to be awaited before the first file appeared -- a slow scan of a
+   // whole library held up a list that never depended on it. It is fetched
+   // only after the list is on screen, guarded by the same token so a scan
+   // that resolves after the reader has moved on drops silently.
    const list=await library.attachments(ids());if(token!==epoch||disposed)return;
-   const found=await findingsReport(token);if(token!==epoch||disposed)return;
-   const NOTE_FOR={supplementary:'보충자료로 판별됨',duplicate:'중복 파일로 판별됨',foreign:'다른 논문의 파일로 판별됨',orphan:'보충자료로 판별됨 · 원논문 없음'};
-   const noteOf=new Map();
-   if(found)for(const kind of ['supplementary','duplicate','foreign','orphan'])for(const row of found[kind]||[])if(row.fileID!=null)noteOf.set(String(row.fileID),NOTE_FOR[kind]);
-   // The heading names the scope actually listed, and a whole library's files come a hundred at a time.
-   if(list.length)sectionHead(state.scope==='selected'?'선택한 문헌의 첨부파일':'이 범위의 첨부파일',list.length);
+   // The heading names the scope actually listed, after the search filter --
+   // it used to count files the list below did not show.
    const every=list.filter(a=>model.matches(a.title+' '+a.contentType,state.query));
+   if(list.length)sectionHead(state.scope==='selected'?'선택한 문헌의 첨부파일':'이 범위의 첨부파일',every.length);
    const limit=state.attachmentLimit||100;
    const matching=every.slice(0,limit);
    const kindWord=type=>({'application/pdf':'PDF','application/epub+zip':'EPUB','application/epub':'EPUB','text/html':T('스냅샷')})[type]||(type?String(type).split('/')[0]:'');
+   const cardOf=new Map();
    for(const a of matching){
     // Which paper this file belongs to: the same list used to say only the
     // file's own name, which is how a supplement and its article told apart
     // only by opening both.
     const parentTitle=state.items.find(i=>String(i.id)===String(a.parentID))?.title||'';
     const c=card(a.title,[parentTitle,kindWord(a.contentType)].filter(Boolean).join(' · '));
-    const note=noteOf.get(String(a.id));
-    if(note)node('p',note,c.querySelector('.sc-card-text'),{class:'sc-attachment-note'});
+    cardOf.set(String(a.id),c);
     button('열기',()=>library.openItem(a.id),c,{'data-opens':'window'});
     const supported=['application/pdf','application/epub+zip','application/epub','text/html'].includes(a.contentType)||/^(image|audio|video)\//.test(a.contentType||'');
     if(!supported||a.path===null){node('p','이 첨부는 미리보기를 지원하지 않습니다. 열기로 확인하세요.',c,{class:'sc-muted'});continue;}
@@ -5341,7 +5416,18 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    }
    if(every.length>limit){const more=bar();node('span',`${every.length}개 중 ${limit}개`,more,{class:'sc-muted'});button('100개 더 보기',()=>{state.attachmentLimit=limit+100;render();},more);}
    if(!matching.length)empty(state.query?'검색에 맞는 첨부가 없습니다. 검색어를 바꿔 보세요.':'첨부파일이 없습니다. PDF 또는 스냅샷을 첨부하세요.');
-   if(found)drawFindingsBox(found,body);
+   // The list is already visible; the slower library-wide scan fills in
+   // per-file notes and the folded findings box once it answers.
+   const found=await findingsReport(token);if(token!==epoch||disposed)return;
+   if(found){
+    const NOTE_FOR={supplementary:'보충자료로 판별됨',duplicate:'중복 파일로 판별됨',foreign:'다른 논문의 파일로 판별됨',orphan:'보충자료로 판별됨 · 원논문 없음'};
+    for(const kind of ['supplementary','duplicate','foreign','orphan'])for(const row of found[kind]||[]){
+     if(row.fileID==null)continue;
+     const c=cardOf.get(String(row.fileID));if(!c)continue;
+     node('p',NOTE_FOR[kind],c.querySelector('.sc-card-text'),{class:'sc-attachment-note'});
+    }
+    drawFindingsBox(found,body);
+   }
   }
   function refreshReading(){
    if(disposed||panel.hidden||state.tab!=='reading')return;
@@ -5395,11 +5481,25 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
       Only a recorded date counts; a paper without one is not guessed stalled. */
    const stalled=shaped.filter(r=>r.status==='reading'&&Number.isFinite(r.when)&&now-r.when>14*DAY).sort((a,b)=>a.when-b.when);
    const readingNow=shaped.filter(r=>r.status==='reading'&&!resumed.has(String(r.item.id)));
+   // 오늘 읽음 · 지난 7일, off the same `when` asResume already computed: not
+   // a second date parse, and the same rows a click on either count narrows to.
+   const dayStart=new Date();dayStart.setHours(0,0,0,0);
+   const todayRows=shaped.filter(r=>Number.isFinite(r.when)&&r.when>=dayStart.getTime());
+   const weekRows=shaped.filter(r=>Number.isFinite(r.when)&&r.when>=now-7*DAY);
+   const todayIDs=new Set(todayRows.map(r=>String(r.item.id))),weekIDs=new Set(weekRows.map(r=>String(r.item.id)));
    // A view that has emptied (the last one finished here) falls back to the whole record, and the switch stays.
-   if((state.readingView==='stalled'&&!stalled.length)||(state.readingView==='reading'&&!readingNow.length))state.readingView='';
-   // The papers in 이어 읽기 are not listed a second time below it.
-   const listedAll=read.filter(r=>!resumed.has(String(r.item.id)));
-   const listed=state.readingView==='stalled'?[]:state.readingView==='reading'?listedAll.filter(r=>(r.item.status??runtime.state?.(r.ref)?.status)==='reading'):listedAll;
+   if((state.readingView==='stalled'&&!stalled.length)||(state.readingView==='reading'&&!readingNow.length)
+    ||(state.readingView==='today'&&!todayRows.length)||(state.readingView==='week'&&!weekRows.length))state.readingView='';
+   // The papers in 이어 읽기 are not listed a second time below it. Drawn
+   // from `shaped`, not `read`, now: the general list uses the same row
+   // renderer as 이어 읽기, which needs the richer shape (files, next page,
+   // last-read time) that only asResume computed before.
+   const listedAll=shaped.filter(r=>!resumed.has(String(r.item.id)));
+   const listed=state.readingView==='stalled'?[]
+    :state.readingView==='reading'?listedAll.filter(r=>r.status==='reading')
+    :state.readingView==='today'?listedAll.filter(r=>todayIDs.has(String(r.item.id)))
+    :state.readingView==='week'?listedAll.filter(r=>weekIDs.has(String(r.item.id)))
+    :listedAll;
    pages=Math.max(1,Math.ceil(listed.length/PER));
    state.readingPage=Math.max(0,Math.min(state.readingPage||0,pages-1));
    /* One paper's pages as a strip; the same in 이어 읽기, folded, and in the list below. */
@@ -5518,16 +5618,26 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    }
    /* Today and this week, in papers: how many were opened today and in the
       last seven days. The record keeps a paper's total time and when it was
-      last read, not time per day, so it counts papers and says no more. */
-   {
-    const start=new Date();start.setHours(0,0,0,0);
-    const whenOf=r=>runtime.localStamp?runtime.localStamp(r.entry.lastRead)?.getTime():Date.parse(r.entry.lastRead||'');
-    const today=read.filter(r=>whenOf(r)>=start.getTime()).length,week=read.filter(r=>whenOf(r)>=Date.now()-7*DAY).length;
-    if(week){const line=node('p',null,list,{class:'sc-overview-facts sc-reading-today'});
-     for(const [label,value] of [['오늘 읽음',today],['지난 7일',week]]){const span=node('span',null,line);node('b',T(`${value}편`),span);span.appendChild(doc.createTextNode(' '+T(label)));}}
-   }
-   const drawResumeRow=(box,r)=>{
-     const row=node('div',null,box,{class:'sc-resume-row'});
+      last read, not time per day, so it counts papers and says no more.
+      Each count is also a button onto just those papers -- pressing the same
+      one again goes back to the whole record, the one mechanism the other
+      view switch already uses. */
+   if(weekRows.length){const line=node('p',null,list,{class:'sc-overview-facts sc-reading-today'});
+    for(const [key,label,value] of [['today','오늘 읽음',todayRows.length],['week','지난 7일',weekRows.length]]){
+     const on=state.readingView===key;
+     const btn=button('',()=>{state.readingView=on?'':key;state.readingPage=0;refreshReading();},line,{class:'sc-overview-fact','aria-pressed':String(on)});
+     node('b',T(`${value}편`),btn);btn.appendChild(doc.createTextNode(' '+T(label)));
+     if(!value)btn.disabled=true;
+    }}
+   /* One row, shared by 이어 읽기 and the general record list below it: a
+      title and memo on the first line, 열기/이어 읽기 and the status control
+      at the end of the second -- the general list used to build its own
+      plain card instead, with a redundant progress bar and its page strip
+      always open. opts.recordMeta switches only the meta line's order (읽은
+      시간 · 방문 쪽/전체 쪽 · 마지막 읽음, what the general list is for)
+      and the button's word for an already-완료 paper. */
+   const drawResumeRow=(box,r,opts={})=>{
+     const row=node('div',null,box,{class:'sc-resume-row'+(opts.recordMeta?' sc-reading-record':'')});
      const text=node('div',null,row,{class:'sc-resume-text'});
      node('span',r.item.title,text,{class:'sc-resume-title',title:r.item.title});
      if(r.files.length>1)fileChooser(text,r.item,r.files,r.p);
@@ -5538,12 +5648,20 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      // With files to choose between, the time is this file's, and says so; the paper's total is the list's.
      const seconds=r.files.length>1?r.fileSeconds:r.seconds;
      const timeText=seconds>0&&runtime.formatReadTime?runtime.formatReadTime(seconds):'';
-     // What is left after the page to come back to, so a paper two pages from its end reads as one.
-     const left=r.next!=null&&r.total?r.total-(r.next+1):null;
-     const parts=[r.total?`${r.p.visited}/${r.total}쪽`:'',left?T(`이 쪽 뒤 ${left}쪽`):'',r.files.length>1&&timeText?T(`이 파일 ${timeText}`):timeText,days?`${days}일 전`:T('오늘')].filter(Boolean);
+     let parts;
+     if(opts.recordMeta){
+      const timeLabel=timeText?T(`읽은 시간 ${timeText}`):T('읽은 시간 기록 없음');
+      const lastLabel=days?T(`마지막 읽음 ${days}일 전`):T('마지막 읽음 오늘');
+      parts=[timeLabel,r.total?`${r.p.visited}/${r.total}쪽`:'',lastLabel].filter(Boolean);
+     } else {
+      // What is left after the page to come back to, so a paper two pages from its end reads as one.
+      const left=r.next!=null&&r.total?r.total-(r.next+1):null;
+      parts=[r.total?`${r.p.visited}/${r.total}쪽`:'',left?T(`이 쪽 뒤 ${left}쪽`):'',r.files.length>1&&timeText?T(`이 파일 ${timeText}`):timeText,days?`${days}일 전`:T('오늘')].filter(Boolean);
+     }
      node('span',parts.join(' · '),row,{class:'sc-resume-meta'});
      const target=r.p.attachmentID||r.item.id;
-     button(r.next!=null?`${r.next+1}쪽에서`:'이어 읽기',()=>run(()=>library.openItem(target,r.next!=null?{pageIndex:r.next}:undefined)),row,{'data-opens':'window',title:T(r.next!=null?'마지막으로 보던 쪽에서 엽니다':'Zotero가 기억하는 위치에서 엽니다')});
+     const resumeLabel=opts.recordMeta&&r.status==='done'?'열기':r.next!=null?`${r.next+1}쪽에서`:'이어 읽기';
+     button(resumeLabel,()=>run(()=>library.openItem(target,r.next!=null?{pageIndex:r.next}:undefined)),row,{'data-opens':'window',title:T(r.next!=null?'마지막으로 보던 쪽에서 엽니다':'Zotero가 기억하는 위치에서 엽니다')});
      // The page-by-page record is not listed below for these, so it folds in here.
      readingStatus(row,r.item,r.ref);
      const folds=node('div',null,row,{class:'sc-resume-folds'});
@@ -5615,27 +5733,16 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     }
     if(unread)node('span',`아직 읽지 않은 ${unread}편은 뺐습니다.`,tools,{class:'sc-muted'});
    }
-   for(const {item,ref,p:paperP,entry} of listed.slice(state.readingPage*PER,(state.readingPage+1)*PER)){
-    // A finished paper keeps its files apart too: article and supplement each with their own pages and notes.
-    const files=Object.keys(entry.readingAttachments||{}),chosenFile=readingFiles.get(String(item.id));
-    const p=chosenFile&&files.includes(chosenFile)?runtime.pageProgress(ref,Number(chosenFile)):paperP;
-    const time=runtime.formatReadTime?runtime.formatReadTime(entry.seconds):Math.floor(entry.seconds||0)+'초';
-    // No recorded time is not "0 seconds read": saying both in one line
-    // contradicted the page count beside it.
-    const timePart=Number(entry.seconds)>0?`읽은 시간 ${time}`:'읽은 시간 기록 없음';
-    const c=card(item.title,p.total?`${timePart} · 전체 ${p.total}쪽 중 ${p.visited}쪽`:`${timePart} · 아직 페이지 기록 없음`,list);
-    // What the reader meant to check, as 이어 읽기's rows already show it.
-    const remark=String(entry.remark||'').trim();
-    if(remark)node('p',remark.split('\n')[0].slice(0,140),c.querySelector('.sc-card-text'),{class:'sc-resume-remark'});
-    if(p.total){const box=node('div',null,c,{class:'sc-collection-bar','aria-hidden':'true'});
-     node('span',null,box,{class:'sc-collection-fill'}).style.width=`${Math.round(100*p.visited/p.total)}%`;}
-    // With a file chosen, 열기 opens that file.
-    button('열기',()=>library.openItem(files.length>1&&p.attachmentID?Number(p.attachmentID):item.id),c,{'data-opens':'window'});
-    if(files.length>1)fileChooser(c,item,files,p);
-    readingStatus(c,item,ref);
-    pageStrip(c,item,p);
-    readingEvidence(c,item,p);
-    drewStrip=true;
+   if(listed.length){
+    // The same row as 이어 읽기, not a separate card: one first line for
+    // title and memo, one second for 읽은 시간 · 방문 쪽/전체 쪽 · 마지막
+    // 읽음 with 열기/이어 읽기 and the status control at its end. No
+    // second progress bar, and the page strip is a fold, not always open.
+    const recordsBox=node('div',null,list,{class:'sc-resume sc-reading-records'});
+    for(const r of listed.slice(state.readingPage*PER,(state.readingPage+1)*PER)){
+     drawResumeRow(recordsBox,r,{recordMeta:true});
+     drewStrip=true;
+    }
    }
    if(!drewStrip&&!list.childNodes.length)node('p','읽은 시간과 페이지는 PDF를 열어 읽는 동안 자동으로 기록됩니다. 아직 기록이 없습니다.',list,{class:'sc-empty'});
    // The key says what the shading counts, and sits above the strips it
@@ -5876,13 +5983,17 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    const distinct=new Set(collections.flatMap(c=>c.itemIDs||[])).size||collections.reduce((n,c)=>n+c.count,0);
    // The bar, its split and its figure all count the same papers: the collection with what is filed below it.
    const most=Math.max(1,...collections.map(c=>c.deepCount||0));
-   node('span',`컬렉션 ${collections.length}개 · 서로 다른 문헌 ${distinct}편 · 빈 컬렉션 ${collections.filter(c=>!c.deepCount).length}개`,b,{class:'sc-muted'});
-   const list=node('div',null,body,{class:'sc-collection-tree'});
    const statusByID=new Map(state.items.map(i=>[String(i.id),i.status]));
    const readByID=new Map(state.items.map(i=>[String(i.id),runtime.localStamp?runtime.localStamp(i.lastRead)?.getTime():Date.parse(i.lastRead||'')]));
    // What is read in each, and when anything in it was last read: which projects are live, and which are shelved.
    const readingMix=ids=>{const mix={done:0,reading:0,unread:0,known:0,last:0};for(const id of ids){if(!statusByID.has(String(id)))continue;const st=statusByID.get(String(id));mix[st==='done'?'done':st==='reading'?'reading':'unread']++;mix.known++;const at=readByID.get(String(id));if(Number.isFinite(at)&&at>mix.last)mix.last=at;}return mix;};
    const ago=at=>{const days=Math.floor((Date.now()-at)/864e5);return days<1?T('오늘 읽음'):days<60?T(`${days}일 전 읽음`):T(`${Math.round(days/30)}개월 전 읽음`);};
+   // Live projects, not just how many exist: a collection whose papers were
+   // touched in the last two weeks, off the same last-read data as each row's own bar.
+   const recentDays=14*864e5,now=Date.now();
+   const recent=collections.filter(c=>{const last=readingMix(deepIDs(c)).last;return last>0&&now-last<=recentDays;}).length;
+   node('span',T(`컬렉션 ${collections.length}개 · 서로 다른 문헌 ${distinct}편 · 빈 컬렉션 ${collections.filter(c=>!c.deepCount).length}개 · 최근 14일에 읽은 컬렉션 ${recent}개`),b,{class:'sc-muted'});
+   const list=node('div',null,body,{class:'sc-collection-tree'});
    function draw(){
     list.replaceChildren();
     const favorites=runtime.cache.favoriteCollections||[];
@@ -6938,7 +7049,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     const maxSeconds=Math.max(1,...shown.map(p=>statsFor(p.name).seconds));
     const table=node('table',null,host,{class:'sc-watch-table'});
     const thead=node('thead',null,table);const head=node('tr',null,thead);
-    for(const [label,cls,title] of [['이름','',''],['소속','',''],['보유','sc-col-n',COAUTHOR_NOTE],['완료','sc-col-n',COAUTHOR_NOTE],['안 읽음','sc-col-n',COAUTHOR_NOTE],['읽은 시간','sc-col-time',COAUTHOR_NOTE],['마지막 확인','sc-col-date',''],['새 논문','sc-col-n',''],['특허','sc-col-n',''],['','sc-col-act','']]){
+    for(const [label,cls,title] of [['이름','',''],['소속','',''],['읽기 상태','sc-col-reading',COAUTHOR_NOTE],['읽은 시간','sc-col-time',COAUTHOR_NOTE],['마지막 확인','sc-col-date',''],['새 논문','sc-col-n',''],['특허','sc-col-n',''],['','sc-col-act','']]){
      const attrs={scope:'col',class:cls};if(title)attrs.title=title;node('th',label,head,attrs);
     }
     const tbody=node('tbody',null,table);
@@ -6947,12 +7058,15 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      const nameCell=node('td',null,tr);const open=node('button',person.name,nameCell,{class:'sc-journal-name',type:'button',title:'상세 보기'});open.addEventListener('click',()=>run(()=>show(person)));
      const place=node('td',person.institution||'소속 미확인',tr,{title:person.institution||''});if(person.institutionGiven&&person.institutionGiven!==person.institution)place.title=`등록 당시: ${person.institutionGiven}`;
      if(person.moved&&person.moved.to)place.classList.add('sc-watch-moved');
-     // 보유·완료·안 읽음·읽은 시간: matched by name against the library, same
-     // basis as the card grid and drawShelf, and a guessed match is marked.
+     // 보유·완료·안 읽음: three fixed columns near 800px width crushed name
+     // and affiliation, so they share one cell now, still matched by name
+     // against the library, and a guessed match is marked.
      const stats=statsFor(person.name);
-     node('td',stats.n?String(stats.n)+(stats.guess?'?':''):'—',tr,{class:'sc-col-n'+(stats.n?' sc-watch-count':' sc-none'),title:stats.n?(stats.guess?T('성과 이름 첫 글자만 같아 짐작한 값입니다 · ')+COAUTHOR_NOTE:COAUTHOR_NOTE):''});
-     node('td',stats.done?String(stats.done):'—',tr,{class:'sc-col-n'+(stats.done?' sc-watch-count':' sc-none'),title:stats.done?COAUTHOR_NOTE:''});
-     node('td',stats.unread?String(stats.unread):'—',tr,{class:'sc-col-n'+(stats.unread?' sc-watch-count':' sc-none'),title:stats.unread?COAUTHOR_NOTE:''});
+     const parts=[];
+     if(stats.n)parts.push(T(`보유 ${stats.n}${stats.guess?'?':''}`));
+     if(stats.done)parts.push(T(`완료 ${stats.done}`));
+     if(stats.unread)parts.push(T(`안 읽음 ${stats.unread}`));
+     node('td',parts.length?parts.join(' · '):'—',tr,{class:'sc-col-reading'+(parts.length?' sc-watch-count':' sc-none'),title:parts.length?(stats.guess?T('성과 이름 첫 글자만 같아 짐작한 값입니다 · ')+COAUTHOR_NOTE:COAUTHOR_NOTE):''});
      const timeCell=node('td',null,tr,{class:'sc-col-time'});
      if(stats.seconds){
       node('span',runtime.formatReadTime?runtime.formatReadTime(stats.seconds):Math.round(stats.seconds/60)+'분',timeCell,{class:'sc-watch-time-text'});

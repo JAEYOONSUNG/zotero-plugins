@@ -1121,9 +1121,13 @@
 #style-custom-workbench .sc-watch-table tr:hover td { background: var(--sc-surface); }
 #style-custom-workbench .sc-watch-table .sc-col-n { width: 64px; text-align: end; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-watch-table .sc-col-date { width: 96px; font-variant-numeric: tabular-nums; color: var(--sc-muted); }
-/* 보유·완료·안 읽음·읽은 시간: the library-match columns, a plain grey bar
-   for time on one scale shared by every row -- no colour, so it reads as a
-   measurement next to 인용/IF rather than another status pill. */
+/* 보유·완료·안 읽음: one cell, not three fixed 64px columns -- those crushed
+   name/affiliation near an 800px panel. No fixed width: it shares the same
+   auto space as 이름/소속 under table-layout: fixed. */
+#style-custom-workbench .sc-watch-table .sc-col-reading { font-variant-numeric: tabular-nums; }
+/* 읽은 시간: a plain grey bar for time on one scale shared by every row --
+   no colour, so it reads as a measurement next to 인용/IF rather than
+   another status pill. */
 #style-custom-workbench .sc-watch-table .sc-col-time { width: 110px; }
 #style-custom-workbench .sc-watch-time-text { display: block; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-watch-time-bar { display: block; margin-top: 3px; width: 100%; height: 4px; border-radius: 7px; background: var(--sc-fill); overflow: hidden; }
@@ -1285,12 +1289,17 @@
   #style-custom-workbench .sc-paper-card .sc-paper-actions { flex: 1 1 100%; margin-inline-start: 23px; justify-content: flex-start; min-height: 20px; }
   #style-custom-workbench .sc-journal-count { flex-basis: 100%; }
   #style-custom-workbench .sc-journal-controls input[type=search] { flex-basis: 100%; max-width: none; }
-  #style-custom-workbench .sc-watch-table th:nth-child(9), #style-custom-workbench .sc-watch-table td:nth-child(9),
+  /* 특허 is now the 7th column (이름/소속/읽기 상태/읽은 시간/마지막 확인/새 논문/특허/act): the count fewest people watch for. */
+  #style-custom-workbench .sc-watch-table th:nth-child(7), #style-custom-workbench .sc-watch-table td:nth-child(7),
   #style-custom-workbench .sc-watch-table .sc-col-date { display: none; }
-  /* The new library-match columns are the first to fold on a narrow panel: 이름/소속/새 논문 answer more of "who and what" than a count. */
-  #style-custom-workbench .sc-watch-table th:nth-child(3), #style-custom-workbench .sc-watch-table td:nth-child(3),
-  #style-custom-workbench .sc-watch-table th:nth-child(4), #style-custom-workbench .sc-watch-table td:nth-child(4),
-  #style-custom-workbench .sc-watch-table th:nth-child(5), #style-custom-workbench .sc-watch-table td:nth-child(5) { display: none; }
+}
+/* 읽기 상태 (보유·완료·안 읽음, merged) is still meaningful at ~800px, so it
+   is not hidden -- it drops the time bar under it and wraps its own text
+   under 이름 instead of losing a whole column. */
+@container sc-workbench (max-width: 900px) {
+  #style-custom-workbench .sc-watch-table .sc-watch-time-bar { display: none; }
+  #style-custom-workbench .sc-watch-table th, #style-custom-workbench .sc-watch-table td { vertical-align: top; }
+  #style-custom-workbench .sc-watch-table .sc-col-reading { white-space: normal; overflow: visible; text-overflow: clip; }
 }
 @container sc-workbench (max-width: 760px) {
   #style-custom-workbench .sc-watch-table .sc-col-time { display: none; }
@@ -1555,7 +1564,8 @@
 #style-custom-workbench .sc-resume-text { display: flex; flex-direction: column; min-width: 0; }
 #style-custom-workbench .sc-resume-remark { font-size: 12px; color: var(--sc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-row-progress-text { margin-inline-start: 4px; font-size: 11px; color: var(--sc-muted); }
-#style-custom-workbench .sc-row-annotations { margin-inline-start: 4px; font-size: 11px; color: var(--sc-muted); }
+#style-custom-workbench .sc-row-annotations { margin-inline-start: 4px; padding: 0; border: 0; background: none; min-height: 0; font-size: 11px; color: var(--sc-muted); cursor: pointer; }
+#style-custom-workbench .sc-row-annotations:hover { color: var(--sc-accent); text-decoration: underline; }
 #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time], #style-custom-workbench .sc-paper-column[data-metric=time] { width: 150px; }
 @container sc-workbench (max-width: 640px) {
   #style-custom-workbench .sc-resume-row { grid-template-columns: minmax(0, 1fr) auto; }
