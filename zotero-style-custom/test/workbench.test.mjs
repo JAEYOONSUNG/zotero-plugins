@@ -611,6 +611,33 @@ test('주변 mode never offers a fetch button, and leaving it restores the curre
  f.bench.destroy();
 });
 
+test('관계 그래프 labels are short title + year, a small graph labels every node, and a cited line pulls back so its arrowhead shows',async()=>{
+ const f=fixture();
+ const extra=[10].map(n=>({...f.papers[0],id:String(n),key:'K'+n,title:'A Very Long Neighbour Paper Title About Something'}));
+ f.refs.set(10,{id:10,libraryID:1,key:'K10'});
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ const works={'1:K1':{openalex:'W1',references:['W10']},'1:K10':{openalex:'W10',references:[]},'1:K2':{}};
+ f.runtime.graphTools=PaperGraph;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=JournalIdentity;
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);
+ await f.bench.show('graph');await settle();
+ const labels=[...f.body().querySelectorAll('.sc-graph-label')];
+ assert.ok(labels.length>=2,'both connected papers are drawn');
+ // Short title + year, not a journal mark and a year: a long title is cut and the year follows.
+ const long=labels.find(l=>l.textContent.includes('…'));
+ assert.ok(long,'the long title is shortened');
+ assert.match(long.textContent,/…\s*\d{4}$/);
+ // A small graph, well under any collision limit: nothing is hidden for lack of room.
+ assert.ok(labels.every(l=>l.getAttribute('opacity')!=='0'),'a small graph labels every node');
+ // Paper Alpha (1) cites Neighbour 10; the line should stop short of its centre, or the arrowhead draws under the node.
+ const line=f.body().querySelector('svg line[marker-end]');
+ assert.ok(line,'the citation carries an arrow');
+ const target=[...f.body().querySelectorAll('svg g[tabindex]')].find(g=>/A Very Long Neighbour/.test(g.querySelector('title')?.textContent||''));
+ const [tx,ty]=target.getAttribute('transform').match(/-?\d+\.?\d*/g).map(Number);
+ assert.notEqual(Number(line.getAttribute('x2')),tx);
+ assert.notEqual(Number(line.getAttribute('y2')),ty);
+ f.bench.destroy();
+});
+
 test('주변 mode fills a lacked paper\'s title only from the work-metadata cache, and never asks OpenAlex',async()=>{
  const f=fixture();
  const extra=[10,11,12].map(n=>({...f.papers[0],id:String(n),key:'K'+n,title:'Neighbour '+n}));
@@ -991,7 +1018,7 @@ test('collections show how much of each has been read, colour chips say what the
  await f.bench.show('collections');
  const row=f.body().querySelector('.sc-collection');
  assert.equal(row.querySelectorAll('.sc-collection-mix > span').length,2,'done and unread, in the bar');
- assert.equal(row.querySelector('.sc-collection-mixtext').textContent,'완료 1 · 안 읽음 1 · 2일 전 읽음');
+ assert.equal(row.querySelector('.sc-collection-mixtext').textContent,'완료 1 · 안 읽음 1 · 2분 · 2일 전 읽음');
  f.runtime.cache.readerSettings={...(f.runtime.cache.readerSettings||{}),colorLabels:{'#FFD400':'핵심 결과'}};
  await f.bench.show('annotations');
  assert.equal(f.body().querySelector('.sc-annot-swatch .sc-annot-meaning')?.textContent,'핵심 결과','matched regardless of case');
@@ -1119,6 +1146,30 @@ test('the general reading record row shares 이어 읽기\'s renderer: one meta 
  assert.ok(fold.querySelector('.sc-page-strip'),'the strip itself is still drawn once opened');
  assert.ok(row.querySelector('.sc-reading-evidence'),'주석이 있는 쪽 kept');
  assert.equal(row.querySelector('button[data-opens=window]').textContent,'열기','완료 opens rather than offering to "이어 읽기"');
+ f.bench.destroy();
+});
+
+test('a general record row for a paper with several files also says "이 파일", not the paper’s whole total',async()=>{
+ // drawResumeRow's recordMeta branch used to always say "읽은 시간 X" even
+ // when X was really just this one file's time out of several -- the same
+ // paper's own read time can be much larger, and read as a paper the reader
+ // barely spent time on if the file in front of them happened to be short.
+ const f=fixture();
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'done':'unread'});
+ f.runtime.cache.items[1]={seconds:500,readingAttachments:{
+  100:{pageTimes:{6:300},totalPages:12,lastPageIndex:6},
+  200:{pageTimes:{1:120},totalPages:4,lastPageIndex:1}
+ },readingAttachmentID:100};
+ f.runtime.formatReadTime=sec=>`${sec}s`;
+ f.refs.set(100,{id:100,getField:()=>'Main article'});f.refs.set(200,{id:200,getField:()=>'Supplementary'});
+ f.runtime.pageProgress=(ref,att)=>ref.id!==1?{pages:{},total:0,visited:0,percent:0}
+  :Number(att)===200?{pages:{1:120},total:4,visited:1,percent:25,attachmentID:200,lastPageIndex:1}
+  :{pages:{6:300},total:12,visited:1,percent:8,attachmentID:100,lastPageIndex:6};
+ await f.bench.show('reading');
+ const row=f.body().querySelector('.sc-reading-record');
+ assert.ok(row,'the paper is 완료, so it is in the general list, not 이어 읽기');
+ assert.match(row.querySelector('.sc-resume-meta').textContent,/이 파일 읽은 시간 300s/,
+  'this file’s time, said the same way as 이어 읽기 says it, not the paper’s own 500');
  f.bench.destroy();
 });
 
@@ -1385,7 +1436,8 @@ test('stalled papers are one view away, journal citations split by reading state
  const names=[...f.body().querySelectorAll('.sc-tag-name')].map(n=>n.textContent);
  assert.deepEqual(names,['methods (2)','spatial (1)'],'the match and its ancestor');
  assert.equal(f.body().querySelector('.sc-tag-edit').hasAttribute('open'),false,'editing folded');
- const jump=[...f.body().querySelectorAll('.sc-tag-unread')].find(b=>b.closest('details').querySelector('.sc-tag-name').textContent==='spatial (1)');
+ // spatial is a leaf (no children): its own row is a plain div, not a <details>.
+ const jump=[...f.body().querySelectorAll('.sc-tag-unread')].find(b=>b.closest('summary, .sc-tag-row').querySelector('.sc-tag-name').textContent==='spatial (1)');
  jump.click();await new Promise(r=>setTimeout(r,20));
  assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.status,'unread');assert.equal(f.bench.state.tag,'methods/spatial');
  f.bench.destroy();
@@ -2909,7 +2961,7 @@ test('native JCR remount and workbench destruction remove old callbacks and thei
  assert.equal([...f.doc.querySelectorAll('link')].some(link=>link.getAttribute('href').endsWith('jcr-browser.css')),false);
 });
 
-test('the three annotation verbs wait until something is selected', async () => {
+test('the annotation selection row is hidden until something is selected, and merge waits for a second', async () => {
  const f = fixture();
  f.library.annotations = f.record('annotations', [
   {id: '3', text: 'First', comment: '', color: '#ffd400', type: 'highlight', pageIndex: 0, attachmentID: '9'},
@@ -2917,19 +2969,35 @@ test('the three annotation verbs wait until something is selected', async () => 
  ]);
  await f.bench.show('annotations');
  const tools = f.body().querySelector('.sc-annot-selection');
- assert.equal(tools.dataset.armed, 'false', 'nothing selected yet');
- assert.match(tools.querySelector('.sc-annot-chosen').textContent, /선택하세요/);
- assert.ok([...tools.querySelectorAll('button')].every(b => b.disabled), 'a verb with nothing to act on is not pressable');
+ // Nothing chosen: the row itself is gone, not shown with disabled verbs waiting.
+ assert.equal(tools.hidden, true, 'nothing selected yet');
  f.body().querySelector('.sc-annot').dispatchEvent(new f.win.Event('click', {bubbles: true}));
- assert.equal(tools.dataset.armed, 'true');
+ assert.equal(tools.hidden, false, 'one annotation arms the row');
  assert.equal(tools.querySelector('.sc-annot-chosen').textContent, '선택 1개');
  const merge = [...tools.querySelectorAll('button')].find(b => b.textContent === '선택 주석 병합');
- assert.ok([...tools.querySelectorAll('button')].filter(b => b !== merge).every(b => !b.disabled));
- assert.equal(merge.disabled, true, 'merging one annotation is not a merge');
+ // From one: count, colour change, 노트로, 선택 해제 -- merge is not offered yet.
+ assert.equal(merge.hidden, true, 'merging one annotation is not a merge');
+ assert.ok([...tools.querySelectorAll('button')].filter(b => b !== merge).every(b => !b.hidden), 'the other verbs are ready from one');
  f.body().querySelectorAll('.sc-annot')[1].dispatchEvent(new f.win.Event('click', {bubbles: true}));
- assert.equal(merge.disabled, false, 'the second one arms it');
+ assert.equal(merge.hidden, false, 'the second one offers merge');
  // The memo that exists is drawn; the one that does not is a button away.
  assert.equal(f.body().querySelectorAll('.sc-annot .sc-annot-memo').length, 1, 'one memo written, one memo drawn');
+ f.bench.destroy();
+});
+
+test('merge stays hidden by feature gate even once a second annotation is chosen, and the merge restriction reads as the button’s title, not a standing paragraph', async () => {
+ const f = fixture(), disabled = new Set(['reader.mergeAnnotations']);
+ f.runtime.featureEnabled = id => !disabled.has(id);
+ f.library.annotations = f.record('annotations', [
+  {id: '3', text: 'First', comment: '', color: '#ffd400', type: 'highlight', pageIndex: 0, attachmentID: '9'},
+  {id: '4', text: 'Second', comment: '', color: '#ffd400', type: 'highlight', pageIndex: 1, attachmentID: '9'}
+ ]);
+ await f.bench.show('annotations');
+ await f.click('보이는 주석 전체 선택');
+ const merge = f.findButton('선택 주석 병합');
+ assert.equal(merge.hidden, true, 'the reader feature being off still wins over having two selected');
+ assert.match(merge.getAttribute('title'), /병합은 같은 PDF/);
+ assert.equal(f.body().querySelectorAll('.sc-muted').length ? [...f.body().querySelectorAll('.sc-muted')].some(p => /병합은 같은 PDF/.test(p.textContent)) : false, false, 'the restriction is no longer a standing paragraph under the list');
  f.bench.destroy();
 });
 
@@ -3420,6 +3488,29 @@ test('the annotation colour tally reads as one line by meaning, not a row of pil
  f.bench.destroy();
 });
 
+test('색 없음 filters to colourless annotations, distinct from no filter at all',async()=>{
+ const f=fixture();
+ f.library.annotations=f.record('annotations',[
+  {id:'1',parentID:'1',attachmentID:'9',text:'has colour',comment:'',color:'#ffd400',type:'highlight',pageIndex:0},
+  {id:'2',parentID:'1',attachmentID:'9',text:'no colour',comment:'',color:'',type:'highlight',pageIndex:1},
+ ]);
+ await f.bench.show('annotations');
+ const swatchByLabel=label=>[...f.body().querySelectorAll('.sc-annot-swatch')].find(el=>el.querySelector('.sc-annot-meaning').textContent===label);
+ const noColor=swatchByLabel('색 없음');
+ assert.ok(noColor,'a chip for colourless annotations exists');
+ assert.equal(noColor.getAttribute('aria-pressed'),'false','not pressed before any filter is chosen');
+ noColor.click();await settle();
+ assert.notEqual(f.bench.state.color,'','색 없음 sets its own sentinel, not the empty "no filter" value');
+ const texts=[...f.body().querySelectorAll('.sc-annot-text')].map(el=>el.textContent);
+ assert.deepEqual(texts,['no colour'],'only the colourless annotation is shown');
+ assert.equal(swatchByLabel('색 없음').getAttribute('aria-pressed'),'true');
+ // Pressing it again clears the filter back to none, not to some other colour's value.
+ swatchByLabel('색 없음').click();await settle();
+ assert.equal(f.bench.state.color,'');
+ assert.equal(f.body().querySelectorAll('.sc-annot-text').length,2);
+ f.bench.destroy();
+});
+
 test('tag rows add the summed reading time next to how much is read, and omit it when nothing is read',async()=>{
  const f=fixture();
  f.runtime.formatReadTime=sec=>`${sec}초`;
@@ -3427,13 +3518,55 @@ test('tag rows add the summed reading time next to how much is read, and omit it
  f.library.snapshot=async()=>[{...f.papers[0],tags:['alpha/x']},{...f.papers[1],tags:['beta/x']}];
  f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'done':'',seconds:ref.id===1?300:0});
  await f.bench.show('tags');
- const details=[...f.body().querySelectorAll('.sc-tag-tree > details')];
+ // alpha and beta are leaves (no children), so they skip <details> and its triangle.
+ const details=[...f.body().querySelectorAll('.sc-tag-tree > details, .sc-tag-tree > .sc-tag-leaf')];
  const byName=n=>details.find(d=>d.querySelector('.sc-tag-name').textContent.startsWith(n));
  const alphaText=byName('alpha').querySelector('.sc-tag-reading').textContent;
  assert.match(alphaText,/완료 1\/1/);
  assert.match(alphaText,/300초/,'the summed reading time joins the line');
  const betaText=byName('beta').querySelector('.sc-tag-reading').textContent;
  assert.doesNotMatch(betaText,/초/,'zero reading time is omitted rather than shown as 0초');
+ f.bench.destroy();
+});
+
+test('중첩 태그: choosing a tag by its name lists what is carried together with it, excluding its own ancestors and descendants, and opens exactly those papers',async()=>{
+ const f=fixture();
+ f.runtime.formatReadTime=sec=>`${sec}s`;
+ f.library.tagTree=()=>[
+  {name:'topicA',path:'topicA',count:4,children:[{name:'detail',path:'topicA/detail',count:1,children:[]}]},
+  {name:'shared',path:'shared',count:3,children:[]},
+  {name:'other',path:'other',count:1,children:[]}
+ ];
+ f.library.snapshot=async()=>[
+  {...f.papers[0],id:'1',key:'K1',title:'P1',tags:['topicA','shared']},
+  {...f.papers[1],id:'2',key:'K2',title:'P2',tags:['topicA','shared']},
+  {id:'3',key:'K3',libraryID:1,title:'P3',itemType:'journalArticle',tags:['topicA','other']},
+  {id:'4',key:'K4',libraryID:1,title:'P4',itemType:'journalArticle',tags:['topicA','topicA/detail']},
+  {id:'5',key:'K5',libraryID:1,title:'P5',itemType:'journalArticle',tags:['shared']}
+ ];
+ for(const id of [3,4,5])f.refs.set(id,{id});
+ const known={1:{status:'unread',seconds:0},2:{status:'unread',seconds:120},3:{status:'done',seconds:50},4:{status:'unread',seconds:0},5:{status:'unread',seconds:0}};
+ f.runtime.state=ref=>({citations:0,impactFactor:0,...known[ref.id]});
+ await f.bench.show('tags');
+ assert.equal(f.body().querySelector('.sc-tag-cross').hidden,true,'nothing chosen yet');
+ const nameBtn=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='topicA (4)');
+ assert.ok(nameBtn,'the tag name itself is a button');
+ nameBtn.click();await settle();
+ const cross=f.body().querySelector('.sc-tag-cross');
+ assert.equal(cross.hidden,false);
+ // Choosing a tag rebuilds the tree (aria-pressed on every row can change), so re-query.
+ const nameBtnAfter=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='topicA (4)');
+ assert.equal(nameBtnAfter.getAttribute('aria-pressed'),'true');
+ const rowsOf=table=>[...table.querySelectorAll('tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent));
+ const table=cross.querySelector('.sc-tag-cross-table');
+ // topicA/detail is a descendant of the chosen tag, so P4 contributes nothing here.
+ assert.deepEqual(rowsOf(table),[['shared','2','2','120s'],['other','1','0','50s']]);
+ const sharedCount=table.querySelectorAll('tbody tr')[0].querySelector('button');
+ sharedCount.click();await settle();
+ assert.equal(f.bench.state.tab,'explore');
+ assert.equal(f.bench.state.scope,'selected');
+ assert.deepEqual([...f.bench.state.selected].sort(),['1','2']);
+ assert.match(f.bench.panel.querySelector('.sc-context-detail').textContent,/#topicA ∩ #shared/);
  f.bench.destroy();
 });
 
@@ -3477,7 +3610,7 @@ test('논문 비교 offers a shared/lone reference table only for an explicit 2-
  f.bench.state.selected=new Set(['1','2']);await f.bench.render();
  const fold=f.body().querySelector('.sc-compare-references details');
  assert.ok(fold,'two explicitly selected papers get the fold');
- assert.equal(fold.querySelector('summary').textContent,'공통 참고문헌 1 · 한 문헌만 인용 2 · 참고목록 확보 2/2편');
+ assert.equal(fold.querySelector('summary').textContent,'공통 참고문헌 1 · 확보된 목록 중 한 편만 인용 2 · 참고목록 확보 2/2편');
  const table=fold.querySelector('.sc-reference-matrix');
  const rows=[...table.querySelectorAll('tr')].slice(1);
  assert.equal(rows.length,3,'the shared reference first, then the two cited by only one paper');
@@ -3489,11 +3622,47 @@ test('논문 비교 offers a shared/lone reference table only for an explicit 2-
  // more", and the paper whose list was never fetched counts against 확보 rather
  // than as though it simply had none.
  f.bench.state.selected=new Set(['1','2','3']);await f.bench.render();
- assert.equal(f.body().querySelector('.sc-compare-references summary').textContent,'2편 이상에서 인용 1 · 한 문헌만 인용 2 · 참고목록 확보 2/3편');
+ assert.equal(f.body().querySelector('.sc-compare-references summary').textContent,'2편 이상에서 인용 1 · 확보된 목록 중 한 편만 인용 2 · 참고목록 확보 2/3편');
  // More than six explicitly selected: back to no table at all.
  for(let n=5;n<=8;n++){f.papers.push({id:String(n),key:'K'+n,libraryID:1,title:'Paper '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
  f.bench.state.selected=new Set(['1','2','3','4','5','6','7']);await f.bench.load();
  assert.equal(f.body().querySelectorAll('.sc-reference-matrix').length,0,'more than six explicitly selected: no reference table');
+ f.bench.destroy();
+});
+
+test('논문 비교 참고문헌 표 shows 미확보 for a paper whose list was never fetched, keeps only the heading row sticky, and opening a title does not steal the comparison selection',async()=>{
+ const f=fixture();
+ f.papers.push({id:'3',key:'K3',libraryID:1,title:'Paper Gamma',itemType:'journalArticle',tags:[]});f.refs.set(3,{id:3});
+ f.papers.push({id:'4',key:'K4',libraryID:1,title:'Paper Delta',itemType:'journalArticle',tags:[]});f.refs.set(4,{id:4});
+ f.runtime.state=ref=>ref.id===4?{status:'reading',seconds:125,citations:0,impactFactor:0}:{status:'unread',seconds:0,citations:0,impactFactor:0};
+ f.runtime.formatReadTime=seconds=>Math.floor(seconds/60)+'분';
+ f.runtime.paperWorks=()=>({
+  '1:K1':{openalex:'W1',references:['W10','W20']},
+  '1:K2':{openalex:'W2',references:['W10','W30']},
+  '1:K4':{openalex:'W10',references:[]}
+  // Paper Gamma (1:K3), the third selected paper, is left out: its list was never fetched.
+ });
+ let opened=null;f.library.openItem=async id=>{opened=id;};
+ await f.bench.show('matrix');
+ f.bench.state.selected=new Set(['1','2','3']);await f.bench.render();
+ const table=f.body().querySelector('.sc-reference-matrix');
+ assert.ok(table.querySelector('thead'),'the column-heading row is its own thead');
+ assert.equal(table.querySelectorAll('thead tr').length,1);
+ const bodyRows=[...table.querySelectorAll('tbody tr')];
+ assert.equal(bodyRows.length,3,'the shared reference, then the two cited by only one of the fetched lists');
+ for(const tr of bodyRows)assert.equal(tr.querySelector('th[scope=row]').closest('thead'),null,'a reference row title is not part of the sticky heading row');
+ // The unfetched paper cannot say "not cited" for any row, so every one of its cells says so rather than reading blank.
+ const unknown=[...table.querySelectorAll('.sc-ref-unknown')];
+ assert.equal(unknown.length,3);
+ assert.ok(unknown.every(td=>td.textContent==='미확보'));
+ // Opening a reference already on the shelf must not overwrite the comparison's own selection.
+ const before=[...f.bench.state.selected].sort();
+ const titleButton=[...table.querySelectorAll('.sc-link-button')].find(b=>b.textContent==='Paper Delta');
+ assert.ok(titleButton,'the shared reference is on the shelf, named as a link');
+ assert.equal(titleButton.getAttribute('data-opens'),'window');
+ titleButton.click();await settle();
+ assert.deepEqual([...f.bench.state.selected].sort(),before,'clicking the title leaves the comparison selection untouched');
+ assert.equal(opened,'4','it opens in Zotero instead of pulling the panel to it');
  f.bench.destroy();
 });
 
@@ -3544,6 +3713,40 @@ test('leaving 보유 문헌 through a row\'s 주석 n remembers the page, select
  f.bench.destroy();
 });
 
+test('opening a paper from the list overview while still on 보유 문헌 keeps the page it came from, not page 1',async()=>{
+ // paperList sets its own pageKey from [tab, scope, items]; a detour that
+ // stays on 보유 문헌 but narrows the scope to one paper runs paperList again
+ // with a different key, so 이전 목록으로 has to restore pageKey along with
+ // pageIndex or the very next paperList call sees a "new" key and zeros the page.
+ const f=fixture();
+ f.runtime.getSetting=key=>({explorePageSize:2,inlineEvidenceCount:5,maxExcerptLength:1200,workbenchDensity:'comfortable'})[key];
+ f.papers.splice(0);
+ for(let id=1;id<=6;id++){f.papers.push({id:String(id),key:'K'+id,libraryID:1,title:'Paper '+id,itemType:'journalArticle',tags:[],year:2020});f.refs.set(id,{id});}
+ f.runtime.state=ref=>({status:'unread',seconds:0,citations:ref.id,impactFactor:0});
+ await f.bench.show('explore');
+ f.bench.state.sort='citations-desc';await f.bench.render();
+ f.bench.state.pageIndex=1;await f.bench.render();
+ assert.deepEqual([...f.body().querySelectorAll('[data-item-id]')].map(c=>c.dataset.itemId),['4','3'],'page 2 of six, highest citations first');
+ // 먼저 읽을 만한: with every paper's year equal, the rate ordering is just citations
+ // descending, so the top pick is Paper 6 -- not on this page.
+ const pick=f.body().querySelector('.sc-overview-pick .sc-hit-title-link');
+ assert.ok(pick,'the list overview offers a pick to open');
+ assert.equal(pick.textContent,'Paper 6');
+ pick.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'explore','the detour never left 보유 문헌');
+ assert.equal(f.bench.state.scope,'selected');
+ assert.deepEqual([...f.bench.state.selected],['6']);
+ assert.ok(f.bench.state.listOrigin,'the origin page was remembered');
+ const backBtn=f.bench.panel.querySelector('.sc-scope-back');
+ assert.ok(backBtn,'선택한 문헌 scope offers a way back');
+ assert.equal(backBtn.textContent,'이전 목록으로');
+ backBtn.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.scope,'library');
+ assert.equal(f.bench.state.pageIndex,1,'the second page, not reset to the first by the detour’s different item set');
+ assert.deepEqual([...f.body().querySelectorAll('[data-item-id]')].map(c=>c.dataset.itemId),['4','3'],'back on the same page of rows');
+ f.bench.destroy();
+});
+
 test('the selection bar\'s 노트 task also remembers 보유 문헌, and the scope-back spot offers the fuller 이전 목록으로',async()=>{
  const f=fixture();
  f.runtime.getSetting=key=>({explorePageSize:2,inlineEvidenceCount:5,maxExcerptLength:1200,workbenchDensity:'comfortable',matrixPageSize:50})[key];
@@ -3563,5 +3766,55 @@ test('the selection bar\'s 노트 task also remembers 보유 문헌, and the sco
  back.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
  assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.scope,'library');
  assert.equal(f.bench.state.pageIndex,1);assert.deepEqual([...f.bench.state.selected],['4']);
+ f.bench.destroy();
+});
+
+test('the watch table also says when a followed author was last read, and can sort by it',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ // Paper Alpha and Paper Beta (both id 1/2) are Ada Lovelace's, per the fixture; Nobody Here matches nothing.
+ const lastRead={1:new Date(now).toISOString(),2:new Date(now-5*day).toISOString()};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:'done',lastRead:lastRead[ref.id]});
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'Ada Lovelace',seen:[],news:[]},{id:'A9',name:'Nobody Here',seen:[],news:[]}];
+ await f.bench.show('authors');
+ await f.click('목록 관리');
+ const row=name=>[...f.body().querySelectorAll('.sc-watch-table tbody tr')].find(tr=>tr.querySelector('button').textContent===name);
+ const cell=name=>row(name).querySelector('td.sc-col-reading').textContent;
+ assert.match(cell('Ada Lovelace'),/ · 오늘 읽음$/,'the more recent of her two papers sets the calendar day');
+ assert.equal(cell('Nobody Here'),'—','never matched, so never read');
+ const sort=f.body().querySelector('select[aria-label="관심 저자 정렬"]');
+ const order=()=>[...f.body().querySelectorAll('.sc-watch-table tbody tr td:first-child button')].map(b=>b.textContent);
+ sort.value='recent';sort.dispatchEvent(new f.win.Event('change',{bubbles:true}));
+ assert.deepEqual(order(),['Ada Lovelace','Nobody Here'],'최근 읽은 순 puts the one read today first');
+ f.bench.destroy();
+});
+
+test('collection rows also add the summed reading time of their papers, and omit it when there is none',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const known={1:{status:'done',seconds:4800,lastRead:new Date(now-3*day).toISOString()},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.formatReadTime=sec=>{const h=Math.floor(sec/3600),m=Math.round((sec%3600)/60);return [h&&`${h}h`,m&&`${m}m`].filter(Boolean).join(' ');};
+ f.library.collections=async()=>[{id:'4',name:'Research',count:2,itemIDs:[1,2],parentID:null}];
+ await f.bench.show('collections');
+ assert.equal(f.body().querySelector('.sc-collection-mixtext').textContent,'완료 1 · 안 읽음 1 · 1h 20m · 3일 전 읽음');
+ // No time anywhere in the collection: the fragment is left out rather than shown as 0m.
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'done':''});
+ await f.bench.load();await f.bench.show('collections');
+ assert.equal(f.body().querySelector('.sc-collection-mixtext').textContent,'완료 1 · 안 읽음 1');
+ f.bench.destroy();
+});
+
+test('보유 문헌 요약 offers a fact button onto papers waiting to be read in this library',async()=>{
+ const f=fixture();
+ const known={1:{status:''},2:{status:'done'}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.cache.workbenchUI={...(f.runtime.cache.workbenchUI||{}),readingQueue:{'1:1':{at:new Date().toISOString()}}};
+ await f.bench.show('explore');
+ const facts=f.body().querySelector('.sc-overview-facts');
+ assert.ok([...facts.querySelectorAll('button')].some(b=>b.textContent==='읽기 대기 1편'),'names the one paper waiting');
+ await f.click('읽기 대기 1편');
+ assert.equal(f.bench.state.tab,'reading','moved to 읽기 진행');
+ assert.ok(f.body().querySelector('.sc-reading-queue'),'lands where the queue itself is drawn');
  f.bench.destroy();
 });

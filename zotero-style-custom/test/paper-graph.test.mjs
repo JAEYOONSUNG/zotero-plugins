@@ -221,3 +221,37 @@ test("a label is drawn when it fits, not when a number clears a threshold", () =
   assert.equal(graph.placeLabels([]).size, 0);
   assert.equal(graph.placeLabels([{id: "x", x: 0, y: 0, labelText: ""}]).size, 0);
 });
+
+test("label width is estimated per character, and Korean runs wider than Latin at the same length", () => {
+  // A flat per-character guess treats "AAAAAAAAAAAA" and "가나다라마바사아자차카타"
+  // (12 characters each) as the same box -- a gap that clears the Latin
+  // pair actually overlaps once the glyphs are Korean-wide.
+  const latin = [
+    {id: "a", x: 0, y: 40, r: 5, degree: 1, rank: 0.2, labelText: "AAAAAAAAAAAA"},
+    {id: "b", x: 90, y: 40, r: 5, degree: 1, rank: 0.2, labelText: "AAAAAAAAAAAA"}
+  ];
+  assert.equal(graph.placeLabels(latin).size, 2, "Latin labels at this spacing clear each other");
+  const korean = latin.map(n => ({...n, labelText: "가나다라마바사아자차카타"}));
+  assert.equal(graph.placeLabels(korean).size, 1, "the same spacing is not enough once the glyphs are Korean-wide");
+});
+
+test("a label that would run off the edge of the view is left out rather than clipped", () => {
+  const near = [{id: "edge", x: 195, y: 50, r: 5, degree: 1, rank: 0.5, labelText: "A title long enough to overflow 2024"}];
+  const bounded = graph.placeLabels(near, {width: 200, height: 100});
+  assert.equal(bounded.size, 0, "the box would cross the right edge of the view");
+  // The same node, unbounded, is placed -- so it is the view check doing this, not the collision check.
+  assert.equal(graph.placeLabels(near).size, 1);
+  // A short label with room to spare is placed as usual.
+  const inside = [{id: "mid", x: 40, y: 50, r: 5, degree: 1, rank: 0.5, labelText: "OK 2024"}];
+  assert.equal(graph.placeLabels(inside, {width: 200, height: 100}).size, 1);
+});
+
+test("node size is centrality (PageRank within this graph), capped and floored like radiusOf but scaled by rank, not by citations", () => {
+  assert.equal(graph.centralityRadius(0), 3.5, "the least central paper is still a dot");
+  assert.equal(graph.centralityRadius(1), 13, "the most-depended-on paper in this graph is the largest");
+  assert.ok(graph.centralityRadius(0.25) > graph.centralityRadius(0));
+  assert.ok(graph.centralityRadius(0.25) < graph.centralityRadius(1));
+  // Out-of-range input is clamped, the same way a negative citation count is.
+  assert.equal(graph.centralityRadius(-1), graph.centralityRadius(0));
+  assert.equal(graph.centralityRadius(5), graph.centralityRadius(1));
+});

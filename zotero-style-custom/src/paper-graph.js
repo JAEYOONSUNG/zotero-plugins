@@ -303,8 +303,9 @@
       node.y = height / 2 + Math.sin(angle) * radius + (random() - 0.5) * 4;
       node.vx = 0; node.vy = 0;
       // Every node keeps its drawn size, so the layout can refuse to let two of
-      // them sit on top of each other.
-      node.r = radiusOf(node.citations);
+      // them sit on top of each other. Size is centrality within this graph
+      // (see centralityRadius), not a citation count from the world outside it.
+      node.r = centralityRadius(node.rank);
     });
     const edges = ((graph && graph.edges) || [])
       .map(edge => Object.assign({}, edge, {a: index.get(String(edge.source)), b: index.get(String(edge.target))}))
@@ -375,8 +376,9 @@
       node.x = pad + (node.x - minX) * scale;
       node.y = pad + (node.y - minY) * scale;
       delete node.vx; delete node.vy;
-      // Kept, because label placement has to know how far out to start.
-      node.r = radiusOf(node.citations) * (0.7 + 0.6 * (node.rank || 0));
+      // Kept, because label placement has to know how far out to start; the
+      // same centralityRadius as at layout's start, so nothing resizes mid-draw.
+      node.r = centralityRadius(node.rank);
     }
     return {nodes, edges: (graph && graph.edges) || [], missing: (graph && graph.missing) || [],
       isolated: (graph && graph.isolated) || [],
@@ -403,6 +405,16 @@
     }
   }
 
+  // Hangul, and CJK generally, draws close to a full em at 11px; Latin script
+  // (and digits, punctuation) runs closer to 0.6em. A flat per-character
+  // guess undersized every Korean label and let them collide undetected.
+  const WIDE_CHAR = /[぀-ヿㄱ-ㆎ가-힣一-鿿豈-﫿]/;
+  function textWidth(str, {narrow = 6.5, wide = 11} = {}) {
+    let w = 0;
+    for (const ch of String(str)) w += WIDE_CHAR.test(ch) ? wide : narrow;
+    return w;
+  }
+
   /* Which nodes get a label, decided by whether the label fits.
 
      Showing a label for everything above a threshold put forty of them on top
@@ -410,10 +422,13 @@
      none: overlapping text is not readable and it hides the nodes underneath.
 
      So labels are placed in order of what matters most and each is kept only if
-     its box misses everything already placed. The result is that the busiest
-     part of the picture -- where the labels would collide -- shows the few that
-     earned it, and the sparse edges show many. */
-  function placeLabels(nodes, {charWidth = 5.2, lineHeight = 11, limit = 60, pad = 2} = {}) {
+     its box misses everything already placed, and sits inside the view -- a
+     label that ran off the edge used to sit there anyway, half off-canvas and
+     unreadable, which is worse than the node it belonged to going unlabelled.
+     The result is that the busiest part of the picture -- where the labels
+     would collide -- shows the few that earned it, and the sparse edges show
+     many. */
+  function placeLabels(nodes, {lineHeight = 11, limit = 60, pad = 2, width = Infinity, height = Infinity} = {}) {
     const wanted = [...nodes]
       // Work you do not hold is the payoff of the whole map, so it is offered a
       // label before a paper already on the shelf.
@@ -429,9 +444,10 @@
       const box = {
         x: node.x + r + 3 - pad,
         y: node.y - lineHeight / 2 - pad,
-        w: text.length * charWidth + pad * 2,
+        w: textWidth(text) + pad * 2,
         h: lineHeight + pad * 2
       };
+      if (box.x < 0 || box.y < 0 || box.x + box.w > width || box.y + box.h > height) continue;
       const clash = placed.some(other =>
         box.x < other.x + other.w && box.x + box.w > other.x
         && box.y < other.y + other.h && box.y + box.h > other.y);
@@ -449,7 +465,19 @@
     return min + (max - min) * Math.min(1, Math.log10(value + 1) / Math.log10(2001));
   }
 
-  const api = {build, layout, coupling, radiusOf, seeded, pagerank, foldCitedBy, placeLabels};
+  /* Node size from centrality within the displayed graph, not "citations ×
+     centrality" -- a paper famous everywhere but marginal to this particular
+     set of readings used to draw as large as the paper this whole graph
+     actually turns on. rank is PageRank over the graph's own citation edges,
+     already normalised to [0, 1] with the most-depended-on paper at 1; the
+     square root keeps the one dominant hub from swallowing the scale the way
+     a linear map would. */
+  function centralityRadius(rank, {min = 3.5, max = 13} = {}) {
+    const value = Math.max(0, Math.min(1, Number(rank) || 0));
+    return min + (max - min) * Math.sqrt(value);
+  }
+
+  const api = {build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStylePaperGraph = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

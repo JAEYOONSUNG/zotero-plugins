@@ -2754,7 +2754,7 @@
         },
         {
           "file": "src/workbench.js",
-          "marker": "btn.dataset.needs==='2'"
+          "marker": "mergeBtn.hidden=mergeFeatureOff||n<2"
         }
       ],
       "tests": [
@@ -2764,7 +2764,7 @@
         },
         {
           "file": "test/workbench.test.mjs",
-          "name": "the three annotation verbs wait until something is selected"
+          "name": "the annotation selection row is hidden until something is selected, and merge waits for a second"
         }
       ],
       "status": "verified",

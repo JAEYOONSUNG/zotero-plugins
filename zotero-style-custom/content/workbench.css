@@ -435,8 +435,8 @@
    share what is left instead of a horizontal scrollbar. */
 #style-custom-workbench .sc-matrix tr > *:first-child { width: 200px; min-width: 160px; max-width: 240px; }
 #style-custom-workbench .sc-matrix th[scope=row] { width: 104px; min-width: 88px; max-width: 120px; }
-#style-custom-workbench .sc-matrix[data-fit] { table-layout: fixed; width: 100%; }
-#style-custom-workbench .sc-matrix[data-fit] th, #style-custom-workbench .sc-matrix[data-fit] td { min-width: 0; max-width: none; }
+#style-custom-workbench .sc-matrix[data-fit="true"] { table-layout: fixed; width: 100%; }
+#style-custom-workbench .sc-matrix[data-fit="true"] th, #style-custom-workbench .sc-matrix[data-fit="true"] td { min-width: 0; max-width: none; }
 /* A real 0 was drawn the same as an unset cell; "—" says the field is unset. */
 #style-custom-workbench .sc-matrix td:empty::before { content: "—"; color: var(--sc-faint); }
 /* A rating is out of five; the bare "4" beside a row of stars was ambiguous. */
@@ -1015,7 +1015,7 @@
   margin-inline-start: auto; display: flex; gap: 4px; opacity: 0;
   position: absolute; inset-block-start: 4px; inset-inline-end: 6px;
   padding: 2px; border-radius: var(--sc-radius-sm); background: var(--sc-surface);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
+  border: 1px solid var(--sc-border);
 }
 #style-custom-workbench .sc-annot { position: relative; }
 #style-custom-workbench .sc-annot:hover .sc-annot-actions,
@@ -1235,12 +1235,9 @@
 #style-custom-workbench .sc-annot-memo::placeholder { color: var(--sc-faint); }
 #style-custom-workbench .sc-annot-memo:focus, #style-custom-workbench .sc-annot-memo:hover { background: var(--sc-fill); padding-inline: 6px; }
 #style-custom-workbench .sc-annot-selection { display: inline-flex; flex-wrap: wrap; max-width: 100%; align-items: center; gap: 4px; margin-inline-start: auto; }
-/* Until something is selected these three verbs have nothing to act on, so
-   they say what they are waiting for rather than failing when pressed. */
-/* Unarmed, the row still has instructions to read; the disabled buttons show the state. */
-#style-custom-workbench .sc-annot-selection[data-armed=false] { opacity: 1; }
-#style-custom-workbench .sc-annot-chosen { font-size: 12px; color: var(--sc-muted); margin-inline-end: 2px; }
-#style-custom-workbench .sc-annot-selection[data-armed=true] .sc-annot-chosen { color: var(--sc-accent); font-weight: 600; }
+/* With nothing chosen there is nothing for these verbs to act on, so the
+   whole row is hidden rather than shown disabled and waiting (see syncChosen). */
+#style-custom-workbench .sc-annot-chosen { font-size: 12px; color: var(--sc-accent); font-weight: 600; margin-inline-end: 2px; }
 
 /* Collections: a tree, each row with a bar for what it holds. */
 #style-custom-workbench .sc-collection-tree { display: flex; flex-direction: column; gap: 0; }
@@ -1281,9 +1278,26 @@
 #style-custom-workbench .sc-scope-back { margin-inline-start: 8px; }
 
 #style-custom-workbench .sc-annot-swatch[aria-pressed=true] { background: var(--sc-accent-soft); box-shadow: inset 0 0 0 1px var(--sc-accent); }
-#style-custom-workbench .sc-tag-name { margin-inline-end: 8px; }
+/* The tag's own name is a button now -- it chooses the tag for 함께 붙은
+   태그 below the tree -- so it needs the usual plain-link reset. */
+#style-custom-workbench .sc-tag-name { margin-inline-end: 8px; min-height: 0; border: 0; background: none; padding: 0; font: inherit; font-weight: 600; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-tag-name:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-tag-name[aria-pressed=true] { color: var(--sc-accent); }
 #style-custom-workbench .sc-tag-only { opacity: 0; }
-#style-custom-workbench summary:hover .sc-tag-only, #style-custom-workbench summary:focus-within .sc-tag-only { opacity: 1; }
+#style-custom-workbench summary:hover .sc-tag-only, #style-custom-workbench summary:focus-within .sc-tag-only,
+#style-custom-workbench .sc-tag-row:hover .sc-tag-only, #style-custom-workbench .sc-tag-row:focus-within .sc-tag-only { opacity: 1; }
+/* A leaf tag has no children to disclose, so it skips <details>; this keeps
+   its row lined up with the ones that still carry the browser's own marker. */
+#style-custom-workbench .sc-tag-leaf { padding-inline-start: 1.1em; }
+#style-custom-workbench .sc-tag-row { display: flex; align-items: baseline; flex-wrap: wrap; padding-block: 1px; }
+#style-custom-workbench .sc-tag-cross { margin: 10px 0 0; padding-block-start: 10px; border-block-start: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-tag-cross-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; margin-block-start: 6px; }
+#style-custom-workbench .sc-tag-cross-table th { font-weight: 600; color: var(--sc-muted); text-align: end; padding: 3px 6px; white-space: nowrap; }
+#style-custom-workbench .sc-tag-cross-table th:first-child, #style-custom-workbench .sc-tag-cross-table td.sc-tag-cross-name { text-align: start; }
+#style-custom-workbench .sc-tag-cross-table td { border-block-start: 1px solid var(--sc-border); padding: 3px 6px; }
+#style-custom-workbench .sc-tag-cross-table .sc-figure-cell { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#style-custom-workbench .sc-tag-cross-table .sc-link-button { min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; cursor: pointer; color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-tag-cross-table .sc-link-button:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
 
 /* --- Narrow panels: what folds, what hides, what wraps (from the responsive audit) --- */
 @container sc-workbench (max-width: 760px) {
@@ -1847,7 +1861,12 @@
 #style-custom-workbench .sc-reference-matrix-scroll { max-height: min(50vh, calc(100cqh - 200px)); overflow: auto; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
 #style-custom-workbench .sc-reference-matrix { border-collapse: collapse; width: 100%; font-size: 12px; }
 #style-custom-workbench .sc-reference-matrix th, #style-custom-workbench .sc-reference-matrix td { padding: 5px 10px; border-bottom: 1px solid var(--sc-border); text-align: start; vertical-align: top; }
-#style-custom-workbench .sc-reference-matrix th { position: sticky; top: 0; background: var(--sc-surface-alt); font-weight: 600; }
+#style-custom-workbench .sc-reference-matrix th { font-weight: 600; }
+/* Only the column-heading row stays put while the reference rows scroll past
+   it; a row's own title used to inherit the same sticky top:0 and pinned
+   itself over every row above it instead of scrolling with the table. */
+#style-custom-workbench .sc-reference-matrix thead th { position: sticky; top: 0; background: var(--sc-surface-alt); z-index: 1; }
+#style-custom-workbench .sc-reference-matrix .sc-ref-unknown { color: var(--sc-faint); }
 #style-custom-workbench .sc-reference-matrix td.sc-ref-check { text-align: center; }
 #style-custom-workbench .sc-reference-matrix .sc-link-button { min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
 #style-custom-workbench .sc-reference-matrix .sc-link-button:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
