@@ -1004,7 +1004,7 @@
       "tests": [
         {
           "file": "test/workbench.test.mjs",
-          "name": "the panel says what has never been filled in, and offers to fill it"
+          "name": "the panel says what has never been filled in behind a small header button, and offers to fill it"
         },
         {
           "file": "test/workbench.test.mjs",
@@ -1012,7 +1012,7 @@
         }
       ],
       "status": "verified",
-      "review": "The counts are read from the cache, not the network, so opening the panel costs nothing. A runtime without backfillPending simply shows no notice, so an older pairing degrades rather than throwing. Live Crossref sweep of all 1,072 distinct library DOIs: 1 retracted, 29 corrected or errata, 1,041 clean, 1 not in Crossref -- twenty-nine papers carrying corrections that were invisible in Zotero.",
+      "review": "The counts are read from the cache, not the network, so opening the panel costs nothing. A runtime without backfillPending simply shows no notice, so an older pairing degrades rather than throwing. Live Crossref sweep of all 1,072 distinct library DOIs: 1 retracted, 29 corrected or errata, 1,041 clean, 1 not in Crossref -- twenty-nine papers carrying corrections that were invisible in Zotero. A later round (자료 점검) moved this row behind a small header toggle so it no longer sits open on every tab.",
       "verification": "Node/DOM tests plus a full live Crossref sweep of the user's own library.",
       "nativeActivationVerified": false
     },

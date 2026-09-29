@@ -532,6 +532,19 @@ test('choosing one annotation colour keeps the other colours on offer, and no fi
  f.bench.destroy();
 });
 
+test('an annotation colour chip with a meaning label never shows the raw hex, only in its title',async()=>{
+ const f=fixture();
+ f.library.annotations=async()=>[{id:'3',parentID:'1',attachmentID:'99',text:'Yellow one',comment:'',color:'#ffd400',type:'highlight',pageIndex:0}];
+ f.refs.set(99,{id:99,parentID:1,getField:()=>'Main PDF'});
+ f.runtime.cache.readerSettings={...(f.runtime.cache.readerSettings||{}),colorLabels:{'#ffd400':'핵심 결과'}};
+ await f.bench.show('annotations');
+ const chip=f.body().querySelector('.sc-annot-swatch');
+ assert.equal(chip.querySelector('.sc-annot-meaning').textContent,'핵심 결과');
+ assert.doesNotMatch(chip.textContent,/#ffd400/i,'the hex never appears as visible text once the colour has a meaning');
+ assert.match(chip.getAttribute('title'),/#ffd400/i,'but stays available in the tooltip');
+ f.bench.destroy();
+});
+
 test('the tag verbs refuse in words, say what they did, and a removal can be undone',async()=>{
  const f=fixture();
  await f.bench.show('tags');
@@ -934,6 +947,17 @@ test('notes name the finished papers with nothing written, owned results say how
  f.bench.destroy();
 });
 
+test("a note's meta line also says its paper's reading state",async()=>{
+ const f=fixture();
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'reading':'unread'});
+ f.library.notes=async()=>[{id:'9',parentID:'1',title:'On Alpha',text:'x',modified:'2026-09-01'}];
+ f.setSelection([]);
+ await f.bench.show('notes');f.bench.state.selected=new Set();await f.bench.render();
+ const meta=f.body().querySelector('.sc-card-text > .sc-muted');
+ assert.match(meta.textContent,/읽는 중/,'the parent paper is being read');
+ f.bench.destroy();
+});
+
 test('any unread paper can wait under 읽기 대기, the search reads the reader’s memo, and annotations can be read paper by colour',async()=>{
  const f=fixture();
  f.runtime.cache.items[2]={remark:'first line\nthe control was sham-operated'};
@@ -1123,6 +1147,32 @@ test('the queue keeps why a paper was put by, the selection bar leads to the nex
  f.bench.destroy();
 });
 
+test('a kept search comes back through 다른 문헌 고르기 and through leaving an empty selection any other way',async()=>{
+ const f=fixture();
+ f.setSelection([]);
+ // Land on the notes tab through the selection bar, as above: the search is set aside.
+ await f.bench.show('explore');f.bench.state.query='Alpha';f.bench.state.selected=new Set(['2']);await f.bench.render();
+ [...f.bench.panel.querySelectorAll('.sc-selection-bar button')].find(x=>x.textContent==='노트').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(f.bench.state.scope,'selected');assert.equal(f.bench.state.query,'');
+ // The note editor for the one chosen paper offers a way to choose another; that also gives the search back.
+ await f.click('다른 문헌 고르기');
+ assert.equal(f.bench.state.selected.size,0);
+ assert.equal(f.bench.state.scope,'library','render’s own fallback also leaves scope, not only the search, in the state it started from');
+ assert.equal(f.bench.state.query,'Alpha','다른 문헌 고르기 restores the kept search too');
+ // The same search, set aside the same way, comes back even when a selection
+ // empties by some other route than a dedicated “back” button -- here, the
+ // page’s own “deselect” control, which calls render() without touching keptFilters itself.
+ await f.bench.show('explore');f.bench.state.query='Beta';f.bench.state.selected=new Set(['1']);await f.bench.render();
+ [...f.bench.panel.querySelectorAll('.sc-selection-bar button')].find(x=>x.textContent==='노트').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(f.bench.state.scope,'selected');assert.equal(f.bench.state.query,'');
+ await f.bench.show('explore');
+ await f.click('현재 페이지 선택 해제');
+ assert.equal(f.bench.state.selected.size,0);
+ assert.equal(f.bench.state.scope,'library');
+ assert.equal(f.bench.state.query,'Beta','render’s fallback restores it even without a dedicated back button');
+ f.bench.destroy();
+});
+
 test('the library opens on today’s next steps, and a journal in 내 문헌 분석 opens its papers',async()=>{
  const f=fixture();
  const recent=new Date(Date.now()-864e5).toISOString();
@@ -1143,7 +1193,23 @@ test('the library opens on today’s next steps, and a journal in 내 문헌 분
  await f.bench.show('journals');
  const natureRow=[...f.body().querySelectorAll('.sc-journal-reading-row')].find(r=>r.querySelector('.sc-journal-reading-name')?.textContent==='Nature');
  natureRow.querySelector('[role=cell]:nth-child(2) button').click();await new Promise(r=>setTimeout(r,20));
- assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.query,'Nature');
+ // Exactly this journal's papers by id, not a text search on its name -- a search
+ // for "Nature" would also have matched "Nature Methods".
+ assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.query,'');
+ assert.equal(f.bench.state.scope,'selected');assert.deepEqual([...f.bench.state.selected],['2']);
+ assert.deepEqual([...f.body().querySelectorAll('.sc-paper-title')].map(n=>n.textContent),['Paper Beta']);
+ f.bench.destroy();
+});
+
+test('내 문헌 분석\'s held-count opens exactly that journal\'s papers, not a text search that a sibling journal name would also match',async()=>{
+ const f=fixture();
+ f.library.snapshot=async()=>[...f.papers,{id:'6',key:'K6',libraryID:1,title:'Paper Gamma',authors:'Someone Else',year:'2023',venue:'Nature Methods',itemType:'journalArticle',tags:[]}];
+ f.refs.set(6,{id:6});
+ f.setSelection([]);
+ await f.bench.show('journals');
+ const natureRow=[...f.body().querySelectorAll('.sc-journal-reading-row')].find(r=>r.querySelector('.sc-journal-reading-name')?.textContent==='Nature');
+ natureRow.querySelector('[role=cell]:nth-child(2) button').click();await new Promise(r=>setTimeout(r,20));
+ assert.deepEqual([...f.bench.state.selected],['2'],'not the Nature Methods paper too');
  assert.deepEqual([...f.body().querySelectorAll('.sc-paper-title')].map(n=>n.textContent),['Paper Beta']);
  f.bench.destroy();
 });
@@ -1351,7 +1417,7 @@ test('the library tab is not named as though it searched the literature',async()
  f.bench.destroy();
 });
 
-test('the panel says what has never been filled in, and offers to fill it', async () => {
+test('the panel says what has never been filled in behind a small header button, and offers to fill it', async () => {
  const f=fixture();
  f.runtime.backfillPending=async()=>({signals:1214,journals:169,authors:109});
  const ran=[];
@@ -1359,6 +1425,13 @@ test('the panel says what has never been filled in, and offers to fill it', asyn
  f.runtime.backfillSummary=()=>'채우기 완료';
  await f.bench.show('explore');
  const notice=f.bench.panel.querySelector('.sc-notice');
+ // The row itself no longer sits open on every tab; the header says the count instead.
+ assert.equal(notice.hidden,true,'the row waits for a press, unlike before');
+ const toggle=f.bench.panel.querySelector('.sc-notice-toggle');
+ assert.equal(toggle.hidden,false);
+ assert.match(toggle.textContent,/자료 점검 3가지/);
+ assert.match(toggle.title,/철회 여부 미확인 1214편 · 지표 없는 저널 169종 · 확인 안 한 관심 저자 109명/,'the kinds named on hover, not summed');
+ await f.click(toggle.textContent);
  assert.equal(notice.hidden,false,'three empty features must not stay invisible a second time');
  assert.match(notice.querySelector('.sc-notice-text').textContent,/1214편.*169종.*109명/);
  await f.click('지금 채우기');
@@ -1372,6 +1445,7 @@ test('nothing left to fill means nothing to say', async () => {
  f.runtime.backfillPending=async()=>({signals:0,journals:0,authors:0});
  await f.bench.show('explore');
  assert.equal(f.bench.panel.querySelector('.sc-notice').hidden,true);
+ assert.equal(f.bench.panel.querySelector('.sc-notice-toggle').hidden,true,'nothing to open, so no button either');
  f.bench.destroy();
 });
 
@@ -1380,6 +1454,22 @@ test('a panel talking to an older runtime simply shows no notice', async () => {
  delete f.runtime.backfillPending;
  await f.bench.show('explore');
  assert.equal(f.bench.panel.querySelector('.sc-notice').hidden,true);
+ assert.equal(f.bench.panel.querySelector('.sc-notice-toggle').hidden,true);
+ f.bench.destroy();
+});
+
+test('closing the 자료 점검 row is remembered, and the header button reopens it',async()=>{
+ const f=fixture();
+ f.runtime.backfillPending=async()=>({signals:1214,journals:169,authors:109});
+ await f.bench.show('explore');
+ await f.click(f.bench.panel.querySelector('.sc-notice-toggle').textContent);
+ assert.equal(f.bench.panel.querySelector('.sc-notice').hidden,false);
+ await f.click('나중에');
+ assert.equal(f.bench.panel.querySelector('.sc-notice').hidden,true);
+ assert.equal(f.runtime.cache.workbenchUI.noticeOpen,false,'closing it is saved, not only reset in memory');
+ await f.click(f.bench.panel.querySelector('.sc-notice-toggle').textContent);
+ assert.equal(f.bench.panel.querySelector('.sc-notice').hidden,false,'the header button opens it again');
+ assert.equal(f.runtime.cache.workbenchUI.noticeOpen,true);
  f.bench.destroy();
 });
 
@@ -1795,7 +1885,7 @@ test('the followed list can be tended as a table: found, sorted, let go',async()
  const place=f.body().querySelector('.sc-watch-table tbody tr:nth-child(1) td:nth-child(2)');
  assert.equal(place.getAttribute('title'),'등록 당시: MIT chemistry');
  assert.ok(f.body().querySelector('.sc-watch-table tbody tr:nth-child(2) td.sc-watch-moved'),'a move is shaded');
- assert.deepEqual([...f.body().querySelectorAll('.sc-watch-table thead th')].map(t=>t.textContent),['이름','소속','마지막 확인','새 논문','특허','']);
+ assert.deepEqual([...f.body().querySelectorAll('.sc-watch-table thead th')].map(t=>t.textContent),['이름','소속','보유','완료','안 읽음','읽은 시간','마지막 확인','새 논문','특허','']);
  f.input('관심 저자 찾기','bo');
  assert.deepEqual(names(),['Bo']);
  f.input('관심 저자 찾기','');
@@ -1809,6 +1899,35 @@ test('the followed list can be tended as a table: found, sorted, let go',async()
  assert.deepEqual(names(),['Bo','Ada']);
  await f.click('카드로 보기');
  assert.equal(f.body().querySelector('.sc-watch-table'),null);
+ f.bench.destroy();
+});
+
+test('the watch table also shows held/finished/unread/reading-time, marks a guessed match, and sorts by them',async()=>{
+ const f=fixture();
+ // Paper Alpha (id 1) finished with time on it, Paper Beta (id 2) unread; both by Ada Lovelace.
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'done':'unread',seconds:ref.id===1?600:ref.id===2?1200:0});
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'Ada Lovelace',seen:[],news:[]},{id:'A2',name:'A. M. Lovelace',seen:[],news:[]},{id:'A9',name:'Nobody Here',seen:[],news:[]}];
+ await f.bench.show('authors');
+ await f.click('목록 관리');
+ const row=name=>[...f.body().querySelectorAll('.sc-watch-table tbody tr')].find(tr=>tr.querySelector('button').textContent===name);
+ const cells=name=>[...row(name).querySelectorAll('td')].map(td=>td.textContent);
+ // 이름 · 소속 · 보유 · 완료 · 안 읽음 · 읽은 시간 · 마지막 확인 · 새 논문 · 특허 · (actions)
+ const ada=cells('Ada Lovelace');
+ assert.equal(ada[2],'2','both papers match the full name');
+ assert.equal(ada[3],'1','one is finished');
+ assert.equal(ada[4],'1','one is unread');
+ assert.match(ada[5],/\d/,'a reading-time figure is shown, not just a bar');
+ assert.equal(cells('A. M. Lovelace')[2],'2?','a family-name-and-initial-only match is marked as a guess');
+ assert.equal(cells('Nobody Here')[2],'—','nothing in the library matches this name');
+ // Co-authored papers counting for every followed author on them is said on the stat columns' headers.
+ const heldHead=[...f.body().querySelectorAll('.sc-watch-table thead th')].find(th=>th.textContent==='보유');
+ assert.match(heldHead.getAttribute('title'),/공동 저자/);
+ const sort=f.body().querySelector('select[aria-label="관심 저자 정렬"]');
+ const order=()=>[...f.body().querySelectorAll('.sc-watch-table tbody tr td:first-child button')].map(b=>b.textContent);
+ sort.value='time';sort.dispatchEvent(new f.win.Event('change',{bubbles:true}));
+ assert.equal(order().at(-1),'Nobody Here','읽은 시간순 puts nobody with no recorded time last');
+ sort.value='unread';sort.dispatchEvent(new f.win.Event('change',{bubbles:true}));
+ assert.equal(order().at(-1),'Nobody Here','안 읽음 많은 순 puts nobody with no unread papers last');
  f.bench.destroy();
 });
 

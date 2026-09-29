@@ -159,7 +159,12 @@
 #style-custom-workbench .sc-tag-only,
 #style-custom-workbench .sc-welcome button,
 #style-custom-workbench .sc-focus-back button,
+#style-custom-workbench .sc-notice-toggle,
 #style-custom-workbench .sc-jcr-back { min-height: 24px; padding: 2px 9px; font-size: 12px; }
+/* 자료 점검: plain text, not another filled button beside the icon row. */
+#style-custom-workbench .sc-notice-toggle { background: none; color: var(--sc-muted); }
+#style-custom-workbench .sc-notice-toggle:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
+#style-custom-workbench .sc-notice-toggle[aria-pressed=true] { color: var(--sc-text); }
 
 #style-custom-workbench button:hover { background: var(--sc-fill-hover); }
 #style-custom-workbench button:active { background: var(--sc-fill-active); }
@@ -1116,6 +1121,13 @@
 #style-custom-workbench .sc-watch-table tr:hover td { background: var(--sc-surface); }
 #style-custom-workbench .sc-watch-table .sc-col-n { width: 64px; text-align: end; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-watch-table .sc-col-date { width: 96px; font-variant-numeric: tabular-nums; color: var(--sc-muted); }
+/* 보유·완료·안 읽음·읽은 시간: the library-match columns, a plain grey bar
+   for time on one scale shared by every row -- no colour, so it reads as a
+   measurement next to 인용/IF rather than another status pill. */
+#style-custom-workbench .sc-watch-table .sc-col-time { width: 110px; }
+#style-custom-workbench .sc-watch-time-text { display: block; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-watch-time-bar { display: block; margin-top: 3px; width: 100%; height: 4px; border-radius: 7px; background: var(--sc-fill); overflow: hidden; }
+#style-custom-workbench .sc-watch-time-fill { display: block; height: 100%; background: var(--sc-border-strong); border-radius: 7px; }
 #style-custom-workbench .sc-watch-table .sc-col-act { width: 64px; text-align: end; }
 #style-custom-workbench .sc-watch-table td.sc-none { color: var(--sc-faint); }
 #style-custom-workbench .sc-watch-table .sc-journal-name { font-weight: 600; }
@@ -1273,8 +1285,15 @@
   #style-custom-workbench .sc-paper-card .sc-paper-actions { flex: 1 1 100%; margin-inline-start: 23px; justify-content: flex-start; min-height: 20px; }
   #style-custom-workbench .sc-journal-count { flex-basis: 100%; }
   #style-custom-workbench .sc-journal-controls input[type=search] { flex-basis: 100%; max-width: none; }
-  #style-custom-workbench .sc-watch-table th:nth-child(5), #style-custom-workbench .sc-watch-table td:nth-child(5),
+  #style-custom-workbench .sc-watch-table th:nth-child(9), #style-custom-workbench .sc-watch-table td:nth-child(9),
   #style-custom-workbench .sc-watch-table .sc-col-date { display: none; }
+  /* The new library-match columns are the first to fold on a narrow panel: 이름/소속/새 논문 answer more of "who and what" than a count. */
+  #style-custom-workbench .sc-watch-table th:nth-child(3), #style-custom-workbench .sc-watch-table td:nth-child(3),
+  #style-custom-workbench .sc-watch-table th:nth-child(4), #style-custom-workbench .sc-watch-table td:nth-child(4),
+  #style-custom-workbench .sc-watch-table th:nth-child(5), #style-custom-workbench .sc-watch-table td:nth-child(5) { display: none; }
+}
+@container sc-workbench (max-width: 760px) {
+  #style-custom-workbench .sc-watch-table .sc-col-time { display: none; }
 }
 @container sc-workbench (max-width: 520px) {
   #style-custom-workbench .sc-journal-table .sc-col-n { display: none; }
@@ -1780,3 +1799,10 @@
 #style-custom-workbench .sc-graph-info-head { margin: 8px 0 2px; font-weight: 600; color: var(--sc-text); }
 #style-custom-workbench .sc-graph-info-row { display: flex; gap: 8px; align-items: baseline; padding: 1px 0; min-width: 0; }
 #style-custom-workbench .sc-graph-info-row > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#style-custom-workbench .sc-graph-info-more { min-height: 22px; font-size: 12px; margin: 2px 0 4px; }
+/* 첨부 미리보기: the library-wide scan folds under the per-item list instead of sitting above it every time. */
+#style-custom-workbench .sc-attachment-findings { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--sc-border); font-size: 12px; }
+#style-custom-workbench .sc-attachment-findings > summary { cursor: pointer; color: var(--sc-muted); width: max-content; max-width: 100%; }
+#style-custom-workbench .sc-attachment-findings[open] > summary { color: var(--sc-text); margin-bottom: 6px; }
+#style-custom-workbench .sc-attachment-findings-more { min-height: 22px; font-size: 12px; margin: 2px 0 10px; }
+#style-custom-workbench .sc-attachment-note { color: var(--sc-muted); font-size: 12px; margin: 1px 0 0; }
