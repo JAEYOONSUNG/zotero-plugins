@@ -44,6 +44,15 @@ test('notes, annotations and attachments retain source metadata with explicit se
  assert.equal((await f.service.attachments([1]))[0].path,'/tmp/sample.pdf');
  f.annotation.annotationPosition='bad';assert.equal((await f.service.annotations([1]))[0].pageIndex,null);
 });
+test('annotationCounts groups annotations by their regular-item parent from one library read',async()=>{
+ const f=fixture();
+ f.add('journalArticle',6);f.add('attachment',7,{parentID:6,attachmentContentType:'application/pdf'});f.add('annotation',8,{parentID:7});
+ f.add('annotation',9,{parentID:2}); // a second highlight in item 1's own attachment
+ assert.deepEqual(await f.service.annotationCounts([1,6]),{'1':2,'6':1});
+ // Asking about item 1 alone leaves item 6's annotation out, not lumped in.
+ assert.deepEqual(await f.service.annotationCounts([1]),{'1':2});
+ assert.deepEqual(await f.service.annotationCounts([]),{});
+});
 test('backlinks find related items and note navigation links without substring key matches',async()=>{
  const f=fixture();f.add('journalArticle',5,{relatedItems:['K1']});f.note.html='<a href="zotero://open-pdf/library/items/K2?annotation=K3">Quote</a>';
  f.add('note',6,{html:'<a href="zotero://select/library/items/K10">Different</a>'});

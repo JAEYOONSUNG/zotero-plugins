@@ -153,6 +153,24 @@
       return out;
     }
     async function attachments(ids) {const out=[];for(const i of await children(ids,'attachments'))out.push({id:String(i.id),parentID:i.parentID?String(i.parentID):null,title:field(i,'title'),contentType:i.attachmentContentType||'',path:i.isFileAttachment?.()?await i.getFilePathAsync():null,url:field(i,'url')});return out;}
+    /* One "주석 n" per row without a request per row: the library's items are
+       already read once for backlinks and notes (all() below), so annotations
+       ride along in that same read and are grouped by their grandparent --
+       the regular item -- rather than fetched one attachment at a time. */
+    async function annotationCounts(ids) {
+      // The wanted IDs are only compared, never fetched: a thousand papers are one read of the library, not a thousand.
+      if(Array.isArray(ids)&&!ids.length)return {};
+      const wanted=Array.isArray(ids)?new Set(ids.map(Number)):null;
+      const items=await all(),byID=new Map(items.map(i=>[i.id,i]));
+      const counts={};
+      for(const item of items) {
+        if(!item.isAnnotation?.())continue;
+        const attachment=byID.get(item.parentID);if(!attachment)continue;
+        const parentID=attachment.parentID;if(parentID==null||(wanted&&!wanted.has(Number(parentID))))continue;
+        const key=String(parentID);counts[key]=(counts[key]||0)+1;
+      }
+      return counts;
+    }
     function annotationNoteMatch(html,target,attachment,route) {
       const decode=value=>{
         let result=String(value||'');
@@ -520,7 +538,7 @@
       }
       return items.length;
     }
-    return {trashItems,snapshot,graph,tagTree,notes,annotations,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
+    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

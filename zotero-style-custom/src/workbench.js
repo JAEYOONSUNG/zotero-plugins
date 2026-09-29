@@ -622,6 +622,13 @@
    if(state.scope.startsWith('collection')){state.collectionIDs=[];const collection=win.ZoteroPane?.getSelectedCollection?.();if(collection){const members=await library.collectionItems(collection.id,{libraryID,recursive:state.scope==='collection-recursive'});if(disposed||token!==loadEpoch||panel.hidden)return;if(context!==scopeContext())return load();state.collectionIDs=members;}}
    // The reader's memo rides with each paper, so the search finds a paper by what was written about it.
    state.items=snapshot.map(i=>{const ref=runtime.Z.Items.get(Number(i.id));return {...i,...(ref?runtime.state(ref):{}),remark:ref?String(runtime.entry?.(ref)?.remark||''):''};});
+   /* 주석 n on a row: one grouped count per load, not one lookup per row.
+      Absent in an older or fake library, rows simply show nothing extra. */
+   if(typeof library.annotationCounts==='function'){
+    const counts=await library.annotationCounts(state.items.map(i=>i.id)).catch(()=>({}));
+    if(disposed||token!==loadEpoch||panel.hidden)return;if(context!==scopeContext())return load();
+    for(const item of state.items)item.annotations=Number(counts[item.id])||0;
+   }
    const existing=new Set(state.items.map(i=>i.id));state.selected=new Set([...state.selected].filter(id=>existing.has(id)));
    type.replaceChildren();node('option','모든 유형',type,{value:''});for(const t of [...new Set(state.items.map(i=>i.itemType))].filter(Boolean).sort())node('option',kindLabel(t),type,{value:t});type.value=state.type;drawKindChips();
    message('');await render();
@@ -744,13 +751,17 @@
      .map(([key,entry])=>({entry,item:state.items.find(i=>String(i.id)===key.split(':').pop())}))
      .filter(x=>x.item&&x.item.status!=='done'&&x.item.status!=='reading'&&!waitUsed(x.item.id,x.entry)).sort((a,b)=>String(a.entry.at).localeCompare(String(b.entry.at)))[0];
     const citedUnread=citedUnreadOf(state.items).cited.length;
-    if(recent||waiting||citedUnread){
+    // Local calendar date, not UTC: dismissing at 11pm should not reappear at 8am the same evening in a +9 zone.
+    const now_=new Date(),todayKey=now_.getFullYear()+'-'+String(now_.getMonth()+1).padStart(2,'0')+'-'+String(now_.getDate()).padStart(2,'0');
+    if((recent||waiting||citedUnread)&&runtime.cache.workbenchUI?.todayHidden!==todayKey){
      const strip=node('div',null,body,{class:'sc-today',role:'group','aria-label':T('오늘의 읽기')});
      node('span',T('오늘의 읽기'),strip,{class:'sc-today-label'});
      if(recent){const p_=runtime.pageProgress(recent.ref);const next=Number.isInteger(p_.lastPageIndex)&&p_.lastPageIndex<(Number(p_.total)||0)?p_.lastPageIndex:null;
       button(T('이어 읽기')+' · '+String(recent.i.title||'').slice(0,48)+(next!=null?' · '+T(`${next+1}쪽`):''),()=>run(()=>library.openItem(p_.attachmentID||recent.i.id,next!=null?{pageIndex:next}:undefined)),strip,{class:'sc-today-item','data-opens':'window',title:recent.i.title||''});}
      if(waiting)button(T('가장 오래 기다린 문헌')+' · '+String(waiting.item.title||'').slice(0,48),()=>openInList(waiting.item),strip,{class:'sc-today-item',title:waiting.item.title||''});
      if(citedUnread)button(T(`읽은 문헌이 인용한 안 읽은 문헌 ${citedUnread}편`),()=>{state.localLinksOpen=true;return render().then(()=>body.querySelector('.sc-local-reading-links')?.scrollIntoView?.({block:'nearest'}));},strip,{class:'sc-today-item'});
+     // Dismissed for today only: it comes back once the local date turns over.
+     button(T('오늘은 닫기'),()=>run(async()=>{await saveUI({todayHidden:todayKey});await render();}),strip,{class:'sc-today-item sc-today-close',title:T('오늘 하루만 이 줄을 숨깁니다')});
     }
    }
    // Narrowed to one paper by a search or filter, the summary stays: it is the way back.
@@ -921,6 +932,8 @@
     if(p?.total&&timeCell){const meter=node('span',null,timeCell,{class:'sc-row-progress',role:'img','aria-label':T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`),title:T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`)});
      node('span',null,meter,{class:'sc-row-progress-fill'}).style.width=Math.round(100*p.visited/p.total)+'%';
      node('span',`${p.visited}/${p.total}`,timeCell,{class:'sc-row-progress-text','aria-hidden':'true'});}}
+   // Loaded once per list, grouped by parent (see load()); a paper with no annotations shows nothing extra.
+   if(Number(item.annotations)>0&&timeCell)node('span',T(`주석 ${item.annotations}`),timeCell,{class:'sc-row-annotations'});
    const actions=bar(mainline);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-opens':'window','data-variant':'primary'});/* 자세히 opens the paper under its own row: the list keeps its search,
       filters, page, selection and place. One at a time; pressed again, it
       closes and the focus goes back to it. */
@@ -2545,9 +2558,13 @@
   function drawMatrix(){
    const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약']];
    const defaults=['title','status','authors','year','venue','doi','citations','impactFactor'];
+   const scopeItems=selected().length?model.sortItems(selected(),state.sort):rows();
+   // No saved choices yet: a memo on any of these papers earns its own column, right after the reading state.
+   const hasMemo=scopeItems.some(item=>String(item.remark||'').trim());
+   const defaultFields=hasMemo?[...defaults.slice(0,2),'remark',...defaults.slice(2)]:defaults;
    const saved=runtime.cache.matrixFields;
-   const fields=Array.isArray(saved)?[...new Set(saved.filter(field=>available.some(([key])=>field===key)))]:defaults;
-   if(!fields.length)fields.push(...defaults);
+   const fields=Array.isArray(saved)?[...new Set(saved.filter(field=>available.some(([key])=>field===key)))]:defaultFields;
+   if(!fields.length)fields.push(...defaultFields);
    const b=bar();button('행·열 전환',()=>{state.transpose=!state.transpose;render();},b);
    const options=node('details',null,body);node('summary','비교 항목 선택',options);
    const fieldNames=Object.fromEntries(available);
@@ -2560,7 +2577,7 @@
    /* The table is read by people and pasted into sheets: statuses in words,
       time as "1시간 5분" rather than 3900. */
    const STATUS={unread:'안 읽음',reading:'읽는 중',done:'완료'};
-   const values=(selected().length?model.sortItems(selected(),state.sort):rows()).map(item=>{
+   const values=scopeItems.map(item=>{
     const ref=runtime.Z.Items.get(Number(item.id)),entry=ref?runtime.entry(ref):{};
     const seconds=Number(item.seconds)||0;
     return {...item,tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||'',

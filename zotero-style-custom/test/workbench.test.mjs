@@ -215,6 +215,19 @@ test('recent view orders papers by latest read or modification and excludes unda
  const f=fixture();f.runtime.state=ref=>ref.id===1?{lastRead:'2026-09-14T10:00:00Z',dateModified:'2025-01-01'}:{lastRead:'2026-08-01',dateModified:'2026-09-14T12:00:00Z'};
  await f.bench.show('recent');assert.deepEqual([...f.body().querySelectorAll('h3')].map(n=>n.textContent),['Paper Beta','Paper Alpha']);await f.click('열기');assert.ok(f.calls.find(c=>c[0]==='open'&&c[1]==='2'));f.bench.destroy();
 });
+test('보유 문헌 rows show 주석 n from one grouped read per load, and nothing when the library has no such call',async()=>{
+ const f=fixture();
+ await f.bench.show('explore');
+ assert.equal(f.body().querySelector('.sc-row-annotations'),null,'no library.annotationCounts: nothing extra shown');
+ f.library.annotationCounts=async ids=>{assert.deepEqual([...ids].sort(),['1','2']);return {'1':3};};
+ await f.bench.load();
+ const rows=[...f.body().querySelectorAll('[data-item-id]')];
+ const alpha=rows.find(r=>r.dataset.itemId==='1'),beta=rows.find(r=>r.dataset.itemId==='2');
+ assert.equal(alpha.querySelector('.sc-row-annotations').textContent,'주석 3');
+ assert.equal(beta.querySelector('.sc-row-annotations'),null,'no annotations recorded for this paper');
+ f.bench.destroy();
+});
+
 test('navigation visibility persists, Appearance cannot be hidden and defaults restore all tabs',async()=>{
  const f=fixture({items:{},hiddenWorkbenchTabs:['graph','appearance']});await f.bench.show('appearance');assert.equal(f.bench.panel.querySelector('[data-tab="graph"]').hidden,true);assert.equal(f.bench.panel.querySelector('[data-tab="appearance"]').hidden,false);
  const control=f.body().querySelector('[aria-label="노트 메뉴 표시"]');control.checked=false;control.dispatchEvent(new f.win.Event('change'));await settle();assert.ok(f.runtime.cache.hiddenWorkbenchTabs.includes('notes'));assert.equal(f.bench.panel.querySelector('[data-tab="notes"]').hidden,true);await f.bench.show('notes');assert.equal(f.bench.state.tab,'appearance');
@@ -288,6 +301,24 @@ test('comparison field choices persist and CSV exports all rows while the table 
  const rating=f.body().querySelector('[aria-label="비교 항목: 별점"]');rating.checked=true;rating.dispatchEvent(new f.win.Event('change',{bubbles:true}));await settle();assert.deepEqual(f.runtime.cache.matrixFields,['title','citations','rating']);
  await f.click('CSV 복사');const csv=f.calls.filter(c=>c[0]==='copy').at(-1)[1];assert.equal(csv.split('\r\n').length,62);assert.match(csv,/"Matrix 61","0","5"/);
  await f.click('행·열 전환');assert.equal(f.body().querySelector('th').getAttribute('scope'),'row');f.bench.destroy();
+});
+
+test('논문 비교 adds a 읽기 메모 column after 읽기 상태 by default once a paper has a memo, but a saved choice still wins',async()=>{
+ const f=fixture();f.runtime.cache.items[1]={remark:'Worth a follow-up'};
+ await f.bench.show('matrix');
+ const heads=[...f.body().querySelectorAll('.sc-matrix th')].map(th=>th.textContent);
+ assert.deepEqual(heads.slice(0,3),['제목','읽기 상태','읽기 메모'],'remark slots in right after status');
+ f.bench.destroy();
+ // No memo anywhere in the table: the default stays as it was.
+ const bare=fixture();
+ await bare.bench.show('matrix');
+ assert.ok(![...bare.body().querySelectorAll('.sc-matrix th')].some(th=>th.textContent==='읽기 메모'));
+ bare.bench.destroy();
+ // A saved column list is respected even with a memo present.
+ const saved=fixture({items:{1:{remark:'Worth a follow-up'}},readerSettings:{},matrixFields:['title','citations']});
+ await saved.bench.show('matrix');
+ assert.deepEqual([...saved.body().querySelectorAll('.sc-matrix th')].map(th=>th.textContent),['제목','인용 수']);
+ saved.bench.destroy();
 });
 
 test('canvas exposes board and card appearance editing and reversible relation removal',async()=>{
@@ -1198,6 +1229,26 @@ test('the library opens on today’s next steps, and a journal in 내 문헌 분
  assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.query,'');
  assert.equal(f.bench.state.scope,'selected');assert.deepEqual([...f.bench.state.selected],['2']);
  assert.deepEqual([...f.body().querySelectorAll('.sc-paper-title')].map(n=>n.textContent),['Paper Beta']);
+ f.bench.destroy();
+});
+
+test('오늘의 읽기 closes for today only and returns once the local date changes',async()=>{
+ const f=fixture();
+ const recent=new Date(Date.now()-864e5).toISOString();
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'reading':''});
+ f.runtime.cache.items[1]={seconds:60,lastRead:recent};
+ f.runtime.pageProgress=()=>({pages:{},total:0,visited:0,percent:0});
+ f.setSelection([]);
+ await f.bench.show('explore');f.bench.state.selected=new Set();await f.bench.render();
+ let strip=f.body().querySelector('.sc-today');assert.ok(strip,'shown with nothing chosen or narrowed');
+ const close=strip.querySelector('.sc-today-close');assert.ok(close,'오늘은 닫기');assert.equal(close.textContent,'오늘은 닫기');
+ close.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ const today=new Date(),key=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+ assert.equal(f.runtime.cache.workbenchUI.todayHidden,key);
+ assert.equal(f.body().querySelector('.sc-today'),null,'gone for the rest of today');
+ // A render on a later local date is not held back by yesterday's dismissal.
+ f.runtime.cache.workbenchUI.todayHidden='2000-01-01';await f.bench.render();
+ strip=f.body().querySelector('.sc-today');assert.ok(strip,'a new day brings it back');
  f.bench.destroy();
 });
 
