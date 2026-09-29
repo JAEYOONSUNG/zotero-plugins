@@ -429,7 +429,16 @@
    per digit, so 128 and 9 line up on their last digit. */
 /* The title column takes the slack, so the figure columns stay next to their
    headings instead of drifting a finger's width apart. */
-#style-custom-workbench .sc-matrix tr > *:first-child { width: 100%; }
+/* At docked width the label column took 100% and pushed every paper off the
+   edge; a fixed, bounded width leaves room for the figures that are the
+   whole point of comparing 2-4 papers, and [data-fit] lets those columns
+   share what is left instead of a horizontal scrollbar. */
+#style-custom-workbench .sc-matrix tr > *:first-child { width: 200px; min-width: 160px; max-width: 240px; }
+#style-custom-workbench .sc-matrix th[scope=row] { width: 104px; min-width: 88px; max-width: 120px; }
+#style-custom-workbench .sc-matrix[data-fit] { table-layout: fixed; width: 100%; }
+#style-custom-workbench .sc-matrix[data-fit] th, #style-custom-workbench .sc-matrix[data-fit] td { min-width: 0; max-width: none; }
+/* A real 0 was drawn the same as an unset cell; "—" says the field is unset. */
+#style-custom-workbench .sc-matrix td:empty::before { content: "—"; color: var(--sc-faint); }
 /* A rating is out of five; the bare "4" beside a row of stars was ambiguous. */
 #style-custom-workbench .sc-matrix td[data-field=rating]::after { content: ' /5'; color: var(--sc-muted); }
 /* The shape of the table that could not be loaded. */
@@ -1050,11 +1059,12 @@
 #style-custom-workbench .sc-memo { display: flex; flex-direction: column; gap: 2px; padding: 8px 0 4px; }
 #style-custom-workbench .sc-memo-label { font-size: 12px; color: var(--sc-faint); }
 
-/* The colour tally doubles as a filter. */
+/* The colour tally doubles as a filter, read as one line of plain text
+   buttons -- a dot, the colour's meaning, its count -- not a row of pills. */
 #style-custom-workbench .sc-annot-swatch {
   display: inline-flex; align-items: center; gap: 5px;
-  min-height: 24px; padding: 2px 9px; border: 0;
-  border-radius: 100px; background: var(--sc-fill);
+  min-height: 22px; padding: 1px 4px; border: 0;
+  border-radius: var(--sc-radius-sm); background: none;
   font: 12px var(--sc-font); color: var(--sc-muted); cursor: pointer;
 }
 #style-custom-workbench .sc-annot-swatch:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
@@ -1479,8 +1489,12 @@
 
 /* 이어 읽기: three rows, title · pages and when · the page to go back to. Plain, as the list under it. */
 #style-custom-workbench .sc-resume { display: flex; flex-direction: column; margin: 0 0 12px; border-block-end: 1px solid var(--sc-border); }
-#style-custom-workbench .sc-resume-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 12px; align-items: center; padding: 6px 2px; }
+/* Title and memo take the whole first line; the meta and the two actions
+   share a second line under it, at any width -- a page number and a status
+   control were unreadably squeezed onto the title's own line before. */
+#style-custom-workbench .sc-resume-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; align-items: center; padding: 6px 2px; }
 #style-custom-workbench .sc-resume-row + .sc-resume-row { border-block-start: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-resume-actions { display: flex; align-items: center; gap: 8px; justify-self: end; }
 #style-custom-workbench .sc-resume-title { font: 600 13px/1.4 var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-resume-meta { color: var(--sc-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -1561,16 +1575,12 @@
 #style-custom-workbench .sc-inbox-person { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; font: inherit; color: inherit; cursor: pointer; }
 #style-custom-workbench .sc-inbox-person:hover { color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; }
 
-#style-custom-workbench .sc-resume-text { display: flex; flex-direction: column; min-width: 0; }
+#style-custom-workbench .sc-resume-text { grid-column: 1 / -1; display: flex; flex-direction: column; min-width: 0; }
 #style-custom-workbench .sc-resume-remark { font-size: 12px; color: var(--sc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-row-progress-text { margin-inline-start: 4px; font-size: 11px; color: var(--sc-muted); }
 #style-custom-workbench .sc-row-annotations { margin-inline-start: 4px; padding: 0; border: 0; background: none; min-height: 0; font-size: 11px; color: var(--sc-muted); cursor: pointer; }
 #style-custom-workbench .sc-row-annotations:hover { color: var(--sc-accent); text-decoration: underline; }
 #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time], #style-custom-workbench .sc-paper-column[data-metric=time] { width: 150px; }
-@container sc-workbench (max-width: 640px) {
-  #style-custom-workbench .sc-resume-row { grid-template-columns: minmax(0, 1fr) auto; }
-  #style-custom-workbench .sc-resume-meta { grid-column: 1; grid-row: 2; }
-}
 /* 내 문헌 분석 (journals tab): a plain table, one grey scale for the bars. */
 #style-custom-workbench .sc-journal-reading { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-journal-reading-title { margin: 0; color: var(--sc-muted); font: 650 11px/1.6 var(--sc-font); letter-spacing: .6px; }
@@ -1818,3 +1828,13 @@
 #style-custom-workbench .sc-attachment-findings[open] > summary { color: var(--sc-text); margin-bottom: 6px; }
 #style-custom-workbench .sc-attachment-findings-more { min-height: 22px; font-size: 12px; margin: 2px 0 10px; }
 #style-custom-workbench .sc-attachment-note { color: var(--sc-muted); font-size: 12px; margin: 1px 0 0; }
+/* 첨부 미리보기: files grouped under the paper they belong to, so a supplement
+   and its article are told apart by their group instead of by opening both. */
+#style-custom-workbench .sc-attachment-group { margin: 0 0 16px; }
+#style-custom-workbench .sc-attachment-group-title { margin: 0 0 4px; font-size: 13px; font-weight: 650; color: var(--sc-text); }
+#style-custom-workbench .sc-attachment-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: center; padding: 6px 2px; }
+#style-custom-workbench .sc-attachment-row + .sc-attachment-row { border-block-start: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-attachment-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+#style-custom-workbench .sc-attachment-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-attachment-reading { color: var(--sc-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-attachment-actions { display: flex; align-items: center; gap: 8px; }

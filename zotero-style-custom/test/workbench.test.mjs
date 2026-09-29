@@ -311,6 +311,41 @@ test('comparison field choices persist and CSV exports all rows while the table 
  await f.click('행·열 전환');assert.equal(f.body().querySelector('th').getAttribute('scope'),'row');f.bench.destroy();
 });
 
+test('논문 비교 fits 2-4 papers to the panel by default, flipping to one row per paper, and a chosen orientation sticks',async()=>{
+ const f=fixture();
+ f.papers.push({id:'3',key:'K3',libraryID:1,title:'Paper Gamma',authors:'X',year:'2023',venue:'PLOS',itemType:'journalArticle',tags:[]});
+ f.refs.set(3,{id:3});
+ f.setSelection([]);f.bench.state.selected=new Set();
+ await f.bench.show('matrix');
+ assert.equal(f.bench.state.transpose,null,'undecided until the reader picks a side');
+ const table=f.body().querySelector('.sc-matrix');
+ assert.equal(table.dataset.fit,'true','3 papers: fitted, one row per paper');
+ assert.equal(table.querySelector('th').getAttribute('scope'),'row','flipped by default for 2-4 papers');
+ // Default columns lead with the deciding figures; DOI is out, but still choosable.
+ const heads=[...table.querySelectorAll('th')].map(th=>th.textContent);
+ assert.deepEqual(heads,['제목','읽기 상태','발행연도','인용 수','IF','저널','저자']);
+ assert.equal([...f.body().querySelectorAll('[type=checkbox]')].some(c=>c.getAttribute('aria-label')==='비교 항목: DOI'),true,'DOI is still there to add back');
+ // A page of 3 rows needed no paging chrome at all.
+ assert.equal(f.findButton('비교 다음 페이지'),undefined,'one page: no paging controls');
+ assert.equal(/전체 \d+개/.test(f.body().textContent),false,'no paging span either');
+ // Pressing 행·열 전환 picks a side explicitly, and it holds even though 3 still fits the default.
+ await f.click('행·열 전환');
+ assert.equal(f.bench.state.transpose,false);
+ assert.equal(f.body().querySelector('.sc-matrix').dataset.fit,'false');
+ assert.equal(f.body().querySelector('.sc-matrix th').getAttribute('scope'),'col');
+ f.bench.destroy();
+});
+
+test('논문 비교 with more than four papers keeps the plain, unflipped shape by default',async()=>{
+ const f=fixture();
+ for(let n=3;n<=6;n++){f.papers.push({id:String(n),key:'K'+n,libraryID:1,title:'Paper '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ f.setSelection([]);f.bench.state.selected=new Set();
+ await f.bench.show('matrix');
+ assert.equal(f.body().querySelector('.sc-matrix').dataset.fit,'false','6 papers: no fixed-layout squeeze');
+ assert.equal(f.body().querySelector('.sc-matrix th').getAttribute('scope'),'col','not flipped past 4 papers');
+ f.bench.destroy();
+});
+
 test('논문 비교 adds a 읽기 메모 column after 읽기 상태 by default once a paper has a memo, but a saved choice still wins',async()=>{
  const f=fixture();f.runtime.cache.items[1]={remark:'Worth a follow-up'};
  await f.bench.show('matrix');
@@ -576,6 +611,57 @@ test('주변 mode never offers a fetch button, and leaving it restores the curre
  f.bench.destroy();
 });
 
+test('주변 mode fills a lacked paper\'s title only from the work-metadata cache, and never asks OpenAlex',async()=>{
+ const f=fixture();
+ const extra=[10,11,12].map(n=>({...f.papers[0],id:String(n),key:'K'+n,title:'Neighbour '+n}));
+ for(const n of [10,11,12])f.refs.set(n,{id:n,libraryID:1,key:'K'+n});
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ // 10, 11 and 12 all cite Alpha (so they are her 인용한 문헌) and all three
+ // also cite W999, which nothing on the shelf holds -- three citers clears
+ // the missingFloor of 3, so it is named under the graph.
+ const works={
+  '1:K1':{openalex:'W1',references:[]},
+  '1:K10':{openalex:'W10',references:['W1','W999']},
+  '1:K11':{openalex:'W11',references:['W1','W999']},
+  '1:K12':{openalex:'W12',references:['W1','W999']},
+  '1:K2':{openalex:'W2',references:[]}
+ };
+ f.runtime.graphTools=PaperGraph;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=JournalIdentity;
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);
+ f.runtime.cache.workMeta={W999:{id:'W999',title:'Cached Elsewhere',doi:'10.1/cached'}};
+ let asked=0;f.runtime.worksByID=async()=>{asked++;return {};};
+ f.bench.state.selected=new Set(['1']);
+ f.bench.state.graphScope='neighbours';
+ await f.bench.show('graph');
+ await settle();
+ assert.match(f.body().textContent,/Cached Elsewhere/,'the cached title fills in without a request');
+ assert.equal(asked,0,'주변 mode never calls worksByID, even for a paper it lacks');
+ f.bench.destroy();
+});
+
+test('zooming 선택 문헌 주변 keeps its middle too, the same centred frame as the current-scope map',async()=>{
+ const f=fixture();
+ const extra=[10].map(n=>({...f.papers[0],id:String(n),key:'K'+n,title:'Neighbour '+n}));
+ f.refs.set(10,{id:10,libraryID:1,key:'K10'});
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ const works={'1:K1':{openalex:'W1',references:['W10']},'1:K10':{openalex:'W10',references:[]},'1:K2':{}};
+ f.runtime.graphTools=PaperGraph;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=JournalIdentity;
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);
+ f.bench.state.selected=new Set(['1']);
+ f.bench.state.graphScope='neighbours';
+ await f.bench.show('graph');
+ await settle();
+ const svg=f.body().querySelector('svg.sc-graph');
+ assert.ok(svg,'the citation map is drawn');
+ const [x0,y0,w0,h0]=svg.getAttribute('viewBox').split(/\s+/).map(Number);
+ await f.click('확대');await f.click('확대');
+ const [x1,y1,w1,h1]=svg.getAttribute('viewBox').split(/\s+/).map(Number);
+ assert.ok(w1<w0&&h1<h0,'two presses zoomed in');
+ assert.equal(Math.round(x0+w0/2),Math.round(x1+w1/2),'the centre held horizontally');
+ assert.equal(Math.round(y0+h0/2),Math.round(y1+h1/2),'the centre held vertically');
+ f.bench.destroy();
+});
+
 test('a paper\'s author list says who is followed and follows the rest in one press',async()=>{
  const f=fixture();
  f.runtime.watchedAuthors=()=>[{id:'A1',name:'First Author'}];
@@ -697,10 +783,10 @@ test('backlinks name the paper a note sits under, once each; attachments come a 
  f.library.attachments=async()=>Array.from({length:130},(_,i)=>({id:String(500+i),parentID:'1',title:'File '+i,contentType:'application/pdf'}));
  f.bench.state.scope='library';
  await f.bench.show('attachments');
- assert.equal(f.body().querySelectorAll('.sc-card').length,100);
+ assert.equal(f.body().querySelectorAll('.sc-attachment-row').length,100);
  assert.match(f.body().textContent,/이 범위의 첨부파일/);
  await f.click('100개 더 보기');
- assert.equal(f.body().querySelectorAll('.sc-card').length,130);
+ assert.equal(f.body().querySelectorAll('.sc-attachment-row').length,130);
  await f.bench.show('notes');
  await f.click('새 노트 저장');
  assert.equal(f.calls.filter(c=>c[0]==='createNote').length,0,'no blank note');
@@ -1036,6 +1122,28 @@ test('the general reading record row shares 이어 읽기\'s renderer: one meta 
  f.bench.destroy();
 });
 
+test('a reading row without a last-read date says so, and its actions share the meta line, off the title',async()=>{
+ const f=fixture();
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:'unread'});
+ f.runtime.canEdit=()=>true;f.runtime.edit=async()=>{};
+ // Time recorded but no lastRead at all: an edge the record list does not filter out.
+ f.runtime.cache.items[1]={seconds:125};
+ f.runtime.formatReadTime=sec=>`${sec}s`;
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:20,visited:5,percent:25,attachmentID:100}:{pages:{},total:0,visited:0,percent:0};
+ await f.bench.show('reading');
+ const row=f.body().querySelector('.sc-reading-record');
+ assert.match(row.querySelector('.sc-resume-meta').textContent,/마지막 읽음 기록 없음/,'no date is said, not left blank');
+ // Title and memo are the row's own first line; the meta and the two actions
+ // (열기/이어 읽기 and the status control) share a second line, off the title.
+ const text=row.querySelector('.sc-resume-text'),actions=row.querySelector('.sc-resume-actions');
+ assert.ok(text&&actions,'the title block and the actions block are drawn separately');
+ const children=[...row.children];
+ assert.ok(children.indexOf(actions)>children.indexOf(text),'actions come after the title block');
+ assert.ok(actions.contains(row.querySelector('button[data-opens=window]')),'열기/이어 읽기 is in the actions group');
+ assert.ok(actions.querySelector('.sc-reading-status'),'the status control is in the same group');
+ f.bench.destroy();
+});
+
 test('notes name the finished papers with nothing written, owned results say how far read, collections sort by last read and by unread',async()=>{
  const f=fixture();
  const now=Date.now(),day=864e5;
@@ -1168,6 +1276,29 @@ test('오늘 읽음/지난 7일 counts narrow the record list, and pressing the 
  assert.equal(f.bench.state.readingView,'');
  facts()[1].dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
  assert.deepEqual(rowTitles().sort(),['Paper Alpha','Paper Beta'],'지난 7일 narrows to the last week');
+ f.bench.destroy();
+});
+
+test('지난 7일 builds its set first, so 이어 읽기 drops a paper outside the period and the button count matches what is shown',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const extra={...f.papers[0],id:'10',key:'K10',libraryID:1,title:'Ten Days Ago'};
+ f.refs.set(10,{id:10});
+ f.library.snapshot=async()=>[f.papers[0],f.papers[1],extra];
+ // All three are still 읽는 중 and unfinished, so all three would sit in
+ // 이어 읽기 (top 3, 14-day window) with no period chosen at all.
+ const lastRead={1:new Date(now-1000).toISOString(),2:new Date(now-3*day).toISOString(),10:new Date(now-10*day).toISOString()};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:'reading',lastRead:lastRead[ref.id]});
+ for(const id of [1,2,10])f.runtime.cache.items[id]={seconds:60,lastRead:lastRead[id]};
+ f.runtime.pageProgress=()=>({pages:{},total:0,visited:0,percent:0});
+ await f.bench.show('reading');
+ const resumeTitles=()=>[...f.body().querySelectorAll('.sc-resume:not(.sc-reading-records) .sc-resume-title')].map(t=>t.textContent);
+ const recordTitles=()=>[...f.body().querySelectorAll('.sc-reading-record .sc-resume-title')].map(t=>t.textContent);
+ assert.deepEqual(resumeTitles().sort(),['Paper Alpha','Paper Beta','Ten Days Ago'],'unfiltered: all three, including the ten-day-old one');
+ f.findButton('2편 지난 7일').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.readingView,'week');
+ assert.equal([...resumeTitles(),...recordTitles()].includes('Ten Days Ago'),false,'outside the 7-day period, it shows nowhere');
+ assert.equal(resumeTitles().length+recordTitles().length,2,'shown count equals the button\'s own count');
  f.bench.destroy();
 });
 
@@ -1717,7 +1848,7 @@ test('the attachment list draws before the library-wide scan answers, and a stal
  // The scan has been asked for but has not answered yet; the files list is already on screen.
  await new Promise(r=>setTimeout(r,0));
  assert.ok(requested);
- assert.equal(f.body().querySelectorAll('.sc-card').length,2,'the two files draw without waiting on the scan');
+ assert.equal(f.body().querySelectorAll('.sc-attachment-row').length,2,'the two files draw without waiting on the scan');
  assert.equal(f.body().querySelector('.sc-attachment-findings'),null,'the findings fold is not there yet');
  // Leaving the tab before the scan answers must not have it draw into whatever is on screen next.
  f.bench.state.tab='notes';await f.bench.render();
@@ -2199,6 +2330,18 @@ test('the pages of a paper read as a strip of shaded squares, with the number an
  assert.equal(cells[0].getAttribute('title'),'1페이지 · 2초');
  assert.equal(cells[0].textContent,'','no number on the square');
  assert.ok(f.body().querySelector('.sc-page-legend'),'a key from little to much');
+ f.bench.destroy();
+});
+
+test('the page-time legend lives inside each 쪽별 기록 fold, not as a standing line above the list',async()=>{
+ const f=fixture();
+ await f.bench.show('reading');
+ const list=f.body().querySelector('[data-reading-progress]');
+ // Not a direct child of the list, floating above every card.
+ assert.equal([...list.children].some(c=>c.classList?.contains('sc-page-legend')),false,'no standing line at the top of the page');
+ const fold=f.body().querySelector('.sc-resume-pages');
+ assert.ok(fold,'a fold exists for the paper with a page total');
+ assert.ok(fold.querySelector('.sc-page-legend'),'the key is inside the fold that explains it');
  f.bench.destroy();
 });
 
@@ -2927,6 +3070,59 @@ test('note and attachment searches take the same words in either order',async()=
  f.bench.destroy();
 });
 
+test('첨부 미리보기 groups a paper\'s files under one head, each with its own reading time, and 열기 goes to that file\'s own last page',async()=>{
+ const f=fixture();
+ f.library.attachments=async()=>[{id:'9',parentID:'1',title:'Full text PDF',contentType:'application/pdf'},{id:'10',parentID:'1',title:'Supplementary information',contentType:'application/pdf'}];
+ f.refs.set(9,{id:9,parentID:1,libraryID:1});
+ f.refs.set(10,{id:10,parentID:1,libraryID:1});
+ f.runtime.formatReadTime=sec=>`${sec}s`;
+ f.runtime.cache.items[1]={readingAttachments:{9:{lastRead:'2026-09-01T00:00:00Z'},10:{lastRead:'2026-08-01T00:00:00Z'}}};
+ // Each file keeps its own page progress -- the supplement is not the article's tail end.
+ f.runtime.pageProgress=(ref,att)=>Number(att)===10?{total:4,visited:1,percent:25,pages:{1:90},attachmentID:'10',lastPageIndex:1}
+  :{total:12,visited:6,percent:50,pages:{0:140,1:520,2:80,3:100,5:370,6:30},attachmentID:'9',lastPageIndex:6};
+ await f.bench.show('attachments');
+ assert.equal(f.body().querySelectorAll('.sc-attachment-group').length,1,'one group for the one paper');
+ const group=f.body().querySelector('.sc-attachment-group');
+ assert.match(group.querySelector('.sc-attachment-group-title').textContent,/Paper Alpha/);
+ const rows=[...group.querySelectorAll('.sc-attachment-row')];
+ assert.equal(rows.length,2,'both PDFs under the one head');
+ assert.match(rows[0].querySelector('.sc-attachment-reading').textContent,/1240s.*6\/12쪽/,'the main text\'s own time and pages');
+ assert.match(rows[1].querySelector('.sc-attachment-reading').textContent,/90s.*1\/4쪽/,'the supplement\'s own time and pages');
+ const openMain=[...rows[0].querySelectorAll('button')].find(b=>b.textContent==='7쪽에서');
+ const openSupp=[...rows[1].querySelectorAll('button')].find(b=>b.textContent==='2쪽에서');
+ assert.ok(openMain,'main text opens at its own last page, 1-based');
+ assert.ok(openSupp,'the supplement opens at its own last page');
+ openMain.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.ok(f.calls.find(c=>c[0]==='open'&&c[1]==='9'&&c[2]?.pageIndex===6));
+ // Searching down to one file still shows a group, just with one row.
+ f.input('작업 패널 검색','Supplementary');await settle();
+ assert.equal(f.body().querySelectorAll('.sc-attachment-row').length,1);
+ assert.match(f.body().textContent,/Supplementary information/);
+ f.bench.destroy();
+});
+
+test('첨부 미리보기 says a group cannot preview only when every file in it cannot, not when one file in the group can',async()=>{
+ const f=fixture();
+ // Paper 1: one file that cannot preview alongside one that can -- no sentence.
+ // Paper 2: nothing in the group can preview -- the sentence, once.
+ f.library.attachments=async()=>[
+  {id:'9',parentID:'1',title:'Full text PDF',contentType:'application/pdf'},
+  {id:'10',parentID:'1',title:'Broken link',contentType:'text/html',path:null},
+  {id:'8',parentID:'2',title:'Old scan',contentType:'application/octet-stream'}
+ ];
+ f.refs.set(9,{id:9});f.refs.set(10,{id:10});f.refs.set(8,{id:8});
+ await f.bench.show('attachments');
+ const groups=[...f.body().querySelectorAll('.sc-attachment-group')];
+ assert.equal(groups.length,2);
+ const g1=groups.find(g=>/Paper Alpha/.test(g.querySelector('.sc-attachment-group-title').textContent));
+ const g2=groups.find(g=>/Paper Beta/.test(g.querySelector('.sc-attachment-group-title').textContent));
+ assert.equal(/미리보기를 지원하지 않습니다/.test(g1.textContent),false,'one previewable file: no sentence for this group');
+ assert.ok(g1.querySelector('button[data-opens]')&&[...g1.querySelectorAll('button')].some(b=>b.textContent==='미리보기'));
+ assert.match(g2.textContent,/미리보기를 지원하지 않습니다/,'nothing previewable: the sentence, for this group only');
+ assert.equal(g2.textContent.match(/미리보기를 지원하지 않습니다/g).length,1,'once for the group, not once per file');
+ f.bench.destroy();
+});
+
 test('a collection opens onto its papers and counts each paper once',async()=>{
  const f=fixture();
  // "1" is filed twice; Parent holds its papers only through Child.
@@ -3186,4 +3382,76 @@ test('the watchlist shows a face for each person and finds the missing ones in o
   assert.match(card('Christopher A. Voigt').querySelector('.sc-watch-face img').getAttribute('src'),/voigt/);
   assert.match(f.bench.panel.querySelector('.sc-status').textContent,/사진 2명 · 이번에 찾음 1명/);
  } finally { f.bench.destroy(); }
+});
+
+test('the annotation colour tally reads as one line by meaning, not a row of pills',async()=>{
+ const f=fixture();
+ f.library.annotations=async()=>[
+  {id:'3',parentID:'1',attachmentID:'99',text:'a',comment:'',color:'#ffd400',type:'highlight',pageIndex:0},
+  {id:'4',parentID:'1',attachmentID:'99',text:'b',comment:'',color:'#ffd400',type:'highlight',pageIndex:1},
+  {id:'5',parentID:'1',attachmentID:'99',text:'c',comment:'',color:'#5fb236',type:'highlight',pageIndex:2},
+  {id:'6',parentID:'1',attachmentID:'99',text:'d',comment:'',color:'',type:'highlight',pageIndex:3},
+ ];
+ f.refs.set(99,{id:99,parentID:1,getField:()=>'Main PDF'});
+ f.runtime.cache.readerSettings={...(f.runtime.cache.readerSettings||{}),colorLabels:{'#ffd400':'핵심 결과'}};
+ await f.bench.show('annotations');
+ const swatches=[...f.body().querySelectorAll('.sc-annot-swatch')];
+ assert.equal(swatches.length,3,'one entry per colour, plus 색 없음');
+ assert.equal(swatches[0].parentElement,swatches[1].parentElement,'one line, one parent');
+ // Labelled: the meaning, never the hex, with the count after it.
+ assert.equal(swatches[0].querySelector('.sc-annot-meaning').textContent,'핵심 결과');
+ assert.equal(swatches[0].textContent.trim(),'핵심 결과2');
+ // Unlabelled but coloured: a neutral name, the hex only in the title.
+ assert.equal(swatches[1].querySelector('.sc-annot-meaning').textContent,'이름 없는 색');
+ assert.doesNotMatch(swatches[1].textContent,/#5fb236/i);
+ assert.match(swatches[1].getAttribute('title'),/#5fb236/i);
+ // No colour at all: 색 없음, still one of the parts.
+ assert.equal(swatches[2].querySelector('.sc-annot-meaning').textContent,'색 없음');
+ // The parts read as one sentence, joined by " · ".
+ const parent=swatches[0].parentElement;
+ const dots=[...parent.querySelectorAll('.sc-annot-dot')].map(()=>1).length;
+ assert.equal(dots,3);
+ assert.match(parent.textContent,/핵심 결과2\s*·\s*이름 없는 색1\s*·\s*색 없음1/);
+ swatches[0].click();await settle();
+ assert.equal(f.bench.state.color,'#ffd400','pressing a part filters by that colour, same as before');
+ f.bench.destroy();
+});
+
+test('tag rows add the summed reading time next to how much is read, and omit it when nothing is read',async()=>{
+ const f=fixture();
+ f.runtime.formatReadTime=sec=>`${sec}초`;
+ f.library.tagTree=()=>[{name:'alpha',path:'alpha',count:1,children:[]},{name:'beta',path:'beta',count:1,children:[]}];
+ f.library.snapshot=async()=>[{...f.papers[0],tags:['alpha/x']},{...f.papers[1],tags:['beta/x']}];
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'done':'',seconds:ref.id===1?300:0});
+ await f.bench.show('tags');
+ const details=[...f.body().querySelectorAll('.sc-tag-tree > details')];
+ const byName=n=>details.find(d=>d.querySelector('.sc-tag-name').textContent.startsWith(n));
+ const alphaText=byName('alpha').querySelector('.sc-tag-reading').textContent;
+ assert.match(alphaText,/완료 1\/1/);
+ assert.match(alphaText,/300초/,'the summed reading time joins the line');
+ const betaText=byName('beta').querySelector('.sc-tag-reading').textContent;
+ assert.doesNotMatch(betaText,/초/,'zero reading time is omitted rather than shown as 0초');
+ f.bench.destroy();
+});
+
+test('읽기 기록 정렬 offers fewest-pages-left, with papers that have no page total sorting last',async()=>{
+ const f=fixture();
+ const extra={...f.papers[0],id:'3',key:'K3',title:'Paper Gamma'};
+ f.refs.set(3,{id:3});
+ f.library.snapshot=async()=>[...f.papers,extra];
+ f.runtime.state=()=>({citations:3,impactFactor:4,status:'done'});
+ f.runtime.cache.items[1]={seconds:60,lastRead:'2026-01-01T00:00:00Z'};
+ f.runtime.cache.items[2]={seconds:60,lastRead:'2026-01-02T00:00:00Z'};
+ f.runtime.cache.items[3]={seconds:60,lastRead:'2026-01-03T00:00:00Z'};
+ // 1: 100 pages, stopped at index 89 -> 10 left. 2: 50 pages, stopped at index 44 -> 5 left. 3: no page record.
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{},total:100,visited:90,percent:90,attachmentID:7,lastPageIndex:89}
+  :ref.id===2?{pages:{},total:50,visited:45,percent:90,attachmentID:8,lastPageIndex:44}
+  :{pages:{},total:0,visited:0,percent:0};
+ await f.bench.show('reading');
+ const order=f.body().querySelector('[aria-label="읽기 기록 정렬"]');
+ assert.ok([...order.querySelectorAll('option')].some(o=>o.value==='pages'),'a third sort choice is offered');
+ order.value='pages';order.dispatchEvent(new f.win.Event('change'));
+ const titles=()=>[...f.body().querySelectorAll('.sc-reading-record .sc-resume-title')].map(c=>c.textContent);
+ assert.deepEqual(titles(),['Paper Beta','Paper Alpha','Paper Gamma'],'5 left, then 10 left, then no record at all');
+ f.bench.destroy();
 });
