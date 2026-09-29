@@ -2186,7 +2186,7 @@
    const readingEvidence=(parent,item,p)=>{
     if(!p.attachmentID||typeof library.annotations!=='function')return;
     const more=node('details',null,parent,{class:'sc-reading-evidence'});
-    node('summary',T('주석이 있는 쪽'),more);
+    const summary=node('summary',T('주석이 있는 쪽'),more);
     const box=node('div',null,more,{class:'sc-reading-evidence-list'});
     let loaded=false;
     const load=async()=>{
@@ -2203,8 +2203,11 @@
      }
      if(generation!==epoch||disposed||!more.isConnected)return;
      box.replaceChildren();
+     const mine=all.filter(a=>String(a.attachmentID)===String(p.attachmentID)&&a.pageIndex!=null);
      const byPage=new Map();
-     for(const a of all){if(String(a.attachmentID)!==String(p.attachmentID)||a.pageIndex==null)continue;const list=byPage.get(a.pageIndex)||[];list.push(a);byPage.set(a.pageIndex,list);}
+     for(const a of mine){const list=byPage.get(a.pageIndex)||[];list.push(a);byPage.set(a.pageIndex,list);}
+     // Read once, the summary says what the fold holds, so opening it is not required to know.
+     summary.textContent=T(`주석이 있는 쪽 · ${byPage.size}쪽 · 주석 ${mine.length}개`);
      if(!byPage.size){node('p',T('이 PDF에는 쪽이 기록된 주석이 없습니다.'),box,{class:'sc-muted'});return;}
      const pagesWith=[...byPage].sort((a,b)=>a[0]-b[0]);
      const drawPage=([index,notes])=>{
@@ -2480,7 +2483,7 @@
   }
   function drawMatrix(){
    const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약']];
-   const defaults=['title','authors','year','venue','doi','citations','impactFactor'];
+   const defaults=['title','status','authors','year','venue','doi','citations','impactFactor'];
    const saved=runtime.cache.matrixFields;
    const fields=Array.isArray(saved)?[...new Set(saved.filter(field=>available.some(([key])=>field===key)))]:defaults;
    if(!fields.length)fields.push(...defaults);
@@ -2500,7 +2503,7 @@
     const ref=runtime.Z.Items.get(Number(item.id)),entry=ref?runtime.entry(ref):{};
     const seconds=Number(item.seconds)||0;
     return {...item,tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||'',
-     status:item.status?T(STATUS[item.status]||item.status):'',
+     status:T(STATUS[item.status]||item.status||'안 읽음'),
      seconds:seconds>0?(runtime.formatReadTime?runtime.formatReadTime(seconds):`${seconds}초`):''};
    });
    const data=model.matrix(values,fields,state.transpose);
@@ -2526,17 +2529,6 @@
     const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):paper?null:String(value),tr);
     if(paper)button(String(value),()=>library.openItem(paper.id),cell,{class:'sc-link-button','data-opens':'window',title:'Zotero에서 열기'});
     if(NUMERIC.has(field))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',state.transpose?'row':'col');if(!heading&&field)cell.dataset.field=field;});});
-   /* The highest citation count, IF and rating on the page are set in bold,
-      so the comparison has an answer before it is read cell by cell. Only
-      where the papers differ; a tie at the top marks each. */
-   for(const field of ['citations','impactFactor','rating']){
-    const cells=[...table.querySelectorAll(`td[data-field="${field}"]`)];
-    const known=cells.filter(c=>String(c.textContent).trim()!==''&&Number.isFinite(Number(c.textContent)));
-    if(known.length<2)continue;
-    const top=Math.max(...known.map(c=>Number(c.textContent))),low=Math.min(...known.map(c=>Number(c.textContent)));
-    if(top===low)continue;
-    for(const c of known)if(Number(c.textContent)===top){c.dataset.best='true';c.title=T('이 표에서 가장 높음');}
-   }
    drawCompareInsight(values);
   }
   /* The papers in the table, read together by the model: what each claims,

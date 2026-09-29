@@ -1713,7 +1713,6 @@
  #style-custom-workbench .sc-annot-compare-corner { display: none; }
  #style-custom-workbench .sc-annot-compare-meaning { grid-column: 1 / -1; }
 }
-#style-custom-workbench .sc-matrix td[data-best=true] { font-weight: 700; color: var(--sc-text); }
 #style-custom-workbench .sc-graph-insight { margin-top: -2px; }
 #style-custom-workbench .sc-author-shelf { display: flex; flex-direction: column; margin: 0 0 12px; }
 #style-custom-workbench .sc-author-shelf-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
@@ -5658,7 +5657,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   }
   function drawMatrix(){
    const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약']];
-   const defaults=['title','authors','year','venue','doi','citations','impactFactor'];
+   const defaults=['title','status','authors','year','venue','doi','citations','impactFactor'];
    const saved=runtime.cache.matrixFields;
    const fields=Array.isArray(saved)?[...new Set(saved.filter(field=>available.some(([key])=>field===key)))]:defaults;
    if(!fields.length)fields.push(...defaults);
@@ -5678,7 +5677,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     const ref=runtime.Z.Items.get(Number(item.id)),entry=ref?runtime.entry(ref):{};
     const seconds=Number(item.seconds)||0;
     return {...item,tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||'',
-     status:item.status?T(STATUS[item.status]||item.status):'',
+     status:T(STATUS[item.status]||item.status||'안 읽음'),
      seconds:seconds>0?(runtime.formatReadTime?runtime.formatReadTime(seconds):`${seconds}초`):''};
    });
    const data=model.matrix(values,fields,state.transpose);
@@ -5704,17 +5703,6 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):paper?null:String(value),tr);
     if(paper)button(String(value),()=>library.openItem(paper.id),cell,{class:'sc-link-button','data-opens':'window',title:'Zotero에서 열기'});
     if(NUMERIC.has(field))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',state.transpose?'row':'col');if(!heading&&field)cell.dataset.field=field;});});
-   /* The highest citation count, IF and rating on the page are set in bold,
-      so the comparison has an answer before it is read cell by cell. Only
-      where the papers differ; a tie at the top marks each. */
-   for(const field of ['citations','impactFactor','rating']){
-    const cells=[...table.querySelectorAll(`td[data-field="${field}"]`)];
-    const known=cells.filter(c=>String(c.textContent).trim()!==''&&Number.isFinite(Number(c.textContent)));
-    if(known.length<2)continue;
-    const top=Math.max(...known.map(c=>Number(c.textContent))),low=Math.min(...known.map(c=>Number(c.textContent)));
-    if(top===low)continue;
-    for(const c of known)if(Number(c.textContent)===top){c.dataset.best='true';c.title=T('이 표에서 가장 높음');}
-   }
    drawCompareInsight(values);
   }
   /* The papers in the table, read together by the model: what each claims,
@@ -7112,11 +7100,11 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    for(const label of ['저널','보유','안 읽음','보유·시간 비중','읽은 시간','인용 중앙값'])node('span',T(label),header,{role:'columnheader'});
    for(const g of shown){
     const row=node('div',null,table,{class:'sc-journal-reading-row',role:'row'});
-    // The name opens the journal's papers in 보유 문헌, by a search for it.
-    const nameCell=node('span',null,row,{class:'sc-journal-reading-name',role:'cell'});
-    if(g.key==='\u0000none'||!g.items[0]?.venue)nameCell.textContent=g.venue;
-    else button(g.venue,()=>{state.query=g.items[0].venue;search.value=state.query;state.status='';const select=filterInputs.get?.('status');if(select)select.value='';return navigate('explore');},nameCell,{class:'sc-hit-title-link',title:T(`${g.venue} 문헌을 보유 문헌에서 보기`)});
-    node('span',`${g.items.length}편`,row,{class:'sc-journal-reading-num',role:'cell'});
+    node('span',g.venue,row,{class:'sc-journal-reading-name',role:'cell',title:g.venue});
+    // The count of papers held is the way to them: 보유 문헌, searched for this journal.
+    const heldCell=node('span',null,row,{class:'sc-journal-reading-num',role:'cell'});
+    if(!g.items[0]?.venue)heldCell.textContent=`${g.items.length}편`;
+    else button(`${g.items.length}편`,()=>{state.query=g.items[0].venue;search.value=state.query;state.status='';const select=filterInputs.get?.('status');if(select)select.value='';return navigate('explore');},heldCell,{class:'sc-journal-reading-count',title:T(`${g.venue} 문헌을 보유 문헌에서 보기`)});
     const unread=node('span',null,row,{class:'sc-journal-reading-unread',role:'cell'});
     const open=state.journalReadingOpen===g.key;
     if(g.unread.length){
@@ -7728,6 +7716,10 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    fresh:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna']}],
    watching:true,checkedAt:'2026-09-18'}),selected:()=>[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,canEdit:()=>true,edit:async(items,patch)=>{for(const item of items){const paper=papers.find(p=>Number(p.id)===item.id);if(paper&&patch.status)paper.status=patch.status;}},
   paperWorks:()=>({'1:DEMO1':{openalex:'W1',references:['W4','W6']},'1:DEMO2':{openalex:'W2',references:['W4']},'1:DEMO3':{openalex:'W3',references:['https://openalex.org/W1','W2','W2']},'1:DEMO4':{openalex:'W4',references:[]},'1:DEMO6':{openalex:'W6',references:[]}}),
+  // So 첨부 미리보기's findings section has something to show: one supplement filed
+  // under its paper, and two papers with no PDF at all, one unread and one already done.
+  attachmentFindings:async()=>({supplementary:[{id:'1',fileID:'10',title:papers[0].title,year:'2025',file:'Supplementary information.pdf',why:'첫 쪽에 Supplementary라고 적혀 있음'}],duplicate:[],foreign:[],orphan:[],missing:[{id:'3',title:papers[2].title,year:'2026'},{id:'2',title:papers[1].title,year:'2024'}],unread:0}),
+  trashAttachments:async()=>({moved:0}),
   pageProgress:(ref,att)=>ref.id===1&&Number(att)===10?{total:4,visited:1,percent:25,pages:{1:90},attachmentID:'10',lastPageIndex:1}:ref.id===1?{total:12,visited:6,percent:50,pages:{0:140,1:520,2:80,3:100,5:370,6:30},attachmentID:'9',lastPageIndex:6}
   :ref.id===2?{total:8,visited:8,percent:100,pages:{0:90,1:300,2:420,3:500,4:600,5:510,6:420,7:360},attachmentID:'8',lastPageIndex:7}
   :{total:0,visited:0,percent:0,pages:{}}};

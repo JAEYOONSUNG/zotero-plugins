@@ -784,6 +784,8 @@ test('an owned unread paper from the inbox waits under 읽기 대기 until readi
  const rows=[...f.body().querySelectorAll('.sc-reading-evidence-row')].map(r=>r.textContent);
  assert.equal(rows.length,1,'one page, this PDF only');
  assert.match(rows[0],/4쪽.*주석 2개.*check the control/);
+ // Once loaded, the fold's own summary says how much it holds without opening it again.
+ assert.equal(evidence.querySelector('summary').textContent,'주석이 있는 쪽 · 1쪽 · 주석 2개');
  f.bench.destroy();
 });
 
@@ -1018,7 +1020,7 @@ test('unread papers that cite the read ones are named too, and two papers’ ann
  f.bench.destroy();
 });
 
-test('an author page opens with what of theirs is on the shelf, and the comparison table marks the highest figures',async()=>{
+test('an author page opens with what of theirs is on the shelf, and the comparison table shows reading state by default',async()=>{
  const f=fixture();
  const known={1:{status:'done',citations:40,impactFactor:4},2:{status:'',citations:9,impactFactor:4}};
  f.runtime.state=ref=>({...known[ref.id]});
@@ -1028,11 +1030,12 @@ test('an author page opens with what of theirs is on the shelf, and the comparis
  const shelf=[...f.body().querySelectorAll('.sc-author-shelf-row')].map(r=>r.textContent);
  assert.equal(shelf.length,2,'both papers by Ada Lovelace');
  assert.match(shelf.join('|'),/완료/);
- f.runtime.cache.matrixFields=['title','citations','impactFactor'];
+ // With no saved column choice the reading state is on by default, not buried behind a checkbox.
+ f.runtime.cache.matrixFields=undefined;
  f.setSelection([]);f.bench.state.selected=new Set();
  await f.bench.show('matrix');
- const best=[...f.body().querySelectorAll('td[data-best="true"]')].map(td=>[td.dataset.field,td.textContent]);
- assert.deepEqual(best,[['citations','40']],'IF ties at the top, so it is not marked');
+ const statusCol=[...f.body().querySelectorAll('td[data-field="status"]')].map(td=>td.textContent);
+ assert.deepEqual(statusCol,['완료','안 읽음'],'reading state shown by default');
  f.bench.destroy();
 });
 

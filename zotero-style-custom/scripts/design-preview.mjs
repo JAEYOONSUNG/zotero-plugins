@@ -148,6 +148,10 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    fresh:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna']}],
    watching:true,checkedAt:'2026-09-18'}),selected:()=>[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,canEdit:()=>true,edit:async(items,patch)=>{for(const item of items){const paper=papers.find(p=>Number(p.id)===item.id);if(paper&&patch.status)paper.status=patch.status;}},
   paperWorks:()=>({'1:DEMO1':{openalex:'W1',references:['W4','W6']},'1:DEMO2':{openalex:'W2',references:['W4']},'1:DEMO3':{openalex:'W3',references:['https://openalex.org/W1','W2','W2']},'1:DEMO4':{openalex:'W4',references:[]},'1:DEMO6':{openalex:'W6',references:[]}}),
+  // So 첨부 미리보기's findings section has something to show: one supplement filed
+  // under its paper, and two papers with no PDF at all, one unread and one already done.
+  attachmentFindings:async()=>({supplementary:[{id:'1',fileID:'10',title:papers[0].title,year:'2025',file:'Supplementary information.pdf',why:'첫 쪽에 Supplementary라고 적혀 있음'}],duplicate:[],foreign:[],orphan:[],missing:[{id:'3',title:papers[2].title,year:'2026'},{id:'2',title:papers[1].title,year:'2024'}],unread:0}),
+  trashAttachments:async()=>({moved:0}),
   pageProgress:(ref,att)=>ref.id===1&&Number(att)===10?{total:4,visited:1,percent:25,pages:{1:90},attachmentID:'10',lastPageIndex:1}:ref.id===1?{total:12,visited:6,percent:50,pages:{0:140,1:520,2:80,3:100,5:370,6:30},attachmentID:'9',lastPageIndex:6}
   :ref.id===2?{total:8,visited:8,percent:100,pages:{0:90,1:300,2:420,3:500,4:600,5:510,6:420,7:360},attachmentID:'8',lastPageIndex:7}
   :{total:0,visited:0,percent:0,pages:{}}};

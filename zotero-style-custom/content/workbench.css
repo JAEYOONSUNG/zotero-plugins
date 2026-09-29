@@ -1713,7 +1713,6 @@
  #style-custom-workbench .sc-annot-compare-corner { display: none; }
  #style-custom-workbench .sc-annot-compare-meaning { grid-column: 1 / -1; }
 }
-#style-custom-workbench .sc-matrix td[data-best=true] { font-weight: 700; color: var(--sc-text); }
 #style-custom-workbench .sc-graph-insight { margin-top: -2px; }
 #style-custom-workbench .sc-author-shelf { display: flex; flex-direction: column; margin: 0 0 12px; }
 #style-custom-workbench .sc-author-shelf-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
