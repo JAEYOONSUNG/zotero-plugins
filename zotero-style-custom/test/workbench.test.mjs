@@ -1428,7 +1428,10 @@ test('the queue keeps why a paper was put by, the selection bar leads to the nex
  assert.ok(visible('주석')&&visible('노트')&&!visible('논문 비교'));
  [...f.bench.panel.querySelectorAll('.sc-selection-bar button')].find(x=>x.textContent==='노트').click();await new Promise(r=>setTimeout(r,20));
  assert.equal(f.bench.state.tab,'notes');assert.equal(f.bench.state.scope,'selected');assert.equal(f.bench.state.query,'','a search that would hide it is set aside');
- await f.click('전체 목록으로');
+ // Leaving 보유 문헌 through the selection bar remembered where it was, so the
+ // spot that used to only say 전체 목록으로 now offers the fuller 이전 목록으로.
+ await f.click('이전 목록으로');
+ assert.equal(f.bench.state.tab,'explore');
  assert.equal(f.bench.state.query,'Alpha','and given back');
  // A note search shows the passage around the match, far into the note.
  f.library.notes=async()=>[{id:'9',parentID:'1',title:'Long note',text:'x '.repeat(900)+'the control culture temperature was 30 C '+'y '.repeat(50),modified:'2026-09-01'}];
@@ -3453,5 +3456,112 @@ test('읽기 기록 정렬 offers fewest-pages-left, with papers that have no pa
  order.value='pages';order.dispatchEvent(new f.win.Event('change'));
  const titles=()=>[...f.body().querySelectorAll('.sc-reading-record .sc-resume-title')].map(c=>c.textContent);
  assert.deepEqual(titles(),['Paper Beta','Paper Alpha','Paper Gamma'],'5 left, then 10 left, then no record at all');
+ f.bench.destroy();
+});
+
+test('논문 비교 offers a shared/lone reference table only for an explicit 2-6 pick, counts an unfetched reference list apart from an empty one, and favours the shelf for a title',async()=>{
+ const f=fixture();
+ f.papers.push({id:'3',key:'K3',libraryID:1,title:'Paper Gamma',itemType:'journalArticle',tags:[]});f.refs.set(3,{id:3});
+ f.papers.push({id:'4',key:'K4',libraryID:1,title:'Paper Delta',itemType:'journalArticle',tags:[]});f.refs.set(4,{id:4});
+ f.runtime.state=ref=>ref.id===4?{status:'reading',seconds:125,citations:0,impactFactor:0}:{status:'unread',seconds:0,citations:0,impactFactor:0};
+ f.runtime.formatReadTime=seconds=>Math.floor(seconds/60)+'분';
+ f.runtime.paperWorks=()=>({
+  '1:K1':{openalex:'W1',references:['W10','W20']},
+  '1:K2':{openalex:'W2',references:['W10','W30']},
+  '1:K4':{openalex:'W10',references:[]}
+  // Paper Gamma (1:K3) is left out on purpose: its reference list was never fetched.
+ });
+ await f.bench.show('matrix');
+ f.bench.state.selected=new Set();await f.bench.render();
+ assert.equal(f.body().querySelectorAll('.sc-reference-matrix').length,0,'nothing explicitly selected: no reference table, even with rows on screen');
+ f.bench.state.selected=new Set(['1','2']);await f.bench.render();
+ const fold=f.body().querySelector('.sc-compare-references details');
+ assert.ok(fold,'two explicitly selected papers get the fold');
+ assert.equal(fold.querySelector('summary').textContent,'공통 참고문헌 1 · 한 문헌만 인용 2 · 참고목록 확보 2/2편');
+ const table=fold.querySelector('.sc-reference-matrix');
+ const rows=[...table.querySelectorAll('tr')].slice(1);
+ assert.equal(rows.length,3,'the shared reference first, then the two cited by only one paper');
+ const cells=tr=>[...tr.querySelectorAll('th,td')].map(td=>td.textContent);
+ assert.deepEqual(cells(rows[0]),['Paper Delta','✓','✓','읽는 중 · 2분'],'the shared reference is on the shelf, named and read by its own title');
+ assert.deepEqual(cells(rows[1]),['W20','✓','','서재에 없음']);
+ assert.deepEqual(cells(rows[2]),['W30','','✓','서재에 없음']);
+ // Three explicitly selected: the same shared reference reads as "cited by two or
+ // more", and the paper whose list was never fetched counts against 확보 rather
+ // than as though it simply had none.
+ f.bench.state.selected=new Set(['1','2','3']);await f.bench.render();
+ assert.equal(f.body().querySelector('.sc-compare-references summary').textContent,'2편 이상에서 인용 1 · 한 문헌만 인용 2 · 참고목록 확보 2/3편');
+ // More than six explicitly selected: back to no table at all.
+ for(let n=5;n<=8;n++){f.papers.push({id:String(n),key:'K'+n,libraryID:1,title:'Paper '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ f.bench.state.selected=new Set(['1','2','3','4','5','6','7']);await f.bench.load();
+ assert.equal(f.body().querySelectorAll('.sc-reference-matrix').length,0,'more than six explicitly selected: no reference table');
+ f.bench.destroy();
+});
+
+test('논문 비교 folds 주장·논쟁 AI 분석 into a closed details by default, its own behaviour kept working inside',async()=>{
+ const f=fixture();
+ await f.bench.show('matrix');
+ f.bench.state.selected=new Set(['1','2']);await f.bench.render();
+ const fold=f.body().querySelector('.sc-compare-insight-fold');
+ assert.ok(fold,'the AI analysis sits in its own fold');
+ assert.equal(fold.querySelector('summary').textContent,'주장·논쟁 AI 분석');
+ assert.ok(!fold.open,'closed by default so the table is what is seen first');
+ assert.ok([...fold.querySelectorAll('button')].some(b=>b.textContent==='함께 읽기'),'its own button is still reachable inside the fold');
+ fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));await settle();
+ await f.bench.render();
+ assert.equal(f.body().querySelector('.sc-compare-insight-fold').open,true,'the open choice sticks across redraws');
+ f.bench.destroy();
+});
+
+test('leaving 보유 문헌 through a row\'s 주석 n remembers the page, selection and sort, and 이전 목록으로 restores all of it',async()=>{
+ const f=fixture();
+ f.runtime.getSetting=key=>({explorePageSize:2,inlineEvidenceCount:5,maxExcerptLength:1200,workbenchDensity:'comfortable',matrixPageSize:50})[key];
+ f.papers.splice(0);
+ for(let id=1;id<=6;id++){f.papers.push({id:String(id),key:'K'+id,libraryID:1,title:'Paper '+id,itemType:'journalArticle',tags:[]});f.refs.set(id,{id});}
+ f.runtime.state=ref=>({status:'unread',seconds:0,citations:ref.id,impactFactor:0});
+ f.library.annotationCounts=async()=>({'4':2});
+ await f.bench.show('explore');
+ f.bench.state.sort='citations-desc';await f.bench.render();
+ f.bench.state.selected=new Set(['2','5']);f.bench.state.pageIndex=1;await f.bench.render();
+ assert.deepEqual([...f.body().querySelectorAll('[data-item-id]')].map(c=>c.dataset.itemId),['4','3'],'page 2 of six, highest citations first');
+ const annotBtn=f.body().querySelector('[data-item-id="4"] .sc-row-annotations');
+ assert.ok(annotBtn,'주석 n is on the row');
+ annotBtn.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'annotations');assert.equal(f.bench.state.annotationPaperID,'4');
+ const origin=f.bench.state.listOrigin;
+ assert.ok(origin,'the list position was remembered on leaving 보유 문헌');
+ assert.equal(origin.tab,'explore');assert.equal(origin.scope,'library');assert.equal(origin.sort,'citations-desc');
+ assert.equal(origin.pageIndex,1);assert.deepEqual([...origin.selected].sort(),['2','5']);assert.equal(origin.anchorID,'4');
+ const back=f.findButton('이전 목록으로');
+ assert.ok(back,'the way back is offered, even though scope itself never left 라이브러리');
+ back.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'explore');
+ assert.equal(f.bench.state.pageIndex,1,'the same page');
+ assert.deepEqual([...f.bench.state.selected].sort(),['2','5'],'the same selection');
+ assert.equal(f.bench.state.sort,'citations-desc','the same sort');
+ assert.deepEqual([...f.body().querySelectorAll('[data-item-id]')].map(c=>c.dataset.itemId),['4','3'],'back on the same page of rows');
+ assert.equal(f.bench.state.listOrigin,null,'consumed once used');
+ assert.equal(f.doc.activeElement.dataset.itemId,'4','the same card is focused');
+ f.bench.destroy();
+});
+
+test('the selection bar\'s 노트 task also remembers 보유 문헌, and the scope-back spot offers the fuller 이전 목록으로',async()=>{
+ const f=fixture();
+ f.runtime.getSetting=key=>({explorePageSize:2,inlineEvidenceCount:5,maxExcerptLength:1200,workbenchDensity:'comfortable',matrixPageSize:50})[key];
+ f.papers.splice(0);
+ for(let id=1;id<=6;id++){f.papers.push({id:String(id),key:'K'+id,libraryID:1,title:'Paper '+id,itemType:'journalArticle',tags:[]});f.refs.set(id,{id});}
+ f.runtime.state=()=>({status:'unread',seconds:0,citations:0,impactFactor:0});
+ await f.bench.show('explore');
+ f.bench.state.selected=new Set(['4']);f.bench.state.pageIndex=1;await f.bench.render();
+ assert.deepEqual([...f.body().querySelectorAll('[data-item-id]')].map(c=>c.dataset.itemId),['3','4']);
+ const goNotes=[...f.bench.panel.querySelectorAll('.sc-selection-tasks button')].find(b=>b.textContent==='노트');
+ assert.ok(goNotes,'the selection bar\'s 노트 task');
+ goNotes.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'notes');assert.equal(f.bench.state.scope,'selected');
+ const back=f.bench.panel.querySelector('.sc-scope-back');
+ assert.ok(back,'the scope-back spot is there once scope is 선택한 문헌');
+ assert.equal(back.textContent,'이전 목록으로','it offers the full restore rather than only 전체 목록으로');
+ back.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.scope,'library');
+ assert.equal(f.bench.state.pageIndex,1);assert.deepEqual([...f.bench.state.selected],['4']);
  f.bench.destroy();
 });

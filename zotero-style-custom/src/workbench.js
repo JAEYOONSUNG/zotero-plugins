@@ -437,8 +437,43 @@
    const kept=state.keptFilters;if(!kept)return;state.keptFilters=null;
    Object.assign(state,kept);search.value=kept.query||'';type.value=kept.type||'';
    for(const [key,input] of filterInputs)if(key in kept)input.value=kept[key]||'';
+   // Left some other way -- 다른 문헌 고르기, an emptied selection -- rather
+   // than through 이전 목록으로: the remembered position is now stale.
+   state.listOrigin=null;
+  }
+  /* 보유 문헌 remembers where it was, so a jump out through a row's 주석 n, a
+     selection-bar task or a single-paper pick can be undone exactly: which
+     page, what was checked and sorted, and which card sat at the top of the
+     scroll area. Only leaving the list itself sets this -- a plain tab
+     switch never does -- and it is read once, by 이전 목록으로. */
+  function rememberListOrigin(){
+   if(state.tab!=='explore')return;
+   const cards=[...body.querySelectorAll('[data-item-id]')];
+   const top=body.getBoundingClientRect?.().top||0;
+   let anchorID=null;
+   for(const c of cards){const rect=c.getBoundingClientRect?.();if(!rect||rect.top>=top-1){anchorID=c.dataset.itemId;break;}}
+   state.listOrigin={tab:state.tab,scope:state.scope,sort:state.sort,pageIndex:state.pageIndex||0,
+    selected:[...state.selected],expandedPaperID:state.expandedPaperID||'',
+    scrollTop:body.scrollTop||0,anchorID,
+    filters:{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo}};
+  }
+  // The other half: everything rememberListOrigin kept, put back, then the
+  // same card scrolled to the same offset and focused (or the nearest one left).
+  async function restoreListOrigin(){
+   const origin=state.listOrigin;if(!origin)return;
+   state.listOrigin=null;
+   Object.assign(state,origin.filters);
+   search.value=origin.filters.query||'';type.value=origin.filters.type||'';
+   for(const [key,input] of filterInputs)if(key in origin.filters)input.value=origin.filters[key]||'';
+   state.scope=origin.scope;scope.value=origin.scope;
+   state.sort=origin.sort;const sortInput=filterInputs.get('sort');if(sortInput)sortInput.value=origin.sort;
+   state.pageIndex=origin.pageIndex;state.selected=new Set(origin.selected);state.expandedPaperID=origin.expandedPaperID;
+   await navigate(origin.tab);
+   const anchor=(origin.anchorID&&body.querySelector(`[data-item-id="${origin.anchorID}"]`))||body.querySelector('[data-item-id]');
+   if(anchor){body.scrollTop=origin.scrollTop||0;anchor.scrollIntoView?.({block:'nearest'});anchor.focus?.();}
   }
   function navigateSelection(tab,ids){
+   rememberListOrigin();
    const kept={query:state.query,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,type:state.type,tag:state.tag};
    if(Object.values(kept).some(Boolean))state.keptFilters=kept;
    state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';
@@ -553,11 +588,23 @@
    const applicable=!nativeJCR&&FILTER_TABS.has(state.tab)&&state.tab!=='collections';controls.hidden=!applicable;filterPanel.hidden=!applicable;kindChips.hidden=!applicable;
    // While the list is narrowed to a selection, the way back is one button, not a menu.
    let back=context.querySelector('.sc-scope-back');
-   if(applicable&&state.scope==='selected'){if(!back){back=button('전체 목록으로',()=>{state.scope='library';scope.value='library';
-    // The search and filters set aside for the selection come back with the whole list.
-    restoreKept();
-    render();},null,{class:'sc-scope-back'});context.insertBefore(back,contextDetail.nextSibling);}}
+   if(applicable&&state.scope==='selected'){if(!back){
+    const fromOrigin=!!state.listOrigin;
+    back=button(fromOrigin?'이전 목록으로':'전체 목록으로',()=>{
+     if(state.listOrigin)return run(restoreListOrigin);
+     state.scope='library';scope.value='library';
+     // The search and filters set aside for the selection come back with the whole list.
+     restoreKept();
+     render();
+    },null,{class:'sc-scope-back'});context.insertBefore(back,contextDetail.nextSibling);}}
    else back?.remove();
+   // A route that left 보유 문헌 without touching scope -- a row's 주석 n,
+   // say -- gets its own small way back, since the spot above only shows
+   // once the scope itself says "선택한 문헌".
+   let originBack=context.querySelector('.sc-list-origin-back');
+   if(state.listOrigin&&!(applicable&&state.scope==='selected')){
+    if(!originBack){originBack=button('이전 목록으로',()=>run(restoreListOrigin),null,{class:'sc-list-origin-back'});context.insertBefore(originBack,contextDetail.nextSibling);}
+   }else originBack?.remove();
    {const scopeName=T(({library:'라이브러리',selected:'선택한 문헌',collection:'현재 컬렉션','collection-recursive':'현재·하위 컬렉션'})[state.scope]||'라이브러리'),inside=['notes','annotations','attachments'].includes(state.tab),n=(inside?model.filter(scoped(),parentOptions()):rows()).length;
    // The detail line says something the title does not; naming the page twice
    // says nothing.
@@ -677,12 +724,14 @@
      and selection. Off the page, it opens by itself as before. */
   // One paper, found whatever the search and filters were: they are cleared, and the paper opened on its own.
   function showPaper(id){
+   rememberListOrigin();
    state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';
    for(const [key,input] of filterInputs)input.value='';type.value='';
    state.selected=new Set([String(id)]);state.scope='selected';scope.value='selected';
    return state.tab==='explore'?render():navigate('explore');
   }
   function openInList(it){
+   rememberListOrigin();
    const id=String(it.id);
    if(body.querySelector(`[data-item-id="${id}"]`)){state.expandedPaperID=id;state.focusPaper=id;return render();}
    state.selected=new Set([id]);state.scope='selected';scope.value='selected';return render();
@@ -935,7 +984,7 @@
    // Loaded once per list, grouped by parent (see load()); a paper with no annotations shows nothing extra.
    // A count used to be all it said; a click now takes the reader straight to
    // just this paper's marks, the scope and everything else on the list kept.
-   if(Number(item.annotations)>0&&timeCell)button(T(`주석 ${item.annotations}`),()=>{state.annotationPaperID=String(item.id);navigate('annotations');},timeCell,{class:'sc-row-annotations'});
+   if(Number(item.annotations)>0&&timeCell)button(T(`주석 ${item.annotations}`),()=>{rememberListOrigin();state.annotationPaperID=String(item.id);navigate('annotations');},timeCell,{class:'sc-row-annotations'});
    const actions=bar(mainline);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-opens':'window','data-variant':'primary'});/* 자세히 opens the paper under its own row: the list keeps its search,
       filters, page, selection and place. One at a time; pressed again, it
       closes and the focus goes back to it. */
@@ -2789,17 +2838,73 @@
     const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):paper?null:String(value),tr);
     if(paper)button(String(value),()=>library.openItem(paper.id),cell,{class:'sc-link-button','data-opens':'window',title:'Zotero에서 열기'});
     if(NUMERIC.has(field))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',flip?'row':'col');if(!heading&&field)cell.dataset.field=field;});});
-   drawCompareInsight(values);
+   // Only an explicit pick, not "whatever is on screen": with nothing chosen
+   // the table above is the whole list, and there is no fixed set of papers
+   // to ask "which references do these share".
+   if(selected().length>=2&&selected().length<=6)drawCompareReferences(scopeItems);
+   const insightFold=node('details',null,body,{class:'sc-compare-insight-fold'});
+   node('summary','주장·논쟁 AI 분석',insightFold);
+   if(state.compareInsightOpen)insightFold.open=true;
+   insightFold.addEventListener('toggle',()=>{state.compareInsightOpen=insightFold.open;});
+   drawCompareInsight(values,insightFold);
+  }
+  /* What the chosen papers cite in common, and what only one of them does --
+     read from the reference lists paperWorks() already holds, nothing asked
+     for. Rows are the referenced works, shared ones first; a column per
+     paper marks who cites it; the last column says whether the work itself
+     is on the shelf, and how far read if so. */
+  function drawCompareReferences(papers){
+   const works=typeof runtime.paperWorks==='function'?runtime.paperWorks():{};
+   const workOf=p=>works[p.libraryID+':'+p.key]||works[String(p.id)]||null;
+   // null (not fetched) is kept apart from [] (fetched, empty): only the
+   // first should count against "확보".
+   const refsOf=p=>{const w=workOf(p);return Array.isArray(w?.references)?w.references.map(bareWork):null;};
+   const acquired=papers.filter(p=>refsOf(p));
+   const byRef=new Map();
+   for(const p of papers){
+    const refs=refsOf(p);if(!refs)continue;
+    for(const ref of new Set(refs)){if(!byRef.has(ref))byRef.set(ref,[]);byRef.get(ref).push(p);}
+   }
+   const shared=[...byRef].filter(([,citing])=>citing.length>=2);
+   const single=[...byRef].filter(([,citing])=>citing.length===1);
+   const section=node('section',null,body,{class:'sc-compare-references'});
+   const fold=node('details',null,section);
+   if(state.compareReferencesOpen)fold.open=true;
+   fold.addEventListener('toggle',()=>{state.compareReferencesOpen=fold.open;});
+   node('summary',papers.length>=3
+    ?`2편 이상에서 인용 ${shared.length} · 한 문헌만 인용 ${single.length} · 참고목록 확보 ${acquired.length}/${papers.length}편`
+    :`공통 참고문헌 ${shared.length} · 한 문헌만 인용 ${single.length} · 참고목록 확보 ${acquired.length}/${papers.length}편`,fold);
+   if(!byRef.size){node('p','참고문헌 기록이 없습니다. 관계 그래프에서 인용 목록을 가져오면 채워집니다.',fold,{class:'sc-muted'});return;}
+   const STATUS={unread:'안 읽음',reading:'읽는 중',done:'완료'};
+   const scroll=node('div',null,fold,{class:'sc-reference-matrix-scroll'});
+   const table=node('table',null,scroll,{class:'sc-reference-matrix'});
+   const head=node('tr',null,table);node('th','',head);
+   for(const p of papers)node('th',String(p.title||T('제목 없음')),head,{scope:'col',title:p.title||''});
+   node('th','보유',head,{scope:'col'});
+   for(const [refID,citing] of [...shared,...single]){
+    const tr=node('tr',null,table);
+    // The library, then an earlier lookup's cache, then the bare id: the
+    // best name for this work that costs no request of its own.
+    const held=state.items.find(item=>bareWork(workOf(item)?.openalex)===refID);
+    const cache=runtime.cache&&typeof runtime.cache.workMeta==='object'?runtime.cache.workMeta:{};
+    const titleCell=node('th',null,tr,{scope:'row'});
+    if(held)button(String(held.title||refID),()=>openInList(held),titleCell,{class:'sc-link-button',title:'Zotero에서 열기'});
+    else node('span',String(cache[refID]?.title||refID),titleCell,{title:refID});
+    for(const p of papers)node('td',citing.includes(p)?'✓':'',tr,{class:'sc-ref-check'});
+    const libCell=node('td',null,tr);
+    if(held)node('span',[T(STATUS[held.status]||'안 읽음'),Number(held.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(held.seconds):''].filter(Boolean).join(' · '),libCell);
+    else node('span','서재에 없음',libCell,{class:'sc-muted'});
+   }
   }
   /* The papers in the table, read together by the model: what each claims,
      the chain it argues along, and where they pull against each other, with
      the evidence that would settle each dispute. Two to six papers, their
      abstracts and the reader's own notes go in; the outline comes back into
      a box the reader can edit, copy, or keep as a note on the first paper. */
-  function drawCompareInsight(values){
+  function drawCompareInsight(values,parent=body){
    const chosen=values.slice(0,6);
    const key=JSON.stringify(chosen.map(paper=>paper.id));
-   const section=node('section',null,body,{class:'sc-compare-insight','aria-label':'AI 논지·논쟁 분석'});
+   const section=node('section',null,parent,{class:'sc-compare-insight','aria-label':'AI 논지·논쟁 분석'});
    sectionHead('주장·논리 흐름·논쟁 여지',null,section);
    const b=bar(section);
    if(!String(runtime.pref('aiEndpoint','')||'').trim())node('p','번역·AI 설정에 AI 서버 주소와 모델을 넣으면 켜집니다.',section,{class:'sc-muted'});

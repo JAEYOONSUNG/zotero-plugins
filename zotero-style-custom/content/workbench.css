@@ -1838,3 +1838,23 @@
 #style-custom-workbench .sc-attachment-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-attachment-reading { color: var(--sc-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-attachment-actions { display: flex; align-items: center; gap: 8px; }
+
+/* A38: 논문 비교 -- the shared/lone references between the chosen papers,
+   and the AI reading folded beneath so the default screen stays a table. */
+#style-custom-workbench .sc-compare-references { margin: 14px 0 0; }
+#style-custom-workbench .sc-compare-references > details > summary { cursor: pointer; color: var(--sc-muted); font-size: 12px; }
+#style-custom-workbench .sc-compare-references > details[open] > summary { color: var(--sc-text); margin-bottom: 8px; }
+#style-custom-workbench .sc-reference-matrix-scroll { max-height: min(50vh, calc(100cqh - 200px)); overflow: auto; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
+#style-custom-workbench .sc-reference-matrix { border-collapse: collapse; width: 100%; font-size: 12px; }
+#style-custom-workbench .sc-reference-matrix th, #style-custom-workbench .sc-reference-matrix td { padding: 5px 10px; border-bottom: 1px solid var(--sc-border); text-align: start; vertical-align: top; }
+#style-custom-workbench .sc-reference-matrix th { position: sticky; top: 0; background: var(--sc-surface-alt); font-weight: 600; }
+#style-custom-workbench .sc-reference-matrix td.sc-ref-check { text-align: center; }
+#style-custom-workbench .sc-reference-matrix .sc-link-button { min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-reference-matrix .sc-link-button:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-compare-insight-fold { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-compare-insight-fold > summary { cursor: pointer; color: var(--sc-muted); font-size: 13px; font-weight: 600; }
+#style-custom-workbench .sc-compare-insight-fold[open] > summary { color: var(--sc-text); margin-bottom: 8px; }
+/* A39: the small way back when 보유 문헌 was left through a route the
+   scope-back spot does not already cover -- a row's 주석 n, say, which
+   never touches scope. Same plain text button as the others in .sc-context. */
+#style-custom-workbench .sc-list-origin-back { min-height: 24px; padding: 2px 9px; font-size: 12px; margin-inline-start: 8px; }
