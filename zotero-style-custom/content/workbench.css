@@ -1,23 +1,28 @@
 /* Style Custom — plain reading tools for evidence, annotation and comparison.
    Local fonts only. Every component stays inside the workbench root. */
 #style-custom-workbench {
-  --sc-bg: #f2f2f4;
+  --sc-bg: #EDEEF0;
   --sc-surface: #ffffff;
-  --sc-surface-alt: #f6f6f8;
-  --sc-fill: #ededf0;
-  --sc-fill-hover: #e4e4e8;
-  --sc-fill-active: #d9d9df;
+  --sc-surface-alt: #F4F4F6;
+  --sc-fill: #EFEFF2;
+  --sc-fill-hover: #E6E6EA;
+  --sc-fill-active: #DCDCE1;
   --sc-text: #1c1c1e;
   --sc-muted: #6A6A6F;
   /* Every tier is text somewhere -- a rank, a table head, an abbreviation --
      so the faintest one clears 4.5:1 too. It used to stop at 3:1, the bar for
      a mark, and twenty rules quietly set words in it. */
   --sc-faint: #6A6A73;
-  --sc-accent: #4A6CA5;
+  --sc-accent: #151517;
   --sc-accent-ink: #fff;
-  --sc-accent-soft: #EDF1F7;
-  --sc-selection: #4A6CA5;
-  --sc-border: rgba(0, 0, 0, .07);
+  --sc-accent-soft: #ECECEF;
+  --sc-selection: #151517;
+  /* Premium dashboard tokens (user direction 2026-10-01): one positive lime, one attention amber. */
+  --sc-lime: #C8F03C; --sc-lime-ink: #1B2300;
+  --sc-amber: #F6A623; --sc-amber-ink: #2B1A00;
+  --sc-nav-on: #151517; --sc-nav-on-ink: #fff;
+  --sc-card-shadow: 0 1px 2px rgba(20, 20, 30, .04);
+  --sc-border: rgba(0, 0, 0, .06);
   --sc-border-strong: rgba(0, 0, 0, .13);
   --sc-reading: #6AA98C;
   --sc-reading-ink: #2D7854;
@@ -46,12 +51,13 @@
      the author page was set between 9 and 11px before this. The only
      exceptions are letters drawn inside a shape -- initials in an avatar,
      a quartile in its pill -- which are read as a picture, not as text. */
-  --sc-radius-sm: 4px;
-  --sc-radius: 6px;
-  --sc-radius-card: 8px;
-  --sc-radius-panel: 10px;
-  --sc-control-height: 30px;
-  --sc-card-padding: 12px;
+  --sc-radius-sm: 8px;
+  --sc-radius: 10px;
+  --sc-radius-card: 14px;
+  --sc-radius-panel: 20px;
+  --sc-radius-pill: 999px;
+  --sc-control-height: 32px;
+  --sc-card-padding: 14px;
   /* One type and control scale for every card in every tab. They had drifted:
      a 14px title here, a 13px one there, a 30px button beside a 24px one, and
      a card ninety pixels tall to say "Aeribacillus, 0 papers". */
@@ -59,8 +65,8 @@
   --sc-card-meta: 400 11px/1.45 var(--sc-font);
   --sc-card-control-height: 24px;
   --sc-card-control-font: 12px;
-  --sc-content-padding: 16px;
-  --sc-nav-width: 178px;
+  --sc-content-padding: 20px;
+  --sc-nav-width: 196px;
   --sc-paper-gap: 8px;
   position: fixed;
   z-index: 10000;
@@ -481,20 +487,22 @@
 /* Apple's dark surfaces are near-black with light hairlines, not inverted greys. */
 @media (prefers-color-scheme: dark) {
   #style-custom-workbench {
-    --sc-bg: #1c1c1f;
-    --sc-surface: #26262a;
+    --sc-bg: #141416;
+    --sc-surface: #212125;
     /* The rail has to part from the page behind it: at #202024 against a
        #1c1c1f background the two read as one slab. */
-    --sc-surface-alt: #232328;
-    --sc-fill: #313137;
-    --sc-fill-hover: #3a3a41;
-    --sc-fill-active: #45454d;
+    --sc-surface-alt: #1B1B1F;
+    --sc-fill: #2A2A30;
+    --sc-fill-hover: #34343B;
+    --sc-fill-active: #3E3E46;
     --sc-text: #e8e8ed;
     --sc-muted: #a8a8ae;
     --sc-faint: #99999F;
-    --sc-accent: #809DD0;
-    --sc-accent-soft: #2B3140;
-    --sc-selection: #809DD0;
+    --sc-accent: #ECECEF;
+    --sc-accent-soft: #2E2E35;
+    --sc-selection: #ECECEF;
+    --sc-nav-on: #ECECEF; --sc-nav-on-ink: #151517;
+    --sc-card-shadow: none;
     --sc-border: rgba(255, 255, 255, .09);
     --sc-border-strong: rgba(255, 255, 255, .18);
     --sc-reading: #7FC3A3;
@@ -512,7 +520,7 @@
   #style-custom-workbench .sc-card { box-shadow: 0 0 0 .5px var(--sc-border); }
   /* The ink that reads on the accent, named once instead of written into
      three rules that then drifted apart. */
-  #style-custom-workbench { --sc-accent-ink: #10131a; }
+  #style-custom-workbench { --sc-accent-ink: #151517; }
 }
 
 /* The panel is resizable independently of the application viewport. */
@@ -1943,3 +1951,87 @@
 #style-custom-workbench .sc-annot-order button[aria-pressed=true] { background: var(--sc-accent-soft); box-shadow: inset 0 0 0 1px var(--sc-accent); }
 #style-custom-workbench .sc-note-head { margin: 6px 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; }
 #style-custom-workbench .sc-note-compose[hidden] { display: none; }
+
+
+/* ==== Premium dashboard look (user direction 2026-10-01) ====================
+   A grey canvas, white cards of large radius, the left rail on the canvas with
+   the current section as a solid dark pill and its count in a lime badge,
+   groups in soft grey containers, dark primary buttons, one lime for positive
+   and one amber for attention. No edge bars on rounded rows: a status is a dot
+   or a chip. Everything below only restyles; no rule changes behaviour. */
+#style-custom-workbench { box-shadow: var(--sc-shadow); }
+#style-custom-workbench .sc-header,
+#style-custom-workbench > header { background: transparent; border-block-end: 0; padding: 14px 20px 10px; }
+#style-custom-workbench .sc-brand img { opacity: 1; width: 20px; height: 20px; border-radius: 8px; }
+#style-custom-workbench .sc-status { background: transparent; }
+#style-custom-workbench .sc-shell { padding: 0 12px 12px 0; }
+#style-custom-workbench .sc-shell nav { background: transparent; border-inline-end: 0; padding: 4px 10px 8px 14px; }
+#style-custom-workbench .sc-nav-group { margin-block-end: 14px; }
+#style-custom-workbench .sc-nav-heading { margin: 0 12px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--sc-muted); }
+#style-custom-workbench .sc-shell nav button[data-tab] { min-height: 34px; margin: 2px 0; padding: 6px 12px; border-radius: var(--sc-radius-pill); font-weight: 450; }
+#style-custom-workbench .sc-shell nav button[data-tab]:hover { background: var(--sc-fill-hover); }
+#style-custom-workbench .sc-shell nav button[data-tab].active,
+#style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); font-weight: 550; }
+#style-custom-workbench .sc-nav-icon svg { stroke-width: 1.6; }
+#style-custom-workbench .sc-nav-count {
+  margin-inline-start: auto; min-width: 22px; padding: 0 7px; border-radius: var(--sc-radius-pill);
+  background: var(--sc-lime); color: var(--sc-lime-ink); font-size: 11px; font-weight: 650; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums;
+}
+/* The page itself is the white card. */
+#style-custom-workbench .sc-content { background: var(--sc-surface); border-radius: var(--sc-radius-panel); box-shadow: var(--sc-card-shadow), 0 0 0 1px var(--sc-border); overflow: hidden; }
+#style-custom-workbench .sc-context { padding: 18px var(--sc-content-padding) 12px; border-block-end: 0; gap: 6px 12px; align-items: center; }
+#style-custom-workbench .sc-section-title { font: 600 22px/1.3 var(--sc-title-font); letter-spacing: -.02em; }
+#style-custom-workbench .sc-context-detail { padding: 2px 10px; border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-muted); font-size: 12px; }
+#style-custom-workbench .sc-context-detail:empty { display: none; }
+#style-custom-workbench .sc-controls,
+#style-custom-workbench .sc-search-row { padding: 6px var(--sc-content-padding) 12px; border-block-end: 0; }
+#style-custom-workbench .sc-filters[open] { border-block-end: 0; }
+#style-custom-workbench .sc-body { padding: 4px var(--sc-content-padding) var(--sc-content-padding); }
+/* Controls: pills for buttons, rounded fields on a hairline. */
+#style-custom-workbench button { border-radius: var(--sc-radius-pill); padding: 5px 14px; }
+#style-custom-workbench input:not([type=checkbox]):not([type=color]),
+#style-custom-workbench textarea,
+#style-custom-workbench select { border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
+#style-custom-workbench input[type=search] { border-radius: var(--sc-radius-pill); padding-inline: 16px; background: var(--sc-fill); box-shadow: none; }
+#style-custom-workbench button[data-variant=primary] { background: var(--sc-accent); color: var(--sc-accent-ink); }
+#style-custom-workbench button[data-variant=primary]:hover { background: var(--sc-accent); opacity: .88; }
+/* Segmented filters and chips: rounded, the chosen one dark. */
+#style-custom-workbench .sc-chip { padding: 3px 11px; border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-muted); }
+#style-custom-workbench .sc-chip-on,
+#style-custom-workbench .sc-chip-button[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); box-shadow: none; font-weight: 600; }
+#style-custom-workbench .sc-chip-on b,
+#style-custom-workbench .sc-chip-button[aria-pressed=true] b { color: inherit; opacity: .8; }
+#style-custom-workbench .sc-chip-on-text { color: var(--sc-text); }
+#style-custom-workbench .sc-chip-button:hover { background: var(--sc-fill-hover); }
+#style-custom-workbench .sc-filter-chips button { border-radius: var(--sc-radius-pill); padding: 2px 10px; }
+#style-custom-workbench .sc-selection-bar,
+#style-custom-workbench > footer { background: transparent; border-block-start: 0; padding: 10px 20px 14px; }
+#style-custom-workbench .sc-selection-bar[data-selected=true] { border-block-start: 0; background: transparent; }
+#style-custom-workbench .sc-selection-bar button:not([data-variant=primary]) { background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
+/* Cards: large radius, hairline, very soft elevation. */
+#style-custom-workbench .sc-card { padding: 10px var(--sc-card-padding); margin: 0 0 8px; border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-border), var(--sc-card-shadow); }
+/* A group reads as one soft grey container: the heading is its header
+   ("Design · 3 files"), the list beneath is its body. */
+#style-custom-workbench .sc-section-head { margin: 14px 0 0; padding: 12px 16px 8px; border-block-end: 0; background: var(--sc-surface-alt); border-radius: var(--sc-radius-card) var(--sc-radius-card) 0 0; align-items: center; font-weight: 600; }
+#style-custom-workbench .sc-section-head:first-child { margin-block-start: 4px; }
+#style-custom-workbench .sc-section-head-count { font-weight: 450; }
+#style-custom-workbench .sc-section-head + .sc-hits { margin: 0 0 4px; padding: 0 8px 8px; background: var(--sc-surface-alt); border-radius: 0 0 var(--sc-radius-card) var(--sc-radius-card); }
+#style-custom-workbench .sc-paper-card { border-radius: var(--sc-radius-card); padding-block: 10px; }
+#style-custom-workbench .sc-paper-card + .sc-paper-card::after { inset-inline: 14px; background: var(--sc-border); }
+#style-custom-workbench .sc-paper-card:hover,
+#style-custom-workbench .sc-paper-card:focus-within { background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-section-head + .sc-hits .sc-paper-card:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-paper-card[data-selected=true] { background: var(--sc-fill); outline: 1px solid var(--sc-border-strong); }
+#style-custom-workbench .sc-paper-title { font-weight: 550; }
+/* Positive status: lime. */
+#style-custom-workbench .sc-kind { border-radius: var(--sc-radius-pill); background: var(--sc-lime); color: var(--sc-lime-ink); }
+#style-custom-workbench .sc-paper-card[data-selected=true] { outline: 0; box-shadow: inset 0 0 0 1.5px var(--sc-border-strong); }
+#style-custom-workbench .sc-segmented { border-radius: var(--sc-radius-pill); padding: 3px; }
+#style-custom-workbench .sc-segmented button { border-radius: var(--sc-radius-pill); }
+#style-custom-workbench .sc-segmented button[aria-pressed=true],
+#style-custom-workbench .sc-watch-tools button[aria-pressed=true],
+#style-custom-workbench .sc-inbox-queue[aria-pressed=true],
+#style-custom-workbench .sc-local-reading-queue[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); box-shadow: none; }
+#style-custom-workbench .sc-section-head { border-radius: var(--sc-radius-card); padding-block: 9px; }
+#style-custom-workbench .sc-section-head:has(+ .sc-hits) { border-radius: var(--sc-radius-card) var(--sc-radius-card) 0 0; padding-block: 12px 8px; }
+#style-custom-workbench .sc-annot-order button[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); box-shadow: none; }

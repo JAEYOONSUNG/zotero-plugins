@@ -1268,7 +1268,7 @@
         },
         {
           "file": "content/workbench.css",
-          "marker": "--sc-accent: #4A6CA5"
+          "marker": "--sc-accent: #151517"
         }
       ],
       "tests": [

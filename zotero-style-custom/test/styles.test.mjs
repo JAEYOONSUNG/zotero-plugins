@@ -151,6 +151,9 @@ test('every badge colour lands on the same contrast, so no one of them shouts', 
       const max = Math.max(r, g, b), min = Math.min(r, g, b);
       const light = (max + min) / 2;
       const saturation = max === min ? 0 : light > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+      // User direction 2026-10-01 (premium dashboard look): the one positive lime and
+      // the one attention amber are sanctioned saturated accents; nothing else may be.
+      if (['#C8F03C', '#F6A623', '#1B2300', '#2B1A00'].includes(hex.toUpperCase())) continue;
       assert.ok(saturation <= 0.55, `${file} still has ${hex} at saturation ${saturation.toFixed(2)}`);
     }
   }

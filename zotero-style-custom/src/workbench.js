@@ -770,6 +770,9 @@
    // A short note on why this particular selection, set by navigateSelection
    // -- "#a ∩ #b" for two tags crossed in 중첩 태그, say -- rather than the
    // reader having to remember what they clicked.
+   // Count badge on the current nav item (premium dashboard look, user direction 2026-10-01).
+   for(const b of navButtons.values()){const old=b.querySelector('.sc-nav-count');if(old&&b.dataset.tab!==state.tab)old.remove();}
+   {const cur=navButtons.get(state.tab);if(cur&&applicable&&Number.isFinite(n)){let badge=cur.querySelector('.sc-nav-count');if(!badge){badge=node('span',null,cur,{class:'sc-nav-count'});}badge.textContent=String(n);}}
    const originNote=state.scope==='selected'&&state.selectionLabel?' · '+state.selectionLabel:'';
    contextDetail.textContent=nativeJCR?[runtime.jcrCatalog?.source?.provider,runtime.jcrCatalog?.source?.product].filter(Boolean).join(' · '):applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`)+originNote
     :state.tab==='matrix'?T(`비교 중 ${matrixUsingPicker()?selected().length:rows().length}편`):state.tab==='collections'?''
