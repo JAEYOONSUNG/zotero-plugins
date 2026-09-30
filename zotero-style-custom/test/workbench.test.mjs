@@ -186,7 +186,10 @@ test('A43 내 기록 포함: hidden without a query, widens 보유 문헌 past i
  assert.match(hit.textContent,/노트 1.*reproducibility/);
  hit.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
  assert.equal(f.bench.state.tab,'notes');
- await f.bench.show('explore');
+ assert.equal(f.bench.state.scope,'selected','opens Beta\'s exact note, not every note the query matches');
+ assert.deepEqual([...f.bench.state.selected],['2']);
+ f.bench.panel.querySelector('.sc-scope-back').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'explore');
  f.input('작업 패널 검색','epitope');await settle();
  cards=[...f.body().querySelectorAll('.sc-paper-card')];
  assert.equal(cards.length,1,'Alpha is pulled in by the annotation only');
@@ -194,6 +197,26 @@ test('A43 내 기록 포함: hidden without a query, widens 보유 문헌 past i
  assert.match(hit.textContent,/주석 1.*epitope/);
  hit.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
  assert.equal(f.bench.state.tab,'annotations');
+ assert.deepEqual([...f.bench.state.selected],['1']);
+ f.bench.destroy();
+});
+
+test('A43 내 기록 포함: merges the note/annotation matches before sorting, and the scope count is the merged list',async()=>{
+ const f=fixture();
+ await f.bench.show('explore');
+ // Beta (2024) matches the query on its own title; Alpha (2025) is pulled in
+ // only by a note that happens to mention "beta". Under 최신 발행순 the newer,
+ // note-only Alpha must sort ahead of Beta -- appending it after the base
+ // list would leave the older paper first.
+ f.library.notes=async()=>[{id:'9',title:'Method note',text:"compared with Beta's results",modified:'today',parentID:'1'}];
+ f.input('작업 패널 검색','beta');await settle();
+ const change=(label,value)=>{const input=f.bench.panel.querySelector('[aria-label="'+label+'"]');input.value=value;input.dispatchEvent(new f.win.Event('change',{bubbles:true}));};
+ change('문헌 정렬','year-desc');await settle();
+ const check=f.bench.panel.querySelector('[aria-label="내 기록 포함"]');check.checked=true;check.dispatchEvent(new f.win.Event('change'));await settle();
+ const cards=[...f.body().querySelectorAll('.sc-paper-card')];
+ assert.equal(cards.length,2);
+ assert.deepEqual(cards.map(c=>c.dataset.itemId),['1','2'],'merged first, then sorted by the chosen order -- Alpha (2025) ahead of Beta (2024)');
+ assert.match(f.bench.panel.querySelector('.sc-context-detail').textContent,/2개 문헌/,'the scope count is the merged list, not the plain search');
  f.bench.destroy();
 });
 
@@ -403,6 +426,20 @@ test('논문 비교 with more than four papers keeps the plain, unflipped shape 
  await f.bench.show('matrix');
  assert.equal(f.body().querySelector('.sc-matrix').dataset.fit,'false','6 papers: no fixed-layout squeeze');
  assert.equal(f.body().querySelector('.sc-matrix th').getAttribute('scope'),'col','not flipped past 4 papers');
+ f.bench.destroy();
+});
+
+test('논문 비교 header counts what is actually compared, 0 included once the last picked paper is removed',async()=>{
+ const f=fixture();
+ f.setSelection([1]);f.bench.state.selected=new Set(['1']);
+ await f.bench.show('matrix');
+ assert.match(f.bench.panel.querySelector('.sc-context-detail').textContent,/비교 중 1편/);
+ // 빼기 on the last chosen paper commits to an empty picker selection --
+ // scopeItems (and the header) must read 0, not fall back to the whole list.
+ await f.click('빼기');
+ assert.equal(f.body().querySelectorAll('.sc-paper-card, tr[data-item-id]').length,0);
+ assert.match(f.body().textContent,/비교할 문헌을 추가하세요/);
+ assert.match(f.bench.panel.querySelector('.sc-context-detail').textContent,/비교 중 0편/,'not the whole library\'s count');
  f.bench.destroy();
 });
 
@@ -1073,14 +1110,15 @@ test('an owned unread paper from the inbox waits under 읽기 대기 until readi
  f.library.annotations=async()=>[{attachmentID:'100',pageIndex:3,pageLabel:'4',comment:'check the control',text:'',color:'#ffd400'},{attachmentID:'100',pageIndex:3,text:'second'},{attachmentID:'200',pageIndex:3,comment:'another PDF'}];
  await f.bench.show('explore');await f.bench.show('reading');
  assert.deepEqual(queued(),[]);
- const evidence=f.body().querySelector('.sc-reading-evidence');
- evidence.open=true;evidence.dispatchEvent(new f.win.Event('toggle'));
+ // #3: 주석이 있는 쪽 merged into 쪽별 기록 -- one fold, one shared load.
+ const fold=f.body().querySelector('.sc-resume-pages');
+ fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));
  await new Promise(r=>setTimeout(r,20));
  const rows=[...f.body().querySelectorAll('.sc-reading-evidence-row')].map(r=>r.textContent);
  assert.equal(rows.length,1,'one page, this PDF only');
  assert.match(rows[0],/4쪽.*주석 2개.*check the control/);
  // Once loaded, the fold's own summary says how much it holds without opening it again.
- assert.equal(evidence.querySelector('summary').textContent,'주석이 있는 쪽 · 1쪽 · 주석 2개');
+ assert.match(f.body().querySelector('.sc-resume-pages summary').textContent,/쪽별 기록 · 방문 2\/8 · 주석 2/);
  f.bench.destroy();
 });
 
@@ -1134,6 +1172,32 @@ test('a paper read in its article and its supplement resumes in either, each wit
  assert.equal(shown.length,1);
  assert.match(shown[0].textContent,/문헌 정보로 찾음/);
  assert.match(f.body().querySelector('.sc-annot-group-meta').textContent,/Science.*일치 주석 1개/);
+ f.bench.destroy();
+});
+
+test('#3 쪽별 기록 is keyed by paper and attachment: switching the main PDF for its supplement does not keep showing the old file\'s marks',async()=>{
+ const f=fixture();
+ f.runtime.cache.items[1]={readingAttachments:{100:{pageTimes:{6:300},totalPages:12,lastPageIndex:6},200:{pageTimes:{1:120},totalPages:4,lastPageIndex:1}},readingAttachmentID:100};
+ f.refs.set(100,{id:100,getField:()=>'Main article'});f.refs.set(200,{id:200,getField:()=>'Supplementary'});
+ f.runtime.pageProgress=(ref,att)=>ref.id!==1?{pages:{},total:0,visited:0,percent:0}
+  :Number(att)===200?{pages:{1:120},total:4,visited:1,percent:25,attachmentID:200,lastPageIndex:1}
+  :{pages:{6:300},total:12,visited:1,percent:8,attachmentID:100,lastPageIndex:6};
+ f.library.annotations=async()=>[{id:'m',parentID:'1',attachmentID:'100',text:'',comment:'main PDF mark',pageIndex:6,pageLabel:'7'},{id:'s',parentID:'1',attachmentID:'200',text:'',comment:'supplement mark',pageIndex:1,pageLabel:'2'}];
+ await f.bench.show('reading');
+ const row=()=>f.body().querySelector('.sc-resume-row');
+ let fold=row().querySelector('.sc-resume-pages');
+ fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));
+ await new Promise(r=>setTimeout(r,20));
+ assert.match(row().querySelector('.sc-reading-evidence-row').textContent,/main PDF mark/,'the main file\'s own mark');
+ assert.doesNotMatch(row().textContent,/supplement mark/,'not the supplement\'s, before it is even chosen');
+ // Switch to the supplement: fileChooser's own change handler redraws the
+ // row against attachment 200, a different cache key.
+ row().querySelector('.sc-reading-file').value='200';
+ row().querySelector('.sc-reading-file').dispatchEvent(new f.win.Event('change'));
+ fold=row().querySelector('.sc-resume-pages');fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));
+ await new Promise(r=>setTimeout(r,20));
+ assert.match(row().querySelector('.sc-reading-evidence-row').textContent,/supplement mark/,'the supplement\'s own mark, not the main file\'s cached one');
+ assert.doesNotMatch(row().textContent,/main PDF mark/,'the stale attachment-100 cache must not leak in under the paper-only key');
  f.bench.destroy();
 });
 
@@ -1224,7 +1288,8 @@ test('the general reading record row shares 이어 읽기\'s renderer: one meta 
  assert.equal(fold.querySelector('.sc-page-strip'),null,'not built while closed');
  fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));
  assert.ok(fold.querySelector('.sc-page-strip'),'the strip itself is drawn once opened');
- assert.ok(row.querySelector('.sc-reading-evidence'),'주석이 있는 쪽 kept');
+ // #3: 주석이 있는 쪽 merged into this same fold -- one press reveals both.
+ assert.ok(fold.querySelector('.sc-reading-evidence-list'),'주석이 있는 쪽 kept, inside 쪽별 기록 itself');
  assert.equal(row.querySelector('button[data-opens=window]').textContent,'열기','완료 opens rather than offering to "이어 읽기"');
  f.bench.destroy();
 });
@@ -1520,6 +1585,125 @@ test('stalled papers are one view away, journal citations split by reading state
  const jump=[...f.body().querySelectorAll('.sc-tag-unread')].find(b=>b.closest('summary, .sc-tag-row').querySelector('.sc-tag-name').textContent==='spatial (1)');
  jump.click();await new Promise(r=>setTimeout(r,20));
  assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.status,'unread');assert.equal(f.bench.state.tag,'methods/spatial');
+ f.bench.destroy();
+});
+
+test('A47 14일 넘게 멈춤: a paper read this week that cites a stalled one surfaces it first and reconnects on a press',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const known={1:{status:'reading',citations:5},2:{status:'done',citations:9}};
+ f.runtime.state=ref=>({impactFactor:4,...known[ref.id]});
+ f.runtime.cache.items[1]={seconds:300,lastRead:new Date(now-20*day).toISOString()};
+ f.runtime.cache.items[2]={seconds:600,lastRead:new Date(now-2*day).toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{2:300},total:10,visited:1,percent:10,attachmentID:7,lastPageIndex:2}:{pages:{0:600},total:20,visited:1,percent:5,attachmentID:8,lastPageIndex:0};
+ // Beta (read this week) cites Alpha (stalled) -- direction fixed: recent cites stalled.
+ f.runtime.paperWorks=()=>({'1:K1':{openalex:'W1',references:[]},'1:K2':{openalex:'W2',references:['W1']}});
+ await f.bench.show('reading');
+ await f.click('14일 넘게 멈춤 1');
+ const row=f.body().querySelector('.sc-reading-stalled .sc-resume-row');
+ const toggle=row.querySelector('.sc-reading-reconnect summary');
+ assert.match(toggle.textContent,/최근 읽은 1편이 인용/);
+ assert.equal(row.querySelector('.sc-reading-reconnect-note'),null,'a real link, not the "no link" note');
+ toggle.parentElement.open=true;toggle.parentElement.dispatchEvent(new f.win.Event('toggle'));
+ const line=row.querySelector('.sc-reading-reconnect-row');
+ assert.match(line.textContent,/최근 읽은 Paper Beta → 이 문헌/);
+ assert.match(line.textContent,/2일 전/);
+ assert.ok(row.querySelector('.sc-reading-reconnect button[data-opens=window]'),'the row\'s own resume action is repeated in the fold');
+ f.bench.destroy();
+});
+
+test('A47 14일 넘게 멈춤: with nothing recent to check, a stalled paper says so distinctly from a checked-and-unlinked one',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const known={1:{status:'reading',citations:5},2:{status:'reading',citations:5}};
+ f.runtime.state=ref=>({impactFactor:4,...known[ref.id]});
+ f.runtime.cache.items[1]={seconds:300,lastRead:new Date(now-20*day).toISOString()};
+ f.runtime.cache.items[2]={seconds:300,lastRead:new Date(now-25*day).toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{2:300},total:10,visited:1,percent:10,attachmentID:7,lastPageIndex:2}:{pages:{0:30},total:10,visited:1,percent:10,attachmentID:8,lastPageIndex:0};
+ // No paper read in the last 7 days at all: nothing to check against.
+ f.runtime.paperWorks=()=>({'1:K1':{openalex:'W1',references:[]},'1:K2':{openalex:'W2',references:[]}});
+ await f.bench.show('reading');
+ await f.click('14일 넘게 멈춤 2');
+ const notes=[...f.body().querySelectorAll('.sc-reading-stalled .sc-reading-reconnect-note')].map(n=>n.textContent);
+ assert.deepEqual(notes,['참고문헌 기록 없음','참고문헌 기록 없음'],'nothing recent was even fetched, not "checked, no link"');
+ f.bench.destroy();
+});
+
+test('A47 14일 넘게 멈춤: a fetched-but-unrelated recent paper reads as 연결 없음, not 참고문헌 기록 없음',async()=>{
+ const f=fixture();
+ f.papers.push({id:'3',key:'K3',libraryID:1,title:'Paper Gamma',authors:'X',year:'2023',venue:'PLOS',itemType:'journalArticle',tags:[]});
+ f.refs.set(3,{id:3});
+ const now=Date.now(),day=864e5;
+ const known={1:{status:'reading',citations:5},3:{status:'done',citations:9}};
+ f.runtime.state=ref=>({impactFactor:4,...known[ref.id]});
+ f.runtime.cache.items[1]={seconds:300,lastRead:new Date(now-20*day).toISOString()};
+ f.runtime.cache.items[3]={seconds:600,lastRead:new Date(now-2*day).toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{2:300},total:10,visited:1,percent:10,attachmentID:7,lastPageIndex:2}:ref.id===3?{pages:{0:600},total:20,visited:1,percent:5,attachmentID:9,lastPageIndex:0}:{pages:{},total:0,visited:0,percent:0};
+ // Gamma (read this week) has a fetched reference list, but it does not cite Alpha.
+ f.runtime.paperWorks=()=>({'1:K1':{openalex:'W1',references:[]},'1:K3':{openalex:'W3',references:['W9']}});
+ await f.bench.show('reading');
+ await f.click('14일 넘게 멈춤 1');
+ const note=f.body().querySelector('.sc-reading-stalled .sc-reading-reconnect-note');
+ assert.equal(note.textContent,'연결 없음','checked -- some recent list was fetched -- and nothing links here');
+ f.bench.destroy();
+});
+
+test('A48 이어 읽기 메모: a row with a memo shows it as a button that swaps to a textarea, and a save returns to the one-line view',async()=>{
+ const f=fixture();
+ f.runtime.cache.items[1]={seconds:125,lastRead:new Date().toISOString(),remark:'Check the control condition'};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:20,visited:5,percent:25,attachmentID:100,lastPageIndex:4}:{pages:{},total:0,visited:0,percent:0};
+ await f.bench.show('reading');
+ const box=()=>f.body().querySelector('.sc-resume-remark-box');
+ const view=box().querySelector('.sc-resume-remark');
+ assert.equal(view.textContent,'Check the control condition');
+ assert.equal(box().querySelector('.sc-resume-memo-editor'),null,'not editing yet');
+ view.click();
+ const field=box().querySelector('.sc-resume-memo-editor textarea');
+ assert.equal(field.value,'Check the control condition');
+ assert.equal(f.doc.activeElement,field,'the editor takes focus on opening');
+ field.value='Check the control condition, and the dosage';
+ field.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ field.dispatchEvent(new f.win.Event('blur'));
+ await settle();
+ assert.deepEqual(f.calls.find(c=>c[0]==='remark'),['remark','1','Check the control condition, and the dosage']);
+ assert.equal(box().querySelector('.sc-resume-memo-editor'),null,'back to the one-line view after a successful save');
+ assert.equal(box().querySelector('.sc-resume-remark').textContent,'Check the control condition, and the dosage');
+ assert.equal(f.runtime.cache.items[1].remark,'Check the control condition, and the dosage','state.items\' own remark follows, as drawPaperMemo does');
+ f.bench.destroy();
+});
+
+test('A48 이어 읽기 메모: a row without one offers 메모 쓰기; a failed save keeps the editor and the draft',async()=>{
+ const f=fixture();
+ f.runtime.cache.items[1]={seconds:125,lastRead:new Date().toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:20,visited:5,percent:25,attachmentID:100,lastPageIndex:4}:{pages:{},total:0,visited:0,percent:0};
+ f.library.setRemark=async()=>{throw new Error('network down');};
+ await f.bench.show('reading');
+ const box=()=>f.body().querySelector('.sc-resume-remark-box');
+ const add=box().querySelector('.sc-resume-remark-add');
+ assert.equal(add.textContent,'메모 쓰기');
+ add.click();
+ const field=box().querySelector('.sc-resume-memo-editor textarea');
+ field.value='Worth a follow-up';
+ field.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ field.dispatchEvent(new f.win.Event('blur'));
+ await settle();
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/저장하지 못했습니다/);
+ assert.equal(box().querySelector('.sc-resume-memo-editor textarea').value,'Worth a follow-up','the draft is not lost on failure');
+ f.bench.destroy();
+});
+
+test('A48 이어 읽기 메모: a reading-record refresh while the editor is focused does not recreate it',async()=>{
+ const f=fixture();
+ f.runtime.cache.items[1]={seconds:125,lastRead:new Date().toISOString(),remark:'Draft in progress'};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:20,visited:5,percent:25,attachmentID:100,lastPageIndex:4}:{pages:{},total:0,visited:0,percent:0};
+ await f.bench.show('reading');
+ f.body().querySelector('.sc-resume-remark').click();
+ const field=f.body().querySelector('.sc-resume-memo-editor textarea');
+ field.value='Draft in progress, still typing';
+ field.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ f.bench.refreshReading();
+ assert.equal(f.body().querySelector('.sc-resume-memo-editor textarea'),field,'the same node -- refreshReading skipped the rebuild while it had focus');
+ assert.equal(field.value,'Draft in progress, still typing','the unsaved draft is untouched');
  f.bench.destroy();
 });
 
@@ -4093,7 +4277,7 @@ test('노트 탭의 "이 문헌 주석에서 노트 만들기"는 고른 문헌�
  f.bench.destroy();
 });
 
-test('이어 읽기 줄은 주석 fold를 연 뒤에만 마지막 주석 한 줄을 보여준다; 날짜가 있으면 최신 것을, 없으면 가장 높은 쪽을 쓴다',async()=>{
+test('이어 읽기 줄은 쪽별 기록 fold를 연 뒤(그 shared load가 끝나면) 마지막 주석 한 줄을 보여준다; 날짜가 있으면 최신 것을, 없으면 가장 높은 쪽을 쓴다',async()=>{
  const f=fixture();
  f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'reading':''});
  f.runtime.cache.items[1]={seconds:500,lastRead:new Date().toISOString()};
@@ -4105,9 +4289,10 @@ test('이어 읽기 줄은 주석 fold를 연 뒤에만 마지막 주석 한 줄
  await f.bench.show('reading');
  const row=()=>f.body().querySelector('.sc-resume-row');
  assert.ok(row(),'a row is drawn');
- assert.ok(!row().querySelector('.sc-resume-last-annotation'),'nothing before the fold is opened');
- const evidence=row().querySelector('.sc-reading-evidence');
- evidence.open=true;evidence.dispatchEvent(new f.win.Event('toggle'));
+ assert.ok(!row().querySelector('.sc-resume-last-annotation'),'no fold opened yet: never fetched just for this line');
+ // #3: one fold now (쪽별 기록), merged with what 주석이 있는 쪽 used to load separately.
+ const fold=row().querySelector('.sc-resume-pages');
+ fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));
  await new Promise(r=>setTimeout(r,20));
  let line=row().querySelector('.sc-resume-last-annotation');
  assert.match(line.textContent,/^지난번 마지막 주석: p\.7 · later comment here/,'the most recently modified, not the earlier mark on the same page');
@@ -4116,8 +4301,8 @@ test('이어 읽기 줄은 주석 fold를 연 뒤에만 마지막 주석 한 줄
   {id:'a',parentID:'1',attachmentID:'100',text:'early note',comment:'',pageIndex:0,pageLabel:'1'},
   {id:'b',parentID:'1',attachmentID:'100',text:'a later page mark',comment:'',pageIndex:6,pageLabel:'7'}];
  await f.bench.show('explore');await f.bench.show('reading');
- const evidence2=row().querySelector('.sc-reading-evidence');
- evidence2.open=true;evidence2.dispatchEvent(new f.win.Event('toggle'));
+ const fold2=row().querySelector('.sc-resume-pages');
+ fold2.open=true;fold2.dispatchEvent(new f.win.Event('toggle'));
  await new Promise(r=>setTimeout(r,20));
  line=row().querySelector('.sc-resume-last-annotation');
  assert.match(line.textContent,/^마지막 쪽 주석: p\.7 · a later page mark/);

@@ -1974,6 +1974,35 @@ test('the publisher mark has its own column, the IF cell keeps only the figure, 
   assert.equal(venue.dataset.styleCustomVenue, undefined);
 });
 
+test('the IF cell tooltip carries the official JCR quartile and category rank when the captured catalog has the journal, and invents nothing when it does not', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body><div id="zotero-items-tree"><div class="row" id="item-tree-main-row-0"></div></div></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  const getField = ref.getField.bind(ref);
+  ref.getField = name => name === 'publicationTitle' ? 'Journal of Thermophilic Enzyme Engineering' : getField(name);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  plugin.displayValue = key => ({if: '56.1', oaCitedness: '4.2'})[key] || '';
+  // No catalog at all: the old, plain tooltip, nothing invented.
+  let cell = plugin.renderCell('if', 0, '', {}, document);
+  assert.doesNotMatch(cell.title, /Q\d/);
+  assert.match(cell.title, /Journal of Thermophilic Enzyme Engineering.*IF 56\.1/);
+  // A captured catalog that does not carry this journal: still nothing invented.
+  plugin.jcrCatalog = {journals: [{title: 'Some Other Journal', issns: [], categoryMetrics: [{categoryKey: 'Other', quartile: 2, rank: 5, rankTotal: 50}]}]};
+  cell = plugin.renderCell('if', 0, '', {}, document);
+  assert.doesNotMatch(cell.title, /Q\d/);
+  // The catalog has this exact journal (matched by title, no ISSN needed):
+  // its official quartile and category rank join the tooltip.
+  plugin.jcrCatalog = {journals: [{title: 'Journal of Thermophilic Enzyme Engineering', issns: [],
+    categoryMetrics: [{categoryKey: 'Biochemistry & Molecular Biology', quartile: 1, rank: 8, rankTotal: 140, percentile: 95}]}]};
+  cell = plugin.renderCell('if', 0, '', {}, document);
+  assert.match(cell.title, /IF 56\.1 · Q1 8\/140 Biochemistry & Molecular Biology/);
+  // OpenAlex's own estimate (a different figure from the official JIF) never
+  // carries this, even with the very same journal in the captured catalog.
+  const oaCell = plugin.renderCell('oaCitedness', 0, '', {}, document);
+  assert.doesNotMatch(oaCell.title, /Q\d/);
+});
+
 test('a tall Extra field gets a row as tall as itself, and the row is given back on unload', async () => {
   const {parseHTML} = await import('linkedom');
   const {document} = parseHTML('<html><body><div id="zotero-item-pane"><div class="meta-row" id="r1"><span class="label">Extra</span><editable-text multiline="true" class="value"></editable-text></div><div class="meta-row" id="r2"><span class="label">Added</span><span class="value">x</span></div></div></body></html>');
@@ -2421,7 +2450,7 @@ test('every entry of the item menu carries a drawn sign', () => {
   }
   // Each verb in the menu names one of those signs as its last argument.
   const source = plugin.constructor.toString();
-  const expected = {'ZotPoP에서 이 논문 검색': 'search', '라이브러리 저널 지표 채우기': 'journals', '인용…': 'quote', '커스텀 열로 전환': 'columns', '연구 작업 패널': 'panel',
+  const expected = {'ZotPoP에서 이 논문 검색': 'search', '라이브러리 저널 지표 채우기': 'journals', '인용문 복사…': 'quote', '커스텀 열로 전환': 'columns', '연구 작업 패널': 'panel',
     '관계 그래프 열기': 'graph', '지표·읽기 기록 새로고침': 'refresh', '인용 수 조회 중지': 'stop', '철회·공개접근 확인': 'signal',
     '이 논문의 관련 논문': 'related', '이 논문 책임저자 추적': 'authors'};
   for (const [label, icon] of Object.entries(expected)) {
@@ -2507,6 +2536,42 @@ test('a menu verb stays short and says the rest in its tooltip', () => {
   const next = source.indexOf('action("', at + 8);
   assert.match(source.slice(at, next < 0 ? undefined : next), /,"[^"]{10,}"\);\s*$/m, `${label} explains itself in a tooltip`);
  }
+});
+
+test('audit #10: the download-verb entries, the copy-citation entry and the library-wide upkeep entries each carry a verb and a scope-honest tooltip', () => {
+ const {plugin} = fixture();
+ const source = plugin.constructor.toString();
+ // "PDF만"/"모든 파일" read as attaching downloaded files with no verb and no
+ // tooltip; each now names the action and says what it reaches.
+ assert.doesNotMatch(source, /\["PDF만",true\]|\["모든 파일",false\]/, 'the bracketed-list labels are gone');
+ assert.match(source, /\["보충자료 PDF 받기",true,"선택한 문헌의 PMC 보충자료 중 PDF만 내려받아 첨부합니다\."\]/);
+ assert.match(source, /\["보충자료 모두 받기",false,"선택한 문헌의 PMC 보충자료를 형식 구분 없이 내려받아 첨부합니다\."\]/);
+ // "인용…" read as citation *counts*, next to four other 인용 수 entries; it is the copy-citation dialog.
+ assert.doesNotMatch(source, /action\("인용…"/);
+ assert.match(source, /action\("인용문 복사…",\(\)=>this\.citationPanel\(win,this\.selected\(win\)\),body,"quote","선택한 문헌을 APA·MLA·Vancouver 등 형식으로 만들어 복사합니다\."\)/);
+ for (const [label, hintFragment] of [
+  ['선택한 문헌 인용 수 새로고침', '선택한 문헌의 인용 수를 OpenAlex에서 다시 가져옵니다.'],
+  ['라이브러리 저널 지표 채우기', '이 라이브러리의 저널마다 OpenAlex를 한 번 조회해'],
+  ['제목 앞 별 태그 정리', '이 라이브러리 전체에서 ★ 태그를 별점으로 옮기고 태그를 지웁니다.'],
+  ['평점 태그를 Extra로 옮기기', '이 라이브러리 전체에서 태그로 남은 평점을'],
+  ['커스텀 열로 전환', 'Zotero Style의 옛 열을 숨기고 이 플러그인의 열을 켭니다.'],
+ ]) {
+  const at = source.indexOf('action("' + label + '"');
+  assert.ok(at >= 0, label);
+  const next = source.indexOf('action("', at + 8);
+  const call = source.slice(at, next < 0 ? undefined : next);
+  assert.ok(call.includes(hintFragment), `${label} carries its new hint`);
+ }
+ // 첨부파일 종류 판별 and 먼저 세어만 보기 both act on the whole library when
+ // nothing is selected -- both hints now say so, in the same words.
+ for (const label of ['첨부파일 종류 판별', '먼저 세어만 보기']) {
+  const at = source.indexOf('action("' + label + '"');
+  const next = source.indexOf('action("', at + 8);
+  assert.match(source.slice(at, next < 0 ? undefined : next), /선택한 문헌\(선택이 없으면 라이브러리 전체\)의/, `${label} states its scope`);
+ }
+ // 읽음 → 완료: the menu's own status entry now matches the panel's word for done.
+ assert.doesNotMatch(source, /done:\s*"읽음"/);
+ assert.match(source, /done:\s*"완료"/);
 });
 
 test('an error message tells the reader what to do next', () => {

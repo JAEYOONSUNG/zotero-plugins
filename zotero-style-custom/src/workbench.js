@@ -604,6 +604,12 @@
    const found=model.filter(scoped(),{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
    return state.query&&state.sort==='library'?model.rankByQuery(found,state.query):model.sortItems(found,state.sort);
   };
+  /* 논문 비교's own scope: once the picker has committed to a chosen set --
+     adding or removing a paper -- 0 chosen means "compare nothing", not
+     "fall back to the whole list". updateChrome's header count has to agree
+     with drawMatrix's scopeItems, or removing the last compared paper still
+     reads "비교 중 N편" for the list behind it. */
+  const matrixUsingPicker=()=>!!state.matrixUsingSelection||selected().length>0;
   const parentOptions=()=>({type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
   const ids=()=>Object.values(parentOptions()).some(Boolean)?model.filter(scoped(),parentOptions()).map(item=>String(item.id)):state.scope==='selected'?[...state.selected]:state.scope.startsWith('collection')?[...(state.collectionIDs||[])]:undefined;
   /* A43: 내 기록 포함. rows() answers what the title/authors/venue/DOI/
@@ -646,7 +652,13 @@
     const annotHit=myAnnotations.find(a=>model.matches(String(a.text||'')+' '+String(a.comment||''),state.query));
     if(annotHit){hits.set(id,{kind:'annotation',label:T(`주석 ${myAnnotations.length}`),text:excerptAround(String(annotHit.text||'')+' '+String(annotHit.comment||''))});extra.push(item);}
    }
-   return {items:extra.length?[...base,...extra]:base,hits};
+   // Merge before sorting: a paper pulled in only through a note ranks and
+   // orders exactly as any other would, rather than trailing the base list
+   // regardless of the chosen sort (or the median-sort facts, which count
+   // whatever this returns).
+   if(!extra.length)return {items:base,hits};
+   const merged=[...base,...extra];
+   return {items:state.query&&state.sort==='library'?model.rankByQuery(merged,state.query):model.sortItems(merged,state.sort),hits};
   }
   /* Searching notes re-ran the whole library's note read on every keystroke.
      The scope's notes only change when the library is reloaded or a note is
@@ -720,7 +732,10 @@
    if(state.listOrigin&&!(applicable&&state.scope==='selected')){
     if(!originBack){originBack=button('이전 목록으로',()=>run(restoreListOrigin),null,{class:'sc-list-origin-back'});context.insertBefore(originBack,contextDetail.nextSibling);}
    }else originBack?.remove();
-   {const scopeName=T(({library:'라이브러리',selected:'선택한 문헌',collection:'현재 컬렉션','collection-recursive':'현재·하위 컬렉션'})[state.scope]||'라이브러리'),inside=['notes','annotations','attachments'].includes(state.tab),n=(inside?model.filter(scoped(),parentOptions()):rows()).length;
+   {const scopeName=T(({library:'라이브러리',selected:'선택한 문헌',collection:'현재 컬렉션','collection-recursive':'현재·하위 컬렉션'})[state.scope]||'라이브러리'),inside=['notes','annotations','attachments'].includes(state.tab),
+    // 내 기록 포함 widens 보유 문헌 past rows(): once exploreRows has resolved,
+    // the count here is the merged list it drew, not the plain search.
+    n=inside?model.filter(scoped(),parentOptions()).length:(state.tab==='explore'&&Number.isFinite(state.exploreCount)?state.exploreCount:rows().length);
    // The detail line says something the title does not; naming the page twice
    // says nothing.
    // A short note on why this particular selection, set by navigateSelection
@@ -728,7 +743,7 @@
    // reader having to remember what they clicked.
    const originNote=state.scope==='selected'&&state.selectionLabel?' · '+state.selectionLabel:'';
    contextDetail.textContent=nativeJCR?[runtime.jcrCatalog?.source?.provider,runtime.jcrCatalog?.source?.product].filter(Boolean).join(' · '):applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`)+originNote
-    :state.tab==='matrix'?T(`비교 중 ${(selected().length||rows().length)}편`):state.tab==='collections'?''
+    :state.tab==='matrix'?T(`비교 중 ${matrixUsingPicker()?selected().length:rows().length}편`):state.tab==='collections'?''
     :['related','authors','backlinks'].includes(state.tab)&&selected().length===1?selected()[0].title
     :state.selected.size===1?T('선택한 문헌 1개'):state.selected.size?T(`선택한 문헌 ${state.selected.size}개`):'';}
    filterChips.replaceChildren();const labels={query:'검색',type:'유형',tag:'태그',status:'상태',ratingMin:'최소 별점',yearFrom:'시작 연도',yearTo:'마지막 연도'};
@@ -1103,7 +1118,11 @@
     const hb=node('button',`${hit.label} · "${hit.text}"`,identity,{class:'sc-paper-search-hit',type:'button',title:T('눌러서 이동합니다')});
     hb.addEventListener('click',event=>{event.stopPropagation();
      if(hit.kind==='memo'){state.expandedPaperID=String(item.id);state.focusPaper=String(item.id);render();return;}
-     rememberListOrigin();navigate(hit.kind==='note'?'notes':'annotations');});
+     // Straight to this paper's exact note or annotation, not just the tab:
+     // narrow the scope to it and keep the query, so the tab's own search
+     // filters down to the record that matched here.
+     rememberListOrigin();state.selected=new Set([String(item.id)]);state.scope='selected';scope.value='selected';
+     navigate(hit.kind==='note'?'notes':'annotations');});
    }
    const metrics=node('div',null,heading,{class:'sc-metrics'});
    metric(metrics,{unit:'IF',name:'impact',text:item.impactFactor??'',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
@@ -2554,6 +2573,12 @@
   }
   function refreshReading(){
    if(disposed||panel.hidden||state.tab!=='reading')return;
+   // A48: this rebuilds the whole list; a memo mid-edit -- typing, unsaved --
+   // must not be torn out from under the reader by some other row's async
+   // load (a page-annotation fetch, say) finishing and calling this. The
+   // save's own commit (blur, or the debounce) calls this again once it is
+   // safe to.
+   if(doc.activeElement?.closest?.('.sc-resume-memo-editor'))return;
    let drewStrip=false;
    const list=body.querySelector('[data-reading-progress]');if(!list)return;list.replaceChildren();
    const ranked=rows().map(item=>{const ref=runtime.Z.Items.get(Number(item.id));if(!ref)return null;const entry=runtime.entry(ref),p=runtime.pageProgress(ref);return {item,ref,entry,p,seconds:Number(entry.seconds)||0};}).filter(Boolean);
@@ -2629,6 +2654,24 @@
       papers that fell out of 이어 읽기 and would otherwise sink in the list.
       Only a recorded date counts; a paper without one is not guessed stalled. */
    const stalled=shaped.filter(r=>r.status==='reading'&&Number.isFinite(r.when)&&now-r.when>14*DAY).sort((a,b)=>a.when-b.when);
+   /* A47: which of the last 7 days' reading cites a stalled paper --
+      paperWorks() references, already in hand from 관계 그래프's own fetch;
+      no request here, no score, direction fixed (recent cites stalled). */
+   const works=typeof runtime.paperWorks==='function'?runtime.paperWorks():{};
+   const workOf=p=>works[p.libraryID+':'+p.key]||works[String(p.id)]||null;
+   const refsOf=p=>{const w=workOf(p);return Array.isArray(w?.references)?w.references.map(bareWork):null;};
+   const recentWithRefs=weekRows.filter(w=>refsOf(w.item));
+   const anyRecentFetched=recentWithRefs.length>0;
+   const reconnect=new Map(stalled.map(r=>{
+    const oa=bareWork(workOf(r.item)?.openalex);
+    const sources=oa?recentWithRefs.filter(w=>refsOf(w.item).includes(oa)).sort((a,b)=>b.when-a.when):[];
+    return [String(r.item.id),sources];
+   }));
+   // Linked first (most sources first), then the plain oldest-first order.
+   stalled.sort((a,b)=>{
+    const la=reconnect.get(String(a.item.id)).length,lb=reconnect.get(String(b.item.id)).length;
+    return (lb>0)-(la>0)||lb-la||a.when-b.when;
+   });
    const readingNow=shaped.filter(r=>r.status==='reading'&&!resumed.has(String(r.item.id)));
    // A view that has emptied (the last one finished here) falls back to the whole record, and the switch stays.
    if((state.readingView==='stalled'&&!stalled.length)||(state.readingView==='reading'&&!readingNow.length)
@@ -2645,12 +2688,14 @@
     :listedAll;
    pages=Math.max(1,Math.ceil(listed.length/PER));
    state.readingPage=Math.max(0,Math.min(state.readingPage||0,pages-1));
-   // A45: the annotations for one paper's pages, cached once per load() and
-   // shared by both 쪽별 기록 (marks and its own count) and 주석이 있는 쪽
-   // (its list) -- whichever opens first fetches for both, one request either
-   // way. force refetches past a cached failure, for 다시 읽기.
+   // A45/#3: the annotations for one paper's pages, cached once per load()
+   // and shared by both 쪽별 기록's marks and its own merged annotated-pages
+   // list -- one request fills both. Keyed by paper *and* attachment: a
+   // paper id alone kept serving the main PDF's marks after the file
+   // chooser switched to its supplement. force refetches past a cached failure.
+   const pageKey=(item,p)=>String(item.id)+':'+String(p?.attachmentID||'');
    const loadPageAnnotations=(item,p,{force=false}={})=>{
-    const id=String(item.id);
+    const id=pageKey(item,p);
     if(!force&&pageAnnotations.has(id))return Promise.resolve(pageAnnotations.get(id));
     if(!force&&pageAnnotationLoads.has(id))return pageAnnotationLoads.get(id);
     const promise=(async()=>{
@@ -2700,8 +2745,8 @@
       const mark=node('span',null,cell,{class:'sc-page-annot-mark','aria-hidden':'true'});
       mark.style.background=hex||'var(--sc-muted)';
      }
-     cell.dataset.chosen=String(pageChosen.get(String(item.id))===n);
-     cell.addEventListener('click',()=>{pageChosen.set(String(item.id),n);onPick?.(n);});
+     cell.dataset.chosen=String(pageChosen.get(pageKey(item,p))===n);
+     cell.addEventListener('click',()=>{pageChosen.set(pageKey(item,p),n);onPick?.(n);});
     }
    };
    const fileChooser=(parent,item,files,p)=>{
@@ -2729,55 +2774,51 @@
       refreshReading();
      }),group,{'aria-pressed':String(key===now)});
    };
-   /* 주석이 있는 쪽: the pages this PDF was marked on, with the time spent
-      there and the first words of what was written, so "where did I note
-      that" is answered beside "where was I". Read only when opened, and only
-      for this attachment's pages -- the same page number in another PDF is
-      another page. Three to start; the rest a press away. */
-   const readingEvidence=(parent,item,p,onLoaded)=>{
-    if(!p.attachmentID||typeof library.annotations!=='function')return;
-    const more=node('details',null,parent,{class:'sc-reading-evidence'});
-    const summary=node('summary',T('주석이 있는 쪽'),more);
-    const box=node('div',null,more,{class:'sc-reading-evidence-list'});
-    let loaded=false;
-    const load=async(force)=>{
-     loaded=true;const generation=epoch;
-     box.replaceChildren();node('p',T('주석을 읽는 중…'),box,{class:'sc-muted'});
-     let byPage;
-     // A45: the same per-attachment fetch 쪽별 기록 shares -- opening this
-     // fold when that one already loaded costs nothing further.
-     try{byPage=await loadPageAnnotations(item,p,{force});}
-     catch(error){
-      // A failed read can be tried again from where it failed.
-      loaded=false;if(generation!==epoch||disposed||!more.isConnected)return;
-      box.replaceChildren();node('p',T('주석을 읽지 못했습니다.'),box,{class:'sc-muted'});
-      button('다시 읽기',()=>run(()=>load(true)),box,{class:'sc-reading-evidence-more'});
-      runtime.Z.logError?.(error);return;
-     }
-     if(generation!==epoch||disposed||!more.isConnected)return;
-     box.replaceChildren();
-     const mine=[...byPage.values()].flat();
-     // Read once, the summary says what the fold holds, so opening it is not required to know.
-     summary.textContent=T(`주석이 있는 쪽 · ${byPage.size}쪽 · 주석 ${mine.length}개`);
-     onLoaded?.(mine);
-     if(!byPage.size){node('p',T('이 PDF에는 쪽이 기록된 주석이 없습니다.'),box,{class:'sc-muted'});return;}
-     const pagesWith=[...byPage].sort((a,b)=>a[0]-b[0]);
-     const drawPage=([index,notes])=>{
-      const row=node('div',null,box,{class:'sc-reading-evidence-row'});
-      const sec=Number(p.pages?.[index])||0;
-      const said=[T(`${notes[0].pageLabel||index+1}쪽`),sec>0&&runtime.formatReadTime?runtime.formatReadTime(sec):'',T(`주석 ${notes.length}개`)].filter(Boolean).join(' · ');
-      button(said,()=>run(()=>library.openItem(p.attachmentID,{pageIndex:index})),row,{class:'sc-reading-evidence-page','data-opens':'window',title:T('이 쪽을 엽니다')});
-      const first=notes.find(a=>a.comment)||notes[0];
-      const words=String(first.comment||first.text||'').replace(/\s+/g,' ').trim();
-      if(words){const line=node('span',null,row,{class:'sc-reading-evidence-text'});
-       // The annotation's own colour is what it means to the reader, so it stays.
-       if(first.color){const swatch=node('span',null,line,{class:'sc-reading-evidence-swatch','aria-hidden':'true'});swatch.style.background=first.color;}
-       line.appendChild(doc.createTextNode(words.slice(0,140)));}
-     };
-     pagesWith.slice(0,3).forEach(drawPage);
-     if(pagesWith.length>3){const rest=button(T(`${pagesWith.length-3}쪽 더 보기`),()=>{rest.remove();pagesWith.slice(3).forEach(drawPage);},box,{class:'sc-reading-evidence-more'});}
+   /* #3: 주석이 있는 쪽 used to be its own fold beside 쪽별 기록, with its own
+      fetch -- two folds, and (past a supplement switch) two different ideas
+      of which attachment's marks they held. It is drawn into 쪽별 기록's own
+      body now, from the exact same pageAnnotations entry that fold's strip
+      already loaded: one fold per row, one fetch either way. Three pages to
+      start; the rest a press away. */
+   const annotatedPagesList=(box,byPage,p)=>{
+    box.replaceChildren();
+    if(!byPage){node('p',T('주석을 읽는 중…'),box,{class:'sc-muted'});return;}
+    if(!byPage.size){node('p',T('이 PDF에는 쪽이 기록된 주석이 없습니다.'),box,{class:'sc-muted'});return;}
+    const pagesWith=[...byPage].sort((a,b)=>a[0]-b[0]);
+    const drawPage=([index,notes])=>{
+     const row=node('div',null,box,{class:'sc-reading-evidence-row'});
+     const sec=Number(p.pages?.[index])||0;
+     const said=[T(`${notes[0].pageLabel||index+1}쪽`),sec>0&&runtime.formatReadTime?runtime.formatReadTime(sec):'',T(`주석 ${notes.length}개`)].filter(Boolean).join(' · ');
+     button(said,()=>run(()=>library.openItem(p.attachmentID,{pageIndex:index})),row,{class:'sc-reading-evidence-page','data-opens':'window',title:T('이 쪽을 엽니다')});
+     const first=notes.find(a=>a.comment)||notes[0];
+     const words=String(first.comment||first.text||'').replace(/\s+/g,' ').trim();
+     if(words){const line=node('span',null,row,{class:'sc-reading-evidence-text'});
+      // The annotation's own colour is what it means to the reader, so it stays.
+      if(first.color){const swatch=node('span',null,line,{class:'sc-reading-evidence-swatch','aria-hidden':'true'});swatch.style.background=first.color;}
+      line.appendChild(doc.createTextNode(words.slice(0,140)));}
     };
-    more.addEventListener('toggle',()=>{if(more.open&&!loaded)run(load);});
+    pagesWith.slice(0,3).forEach(drawPage);
+    if(pagesWith.length>3){const rest=button(T(`${pagesWith.length-3}쪽 더 보기`),()=>{rest.remove();pagesWith.slice(3).forEach(drawPage);},box,{class:'sc-reading-evidence-more'});}
+   };
+   /* 지난번 마지막 주석: the most recently modified mark (or, without a date
+      anywhere, the highest page) among a paper's own marks -- read directly
+      off whatever 쪽별 기록's shared load already holds, so the line can
+      appear the moment that completes rather than needing its own fold opened. */
+   const lastAnnotationLine=mine=>{
+    if(!mine.length)return null;
+    const dated=mine.filter(a=>a.dateModified||a.modified);
+    const pageOf=a=>a.pageLabel||(a.pageIndex!=null?a.pageIndex+1:null);
+    let best;
+    if(dated.length){
+     best=dated.slice().sort((a,b)=>String(b.dateModified||b.modified||'').localeCompare(String(a.dateModified||a.modified||'')))[0];
+     const page=pageOf(best);if(page==null)return null;
+     const words=String(best.comment||best.text||'').replace(/\s+/g,' ').trim().slice(0,80);
+     return words?T(`지난번 마지막 주석: p.${page} · ${words}`):T(`지난번 마지막 주석: p.${page}`);
+    }
+    best=mine.slice().sort((a,b)=>(b.pageIndex??-1)-(a.pageIndex??-1))[0];
+    const page=pageOf(best);if(page==null)return null;
+    const words=String(best.comment||best.text||'').replace(/\s+/g,' ').trim().slice(0,80);
+    return words?T(`마지막 쪽 주석: p.${page} · ${words}`):T(`마지막 쪽 주석: p.${page}`);
    };
    // 읽기 대기: papers put by for reading, oldest first, until reading starts.
    const queue=Object.entries(runtime.cache.workbenchUI?.readingQueue||{}).filter(([key])=>key.startsWith(`${state.libraryID||''}:`));
@@ -2817,9 +2858,33 @@
      const text=node('div',null,row,{class:'sc-resume-text'});
      node('span',r.item.title,text,{class:'sc-resume-title',title:r.item.title});
      if(r.files.length>1)fileChooser(text,r.item,r.files,r.p);
-     // What the reader meant to check, if they wrote it down: the memo comes back with the page.
-     const remark=String(r.entry.remark||'').trim();
-     if(remark)node('span',remark.split('\n')[0].slice(0,140),text,{class:'sc-resume-remark'});
+     /* A48: the memo line the reader meant to check is editable in place --
+        press it (or, with nothing written yet, 메모 쓰기) and it becomes a
+        textarea, saved the same way drawPaperMemo's own memo is (bindMemo +
+        library.setRemark, updating state.items' cached remark too). A
+        successful save returns to the one-line view; a failed one leaves
+        the editor and the draft exactly as they were. */
+     const remarkBox=node('div',null,text,{class:'sc-resume-remark-box'});
+     const renderRemarkView=()=>{
+      remarkBox.replaceChildren();
+      const current=String(r.entry.remark||'').trim();
+      if(current)button(current.split('\n')[0].slice(0,140),renderRemarkEdit,remarkBox,{class:'sc-resume-remark',title:T('눌러서 편집합니다')});
+      else button(T('메모 쓰기'),renderRemarkEdit,remarkBox,{class:'sc-resume-remark-add'});
+     };
+     const renderRemarkEdit=()=>{
+      remarkBox.replaceChildren();
+      const editor=node('div',null,remarkBox,{class:'sc-resume-memo-editor'});
+      const field=node('textarea',null,editor,{rows:'2','aria-label':T(`${r.item.title} 메모`),placeholder:T('짧게 적어두세요. 노트 항목은 만들지 않습니다.')});
+      field.value=r.entry.remark||'';
+      field.focus();
+      bindMemo(field,value=>Promise.resolve(library.setRemark(r.item.id,value)).then(result=>{
+       r.entry.remark=String(value||'');
+       const held=state.items.find(i=>String(i.id)===String(r.item.id));if(held)held.remark=String(value||'');
+       renderRemarkView();
+       return result;
+      }),r.item.title||'문헌');
+     };
+     renderRemarkView();
      // No recorded date is a different fact from "read today" (days===0), and
      // reads as nothing otherwise -- an empty space where a date belongs.
      const hasDate=Number.isFinite(r.shownWhen);
@@ -2838,26 +2903,54 @@
       const lastPart=!hasDate?T('마지막 읽음 기록 없음'):days?`${days}일 전`:T('오늘');
       parts=[r.total?`${r.p.visited}/${r.total}쪽`:'',left?T(`이 쪽 뒤 ${left}쪽`):'',r.files.length>1&&timeText?T(`이 파일 ${timeText}`):timeText,lastPart].filter(Boolean);
      }
-     node('span',parts.join(' · '),row,{class:'sc-resume-meta'});
-     // 열기/이어 읽기 and the status control share the meta's line, at the row's end.
-     const actions=node('div',null,row,{class:'sc-resume-actions'});
      const target=r.p.attachmentID||r.item.id;
      const resumeLabel=opts.recordMeta&&r.status==='done'?'열기':r.next!=null?`${r.next+1}쪽에서`:'이어 읽기';
+     node('span',parts.join(' · '),row,{class:'sc-resume-meta'});
+     /* A47: 14일 넘게 멈춤 only -- opts.reconnect is who among the last 7
+        days' reading cites this stalled paper (paperWorks() references,
+        already in hand; no request, no score). opts.refsUnknown separates
+        "checked, nothing linked" from "nothing to check yet". */
+     if(opts.reconnect){
+      if(opts.reconnect.length){
+       const fold=node('details',null,row,{class:'sc-reading-reconnect'});
+       node('summary',T(`최근 읽은 ${opts.reconnect.length}편이 인용`),fold);
+       for(const src of opts.reconnect){
+        const line=node('div',null,fold,{class:'sc-reading-reconnect-row'});
+        node('span',T(`최근 읽은 ${src.item.title||T('제목 없음')} → 이 문헌`),line);
+        const srcDays=Number.isFinite(src.when)?Math.floor((now-src.when)/DAY):null;
+        node('span',srcDays!=null?T(`마지막 읽음 ${srcDays}일 전`):T('마지막 읽음 기록 없음'),line,{class:'sc-muted'});
+       }
+       // The row's own resume action, repeated here so reconnecting does not need a scroll back up.
+       button(resumeLabel,()=>run(()=>library.openItem(target,r.next!=null?{pageIndex:r.next}:undefined)),fold,{'data-opens':'window'});
+      } else node('span',T(opts.refsUnknown?'참고문헌 기록 없음':'연결 없음'),row,{class:'sc-muted sc-reading-reconnect-note'});
+     }
+     // 열기/이어 읽기 and the status control share the meta's line, at the row's end.
+     const actions=node('div',null,row,{class:'sc-resume-actions'});
      button(resumeLabel,()=>run(()=>library.openItem(target,r.next!=null?{pageIndex:r.next}:undefined)),actions,{'data-opens':'window',title:T(r.next!=null?'마지막으로 보던 쪽에서 엽니다':'Zotero가 기억하는 위치에서 엽니다')});
      // The page-by-page record is not listed below for these, so it folds in here.
      readingStatus(actions,r.item,r.ref);
      const folds=node('div',null,row,{class:'sc-resume-folds'});
      if(r.total){
-      const id=String(r.item.id);
+      const rowID=String(r.item.id);
+      // #3: pages, marks, the 지난번 마지막 주석 line and the merged
+      // annotated-pages list all key off paper *and* attachment -- switching
+      // the file chooser changes r.p.attachmentID, and so this key, rather
+      // than reusing a cache built for the file just left.
+      const pid=pageKey(r.item,r.p);
       const more=node('details',null,folds,{class:'sc-resume-pages'});
-      if(openStrips.has(id))more.open=true;
-      /* A45: 방문 쪽/전체 쪽 is known the moment the row is drawn; the
-         annotation count joins it only once known -- from this fold's own
-         open, or from 주석이 있는 쪽's, whichever happened first. */
+      if(openStrips.has(rowID))more.open=true;
+      /* 방문 쪽/전체 쪽 is known the moment the row is drawn; the annotation
+         count, and 지난번 마지막 주석 by the title, join it only once this
+         fold's own shared load has actually completed -- never fetched just
+         for either. */
       const summary=node('summary',null,more);
-      const known=pageAnnotations.get(id);
-      const annotCount=known?[...known.values()].reduce((sum,list)=>sum+list.length,0):null;
-      summary.textContent=T(`쪽별 기록 · 방문 ${r.p.visited}/${r.total}`)+(annotCount!=null?' · '+T(`주석 ${annotCount}`):'');
+      const known=pageAnnotations.get(pid);
+      const mine=known?[...known.values()].flat():[];
+      summary.textContent=T(`쪽별 기록 · 방문 ${r.p.visited}/${r.total}`)+(known?' · '+T(`주석 ${mine.length}`):'');
+      if(mine.length&&!text.querySelector('.sc-resume-last-annotation')){
+       const line=lastAnnotationLine(mine);
+       if(line)node('span',line,text,{class:'sc-resume-last-annotation'});
+      }
       // The strip itself, and the key that explains it, are built only once
       // opened: a closed fold that still built thirty thousand cells behind
       // it was most of a big list's render cost for nothing shown.
@@ -2875,7 +2968,7 @@
        // to open that page, instead of the strip itself opening on a click.
        const showEvidence=n=>{
         evidenceBox.replaceChildren();
-        const notes=pageAnnotations.get(id)?.get(n)||[];
+        const notes=pageAnnotations.get(pid)?.get(n)||[];
         const sec=Number(r.p.pages?.[n])||0;
         const line=node('div',null,evidenceBox,{class:'sc-reading-evidence-row'});
         const said=[T(`${notes[0]?.pageLabel||n+1}쪽`),sec>0&&runtime.formatReadTime?runtime.formatReadTime(sec):'',notes.length?T(`주석 ${notes.length}개`):''].filter(Boolean).join(' · ');
@@ -2887,43 +2980,25 @@
          excerpt.appendChild(doc.createTextNode(words.slice(0,140)));
         }
        };
-       pageStrip(stripBox,r.item,r.p,{byPage:pageAnnotations.get(id),onPick:n=>{pageChosen.set(id,n);showEvidence(n);}});
-       if(pageChosen.has(id))showEvidence(pageChosen.get(id));
+       pageStrip(stripBox,r.item,r.p,{byPage:pageAnnotations.get(pid),onPick:n=>{pageChosen.set(pid,n);showEvidence(n);}});
+       if(pageChosen.has(pid))showEvidence(pageChosen.get(pid));
+       // #3: 주석이 있는 쪽's own list, merged into this same fold rather than
+       // a second one below it -- one press opens both the strip and this.
+       const listBox=node('div',null,stripBox,{class:'sc-reading-evidence-list'});
+       annotatedPagesList(listBox,pageAnnotations.get(pid),r.p);
       };
       more.addEventListener('toggle',()=>{
-       more.open?openStrips.add(id):openStrips.delete(id);
+       more.open?openStrips.add(rowID):openStrips.delete(rowID);
        if(!more.open)return;
        build();
        // Switching the file chooser calls refreshReading() itself (see
        // fileChooser above), which redraws this whole row against the newly
        // chosen file's r.p -- the strip, the marks and the evidence below it
        // all follow without any of this needing to know a file was switched.
-       if(!pageAnnotations.has(id))loadPageAnnotations(r.item,r.p).catch(()=>{}).then(()=>{if(!disposed&&more.isConnected)refreshReading();});
+       if(!pageAnnotations.has(pid))loadPageAnnotations(r.item,r.p).catch(()=>{}).then(()=>{if(!disposed&&more.isConnected)refreshReading();});
       });
       if(more.open)build();
      }
-     // The annotated pages are their own fold beside it, not one more level down.
-     // Shown only once that fold has actually loaded -- never fetched just for this line.
-     readingEvidence(folds,r.item,r.p,mine=>{
-      if(!mine.length||text.querySelector('.sc-resume-last-annotation'))return;
-      // library.annotations carries no date field yet (src/library.js), so
-      // "most recent" falls back to the highest page until one exists.
-      const dated=mine.filter(a=>a.dateModified||a.modified);
-      const pageOf=a=>a.pageLabel||(a.pageIndex!=null?a.pageIndex+1:null);
-      let best,line;
-      if(dated.length){
-       best=dated.slice().sort((a,b)=>String(b.dateModified||b.modified||'').localeCompare(String(a.dateModified||a.modified||'')))[0];
-       const page=pageOf(best);if(page==null)return;
-       const words=String(best.comment||best.text||'').replace(/\s+/g,' ').trim().slice(0,80);
-       line=words?T(`지난번 마지막 주석: p.${page} · ${words}`):T(`지난번 마지막 주석: p.${page}`);
-      }else{
-       best=mine.slice().sort((a,b)=>(b.pageIndex??-1)-(a.pageIndex??-1))[0];
-       const page=pageOf(best);if(page==null)return;
-       const words=String(best.comment||best.text||'').replace(/\s+/g,' ').trim().slice(0,80);
-       line=words?T(`마지막 쪽 주석: p.${page} · ${words}`):T(`마지막 쪽 주석: p.${page}`);
-      }
-      node('span',line,text,{class:'sc-resume-last-annotation'});
-     });
    };
    if(resume.length){
     sectionHead('이어 읽기',resume.length,list);
@@ -2966,7 +3041,7 @@
    }
    if(state.readingView==='stalled'){
     const box=node('div',null,list,{class:'sc-resume sc-reading-stalled'});
-    for(const r of stalled.slice(0,state.stalledAll?stalled.length:10))drawResumeRow(box,r);
+    for(const r of stalled.slice(0,state.stalledAll?stalled.length:10))drawResumeRow(box,r,{reconnect:reconnect.get(String(r.item.id)),refsUnknown:!anyRecentFetched});
     if(stalled.length>10)button(state.stalledAll?'10편만 보기':T(`${stalled.length}편 모두 보기`),()=>{state.stalledAll=!state.stalledAll;refreshReading();},list,{class:'sc-local-reading-more'});
    }
    if(read.length&&state.readingView!=='stalled'){
@@ -3173,7 +3248,7 @@
       nothing has committed to "a selection" yet, so 0 chosen still means
       "compare what 보유 문헌 is showing", which is what every existing use of
       this tab (and the tests for it) already expects. */
-   const usingPicker=!!state.matrixUsingSelection||selected().length>0;
+   const usingPicker=matrixUsingPicker();
    const scopeItems=usingPicker?model.sortItems(selected(),state.sort):rows();
    // No saved choices yet: a memo on any of these papers earns its own column, right after the reading state.
    const hasMemo=scopeItems.some(item=>String(item.remark||'').trim());
@@ -5433,8 +5508,11 @@
        own cards on top of the next's. Only take that detour when needed. */
     if(state.searchRecords&&state.query.trim()){
      const {items,hits}=await exploreRows();
+     if(token!==epoch||disposed)break;
+     state.exploreCount=items.length;
      await paperList(items,{hits});
-    } else await paperList(rows());
+     if(token===epoch&&!disposed)updateChrome();
+    } else {state.exploreCount=null;await paperList(rows());}
     break;
    }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();

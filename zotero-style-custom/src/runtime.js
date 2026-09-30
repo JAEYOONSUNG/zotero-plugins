@@ -909,8 +909,49 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return mark;
   }
 
+  /* Mirrors workbench.js's jcrIndex/jcrMatch/jcrBestStanding (kept as a
+     separate, minimal copy rather than requiring the workbench module from
+     here): the captured JCR catalog's own journals, indexed once by ISSN and
+     by exact lower-cased title, so the item-list IF tooltip can name the
+     official quartile and category rank without scanning the catalog on
+     every cell. Only worth building for the real Clarivate catalog -- the
+     shipped OpenAlex placeholder never fills categoryMetrics, so it would
+     never match. */
+  static _jcrCatalogIndex = new WeakMap();
+  _jcrIndex(catalog) {
+    let entry = CustomStyleRuntime._jcrCatalogIndex.get(catalog);
+    if (entry) return entry;
+    const byIssn = new Map(), byTitle = new Map();
+    for (const journal of catalog.journals || []) {
+      for (const raw of journal.issns || []) {
+        const key = String(raw).replace(/[^0-9xX]/g, '').toUpperCase();
+        if (key.length === 8 && !byIssn.has(key)) byIssn.set(key, journal);
+      }
+      const folded = String(journal.title || '').trim().toLowerCase();
+      if (folded && !byTitle.has(folded)) byTitle.set(folded, journal);
+    }
+    entry = { byIssn, byTitle }; CustomStyleRuntime._jcrCatalogIndex.set(catalog, entry);
+    return entry;
+  }
+  _jcrMatch(catalog, venue, issns) {
+    if (!catalog || !venue) return null;
+    const { byIssn, byTitle } = this._jcrIndex(catalog);
+    for (const raw of issns || []) {
+      const key = String(raw || '').replace(/[^0-9xX]/g, '').toUpperCase();
+      if (key.length === 8 && byIssn.has(key)) return byIssn.get(key);
+    }
+    return byTitle.get(String(venue).trim().toLowerCase()) || null;
+  }
+  // The one category worth leading with: the best quartile, then the highest percentile in a tie.
+  _jcrBestStanding(journal) {
+    const rows = (journal.categoryMetrics || []).filter(m => m.quartile != null || m.rank != null);
+    if (!rows.length) return null;
+    return rows.slice().sort((a, b) => (a.quartile ?? 5) - (b.quartile ?? 5) || (b.percentile ?? -1) - (a.percentile ?? -1))[0];
+  }
+
   paintJournal(cell, item, doc, P, {figure, estimate, name} = {}) {
-    const title = this.journalIdentityOf(item)?.title
+    const identityInfo = this.journalIdentityOf(item);
+    const title = identityInfo?.title
       || (this.isRegular(item) ? String(item.getField('publicationTitle') || item.getField('proceedingsTitle') || '') : '');
     const number = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     const value = Number(figure);
@@ -928,11 +969,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       + `color:${figure == null ? P.faint : estimate ? P.muted : P.text};`;
     cell.appendChild(number);
     const tier = this.impactTier(value, P);
+    /* The official standing, when the captured JCR catalog has this journal:
+       Q1 8/140 says more, field-by-field, than a tier name derived only from
+       the raw number. Nothing invented -- no catalog, no match or no
+       quartile recorded all leave this off, the same as before. */
+    const journal = (!estimate && figure != null && this.jcrCatalog)
+      ? this._jcrMatch(this.jcrCatalog, title, identityInfo?.identity?.issns) : null;
+    const standing = journal ? this._jcrBestStanding(journal) : null;
+    const standingText = standing && standing.quartile != null
+      ? ` · Q${standing.quartile}${standing.rank != null && standing.rankTotal != null ? ` ${standing.rank}/${standing.rankTotal}` : ''}${standing.categoryKey ? ' ' + standing.categoryKey : ''}`
+      : '';
     cell.title = figure == null
       ? (title ? `${title} · 공식 IF를 아직 확인하지 못했습니다.` : '저널 정보가 없습니다.')
       : estimate
         ? `≈ ${figure} · OpenAlex 2년 평균 피인용 · ${name || title}\n공식 JIF가 아니라 추정치입니다.`
-        : `${title}${tier ? ' · ' + tier.name : ''} · IF ${figure}`;
+        : `${title}${tier ? ' · ' + tier.name : ''} · IF ${figure}${standingText}`;
     return cell;
   }
 
@@ -1074,11 +1125,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       dot.style.cssText = `font-size:11px;line-height:1;color:${tone};`;
       const text = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       // Thirty rows saying "unread" were the column's texture; the hollow circle says it alone.
-      text.textContent = label === "unread" ? "" : this.t({unread: "안 읽음", reading: "읽는 중", done: "읽음"}[label]);
+      // 완료, not 읽음: the panel's own status word, so a paper marked done reads the same everywhere.
+      text.textContent = label === "unread" ? "" : this.t({unread: "안 읽음", reading: "읽는 중", done: "완료"}[label]);
       text.style.cssText = `color:${label === "unread" ? P.muted : tone};font-weight:${label === "unread" ? 400 : 590};`;
       cell.append(dot, text);
       if (this.isRegular(item)) {
-        cell.title = this.t({unread: "안 읽음", reading: "읽는 중", done: "읽음"}[label]) + " · " + this.t("클릭하면 다음 상태로 바꿉니다");
+        cell.title = this.t({unread: "안 읽음", reading: "읽는 중", done: "완료"}[label]) + " · " + this.t("클릭하면 다음 상태로 바꿉니다");
         cell.style.cursor = "pointer";
         // The first click on a row selects it, as everywhere in Zotero; only a click on a row already selected changes it.
         const armed = this.guardClick(cell, doc, index);
@@ -4914,7 +4966,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          without one, Style Custom is the only unmarked line in the menu. */
       iconic(menu,"panel");iconic(doc.getElementById("style-custom-tools-item"),"panel");
       const statusItems={};
-      for(const status of ["unread","reading","done"]) statusItems[status]=action(({unread:"안 읽음",reading:"읽는 중",done:"읽음"})[status],()=>this.edit(this.selected(win),{status}),body,{unread:"circle",reading:"half",done:"disc"}[status]);
+      for(const status of ["unread","reading","done"]) statusItems[status]=action(({unread:"안 읽음",reading:"읽는 중",done:"완료"})[status],()=>this.edit(this.selected(win),{status}),body,{unread:"circle",reading:"half",done:"disc"}[status]);
       /* The paper you are looking at is the best query you have. The search
          tab used to open empty and ask you to type in what was already on the
          row under the pointer. */
@@ -4958,15 +5010,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           +`PMC에 없음 ${report.notFound+report.notArchived} · 보충자료 없음 ${report.noSupplement}\n`
           +`오픈액세스가 아니라 받을 수 없음 ${report.closed}`
           +(report.errors?`\n조회 실패 ${report.errors}`:""));
-      },suppl,"","받을 수 있는 논문이 몇 편인지만 세고, 내려받지는 않습니다.");
-      for(const [label,pdfOnly] of [["PDF만",true],["모든 파일",false]])action(label,async()=>{
+      },suppl,"","선택한 문헌(선택이 없으면 라이브러리 전체)의 받을 수 있는 논문이 몇 편인지만 세고, 내려받지는 않습니다.");
+      for(const [label,pdfOnly,hint] of [["보충자료 PDF 받기",true,"선택한 문헌의 PMC 보충자료 중 PDF만 내려받아 첨부합니다."],["보충자료 모두 받기",false,"선택한 문헌의 PMC 보충자료를 형식 구분 없이 내려받아 첨부합니다."]])action(label,async()=>{
         const items=this.selected(win);
         if(!items.length)throw new Error("문헌을 먼저 선택하세요.");
         const result=await this.downloadSupplementary(items,{pdfOnly});
         this.say(win,
           `보충자료 ${result.added}개 추가 · 이미 있음 ${result.already} · 없음 ${result.none} · 미확인 ${result["not-found"]} · 실패 ${result.error}`
           +(result.failures.length?"\n\n"+result.failures.slice(0,5).join("\n"):""));
-      },suppl);
+      },suppl,"",hint);
       const marks=make("menupopup",null,iconic(make("menu","색 표시",body),"palette"));
       for(const colour of this.highlightColours())action(colour.label,async()=>{
         const changed=await this.setHighlight(this.selected(win),colour.key);
@@ -4987,7 +5039,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(result.budgetGone) lines.push(`OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}종이 남았고, 한국 시간 오전 9시에 초기화됩니다.\n지금까지 받은 값은 저장했으니 내일 다시 실행하면 남은 것부터 이어서 채웁니다.`);
         else lines.push("공식 JIF가 있는 저널은 그대로 두고, 없는 저널만 ~추정치로 채웁니다.");
         this.say(win,lines.join("\n"));
-      },upkeep,"journals");
+      },upkeep,"journals","이 라이브러리의 저널마다 OpenAlex를 한 번 조회해, 공식 JIF가 없는 저널만 추정치로 채웁니다.");
       action("읽기 기록 가져오기",async()=>{
         const preview=await this.importLegacyReading({dryRun:true});
         if(!preview.imported){this.say(win,`가져올 읽기 기록이 없습니다. (노트 ${preview.notes}개 · 이미 보유 ${preview.skipped}개 · 대상 불명 ${preview.unresolved}개)`);return;}
@@ -5000,7 +5052,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(!found.length){this.say(win,"정리할 별 태그가 없습니다.");return;}
         const {moved,skipped}=await this.migrateStarTags(found);
         this.say(win,`${moved}개 항목의 별 태그를 정리했습니다. 평점은 그대로 유지됩니다.`+(skipped?` · 편집할 수 없어 건너뜀 ${skipped}개`:""));
-      },upkeep,"star");
+      },upkeep,"star","이 라이브러리 전체에서 ★ 태그를 별점으로 옮기고 태그를 지웁니다.");
       action("평점 태그를 Extra로 옮기기",async()=>{
         const found=await this.visibleRatingTagItems(win.ZoteroPane?.getSelectedLibraryID?.());
         if(!found.length){this.say(win,"태그로 남은 평점이 없습니다.");return;}
@@ -5011,10 +5063,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(stray.orphans)lines.push(`독립 첨부파일 ${stray.orphans}개는 본 문헌이 없어 태그를 그대로 두었습니다.`);
         lines.push("Extra는 동기화되고 직접 고칠 수 있으며, 태그 목록에는 나타나지 않습니다.");
         this.say(win,lines.join("\n"));
-      },upkeep,"star");
+      },upkeep,"star",`이 라이브러리 전체에서 태그로 남은 평점을 Extra의 "Rating: N"으로 옮기고 태그를 지웁니다.`);
       make("menuseparator",null,body);
-      action("인용…",()=>this.citationPanel(win,this.selected(win)),body,"quote");
-      action("커스텀 열로 전환",()=>this.useColumns(win),upkeep,"columns");
+      // Reads as 인용 수 next to four other 인용 수 entries; the copy-citation dialog gets its own verb.
+      action("인용문 복사…",()=>this.citationPanel(win,this.selected(win)),body,"quote","선택한 문헌을 APA·MLA·Vancouver 등 형식으로 만들어 복사합니다.");
+      action("커스텀 열로 전환",()=>this.useColumns(win),upkeep,"columns","Zotero Style의 옛 열을 숨기고 이 플러그인의 열을 켭니다.");
       action("연구 작업 패널",()=>state.workbench?.toggle(true),body,"panel");
       action("관계 그래프 열기",()=>state.workbench?.show('graph'),body,"graph");
       /* The paper under the pointer is already the question. Both of these
@@ -5031,7 +5084,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       make("menuseparator",null,body);
       body.addEventListener("popupshowing",()=>{
         /* Greyed means "already so" -- for every selected paper, not the first:
-           with twenty selected and the first already read, "읽음" was greyed
+           with twenty selected and the first already read, "완료" was greyed
            and the other nineteen could not be marked. */
         try{
           const chosen=this.selected(win);
@@ -5044,7 +5097,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       action("선택한 문헌 인용 수 새로고침",async()=>{
         const result=await this.refreshCitations(this.selected(win),{force:true});
         this.say(win,`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개${result.cancelled?" · 중지됨":""}`);
-      },body,"citations");
+      },body,"citations","선택한 문헌의 인용 수를 OpenAlex에서 다시 가져옵니다.");
       const stopItem=action("인용 수 조회 중지",()=>{if(!this.citationJob)throw new Error("진행 중인 인용 수 조회가 없습니다. 중지할 것이 없습니다.");this.citationJob.controller.abort();this.say(win,"인용 수 조회를 중지했습니다. 지금까지 받은 값은 저장했습니다.");},body,"stop");
       action("첨부파일 종류 판별",async()=>{
         const chosen=this.selected(win);
@@ -5057,7 +5110,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           +(result.unknown?` · 판단 불가 ${result.unknown}`:"")
           +(result.indexed?`\n본문이 없던 ${result.indexed}개는 Zotero가 먼저 본문을 읽어 두었습니다.`:"")
           +(result.unread?`\n${result.unread}개는 색인을 만든 뒤에도 본문을 읽지 못했습니다(스캔 PDF일 수 있습니다).`:""));
-      },body,"attachments","본문·보충자료·중복·다른 논문으로 나눕니다.");
+      },body,"attachments","선택한 문헌(선택이 없으면 라이브러리 전체)의 PDF를 첫 페이지로 읽어 본문·보충자료·중복·다른 논문으로 나눕니다.");
       action("빈 칸 채우기",async()=>{
         if(this.backfilling){this.stopBackfill();this.say(win,"채우기를 중지했습니다. 지금까지 받은 값은 저장했습니다.");return;}
         const report=await this.runBackfill({libraryID:win.ZoteroPane?.getSelectedLibraryID?.(),
