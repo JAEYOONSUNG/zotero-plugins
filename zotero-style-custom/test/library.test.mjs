@@ -40,7 +40,7 @@ test('nested tags count distinct items for prefixes and retain slash status',()=
 });
 test('notes, annotations and attachments retain source metadata with explicit selection',async()=>{
  const f=fixture();assert.equal((await f.service.notes([1]))[0].text,'Hello rich note');assert.match((await f.service.notes([4]))[0].html,/<b>/);assert.equal((await f.service.notes([])).length,0);
- const a=(await f.service.annotations([1]))[0];assert.equal(a.pageIndex,2);assert.equal(a.attachmentID,'2');assert.equal(a.parentID,'1');assert.equal((await f.service.annotations([3])).length,1);
+ const a=(await f.service.annotations([1]))[0];assert.equal(a.pageIndex,2);assert.equal(a.attachmentID,'2');assert.equal(a.parentID,'1');assert.equal(a.modified,'','no local dateModified reads as empty');f.annotation.fields.dateModified='2026-09-01 10:00:00';assert.equal((await f.service.annotations([1]))[0].modified,'2026-09-01 10:00:00');assert.equal((await f.service.annotations([3])).length,1);
  assert.equal((await f.service.attachments([1]))[0].path,'/tmp/sample.pdf');
  f.annotation.annotationPosition='bad';assert.equal((await f.service.annotations([1]))[0].pageIndex,null);
 });

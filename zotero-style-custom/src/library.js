@@ -148,7 +148,7 @@
       const out=[];
       for(const i of await children(ids,'annotations')) {
         const attachment=await get(i.parentID),position=safe(()=>JSON.parse(i.annotationPosition),{});
-        out.push({id:String(i.id),key:i.key,parentID:attachment.parentID?String(attachment.parentID):null,attachmentID:String(attachment.id),text:i.annotationText||'',comment:i.annotationComment||'',color:i.annotationColor||'',type:i.annotationType||'',pageLabel:i.annotationPageLabel||'',pageIndex:Number.isInteger(position.pageIndex)&&position.pageIndex>=0?position.pageIndex:null});
+        out.push({id:String(i.id),key:i.key,parentID:attachment.parentID?String(attachment.parentID):null,attachmentID:String(attachment.id),text:i.annotationText||'',comment:i.annotationComment||'',color:i.annotationColor||'',type:i.annotationType||'',pageLabel:i.annotationPageLabel||'',pageIndex:Number.isInteger(position.pageIndex)&&position.pageIndex>=0?position.pageIndex:null,modified:field(i,'dateModified')});
       }
       return out;
     }

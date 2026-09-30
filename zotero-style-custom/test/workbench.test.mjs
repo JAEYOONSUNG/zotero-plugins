@@ -1084,7 +1084,7 @@ test('recent papers say what brought them there and when; the summary names the 
  assert.match(picks[0],/Paper Alpha.*연 40회/);
  assert.match(picks[1],/Paper Beta.*연 11회/);
  f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'Ada Lovelace',seen:[],news:[]},{id:'A2',name:'A. M. Lovelace',seen:[],news:[]},{id:'A9',name:'Nobody Here',seen:[],news:[]}];
- await f.bench.show('authors');
+ await f.bench.show('authors');await f.click('조용한 저자 3명 보기');
  const cards=[...f.body().querySelectorAll('.sc-watch')];
  assert.equal(cards[0].querySelector('.sc-watch-mine')?.textContent,'서재 2','the full name as the library spells it');
  assert.equal(cards[1].querySelector('.sc-watch-mine')?.textContent,'서재 2?','family name and initial only: said to be a guess');
@@ -2634,14 +2634,46 @@ test('the followed authors with something to say are the ones on screen; the qui
  f.bench.destroy();
 });
 
-test('with nobody in the news, every followed author is shown rather than folded away',async()=>{
- // A fold over an empty grid would say less than the list it hides.
+test('with nobody in the news the quiet authors stay folded until the reader expands them',async()=>{
+ // Marking the last paper seen must not open 109 cards.
  const f=fixture();
  const rows=[{id:'A1',name:'Ada',news:[],seen:[]},{id:'A2',name:'Bo',news:[],seen:[]}];
  f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
  await f.bench.show('authors');
- assert.deepEqual([...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent),['Ada','Bo']);
- assert.equal(f.findButton('조용한 저자 2명 보기'),undefined,'nothing to fold against');
+ const names=()=>[...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent);
+ assert.deepEqual(names(),[]);
+ await f.click('조용한 저자 2명 보기');
+ assert.deepEqual(names(),['Ada','Bo']);
+ f.bench.destroy();
+});
+
+test('R18 after the last news is marked seen the quiet authors stay folded and the manage list counts unseen papers only',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'Ada',news:[{id:'W1',doi:'10.1/a',title:'One'}],seen:[]},{id:'A2',name:'Bo',news:[{id:'W2',doi:'10.1/b',title:'Two'},{id:'W3',doi:'10.1/c',title:'Three'}],seen:[]},{id:'A3',name:'Cy',news:[],seen:[]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ f.runtime.cache.workbenchUI={...(f.runtime.cache.workbenchUI||{}),inboxSeen:{'1:10.1/a':'2026-09-01','1:10.1/b':'2026-09-01','1:10.1/c':'2026-09-01'}};
+ await f.bench.show('authors');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent),[],'everything seen: no cards until asked');
+ await f.click('목록 관리');
+ const counts=[...f.body().querySelectorAll('.sc-watch-table tbody tr')].map(tr=>tr.querySelector('td.sc-col-n').textContent);
+ assert.deepEqual(counts,['—','—','—'],'확인함 is respected in the count');
+ f.bench.destroy();
+});
+
+test('R18 an autosave that lands while the reader keeps typing does not collapse the inline memo',async()=>{
+ const f=fixture();
+ f.runtime.cache.items[1]={seconds:125,lastRead:new Date().toISOString(),remark:'first'};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:20,visited:5,percent:25,attachmentID:100,lastPageIndex:4}:{pages:{},total:0,visited:0,percent:0};
+ let release;f.library.setRemark=()=>new Promise(r=>{release=r;});
+ await f.bench.show('reading');
+ f.body().querySelector('.sc-resume-remark').click();
+ const field=f.body().querySelector('.sc-resume-memo-editor textarea');
+ field.value='first, second';field.dispatchEvent(new f.win.Event('input',{bubbles:true}));field.dispatchEvent(new f.win.Event('blur'));
+ await settle();field.focus();
+ field.value='first, second, third';field.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ release();await settle();
+ assert.equal(f.body().querySelector('.sc-resume-memo-editor textarea'),field,'still editing');
+ assert.equal(field.value,'first, second, third');
  f.bench.destroy();
 });
 
@@ -2789,8 +2821,8 @@ test('the journals tab opens on what the library does with each journal: held, u
  const cells=[...rows[0].querySelectorAll('[role=cell]')].map(c=>c.textContent);
  assert.equal(cells[1],'3편');
  assert.match(cells[2],/^2편/);
- assert.match(cells[3],/보유 75%.*시간 100%/s,'three of the four papers, all the reading time');
- assert.match(cells[5],/읽는 중·완료\s*10 · 1\/1편.*안 읽음\s*4 · 1\/2편/s,'the median of the known ones in each reading state, and on how many');
+ assert.match(cells[3],/75%.*100%/s,'three of the four papers, all the reading time');
+ assert.match(cells[5],/10 · 1\/1편.*4 · 1\/2편/s,'the median of the known ones in each reading state, and on how many');
  await f.click('2편');
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal-reading-paper .sc-hit-title-link')].map(n=>n.textContent).sort(),['Nature three','Paper Beta']);
  await f.click('읽은 시간순');
@@ -3802,7 +3834,7 @@ test('the watchlist shows a face for each person and finds the missing ones in o
  f.runtime.findWatchedPortraits=async()=>{searched++;faces.set('A1',{url:'https://example.org/voigt.jpg',page:'https://example.org/'});return {asked:1,found:1,wikimedia:0,homepage:1,none:0,requests:3};};
  f.setSelection([]);
  try{
-  await f.bench.show('authors');
+  await f.bench.show('authors');await f.click('조용한 저자 2명 보기');
   const card=name=>[...f.body().querySelectorAll('.sc-watch')].find(c=>c.querySelector('.sc-watch-name').textContent===name);
   // Initials until a photo is known; the photo, credited, once it is.
   assert.equal(card('Christopher A. Voigt').querySelector('.sc-watch-face .sc-face-text').textContent,'CV');
@@ -4607,5 +4639,95 @@ test('a day-old stored answer still renders, with its date, and the reason line 
  assert.ok(row.querySelector('.sc-hit-owned'),'redrawn as owned');
  assert.match(row.querySelector('.sc-path-why')?.textContent||'',/내 서재 3편 인용/,'the reason line is kept');
  assert.equal(row.querySelectorAll('.sc-path-why').length,1);
+ f.bench.destroy();
+});
+
+test('R18 clearing a record search resets the header count to the plain list',async()=>{
+ const f=fixture();
+ await f.bench.show('explore');
+ f.bench.state.exploreCount=1;
+ await f.bench.render();
+ assert.equal(f.bench.state.exploreCount,null,'no stale merged count survives a render without a record search');
+ f.bench.destroy();
+});
+
+test('R18 annotations group by paper then file, and the order choice flips p.6 against p.3 by modification date',async()=>{
+ const f=fixture();
+ f.refs.set(100,{id:100,parentID:1,getField:()=>'Main article'});f.refs.set(200,{id:200,parentID:1,getField:()=>'Supplementary'});f.refs.set(98,{id:98,parentID:2,getField:()=>'PDF'});
+ f.library.annotations=async()=>[
+  {id:'a',parentID:'1',attachmentID:'100',text:'page three',comment:'',color:'#ffd400',pageIndex:2,pageLabel:'3',modified:'2026-09-01 10:00:00'},
+  {id:'b',parentID:'2',attachmentID:'98',text:'other paper',comment:'',color:'#ffd400',pageIndex:0,pageLabel:'1',modified:'2026-09-10 10:00:00'},
+  {id:'c',parentID:'1',attachmentID:'200',text:'supplement',comment:'',color:'#ffd400',pageIndex:0,pageLabel:'1',modified:'2026-08-01 10:00:00'},
+  {id:'d',parentID:'1',attachmentID:'100',text:'page six',comment:'',color:'#ffd400',pageIndex:5,pageLabel:'6',modified:'2026-09-20 10:00:00'},
+  {id:'e',parentID:'1',attachmentID:'100',text:'undated',comment:'',color:'#ffd400',pageIndex:7,pageLabel:'8'}];
+ await f.bench.show('annotations');
+ const heads=()=>[...f.body().querySelectorAll('.sc-annot-group-name')].map(n=>n.textContent);
+ assert.equal(heads().filter(n=>n==='Paper Alpha').length,1,'one paper title for main and supplement');
+ assert.equal(heads().length,2,'two papers, each named once');
+ const texts=()=>[...f.body().querySelectorAll('.sc-annot-text')].map(n=>n.textContent);
+ f.bench.state.annotationPaperID='1';await f.bench.render();
+ assert.equal(f.body().querySelectorAll('.sc-annot-group-meta').length,1,'the paper head and meta once');
+ assert.equal(f.body().querySelectorAll('.sc-annot-file').length,2,'file subheads because there are several files');
+ const order1=texts();
+ assert.deepEqual(order1.slice(0,2),['page three','page six'],'page order: p.3 before p.6');
+ await f.click('최근 수정순');
+ assert.equal(f.runtime.cache.workbenchUI.annotationOrder,'recent','remembered');
+ const order2=texts();
+ assert.deepEqual(order2.slice(0,2),['page six','page three'],'recent order: p.6 first');
+ const main=order2.indexOf('supplement'),last=order2.indexOf('undated');
+ assert.ok(main>order2.indexOf('page three'),'the older file follows the newer file');
+ assert.ok(last>order2.indexOf('page three')&&last<main,'unknown dates last within their file');
+ await f.click('문헌·쪽순');
+ assert.deepEqual(texts().slice(0,2),['page three','page six']);
+ f.bench.destroy();
+});
+
+test('R18 the notes compose area folds over existing notes, opens when empty or drafted, and keeps drafts',async()=>{
+ const f=fixture();
+ f.library.notes=async()=>[{id:'9',parentID:'1',title:'Research question',text:'Research question and follow-up',html:'<p>q</p>',modified:'2026-09-01'}];
+ await f.bench.show('notes');
+ const compose=()=>f.body().querySelector('.sc-note-compose');
+ assert.equal(compose().hidden,true,'folded by default when the paper has notes');
+ assert.match(f.body().querySelector('.sc-note-head').textContent,/이 문헌의 노트 1개.*새 노트 쓰기.*다른 문헌 고르기/s);
+ await f.click('새 노트 쓰기');
+ assert.equal(compose().hidden,false);
+ f.input('새 노트 내용','unsaved thought');
+ await f.click('새 노트 쓰기');
+ assert.equal(compose().hidden,true,'folding keeps the text');
+ assert.equal(compose().querySelector('textarea').value,'unsaved thought');
+ await f.bench.render();
+ assert.equal(compose().hidden,false,'an unsaved draft opens it again');
+ assert.equal(compose().querySelector('textarea').value,'unsaved thought');
+ f.bench.destroy();
+ const g=fixture();
+ g.library.notes=async()=>[];
+ await g.bench.show('notes');
+ assert.equal(g.body().querySelector('.sc-note-compose').hidden,false,'no notes: write straight away');
+ g.bench.destroy();
+});
+
+test('R18 journal citations share one axis: 64 and 12 on it, unknown as a dash, legends once in the header',async()=>{
+ const f=fixture();
+ const mk=(id,venue,status,citations)=>({...f.papers[0],id:String(id),title:'P'+id,venue,status,citations});
+ f.runtime.state=ref=>({status:[11,21].includes(ref.id)?'done':'',citations:{11:64,12:64,13:12,14:12,21:0,22:null,23:5}[ref.id]??null,impactFactor:null});
+ for(const id of [11,12,13,14,21,22,23])f.refs.set(id,{id});
+ f.library.snapshot=async()=>[mk(11,'Example Methods','done',64),mk(13,'Example Methods','',12),mk(21,'Zero Journal','done',0),mk(22,'Zero Journal','',null),mk(23,'Only Unread','',5)];
+ await f.bench.load();await f.bench.show('journals');
+ const rows=[...f.body().querySelectorAll('.sc-journal-reading-row:not(.sc-journal-reading-header)')];
+ const row=name=>rows.find(r=>r.querySelector('.sc-journal-reading-name-text')?.textContent===name);
+ const ex=row('Example Methods');
+ assert.equal(ex.querySelectorAll('.sc-journal-citation-dot').length,2,'both marks on the one axis');
+ assert.equal(ex.querySelectorAll('.sc-journal-citation-join').length,1,'joined when both exist');
+ assert.deepEqual([...ex.querySelectorAll('.sc-journal-citation-value')].map(n=>n.textContent.split(' ·')[0]),['64','12']);
+ assert.equal(ex.querySelector('.sc-journal-citation-label'),null,'no per-row legend');
+ assert.equal(ex.querySelector('.sc-journal-reading-pct').textContent.includes('보유'),false,'no per-row 보유/시간 words');
+ const zero=row('Zero Journal');
+ const values=[...zero.querySelectorAll('.sc-journal-citation-value')].map(n=>n.textContent.split(' ·')[0]);
+ assert.deepEqual(values,['0','—'],'a real 0 and an unknown');
+ assert.equal(zero.querySelectorAll('.sc-journal-citation-dot').length,1,'unknown has no mark');
+ assert.match(zero.querySelector('.sc-journal-citation-dot').style.left,/\* 0\)/,'a real 0 sits at the axis start');
+ const head=f.body().querySelector('.sc-journal-reading-header');
+ assert.match(head.textContent,/읽는 중·완료.*안 읽음/);assert.match(head.textContent,/보유.*시간/);
+ assert.match(head.querySelector('.sc-journal-citation-axis').textContent,/^0/,'explicit axis ends');
  f.bench.destroy();
 });

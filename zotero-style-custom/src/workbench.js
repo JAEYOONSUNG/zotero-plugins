@@ -1941,13 +1941,31 @@
    // or filter starts back at 40 rather than keeping whatever was reached.
    const noteContext=JSON.stringify([state.query,state.scope,state.libraryID,state.status,state.ratingMin,state.yearFrom,state.yearTo,state.tag,state.type,state.color]);
    if(state.noteContext!==noteContext){state.noteContext=noteContext;state.noteLimit=40;}
-   if(target.length!==1){if(target.length>1){node('p',`선택한 ${target.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});const pickBar=bar();for(const it of target.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar,{'data-pick':String(it.id)});}else notePaperChooser();}
+   // Notes first, so the compose fold can say how many the paper has and stay closed over them.
+   const own=target.length===1&&!state.query&&scoped().some(i=>String(i.id)===String(target[0].id));
+   const notes=await scopeNotes(own?[String(target[0].id)]:ids());if(token!==epoch||disposed)return;
+   const mine=target.length===1?(own?notes:notes.filter(n=>String(n.parentID||'')===String(target[0].id))).length:notes.length;
+   /* The compose area folds by default when there is something to read; it opens when there is nothing yet, when an unsaved draft is in it, or when the reader opened it (kept across redraws). */
+   const composeKey=target.length===1?String(target[0].id):'choose';
+   const draftKey=draftContext+'|새 노트 내용|0';
+   const hasDraft=target.length===1&&!!String(drafts.get(draftKey)||'').trim();
+   const wantOpen=hasDraft||state.noteComposeOpen===composeKey||(!mine&&!state.query);
+   const headLine=node('p',null,body,{class:'sc-muted sc-note-head'});
+   const host=node('div',null,body,{class:'sc-note-compose'});
+   host.hidden=!wantOpen;
+   const dot=()=>node('span',' · ',headLine,{'aria-hidden':'true'});
+   node('span',T(target.length===1?`이 문헌의 노트 ${mine}개`:`이 범위의 노트 ${mine}개`),headLine);dot();
+   const toggle=button(target.length===1?'새 노트 쓰기':'노트 붙일 문헌 고르기',()=>{host.hidden=!host.hidden;toggle.setAttribute('aria-expanded',String(!host.hidden));state.noteComposeOpen=host.hidden?null:composeKey;},headLine,{class:'sc-inline','aria-expanded':String(wantOpen)});
+   if(target.length===1){dot();button('다른 문헌 고르기',()=>{state.selected=new Set();restoreKept();render();},headLine,{class:'sc-inline'});}
+   if(target.length!==1){
+    // Built where it always was, then carried into the fold.
+    const mark=body.lastChild;
+    if(target.length>1){node('p',`선택한 ${target.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});const pickBar=bar();for(const it of target.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar,{'data-pick':String(it.id)});}else notePaperChooser();
+    while(mark.nextSibling)host.appendChild(mark.nextSibling);
+   }
    else{
-    // While searching, the results come first and writing a new note folds.
-    const host=state.query?node('details',null,body,{class:'sc-note-compose'}):body;
-    if(state.query)node('summary',T('새 노트 쓰기'),host);
-    const head=node('p',`${target[0].title}에 새 노트`,host,{class:'sc-muted'});button('다른 문헌 고르기',()=>{state.selected=new Set();restoreKept();render();},head,{class:'sc-inline'});
-    const draft=node('textarea',null,host,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar(host);const saveNote=button('새 노트 저장',async()=>{if(!draft.value.trim())throw new Error('빈 노트는 만들지 않으니 노트 내용을 먼저 입력하세요.');const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);noteCache=null;finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
+    node('p',`${target[0].title}에 새 노트`,host,{class:'sc-muted'});
+    const draft=node('textarea',null,host,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar(host);const saveNote=button('새 노트 저장',async()=>{if(!draft.value.trim())throw new Error('빈 노트는 만들지 않으니 노트 내용을 먼저 입력하세요.');const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);noteCache=null;finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};state.noteComposeOpen=null;await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
     // 이 문헌의 주석만으로 노트를 만든다. 주석이 없으면 아무것도 만들지 않는다.
     button('이 문헌 주석에서 노트 만들기',async()=>{
      const paper=target[0],parent=paper.id,libraryID=state.libraryID;
@@ -1961,8 +1979,7 @@
    }
    // The notes: the chosen paper's own when it sits in the scope and nothing
    // is being searched; otherwise the scope's, newest first, as a note search.
-   const own=target.length===1&&!state.query&&scoped().some(i=>String(i.id)===String(target[0].id));
-   const notes=await scopeNotes(own?[String(target[0].id)]:ids());if(token!==epoch||disposed)return;/* A note is found by its paper too: "Kim 재현" finds what was written
+   /* A note is found by its paper too: "Kim 재현" finds what was written
       about reproducibility in Kim's paper. Every word must be in the note or
       its paper; one found only through the paper says which of its fields. */
    const paperOf=n=>state.items.find(i=>String(i.id)===String(n.parentID||''));
@@ -2145,6 +2162,9 @@
     node('span',String(n),chip);
     chip.addEventListener('click',()=>{state.color=on?'':colorKey(hex);render();});
    });
+   // Order of the list, remembered: by paper and page, or by what was touched last.
+   const orderBox=node('span',null,summary,{class:'sc-annot-order',role:'group','aria-label':T('주석 정렬')});
+   for(const [key,label] of [['page','문헌·쪽순'],['recent','최근 수정순']])button(label,async()=>{await saveUI({annotationOrder:key});render();},orderBox,{'aria-pressed':String((runtime.cache.workbenchUI?.annotationOrder==='recent')===(key==='recent'))});
    /* 문헌별 주석 분포: each paper a row, each colour a column, the count of
       annotations in the cell -- where the methods and the key results were
       marked across papers. The article and its supplement are one paper. A
@@ -2248,8 +2268,7 @@
    };
    summary.appendChild(selectionTools);
 
-   // Grouped by document and read in page order, which is the order they were
-   // made in and the only order that reads as a pass through the paper.
+   // Grouped by paper, then file; page order is the order they were made in, the only one that reads as a pass through the paper.
    const byDocument=new Map();
    for(const a of filtered){
     const key=a.attachmentID||'';
@@ -2274,89 +2293,109 @@
    }
    // Three groups all called "Full text PDF" say nothing; the paper's title does.
    const paperOf=id=>{const parent=parents.get(id);return parent?state.items.find(i=>String(i.id)===String(parent))?.title:null;};
-   const siblings=new Map();for(const id of byDocument.keys()){const key=parents.get(id)||id;siblings.set(key,(siblings.get(key)||0)+1);}
-   const groupName=id=>{const paper=paperOf(id),file=titles.get(id)||T('첨부파일');if(!paper)return file;return (siblings.get(parents.get(id))||0)>1?`${paper} · ${file}`:paper;};
+   const fileTitle=id=>titles.get(id)||T('첨부파일');
+   // Recent order sorts papers, files and annotations by modification date, unknown dates last.
+   const recent=runtime.cache.workbenchUI?.annotationOrder==='recent';
+   const stamp=a=>String(a.modified||a.dateModified||'');
+   const newer=(x,y)=>x&&y?y.localeCompare(x):x?-1:y?1:0;
+   const latest=list_=>list_.reduce((m,a)=>stamp(a)>m?stamp(a):m,'');
+   const byPaper=new Map();
+   for(const [id,group] of byDocument){
+    const key=parents.get(id)||'att:'+id;
+    if(!byPaper.has(key))byPaper.set(key,{key,files:[],count:0});
+    const entry=byPaper.get(key);entry.files.push({id,group});entry.count+=group.length;
+   }
+   for(const entry of byPaper.values()){
+    for(const file of entry.files)file.group.sort(recent?(x,y)=>newer(stamp(x),stamp(y))||(x.pageIndex??1e9)-(y.pageIndex??1e9):(x,y)=>(x.pageIndex??1e9)-(y.pageIndex??1e9));
+    if(recent){for(const file of entry.files)file.at=latest(file.group);entry.files.sort((x,y)=>newer(x.at,y.at));entry.at=entry.files[0]?.at||'';}
+   }
+   const papers=[...byPaper.values()];
+   if(recent)papers.sort((x,y)=>newer(x.at,y.at));
    if(token!==epoch||disposed)return;
+
 
    let budget=state.annotationBudget||setting('annotationPageSize',150);
    const rest=[];
-   for(const [attachmentID,group] of byDocument){
-    if(budget<=0){rest.push([attachmentID,group]);continue;}
-    group.sort((a,b)=>(a.pageIndex??1e9)-(b.pageIndex??1e9));
-    /* Every group is named, one paper or many, with what it is: its year,
-       journal and reading state, and how many annotations matched. With
-       several papers each shows three first, so one long paper does not push
-       the others off the page. */
+   for(const paperEntry of papers){
+    if(budget<=0){rest.push(paperEntry);continue;}
+    const first=paperEntry.files[0].id,parentKey=parents.get(first);
+    // The paper's head and meta once; with several papers each shows three first, so one long paper does not push the others off the page.
     const head=node('h3',null,body,{class:'sc-annot-group'});
-    node('span',groupName(attachmentID),head,{class:'sc-annot-group-name'});
-    node('span',`${group.length}`,head,{class:'sc-annot-group-count'});
-    const paper=paperByID.get(String(parents.get(attachmentID)||''));
+    node('span',paperOf(first)||fileTitle(first),head,{class:'sc-annot-group-name'});
+    node('span',`${paperEntry.count}`,head,{class:'sc-annot-group-count'});
+    const paper=paperByID.get(String(parentKey||''));
     if(paper){
      const status=paper.status==='done'?T('완료'):paper.status==='reading'?T('읽는 중'):T('안 읽음');
-     node('p',[paper.year,paper.venue,status,state.query?T(`일치 주석 ${group.length}개`):''].filter(Boolean).join(' · '),body,{class:'sc-annot-group-meta'});
+     node('p',[paper.year,paper.venue,status,state.query?T(`일치 주석 ${paperEntry.count}개`):''].filter(Boolean).join(' · '),body,{class:'sc-annot-group-meta'});
     }
-    const capped=byDocument.size>1&&!openAnnotGroups.has(attachmentID)&&group.length>3;
-    // What is drawn is what is spent: three shown from a long paper leave room for the next paper.
-    budget-=capped?3:group.length;
-    const stack=node('div',null,body,{class:'sc-annots'});
-    for(const a of capped?group.slice(0,3):group){
-     visibleAnnotationIDs.add(a.id);
-     const tint=/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'var(--sc-faint)';
-     const row=node('article',null,stack,{class:'sc-annot',tabindex:'0','data-selected':String(state.annotationIDs.has(a.id))});
-     // The annotation's colour, shown as a square before its page (see the CSS).
-     row.style.setProperty('--sc-annot',tint);
-     const head=node('div',null,row,{class:'sc-annot-head'});
-     node('span',`p.${a.pageLabel||((a.pageIndex??0)+1)}`,head,{class:'sc-annot-page'});
-     if(a.type&&a.type!=='highlight')node('span',({underline:'밑줄',note:'메모',image:'그림',ink:'필기',text:'텍스트'})[a.type]||a.type,head,{class:'sc-annot-kind'});
-     const actions=node('div',null,head,{class:'sc-annot-actions'});
-     button('원문',()=>library.openItem(a.id),actions,{'data-opens':'window'});
-     button('내용 복사',()=>copy(a.text+(a.comment?'\n'+a.comment:'')),actions);
-     button('참조 노트',async()=>{
-      const mark=epoch,links=await library.backlinks(a.id);
-      if(disposed||mark!==epoch||!row.isConnected)return;
-      let box=row.querySelector('[data-annotation-backlinks]');
-      if(!box)box=node('div',null,row,{'data-annotation-backlinks':'true',class:'sc-annot-links'});
-      box.replaceChildren();
-      const notes=links.filter(link=>link.kind==='note');
-      node('span',notes.length?`참조 노트 ${notes.length}개`:'이 주석을 인용한 노트가 없습니다.',box,{class:'sc-muted'});
-      for(const note of notes)button(note.title||'제목 없는 노트',()=>library.openItem(note.id),box,{'data-opens':'window'});
-     },actions);
-     if(viaSource.has(a.id))node('span',T('문헌 정보로 찾음'),head,{class:'sc-annot-via',title:T('검색어가 주석이 아니라 이 주석이 있는 문헌의 제목·저자·저널·태그에 있습니다')});
-     if(a.text)node('p',a.text,row,{class:'sc-annot-text'});
-     // The annotation's own comment is the memo: it travels with the highlight,
-     // shows in the reader and syncs, so there is no second place to look.
-     const writeMemo=(focus)=>{
-      const memo=node('textarea',null,row,{class:'sc-annot-memo',rows:'1',
-       placeholder:'메모','aria-label':'이 주석의 메모'});
-      memo.value=a.comment||'';
-      autoGrow(memo);
-      bindMemo(memo,value=>library.setAnnotationComment(a.id,value),`주석 ${a.pageLabel||''}`);
-      if(focus)memo.focus();
-      return memo;
-     };
-     if(a.comment)writeMemo(false);
-     else{
-      const add=button('메모',()=>{add.remove();writeMemo(true);},actions,{class:'sc-annot-add-memo'});
+    const capped=papers.length>1&&!openAnnotGroups.has(paperEntry.key)&&paperEntry.count>3;
+    // What is drawn is what is spent.
+    budget-=capped?3:paperEntry.count;
+    let left=capped?3:Infinity;
+    for(const {id:attachmentID,group} of paperEntry.files){
+     if(left<=0)break;
+     if(paperEntry.files.length>1)node('h4',fileTitle(attachmentID),body,{class:'sc-annot-file',title:fileTitle(attachmentID)});
+     const stack=node('div',null,body,{class:'sc-annots'});
+     for(const a of group.slice(0,left)){
+      left--;
+       visibleAnnotationIDs.add(a.id);
+       const tint=/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'var(--sc-faint)';
+       const row=node('article',null,stack,{class:'sc-annot',tabindex:'0','data-selected':String(state.annotationIDs.has(a.id))});
+       // The annotation's colour, shown as a square before its page (see the CSS).
+       row.style.setProperty('--sc-annot',tint);
+       const head=node('div',null,row,{class:'sc-annot-head'});
+       node('span',`p.${a.pageLabel||((a.pageIndex??0)+1)}`,head,{class:'sc-annot-page'});
+       if(a.type&&a.type!=='highlight')node('span',({underline:'밑줄',note:'메모',image:'그림',ink:'필기',text:'텍스트'})[a.type]||a.type,head,{class:'sc-annot-kind'});
+       const actions=node('div',null,head,{class:'sc-annot-actions'});
+       button('원문',()=>library.openItem(a.id),actions,{'data-opens':'window'});
+       button('내용 복사',()=>copy(a.text+(a.comment?'\n'+a.comment:'')),actions);
+       button('참조 노트',async()=>{
+        const mark=epoch,links=await library.backlinks(a.id);
+        if(disposed||mark!==epoch||!row.isConnected)return;
+        let box=row.querySelector('[data-annotation-backlinks]');
+        if(!box)box=node('div',null,row,{'data-annotation-backlinks':'true',class:'sc-annot-links'});
+        box.replaceChildren();
+        const notes=links.filter(link=>link.kind==='note');
+        node('span',notes.length?`참조 노트 ${notes.length}개`:'이 주석을 인용한 노트가 없습니다.',box,{class:'sc-muted'});
+        for(const note of notes)button(note.title||'제목 없는 노트',()=>library.openItem(note.id),box,{'data-opens':'window'});
+       },actions);
+       if(viaSource.has(a.id))node('span',T('문헌 정보로 찾음'),head,{class:'sc-annot-via',title:T('검색어가 주석이 아니라 이 주석이 있는 문헌의 제목·저자·저널·태그에 있습니다')});
+       if(a.text)node('p',a.text,row,{class:'sc-annot-text'});
+       // The annotation's own comment is the memo: it travels with the highlight,
+       // shows in the reader and syncs, so there is no second place to look.
+       const writeMemo=(focus)=>{
+        const memo=node('textarea',null,row,{class:'sc-annot-memo',rows:'1',
+         placeholder:'메모','aria-label':'이 주석의 메모'});
+        memo.value=a.comment||'';
+        autoGrow(memo);
+        bindMemo(memo,value=>library.setAnnotationComment(a.id,value),`주석 ${a.pageLabel||''}`);
+        if(focus)memo.focus();
+        return memo;
+       };
+       if(a.comment)writeMemo(false);
+       else{
+        const add=button('메모',()=>{add.remove();writeMemo(true);},actions,{class:'sc-annot-add-memo'});
+       }
+       // Clicking the card selects it; the checkbox that used to do this carried a
+       // label longer than most of the annotations.
+       row.addEventListener('click',event=>{
+        if(event.target.closest('button, textarea, a'))return;
+        if(state.annotationIDs.has(a.id))state.annotationIDs.delete(a.id);
+        else state.annotationIDs.add(a.id);
+        row.dataset.selected=String(state.annotationIDs.has(a.id));
+        syncChosen();
+       });
+       row.addEventListener('keydown',event=>{
+        if(event.target!==row)return; // Space and Enter typed in the memo stay in the memo.
+        if(event.key===' '||event.key==='Enter'){event.preventDefault();row.click();}
+       });
+      }
      }
-     // Clicking the card selects it; the checkbox that used to do this carried a
-     // label longer than most of the annotations.
-     row.addEventListener('click',event=>{
-      if(event.target.closest('button, textarea, a'))return;
-      if(state.annotationIDs.has(a.id))state.annotationIDs.delete(a.id);
-      else state.annotationIDs.add(a.id);
-      row.dataset.selected=String(state.annotationIDs.has(a.id));
-      syncChosen();
-     });
-     row.addEventListener('keydown',event=>{
-      if(event.target!==row)return; // Space and Enter typed in the memo stay in the memo.
-      if(event.key===' '||event.key==='Enter'){event.preventDefault();row.click();}
-     });
-    }
-    if(capped)button(T(`이 문헌 주석 ${group.length-3}개 더 보기`),()=>{openAnnotGroups.add(attachmentID);render();},body,{class:'sc-annot-group-more'});
+     if(capped)button(T(`이 문헌 주석 ${paperEntry.count-3}개 더 보기`),()=>{openAnnotGroups.add(paperEntry.key);render();},body,{class:'sc-annot-group-more'});
    }
    syncChosen();
    if(rest.length){
-    const more=rest.reduce((sum,[,group])=>sum+group.length,0);
+    const more=rest.reduce((sum,entry)=>sum+entry.count,0);
     const wrap=node('div',null,body,{class:'sc-annot-more'});
     node('span',`${rest.length}개 문헌의 주석 ${more}개가 더 있습니다.`,wrap,{class:'sc-muted'});
     button('더 보기',()=>{state.annotationBudget=(state.annotationBudget||setting('annotationPageSize',150))+300;render();},wrap,{'data-variant':'primary'});
@@ -2916,9 +2955,12 @@
       const field=node('textarea',null,editor,{rows:'2','aria-label':T(`${r.item.title} 메모`),placeholder:T('짧게 적어두세요. 노트 항목은 만들지 않습니다.')});
       field.value=r.entry.remark||'';
       field.focus();
+      let typing=true;for(const [type,on] of [['focus',true],['input',true],['blur',false]])field.addEventListener(type,()=>{typing=on;});
       bindMemo(field,value=>Promise.resolve(library.setRemark(r.item.id,value)).then(result=>{
        r.entry.remark=String(value||'');
        const held=state.items.find(i=>String(i.id)===String(r.item.id));if(held)held.remark=String(value||'');
+       // An autosave that lands while the reader keeps typing must not collapse the editor under them.
+       if(!field.isConnected||typing||field.value!==value)return result;
        renderRemarkView();
        return result;
       }),r.item.title||'문헌');
@@ -4689,8 +4731,8 @@
     if(fresh.length)sectionHead('관심 저자',watched.length,parent);
     const hasNews=person=>!!(unseenWorks(person).length||person.newPatents?.length||(person.moved&&person.moved.to));
     const loud=watched.filter(hasNews),quiet=watched.filter(person=>!hasNews(person));
-    // Nobody has anything new: a fold over an empty grid says less than the list.
-    const folding=loud.length>0&&quiet.length>0;
+    // Quiet authors stay folded whether or not any news is left (marking the last one seen must not open 109 cards); only the reader's press shows them.
+    const folding=quiet.length>0;
     const shown=folding&&!state.watchQuietOpen?loud:watched;
     const rows=node('div',null,parent,{class:'sc-watch-grid'});
     for(const person of shown){
@@ -4762,7 +4804,7 @@
     const sort=state.watchSort||'news';
     // The library-match stats behind 보유/완료/안 읽음/읽은 시간: one lookup
     // per person against the totals built once in authorTotals above.
-    const order={news:(a,b)=>((b.news?.length||0)+(b.newPatents?.length||0))-((a.news?.length||0)+(a.newPatents?.length||0))||a.name.localeCompare(b.name),name:(a,b)=>a.name.localeCompare(b.name),place:(a,b)=>String(a.institution||'').localeCompare(String(b.institution||''))||a.name.localeCompare(b.name),checked:(a,b)=>String(a.sweptAt||'').localeCompare(String(b.sweptAt||''))||a.name.localeCompare(b.name),added:(a,b)=>String(b.checkedAt||'').localeCompare(String(a.checkedAt||'')),
+    const order={news:(a,b)=>(unseenWorks(b).length+(b.newPatents?.length||0))-(unseenWorks(a).length+(a.newPatents?.length||0))||a.name.localeCompare(b.name),name:(a,b)=>a.name.localeCompare(b.name),place:(a,b)=>String(a.institution||'').localeCompare(String(b.institution||''))||a.name.localeCompare(b.name),checked:(a,b)=>String(a.sweptAt||'').localeCompare(String(b.sweptAt||''))||a.name.localeCompare(b.name),added:(a,b)=>String(b.checkedAt||'').localeCompare(String(a.checkedAt||'')),
      time:(a,b)=>statsFor(b.name).seconds-statsFor(a.name).seconds||a.name.localeCompare(b.name),
      unread:(a,b)=>statsFor(b.name).unread-statsFor(a.name).unread||a.name.localeCompare(b.name),
      recent:(a,b)=>statsFor(b.name).last-statsFor(a.name).last||a.name.localeCompare(b.name)}[sort];
@@ -4798,7 +4840,7 @@
       node('span',null,meter,{class:'sc-watch-time-fill'}).style.width=Math.round(100*stats.seconds/maxSeconds)+'%';
      } else node('span','—',timeCell,{class:'sc-none'});
      node('td',person.sweptAt?person.sweptAt.slice(0,10):'아직 없음',tr,{class:'sc-col-date'});
-     const news=person.news?.length||0;node('td',news?String(news):'—',tr,{class:'sc-col-n'+(news?' sc-watch-count':' sc-none')});
+     const news=unseenWorks(person).length;node('td',news?String(news):'—',tr,{class:'sc-col-n'+(news?' sc-watch-count':' sc-none')});
      const patents=person.patents?.length||0;node('td',patents?String(patents)+(person.newPatents?.length?` (+${person.newPatents.length})`:''):'—',tr,{class:'sc-col-n'+(patents?'':' sc-none')});
      const act=node('td',null,tr,{class:'sc-col-act'});
      // Letting someone go drops their baseline and news: the first press only arms the button.
@@ -5096,7 +5138,16 @@
    const shown=all.slice(0,state.journalReadingAll?all.length:8);
    const table=node('div',null,box,{class:'sc-journal-reading-table',role:'table'});
    const header=node('div',null,table,{class:'sc-journal-reading-row sc-journal-reading-header',role:'row'});
-   for(const label of ['저널','보유','안 읽음','보유·시간 비중','읽은 시간','인용 중앙값'])node('span',T(label),header,{role:'columnheader'});
+   // Legends live here once, not on every row.
+   for(const label of ['저널','보유','안 읽음'])node('span',T(label),header,{role:'columnheader'});
+   const mixHead=node('span',null,header,{role:'columnheader',class:'sc-journal-reading-mix-head'});
+   node('span',T('비중'),mixHead);node('span',T('위 보유 / 아래 시간'),mixHead,{class:'sc-journal-legend'});
+   node('span',T('읽은 시간'),header,{role:'columnheader'});
+   const citeHead=node('span',null,header,{role:'columnheader',class:'sc-journal-citation-head'});
+   const axisEnds=node('span',null,citeHead,{class:'sc-journal-citation-axis'});
+   node('span','0',axisEnds);node('span',citeScale.toLocaleString(),axisEnds);
+   node('span',T('인용 중앙값'),citeHead,{class:'sc-journal-citation-title'});
+   node('span',T('● 읽는 중·완료 / ■ 안 읽음'),citeHead,{class:'sc-journal-legend'});
    for(const g of shown){
     const row=node('div',null,table,{class:'sc-journal-reading-row',role:'row'});
     const nameCell=node('div',null,row,{class:'sc-journal-reading-name',role:'cell'});
@@ -5137,24 +5188,28 @@
     const share=(label,part,whole)=>{
      const line=node('span',null,mix,{class:'sc-journal-reading-share'});
      const pct=whole>0?Math.round(100*part/whole):null;
-     node('span',pct==null?T(`${label} —`):T(`${label} ${pct}%`),line,{class:'sc-journal-reading-pct'});
+     node('span',pct==null?'—':`${pct}%`,line,{class:'sc-journal-reading-pct',title:T(label)});
      const scale=node('span',null,line,{class:'sc-journal-reading-bar','aria-hidden':'true'});
      if(pct!=null)node('span',null,scale).style.width=`${pct}%`;
     };
     share('보유',g.items.length,totalPapers);
     share('시간',g.seconds,totalSeconds);
     node('span',g.seconds>0?(runtime.formatReadTime?runtime.formatReadTime(g.seconds):Math.round(g.seconds/60)+'분'):'—',row,{class:'sc-journal-reading-num',role:'cell'});
-    /* Two figures on one scale shared by every row: a filled dot for the
-       papers read or being read, a filled square for the unread, each with
-       the count it rests on. No record is —; a real 0 is 0. */
+    /* Both medians on one axis shared by every row (0 to the header's end value): a dot for the papers read or being read, a square for the unread, in two lanes so equal values never fully overlap, joined by a thin line when both exist. No record is no mark and —; a real 0 sits at the axis start. */
     const cell=node('span',null,row,{class:'sc-journal-reading-num sc-journal-reading-citation-compare',role:'cell',title:T('인용 수를 아는 문헌만으로 계산합니다')});
+    const plot=node('span',null,cell,{class:'sc-journal-citation-plot','aria-hidden':'true'});
+    const at=part=>Math.min(1,Math.max(0,part.median/citeScale));
+    const fx=part=>`calc(5px + (100% - 10px) * ${at(part)})`;
+    const [rd,un]=g.split;
+    if(rd.median!=null&&un.median!=null){
+     const join=node('span',null,plot,{class:'sc-journal-citation-join'});
+     join.style.left=fx(at(rd)<=at(un)?rd:un);join.style.width=`calc((100% - 10px) * ${Math.abs(at(rd)-at(un))})`;
+    }
+    for(const part of g.split)if(part.median!=null)node('span',part.key==='read'?'●':'■',plot,{class:'sc-journal-citation-dot','data-group':part.key}).style.left=fx(part);
     for(const part of g.split){
      const line=node('span',null,cell,{class:'sc-journal-citation-line','data-group':part.key});
      node('span',part.key==='read'?'●':'■',line,{class:'sc-journal-citation-mark','aria-hidden':'true'});
-     node('span',part.key==='read'?T('읽는 중·완료'):T('안 읽음'),line,{class:'sc-journal-citation-label'});
      node('span',part.median==null?'—':`${Math.round(part.median).toLocaleString()} · ${part.known}/${part.n}편`,line,{class:'sc-journal-citation-value'});
-     const track=node('span',null,line,{class:'sc-journal-citation-track','aria-hidden':'true'});
-     if(part.median!=null)node('span',part.key==='read'?'●':'■',track,{class:'sc-journal-citation-dot'}).style.left=`${Math.round(100*part.median/citeScale)}%`;
     }
     if(open){
      const list=node('div',null,table,{class:'sc-journal-reading-papers',role:'row'});
@@ -5548,7 +5603,7 @@
       broken: after 자세히 the scope stayed on the selection, and the
       selection went away with the next click in the tree. With nothing to
       show, the scope falls back to the library. */
-   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';state.selectionLabel='';restoreKept();}const token=++epoch;clear();for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});
+   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';state.selectionLabel='';restoreKept();}const token=++epoch;state.exploreCount=null;clear();for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});
    // Said in the panel, never in a modal: the first background write into Extra.
    if(runtime.cache?.citationExtraNoticePending){win.setTimeout(()=>{if(disposed||panel.hidden||!runtime.cache.citationExtraNoticePending)return;message("인용 수를 Extra 필드에 'Citations: N (출처, 날짜)' 한 줄로 기록합니다. 원하지 않으면 설정 → Style Custom → 인용 수·IF → '논문 추가·수정 시 인용 수 조회 후 Extra 저장'을 끄세요.");delete runtime.cache.citationExtraNoticePending;runtime.dirty=true;},0);}try{
    switch(state.tab){case'explore':{
@@ -5566,7 +5621,7 @@
      state.exploreCount=items.length;
      await paperList(items,{hits});
      if(token===epoch&&!disposed)updateChrome();
-    } else {state.exploreCount=null;await paperList(rows());}
+    } else {await paperList(rows());}
     break;
    }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();

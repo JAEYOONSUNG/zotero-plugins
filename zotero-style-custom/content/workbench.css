@@ -1605,7 +1605,7 @@
 #style-custom-workbench .sc-journal-reading-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
 #style-custom-workbench .sc-journal-reading-head .sc-segmented { margin-left: auto; }
 #style-custom-workbench .sc-journal-reading-table { display: flex; flex-direction: column; }
-#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 52px 60px 176px 84px 250px; gap: 10px; align-items: center; min-height: 28px; padding: 3px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
+#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 52px 60px 118px 76px 200px; gap: 10px; align-items: center; min-height: 28px; padding: 3px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
 #style-custom-workbench .sc-journal-reading-header { font-size: 11px; color: var(--sc-muted); border-top: 0; min-height: 0; }
 #style-custom-workbench .sc-journal-reading-header > span:not(:first-child) { text-align: right; }
 #style-custom-workbench .sc-journal-reading-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -1616,7 +1616,7 @@
 #style-custom-workbench .sc-journal-reading-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--sc-text); white-space: nowrap; }
 #style-custom-workbench .sc-journal-reading-unread { text-align: right; }
 #style-custom-workbench .sc-journal-reading-mix { display: flex; flex-direction: column; gap: 2px; }
-#style-custom-workbench .sc-journal-reading-share { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 6px; font-size: 11px; color: var(--sc-muted); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-journal-reading-share { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 6px; font-size: 11px; color: var(--sc-muted); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-journal-reading-count { min-height: 0; padding: 1px 4px; border: 0; background: none; box-shadow: none; font: inherit; font-variant-numeric: tabular-nums; color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; border-radius: 7px; }
 #style-custom-workbench .sc-journal-reading-count:hover, #style-custom-workbench .sc-journal-reading-count[aria-expanded=true] { background: var(--sc-fill); }
 #style-custom-workbench .sc-journal-reading-bar { display: block; height: 4px; background: var(--sc-fill); }
@@ -1791,17 +1791,27 @@
 #style-custom-workbench .sc-author-shelf-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--sc-border); font-size: 12px; }
 #style-custom-workbench .sc-author-shelf-row .sc-hit-title-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 #style-custom-workbench .sc-author-shelf-meta { white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* 인용 중앙값 by reading state: two lines, a shared grey scale, a dot and a square. */
-#style-custom-workbench .sc-journal-reading-citation-compare { display: flex; flex-direction: column; gap: 1px; }
-#style-custom-workbench .sc-journal-citation-line { display: grid; grid-template-columns: 12px 64px 76px 1fr; gap: 4px; align-items: center; font-size: 11px; }
-#style-custom-workbench .sc-journal-citation-mark { color: var(--sc-muted); font-size: 11px; text-align: center; }
-#style-custom-workbench .sc-journal-citation-label { color: var(--sc-muted); text-align: start; white-space: nowrap; }
-#style-custom-workbench .sc-journal-citation-value { color: var(--sc-text); text-align: end; white-space: nowrap; }
-#style-custom-workbench .sc-journal-citation-track { position: relative; height: 9px; border-bottom: 1px solid var(--sc-border); }
-#style-custom-workbench .sc-journal-citation-dot { position: absolute; bottom: -4px; transform: translateX(-50%); font-size: 11px; line-height: 11px; color: var(--sc-text); }
+/* 인용 중앙값: one shared axis, a dot (read) and a square (unread) in two lanes, joined by a thin line. */
+#style-custom-workbench .sc-journal-reading-citation-compare { display: grid; grid-template-columns: 84px minmax(0,1fr); grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: start; }
+#style-custom-workbench .sc-journal-citation-plot { grid-column: 1; grid-row: 1 / span 2; position: relative; height: 24px; }
+#style-custom-workbench .sc-journal-citation-plot::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--sc-border); }
+#style-custom-workbench .sc-journal-citation-join { position: absolute; top: 50%; height: 0; border-top: 1px solid var(--sc-muted); }
+#style-custom-workbench .sc-journal-citation-dot { position: absolute; transform: translate(-50%, 0); font-size: 11px; line-height: 11px; color: var(--sc-text); }
+#style-custom-workbench .sc-journal-citation-dot[data-group=read] { top: 0; }
+#style-custom-workbench .sc-journal-citation-dot[data-group=unread] { bottom: 0; }
+#style-custom-workbench .sc-journal-citation-line { grid-column: 2; display: flex; gap: 4px; align-items: baseline; font-size: 11px; white-space: nowrap; }
+#style-custom-workbench .sc-journal-citation-mark { color: var(--sc-muted); font-size: 11px; }
+#style-custom-workbench .sc-journal-citation-value { color: var(--sc-text); }
+#style-custom-workbench .sc-journal-citation-head { display: grid; grid-template-columns: 84px minmax(0,1fr); column-gap: 8px; text-align: start; }
+#style-custom-workbench .sc-journal-citation-axis { grid-column: 1; grid-row: 1 / span 2; display: flex; justify-content: space-between; align-self: end; padding: 0 2px; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-journal-citation-title, #style-custom-workbench .sc-journal-legend { grid-column: 2; }
+#style-custom-workbench .sc-journal-legend { display: block; font-size: 11px; color: var(--sc-muted); white-space: nowrap; }
+#style-custom-workbench .sc-journal-reading-mix-head { display: flex; flex-direction: column; }
+#style-custom-workbench .sc-journal-reading-header > .sc-journal-citation-head, #style-custom-workbench .sc-journal-reading-header > .sc-journal-reading-mix-head { text-align: start; }
 @container sc-workbench (max-width: 640px) {
- #style-custom-workbench .sc-journal-citation-track { display: none; }
- #style-custom-workbench .sc-journal-citation-line { grid-template-columns: 10px auto auto; }
+ #style-custom-workbench .sc-journal-citation-plot, #style-custom-workbench .sc-journal-citation-axis { display: none; }
+ #style-custom-workbench .sc-journal-reading-citation-compare, #style-custom-workbench .sc-journal-citation-head { grid-template-columns: minmax(0,1fr); }
+ #style-custom-workbench .sc-journal-citation-line, #style-custom-workbench .sc-journal-citation-title, #style-custom-workbench .sc-journal-legend { grid-column: 1; }
 }
 /* Tags: the tree first, editing folded under it. */
 #style-custom-workbench .sc-tag-edit { margin: 14px 0 0; }
@@ -1812,17 +1822,9 @@
 #style-custom-workbench .sc-reading-views { margin: 4px 0 8px; }
 #style-custom-workbench .sc-collection-unread { min-height: 0; padding: 0 3px; margin: 0 -3px; border: 0; background: none; box-shadow: none; font: inherit; color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; border-radius: 7px; }
 #style-custom-workbench .sc-collection-unread:hover { background: var(--sc-fill); }
-/* A middle width: the citation split takes its own line under the row, so the journal name keeps its room. */
-@container sc-workbench (max-width: 1060px) {
- #style-custom-workbench .sc-journal-reading-row { grid-template-columns: minmax(0,1fr) 52px 60px 176px 84px; }
- #style-custom-workbench .sc-journal-reading-header > :last-child { display: none; }
- #style-custom-workbench .sc-journal-reading-citation-compare { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; gap: 2px 18px; }
- #style-custom-workbench .sc-journal-citation-line { grid-template-columns: 12px auto auto 90px; }
-}
 /* ...and below 640px the narrow layout of 내 문헌 분석 again, after the middle one. */
 @container sc-workbench (max-width: 640px) {
  #style-custom-workbench .sc-journal-reading-row { grid-template-columns: 40px 44px minmax(0,1.6fr) minmax(0,1fr); row-gap: 2px; gap: 6px; }
- #style-custom-workbench .sc-journal-citation-line { grid-template-columns: 12px auto auto; }
 }
 #style-custom-workbench .sc-queue-reason { font-size: 12px; }
 #style-custom-workbench .sc-queue-reason > summary { cursor: pointer; color: var(--sc-text); width: max-content; max-width: 100%; }
@@ -1930,3 +1932,14 @@
 #style-custom-workbench .sc-page-cell[data-chosen=true] { box-shadow: inset 0 0 0 1.5px var(--sc-text); }
 #style-custom-workbench .sc-page-evidence:empty { display: none; }
 #style-custom-workbench .sc-page-evidence { margin-top: 6px; }
+
+/* Round 18: annotations by paper then file, with an order choice. */
+#style-custom-workbench .sc-annot-file {
+  margin: 8px 0 4px 2px; font: 500 12px/1.4 var(--sc-font); color: var(--sc-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#style-custom-workbench .sc-annot-order { display: inline-flex; gap: 2px; margin-inline-start: auto; }
+#style-custom-workbench .sc-annot-order button { min-height: 24px; padding: 0 8px; border-radius: 7px; font-size: 12px; }
+#style-custom-workbench .sc-annot-order button[aria-pressed=true] { background: var(--sc-accent-soft); box-shadow: inset 0 0 0 1px var(--sc-accent); }
+#style-custom-workbench .sc-note-head { margin: 6px 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; }
+#style-custom-workbench .sc-note-compose[hidden] { display: none; }
