@@ -18,6 +18,7 @@ export function deferred() {
 	return { promise, resolve, reject };
 }
 
+// The element focus() was last called on, standing in for document.activeElement.
 export function mockElement(tagName = "div") {
 	const attributes = new Map(), classes = new Set(), listeners = new Map();
 	let text = "";
@@ -69,9 +70,9 @@ export function mockElement(tagName = "div") {
 		querySelector(selector) { return this.querySelectorAll(selector)[0] || null; },
 		addEventListener(name, fn) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(fn); },
 		removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
-		emit(name, event = {}) { for (const fn of listeners.get(name) || []) fn({ target: this, ...event }); },
+		emit(name, event = {}) { for (const fn of listeners.get(name) || []) fn({ target: this, stopPropagation() {}, preventDefault() {}, ...event }); },
 		listenerCount() { return [...listeners.values()].reduce((sum, set) => sum + set.size, 0); },
-		focus() {}, scrollIntoView() {},
+		focus() { mockElement.active = node; }, scrollIntoView() {},
 		getBoundingClientRect() { return { left: 0, right: 100, top: 0, bottom: 30, width: 100, height: 30 }; }
 	};
 	const dataName = key => "data-" + String(key).replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
@@ -96,6 +97,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 			const match = selector.match(/^#([\w-]+)\s+(.+)$/);
 			return match ? get(match[1]).querySelectorAll(match[2]) : [];
 		}, createElement: mockElement, body: mockElement("body"),
+		get activeElement() { return mockElement.active || null; },
 		addEventListener: (...args) => docEvents.addEventListener(...args), removeEventListener: (...args) => docEvents.removeEventListener(...args),
 		createTextNode(value) { const node = mockElement("#text"); node.textContent = value; return node; },
 		createDocumentFragment: () => mockElement("#fragment"),
@@ -116,6 +118,8 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 			head.appendChild(th);
 		}
 	}
+	// The library filter's three buttons, as the markup has them.
+	for (const key of ["all", "new", "owned"]) { const b = mockElement("button"); b.connected = true; b.dataset.lib = key; elements.set("lib-" + key, b); get("lib-filter").appendChild(b); }
 	for (const source of ["openalex", "crossref", "europepmc", "arxiv"]) get("multi-source-" + source).checked = true;
 	get("keywords").value = "genome editing";
 	get("sort").value = sort;
@@ -160,7 +164,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		cacheIO = setupStorage();
 		globalThis.harness = { state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
-			wireEvents, importRecords, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
+			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, renderVersions, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			searchMode: () => searchSurface, authorSessions,
 			get history() { return history; },
 			setOpenSelectForTest: value => { openSel = value; } };

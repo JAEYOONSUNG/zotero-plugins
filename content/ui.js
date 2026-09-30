@@ -97,7 +97,10 @@
 		colOrder: [...COLUMN_KEYS],
 		colsMode: "basic",
 		facet: null,
-		selectedOnly: false
+		selectedOnly: false,
+		// "all" | "new" | "owned": whether the library already has the paper.
+		libraryFilter: "all",
+		libCounts: { all: 0, new: 0, owned: 0 }
 	};
 	let marquee = null;
 	let history = null;
@@ -362,20 +365,19 @@
 		$("filter-clear")?.addEventListener("click", () => { clearFilter(); $("filter").focus(); });
 		syncFilterClear();
 		$("chk-all").addEventListener("change", e => selectVisible(e.target.checked));
-		$("cols-mode")?.addEventListener("click", () => { state.colsMode = state.colsMode === "all" ? "basic" : "all"; applyColumnView(); saveLayout(); });
 		$("facet-clear")?.addEventListener("click", () => setFacet(null));
 		$("selected-only")?.addEventListener("click", () => { state.selectedOnly = !state.selectedOnly; render(); });
 		$("select-none").addEventListener("click", () => { state.selected.clear(); render(); });
-		// Adds to the selection: what was already chosen, on screen or not, stays chosen.
-		$("select-new").addEventListener("click", () => {
-			for (let r of state.visible) if (!r.inLibrary) state.selected.add(r.key);
-			render();
-		});
-		$("copy-csv").addEventListener("click", copyCSV);
-		$("copy-pop-json")?.addEventListener("click", () => copyText(popOriginalJSON(), t("popJSONCopied")));
-		$("save-csv").addEventListener("click", saveCSV);
-		$("toggle-detail").addEventListener("click", toggleDetail);
-		$("toggle-metrics")?.addEventListener("click", toggleMetrics);
+		// Changing the library filter never touches the checks: what was chosen stays chosen.
+		for (let b of document.querySelectorAll("#lib-filter button")) b.addEventListener("click", () => { state.libraryFilter = b.dataset.lib; render(); });
+		let toolbarMenus = { "export-btn": () => [exportMenuItems(), t("exportMenu")], "view-btn": () => [viewMenuItems(), t("viewMenu")], "d-more": () => [moreMenuItems(detailRecord()), t("dMore")] };
+		for (let id of Object.keys(toolbarMenus)) {
+			let open = focusFirst => { let [items, label] = toolbarMenus[id](); openToolbarMenu($(id), items, label, focusFirst); };
+			// A click from the keyboard has no pointer (detail 0), so it also moves focus into the menu.
+			$(id).addEventListener("click", e => { e.stopPropagation(); open(e.detail === 0); });
+			$(id).addEventListener("keydown", e => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (openTbMenu?.btn === $(id)) openTbMenu.nodes[0]?.focus(); else open(true); } });
+		}
+		$("tbmenu").addEventListener("keydown", onToolbarMenuKey);
 		// An in-page select menu closes when focus leaves it, so Tab does not leave it floating.
 		if (typeof document.addEventListener === "function") document.addEventListener("focusin", e => { if (openSel && !openSel.menu?.contains?.(e.target) && e.target !== selButton(openSel.sel)) closeSelMenu(); });
 		$("preview-btn").addEventListener("click", () => openPreview());
@@ -395,14 +397,8 @@
 		for (let id of ["target", "opt-pdf", "opt-skip", "opt-extra", "opt-fillpdf"]) $(id).addEventListener("change", () => syncImportBar());
 		$("import-opts-toggle")?.addEventListener("click", () => { state.optsOpen = !state.optsOpen; syncImportBar(); });
 		// detail actions
-		$("d-open").addEventListener("click", () => { let r = detailRecord(); if (r?.url) Zotero.launchURL(r.url); });
-		$("d-pdf").addEventListener("click", () => { let r = detailRecord(); let u = (r?.pdfUrls || [])[0] || r?.pdfUrl; if (u) Zotero.launchURL(u); });
-		$("d-preview").addEventListener("click", () => openPreview(detailRecord()));
-		$("d-proxy").addEventListener("click", () => openViaProxy(detailRecord()));
-		$("d-copy-doi").addEventListener("click", () => { let r = detailRecord(); if (r?.doi) copyText(r.doi, t("copiedDoi")); });
-		$("d-copy-cite").addEventListener("click", () => { let r = detailRecord(); if (r) copyText(citationText(r), t("copiedCite")); });
-		$("d-add").addEventListener("click", () => { let r = detailRecord(); if (r) importRecords([r]); });
-		$("d-check").addEventListener("click", () => checkCitations(detailRecord()));
+		// An owned paper's main action shows its library copy; any other adds it.
+		$("d-primary").addEventListener("click", () => { let r = detailRecord(); if (!r) return; if (r.inLibrary) showInLibrary(r); else importRecords([r]); });
 
 		// Pressing in the results hands keyboard focus to the table. Done on mousedown because
 		// focusing during the click handler is undone when the browser settles focus after it;
@@ -417,9 +413,9 @@
 		setupSplitters();
 		setupColumnResize();
 		document.addEventListener("keydown", onKeyDown);
-		document.addEventListener("click", () => { hideCtxMenu(); closeSelMenu(); closeHistoryMenu(); });
-		window.addEventListener("blur", () => { closeSelMenu(); closeHistoryMenu(); });
-		window.addEventListener("resize", () => { closeSelMenu(); closeHistoryMenu(); });
+		document.addEventListener("click", () => { hideCtxMenu(); closeSelMenu(); closeHistoryMenu(); closeToolbarMenu(); });
+		window.addEventListener("blur", () => { closeSelMenu(); closeHistoryMenu(); closeToolbarMenu(); });
+		window.addEventListener("resize", () => { closeSelMenu(); closeHistoryMenu(); closeToolbarMenu(); });
 		document.addEventListener("scroll", onDocumentScroll, true);
 		window.addEventListener("unload", saveLayout);
 		window.addEventListener("unload", () => state.searchController?.abort());
@@ -464,6 +460,7 @@
 		if (!$("histmenu").hidden && (event.target === $("histmenu") || $("histmenu").contains?.(event.target))) return;
 		closeSelMenu();
 		closeHistoryMenu();
+		closeToolbarMenu();
 	}
 
 	function openSelMenu(sel) {
@@ -1021,6 +1018,7 @@
 	async function toggleHistoryMenu() {
 		if (!$("histmenu").hidden) { closeHistoryMenu(); return; }
 		closeSelMenu();
+		closeToolbarMenu();
 		hideCtxMenu();
 		await openHistoryMenu();
 	}
@@ -1091,6 +1089,100 @@
 		menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - menu.offsetWidth - 6)) + "px";
 	}
 
+	// ------------------------------------------------------------ toolbar menus
+	// Export, View and the detail's More share one in-page menu. Arrow keys move, Enter or
+	// Space runs the item, Escape (or Tab) closes it and focus goes back to its button.
+	let openTbMenu = null;
+	function closeToolbarMenu(returnFocus = false) {
+		if (!openTbMenu) return;
+		let { btn } = openTbMenu, menu = $("tbmenu");
+		menu.hidden = true;
+		menu.textContent = "";
+		btn.setAttribute("aria-expanded", "false");
+		openTbMenu = null;
+		if (returnFocus) btn.focus();
+	}
+	// items: { label, title, run, disabled, check, radio } or "-" for a rule; check makes it a checkable item.
+	function openToolbarMenu(btn, items, label, focusFirst = false) {
+		if (openTbMenu?.btn === btn) { closeToolbarMenu(true); return; }
+		closeToolbarMenu();
+		closeSelMenu();
+		closeHistoryMenu();
+		hideCtxMenu();
+		let menu = $("tbmenu"), nodes = [], acts = [];
+		menu.textContent = "";
+		menu.setAttribute("aria-label", label);
+		for (let item of items) {
+			if (item === "-") { menu.appendChild(document.createElement("hr")); continue; }
+			let d = document.createElement("div");
+			d.className = "selopt";
+			d.setAttribute("role", item.check === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox");
+			if (item.check !== undefined) d.setAttribute("aria-checked", String(Boolean(item.check)));
+			if (item.disabled) d.setAttribute("aria-disabled", "true");
+			if (item.title) d.title = item.title;
+			d.tabIndex = -1;
+			d.textContent = item.label;
+			let act = () => { if (item.disabled) return; closeToolbarMenu(true); item.run(); };
+			d.addEventListener("mouseenter", () => d.focus());
+			d.addEventListener("click", e => { e.stopPropagation(); act(); });
+			menu.appendChild(d);
+			nodes.push(d);
+			acts.push(act);
+		}
+		menu.hidden = false;
+		if (typeof btn.getBoundingClientRect === "function") {
+			let r = btn.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
+			let below = window.innerHeight - r.bottom - 8;
+			menu.style.top = (h > below && r.top > below ? Math.max(6, r.top - h - 3) : r.bottom + 3) + "px";
+			menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - w - 6)) + "px";
+		}
+		btn.setAttribute("aria-expanded", "true");
+		openTbMenu = { btn, nodes, acts };
+		if (focusFirst) nodes[0]?.focus();
+	}
+	function onToolbarMenuKey(e) {
+		if (!openTbMenu) return;
+		let { nodes, acts } = openTbMenu, i = nodes.indexOf(document.activeElement);
+		let go = n => { e.preventDefault(); e.stopPropagation(); nodes[(n + nodes.length) % nodes.length]?.focus(); };
+		if (e.key === "ArrowDown") go(i + 1);
+		else if (e.key === "ArrowUp") go(i < 0 ? nodes.length - 1 : i - 1);
+		else if (e.key === "Home") go(0);
+		else if (e.key === "End") go(nodes.length - 1);
+		else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); acts[i]?.(); }
+		else if (e.key === "Escape" || e.key === "Tab") { e.preventDefault(); e.stopPropagation(); closeToolbarMenu(true); }
+	}
+	function exportMenuItems() {
+		let items = [{ label: t("copyCsv"), title: t("copyCsvTip"), run: copyCSV }, { label: t("saveCsv"), title: t("saveCsvTip"), run: saveCSV }];
+		// The original JSON only exists when every row came from Publish or Perish.
+		if (state.records.length && state.records.every(r => r.popOriginal)) items.push({ label: t("popOriginalJSON"), run: () => copyText(popOriginalJSON(), t("popJSONCopied")) });
+		return items;
+	}
+	function setColsMode(mode) { state.colsMode = mode; applyColumnView(); saveLayout(); }
+	function viewMenuItems() {
+		return [
+			{ label: t("colsBasic"), title: t("colsModeTip"), check: state.colsMode !== "all", radio: true, run: () => setColsMode("basic") },
+			{ label: t("colsAll"), title: t("colsModeTip"), check: state.colsMode === "all", radio: true, run: () => setColsMode("all") },
+			"-",
+			{ label: t("metricsToggle"), title: t("metricsTip"), check: !$("metrics").hidden, run: toggleMetrics },
+			{ label: t("detailToggle"), title: t("detailTip"), check: !$("detail").hidden, run: toggleDetail }
+		];
+	}
+	// What the detail's More holds: everything but the one main action.
+	function moreMenuItems(r) {
+		if (!r) return [];
+		let pdf = (r.pdfUrls || [])[0] || r.pdfUrl;
+		return [
+			{ label: t("dOpen"), disabled: !r.url, run: () => Zotero.launchURL(r.url) },
+			{ label: t("dPdf"), disabled: !pdf, run: () => Zotero.launchURL(pdf) },
+			{ label: t("dProxy"), title: t("dProxyTip"), disabled: !(r.doi || r.url), run: () => openViaProxy(r) },
+			"-",
+			{ label: t("dCopyDoi"), disabled: !r.doi, run: () => copyText(r.doi, t("copiedDoi")) },
+			{ label: t("dCopyCite"), run: () => copyText(citationText(r), t("copiedCite")) },
+			"-",
+			{ label: t("dCheck"), title: t("dCheckTip"), disabled: state.checking || !(r.doi || r.arxiv || r.pmid || (r.source === "openalex" && r.sourceId)), run: () => checkCitations(r) }
+		];
+	}
+
 	// ------------------------------------------------------------ layout persistence
 	function restoreLayout() {
 		// An order saved before the title moved forward would put it back behind the authors.
@@ -1138,13 +1230,11 @@
 	function setMetricsVisible(on) {
 		$("metrics").hidden = !on;
 		$("vsplit").hidden = !on;
-		let b = $("toggle-metrics"); if (b) b.setAttribute("aria-pressed", String(!!on));
 	}
 	function toggleMetrics() { setMetricsVisible($("metrics").hidden); saveLayout(); }
 	function setDetailVisible(on) {
 		$("detail").hidden = !on;
 		$("hsplit").hidden = !on;
-		$("toggle-detail-label").textContent = on ? t("detailOn") : t("detailOff");
 	}
 	function toggleDetail() {
 		setDetailVisible($("detail").hidden);
@@ -1203,8 +1293,6 @@
 		let table = $("results-table"); if (!table) return;
 		table.setAttribute("data-cols", state.colsMode);
 		if (state.records.some(r => r.status)) table.setAttribute("data-status", "1"); else table.removeAttribute("data-status");
-		let all = state.colsMode === "all", b = $("cols-mode");
-		if (b) { b.setAttribute("aria-pressed", String(all)); $("cols-mode-label").textContent = t(all ? "colsAll" : "colsBasic"); }
 	}
 
 	function normalizeColumnOrder(saved) {
@@ -1655,6 +1743,7 @@
 		for (let id of ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "filter", ...POP_FIELDS.filter(k => !["popOutputSort", "popCachePolicy"].includes(k))]) $(id).value = "";
 		state.records = [];
 		state.selected.clear();
+		state.libraryFilter = "all";
 		state.focusKey = null;
 		state.detailKey = null;
 		saveQuery();
@@ -1664,8 +1753,12 @@
 	}
 
 	// ------------------------------------------------------------ render
-	function matchesFilter(r, f, ignoreYears = false) {
-		if (state.selectedOnly && !state.selected.has(r.key)) return false;
+	function libraryPass(r) { return state.libraryFilter === "all" || (state.libraryFilter === "owned") === Boolean(r.inLibrary); }
+	// Selected-only is a mode of its own: it answers by selection alone, so a paper checked
+	// and then filtered out still shows, and the other filters return when it is turned off.
+	function matchesFilter(r, f, ignoreYears = false, ignoreLibrary = false) {
+		if (state.selectedOnly) return state.selected.has(r.key);
+		if (!ignoreLibrary && !libraryPass(r)) return false;
 		if (state.yearRange && !ignoreYears && !(r.year >= state.yearRange.from && r.year <= state.yearRange.to)) return false;
 		if (!applyLocalFacet(r)) return false;
 		if (!f) return true;
@@ -1817,9 +1910,12 @@
 
 	function render() {
 		if (state.selectedOnly && !state.records.some(r => state.selected.has(r.key))) state.selectedOnly = false;
-		if ($("copy-pop-json")) $("copy-pop-json").hidden = !state.records.length || state.records.some(r => !r.popOriginal);
 		let f = $("filter").value.trim().toLowerCase();
-		let list = state.records.filter(r => matchesFilter(r, f));
+		// The library counts follow every other filter, but not the library filter itself.
+		let base = state.records.filter(r => matchesFilter(r, f, false, true));
+		let owned = base.filter(r => r.inLibrary).length;
+		state.libCounts = { all: base.length, new: base.length - owned, owned };
+		let list = state.selectedOnly ? base : base.filter(libraryPass);
 		let k = state.sortKey, dir = state.sortDir === "asc" ? 1 : -1;
 		list.sort((a, b) => {
 			let va = sortValue(a, k), vb = sortValue(b, k);
@@ -1830,8 +1926,20 @@
 		state.visible = list;
 
 		for (let th of document.querySelectorAll("#results-table th[data-sort]")) {
-			th.classList.toggle("sorted-asc", th.dataset.sort === k && state.sortDir === "asc");
-			th.classList.toggle("sorted-desc", th.dataset.sort === k && state.sortDir === "desc");
+			let on = th.dataset.sort === k;
+			th.classList.toggle("sorted-asc", on && state.sortDir === "asc");
+			th.classList.toggle("sorted-desc", on && state.sortDir === "desc");
+			if (on) th.setAttribute("aria-sort", state.sortDir === "asc" ? "ascending" : "descending"); else th.removeAttribute("aria-sort");
+			// The arrow is a node after the header's own text, so it stays beside that text.
+			let mark = th.querySelector(".sort-mark");
+			if (!mark) {
+				mark = document.createElement("span");
+				mark.className = "sort-mark";
+				mark.setAttribute("aria-hidden", "true");
+				let grip = th.querySelector(".rz");
+				if (grip) th.insertBefore(mark, grip); else th.appendChild(mark);
+			}
+			mark.textContent = on ? (state.sortDir === "asc" ? "▲" : "▼") : "";
 		}
 
 		let tbody = $("results-body");
@@ -2001,9 +2109,11 @@
 		let some = state.visible.some(r => state.selected.has(r.key));
 		$("chk-all").checked = all;
 		$("chk-all").indeterminate = some && !all;
-		let fresh = state.visible.filter(r => !r.inLibrary).length;
-		let newLabel = $("select-new").querySelector("span"); if (newLabel) newLabel.textContent = t("selNewCount", fresh);
-		$("select-new").disabled = fresh === 0;
+		for (let [id, key, label] of [["lib-all", "all", "libAll"], ["lib-new", "new", "libNew"], ["lib-owned", "owned", "libOwned"]]) {
+			let b = $(id);
+			b.textContent = t(label, state.libCounts[key]);
+			b.setAttribute("aria-pressed", String(state.libraryFilter === key));
+		}
 		$("preview-btn").disabled = !previewRecord();
 		previewManager?.update(previewRecord());
 	}
@@ -2194,19 +2304,6 @@
 		if (mark) badges.appendChild(mark);
 		for (let s of r.sources || [r.source]) sourceChip(s);
 		if (r.inLibrary) chip(t("badgeInLibrary"), "lib");
-		/* A preprint and the article it became are two records with two DOIs, so
-		   they are not merged -- but a list that shows both and says nothing
-		   looks broken. A real search returned the Research Square preprint and
-		   the Biotechnology for Biofuels article one after the other, differing
-		   only in the case of one letter. */
-		if (r.publishedAs) {
-			chip(t("badgePublishedAs", r.publishedAs.venue || r.publishedAs.year || ""), "ver")
-				.title = t("publishedAsTip", r.publishedAs.doi || "");
-		}
-		else if (r.preprintOf) {
-			chip(t("badgeHasPreprint"), "ver").title = t("preprintOfTip", r.preprintOf.doi || "");
-		}
-
 		// The figures the table already shows, said once as one plain sentence with what each one is.
 		let context = buildResultContext(r);
 		let evidence = $("d-evidence");
@@ -2266,13 +2363,59 @@
 		if (paths.length) filed.textContent = t("inCollections") + " " + filed.textContent;
 		$("d-abstract").textContent = r.abstract || t("noAbstract");
 
-		$("d-open").disabled = !r.url;
-		$("d-preview").disabled = false;
-		$("d-pdf").disabled = !((r.pdfUrls || [])[0] || r.pdfUrl);
-		$("d-copy-doi").disabled = !r.doi;
-		$("d-proxy").disabled = !(r.doi || r.url);
-		$("d-add").disabled = state.importing || state.searching;
-		$("d-check").disabled = state.checking || !(r.doi || r.arxiv || r.pmid || (r.source === "openalex" && r.sourceId));
+		// Why the row has the status it has, in words: a failure's cause was only in a tooltip.
+		let statusLine = $("d-status");
+		statusLine.textContent = r.status ? t("statusLine", r.status, r.statusTitle) : "";
+		statusLine.className = "d-status" + (r.statusClass ? " " + r.statusClass : "");
+		statusLine.hidden = !r.status;
+		renderVersions(r);
+
+		// The main action: an owned paper shows its library copy, any other is added.
+		let primary = $("d-primary"), owned = Boolean(r.inLibrary);
+		$("d-primary-label").textContent = t(owned ? "dShowLibrary" : "dAdd");
+		$("d-primary-icon").setAttribute("href", owned ? "#ic-library" : "#ic-plus");
+		primary.classList.toggle("primary", !owned);
+		primary.title = t(owned ? "dShowLibrary" : "dAdd");
+		primary.disabled = !owned && (state.importing || state.searching);
+	}
+
+	/* A preprint and the article it became are two records with two DOIs, so they are not
+	   merged. The detail says so in one plain line: which version, where, whether the library
+	   has it, and a jump to its row. A link found from title and first author says "estimated". */
+	function renderVersions(r) {
+		let box = $("d-versions");
+		box.textContent = "";
+		box.removeAttribute("title");
+		let link = r.publishedAs ? { kind: "verPublished", tip: "publishedAsTip", to: r.publishedAs } : r.preprintOf ? { kind: "verPreprint", tip: "preprintOfTip", to: r.preprintOf } : null;
+		box.hidden = !link;
+		if (!link) return;
+		let { to } = link, estimated = to.basis === "title";
+		let target = state.records.find(o => o.key === to.key)
+			|| (to.doi && state.records.find(o => o.doi && ZotPoPSources.normalizeDOI(o.doi) === ZotPoPSources.normalizeDOI(to.doi)));
+		let bits = [to.venue, to.year, target ? t(target.inLibrary ? "verOwned" : "verNotOwned") : t("verGone")].filter(Boolean);
+		box.title = t(link.tip, to.doi || "") + "\n" + t(estimated ? "verEstimateTip" : "verExplicitTip");
+		box.appendChild(document.createTextNode(t(link.kind, estimated) + ": " + bits.join(" · ")));
+		if (target) {
+			box.appendChild(document.createTextNode(" · "));
+			let go = document.createElement("button");
+			go.type = "button"; go.className = "ghost";
+			go.textContent = t("verShow");
+			go.addEventListener("click", () => revealRecord(target.key));
+			box.appendChild(go);
+		}
+	}
+	// Opens another row and its detail in this window; a filter that hides it is let go first.
+	function revealRecord(key) {
+		if (!state.records.some(r => r.key === key)) return;
+		if (!state.visible.some(r => r.key === key)) {
+			$("filter").value = "";
+			state.facet = null; state.yearRange = null; state.libraryFilter = "all"; state.selectedOnly = false;
+			syncFilterClear();
+		}
+		state.focusKey = state.detailKey = key;
+		render();
+		document.querySelector(`#results-body tr[data-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: "nearest" });
+		$("table-wrap").focus({ preventScroll: true });
 	}
 
 	// Re-query every free source for one paper's current citation count and its journal's impact
@@ -2289,7 +2432,6 @@
 	async function checkCitations(r) {
 		if (!r || state.checking) return;
 		state.checking = true;
-		$("d-check").disabled = true;
 		setStatus(t("citeChecking"));
 		try {
 			let checked = r.popOriginal ? Object.assign({}, r) : r;
@@ -2370,6 +2512,7 @@
 	function onKeyDown(e) {
 		let mod = e.metaKey || e.ctrlKey;
 		if (e.key === "Escape") {
+			if (openTbMenu) { closeToolbarMenu(true); return; }
 			if (openSel) { closeSelMenu(); return; }
 			if (!$("histmenu").hidden) { closeHistoryMenu(); return; }
 			if (!$("ctxmenu").hidden) { hideCtxMenu(); return; }
@@ -2549,7 +2692,7 @@
 		$("import-btn").disabled = true;
 		$("search-btn").disabled = true;
 		$("stop-btn").disabled = false;
-		$("d-add").disabled = true;
+		$("d-primary").disabled = true;
 		let added = 0, exists = 0, failed = 0, pdfs = 0, pdfMissedCount = 0, proxyLoginNeeded = false;
 		let failedRecs = [];
 		setProgress(0, recs.length);
@@ -2590,8 +2733,10 @@
 				failed++;
 				failedRecs.push(r);
 				setRowStatus(r, t("statusFailed"), "err", res.error);
+				// A failure is selected even if it was added from the detail alone, so it is there to retry.
+				state.selected.add(r.key);
 			}
-			// A failure stays selected, so it is still there to retry; what got in is let go.
+			// What got in is let go.
 			if (res.status === "added" || res.status === "exists") state.selected.delete(r.key);
 			setProgress(i + 1, recs.length);
 		}
@@ -2599,8 +2744,8 @@
 		$("search-btn").disabled = false;
 		$("stop-btn").disabled = true;
 		setProgress(null);
-		paintRows();
-		renderDetail();
+		// Redrawn, not just repainted: an added paper leaves "not owned", and the counts say so.
+		render();
 		setStatus(t("importDone", added, pdfs, exists, failed, state.cancelled));
 		if (failed) showBanner(pdfMissedCount ? t("importFailuresPdf", failed, pdfMissedCount) : t("importFailures", failed), { label: t("importRetry", failed), run: () => { hideBanner(); importRecords(failedRecs); } });
 		else if (pdfMissedCount) showBanner(t("importPdfMissed", pdfMissedCount));

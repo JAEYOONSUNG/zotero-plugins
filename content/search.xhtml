@@ -28,7 +28,6 @@
 	<symbol id="ic-clear" viewBox="0 0 16 16"><path d="M3 3.5h10M6.5 3.5V2.5h3v1M4.5 3.5l.7 9a1 1 0 0 0 1 .9h3.6a1 1 0 0 0 1-.9l.7-9"/></symbol>
 	<symbol id="ic-all" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2"/><path d="M5.2 8.2 7.2 10.3l3.6-4"/></symbol>
 	<symbol id="ic-none" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2"/></symbol>
-	<symbol id="ic-new" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2"/><path d="M8 5.4v5.2M5.4 8h5.2"/></symbol>
 	<symbol id="ic-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 5.5v-1a1.5 1.5 0 0 0-1.5-1.5H4a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 4 11h1"/></symbol>
 	<symbol id="ic-save" viewBox="0 0 16 16"><path d="M8 2.5v7.5M5 7.2 8 10.2l3-3M2.8 12.5h10.4"/></symbol>
 	<symbol id="ic-panel" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2"/><path d="M2.5 10h11"/></symbol>
@@ -184,14 +183,15 @@
 				<span class="spacer"></span>
 				<button id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="previewAction"></span></button>
 				<button id="select-none" type="button" data-i18n-title="selNoneTip" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-none"/></svg><span data-i18n="selNone"></span></button>
-				<button id="select-new" type="button" class="ghost icon-text" data-i18n-title="selNewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-new"/></svg><span data-i18n="selNew"></span></button>
+				<span id="lib-filter" class="lib-filter" role="group" data-i18n-aria="libFilterLabel" data-i18n-title="libFilterTip">
+					<span class="lib-filter-label" data-i18n="libFilterLabel"></span>
+					<button id="lib-all" type="button" data-lib="all" aria-pressed="true"></button>
+					<button id="lib-new" type="button" data-lib="new" aria-pressed="false"></button>
+					<button id="lib-owned" type="button" data-lib="owned" aria-pressed="false"></button>
+				</span>
 				<span class="sep"></span>
-				<button id="cols-mode" type="button" class="ghost icon-text" aria-pressed="false" data-i18n-title="colsModeTip"><span id="cols-mode-label"></span></button>
-				<button id="copy-csv" type="button" class="ghost icon-text" data-i18n-title="copyCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy"/></svg><span data-i18n="copyCsv"></span></button>
-				<button id="copy-pop-json" type="button" class="ghost icon-text" hidden="hidden" data-i18n="popOriginalJSON"></button>
-				<button id="save-csv" type="button" class="ghost icon-text" data-i18n-title="saveCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-save"/></svg><span data-i18n="saveCsv"></span></button>
-				<button id="toggle-metrics" type="button" class="ghost icon-text" data-i18n-title="metricsTip" aria-pressed="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-panel"/></svg><span data-i18n="metricsToggle"></span></button>
-				<button id="toggle-detail" type="button" class="ghost icon-text" data-i18n-title="detailTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-panel"/></svg><span id="toggle-detail-label"></span></button>
+				<button id="export-btn" type="button" class="menu-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="exportTip"><span data-i18n="exportMenu"></span></button>
+				<button id="view-btn" type="button" class="menu-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="viewTip"><span data-i18n="viewMenu"></span></button>
 			</div>
 			<div class="table-wrap" id="table-wrap" tabindex="0">
 				<table id="results-table">
@@ -229,25 +229,24 @@
 				<div id="detail-body" hidden="hidden">
 					<div class="detail-head">
 						<div id="d-title" class="d-title"></div>
-						<div id="d-badges" class="badges"></div>
+						<div class="d-actions">
+							<button id="d-primary" type="button" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use id="d-primary-icon" href="#ic-plus"/></svg><span id="d-primary-label"></span></button>
+							<button id="d-more" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false" data-i18n-title="dMoreTip"><span data-i18n="dMore"></span></button>
+						</div>
 					</div>
+					<div id="d-badges" class="badges"></div>
 					<div id="d-evidence" class="d-evidence"></div>
+					<div id="d-status" class="d-status" hidden="hidden"></div>
 					<div id="d-authors" class="d-authors"></div>
-					<div id="d-facets" class="d-facets"></div>
-						<div id="d-where" class="d-where"></div>
-					<div id="d-meta" class="d-meta"></div>
-					<div id="d-collections" class="d-collections" hidden="hidden"></div>
-					<div class="d-actions">
-						<button id="d-open" type="button" data-i18n-title="dOpen" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-external"/></svg><span data-i18n="dOpen"></span></button>
-						<button id="d-pdf" type="button" data-i18n-title="dPdf" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="dPdf"></span></button>
-						<button id="d-preview" type="button" class="icon-text preview-action" data-i18n-title="previewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="previewAction"></span></button>
-						<button id="d-proxy" type="button" class="icon-text" data-i18n-title="dProxyTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-library"/></svg><span data-i18n="dProxy"></span></button>
-						<button id="d-copy-doi" type="button" data-i18n-title="dCopyDoi" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy"/></svg><span data-i18n="dCopyDoi"></span></button>
-						<button id="d-copy-cite" type="button" data-i18n-title="dCopyCite" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-quote"/></svg><span data-i18n="dCopyCite"></span></button>
-						<button id="d-check" type="button" class="icon-text" data-i18n-title="dCheckTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="dCheck"></span></button>
-						<button id="d-add" type="button" data-i18n-title="dAdd" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus"/></svg><span data-i18n="dAdd"></span></button>
-					</div>
 					<div id="d-abstract" class="d-abstract"></div>
+					<div id="d-versions" class="d-versions" hidden="hidden"></div>
+					<div id="d-collections" class="d-collections" hidden="hidden"></div>
+					<details id="d-fold" class="d-fold">
+						<summary data-i18n="dFold"></summary>
+						<div id="d-facets" class="d-facets"></div>
+						<div id="d-where" class="d-where"></div>
+						<div id="d-meta" class="d-meta"></div>
+					</details>
 				</div>
 			</div>
 		</section>
@@ -277,6 +276,7 @@
 
 	<div id="ctxmenu" class="ctxmenu" hidden="hidden"></div>
 	<div id="histmenu" class="selmenu histmenu" role="menu" hidden="hidden"></div>
+	<div id="tbmenu" class="selmenu tbmenu" role="menu" hidden="hidden"></div>
 </div>
 </body>
 </html>

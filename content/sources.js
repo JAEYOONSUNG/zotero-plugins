@@ -2503,8 +2503,11 @@ var ZotPoPSources = (function () {
 			});
 			if (candidates.length !== 1) continue;
 			let pub = candidates[0];
-			pre.publishedAs = { doi: pub.doi || null, venue: pub.venue || null, year: pub.year || null };
-			pub.preprintOf = { doi: pre.doi || null, venue: pre.venue || null };
+			// The target's key and why the two were linked, so the UI can jump to the other row
+			// and say "estimated" when the link rests on title and authors, not a deposited relation.
+			let basis = pre.publishedDoi || pre.publishedPmid ? "explicit" : "title";
+			pre.publishedAs = { key: pub.key || null, doi: pub.doi || null, venue: pub.venue || null, year: pub.year || null, basis };
+			pub.preprintOf = { key: pre.key || null, doi: pre.doi || null, venue: pre.venue || null, year: pre.year || null, basis };
 		}
 		return records;
 	}

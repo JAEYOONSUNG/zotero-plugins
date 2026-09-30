@@ -613,7 +613,10 @@ test("PoP rows retain native rank, order, duplicates, unknowns and independent s
 	assert.equal(new Set(ui.state.records.map(r => r.key)).size, 3);
 	assert.deepEqual(JSON.parse(JSON.stringify(ui.state.records.map(r => r.popOriginal))), raw);
 	assert.deepEqual(JSON.parse(ui.popOriginalJSON()), raw);
-	assert.equal(ui.get("copy-pop-json").hidden, false);
+	ui.wireEvents();
+	ui.get("export-btn").emit("click");
+	assert.deepEqual(Array.from(ui.get("tbmenu").children.filter(c => c.tagName === "DIV"), c => c.textContent), ["copyCsv", "saveCsv", "popOriginalJSON"], "the original JSON is offered when every row came from PoP");
+	ui.closeToolbarMenu();
 	ui.state.selected.add(ui.state.records[1].key);
 	ui.displaySearchResults(records);
 	assert.deepEqual(Array.from(ui.state.selected), [records[1].key], "selecting one duplicate must not select the other");
@@ -817,7 +820,7 @@ test("Stop preserves published author rows as incomplete without late overwrite"
 test("author UI is registered after sources, and native paper fields and history controls remain available", () => {
 	const markup = readFileSync(new URL("../content/search.xhtml", import.meta.url), "utf8");
 	assert.ok(markup.indexOf('/sources.js') < markup.indexOf('/authors.js') && markup.indexOf('/authors.js') < markup.indexOf('/ui.js'));
-	for (const id of ["mode-papers", "mode-authors", "author-form", "author-provider", "author-input-kind", "author-input", "author-stop-btn", "author-history-btn", "author-profiles", "query-form", "popRaw", "copy-pop-json"]) assert.ok(markup.includes(`id="${id}"`), id);
+	for (const id of ["mode-papers", "mode-authors", "author-form", "author-provider", "author-input-kind", "author-input", "author-stop-btn", "author-history-btn", "author-profiles", "query-form", "popRaw", "export-btn", "view-btn", "tbmenu", "d-primary", "d-more", "d-versions", "lib-filter"]) assert.ok(markup.includes(`id="${id}"`), id);
 });
 
 test("author form and mode button events execute the workflow and cancel edits without touching paper input", async () => {
@@ -1269,11 +1272,11 @@ test("the default result columns put the title second and hide five columns unti
 	assert.equal(table.hasAttribute("data-status"), false);
 	ui.setRowStatus(ui.state.records[0], "Added", "ok");
 	assert.equal(table.hasAttribute("data-status"), true);
-	ui.get("cols-mode").emit("click");
+	const pick = index => { ui.get("view-btn").emit("click"); ui.get("tbmenu").children.filter(c => c.tagName === "DIV")[index].emit("click"); };
+	pick(1);
 	assert.equal(table.getAttribute("data-cols"), "all");
-	assert.equal(ui.get("cols-mode-label").textContent, "colsAll");
 	assert.equal(ui.prefs.colsMode, "all", "the choice is remembered");
-	ui.get("cols-mode").emit("click");
+	pick(0);
 	assert.equal(table.getAttribute("data-cols"), "basic");
 });
 
@@ -1315,7 +1318,7 @@ test("same-name authors are counted over this search only, by ID when there is o
 	assert.equal(ui.state.facet, null, "a new search starts without it");
 });
 
-test("selection counts what is on screen and what a filter hides, and Not-in-library adds to it", async () => {
+test("selection counts what is on screen and what a filter hides, and the library filter keeps the checks", async () => {
 	const ui = await loaded();
 	for (const key of ["a", "b", "d"]) ui.state.selected.add(key);
 	ui.setFacet({ key: "name:jenna dowd", name: "Jenna Dowd", byId: false });
@@ -1329,9 +1332,6 @@ test("selection counts what is on screen and what a filter hides, and Not-in-lib
 	ui.get("selected-only").emit("click");
 	assert.equal(ui.state.visible.length, 6);
 	assert.equal(ui.get("selected-count").textContent, "selected|3");
-	ui.state.selected.clear(); ui.state.selected.add("b"); ui.render();
-	ui.get("select-new").emit("click");
-	assert.deepEqual(Array.from(ui.state.selected).sort(), ["a", "b", "c", "d", "e", "f"], "the visible unowned rows join the one already chosen");
 	ui.get("chk-all").checked = false; ui.get("chk-all").emit("change", { target: ui.get("chk-all") });
 	assert.equal(ui.state.selected.size, 0, "the header checkbox is the one select-all");
 });

@@ -407,7 +407,9 @@ var ZotPoPJournalMarks = (function () {
 	/* One lightness for every hue leaves the yellows and light greens short of
 	   the contrast a reader needs, so the ink walks its own hue until it clears
 	   4.5:1 against the row it is drawn on. */
-	const ROW_DARK = 0.0176, ROW_LIGHT = 1;
+	/* The rows the ink is read on: the selected row over the page colour in search.css, the
+	   darkest ink on the lightest row and vice versa, so it clears on every row state. */
+	const ROW_DARK = 0.045, ROW_LIGHT = 0.68;
 	function hslLuminance(h, s, l) {
 		const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
 		const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];

@@ -189,5 +189,6 @@ test("preview markup has a separate window identity and visible original/preview
 	assert.doesNotMatch(markup, /<iframe|<browser|https?:\/\/[^\s"]+\.js/);
 	const search = await fs.readFile(new URL("../content/search.xhtml", import.meta.url), "utf8");
 	assert.match(search, /id="preview-btn"/);
-	assert.match(search, /id="d-preview"/);
+	assert.doesNotMatch(search, /id="d-preview"/, "one preview button, in the toolbar");
+	assert.equal((search.match(/preview-action/g) || []).length, 1);
 });

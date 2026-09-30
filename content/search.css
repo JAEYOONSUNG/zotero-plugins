@@ -9,18 +9,18 @@
 	--border: rgba(0, 0, 0, 0.10);
 	--border-strong: rgba(0, 0, 0, 0.20);
 	--text: #17171a;
-	--muted: #6a6a72;
+	--muted: #5b5b62;
 	--accent: #5477B3;
+	--accent-ink: #3a5a91;
 	--accent-soft: rgba(84, 119, 179, 0.20);
 	--accent-text: #ffffff;
 	--row-alt: rgba(0, 0, 0, 0.022);
 	--row-hover: rgba(47, 111, 208, 0.09);
 	--row-sel: rgba(47, 111, 208, 0.17);
-	--ok: #3B8361;
-	--warn: #9B6D45;
-	--err: #B55B5E;
+	--ok: #2e654b;
+	--warn: #785435;
+	--err: #934245;
 	--chip: rgba(0, 0, 0, 0.06);
-	--shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 20px rgba(0, 0, 0, 0.07);
 	font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Helvetica, Arial, sans-serif;
 	font-size: 12px;
 }
@@ -34,18 +34,18 @@
 		--border: rgba(255, 255, 255, 0.10);
 		--border-strong: rgba(255, 255, 255, 0.20);
 		--text: #ebebf0;
-		--muted: #9c9ca6;
+		--muted: #a4a4ad;
 		--accent: #809DD0;
+		--accent-ink: #a9c0e6;
 		--accent-text: #10131a;
 		--accent-soft: rgba(128, 157, 208, 0.26);
 		--row-alt: rgba(255, 255, 255, 0.028);
 		--row-hover: rgba(92, 155, 245, 0.14);
 		--row-sel: rgba(92, 155, 245, 0.24);
-		--ok: #41AF7C;
-		--warn: #C69164;
-		--err: #D3888A;
+		--ok: #45ba84;
+		--warn: #cb9c73;
+		--err: #d79395;
 		--chip: rgba(255, 255, 255, 0.09);
-		--shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.34);
 	}
 }
 * { box-sizing: border-box; }
@@ -60,7 +60,7 @@ body {
 #app { display: flex; flex-direction: column; height: 100vh; }
 .search-modes { display: flex; gap: 5px; padding: 8px 13px 0; }
 .search-modes button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.search-modes button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.search-modes button[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent); }
 .author-panel { padding: 12px 13px; border-bottom: 1px solid var(--border); }
 .author-query { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 9px; }
 .author-actions { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 1px; }
@@ -90,7 +90,7 @@ body {
 
 input[type=text], input[type=number], input[type=search], select {
 	font: inherit; padding: 4px 7px; color: var(--text);
-	border: 1px solid var(--border-strong); border-radius: 6px;
+	border: 1px solid var(--border-strong); border-radius: 7px;
 	background: var(--bg-tint);
 	transition: border-color .12s, box-shadow .12s, background .12s;
 }
@@ -109,7 +109,7 @@ select { appearance: none; padding-right: 20px;
 
 button {
 	font: inherit; padding: 4px 10px; color: var(--text); cursor: pointer;
-	border: 1px solid var(--border-strong); border-radius: 6px;
+	border: 1px solid var(--border-strong); border-radius: 7px;
 	background: var(--glass-strong);
 	transition: background .12s, border-color .12s, transform .04s;
 }
@@ -118,7 +118,7 @@ button:hover:not(:disabled) { background: var(--row-hover); border-color: var(--
 button:active:not(:disabled) { transform: translateY(0.5px); }
 button:disabled { opacity: .42; cursor: default; }
 button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
-button.preview-action { color: var(--accent); border-color: var(--accent); white-space: nowrap; }
+button.preview-action { color: var(--accent-ink); border-color: var(--accent); white-space: nowrap; }
 button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.09); }
 button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
 button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: transparent; color: var(--text); }
@@ -133,7 +133,7 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 .field.grow2 { flex: 2 1 240px; }
 .field.narrow { width: 82px; min-width: 82px; }
 .field.years .row input { width: 64px; }
-.field label { font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: var(--muted); }
+.field label { font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--muted); }
 
 /* ---------------------------------------------------------------- banner */
 .banner {
@@ -151,8 +151,8 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 #metrics-table { width: 100%; border-collapse: collapse; }
 #metrics-table td { padding: 3.5px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
 #metrics-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; color: var(--text); }
-#metrics-table tr.hl td, #metrics-table tr.hl td:last-child { color: var(--accent); }
-.hint { color: var(--muted); font-size: 10.5px; margin-top: 11px; line-height: 1.5; }
+#metrics-table tr.hl td, #metrics-table tr.hl td:last-child { color: var(--accent-ink); }
+.hint { color: var(--muted); font-size: 11px; margin-top: 11px; line-height: 1.5; }
 
 .splitter-v { flex: 0 0 5px; cursor: col-resize; background: transparent; border-right: 1px solid transparent; }
 .splitter-v:hover, .splitter-v.dragging { background: var(--accent-soft); }
@@ -160,8 +160,11 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 .splitter-h:hover, .splitter-h.dragging { background: var(--accent-soft); }
 
 #results { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 7px 11px; border-bottom: 1px solid var(--border); }
-.searchbox { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; flex: 1 1 140px; width: auto; max-width: 250px;
+/* One line at 1280px: the search box and the facet chip give way before anything wraps. */
+.toolbar { display: flex; flex-wrap: nowrap; gap: 5px; align-items: center; padding: 7px 11px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.toolbar > button, .toolbar > .lib-filter, .toolbar > .sep { flex: none; }
+@media (max-width: 1000px) { .toolbar { flex-wrap: wrap; } }
+.searchbox { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; flex: 1 1 140px; min-width: 96px; width: auto; max-width: 250px;
 	border: 1px solid var(--border-strong); border-radius: 999px; background: var(--bg-tint); }
 .searchbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .searchbox input { border: none; background: transparent; padding: 1px 0; width: 100%; }
@@ -170,7 +173,8 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 .filter-clear:hover { color: var(--text); }
 
 /* ---------------------------------------------------------------- table */
-.table-wrap { flex: 1 1 auto; overflow: auto; position: relative; }
+/* Rows sit on the page colour, so the status and journal inks are checked against one known background. */
+.table-wrap { flex: 1 1 auto; overflow: auto; position: relative; background: var(--bg); }
 .table-wrap:focus { outline: none; }
 #results-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
 #results-table th, #results-table td {
@@ -191,19 +195,16 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 #results-table th.column-drop-after { box-shadow: inset -3px 0 0 var(--accent); }
 #results-table th .rz { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; }
 #results-table th .rz:hover { background: var(--accent); opacity: .5; }
-/* The sort mark sits outside the header's text, so "Rank" does not become "Ra…" the moment it is sorted. */
-#results-table th[data-sort] { padding-right: 18px; }
-#results-table th.num[data-sort] { padding: 6px 8px 6px 18px; }
-#results-table th.sorted-asc::after, #results-table th.sorted-desc::after { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 8px; color: var(--accent); }
-#results-table th.num.sorted-asc::after, #results-table th.num.sorted-desc::after { right: auto; left: 6px; }
-#results-table th.sorted-asc::after { content: "▲"; }
-#results-table th.sorted-desc::after { content: "▼"; }
+/* The sort mark follows its own header's text (the label gives up 13px to it, so "Rank" does not become "Ra…"). */
+#results-table th[data-sort] > span:first-child { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+#results-table th.sorted-asc > span:first-child, #results-table th.sorted-desc > span:first-child { max-width: calc(100% - 14px); }
+#results-table th .sort-mark { display: inline-block; width: 14px; padding-left: 3px; font-size: 11px; line-height: 1.2; color: var(--text); vertical-align: bottom; }
 #results-table td.num, #results-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 #results-table th.mini, #results-table td.mini { text-align: center; }
 #results-table td.doi a.doi-link { color: inherit; text-decoration: none; }
-#results-table td.doi a.doi-link:hover { text-decoration: underline; color: var(--accent); }
+#results-table td.doi a.doi-link:hover { text-decoration: underline; color: var(--accent-ink); }
 #results-table td[role="button"] { cursor: pointer; }
-#results-table td[role="button"]:hover { color: var(--accent); }
+#results-table td[role="button"]:hover { color: var(--accent-ink); }
 .marquee-text { display: block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; scroll-behavior: auto; }
 /* At rest a cell shows its beginning with an ellipsis; the row under the pointer rolls once. */
 #results-table tbody tr:hover:not(.selected) td { background: var(--row-hover); }
@@ -223,7 +224,7 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 .chk { width: 28px; }
 th.chk, td.chk { text-align: center; padding: 4px 2px; }
 td.lib { color: var(--ok); font-weight: 700; }
-td.pdf { color: var(--accent); }
+td.pdf { color: var(--accent-ink); }
 td.status.ok { color: var(--ok); }
 td.status.warn { color: var(--warn); }
 td.status.err { color: var(--err); }
@@ -236,6 +237,7 @@ td.status.err { color: var(--err); }
 #detail { height: 190px; flex: 0 0 auto; overflow: auto; padding: 11px 13px; border-top: 1px solid var(--border); }
 .detail-empty { color: var(--muted); padding: 6px 0; }
 .detail-head { display: flex; align-items: flex-start; gap: 10px; }
+#detail-body .badges { margin-top: 4px; }
 .d-title { font-size: 13.5px; font-weight: 650; line-height: 1.4; flex: 1; }
 .badges { display: flex; gap: 4px; flex-wrap: wrap; }
 /* Plain chips: the only colour in the detail is the journal's own mark. */
@@ -245,7 +247,9 @@ td.status.err { color: var(--err); }
 .d-evidence { margin-top: 4px; color: var(--text); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .d-facets { margin-top: 3px; color: var(--muted); font-size: 11.5px; line-height: 1.6; }
 .d-facet button.facet-show { font-size: 11px; padding: 0 7px; border-radius: 7px; color: var(--text); text-decoration: underline; }
-.facet-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border: 1px solid var(--border-strong); border-radius: 7px; font-size: 11.5px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.facet-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border: 1px solid var(--border-strong); border-radius: 7px; font-size: 11.5px; white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 220px; overflow: hidden; }
+#facet-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#facet-chip .filter-clear { flex: none; }
 #selected-only { font-size: 11.5px; padding: 2px 8px; border-radius: 7px; }
 #selected-only[aria-pressed="true"] { font-weight: 650; border-color: var(--border-strong); }
 /* Columns: basic keeps the title readable. Rank, institution, country, tier and DOI
@@ -262,9 +266,9 @@ td.if.estimate { color: var(--muted); font-weight: 500; }
 /* The publisher's lettermark, in its colour, ahead of the journal's name. The
    colour lives on the mark alone; the name stays in ink so the column reads. */
 .jmark {
-	display: inline-flex; align-items: center; justify-content: center; vertical-align: -2px; margin-right: 5px;
-	min-width: 22px; height: 14px; padding: 0 3px; border-radius: 3px;
-	font-size: 9px; font-weight: 700; letter-spacing: .02em; line-height: 1; white-space: nowrap;
+	display: inline-flex; align-items: center; justify-content: center; vertical-align: -3px; margin-right: 5px;
+	min-width: 26px; height: 17px; padding: 0 5px; border-radius: 7px;
+	font-size: 11px; font-weight: 700; letter-spacing: .02em; line-height: 1; white-space: nowrap;
 	font-variant-numeric: normal;
 }
 .badges .jmark { height: 18px; min-width: 26px; font-size: 11px; border-radius: 7px; padding: 0 7px; }
@@ -283,18 +287,27 @@ td.country { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 
 /* ---------------------------------------------------------------- recent searches */
 .histmenu { min-width: 320px; max-width: 560px; }
-.histmenu .histopt { display: flex; flex-direction: column; gap: 1px; padding: 5px 11px; border-radius: 5px; cursor: pointer; }
+.histmenu .histopt { display: flex; flex-direction: column; gap: 1px; padding: 5px 11px; border-radius: 7px; cursor: pointer; }
 .histmenu .histopt:hover, .histmenu .histopt.hot { background: var(--accent); color: var(--accent-text); }
 .histmenu .histopt .h-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.histmenu .histopt .h-meta { font-size: 11px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.histmenu .histopt .h-meta { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .histmenu .histempty { padding: 7px 11px; color: var(--muted); }
 .histmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
-.histmenu .histclear { padding: 5px 11px; border-radius: 5px; cursor: pointer; color: var(--muted); }
+.histmenu .histclear { padding: 5px 11px; border-radius: 7px; cursor: pointer; color: var(--muted); }
 .histmenu .histclear:hover { background: var(--row-hover); color: var(--text); }
-.d-authors { margin-top: 5px; }
+.d-authors { margin-top: 4px; }
 .d-meta { margin-top: 3px; color: var(--muted); }
-.d-actions { display: flex; gap: 6px; margin: 10px 0 9px; flex-wrap: wrap; }
-.d-abstract { line-height: 1.6; white-space: pre-wrap; }
+.d-actions { display: flex; gap: 6px; flex: none; }
+.d-abstract { margin-top: 6px; line-height: 1.6; white-space: pre-wrap; }
+/* What the row's own status says, in words: the tooltip alone hid why an add failed. */
+.d-status { margin-top: 3px; line-height: 1.5; }
+.d-status.ok { color: var(--ok); }
+.d-status.warn { color: var(--warn); }
+.d-status.err { color: var(--err); }
+.d-versions { margin-top: 6px; color: var(--muted); line-height: 1.5; }
+.d-versions button { font-size: 11px; padding: 0 7px; border-radius: 7px; color: var(--text); text-decoration: underline; }
+.d-fold { margin-top: 8px; color: var(--muted); }
+.d-fold summary { cursor: pointer; }
 
 /* ---------------------------------------------------------------- bottom bars */
 #import-bar { display: flex; align-items: center; gap: 12px; padding: 9px 13px; border-top: 1px solid var(--border); flex-wrap: wrap; }
@@ -310,9 +323,9 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 .ctxmenu {
 	position: fixed; z-index: 50; min-width: 190px; padding: 5px;
 	background: var(--glass-strong); backdrop-filter: saturate(180%) blur(26px); -webkit-backdrop-filter: saturate(180%) blur(26px);
-	border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: var(--shadow);
+	border: 1px solid var(--border-strong); border-radius: 9px;
 }
-.ctxmenu div { padding: 5px 11px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.ctxmenu div { padding: 5px 11px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
 .ctxmenu div:hover { background: var(--accent); color: var(--accent-text); }
 .ctxmenu div.disabled { opacity: .38; pointer-events: none; }
 .ctxmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
@@ -323,7 +336,7 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 .sel-btn {
 	flex: 1 1 auto; display: flex; align-items: center; gap: 6px;
 	font: inherit; padding: 4px 7px; color: var(--text); text-align: left; cursor: pointer;
-	border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-tint);
+	border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-tint);
 	white-space: nowrap; overflow: hidden;
 }
 .sel-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
@@ -333,9 +346,9 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 .selmenu {
 	position: fixed; z-index: 60; padding: 5px; overflow-y: auto;
 	background: var(--menu-bg); border: 1px solid var(--border-strong);
-	border-radius: 9px; box-shadow: var(--shadow);
+	border-radius: 9px;
 }
-.selopt { padding: 5px 11px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.selopt { padding: 5px 11px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
 .selopt.on { font-weight: 650; }
 .selopt.hot { background: var(--accent); color: var(--accent-text); }
 
@@ -351,10 +364,9 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 .badge.src { display: inline-flex; align-items: center; gap: 5px; }
 .badge .brand-mark { flex: none; width: 12px; height: 12px; opacity: .85; }
 
-/* Narrow windows: the toolbar and the detail actions keep their icons and drop their words (tooltips remain). */
+/* Narrow windows: the toolbar keeps its icons and drops their words (tooltips remain). */
 @media (max-width: 1000px) {
-	.toolbar .ghost span, .d-actions button span { display: none; }
-	.d-actions button { padding: 4px 7px; }
+	.toolbar .ghost span { display: none; }
 }
 #toggle-metrics[aria-pressed="false"] { color: var(--muted); }
 .table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -409,3 +421,20 @@ html[lang="ko"] .field label, html[lang="ko"] .hint, html[lang="ko"] #results-ta
 .yr-bar:hover:not(:disabled) { background: transparent; border-color: transparent; }
 .yr-ends { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .yr-clear { font-size: 11px; padding: 1px 5px; border-radius: 7px; white-space: nowrap; }
+
+/* In library: all / not owned / owned, each with its count after the other filters. */
+.lib-filter { display: inline-flex; align-items: center; gap: 2px; }
+.lib-filter-label { margin-right: 3px; color: var(--muted); font-size: 11.5px; }
+.lib-filter button { font-size: 11.5px; padding: 2px 8px; border-radius: 7px; background: transparent; border-color: transparent; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lib-filter button:hover:not(:disabled) { color: var(--text); }
+.lib-filter button[aria-pressed="true"] { color: var(--text); font-weight: 650; background: var(--chip); border-color: var(--border-strong); }
+/* Export and View: two plain menus instead of six buttons. */
+.menu-btn { color: var(--muted); background: transparent; border-color: transparent; white-space: nowrap; }
+.menu-btn::after { content: "▾"; margin-left: 5px; font-size: 11px; }
+.menu-btn:hover:not(:disabled), .menu-btn[aria-expanded="true"] { color: var(--text); background: var(--row-hover); border-color: transparent; }
+.tbmenu { min-width: 170px; }
+.tbmenu .selopt::before { content: ""; display: inline-block; width: 1.3em; }
+.tbmenu .selopt[aria-checked="true"]::before { content: "✓"; }
+.tbmenu .selopt:focus { outline: none; background: var(--accent); color: var(--accent-text); }
+.tbmenu .selopt[aria-disabled="true"] { opacity: .5; }
+.tbmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
