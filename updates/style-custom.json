@@ -5,7 +5,7 @@
         {
           "version": "0.54.4",
           "update_link": "https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/style-custom-v0.54.4/style-custom-0.54.4.xpi",
-          "update_hash": "sha256:",
+          "update_hash": "sha256:ef698b487abf6f27843545467afe047dd39146fc04f728201a20af3149189817",
           "applications": {
             "zotero": {
               "strict_min_version": "9.0"

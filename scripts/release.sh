@@ -25,7 +25,10 @@ release_one() { # name manifest-dir xpi-prefix tag-prefix feed
 	if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then echo "$NAME $VERSION is already released ($TAG); skipping."; return 0; fi
 	if [ "$DIR" = "." ]; then sh scripts/build.sh >/dev/null; else (cd "$DIR" && python3 scripts/build.py >/dev/null); fi
 	XPI="$DIR/build/$PREFIX-$VERSION.xpi"; [ -f "$XPI" ] || { echo "build did not produce $XPI"; exit 1; }
-	HASH=$(shasum -a 256 "$XPI" | cut -d' ' -f1)
+	# The system shasum, not whatever is first on PATH: a stale Intel perl under
+	# /usr/local once made `shasum` fail, and the feed went out with an empty hash.
+	HASH=$(/usr/bin/shasum -a 256 "$XPI" | cut -d' ' -f1)
+	[ ${#HASH} -eq 64 ] || { echo "could not hash $XPI; nothing was published"; exit 1; }
 	LINK="https://github.com/$REPO/releases/download/$TAG/$PREFIX-$VERSION.xpi"
 	node -e '
 		const [feed, id, version, link, hash, min] = process.argv.slice(1);
