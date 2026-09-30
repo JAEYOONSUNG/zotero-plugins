@@ -177,6 +177,21 @@
    });return b;
   };
   function saveUI(patch){if(patch.density)runtime.Z.Prefs.set('extensions.style-custom.workbenchDensity',patch.density,true);runtime.cache.workbenchUI={...(runtime.cache.workbenchUI||{}),...patch};runtime.dirty=true;return runtime.flush();}
+  /* 확인함: one store for 저자 추적's inbox and 새 논문. Kept per library by
+     normalised DOI, else OpenAlex work id (never by title), apart from the news
+     and the answers themselves, which a later sweep replaces. Separate from the
+     reading state: marking a paper seen never changes its status. */
+  const seenWorkKey=work=>String(work.doi||'').toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim()||String(work.id||'');
+  const seenKey=entry=>`${state.libraryID||''}:${entry.key}`;
+  const seenAll=()=>runtime.cache.workbenchUI?.inboxSeen||{};
+  const isSeen=entry=>!!entry.key&&!!seenAll()[seenKey(entry)];
+  function setSeen(entry,on){
+   const next={...seenAll()};
+   if(on)next[seenKey(entry)]=new Date().toISOString();else delete next[seenKey(entry)];
+   // Oldest go first past a few thousand; a follow list turns over long before that.
+   const keys=Object.keys(next);if(keys.length>3000)for(const k of keys.sort((x,y)=>String(next[x]).localeCompare(String(next[y]))).slice(0,keys.length-3000))delete next[k];
+   return saveUI({inboxSeen:next});
+  }
   const SVG_NS='http://www.w3.org/2000/svg';
   const ICONS={
    density:[['line',{x1:3,y1:5,x2:13,y2:5}],['line',{x1:3,y1:8,x2:13,y2:8}],['line',{x1:3,y1:11,x2:13,y2:11}]],
@@ -3562,8 +3577,10 @@
 
   // One dense row per result: what it is, then the actions, which stay out of
   // the way until the row is hovered.
-  function hitRow(work,parent){
+  function hitRow(work,parent,decorate){
    const row=node('div',null,parent||null,{class:'sc-hit'});
+   // A caller's extra lines (why it is listed, seen) come back with every redraw of the row.
+   const done=()=>{decorate?.(row,work);return row;};
    if(work.doi&&!work.inLibrary){const open=node('button',work.title||'제목 없음',row,{class:'sc-hit-title sc-hit-title-link',type:'button',title:'doi.org에서 열기','data-opens':'browser'});open.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+encodeURI(work.doi));}catch(e){message(readable(e),true);}});}
    else node('p',work.title||'제목 없음',row,{class:'sc-hit-title'});
    const meta=node('p',null,row,{class:'sc-hit-meta'});
@@ -3604,7 +3621,7 @@
     const mine=work.doi&&typeof runtime.itemForDOI==='function'?runtime.itemForDOI(work.doi):null;
     if(mine&&win.ZoteroPane?.selectItem){const acts=node('div',null,row,{class:'sc-hit-actions'});
      button('보기',()=>run(async()=>{await win.ZoteroPane.selectItem(mine.id);message(`목록에서 선택했습니다 — ${String(mine.getField?.('title')||work.title||'').slice(0,60)}`);}),acts,{title:'Zotero 목록에서 이 논문 선택'});}
-    return row;
+    return done();
    }
    const actions=node('div',null,row,{class:'sc-hit-actions'});
    if(!work.doi&&!work.inLibrary&&typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 찾기',()=>runtime.Z.ZotPoP.openSearch(win,{title:work.title||'',year:work.year||''}),actions,{'data-opens':'window'});
@@ -3614,12 +3631,12 @@
     // The row is now stale: say so in place rather than leaving a dead button.
     // The row is stale once the paper is in: redraw it in place as owned.
     work.inLibrary=true;
-    const fresh=hitRow(work,null);row.replaceWith(fresh);
+    const fresh=hitRow(work,null,decorate);row.replaceWith(fresh);
     message(`추가했습니다 — ${saved[0]?.getField('title')||work.doi}`);
    }),actions);
    if(work.doi)button('DOI',()=>copy(work.doi),actions);
    if(work.pdfURL)button('PDF',()=>win.Zotero.launchURL(work.pdfURL),actions,{'data-opens':'browser'});
-   return row;
+   return done();
   }
 
   function hitList(works,parent){
@@ -3672,7 +3689,8 @@
    for(const paper of shelf){const id=seedOf(paper);if(/^W\d+$/.test(id))seeds.add(id);else noWork++;}
    const key=`${state.libraryID||''}:${state.scope}:${shelfKey(shelf)}`;
    const saved=typeof runtime.freshCiterStore==='function'?runtime.freshCiterStore()[key]:null;
-   const kept=saved&&saved.days===FRESH_DAYS&&Date.now()-Date.parse(saved.at)<24*3600e3?saved:null;
+   // A stored answer is shown at any age, dated; only 다시 확인 asks again.
+   const kept=saved&&saved.days===FRESH_DAYS?saved:null;
    const list=node('div',null,body);
    /* How much of the shelf could not be asked about. "Nothing new" and "most
       of this was never asked" are different answers and only one of them is
@@ -3684,34 +3702,54 @@
    };
    const draw=report=>{
     list.replaceChildren();
-    const rows=report.rows||[];
-    const checked=String(report.at||'').slice(0,10);
-    message(rows.length?T(`새 논문 ${rows.length}편 · 최근 ${report.days}일 · 내 문헌 ${report.seeds}편 기준`)
+    const all=report.rows||[];
+    const at=Date.parse(report.at),gone=Number.isFinite(at)?Math.max(0,Math.floor((Date.now()-at)/864e5)):0;
+    const checked=gone?T(`${gone}일 전 확인`):T('오늘 확인');
+    const view=state.freshSeen||'new';
+    const unseen=all.filter(w=>!isSeen({key:seenWorkKey(w)})).length;
+    const rows=all.filter(w=>view==='all'||(view==='seen')===isSeen({key:seenWorkKey(w)}));
+    message(all.length?T(`새 논문 ${all.length}편 · 최근 ${report.days}일 · 내 문헌 ${report.seeds}편 기준`)
      :T(`최근 ${report.days}일 사이 이 범위를 인용한 새 논문이 없습니다.`));
-    if(!rows.length){
+    if(!all.length){
      const box=node('div',null,list,{class:'sc-empty'});
      node('p',T(`최근 ${report.days}일 사이 이 범위의 문헌을 인용한 새 논문이 없습니다.`),box);
+     node('p',checked,box,{class:'sc-muted'});
      gapLine(box,report.noWork);
      return;
     }
-    const heading=sectionHead('새로 나온 관련 논문',rows.length,list);
-    node('span',T(`최근 ${report.days}일 · 확인함 ${checked}`),heading,{class:'sc-path-head-note'});
+    const heading=sectionHead('새로 나온 관련 논문',all.length,list);
+    node('span',T(`최근 ${report.days}일 · ${checked}`),heading,{class:'sc-path-head-note'});
     node('p','이 범위의 문헌을 인용한 새 논문입니다. 내 문헌을 많이 인용한 순서입니다.',list,{class:'sc-muted sc-hit-group-note'});
     gapLine(list,report.noWork);
     if(report.truncated)node('p','인용한 논문이 더 있어 최근 것부터 보여 줍니다.',list,{class:'sc-muted sc-path-note'});
+    // The same switch and the same store as 저자 추적's inbox: seen in one is seen in both.
+    const tools=node('div',null,list,{class:'sc-inbox-tools'});
+    const views=node('div',null,tools,{class:'sc-segmented',role:'group','aria-label':T('새 논문 보기')});
+    for(const [key,label,count] of [['new','미확인',unseen],['seen','확인함',all.length-unseen],['all','전체',all.length]])
+     button(`${T(label)} ${count}`,()=>{state.freshSeen=key;state.freshLimit=0;draw(report);},views,{'aria-pressed':String(view===key)});
     const box=node('div',null,list,{class:'sc-hits'});
     const limit=state.freshLimit||12;
-    for(const work of rows.slice(0,limit)){
-     const row=hitRow(work,box);
-     /* Why this paper is here goes directly under its title, as it does in the
-        reading order: above the year and journal, which identify the paper
-        rather than justify it. */
+    /* Why this paper is here goes directly under its title, as it does in the
+       reading order: above the year and journal, which identify the paper
+       rather than justify it. Redrawn with the row, so 추가 does not lose it. */
+    const decorate=(row,work)=>{
      const why=node('p',null,null,{class:'sc-path-why'});
      row.insertBefore(why,row.querySelector('.sc-hit-meta'));
      node('b',T(`내 서재 ${work.shared}편 인용`),why);
      const named=(work.citedTitles||[]).filter(Boolean);
      if(named.length)why.appendChild(doc.createTextNode(' · '+named[0]+(named.length>1?' '+T(`외 ${named.length-1}편`):'')));
-    }
+     const entry={key:seenWorkKey(work)},seen=isSeen(entry);
+     row.dataset.seen=String(seen);
+     const acts=row.querySelector('.sc-hit-actions')||node('div',null,row,{class:'sc-hit-actions'});
+     button(seen?'되돌리기':'확인함',()=>run(async()=>{
+      await setSeen(entry,!seen);
+      if(disposed||state.tab!=='related'||state.relatedView!=='fresh')return;
+      draw(report);
+      body.querySelector('.sc-inbox-seen')?.focus?.();
+     }),acts,{class:'sc-inbox-seen',title:T(seen?'미확인으로 되돌립니다':'이 논문을 확인한 것으로 두고 목록에서 뺍니다')});
+    };
+    if(!rows.length)node('p',T(view==='new'?'확인하지 않은 새 논문이 없습니다.':'확인한 새 논문이 없습니다.'),box,{class:'sc-muted sc-inbox-empty'});
+    for(const work of rows.slice(0,limit))hitRow(work,box,decorate);
     if(rows.length>limit){
      const more=bar(list);
      node('span',T(`${rows.length}편 중 ${limit}편`),more,{class:'sc-muted'});
@@ -4253,7 +4291,7 @@
        for good and did not mark anything in the inbox. Both now read and
        write the one store, so a paper dismissed in either place is dismissed
        in both, and can be put back. */
-    const newsKey=work=>bareDOI(work.doi)||String(work.id||'');
+    const newsKey=seenWorkKey;
     const fresh=reported.filter(work=>!isSeen({key:newsKey(work)}));
     if(token!==epoch||disposed||state.tab!=='authors')return;
     list.replaceChildren();
@@ -4404,24 +4442,11 @@
    function mergedNews(watched){
     const merged=new Map();
     for(const person of watched)for(const work of person.news||[]){
-     const key=bareDOI(work.doi)||String(work.id||'');if(!key)continue;
+     const key=seenWorkKey(work);if(!key)continue;
      if(!merged.has(key))merged.set(key,{key,work,people:[]});
      merged.get(key).people.push(person);
     }
     return [...merged.values()].sort((a,b)=>String(b.work.date||'').localeCompare(String(a.work.date||'')));
-   }
-   /* A paper marked 확인함 is out of the way until asked for, and can be put
-      back. Kept per library by DOI or work id, apart from the authors' own
-      news, which a later sweep replaces; nothing here clears that news. */
-   const seenKey=entry=>`${state.libraryID||''}:${entry.key}`;
-   const seenAll=()=>runtime.cache.workbenchUI?.inboxSeen||{};
-   const isSeen=entry=>!!seenAll()[seenKey(entry)];
-   function setSeen(entry,on){
-    const next={...seenAll()};
-    if(on)next[seenKey(entry)]=new Date().toISOString();else delete next[seenKey(entry)];
-    // Oldest go first past a few thousand; a follow list turns over long before that.
-    const keys=Object.keys(next);if(keys.length>3000)for(const k of keys.sort((x,y)=>String(next[x]).localeCompare(String(next[y]))).slice(0,keys.length-3000))delete next[k];
-    return saveUI({inboxSeen:next});
    }
    function drawAuthorInbox(watched,parent){
     const all=mergedNews(watched);
@@ -4568,7 +4593,7 @@
    };
    const COAUTHOR_NOTE=T('공동 저자로 실린 문헌은 관련된 관심 저자 모두에게 집계됩니다');
    // What a person has that is still to look at: their news less what the inbox has marked 확인함.
-   const unseenWorks=person=>(person.news||[]).filter(work=>!isSeen({key:bareDOI(work.doi)||String(work.id||'')}));
+   const unseenWorks=person=>(person.news||[]).filter(work=>!isSeen({key:seenWorkKey(work)}));
    function drawWatched(parent){
     // Those with most still to look at first; the runtime's order counts news already seen.
     const watched=runtime.watchedAuthorsByNews().map((person,index)=>({person,index,left:unseenWorks(person).length}))

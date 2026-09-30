@@ -4545,3 +4545,46 @@ test('an inbox row is the same shape as every other paper row: mark first, prepr
   assert.equal(/프리프린트/.test(f.body().querySelector('.sc-inbox-status')?.textContent || ''), false);
   f.bench.destroy();
 });
+
+test('확인함 is one store: a paper seen in 새 논문 leaves the inbox, and 되돌리기 restores both',async()=>{
+ const f=fixture();
+ shelfBench(f,{rows:[newWork('W10',3,['Held one']),newWork('W11',1,['Held one'])]});
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news:[{id:'https://openalex.org/W10',title:'Inbox copy',doi:'https://doi.org/10.1/W10',date:'2026-09-01'}]}];
+ await onFresh(f);
+ await f.click(FIND_NEW);await settle();
+ const hits=()=>[...f.body().querySelectorAll('.sc-hit .sc-hit-title')].map(t=>t.textContent);
+ const tab=label=>[...f.body().querySelectorAll('.sc-inbox-tools .sc-segmented button')].find(b=>b.textContent.startsWith(label)).textContent;
+ assert.equal(tab('미확인'),'미확인 2');
+ await f.click('확인함');await settle();
+ assert.deepEqual(hits(),['New paper W11'],'gone from 미확인 in 새 논문');
+ assert.equal(tab('확인함'),'확인함 1');
+ assert.equal(f.runtime.cache.workbenchUI.inboxSeen['1:10.1/w10']!=null||Object.keys(f.runtime.cache.workbenchUI.inboxSeen).length===1,true,'keyed by library and DOI');
+ await f.bench.show('authors');
+ assert.equal(f.body().querySelectorAll('.sc-author-inbox-row').length,0,'and from the inbox');
+ await f.click('확인함 1');
+ assert.equal(f.body().querySelectorAll('.sc-author-inbox-row').length,1);
+ await f.click('되돌리기');
+ assert.equal(f.body().querySelectorAll('.sc-author-inbox-row').length,0,'restored, so out of 확인함');
+ await onFresh(f);await f.click(FIND_NEW);await settle();
+ assert.deepEqual(hits(),['New paper W10','New paper W11'],'back in 새 논문 too');
+ f.bench.destroy();
+});
+
+test('a day-old stored answer still renders, with its date, and the reason line survives 추가',async()=>{
+ const f=fixture();
+ const {asked}=shelfBench(f,{rows:[]});
+ const old=new Date(Date.now()-25*3600e3).toISOString();
+ f.runtime.freshCiterStore=()=>new Proxy({}, {get:(_,k)=>typeof k==='string'?{days:90,at:old,seeds:2,noWork:0,rows:[newWork('W10',3,['Held one'])]}:undefined});
+ await onFresh(f);
+ assert.equal(asked.length,0,'nothing is asked again on its own');
+ assert.match(f.body().textContent,/1일 전 확인/);
+ assert.doesNotMatch(f.body().textContent,/새 논문 찾기 · OpenAlex/);
+ assert.match(f.body().querySelector('.sc-path-why').textContent,/내 서재 3편 인용/);
+ await f.click('추가');await settle();
+ const row=f.body().querySelector('.sc-hit');
+ assert.ok(f.calls.find(c=>c[0]==='importWork'));
+ assert.ok(row.querySelector('.sc-hit-owned'),'redrawn as owned');
+ assert.match(row.querySelector('.sc-path-why')?.textContent||'',/내 서재 3편 인용/,'the reason line is kept');
+ assert.equal(row.querySelectorAll('.sc-path-why').length,1);
+ f.bench.destroy();
+});
