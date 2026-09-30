@@ -277,3 +277,23 @@ test("node size is centrality (PageRank within this graph), capped and floored l
   assert.equal(graph.centralityRadius(-1), graph.centralityRadius(0));
   assert.equal(graph.centralityRadius(5), graph.centralityRadius(1));
 });
+
+test("placeLabelSides keeps a label off the lines and off the other nodes when it can", () => {
+  // b lies to the right of a on the same row, joined by an edge: the default spot (right of a)
+  // sits on that edge, so a's label goes somewhere the line does not run.
+  const nodes = [
+    {id: "a", x: 100, y: 100, r: 5, degree: 3, rank: 0.9, labelText: "First paper"},
+    {id: "b", x: 240, y: 100, r: 5, degree: 1, rank: 0.1, labelText: "Second"}
+  ];
+  const plain = graph.placeLabelSides(nodes).get("a");
+  assert.equal(plain.dx, 5 + 4, "without edges the right-hand spot is taken, as before");
+  const aware = graph.placeLabelSides(nodes, {edges: [{source: "a", target: "b"}]}).get("a");
+  assert.ok(!(aware.anchor === "start" && aware.dy === 3.5), "with the edge known, a's label leaves the line");
+  // A node in the way counts too: b's circle sits where a's right-hand label would be.
+  const crowded = [
+    {id: "a", x: 100, y: 100, r: 5, degree: 3, rank: 0.9, labelText: "First paper"},
+    {id: "c", x: 130, y: 100, r: 9, degree: 1, rank: 0.1, labelText: "C"}
+  ];
+  const away = graph.placeLabelSides(crowded).get("a");
+  assert.ok(!(away.anchor === "start" && away.dy === 3.5), "a label does not start on top of a neighbouring node");
+});

@@ -1942,7 +1942,6 @@
 #style-custom-workbench .sc-annot-order { display: inline-flex; gap: 2px; margin-inline-start: auto; }
 #style-custom-workbench .sc-annot-order button { min-height: 24px; padding: 0 8px; border-radius: 7px; font-size: 12px; }
 #style-custom-workbench .sc-annot-order button[aria-pressed=true] { background: var(--sc-accent-soft); box-shadow: inset 0 0 0 1px var(--sc-accent); }
-#style-custom-workbench .sc-note-head { margin: 6px 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; }
 #style-custom-workbench .sc-note-compose[hidden] { display: none; }
 
 
@@ -2252,8 +2251,6 @@
 #style-custom-workbench button[data-variant=primary]:hover:not(:disabled) { background: var(--sc-accent); opacity: .86; }
 #style-custom-workbench button:disabled,
 #style-custom-workbench button[aria-disabled=true] { background: transparent; box-shadow: inset 0 0 0 1px var(--sc-border-strong); color: var(--sc-muted); cursor: default; opacity: 1; }
-#style-custom-workbench .sc-note-head > [aria-hidden=true] { display: none; }
-#style-custom-workbench .sc-note-head { gap: 8px; align-items: center; }
 
 /* S8: hover lightens a resting chip, never the chosen one. */
 #style-custom-workbench .sc-chip-button:hover:not([aria-pressed=true]) { background: var(--sc-fill-hover); color: var(--sc-text); }
@@ -2335,3 +2332,239 @@
 #style-custom-workbench .sc-segmented .sc-count { margin-inline-start: 2px; }
 #style-custom-workbench .sc-shell nav { scroll-padding-block: 30px; }
 #style-custom-workbench .sc-settings-part input[type=checkbox]:not(:checked) { box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
+
+/* ==== System pass 2 (user direction 2026-10-01, second round): defects found tab by tab after pass 1 ====
+   Every rule below is a tab-specific fix on top of the system pass; none adds a coloured edge,
+   text stays at 11px or more, and every surface comes from the tokens so dark mode follows. */
+
+/* A heading with its actions at the right: the one head of a group, not a count line plus a second bar. */
+#style-custom-workbench .sc-section-head:has(> .sc-section-head-actions) { display: flex; flex-wrap: wrap; }
+#style-custom-workbench .sc-section-head-actions { margin-inline-start: auto; display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 400; }
+
+/* 2. 저자 추적 ------------------------------------------------------------ */
+/* "관심 저자" and "최근 논문" side by side: the label no longer lies on the button. */
+#style-custom-workbench .sc-hit:has(> .sc-hit-owned) { grid-template-columns: minmax(0, 1fr) auto auto; }
+#style-custom-workbench .sc-hit:has(> .sc-hit-owned) > .sc-hit-owned { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+#style-custom-workbench .sc-hit:has(> .sc-hit-owned) > .sc-hit-actions { grid-column: 3; grid-row: 1 / span 3; align-self: center; }
+/* The toolbar says what is waiting, in a badge: amber to look at, lime when done. */
+#style-custom-workbench .sc-watch-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 10px; padding: 0 4px; }
+#style-custom-workbench .sc-watch-head .sc-hit-group { margin: 0; padding: 0; font-size: 12px; }
+#style-custom-workbench .sc-watch-count { display: inline-block; padding: 2px 11px; border-radius: var(--sc-radius-pill); background: var(--sc-amber); color: var(--sc-amber-ink); font: 650 12px/18px var(--sc-font); }
+#style-custom-workbench .sc-watch-count[data-state=done] { background: var(--sc-lime); color: var(--sc-lime-ink); }
+#style-custom-workbench .sc-author-inbox-section { margin: 0; }
+/* Followed authors: white cards in the group, wide enough for a name and its affiliation. */
+#style-custom-workbench .sc-watch-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin: 0; }
+#style-custom-workbench .sc-watch { align-items: start; padding: 10px 12px; border-radius: 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-watch:hover { background: var(--sc-fill); }
+#style-custom-workbench .sc-watch > .sc-watch-face { align-self: start; }
+#style-custom-workbench .sc-watch-line { flex-wrap: wrap; row-gap: 4px; }
+#style-custom-workbench .sc-watch-name { flex: 1 1 100%; font-size: 13px; }
+#style-custom-workbench .sc-watch-badge, #style-custom-workbench .sc-watch-mine { flex: none; }
+#style-custom-workbench .sc-watch-badge { border-radius: var(--sc-radius-pill); padding: 0 8px; }
+#style-custom-workbench .sc-watch-mine { margin: 0; }
+#style-custom-workbench .sc-watch-sub { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; font-size: 11px; color: var(--sc-muted); }
+/* The page of this paper's authors is a group like the others: no rule above it. */
+#style-custom-workbench .sc-author-page:not(:empty) { margin-block-start: 0; padding-block-start: 0; border-block-start: 0; }
+/* Saved new papers: white row cards on the grey, no hairlines. */
+#style-custom-workbench .sc-author-inbox { gap: 6px; margin: 0 0 8px; }
+#style-custom-workbench .sc-author-inbox-row { padding: 10px 14px; border: 0; border-radius: 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); align-items: center; }
+#style-custom-workbench .sc-inbox-tools { padding: 0 2px; }
+#style-custom-workbench .sc-inbox-note { margin: 0 6px 8px; }
+@container sc-workbench (max-width: 680px) {
+  #style-custom-workbench .sc-inbox-hint { display: none; }
+  #style-custom-workbench .sc-inbox-status { flex-wrap: nowrap; }
+}
+
+/* 3. 저널 지표 ------------------------------------------------------------ */
+#style-custom-workbench .sc-journal-reading { gap: 8px; margin: 0 0 14px; padding: 12px 12px 14px; border: 0; border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-journal-reading-head { padding: 0 4px; }
+#style-custom-workbench .sc-journal-reading-title { color: var(--sc-text); font: 650 13px/1.4 var(--sc-font); letter-spacing: 0; }
+#style-custom-workbench .sc-journal-reading-jcr-note, #style-custom-workbench .sc-journal-legend-line { margin: 0; padding: 0 4px; font-size: 12px; line-height: 1.5; }
+#style-custom-workbench .sc-journal-reading-table { gap: 6px; }
+#style-custom-workbench .sc-journal-reading-row { grid-template-columns: minmax(0, 1fr) 56px 64px 120px 84px 210px; gap: 10px; min-height: 0; padding: 8px 14px; border-top: 0; border-radius: 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-journal-reading-row.sc-journal-reading-header { padding-block: 0; background: transparent; box-shadow: none; }
+#style-custom-workbench .sc-journal-reading-papers { margin: -2px 0 0; padding: 6px 14px 8px 26px; border-top: 0; border-radius: 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-journal-reading-count,
+#style-custom-workbench .sc-journal-reading-count:hover,
+#style-custom-workbench .sc-journal-reading-count[aria-expanded=true] { text-decoration: none; }
+/* Narrow: the row is three lines. The journal, then the figures, then 인용 중앙값 as one line across. */
+@container sc-workbench (max-width: 760px) {
+  #style-custom-workbench .sc-journal-reading-row { grid-template-columns: 52px 52px minmax(0, 1fr) 76px; column-gap: 10px; row-gap: 4px; }
+  #style-custom-workbench .sc-journal-reading-name,
+  #style-custom-workbench .sc-journal-reading-citation-compare { grid-column: 1 / -1; }
+  #style-custom-workbench .sc-journal-reading-header > :first-child,
+  #style-custom-workbench .sc-journal-reading-header > .sc-journal-citation-head { display: none; }
+  #style-custom-workbench .sc-journal-reading-citation-compare { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; text-align: start; }
+  #style-custom-workbench .sc-journal-reading-citation-compare::before { content: attr(data-label); color: var(--sc-muted); font-size: 11px; }
+  #style-custom-workbench .sc-journal-citation-plot { display: none; }
+  #style-custom-workbench .sc-journal-citation-line { display: inline-flex; grid-column: auto; }
+}
+
+/* 4. 관계 그래프 ---------------------------------------------------------- */
+#style-custom-workbench .sc-graph-frame { position: relative; }
+/* The zoom lies on the map, top right: nothing under it to be cut by the footer. */
+#style-custom-workbench .sc-graph-zoom { position: absolute; inset-block-start: 10px; inset-inline-end: 10px; z-index: 2; display: flex; gap: 2px; padding: 3px; border-radius: var(--sc-radius-pill); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
+#style-custom-workbench .sc-graph-zoom button { min-height: 26px; padding: 0 12px; border-radius: var(--sc-radius-pill); background: transparent; box-shadow: none; font-size: 12px; font-weight: 500; }
+#style-custom-workbench .sc-graph-zoom button:hover { background: var(--sc-fill-hover); }
+#style-custom-workbench .sc-graph-caption { margin: 8px 2px 12px; font-size: 12px; }
+/* A label lies on a surface-coloured plate, so a line behind it never cuts through the words. */
+#style-custom-workbench .sc-graph-label-bg { fill: var(--sc-surface); fill-opacity: .94; pointer-events: none; }
+#style-custom-workbench .sc-graph-label { stroke-width: 2px; }
+/* A fetch is a button, not a second track like the segmented choices beside it. */
+#style-custom-workbench .sc-fetch-action { min-height: var(--sc-control-height); padding: 0 16px; border-radius: var(--sc-radius-pill); background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border-strong); color: var(--sc-text); font-size: 13px; font-weight: 500; }
+#style-custom-workbench .sc-fetch-action:hover { background: var(--sc-fill-hover); }
+
+/* 5. 논문 비교 ------------------------------------------------------------ */
+#style-custom-workbench .sc-matrix-selection { gap: 8px; margin: 8px 0 12px; }
+#style-custom-workbench .sc-matrix-selection-row { padding: 3px 4px 3px 14px; border: 0; border-radius: var(--sc-radius-pill); background: var(--sc-fill); }
+#style-custom-workbench .sc-matrix-selection-row button { background: var(--sc-surface); }
+#style-custom-workbench .sc-matrix-picker { margin: 6px 0 16px; padding: 10px 12px; border: 0; border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-matrix-picker .sc-actions { padding: 0 0 8px; }
+#style-custom-workbench .sc-matrix-picker-results { display: flex; flex-direction: column; gap: 2px; border-top: 0; }
+/* Title, authors in a column of their own, then the button: the names line up down the list. */
+#style-custom-workbench .sc-matrix-picker-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 12px; align-items: center; padding: 6px 8px; border: 0; border-radius: 10px; }
+#style-custom-workbench .sc-matrix-picker-row:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-matrix-picker-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container sc-workbench (max-width: 680px) {
+  #style-custom-workbench .sc-matrix-picker-row { grid-template-columns: minmax(0, 1fr) auto; }
+  #style-custom-workbench .sc-matrix-picker-authors { display: none; }
+}
+#style-custom-workbench .sc-matrix-options { margin-block: 18px 10px; }
+/* Row rules only, the same on every column; the first column is told apart by its tint, not by a line. */
+#style-custom-workbench .sc-matrix-scroll { border: 0; border-radius: var(--sc-radius-card); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-matrix th,
+#style-custom-workbench .sc-matrix td,
+#style-custom-workbench .sc-matrix tr > *:first-child { border-inline-end: 0; border-inline-start: 0; }
+#style-custom-workbench .sc-matrix tr > *:first-child { background: var(--sc-surface-alt); min-width: 150px; max-width: 200px; width: 170px; }
+#style-custom-workbench .sc-matrix tr:last-child > * { border-block-end: 0; }
+/* A table wider than the panel fades at the cut edge, with a line under it saying so. */
+#style-custom-workbench .sc-matrix-scroll[data-more=true] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+#style-custom-workbench .sc-matrix-hint { margin: 6px 4px 0; font-size: 12px; }
+
+/* 6. 컬렉션 --------------------------------------------------------------- */
+/* The progress bar is pinned at the row's end; the actions lie over it on hover instead of keeping a column. */
+#style-custom-workbench .sc-collection { grid-template-columns: minmax(0, 1fr) 96px; grid-template-areas: "line bar"; }
+#style-custom-workbench .sc-collection-actions { position: absolute; inset-inline-end: 8px; inset-block-start: 50%; transform: translateY(-50%); z-index: 2; padding: 3px 4px; border-radius: var(--sc-radius-pill); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); opacity: 1; }
+#style-custom-workbench .sc-collection:not(:hover):not(:focus-within) > .sc-collection-actions { visibility: hidden; }
+#style-custom-workbench .sc-collection-bar { height: 4px; border-radius: var(--sc-radius-pill); }
+#style-custom-workbench .sc-collection > .sc-collection-bar { height: 4px; border-radius: var(--sc-radius-pill); }
+/* An empty collection is one compact line with no track. */
+#style-custom-workbench .sc-collection-empty > .sc-collection-bar { display: none; }
+#style-custom-workbench .sc-collection-group:has(> .sc-collection-empty:only-child) { padding: 2px 8px; border-radius: var(--sc-radius); }
+#style-custom-workbench .sc-collection-group > .sc-collection-empty { padding-block: 6px; min-height: 0; }
+#style-custom-workbench .sc-collection-tree { gap: 8px; }
+@container sc-workbench (max-width: 680px) {
+  #style-custom-workbench .sc-collection { grid-template-columns: minmax(0, 1fr) 64px; grid-template-areas: "line bar"; }
+  #style-custom-workbench .sc-collection-actions { inset-block-start: 6px; transform: none; }
+}
+
+/* 7. 주석 ----------------------------------------------------------------- */
+/* One container per paper, its title stuck at the top of it and leaving with it. */
+#style-custom-workbench .sc-annot-paper { display: flow-root; margin: 0 0 12px; padding: 0 12px 12px; border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-annot-paper .sc-annot-group { position: sticky; top: 0; z-index: 2; margin: 0 -12px 4px; padding: 12px 12px 8px; background: var(--sc-surface-alt); border-radius: var(--sc-radius-card) var(--sc-radius-card) 0 0; font-size: 13px; }
+#style-custom-workbench .sc-annot-paper .sc-annot-group-meta { margin: 0 0 6px; }
+#style-custom-workbench .sc-annot-paper .sc-annot-file { margin: 10px 0 6px 2px; }
+#style-custom-workbench .sc-annot-paper .sc-annot-group-more { margin: 8px 0 0; }
+/* Annotations: small white cards, eight pixels apart in both directions. */
+#style-custom-workbench .sc-annots { columns: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; align-items: start; }
+#style-custom-workbench .sc-annots > .sc-annot { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-annots > .sc-annot:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-annots > .sc-annot[data-selected=true] { background: var(--sc-fill); box-shadow: 0 0 0 1.5px var(--sc-control-edge); }
+#style-custom-workbench .sc-annot-memo { border-radius: 10px; }
+#style-custom-workbench .sc-annot-memo:hover { background: var(--sc-fill); }
+/* The memo of this paper: a container with a label and a white field. */
+#style-custom-workbench .sc-memo { gap: 6px; margin: 4px 0 12px; padding: 10px 12px; border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-memo-label { padding: 0 2px; color: var(--sc-muted); font-weight: 600; }
+#style-custom-workbench .sc-memo .sc-annot-memo { padding: 8px 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-text); }
+/* The order switch is as tall as the button beside it. */
+#style-custom-workbench .sc-annot-order { display: inline-flex; align-items: center; gap: 2px; padding: 3px; min-height: var(--sc-control-height); box-sizing: border-box; border-radius: var(--sc-radius-pill); background: var(--sc-fill); }
+#style-custom-workbench .sc-annot-order button { min-height: 26px; padding: 0 12px; border-radius: var(--sc-radius-pill); font-size: 12px; background: transparent; box-shadow: none; }
+#style-custom-workbench .sc-annot-order button[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+#style-custom-workbench .sc-annot-order button[aria-pressed=false]:hover { background: var(--sc-fill-hover); }
+
+/* 8. 읽기 진행 ------------------------------------------------------------ */
+#style-custom-workbench .sc-overview-fact:disabled { background: none; box-shadow: none; color: var(--sc-muted); cursor: default; }
+#style-custom-workbench .sc-group > .sc-reading-views { margin: 2px 6px 8px; }
+#style-custom-workbench .sc-group > .sc-reading-tools { padding: 0 6px 8px; }
+/* The file chooser travels with the button that opens that file. */
+#style-custom-workbench .sc-resume-actions > .sc-reading-file { order: -1; }
+@container sc-workbench (max-width: 680px) {
+  #style-custom-workbench .sc-resume-meta { flex: 1 1 100%; }
+  #style-custom-workbench .sc-resume-remark-box:not(:has(.sc-resume-remark)):not(:has(.sc-resume-memo-editor)) { flex: 1 1 100%; }
+  #style-custom-workbench .sc-resume-actions { flex: 1 1 100%; margin-inline-start: 0; justify-content: flex-start; flex-wrap: wrap; }
+  /* With a file to choose, the status control takes the next line, left aligned. */
+  #style-custom-workbench .sc-resume-actions:has(> .sc-reading-file) { display: grid; grid-template-columns: auto auto 1fr; justify-content: start; align-items: center; }
+  #style-custom-workbench .sc-resume-actions:has(> .sc-reading-file) > .sc-segmented { grid-column: 1 / -1; justify-self: start; }
+}
+
+/* 9. 노트: the one head carries the count, its actions at the right. */
+#style-custom-workbench .sc-note-compose { margin: 0 0 8px; padding: 10px 12px; border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+
+/* 10. 첨부 미리보기: each file a white row, the note about it on its own row. */
+#style-custom-workbench .sc-group .sc-attachment-group { margin: 0 0 12px; }
+#style-custom-workbench .sc-group .sc-attachment-group-title { margin: 6px 6px 6px; }
+#style-custom-workbench .sc-group .sc-attachment-row { padding: 10px 14px; margin: 0 0 6px; border: 0; border-radius: 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-attachment-nopreview { font-size: 12px; }
+
+/* 11. 보유·최근 문헌 ------------------------------------------------------- */
+/* The reading-state dot has a column of its own, left of the box, on the same centre line. */
+#style-custom-workbench .sc-paper-card[data-status]::before { content: none; }
+#style-custom-workbench .sc-paper-heading > .sc-check { opacity: 1; position: relative; display: inline-flex; align-items: center; justify-content: space-between; width: 34px; gap: 0; }
+#style-custom-workbench .sc-paper-heading > .sc-check::before { content: ""; flex: none; box-sizing: border-box; width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+#style-custom-workbench .sc-paper-card[data-status] .sc-paper-heading > .sc-check::before { background: var(--sc-faint); }
+#style-custom-workbench .sc-paper-card[data-status=reading] .sc-paper-heading > .sc-check::before { background: var(--sc-reading); }
+#style-custom-workbench .sc-paper-card[data-status=done] .sc-paper-heading > .sc-check::before { background: var(--sc-done); }
+#style-custom-workbench .sc-paper-heading > .sc-check input { opacity: 0; transition: opacity .12s ease; }
+#style-custom-workbench .sc-paper-card:hover .sc-paper-heading > .sc-check input,
+#style-custom-workbench .sc-paper-card:focus-within .sc-paper-heading > .sc-check input,
+#style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-heading > .sc-check input { opacity: 1; }
+#style-custom-workbench .sc-row-progress { align-self: center; border-radius: var(--sc-radius-pill); }
+/* The summary: a soft block with the two-tone bar over a row of small tiles. */
+#style-custom-workbench .sc-overview { gap: 10px; margin: 2px 0 14px; padding: 12px 14px; border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-overview-meter { height: 8px; border-radius: var(--sc-radius-pill); }
+#style-custom-workbench .sc-overview > .sc-overview-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; }
+#style-custom-workbench .sc-overview > .sc-overview-facts > * { display: flex; flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-muted); font-size: 11px; line-height: 1.4; text-align: start; }
+#style-custom-workbench .sc-overview > .sc-overview-facts > button:hover { background: var(--sc-fill-hover); }
+#style-custom-workbench .sc-overview > .sc-overview-facts > button[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+#style-custom-workbench .sc-overview > .sc-overview-facts > button[aria-pressed=true] b { color: var(--sc-nav-on-ink); }
+#style-custom-workbench .sc-overview > .sc-overview-facts b { color: var(--sc-text); font-size: 16px; font-weight: 650; line-height: 1.3; }
+#style-custom-workbench .sc-overview > .sc-local-reading-links,
+#style-custom-workbench .sc-overview > .sc-overview-picks { padding: 0 2px; }
+/* The sort row under the summary: at narrow widths the column labels become plain sort chips. */
+@container sc-workbench (max-width: 680px) {
+  #style-custom-workbench .sc-paper-columns { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 2px 8px; border-block-end: 0; }
+  #style-custom-workbench .sc-paper-columns-lead { display: inline-flex; align-items: center; gap: 8px; }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-column { width: auto; min-height: 24px; padding: 0 12px; border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-text); font-size: 12px; text-align: center; }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-column[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+}
+
+/* 12. 태그: counts are badges; rows are six-pixel rows in the group. */
+#style-custom-workbench .sc-tag-tree { display: flex; flex-direction: column; gap: 2px; }
+#style-custom-workbench .sc-tag-tree summary,
+#style-custom-workbench .sc-tag-tree .sc-tag-row { padding: 6px 10px; border-radius: var(--sc-radius); align-items: center; }
+#style-custom-workbench .sc-tag-tree summary { display: flex; flex-wrap: wrap; }
+#style-custom-workbench .sc-tag-tree summary:hover,
+#style-custom-workbench .sc-tag-tree .sc-tag-row:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-tag-tree .sc-tag-leaf { padding-inline-start: 18px; }
+#style-custom-workbench .sc-tag-name .sc-count { margin-inline-start: 4px; }
+#style-custom-workbench .sc-tag-name:hover { text-decoration: none; }
+#style-custom-workbench .sc-tag-reading { margin-inline-end: 4px; }
+
+/* 13. 번역·AI / 모양 -------------------------------------------------------- */
+/* No result yet: one quiet line instead of a blank box with a resize grip. */
+#style-custom-workbench .sc-ai-output:placeholder-shown { min-height: 0 !important; height: 44px; resize: none; }
+#style-custom-workbench .sc-lang { min-height: var(--sc-control-height); padding-inline: 14px; border-radius: var(--sc-radius-pill); }
+#style-custom-workbench input[type=color] { -webkit-appearance: none; appearance: none; width: 44px; height: var(--sc-control-height); min-height: 0; padding: 4px; border: 0; border-radius: var(--sc-radius-pill); background: var(--sc-fill); box-shadow: inset 0 0 0 1px var(--sc-border-strong); cursor: pointer; }
+#style-custom-workbench input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+#style-custom-workbench input[type=color]::-webkit-color-swatch { border: 0; border-radius: var(--sc-radius-pill); }
+#style-custom-workbench input[type=number] { width: 72px; flex: 0 0 auto; min-width: 0; }
+
+/* 14. 관련 논문: "여기부터" is a small chip. */
+#style-custom-workbench .sc-path-start { display: inline-block; margin-inline-end: 8px; padding: 0 8px; border-radius: var(--sc-radius-pill); background: var(--sc-nav-on); color: var(--sc-nav-on-ink); font: 650 11px/18px var(--sc-font); vertical-align: 1px; }
+#style-custom-workbench .sc-hit-title > .sc-signal { margin-inline-start: 8px; vertical-align: 1px; }
+@container sc-workbench (max-width: 760px) {
+  #style-custom-workbench .sc-overview > .sc-overview-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* Tags: a leaf lines up with the names of its siblings (the chevron's width and the row's padding), children sit one step in. */
+#style-custom-workbench .sc-tag-tree .sc-tag-leaf { padding-inline-start: 30px; }
+#style-custom-workbench .sc-tag-tree details > :not(summary) { margin-inline-start: 18px; }

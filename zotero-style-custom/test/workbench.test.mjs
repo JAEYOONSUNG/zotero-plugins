@@ -555,7 +555,7 @@ test('selected paper context warns about off-result selection and disables relat
 
 test('large inline evidence starts with five entries and supported preview choices stay explicit',async()=>{
  const f=fixture();f.library.notes=f.record('notes',Array.from({length:30},(_,i)=>({id:String(10+i),title:'Note '+i,text:'Content'})));await f.bench.show('explore');await f.click('자세히');const section=f.body().querySelector('.sc-evidence');assert.equal(section.hasAttribute('open'),false);assert.equal(section.querySelectorAll('article').length,5);await f.click('노트 더 보기 · 25개 남음');assert.equal(section.querySelectorAll('article').length,25);
- f.library.attachments=f.record('attachments',[{id:'99',title:'Link',contentType:'text/html',path:null},{id:'100',title:'Archive',contentType:'application/zip',path:'/fake/archive.zip'}]);await f.bench.show('attachments');assert.equal(f.findButton('미리보기'),undefined);assert.match(f.body().textContent,/미리보기를 지원하지 않습니다/);assert.ok(f.findButton('열기'));f.bench.destroy();
+ f.library.attachments=f.record('attachments',[{id:'99',title:'Link',contentType:'text/html',path:null},{id:'100',title:'Archive',contentType:'application/zip',path:'/fake/archive.zip'}]);await f.bench.show('attachments');assert.equal(f.findButton('미리보기'),undefined);assert.match(f.body().textContent,/미리보기를 지원하지 않는 형식입니다/);assert.ok(f.findButton('열기'));f.bench.destroy();
 });
 
 test('pending note creation survives redraw without submitting the same draft twice',async()=>{
@@ -1047,7 +1047,8 @@ test('a new paper marked 확인함 leaves the unseen list, is found under 확인
   {id:'A1',name:'First Person',seen:[],news:[{id:'W1',title:'Shared paper',doi:'10.1/shared',date:'2026-09-01'},{id:'W3',title:'Withdrawn one',doi:'10.1/bad',date:'2026-07-01',signals:{rank:3}}]},
   {id:'A2',name:'Second Person',seen:[],news:[{id:'W1',title:'Shared paper',doi:'https://doi.org/10.1/SHARED',date:'2026-09-01'},{id:'W2',title:'Owned one',doi:'10.1234/a',date:'2026-08-01'}]}];
  await f.bench.show('authors');
- const titles=()=>[...f.body().querySelectorAll('.sc-author-inbox-row .sc-hit-title')].map(n=>n.textContent);
+ // The paper's own words: the 철회 chip now stands on the title's line, beside the link rather than in the status column.
+ const titles=()=>[...f.body().querySelectorAll('.sc-author-inbox-row .sc-hit-title')].map(n=>(n.querySelector('.sc-hit-title-link')||n).textContent);
  assert.match(f.body().querySelector('.sc-watch-count').textContent,/새 논문 3편/,'the heading counts the shared paper once, as the list does');
  assert.deepEqual(titles(),['Shared paper','Owned one','Withdrawn one']);
  assert.match(f.body().querySelectorAll('.sc-author-inbox-row')[2].textContent,/철회/,'a withdrawn paper says so');
@@ -1597,10 +1598,10 @@ test('stalled papers are one view away, journal citations split by reading state
  const find=f.body().querySelector('[aria-label="태그 경로 검색"]');find.value='spatial';find.dispatchEvent(new f.win.Event('input'));
  await new Promise(r=>setTimeout(r,200));
  const names=[...f.body().querySelectorAll('.sc-tag-name')].map(n=>n.textContent);
- assert.deepEqual(names,['methods (2)','spatial (1)'],'the match and its ancestor');
+ assert.deepEqual(names,['methods 2','spatial 1'],'the match and its ancestor');
  assert.equal(f.body().querySelector('.sc-tag-edit').hasAttribute('open'),false,'editing folded');
  // spatial is a leaf (no children): its own row is a plain div, not a <details>.
- const jump=[...f.body().querySelectorAll('.sc-tag-unread')].find(b=>b.closest('summary, .sc-tag-row').querySelector('.sc-tag-name').textContent==='spatial (1)');
+ const jump=[...f.body().querySelectorAll('.sc-tag-unread')].find(b=>b.closest('summary, .sc-tag-row').querySelector('.sc-tag-name').textContent==='spatial 1');
  jump.click();await new Promise(r=>setTimeout(r,20));
  assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.status,'unread');assert.equal(f.bench.state.tag,'methods/spatial');
  f.bench.destroy();
@@ -3581,10 +3582,15 @@ test('첨부 미리보기 says a group cannot preview only when every file in it
  assert.equal(groups.length,2);
  const g1=groups.find(g=>/Paper Alpha/.test(g.querySelector('.sc-attachment-group-title').textContent));
  const g2=groups.find(g=>/Paper Beta/.test(g.querySelector('.sc-attachment-group-title').textContent));
- assert.equal(/미리보기를 지원하지 않습니다/.test(g1.textContent),false,'one previewable file: no sentence for this group');
+ // The sentence is about a file, so it stands on that file's row -- and points at the button on the same row, never at a 「열기」 that may not exist.
+ const noteRows=g=>[...g.querySelectorAll('.sc-attachment-row')].filter(r=>/미리보기를 지원하지 않는 형식입니다/.test(r.textContent));
+ assert.equal(noteRows(g1).length,1,'only the broken link says it');
+ assert.match(noteRows(g1)[0].textContent,/Broken link/);
+ assert.equal([...g1.querySelectorAll('.sc-attachment-row')].find(r=>/Full text PDF/.test(r.textContent)).querySelector('.sc-attachment-nopreview'),null,'the previewable file says nothing');
  assert.ok(g1.querySelector('button[data-opens]')&&[...g1.querySelectorAll('button')].some(b=>b.textContent==='미리보기'));
- assert.match(g2.textContent,/미리보기를 지원하지 않습니다/,'nothing previewable: the sentence, for this group only');
- assert.equal(g2.textContent.match(/미리보기를 지원하지 않습니다/g).length,1,'once for the group, not once per file');
+ assert.equal(noteRows(g2).length,1,'the one file in this group that cannot be previewed');
+ assert.match(noteRows(g2)[0].textContent,/같은 줄의 버튼/,'it names the button on its own row');
+ assert.equal(/「열기」|열기로 확인/.test(g2.textContent),false,'no reference to a button that may not be there');
  f.bench.destroy();
 });
 
@@ -3722,8 +3728,8 @@ test('a paper already read reads as one "완료" line, is not numbered, and does
   }
   // One start, marked either on a row to fetch or on an owned line -- an owned
   // start is the cheapest one, as there is nothing to fetch.
-  const marked = f.body().querySelectorAll('.sc-path-start').length
-   + [...f.body().querySelectorAll('.sc-path-owned .sc-hit-title')].filter(p => p.textContent.startsWith('여기부터')).length;
+  // Both kinds of line now carry the same chip (an owned line used to say it in plain text).
+  const marked = f.body().querySelectorAll('.sc-path-start').length;
   assert.equal(marked, 1);
   for (const row of ownedRows) assert.ok(!row.querySelector('.sc-path-why'), 'an owned line carries no reasons');
   const foundation = [...f.body().querySelectorAll('.sc-path-head')].find(h => h.textContent.startsWith('기초'));
@@ -3943,13 +3949,13 @@ test('중첩 태그: choosing a tag by its name lists what is carried together w
  f.runtime.state=ref=>({citations:0,impactFactor:0,...known[ref.id]});
  await f.bench.show('tags');
  assert.equal(f.body().querySelector('.sc-tag-cross').hidden,true,'nothing chosen yet');
- const nameBtn=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='topicA (4)');
+ const nameBtn=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='topicA 4');
  assert.ok(nameBtn,'the tag name itself is a button');
  nameBtn.click();await settle();
  const cross=f.body().querySelector('.sc-tag-cross');
  assert.equal(cross.hidden,false);
  // Choosing a tag rebuilds the tree (aria-pressed on every row can change), so re-query.
- const nameBtnAfter=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='topicA (4)');
+ const nameBtnAfter=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='topicA 4');
  assert.equal(nameBtnAfter.getAttribute('aria-pressed'),'true');
  const rowsOf=table=>[...table.querySelectorAll('tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent));
  const table=cross.querySelector('.sc-tag-cross-table');
@@ -3976,14 +3982,14 @@ test('태그: opening a parent by hand stays open across the redraw that choosin
  ];
  f.refs.set(4,{id:4});
  await f.bench.show('tags');
- const findDetails=()=>[...f.body().querySelectorAll('.sc-tag-tree details')].find(d=>d.querySelector('.sc-tag-name')?.textContent==='topicA (2)');
+ const findDetails=()=>[...f.body().querySelectorAll('.sc-tag-tree details')].find(d=>d.querySelector('.sc-tag-name')?.textContent==='topicA 2');
  const details=findDetails();
  assert.ok(details,'topicA has children and renders as <details>');
  details.open=true;details.dispatchEvent(new f.win.Event('toggle'));
  // Choosing a different tag by name only calls redraw(), not a full render();
  // the parent opened by hand used to collapse every time because a fresh
  // <details> was built with no memory of what the reader had opened.
- const sharedBtn=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='shared (1)');
+ const sharedBtn=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='shared 1');
  sharedBtn.click();await settle();
  assert.equal(findDetails().open,true,'the parent opened by hand stays open after choosing another tag');
  f.bench.destroy();
@@ -3999,7 +4005,7 @@ test('태그: the "#a ∩ #b" origin label uses full tag paths, not just the las
   {...f.papers[0],id:'1',key:'K1',title:'P1',tags:['proj/methods','other/thing']}
  ];
  await f.bench.show('tags');
- const nameBtn=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='methods (1)');
+ const nameBtn=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='methods 1');
  nameBtn.click();await settle();
  const countBtn=f.body().querySelector('.sc-tag-cross-table tbody tr button');
  countBtn.click();await settle();
@@ -4682,13 +4688,116 @@ test('R18 annotations group by paper then file, and the order choice flips p.6 a
  f.bench.destroy();
 });
 
+test('the count on the current tab is that page\'s own: notes shown, annotations shown, never the paper-scope count',async()=>{
+ const f=fixture();
+ f.library.notes=async()=>[{id:'9',parentID:'1',title:'One',text:'one',html:'<p>1</p>',modified:'2026-09-01'},{id:'10',parentID:'1',title:'Two',text:'two',html:'<p>2</p>',modified:'2026-09-02'}];
+ f.library.annotations=async()=>[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'an epitope map',comment:'',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}];
+ const badge=tab=>f.bench.panel.querySelector(`nav [data-tab="${tab}"] .sc-nav-count`)?.textContent??null;
+ await f.bench.show('explore');
+ assert.equal(badge('explore'),String(f.body().querySelectorAll('.sc-paper-card').length),'papers listed on 보유 문헌');
+ await f.bench.show('notes');
+ assert.equal(badge('notes'),'2','the notes shown, not the papers in scope');
+ await f.bench.show('annotations');
+ assert.equal(badge('annotations'),'1','the annotations shown');
+ assert.equal(badge('notes'),null,'only the current tab carries a count');
+ await f.bench.show('tags');
+ assert.equal(badge('tags'),null,'a page with no natural count shows none');
+ f.bench.destroy();
+});
+
+test('저자 추적: the toolbar says what is waiting in a badge, a withdrawal chip stays on its paper\'s title line',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthorsByNews=()=>[
+  {id:'A1',name:'First Person',seen:[],news:[{id:'W3',title:'Withdrawn one',doi:'10.1/bad',date:'2026-07-01',signals:{rank:3}}]}];
+ await f.bench.show('authors');
+ const count=f.body().querySelector('.sc-watch-head .sc-watch-count');
+ assert.equal(count.dataset.state,'new');
+ assert.match(count.textContent,/확인 안 한 새 논문 1편/);
+ assert.equal(f.body().querySelector('.sc-watch-head .sc-hit-group').textContent.includes('관심 저자'),false,'the group below carries the name; the toolbar does not repeat it');
+ const head=[...f.body().querySelectorAll('.sc-section-head')].find(h=>h.querySelector('.sc-section-head-name')?.textContent==='관심 저자');
+ assert.ok(head,'the followed authors are a group with their own head, news or not');
+ const row=f.body().querySelector('.sc-author-inbox-row');
+ assert.ok(row.querySelector('.sc-hit-title .sc-signal'),'the chip is on the title line');
+ assert.equal(row.querySelector('.sc-inbox-status .sc-signal'),null,'and not in the status column, where it wrapped alone');
+ f.bench.destroy();
+});
+
+test('논문 비교: with a comparison on screen the picker stays folded, 문헌 추가 opens it, and every row keeps its authors column',async()=>{
+ const f=fixture();
+ f.setSelection([1]);f.bench.state.selected=new Set(['1']);
+ await f.bench.show('matrix');
+ assert.equal(f.body().querySelector('.sc-matrix-picker'),null,'a comparison already exists: picker folded');
+ await f.click('문헌 추가');
+ const rows=[...f.body().querySelectorAll('.sc-matrix-picker-row')];
+ assert.ok(rows.length>0);
+ for(const row of rows)assert.equal(row.children.length,3,'title, authors, button -- also for a paper with no authors, so the button never slides into the authors column');
+ f.bench.destroy();
+ const g=fixture();
+ g.setSelection([]);g.bench.state.selected=new Set();
+ await g.bench.show('matrix');
+ assert.ok(g.body().querySelector('.sc-matrix-picker'),'nothing chosen yet: the picker is the way in');
+ g.bench.destroy();
+});
+
+test('관계 그래프: labels lie on a backdrop and the zoom buttons lie on the map',async()=>{
+ const f=fixture();
+ const extra=[10].map(n=>({...f.papers[0],id:String(n),key:'K'+n,title:'A Very Long Neighbour Paper Title About Something'}));
+ f.refs.set(10,{id:10,libraryID:1,key:'K10'});
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ const works={'1:K1':{openalex:'W1',references:['W10']},'1:K10':{openalex:'W10',references:[]},'1:K2':{}};
+ f.runtime.graphTools=PaperGraph;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=JournalIdentity;
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);
+ await f.bench.show('graph');await settle();
+ const frame=f.body().querySelector('.sc-graph-frame');
+ assert.ok(frame&&frame.querySelector('svg.sc-graph'),'the map is in a frame of its own');
+ assert.deepEqual([...frame.querySelectorAll('.sc-graph-zoom button')].map(b=>b.textContent),['확대','축소'],'the zoom is inside the frame, top right by CSS, not in a bar under it');
+ const labels=[...frame.querySelectorAll('.sc-graph-label')];
+ assert.ok(labels.length>=2);
+ for(const label of labels)assert.equal(label.previousElementSibling.getAttribute('class'),'sc-graph-label-bg','every label has its plate');
+ f.bench.destroy();
+});
+
+test('읽기 진행: the record views and the sort belong to the 읽기 기록 group, not to 이어 읽기',async()=>{
+ const f=fixture();
+ const now=Date.now(),day=864e5;
+ const lastRead={1:new Date(now-1000).toISOString(),2:new Date(now-20*day).toISOString()};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:'reading',lastRead:lastRead[ref.id]});
+ for(const id of [1,2])f.runtime.cache.items[id]={seconds:60,lastRead:lastRead[id]};
+ f.runtime.pageProgress=()=>({pages:{},total:0,visited:0,percent:0});
+ await f.bench.show('reading');
+ const groups=[...f.body().querySelectorAll('.sc-group')];
+ const named=name=>groups.find(g=>g.querySelector('.sc-section-head-name')?.textContent===name);
+ const resume=named('이어 읽기'),records=named('읽기 기록');
+ assert.ok(resume&&records);
+ assert.equal(resume.querySelector('.sc-reading-views'),null,'not under 이어 읽기');
+ assert.equal(resume.querySelector('.sc-reading-tools'),null);
+ assert.ok(records.querySelector('.sc-reading-views'),'the record views are in 읽기 기록');
+ assert.ok(records.querySelector('.sc-reading-tools select'),'and so is the sort');
+ f.bench.destroy();
+});
+
+test('중첩 태그: a count is a badge beside the name, not a parenthesis',async()=>{
+ const f=fixture();
+ await f.bench.show('tags');
+ const name=f.body().querySelector('.sc-tag-name');
+ assert.ok(name.querySelector('.sc-count'),'the count is its own badge');
+ assert.equal(/[()]/.test(name.textContent),false,'no parentheses');
+ f.bench.destroy();
+});
+
 test('R18 the notes compose area folds over existing notes, opens when empty or drafted, and keeps drafts',async()=>{
  const f=fixture();
  f.library.notes=async()=>[{id:'9',parentID:'1',title:'Research question',text:'Research question and follow-up',html:'<p>q</p>',modified:'2026-09-01'}];
  await f.bench.show('notes');
  const compose=()=>f.body().querySelector('.sc-note-compose');
  assert.equal(compose().hidden,true,'folded by default when the paper has notes');
- assert.match(f.body().querySelector('.sc-note-head').textContent,/이 문헌의 노트 1개.*새 노트 쓰기.*다른 문헌 고르기/s);
+ // One head, not a count line above a second "이 문헌의 노트" head: the name and its count, the actions at its right.
+ const noteHead=f.body().querySelector('.sc-section-head');
+ assert.match(noteHead.textContent,/이 문헌의 노트\s*1/);
+ assert.ok(noteHead.querySelector('.sc-section-head-actions'),'the actions sit in the head');
+ assert.match(noteHead.textContent,/새 노트 쓰기.*다른 문헌 고르기/s);
+ assert.equal(f.body().querySelector('.sc-note-head'),null,'no second count line');
+ assert.equal([...f.body().querySelectorAll('.sc-section-head-name')].filter(n=>n.textContent==='이 문헌의 노트').length,1,'the name once');
  await f.click('새 노트 쓰기');
  assert.equal(compose().hidden,false);
  f.input('새 노트 내용','unsaved thought');
@@ -4727,7 +4836,10 @@ test('R18 journal citations share one axis: 64 and 12 on it, unknown as a dash, 
  assert.equal(zero.querySelectorAll('.sc-journal-citation-dot').length,1,'unknown has no mark');
  assert.match(zero.querySelector('.sc-journal-citation-dot').style.left,/\* 0\)/,'a real 0 sits at the axis start');
  const head=f.body().querySelector('.sc-journal-reading-header');
- assert.match(head.textContent,/읽는 중·완료.*안 읽음/);assert.match(head.textContent,/보유.*시간/);
+ // The legend is one line under the section title now (it overflowed the card as a header cell), not part of the column header.
+ const legend=f.body().querySelector('.sc-journal-legend-line').textContent;
+ assert.match(legend,/읽는 중·완료.*안 읽음/);assert.match(legend,/보유.*시간/);
+ assert.equal(/읽는 중·완료/.test(head.textContent),false,'no legend in the header cells');
  assert.match(head.querySelector('.sc-journal-citation-axis').textContent,/^0/,'explicit axis ends');
  f.bench.destroy();
 });

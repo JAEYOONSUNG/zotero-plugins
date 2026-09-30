@@ -469,36 +469,75 @@
      node and keeping whichever collides least (with the labels already
      placed, and with the frame) keeps every label -- none are dropped -- while
      spreading them off the lines and off each other. */
-  function placeLabelSides(nodes, {lineHeight = 11, pad = 2, gap = 4, width = Infinity, height = Infinity} = {}) {
+  function placeLabelSides(nodes, {lineHeight = 11, pad = 2, gap = 4, width = Infinity, height = Infinity, edges = []} = {}) {
     // Central papers first: the ones most likely to sit in a crowded middle
     // get first pick of the side that is actually clear.
     const order = [...nodes].sort((a, b) => (b.rank || 0) - (a.rank || 0) || (b.degree || 0) - (a.degree || 0));
     const placed = [];
     const sides = new Map();
+    const byID = new Map(nodes.map(n => [String(n.id), n]));
+    // Every edge as a segment, so a label is also kept off the lines.
+    const segments = [];
+    for (const e of edges || []) {
+      const a = byID.get(String(e.source)), b = byID.get(String(e.target));
+      if (a && b) segments.push({a, b});
+    }
     const boxFor = (node, side, w) => {
       const r = node.r || 6;
-      if (side === 'left') return {x: node.x - r - gap - w, y: node.y - lineHeight / 2, w, h: lineHeight,
-        anchor: 'end', dx: -(r + gap), dy: 3.5};
-      if (side === 'above') return {x: node.x - w / 2, y: node.y - r - gap - lineHeight, w, h: lineHeight,
-        anchor: 'middle', dx: 0, dy: -(r + gap)};
-      if (side === 'below') return {x: node.x - w / 2, y: node.y + r + gap, w, h: lineHeight,
-        anchor: 'middle', dx: 0, dy: r + gap + lineHeight - 3};
-      return {x: node.x + r + gap, y: node.y - lineHeight / 2, w, h: lineHeight,
-        anchor: 'start', dx: r + gap, dy: 3.5};
+      const d = r + gap;
+      if (side === 'left') return {x: node.x - d - w, y: node.y - lineHeight / 2, w, h: lineHeight,
+        anchor: 'end', dx: -d, dy: 3.5};
+      if (side === 'above') return {x: node.x - w / 2, y: node.y - d - lineHeight, w, h: lineHeight,
+        anchor: 'middle', dx: 0, dy: -d};
+      if (side === 'below') return {x: node.x - w / 2, y: node.y + d, w, h: lineHeight,
+        anchor: 'middle', dx: 0, dy: d + lineHeight - 3};
+      // The four corners: a label that would sit on an edge running straight
+      // up, down, left or right of its node often clears it diagonally.
+      const k = d * 0.72;
+      if (side === 'above-right') return {x: node.x + k, y: node.y - k - lineHeight, w, h: lineHeight,
+        anchor: 'start', dx: k, dy: -k};
+      if (side === 'above-left') return {x: node.x - k - w, y: node.y - k - lineHeight, w, h: lineHeight,
+        anchor: 'end', dx: -k, dy: -k};
+      if (side === 'below-right') return {x: node.x + k, y: node.y + k, w, h: lineHeight,
+        anchor: 'start', dx: k, dy: k + lineHeight - 3};
+      if (side === 'below-left') return {x: node.x - k - w, y: node.y + k, w, h: lineHeight,
+        anchor: 'end', dx: -k, dy: k + lineHeight - 3};
+      return {x: node.x + d, y: node.y - lineHeight / 2, w, h: lineHeight,
+        anchor: 'start', dx: d, dy: 3.5};
+    };
+    const overlaps = (box, other) => box.x < other.x + other.w && box.x + box.w > other.x
+      && box.y < other.y + other.h && box.y + box.h > other.y;
+    // A circle against a box: the nearest point of the box to the centre.
+    const hitsNode = (box, n) => {
+      const r = (n.r || 6) + 1;
+      const nx = Math.max(box.x - pad, Math.min(n.x, box.x + box.w + pad));
+      const ny = Math.max(box.y - pad, Math.min(n.y, box.y + box.h + pad));
+      return Math.hypot(n.x - nx, n.y - ny) < r;
+    };
+    // A segment against a box (Liang-Barsky clip).
+    const hitsSegment = (box, seg) => {
+      const x0 = seg.a.x, y0 = seg.a.y, dx = seg.b.x - x0, dy = seg.b.y - y0;
+      const left = box.x - pad, right = box.x + box.w + pad, top = box.y - pad, bottom = box.y + box.h + pad;
+      let t0 = 0, t1 = 1;
+      for (const [p, q] of [[-dx, x0 - left], [dx, right - x0], [-dy, y0 - top], [dy, bottom - y0]]) {
+        if (p === 0) { if (q < 0) return false; continue; }
+        const t = q / p;
+        if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+        else { if (t < t0) return false; if (t < t1) t1 = t; }
+      }
+      return t0 <= t1;
     };
     for (const node of order) {
       const text = String(node.labelText == null ? node.label : node.labelText);
       const w = textWidth(text) + pad * 2;
       let best = null, bestScore = Infinity;
-      for (const side of ['right', 'left', 'above', 'below']) {
+      for (const side of ['right', 'left', 'above', 'below', 'above-right', 'below-right', 'above-left', 'below-left']) {
         const box = boxFor(node, side, w);
         const inView = box.x >= 0 && box.y >= 0 && box.x + box.w <= width && box.y + box.h <= height;
-        let clashes = 0;
-        for (const other of placed) {
-          if (box.x < other.x + other.w && box.x + box.w > other.x
-            && box.y < other.y + other.h && box.y + box.h > other.y) clashes++;
-        }
-        const score = clashes + (inView ? 0 : 1000);
+        let score = inView ? 0 : 1000;
+        for (const other of placed) if (overlaps(box, other)) score += 10;
+        for (const other of nodes) if (other !== node && hitsNode(box, other)) score += 10;
+        for (const seg of segments) if (hitsSegment(box, seg)) score += seg.a === node || seg.b === node ? 2 : 3;
         if (score < bestScore) { bestScore = score; best = box; }
         if (score === 0) break;
       }
