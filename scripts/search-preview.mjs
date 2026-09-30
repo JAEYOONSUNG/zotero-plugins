@@ -78,6 +78,10 @@ export async function buildPreview({ locale = "en" } = {}) {
 
 	const Sources = require_(path.join(root, "content/sources.js"));
 	const recs = records(Sources);
+	// A later run of the same search finds one more paper: the row the re-run marks as new.
+	const later = Sources.makeRecord({ source: "openalex", sourceId: "demo13", title: "Longitudinal follow-up of repair-stage maps", year: 2026, venue: "Cell Systems", citations: 1, doi: "10.5555/demo.013",
+		authors: [{ name: "Mina Kim", firstName: "Mina", lastName: "Kim" }], authorString: "Mina Kim", itemType: "journalArticle" });
+	let runs = 0;
 	const library = new Map([["10.5555/demo.004", 1]]);
 	const ctx = vm.createContext({
 		window: win, document, AbortController, console, setTimeout, clearTimeout, CSS: { escape: v => v },
@@ -87,7 +91,8 @@ export async function buildPreview({ locale = "en" } = {}) {
 			Utilities: { Internal: { copyTextToClipboard() {} } } },
 		ZotPoPMarquee: { attach: () => ({ refresh() {}, refreshCell() {} }) },
 		ZotPoPImporter: { importRecord: async r => { importCalls.push(r.key); return r.sourceId === "demo9" ? { status: "failed", error: "fictional failure" } : { status: "added", item: { id: 100 + importCalls.length }, pdf: r.pdfUrl ? "pdf:oa" : "no pdf", how: "translator" }; },
-			getLibraryDOIMap: async () => library, getReadingStates: async ids => new Map(ids.map(id => [id, "reading"])), getTargets: () => [{ libraryID: 1, collectionID: null, label: "My Library", depth: 0 }, { libraryID: 1, collectionID: 7, label: "Repair atlases", depth: 1 }],
+			getLibraryDOIMap: async () => library, getReadingStates: async ids => new Map(ids.map(id => [id, "reading"])),
+			getCollectionPaths: async ids => new Map(ids.filter(id => id === 1).map(id => [id, [["Repair atlases", "Tissue maps", "2025 reviews"], ["Reading list"]]])), getTargets: () => [{ libraryID: 1, collectionID: null, label: "My Library", depth: 0 }, { libraryID: 1, collectionID: 7, label: "Repair atlases", depth: 1 }],
 			getCurrentTarget: () => ({ libraryID: 1, collectionID: null }), forgetTitleIndex() {} }
 	});
 	win.Zotero = ctx.Zotero;
@@ -99,7 +104,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 		for (const el of root.querySelectorAll("[data-i18n-title]")) el.setAttribute("title", t(el.getAttribute("data-i18n-title")));
 	};
 	// Same search function shape as the real one; only the network is replaced.
-	ctx.ZotPoPSources = Object.assign(Object.create(Sources), { search: async (_s, _q, _h, c) => { c?.onResults?.(recs, { final: false }); return recs; } });
+	ctx.ZotPoPSources = Object.assign(Object.create(Sources), { search: async (_s, _q, _h, c) => { let out = runs++ ? [later, ...recs] : recs; c?.onResults?.(out, { final: false }); return out; } });
 	vm.runInContext(read("content/ui.js"), ctx, { filename: "ui.js" });
 	for (const fn of listeners.get("load") || []) fn();
 	await new Promise(r => setTimeout(r, 30));
@@ -172,17 +177,50 @@ export async function buildPreview({ locale = "en" } = {}) {
 	for (let i = 0; i < 100 && !importCalls.length; i++) await wait(20);
 	await wait(60);
 	trace.retry = { calls: [...importCalls] };
-	return { results, detail, facet, importPage, trace, rows: rows.length, netCalls, errors };
+	// ---- the same search again: a later run finds one more paper, the owned row's detail lists its collections
+	const bar = year => [...document.querySelectorAll("#metrics-years .yr-bar")].find(b => b.getAttribute("title").startsWith(year));
+	trace.histogram = { bars: document.querySelectorAll("#metrics-years .yr-bar").length, ends: [...document.querySelectorAll("#metrics-years .yr-ends span")].map(e => e.textContent), rows: shown().length };
+	fire(bar("2025"), "mousedown");
+	await wait(20);
+	trace.histogram.pressed = shown().sort((a, b) => a - b);
+	trace.histogram.clearLabel = document.querySelector("#metrics-years .yr-clear")?.textContent;
+	trace.histogram.barsAfter = document.querySelectorAll("#metrics-years .yr-bar").length;
+	fire(document.querySelector("#metrics-years .yr-clear"));
+	await wait(20);
+	trace.histogram.cleared = shown().length;
+	fire(document.getElementById("history-btn"));
+	for (let i = 0; i < 50 && document.getElementById("histmenu").hidden; i++) await wait(20);
+	trace.history = { entries: [...document.querySelectorAll("#histmenu .histopt .h-meta")].map(e => e.textContent) };
+	Object.assign(document.getElementById("histmenu").style, { top: "44px", left: "700px" });
+	const historyPage = page();
+	fire(document.body);
+	document.getElementById("histmenu").hidden = true;
+	document.getElementById("keywords").value = "tissue repair";
+	fire(document.getElementById("query-form"), "submit");
+	for (let i = 0; i < 100 && shown().length < 13; i++) await wait(20);
+	await wait(60);
+	trace.rerun = { rows: shown().length, marked: table().filter(tr => tr.querySelector(".new-mark")).map(tr => tr.dataset.key.replace(/^.*demo/, "")), tip: document.querySelector(".new-mark")?.getAttribute("title") };
+	fire(rowOf("demo4"));
+	await wait(20);
+	trace.collections = { text: text("d-collections"), tip: document.getElementById("d-collections").getAttribute("title"), hiddenOnUnowned: null };
+	fire(rowOf("demo3"));
+	await wait(20);
+	trace.collections.hiddenOnUnowned = document.getElementById("d-collections").hidden;
+	fire(rowOf("demo4"));
+	await wait(20);
+	const rerun = page();
+	return { results, detail, facet, importPage, historyPage, rerun, trace, rows: rows.length, netCalls, errors };
 }
 
 export function checkPreview(out) {
 	const problems = [];
 	if (out.rows < 10) problems.push("expected at least 10 result rows, got " + out.rows);
 	if (out.netCalls) problems.push("network was called");
-	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage]]) {
+	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun]]) {
 		if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
 		if (/(?:src|href)\s*=\s*["'](?:https?:|\/\/|chrome:|resource:)/i.test(html)) problems.push(name + ": external asset");
 		if (/url\(\s*["']?(?:https?:|\/\/|chrome:)/i.test(html)) problems.push(name + ": external css url");
+		if (name === "history" || name === "rerun") { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
 		for (const needle of ['id="results-table"', 'id="results-body"', 'id="query-form"', name === "facet" ? "Off-target profiling" : "Mapping cellular responses"]) if (!html.includes(needle)) problems.push(name + ": missing " + needle);
 	}
 	if (!out.results.includes('class="in-library')) problems.push("no in-library row");
@@ -197,6 +235,13 @@ export function checkPreview(out) {
 	if (!same(t.import.selected, ["9"])) problems.push("after the import only the failed row should stay selected; got " + t.import.selected);
 	if (t.import.calls.length !== 3) problems.push("import should try the three selected rows");
 	if (t.retry.calls.length !== 1 || !t.retry.calls[0].endsWith("demo9")) problems.push("retry should pass only the failed key; got " + t.retry.calls);
+	if (t.histogram.bars < 3 || t.histogram.ends.join() !== "2022,2026") problems.push("histogram should span 2022 to 2026; got " + t.histogram.ends);
+	if (!same(t.histogram.pressed, ["1", "4", "8", "10"])) problems.push("pressing the 2025 bar should keep the 2025 rows; got " + t.histogram.pressed);
+	if (t.histogram.barsAfter !== t.histogram.bars) problems.push("the histogram should keep every year after one is chosen");
+	if (t.histogram.cleared !== FAKE.length) problems.push("the clear control did not restore every row");
+	if (!t.history.entries.length || !/오늘|today/.test(t.history.entries[0]) || !/12/.test(t.history.entries[0])) problems.push("history entry should show its date and count; got " + t.history.entries);
+	if (!same(t.rerun.marked, ["13"])) problems.push("only the new paper should be marked; got " + t.rerun.marked);
+	if (!t.collections.text.includes("Tissue maps › 2025 reviews") || !t.collections.tip.includes("Repair atlases › Tissue maps › 2025 reviews") || !t.collections.hiddenOnUnowned) problems.push("owned row should list its collections; got " + t.collections.text);
 	return problems;
 }
 
@@ -209,6 +254,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.writeFileSync(path.join(root, "docs/search-preview-detail.html"), out.detail);
 	fs.writeFileSync(path.join(root, "docs/search-preview-facet.html"), out.facet);
 	fs.writeFileSync(path.join(root, "docs/search-preview-import.html"), out.importPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-history.html"), out.historyPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-rerun.html"), out.rerun);
 	console.log(`ZotPoP search preview: real markup, CSS and ui.js, ${out.rows} fictional rows, no network: docs/search-preview.html, docs/search-preview-detail.html`);
 	process.exit(0);
 }

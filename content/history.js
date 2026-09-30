@@ -83,6 +83,17 @@ var ZotPoPHistory = (function () {
 		return bits.join(" · ");
 	}
 
+	// What identifies a result across two runs of one search: its DOI, else the source's own key.
+	// Only these short strings are kept per entry, never the records a second time.
+	const KEY_CAP = 1000;
+	function recordKey(record = {}) {
+		let doi = String(record.doi || "").trim().toLowerCase().replace(/^https?:\/\/(?:dx\.)?doi\.org\//, "");
+		return doi ? "d:" + doi : record.key ? "k:" + record.key : "";
+	}
+	function keysOf(records) {
+		return [...new Set(records.map(recordKey).filter(Boolean))].slice(0, KEY_CAP);
+	}
+
 	function create({ io, dir, join, max = 30, maxBytes = 12 * 1024 * 1024, now = () => new Date() } = {}) {
 		if (!io) throw new TypeError("History storage requires an io adapter");
 		let path = name => (join || ((a, b) => a.replace(/\/+$/, "") + "/" + b))(dir || "", name);
@@ -129,7 +140,8 @@ var ZotPoPHistory = (function () {
 			if (!source || !Array.isArray(records) || !records.length && !profiles.length) return null;
 			let id = signature(source, query);
 			let savedAt = now().toISOString();
-			let body = JSON.stringify({ version: 1, id, source, query, savedAt, partial, records });
+			let keys = keysOf(records);
+			let body = JSON.stringify({ version: 1, id, source, query, savedAt, partial, keys, records });
 			if (body.length > maxBytes) return null;
 			return serial(async () => {
 				await load();
@@ -169,6 +181,16 @@ var ZotPoPHistory = (function () {
 			}
 		}
 
+		// The keys of the last run of this exact search, to tell what is new this time.
+		// Nothing when it was never run, or when more results were kept than the cap holds.
+		async function previousKeys(source, query) {
+			let saved = await find(source, query);
+			let entry = saved && await get(saved.id);
+			if (!entry) return null;
+			let keys = Array.isArray(entry.keys) ? entry.keys : keysOf(entry.records);
+			return keys.length && keys.length < KEY_CAP ? new Set(keys) : null;
+		}
+
 		async function remove(id) {
 			return serial(async () => {
 				await load();
@@ -187,7 +209,7 @@ var ZotPoPHistory = (function () {
 			});
 		}
 
-		return { list, save, find, get, remove, clear, signature, describe };
+		return { list, save, find, get, previousKeys, remove, clear, signature, describe };
 	}
 
 	// A storage that forgets everything when the window closes: the fallback when the
@@ -203,7 +225,7 @@ var ZotPoPHistory = (function () {
 		};
 	}
 
-	return { create, memoryIO, signature, describe, normalizeQuery };
+	return { create, memoryIO, signature, describe, normalizeQuery, recordKey };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPHistory;

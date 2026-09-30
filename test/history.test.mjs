@@ -166,3 +166,16 @@ test("the menu tells two combined searches over different sources apart", () => 
 	assert.notEqual(History.describe({ ...base, sources: ["openalex", "crossref"] }),
 		History.describe({ ...base, sources: ["openalex", "crossref", "pubmed"] }));
 });
+
+test("each entry keeps only capped result keys, and the last run's keys come back for the same search", async () => {
+	const { history } = store();
+	assert.equal(await history.previousKeys("multi", query), null, "a search never run has nothing to compare with");
+	await history.save({ source: "multi", query, records });
+	const keys = await history.previousKeys("multi", query);
+	assert.deepEqual([...keys].sort(), ["d:10.1/a", "k:crossref:10.1/b"]);
+	assert.equal(History.recordKey({ doi: "https://doi.org/10.1/A", key: "x" }), "d:10.1/a", "DOI wins, case and resolver prefix ignored");
+	const many = Array.from({ length: 1200 }, (_, i) => ({ key: "k" + i, title: "t" + i }));
+	const id = await history.save({ source: "multi", query: { ...query, keywords: "many" }, records: many });
+	assert.equal((await history.get(id)).keys.length, 1000, "stored keys are capped");
+	assert.equal(await history.previousKeys("multi", { ...query, keywords: "many" }), null, "a capped key list cannot say what is new");
+});

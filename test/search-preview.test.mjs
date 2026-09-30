@@ -25,3 +25,17 @@ test("search preview drives the real handlers: Jenna facet, 3/2/1 selection, one
 	assert.ok(trace.retry.calls[0].endsWith("demo9"));
 	assert.equal(trace.importLabel, "Zotero에 3편 추가");
 });
+
+test("search preview: history entry with date and count, new rows on a re-run, owned collections, year histogram", async () => {
+	const { trace } = await buildPreview({ locale: "ko" });
+	assert.match(trace.history.entries[0], /12건 · 오늘$/);
+	assert.deepEqual(trace.rerun.marked, ["13"], "only the paper missing from the last run is marked");
+	assert.equal(trace.rerun.tip, "지난번 이 검색 이후 새로 나온 결과");
+	assert.equal(trace.collections.text, "컬렉션: … › Tissue maps › 2025 reviews · Reading list");
+	assert.match(trace.collections.tip, /^Repair atlases › Tissue maps › 2025 reviews\nReading list$/);
+	assert.equal(trace.collections.hiddenOnUnowned, true, "nothing for a paper that is not in the library");
+	assert.deepEqual(trace.histogram.ends, ["2022", "2026"]);
+	assert.deepEqual(trace.histogram.pressed, ["1", "4", "8", "10"]);
+	assert.equal(trace.histogram.clearLabel, "2025 ×");
+	assert.equal(trace.histogram.cleared, 12);
+});

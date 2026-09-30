@@ -625,7 +625,7 @@
 	function restoreSurfaceResults() {
 		let saved = surfaceSnapshots.get(currentSurfaceKey());
 		Object.assign(state, saved || { records: [], selected: new Set(), focusKey: null, detailKey: null, sortKey: "rank", sortDir: "asc" });
-		$("filter").value = saved?.filter || ""; state.facet = null;
+		$("filter").value = saved?.filter || ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
 	}
 	function applySearchSurface() {
 		$("query-form").hidden = searchSurface === "authors";
@@ -743,7 +743,7 @@
 		session.profile = query.authorProfile || entry.records?.[0]?.authorProfile || null;
 		session.profiles = Array.isArray(query.authorProfiles) && query.authorProfiles.length ? query.authorProfiles : session.profile ? [session.profile] : [];
 		session.action = authorAction = query.authorAction || "profiles";
-		state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = ""; state.facet = null;
+		state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
 		state.sortKey = entry.records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc";
 		displaySearchResults(entry.records); updateAuthorHint(); renderAuthorProfiles(); saveAuthorPreferences();
 		setStatus(query.authorAction === "profiles" ? t("authorProfilesFound", session.profiles.length) : t("historyRestored", entry.records.length));
@@ -771,7 +771,7 @@
 		session.action = action;
 		if (action !== "publications") { session.profiles = []; session.profile = null; } else session.profile = profile;
 		saveAuthorPreferences();
-		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = ""; state.facet = null;
+		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
 		state.searching = true; state.cancelled = false;
 		let resolveDone; state.searchDone = new Promise(resolve => { resolveDone = resolve; });
 		let controller = state.searchController = new AbortController();
@@ -928,7 +928,7 @@
 
 	// ------------------------------------------------------------ recent searches
 	function stripDisplayFields(records) {
-		return records.map(({ rank, authorString, status, statusClass, statusTitle, inLibrary, ...rest }) => {
+		return records.map(({ rank, authorString, status, statusClass, statusTitle, inLibrary, isNew, collections, ...rest }) => {
 			if (rest.popOriginal) rest.rank = rank;
 			return rest;
 		});
@@ -955,7 +955,7 @@
 		if (!active()) return false;
 		state.sortKey = entry.query?.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
-		$("filter").value = ""; state.facet = null;
+		$("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
 		displaySearchResults(records);
 		let captured = new Date(entry.savedAt).toLocaleString(t.locale || undefined);
 		setStatus(t("historyRestored", records.length));
@@ -1025,6 +1025,11 @@
 		await openHistoryMenu();
 	}
 
+	// Whole calendar days between a saved time and now, so "yesterday" means the day before.
+	function daysSince(iso) {
+		let day = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+		return Math.max(0, Math.round((day(new Date()) - day(new Date(iso))) / 86400000));
+	}
 	async function openHistoryMenu() {
 		let menu = $("histmenu");
 		menu.textContent = "";
@@ -1047,12 +1052,12 @@
 			label.textContent = e.label || history.describe(e.query);
 			let meta = document.createElement("span");
 			meta.className = "h-meta";
-			let when = new Date(e.savedAt).toLocaleString(t.locale || undefined);
+			let when = t("historyWhen", daysSince(e.savedAt));
 			let provider = e.query?.mode === "author" ? (e.query.authorProvider === "orcid" ? "ORCID" : "Google Scholar") : sourceLabel(e.source);
 			meta.textContent = e.kind === "profiles" ? t("authorHistoryProfiles", provider, e.count, when) : t("historyEntryMeta", provider, e.count, when, Boolean(e.partial));
 			d.appendChild(label);
 			d.appendChild(meta);
-			d.title = label.textContent;
+			d.title = label.textContent + "\n" + new Date(e.savedAt).toLocaleString(t.locale || undefined);
 			d.tabIndex = 0;
 			d.addEventListener("click", ev => { ev.stopPropagation(); closeHistoryMenu(); openHistoryEntry(e.id); });
 			d.addEventListener("keydown", ev => {
@@ -1423,7 +1428,8 @@
 				rank: record.popOriginal ? record.rank : i + 1,
 				authorString: (record.authors || []).map(a => a.name || [a.firstName, a.lastName].filter(Boolean).join(" ")).join(", "),
 				status: "",
-				inLibrary: Boolean(record.doi && state.doiMap.has(record.doi))
+				inLibrary: Boolean(record.doi && state.doiMap.has(record.doi)),
+				isNew: Boolean(state.priorKeys && !state.priorKeys.has(ZotPoPHistory.recordKey(record)))
 			});
 			for (let id of recordIdentities(r)) {
 				let flags = previous.get(id);
@@ -1499,7 +1505,7 @@
 		// until the user explicitly sorts a result column again.
 		state.sortKey = q.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
-		$("filter").value = ""; state.facet = null;
+		$("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
 		state.selected.clear();
 		state.focusKey = null;
 		state.detailKey = null;
@@ -1510,6 +1516,9 @@
 		render();
 		setStatus(t("searching", label));
 		setProgress(0, q.maxResults);
+		// The last run of this same search, kept only as keys, to mark what is new this time.
+		// Read while the search runs; the rows are marked when the final list is drawn.
+		let prior = Promise.resolve(history?.previousKeys(sourceKey, q)).catch(() => null);
 		let ctx = {
 			email: PREF("email") || "",
 			s2ApiKey: PREF("s2ApiKey") || "",
@@ -1540,6 +1549,7 @@
 			// Decided before the first draw: the empty-table message depends on it.
 			state.searched = true;
 			state.lastPartial = Boolean(ctx.errors?.length || recs.partial || recs.popProvenance?.complete === false);
+			state.priorKeys = await prior || null;
 			displaySearchResults(recs);
 			await refreshLibraryFlags();
 			if (!active()) throw abortError();
@@ -1625,6 +1635,12 @@
 				? await ZotPoPImporter.getReadingStates(state.records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID)) : new Map();
 			for (let r of state.records) r.readState = r.inLibrary && states.get(r.libraryItemID) || null;
 		} catch (e) { /* only a hint */ }
+		// The collections each owned paper is filed in, for the detail: one query, no network.
+		try {
+			let paths = typeof ZotPoPImporter.getCollectionPaths === "function"
+				? await ZotPoPImporter.getCollectionPaths(state.records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID)) : new Map();
+			for (let r of state.records) r.collections = r.inLibrary && paths.get(r.libraryItemID) || null;
+		} catch (e) { /* only a hint */ }
 		render();
 	}
 
@@ -1648,8 +1664,9 @@
 	}
 
 	// ------------------------------------------------------------ render
-	function matchesFilter(r, f) {
+	function matchesFilter(r, f, ignoreYears = false) {
 		if (state.selectedOnly && !state.selected.has(r.key)) return false;
+		if (state.yearRange && !ignoreYears && !(r.year >= state.yearRange.from && r.year <= state.yearRange.to)) return false;
 		if (!applyLocalFacet(r)) return false;
 		if (!f) return true;
 		let where = affiliationOf(r);
@@ -1749,7 +1766,7 @@
 
 	// The results filter can always be let go of: Escape in the box, the × beside it.
 	function syncFilterClear() { let b = $("filter-clear"); if (b) b.hidden = !$("filter").value; }
-	function clearFilter() { $("filter").value = ""; state.facet = null; state.focusKey = null; render(); syncFilterClear(); }
+	function clearFilter() { $("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null; state.focusKey = null; render(); syncFilterClear(); }
 
 	// ------------------------------------------------------------ this search's authors
 	// An author's key: the registry ID when the source gave one, else the name as written.
@@ -1889,6 +1906,8 @@
 		if (r.titleMarkup) rich(a, r.titleMarkup); else a.textContent = r.title;
 		if (r.url) tt.title = r.title + "\n" + t("titleOpenTip");
 		tt.appendChild(a);
+		// Plain text, not a badge: this row was not in the previous run of this search.
+		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); mark.title = t("newMarkTip"); tt.appendChild(mark); }
 
 		td("year", "num", r.year == null ? "" : String(r.year));
 		let venueCell = td("venue", "venue", r.venue, r.publisher ? r.venue + " · " + r.publisher : r.venue);
@@ -2034,7 +2053,50 @@
 			line.appendChild(short); line.appendChild(b); row.appendChild(line); row.appendChild(full); box.appendChild(row);
 		}
 	}
+	// Results per year as small grey bars. Drawn from every result the other filters let
+	// through, so choosing years does not flatten the picture; the chosen range stays dark.
+	function drawYearHistogram() {
+		let box = $("metrics-years"); if (!box) return;
+		box.textContent = "";
+		let f = $("filter").value.trim().toLowerCase();
+		let counts = new Map();
+		for (let r of state.records) if (Number.isInteger(r.year) && matchesFilter(r, f, true)) counts.set(r.year, (counts.get(r.year) || 0) + 1);
+		let years = [...counts.keys()];
+		box.hidden = years.length < 2 && !state.yearRange;
+		if (box.hidden) return;
+		let last = Math.max(...years), first = Math.max(Math.min(...years), last - 59), peak = Math.max(...counts.values());
+		let bars = document.createElement("div"); bars.className = "yr-bars"; bars.setAttribute("role", "group"); bars.setAttribute("aria-label", t("yearHistogram"));
+		let choose = (a, b) => { state.yearRange = { from: Math.min(a, b), to: Math.max(a, b) }; state.focusKey = null; render(); };
+		for (let y = first; y <= last; y++) {
+			let n = counts.get(y) || 0, b = document.createElement("button");
+			b.type = "button"; b.className = "yr-bar";
+			b.classList.toggle("on", !state.yearRange || (y >= state.yearRange.from && y <= state.yearRange.to));
+			b.title = t("yearBarTip", y, n); b.setAttribute("aria-label", b.title);
+			b.setAttribute("aria-pressed", String(Boolean(state.yearRange) && y >= state.yearRange.from && y <= state.yearRange.to));
+			let fill = document.createElement("span"); fill.style.height = (n ? Math.max(6, Math.round(100 * n / peak)) : 0) + "%"; b.appendChild(fill);
+			// Pressing starts a range and passing over other bars with the button held extends it.
+			b.addEventListener("mousedown", e => { if (e.button) return; state.yearAnchor = y; choose(y, y); });
+			b.addEventListener("mouseenter", e => { if (state.yearAnchor != null && e.buttons) choose(state.yearAnchor, y); });
+			b.addEventListener("click", e => { if (!e.detail) choose(y, y); });
+			bars.appendChild(b);
+		}
+		if (!state.yearUpBound) { state.yearUpBound = true; document.addEventListener("mouseup", () => { state.yearAnchor = null; }); }
+		box.appendChild(bars);
+		let ends = document.createElement("div"); ends.className = "yr-ends";
+		let lo = document.createElement("span"), hi = document.createElement("span");
+		lo.textContent = String(first); hi.textContent = String(last);
+		ends.appendChild(lo); ends.appendChild(hi);
+		if (state.yearRange) {
+			let clear = document.createElement("button"); clear.type = "button"; clear.className = "ghost yr-clear";
+			let { from, to } = state.yearRange;
+			clear.textContent = t("yearClear", from === to ? String(from) : from + "–" + to); clear.title = t("yearClearTip");
+			clear.addEventListener("click", () => { state.yearRange = null; state.focusKey = null; render(); });
+			ends.insertBefore(clear, hi);
+		}
+		box.appendChild(ends);
+	}
 	function renderMetrics(list) {
+		drawYearHistogram();
 		if (searchSurface === "authors" && list.length && !list.some(record => record.citations != null && Number.isFinite(Number(record.citations)))) {
 			$("metrics-hint").hidden = false; $("metrics-hint").textContent = t("authorNoCitationData", list.length); $("metrics-table").hidden = true; return;
 		}
@@ -2196,6 +2258,12 @@
 		if (r.pmid) bits.push("PMID " + r.pmid);
 		if (r.arxiv) bits.push("arXiv " + r.arxiv);
 		$("d-meta").textContent = bits.join(" · ");
+		// Where the library files this paper: the last two levels of each path, the whole path in the tooltip.
+		let filed = $("d-collections"), paths = r.inLibrary && r.collections || [];
+		filed.textContent = paths.map(p => (p.length > 2 ? "… › " : "") + p.slice(-2).join(" › ")).join(" · ");
+		filed.title = paths.map(p => p.join(" › ")).join("\n");
+		filed.hidden = !paths.length;
+		if (paths.length) filed.textContent = t("inCollections") + " " + filed.textContent;
 		$("d-abstract").textContent = r.abstract || t("noAbstract");
 
 		$("d-open").disabled = !r.url;
@@ -2314,7 +2382,7 @@
 				else { escapeArmed = now; setStatus(t("escapeAgainToStop")); }
 				return;
 			}
-			if (document.activeElement === $("filter") && ($("filter").value || state.facet)) { clearFilter(); return; }
+			if (document.activeElement === $("filter") && ($("filter").value || state.facet || state.yearRange)) { clearFilter(); return; }
 			if (document.activeElement === $("filter")) { $("table-wrap").focus(); return; }
 			if (state.detailKey) { state.detailKey = null; paintRows(); renderDetail(); return; }
 			return;

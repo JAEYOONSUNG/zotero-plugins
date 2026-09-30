@@ -286,7 +286,7 @@ td.country { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .histmenu .histopt { display: flex; flex-direction: column; gap: 1px; padding: 5px 11px; border-radius: 5px; cursor: pointer; }
 .histmenu .histopt:hover, .histmenu .histopt.hot { background: var(--accent); color: var(--accent-text); }
 .histmenu .histopt .h-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.histmenu .histopt .h-meta { font-size: 10.5px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.histmenu .histopt .h-meta { font-size: 11px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .histmenu .histempty { padding: 7px 11px; color: var(--muted); }
 .histmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
 .histmenu .histclear { padding: 5px 11px; border-radius: 5px; cursor: pointer; color: var(--muted); }
@@ -394,6 +394,21 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 #results-table td[data-k="doi"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 /* Korean at the Latin size reads a step small; the lang attribute is already set. */
 html[lang="ko"] .field label, html[lang="ko"] .hint, html[lang="ko"] #results-table th { font-size: 11.5px; }
+
+/* Rows that were not in the previous run of this search: a word, not a badge. */
+#results-table td.title .new-mark { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--muted); white-space: nowrap; }
+/* The collections an owned paper is filed in, one plain line. */
+.d-collections { margin-top: 4px; color: var(--muted); line-height: 1.5; }
+/* Results per year: grey bars, the chosen years darker, labels only at the ends. */
+.metrics-years { margin: 6px 0 8px; }
+.yr-bars { display: flex; align-items: flex-end; gap: 1px; height: 44px; }
+.yr-bar { flex: 1 1 0; min-width: 2px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; display: flex; align-items: flex-end; cursor: pointer; }
+.yr-bar span { display: block; width: 100%; background: var(--muted); opacity: .35; }
+.yr-bar.on span { opacity: .8; }
+.yr-bar:hover span { opacity: 1; }
+.yr-bar:hover:not(:disabled) { background: transparent; border-color: transparent; }
+.yr-ends { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.yr-clear { font-size: 11px; padding: 1px 5px; border-radius: 7px; white-space: nowrap; }
 </style></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
 	<symbol id="ic-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" /><path d="M10.4 10.4 14 14" /></symbol>
@@ -519,6 +534,7 @@ html[lang="ko"] .field label, html[lang="ko"] .hint, html[lang="ko"] #results-ta
 	<div id="main">
 		<aside id="metrics" class="glass">
 			<h3 data-i18n="metricsTitle">인용 지표</h3>
+			<div id="metrics-years" class="metrics-years"><div aria-label="연도별 결과 수" role="group" class="yr-bars"><button aria-pressed="false" aria-label="2022년: 1편" title="2022년: 1편" class="yr-bar on" type="button"><span style="height:25%"></span></button><button aria-pressed="false" aria-label="2023년: 1편" title="2023년: 1편" class="yr-bar on" type="button"><span style="height:25%"></span></button><button aria-pressed="false" aria-label="2024년: 3편" title="2024년: 3편" class="yr-bar on" type="button"><span style="height:75%"></span></button><button aria-pressed="false" aria-label="2025년: 4편" title="2025년: 4편" class="yr-bar on" type="button"><span style="height:100%"></span></button><button aria-pressed="false" aria-label="2026년: 3편" title="2026년: 3편" class="yr-bar on" type="button"><span style="height:75%"></span></button></div><div class="yr-ends"><span>2022</span><span>2026</span></div></div>
 			<p hidden id="metrics-hint" class="metrics-hint" data-i18n="metricsHint">검색 결과가 오면 결과 집합의 연도·인용 수·h-index가 여기에 표시됩니다.</p>
 			<div aria-label="통계 기준 색인" role="group" class="metrics-basis" id="metrics-basis"><button aria-pressed="true" type="button">논문별 최댓값</button><button aria-pressed="false" type="button">OpenAlex</button><button aria-pressed="false" type="button">Crossref</button><button aria-pressed="false" type="button">Europe PMC (articles + preprints)</button></div><table id="metrics-table">
 				<tr><td data-i18n="mYears">출판 연도</td><td id="m-years">2022–2026</td></tr>
@@ -625,6 +641,7 @@ html[lang="ko"] .field label, html[lang="ko"] .hint, html[lang="ko"] #results-ta
 					<div id="d-facets" class="d-facets"></div>
 						<div id="d-where" class="d-where"></div>
 					<div id="d-meta" class="d-meta"></div>
+					<div id="d-collections" class="d-collections" hidden="hidden"></div>
 					<div class="d-actions">
 						<button title="브라우저에서 열기" id="d-open" type="button" data-i18n-title="dOpen" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-external" /></svg><span data-i18n="dOpen">브라우저에서 열기</span></button>
 						<button title="PDF 열기" id="d-pdf" type="button" data-i18n-title="dPdf" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf" /></svg><span data-i18n="dPdf">PDF 열기</span></button>

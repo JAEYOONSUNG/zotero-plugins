@@ -120,6 +120,31 @@ var ZotPoPImporter = (function () {
 		} catch (e) { /* a missing hint, not a failure */ }
 		return out;
 	}
+	/* The collections each item is filed in, as name paths from the top collection down
+	   ([["A", "B"], ["C"]]), for items already found: one query, no item loading. */
+	async function getCollectionPaths(itemIDs) {
+		let out = new Map();
+		let ids = [...new Set(itemIDs)].filter(Number.isInteger);
+		if (!ids.length) return out;
+		try {
+			let pathOf = id => {
+				let names = [];
+				for (let c = Zotero.Collections.get(id), hops = 0; c && hops < 20; c = c.parentID ? Zotero.Collections.get(c.parentID) : null, hops++) names.unshift(c.name);
+				return names;
+			};
+			for (let i = 0; i < ids.length; i += 500) {
+				let chunk = ids.slice(i, i + 500);
+				let rows = await Zotero.DB.queryAsync("SELECT itemID, collectionID FROM collectionItems WHERE itemID IN (" + chunk.map(() => "?").join(",") + ")", chunk);
+				for (let row of rows || []) {
+					let names = pathOf(row.collectionID);
+					if (!names.length) continue;
+					if (!out.has(row.itemID)) out.set(row.itemID, []);
+					out.get(row.itemID).push(names);
+				}
+			}
+		} catch (e) { /* a missing hint, not a failure */ }
+		return out;
+	}
 	function forgetTitleIndex(libraryID) { if (libraryID == null) titleRuns.clear(); else titleRuns.delete(libraryID); }
 	async function titleIndex(libraryID) {
 		let held = titleRuns.get(libraryID);
@@ -520,5 +545,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { manualItemType, importRecord, fillPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, getReadingStates };
+	return { manualItemType, importRecord, fillPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, getReadingStates, getCollectionPaths };
 })();
