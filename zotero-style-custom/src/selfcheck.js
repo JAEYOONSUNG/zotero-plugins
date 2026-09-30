@@ -184,11 +184,11 @@
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
-      /* And a rule only this build's stylesheet has: a row of the
-         논문 비교 picker. Update both marks when a
+      /* And a rule only this build's stylesheet has: a collection path
+         button in a paper's 자세히. Update both marks when a
          change touches only one of the two files. */
-      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-matrix-picker-row'
-        && String(rule.style?.getPropertyValue('justify-content') || '').includes('space-between');
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-paper-collection-link'
+        && String(rule.style?.getPropertyValue('display') || '').includes('inline');
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;
@@ -197,7 +197,7 @@
         catch (error) { throw new Error('the panel stylesheet could not be read: ' + (error.message || error)); }
       }
       // The runtime and the reader tools change without the panel: each gets a mark of its own.
-      const RUNTIME_MARK = 'alreadySo', READER_MARK = 'labelsByOwner';
+      const RUNTIME_MARK = 'collectionEntries', READER_MARK = 'labelsByOwner';
       const liveRuntime = typeof runtime[RUNTIME_MARK] === 'function';
       const readerCode = String(root.CustomStyleReaderTools?.create || '');
       const liveReader = !readerCode || readerCode.includes(READER_MARK);
