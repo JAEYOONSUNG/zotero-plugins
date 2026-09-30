@@ -18,15 +18,16 @@
 	// ones a reader scans; rank, institution, country, tier and DOI (kept in the
 	// detail) and Status (only once something has one) are hidden until "all".
 	const DEFAULT_COLS = {
-		chk: 28, title: 320, authorString: 190, year: 58, venue: 150, citations: 56, cpy: 74, journalIF: 64,
-		pdf: 52, inLibrary: 84, status: 96, rank: 60, affiliation: 150, country: 62, tier: 56, doi: 150
+		chk: 28, title: 270, authorString: 190, year: 58, venue: 140, citations: 56, cpy: 68, journalIF: 60,
+		pdf: 60, inLibrary: 96, status: 128, rank: 60, affiliation: 150, country: 62, tier: 56, doi: 150
 	};
 
 	// 8: Year, Rank and Per year were narrower than their own digits ("20…", "Ra…").
 	// 9: the IF column gained a leading ~ for an estimate and 48px clipped it.
 	// 10: the library column carries Style Custom's reading state beside the check.
 	// 11: the title moved to second place and five columns are hidden by default.
-	const COL_VERSION = 11;
+	// 12: the status column fits "Added + PDF" and the defaults still add up to the results pane at 1280px.
+	const COL_VERSION = 12;
 	const COLUMN_KEYS = Object.keys(DEFAULT_COLS);
 	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~56px with its padding)
 	const MIN_COL = 40;
@@ -263,8 +264,10 @@
 		p.value = Math.min(p.max, value);
 	}
 	let bannerAction = null;
-	function showBanner(text, action) {
+	function showBanner(text, action, options = {}) {
 		$("banner-text").textContent = text;
+		// A banner that reports a failure wears the attention colour; one that offers a hint stays plain.
+		$("banner").classList.toggle("warn", Boolean(options.warn));
 		// A banner can carry one verb: what to do about what it says.
 		bannerAction = action && typeof action.run === "function" ? action : null;
 		let btn = $("banner-action");
@@ -282,7 +285,7 @@
 			if (!win) { Zotero.launchURL(error.url || "https://scholar.google.com"); return; }
 			hideBanner();
 			try { win.addEventListener("unload", () => { setTimeout(() => { if (typeof retry === "function") retry(); }, 400); }, { once: true }); } catch (e) { log("scholar session: " + e.message); }
-		} });
+		} }, { warn: true });
 	}
 	function hideBanner() { $("banner").hidden = true; }
 
@@ -314,7 +317,7 @@
 		// here quietly overrode the shipped default of "multi".
 		populateSearchSources();
 		populatePoPOutputSort();
-		for (let id of ["engine", "source", "sort", "popOutputSort", "popCachePolicy", "target"]) enhanceSelect($(id));
+		for (let id of ["engine", "source", "sort", "popOutputSort", "popCachePolicy", "target", "author-provider", "author-input-kind"]) enhanceSelect($(id));
 
 		restoreQuery();
 		restoreAuthorPreferences();
@@ -351,6 +354,7 @@
 		$("author-provider").addEventListener("change", () => switchAuthorProvider($("author-provider").value));
 		$("author-name-btn").addEventListener("click", () => runAuthorAction("name-papers"));
 		$("author-stop-btn").addEventListener("click", stopOperation);
+		$("author-help-toggle")?.addEventListener("click", () => { state.authorHelpOpen = !state.authorHelpOpen; updateAuthorHint(); });
 		$("author-history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(); });
 		$("query-form").addEventListener("submit", e => { e.preventDefault(); runSearch(); });
 		$("query-form").addEventListener("input", cancelCacheRestore);
@@ -634,6 +638,13 @@
 		$("mode-authors").setAttribute("aria-pressed", String(searchSurface === "authors"));
 		sourceHint(); renderAuthorProfiles();
 	}
+	// What the status line says when nothing is running: the results on screen, or "ready" for none.
+	function restStatus() {
+		let n = state.records.length;
+		if (!n) return t("ready");
+		let label = searchSurface === "authors" ? (activeAuthorProvider === "orcid" ? "ORCID" : "Google Scholar") : sourceLabel($("source").value);
+		return t("resultCount", label, n, false, 0);
+	}
 	async function settleActiveSearch() {
 		if (state.searching) { state.searchController?.abort(); try { await state.searchDone; } catch (_) {} }
 	}
@@ -641,7 +652,7 @@
 		if (state.importing || !["papers", "authors"].includes(mode)) return;
 		cancelCacheRestore(); while (state.searching) await settleActiveSearch();
 		if (searchSurface !== mode) { saveSurfaceResults(); searchSurface = mode; restoreSurfaceResults(); }
-		PREF("searchSurface", mode); applySearchSurface(); hideBanner(); setStatus(t("ready")); render();
+		PREF("searchSurface", mode); applySearchSurface(); hideBanner(); setStatus(restStatus()); render();
 	}
 	async function switchAuthorProvider(provider) {
 		if (!["scholar", "orcid"].includes(provider)) return;
@@ -654,8 +665,9 @@
 		authorAction = authorSessions[provider].action;
 		$("author-input").value = authorSessions[provider].input;
 		$("author-input-kind").value = authorSessions[provider].inputKind || "auto";
+		syncSel($("author-provider")); syncSel($("author-input-kind"));
 		if (searchSurface === "authors") restoreSurfaceResults();
-		saveAuthorPreferences(); updateAuthorHint(); renderAuthorProfiles(); hideBanner(); setStatus(t("ready")); render();
+		saveAuthorPreferences(); updateAuthorHint(); renderAuthorProfiles(); hideBanner(); setStatus(restStatus()); render();
 	}
 	function saveAuthorPreferences() {
 		authorSessions[activeAuthorProvider].input = $("author-input").value;
@@ -679,12 +691,19 @@
 		$("author-input-kind").value = authorSessions[activeAuthorProvider].inputKind;
 		authorAction = authorSessions[activeAuthorProvider].action;
 		$("author-input").value = authorSessions[activeAuthorProvider].input;
+		syncSel($("author-provider")); syncSel($("author-input-kind"));
 		let max = Number(saved.maxResults); $("author-max-results").value = Number.isInteger(max) && max >= 1 && max <= 2000 ? String(max) : "1000";
 	}
 	function updateAuthorHint() {
 		let orcid = activeAuthorProvider === "orcid";
 		$("author-input-label").textContent = t(orcid ? "authorOrcidInput" : "authorScholarInput");
 		$("author-help").textContent = t(orcid ? "authorOrcidHelp" : "authorScholarHelp");
+		let more = $("author-help-more"), toggle = $("author-help-toggle");
+		if (more && toggle) {
+			more.textContent = t(orcid ? "authorOrcidHelpMore" : "authorScholarHelpMore");
+			let open = state.authorHelpOpen === true;
+			more.hidden = !open; toggle.setAttribute("aria-expanded", String(open));
+		}
 		$("author-name-btn").hidden = orcid;
 		$("author-input-kind-field").hidden = orcid;
 	}
@@ -805,7 +824,7 @@
 				showBanner(t(action === "name-papers" ? "authorNameUnverified" : q.authorProvider === "orcid" ? "authorOrcidHelp" : "popModeNotice")
 					+ (result.authorProvenance?.truncated ? " " + t("authorLimited", result.length, result.authorProvenance.totalGroups) : ""));
 			}
-			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")));
+			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")), null, { warn: true });
 			await history?.save({ source: "author:" + q.authorProvider, query: { ...q, authorProfile: session.profile, authorProfiles: session.profiles },
 				records: stripDisplayFields(received), partial: Boolean(received.partial || ctx.errors.length) });
 			saveAuthorPreferences();
@@ -821,7 +840,7 @@
 				fallbackToName = true; setStatus(t("searchFailed", error.message || error), "err");
 			}
 			else if (error.wall) { setStatus(t("searchFailed", error.message || error), "err"); scholarWallBanner(error, () => runAuthorAction(action, profile)); }
-			else { setStatus(t("searchFailed", error.message || error), "err"); showBanner(t("searchFailed", error.message || error)); }
+			else { setStatus(t("searchFailed", error.message || error), "err"); showBanner(t("searchFailed", error.message || error), null, { warn: true }); }
 		} finally {
 			if (state.searchController === controller || !state.searchController) { state.searching = false; state.searchController = null;
 				$("author-search-btn").disabled = false; $("author-name-btn").disabled = false; $("author-stop-btn").disabled = true; $("search-btn").disabled = false;
@@ -1031,6 +1050,14 @@
 		let day = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 		return Math.max(0, Math.round((day(new Date()) - day(new Date(iso))) / 86400000));
 	}
+	// The words of a saved search, with the sources it combined named as the window names them
+	// ("OpenAlex, Crossref"), not as the ids the search was stored under ("openalex+crossref").
+	function historyLabel(e) {
+		let query = e.query || {}, names = Array.isArray(query.sources) ? query.sources : [];
+		if (e.query?.mode === "author" || !names.length) return history.describe(query);
+		let plain = key => String(sourceLabel(key) || key).replace(/\s*[(（][^)）]*[)）]\s*$/, "");
+		return [history.describe({ ...query, sources: null }), names.map(plain).join(", ")].filter(Boolean).join(" · ");
+	}
 	async function openHistoryMenu() {
 		let menu = $("histmenu");
 		menu.textContent = "";
@@ -1050,7 +1077,8 @@
 			d.dataset.id = e.id;
 			let label = document.createElement("span");
 			label.className = "h-label";
-			label.textContent = e.label || history.describe(e.query);
+			// The stored label is the plain description; a label someone chose stays as chosen.
+			label.textContent = !e.label || e.label === history.describe(e.query) ? historyLabel(e) : e.label;
 			let meta = document.createElement("span");
 			meta.className = "h-meta";
 			let when = t("historyWhen", daysSince(e.savedAt));
@@ -1089,7 +1117,12 @@
 		let below = window.innerHeight - r.bottom - 8;
 		menu.style.maxHeight = Math.max(120, below) + "px";
 		menu.style.top = (r.bottom + 3) + "px";
-		menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - menu.offsetWidth - 6)) + "px";
+		/* Hung from the button's right edge, so the menu opens under the control that opened it and
+		   grows leftwards; it is kept inside the window on both sides. */
+		let right = Math.max(6, Math.min(window.innerWidth - r.right, window.innerWidth - 6 - 200));
+		menu.style.left = "auto";
+		menu.style.right = right + "px";
+		menu.style.maxWidth = Math.max(200, Math.min(560, window.innerWidth - right - 6)) + "px";
 	}
 
 	// ------------------------------------------------------------ toolbar menus
@@ -1214,7 +1247,8 @@
 		try {
 			PREF("metricsWidth", $("metrics").offsetWidth);
 			// offsetHeight is 0 for a hidden pane; saving that brings it back as a dead strip
-			if (!$("detail").hidden) PREF("detailHeight", $("detail").offsetHeight);
+			// Nor the one-line hint it folds to while nothing is chosen.
+			if (!$("detail").hidden && !$("detail").hasAttribute("data-empty")) PREF("detailHeight", $("detail").offsetHeight);
 			PREF("detailHidden", $("detail").hidden === true);
 			PREF("metricsHidden", $("metrics").hidden === true);
 			PREF("colWidths", JSON.stringify(state.colWidths));
@@ -1237,7 +1271,12 @@
 	function toggleMetrics() { setMetricsVisible($("metrics").hidden); saveLayout(); }
 	function setDetailVisible(on) {
 		$("detail").hidden = !on;
-		$("hsplit").hidden = !on;
+		syncDetailSplitter();
+	}
+	// The grip belongs to a pane that has a height to drag: not a hidden one, not the one-line hint.
+	function syncDetailSplitter() {
+		let detail = $("detail"), grip = $("hsplit");
+		if (grip) grip.hidden = detail.hidden || detail.hasAttribute("data-empty");
 	}
 	function toggleDetail() {
 		setDetailVisible($("detail").hidden);
@@ -1657,7 +1696,7 @@
 				// A bare "HTTP 429" from OpenAlex is its exhausted daily budget, which the user
 				// can actually fix; say so instead of showing the status code alone.
 				let quota = ctx.errors.some(m => /openalex/i.test(m) && /429|budget|credit/i.test(m));
-				showBanner(t("partialFail", ctx.errors.join(" / ")) + (quota ? " " + t("openAlexQuota") : ""));
+				showBanner(t("partialFail", ctx.errors.join(" / ")) + (quota ? " " + t("openAlexQuota") : ""), null, { warn: true });
 			}
 			if (!recs.length && !partial) setStatus(t("noResults", label));
 			else if (!partial && q.sort === "date" && q.venue.trim()) setStatus(t("journalFeed", q.venue.trim(), recs.length));
@@ -1681,7 +1720,7 @@
 				let text = quota ? t("openAlexQuota") : t("searchFailed", e.message || e);
 				setStatus(text, "err");
 				// Scholar's walls carry their own cure: a window inside Zotero and a retry.
-				if (e.wall) scholarWallBanner(e, () => runSearch()); else showBanner(text);
+				if (e.wall) scholarWallBanner(e, () => runSearch()); else showBanner(text, null, { warn: true });
 				if (state.records.length) rememberSearch(sourceKey, q, state.records, true);
 			}
 		}
@@ -1794,11 +1833,24 @@
 		if (typeof ZotPoPJournalMarks === "undefined" || !r?.venue) return null;
 		let identity = ZotPoPJournalMarks.identify(r.venue, r.publisher);
 		if (!identity) return null;
-		let dark = Boolean(window.matchMedia?.("(prefers-color-scheme: dark)")?.matches);
-		return { identity, tone: ZotPoPJournalMarks.colours(identity, { dark }),
+		/* Both themes' inks travel with the element as custom properties and search.css picks one
+		   with prefers-color-scheme. Choosing by matchMedia at render time left the light ink on a
+		   dark page (Genome Biology came out at 1:1) whenever the theme changed after the draw,
+		   and in any static copy of the page. */
+		let light = ZotPoPJournalMarks.colours(identity, { dark: false });
+		let dark = ZotPoPJournalMarks.colours(identity, { dark: true });
+		return { identity, tone: light, light, dark,
 			// OpenAlex's ISO 4 abbreviation when the journal lookup supplied one; the
 			// module's own otherwise.
 			abbrev: r.journalAbbrev || identity.mark };
+	}
+	function setJournalTones(el, found) {
+		let put = (name, value) => { if (typeof el.style.setProperty === "function") el.style.setProperty(name, value); else el.style[name] = value; };
+		for (let [suffix, tone] of [["l", found.light], ["d", found.dark]]) {
+			put("--j-ink-" + suffix, tone.ink);
+			put("--j-fill-" + suffix, tone.fill);
+			put("--j-edge-" + suffix, tone.edge);
+		}
 	}
 	function journalMark(r) {
 		let found = journalIdentity(r);
@@ -1806,10 +1858,9 @@
 		let mark = document.createElement("span");
 		mark.className = "jmark" + (found.identity.known ? " known" : "");
 		mark.textContent = found.abbrev;
-		// An exact brand code is worn as-is; a derived colour is a tinted chip.
-		mark.style.background = found.tone.badge || found.tone.fill;
-		mark.style.color = found.tone.badge ? found.tone.badgeInk : found.tone.ink;
-		mark.style.boxShadow = found.tone.badge ? "none" : "inset 0 0 0 .5px " + found.tone.edge;
+		// A tinted chip (fill and ink of one hue), never the raw brand colour: a saturated
+		// block would be the loudest thing on the screen. search.css picks the theme's pair.
+		setJournalTones(mark, found);
 		mark.title = found.identity.label ? r.venue + " · " + found.identity.label : r.venue;
 		return mark;
 	}
@@ -1817,8 +1868,7 @@
 	function paintVenue(cell, r) {
 		let found = journalIdentity(r);
 		if (!found) return;
-		cell.style.color = found.tone.ink;
-		cell.style.fontWeight = "600";
+		setJournalTones(cell, found);
 		cell.classList.add("venue-known");
 		cell.title = [r.venue, found.abbrev !== r.venue ? found.abbrev : "", found.identity.label, r.publisher].filter(Boolean).join(" · ");
 	}
@@ -1934,6 +1984,8 @@
 		form.classList.toggle("collapsed", folded);
 		$("cond-toggle").setAttribute("aria-expanded", String(!folded));
 		$("cond-summary").textContent = folded ? conditionSummary() : "";
+		// Folded, the toggle is the summary bar; open, it is a quiet "fold" at the end of the form.
+		let label = form.querySelector(".cond-label"); if (label) label.textContent = t(folded ? "condLabel" : "condFold");
 	}
 
 	function render() {
@@ -1968,7 +2020,8 @@
 				let grip = th.querySelector(".rz");
 				if (grip) th.insertBefore(mark, grip); else th.appendChild(mark);
 			}
-			mark.textContent = on ? (state.sortDir === "asc" ? "▲" : "▼") : "";
+			// Drawn by search.css as a small chevron from the header's own class; no glyph to mismatch the text.
+				mark.textContent = "";
 		}
 
 		let tbody = $("results-body");
@@ -1986,7 +2039,10 @@
 		$("empty").hidden = list.length > 0 || !$("busy").hidden;
 		// "Enter a query above" after a search that ran and found nothing reads as though
 		// nothing happened, which is exactly when a user needs to know a source failed.
+		// Profiles found but no papers loaded yet: the next step is choosing one, not "found nothing".
+		let profilesOnly = searchSurface === "authors" && !state.records.length && authorSessions[activeAuthorProvider].profiles.length > 0;
 		$("empty").textContent = state.records.length ? t("emptyFiltered")
+			: profilesOnly ? t("emptyAuthorProfiles")
 			: state.searched ? t(state.lastPartial ? "emptyAfterPartial" : "emptyAfterSearch")
 			: t(searchSurface === "authors" ? "emptyInitialAuthors" : "emptyInitial");
 		updateCounts();
@@ -2031,7 +2087,7 @@
 		c0.appendChild(cb);
 
 		td("citations", "num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : "");
-		td("cpy", "num", fmt(ZotPoPMetrics.citesPerYear(r)));
+		td("cpy", "num", fmt(ZotPoPMetrics.citesPerYear(r), 1));
 		td("rank", "num", r.popOriginal ? (r.popRank == null ? "–" : String(r.popRank)) : String(r.rank));
 		td("authorString", "", r.authorString, r.authorString).dataset.marquee = "authors";
 
@@ -2043,8 +2099,8 @@
 		if (r.titleMarkup) rich(a, r.titleMarkup); else a.textContent = r.title;
 		if (r.url) tt.title = r.title + "\n" + t("titleOpenTip");
 		tt.appendChild(a);
-		// Plain text, not a badge: this row was not in the previous run of this search.
-		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); mark.title = t("newMarkTip"); tt.appendChild(mark); }
+		// A small lime mark ahead of the title (so a narrow cell never clips it): this row was not in the previous run of this search.
+		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); mark.title = t("newMarkTip"); tt.insertBefore(mark, a); }
 
 		td("year", "num", r.year == null ? "" : String(r.year));
 		let venueCell = td("venue", "venue", r.venue, r.publisher ? r.venue + " · " + r.publisher : r.venue);
@@ -2112,16 +2168,17 @@
 		paintRows();
 	}
 
-	// Add options fold into one line while nothing is chosen; choosing rows opens them.
-	function syncImportBar(n = state.records.filter(r => state.selected.has(r.key)).length) {
+	// The footer has one layout in both states: where to add, the options as one line (opened by hand
+	// into a row of its own) and, at the right, the count and the add button. Choosing rows changes
+	// the numbers and the button, never the shape.
+	function syncImportBar() {
 		let toggle = $("import-opts-toggle"), box = $("import-opts"); if (!toggle || !box) return;
-		let open = n > 0 || Boolean(state.optsOpen);
+		let open = Boolean(state.optsOpen);
 		box.hidden = !open;
-		toggle.hidden = n > 0;
+		toggle.hidden = false;
 		toggle.setAttribute("aria-expanded", String(open));
-		let target = ""; try { target = $("target").options?.[$("target").selectedIndex]?.textContent || ""; } catch (e) { /* no target yet */ }
 		let parts = [["opt-pdf", "optPdfShort"], ["opt-skip", "optSkipShort"], ["opt-fillpdf", "optFillPdfShort"], ["opt-extra", "optExtraShort"]].filter(([id]) => $(id).checked).map(([, key]) => t(key));
-		toggle.textContent = open ? t("optsHide") : t("optsSummary", String(target).trim() || t("optsSummaryNone"), parts) + " ▾";
+		toggle.textContent = open ? t("optsHide") : t("optsSummary", parts.length ? parts : [t("optsSummaryNone")]);
 	}
 
 	function updateCounts() {
@@ -2150,6 +2207,10 @@
 			b.setAttribute("aria-pressed", String(state.libraryFilter === key));
 		}
 		$("preview-btn").disabled = !previewRecord();
+		// Nothing to clear, filter, export or view while there are no rows: shown, but inert.
+		$("select-none").disabled = n === 0;
+		let noRows = state.records.length === 0;
+		for (let id of ["export-btn", "view-btn", "lib-all", "lib-new", "lib-owned"]) { let b = $(id); if (b) b.disabled = noRows; }
 		previewManager?.update(previewRecord());
 	}
 
@@ -2168,7 +2229,10 @@
 		for (let key of [null, ...sources]) {
 			let b = document.createElement("button");
 			b.type = "button";
-			b.textContent = key ? (ZotPoPSources.SOURCES?.[key]?.label || key) : t("metricsBasisMax");
+			// The chip names the index; the qualifier in parentheses is in its tooltip.
+			let full = key ? (ZotPoPSources.SOURCES?.[key]?.label || key) : t("metricsBasisMax");
+			b.textContent = key ? String(full).replace(/\s*[(（][^)）]*[)）]\s*$/, "") : full;
+			b.title = full;
 			b.setAttribute("aria-pressed", String((state.metricsBasis || null) === key));
 			b.addEventListener("click", () => {
 				state.metricsBasis = key; renderMetrics(state.visible || state.records || []);
@@ -2303,6 +2367,10 @@
 		let r = detailRecord();
 		$("detail-empty").hidden = Boolean(r);
 		$("detail-body").hidden = !r;
+		// Nothing chosen: the pane folds to one hint row and gives the table its height back. The height
+		// the user set stays on the element and returns with the next choice.
+		if (r) $("detail").removeAttribute("data-empty"); else $("detail").setAttribute("data-empty", "");
+		syncDetailSplitter();
 		if (!r) return;
 		$("d-title").textContent = "";
 		if (r.titleMarkup) {
@@ -2782,9 +2850,9 @@
 		// Redrawn, not just repainted: an added paper leaves "not owned", and the counts say so.
 		render();
 		setStatus(t("importDone", added, pdfs, exists, failed, state.cancelled));
-		if (failed) showBanner(pdfMissedCount ? t("importFailuresPdf", failed, pdfMissedCount) : t("importFailures", failed), { label: t("importRetry", failed), run: () => { hideBanner(); importRecords(failedRecs); } });
-		else if (pdfMissedCount) showBanner(t("importPdfMissed", pdfMissedCount));
-		else if (proxyLoginNeeded) showBanner(t("loginNeeded"));
+		if (failed) showBanner(pdfMissedCount ? t("importFailuresPdf", failed, pdfMissedCount) : t("importFailures", failed), { label: t("importRetry", failed), run: () => { hideBanner(); importRecords(failedRecs); } }, { warn: true });
+		else if (pdfMissedCount) showBanner(t("importPdfMissed", pdfMissedCount), null, { warn: true });
+		else if (proxyLoginNeeded) showBanner(t("loginNeeded"), null, { warn: true });
 	}
 
 	/* A query handed over from the item list. Title first: it is the most

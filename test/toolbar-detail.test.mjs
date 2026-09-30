@@ -121,13 +121,14 @@ test("the sort arrow is its own node beside the header's text and aria-sort foll
 	const heads = ui.get("results-head").children;
 	const th = key => heads.find(h => h.dataset.sort === key);
 	assert.equal(th("cpy").getAttribute("aria-sort"), "descending");
-	assert.equal(th("cpy").querySelector(".sort-mark").textContent, "▼");
+	assert.ok(th("cpy").classList.contains("sorted-desc"), "the chevron is drawn by the stylesheet from the header's class");
+	assert.equal(th("cpy").querySelector(".sort-mark").textContent, "", "no glyph that could differ from the header text");
 	assert.equal(th("cpy").children[0].className, "sort-mark", "the mark sits before the resize grip, after the label");
 	assert.equal(th("citations").hasAttribute("aria-sort"), false, "the neighbouring column carries nothing");
 	assert.equal(th("citations").querySelector(".sort-mark").textContent, "");
 	ui.state.sortDir = "asc"; ui.render();
 	assert.equal(th("cpy").getAttribute("aria-sort"), "ascending");
-	assert.equal(th("cpy").querySelector(".sort-mark").textContent, "▲");
+	assert.ok(th("cpy").classList.contains("sorted-asc"));
 	assert.equal(th("cpy").querySelectorAll(".sort-mark").length, 1);
 	assert.doesNotMatch(css, /sorted-(asc|desc)::after/, "no arrow is painted at the cell's edge any more");
 });
@@ -138,7 +139,7 @@ test("the markup folds the long metadata, keeps one preview button and two detai
 	const actions = /<div class="d-actions">([\s\S]*?)<\/div>/.exec(markup)[1];
 	assert.deepEqual([...actions.matchAll(/<button id="([^"]+)"/g)].map(m => m[1]), ["d-primary", "d-more"]);
 	const at = id => markup.indexOf(`id="${id}"`);
-	assert.ok(at("d-authors") < at("d-abstract") && at("d-abstract") < at("d-fold"), "the abstract follows the authors");
+	assert.ok(at("d-authors") < at("d-fold") && at("d-fold") < at("d-abstract"), "the disclosure row sits above the abstract, so a short pane scrolls the abstract and never hides the disclosure");
 	const fold = markup.slice(at("d-fold"), markup.indexOf("</details>", at("d-fold")));
 	for (const id of ["d-facets", "d-where", "d-meta"]) assert.ok(fold.includes(`id="${id}"`), id + " is inside the fold");
 	assert.ok(!/id="d-versions"[^>]*>[\s\S]{0,4}<\/div>[\s\S]*class="badge ver"/.test(markup) && !css.includes(".badge.ver"), "no version badge");
@@ -194,7 +195,7 @@ test("both locales word the new controls, and the PDF and column tips say what i
 		for (const key of keys) assert.notEqual(t(key, 1), key, `${locale}: ${key}`);
 	}
 	const ko = I18N.make("ko"), en = I18N.make("en");
-	assert.equal(ko("libAll") + " / " + ko("libNew") + " / " + ko("libOwned"), "전체 / 미보유 / 보유");
+	assert.equal(ko("libAll") + " / " + ko("libNew") + " / " + ko("libOwned"), "전체 / 미보유 / 보유함");
 	assert.equal(en("libAll") + " / " + en("libNew") + " / " + en("libOwned"), "All / Not owned / Owned");
 	for (const t of [ko, en]) {
 		assert.match(t("evPdf") + t("thPdfClickTip"), /후보|candidate/i);
@@ -245,3 +246,28 @@ test("the detail names the other version, whether the library has it, and jumps 
 	assert.equal(ui.state.records.find(r => r.key === "pub").doi, "10.1/pub");
 	assert.equal(ui.state.records.find(r => r.key === "pre").doi, "10.1/pre");
 });
+
+// ---- journal ink for both themes (fix round): chosen by the stylesheet, never by matchMedia at draw time
+test("the journal name and the detail chip carry the ink of both themes, and the stylesheet chooses", async () => {
+	const ui = uiHarness({ realRows: true, search: async () => [paper("sci", { venue: "Science", publisher: "American Association for the Advancement of Science (AAAS)" }), paper("none", { venue: "" })] });
+	await ui.runSearch(); ui.wireEvents();
+	const cell = ui.get("results-body").children[0].querySelector("td.venue");
+	const chip = ui.journalMark(ui.state.records[0]);
+	assert.ok(chip, "the detail shows the journal chip");
+	for (const el of [cell, chip]) {
+		for (const name of ["ink", "fill", "edge"]) for (const suffix of ["l", "d"]) assert.ok(el.style[`--j-${name}-${suffix}`], `--j-${name}-${suffix} is set on ${el.className}`);
+		assert.notEqual(el.style["--j-ink-l"], el.style["--j-ink-d"], "two different inks");
+		assert.equal(el.style.color, undefined, "no inline colour pins one theme");
+		assert.equal(el.style.background, undefined, "no inline background either: the chip is the tinted pair, not the raw brand colour");
+	}
+	// The dark ink is the dark page's ink: it is light, and it clears 4.5:1 on the dark card.
+	const [h, s, l] = /hsl\((\d+) (\d+)% (\d+)%\)/.exec(cell.style["--j-ink-d"]).slice(1).map(Number);
+	assert.ok(ratio(hslRGB(h, s / 100, l / 100), hexRGB(tokens("dark").card)) >= 4.5, "dark ink on the dark card: " + cell.style["--j-ink-d"]);
+	// The stylesheet picks by prefers-color-scheme; the raw brand colour is not worn by the chip.
+	assert.match(css, /\.venue-known \{[^}]*color: var\(--j-ink\)/);
+	assert.match(css, /@media \(prefers-color-scheme: dark\) \{\s*\.venue-known \{ --j-ink: var\(--j-ink-d\)/);
+	assert.match(css, /\.jmark \{[^}]*background: var\(--j-fill\)/);
+	assert.match(css, /@media \(prefers-color-scheme: dark\) \{\s*\.venue-known \{[^}]*\}\s*\.jmark \{ --j-ink: var\(--j-ink-d\); --j-fill: var\(--j-fill-d\)/);
+	assert.doesNotMatch(read_("content/ui.js"), /matchMedia\?\.\("\(prefers-color-scheme/, "the ink is no longer decided when the row is drawn");
+});
+function read_(name) { return readFileSync(new URL("../" + name, import.meta.url), "utf8"); }

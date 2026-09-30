@@ -346,13 +346,17 @@ test("the journal cell carries the publisher's mark in its colour, and so does t
 	const rows = ui.get("results-body").children;
 	const venue = rows[0].querySelector("td.venue");
 	assert.equal(venue.textContent, "Science", "the name itself carries the colour; no chip crowds it");
-	assert.match(venue.style.color, /^hsl\(4 81% 36%\)$/);
-	assert.equal(venue.style.fontWeight, "600");
+	/* Both themes' inks travel on the cell; the stylesheet picks one with prefers-color-scheme, so a dark
+	   page, a live theme switch and a static copy never wear the light ink. */
+	assert.match(venue.style["--j-ink-l"], /^hsl\(4 81% 36%\)$/);
+	assert.match(venue.style["--j-ink-d"], /^hsl\(\d+ \d+% \d+%\)$/);
+	assert.notEqual(venue.style["--j-ink-l"], venue.style["--j-ink-d"], "a light and a dark ink");
+	assert.equal(venue.style.color, undefined, "no inline colour that would pin one theme");
 	assert.equal(venue.title, "Science · Science · American Association for the Advancement of Science (AAAS)");
 	assert.equal(venue.dataset.marquee, "venue");
 	assert.match(rows[1].querySelector("td.venue").title, /^Journal of Cleaner Production · J Clean Prod · Elsevier/);
 	assert.equal(rows[1].querySelector("td.venue").classList.contains("venue-known"), true, "the publisher placed it");
-	assert.equal(rows[2].querySelector("td.venue").style.color, undefined);
+	assert.equal(rows[2].querySelector("td.venue").style["--j-ink-l"], undefined);
 	// The detail pane shows the abbreviation as a chip in the same colour.
 	ui.state.detailKey = "sci";
 	ui.state.records[0].journalAbbrev = "Science";
@@ -1214,7 +1218,7 @@ test("Style Custom's tags are read for the found items in one query, done over r
 	assert.equal((await sandbox.__api.getReadingStates([1])).size, 0, "a database that cannot be read is a missing hint");
 });
 
-test("the add options fold into one summary line until a result is selected", async () => {
+test("the add options stay one summary line in the footer, opened by hand, whatever is selected", async () => {
 	const ui = uiHarness({ search: async () => [paper("a"), paper("b")] });
 	await ui.runSearch(); ui.wireEvents();
 	const toggle = ui.get("import-opts-toggle"), box = ui.get("import-opts");
@@ -1228,12 +1232,13 @@ test("the add options fold into one summary line until a result is selected", as
 	assert.match(toggle.textContent, /optsHide/);
 	toggle.emit("click");
 	assert.equal(box.hidden, true);
+	// Choosing rows changes the count and the button, never the shape of the footer.
 	ui.state.selected.add("a"); ui.render();
-	assert.equal(box.hidden, false, "selecting a row expands them");
-	assert.equal(toggle.hidden, true);
+	assert.equal(box.hidden, true, "selecting a row does not reflow the footer");
+	assert.equal(toggle.hidden, false, "the summary line is there in both states");
 	assert.equal(ui.get("import-btn").disabled, false);
 	ui.state.selected.clear(); ui.render();
-	assert.equal(box.hidden, true, "and clearing the selection folds them again");
+	assert.equal(box.hidden, true);
 	// The values are untouched by folding.
 	ui.get("opt-fillpdf").checked = true; ui.get("opt-fillpdf").emit("change");
 	assert.equal(ui.prefs.fillMissingPDF, true);

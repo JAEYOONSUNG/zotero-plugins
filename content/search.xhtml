@@ -36,6 +36,7 @@
 	<symbol id="ic-library" viewBox="0 0 16 16"><path d="M2.5 13.5h11M3.5 13.5V6.2M6.5 13.5V6.2M9.5 13.5V6.2M12.5 13.5V6.2M8 2.2l5.5 3.2h-11z"/></symbol>
 	<symbol id="ic-plus" viewBox="0 0 16 16"><path d="M8 3.2v9.6M3.2 8h9.6"/></symbol>
 	<symbol id="ic-history" viewBox="0 0 16 16"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8M2.6 2.8v3h3M8 5.2V8l2 1.4"/></symbol>
+	<symbol id="ic-user" viewBox="0 0 16 16"><circle cx="8" cy="5.6" r="2.6"/><path d="M2.9 13.4c.6-2.6 2.6-4 5.1-4s4.5 1.4 5.1 4"/></symbol>
 	<symbol id="ic-quote" viewBox="0 0 16 16"><path d="M6.3 4.5C4.6 5.3 3.5 6.8 3.5 8.6c0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2zM12.6 4.5c-1.7.8-2.8 2.3-2.8 4.1 0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2z"/></symbol>
 </svg>
 
@@ -50,9 +51,10 @@
 			<label id="author-input-kind-field" class="field"><span data-i18n="authorInputKind"></span><select id="author-input-kind"><option value="auto" data-i18n="authorAutoKind"></option><option value="name" data-i18n="authorNameKind"></option><option value="profile" data-i18n="authorProfileKind"></option></select></label>
 			<label class="field grow2"><span id="author-input-label" data-i18n="authorScholarInput"></span><input id="author-input" type="text" autocomplete="off"/></label>
 			<label class="field narrow"><span data-i18n="maxResults"></span><input id="author-max-results" type="number" min="1" max="2000" value="1000"/></label>
-			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary" data-i18n="findAuthorProfiles"></button><button id="author-name-btn" type="button" data-i18n="authorNamePapers"></button><button id="author-stop-btn" type="button" disabled="disabled" data-i18n="stop"></button><button id="author-history-btn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n="history"></button></div>
+			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="findAuthorProfiles"></span></button><button id="author-name-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-user"/></svg><span data-i18n="authorNamePapers"></span></button><button id="author-stop-btn" type="button" class="icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop"/></svg><span data-i18n="stop"></span></button><button id="author-history-btn" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history"/></svg><span data-i18n="history"></span></button></div>
 		</form>
-		<p id="author-help" class="author-help"></p>
+		<div class="author-helprow"><p id="author-help" class="author-help"></p><button id="author-help-toggle" type="button" class="ghost note-help" aria-expanded="false" aria-controls="author-help-more" aria-label="?" data-i18n-title="metricsMore">?</button></div>
+		<p id="author-help-more" class="author-help author-help-more" hidden="hidden"></p>
 		<div id="author-profiles" class="author-profiles" aria-live="polite"></div>
 	</section>
 	<form id="query-form" class="query glass" onsubmit="return false;">
@@ -121,34 +123,33 @@
 				<button id="history-btn" type="button" class="icon-text" data-i18n-title="historyTip" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history"/></svg><span data-i18n="history"></span></button>
 			</div>
 		</div>
+		<details id="pop-options" class="combined-options" hidden="hidden">
+			<summary data-i18n="popOptions"></summary>
+			<p data-i18n="popNativeHelp"></p>
+			<div class="pop-native-fields">
+				<label><span data-i18n="popCachePolicy"></span><select id="popCachePolicy" form="query-form"><option value="refresh" data-i18n="popRefresh"></option><option value="offline" data-i18n="popOffline"></option></select></label>
+				<label><span data-i18n="popAffiliation"></span><input id="affiliation" type="text" form="query-form"/></label>
+				<label>ISSN<input id="issn" type="text" form="query-form"/></label>
+				<label><span data-i18n="popCitedId"></span><input id="citedId" type="text" form="query-form"/></label>
+				<label><span data-i18n="popField"></span><input id="field" type="text" form="query-form"/></label>
+				<label class="pop-raw-field"><span data-i18n="popRaw"></span><input id="popRaw" type="text" form="query-form" data-i18n-title="popRawHelp"/></label>
+			</div>
+		</details>
+		<details id="combined-options" class="combined-options" hidden="hidden">
+			<summary data-i18n="combinedSources"></summary>
+			<div class="combined-source-list">
+				<label><input id="multi-source-openalex" type="checkbox" checked="checked"/> OpenAlex</label>
+				<label><input id="multi-source-crossref" type="checkbox" checked="checked"/> Crossref</label>
+				<label><input id="multi-source-europepmc" type="checkbox" checked="checked"/> Europe PMC</label>
+				<label><input id="multi-source-arxiv" type="checkbox" checked="checked"/> arXiv</label>
+				<label><input id="multi-source-pubmed" type="checkbox"/> PubMed</label>
+				<label><input id="multi-source-semanticscholar" type="checkbox"/> Semantic Scholar</label>
+				<label><input id="multi-source-scholar" type="checkbox"/> Google Scholar</label>
+			</div>
+			<p data-i18n="combinedSourcesHelp"></p>
+		</details>
 	</form>
-	<details id="pop-options" class="combined-options" hidden="hidden">
-		<summary data-i18n="popOptions"></summary>
-		<p data-i18n="popNativeHelp"></p>
-		<div class="pop-native-fields">
-			<label><span data-i18n="popCachePolicy"></span><select id="popCachePolicy" form="query-form"><option value="refresh" data-i18n="popRefresh"></option><option value="offline" data-i18n="popOffline"></option></select></label>
-			<label><span data-i18n="popAffiliation"></span><input id="affiliation" type="text" form="query-form"/></label>
-			<label>ISSN<input id="issn" type="text" form="query-form"/></label>
-			<label><span data-i18n="popCitedId"></span><input id="citedId" type="text" form="query-form"/></label>
-			<label><span data-i18n="popField"></span><input id="field" type="text" form="query-form"/></label>
-			<label class="pop-raw-field"><span data-i18n="popRaw"></span><input id="popRaw" type="text" form="query-form" data-i18n-title="popRawHelp"/></label>
-		</div>
-	</details>
-	<details id="combined-options" class="combined-options" hidden="hidden">
-		<summary data-i18n="combinedSources"></summary>
-		<div class="combined-source-list">
-			<label><input id="multi-source-openalex" type="checkbox" checked="checked"/> OpenAlex</label>
-			<label><input id="multi-source-crossref" type="checkbox" checked="checked"/> Crossref</label>
-			<label><input id="multi-source-europepmc" type="checkbox" checked="checked"/> Europe PMC</label>
-			<label><input id="multi-source-arxiv" type="checkbox" checked="checked"/> arXiv</label>
-			<label><input id="multi-source-pubmed" type="checkbox"/> PubMed</label>
-			<label><input id="multi-source-semanticscholar" type="checkbox"/> Semantic Scholar</label>
-			<label><input id="multi-source-scholar" type="checkbox"/> Google Scholar</label>
-		</div>
-		<p data-i18n="combinedSourcesHelp"></p>
-	</details>
-
-	<div id="banner" class="banner" hidden="hidden"><span id="banner-text"></span><span class="spacer"></span><button id="banner-action" type="button" class="primary" hidden="hidden"></button><button id="banner-close" type="button">×</button></div>
+	<div id="banner" class="banner" hidden="hidden"><span id="banner-text"></span><span class="spacer"></span><button id="banner-action" type="button" class="primary" hidden="hidden"></button><button id="banner-close" type="button" class="banner-close">×</button></div>
 
 	<div id="main">
 		<aside id="metrics" class="glass">
@@ -180,7 +181,7 @@
 			<div class="toolbar glass">
 				<span class="searchbox">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic muted"><use href="#ic-search"/></svg>
-					<input id="filter" type="search" data-i18n-ph="filterPh"/>
+					<input id="filter" type="search" data-i18n-ph="filterPh" data-i18n-title="filterTip"/>
 					<button id="filter-clear" type="button" class="filter-clear" data-i18n-title="filterClear" aria-label="clear" hidden="hidden">×</button>
 				</span>
 				<span id="facet-chip" class="facet-chip" hidden="hidden"><span id="facet-text"></span><button id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" aria-label="clear">×</button></span>
@@ -188,8 +189,7 @@
 				<button id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="previewAction"></span></button>
 				<button id="select-none" type="button" data-i18n-title="selNoneTip" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-none"/></svg><span data-i18n="selNone"></span></button>
 				<span id="lib-filter" class="lib-filter" role="group" data-i18n-aria="libFilterLabel" data-i18n-title="libFilterTip">
-					<span class="lib-filter-label" data-i18n="libFilterLabel"></span>
-					<button id="lib-all" type="button" data-lib="all" aria-pressed="true"></button>
+						<button id="lib-all" type="button" data-lib="all" aria-pressed="true"></button>
 					<button id="lib-new" type="button" data-lib="new" aria-pressed="false"></button>
 					<button id="lib-owned" type="button" data-lib="owned" aria-pressed="false"></button>
 				</span>
@@ -242,7 +242,6 @@
 					<div id="d-evidence" class="d-evidence"></div>
 					<div id="d-status" class="d-status" hidden="hidden"></div>
 					<div id="d-authors" class="d-authors"></div>
-					<div id="d-abstract" class="d-abstract"></div>
 					<div id="d-versions" class="d-versions" hidden="hidden"></div>
 					<div id="d-collections" class="d-collections" hidden="hidden"></div>
 					<details id="d-fold" class="d-fold">
@@ -251,25 +250,26 @@
 						<div id="d-where" class="d-where"></div>
 						<div id="d-meta" class="d-meta"></div>
 					</details>
+					<div id="d-abstract" class="d-abstract"></div>
 				</div>
 			</div>
 		</section>
 	</div>
 
 	<div id="import-bar" class="glass">
+		<label for="target" class="import-target-label" data-i18n="addTo"></label>
+		<select id="target"></select>
 		<button id="import-opts-toggle" type="button" class="ghost import-opts-toggle" aria-expanded="false" aria-controls="import-opts"></button>
-		<span id="import-opts" class="import-opts">
-			<label for="target" data-i18n="addTo"></label>
-			<select id="target"></select>
+		<span class="spacer"></span>
+		<span id="selected-count"></span>
+		<button id="selected-only" type="button" class="ghost" aria-pressed="false" hidden="hidden"></button>
+		<button id="import-btn" type="button" class="primary icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus"/></svg><span data-i18n="importBtn"></span></button>
+		<span id="import-opts" class="import-opts" hidden="hidden">
 			<label class="cb"><input id="opt-pdf" type="checkbox" checked="checked"/> <span data-i18n="optPdf"></span></label>
 			<label class="cb"><input id="opt-skip" type="checkbox" checked="checked"/> <span data-i18n="optSkip"></span></label>
 			<label class="cb"><input id="opt-fillpdf" type="checkbox"/> <span data-i18n="optFillPdf"></span></label>
 			<label class="cb"><input id="opt-extra" type="checkbox" checked="checked"/> <span data-i18n="optExtra"></span></label>
 		</span>
-		<span class="spacer"></span>
-		<span id="selected-count"></span>
-		<button id="selected-only" type="button" class="ghost" aria-pressed="false" hidden="hidden"></button>
-		<button id="import-btn" type="button" class="primary icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus"/></svg><span data-i18n="importBtn"></span></button>
 	</div>
 
 	<div id="statusbar">

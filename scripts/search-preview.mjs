@@ -265,7 +265,9 @@ export async function buildPreview({ locale = "en" } = {}) {
 	fire(document.getElementById("history-btn"));
 	for (let i = 0; i < 50 && document.getElementById("histmenu").hidden; i++) await wait(20);
 	trace.history = { entries: [...document.querySelectorAll("#histmenu .histopt .h-meta")].map(e => e.textContent) };
-	Object.assign(document.getElementById("histmenu").style, { top: "44px", left: "700px" });
+	document.getElementById("banner").hidden = true; // the popup is the subject of this page, not the import notice behind it
+		// Hung from the right edge of the 최근 검색 button, as ui.js does in a real window (no layout here to measure).
+		Object.assign(document.getElementById("histmenu").style, { top: "98px", left: "auto", right: "32px", maxWidth: "560px" });
 	const historyPage = page();
 	fire(document.body);
 	document.getElementById("histmenu").hidden = true;
@@ -336,7 +338,7 @@ export function checkPreview(out) {
 	if (!t.menu.closed || !t.menu.closedByOutsideClick) problems.push("a menu should close after a choice and on an outside click");
 	if (!same(t.menu.reopened, ["false", "true", "true", "true"])) problems.push("the reopened View menu should show Columns: all as chosen; got " + t.menu.reopened);
 	if (t.menu.export.length < 2) problems.push("the Export menu should offer copy and save");
-	if (!/전체 12 \/ 미보유 11 \/ 보유 1|All 12 \/ Not owned 11 \/ Owned 1/.test(t.library.start)) problems.push("the library filter should start at 12 / 11 / 1; got " + t.library.start);
+	if (!/전체 12 \/ 미보유 11 \/ 보유함 1|All 12 \/ Not owned 11 \/ Owned 1/.test(t.library.start)) problems.push("the library filter should start at 12 / 11 / 1; got " + t.library.start);
 	if (!/4 \/ .* 4 \/ .* 0$/.test(t.library.withFacet)) problems.push("the library counts should follow the author facet; got " + t.library.withFacet);
 	if (!same(t.library.facetNew.rows.slice().sort(), ["10", "7", "8", "9"])) problems.push("Jenna's not-owned rows should be 7-10; got " + t.library.facetNew.rows);
 	if (t.library.facetNew.selected !== t.facet.selected) problems.push("changing the library filter should keep the checks");

@@ -162,7 +162,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		const originalRenderDetail = renderDetail;
 		renderMetrics = renderDetail = () => {};
 		cacheIO = setupStorage();
-		globalThis.harness = { state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
+		globalThis.harness = { journalMark, state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
 			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, renderVersions, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			searchMode: () => searchSurface, authorSessions,

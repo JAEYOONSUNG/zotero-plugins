@@ -101,16 +101,16 @@ test("successful and cancelled header drags suppress accidental sort clicks, ord
 
 test("resize grips cannot initiate column drag and width updates remain keyed after reordering", () => {
 	const h = setup(); drop(h, "title", "rank", true);
-	const th = h.header("title"), grip = th.querySelector(".rz"), before = keys(h.get("cols"));
+	const th = h.header("title"), grip = th.querySelector(".rz"), before = keys(h.get("cols")), width = h.state.colWidths.title + 50;
 	event(th, "mousedown", { target: grip, clientX: 10 });
 	event(grip, "mousedown", { clientX: 10 });
 	assert.equal(event(th, "dragstart", { dataTransfer: transfer() }).defaultPrevented, true);
 	h.emitDocument("mousemove", { clientX: 60 }); h.emitDocument("mouseup");
-	assert.equal(h.state.colWidths.title, 370);
-	assert.equal(h.get("cols").children.find(col => col.dataset.k === "title").style.width, "370px");
+	assert.equal(h.state.colWidths.title, width);
+	assert.equal(h.get("cols").children.find(col => col.dataset.k === "title").style.width, `${width}px`);
 	assert.deepEqual(keys(h.get("cols")), before);
 	event(th, "click", { target: grip }); assert.equal(h.state.sortKey, "rank");
-	assert.equal(JSON.parse(h.prefs.colWidths).title, 370);
+	assert.equal(JSON.parse(h.prefs.colWidths).title, width);
 });
 
 test("drop after target works both directions and checkbox column stays fixed", () => {
