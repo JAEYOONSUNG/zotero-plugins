@@ -1817,7 +1817,9 @@ test('the library opens on today’s next steps, and a journal in 내 문헌 분
  assert.ok(strip);
  const items=[...strip.querySelectorAll('.sc-today-item')].map(b=>b.textContent);
  assert.match(items[0],/이어 읽기 · Paper Alpha · 5쪽/);
- assert.match(items.join('|'),/인용한 안 읽은 문헌 1편/);
+ assert.equal(items.length,2,'이어 읽기 and 오늘은 닫기 only: cited-unread lives in the fold, the queue in 읽기 대기');
+ assert.equal(items.join('|').includes('인용한 안 읽은 문헌'),false);
+ assert.equal(f.body().querySelectorAll('.sc-local-reading-links summary').length,1);
  strip.querySelector('.sc-today-item').click();await new Promise(r=>setTimeout(r,10));
  assert.deepEqual(f.calls.filter(c=>c[0]==='open').pop().slice(1),[7,{pageIndex:4}]);
  await f.bench.show('journals');
@@ -4567,6 +4569,25 @@ test('확인함 is one store: a paper seen in 새 논문 leaves the inbox, and �
  assert.equal(f.body().querySelectorAll('.sc-author-inbox-row').length,0,'restored, so out of 확인함');
  await onFresh(f);await f.click(FIND_NEW);await settle();
  assert.deepEqual(hits(),['New paper W10','New paper W11'],'back in 새 논문 too');
+ f.bench.destroy();
+});
+
+test('the inboxes are worked from the keyboard: arrows and j/k move, e marks 확인함 and moves on, typing is left alone',async()=>{
+ const f=fixture();
+ shelfBench(f,{rows:[newWork('W10',3,['Held one']),newWork('W11',1,['Held one']),newWork('W12',1,['Held one'])]});
+ f.runtime.watchedAuthorsByNews=()=>[];
+ await onFresh(f);await f.click(FIND_NEW);await settle();
+ const key=(el,k)=>{const e=new f.win.Event('keydown',{bubbles:true,cancelable:true});e.key=k;el.dispatchEvent(e);return e;};
+ const rows=()=>[...f.body().querySelectorAll('.sc-hits .sc-hit')];
+ assert.match(f.body().querySelector('.sc-inbox-hint').textContent,/e 확인함/);
+ const first=rows()[0].querySelector('.sc-hit-title-link,button');first.focus();
+ key(first,'ArrowDown');assert.ok(rows()[1].contains(f.win.document.activeElement),'down');
+ key(f.win.document.activeElement,'k');assert.ok(rows()[0].contains(f.win.document.activeElement),'k goes back up');
+ const typed=f.win.document.createElement('input');rows()[0].appendChild(typed);key(typed,'e');
+ assert.equal(rows().length,3,'nothing marked yet');
+ key(f.win.document.activeElement,'e');await settle();
+ assert.equal(rows().length,2,'e marked the focused row 확인함');
+ assert.ok(rows()[0].contains(f.win.document.activeElement),'and the focus moved on to the next row');
  f.bench.destroy();
 });
 

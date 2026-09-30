@@ -192,6 +192,20 @@
    const keys=Object.keys(next);if(keys.length>3000)for(const k of keys.sort((x,y)=>String(next[x]).localeCompare(String(next[y]))).slice(0,keys.length-3000))delete next[k];
    return saveUI({inboxSeen:next});
   }
+  /* The two inboxes are worked through from the keyboard: inside the list,
+     arrows or j/k walk the rows (each row's title, else its first button) and
+     e marks the focused row 확인함 -- its own button does the marking and the
+     refocus, so the shortcut cannot drift from the click. Typing in a field,
+     or a modified key, is left alone. */
+  const inboxKeys=box=>box.addEventListener('keydown',event=>{
+   const target=event.target;
+   if(event.ctrlKey||event.metaKey||event.altKey||/^(input|textarea|select)$/i.test(target?.localName||'')||target?.isContentEditable)return;
+   const rows=[...box.children].filter(r=>r.querySelector?.('button'));
+   const at=rows.findIndex(r=>r.contains(target));if(at<0)return;
+   const key=event.key,step=key==='ArrowDown'||key==='j'?1:key==='ArrowUp'||key==='k'?-1:0;
+   if(step){event.preventDefault();const row=rows[Math.min(rows.length-1,Math.max(0,at+step))];(row.querySelector('.sc-hit-title-link')||row.querySelector('button'))?.focus?.();}
+   else if(key==='e'){const seen=rows[at].querySelector('.sc-inbox-seen');if(seen){event.preventDefault();seen.click();}}
+  });
   const SVG_NS='http://www.w3.org/2000/svg';
   const ICONS={
    density:[['line',{x1:3,y1:5,x2:13,y2:5}],['line',{x1:3,y1:8,x2:13,y2:8}],['line',{x1:3,y1:11,x2:13,y2:11}]],
@@ -842,7 +856,7 @@
     if(fromPane.length||wasHidden)state.selected=new Set(fromPane);await load();
     if(!disposed&&!runtime.cache.workbenchUI?.welcomed&&!welcome.childNodes.length){
      // One line, once, on the first open: where the features are and how a paper gets in.
-     node('span','처음 여셨네요. 왼쪽 탭이 기능이고, ⌘/Ctrl K로 기능을 찾습니다. 문헌은 목록에서 고른 뒤 「현재 선택 가져오기」로 넘기고, 열 경계를 두 번 클릭하면 너비가 내용에 맞춰집니다.',welcome);
+     node('span','처음 여셨네요. 왼쪽 탭이 기능이고 ⌘/Ctrl K로 기능을 찾습니다. 보유 문헌 맨 위 요약과 읽기 진행에서 읽을 것을 고르고, 저자 추적의 새 논문 목록은 ↑↓와 e로 넘기며 확인합니다.',welcome);
      button('알겠어요',()=>{welcome.hidden=true;welcome.replaceChildren();saveUI({welcomed:true});},welcome);welcome.hidden=false;
     }if(!disposed&&!panel.hidden)(controls.hidden?body:search).focus?.();}else{navigationEpoch++;closeCommands(false);epoch++;loadEpoch++;aiEpoch++;clear();if(returnFocus?.isConnected&&!win.closed)returnFocus.focus?.();returnFocus=null;}}
   /* 읽기 대기, one store for every place that adds to it: kept per library
@@ -938,26 +952,22 @@
       what came in this month. Read off the rows already in hand; the bar is
       the reading status in the status column's own three tones. */
    /* 오늘의 읽기: opening the library with nothing chosen and nothing
-      narrowed, the three next steps the panel already knows, one press each --
-      the paper being read most recently (at its page), the paper waiting
-      longest, and how many unread papers the read ones cite. */
+      narrowed, the one step the summary below does not say: the paper being
+      read most recently, at its page. The other two it used to carry were
+      duplicates -- the cited-unread count is the fold's own summary line, and
+      the longest-waiting paper is the first row of 읽기 대기 (oldest first),
+      one press from the 읽기 대기 fact. */
    if(state.tab==='explore'&&!state.selected.size&&!state.query&&!state.status&&!Object.values(parentOptions()).some(Boolean)&&state.scope==='library'){
     const DAY_=864e5,stamp=v=>runtime.localStamp?runtime.localStamp(v)?.getTime():Date.parse(v||'');
     const recent=state.items.filter(i=>i.status!=='done').map(i=>{const ref=runtime.Z.Items.get(Number(i.id));const e=ref?runtime.entry(ref):{};return {i,ref,at:stamp(e.lastRead)};})
      .filter(x=>x.ref&&Number.isFinite(x.at)&&Date.now()-x.at<=14*DAY_).sort((a,b)=>b.at-a.at)[0];
-    const waiting=Object.entries(readingQueue()).filter(([key])=>key.startsWith(`${state.libraryID||''}:`))
-     .map(([key,entry])=>({entry,item:state.items.find(i=>String(i.id)===key.split(':').pop())}))
-     .filter(x=>x.item&&x.item.status!=='done'&&x.item.status!=='reading'&&!waitUsed(x.item.id,x.entry)).sort((a,b)=>String(a.entry.at).localeCompare(String(b.entry.at)))[0];
-    const citedUnread=citedUnreadOf(state.items).cited.length;
     // Local calendar date, not UTC: dismissing at 11pm should not reappear at 8am the same evening in a +9 zone.
     const now_=new Date(),todayKey=now_.getFullYear()+'-'+String(now_.getMonth()+1).padStart(2,'0')+'-'+String(now_.getDate()).padStart(2,'0');
-    if((recent||waiting||citedUnread)&&runtime.cache.workbenchUI?.todayHidden!==todayKey){
+    if(recent&&runtime.cache.workbenchUI?.todayHidden!==todayKey){
      const strip=node('div',null,body,{class:'sc-today',role:'group','aria-label':T('오늘의 읽기')});
      node('span',T('오늘의 읽기'),strip,{class:'sc-today-label'});
      if(recent){const p_=runtime.pageProgress(recent.ref);const next=Number.isInteger(p_.lastPageIndex)&&p_.lastPageIndex<(Number(p_.total)||0)?p_.lastPageIndex:null;
       button(T('이어 읽기')+' · '+String(recent.i.title||'').slice(0,48)+(next!=null?' · '+T(`${next+1}쪽`):''),()=>run(()=>library.openItem(p_.attachmentID||recent.i.id,next!=null?{pageIndex:next}:undefined)),strip,{class:'sc-today-item','data-opens':'window',title:recent.i.title||''});}
-     if(waiting)button(T('가장 오래 기다린 문헌')+' · '+String(waiting.item.title||'').slice(0,48),()=>openInList(waiting.item),strip,{class:'sc-today-item',title:waiting.item.title||''});
-     if(citedUnread)button(T(`읽은 문헌이 인용한 안 읽은 문헌 ${citedUnread}편`),()=>{state.localLinksOpen=true;return render().then(()=>body.querySelector('.sc-local-reading-links')?.scrollIntoView?.({block:'nearest'}));},strip,{class:'sc-today-item'});
      // Dismissed for today only: it comes back once the local date turns over.
      button(T('오늘은 닫기'),()=>run(async()=>{await saveUI({todayHidden:todayKey});await render();}),strip,{class:'sc-today-item sc-today-close',title:T('오늘 하루만 이 줄을 숨깁니다')});
     }
@@ -3727,7 +3737,8 @@
     const views=node('div',null,tools,{class:'sc-segmented',role:'group','aria-label':T('새 논문 보기')});
     for(const [key,label,count] of [['new','미확인',unseen],['seen','확인함',all.length-unseen],['all','전체',all.length]])
      button(`${T(label)} ${count}`,()=>{state.freshSeen=key;state.freshLimit=0;draw(report);},views,{'aria-pressed':String(view===key)});
-    const box=node('div',null,list,{class:'sc-hits'});
+    node('span',T('↑↓ 이동 · e 확인함'),tools,{class:'sc-muted sc-inbox-hint'});
+    const box=node('div',null,list,{class:'sc-hits'});inboxKeys(box);
     const limit=state.freshLimit||12;
     /* Why this paper is here goes directly under its title, as it does in the
        reading order: above the year and journal, which identify the paper
@@ -3742,10 +3753,13 @@
      row.dataset.seen=String(seen);
      const acts=row.querySelector('.sc-hit-actions')||node('div',null,row,{class:'sc-hit-actions'});
      button(seen?'되돌리기':'확인함',()=>run(async()=>{
+      // The next paper's button takes the focus (in 전체 the row stays, so one on).
+      const index=[...row.parentNode.children].indexOf(row),at=view==='all'?index+1:index;
       await setSeen(entry,!seen);
       if(disposed||state.tab!=='related'||state.relatedView!=='fresh')return;
       draw(report);
-      body.querySelector('.sc-inbox-seen')?.focus?.();
+      const buttons=[...body.querySelectorAll('.sc-hits .sc-inbox-seen')];
+      (buttons[Math.max(0,at)]||buttons[buttons.length-1]||body.querySelector('.sc-inbox-tools [aria-pressed="true"]'))?.focus?.();
      }),acts,{class:'sc-inbox-seen',title:T(seen?'미확인으로 되돌립니다':'이 논문을 확인한 것으로 두고 목록에서 뺍니다')});
     };
     if(!rows.length)node('p',T(view==='new'?'확인하지 않은 새 논문이 없습니다.':'확인한 새 논문이 없습니다.'),box,{class:'sc-muted sc-inbox-empty'});
@@ -4478,7 +4492,8 @@
      button(`${T(label)} ${count}`,()=>{state.inboxView=key;state.inboxAll=false;refreshWatched();},views,{'aria-pressed':String(view===key)});
     const find=node('input',null,tools,{type:'search',placeholder:T('제목·저널·저자 검색'),'aria-label':T('새 논문 검색')});
     find.value=state.inboxQuery||'';
-    const box=node('div',null,section,{class:'sc-author-inbox'});
+    node('span',T('↑↓ 이동 · e 확인함'),tools,{class:'sc-muted sc-inbox-hint'});
+    const box=node('div',null,section,{class:'sc-author-inbox'});inboxKeys(box);
     const more=node('div',null,section,{class:'sc-actions'});
     const draw=()=>{
      box.replaceChildren();more.replaceChildren();
