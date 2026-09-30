@@ -1628,7 +1628,7 @@
       "round": "R56",
       "title": "함께 읽기 지시문과 새 소식만 보기",
       "gap": "The read-together outline was fixed, while the remark and tag prompts could be changed; and a hundred quiet author cards hid the ten with news.",
-      "entryPoint": "설정 → 번역·AI → 함께 읽기 지시문 · 저자 추적 → 새 소식만",
+      "entryPoint": "설정 → 번역·AI → 함께 읽기 지시문 · 저자 추적 → 조용한 저자 접기",
       "sources": [
         {
           "file": "src/assist.js",
@@ -1636,7 +1636,7 @@
         },
         {
           "file": "src/workbench.js",
-          "marker": "state.watchFreshOnly"
+          "marker": "const loud=watched.filter(hasNews)"
         }
       ],
       "tests": [
@@ -1646,11 +1646,11 @@
         },
         {
           "file": "test/workbench.test.mjs",
-          "name": "one chip keeps only the followed authors with something new"
+          "name": "the followed authors with something to say are the ones on screen; the quiet fold"
         }
       ],
       "status": "verified",
-      "review": "A setting replaces the outline; the output language and the no-invention rule are always appended. A chip on the followed list keeps only the people with a new paper, a new patent or a move."
+      "review": "A setting replaces the outline; the output language and the no-invention rule are always appended. The followed list shows only the people with a new paper, a new patent or a move; the quiet ones fold behind one button (R155 made this the default rather than a chip to find)."
     },
     {
       "round": "R57",
@@ -3993,6 +3993,34 @@
       ],
       "status": "verified",
       "review": "읽기 전용 감사 에이전트가 54편짜리 저자로 재현한 것: 확인함을 누를 때마다 2025-04까지의 옛 논문 8편이 다시 올라왔다. 마지막 확인 이후로 나온 것만 새 논문으로 세고, 그 이전 것은 조용히 이미 본 것으로 기록한다(색인이 게재일보다 늦는 경우를 위해 두 달 여유). 확인함은 한 곳에서만 기록하고 되돌릴 수 있으며, 스윕이 찾아 둔 소식은 지우지 않는다."
+    },
+    {
+      "round": "R156",
+      "title": "관심 저자 목록은 소식 있는 사람부터, 받은함 행은 다른 목록과 같은 모양",
+      "gap": "Opening 저자 추적 with 109 followed authors put a hundred quiet cards above everything else; keeping only the ones with news was a chip the reader had to find. The inbox row was a poorer result row: no publisher mark, and 프리프린트 as plain text trailing the row.",
+      "entryPoint": "저자 추적",
+      "sources": [
+        {
+          "file": "src/workbench.js",
+          "marker": "const loud=watched.filter(hasNews)"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "The same row anatomy as every other list of papers in this panel"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "the followed authors with something to say are the ones on screen; the quiet fold"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "an inbox row is the same shape as every other paper row: mark first, preprint as a chip"
+        }
+      ],
+      "status": "verified",
+      "review": "새 논문·새 특허·소속 이동이 있는 사람만 카드로 보이고, 조용한 사람은 '조용한 저자 n명 보기' 한 번으로 펼친다. 아무도 소식이 없으면 접지 않고 전부 보인다. 받은함 행은 저널 마크가 앞에 서고 프리프린트는 칩으로 말한다."
     }
   ],
   "introducedInVersion": "0.6.0"

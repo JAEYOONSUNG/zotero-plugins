@@ -2045,15 +2045,20 @@ test('followed authors are listed whether or not a paper happens to be selected'
  // Ninety-five followed authors were invisible because the whole tab returned
  // early when no single paper was selected.
  const names=[...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent);
- // Whoever published floats up: the list should answer the question, not store it.
- assert.deepEqual(names,['George M. Church','Christopher A. Voigt']);
+ /* Whoever published is shown; whoever is quiet folds. At a hundred and nine
+    followed authors the quiet cards were the whole page, and the ten that
+    mattered were somewhere inside it. */
+ assert.deepEqual(names,['George M. Church']);
  const badges=[...f.body().querySelectorAll('.sc-watch-badge')].map(n=>n.textContent);
  assert.deepEqual(badges,['1'],'only the author with news is marked');
  // The subtitle earns its line: what the news is, not the same date on every row.
- const subs=[...f.body().querySelectorAll('.sc-watch-sub')].map(n=>n.textContent);
- assert.equal(subs[0],'2026-09 · Nature');
- assert.equal(subs[1],'MIT');
- assert.match(f.bench.panel.querySelector('.sc-status').textContent,/관심 저자 2명/);
+ assert.equal(f.body().querySelector('.sc-watch-sub').textContent,'2026-09 · Nature');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/관심 저자 2명/,'the count is still everybody');
+ // The quiet one is one press away, and the press says how many.
+ await f.click('조용한 저자 1명 보기');
+ const all=[...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent);
+ assert.deepEqual(all,['George M. Church','Christopher A. Voigt']);
+ assert.equal([...f.body().querySelectorAll('.sc-watch-sub')].map(n=>n.textContent)[1],'MIT');
  f.bench.destroy();
 });
 
@@ -2411,17 +2416,28 @@ test('the watch table also shows held/finished/unread/reading-time, marks a gues
  f.bench.destroy();
 });
 
-test('one chip keeps only the followed authors with something new',async()=>{
+test('the followed authors with something to say are the ones on screen; the quiet fold',async()=>{
  const f=fixture();
  const rows=[{id:'A1',name:'Ada',news:[{id:'W1'}],seen:[]},{id:'A2',name:'Bo',news:[],seen:[]},{id:'A3',name:'Cy',news:[],moved:{from:'X',to:'Y',rule:2},seen:[]}];
  f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
  await f.bench.show('authors');
  const names=()=>[...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent);
+ assert.deepEqual(names(),['Ada','Cy'],'news or a move counts; a quiet card waits');
+ await f.click('조용한 저자 1명 보기');
  assert.deepEqual(names(),['Ada','Bo','Cy']);
- await f.click('새 소식만');
- assert.deepEqual(names(),['Ada','Cy'],'news or a move counts; a quiet card does not');
- await f.click('모두 보기');
- assert.deepEqual(names(),['Ada','Bo','Cy']);
+ await f.click('조용한 저자 접기');
+ assert.deepEqual(names(),['Ada','Cy']);
+ f.bench.destroy();
+});
+
+test('with nobody in the news, every followed author is shown rather than folded away',async()=>{
+ // A fold over an empty grid would say less than the list it hides.
+ const f=fixture();
+ const rows=[{id:'A1',name:'Ada',news:[],seen:[]},{id:'A2',name:'Bo',news:[],seen:[]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ await f.bench.show('authors');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent),['Ada','Bo']);
+ assert.equal(f.findButton('조용한 저자 2명 보기'),undefined,'nothing to fold against');
  f.bench.destroy();
 });
 
@@ -4302,5 +4318,27 @@ test('a paper dismissed in the inbox is dismissed on the author page too, and th
     'the page counts the same papers the inbox does');
   // And nothing was thrown away to achieve it.
   assert.equal(f.calls.some(c => c[0] === 'clearNews'), false);
+  f.bench.destroy();
+});
+
+test('an inbox row is the same shape as every other paper row: mark first, preprint as a chip', async () => {
+  /* It was a poorer hitRow — no publisher mark, and 프리프린트 as plain text at
+     the end of the row, in a column whose position moved with the content. */
+  const f = fixture();
+  const rows = [{id: 'A1', name: 'Ada', seen: [], news: [
+    {id: 'W1', title: 'A preprint', venue: 'bioRxiv', date: '2026-09-01', type: 'preprint', preprint: true},
+    {id: 'W2', title: 'A paper', venue: 'Nature', date: '2026-08-01', type: 'article'}
+  ]}];
+  f.runtime.watchedAuthors = () => rows;
+  f.runtime.watchedAuthorsByNews = () => rows;
+  await f.bench.show('authors');
+  const metas = [...f.body().querySelectorAll('.sc-author-inbox-row .sc-hit-meta')];
+  assert.equal(metas.length, 2);
+  const chip = metas[0].querySelector('.sc-preprint');
+  assert.ok(chip, 'a preprint says so as a chip, beside the mark');
+  assert.equal(chip.textContent, '프리프린트');
+  assert.equal(metas[1].querySelector('.sc-preprint'), null, 'a journal article carries no chip');
+  // The word no longer trails the row on the right.
+  assert.equal(/프리프린트/.test(f.body().querySelector('.sc-inbox-status')?.textContent || ''), false);
   f.bench.destroy();
 });

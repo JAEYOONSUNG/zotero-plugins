@@ -4384,7 +4384,19 @@
       if(mine)button(work.title||T('제목 없음'),()=>{state.selected=new Set([String(mine.id)]);state.scope='selected';scope.value='selected';return navigate('explore');},title,{class:'sc-hit-title-link',title:T('이 문헌 자세히 보기')});
       else if(work.doi){const link=node('button',work.title||T('제목 없음'),title,{type:'button',class:'sc-hit-title-link','data-opens':'browser',title:T('doi.org에서 열기')});link.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+bareDOI(work.doi));}catch(e){message(readable(e),true);}});}
       else title.textContent=work.title||T('제목 없음');
-      const meta=node('p',[String(work.date||'').slice(0,10),work.venue].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
+      const meta=node('p',null,row,{class:'sc-hit-meta'});
+      /* The same row anatomy as every other list of papers in this panel: the
+         publisher mark leads, because it is the one thing in a line of grey
+         metadata a reader recognises without reading it, and a preprint says
+         so as a chip rather than as a word at the end of the row. */
+      const P=runtime.palette?.(doc);
+      const mark=P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,work.venue,P):null;
+      if(mark){mark.style.marginInlineEnd='6px';meta.appendChild(mark);}
+      if(work.preprint||/preprint/i.test(String(work.type||''))){
+       const chip=node('span','프리프린트',meta,{class:'sc-preprint',title:'아직 심사 전 원고입니다. 정식 게재본은 나중에 따로 나올 수 있습니다.'});
+       chip.style.marginInlineEnd='6px';
+      }
+      meta.appendChild(doc.createTextNode([String(work.date||'').slice(0,10),work.venue].filter(Boolean).join(' · ')));
       // Each name opens that person's page: from a paper to who wrote it, without the card grid.
       for(const person of people){meta.appendChild(doc.createTextNode(' · '));button(person.name,()=>run(()=>show(person)),meta,{class:'sc-inbox-person',title:T('이 저자 보기')});}
       const status=node('span',null,row,{class:'sc-inbox-status'});
@@ -4393,7 +4405,6 @@
       if(rank>=1)node('span',T(rank>=3?'철회':rank>=2?'우려 표명':'정정'),status,{class:'sc-signal sc-signal-'+(rank>=3?'retracted':rank>=2?'concern':'corrected')});
       if(mine){const said=[T('보유'),mine.status==='done'?T('완료'):mine.status==='reading'?T('읽는 중'):T('안 읽음')];if(Number(mine.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(mine.seconds));node('span',said.join(' · '),status);}
       else{
-       if(work.preprint||/preprint/i.test(String(work.type||'')))node('span',T('프리프린트'),status);
        // Not on the shelf: taken in from here, as from any list of suggestions.
        if(work.doi&&typeof runtime.importWork==='function'){const add=button('추가',()=>run(async()=>{message('가져오는 중… '+String(work.title||work.doi).slice(0,50));await runtime.importWork(work,win);add.remove();node('span',T('보유'),status);message(`추가했습니다 — ${work.title||work.doi}`);}),status);}
       }
@@ -4534,17 +4545,26 @@
        over a list where the rest had never been looked at. */
     const unchecked=watched.filter(person=>!person.sweptAt).length;
     if(!fresh.length&&swept)node('span',unchecked?T(`확인 전 ${unchecked}명`):T('새 논문 없음'),tools,{class:'sc-watch-quiet'});
-    // One chip keeps only the people with something new; a hundred quiet cards hide the ten that matter.
-    if(state.watchFreshOnly&&!fresh.length)state.watchFreshOnly=false; // nothing new: an empty grid would say nothing
-    if(fresh.length&&fresh.length<watched.length)button(state.watchFreshOnly?'모두 보기':'새 소식만',()=>{state.watchFreshOnly=!state.watchFreshOnly;refreshWatched();},tools,{'aria-pressed':String(!!state.watchFreshOnly)});
+    /* The people with something to say come first, and the quiet ones fold.
+
+       This used to be a chip the reader had to find and press, so opening the
+       tab with a hundred and nine followed authors put a hundred quiet cards
+       above everything else -- the whole page was names, and the ten that
+       mattered were somewhere inside it. Whoever has an unread paper, a new
+       filing or a move is shown; the rest sit behind one button. */
     const manage=button(state.watchManage?'카드로 보기':'목록 관리',()=>{state.watchManage=!state.watchManage;refreshWatched();},tools,{'aria-pressed':String(!!state.watchManage)});
     if(state.watchManage){drawWatchManager(watched,parent);return;}
     drawAuthorInbox(watched,parent);
     // A grid, not a column: at this panel width one name per row turned a
     // hundred people into a scroll, and the whole point is to see them at once.
     if(fresh.length)sectionHead('관심 저자',watched.length,parent);
+    const hasNews=person=>!!(unseenWorks(person).length||person.newPatents?.length||(person.moved&&person.moved.to));
+    const loud=watched.filter(hasNews),quiet=watched.filter(person=>!hasNews(person));
+    // Nobody has anything new: a fold over an empty grid says less than the list.
+    const folding=loud.length>0&&quiet.length>0;
+    const shown=folding&&!state.watchQuietOpen?loud:watched;
     const rows=node('div',null,parent,{class:'sc-watch-grid'});
-    for(const person of (state.watchFreshOnly?watched.filter(p=>unseenWorks(p).length||p.newPatents?.length||p.moved):watched)){
+    for(const person of shown){
      // The badge counts what is still to look at, as the inbox does.
      const left=unseenWorks(person),count=left.length;
      const row=node('div',null,rows,{class:'sc-watch'+(count?' sc-watch-new':'')});
@@ -4582,6 +4602,10 @@
       :person.sweptAt?`${person.name} · 새 논문 없음 (확인 ${person.sweptAt.slice(0,10)})`
       :`${person.name} · 아직 확인하지 않음`;
     }
+    // The quiet ones are one press away, and the press says how many.
+    if(folding)button(state.watchQuietOpen?T('조용한 저자 접기'):T(`조용한 저자 ${quiet.length}명 보기`),
+     ()=>{state.watchQuietOpen=!state.watchQuietOpen;refreshWatched();},parent,
+     {class:'sc-local-reading-more','aria-expanded':String(!!state.watchQuietOpen)});
    }
    /* The followed authors as a list to keep in order: find one by name or
       place, sort by who has news or who was checked longest ago, let one go
