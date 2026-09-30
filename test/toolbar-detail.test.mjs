@@ -144,14 +144,14 @@ test("the markup folds the long metadata, keeps one preview button and two detai
 	assert.ok(!/id="d-versions"[^>]*>[\s\S]{0,4}<\/div>[\s\S]*class="badge ver"/.test(markup) && !css.includes(".badge.ver"), "no version badge");
 });
 
-test("plain-UI rules in the stylesheet: corners of 7px or more, text of 11px or more, no shadow on menus, 11px menu notes", () => {
-	for (const m of css.matchAll(/border-radius:\s*([^;}]+)/g)) for (const px of m[1].matchAll(/([\d.]+)px/g)) assert.ok(Number(px[1]) >= 7, "radius " + m[0]);
+test("dashboard rules in the stylesheet (user direction 2026-10-01, replacing the plain-UI 7px corners): corners of 4px or more, text of 11px or more, no shadow on menus, 11px menu notes", () => {
+	for (const m of css.matchAll(/border-radius:\s*([^;}]+)/g)) for (const px of m[1].matchAll(/([\d.]+)px/g)) assert.ok(Number(px[1]) >= 4, "radius " + m[0]);
 	for (const m of css.matchAll(/(?<![-\w])font-size:\s*([\d.]+)px/g)) assert.ok(Number(m[1]) >= 11, m[0]);
 	const block = sel => new RegExp("(?:^|\\n)" + sel.replace(/[.[\]()*+?^$|]/g, "\\$&") + "\\s*\\{([^}]*)\\}").exec(css)[1];
 	assert.doesNotMatch(block(".ctxmenu"), /box-shadow/);
 	assert.doesNotMatch(block(".selmenu"), /box-shadow/);
 	assert.ok(Number(/font-size:\s*([\d.]+)px/.exec(block(".histmenu .histopt .h-meta"))[1]) >= 11);
-	for (const sel of ["input[type=text], input[type=number], input[type=search], select", "button", ".sel-btn"]) assert.match(block(sel), /border-radius:\s*7px/, sel);
+	for (const sel of ["input[type=text], input[type=number], input[type=search], select", "button", ".sel-btn"]) assert.match(block(sel), /border-radius:\s*(10px|999px)/, sel);
 	assert.match(css, /\.toolbar \{[^}]*flex-wrap: nowrap/, "the toolbar stays on one line");
 });
 

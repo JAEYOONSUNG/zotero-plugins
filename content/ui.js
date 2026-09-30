@@ -2035,7 +2035,8 @@
 		let pdfCell = td("pdf", "mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfClickTip") : "");
 		if (hasPDF(r)) { pdfCell.setAttribute("role", "button"); pdfCell.addEventListener("click", e => { e.stopPropagation(); state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail(); openPreview(r); }); }
 		let readLabel = r.inLibrary && r.readState ? { done: t("readDone"), reading: t("readReading"), unread: t("readUnread") }[r.readState] : "";
-		let libCell = td("inLibrary", "mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibClickTip") : "");
+		let libCell = td("inLibrary", "mini lib", "", r.inLibrary ? t("thLibClickTip") : "");
+		if (r.inLibrary) { let ck = document.createElement("span"); ck.className = "pill pos"; ck.textContent = "✓"; libCell.appendChild(ck); }
 		if (readLabel) { let rs = document.createElement("span"); rs.className = "read-state"; rs.textContent = readLabel; rs.title = t("readStateTip"); libCell.appendChild(rs); }
 		if (r.inLibrary) { libCell.setAttribute("role", "button"); libCell.addEventListener("click", e => { e.stopPropagation(); showInLibrary(r); }); }
 		let st = td("status", "status", r.status || "", r.statusTitle || "");
@@ -2672,7 +2673,7 @@
 		if (r.inLibrary) {
 			tr.classList.add("in-library");
 			let lib = tr.querySelector("td.lib");
-			if (lib) { let rs = lib.querySelector(".read-state"); lib.textContent = "✓"; if (rs) lib.appendChild(rs); }
+			if (lib) { let rs = lib.querySelector(".read-state"); lib.textContent = ""; let ck = document.createElement("span"); ck.className = "pill pos"; ck.textContent = "✓"; lib.appendChild(ck); if (rs) lib.appendChild(rs); }
 		}
 	}
 

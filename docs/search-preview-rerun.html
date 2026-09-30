@@ -1,62 +1,76 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZotPoP search preview (fictional data)</title><style>/* ZotPoP — glass surfaces over Zotero's own light/dark chrome */
 :root {
 	color-scheme: light dark;
-	--bg: #eceef2;
-	--bg-tint: rgba(255, 255, 255, 0.62);
-	--glass: rgba(252, 252, 254, 0.72);
-	--glass-strong: rgba(252, 252, 254, 0.9);
+	/* Premium dashboard (user direction 2026-10-01): a grey canvas, white cards, one dark pill, sparing lime and amber. */
+	--bg: #f1f2f4;
+	--card: #ffffff;
+	--bg-tint: #f6f7f9;
+	--glass: #ffffff;
+	--glass-strong: #ffffff;
 	--menu-bg: #ffffff;
-	--border: rgba(0, 0, 0, 0.10);
-	--border-strong: rgba(0, 0, 0, 0.20);
-	--text: #17171a;
-	--muted: #5b5b62;
-	--accent: #5477B3;
-	--accent-ink: #3a5a91;
-	--accent-soft: rgba(84, 119, 179, 0.20);
+	--border: rgba(20, 22, 30, 0.08);
+	--border-strong: rgba(20, 22, 30, 0.16);
+	--text: #15171c;
+	--muted: #5b5f68;
+	--accent: #15171c;
+	--accent-ink: #2f4f8f;
+	--accent-soft: rgba(20, 22, 30, 0.10);
 	--accent-text: #ffffff;
-	--row-alt: rgba(0, 0, 0, 0.022);
-	--row-hover: rgba(47, 111, 208, 0.09);
-	--row-sel: rgba(47, 111, 208, 0.17);
+	--pill: #15171c;
+	--pill-text: #ffffff;
+	--row-alt: transparent;
+	--row-hover: rgba(20, 22, 30, 0.04);
+	--row-sel: rgba(20, 22, 30, 0.07);
 	--ok: #2e654b;
 	--warn: #785435;
 	--err: #934245;
-	--chip: rgba(0, 0, 0, 0.06);
+	--pos-bg: #d8f36a;
+	--pos-ink: #26330a;
+	--att-bg: #fbe3ae;
+	--att-ink: #5e3c00;
+	--chip: rgba(20, 22, 30, 0.06);
+	--card-shadow: 0 1px 2px rgba(20, 22, 30, 0.04), 0 6px 18px rgba(20, 22, 30, 0.04);
+	--r-card: 18px;
+	--r-ctl: 10px;
 	font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Helvetica, Arial, sans-serif;
 	font-size: 12px;
 }
 @media (prefers-color-scheme: dark) {
 	:root {
-		--bg: #1b1b1f;
-		--bg-tint: rgba(255, 255, 255, 0.04);
-		--glass: rgba(44, 44, 50, 0.72);
-		--glass-strong: rgba(44, 44, 50, 0.92);
-		--menu-bg: #2c2c32;
-		--border: rgba(255, 255, 255, 0.10);
-		--border-strong: rgba(255, 255, 255, 0.20);
-		--text: #ebebf0;
-		--muted: #a4a4ad;
-		--accent: #809DD0;
+		--bg: #121317;
+		--card: #1c1d23;
+		--bg-tint: #24252c;
+		--glass: #1c1d23;
+		--glass-strong: #1c1d23;
+		--menu-bg: #26272e;
+		--border: rgba(255, 255, 255, 0.08);
+		--border-strong: rgba(255, 255, 255, 0.17);
+		--text: #ececf1;
+		--muted: #a3a6b0;
+		--accent: #ececf1;
 		--accent-ink: #a9c0e6;
-		--accent-text: #10131a;
-		--accent-soft: rgba(128, 157, 208, 0.26);
-		--row-alt: rgba(255, 255, 255, 0.028);
-		--row-hover: rgba(92, 155, 245, 0.14);
-		--row-sel: rgba(92, 155, 245, 0.24);
+		--accent-text: #121317;
+		--accent-soft: rgba(255, 255, 255, 0.14);
+		--pill: #ececf1;
+		--pill-text: #121317;
+		--row-alt: transparent;
+		--row-hover: rgba(255, 255, 255, 0.05);
+		--row-sel: rgba(255, 255, 255, 0.10);
 		--ok: #45ba84;
 		--warn: #cb9c73;
 		--err: #d79395;
+		--pos-bg: rgba(196, 240, 80, 0.20);
+		--pos-ink: #cdf27a;
+		--att-bg: rgba(245, 175, 50, 0.20);
+		--att-ink: #f3c46e;
 		--chip: rgba(255, 255, 255, 0.09);
+		--card-shadow: none;
 	}
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; color: var(--text); overflow: hidden; }
-body {
-	background:
-		radial-gradient(1100px 520px at 8% -12%, var(--accent-soft), transparent 62%),
-		radial-gradient(900px 460px at 108% 8%, var(--accent-soft), transparent 58%),
-		var(--bg);
-}
+body { background: var(--bg); }
 #app { display: flex; flex-direction: column; height: 100vh; }
 .search-modes { display: flex; gap: 5px; padding: 8px 13px 0; }
 .search-modes button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
@@ -90,7 +104,7 @@ body {
 
 input[type=text], input[type=number], input[type=search], select {
 	font: inherit; padding: 4px 7px; color: var(--text);
-	border: 1px solid var(--border-strong); border-radius: 7px;
+	border: 1px solid var(--border-strong); border-radius: 10px;
 	background: var(--bg-tint);
 	transition: border-color .12s, box-shadow .12s, background .12s;
 }
@@ -109,7 +123,7 @@ select { appearance: none; padding-right: 20px;
 
 button {
 	font: inherit; padding: 4px 10px; color: var(--text); cursor: pointer;
-	border: 1px solid var(--border-strong); border-radius: 7px;
+	border: 1px solid var(--border-strong); border-radius: 999px;
 	background: var(--glass-strong);
 	transition: background .12s, border-color .12s, transform .04s;
 }
@@ -336,7 +350,7 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 .sel-btn {
 	flex: 1 1 auto; display: flex; align-items: center; gap: 6px;
 	font: inherit; padding: 4px 7px; color: var(--text); text-align: left; cursor: pointer;
-	border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-tint);
+	border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-tint);
 	white-space: nowrap; overflow: hidden;
 }
 .sel-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
@@ -438,6 +452,109 @@ html[lang="ko"] .field label, html[lang="ko"] .hint, html[lang="ko"] #results-ta
 .tbmenu .selopt:focus { outline: none; background: var(--accent); color: var(--accent-text); }
 .tbmenu .selopt[aria-disabled="true"] { opacity: .5; }
 .tbmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
+
+/* ================================================================ premium dashboard layer
+   User direction 2026-10-01: grey canvas, white cards of large radius, hairline borders, a very
+   soft card elevation, selected = solid near-black pill, lime for positive and amber for attention.
+   No coloured bar ever runs along the edge of a rounded row or card. */
+#app { padding: 10px 14px 6px; gap: 8px; }
+.glass { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.query, .combined-options, .author-panel, #metrics, .table-wrap, #detail, #import-bar {
+	background: var(--card); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--card-shadow);
+}
+input[type=checkbox] { accent-color: var(--pill); }
+
+/* segmented control: paper / author tabs */
+.search-modes { display: inline-flex; align-self: flex-start; gap: 2px; padding: 4px; margin: 0; border-radius: 999px; background: var(--chip); }
+.search-modes button, .search-modes button:hover:not(:disabled) { border: 0; border-radius: 999px; padding: 6px 18px; background: transparent; color: var(--muted); font-weight: 500; }
+.search-modes button:hover:not(:disabled) { color: var(--text); }
+.search-modes button[aria-pressed="true"], .search-modes button[aria-pressed="true"]:hover:not(:disabled) { background: var(--pill); color: var(--pill-text); font-weight: 600; }
+
+/* search form card */
+.query { padding: 12px 18px 14px; gap: 8px 12px; }
+.author-panel { padding: 16px 20px; }
+.field label { font-weight: 500; letter-spacing: 0; }
+input[type=text], input[type=number], input[type=search], select, .sel-btn { padding: 6px 11px; }
+button { padding: 5px 14px; }
+button:hover:not(:disabled) { background: var(--row-hover); border-color: var(--border-strong); }
+button.primary, button.primary:hover:not(:disabled) { background: var(--pill); color: var(--pill-text); border-color: transparent; }
+button.primary:hover:not(:disabled) { filter: none; opacity: .88; }
+button.preview-action { color: var(--text); border-color: var(--border-strong); }
+button.ghost, button.ghost:hover:not(:disabled) { background: transparent; border-color: transparent; }
+button.ghost:hover:not(:disabled) { background: var(--row-hover); }
+.author-profile { border-radius: 14px; }
+.author-profile.selected { border-color: var(--pill); background: var(--row-hover); }
+.combined-options { padding: 7px 18px 9px; }
+
+/* banner */
+.banner { padding: 9px 18px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; }
+.banner.warn { background: var(--att-bg); color: var(--att-ink); border-color: transparent; }
+.banner.warn button { color: var(--att-ink); }
+
+/* the dashboard row: metrics card | results */
+.splitter-v { flex-basis: 12px; }
+.splitter-h { height: 12px; }
+.splitter-v:hover, .splitter-v.dragging, .splitter-h:hover, .splitter-h.dragging { background: transparent; }
+.splitter-v:hover::after, .splitter-v.dragging::after { content: ""; display: block; width: 2px; height: 100%; margin: 0 auto; background: var(--border-strong); }
+.splitter-h:hover::after, .splitter-h.dragging::after { content: ""; display: block; height: 2px; margin: 5px 0; background: var(--border-strong); }
+#metrics { padding: 18px 20px; }
+#metrics h3 { margin: 0 0 12px; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+#metrics-table td { padding: 6px 0; }
+#metrics-table td:last-child { font-weight: 500; }
+#metrics-table tr:last-child td { border-bottom: 0; }
+.metrics-basis { gap: 4px; margin: 10px 0 6px; }
+.metrics-basis button { padding: 2px 10px; border-radius: 999px; }
+.metrics-basis button[aria-pressed="true"], .lib-filter button[aria-pressed="true"], #selected-only[aria-pressed="true"] { background: var(--pill); color: var(--pill-text); border-color: transparent; font-weight: 600; }
+.yr-bars { gap: 3px; height: 54px; }
+.yr-bar span { border-radius: 5px 5px 0 0; background: var(--muted); opacity: .22; }
+.yr-bar.on span { opacity: .5; }
+.yr-bar:hover span { opacity: .75; }
+.note-help { border-radius: 999px; }
+
+/* toolbar sits on the canvas, above the table card */
+.toolbar.glass { background: transparent; border: 0; padding: 0 2px 10px; }
+.searchbox { padding: 5px 12px; background: var(--card); border-color: var(--border-strong); }
+.facet-chip { border-radius: 999px; background: var(--card); }
+.lib-filter { padding: 3px; border-radius: 999px; background: var(--chip); gap: 1px; margin-left: 4px; }
+.lib-filter-label { margin: 0 5px 0 9px; }
+.lib-filter button, #selected-only { border-radius: 999px; padding: 3px 11px; }
+.menu-btn { padding: 4px 11px; }
+
+/* results card */
+.table-wrap { background: var(--card); }
+#results-table th { padding: 9px 10px; font-weight: 500; background: var(--card); border-bottom: 1px solid var(--border); backdrop-filter: none; -webkit-backdrop-filter: none; }
+#results-table td { padding: 7px 10px; }
+#results-table tbody tr:last-child td { border-bottom: 0; }
+#results-table td.title { font-weight: 500; }
+#results-table tbody tr.selected { background: var(--row-sel); }
+#results-table tbody tr.focused td:first-child { box-shadow: none; }
+#results-table tbody tr.focused { outline: 1px solid var(--border-strong); outline-offset: -1px; }
+td.lib { font-weight: 600; }
+.pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 1.5; }
+.pill.pos, .badge.lib { background: var(--pos-bg); color: var(--pos-ink); }
+td.status:not(:empty)::before { content: "\25CF"; margin-right: 5px; font-size: 11px; }
+.tier, .badge { border-radius: 999px; }
+.badge { padding: 2px 10px; }
+.badge.lib { font-weight: 600; }
+.tier { padding: 1px 9px; }
+
+/* detail card */
+#detail { padding: 14px 20px; }
+.d-title { font-size: 16px; font-weight: 600; line-height: 1.35; }
+.d-evidence { color: var(--muted); }
+.d-abstract { color: var(--text); }
+.d-status.warn, .d-status.err { display: inline-block; padding: 2px 10px; border-radius: 10px; background: var(--att-bg); color: var(--att-ink); }
+.d-actions button { padding: 6px 16px; }
+
+/* bottom bars */
+#import-bar { padding: 10px 18px; }
+#selected-count { padding: 2px 10px; border-radius: 999px; background: var(--chip); }
+#selected-count:empty { display: none; }
+#statusbar { background: transparent; border-top: 0; padding: 2px 6px 0; }
+
+/* menus */
+.ctxmenu, .selmenu { border-radius: 14px; padding: 6px; }
+.ctxmenu div, .selopt, .histmenu .histopt, .histmenu .histclear { border-radius: 9px; }
 </style></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
 	<symbol id="ic-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" /><path d="M10.4 10.4 14 14" /></symbol>
@@ -642,14 +759,14 @@ html[lang="ko"] .field label, html[lang="ko"] .hint, html[lang="ko"] #results-ta
 					</thead>
 					<tbody id="results-body"><tr data-key="openalex:demo13"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Longitudinal follow-up of repair-stage maps
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Longitudinal follow-up of repair-stage maps</span><span title="지난번 이 검색 이후 새로 나온 결과" class="new-mark">새</span></td><td data-marquee="authors" title="Mina Kim" data-k="authorString">Mina Kim</td><td class="num" data-k="year">2026</td><td style="color:hsl(200 95% 28%);font-weight:600" data-marquee="venue" title="Cell Systems · Cell Syst · Cell Press" class="venue venue-known" data-k="venue">Cell Systems</td><td title="출처: OpenAlex" class="num" data-k="citations">1</td><td class="num" data-k="cpy">1.00</td><td class="num if" data-k="journalIF"></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">1</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.013</a></td></tr><tr class="in-library" data-key="openalex:demo1"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs</span></td><td data-marquee="authors" title="Mina Kim, Alex Rivera, Jonas Park" data-k="authorString">Mina Kim, Alex Rivera, Jonas Park</td><td class="num" data-k="year">2025</td><td style="color:hsl(16 83% 34%);font-weight:600" data-marquee="venue" title="Nature Methods · Nat Methods · Nature Portfolio" class="venue venue-known" data-k="venue">Nature Methods</td><td title="출처: OpenAlex" class="num" data-k="citations">214</td><td class="num" data-k="cpy">214.00</td><td title="~32.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 193" class="num if estimate" data-k="journalIF">~32.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary">✓<span title="Style Custom 읽기 상태" class="read-state">읽는 중</span></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">2</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.001</a></td></tr><tr data-key="crossref:demo2"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="A practical framework for reproducible literature synthesis
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs</span></td><td data-marquee="authors" title="Mina Kim, Alex Rivera, Jonas Park" data-k="authorString">Mina Kim, Alex Rivera, Jonas Park</td><td class="num" data-k="year">2025</td><td style="color:hsl(16 83% 34%);font-weight:600" data-marquee="venue" title="Nature Methods · Nat Methods · Nature Portfolio" class="venue venue-known" data-k="venue">Nature Methods</td><td title="출처: OpenAlex" class="num" data-k="citations">214</td><td class="num" data-k="cpy">214.00</td><td title="~32.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 193" class="num if estimate" data-k="journalIF">~32.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span><span title="Style Custom 읽기 상태" class="read-state">읽는 중</span></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">2</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.001</a></td></tr><tr data-key="crossref:demo2"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="A practical framework for reproducible literature synthesis
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>A practical framework for reproducible literature synthesis</span></td><td data-marquee="authors" title="Sora Lee, Lin Chen" data-k="authorString">Sora Lee, Lin Chen</td><td class="num" data-k="year">2024</td><td style="color:hsl(4 81% 36%);font-weight:600" data-marquee="venue" title="Science · Science" class="venue venue-known" data-k="venue">Science</td><td title="출처: Crossref" class="num" data-k="citations">97</td><td class="num" data-k="cpy">48.50</td><td title="~45.8는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 275" class="num if estimate" data-k="journalIF">~45.8</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">3</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.002</a></td></tr><tr data-key="openalex:demo3"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Spatial context and cell-state transitions in regeneration
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Spatial context and cell-state transitions in regeneration</span></td><td data-marquee="authors" title="Eva Morgan, Hana Choi" data-k="authorString">Eva Morgan, Hana Choi</td><td class="num" data-k="year">2026</td><td style="color:hsl(331 40% 40%);font-weight:600" data-marquee="venue" title="bioRxiv" class="venue venue-known" data-k="venue">bioRxiv</td><td title="출처: OpenAlex" class="num" data-k="citations">3</td><td class="num" data-k="cpy">3.00</td><td class="num if" data-k="journalIF"></td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">4</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.003</a></td></tr><tr class="in-library focused" data-key="crossref:demo4"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Tissue-scale repair atlases from sparse sampling
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Tissue-scale repair atlases from sparse sampling</span></td><td data-marquee="authors" title="Ren Ahn, Paula Silva" data-k="authorString">Ren Ahn, Paula Silva</td><td class="num" data-k="year">2025</td><td style="color:hsl(200 95% 28%);font-weight:600" data-marquee="venue" title="Cell · Cell Press" class="venue venue-known" data-k="venue">Cell</td><td title="출처: Crossref" class="num" data-k="citations">41</td><td class="num" data-k="cpy">41.00</td><td title="~42.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 255" class="num if estimate" data-k="journalIF">~42.5</td><td class="mini pdf" data-k="pdf"></td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary">✓<span title="Style Custom 읽기 상태" class="read-state">읽는 중</span></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">5</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.004</a></td></tr><tr data-key="europepmc:demo5"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Benchmarks for repair-stage classifiers
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Tissue-scale repair atlases from sparse sampling</span></td><td data-marquee="authors" title="Ren Ahn, Paula Silva" data-k="authorString">Ren Ahn, Paula Silva</td><td class="num" data-k="year">2025</td><td style="color:hsl(200 95% 28%);font-weight:600" data-marquee="venue" title="Cell · Cell Press" class="venue venue-known" data-k="venue">Cell</td><td title="출처: Crossref" class="num" data-k="citations">41</td><td class="num" data-k="cpy">41.00</td><td title="~42.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 255" class="num if estimate" data-k="journalIF">~42.5</td><td class="mini pdf" data-k="pdf"></td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span><span title="Style Custom 읽기 상태" class="read-state">읽는 중</span></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">5</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.004</a></td></tr><tr data-key="europepmc:demo5"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Benchmarks for repair-stage classifiers
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Benchmarks for repair-stage classifiers</span></td><td data-marquee="authors" title="Kai Oh, Chris Voigtland" data-k="authorString">Kai Oh, Chris Voigtland</td><td class="num" data-k="year">2024</td><td style="color:hsl(54 95% 20%);font-weight:600" data-marquee="venue" title="Nature Biotechnology · Nat Biotechnol · Nature Portfolio" class="venue venue-known" data-k="venue">Nature Biotechnology</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">66</td><td class="num" data-k="cpy">33.00</td><td title="~33.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 199" class="num if estimate" data-k="journalIF">~33.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">6</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.005</a></td></tr><tr data-key="openalex:demo6"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Preregistered synthesis of repair reviews
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Preregistered synthesis of repair reviews</span></td><td data-marquee="authors" title="Dana Yu, Sora Lee" data-k="authorString">Dana Yu, Sora Lee</td><td class="num" data-k="year">2023</td><td style="color:hsl(215 89% 36%);font-weight:600" data-marquee="venue" title="eLife · eLife" class="venue venue-known" data-k="venue">eLife</td><td title="출처: OpenAlex" class="num" data-k="citations">12</td><td class="num" data-k="cpy">4.00</td><td title="~6.4는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 38" class="num if estimate" data-k="journalIF">~6.4</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">7</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.006</a></td></tr><tr data-key="europepmc:demo7"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Compact editors from uncultivated bacteria
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Compact editors from uncultivated bacteria</span></td><td data-marquee="authors" title="Jenna Dowd, Sam Sternfield, Priya Natarajan" data-k="authorString">Jenna Dowd, Sam Sternfield, Priya Natarajan</td><td class="num" data-k="year">2026</td><td style="color:hsl(206 71% 34%);font-weight:600" data-marquee="venue" title="Proceedings of the National Academy of Sciences · PNAS · PNAS" class="venue venue-known" data-k="venue">Proceedings of the National Academy of Sciences</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">18</td><td class="num" data-k="cpy">18.00</td><td title="~9.4는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 56" class="num if estimate" data-k="journalIF">~9.4</td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">8</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.007</a></td></tr><tr class="in-library" data-key="crossref:demo8"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Guide design rules learned from a million targets
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Guide design rules learned from a million targets</span></td><td data-marquee="authors" title="Jenna Dowd, Marta Jinkova" data-k="authorString">Jenna Dowd, Marta Jinkova</td><td class="num" data-k="year">2025</td><td style="color:hsl(213 95% 36%);font-weight:600" data-marquee="venue" title="Nucleic Acids Research · Nucleic Acids Res · Oxford" class="venue venue-known" data-k="venue">Nucleic Acids Research</td><td title="출처: Crossref" class="num" data-k="citations">88</td><td class="num" data-k="cpy">88.00</td><td title="~13.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 79" class="num if estimate" data-k="journalIF">~13.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary">✓<span title="Style Custom 읽기 상태" class="read-state">읽는 중</span></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">9</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.008</a></td></tr><tr data-key="openalex:demo9"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Off-target profiling in primary human cells
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Guide design rules learned from a million targets</span></td><td data-marquee="authors" title="Jenna Dowd, Marta Jinkova" data-k="authorString">Jenna Dowd, Marta Jinkova</td><td class="num" data-k="year">2025</td><td style="color:hsl(213 95% 36%);font-weight:600" data-marquee="venue" title="Nucleic Acids Research · Nucleic Acids Res · Oxford" class="venue venue-known" data-k="venue">Nucleic Acids Research</td><td title="출처: Crossref" class="num" data-k="citations">88</td><td class="num" data-k="cpy">88.00</td><td title="~13.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 79" class="num if estimate" data-k="journalIF">~13.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span><span title="Style Custom 읽기 상태" class="read-state">읽는 중</span></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">9</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.008</a></td></tr><tr data-key="openalex:demo9"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Off-target profiling in primary human cells
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Off-target profiling in primary human cells</span></td><td data-marquee="authors" title="Jenna Dowd, Ben Oakley" data-k="authorString">Jenna Dowd, Ben Oakley</td><td class="num" data-k="year">2024</td><td style="color:hsl(235 95% 36%);font-weight:600" data-marquee="venue" title="Genome Biology · Genome Biol" class="venue venue-known" data-k="venue">Genome Biology</td><td title="출처: OpenAlex" class="num" data-k="citations">203</td><td class="num" data-k="cpy">101.50</td><td title="~10.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 61" class="num if estimate" data-k="journalIF">~10.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">10</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.009</a></td></tr><tr data-key="europepmc:demo10"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Delivery of editing enzymes across tissue barriers
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Delivery of editing enzymes across tissue barriers</span></td><td data-marquee="authors" title="Jenna Dowd, Sam Sternfield" data-k="authorString">Jenna Dowd, Sam Sternfield</td><td class="num" data-k="year">2025</td><td style="color:hsl(200 95% 28%);font-weight:600" data-marquee="venue" title="Cell Reports · Cell Rep · Cell Press" class="venue venue-known" data-k="venue">Cell Reports</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">61</td><td class="num" data-k="cpy">61.00</td><td title="~7.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 45" class="num if estimate" data-k="journalIF">~7.5</td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">11</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.010</a></td></tr><tr data-key="europepmc:demo11"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Preregistered synthesis of repair reviews
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Preregistered synthesis of repair reviews</span></td><td data-marquee="authors" title="Dana Yu, Omar Haddad" data-k="authorString">Dana Yu, Omar Haddad</td><td class="num" data-k="year">2022</td><td style="color:hsl(159 40% 28%);font-weight:600" data-marquee="venue" title="medRxiv" class="venue venue-known" data-k="venue">medRxiv</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">0</td><td class="num" data-k="cpy">0.00</td><td class="num if" data-k="journalIF"></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">12</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.011</a></td></tr><tr data-key="crossref:demo12"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Spatial context and cell-state transitions in regeneration: a commentary
