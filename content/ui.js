@@ -14,16 +14,19 @@
 	// Title has no fixed width: it absorbs whatever is left, so keep these lean.
 	// Wider text columns: at the old widths a title showed eight words and an
 	// author list two names, and every one of them rolled at once.
+	// The title comes right after the checkbox. The columns that follow it are the
+	// ones a reader scans; rank, institution, country, tier and DOI (kept in the
+	// detail) and Status (only once something has one) are hidden until "all".
 	const DEFAULT_COLS = {
-		chk: 28, citations: 56, cpy: 74, rank: 60, authorString: 190, title: 320,
-		year: 58, venue: 150, journalIF: 64, affiliation: 150, country: 62, tier: 56,
-		doi: 150, pdf: 44, inLibrary: 84, status: 96
+		chk: 28, title: 320, authorString: 190, year: 58, venue: 150, citations: 56, cpy: 74, journalIF: 64,
+		pdf: 52, inLibrary: 84, status: 96, rank: 60, affiliation: 150, country: 62, tier: 56, doi: 150
 	};
 
 	// 8: Year, Rank and Per year were narrower than their own digits ("20…", "Ra…").
 	// 9: the IF column gained a leading ~ for an estimate and 48px clipped it.
 	// 10: the library column carries Style Custom's reading state beside the check.
-	const COL_VERSION = 10;
+	// 11: the title moved to second place and five columns are hidden by default.
+	const COL_VERSION = 11;
 	const COLUMN_KEYS = Object.keys(DEFAULT_COLS);
 	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~56px with its padding)
 	const MIN_COL = 40;
@@ -91,7 +94,10 @@
 		doiMap: new Map(),
 		libraryID: null,
 		colWidths: Object.assign({}, DEFAULT_COLS),
-		colOrder: [...COLUMN_KEYS]
+		colOrder: [...COLUMN_KEYS],
+		colsMode: "basic",
+		facet: null,
+		selectedOnly: false
 	};
 	let marquee = null;
 	let history = null;
@@ -356,10 +362,12 @@
 		$("filter-clear")?.addEventListener("click", () => { clearFilter(); $("filter").focus(); });
 		syncFilterClear();
 		$("chk-all").addEventListener("change", e => selectVisible(e.target.checked));
-		$("select-all").addEventListener("click", () => selectVisible(true));
+		$("cols-mode")?.addEventListener("click", () => { state.colsMode = state.colsMode === "all" ? "basic" : "all"; applyColumnView(); saveLayout(); });
+		$("facet-clear")?.addEventListener("click", () => setFacet(null));
+		$("selected-only")?.addEventListener("click", () => { state.selectedOnly = !state.selectedOnly; render(); });
 		$("select-none").addEventListener("click", () => { state.selected.clear(); render(); });
+		// Adds to the selection: what was already chosen, on screen or not, stays chosen.
 		$("select-new").addEventListener("click", () => {
-			state.selected.clear();
 			for (let r of state.visible) if (!r.inLibrary) state.selected.add(r.key);
 			render();
 		});
@@ -617,7 +625,7 @@
 	function restoreSurfaceResults() {
 		let saved = surfaceSnapshots.get(currentSurfaceKey());
 		Object.assign(state, saved || { records: [], selected: new Set(), focusKey: null, detailKey: null, sortKey: "rank", sortDir: "asc" });
-		$("filter").value = saved?.filter || "";
+		$("filter").value = saved?.filter || ""; state.facet = null;
 	}
 	function applySearchSurface() {
 		$("query-form").hidden = searchSurface === "authors";
@@ -735,7 +743,7 @@
 		session.profile = query.authorProfile || entry.records?.[0]?.authorProfile || null;
 		session.profiles = Array.isArray(query.authorProfiles) && query.authorProfiles.length ? query.authorProfiles : session.profile ? [session.profile] : [];
 		session.action = authorAction = query.authorAction || "profiles";
-		state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = "";
+		state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = ""; state.facet = null;
 		state.sortKey = entry.records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc";
 		displaySearchResults(entry.records); updateAuthorHint(); renderAuthorProfiles(); saveAuthorPreferences();
 		setStatus(query.authorAction === "profiles" ? t("authorProfilesFound", session.profiles.length) : t("historyRestored", entry.records.length));
@@ -763,7 +771,7 @@
 		session.action = action;
 		if (action !== "publications") { session.profiles = []; session.profile = null; } else session.profile = profile;
 		saveAuthorPreferences();
-		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = "";
+		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = ""; state.facet = null;
 		state.searching = true; state.cancelled = false;
 		let resolveDone; state.searchDone = new Promise(resolve => { resolveDone = resolve; });
 		let controller = state.searchController = new AbortController();
@@ -947,7 +955,7 @@
 		if (!active()) return false;
 		state.sortKey = entry.query?.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
-		$("filter").value = "";
+		$("filter").value = ""; state.facet = null;
 		displaySearchResults(records);
 		let captured = new Date(entry.savedAt).toLocaleString(t.locale || undefined);
 		setStatus(t("historyRestored", records.length));
@@ -1080,8 +1088,10 @@
 
 	// ------------------------------------------------------------ layout persistence
 	function restoreLayout() {
-		try { state.colOrder = normalizeColumnOrder(JSON.parse(PREF("colOrder") || "null")); }
+		// An order saved before the title moved forward would put it back behind the authors.
+		try { state.colOrder = PREF("colOrderVersion") === COL_VERSION ? normalizeColumnOrder(JSON.parse(PREF("colOrder") || "null")) : [...COLUMN_KEYS]; }
 		catch (e) { state.colOrder = [...COLUMN_KEYS]; }
+		state.colsMode = PREF("colsMode") === "all" ? "all" : "basic";
 		// Sizes saved on a large screen are clamped to this window, so a wide
 		// sidebar or a tall detail pane cannot swallow the table on a laptop.
 		let w = parseInt(PREF("metricsWidth"), 10);
@@ -1109,6 +1119,7 @@
 			PREF("metricsHidden", $("metrics").hidden === true);
 			PREF("colWidths", JSON.stringify(state.colWidths));
 			PREF("colWidthsVersion", COL_VERSION);
+			PREF("colsMode", state.colsMode);
 			PREF("winWidth", window.outerWidth);
 			PREF("winHeight", window.outerHeight);
 			PREF("winLeft", window.screenX);
@@ -1178,6 +1189,17 @@
 			// of padding. It has a width of its own now, and a grip like the rest.
 			col.style.width = (state.colWidths[k] || DEFAULT_COLS[k]) + "px";
 		}
+		applyColumnView();
+	}
+
+	// Which columns show is one attribute on the table; search.css hides the rest, in the
+	// header, the colgroup and every row alike. Status shows once any row has one.
+	function applyColumnView() {
+		let table = $("results-table"); if (!table) return;
+		table.setAttribute("data-cols", state.colsMode);
+		if (state.records.some(r => r.status)) table.setAttribute("data-status", "1"); else table.removeAttribute("data-status");
+		let all = state.colsMode === "all", b = $("cols-mode");
+		if (b) { b.setAttribute("aria-pressed", String(all)); $("cols-mode-label").textContent = t(all ? "colsAll" : "colsBasic"); }
 	}
 
 	function normalizeColumnOrder(saved) {
@@ -1259,6 +1281,7 @@
 						state.colOrder = normalizeColumnOrder(order);
 						applyColumnOrder();
 						PREF("colOrder", JSON.stringify(state.colOrder));
+						PREF("colOrderVersion", COL_VERSION);
 					}
 				}
 				clearColumnDrag();
@@ -1476,7 +1499,7 @@
 		// until the user explicitly sorts a result column again.
 		state.sortKey = q.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
-		$("filter").value = "";
+		$("filter").value = ""; state.facet = null;
 		state.selected.clear();
 		state.focusKey = null;
 		state.detailKey = null;
@@ -1626,6 +1649,8 @@
 
 	// ------------------------------------------------------------ render
 	function matchesFilter(r, f) {
+		if (state.selectedOnly && !state.selected.has(r.key)) return false;
+		if (!applyLocalFacet(r)) return false;
 		if (!f) return true;
 		let where = affiliationOf(r);
 		let hay = (r.title + " " + r.authorString + " " + r.venue + " " + (r.doi || "") + " " + (r.year || "") + " " + (r.status || "")
@@ -1724,11 +1749,57 @@
 
 	// The results filter can always be let go of: Escape in the box, the × beside it.
 	function syncFilterClear() { let b = $("filter-clear"); if (b) b.hidden = !$("filter").value; }
-	function clearFilter() { $("filter").value = ""; state.focusKey = null; render(); syncFilterClear(); }
+	function clearFilter() { $("filter").value = ""; state.facet = null; state.focusKey = null; render(); syncFilterClear(); }
+
+	// ------------------------------------------------------------ this search's authors
+	// An author's key: the registry ID when the source gave one, else the name as written.
+	// A name is not a person, so a name key never claims the results are one author's.
+	const nameKey = name => String(name || "").normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+	function authorKeys(r) {
+		let out = [];
+		for (let a of r.authors || []) {
+			let name = a.name || [a.firstName, a.lastName].filter(Boolean).join(" ");
+			let key = a.openalexId ? "id:" + a.openalexId : a.orcid ? "id:" + a.orcid : name ? "name:" + nameKey(name) : null;
+			if (key && !out.some(o => o.key === key)) out.push({ key, name, byId: key.startsWith("id:") });
+		}
+		return out;
+	}
+	// What the detail says about a paper from this search's own records alone: no request is made.
+	function buildResultContext(r) {
+		let evidence = [], src = r.citationSource ? sourceLabel(r.citationSource) : "";
+		evidence.push(r.citations == null ? t("evCitesUnknown", src) : t("evCites", src, r.citations));
+		let cpy = ZotPoPMetrics.citesPerYear(r);
+		if (cpy != null) evidence.push(t("evPerYear", fmt(cpy, 1)));
+		if (r.journalIF != null) evidence.push(t("evIF", fmt(r.journalIF, 1), Boolean(r.journalIFEstimate)));
+		if (hasPDF(r)) evidence.push(t("evPdf"));
+		let counts = new Map();
+		for (let other of state.records) for (let a of authorKeys(other)) {
+			let c = counts.get(a.key) || { total: 0, unowned: 0 };
+			c.total++; if (!other.inLibrary) c.unowned++;
+			counts.set(a.key, c);
+		}
+		let authors = authorKeys(r).map(a => ({ ...a, ...counts.get(a.key) })).filter(a => a.total > 1);
+		return { evidence, authors };
+	}
+	// Whether a record passes the author facet; no facet passes everything.
+	function applyLocalFacet(r) {
+		return !state.facet || authorKeys(r).some(a => a.key === state.facet.key);
+	}
+	function setFacet(facet) {
+		state.facet = facet || null;
+		state.focusKey = null;
+		render();
+	}
+	function syncFacetChip() {
+		let chip = $("facet-chip"); if (!chip) return;
+		chip.hidden = !state.facet;
+		if (state.facet) $("facet-text").textContent = t(state.facet.byId ? "facetChipId" : "facetChipName", state.facet.name, state.visible.length);
+	}
 
 	function popOriginalJSON() { return JSON.stringify(state.records.filter(r => r.popOriginal).slice().sort((a, b) => a.popOrdinal - b.popOrdinal).map(r => r.popOriginal), null, 2); }
 
 	function render() {
+		if (state.selectedOnly && !state.records.some(r => state.selected.has(r.key))) state.selectedOnly = false;
 		if ($("copy-pop-json")) $("copy-pop-json").hidden = !state.records.length || state.records.some(r => !r.popOriginal);
 		let f = $("filter").value.trim().toLowerCase();
 		let list = state.records.filter(r => matchesFilter(r, f));
@@ -1753,6 +1824,8 @@
 		}
 		tbody.textContent = "";
 		tbody.appendChild(frag);
+		applyColumnView();
+		syncFacetChip();
 		if (!marquee) marquee = ZotPoPMarquee.attach(window, $("table-wrap"), { mode: "hover" });
 		else marquee.refresh();
 
@@ -1896,7 +1969,13 @@
 
 	function updateCounts() {
 		let n = state.records.filter(r => state.selected.has(r.key)).length;
-		$("selected-count").textContent = t("selected", n);
+		if (state.selectedOnly && n === 0) { state.selectedOnly = false; render(); return; }
+		// Selection outlives the filter, so say how much of it is out of sight.
+		let onScreen = state.visible.filter(r => state.selected.has(r.key)).length;
+		$("selected-count").textContent = n > onScreen ? t("selectedSplit", n, onScreen, n - onScreen) : t("selected", n);
+		let only = $("selected-only");
+		if (only) { only.hidden = n === 0; only.textContent = t("selectedOnly"); only.setAttribute("aria-pressed", String(state.selectedOnly)); }
+		let importLabel = $("import-btn").querySelector("span"); if (importLabel) importLabel.textContent = n ? t("importBtnN", n) : t("importBtn");
 		$("import-btn").disabled = n === 0 || state.importing || state.searching;
 		syncImportBar(n);
 		let all = state.visible.length > 0 && state.visible.every(r => state.selected.has(r.key));
@@ -2051,13 +2130,8 @@
 		};
 		let mark = journalMark(r);
 		if (mark) badges.appendChild(mark);
-		if (r.citations != null) chip(t("badgeCites", r.citations), "cite");
-		if (r.journalIF != null) chip(t("badgeIF", (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1)), "if").title = r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH);
-		let cpy = ZotPoPMetrics.citesPerYear(r);
-		if (cpy != null) chip(t("badgePerYear", fmt(cpy)));
 		for (let s of r.sources || [r.source]) sourceChip(s);
 		if (r.inLibrary) chip(t("badgeInLibrary"), "lib");
-		if (hasPDF(r)) chip(t("badgeHasPdf"));
 		/* A preprint and the article it became are two records with two DOIs, so
 		   they are not merged -- but a list that shows both and says nothing
 		   looks broken. A real search returned the Research Square preprint and
@@ -2071,7 +2145,30 @@
 			chip(t("badgeHasPreprint"), "ver").title = t("preprintOfTip", r.preprintOf.doi || "");
 		}
 
+		// The figures the table already shows, said once as one plain sentence with what each one is.
+		let context = buildResultContext(r);
+		let evidence = $("d-evidence");
+		evidence.textContent = context.evidence.join(" · ");
+		evidence.title = r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH);
+
 		$("d-authors").textContent = r.authorString || t("noAuthors");
+		// Other papers of these authors in this search's results only, never the whole library.
+		let facets = $("d-facets");
+		facets.textContent = "";
+		for (let a of context.authors.slice(0, 4)) {
+			let line = document.createElement("div");
+			line.className = "d-facet";
+			let text = document.createElement("span");
+			text.textContent = t(a.byId ? "facetLineId" : "facetLineName", a.name, a.total, a.unowned) + " ";
+			text.title = t("facetScope");
+			let btn = document.createElement("button");
+			btn.type = "button"; btn.className = "ghost facet-show";
+			btn.textContent = t("facetShow");
+			btn.addEventListener("click", () => setFacet({ key: a.key, name: a.name, byId: a.byId }));
+			line.appendChild(text); line.appendChild(btn);
+			facets.appendChild(line);
+		}
+		facets.hidden = !facets.firstChild;
 		let whereBox = $("d-where");
 		whereBox.textContent = "";
 		let where = affiliationOf(r);
@@ -2217,7 +2314,7 @@
 				else { escapeArmed = now; setStatus(t("escapeAgainToStop")); }
 				return;
 			}
-			if (document.activeElement === $("filter") && $("filter").value) { clearFilter(); return; }
+			if (document.activeElement === $("filter") && ($("filter").value || state.facet)) { clearFilter(); return; }
 			if (document.activeElement === $("filter")) { $("table-wrap").focus(); return; }
 			if (state.detailKey) { state.detailKey = null; paintRows(); renderDetail(); return; }
 			return;
@@ -2353,6 +2450,7 @@
 		r.status = text;
 		r.statusClass = cls;
 		r.statusTitle = title || "";
+		if (text) applyColumnView();
 		let tr = document.querySelector(`#results-body tr[data-key="${CSS.escape(r.key)}"]`);
 		if (!tr) return;
 		let td = tr.querySelector("td.status");
@@ -2384,7 +2482,8 @@
 		$("search-btn").disabled = true;
 		$("stop-btn").disabled = false;
 		$("d-add").disabled = true;
-		let added = 0, exists = 0, failed = 0, pdfs = 0, proxyLoginNeeded = false;
+		let added = 0, exists = 0, failed = 0, pdfs = 0, pdfMissedCount = 0, proxyLoginNeeded = false;
+		let failedRecs = [];
 		setProgress(0, recs.length);
 		for (let i = 0; i < recs.length; i++) {
 			if (state.cancelled) break;
@@ -2400,10 +2499,14 @@
 				let gotPDF = res.pdf.startsWith("pdf");
 				if (res.proxyLoginNeeded) proxyLoginNeeded = true;
 				if (gotPDF) pdfs++;
+				// Saved, only its PDF missing: not the same as a paper that failed.
+				let pdfMissed = res.pdf === "no pdf";
+				if (pdfMissed) pdfMissedCount++;
 				let label = res.pdf === "skipped" ? t("statusAdded")
 					: res.pdf === "pdf:proxy" ? t("statusAddedProxy")
 					: gotPDF ? t("statusAddedPdf") : t("statusAddedNoPdf");
 				if (res.warnings?.length) setRowStatus(r, label + " · " + t("statusPartSaved"), "warn", t("tipPartSaved"));
+				else if (pdfMissed) setRowStatus(r, label, "warn", t("tipPdfMissed"));
 				else setRowStatus(r, label, "ok", res.how === "manual" ? t("tipManual") : t("tipTranslator"));
 			}
 			else if (res.status === "exists") {
@@ -2417,9 +2520,11 @@
 			}
 			else {
 				failed++;
+				failedRecs.push(r);
 				setRowStatus(r, t("statusFailed"), "err", res.error);
 			}
-			state.selected.delete(r.key);
+			// A failure stays selected, so it is still there to retry; what got in is let go.
+			if (res.status === "added" || res.status === "exists") state.selected.delete(r.key);
 			setProgress(i + 1, recs.length);
 		}
 		state.importing = false;
@@ -2429,7 +2534,8 @@
 		paintRows();
 		renderDetail();
 		setStatus(t("importDone", added, pdfs, exists, failed, state.cancelled));
-		if (failed) showBanner(t("importFailures", failed));
+		if (failed) showBanner(pdfMissedCount ? t("importFailuresPdf", failed, pdfMissedCount) : t("importFailures", failed), { label: t("importRetry", failed), run: () => { hideBanner(); importRecords(failedRecs); } });
+		else if (pdfMissedCount) showBanner(t("importPdfMissed", pdfMissedCount));
 		else if (proxyLoginNeeded) showBanner(t("loginNeeded"));
 	}
 

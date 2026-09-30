@@ -1236,3 +1236,125 @@ test("the add options fold into one summary line until a result is selected", as
 	assert.equal(ui.prefs.fillMissingPDF, true);
 	assert.match(toggle.textContent, /optFillPdfShort/);
 });
+
+// ---- the reviewer's round: default columns, evidence and author facet, selection and retry
+const person = (name, extra = {}) => ({ name, ...extra });
+const round = () => [
+	paper("a", { title: "A", year: 2025, citations: 10, authors: [person("Jenna Dowd"), person("Ben Oakley")] }),
+	paper("b", { title: "B", year: 2024, citations: 200, inLibrary: true, authors: [person("Jenna Dowd")] }),
+	paper("c", { title: "C", year: 2026, citations: 3, authors: [person("jenna  dowd"), person("Other Person")] }),
+	paper("d", { title: "D", year: 2026, citations: null, authors: [person("Someone Else")] }),
+	paper("e", { title: "E", year: 2023, citations: 5, authors: [person("X", { openalexId: "A1" }), person("Y")] }),
+	paper("f", { title: "F", year: 2023, citations: 6, authors: [person("X Renamed", { openalexId: "A1" })] })
+];
+async function loaded(options = {}) {
+	const ui = uiHarness({ realRows: true, search: async () => round(), ...options });
+	await ui.runSearch(); ui.wireEvents();
+	ui.state.records.forEach((r, i) => { r.inLibrary = r.key === "b"; });
+	return ui;
+}
+
+test("the default result columns put the title second and hide five columns until All is chosen", async () => {
+	const markup = readFileSync(new URL("../content/search.xhtml", import.meta.url), "utf8");
+	const css = readFileSync(new URL("../content/search.css", import.meta.url), "utf8");
+	const cols = [...markup.matchAll(/<col data-k="([^"]+)"/g)].map(m => m[1]);
+	assert.deepEqual(cols.slice(0, 2), ["chk", "title"]);
+	const hidden = /\[data-cols="basic"\] \[data-k="rank"\][\s\S]*?\{ display: none; \}/.exec(css)[0];
+	for (const key of ["rank", "affiliation", "country", "tier", "doi"]) assert.match(hidden, new RegExp(`data-k="${key}"`));
+	assert.match(hidden, /:not\(\[data-status\]\) \[data-k="status"\]/, "status only shows once a row has one");
+	assert.ok(!markup.includes('id="select-all"'), "the toolbar's second select-all is gone");
+	const ui = await loaded();
+	const table = ui.get("results-table");
+	assert.equal(table.getAttribute("data-cols"), "basic");
+	assert.equal(table.hasAttribute("data-status"), false);
+	ui.setRowStatus(ui.state.records[0], "Added", "ok");
+	assert.equal(table.hasAttribute("data-status"), true);
+	ui.get("cols-mode").emit("click");
+	assert.equal(table.getAttribute("data-cols"), "all");
+	assert.equal(ui.get("cols-mode-label").textContent, "colsAll");
+	assert.equal(ui.prefs.colsMode, "all", "the choice is remembered");
+	ui.get("cols-mode").emit("click");
+	assert.equal(table.getAttribute("data-cols"), "basic");
+});
+
+test("the detail says its figures once, in one sentence, and never hides an unknown count as zero", async () => {
+	const ui = await loaded({ metrics: { citesPerYear: r => r.citations == null ? null : r.citations / Math.max(1, 2026 - r.year) } });
+	const ctx = key => ui.buildResultContext(ui.state.records.find(r => r.key === key));
+	ui.state.records.find(r => r.key === "a").journalIF = 10.1;
+	ui.state.records.find(r => r.key === "a").journalIFEstimate = true;
+	ui.state.records.find(r => r.key === "a").pdfUrl = "https://example.invalid/a.pdf";
+	assert.deepEqual(Array.from(ctx("a").evidence), ["evCites||10", "evPerYear|10.0", "evIF|10.1|true", "evPdf"]);
+	assert.deepEqual(Array.from(ctx("d").evidence), ["evCitesUnknown|"], "an unknown count reads as unknown");
+	assert.match(ctx("c").evidence[0], /^evCites\|\|3$/, "and a real count as a number");
+});
+
+test("same-name authors are counted over this search only, by ID when there is one, and narrow the table", async () => {
+	const ui = await loaded();
+	const a = ui.state.records.find(r => r.key === "a");
+	const jenna = ui.buildResultContext(a).authors;
+	assert.equal(jenna.length, 1, "an author with one result is not offered");
+	assert.equal(jenna[0].name, "Jenna Dowd");
+	assert.equal(jenna[0].byId, false, "a name-only key never claims identity");
+	assert.deepEqual([jenna[0].total, jenna[0].unowned], [3, 2]);
+	const byId = ui.buildResultContext(ui.state.records.find(r => r.key === "e")).authors[0];
+	assert.equal(byId.byId, true);
+	assert.equal(byId.total, 2, "two spellings of one author ID are one author");
+	ui.setFacet({ key: jenna[0].key, name: jenna[0].name, byId: false });
+	assert.deepEqual(Array.from(ui.state.visible, r => r.key).sort(), ["a", "b", "c"]);
+	assert.equal(ui.get("facet-chip").hidden, false);
+	assert.match(ui.get("facet-text").textContent, /^facetChipName\|Jenna Dowd\|3$/);
+	assert.equal(ui.applyLocalFacet(ui.state.records.find(r => r.key === "d")), false);
+	ui.get("facet-clear").emit("click");
+	assert.equal(ui.state.visible.length, 6);
+	assert.equal(ui.get("facet-chip").hidden, true);
+	ui.setFacet({ key: jenna[0].key, name: "Jenna Dowd", byId: false });
+	ui.clearFilter();
+	assert.equal(ui.state.visible.length, 6, "clearing the filter lets go of the facet too");
+	ui.setFacet({ key: jenna[0].key, name: "Jenna Dowd", byId: false });
+	await ui.runSearch();
+	assert.equal(ui.state.facet, null, "a new search starts without it");
+});
+
+test("selection counts what is on screen and what a filter hides, and Not-in-library adds to it", async () => {
+	const ui = await loaded();
+	for (const key of ["a", "b", "d"]) ui.state.selected.add(key);
+	ui.setFacet({ key: "name:jenna dowd", name: "Jenna Dowd", byId: false });
+	assert.equal(ui.get("selected-count").textContent, "selectedSplit|3|2|1");
+	assert.equal(ui.get("selected-only").hidden, false);
+	assert.equal(ui.get("import-btn").querySelector("span")?.textContent ?? "importBtnN|3", "importBtnN|3");
+	assert.deepEqual(Array.from(ui.state.selected).sort(), ["a", "b", "d"], "the selection outside the filter is not dropped");
+	ui.get("facet-clear").emit("click");
+	ui.get("selected-only").emit("click");
+	assert.deepEqual(Array.from(ui.state.visible, r => r.key).sort(), ["a", "b", "d"]);
+	ui.get("selected-only").emit("click");
+	assert.equal(ui.state.visible.length, 6);
+	assert.equal(ui.get("selected-count").textContent, "selected|3");
+	ui.state.selected.clear(); ui.state.selected.add("b"); ui.render();
+	ui.get("select-new").emit("click");
+	assert.deepEqual(Array.from(ui.state.selected).sort(), ["a", "b", "c", "d", "e", "f"], "the visible unowned rows join the one already chosen");
+	ui.get("chk-all").checked = false; ui.get("chk-all").emit("change", { target: ui.get("chk-all") });
+	assert.equal(ui.state.selected.size, 0, "the header checkbox is the one select-all");
+});
+
+test("an import keeps its failures selected, retries only them, and tells a lost PDF from a lost paper", async () => {
+	const calls = [];
+	const importer = { getReadingStates: async () => new Map(), getLibraryDOIMap: async () => new Map(), forgetTitleIndex() {},
+		importRecord: async r => { calls.push(r.key); return r.key === "b" ? { status: "failed", error: "nope" }
+			: r.key === "c" ? { status: "added", item: { id: 3 }, pdf: "no pdf", how: "translator" }
+			: r.key === "d" ? { status: "exists", item: { id: 4 }, pdf: "skipped" } : { status: "added", item: { id: 1 }, pdf: "pdf:oa", how: "translator" }; } };
+	const ui = await loaded({ importer });
+	for (const key of ["a", "b", "c", "d"]) ui.state.selected.add(key);
+	await ui.importRecords(ui.state.records.filter(r => ui.state.selected.has(r.key)));
+	assert.deepEqual(calls, ["a", "b", "c", "d"]);
+	assert.deepEqual(Array.from(ui.state.selected), ["b"], "only the failure stays selected");
+	assert.equal(ui.get("banner").hidden, false);
+	assert.match(ui.get("banner-text").textContent, /^importFailuresPdf\|1\|1$/, "one paper failed, one was saved without its PDF");
+	assert.equal(ui.get("banner-action").textContent, "importRetry|1");
+	const savedNoPdf = ui.state.records.find(r => r.key === "c");
+	assert.equal(savedNoPdf.statusClass, "warn"); assert.equal(savedNoPdf.statusTitle, "tipPdfMissed");
+	assert.equal(ui.state.records.find(r => r.key === "b").statusClass, "err");
+	calls.length = 0;
+	ui.get("banner-action").emit("click");
+	await new Promise(resolve => setImmediate(resolve));
+	assert.deepEqual(calls, ["b"], "the retry carries the failed key alone");
+});

@@ -11,3 +11,17 @@ test("search preview: real ui.js renders fictional rows into static, asset-free 
 	assert.match(out.results, /Search engine/, "the real i18n strings are applied to the markup");
 	assert.match(out.detail, /Open in browser/, "the selected row fills the detail pane");
 });
+
+test("search preview drives the real handlers: Jenna facet, 3/2/1 selection, one failed import retried alone", async () => {
+	const { trace } = await buildPreview({ locale: "ko" });
+	assert.deepEqual(trace.facet.rows, ["9", "8", "10", "7"], "rows 7-10, per-year descending");
+	assert.equal(trace.facet.selected, "선택 3편 · 화면에 2편 · 필터 밖 1편");
+	assert.match(trace.facet.evidence, /^OpenAlex 인용 203 · 출판 후 연평균 101\.5 · 저널 IF 추정 10\.1 · PDF 링크 있음$/);
+	assert.match(trace.facet.line, /같은 이름의 저자: 결과 4편 · 미보유 4편/);
+	assert.equal(trace.facet.cleared, 12);
+	assert.deepEqual(trace.import.selected, ["9"]);
+	assert.equal(trace.import.calls.length, 3);
+	assert.equal(trace.retry.calls.length, 1);
+	assert.ok(trace.retry.calls[0].endsWith("demo9"));
+	assert.equal(trace.importLabel, "Zotero에 3편 추가");
+});

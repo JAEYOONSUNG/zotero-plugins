@@ -179,12 +179,13 @@
 					<input id="filter" type="search" data-i18n-ph="filterPh"/>
 					<button id="filter-clear" type="button" class="filter-clear" data-i18n-title="filterClear" aria-label="clear" hidden="hidden">×</button>
 				</span>
+				<span id="facet-chip" class="facet-chip" hidden="hidden"><span id="facet-text"></span><button id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" aria-label="clear">×</button></span>
 				<span class="spacer"></span>
 				<button id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="previewAction"></span></button>
-				<button id="select-all" type="button" data-i18n-title="selAllTip" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-all"/></svg><span data-i18n="selAll"></span></button>
 				<button id="select-none" type="button" data-i18n-title="selNoneTip" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-none"/></svg><span data-i18n="selNone"></span></button>
 				<button id="select-new" type="button" class="ghost icon-text" data-i18n-title="selNewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-new"/></svg><span data-i18n="selNew"></span></button>
 				<span class="sep"></span>
+				<button id="cols-mode" type="button" class="ghost icon-text" aria-pressed="false" data-i18n-title="colsModeTip"><span id="cols-mode-label"></span></button>
 				<button id="copy-csv" type="button" class="ghost icon-text" data-i18n-title="copyCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy"/></svg><span data-i18n="copyCsv"></span></button>
 				<button id="copy-pop-json" type="button" class="ghost icon-text" hidden="hidden" data-i18n="popOriginalJSON"></button>
 				<button id="save-csv" type="button" class="ghost icon-text" data-i18n-title="saveCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-save"/></svg><span data-i18n="saveCsv"></span></button>
@@ -194,29 +195,26 @@
 			<div class="table-wrap" id="table-wrap" tabindex="0">
 				<table id="results-table">
 					<colgroup id="cols">
-						<col data-k="chk"/><col data-k="citations"/><col data-k="cpy"/><col data-k="rank"/>
-						<col data-k="authorString"/><col data-k="title"/><col data-k="year"/><col data-k="venue"/><col data-k="journalIF"/>
-							<col data-k="affiliation"/><col data-k="country"/><col data-k="tier"/>
-						<col data-k="doi"/><col data-k="pdf"/><col data-k="inLibrary"/><col data-k="status"/>
+						<col data-k="chk"/><col data-k="title"/><col data-k="authorString"/><col data-k="year"/><col data-k="venue"/><col data-k="citations"/><col data-k="cpy"/><col data-k="journalIF"/><col data-k="pdf"/><col data-k="inLibrary"/><col data-k="status"/><col data-k="rank"/><col data-k="affiliation"/><col data-k="country"/><col data-k="tier"/><col data-k="doi"/>
 					</colgroup>
 					<thead>
 						<tr id="results-head">
 							<th class="chk" data-k="chk"><input id="chk-all" type="checkbox" data-i18n-title="chkAllTip"/></th>
-							<th data-sort="citations" class="num" data-i18n-title="thCitesTip"><span data-i18n="thCites"></span><span class="rz"></span></th>
-							<th data-sort="cpy" class="num" data-i18n-title="thPerYearTip"><span data-i18n="thPerYear"></span><span class="rz"></span></th>
-							<th data-sort="rank" class="num" data-i18n-title="thRankTip"><span data-i18n="thRank"></span><span class="rz"></span></th>
-							<th data-sort="authorString"><span data-i18n="thAuthors"></span><span class="rz"></span></th>
 							<th data-sort="title"><span data-i18n="thTitle"></span><span class="rz"></span></th>
+							<th data-sort="authorString"><span data-i18n="thAuthors"></span><span class="rz"></span></th>
 							<th data-sort="year" class="num"><span data-i18n="thYear"></span><span class="rz"></span></th>
 							<th data-sort="venue"><span data-i18n="thVenue"></span><span class="rz"></span></th>
+							<th data-sort="citations" class="num" data-i18n-title="thCitesTip"><span data-i18n="thCites"></span><span class="rz"></span></th>
+							<th data-sort="cpy" class="num" data-i18n-title="thPerYearTip"><span data-i18n="thPerYear"></span><span class="rz"></span></th>
 							<th data-sort="journalIF" class="num" data-i18n-title="thIFTip"><span data-i18n="thIF"></span><span class="rz"></span></th>
+							<th data-sort="pdf" class="mini" data-i18n-title="thPdfTip"><span data-i18n="thPdf"></span><span class="rz"></span></th>
+							<th data-sort="inLibrary" class="mini" data-i18n-title="thLibTip"><span data-i18n="thLib"></span><span class="rz"></span></th>
+							<th data-sort="status"><span data-i18n="thStatus"></span></th>
+							<th data-sort="rank" class="num" data-i18n-title="thRankTip"><span data-i18n="thRank"></span><span class="rz"></span></th>
 							<th data-sort="affiliation" data-i18n-title="thInstTip"><span data-i18n="thInst"></span><span class="rz"></span></th>
 							<th data-sort="country" class="mini" data-i18n-title="thCountryTip"><span data-i18n="thCountry"></span><span class="rz"></span></th>
 							<th data-sort="tier" class="mini" data-i18n-title="thTierTip"><span data-i18n="thTier"></span><span class="rz"></span></th>
 							<th data-sort="doi"><span data-i18n="thDoi"></span><span class="rz"></span></th>
-							<th data-sort="pdf" class="mini" data-i18n-title="thPdfTip"><span data-i18n="thPdf"></span><span class="rz"></span></th>
-							<th data-sort="inLibrary" class="mini" data-i18n-title="thLibTip"><span data-i18n="thLib"></span><span class="rz"></span></th>
-							<th data-sort="status"><span data-i18n="thStatus"></span></th>
 						</tr>
 					</thead>
 					<tbody id="results-body"></tbody>
@@ -232,7 +230,9 @@
 						<div id="d-title" class="d-title"></div>
 						<div id="d-badges" class="badges"></div>
 					</div>
+					<div id="d-evidence" class="d-evidence"></div>
 					<div id="d-authors" class="d-authors"></div>
+					<div id="d-facets" class="d-facets"></div>
 						<div id="d-where" class="d-where"></div>
 					<div id="d-meta" class="d-meta"></div>
 					<div class="d-actions">
@@ -263,6 +263,7 @@
 		</span>
 		<span class="spacer"></span>
 		<span id="selected-count"></span>
+		<button id="selected-only" type="button" class="ghost" aria-pressed="false" hidden="hidden"></button>
 		<button id="import-btn" type="button" class="primary icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus"/></svg><span data-i18n="importBtn"></span></button>
 	</div>
 

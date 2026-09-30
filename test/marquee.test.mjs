@@ -232,7 +232,7 @@ test("real result rows mark only text columns and retain title links, focus and 
 		search: async () => [paper("result", { title: "An entire title", url: "https://example.test/paper", venue: "A journal", doi: "10.1234/example", authors: [{ name: "A Researcher" }] })] });
 	await ui.runSearch();
 	const row = ui.get("results-body").firstChild;
-	assert.deepEqual(row.children.filter(cell => cell.dataset.marquee).map(cell => cell.dataset.marquee), ["authors", "title", "venue", "affiliation", "doi", "status"]);
+	assert.deepEqual(row.children.filter(cell => cell.dataset.marquee).map(cell => cell.dataset.marquee), ["title", "authors", "venue", "status", "affiliation", "doi"]);
 	// The title is text now; a click on it stays in the window. The DOI is the row's one link.
 	const link = row.querySelector("a"); let prevented = false, stopped = false;
 	assert.equal(link.parentNode.dataset.k, "doi", "the only link in a row is the DOI");

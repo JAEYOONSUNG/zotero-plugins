@@ -115,8 +115,8 @@ test("resize grips cannot initiate column drag and width updates remain keyed af
 
 test("drop after target works both directions and checkbox column stays fixed", () => {
 	const h = setup();
-	drop(h, "title", "status", true); assert.equal(keys(h.get("cols")).at(-1), "title");
-	drop(h, "title", "citations"); assert.equal(keys(h.get("cols"))[1], "title");
+	drop(h, "title", "doi", true); assert.equal(keys(h.get("cols")).at(-1), "title");
+	drop(h, "title", "authorString"); assert.equal(keys(h.get("cols"))[1], "title");
 	const before = keys(h.get("cols")), saved = h.prefs.colOrder;
 	assert.equal(h.header("chk").getAttribute("draggable"), null);
 	const dataTransfer = start(h, "year"); event(h.header("chk"), "drop", { dataTransfer }); event(h.header("year"), "dragend");
@@ -156,9 +156,10 @@ test("progressive and later rows keep persisted order and status cells update in
 	gate.resolve(); await pending; aligned(h, expected);
 	assert.equal(h.get("results-body").children.length, 2);
 	const rec = h.state.records[0]; h.setRowStatus(rec, "Complete", "ok");
-	assert.equal(h.get("results-body").children[0].children[1].textContent, "Complete");
+	const at = expected.indexOf("status");
+	assert.equal(h.get("results-body").children[0].children[at].textContent, "Complete");
 	h.render(); aligned(h, expected);
-	assert.equal(h.get("results-body").children[0].children[1].textContent, "Complete");
+	assert.equal(h.get("results-body").children[0].children[at].textContent, "Complete");
 });
 
 test("edge drag scrolls wide tables, external drags do not reorder or scroll", () => {

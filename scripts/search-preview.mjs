@@ -8,6 +8,12 @@
 //
 //   node scripts/search-preview.mjs   ->  docs/search-preview.html (results)
 //                                         docs/search-preview-detail.html (selected row)
+//                                         docs/search-preview-facet.html (one author's results, three rows selected)
+//                                         docs/search-preview-import.html (an import where one paper fails)
+//
+// After the two static states the build drives the real handlers (choose an author
+// facet, select rows, import against a stub importer that fails one paper, retry) and
+// records what happened in `trace`, so the checks are on behaviour, not on static markup.
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -54,6 +60,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	const css = read("content/search.css");
 	const errors = [];
 	let netCalls = 0;
+	const importCalls = [];
 	const prefs = { language: locale, searchSurface: "papers", hintShown: true, multiSourceMigrated: true, defaultSource: "multi", multiSourceMigrated2: true };
 	const listeners = new Map();
 	// linkedom's window rejects assignments; the UI only needs a small window surface.
@@ -79,7 +86,8 @@ export async function buildPreview({ locale = "en" } = {}) {
 			HTTP: { request: () => { netCalls++; throw new Error("network is off in the preview"); } },
 			Utilities: { Internal: { copyTextToClipboard() {} } } },
 		ZotPoPMarquee: { attach: () => ({ refresh() {}, refreshCell() {} }) },
-		ZotPoPImporter: { getLibraryDOIMap: async () => library, getReadingStates: async ids => new Map(ids.map(id => [id, "reading"])), getTargets: () => [{ libraryID: 1, collectionID: null, label: "My Library", depth: 0 }, { libraryID: 1, collectionID: 7, label: "Repair atlases", depth: 1 }],
+		ZotPoPImporter: { importRecord: async r => { importCalls.push(r.key); return r.sourceId === "demo9" ? { status: "failed", error: "fictional failure" } : { status: "added", item: { id: 100 + importCalls.length }, pdf: r.pdfUrl ? "pdf:oa" : "no pdf", how: "translator" }; },
+			getLibraryDOIMap: async () => library, getReadingStates: async ids => new Map(ids.map(id => [id, "reading"])), getTargets: () => [{ libraryID: 1, collectionID: null, label: "My Library", depth: 0 }, { libraryID: 1, collectionID: 7, label: "Repair atlases", depth: 1 }],
 			getCurrentTarget: () => ({ libraryID: 1, collectionID: null }), forgetTitleIndex() {} }
 	});
 	win.Zotero = ctx.Zotero;
@@ -115,21 +123,80 @@ export async function buildPreview({ locale = "en" } = {}) {
 	rows[0]?.dispatchEvent(new window.Event("click", { bubbles: true }));
 	await new Promise(r => setTimeout(r, 30));
 	const detail = page();
-	return { results, detail, rows: rows.length, netCalls, errors };
+
+	// ---- drive states through the real handlers
+	const wait = ms => new Promise(r => setTimeout(r, ms));
+	const fire = (el, type = "click") => el.dispatchEvent(new window.Event(type, { bubbles: true, cancelable: true }));
+	const table = () => [...document.querySelectorAll("#results-body tr")];
+	const rowOf = id => table().find(tr => tr.dataset.key.endsWith(id));
+	const shown = () => table().map(tr => tr.dataset.key.replace(/^.*demo/, ""));
+	const text = id => document.getElementById(id).textContent;
+	const trace = { columns: {}, facet: {} };
+	trace.columns.basic = document.getElementById("results-table").getAttribute("data-cols");
+	trace.columns.statusAttr = document.getElementById("results-table").hasAttribute("data-status");
+	fire(document.getElementById("cols-mode"));
+	trace.columns.all = document.getElementById("results-table").getAttribute("data-cols");
+	trace.columns.allLabel = text("cols-mode-label");
+	fire(document.getElementById("cols-mode"));
+	trace.columns.back = document.getElementById("results-table").getAttribute("data-cols");
+	trace.columns.doiInDetail = detail.includes("10.5555/demo.001");
+	// three rows chosen, two of them by the Jenna Dowd facet later
+	for (const id of ["demo1", "demo8", "demo9"]) { const cb = rowOf(id).querySelector("input"); cb.checked = true; fire(cb, "change"); }
+	trace.selectedAll = text("selected-count");
+	trace.importLabel = document.getElementById("import-btn").textContent.trim();
+	fire(document.getElementById("selected-only"));
+	trace.selectedOnlyRows = shown();
+	fire(document.getElementById("selected-only"));
+	fire(document.querySelector('#results-head th[data-sort="cpy"]'));
+	fire(rowOf("demo9"));
+	await wait(20);
+	trace.facet.evidence = text("d-evidence");
+	trace.facet.line = text("d-facets");
+	fire(document.querySelector("#d-facets button"));
+	await wait(20);
+	trace.facet.rows = shown();
+	trace.facet.selected = text("selected-count");
+	trace.facet.chip = text("facet-text");
+	const facet = page();
+	fire(document.getElementById("facet-clear"));
+	await wait(20);
+	trace.facet.cleared = shown().length;
+	// import three, one of which fails; the failure stays selected and is the only one retried
+	fire(document.getElementById("import-btn"));
+	for (let i = 0; i < 100 && document.getElementById("banner").hidden; i++) await wait(20);
+	trace.import = { calls: [...importCalls], selected: table().filter(tr => tr.querySelector("input").checked).map(tr => tr.dataset.key.replace(/^.*demo/, "")),
+		banner: text("banner-text"), retry: document.getElementById("banner-action").textContent, statuses: Object.fromEntries(["demo1", "demo8", "demo9"].map(id => [id, rowOf(id).querySelector("td.status").textContent])) };
+	const importPage = page();
+	importCalls.length = 0;
+	fire(document.getElementById("banner-action"));
+	for (let i = 0; i < 100 && !importCalls.length; i++) await wait(20);
+	await wait(60);
+	trace.retry = { calls: [...importCalls] };
+	return { results, detail, facet, importPage, trace, rows: rows.length, netCalls, errors };
 }
 
 export function checkPreview(out) {
 	const problems = [];
 	if (out.rows < 10) problems.push("expected at least 10 result rows, got " + out.rows);
 	if (out.netCalls) problems.push("network was called");
-	for (const [name, html] of [["results", out.results], ["detail", out.detail]]) {
+	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage]]) {
 		if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
 		if (/(?:src|href)\s*=\s*["'](?:https?:|\/\/|chrome:|resource:)/i.test(html)) problems.push(name + ": external asset");
 		if (/url\(\s*["']?(?:https?:|\/\/|chrome:)/i.test(html)) problems.push(name + ": external css url");
-		for (const needle of ['id="results-table"', 'id="results-body"', 'id="query-form"', "Mapping cellular responses"]) if (!html.includes(needle)) problems.push(name + ": missing " + needle);
+		for (const needle of ['id="results-table"', 'id="results-body"', 'id="query-form"', name === "facet" ? "Off-target profiling" : "Mapping cellular responses"]) if (!html.includes(needle)) problems.push(name + ": missing " + needle);
 	}
 	if (!out.results.includes('class="in-library')) problems.push("no in-library row");
 	if (!/id="detail-body"(?![^>]*hidden)/.test(out.detail)) problems.push("detail pane not shown for the selected row");
+	const t = out.trace, same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+	if (t.columns.basic !== "basic" || t.columns.all !== "all" || t.columns.back !== "basic") problems.push("column view did not switch basic/all/basic");
+	if (t.columns.statusAttr) problems.push("status column shown before any status");
+	if (!t.columns.doiInDetail) problems.push("DOI missing from the detail");
+	if (!same(t.facet.rows, ["9", "8", "10", "7"])) problems.push("Jenna facet + per-year sort should give 9, 8, 10, 7; got " + t.facet.rows);
+	if (t.facet.cleared !== FAKE.length) problems.push("clearing the facet did not restore every row");
+	if (!same(t.selectedOnlyRows.slice().sort(), ["1", "8", "9"])) problems.push("selected-only should show rows 1, 8, 9; got " + t.selectedOnlyRows);
+	if (!same(t.import.selected, ["9"])) problems.push("after the import only the failed row should stay selected; got " + t.import.selected);
+	if (t.import.calls.length !== 3) problems.push("import should try the three selected rows");
+	if (t.retry.calls.length !== 1 || !t.retry.calls[0].endsWith("demo9")) problems.push("retry should pass only the failed key; got " + t.retry.calls);
 	return problems;
 }
 
@@ -140,6 +207,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.mkdirSync(path.join(root, "docs"), { recursive: true });
 	fs.writeFileSync(path.join(root, "docs/search-preview.html"), out.results);
 	fs.writeFileSync(path.join(root, "docs/search-preview-detail.html"), out.detail);
+	fs.writeFileSync(path.join(root, "docs/search-preview-facet.html"), out.facet);
+	fs.writeFileSync(path.join(root, "docs/search-preview-import.html"), out.importPage);
 	console.log(`ZotPoP search preview: real markup, CSS and ui.js, ${out.rows} fictional rows, no network: docs/search-preview.html, docs/search-preview-detail.html`);
 	process.exit(0);
 }

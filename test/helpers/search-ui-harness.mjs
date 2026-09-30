@@ -155,11 +155,12 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		if (!globalThis.ZotPoPImporter) refreshLibraryFlags = globalThis.refreshFlags;
 		${realRows ? "" : 'buildRow = () => document.createElement("tr");'}
 		const originalRenderMetrics = renderMetrics;
+		const originalRenderDetail = renderDetail;
 		renderMetrics = renderDetail = () => {};
 		cacheIO = setupStorage();
 		globalThis.harness = { state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
-			wireEvents, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
+			wireEvents, importRecords, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			searchMode: () => searchSurface, authorSessions,
 			get history() { return history; },
 			setOpenSelectForTest: value => { openSel = value; } };
