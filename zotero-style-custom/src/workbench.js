@@ -3147,6 +3147,7 @@
     // title and memo, one second for 읽은 시간 · 방문 쪽/전체 쪽 · 마지막
     // 읽음 with 열기/이어 읽기 and the status control at its end. No
     // second progress bar, and the page strip is a fold, not always open.
+    sectionHead('읽기 기록',listed.length,list);
     const recordsBox=node('div',null,list,{class:'sc-resume sc-reading-records'});
     for(const r of listed.slice(state.readingPage*PER,(state.readingPage+1)*PER)){
      drawResumeRow(recordsBox,r,{recordMeta:true});
@@ -3557,13 +3558,15 @@
     const matches=c=>model.matches(c.name,q);
     const subtree=c=>[c,...(byParent.get(c.id)||[]).flatMap(subtree)];
     let drawn=0;
-    const walk=(parent,depth)=>{
+    const walk=(parent,depth,host=list)=>{
      for(const c of [...(byParent.get(parent)||[])].sort(order)){
       const family=subtree(c);
       if(!family.some(matches))continue;
       if(state.collectionsHideEmpty&&!c.deepCount)continue;
       drawn++;
-      const row=node('div',null,list,{class:'sc-collection'+(c.deepCount?'':' sc-collection-empty'),role:'button',tabindex:'0','data-depth':String(depth),'data-id':c.id});
+      // A top-level collection is a soft grey group: its own row is the header, the subcollections sit inside it.
+      const group=depth?host:node('div',null,list,{class:'sc-collection-group'});
+      const row=node('div',null,group,{class:'sc-collection'+(c.deepCount?'':' sc-collection-empty'),role:'button',tabindex:'0','data-depth':String(depth),'data-id':c.id});
       row.style.setProperty('--sc-depth',String(depth));
       /* Opening a collection shows its papers: the tree moves behind the
          panel, and the panel goes to 보유 문헌 scoped to it. A parent whose
@@ -3579,8 +3582,7 @@
       row.addEventListener('click',event=>{if(event.target.closest('button,input,label'))return;open();});
       row.addEventListener('keydown',event=>{if(event.target!==row)return;if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
       const nameLine=node('div',null,row,{class:'sc-collection-line'});
-      if(depth)node('span','└',nameLine,{class:'sc-collection-branch','aria-hidden':'true'});
-      setIcon(node('span',null,nameLine,{class:'sc-collection-icon'}),'collections');
+            setIcon(node('span',null,nameLine,{class:'sc-collection-icon'}),'collections');
       node('span',c.name,nameLine,{class:'sc-collection-name',title:c.name});
       const kids=(byParent.get(c.id)||[]).length;
       if(kids)node('span',`하위 ${kids}`,nameLine,{class:'sc-collection-kids'});
@@ -3618,7 +3620,7 @@
       button('컬렉션 열기',open,actions);
       if(enabled('favoriteCollections'))check('즐겨찾기',favorites.includes(c.id),on=>run(async()=>{runtime.cache.favoriteCollections=on?[...new Set([...favorites,c.id])]:favorites.filter(id=>id!==c.id);runtime.dirty=true;await runtime.flush();draw();}),actions);
       if(favorites.includes(c.id))row.classList.add('sc-collection-favorite');
-      walk(c.id,depth+1);
+      walk(c.id,depth+1,group);
      }
     };
     walk('',0);

@@ -2035,3 +2035,57 @@
 #style-custom-workbench .sc-section-head { border-radius: var(--sc-radius-card); padding-block: 9px; }
 #style-custom-workbench .sc-section-head:has(+ .sc-hits) { border-radius: var(--sc-radius-card) var(--sc-radius-card) 0 0; padding-block: 12px 8px; }
 #style-custom-workbench .sc-annot-order button[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); box-shadow: none; }
+
+/* Reading record, collections and the narrow metric line in the dashboard look
+   (2026-10-01): each record is its own white row card; sections and collection
+   groups carry a "Name · n" header. No coloured edge bars anywhere. */
+#style-custom-workbench .sc-resume,
+#style-custom-workbench .sc-reading-queue { gap: 8px; margin: 6px 0 16px; border-block-end: 0; }
+#style-custom-workbench .sc-resume-row,
+#style-custom-workbench .sc-reading-queue-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 12px 16px; border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-resume-row + .sc-resume-row,
+#style-custom-workbench .sc-reading-queue-row + .sc-reading-queue-row { border-block-start: 0; }
+#style-custom-workbench .sc-resume-text { display: contents; }
+#style-custom-workbench .sc-resume-title { order: 0; flex: 1 1 100%; min-width: 0; font-weight: 600; font-size: 13px; }
+#style-custom-workbench .sc-resume-remark-box:has(.sc-resume-remark),
+#style-custom-workbench .sc-resume-remark-box:has(.sc-resume-memo-editor),
+#style-custom-workbench .sc-resume-last-annotation { order: 1; flex: 1 1 100%; min-width: 0; font-size: 12px; color: var(--sc-muted); }
+#style-custom-workbench .sc-resume-meta { order: 2; color: var(--sc-muted); font-size: 12px; white-space: normal; }
+#style-custom-workbench .sc-reading-file { order: 3; min-height: 24px; padding: 0 22px 0 10px; border-radius: var(--sc-radius-pill); font-size: 12px; max-width: 220px; }
+#style-custom-workbench .sc-resume-remark-box { order: 4; }
+#style-custom-workbench .sc-resume-remark-add { min-height: 0; padding: 0 2px; border: 0; background: none; box-shadow: none; color: var(--sc-muted); font-size: 12px; font-weight: 450; }
+#style-custom-workbench .sc-resume-remark-add:hover { color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-resume-actions { order: 5; margin-inline-start: auto; justify-self: auto; }
+#style-custom-workbench .sc-resume-row > .sc-reading-reconnect, #style-custom-workbench .sc-resume-row > .sc-reading-reconnect-note { order: 6; flex: 1 1 100%; }
+#style-custom-workbench .sc-resume-row > .sc-resume-folds { order: 7; flex: 1 1 100%; }
+#style-custom-workbench .sc-reading-queue-row > .sc-resume-text { display: flex; flex-direction: column; flex: 1 1 240px; min-width: 0; }
+#style-custom-workbench .sc-reading-queue-row > .sc-resume-text .sc-resume-title { flex: none; }
+#style-custom-workbench .sc-reading-queue-row > button:first-of-type { margin-inline-start: auto; }
+#style-custom-workbench .sc-section-head:has(+ .sc-resume), #style-custom-workbench .sc-section-head:has(+ .sc-reading-queue) { margin: 18px 0 0; padding: 0 4px; background: none; border-radius: 0; }
+#style-custom-workbench .sc-section-head:has(+ .sc-resume) .sc-section-head-count::before, #style-custom-workbench .sc-section-head:has(+ .sc-reading-queue) .sc-section-head-count::before { content: "\00B7\00A0"; }
+
+/* Narrow metrics: stars and read time keep their own width, units stay with their figures. */
+@container sc-workbench (max-width: 760px) {
+  #style-custom-workbench .sc-paper-card .sc-metric, #style-custom-workbench .sc-paper-card .sc-metric[data-metric] { flex: 0 0 auto; width: auto !important; }
+  #style-custom-workbench .sc-paper-card .sc-metric > * { flex: 0 0 auto; }
+  #style-custom-workbench .sc-paper-card .sc-stars .sc-metric-value { min-width: 0; letter-spacing: 0; }
+  #style-custom-workbench .sc-paper-card .sc-stars:has(.sc-metric-value:empty) { display: none; }
+  #style-custom-workbench .sc-paper-card .sc-metrics { row-gap: 4px; column-gap: 14px; }
+  #style-custom-workbench .sc-paper-card .sc-metric-value { min-width: 0 !important; }
+}
+
+/* Collections: each top-level collection is a soft grey group, its row the header. */
+#style-custom-workbench .sc-collection-tree { gap: 12px; padding-block-start: 8px; }
+#style-custom-workbench .sc-collection-group { display: flex; flex-direction: column; padding: 6px 8px 8px; border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-collection-group > .sc-collection { border-radius: 10px; padding-inline-start: calc(10px + var(--sc-depth, 0) * 18px); }
+#style-custom-workbench .sc-collection-group > .sc-collection:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-collection-group > .sc-collection[data-depth="0"] { padding-block: 8px; font-weight: 600; }
+#style-custom-workbench .sc-collection-group > .sc-collection[data-depth="0"]:hover { background: transparent; }
+#style-custom-workbench .sc-collection-line { flex-wrap: wrap; row-gap: 1px; }
+#style-custom-workbench .sc-collection-icon { color: var(--sc-muted); }
+#style-custom-workbench .sc-collection-name { font-weight: 500; }
+#style-custom-workbench .sc-collection[data-depth="0"] .sc-collection-name { font-weight: 600; }
+#style-custom-workbench .sc-collection-count { margin-inline-start: 0; font: 450 12px/1.4 var(--sc-font, inherit); }
+#style-custom-workbench .sc-collection-count::before { content: "\00B7\00A0"; }
+#style-custom-workbench .sc-collection-mixtext { flex: 1 0 100%; margin: 0; padding-inline-start: 22px; }
+#style-custom-workbench .sc-collection-empty .sc-collection-name { color: var(--sc-muted); font-weight: 450; }
