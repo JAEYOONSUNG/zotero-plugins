@@ -1,0 +1,641 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZotPoP search preview (fictional data)</title><style>/* ZotPoP — glass surfaces over Zotero's own light/dark chrome */
+:root {
+	color-scheme: light dark;
+	--bg: #eceef2;
+	--bg-tint: rgba(255, 255, 255, 0.62);
+	--glass: rgba(252, 252, 254, 0.72);
+	--glass-strong: rgba(252, 252, 254, 0.9);
+	--menu-bg: #ffffff;
+	--border: rgba(0, 0, 0, 0.10);
+	--border-strong: rgba(0, 0, 0, 0.20);
+	--text: #17171a;
+	--muted: #6a6a72;
+	--accent: #5477B3;
+	--accent-soft: rgba(84, 119, 179, 0.20);
+	--accent-text: #ffffff;
+	--row-alt: rgba(0, 0, 0, 0.022);
+	--row-hover: rgba(47, 111, 208, 0.09);
+	--row-sel: rgba(47, 111, 208, 0.17);
+	--ok: #3B8361;
+	--warn: #9B6D45;
+	--err: #B55B5E;
+	--chip: rgba(0, 0, 0, 0.06);
+	--shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 20px rgba(0, 0, 0, 0.07);
+	font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Helvetica, Arial, sans-serif;
+	font-size: 12px;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #1b1b1f;
+		--bg-tint: rgba(255, 255, 255, 0.04);
+		--glass: rgba(44, 44, 50, 0.72);
+		--glass-strong: rgba(44, 44, 50, 0.92);
+		--menu-bg: #2c2c32;
+		--border: rgba(255, 255, 255, 0.10);
+		--border-strong: rgba(255, 255, 255, 0.20);
+		--text: #ebebf0;
+		--muted: #9c9ca6;
+		--accent: #809DD0;
+		--accent-text: #10131a;
+		--accent-soft: rgba(128, 157, 208, 0.26);
+		--row-alt: rgba(255, 255, 255, 0.028);
+		--row-hover: rgba(92, 155, 245, 0.14);
+		--row-sel: rgba(92, 155, 245, 0.24);
+		--ok: #41AF7C;
+		--warn: #C69164;
+		--err: #D3888A;
+		--chip: rgba(255, 255, 255, 0.09);
+		--shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.34);
+	}
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; color: var(--text); overflow: hidden; }
+body {
+	background:
+		radial-gradient(1100px 520px at 8% -12%, var(--accent-soft), transparent 62%),
+		radial-gradient(900px 460px at 108% 8%, var(--accent-soft), transparent 58%),
+		var(--bg);
+}
+#app { display: flex; flex-direction: column; height: 100vh; }
+.search-modes { display: flex; gap: 5px; padding: 8px 13px 0; }
+.search-modes button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.search-modes button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.author-panel { padding: 12px 13px; border-bottom: 1px solid var(--border); }
+.author-query { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 9px; }
+.author-actions { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 1px; }
+.author-help { margin: 8px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.author-profiles { display: flex; flex-wrap: wrap; gap: 8px; max-height: 180px; overflow: auto; }
+.author-profile { display: flex; flex: 1 1 250px; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; min-width: 0; }
+.author-profile.selected { border-color: var(--accent); background: var(--accent-soft); }
+.author-profile-info { min-width: 0; }
+.author-profile-name { font-weight: 650; }
+.author-profile-meta { color: var(--muted); font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
+.author-profile-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+.sprite { display: none; }
+.ic { width: 14px; height: 14px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
+.ic.muted { color: var(--muted); }
+
+.glass {
+	background: var(--glass);
+	backdrop-filter: saturate(180%) blur(22px);
+	-webkit-backdrop-filter: saturate(180%) blur(22px);
+}
+
+/* ---------------------------------------------------------------- controls */
+.row { display: flex; align-items: center; gap: 6px; }
+.spacer { flex: 1; }
+.sep { width: 1px; height: 17px; background: var(--border-strong); margin: 0 3px; opacity: .7; }
+.dash { color: var(--muted); }
+
+input[type=text], input[type=number], input[type=search], select {
+	font: inherit; padding: 4px 7px; color: var(--text);
+	border: 1px solid var(--border-strong); border-radius: 6px;
+	background: var(--bg-tint);
+	transition: border-color .12s, box-shadow .12s, background .12s;
+}
+input::placeholder { color: var(--muted); }
+input:hover, select:hover { border-color: var(--accent); }
+input:focus, select:focus, button:focus-visible {
+	outline: none; border-color: var(--accent);
+	box-shadow: 0 0 0 3px var(--accent-soft);
+}
+select { appearance: none; padding-right: 20px;
+	background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+	background-position: right 9px center, right 5px center;
+	background-size: 4px 4px, 4px 4px;
+	background-repeat: no-repeat;
+}
+
+button {
+	font: inherit; padding: 4px 10px; color: var(--text); cursor: pointer;
+	border: 1px solid var(--border-strong); border-radius: 6px;
+	background: var(--glass-strong);
+	transition: background .12s, border-color .12s, transform .04s;
+}
+button.icon-text { display: inline-flex; align-items: center; gap: 5px; }
+button:hover:not(:disabled) { background: var(--row-hover); border-color: var(--accent); }
+button:active:not(:disabled) { transform: translateY(0.5px); }
+button:disabled { opacity: .42; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+button.preview-action { color: var(--accent); border-color: var(--accent); white-space: nowrap; }
+button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.09); }
+button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: transparent; color: var(--text); }
+
+/* ---------------------------------------------------------------- query bar */
+.query {
+	display: flex; flex-wrap: wrap; gap: 8px 11px; padding: 11px 13px;
+	border-bottom: 1px solid var(--border);
+}
+.field { display: flex; flex-direction: column; gap: 3px; min-width: 112px; }
+.field.grow { flex: 1 1 170px; }
+.field.grow2 { flex: 2 1 240px; }
+.field.narrow { width: 82px; min-width: 82px; }
+.field.years .row input { width: 64px; }
+.field label { font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: var(--muted); }
+
+/* ---------------------------------------------------------------- banner */
+.banner {
+	display: flex; align-items: center; gap: 8px; padding: 7px 13px;
+	background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--glass);
+	backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+	border-bottom: 1px solid var(--border); color: var(--text);
+}
+.banner button { border: none; background: transparent; font-size: 15px; line-height: 1; padding: 0 4px; color: var(--muted); }
+
+/* ---------------------------------------------------------------- layout */
+#main { display: flex; flex: 1 1 auto; min-height: 0; }
+#metrics { width: 190px; flex: 0 0 auto; padding: 11px 13px; overflow: auto; border-right: 1px solid var(--border); }
+#metrics h3 { margin: 0 0 9px; font-size: 12px; letter-spacing: .01em; }
+#metrics-table { width: 100%; border-collapse: collapse; }
+#metrics-table td { padding: 3.5px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
+#metrics-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; color: var(--text); }
+#metrics-table tr.hl td, #metrics-table tr.hl td:last-child { color: var(--accent); }
+.hint { color: var(--muted); font-size: 10.5px; margin-top: 11px; line-height: 1.5; }
+
+.splitter-v { flex: 0 0 5px; cursor: col-resize; background: transparent; border-right: 1px solid transparent; }
+.splitter-v:hover, .splitter-v.dragging { background: var(--accent-soft); }
+.splitter-h { height: 5px; cursor: row-resize; background: transparent; }
+.splitter-h:hover, .splitter-h.dragging { background: var(--accent-soft); }
+
+#results { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 7px 11px; border-bottom: 1px solid var(--border); }
+.searchbox { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; flex: 1 1 140px; width: auto; max-width: 250px;
+	border: 1px solid var(--border-strong); border-radius: 999px; background: var(--bg-tint); }
+.searchbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.searchbox input { border: none; background: transparent; padding: 1px 0; width: 100%; }
+.searchbox input:focus { box-shadow: none; border: none; }
+.filter-clear { border: 0; background: transparent; color: var(--muted); padding: 0 2px; line-height: 1; cursor: pointer; font-size: 14px; }
+.filter-clear:hover { color: var(--text); }
+
+/* ---------------------------------------------------------------- table */
+.table-wrap { flex: 1 1 auto; overflow: auto; position: relative; }
+.table-wrap:focus { outline: none; }
+#results-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
+#results-table th, #results-table td {
+	padding: 6px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+	border-bottom: 1px solid var(--border);
+}
+#results-table th {
+	position: sticky; top: 0; z-index: 2; cursor: pointer; user-select: none;
+	font-weight: 650; font-size: 11px; color: var(--muted);
+	background: var(--glass-strong);
+	backdrop-filter: saturate(180%) blur(22px); -webkit-backdrop-filter: saturate(180%) blur(22px);
+	border-bottom: 1px solid var(--border-strong);
+}
+#results-table th:hover { color: var(--text); }
+#results-table th[draggable="true"] { cursor: grab; }
+#results-table th.column-dragging { opacity: .45; cursor: grabbing; }
+#results-table th.column-drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+#results-table th.column-drop-after { box-shadow: inset -3px 0 0 var(--accent); }
+#results-table th .rz { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; }
+#results-table th .rz:hover { background: var(--accent); opacity: .5; }
+/* The sort mark sits outside the header's text, so "Rank" does not become "Ra…" the moment it is sorted. */
+#results-table th[data-sort] { padding-right: 18px; }
+#results-table th.num[data-sort] { padding: 6px 8px 6px 18px; }
+#results-table th.sorted-asc::after, #results-table th.sorted-desc::after { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 8px; color: var(--accent); }
+#results-table th.num.sorted-asc::after, #results-table th.num.sorted-desc::after { right: auto; left: 6px; }
+#results-table th.sorted-asc::after { content: "▲"; }
+#results-table th.sorted-desc::after { content: "▼"; }
+#results-table td.num, #results-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+#results-table th.mini, #results-table td.mini { text-align: center; }
+#results-table td.doi a.doi-link { color: inherit; text-decoration: none; }
+#results-table td.doi a.doi-link:hover { text-decoration: underline; color: var(--accent); }
+#results-table td[role="button"] { cursor: pointer; }
+#results-table td[role="button"]:hover { color: var(--accent); }
+.marquee-text { display: block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; scroll-behavior: auto; }
+/* At rest a cell shows its beginning with an ellipsis; the row under the pointer rolls once. */
+#results-table tbody tr:hover:not(.selected) td { background: var(--row-hover); }
+#results-table td.title { font-weight: 500; }
+.marquee-overflow .marquee-text { text-overflow: ellipsis; }
+.marquee-overflow.marquee-active .marquee-text { text-overflow: clip; }
+.marquee-reduced .marquee-text { text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) {
+	.marquee-text { scroll-behavior: auto; text-overflow: ellipsis; }
+}
+#results-table tbody tr:nth-child(even) { background: var(--row-alt); }
+#results-table tbody tr:hover { background: var(--row-hover); }
+#results-table tbody tr.selected { background: var(--row-sel); }
+#results-table tbody tr.focused td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+#results-table tbody tr.focused { outline: 1px solid var(--accent); outline-offset: -1px; }
+#results-table tbody tr.in-library td.title { color: var(--muted); }
+.chk { width: 28px; }
+th.chk, td.chk { text-align: center; padding: 4px 2px; }
+td.lib { color: var(--ok); font-weight: 700; }
+td.pdf { color: var(--accent); }
+td.status.ok { color: var(--ok); }
+td.status.warn { color: var(--warn); }
+td.status.err { color: var(--err); }
+.empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 9px; padding-inline: max(24px, calc(50% - 22ch)); text-align: center; text-wrap: pretty; color: var(--muted); pointer-events: none; }
+#busy { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------- detail */
+#detail { height: 190px; flex: 0 0 auto; overflow: auto; padding: 11px 13px; border-top: 1px solid var(--border); }
+.detail-empty { color: var(--muted); padding: 6px 0; }
+.detail-head { display: flex; align-items: flex-start; gap: 10px; }
+.d-title { font-size: 13.5px; font-weight: 650; line-height: 1.4; flex: 1; }
+.badges { display: flex; gap: 4px; flex-wrap: wrap; }
+.badge { background: var(--chip); color: var(--muted); border-radius: 999px; padding: 1.5px 9px; font-size: 10.5px; white-space: nowrap; }
+.badge.cite { background: var(--accent); color: var(--accent-text); font-weight: 650; }
+.badge.lib { background: var(--ok); color: var(--accent-text); }
+.badge.if { background: var(--warn); color: var(--accent-text); font-weight: 650; }
+td.if { color: var(--text); font-weight: 650; }
+td.if.estimate { color: var(--muted); font-weight: 500; }
+
+/* ---------------------------------------------------------------- journal mark */
+/* The publisher's lettermark, in its colour, ahead of the journal's name. The
+   colour lives on the mark alone; the name stays in ink so the column reads. */
+.jmark {
+	display: inline-flex; align-items: center; justify-content: center; vertical-align: -2px; margin-right: 5px;
+	min-width: 22px; height: 14px; padding: 0 3px; border-radius: 3px;
+	font-size: 9px; font-weight: 700; letter-spacing: .02em; line-height: 1; white-space: nowrap;
+	font-variant-numeric: normal;
+}
+.badges .jmark { height: 18px; min-width: 26px; font-size: 10px; border-radius: 999px; padding: 0 7px; }
+
+/* ---------------------------------------------------------------- affiliation */
+/* The country cell is a flag and a code; the tier cell is a chip whose colour says
+   how the lab stands, so a column of them reads at a glance. */
+td.country { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.tier { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 650; line-height: 1.5; white-space: nowrap; }
+.tier-t1 { background: var(--accent); color: var(--accent-text); }
+.tier-t2 { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
+.tier-t3 { background: var(--chip); color: var(--muted); }
+.tier-t4 { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+.d-where { margin-top: 4px; color: var(--muted); line-height: 1.5; }
+.d-where .tier { margin-left: 4px; vertical-align: 1px; }
+
+/* ---------------------------------------------------------------- recent searches */
+.histmenu { min-width: 320px; max-width: 560px; }
+.histmenu .histopt { display: flex; flex-direction: column; gap: 1px; padding: 5px 11px; border-radius: 5px; cursor: pointer; }
+.histmenu .histopt:hover, .histmenu .histopt.hot { background: var(--accent); color: var(--accent-text); }
+.histmenu .histopt .h-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.histmenu .histopt .h-meta { font-size: 10.5px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.histmenu .histempty { padding: 7px 11px; color: var(--muted); }
+.histmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
+.histmenu .histclear { padding: 5px 11px; border-radius: 5px; cursor: pointer; color: var(--muted); }
+.histmenu .histclear:hover { background: var(--row-hover); color: var(--text); }
+.d-authors { margin-top: 5px; }
+.d-meta { margin-top: 3px; color: var(--muted); }
+.d-actions { display: flex; gap: 6px; margin: 10px 0 9px; flex-wrap: wrap; }
+.d-abstract { line-height: 1.6; white-space: pre-wrap; }
+
+/* ---------------------------------------------------------------- bottom bars */
+#import-bar { display: flex; align-items: center; gap: 12px; padding: 9px 13px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+#import-bar .sel { max-width: 300px; }
+label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); white-space: nowrap; }
+#selected-count { font-variant-numeric: tabular-nums; color: var(--muted); }
+#statusbar { display: flex; align-items: center; gap: 10px; padding: 5px 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; background: var(--bg-tint); }
+#statusbar.err #status { color: var(--err); }
+#statusbar.warn #status { color: var(--warn); }
+#progress { width: 190px; }
+
+/* ---------------------------------------------------------------- context menu */
+.ctxmenu {
+	position: fixed; z-index: 50; min-width: 190px; padding: 5px;
+	background: var(--glass-strong); backdrop-filter: saturate(180%) blur(26px); -webkit-backdrop-filter: saturate(180%) blur(26px);
+	border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: var(--shadow);
+}
+.ctxmenu div { padding: 5px 11px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.ctxmenu div:hover { background: var(--accent); color: var(--accent-text); }
+.ctxmenu div.disabled { opacity: .38; pointer-events: none; }
+.ctxmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
+
+/* ---------------------------------------------------------------- dropdowns */
+.sel { position: relative; display: flex; }
+.sel > select { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.sel-btn {
+	flex: 1 1 auto; display: flex; align-items: center; gap: 6px;
+	font: inherit; padding: 4px 7px; color: var(--text); text-align: left; cursor: pointer;
+	border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-tint);
+	white-space: nowrap; overflow: hidden;
+}
+.sel-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.sel-caret { flex: 0 0 auto; width: 0; height: 0; border-left: 3.5px solid transparent; border-right: 3.5px solid transparent; border-top: 4px solid currentColor; opacity: .65; }
+.sel-btn:hover { border-color: var(--accent); background: var(--bg-tint); }
+.sel-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.selmenu {
+	position: fixed; z-index: 60; padding: 5px; overflow-y: auto;
+	background: var(--menu-bg); border: 1px solid var(--border-strong);
+	border-radius: 9px; box-shadow: var(--shadow);
+}
+.selopt { padding: 5px 11px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.selopt.on { font-weight: 650; }
+.selopt.hot { background: var(--accent); color: var(--accent-text); }
+
+/* ---------------------------------------------------------------- proxy login window */
+#pl-bar { border-bottom: 1px solid var(--border); }
+.pl-url { color: var(--muted); font-size: 11px; max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-intro { margin: 0; padding: 9px 13px; color: var(--muted); line-height: 1.5; border-bottom: 1px solid var(--border); }
+#pl-browser-host { flex: 1 1 auto; display: flex; min-height: 0; }
+#pl-browser { flex: 1 1 auto; border: none; }
+
+/* A source badge wears its own mark: nine services rendered as identical grey
+   text is a list you read one word at a time. */
+.badge.src { display: inline-flex; align-items: center; gap: 5px; }
+.badge .brand-mark { flex: none; width: 12px; height: 12px; opacity: .85; }
+
+/* Narrow windows: the toolbar and the detail actions keep their icons and drop their words (tooltips remain). */
+@media (max-width: 1000px) {
+	.toolbar .ghost span, .d-actions button span { display: none; }
+	.d-actions button { padding: 4px 7px; }
+}
+#toggle-metrics[aria-pressed="false"] { color: var(--muted); }
+.table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* The metrics sidebar before any search: one line saying what will appear, not a column of dashes. */
+.metrics-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+/* Which index the statistics are read from: plain buttons, the pressed one a step darker. */
+.metrics-basis { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 4px; }
+.metrics-basis button { font-size: 12px; padding: 2px 8px; border-radius: 4px; }
+.metrics-basis button[aria-pressed="true"] { font-weight: 600; }
+
+/* Optional search coverage stays with the query controls. */
+.combined-options { flex: 0 0 auto; padding: 6px 16px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.combined-options summary { cursor: pointer; color: var(--muted); }
+.combined-source-list { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 8px; }
+.combined-source-list label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.combined-options p { margin: 8px 0 0; color: var(--muted); }
+
+.pop-native-fields { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-top: 8px; }
+.pop-native-fields label { display: flex; flex: 1 1 150px; flex-direction: column; gap: 4px; }
+.pop-native-fields .pop-raw-field { flex-basis: 100%; }
+
+/* A banner that reports a failure cannot look like one that offers a hint. */
+.banner.warn { background: linear-gradient(rgba(155, 109, 69, .16), rgba(155, 109, 69, .16)), var(--glass); }
+/* An identifier is not prose: a DOI is read character by character. */
+#results-table td[data-k="doi"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+/* Korean at the Latin size reads a step small; the lang attribute is already set. */
+html[lang="ko"] .field label, html[lang="ko"] .hint, html[lang="ko"] #results-table th { font-size: 11.5px; }
+</style></head><body>
+<svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
+	<symbol id="ic-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" /><path d="M10.4 10.4 14 14" /></symbol>
+	<symbol id="ic-stop" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.2" /></symbol>
+	<symbol id="ic-clear" viewBox="0 0 16 16"><path d="M3 3.5h10M6.5 3.5V2.5h3v1M4.5 3.5l.7 9a1 1 0 0 0 1 .9h3.6a1 1 0 0 0 1-.9l.7-9" /></symbol>
+	<symbol id="ic-all" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2" /><path d="M5.2 8.2 7.2 10.3l3.6-4" /></symbol>
+	<symbol id="ic-none" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2" /></symbol>
+	<symbol id="ic-new" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2" /><path d="M8 5.4v5.2M5.4 8h5.2" /></symbol>
+	<symbol id="ic-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6" /><path d="M10.5 5.5v-1a1.5 1.5 0 0 0-1.5-1.5H4a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 4 11h1" /></symbol>
+	<symbol id="ic-save" viewBox="0 0 16 16"><path d="M8 2.5v7.5M5 7.2 8 10.2l3-3M2.8 12.5h10.4" /></symbol>
+	<symbol id="ic-panel" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2" /><path d="M2.5 10h11" /></symbol>
+	<symbol id="ic-external" viewBox="0 0 16 16"><path d="M9 3h4v4M13 3 7.6 8.4M12 9.5v3A1.5 1.5 0 0 1 10.5 14h-7A1.5 1.5 0 0 1 2 12.5v-7A1.5 1.5 0 0 1 3.5 4h3" /></symbol>
+	<symbol id="ic-pdf" viewBox="0 0 16 16"><path d="M4 2.5h5l3 3v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z" /><path d="M9 2.5v3h3" /><path d="M5.4 11.6V8.9h1a.9.9 0 0 1 0 1.8h-1" /></symbol>
+	<symbol id="ic-library" viewBox="0 0 16 16"><path d="M2.5 13.5h11M3.5 13.5V6.2M6.5 13.5V6.2M9.5 13.5V6.2M12.5 13.5V6.2M8 2.2l5.5 3.2h-11z" /></symbol>
+	<symbol id="ic-plus" viewBox="0 0 16 16"><path d="M8 3.2v9.6M3.2 8h9.6" /></symbol>
+	<symbol id="ic-history" viewBox="0 0 16 16"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8M2.6 2.8v3h3M8 5.2V8l2 1.4" /></symbol>
+	<symbol id="ic-quote" viewBox="0 0 16 16"><path d="M6.3 4.5C4.6 5.3 3.5 6.8 3.5 8.6c0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2zM12.6 4.5c-1.7.8-2.8 2.3-2.8 4.1 0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2z" /></symbol>
+</svg>
+
+<div id="app">
+	<nav class="search-modes" aria-label="Search mode">
+		<button id="mode-papers" type="button" aria-pressed="true" data-i18n="modePapers">Paper search</button>
+		<button id="mode-authors" type="button" aria-pressed="false" data-i18n="modeAuthors">Author search</button>
+	</nav>
+	<section id="author-panel" class="author-panel glass" hidden>
+		<form id="author-form" class="author-query" onsubmit="return false;">
+			<label class="field"><span data-i18n="authorProvider">Author registry</span><select id="author-provider"><option selected value="scholar">Google Scholar</option><option value="orcid">ORCID</option></select></label>
+			<label id="author-input-kind-field" class="field"><span data-i18n="authorInputKind">Scholar input</span><select id="author-input-kind"><option selected value="auto" data-i18n="authorAutoKind">Detect from input</option><option value="name" data-i18n="authorNameKind">Author name</option><option value="profile" data-i18n="authorProfileKind">Profile URL / ID</option></select></label>
+			<label class="field grow2"><span id="author-input-label" data-i18n="authorScholarInput">Author name or Scholar profile URL / ID</span><input value="" id="author-input" type="text" autocomplete="off"></label>
+			<label class="field narrow"><span data-i18n="maxResults">Max results</span><input id="author-max-results" type="number" min="1" max="2000" value="1000"></label>
+			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary" data-i18n="findAuthorProfiles">Find profiles</button><button id="author-name-btn" type="button" data-i18n="authorNamePapers">Search papers by name</button><button id="author-stop-btn" type="button" disabled="disabled" data-i18n="stop">Stop</button><button id="author-history-btn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n="history">Recent</button></div>
+		</form>
+		<p id="author-help" class="author-help"></p>
+		<div id="author-profiles" class="author-profiles" aria-live="polite"></div>
+	</section>
+	<form id="query-form" class="query glass" onsubmit="return false;">
+		<div class="field">
+			<label for="engine" data-i18n="engine">Search engine</label>
+			<div class="sel"><select aria-hidden="true" tabindex="-1" id="engine"><option selected value="direct" data-i18n="engineDirect">ZotPoP combined / direct</option><option value="pop" data-i18n="enginePoP">Publish or Perish — original results</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">ZotPoP combined / direct</span><span class="sel-caret"></span></button></div>
+		</div>
+		<div class="field">
+			<label for="source" data-i18n="source">Source</label>
+			<div class="sel"><select aria-hidden="true" tabindex="-1" id="source"><option value="openalex">OpenAlex</option><option value="crossref">Crossref</option><option value="semanticscholar">Semantic Scholar</option><option value="pubmed">PubMed</option><option value="europepmc">Europe PMC (articles + preprints)</option><option value="preprint">Preprints (bioRxiv · medRxiv · Research Square · arXiv)</option><option value="arxiv">arXiv</option><option value="osf">OSF Preprints (PsyArXiv, SocArXiv, engrXiv, bioHackrXiv, ...)</option><option value="scholar">Google Scholar</option><option selected value="multi">Combined (selected sources)</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">Combined (selected sources)</span><span class="sel-caret"></span></button></div>
+		</div>
+		<div class="field grow">
+			<label for="authors" data-i18n="authors">Authors</label>
+			<input title="Use ORCID or an OpenAlex author ID with OpenAlex or Combined to identify a person precisely. Names support AND, OR, NOT and parentheses; matching a name alone does not establish identity." placeholder="Name, ORCID or OpenAlex author ID" id="authors" type="text" data-i18n-ph="authorsPh" data-i18n-title="authorsHelp">
+		</div>
+		<div class="field grow">
+			<label for="venue" data-i18n="venue">Publication</label>
+			<input placeholder="e.g. Nucleic Acids Research" id="venue" type="text" data-i18n-ph="venuePh">
+		</div>
+		<div class="field grow">
+			<label for="title" data-i18n="titleWords">Title words</label>
+			<input title="Title words support AND, OR, NOT and parentheses. Put an exact phrase in double quotes." placeholder="all words must appear in the title" id="title" type="text" data-i18n-ph="titlePh" data-i18n-title="titleHelp">
+		</div>
+		<div class="field grow2">
+			<label for="keywords" data-i18n="keywords">Keywords (any field)</label>
+			<input value="tissue repair" placeholder="e.g. CRISPR base editing" id="keywords" type="text" data-i18n-ph="keywordsPh">
+		</div>
+		<div class="field years">
+			<label data-i18n="years">Years</label>
+			<div class="row">
+				<input placeholder="from" id="yearFrom" type="number" min="1500" max="2100" data-i18n-ph="yearFromPh">
+				<span class="dash">–</span>
+				<input placeholder="to" id="yearTo" type="number" min="1500" max="2100" data-i18n-ph="yearToPh">
+			</div>
+		</div>
+		<div class="field" id="direct-sort-field">
+			<label for="sort" data-i18n="sort">Sort</label>
+			<div class="sel"><select aria-hidden="true" tabindex="-1" id="sort">
+				<option selected value="relevance" data-i18n="sortRelevance">Relevance</option>
+				<option value="citations" data-i18n="sortCitations">Citations</option>
+				<option value="date" data-i18n="sortDate">Newest</option>
+			</select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">Relevance</span><span class="sel-caret"></span></button></div>
+		</div>
+		<div class="field" id="pop-sort-field" hidden>
+			<label for="popOutputSort" data-i18n="popOutputSort">PoP output order</label>
+			<div class="sel"><select aria-hidden="true" tabindex="-1" id="popOutputSort"><option selected value="rank">PoP rank ↑</option><option value="-rank">PoP rank ↓</option><option value="author">Authors ↑</option><option value="-author">Authors ↓</option><option value="cites">Cites ↑</option><option value="-cites">Cites ↓</option><option value="cites_annual">Per year ↑</option><option value="-cites_annual">Per year ↓</option><option value="cites_norm">Citations per author ↑</option><option value="-cites_norm">Citations per author ↓</option><option value="source">Publication ↑</option><option value="-source">Publication ↓</option><option value="title">Title ↑</option><option value="-title">Title ↓</option><option value="year">Years ↑</option><option value="-year">Years ↓</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">PoP rank ↑</span><span class="sel-caret"></span></button></div>
+		</div>
+		<div class="field narrow">
+			<label for="maxResults" data-i18n="maxResults">Max results</label>
+			<input id="maxResults" type="number" min="1" max="2000" value="1000">
+		</div>
+		<div class="field buttons">
+			<label>&#160;</label>
+			<div class="row">
+				<button id="search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search" /></svg><span data-i18n="search">Search</span></button>
+				<button disabled id="stop-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop" /></svg><span data-i18n="stop">Stop</span></button>
+				<button id="clear-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-clear" /></svg><span data-i18n="clear">Clear</span></button>
+				<button title="Reopen a recent search with the results it fetched — nothing is asked of the APIs again" id="history-btn" type="button" class="icon-text" data-i18n-title="historyTip" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history" /></svg><span data-i18n="history">Recent</span></button>
+			</div>
+		</div>
+	</form>
+	<details id="pop-options" class="combined-options" hidden>
+		<summary data-i18n="popOptions">PoP native query options</summary>
+		<p data-i18n="popNativeHelp">Available fields and syntax depend on the selected PoP source. Output order sorts retrieved rows; it does not change which rows the provider retrieves.</p>
+		<div class="pop-native-fields">
+			<label><span data-i18n="popCachePolicy">Retrieval</span><div class="sel"><select aria-hidden="true" tabindex="-1" id="popCachePolicy" form="query-form"><option selected value="refresh" data-i18n="popRefresh">Retrieve fresh results</option><option value="offline" data-i18n="popOffline">Read PoP stored results (offline)</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">Retrieve fresh results</span><span class="sel-caret"></span></button></div></label>
+			<label><span data-i18n="popAffiliation">Affiliation</span><input id="affiliation" type="text" form="query-form"></label>
+			<label>ISSN<input id="issn" type="text" form="query-form"></label>
+			<label><span data-i18n="popCitedId">Citing references / profile ID</span><input id="citedId" type="text" form="query-form"></label>
+			<label><span data-i18n="popField">Field of study</span><input id="field" type="text" form="query-form"></label>
+			<label class="pop-raw-field"><span data-i18n="popRaw">Native query (--raw)</span><input title="Use only a native query, or the ordinary fields. Do not combine them." id="popRaw" type="text" form="query-form" data-i18n-title="popRawHelp"></label>
+		</div>
+	</details>
+	<details id="combined-options" class="combined-options">
+		<summary data-i18n="combinedSources">Choose combined search sources</summary>
+		<div class="combined-source-list">
+			<label><input id="multi-source-openalex" type="checkbox" checked> OpenAlex</label>
+			<label><input id="multi-source-crossref" type="checkbox" checked> Crossref</label>
+			<label><input id="multi-source-europepmc" type="checkbox" checked> Europe PMC</label>
+			<label><input id="multi-source-arxiv" type="checkbox" checked> arXiv</label>
+			<label><input id="multi-source-pubmed" type="checkbox"> PubMed</label>
+			<label><input id="multi-source-semanticscholar" type="checkbox"> Semantic Scholar</label>
+			<label><input id="multi-source-scholar" type="checkbox"> Google Scholar</label>
+		</div>
+		<p data-i18n="combinedSourcesHelp">Add PubMed, Semantic Scholar or Google Scholar to broaden the search. Google Scholar uses the installed PoP engine when available; each service may apply its own request limits.</p>
+	</details>
+
+	<div hidden id="banner" class="banner"><span id="banner-text">Combined searches the selected sources and merges verified copies. Expand “Choose combined search sources” to add PubMed, Semantic Scholar or Google Scholar. Incomplete sources are reported.</span><span class="spacer"></span><button id="banner-action" type="button" class="primary" hidden></button><button id="banner-close" type="button">×</button></div>
+
+	<div id="main">
+		<aside id="metrics" class="glass">
+			<h3 data-i18n="metricsTitle">Citation metrics</h3>
+			<p id="metrics-hint" class="metrics-hint" data-i18n="metricsHint">1 of 12 papers have no citation count; they are left out of citations per paper, not counted as zero. Citation counts come from several indexes (OpenAlex, Crossref, Europe PMC (articles + preprints)), the highest kept per paper: read the h-index as a reference figure, not one index's.</p>
+			<div aria-label="Which index the statistics use" role="group" class="metrics-basis" id="metrics-basis"><button aria-pressed="true" type="button">Highest per paper</button><button aria-pressed="false" type="button">OpenAlex</button><button aria-pressed="false" type="button">Crossref</button><button aria-pressed="false" type="button">Europe PMC (articles + preprints)</button></div><table id="metrics-table">
+				<tr><td data-i18n="mYears">Publication years</td><td id="m-years">2022–2026</td></tr>
+				<tr><td data-i18n="mCitationYears">Citation years</td><td id="m-cyears">4</td></tr>
+				<tr><td data-i18n="mPapers">Papers</td><td id="m-papers">12</td></tr>
+				<tr><td data-i18n="mCitations">Citations</td><td id="m-citations">803</td></tr>
+				<tr><td data-i18n="mCitesPerYear">Cites/year</td><td id="m-cpy">200.75</td></tr>
+				<tr><td data-i18n="mCitesPerPaper">Cites/paper</td><td id="m-cpp">73.00</td></tr>
+				<tr><td data-i18n="mCitesPerAuthor">Cites/author</td><td id="m-cpa">362.83</td></tr>
+				<tr><td data-i18n="mPapersPerAuthor">Papers/author</td><td id="m-ppa">6.17</td></tr>
+				<tr><td data-i18n="mAuthorsPerPaper">Authors/paper</td><td id="m-app">2.08</td></tr>
+				<tr class="hl"><td>h-index</td><td id="m-h">9</td></tr>
+				<tr class="hl"><td>g-index</td><td id="m-g">12</td></tr>
+				<tr><td>hI,norm</td><td id="m-hinorm">7</td></tr>
+				<tr><td>hI,annual</td><td id="m-hiannual">1.75</td></tr>
+				<tr><td>hA-index</td><td id="m-ha">8</td></tr>
+			</table>
+			<p class="hint" data-i18n="metricsScope">Computed from the filtered results shown. Combined searches can mix citation indexes; hover a citation count to see its source.</p>
+		</aside>
+
+		<div id="vsplit" class="splitter-v"></div>
+
+		<section id="results">
+			<div class="toolbar glass">
+				<span class="searchbox">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic muted"><use href="#ic-search" /></svg>
+					<input value="" placeholder="Filter results… (⌘F)" id="filter" type="search" data-i18n-ph="filterPh">
+					<button title="Clear the filter" id="filter-clear" type="button" class="filter-clear" data-i18n-title="filterClear" aria-label="clear" hidden>×</button>
+				</span>
+				<span class="spacer"></span>
+				<button title="Open the first PDF page in a separate window (P)" id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf" /></svg><span data-i18n="previewAction">Preview</span></button>
+				<button title="Select every result shown (⌘A)" id="select-all" type="button" data-i18n-title="selAllTip" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-all" /></svg><span data-i18n="selAll">All</span></button>
+				<button title="Deselect everything" id="select-none" type="button" data-i18n-title="selNoneTip" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-none" /></svg><span data-i18n="selNone">None</span></button>
+				<button title="Select only papers that are not in your library yet" id="select-new" type="button" class="ghost icon-text" data-i18n-title="selNewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-new" /></svg><span data-i18n="selNew">Not in library (11)</span></button>
+				<span class="sep"></span>
+				<button title="Copy the visible results to the clipboard as CSV" id="copy-csv" type="button" class="ghost icon-text" data-i18n-title="copyCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy" /></svg><span data-i18n="copyCsv">Copy CSV</span></button>
+				<button id="copy-pop-json" type="button" class="ghost icon-text" hidden data-i18n="popOriginalJSON">Copy original PoP JSON</button>
+				<button title="Save the visible results to your desktop as a CSV file" id="save-csv" type="button" class="ghost icon-text" data-i18n-title="saveCsvTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-save" /></svg><span data-i18n="saveCsv">Save CSV</span></button>
+				<button title="Show or hide the citation metrics sidebar" id="toggle-metrics" type="button" class="ghost icon-text" data-i18n-title="metricsTip" aria-pressed="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-panel" /></svg><span data-i18n="metricsToggle">Metrics</span></button>
+				<button title="Show or hide the detail pane" id="toggle-detail" type="button" class="ghost icon-text" data-i18n-title="detailTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-panel" /></svg><span id="toggle-detail-label">Details ▾</span></button>
+			</div>
+			<div class="table-wrap" id="table-wrap" tabindex="0">
+				<table id="results-table">
+					<colgroup id="cols">
+						
+						
+							
+						
+					<col style="width:28px" data-k="chk"><col style="width:56px" data-k="citations"><col style="width:74px" data-k="cpy"><col style="width:60px" data-k="rank"><col style="width:190px" data-k="authorString"><col style="width:320px" data-k="title"><col style="width:58px" data-k="year"><col style="width:150px" data-k="venue"><col style="width:64px" data-k="journalIF"><col style="width:150px" data-k="affiliation"><col style="width:62px" data-k="country"><col style="width:56px" data-k="tier"><col style="width:150px" data-k="doi"><col style="width:44px" data-k="pdf"><col style="width:44px" data-k="inLibrary"><col style="width:96px" data-k="status"></colgroup>
+					<thead>
+						<tr id="results-head">
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+						<th class="chk" data-k="chk"><input title="Select every visible result" id="chk-all" type="checkbox" data-i18n-title="chkAllTip"></th><th draggable="true" data-k="citations" title="Citation count from the source; hover a cell to see which
+Drag to move this column; click to sort." data-sort="citations" class="num" data-i18n-title="thCitesTip"><span data-i18n="thCites">Cites</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th draggable="true" data-k="cpy" title="Citations ÷ years since publication (this year counts as one)
+Drag to move this column; click to sort." data-sort="cpy" class="num" data-i18n-title="thPerYearTip"><span data-i18n="thPerYear">Per year</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th draggable="true" data-k="rank" title="Position in the source's own result order
+Drag to move this column; click to sort." data-sort="rank" class="num sorted-asc" data-i18n-title="thRankTip"><span data-i18n="thRank">Rank</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th title="Drag to move this column; click to sort." draggable="true" data-k="authorString" data-sort="authorString"><span data-i18n="thAuthors">Authors</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th title="Drag to move this column; click to sort." draggable="true" data-k="title" data-sort="title"><span data-i18n="thTitle">Title</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th title="Drag to move this column; click to sort." draggable="true" data-k="year" data-sort="year" class="num"><span data-i18n="thYear">Year</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th title="Drag to move this column; click to sort." draggable="true" data-k="venue" data-sort="venue"><span data-i18n="thVenue">Publication</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th draggable="true" data-k="journalIF" title="Journal Impact Factor from the JCR 2026 release (JIF 2025). A value with ~ is OpenAlex's 2-year mean citedness, shown only for journals the JCR does not list.
+Drag to move this column; click to sort." data-sort="journalIF" class="num" data-i18n-title="thIFTip"><span data-i18n="thIF">IF</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th draggable="true" data-k="affiliation" title="Institution of the first author. Hover a cell for the corresponding author's as well.
+Drag to move this column; click to sort." data-sort="affiliation" data-i18n-title="thInstTip"><span data-i18n="thInst">1st author inst.</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th draggable="true" data-k="country" title="Country of the first and corresponding authors' institutions
+Drag to move this column; click to sort." data-sort="country" class="mini" data-i18n-title="thCountryTip"><span data-i18n="thCountry">Country</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th draggable="true" data-k="tier" title="Standing of the first or corresponding author's institution, from the OpenAlex h-index of everything it has published: T1 ≥ 1400, T2 ≥ 800, T3 ≥ 400, T4 below. A cut point, not a ranking.
+Drag to move this column; click to sort." data-sort="tier" class="mini" data-i18n-title="thTierTip"><span data-i18n="thTier">Tier</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th title="Drag to move this column; click to sort." draggable="true" data-k="doi" data-sort="doi"><span data-i18n="thDoi">DOI</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th draggable="true" data-k="pdf" title="A reachable PDF link is known
+Drag to move this column; click to sort." data-sort="pdf" class="mini" data-i18n-title="thPdfTip"><span data-i18n="thPdf">PDF</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th draggable="true" data-k="inLibrary" title="Already in your library
+Drag to move this column; click to sort." data-sort="inLibrary" class="mini" data-i18n-title="thLibTip"><span data-i18n="thLib">Lib</span><span title="Drag to resize · double-click to reset" class="rz"></span></th><th title="Drag to move this column; click to sort." draggable="true" data-k="status" data-sort="status"><span data-i18n="thStatus">Status</span></th></tr>
+					</thead>
+					<tbody id="results-body"><tr data-key="openalex:demo1"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: OpenAlex" class="num" data-k="citations">214</td><td class="num" data-k="cpy">214.00</td><td class="num" data-k="rank">1</td><td data-marquee="authors" title="Mina Kim, Alex Rivera, Jonas Park" data-k="authorString">Mina Kim, Alex Rivera, Jonas Park</td><td data-marquee="title" title="Mapping cellular responses across tissue repair
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Mapping cellular responses across tissue repair</span></td><td class="num" data-k="year">2025</td><td style="color:hsl(16 83% 36%);font-weight:600" data-marquee="venue" title="Nature Methods · Nat Methods · Nature Portfolio" class="venue venue-known" data-k="venue">Nature Methods</td><td title="~32.1 is an estimate: OpenAlex 2-year mean citedness (the journal is not in the JCR) · journal h-index 193" class="num if estimate" data-k="journalIF">~32.1</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.001</a></td><td role="button" title="A reachable PDF is known · click to preview it (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="crossref:demo2"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: Crossref" class="num" data-k="citations">97</td><td class="num" data-k="cpy">48.50</td><td class="num" data-k="rank">2</td><td data-marquee="authors" title="Sora Lee, Lin Chen" data-k="authorString">Sora Lee, Lin Chen</td><td data-marquee="title" title="A practical framework for reproducible literature synthesis
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>A practical framework for reproducible literature synthesis</span></td><td class="num" data-k="year">2024</td><td style="color:hsl(4 81% 36%);font-weight:600" data-marquee="venue" title="Science · Science" class="venue venue-known" data-k="venue">Science</td><td title="~45.8 is an estimate: OpenAlex 2-year mean citedness (the journal is not in the JCR) · journal h-index 275" class="num if estimate" data-k="journalIF">~45.8</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.002</a></td><td role="button" title="A reachable PDF is known · click to preview it (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="openalex:demo3"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: OpenAlex" class="num" data-k="citations">3</td><td class="num" data-k="cpy">3.00</td><td class="num" data-k="rank">3</td><td data-marquee="authors" title="Eva Morgan, Hana Choi" data-k="authorString">Eva Morgan, Hana Choi</td><td data-marquee="title" title="Spatial context and cell-state transitions in regeneration
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Spatial context and cell-state transitions in regeneration</span></td><td class="num" data-k="year">2026</td><td style="color:hsl(331 40% 40%);font-weight:600" data-marquee="venue" title="bioRxiv" class="venue venue-known" data-k="venue">bioRxiv</td><td class="num if" data-k="journalIF"></td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.003</a></td><td role="button" title="A reachable PDF is known · click to preview it (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr class="in-library" data-key="crossref:demo4"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: Crossref" class="num" data-k="citations">41</td><td class="num" data-k="cpy">41.00</td><td class="num" data-k="rank">4</td><td data-marquee="authors" title="Ren Ahn, Paula Silva" data-k="authorString">Ren Ahn, Paula Silva</td><td data-marquee="title" title="Tissue-scale repair atlases from sparse sampling
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Tissue-scale repair atlases from sparse sampling</span></td><td class="num" data-k="year">2025</td><td style="color:hsl(200 95% 36%);font-weight:600" data-marquee="venue" title="Cell · Cell Press" class="venue venue-known" data-k="venue">Cell</td><td title="~42.5 is an estimate: OpenAlex 2-year mean citedness (the journal is not in the JCR) · journal h-index 255" class="num if estimate" data-k="journalIF">~42.5</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.004</a></td><td class="mini pdf" data-k="pdf"></td><td role="button" title="Already in your library · click to show the item" class="mini lib" data-k="inLibrary">✓</td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="europepmc:demo5"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: Europe PMC (articles + preprints)" class="num" data-k="citations">66</td><td class="num" data-k="cpy">33.00</td><td class="num" data-k="rank">5</td><td data-marquee="authors" title="Kai Oh, Chris Voigtland" data-k="authorString">Kai Oh, Chris Voigtland</td><td data-marquee="title" title="Benchmarks for repair-stage classifiers
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Benchmarks for repair-stage classifiers</span></td><td class="num" data-k="year">2024</td><td style="color:hsl(54 95% 26%);font-weight:600" data-marquee="venue" title="Nature Biotechnology · Nat Biotechnol · Nature Portfolio" class="venue venue-known" data-k="venue">Nature Biotechnology</td><td title="~33.1 is an estimate: OpenAlex 2-year mean citedness (the journal is not in the JCR) · journal h-index 199" class="num if estimate" data-k="journalIF">~33.1</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.005</a></td><td role="button" title="A reachable PDF is known · click to preview it (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="openalex:demo6"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: OpenAlex" class="num" data-k="citations">12</td><td class="num" data-k="cpy">4.00</td><td class="num" data-k="rank">6</td><td data-marquee="authors" title="Dana Yu, Sora Lee" data-k="authorString">Dana Yu, Sora Lee</td><td data-marquee="title" title="Preregistered synthesis of repair reviews
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Preregistered synthesis of repair reviews</span></td><td class="num" data-k="year">2023</td><td style="color:hsl(215 89% 36%);font-weight:600" data-marquee="venue" title="eLife · eLife" class="venue venue-known" data-k="venue">eLife</td><td title="~6.4 is an estimate: OpenAlex 2-year mean citedness (the journal is not in the JCR) · journal h-index 38" class="num if estimate" data-k="journalIF">~6.4</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.006</a></td><td role="button" title="A reachable PDF is known · click to preview it (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="europepmc:demo7"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: Europe PMC (articles + preprints)" class="num" data-k="citations">18</td><td class="num" data-k="cpy">18.00</td><td class="num" data-k="rank">7</td><td data-marquee="authors" title="Jenna Dowd, Sam Sternfield, Priya Natarajan" data-k="authorString">Jenna Dowd, Sam Sternfield, Priya Natarajan</td><td data-marquee="title" title="Compact editors from uncultivated bacteria
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Compact editors from uncultivated bacteria</span></td><td class="num" data-k="year">2026</td><td style="color:hsl(206 71% 36%);font-weight:600" data-marquee="venue" title="Proceedings of the National Academy of Sciences · PNAS · PNAS" class="venue venue-known" data-k="venue">Proceedings of the National Academy of Sciences</td><td title="~9.4 is an estimate: OpenAlex 2-year mean citedness (the journal is not in the JCR) · journal h-index 56" class="num if estimate" data-k="journalIF">~9.4</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.007</a></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="crossref:demo8"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: Crossref" class="num" data-k="citations">88</td><td class="num" data-k="cpy">88.00</td><td class="num" data-k="rank">8</td><td data-marquee="authors" title="Jenna Dowd, Marta Jinkova" data-k="authorString">Jenna Dowd, Marta Jinkova</td><td data-marquee="title" title="Guide design rules learned from a million targets
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Guide design rules learned from a million targets</span></td><td class="num" data-k="year">2025</td><td style="color:hsl(213 95% 36%);font-weight:600" data-marquee="venue" title="Nucleic Acids Research · Nucleic Acids Res · Oxford" class="venue venue-known" data-k="venue">Nucleic Acids Research</td><td title="~13.1 is an estimate: OpenAlex 2-year mean citedness (the journal is not in the JCR) · journal h-index 79" class="num if estimate" data-k="journalIF">~13.1</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.008</a></td><td role="button" title="A reachable PDF is known · click to preview it (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="openalex:demo9"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: OpenAlex" class="num" data-k="citations">203</td><td class="num" data-k="cpy">101.50</td><td class="num" data-k="rank">9</td><td data-marquee="authors" title="Jenna Dowd, Ben Oakley" data-k="authorString">Jenna Dowd, Ben Oakley</td><td data-marquee="title" title="Off-target profiling in primary human cells
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Off-target profiling in primary human cells</span></td><td class="num" data-k="year">2024</td><td style="color:hsl(235 95% 36%);font-weight:600" data-marquee="venue" title="Genome Biology · Genome Biol" class="venue venue-known" data-k="venue">Genome Biology</td><td title="~10.1 is an estimate: OpenAlex 2-year mean citedness (the journal is not in the JCR) · journal h-index 61" class="num if estimate" data-k="journalIF">~10.1</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.009</a></td><td role="button" title="A reachable PDF is known · click to preview it (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="europepmc:demo10"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: Europe PMC (articles + preprints)" class="num" data-k="citations">61</td><td class="num" data-k="cpy">61.00</td><td class="num" data-k="rank">10</td><td data-marquee="authors" title="Jenna Dowd, Sam Sternfield" data-k="authorString">Jenna Dowd, Sam Sternfield</td><td data-marquee="title" title="Delivery of editing enzymes across tissue barriers
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Delivery of editing enzymes across tissue barriers</span></td><td class="num" data-k="year">2025</td><td style="color:hsl(200 95% 36%);font-weight:600" data-marquee="venue" title="Cell Reports · Cell Rep · Cell Press" class="venue venue-known" data-k="venue">Cell Reports</td><td title="~7.5 is an estimate: OpenAlex 2-year mean citedness (the journal is not in the JCR) · journal h-index 45" class="num if estimate" data-k="journalIF">~7.5</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.010</a></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="europepmc:demo11"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Source: Europe PMC (articles + preprints)" class="num" data-k="citations">0</td><td class="num" data-k="cpy">0.00</td><td class="num" data-k="rank">11</td><td data-marquee="authors" title="Iris Thorne, Omar Haddad" data-k="authorString">Iris Thorne, Omar Haddad</td><td data-marquee="title" title="Rapid editing screens in primary cells
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Rapid editing screens in primary cells</span></td><td class="num" data-k="year">2026</td><td style="color:hsl(159 40% 36%);font-weight:600" data-marquee="venue" title="medRxiv" class="venue venue-known" data-k="venue">medRxiv</td><td class="num if" data-k="journalIF"></td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.011</a></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr><tr data-key="crossref:demo12"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td class="num" data-k="citations">–</td><td class="num" data-k="cpy">–</td><td class="num" data-k="rank">12</td><td data-marquee="authors" title="Tara Novak" data-k="authorString">Tara Novak</td><td data-marquee="title" title="Field notes on a shared vocabulary for repair-stage maps
+Double-click or press Enter to open in the browser" class="title" data-k="title"><span>Field notes on a shared vocabulary for repair-stage maps</span></td><td class="num" data-k="year">2022</td><td style="color:hsl(326 40% 40%);font-weight:600" data-marquee="venue" title="Example Journal of Tissue Studies · Example J Tissue Stud" class="venue venue-known" data-k="venue">Example Journal of Tissue Studies</td><td class="num if" data-k="journalIF"></td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="Open on doi.org · right-click the row to copy" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.012</a></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td></tr></tbody>
+				</table>
+				<div hidden id="empty" class="empty">No results match the filter. Press Esc or × to clear it.</div>
+				<div hidden id="busy" class="empty"><span class="spinner"></span><span id="busy-text">Searching Combined (selected sources)…</span></div>
+			</div>
+			<div id="hsplit" class="splitter-h"></div>
+			<div id="detail" class="glass">
+				<div id="detail-empty" class="detail-empty" data-i18n="detailEmpty">Click a row or press ↓ for details · Space selects · P previews · Enter or double-click opens in the browser · ⌘C copies a citation · right-click for more.</div>
+				<div id="detail-body" hidden>
+					<div class="detail-head">
+						<div id="d-title" class="d-title"></div>
+						<div id="d-badges" class="badges"></div>
+					</div>
+					<div id="d-authors" class="d-authors"></div>
+						<div id="d-where" class="d-where"></div>
+					<div id="d-meta" class="d-meta"></div>
+					<div class="d-actions">
+						<button title="Open in browser" id="d-open" type="button" data-i18n-title="dOpen" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-external" /></svg><span data-i18n="dOpen">Open in browser</span></button>
+						<button title="Open PDF" id="d-pdf" type="button" data-i18n-title="dPdf" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf" /></svg><span data-i18n="dPdf">Open PDF</span></button>
+						<button title="Open the first PDF page in a separate window (P)" id="d-preview" type="button" class="icon-text preview-action" data-i18n-title="previewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf" /></svg><span data-i18n="previewAction">Preview</span></button>
+						<button title="Open the publisher page through your library proxy" id="d-proxy" type="button" class="icon-text" data-i18n-title="dProxyTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-library" /></svg><span data-i18n="dProxy">Open via library</span></button>
+						<button title="Copy DOI" id="d-copy-doi" type="button" data-i18n-title="dCopyDoi" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy" /></svg><span data-i18n="dCopyDoi">Copy DOI</span></button>
+						<button title="Copy citation" id="d-copy-cite" type="button" data-i18n-title="dCopyCite" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-quote" /></svg><span data-i18n="dCopyCite">Copy citation</span></button>
+						<button title="Re-query OpenAlex, Crossref and Semantic Scholar for this paper's current citation count and its journal's impact" id="d-check" type="button" class="icon-text" data-i18n-title="dCheckTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search" /></svg><span data-i18n="dCheck">Check citations</span></button>
+						<button title="Add this paper" id="d-add" type="button" data-i18n-title="dAdd" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus" /></svg><span data-i18n="dAdd">Add this paper</span></button>
+					</div>
+					<div id="d-abstract" class="d-abstract"></div>
+				</div>
+			</div>
+		</section>
+	</div>
+
+	<div id="import-bar" class="glass">
+		<label for="target" data-i18n="addTo">Add to</label>
+		<div class="sel"><select aria-hidden="true" tabindex="-1" id="target"><option selected value="1:">My Library</option><option value="1:7">&#160;&#160;↳ Repair atlases</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">My Library</span><span class="sel-caret"></span></button></div>
+		<label class="cb"><input id="opt-pdf" type="checkbox" checked> <span data-i18n="optPdf">Find &amp; attach PDF</span></label>
+		<label class="cb"><input id="opt-skip" type="checkbox" checked> <span data-i18n="optSkip">Skip duplicates (by DOI)</span></label>
+		<label class="cb"><input id="opt-fillpdf" type="checkbox"> <span data-i18n="optFillPdf">Fill a missing PDF for papers already in the library</span></label>
+		<label class="cb"><input id="opt-extra" type="checkbox" checked> <span data-i18n="optExtra">Record citation count in Extra</span></label>
+		<span class="spacer"></span>
+		<span id="selected-count">0 selected</span>
+		<button id="import-btn" type="button" class="primary icon-text" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus" /></svg><span data-i18n="importBtn">Add to Zotero</span></button>
+	</div>
+
+	<div id="statusbar">
+		<span id="status" role="status" aria-live="polite">12 results from Combined (selected sources).</span>
+		<span class="spacer"></span>
+		<progress hidden id="progress" max="100" value="0"></progress>
+	</div>
+
+	<div id="ctxmenu" class="ctxmenu" hidden="hidden"></div>
+	<div id="histmenu" class="selmenu histmenu" role="menu" hidden="hidden"></div>
+</div>
+</body></html>
