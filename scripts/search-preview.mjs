@@ -283,18 +283,48 @@ export async function buildPreview({ locale = "en" } = {}) {
 	fire(rowOf("demo4"));
 	await wait(20);
 	const rerun = page();
-	return { results, detail, facet, importPage, historyPage, rerun, trace, rows: rows.length, netCalls, errors };
+	// ---- the author tab: a profile lookup, then that profile's papers (stubbed lookups; fictional people)
+	const dowd = recs.filter(r => r.authorString.startsWith("Jenna Dowd"));
+	const profiles = [
+		{ provider: "scholar", id: "DEMOxAUTHOR1", name: "Jenna Dowd", affiliation: "Example Institute of Genome Engineering", url: "https://scholar.google.com/citations?user=DEMOxAUTHOR1", mode: "profile", identityConfirmed: true },
+		{ provider: "scholar", id: "DEMOxAUTHOR2", name: "Jenna M. Dowd", affiliation: "Fictional University, Dept. of Biology", url: "https://scholar.google.com/citations?user=DEMOxAUTHOR2", mode: "profile", identityConfirmed: false }
+	];
+	ctx.ZotPoPAuthors.searchProfiles = async () => profiles;
+	ctx.ZotPoPAuthors.loadPublications = async profile => Object.assign(dowd.slice(), { authorProfile: profile });
+	fire(document.getElementById("mode-authors"));
+	await wait(30);
+	document.getElementById("author-input").value = "Jenna Dowd";
+	fire(document.getElementById("author-form"), "submit");
+	for (let i = 0; i < 100 && !document.querySelector("#author-profiles .author-profile"); i++) await wait(20);
+	await wait(40);
+	const authorsLookup = page();
+	fire(document.querySelector("#author-profiles .author-profile button"));
+	for (let i = 0; i < 100 && !table().length; i++) await wait(20);
+	await wait(80);
+	fire(table()[0]);
+	await wait(30);
+	trace.authors = { rows: table().length, profiles: document.querySelectorAll("#author-profiles .author-profile").length, formHidden: document.getElementById("author-panel").hidden, paperFormHidden: document.getElementById("query-form").hidden };
+	const authorsPage = page();
+	fire(document.getElementById("mode-papers"));
+	await wait(40);
+	// the paper form folds once there are results, and the summary names the conditions
+	trace.fold = { collapsed: document.getElementById("query-form").classList.contains("collapsed"), summary: text("cond-summary"), expanded: document.getElementById("cond-toggle").getAttribute("aria-expanded") };
+	fire(document.getElementById("cond-toggle"));
+	trace.fold.afterClick = { collapsed: document.getElementById("query-form").classList.contains("collapsed"), expanded: document.getElementById("cond-toggle").getAttribute("aria-expanded") };
+	const unfolded = page();
+	fire(document.getElementById("cond-toggle"));
+	return { results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, unfolded, trace, rows: rows.length, netCalls, errors };
 }
 
 export function checkPreview(out) {
 	const problems = [];
 	if (out.rows < 10) problems.push("expected at least 10 result rows, got " + out.rows);
 	if (out.netCalls) problems.push("network was called");
-	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun]]) {
+	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["unfolded", out.unfolded]]) {
 		if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
 		if (/(?:src|href)\s*=\s*["'](?:https?:|\/\/|chrome:|resource:)/i.test(html)) problems.push(name + ": external asset");
 		if (/url\(\s*["']?(?:https?:|\/\/|chrome:)/i.test(html)) problems.push(name + ": external css url");
-		if (name === "history" || name === "rerun") { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
+		if (name === "history" || name === "rerun" || name === "unfolded" || name.startsWith("authors")) { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
 		for (const needle of ['id="results-table"', 'id="results-body"', 'id="query-form"', name === "facet" ? "Off-target profiling" : "Mapping cellular responses"]) if (!html.includes(needle)) problems.push(name + ": missing " + needle);
 	}
 	if (!out.results.includes('class="in-library')) problems.push("no in-library row");
@@ -340,6 +370,9 @@ export function checkPreview(out) {
 	if (!t.history.entries.length || !/오늘|today/.test(t.history.entries[0]) || !/12/.test(t.history.entries[0])) problems.push("history entry should show its date and count; got " + t.history.entries);
 	if (!same(t.rerun.marked, ["13"])) problems.push("only the new paper should be marked; got " + t.rerun.marked);
 	if (!t.collections.text.includes("Tissue maps › 2025 reviews") || !t.collections.tip.includes("Repair atlases › Tissue maps › 2025 reviews") || !t.collections.hiddenOnUnowned) problems.push("owned row should list its collections; got " + t.collections.text);
+	if (!t.fold.collapsed || t.fold.expanded !== "false" || !t.fold.summary) problems.push("the paper form should fold after a search; got " + JSON.stringify(t.fold));
+	if (t.fold.afterClick.collapsed || t.fold.afterClick.expanded !== "true") problems.push("the conditions toggle should unfold the form");
+	if (t.authors.rows !== 4 || t.authors.profiles !== 2 || t.authors.formHidden || !t.authors.paperFormHidden) problems.push("the author tab should list two profiles and four papers; got " + JSON.stringify(t.authors));
 	return problems;
 }
 
@@ -354,6 +387,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.writeFileSync(path.join(root, "docs/search-preview-import.html"), out.importPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-history.html"), out.historyPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-rerun.html"), out.rerun);
+	fs.writeFileSync(path.join(root, "docs/search-preview-unfolded.html"), out.unfolded);
+	fs.writeFileSync(path.join(root, "docs/search-preview-authors.html"), out.authorsPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-authors-lookup.html"), out.authorsLookup);
 	console.log(`ZotPoP search preview: real markup, CSS and ui.js, ${out.rows} fictional rows, no network: docs/search-preview.html, docs/search-preview-detail.html`);
 	process.exit(0);
 }

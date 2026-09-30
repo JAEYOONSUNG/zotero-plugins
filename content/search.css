@@ -555,3 +555,34 @@ td.status:not(:empty)::before { content: "\25CF"; margin-right: 5px; font-size: 
 /* menus */
 .ctxmenu, .selmenu { border-radius: 14px; padding: 6px; }
 .ctxmenu div, .selopt, .histmenu .histopt, .histmenu .histclear { border-radius: 9px; }
+
+/* library filter: each count is its own small rounded badge */
+.lib-filter button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 11px; }
+.lib-filter .lib-n { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--card); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.lib-filter button[aria-pressed="true"] .lib-n { background: rgba(255, 255, 255, 0.2); color: var(--pill-text); }
+@media (prefers-color-scheme: dark) { .lib-filter button[aria-pressed="true"] .lib-n { background: rgba(0, 0, 0, 0.14); } }
+
+/* the search form folds to one line once there are results */
+.cond-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 6px 12px; border-radius: 999px; background: var(--chip); border-color: transparent; color: var(--text); text-align: left; }
+.cond-toggle:hover:not(:disabled) { background: var(--row-sel); border-color: transparent; }
+.cond-label { flex: none; font-weight: 600; }
+.cond-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.cond-chev { flex: none; width: 6px; height: 6px; margin: 0 2px 2px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); color: var(--muted); }
+.cond-toggle[aria-expanded="true"] .cond-chev { transform: rotate(-135deg); margin-bottom: -2px; }
+.field.cond { flex: 0 0 auto; min-width: 112px; }
+#query-form.collapsed { flex-wrap: nowrap; align-items: center; padding: 10px 18px; }
+#query-form.collapsed .field:not(.keep) { display: none; }
+#query-form.collapsed .field > label { display: none; }
+#query-form.collapsed .field.grow2 { flex: 0 1 300px; min-width: 160px; }
+#query-form.collapsed .field.cond { flex: 1 1 auto; min-width: 0; }
+#query-form.collapsed .field.buttons { flex: none; }
+#query-form.collapsed ~ .combined-options { display: none; }
+
+/* author tab: same card rhythm as the paper form */
+.author-panel { padding: 12px 18px 14px; }
+.author-query { gap: 8px 12px; }
+.author-query .field select { min-width: 150px; }
+.author-query .field.grow2 { flex: 2 1 240px; }
+.author-help { margin: 10px 2px 10px; }
+.author-profiles { max-height: 190px; }
+.author-profile { padding: 10px 14px; }

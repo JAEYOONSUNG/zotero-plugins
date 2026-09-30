@@ -555,6 +555,37 @@ td.status:not(:empty)::before { content: "\25CF"; margin-right: 5px; font-size: 
 /* menus */
 .ctxmenu, .selmenu { border-radius: 14px; padding: 6px; }
 .ctxmenu div, .selopt, .histmenu .histopt, .histmenu .histclear { border-radius: 9px; }
+
+/* library filter: each count is its own small rounded badge */
+.lib-filter button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 11px; }
+.lib-filter .lib-n { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--card); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.lib-filter button[aria-pressed="true"] .lib-n { background: rgba(255, 255, 255, 0.2); color: var(--pill-text); }
+@media (prefers-color-scheme: dark) { .lib-filter button[aria-pressed="true"] .lib-n { background: rgba(0, 0, 0, 0.14); } }
+
+/* the search form folds to one line once there are results */
+.cond-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 6px 12px; border-radius: 999px; background: var(--chip); border-color: transparent; color: var(--text); text-align: left; }
+.cond-toggle:hover:not(:disabled) { background: var(--row-sel); border-color: transparent; }
+.cond-label { flex: none; font-weight: 600; }
+.cond-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.cond-chev { flex: none; width: 6px; height: 6px; margin: 0 2px 2px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); color: var(--muted); }
+.cond-toggle[aria-expanded="true"] .cond-chev { transform: rotate(-135deg); margin-bottom: -2px; }
+.field.cond { flex: 0 0 auto; min-width: 112px; }
+#query-form.collapsed { flex-wrap: nowrap; align-items: center; padding: 10px 18px; }
+#query-form.collapsed .field:not(.keep) { display: none; }
+#query-form.collapsed .field > label { display: none; }
+#query-form.collapsed .field.grow2 { flex: 0 1 300px; min-width: 160px; }
+#query-form.collapsed .field.cond { flex: 1 1 auto; min-width: 0; }
+#query-form.collapsed .field.buttons { flex: none; }
+#query-form.collapsed ~ .combined-options { display: none; }
+
+/* author tab: same card rhythm as the paper form */
+.author-panel { padding: 12px 18px 14px; }
+.author-query { gap: 8px 12px; }
+.author-query .field select { min-width: 150px; }
+.author-query .field.grow2 { flex: 2 1 240px; }
+.author-help { margin: 10px 2px 10px; }
+.author-profiles { max-height: 190px; }
+.author-profile { padding: 10px 14px; }
 </style></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
 	<symbol id="ic-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" /><path d="M10.4 10.4 14 14" /></symbol>
@@ -589,7 +620,15 @@ td.status:not(:empty)::before { content: "\25CF"; margin-right: 5px; font-size: 
 		<p id="author-help" class="author-help"></p>
 		<div id="author-profiles" class="author-profiles" aria-live="polite"></div>
 	</section>
-	<form id="query-form" class="query glass" onsubmit="return false;">
+	<form id="query-form" class="query glass collapsed" onsubmit="return false;">
+		<div class="field grow2 keep">
+			<label for="keywords" data-i18n="keywords">키워드 (전체 필드)</label>
+			<input value="tissue repair" placeholder="예: CRISPR base editing" id="keywords" type="text" data-i18n-ph="keywordsPh">
+		</div>
+		<div class="field cond keep" id="cond-field">
+			<label>&#160;</label>
+			<button title="검색 조건을 펼치거나 접습니다" id="cond-toggle" type="button" class="cond-toggle" aria-expanded="false" aria-controls="query-form" data-i18n-title="condTip"><span class="cond-label" data-i18n="condLabel">조건</span><span id="cond-summary" class="cond-summary">통합 검색 (선택한 소스)</span><span class="cond-chev" aria-hidden="true"></span></button>
+		</div>
 		<div class="field">
 			<label for="engine" data-i18n="engine">검색 방식</label>
 			<div class="sel"><select aria-hidden="true" tabindex="-1" id="engine"><option selected value="direct" data-i18n="engineDirect">ZotPoP 통합·직접 검색</option><option value="pop" data-i18n="enginePoP">Publish or Perish 원본 검색</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">ZotPoP 통합·직접 검색</span><span class="sel-caret"></span></button></div>
@@ -609,10 +648,6 @@ td.status:not(:empty)::before { content: "\25CF"; margin-right: 5px; font-size: 
 		<div class="field grow">
 			<label for="title" data-i18n="titleWords">제목 단어</label>
 			<input title="제목 단어에 AND·OR·NOT·괄호를 쓸 수 있습니다. 정확한 구절은 큰따옴표로 감싸세요." placeholder="제목 단어 또는 AND·OR·NOT 검색식" id="title" type="text" data-i18n-ph="titlePh" data-i18n-title="titleHelp">
-		</div>
-		<div class="field grow2">
-			<label for="keywords" data-i18n="keywords">키워드 (전체 필드)</label>
-			<input value="tissue repair" placeholder="예: CRISPR base editing" id="keywords" type="text" data-i18n-ph="keywordsPh">
 		</div>
 		<div class="field years">
 			<label data-i18n="years">연도</label>
@@ -638,7 +673,7 @@ td.status:not(:empty)::before { content: "\25CF"; margin-right: 5px; font-size: 
 			<label for="maxResults" data-i18n="maxResults">최대 결과</label>
 			<input id="maxResults" type="number" min="1" max="2000" value="1000">
 		</div>
-		<div class="field buttons">
+		<div class="field buttons keep">
 			<label>&#160;</label>
 			<div class="row">
 				<button id="search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search" /></svg><span data-i18n="search">검색</span></button>
@@ -715,9 +750,9 @@ td.status:not(:empty)::before { content: "\25CF"; margin-right: 5px; font-size: 
 				<button title="선택 모두 해제" id="select-none" type="button" data-i18n-title="selNoneTip" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-none" /></svg><span data-i18n="selNone">해제</span></button>
 				<span aria-label="보유" title="이미 라이브러리에 있는 논문인지로 결과를 좁힙니다. 편수는 다른 필터를 적용한 결과 기준이며, 체크한 논문은 그대로 유지됩니다." id="lib-filter" class="lib-filter" role="group" data-i18n-aria="libFilterLabel" data-i18n-title="libFilterTip">
 					<span class="lib-filter-label" data-i18n="libFilterLabel">보유</span>
-					<button id="lib-all" type="button" data-lib="all" aria-pressed="true">전체 12</button>
-					<button id="lib-new" type="button" data-lib="new" aria-pressed="false">미보유 9</button>
-					<button id="lib-owned" type="button" data-lib="owned" aria-pressed="false">보유 3</button>
+					<button id="lib-all" type="button" data-lib="all" aria-pressed="true"><span class="lib-name">전체</span> <span class="lib-n">12</span></button>
+					<button id="lib-new" type="button" data-lib="new" aria-pressed="false"><span class="lib-name">미보유</span> <span class="lib-n">9</span></button>
+					<button id="lib-owned" type="button" data-lib="owned" aria-pressed="false"><span class="lib-name">보유</span> <span class="lib-n">3</span></button>
 				</span>
 				<span class="sep"></span>
 				<button title="보이는 결과를 복사하거나 저장" id="export-btn" type="button" class="menu-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="exportTip"><span data-i18n="exportMenu">내보내기</span></button>

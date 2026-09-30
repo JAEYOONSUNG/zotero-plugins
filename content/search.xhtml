@@ -56,6 +56,14 @@
 		<div id="author-profiles" class="author-profiles" aria-live="polite"></div>
 	</section>
 	<form id="query-form" class="query glass" onsubmit="return false;">
+		<div class="field grow2 keep">
+			<label for="keywords" data-i18n="keywords"></label>
+			<input id="keywords" type="text" data-i18n-ph="keywordsPh"/>
+		</div>
+		<div class="field cond keep" id="cond-field" hidden="hidden">
+			<label>&#160;</label>
+			<button id="cond-toggle" type="button" class="cond-toggle" aria-expanded="false" aria-controls="query-form" data-i18n-title="condTip"><span class="cond-label" data-i18n="condLabel"></span><span id="cond-summary" class="cond-summary"></span><span class="cond-chev" aria-hidden="true"></span></button>
+		</div>
 		<div class="field">
 			<label for="engine" data-i18n="engine"></label>
 			<select id="engine"><option value="direct" data-i18n="engineDirect"></option><option value="pop" data-i18n="enginePoP"></option></select>
@@ -75,10 +83,6 @@
 		<div class="field grow">
 			<label for="title" data-i18n="titleWords"></label>
 			<input id="title" type="text" data-i18n-ph="titlePh" data-i18n-title="titleHelp"/>
-		</div>
-		<div class="field grow2">
-			<label for="keywords" data-i18n="keywords"></label>
-			<input id="keywords" type="text" data-i18n-ph="keywordsPh"/>
 		</div>
 		<div class="field years">
 			<label data-i18n="years"></label>
@@ -108,7 +112,7 @@
 			<label for="maxResults" data-i18n="maxResults"></label>
 			<input id="maxResults" type="number" min="1" max="2000" value="1000"/>
 		</div>
-		<div class="field buttons">
+		<div class="field buttons keep">
 			<label>&#160;</label>
 			<div class="row">
 				<button id="search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="search"></span></button>

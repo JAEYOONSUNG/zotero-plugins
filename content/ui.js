@@ -341,6 +341,9 @@
 	function wireEvents() {
 		$("mode-papers").addEventListener("click", () => switchSearchMode("papers"));
 		$("mode-authors").addEventListener("click", () => switchSearchMode("authors"));
+		$("cond-toggle").addEventListener("click", () => { state.condOpen = !state.condOpen; syncQueryCollapse(); });
+		// Reaching the toggle by keyboard opens the conditions, so Tab walks into the fields.
+		$("cond-toggle").addEventListener("focus", () => { let keyboard = false; try { keyboard = $("cond-toggle").matches(":focus-visible"); } catch (e) {} if (keyboard && !state.condOpen) { state.condOpen = true; syncQueryCollapse(); } });
 		$("author-form").addEventListener("submit", e => { e.preventDefault(); runAuthorAction("profiles"); });
 		$("author-input").addEventListener("input", authorInputChanged);
 		$("author-input-kind").addEventListener("change", authorInputChanged);
@@ -1589,6 +1592,7 @@
 		let active = () => state.searchController === controller && !controller.signal.aborted;
 		hideBanner();
 		state.records = [];
+		state.condOpen = false;
 		// The API layer already applies the requested search order. Preserve its rank
 		// until the user explicitly sorts a result column again.
 		state.sortKey = q.engine === "pop" ? "popOrdinal" : "rank";
@@ -1908,7 +1912,32 @@
 
 	function popOriginalJSON() { return JSON.stringify(state.records.filter(r => r.popOriginal).slice().sort((a, b) => a.popOrdinal - b.popOrdinal).map(r => r.popOriginal), null, 2); }
 
+	// After a search the form folds to one line: keywords, Search and a summary of the other conditions.
+	function conditionSummary() {
+		let v = id => String($(id)?.value || "").trim(), parts = [];
+		let source = sourceLabel($("source").value); if (source) parts.push(source);
+		if (v("authors")) parts.push(t("authors") + " " + v("authors"));
+		if (v("venue")) parts.push(t("venue") + " " + v("venue"));
+		if (v("title")) parts.push(t("titleWords") + " " + v("title"));
+		let from = v("yearFrom"), to = v("yearTo");
+		if (from || to) parts.push(from && to ? from + "–" + to : from ? from + "–" : "–" + to);
+		let sorts = { citations: "sortCitations", date: "sortDate" }, sortKey = sorts[v("sort")];
+		if (engineValue() !== "pop" && sortKey) parts.push(t(sortKey));
+		return parts.join(" · ") || t("condNone");
+	}
+	function syncQueryCollapse() {
+		let form = $("query-form"), field = $("cond-field");
+		if (!form || !field) return;
+		let has = searchSurface === "papers" && state.records.length > 0;
+		field.hidden = !has;
+		let folded = has && !state.condOpen;
+		form.classList.toggle("collapsed", folded);
+		$("cond-toggle").setAttribute("aria-expanded", String(!folded));
+		$("cond-summary").textContent = folded ? conditionSummary() : "";
+	}
+
 	function render() {
+		syncQueryCollapse();
 		if (state.selectedOnly && !state.records.some(r => state.selected.has(r.key))) state.selectedOnly = false;
 		let f = $("filter").value.trim().toLowerCase();
 		// The library counts follow every other filter, but not the library filter itself.
@@ -2112,7 +2141,12 @@
 		$("chk-all").indeterminate = some && !all;
 		for (let [id, key, label] of [["lib-all", "all", "libAll"], ["lib-new", "new", "libNew"], ["lib-owned", "owned", "libOwned"]]) {
 			let b = $(id);
-			b.textContent = t(label, state.libCounts[key]);
+			if (!b.querySelector(".lib-name")) {
+				b.textContent = "";
+				for (let cls of ["lib-name", "lib-n"]) { let span = document.createElement("span"); span.className = cls; if (cls === "lib-n") b.appendChild(document.createTextNode(" ")); b.appendChild(span); }
+			}
+			b.querySelector(".lib-name").textContent = t(label);
+			b.querySelector(".lib-n").textContent = String(state.libCounts[key]);
 			b.setAttribute("aria-pressed", String(state.libraryFilter === key));
 		}
 		$("preview-btn").disabled = !previewRecord();

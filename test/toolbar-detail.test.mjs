@@ -40,26 +40,26 @@ test("the library filter counts after the other filters, keeps the checks and fo
 		importRecord: async r => r.key === "c" ? { status: "failed", error: "nope" } : { status: "added", item: { id: 9 }, pdf: "no pdf", how: "translator" } };
 	const ui = await loaded({ importer });
 	const line = () => ["lib-all", "lib-new", "lib-owned"].map(id => ui.get(id).textContent).join(" / ");
-	assert.equal(line(), "libAll|4 / libNew|3 / libOwned|1");
+	assert.equal(line(), "libAll 4 / libNew 3 / libOwned 1");
 	ui.get("filter").value = "a";
 	ui.render();
-	assert.equal(line(), "libAll|4 / libNew|3 / libOwned|1", "Alpha, Beta, Gamma and Delta all contain an a");
+	assert.equal(line(), "libAll 4 / libNew 3 / libOwned 1", "Alpha, Beta, Gamma and Delta all contain an a");
 	ui.get("filter").value = "et";
 	ui.render();
-	assert.equal(line(), "libAll|1 / libNew|0 / libOwned|1", "counts follow the text filter");
+	assert.equal(line(), "libAll 1 / libNew 0 / libOwned 1", "counts follow the text filter");
 	ui.get("filter").value = "";
 	ui.state.selected.add("a");
 	ui.get("lib-new").emit("click");
 	assert.deepEqual(Array.from(ui.state.visible, r => r.key).sort(), ["a", "c", "d"]);
 	assert.equal(ui.get("lib-new").getAttribute("aria-pressed"), "true");
-	assert.equal(line(), "libAll|4 / libNew|3 / libOwned|1", "the filter's own choice does not change the counts");
+	assert.equal(line(), "libAll 4 / libNew 3 / libOwned 1", "the filter's own choice does not change the counts");
 	ui.get("lib-owned").emit("click");
 	assert.deepEqual(Array.from(ui.state.visible, r => r.key), ["b"]);
 	assert.deepEqual(Array.from(ui.state.selected), ["a"], "changing the filter keeps the checks");
 	ui.get("lib-new").emit("click");
 	for (const key of ["a", "c"]) ui.state.selected.add(key);
 	await ui.importRecords(ui.state.records.filter(r => ui.state.selected.has(r.key)));
-	assert.equal(line(), "libAll|4 / libNew|2 / libOwned|2", "one paper was added, one failed");
+	assert.equal(line(), "libAll 4 / libNew 2 / libOwned 2", "one paper was added, one failed");
 	assert.deepEqual(Array.from(ui.state.visible, r => r.key).sort(), ["c", "d"], "the added paper left the not-owned list");
 	assert.deepEqual(Array.from(ui.state.selected), ["c"]);
 });
@@ -194,7 +194,8 @@ test("both locales word the new controls, and the PDF and column tips say what i
 		for (const key of keys) assert.notEqual(t(key, 1), key, `${locale}: ${key}`);
 	}
 	const ko = I18N.make("ko"), en = I18N.make("en");
-	assert.equal(ko("libAll", 12) + " / " + ko("libNew", 11) + " / " + ko("libOwned", 1), "전체 12 / 미보유 11 / 보유 1");
+	assert.equal(ko("libAll") + " / " + ko("libNew") + " / " + ko("libOwned"), "전체 / 미보유 / 보유");
+	assert.equal(en("libAll") + " / " + en("libNew") + " / " + en("libOwned"), "All / Not owned / Owned");
 	for (const t of [ko, en]) {
 		assert.match(t("evPdf") + t("thPdfClickTip"), /후보|candidate/i);
 		assert.match(t("evPdf"), /후보|candidate/i);
