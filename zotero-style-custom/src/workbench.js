@@ -441,7 +441,7 @@
    if(counts.size<2)return;
    const order=['journalArticle','preprint','conferencePaper','patent','thesis','book','bookSection','report'];
    const kinds=[...counts].sort((a,b)=>(order.indexOf(a[0])+1||99)-(order.indexOf(b[0])+1||99)||b[1]-a[1]);
-   const chip=(label,value,count,title)=>{const b=node('button',null,kindChips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(state.type===value),title});b.textContent=`${T(label)} ${count}`;b.dataset.kind=value;b.addEventListener('click',()=>{state.type=state.type===value?'':value;type.value=state.type;render();});return b;};
+   const chip=(label,value,count,title)=>{const b=node('button',null,kindChips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(state.type===value),title});withCount(b,label,count);b.dataset.kind=value;b.addEventListener('click',()=>{state.type=state.type===value?'':value;type.value=state.type;render();});return b;};
    chip('전체','',state.items.length,'모든 종류');
    for(const [kind,count] of kinds)chip(kindLabel(kind),kind,count,`${T(kindLabel(kind))}만 보기`);
   }
@@ -736,7 +736,7 @@
   const SEARCH_WHAT={explore:'제목·저자·태그·DOI·초록·내 메모 검색',recent:'제목·저자·태그·DOI·초록·내 메모 검색',notes:'노트·문헌 제목·저자 검색',annotations:'주석·메모·문헌 제목·저자 검색',attachments:'첨부파일 이름·형식 검색'};
   function updateChrome(){
    sectionTitle.textContent=T(TABS.find(([id])=>id===state.tab)?.[1]||'');
-   search.placeholder=T(SEARCH_WHAT[state.tab]||'제목·저자·태그·DOI·초록 검색');
+   search.placeholder=T(SEARCH_WHAT[state.tab]||'제목·저자·태그·DOI·초록 검색');search.title=search.placeholder;
    const nativeJCR=state.tab==='journals'&&state.journalBrowser!=='openalex';
    const applicable=!nativeJCR&&FILTER_TABS.has(state.tab)&&state.tab!=='collections';controls.hidden=!applicable;filterPanel.hidden=!applicable;kindChips.hidden=!applicable;
    // 보유 문헌's own widened-search checkbox: nothing to widen without a query,
@@ -797,13 +797,23 @@
    if(latest!==submitted)return;
    updateDraft(key,undefined);if(clearValue)input.value='';
   }
-  function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]'))if(drafts.has(input.dataset.draftKey))input.value=drafts.get(input.dataset.draftKey);}
+  /* Applying a generated result needs a result: the button is off while the box is empty. */
+  function syncAIApply(){const apply=body.querySelector('[data-ai-apply]'),copyBtn=body.querySelector('[data-ai-copy]'),out=body.querySelector('.sc-ai-output');if(out){if(apply)apply.disabled=!out.value.trim();if(copyBtn)copyBtn.disabled=!out.value.trim();}}
+  body.addEventListener('input',syncAIApply);
+  function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]'))if(drafts.has(input.dataset.draftKey))input.value=drafts.get(input.dataset.draftKey);syncAIApply();}
   function clear(){
    if(jcrMount){state.jcrBrowserState=jcrMount.state;jcrMount.destroy();jcrMount=null;}
    previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
   }
 
-  function empty(text){node('p',text,body,{class:'sc-empty'});}
+  /* An empty page: one heading and, when the text has a second sentence, a muted hint. */
+  function empty(text){
+   const p=node('p',null,body,{class:'sc-empty'});
+   const said=String(T(text)),cut=said.search(/[.!?。]\s+\S/);
+   if(cut<0){node('strong',said,p,{class:'sc-empty-title'});return;}
+   node('strong',said.slice(0,cut+1),p,{class:'sc-empty-title'});p.appendChild(doc.createTextNode(' '));
+   node('span',said.slice(cut+1).trim(),p,{class:'sc-empty-hint'});
+  }
   function bar(parent=body){return node('div',null,parent,{class:'sc-actions'});}
   // The headline and its detail go in their own block so that everything a
   // caller appends afterwards -- buttons, checkboxes, selects -- lands in one
@@ -819,6 +829,27 @@
    // read as text, "논문1" is one word.
    if(count!=null&&count!==''){h.appendChild(doc.createTextNode(' '));node('span',String(count),h,{class:'sc-section-head-count'});}
    return h;
+  }
+  /* Every heading and what follows it, up to the next heading, is one soft
+     container (user direction 2026-10-01). Done once after a page is drawn, so
+     the tab code keeps appending to its own parents and nothing in it depends
+     on the wrapper. Headings inside a card or a settings part are already in a
+     container and stay as they are. */
+  function groupSections(root=body){
+   for(const head of [...root.querySelectorAll('.sc-section-head,.sc-path-head')]){
+    const parent=head.parentNode;
+    if(!parent||head.closest('.sc-group,.sc-card,.sc-author-news,.sc-settings-part'))continue;
+    const group=doc.createElement('section');group.className='sc-group';
+    parent.insertBefore(group,head);group.appendChild(head);
+    while(group.nextSibling&&!group.nextSibling.classList?.contains('sc-section-head')&&!group.nextSibling.classList?.contains('sc-path-head'))group.appendChild(group.nextSibling);
+   }
+  }
+  /* A label and its count: the count is a small rounded badge everywhere, and
+     the button's text still reads "전체 6" as one phrase. */
+  function withCount(target,label,count){
+   target.textContent='';target.appendChild(doc.createTextNode(T(label)+' '));
+   node('span',String(count),target,{class:'sc-count'});
+   return target;
   }
   function card(title,subtitle,parent=body){
    const c=node('article',null,parent,{class:'sc-card'});
@@ -3119,7 +3150,7 @@
    if(read.length){
     const views=node('div',null,list,{class:'sc-segmented sc-reading-views',role:'group','aria-label':T('읽기 기록 보기')});
     for(const [key,label,count] of [['','전체 기록',listedAll.length],['reading','읽는 중',readingNow.length],['stalled','14일 넘게 멈춤',stalled.length]]){
-     const b_=button(`${T(label)} ${count}`,()=>{state.readingView=key;state.readingPage=0;refreshReading();},views,{'aria-pressed':String((state.readingView||'')===key)});
+     const b_=button('',()=>{state.readingView=key;state.readingPage=0;refreshReading();},views,{'aria-pressed':String((state.readingView||'')===key)});withCount(b_,label,count);
      if(key&&!count)b_.disabled=true;
     }
    }
@@ -3238,11 +3269,11 @@
    if(!reader.viewGroups().length)empty('열 표시·순서·너비·정렬을 조절한 뒤 현재 뷰를 저장하세요.');
   }
   function drawCanvas(){const b=bar(),name=node('input',null,b,{placeholder:'새 보드 이름','aria-label':'보드 이름'});button('보드 만들기',async()=>{const board=model.createBoard(runtime.cache,name.value);state.boardID=board.id;runtime.dirty=true;await runtime.flush();render();},b,{'data-variant':'primary'});const select=node('select',null,b,{'aria-label':'캔버스 선택'});node('option','보드 선택',select,{value:''});for(const board of runtime.cache.boards||[])node('option',board.name,select,{value:board.id});select.value=state.boardID||'';select.addEventListener('change',()=>{state.boardID=select.value;state.cardIDs.clear();render();});const board=(runtime.cache.boards||[]).find(b=>b.id===state.boardID);
-   button('보드 삭제',async()=>{if(!board)throw new Error('삭제할 보드를 선택하세요.');deletedCardSelections.set(board.id,[...state.cardIDs]);model.deleteBoard(runtime.cache,board.id);state.boardID=null;state.cardIDs.clear();runtime.dirty=true;await runtime.flush();render();},b,{class:'sc-danger-soft'}).disabled=!board;
+   button('보드 삭제',async()=>{if(!board)throw new Error('삭제할 보드를 선택하세요.');deletedCardSelections.set(board.id,[...state.cardIDs]);model.deleteBoard(runtime.cache,board.id);state.boardID=null;state.cardIDs.clear();runtime.dirty=true;await runtime.flush();render();},b,{class:'sc-danger-soft'}).hidden=!board;
    // Nothing to act on is shown as off, as the matrix's paging and the tab
    // manager's moves already are, instead of an error after the press.
    select.disabled=!(runtime.cache.boards||[]).length;
-   button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b).disabled=!(deletedCardSelections.size||(runtime.cache.boardTrash||[]).length);
+   button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b).hidden=!(deletedCardSelections.size||(runtime.cache.boardTrash||[]).length);
    if(!board){empty('보드를 만들고 선택한 문헌을 카드로 추가하세요.');return;}
    const save=async()=>{runtime.dirty=true;await runtime.flush();render();};button('선택 문헌 추가',async()=>{const chosen=selected();if(!chosen.length)throw new Error('카드로 올릴 문헌을 먼저 선택하세요.');model.addToBoard(runtime.cache,board,chosen);await save();},b);button('메모 카드 추가',async()=>{model.addBoardNote(runtime.cache,board,'새 메모');await save();},b);button('카드 연결',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('두 카드를 선택하세요.');model.linkCards(board,...ids);await save();},b);button('선택 카드 삭제',async()=>{
     if(!state.cardIDs.size)throw new Error('지울 카드를 먼저 선택하세요.');
@@ -3508,7 +3539,7 @@
    const have=state.compareKey===key&&state.compareOutput;
    output.hidden=!have;if(have)output.value=state.compareOutput;
    const actions=bar(section);actions.classList.add('sc-compare-actions');actions.hidden=!have;
-   button('결과 복사',()=>copy(output.value),actions);
+   button('결과 복사',()=>copy(output.value),actions,{'data-ai-copy':'true'});
    button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 「함께 읽기」를 눌러 결과를 받으세요.');noteCache=null;await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
   }
   /* Collections as a tree, each with a bar for how much it holds. A list of
@@ -3783,7 +3814,7 @@
     const tools=node('div',null,list,{class:'sc-inbox-tools'});
     const views=node('div',null,tools,{class:'sc-segmented',role:'group','aria-label':T('새 논문 보기')});
     for(const [key,label,count] of [['new','미확인',unseen],['seen','확인함',all.length-unseen],['all','전체',all.length]])
-     button(`${T(label)} ${count}`,()=>{state.freshSeen=key;state.freshLimit=0;draw(report);},views,{'aria-pressed':String(view===key)});
+     withCount(button('',()=>{state.freshSeen=key;state.freshLimit=0;draw(report);},views,{'aria-pressed':String(view===key)}),label,count);
     node('span',T('↑↓ 이동 · e 확인함'),tools,{class:'sc-muted sc-inbox-hint'});
     const box=node('div',null,list,{class:'sc-hits'});inboxKeys(box);
     const limit=state.freshLimit||12;
@@ -4536,7 +4567,7 @@
     const tools=node('div',null,section,{class:'sc-inbox-tools'});
     const views=node('div',null,tools,{class:'sc-segmented',role:'group','aria-label':T('새 논문 보기')});
     for(const [key,label,count] of [['new','미확인',unseen],['seen','확인함',all.length-unseen],['all','전체',all.length]])
-     button(`${T(label)} ${count}`,()=>{state.inboxView=key;state.inboxAll=false;refreshWatched();},views,{'aria-pressed':String(view===key)});
+     withCount(button('',()=>{state.inboxView=key;state.inboxAll=false;refreshWatched();},views,{'aria-pressed':String(view===key)}),label,count);
     const find=node('input',null,tools,{type:'search',placeholder:T('제목·저널·저자 검색'),'aria-label':T('새 논문 검색')});
     find.value=state.inboxQuery||'';
     node('span',T('↑↓ 이동 · e 확인함'),tools,{class:'sc-muted sc-inbox-hint'});
@@ -5555,8 +5586,8 @@
    const hasAbstract=!!String(item.abstract||'').trim();
    const NEEDS_ABSTRACT=new Set(['summary','remark','tags']);
    if(aiReady&&!hasAbstract)body.insertBefore(node('p','이 문헌에는 초록이 없어 요약·메모·태그 제안은 쓸 수 없습니다. 제목 번역만 됩니다.',null,{class:'sc-muted sc-settings-note'}),b);
-   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message(task==='translate'?'제목을 AI 서버에 보내는 중…':'제목·초록을 AI 서버에 보내는 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b,{title:!aiReady?T('설정에서 AI 서버를 연결하면 켜집니다'):(NEEDS_ABSTRACT.has(task)&&!hasAbstract)?T('초록이 없는 문헌입니다'):''}).disabled=!aiReady||(NEEDS_ABSTRACT.has(task)&&!hasAbstract);
-   const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary'});
+   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message(task==='translate'?'제목을 AI 서버에 보내는 중…':'제목·초록을 AI 서버에 보내는 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);syncAIApply();}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b,{title:!aiReady?T('설정에서 AI 서버를 연결하면 켜집니다'):(NEEDS_ABSTRACT.has(task)&&!hasAbstract)?T('초록이 없는 문헌입니다'):''}).disabled=!aiReady||(NEEDS_ABSTRACT.has(task)&&!hasAbstract);
+   const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary','data-ai-apply':'true'});syncAIApply();
   }
   /* The settings page as sections, each with its name, one line saying what it
      changes, its options one per line, and its action under them. It was one
@@ -5629,7 +5660,7 @@
     } else {await paperList(rows());}
     break;
    }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
-   if(token===epoch&&!disposed)restoreDrafts();
+   if(token===epoch&&!disposed){groupSections();restoreDrafts();navButtons.get(state.tab)?.scrollIntoView?.({block:'nearest',inline:'nearest'});}
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
   function refreshMetrics(){
    if(disposed||panel.hidden)return;

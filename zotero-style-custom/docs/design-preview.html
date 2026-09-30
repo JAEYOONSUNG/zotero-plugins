@@ -318,12 +318,6 @@
   background: transparent;
   border-block-end: 0;
 }
-/* The divider belongs between two rows, not around the corner of one: a border on
-   a 10px-rounded card thins to a wedge at each end, and hangs under the last row. */
-#style-custom-workbench .sc-paper-card + .sc-paper-card::after {
-  content: ""; position: absolute; inset-inline: 0; inset-block-start: -1px;
-  height: 1px; background: var(--sc-border);
-}
 #style-custom-workbench .sc-paper-card:hover { background: var(--sc-surface); }
 /* Reading state as a dot at the start of the row, not a slab down its edge. */
 #style-custom-workbench .sc-paper-card[data-status]::before {
@@ -502,7 +496,7 @@
     --sc-accent-soft: #2E2E35;
     --sc-selection: #ECECEF;
     --sc-nav-on: #ECECEF; --sc-nav-on-ink: #151517;
-    --sc-card-shadow: none;
+    --sc-card-shadow: 0 0 0 0 transparent;
     --sc-border: rgba(255, 255, 255, .09);
     --sc-border-strong: rgba(255, 255, 255, .18);
     --sc-reading: #7FC3A3;
@@ -517,7 +511,6 @@
     color-scheme: dark;
   }
   #style-custom-workbench .sc-shell nav button[data-tab]:hover { background: rgba(255, 255, 255, .07); }
-  #style-custom-workbench .sc-card { box-shadow: 0 0 0 .5px var(--sc-border); }
   /* The ink that reads on the accent, named once instead of written into
      three rules that then drifted apart. */
   #style-custom-workbench { --sc-accent-ink: #151517; }
@@ -2017,7 +2010,6 @@
 #style-custom-workbench .sc-section-head-count { font-weight: 450; }
 #style-custom-workbench .sc-section-head + .sc-hits { margin: 0 0 4px; padding: 0 8px 8px; background: var(--sc-surface-alt); border-radius: 0 0 var(--sc-radius-card) var(--sc-radius-card); }
 #style-custom-workbench .sc-paper-card { border-radius: var(--sc-radius-card); padding-block: 10px; }
-#style-custom-workbench .sc-paper-card + .sc-paper-card::after { inset-inline: 14px; background: var(--sc-border); }
 #style-custom-workbench .sc-paper-card:hover,
 #style-custom-workbench .sc-paper-card:focus-within { background: var(--sc-surface-alt); }
 #style-custom-workbench .sc-section-head + .sc-hits .sc-paper-card:hover { background: var(--sc-surface); }
@@ -2089,7 +2081,261 @@
 #style-custom-workbench .sc-collection-count::before { content: "\00B7\00A0"; }
 #style-custom-workbench .sc-collection-mixtext { flex: 1 0 100%; margin: 0; padding-inline-start: 22px; }
 #style-custom-workbench .sc-collection-empty .sc-collection-name { color: var(--sc-muted); font-weight: 450; }
-</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div><section style="font-size:13px" data-maximized="false" role="region" data-density="comfortable" aria-label="Style Custom 연구 작업 패널" id="style-custom-workbench"><header class="sc-header"><div class="sc-brand"><img aria-hidden="true" alt="" height="24" width="24" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJTdHlsZSBDdXN0b206IGEgbGlicmFyeSByb3cgbWFya2VkIj4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjI4IiBmaWxsPSIjMkIzMjQwIi8+CiAgPGcgZmlsbD0iI0ZGRkZGRiIgb3BhY2l0eT0iMC41Ij4KICAgIDxjaXJjbGUgY3g9IjMxIiBjeT0iNDEiIHI9IjYiLz48Y2lyY2xlIGN4PSIzMSIgY3k9IjY0IiByPSI2Ii8+PGNpcmNsZSBjeD0iMzEiIGN5PSI4NyIgcj0iNiIvPgogIDwvZz4KICA8ZyBmaWxsPSIjRkZGRkZGIj4KICAgIDxyZWN0IHg9IjQ2IiB5PSIzNCIgd2lkdGg9IjU2IiBoZWlnaHQ9IjE0IiByeD0iNyIvPgogICAgPHJlY3QgeD0iNDYiIHk9IjgwIiB3aWR0aD0iNDAiIGhlaWdodD0iMTQiIHJ4PSI3Ii8+CiAgPC9nPgogIDxyZWN0IHg9IjQ2IiB5PSI1NyIgd2lkdGg9IjUwIiBoZWlnaHQ9IjE0IiByeD0iNyIgZmlsbD0iI0U5QTgxQyIvPgo8L3N2Zz4K"><strong>Style Custom</strong><span class="sc-subtitle">연구 작업 패널</span></div><button title="철회 여부 미확인 1146편 · 지표 없는 저널 169종 · 확인 안 한 관심 저자 109명" aria-pressed="false" class="sc-notice-toggle" type="button">자료 점검 3가지</button><div class="sc-header-actions"><button aria-pressed="false" title="간격 좁게" class="sc-icon-button" aria-label="화면 밀도 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="8" x2="13" y1="8" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /></svg></button><button hidden aria-pressed="false" class="sc-icon-button sc-dock" title="탭으로 열기" aria-label="탭으로 열기 / 창으로 띄우기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="8.4" width="10.8" y="4.6" x="2.6" /><path d="M2.6 7.4h10.8M5.2 4.6V3h4.4v1.6" /></svg></button><button aria-pressed="false" class="sc-icon-button sc-maximize" title="전체 화면" aria-label="전체 화면 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4" /></svg></button><button class="sc-icon-button" title="기능 찾기 · ⌘/Ctrl K" aria-label="기능 찾기" aria-keyshortcuts="Meta+K Control+K" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="4.25" cy="7.25" cx="7.25" /><line y2="13.5" x2="13.5" y1="10.5" x1="10.5" /></svg></button><button class="sc-icon-button sc-close" title="닫기" aria-label="작업 패널 닫기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="12" x2="12" y1="4" x1="4" /><line y2="12" x2="4" y1="4" x1="12" /></svg></button></div></header><div class="sc-shell"><nav aria-label="작업 종류"><div class="sc-nav-group"><div class="sc-nav-heading">탐색</div><button tabindex="0" class="active" aria-current="page" data-tab="explore" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.8" height="10" width="3" y="3" x="2.75" /><rect rx="0.8" height="10" width="3" y="3" x="7.25" /><path d="M11.9 3.6l1.9.5-2.2 9.1-1.2-.3" /></svg></span>보유 문헌<span class="sc-nav-count">6</span></button><button tabindex="-1" aria-current="false" data-tab="recent" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="5.25" cy="8" cx="8" /><path d="M8 5.1V8l2.2 1.7" /></svg></span>최근 문헌</button><button tabindex="-1" aria-current="false" data-tab="related" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.1" cy="11.4" cx="4.4" /><circle r="2.1" cy="4.6" cx="11.5" /><line y2="6.1" x2="10" y1="9.9" x1="6" /></svg></span>관련 논문</button><button tabindex="-1" aria-current="false" data-tab="authors" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.5" cy="5.6" cx="8" /><path d="M3.3 13.1c.7-2.5 2.5-3.8 4.7-3.8s4 1.3 4.7 3.8" /></svg></span>저자 추적</button><button tabindex="-1" aria-current="false" data-tab="collections" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.7 12.6V4.2h3.9l1.4 1.7h5.3v6.7z" /></svg></span>컬렉션</button><button tabindex="-1" aria-current="false" data-tab="journals" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="8.6" x2="4" y1="12.6" x1="4" /><line y2="5" x2="8" y1="12.6" x1="8" /><line y2="10" x2="12" y1="12.6" x1="12" /><line y2="12.6" x2="13.6" y1="12.6" x1="2.4" /></svg></span>저널 지표</button></div><div class="sc-nav-group"><div class="sc-nav-heading">읽기</div><button tabindex="-1" aria-current="false" data-tab="reading" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z" /><line y2="13.4" x2="8" y1="4.8" x1="8" /></svg></span>읽기 진행</button><button tabindex="-1" aria-current="false" data-tab="notes" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M4 2.6h5.4L12.4 5.6v7.8H4z" /><path d="M9.2 2.7v3h3.1" /><line y2="9" x2="10.4" y1="9" x1="6" /><line y2="11.2" x2="9" y1="11.2" x1="6" /></svg></span>노트</button><button tabindex="-1" aria-current="false" data-tab="annotations" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.9" height="2.6" width="10.8" y="9.6" x="2.6" /><path d="M5.2 9.5l5.6-6 2.3 2.3-5.5 5.7" /></svg></span>주석</button><button tabindex="-1" aria-current="false" data-tab="attachments" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M11.5 7.2l-4.6 4.6a2.4 2.4 0 01-3.4-3.4l5.4-5.4a1.7 1.7 0 012.4 2.4l-5.2 5.2a.9.9 0 01-1.3-1.3l4.5-4.5" /></svg></span>첨부 미리보기</button><button tabindex="-1" aria-current="false" data-tab="backlinks" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M13.2 11.6a4.2 4.2 0 00-4.2-4.2H3.5" /><path d="M6.2 4.6L3.2 7.4l3 2.8" /></svg></span>역링크</button></div><div class="sc-nav-group"><div class="sc-nav-heading">정리</div><button tabindex="-1" aria-current="false" data-tab="tags" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8.4 2.6H13v4.6l-6 6a1.1 1.1 0 01-1.6 0L2.8 10.2a1.1 1.1 0 010-1.6z" /><circle r="0.95" cy="5.1" cx="10.5" /></svg></span>중첩 태그</button><button tabindex="-1" aria-current="false" data-tab="graph" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="1.7" cy="3.6" cx="8" /><circle r="1.7" cy="11.8" cx="3.7" /><circle r="1.7" cy="11.8" cx="12.3" /><line y2="10.2" x2="4.6" y1="5.1" x1="6.9" /><line y2="10.2" x2="11.4" y1="5.1" x1="9.1" /><line y2="11.8" x2="10.6" y1="11.8" x1="5.4" /></svg></span>관계 그래프</button><button tabindex="-1" aria-current="false" data-tab="canvas" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.4" height="9.4" width="10.8" y="3.3" x="2.6" /><circle r="1.1" cy="6.6" cx="5.9" /><path d="M3 11.6l3.1-3 2.2 2 2.1-2.4 2.6 3" /></svg></span>캔버스</button><button tabindex="-1" aria-current="false" data-tab="matrix" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="9.6" width="10.8" y="3.2" x="2.6" /><line y2="12.8" x2="8" y1="3.2" x1="8" /><line y2="6.4" x2="13.4" y1="6.4" x1="2.6" /></svg></span>논문 비교</button></div><div class="sc-nav-group"><div class="sc-nav-heading">도구</div><button tabindex="-1" aria-current="false" data-tab="tabs" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.6 12.6V6.2h4.1l1.3-1.8h5.4v8.2z" /><path d="M4.4 4.4h3.2" /></svg></span>탭 관리</button><button tabindex="-1" aria-current="false" data-tab="views" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1" height="4.6" width="4.6" y="2.8" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="2.8" x="8.6" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="8.6" /></svg></span>뷰 그룹</button><button tabindex="-1" aria-current="false" data-tab="assist" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M6 2.9l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" /><path d="M11.4 8.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg></span>번역 · AI</button><button tabindex="-1" aria-current="false" data-tab="appearance" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /><circle r="1.6" cy="5" cx="6.4" /><circle r="1.6" cy="11" cx="10" /></svg></span>스타일 편집</button></div></nav><div class="sc-content"><div class="sc-context"><h2 class="sc-section-title">보유 문헌</h2><span class="sc-context-detail">라이브러리 · 6개 문헌</span><div aria-label="문헌 종류" class="sc-kind-chips"><button data-kind="" title="모든 종류" aria-pressed="true" type="button" class="sc-chip sc-chip-button">전체 6</button><button data-kind="journalArticle" title="논문만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">논문 5</button><button data-kind="preprint" title="프리프린트만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">프리프린트 1</button></div></div><div class="sc-controls sc-search-row"><input aria-label="작업 패널 검색" placeholder="제목·저자·태그·DOI·초록·내 메모 검색" type="search"><label hidden class="sc-check sc-search-records"><input aria-label="내 기록 포함" type="checkbox"><span>내 기록 포함</span></label><select aria-label="표시 범위"><option value="library">라이브러리</option><option value="selected">선택한 문헌</option><option value="collection">현재 컬렉션</option><option value="collection-recursive">현재 컬렉션과 하위 컬렉션</option></select><button type="button">현재 선택 가져오기</button><button type="button">새로고침</button><details class="sc-filters"><summary>상세 필터</summary><div aria-label="문헌 상세 필터" class="sc-filter-fields"><select aria-label="문헌 유형 필터"><option value="">모든 유형</option><option value="journalArticle">논문</option><option value="preprint">프리프린트</option></select><select aria-label="읽기 상태 필터"><option value="">모든 읽기 상태</option><option value="unread">안 읽음</option><option value="reading">읽는 중</option><option value="done">완료</option></select><select aria-label="최소 별점"><option value="">모든 별점</option><option value="1">1점 이상</option><option value="2">2점 이상</option><option value="3">3점 이상</option><option value="4">4점 이상</option><option value="5">5점 이상</option></select><input aria-label="시작 연도" placeholder="시작 연도" max="9999" min="1" type="number"><input aria-label="마지막 연도" placeholder="마지막 연도" max="9999" min="1" type="number"><select aria-label="문헌 정렬"><option value="library">기본 순서</option><option value="title">제목순</option><option value="year-desc">최신 발행순</option><option value="if-desc">IF 높은 순</option><option value="citations-desc">인용 많은 순</option><option value="rating-desc">별점 높은 순</option><option value="time-desc">읽기 시간순</option></select><button type="button">필터 초기화</button></div></details></div><div hidden aria-label="적용 중인 필터" class="sc-filter-chips"></div><div data-error="false" aria-live="polite" role="status" class="sc-status"></div><div hidden="hidden" class="sc-welcome"></div><div hidden class="sc-notice"></div><div tabindex="-1" class="sc-body"><div aria-label="이 목록 요약" role="group" class="sc-overview"><div aria-hidden="true" class="sc-overview-meter"><span style="flex-grow:1" class="sc-overview-done"></span><span style="flex-grow:2" class="sc-overview-reading"></span><span style="flex-grow:3" class="sc-overview-unread"></span></div><p class="sc-overview-facts"><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>1</b> 완료</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>2</b> 읽는 중</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>3</b> 안 읽음</button><span><b>1h 20m 40s</b> 읽음</span><button title="이 순서로 정렬" aria-pressed="false" class="sc-overview-fact" type="button"><b>12.4</b> IF 중앙값 · 5/6편</button><button title="이 순서로 정렬" aria-pressed="false" class="sc-overview-fact" type="button"><b>53</b> 인용 중앙값 · 4/6편</button></p><details class="sc-local-reading-links"><summary>읽는 중·완료 문헌과 인용으로 이어진 안 읽은 문헌 2편</summary><p class="sc-local-reading-head">읽는 중·완료 문헌이 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">기준 3편 중 참고문헌 기록 2편</p><div class="sc-local-reading-link"><button title="Preregistered synthesis of repair reviews" class="sc-hit-title-link" type="button">Preregistered synthesis of repair reviews</button><span class="sc-local-reading-count">1편에서 인용</span><span title="Mapping cellular responses across tissue repair" class="sc-muted sc-local-reading-from">Mapping cellular responses across tissue repair</span><button aria-pressed="false" class="sc-local-reading-queue" type="button">읽기 대기</button></div><p class="sc-local-reading-head">읽는 중·완료 문헌을 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">안 읽은 3편 중 참고문헌 기록 1편</p><div class="sc-local-reading-link"><button title="Spatial context and cell-state transitions in regeneration" class="sc-hit-title-link" type="button">Spatial context and cell-state transitions in regeneration</button><span class="sc-local-reading-count">읽는 중·완료 문헌 2편 인용</span><span title="Mapping cellular responses across tissue repair
+
+/* ==== System pass (user direction 2026-10-01): the defects that recurred on every tab ====
+   Fixed once here, at the source, instead of tab by tab:
+   dark cards with an edge, one group container, one count badge, one select,
+   one disclosure chevron, one checkbox, two button styles, Korean wrapping,
+   a rail that hints at its own scroll, a fixed bottom edge, calm empty states. */
+#style-custom-workbench {
+  /* S11: Korean breaks between words, never inside "업데이트" or "보냅니다"; a long URL still breaks. */
+  word-break: keep-all; overflow-wrap: anywhere;
+  --sc-card-edge: rgba(0, 0, 0, .08);
+  --sc-control-edge: rgba(0, 0, 0, .42);
+  --sc-chevron-ink: #6A6A6F;
+  --sc-check-ink: #fff;
+  --sc-bar-reserve: 58px;
+}
+@media (prefers-color-scheme: dark) {
+  #style-custom-workbench {
+    /* S1: a card in the dark has to part from the page it lies on. */
+    --sc-card-edge: rgba(255, 255, 255, .14);
+    --sc-control-edge: rgba(255, 255, 255, .5);
+    --sc-chevron-ink: #a8a8ae;
+      --sc-check-ink: #151517;
+  }
+}
+
+/* S1: cards carry the edge token in both themes, and hover never drops it. */
+#style-custom-workbench .sc-card,
+#style-custom-workbench .sc-paper-card,
+#style-custom-workbench .sc-resume-row,
+#style-custom-workbench .sc-reading-queue-row { background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
+#style-custom-workbench .sc-paper-card { margin: 0 0 var(--sc-paper-gap); }
+#style-custom-workbench .sc-paper-card:hover,
+#style-custom-workbench .sc-paper-card:focus-within { background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-paper-card[data-selected=true] { background: var(--sc-fill); box-shadow: 0 0 0 1.5px var(--sc-control-edge); outline: 0; }
+#style-custom-workbench .sc-author-news { box-shadow: 0 0 0 1px var(--sc-card-edge); }
+
+/* S2: heading and body are one soft container (section.sc-group from groupSections,
+   or a settings part). Inside it, cards stand on the grey. */
+#style-custom-workbench .sc-group,
+#style-custom-workbench .sc-settings-part { display: flow-root; margin: 0 0 14px; padding: 4px 10px 10px; border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-settings-part + .sc-settings-part { margin-block-start: 0; }
+#style-custom-workbench .sc-group > .sc-section-head,
+#style-custom-workbench .sc-settings-part > .sc-section-head,
+#style-custom-workbench .sc-group > .sc-section-head:has(+ .sc-hits),
+#style-custom-workbench .sc-group > .sc-section-head:has(+ .sc-resume),
+#style-custom-workbench .sc-group > .sc-section-head:has(+ .sc-reading-queue) {
+  margin: 0; padding: 10px 6px 8px; background: transparent; border-radius: 0; border: 0; gap: 2px 8px; align-items: center;
+}
+#style-custom-workbench .sc-group > .sc-section-head:first-child { margin-block-start: 0; }
+#style-custom-workbench .sc-group > .sc-hits,
+#style-custom-workbench .sc-section-head + .sc-hits { margin: 0; padding: 0; background: transparent; border-radius: 0; }
+#style-custom-workbench .sc-group > .sc-resume,
+#style-custom-workbench .sc-group > .sc-reading-queue { margin: 0 0 4px; }
+#style-custom-workbench .sc-group > :last-child { margin-block-end: 0; }
+#style-custom-workbench .sc-group .sc-card,
+#style-custom-workbench .sc-group .sc-paper-card,
+#style-custom-workbench .sc-settings-part .sc-card { background: var(--sc-surface); }
+#style-custom-workbench .sc-group .sc-paper-card:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-group .sc-paper-card[data-selected=true] { background: var(--sc-fill); }
+#style-custom-workbench .sc-group .sc-actions { padding: 6px 0; }
+/* The count beside a heading reads "Name · n" as a badge. */
+#style-custom-workbench .sc-section-head-count::before,
+#style-custom-workbench .sc-collection-count::before { content: none !important; }
+
+/* S3: one count badge for every number that sits beside a label. */
+#style-custom-workbench .sc-section-head-count,
+#style-custom-workbench .sc-count,
+#style-custom-workbench .sc-annot-group-count,
+#style-custom-workbench .sc-collection-count,
+#style-custom-workbench .sc-tag-unread,
+#style-custom-workbench .sc-collection-unread,
+#style-custom-workbench .sc-journal-reading-count,
+#style-custom-workbench .sc-path-jump[aria-label] {
+  display: inline-block; min-height: 0; padding: 0 7px; margin: 0; border: 0; border-radius: var(--sc-radius-pill);
+  background: var(--sc-fill); color: var(--sc-muted); box-shadow: none; text-decoration: none;
+  font: 600 11px/18px var(--sc-font); font-variant-numeric: tabular-nums; vertical-align: middle; white-space: nowrap;
+}
+#style-custom-workbench .sc-tag-unread,
+#style-custom-workbench .sc-collection-unread,
+#style-custom-workbench .sc-journal-reading-count,
+#style-custom-workbench .sc-path-jump[aria-label] { color: var(--sc-text); cursor: pointer; }
+#style-custom-workbench .sc-tag-unread { margin-inline-start: 8px; }
+#style-custom-workbench .sc-tag-unread:hover,
+#style-custom-workbench .sc-collection-unread:hover,
+#style-custom-workbench .sc-journal-reading-count:hover,
+#style-custom-workbench .sc-journal-reading-count[aria-expanded=true],
+#style-custom-workbench .sc-path-jump[aria-label]:hover { background: var(--sc-fill-hover); text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-count { margin-inline-start: 4px; }
+#style-custom-workbench .sc-chip .sc-count,
+#style-custom-workbench .sc-segmented .sc-count { background: var(--sc-fill); color: var(--sc-muted); }
+#style-custom-workbench .sc-chip-on .sc-count,
+#style-custom-workbench .sc-chip-button[aria-pressed=true] .sc-count,
+#style-custom-workbench .sc-segmented button[aria-pressed=true] .sc-count { background: rgba(255, 255, 255, .22); color: inherit; }
+@media (prefers-color-scheme: dark) {
+  #style-custom-workbench .sc-chip-on .sc-count,
+  #style-custom-workbench .sc-chip-button[aria-pressed=true] .sc-count,
+  #style-custom-workbench .sc-segmented button[aria-pressed=true] .sc-count { background: rgba(0, 0, 0, .14); }
+}
+#style-custom-workbench .sc-chip-on .sc-count,
+#style-custom-workbench .sc-chip-button[aria-pressed=true] .sc-count { font-weight: 650; }
+
+/* S4: every native select is one control: no OS arrow, an outline chevron, a pill. */
+#style-custom-workbench select,
+#style-custom-workbench .sc-card select {
+  -webkit-appearance: none; appearance: none;
+  min-height: var(--sc-control-height); padding-block: 5px; padding-inline: 14px 30px; border-radius: var(--sc-radius-pill);
+  background-color: var(--sc-surface);
+  background-image: linear-gradient(to top right, transparent calc(50% - .8px), var(--sc-chevron-ink) calc(50% - .8px), var(--sc-chevron-ink) calc(50% + .8px), transparent calc(50% + .8px)), linear-gradient(to top left, transparent calc(50% - .8px), var(--sc-chevron-ink) calc(50% - .8px), var(--sc-chevron-ink) calc(50% + .8px), transparent calc(50% + .8px));
+  background-repeat: no-repeat; background-position: right 17px center, right 11px center; background-size: 6px 6px, 6px 6px;
+  box-shadow: inset 0 0 0 1px var(--sc-border-strong); cursor: pointer;
+}
+#style-custom-workbench .sc-card select { min-height: var(--sc-card-control-height); padding-block: 2px; padding-inline: 12px 28px; }
+#style-custom-workbench select:disabled { cursor: default; opacity: .6; }
+#style-custom-workbench select:dir(rtl) { background-position: left 11px center, left 17px center; padding-inline: 30px 14px; }
+
+/* S5: one disclosure: no native triangle, a 12px outline chevron that turns when open. */
+#style-custom-workbench summary { list-style: none; }
+#style-custom-workbench summary::-webkit-details-marker { display: none; }
+#style-custom-workbench summary:not(.sc-path-owned)::before {
+  content: ""; display: inline-block; flex: none; box-sizing: border-box; width: 7px; height: 7px; margin-inline: 2px 9px; vertical-align: 1px;
+  border-inline-end: 1.6px solid currentColor; border-block-end: 1.6px solid currentColor; opacity: .75;
+  transform: rotate(-45deg); transition: transform .12s ease;
+}
+#style-custom-workbench summary:not(.sc-path-owned):dir(rtl)::before { transform: rotate(45deg); }
+#style-custom-workbench details[open] > summary:not(.sc-path-owned)::before { transform: rotate(45deg) translate(-1px, -1px); vertical-align: 2px; }
+#style-custom-workbench .sc-path-owned-group > summary { position: relative; padding-inline-end: 22px; }
+#style-custom-workbench .sc-path-owned-group > summary::after {
+  content: ""; position: absolute; inset-inline-end: 8px; inset-block-start: 50%; box-sizing: border-box; width: 7px; height: 7px; margin-block-start: -5px;
+  border-inline-end: 1.6px solid var(--sc-muted); border-block-end: 1.6px solid var(--sc-muted); transform: rotate(-45deg); transition: transform .12s ease;
+}
+#style-custom-workbench .sc-path-owned-group[open] > summary::after { transform: rotate(45deg); margin-block-start: -7px; }
+/* A leaf keeps the width the chevron takes (12px + its 6px margin). */
+#style-custom-workbench .sc-tag-leaf { padding-inline-start: 30px; }
+
+/* S6: one checkbox: a 16px rounded box, the dark fill and a check when on. */
+#style-custom-workbench input[type=checkbox] {
+  -webkit-appearance: none; appearance: none; position: relative; width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0; flex: none;
+  border-radius: calc(var(--sc-radius-sm) - 3px); background: var(--sc-surface); box-shadow: inset 0 0 0 1.5px var(--sc-control-edge); cursor: pointer;
+}
+#style-custom-workbench input[type=checkbox]:checked {
+  background-color: var(--sc-nav-on); box-shadow: none;
+  background-image: linear-gradient(to top right, transparent calc(50% - 1px), var(--sc-check-ink) calc(50% - 1px), var(--sc-check-ink) calc(50% + 1px), transparent calc(50% + 1px)), linear-gradient(to bottom right, transparent calc(50% - 1px), var(--sc-check-ink) calc(50% - 1px), var(--sc-check-ink) calc(50% + 1px), transparent calc(50% + 1px));
+  background-repeat: no-repeat; background-size: 4px 4px, 7px 7px; background-position: 3.5px 7.5px, 6px 4px;
+}
+#style-custom-workbench input[type=checkbox]:disabled { opacity: .5; cursor: default; }
+#style-custom-workbench .sc-card .sc-check input[type=checkbox] { width: 16px; height: 16px; }
+/* The appearance page's on/off choices are switches. */
+#style-custom-workbench .sc-settings-part input[type=checkbox] {
+  width: 30px; height: 18px; border-radius: 999px; background: var(--sc-fill-active); box-shadow: none;
+  transition: background .12s ease;
+}
+#style-custom-workbench .sc-settings-part input[type=checkbox] { background-image: radial-gradient(circle at 7px 7px, var(--sc-surface) 6.5px, transparent 7px); background-repeat: no-repeat; background-size: 14px 14px; background-position: 2px center; }
+#style-custom-workbench .sc-settings-part input[type=checkbox]:checked { background-color: var(--sc-nav-on); background-image: radial-gradient(circle at 7px 7px, var(--sc-nav-on-ink) 6.5px, transparent 7px); background-position: calc(100% - 2px) center; background-size: 14px 14px; }
+#style-custom-workbench .sc-settings-part input[type=checkbox]:focus-visible { outline-offset: 2px; }
+
+/* S7: two buttons. Secondary is a filled grey pill; primary is the dark one.
+   The outlined variant survives only as disabled. */
+#style-custom-workbench .sc-quiet-action,
+#style-custom-workbench .sc-resume-remark-add,
+#style-custom-workbench .sc-path-jump:not([aria-label]),
+#style-custom-workbench .sc-danger-soft {
+  background: var(--sc-fill); box-shadow: none; color: var(--sc-text);
+  min-height: var(--sc-card-control-height); padding: 2px 12px; border: 0; border-radius: var(--sc-radius-pill); font: inherit; font-size: 12px; font-weight: 500; text-decoration: none;
+}
+#style-custom-workbench .sc-quiet-action:hover,
+#style-custom-workbench .sc-resume-remark-add:hover,
+#style-custom-workbench .sc-path-jump:not([aria-label]):hover { background: var(--sc-fill-hover); text-decoration: none; }
+#style-custom-workbench .sc-danger-soft:hover { color: var(--sc-error); background: var(--sc-fill-hover); }
+#style-custom-workbench button[data-variant=primary]:hover:not(:disabled) { background: var(--sc-accent); opacity: .86; }
+#style-custom-workbench button:disabled,
+#style-custom-workbench button[aria-disabled=true] { background: transparent; box-shadow: inset 0 0 0 1px var(--sc-border-strong); color: var(--sc-muted); cursor: default; opacity: 1; }
+#style-custom-workbench .sc-note-head > [aria-hidden=true] { display: none; }
+#style-custom-workbench .sc-note-head { gap: 8px; align-items: center; }
+
+/* S8: hover lightens a resting chip, never the chosen one. */
+#style-custom-workbench .sc-chip-button:hover:not([aria-pressed=true]) { background: var(--sc-fill-hover); color: var(--sc-text); }
+#style-custom-workbench .sc-chip-button[aria-pressed=true]:hover,
+#style-custom-workbench .sc-chip-on:hover { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+#style-custom-workbench .sc-segmented button[aria-pressed=true]:hover,
+#style-custom-workbench .sc-watch-tools button[aria-pressed=true]:hover,
+#style-custom-workbench .sc-inbox-queue[aria-pressed=true]:hover,
+#style-custom-workbench .sc-local-reading-queue[aria-pressed=true]:hover,
+#style-custom-workbench .sc-annot-order button[aria-pressed=true]:hover { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+#style-custom-workbench .sc-segmented button[aria-pressed=false]:hover { background: var(--sc-fill-hover); }
+
+/* S10: decoration goes neutral; meaning (tiers, stars, annotation and tag colours, retraction) stays. */
+#style-custom-workbench .sc-watch-new .sc-watch-sub,
+#style-custom-workbench .sc-watch-count { color: var(--sc-muted); }
+#style-custom-workbench .sc-preprint { background: var(--sc-lime); color: var(--sc-lime-ink); border-radius: var(--sc-radius-pill); padding: 0 8px; }
+#style-custom-workbench .sc-hit-owned { justify-self: start; padding: 0 9px; border-radius: var(--sc-radius-pill); background: var(--sc-lime); color: var(--sc-lime-ink); font: 650 11px/18px var(--sc-font); }
+#style-custom-workbench .sc-notice-toggle { background: var(--sc-amber); color: var(--sc-amber-ink); font-weight: 600; }
+#style-custom-workbench .sc-notice-toggle:hover,
+#style-custom-workbench .sc-notice-toggle[aria-pressed=true] { background: var(--sc-amber); color: var(--sc-amber-ink); opacity: .86; }
+
+/* S12: the rail is 30px items with 10px between groups, and its scroll is visible as a fade. */
+#style-custom-workbench .sc-nav-group { margin-block-end: 10px; }
+#style-custom-workbench .sc-nav-heading { margin-block-end: 4px; }
+#style-custom-workbench .sc-shell nav { padding-block: 12px 22px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 22px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 22px), transparent 100%); }
+#style-custom-workbench .sc-shell nav button[data-tab] { min-height: 30px; margin: 1px 0; padding-block: 4px; }
+
+/* S13: the page card ends at the same place on every tab. The selection bar
+   shows only with a selection, and the room it needs is kept when it is away. */
+#style-custom-workbench > .sc-selection-bar { min-height: var(--sc-bar-reserve); align-content: center; }
+#style-custom-workbench:has(> .sc-selection-bar[hidden]) > .sc-shell { margin-block-end: var(--sc-bar-reserve); }
+
+/* S14: an empty page is an icon, a heading and a muted hint in a soft container. */
+#style-custom-workbench .sc-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 420px; margin: 24px auto; padding: 28px 24px;
+  border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); color: var(--sc-muted); text-align: center;
+}
+#style-custom-workbench .sc-empty::before {
+  content: ""; display: block; box-sizing: border-box; width: 30px; height: 24px; margin-block-end: 6px;
+  border: 1.6px solid var(--sc-muted); border-radius: var(--sc-radius-sm); opacity: .85;
+  background: linear-gradient(var(--sc-muted), var(--sc-muted)) center 13px / 14px 1.6px no-repeat;
+}
+#style-custom-workbench .sc-empty-title,
+#style-custom-workbench .sc-empty > strong { color: var(--sc-text); font: 600 14px/1.4 var(--sc-font); }
+#style-custom-workbench .sc-empty-hint { font-size: 12px; line-height: 1.5; }
+#style-custom-workbench .sc-empty + .sc-actions { justify-content: center; }
+
+/* S15: at narrow widths the search gets a full row and the rest wraps under it. */
+#style-custom-workbench input[type=search]::placeholder { text-overflow: ellipsis; }
+#style-custom-workbench input[type=search] { text-overflow: ellipsis; }
+@container sc-workbench (max-width: 680px) {
+  #style-custom-workbench .sc-controls input[type=search],
+  #style-custom-workbench .sc-search-row input[type=search] { flex: 1 1 100%; min-width: 0; }
+  #style-custom-workbench .sc-search-row > *:not(input[type=search]) { flex: 0 1 auto; }
+  #style-custom-workbench .sc-search-row > .sc-filters { margin-inline-start: auto; padding: 0; }
+  #style-custom-workbench .sc-search-row > .sc-filters[open] { flex-basis: 100%; }
+  /* S12 narrow: the tab strip fades over its padding only, and keeps the current pill in view. */
+  #style-custom-workbench .sc-shell nav {
+    padding: 6px 18px; scroll-padding-inline: 28px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  }
+  #style-custom-workbench { --sc-bar-reserve: 52px; }
+}
+/* The bar lies on the grey canvas, where the grey fill would vanish: its secondary buttons are white. */
+#style-custom-workbench .sc-selection-bar button:not([data-variant=primary]):not(:disabled) { background: var(--sc-surface); box-shadow: none; color: var(--sc-text); min-height: 30px; padding: 3px 14px; font-size: 13px; font-weight: 500; }
+#style-custom-workbench .sc-selection-bar button:not([data-variant=primary]):not(:disabled):hover { background: var(--sc-fill-hover); }
+
+/* Related papers: each step is a group like any other. Rows inside a group are
+   white cards on the grey, one gap apart, with no divider lines. */
+#style-custom-workbench .sc-group > .sc-path-head,
+#style-custom-workbench .sc-group > .sc-path-head:first-child { margin: 0; padding: 10px 6px 8px; border: 0; align-items: center; }
+#style-custom-workbench .sc-group > .sc-hit-group-note { margin: -4px 6px 8px; }
+#style-custom-workbench .sc-group .sc-hits { display: flex; flex-direction: column; gap: 6px; border-top: 0; }
+#style-custom-workbench .sc-group .sc-hit { padding: 10px 14px; border: 0; border-radius: 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-group .sc-hit:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-group .sc-hit:last-child { border-bottom: 0; }
+#style-custom-workbench .sc-chip .sc-count,
+#style-custom-workbench .sc-segmented .sc-count { margin-inline-start: 2px; }
+#style-custom-workbench .sc-shell nav { scroll-padding-block: 30px; }
+#style-custom-workbench .sc-settings-part input[type=checkbox]:not(:checked) { box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
+</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div><section style="font-size:13px" data-maximized="false" role="region" data-density="comfortable" aria-label="Style Custom 연구 작업 패널" id="style-custom-workbench"><header class="sc-header"><div class="sc-brand"><img aria-hidden="true" alt="" height="24" width="24" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJTdHlsZSBDdXN0b206IGEgbGlicmFyeSByb3cgbWFya2VkIj4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjI4IiBmaWxsPSIjMkIzMjQwIi8+CiAgPGcgZmlsbD0iI0ZGRkZGRiIgb3BhY2l0eT0iMC41Ij4KICAgIDxjaXJjbGUgY3g9IjMxIiBjeT0iNDEiIHI9IjYiLz48Y2lyY2xlIGN4PSIzMSIgY3k9IjY0IiByPSI2Ii8+PGNpcmNsZSBjeD0iMzEiIGN5PSI4NyIgcj0iNiIvPgogIDwvZz4KICA8ZyBmaWxsPSIjRkZGRkZGIj4KICAgIDxyZWN0IHg9IjQ2IiB5PSIzNCIgd2lkdGg9IjU2IiBoZWlnaHQ9IjE0IiByeD0iNyIvPgogICAgPHJlY3QgeD0iNDYiIHk9IjgwIiB3aWR0aD0iNDAiIGhlaWdodD0iMTQiIHJ4PSI3Ii8+CiAgPC9nPgogIDxyZWN0IHg9IjQ2IiB5PSI1NyIgd2lkdGg9IjUwIiBoZWlnaHQ9IjE0IiByeD0iNyIgZmlsbD0iI0U5QTgxQyIvPgo8L3N2Zz4K"><strong>Style Custom</strong><span class="sc-subtitle">연구 작업 패널</span></div><button title="철회 여부 미확인 1146편 · 지표 없는 저널 169종 · 확인 안 한 관심 저자 109명" aria-pressed="false" class="sc-notice-toggle" type="button">자료 점검 3가지</button><div class="sc-header-actions"><button aria-pressed="false" title="간격 좁게" class="sc-icon-button" aria-label="화면 밀도 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="8" x2="13" y1="8" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /></svg></button><button hidden aria-pressed="false" class="sc-icon-button sc-dock" title="탭으로 열기" aria-label="탭으로 열기 / 창으로 띄우기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="8.4" width="10.8" y="4.6" x="2.6" /><path d="M2.6 7.4h10.8M5.2 4.6V3h4.4v1.6" /></svg></button><button aria-pressed="false" class="sc-icon-button sc-maximize" title="전체 화면" aria-label="전체 화면 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4" /></svg></button><button class="sc-icon-button" title="기능 찾기 · ⌘/Ctrl K" aria-label="기능 찾기" aria-keyshortcuts="Meta+K Control+K" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="4.25" cy="7.25" cx="7.25" /><line y2="13.5" x2="13.5" y1="10.5" x1="10.5" /></svg></button><button class="sc-icon-button sc-close" title="닫기" aria-label="작업 패널 닫기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="12" x2="12" y1="4" x1="4" /><line y2="12" x2="4" y1="4" x1="12" /></svg></button></div></header><div class="sc-shell"><nav aria-label="작업 종류"><div class="sc-nav-group"><div class="sc-nav-heading">탐색</div><button tabindex="0" class="active" aria-current="page" data-tab="explore" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.8" height="10" width="3" y="3" x="2.75" /><rect rx="0.8" height="10" width="3" y="3" x="7.25" /><path d="M11.9 3.6l1.9.5-2.2 9.1-1.2-.3" /></svg></span>보유 문헌<span class="sc-nav-count">6</span></button><button tabindex="-1" aria-current="false" data-tab="recent" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="5.25" cy="8" cx="8" /><path d="M8 5.1V8l2.2 1.7" /></svg></span>최근 문헌</button><button tabindex="-1" aria-current="false" data-tab="related" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.1" cy="11.4" cx="4.4" /><circle r="2.1" cy="4.6" cx="11.5" /><line y2="6.1" x2="10" y1="9.9" x1="6" /></svg></span>관련 논문</button><button tabindex="-1" aria-current="false" data-tab="authors" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.5" cy="5.6" cx="8" /><path d="M3.3 13.1c.7-2.5 2.5-3.8 4.7-3.8s4 1.3 4.7 3.8" /></svg></span>저자 추적</button><button tabindex="-1" aria-current="false" data-tab="collections" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.7 12.6V4.2h3.9l1.4 1.7h5.3v6.7z" /></svg></span>컬렉션</button><button tabindex="-1" aria-current="false" data-tab="journals" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="8.6" x2="4" y1="12.6" x1="4" /><line y2="5" x2="8" y1="12.6" x1="8" /><line y2="10" x2="12" y1="12.6" x1="12" /><line y2="12.6" x2="13.6" y1="12.6" x1="2.4" /></svg></span>저널 지표</button></div><div class="sc-nav-group"><div class="sc-nav-heading">읽기</div><button tabindex="-1" aria-current="false" data-tab="reading" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z" /><line y2="13.4" x2="8" y1="4.8" x1="8" /></svg></span>읽기 진행</button><button tabindex="-1" aria-current="false" data-tab="notes" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M4 2.6h5.4L12.4 5.6v7.8H4z" /><path d="M9.2 2.7v3h3.1" /><line y2="9" x2="10.4" y1="9" x1="6" /><line y2="11.2" x2="9" y1="11.2" x1="6" /></svg></span>노트</button><button tabindex="-1" aria-current="false" data-tab="annotations" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.9" height="2.6" width="10.8" y="9.6" x="2.6" /><path d="M5.2 9.5l5.6-6 2.3 2.3-5.5 5.7" /></svg></span>주석</button><button tabindex="-1" aria-current="false" data-tab="attachments" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M11.5 7.2l-4.6 4.6a2.4 2.4 0 01-3.4-3.4l5.4-5.4a1.7 1.7 0 012.4 2.4l-5.2 5.2a.9.9 0 01-1.3-1.3l4.5-4.5" /></svg></span>첨부 미리보기</button><button tabindex="-1" aria-current="false" data-tab="backlinks" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M13.2 11.6a4.2 4.2 0 00-4.2-4.2H3.5" /><path d="M6.2 4.6L3.2 7.4l3 2.8" /></svg></span>역링크</button></div><div class="sc-nav-group"><div class="sc-nav-heading">정리</div><button tabindex="-1" aria-current="false" data-tab="tags" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8.4 2.6H13v4.6l-6 6a1.1 1.1 0 01-1.6 0L2.8 10.2a1.1 1.1 0 010-1.6z" /><circle r="0.95" cy="5.1" cx="10.5" /></svg></span>중첩 태그</button><button tabindex="-1" aria-current="false" data-tab="graph" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="1.7" cy="3.6" cx="8" /><circle r="1.7" cy="11.8" cx="3.7" /><circle r="1.7" cy="11.8" cx="12.3" /><line y2="10.2" x2="4.6" y1="5.1" x1="6.9" /><line y2="10.2" x2="11.4" y1="5.1" x1="9.1" /><line y2="11.8" x2="10.6" y1="11.8" x1="5.4" /></svg></span>관계 그래프</button><button tabindex="-1" aria-current="false" data-tab="canvas" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.4" height="9.4" width="10.8" y="3.3" x="2.6" /><circle r="1.1" cy="6.6" cx="5.9" /><path d="M3 11.6l3.1-3 2.2 2 2.1-2.4 2.6 3" /></svg></span>캔버스</button><button tabindex="-1" aria-current="false" data-tab="matrix" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="9.6" width="10.8" y="3.2" x="2.6" /><line y2="12.8" x2="8" y1="3.2" x1="8" /><line y2="6.4" x2="13.4" y1="6.4" x1="2.6" /></svg></span>논문 비교</button></div><div class="sc-nav-group"><div class="sc-nav-heading">도구</div><button tabindex="-1" aria-current="false" data-tab="tabs" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.6 12.6V6.2h4.1l1.3-1.8h5.4v8.2z" /><path d="M4.4 4.4h3.2" /></svg></span>탭 관리</button><button tabindex="-1" aria-current="false" data-tab="views" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1" height="4.6" width="4.6" y="2.8" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="2.8" x="8.6" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="8.6" /></svg></span>뷰 그룹</button><button tabindex="-1" aria-current="false" data-tab="assist" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M6 2.9l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" /><path d="M11.4 8.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg></span>번역 · AI</button><button tabindex="-1" aria-current="false" data-tab="appearance" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /><circle r="1.6" cy="5" cx="6.4" /><circle r="1.6" cy="11" cx="10" /></svg></span>스타일 편집</button></div></nav><div class="sc-content"><div class="sc-context"><h2 class="sc-section-title">보유 문헌</h2><span class="sc-context-detail">라이브러리 · 6개 문헌</span><div aria-label="문헌 종류" class="sc-kind-chips"><button data-kind="" title="모든 종류" aria-pressed="true" type="button" class="sc-chip sc-chip-button">전체 <span class="sc-count">6</span></button><button data-kind="journalArticle" title="논문만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">논문 <span class="sc-count">5</span></button><button data-kind="preprint" title="프리프린트만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">프리프린트 <span class="sc-count">1</span></button></div></div><div class="sc-controls sc-search-row"><input title="제목·저자·태그·DOI·초록·내 메모 검색" aria-label="작업 패널 검색" placeholder="제목·저자·태그·DOI·초록·내 메모 검색" type="search"><label hidden class="sc-check sc-search-records"><input aria-label="내 기록 포함" type="checkbox"><span>내 기록 포함</span></label><select aria-label="표시 범위"><option value="library">라이브러리</option><option value="selected">선택한 문헌</option><option value="collection">현재 컬렉션</option><option value="collection-recursive">현재 컬렉션과 하위 컬렉션</option></select><button type="button">현재 선택 가져오기</button><button type="button">새로고침</button><details class="sc-filters"><summary>상세 필터</summary><div aria-label="문헌 상세 필터" class="sc-filter-fields"><select aria-label="문헌 유형 필터"><option value="">모든 유형</option><option value="journalArticle">논문</option><option value="preprint">프리프린트</option></select><select aria-label="읽기 상태 필터"><option value="">모든 읽기 상태</option><option value="unread">안 읽음</option><option value="reading">읽는 중</option><option value="done">완료</option></select><select aria-label="최소 별점"><option value="">모든 별점</option><option value="1">1점 이상</option><option value="2">2점 이상</option><option value="3">3점 이상</option><option value="4">4점 이상</option><option value="5">5점 이상</option></select><input aria-label="시작 연도" placeholder="시작 연도" max="9999" min="1" type="number"><input aria-label="마지막 연도" placeholder="마지막 연도" max="9999" min="1" type="number"><select aria-label="문헌 정렬"><option value="library">기본 순서</option><option value="title">제목순</option><option value="year-desc">최신 발행순</option><option value="if-desc">IF 높은 순</option><option value="citations-desc">인용 많은 순</option><option value="rating-desc">별점 높은 순</option><option value="time-desc">읽기 시간순</option></select><button type="button">필터 초기화</button></div></details></div><div hidden aria-label="적용 중인 필터" class="sc-filter-chips"></div><div data-error="false" aria-live="polite" role="status" class="sc-status"></div><div hidden="hidden" class="sc-welcome"></div><div hidden class="sc-notice"></div><div tabindex="-1" class="sc-body"><div aria-label="이 목록 요약" role="group" class="sc-overview"><div aria-hidden="true" class="sc-overview-meter"><span style="flex-grow:1" class="sc-overview-done"></span><span style="flex-grow:2" class="sc-overview-reading"></span><span style="flex-grow:3" class="sc-overview-unread"></span></div><p class="sc-overview-facts"><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>1</b> 완료</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>2</b> 읽는 중</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>3</b> 안 읽음</button><span><b>1h 20m 40s</b> 읽음</span><button title="이 순서로 정렬" aria-pressed="false" class="sc-overview-fact" type="button"><b>12.4</b> IF 중앙값 · 5/6편</button><button title="이 순서로 정렬" aria-pressed="false" class="sc-overview-fact" type="button"><b>53</b> 인용 중앙값 · 4/6편</button></p><details class="sc-local-reading-links"><summary>읽는 중·완료 문헌과 인용으로 이어진 안 읽은 문헌 2편</summary><p class="sc-local-reading-head">읽는 중·완료 문헌이 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">기준 3편 중 참고문헌 기록 2편</p><div class="sc-local-reading-link"><button title="Preregistered synthesis of repair reviews" class="sc-hit-title-link" type="button">Preregistered synthesis of repair reviews</button><span class="sc-local-reading-count">1편에서 인용</span><span title="Mapping cellular responses across tissue repair" class="sc-muted sc-local-reading-from">Mapping cellular responses across tissue repair</span><button aria-pressed="false" class="sc-local-reading-queue" type="button">읽기 대기</button></div><p class="sc-local-reading-head">읽는 중·완료 문헌을 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">안 읽은 3편 중 참고문헌 기록 1편</p><div class="sc-local-reading-link"><button title="Spatial context and cell-state transitions in regeneration" class="sc-hit-title-link" type="button">Spatial context and cell-state transitions in regeneration</button><span class="sc-local-reading-count">읽는 중·완료 문헌 2편 인용</span><span title="Mapping cellular responses across tissue repair
 A practical framework for reproducible literature synthesis" class="sc-muted sc-local-reading-from">Mapping cellular responses across tissue repair · A practical framework for reproducible literatur</span><button aria-pressed="false" class="sc-local-reading-queue" type="button">읽기 대기</button></div></details><p class="sc-overview-picks"><span title="안 읽은 문헌 중 출판 후 해마다 가장 많이 인용된 순서입니다. 철회된 문헌은 뺐습니다." class="sc-overview-picks-label">안 읽은 문헌 · 연도 보정 인용순</span><span class="sc-overview-pick"><button title="Preregistered synthesis of repair reviews" class="sc-hit-title-link" type="button">Preregistered synthesis of repair reviews</button><span class="sc-muted">연 3회</span></span></p></div><div aria-label="정렬할 열" role="group" class="sc-paper-columns"><span class="sc-paper-columns-lead"><details class="sc-selection-tools"><summary>선택 작업</summary><span class="sc-selection-tools-body"><button type="button">현재 페이지 선택</button><button type="button">현재 페이지 선택 해제</button><button type="button">검색 결과 전체 선택</button></span></details><span class="sc-paper-columns-sortlabel">정렬</span></span><button title="높은 순으로 정렬" aria-pressed="false" data-metric="impact" class="sc-paper-column" type="button">IF</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="citations" class="sc-paper-column" type="button">인용</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="rating" class="sc-paper-column" type="button">별점</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="time" class="sc-paper-column" type="button">읽기</button><span class="sc-paper-columns-tail"></span></div><div class="sc-paper-list"><article tabindex="0" data-selected="true" data-status="reading" data-item-id="1" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|0" aria-label="Mapping cellular responses across tissue repair 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Mapping cellular responses across tissue repair" class="sc-paper-title">Mapping cellular responses across tissue repair</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="1" aria-expanded="false" type="button">자세히</button></div></div><span title="M. Kim; A. Rivera; J. Park · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · M. Kim; A. Rivera; J. Park</span></span><span title="Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것" class="sc-paper-remark"><span class="sc-paper-remark-label">메모</span>Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것</span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">128</span></span><span data-metric="rating" title="별점 4/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★☆</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">20m 40s</span><span title="전체 12쪽 중 6쪽 읽음" aria-label="전체 12쪽 중 6쪽 읽음" role="img" class="sc-row-progress"><span style="width:50%" class="sc-row-progress-fill"></span></span><span aria-hidden="true" class="sc-row-progress-text">6/12</span><button class="sc-row-annotations" type="button">주석 3</button></span></div></div></article><article tabindex="0" data-selected="false" data-status="done" data-item-id="2" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|1" aria-label="A practical framework for reproducible literature synthesis 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="A practical framework for reproducible literature synthesis" class="sc-paper-title">A practical framework for reproducible literature synthesis</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="2" aria-expanded="false" type="button">자세히</button></div></div><span title="S. Lee; L. Chen · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Methods · S. Lee; L. Chen</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">64</span></span><span data-metric="rating" title="별점 5/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★★</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">53m 20s</span><span title="전체 8쪽 중 8쪽 읽음" aria-label="전체 8쪽 중 8쪽 읽음" role="img" class="sc-row-progress"><span style="width:100%" class="sc-row-progress-fill"></span></span><span aria-hidden="true" class="sc-row-progress-text">8/8</span><button class="sc-row-annotations" type="button">주석 2</button></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="3" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|2" aria-label="Spatial context and cell-state transitions in regeneration 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Spatial context and cell-state transitions in regeneration" class="sc-paper-title"><span title="프리프린트" class="sc-preprint sc-kind">프리프린트</span>Spatial context and cell-state transitions in regeneration</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="3" aria-expanded="false" type="button">자세히</button></div></div><span title="E. Morgan; H. Choi · Example Biology" class="sc-paper-meta"><span class="sc-paper-meta-text">2026 · Example Biology · E. Morgan; H. Choi</span></span></div><div class="sc-metrics"><span data-empty="true" data-metric="impact" title="저널 영향력 지수 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">—</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="reading" data-item-id="4" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|3" aria-label="Tissue-scale repair atlases from sparse sampling 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Tissue-scale repair atlases from sparse sampling" class="sc-paper-title">Tissue-scale repair atlases from sparse sampling</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="4" aria-expanded="false" type="button">자세히</button></div></div><span title="R. Ahn; P. Silva · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · R. Ahn; P. Silva</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">41</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">6m 40s</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="5" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|4" aria-label="Benchmarks for repair-stage classifiers 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Benchmarks for repair-stage classifiers" class="sc-paper-title">Benchmarks for repair-stage classifiers</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="5" aria-expanded="false" type="button">자세히</button></div></div><span title="K. Oh; Christopher A. Voigt · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Cell Research · K. Oh; Christopher A. Voigt</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="6" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|5" aria-label="Preregistered synthesis of repair reviews 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Preregistered synthesis of repair reviews" class="sc-paper-title">Preregistered synthesis of repair reviews</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="6" aria-expanded="false" type="button">자세히</button></div></div><span title="D. Yu; S. Lee · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2023 · Example Methods · D. Yu; S. Lee</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">12</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article></div></div></div></div><footer data-selected="true" class="sc-selection-bar"><span title="Mapping cellular responses across tissue repair" class="sc-selection-label">문헌 1개 선택</span><button type="button">선택 해제</button><span class="sc-selection-tasks"><button type="button">노트</button><button type="button">주석</button><button hidden data-variant="primary" type="button">논문 비교</button><button hidden type="button">주석 나란히</button></span><details hidden class="sc-selection-relations"><summary>연결 작업</summary><button disabled type="button">관련 문헌으로 연결</button><button disabled type="button">선택 문헌끼리 연결 해제</button></details></footer><div hidden aria-label="기능 바로 찾기" aria-modal="true" role="dialog" class="sc-command-palette"><input aria-controls="sc-command-results" aria-label="찾을 기능 이름" aria-autocomplete="list" aria-expanded="false" role="combobox" placeholder="예: 주석, 비교, 탭…" class="sc-command-search" type="search"><div aria-label="검색된 기능" role="listbox" class="sc-command-results" id="sc-command-results"></div><p class="sc-muted">↑↓ 이동 · Enter 열기 · Esc 닫기</p></div></section><script>/* Pure workspace operations shared by the panel and background regressions. */
 (function(root){
  'use strict';
@@ -4005,7 +4251,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    if(counts.size<2)return;
    const order=['journalArticle','preprint','conferencePaper','patent','thesis','book','bookSection','report'];
    const kinds=[...counts].sort((a,b)=>(order.indexOf(a[0])+1||99)-(order.indexOf(b[0])+1||99)||b[1]-a[1]);
-   const chip=(label,value,count,title)=>{const b=node('button',null,kindChips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(state.type===value),title});b.textContent=`${T(label)} ${count}`;b.dataset.kind=value;b.addEventListener('click',()=>{state.type=state.type===value?'':value;type.value=state.type;render();});return b;};
+   const chip=(label,value,count,title)=>{const b=node('button',null,kindChips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(state.type===value),title});withCount(b,label,count);b.dataset.kind=value;b.addEventListener('click',()=>{state.type=state.type===value?'':value;type.value=state.type;render();});return b;};
    chip('전체','',state.items.length,'모든 종류');
    for(const [kind,count] of kinds)chip(kindLabel(kind),kind,count,`${T(kindLabel(kind))}만 보기`);
   }
@@ -4300,7 +4546,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   const SEARCH_WHAT={explore:'제목·저자·태그·DOI·초록·내 메모 검색',recent:'제목·저자·태그·DOI·초록·내 메모 검색',notes:'노트·문헌 제목·저자 검색',annotations:'주석·메모·문헌 제목·저자 검색',attachments:'첨부파일 이름·형식 검색'};
   function updateChrome(){
    sectionTitle.textContent=T(TABS.find(([id])=>id===state.tab)?.[1]||'');
-   search.placeholder=T(SEARCH_WHAT[state.tab]||'제목·저자·태그·DOI·초록 검색');
+   search.placeholder=T(SEARCH_WHAT[state.tab]||'제목·저자·태그·DOI·초록 검색');search.title=search.placeholder;
    const nativeJCR=state.tab==='journals'&&state.journalBrowser!=='openalex';
    const applicable=!nativeJCR&&FILTER_TABS.has(state.tab)&&state.tab!=='collections';controls.hidden=!applicable;filterPanel.hidden=!applicable;kindChips.hidden=!applicable;
    // 보유 문헌's own widened-search checkbox: nothing to widen without a query,
@@ -4361,13 +4607,23 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    if(latest!==submitted)return;
    updateDraft(key,undefined);if(clearValue)input.value='';
   }
-  function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]'))if(drafts.has(input.dataset.draftKey))input.value=drafts.get(input.dataset.draftKey);}
+  /* Applying a generated result needs a result: the button is off while the box is empty. */
+  function syncAIApply(){const apply=body.querySelector('[data-ai-apply]'),copyBtn=body.querySelector('[data-ai-copy]'),out=body.querySelector('.sc-ai-output');if(out){if(apply)apply.disabled=!out.value.trim();if(copyBtn)copyBtn.disabled=!out.value.trim();}}
+  body.addEventListener('input',syncAIApply);
+  function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]'))if(drafts.has(input.dataset.draftKey))input.value=drafts.get(input.dataset.draftKey);syncAIApply();}
   function clear(){
    if(jcrMount){state.jcrBrowserState=jcrMount.state;jcrMount.destroy();jcrMount=null;}
    previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
   }
 
-  function empty(text){node('p',text,body,{class:'sc-empty'});}
+  /* An empty page: one heading and, when the text has a second sentence, a muted hint. */
+  function empty(text){
+   const p=node('p',null,body,{class:'sc-empty'});
+   const said=String(T(text)),cut=said.search(/[.!?。]\s+\S/);
+   if(cut<0){node('strong',said,p,{class:'sc-empty-title'});return;}
+   node('strong',said.slice(0,cut+1),p,{class:'sc-empty-title'});p.appendChild(doc.createTextNode(' '));
+   node('span',said.slice(cut+1).trim(),p,{class:'sc-empty-hint'});
+  }
   function bar(parent=body){return node('div',null,parent,{class:'sc-actions'});}
   // The headline and its detail go in their own block so that everything a
   // caller appends afterwards -- buttons, checkboxes, selects -- lands in one
@@ -4383,6 +4639,27 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    // read as text, "논문1" is one word.
    if(count!=null&&count!==''){h.appendChild(doc.createTextNode(' '));node('span',String(count),h,{class:'sc-section-head-count'});}
    return h;
+  }
+  /* Every heading and what follows it, up to the next heading, is one soft
+     container (user direction 2026-10-01). Done once after a page is drawn, so
+     the tab code keeps appending to its own parents and nothing in it depends
+     on the wrapper. Headings inside a card or a settings part are already in a
+     container and stay as they are. */
+  function groupSections(root=body){
+   for(const head of [...root.querySelectorAll('.sc-section-head,.sc-path-head')]){
+    const parent=head.parentNode;
+    if(!parent||head.closest('.sc-group,.sc-card,.sc-author-news,.sc-settings-part'))continue;
+    const group=doc.createElement('section');group.className='sc-group';
+    parent.insertBefore(group,head);group.appendChild(head);
+    while(group.nextSibling&&!group.nextSibling.classList?.contains('sc-section-head')&&!group.nextSibling.classList?.contains('sc-path-head'))group.appendChild(group.nextSibling);
+   }
+  }
+  /* A label and its count: the count is a small rounded badge everywhere, and
+     the button's text still reads "전체 6" as one phrase. */
+  function withCount(target,label,count){
+   target.textContent='';target.appendChild(doc.createTextNode(T(label)+' '));
+   node('span',String(count),target,{class:'sc-count'});
+   return target;
   }
   function card(title,subtitle,parent=body){
    const c=node('article',null,parent,{class:'sc-card'});
@@ -6683,7 +6960,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    if(read.length){
     const views=node('div',null,list,{class:'sc-segmented sc-reading-views',role:'group','aria-label':T('읽기 기록 보기')});
     for(const [key,label,count] of [['','전체 기록',listedAll.length],['reading','읽는 중',readingNow.length],['stalled','14일 넘게 멈춤',stalled.length]]){
-     const b_=button(`${T(label)} ${count}`,()=>{state.readingView=key;state.readingPage=0;refreshReading();},views,{'aria-pressed':String((state.readingView||'')===key)});
+     const b_=button('',()=>{state.readingView=key;state.readingPage=0;refreshReading();},views,{'aria-pressed':String((state.readingView||'')===key)});withCount(b_,label,count);
      if(key&&!count)b_.disabled=true;
     }
    }
@@ -6802,11 +7079,11 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    if(!reader.viewGroups().length)empty('열 표시·순서·너비·정렬을 조절한 뒤 현재 뷰를 저장하세요.');
   }
   function drawCanvas(){const b=bar(),name=node('input',null,b,{placeholder:'새 보드 이름','aria-label':'보드 이름'});button('보드 만들기',async()=>{const board=model.createBoard(runtime.cache,name.value);state.boardID=board.id;runtime.dirty=true;await runtime.flush();render();},b,{'data-variant':'primary'});const select=node('select',null,b,{'aria-label':'캔버스 선택'});node('option','보드 선택',select,{value:''});for(const board of runtime.cache.boards||[])node('option',board.name,select,{value:board.id});select.value=state.boardID||'';select.addEventListener('change',()=>{state.boardID=select.value;state.cardIDs.clear();render();});const board=(runtime.cache.boards||[]).find(b=>b.id===state.boardID);
-   button('보드 삭제',async()=>{if(!board)throw new Error('삭제할 보드를 선택하세요.');deletedCardSelections.set(board.id,[...state.cardIDs]);model.deleteBoard(runtime.cache,board.id);state.boardID=null;state.cardIDs.clear();runtime.dirty=true;await runtime.flush();render();},b,{class:'sc-danger-soft'}).disabled=!board;
+   button('보드 삭제',async()=>{if(!board)throw new Error('삭제할 보드를 선택하세요.');deletedCardSelections.set(board.id,[...state.cardIDs]);model.deleteBoard(runtime.cache,board.id);state.boardID=null;state.cardIDs.clear();runtime.dirty=true;await runtime.flush();render();},b,{class:'sc-danger-soft'}).hidden=!board;
    // Nothing to act on is shown as off, as the matrix's paging and the tab
    // manager's moves already are, instead of an error after the press.
    select.disabled=!(runtime.cache.boards||[]).length;
-   button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b).disabled=!(deletedCardSelections.size||(runtime.cache.boardTrash||[]).length);
+   button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b).hidden=!(deletedCardSelections.size||(runtime.cache.boardTrash||[]).length);
    if(!board){empty('보드를 만들고 선택한 문헌을 카드로 추가하세요.');return;}
    const save=async()=>{runtime.dirty=true;await runtime.flush();render();};button('선택 문헌 추가',async()=>{const chosen=selected();if(!chosen.length)throw new Error('카드로 올릴 문헌을 먼저 선택하세요.');model.addToBoard(runtime.cache,board,chosen);await save();},b);button('메모 카드 추가',async()=>{model.addBoardNote(runtime.cache,board,'새 메모');await save();},b);button('카드 연결',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('두 카드를 선택하세요.');model.linkCards(board,...ids);await save();},b);button('선택 카드 삭제',async()=>{
     if(!state.cardIDs.size)throw new Error('지울 카드를 먼저 선택하세요.');
@@ -7072,7 +7349,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    const have=state.compareKey===key&&state.compareOutput;
    output.hidden=!have;if(have)output.value=state.compareOutput;
    const actions=bar(section);actions.classList.add('sc-compare-actions');actions.hidden=!have;
-   button('결과 복사',()=>copy(output.value),actions);
+   button('결과 복사',()=>copy(output.value),actions,{'data-ai-copy':'true'});
    button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 「함께 읽기」를 눌러 결과를 받으세요.');noteCache=null;await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
   }
   /* Collections as a tree, each with a bar for how much it holds. A list of
@@ -7347,7 +7624,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     const tools=node('div',null,list,{class:'sc-inbox-tools'});
     const views=node('div',null,tools,{class:'sc-segmented',role:'group','aria-label':T('새 논문 보기')});
     for(const [key,label,count] of [['new','미확인',unseen],['seen','확인함',all.length-unseen],['all','전체',all.length]])
-     button(`${T(label)} ${count}`,()=>{state.freshSeen=key;state.freshLimit=0;draw(report);},views,{'aria-pressed':String(view===key)});
+     withCount(button('',()=>{state.freshSeen=key;state.freshLimit=0;draw(report);},views,{'aria-pressed':String(view===key)}),label,count);
     node('span',T('↑↓ 이동 · e 확인함'),tools,{class:'sc-muted sc-inbox-hint'});
     const box=node('div',null,list,{class:'sc-hits'});inboxKeys(box);
     const limit=state.freshLimit||12;
@@ -8100,7 +8377,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     const tools=node('div',null,section,{class:'sc-inbox-tools'});
     const views=node('div',null,tools,{class:'sc-segmented',role:'group','aria-label':T('새 논문 보기')});
     for(const [key,label,count] of [['new','미확인',unseen],['seen','확인함',all.length-unseen],['all','전체',all.length]])
-     button(`${T(label)} ${count}`,()=>{state.inboxView=key;state.inboxAll=false;refreshWatched();},views,{'aria-pressed':String(view===key)});
+     withCount(button('',()=>{state.inboxView=key;state.inboxAll=false;refreshWatched();},views,{'aria-pressed':String(view===key)}),label,count);
     const find=node('input',null,tools,{type:'search',placeholder:T('제목·저널·저자 검색'),'aria-label':T('새 논문 검색')});
     find.value=state.inboxQuery||'';
     node('span',T('↑↓ 이동 · e 확인함'),tools,{class:'sc-muted sc-inbox-hint'});
@@ -9119,8 +9396,8 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    const hasAbstract=!!String(item.abstract||'').trim();
    const NEEDS_ABSTRACT=new Set(['summary','remark','tags']);
    if(aiReady&&!hasAbstract)body.insertBefore(node('p','이 문헌에는 초록이 없어 요약·메모·태그 제안은 쓸 수 없습니다. 제목 번역만 됩니다.',null,{class:'sc-muted sc-settings-note'}),b);
-   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message(task==='translate'?'제목을 AI 서버에 보내는 중…':'제목·초록을 AI 서버에 보내는 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b,{title:!aiReady?T('설정에서 AI 서버를 연결하면 켜집니다'):(NEEDS_ABSTRACT.has(task)&&!hasAbstract)?T('초록이 없는 문헌입니다'):''}).disabled=!aiReady||(NEEDS_ABSTRACT.has(task)&&!hasAbstract);
-   const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary'});
+   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message(task==='translate'?'제목을 AI 서버에 보내는 중…':'제목·초록을 AI 서버에 보내는 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);syncAIApply();}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b,{title:!aiReady?T('설정에서 AI 서버를 연결하면 켜집니다'):(NEEDS_ABSTRACT.has(task)&&!hasAbstract)?T('초록이 없는 문헌입니다'):''}).disabled=!aiReady||(NEEDS_ABSTRACT.has(task)&&!hasAbstract);
+   const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary','data-ai-apply':'true'});syncAIApply();
   }
   /* The settings page as sections, each with its name, one line saying what it
      changes, its options one per line, and its action under them. It was one
@@ -9193,7 +9470,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     } else {await paperList(rows());}
     break;
    }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
-   if(token===epoch&&!disposed)restoreDrafts();
+   if(token===epoch&&!disposed){groupSections();restoreDrafts();navButtons.get(state.tab)?.scrollIntoView?.({block:'nearest',inline:'nearest'});}
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
   function refreshMetrics(){
    if(disposed||panel.hidden)return;

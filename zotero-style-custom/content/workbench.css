@@ -318,12 +318,6 @@
   background: transparent;
   border-block-end: 0;
 }
-/* The divider belongs between two rows, not around the corner of one: a border on
-   a 10px-rounded card thins to a wedge at each end, and hangs under the last row. */
-#style-custom-workbench .sc-paper-card + .sc-paper-card::after {
-  content: ""; position: absolute; inset-inline: 0; inset-block-start: -1px;
-  height: 1px; background: var(--sc-border);
-}
 #style-custom-workbench .sc-paper-card:hover { background: var(--sc-surface); }
 /* Reading state as a dot at the start of the row, not a slab down its edge. */
 #style-custom-workbench .sc-paper-card[data-status]::before {
@@ -502,7 +496,7 @@
     --sc-accent-soft: #2E2E35;
     --sc-selection: #ECECEF;
     --sc-nav-on: #ECECEF; --sc-nav-on-ink: #151517;
-    --sc-card-shadow: none;
+    --sc-card-shadow: 0 0 0 0 transparent;
     --sc-border: rgba(255, 255, 255, .09);
     --sc-border-strong: rgba(255, 255, 255, .18);
     --sc-reading: #7FC3A3;
@@ -517,7 +511,6 @@
     color-scheme: dark;
   }
   #style-custom-workbench .sc-shell nav button[data-tab]:hover { background: rgba(255, 255, 255, .07); }
-  #style-custom-workbench .sc-card { box-shadow: 0 0 0 .5px var(--sc-border); }
   /* The ink that reads on the accent, named once instead of written into
      three rules that then drifted apart. */
   #style-custom-workbench { --sc-accent-ink: #151517; }
@@ -2017,7 +2010,6 @@
 #style-custom-workbench .sc-section-head-count { font-weight: 450; }
 #style-custom-workbench .sc-section-head + .sc-hits { margin: 0 0 4px; padding: 0 8px 8px; background: var(--sc-surface-alt); border-radius: 0 0 var(--sc-radius-card) var(--sc-radius-card); }
 #style-custom-workbench .sc-paper-card { border-radius: var(--sc-radius-card); padding-block: 10px; }
-#style-custom-workbench .sc-paper-card + .sc-paper-card::after { inset-inline: 14px; background: var(--sc-border); }
 #style-custom-workbench .sc-paper-card:hover,
 #style-custom-workbench .sc-paper-card:focus-within { background: var(--sc-surface-alt); }
 #style-custom-workbench .sc-section-head + .sc-hits .sc-paper-card:hover { background: var(--sc-surface); }
@@ -2089,3 +2081,257 @@
 #style-custom-workbench .sc-collection-count::before { content: "\00B7\00A0"; }
 #style-custom-workbench .sc-collection-mixtext { flex: 1 0 100%; margin: 0; padding-inline-start: 22px; }
 #style-custom-workbench .sc-collection-empty .sc-collection-name { color: var(--sc-muted); font-weight: 450; }
+
+/* ==== System pass (user direction 2026-10-01): the defects that recurred on every tab ====
+   Fixed once here, at the source, instead of tab by tab:
+   dark cards with an edge, one group container, one count badge, one select,
+   one disclosure chevron, one checkbox, two button styles, Korean wrapping,
+   a rail that hints at its own scroll, a fixed bottom edge, calm empty states. */
+#style-custom-workbench {
+  /* S11: Korean breaks between words, never inside "업데이트" or "보냅니다"; a long URL still breaks. */
+  word-break: keep-all; overflow-wrap: anywhere;
+  --sc-card-edge: rgba(0, 0, 0, .08);
+  --sc-control-edge: rgba(0, 0, 0, .42);
+  --sc-chevron-ink: #6A6A6F;
+  --sc-check-ink: #fff;
+  --sc-bar-reserve: 58px;
+}
+@media (prefers-color-scheme: dark) {
+  #style-custom-workbench {
+    /* S1: a card in the dark has to part from the page it lies on. */
+    --sc-card-edge: rgba(255, 255, 255, .14);
+    --sc-control-edge: rgba(255, 255, 255, .5);
+    --sc-chevron-ink: #a8a8ae;
+      --sc-check-ink: #151517;
+  }
+}
+
+/* S1: cards carry the edge token in both themes, and hover never drops it. */
+#style-custom-workbench .sc-card,
+#style-custom-workbench .sc-paper-card,
+#style-custom-workbench .sc-resume-row,
+#style-custom-workbench .sc-reading-queue-row { background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
+#style-custom-workbench .sc-paper-card { margin: 0 0 var(--sc-paper-gap); }
+#style-custom-workbench .sc-paper-card:hover,
+#style-custom-workbench .sc-paper-card:focus-within { background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-paper-card[data-selected=true] { background: var(--sc-fill); box-shadow: 0 0 0 1.5px var(--sc-control-edge); outline: 0; }
+#style-custom-workbench .sc-author-news { box-shadow: 0 0 0 1px var(--sc-card-edge); }
+
+/* S2: heading and body are one soft container (section.sc-group from groupSections,
+   or a settings part). Inside it, cards stand on the grey. */
+#style-custom-workbench .sc-group,
+#style-custom-workbench .sc-settings-part { display: flow-root; margin: 0 0 14px; padding: 4px 10px 10px; border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-settings-part + .sc-settings-part { margin-block-start: 0; }
+#style-custom-workbench .sc-group > .sc-section-head,
+#style-custom-workbench .sc-settings-part > .sc-section-head,
+#style-custom-workbench .sc-group > .sc-section-head:has(+ .sc-hits),
+#style-custom-workbench .sc-group > .sc-section-head:has(+ .sc-resume),
+#style-custom-workbench .sc-group > .sc-section-head:has(+ .sc-reading-queue) {
+  margin: 0; padding: 10px 6px 8px; background: transparent; border-radius: 0; border: 0; gap: 2px 8px; align-items: center;
+}
+#style-custom-workbench .sc-group > .sc-section-head:first-child { margin-block-start: 0; }
+#style-custom-workbench .sc-group > .sc-hits,
+#style-custom-workbench .sc-section-head + .sc-hits { margin: 0; padding: 0; background: transparent; border-radius: 0; }
+#style-custom-workbench .sc-group > .sc-resume,
+#style-custom-workbench .sc-group > .sc-reading-queue { margin: 0 0 4px; }
+#style-custom-workbench .sc-group > :last-child { margin-block-end: 0; }
+#style-custom-workbench .sc-group .sc-card,
+#style-custom-workbench .sc-group .sc-paper-card,
+#style-custom-workbench .sc-settings-part .sc-card { background: var(--sc-surface); }
+#style-custom-workbench .sc-group .sc-paper-card:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-group .sc-paper-card[data-selected=true] { background: var(--sc-fill); }
+#style-custom-workbench .sc-group .sc-actions { padding: 6px 0; }
+/* The count beside a heading reads "Name · n" as a badge. */
+#style-custom-workbench .sc-section-head-count::before,
+#style-custom-workbench .sc-collection-count::before { content: none !important; }
+
+/* S3: one count badge for every number that sits beside a label. */
+#style-custom-workbench .sc-section-head-count,
+#style-custom-workbench .sc-count,
+#style-custom-workbench .sc-annot-group-count,
+#style-custom-workbench .sc-collection-count,
+#style-custom-workbench .sc-tag-unread,
+#style-custom-workbench .sc-collection-unread,
+#style-custom-workbench .sc-journal-reading-count,
+#style-custom-workbench .sc-path-jump[aria-label] {
+  display: inline-block; min-height: 0; padding: 0 7px; margin: 0; border: 0; border-radius: var(--sc-radius-pill);
+  background: var(--sc-fill); color: var(--sc-muted); box-shadow: none; text-decoration: none;
+  font: 600 11px/18px var(--sc-font); font-variant-numeric: tabular-nums; vertical-align: middle; white-space: nowrap;
+}
+#style-custom-workbench .sc-tag-unread,
+#style-custom-workbench .sc-collection-unread,
+#style-custom-workbench .sc-journal-reading-count,
+#style-custom-workbench .sc-path-jump[aria-label] { color: var(--sc-text); cursor: pointer; }
+#style-custom-workbench .sc-tag-unread { margin-inline-start: 8px; }
+#style-custom-workbench .sc-tag-unread:hover,
+#style-custom-workbench .sc-collection-unread:hover,
+#style-custom-workbench .sc-journal-reading-count:hover,
+#style-custom-workbench .sc-journal-reading-count[aria-expanded=true],
+#style-custom-workbench .sc-path-jump[aria-label]:hover { background: var(--sc-fill-hover); text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-count { margin-inline-start: 4px; }
+#style-custom-workbench .sc-chip .sc-count,
+#style-custom-workbench .sc-segmented .sc-count { background: var(--sc-fill); color: var(--sc-muted); }
+#style-custom-workbench .sc-chip-on .sc-count,
+#style-custom-workbench .sc-chip-button[aria-pressed=true] .sc-count,
+#style-custom-workbench .sc-segmented button[aria-pressed=true] .sc-count { background: rgba(255, 255, 255, .22); color: inherit; }
+@media (prefers-color-scheme: dark) {
+  #style-custom-workbench .sc-chip-on .sc-count,
+  #style-custom-workbench .sc-chip-button[aria-pressed=true] .sc-count,
+  #style-custom-workbench .sc-segmented button[aria-pressed=true] .sc-count { background: rgba(0, 0, 0, .14); }
+}
+#style-custom-workbench .sc-chip-on .sc-count,
+#style-custom-workbench .sc-chip-button[aria-pressed=true] .sc-count { font-weight: 650; }
+
+/* S4: every native select is one control: no OS arrow, an outline chevron, a pill. */
+#style-custom-workbench select,
+#style-custom-workbench .sc-card select {
+  -webkit-appearance: none; appearance: none;
+  min-height: var(--sc-control-height); padding-block: 5px; padding-inline: 14px 30px; border-radius: var(--sc-radius-pill);
+  background-color: var(--sc-surface);
+  background-image: linear-gradient(to top right, transparent calc(50% - .8px), var(--sc-chevron-ink) calc(50% - .8px), var(--sc-chevron-ink) calc(50% + .8px), transparent calc(50% + .8px)), linear-gradient(to top left, transparent calc(50% - .8px), var(--sc-chevron-ink) calc(50% - .8px), var(--sc-chevron-ink) calc(50% + .8px), transparent calc(50% + .8px));
+  background-repeat: no-repeat; background-position: right 17px center, right 11px center; background-size: 6px 6px, 6px 6px;
+  box-shadow: inset 0 0 0 1px var(--sc-border-strong); cursor: pointer;
+}
+#style-custom-workbench .sc-card select { min-height: var(--sc-card-control-height); padding-block: 2px; padding-inline: 12px 28px; }
+#style-custom-workbench select:disabled { cursor: default; opacity: .6; }
+#style-custom-workbench select:dir(rtl) { background-position: left 11px center, left 17px center; padding-inline: 30px 14px; }
+
+/* S5: one disclosure: no native triangle, a 12px outline chevron that turns when open. */
+#style-custom-workbench summary { list-style: none; }
+#style-custom-workbench summary::-webkit-details-marker { display: none; }
+#style-custom-workbench summary:not(.sc-path-owned)::before {
+  content: ""; display: inline-block; flex: none; box-sizing: border-box; width: 7px; height: 7px; margin-inline: 2px 9px; vertical-align: 1px;
+  border-inline-end: 1.6px solid currentColor; border-block-end: 1.6px solid currentColor; opacity: .75;
+  transform: rotate(-45deg); transition: transform .12s ease;
+}
+#style-custom-workbench summary:not(.sc-path-owned):dir(rtl)::before { transform: rotate(45deg); }
+#style-custom-workbench details[open] > summary:not(.sc-path-owned)::before { transform: rotate(45deg) translate(-1px, -1px); vertical-align: 2px; }
+#style-custom-workbench .sc-path-owned-group > summary { position: relative; padding-inline-end: 22px; }
+#style-custom-workbench .sc-path-owned-group > summary::after {
+  content: ""; position: absolute; inset-inline-end: 8px; inset-block-start: 50%; box-sizing: border-box; width: 7px; height: 7px; margin-block-start: -5px;
+  border-inline-end: 1.6px solid var(--sc-muted); border-block-end: 1.6px solid var(--sc-muted); transform: rotate(-45deg); transition: transform .12s ease;
+}
+#style-custom-workbench .sc-path-owned-group[open] > summary::after { transform: rotate(45deg); margin-block-start: -7px; }
+/* A leaf keeps the width the chevron takes (12px + its 6px margin). */
+#style-custom-workbench .sc-tag-leaf { padding-inline-start: 30px; }
+
+/* S6: one checkbox: a 16px rounded box, the dark fill and a check when on. */
+#style-custom-workbench input[type=checkbox] {
+  -webkit-appearance: none; appearance: none; position: relative; width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0; flex: none;
+  border-radius: calc(var(--sc-radius-sm) - 3px); background: var(--sc-surface); box-shadow: inset 0 0 0 1.5px var(--sc-control-edge); cursor: pointer;
+}
+#style-custom-workbench input[type=checkbox]:checked {
+  background-color: var(--sc-nav-on); box-shadow: none;
+  background-image: linear-gradient(to top right, transparent calc(50% - 1px), var(--sc-check-ink) calc(50% - 1px), var(--sc-check-ink) calc(50% + 1px), transparent calc(50% + 1px)), linear-gradient(to bottom right, transparent calc(50% - 1px), var(--sc-check-ink) calc(50% - 1px), var(--sc-check-ink) calc(50% + 1px), transparent calc(50% + 1px));
+  background-repeat: no-repeat; background-size: 4px 4px, 7px 7px; background-position: 3.5px 7.5px, 6px 4px;
+}
+#style-custom-workbench input[type=checkbox]:disabled { opacity: .5; cursor: default; }
+#style-custom-workbench .sc-card .sc-check input[type=checkbox] { width: 16px; height: 16px; }
+/* The appearance page's on/off choices are switches. */
+#style-custom-workbench .sc-settings-part input[type=checkbox] {
+  width: 30px; height: 18px; border-radius: 999px; background: var(--sc-fill-active); box-shadow: none;
+  transition: background .12s ease;
+}
+#style-custom-workbench .sc-settings-part input[type=checkbox] { background-image: radial-gradient(circle at 7px 7px, var(--sc-surface) 6.5px, transparent 7px); background-repeat: no-repeat; background-size: 14px 14px; background-position: 2px center; }
+#style-custom-workbench .sc-settings-part input[type=checkbox]:checked { background-color: var(--sc-nav-on); background-image: radial-gradient(circle at 7px 7px, var(--sc-nav-on-ink) 6.5px, transparent 7px); background-position: calc(100% - 2px) center; background-size: 14px 14px; }
+#style-custom-workbench .sc-settings-part input[type=checkbox]:focus-visible { outline-offset: 2px; }
+
+/* S7: two buttons. Secondary is a filled grey pill; primary is the dark one.
+   The outlined variant survives only as disabled. */
+#style-custom-workbench .sc-quiet-action,
+#style-custom-workbench .sc-resume-remark-add,
+#style-custom-workbench .sc-path-jump:not([aria-label]),
+#style-custom-workbench .sc-danger-soft {
+  background: var(--sc-fill); box-shadow: none; color: var(--sc-text);
+  min-height: var(--sc-card-control-height); padding: 2px 12px; border: 0; border-radius: var(--sc-radius-pill); font: inherit; font-size: 12px; font-weight: 500; text-decoration: none;
+}
+#style-custom-workbench .sc-quiet-action:hover,
+#style-custom-workbench .sc-resume-remark-add:hover,
+#style-custom-workbench .sc-path-jump:not([aria-label]):hover { background: var(--sc-fill-hover); text-decoration: none; }
+#style-custom-workbench .sc-danger-soft:hover { color: var(--sc-error); background: var(--sc-fill-hover); }
+#style-custom-workbench button[data-variant=primary]:hover:not(:disabled) { background: var(--sc-accent); opacity: .86; }
+#style-custom-workbench button:disabled,
+#style-custom-workbench button[aria-disabled=true] { background: transparent; box-shadow: inset 0 0 0 1px var(--sc-border-strong); color: var(--sc-muted); cursor: default; opacity: 1; }
+#style-custom-workbench .sc-note-head > [aria-hidden=true] { display: none; }
+#style-custom-workbench .sc-note-head { gap: 8px; align-items: center; }
+
+/* S8: hover lightens a resting chip, never the chosen one. */
+#style-custom-workbench .sc-chip-button:hover:not([aria-pressed=true]) { background: var(--sc-fill-hover); color: var(--sc-text); }
+#style-custom-workbench .sc-chip-button[aria-pressed=true]:hover,
+#style-custom-workbench .sc-chip-on:hover { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+#style-custom-workbench .sc-segmented button[aria-pressed=true]:hover,
+#style-custom-workbench .sc-watch-tools button[aria-pressed=true]:hover,
+#style-custom-workbench .sc-inbox-queue[aria-pressed=true]:hover,
+#style-custom-workbench .sc-local-reading-queue[aria-pressed=true]:hover,
+#style-custom-workbench .sc-annot-order button[aria-pressed=true]:hover { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+#style-custom-workbench .sc-segmented button[aria-pressed=false]:hover { background: var(--sc-fill-hover); }
+
+/* S10: decoration goes neutral; meaning (tiers, stars, annotation and tag colours, retraction) stays. */
+#style-custom-workbench .sc-watch-new .sc-watch-sub,
+#style-custom-workbench .sc-watch-count { color: var(--sc-muted); }
+#style-custom-workbench .sc-preprint { background: var(--sc-lime); color: var(--sc-lime-ink); border-radius: var(--sc-radius-pill); padding: 0 8px; }
+#style-custom-workbench .sc-hit-owned { justify-self: start; padding: 0 9px; border-radius: var(--sc-radius-pill); background: var(--sc-lime); color: var(--sc-lime-ink); font: 650 11px/18px var(--sc-font); }
+#style-custom-workbench .sc-notice-toggle { background: var(--sc-amber); color: var(--sc-amber-ink); font-weight: 600; }
+#style-custom-workbench .sc-notice-toggle:hover,
+#style-custom-workbench .sc-notice-toggle[aria-pressed=true] { background: var(--sc-amber); color: var(--sc-amber-ink); opacity: .86; }
+
+/* S12: the rail is 30px items with 10px between groups, and its scroll is visible as a fade. */
+#style-custom-workbench .sc-nav-group { margin-block-end: 10px; }
+#style-custom-workbench .sc-nav-heading { margin-block-end: 4px; }
+#style-custom-workbench .sc-shell nav { padding-block: 12px 22px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 22px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 22px), transparent 100%); }
+#style-custom-workbench .sc-shell nav button[data-tab] { min-height: 30px; margin: 1px 0; padding-block: 4px; }
+
+/* S13: the page card ends at the same place on every tab. The selection bar
+   shows only with a selection, and the room it needs is kept when it is away. */
+#style-custom-workbench > .sc-selection-bar { min-height: var(--sc-bar-reserve); align-content: center; }
+#style-custom-workbench:has(> .sc-selection-bar[hidden]) > .sc-shell { margin-block-end: var(--sc-bar-reserve); }
+
+/* S14: an empty page is an icon, a heading and a muted hint in a soft container. */
+#style-custom-workbench .sc-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 420px; margin: 24px auto; padding: 28px 24px;
+  border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); color: var(--sc-muted); text-align: center;
+}
+#style-custom-workbench .sc-empty::before {
+  content: ""; display: block; box-sizing: border-box; width: 30px; height: 24px; margin-block-end: 6px;
+  border: 1.6px solid var(--sc-muted); border-radius: var(--sc-radius-sm); opacity: .85;
+  background: linear-gradient(var(--sc-muted), var(--sc-muted)) center 13px / 14px 1.6px no-repeat;
+}
+#style-custom-workbench .sc-empty-title,
+#style-custom-workbench .sc-empty > strong { color: var(--sc-text); font: 600 14px/1.4 var(--sc-font); }
+#style-custom-workbench .sc-empty-hint { font-size: 12px; line-height: 1.5; }
+#style-custom-workbench .sc-empty + .sc-actions { justify-content: center; }
+
+/* S15: at narrow widths the search gets a full row and the rest wraps under it. */
+#style-custom-workbench input[type=search]::placeholder { text-overflow: ellipsis; }
+#style-custom-workbench input[type=search] { text-overflow: ellipsis; }
+@container sc-workbench (max-width: 680px) {
+  #style-custom-workbench .sc-controls input[type=search],
+  #style-custom-workbench .sc-search-row input[type=search] { flex: 1 1 100%; min-width: 0; }
+  #style-custom-workbench .sc-search-row > *:not(input[type=search]) { flex: 0 1 auto; }
+  #style-custom-workbench .sc-search-row > .sc-filters { margin-inline-start: auto; padding: 0; }
+  #style-custom-workbench .sc-search-row > .sc-filters[open] { flex-basis: 100%; }
+  /* S12 narrow: the tab strip fades over its padding only, and keeps the current pill in view. */
+  #style-custom-workbench .sc-shell nav {
+    padding: 6px 18px; scroll-padding-inline: 28px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  }
+  #style-custom-workbench { --sc-bar-reserve: 52px; }
+}
+/* The bar lies on the grey canvas, where the grey fill would vanish: its secondary buttons are white. */
+#style-custom-workbench .sc-selection-bar button:not([data-variant=primary]):not(:disabled) { background: var(--sc-surface); box-shadow: none; color: var(--sc-text); min-height: 30px; padding: 3px 14px; font-size: 13px; font-weight: 500; }
+#style-custom-workbench .sc-selection-bar button:not([data-variant=primary]):not(:disabled):hover { background: var(--sc-fill-hover); }
+
+/* Related papers: each step is a group like any other. Rows inside a group are
+   white cards on the grey, one gap apart, with no divider lines. */
+#style-custom-workbench .sc-group > .sc-path-head,
+#style-custom-workbench .sc-group > .sc-path-head:first-child { margin: 0; padding: 10px 6px 8px; border: 0; align-items: center; }
+#style-custom-workbench .sc-group > .sc-hit-group-note { margin: -4px 6px 8px; }
+#style-custom-workbench .sc-group .sc-hits { display: flex; flex-direction: column; gap: 6px; border-top: 0; }
+#style-custom-workbench .sc-group .sc-hit { padding: 10px 14px; border: 0; border-radius: 12px; background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-group .sc-hit:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-group .sc-hit:last-child { border-bottom: 0; }
+#style-custom-workbench .sc-chip .sc-count,
+#style-custom-workbench .sc-segmented .sc-count { margin-inline-start: 2px; }
+#style-custom-workbench .sc-shell nav { scroll-padding-block: 30px; }
+#style-custom-workbench .sc-settings-part input[type=checkbox]:not(:checked) { box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
