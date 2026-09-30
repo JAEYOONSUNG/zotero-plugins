@@ -458,6 +458,56 @@
     return shown;
   }
 
+  /* Every node labelled, sides chosen instead of nodes dropped.
+
+     placeLabels is right for a crowded graph: most labels would collide, so
+     showing the ones that fit is the useful picture. A small graph is the
+     opposite problem -- there is room for every title, but the fixed spot
+     just right of the node is exactly where an edge to that node's own
+     neighbour usually runs, so the label sits on top of a line and, once two
+     nodes are close, on top of each other. Trying the other three sides per
+     node and keeping whichever collides least (with the labels already
+     placed, and with the frame) keeps every label -- none are dropped -- while
+     spreading them off the lines and off each other. */
+  function placeLabelSides(nodes, {lineHeight = 11, pad = 2, gap = 4, width = Infinity, height = Infinity} = {}) {
+    // Central papers first: the ones most likely to sit in a crowded middle
+    // get first pick of the side that is actually clear.
+    const order = [...nodes].sort((a, b) => (b.rank || 0) - (a.rank || 0) || (b.degree || 0) - (a.degree || 0));
+    const placed = [];
+    const sides = new Map();
+    const boxFor = (node, side, w) => {
+      const r = node.r || 6;
+      if (side === 'left') return {x: node.x - r - gap - w, y: node.y - lineHeight / 2, w, h: lineHeight,
+        anchor: 'end', dx: -(r + gap), dy: 3.5};
+      if (side === 'above') return {x: node.x - w / 2, y: node.y - r - gap - lineHeight, w, h: lineHeight,
+        anchor: 'middle', dx: 0, dy: -(r + gap)};
+      if (side === 'below') return {x: node.x - w / 2, y: node.y + r + gap, w, h: lineHeight,
+        anchor: 'middle', dx: 0, dy: r + gap + lineHeight - 3};
+      return {x: node.x + r + gap, y: node.y - lineHeight / 2, w, h: lineHeight,
+        anchor: 'start', dx: r + gap, dy: 3.5};
+    };
+    for (const node of order) {
+      const text = String(node.labelText == null ? node.label : node.labelText);
+      const w = textWidth(text) + pad * 2;
+      let best = null, bestScore = Infinity;
+      for (const side of ['right', 'left', 'above', 'below']) {
+        const box = boxFor(node, side, w);
+        const inView = box.x >= 0 && box.y >= 0 && box.x + box.w <= width && box.y + box.h <= height;
+        let clashes = 0;
+        for (const other of placed) {
+          if (box.x < other.x + other.w && box.x + box.w > other.x
+            && box.y < other.y + other.h && box.y + box.h > other.y) clashes++;
+        }
+        const score = clashes + (inView ? 0 : 1000);
+        if (score < bestScore) { bestScore = score; best = box; }
+        if (score === 0) break;
+      }
+      placed.push(best);
+      sides.set(node.id, {anchor: best.anchor, dx: best.dx, dy: best.dy});
+    }
+    return sides;
+  }
+
   // Node size: citation counts span orders of magnitude, so the radius follows
   // the log, and a paper with none is still a dot rather than a point.
   function radiusOf(citations, {min = 3.5, max = 13} = {}) {
@@ -477,7 +527,7 @@
     return min + (max - min) * Math.sqrt(value);
   }
 
-  const api = {build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels};
+  const api = {build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels, placeLabelSides};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStylePaperGraph = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

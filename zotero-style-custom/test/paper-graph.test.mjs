@@ -246,6 +246,28 @@ test("a label that would run off the edge of the view is left out rather than cl
   assert.equal(graph.placeLabels(inside, {width: 200, height: 100}).size, 1);
 });
 
+test("placeLabelSides keeps every node, spreading close ones to different sides", () => {
+  const pair = [
+    {id: "a", x: 100, y: 100, r: 5, degree: 5, rank: 0.8, labelText: "First paper title"},
+    {id: "b", x: 108, y: 101, r: 5, degree: 4, rank: 0.6, labelText: "Second paper title"}
+  ];
+  const sides = graph.placeLabelSides(pair);
+  assert.equal(sides.size, 2, "nothing is dropped, unlike placeLabels");
+  const a = sides.get("a"), b = sides.get("b");
+  assert.ok(a && b, "every node got a placement");
+  // Two nodes this close cannot both sit at the default right-of-node spot
+  // without their boxes overlapping, so they must have picked different sides.
+  assert.notDeepEqual([a.dx, a.dy, a.anchor], [b.dx, b.dy, b.anchor]);
+});
+
+test("placeLabelSides falls back to the default right-of-node spot when nothing else is nearby", () => {
+  const lone = [{id: "solo", x: 50, y: 50, r: 5, degree: 1, rank: 0.2, labelText: "Alone"}];
+  const sides = graph.placeLabelSides(lone);
+  const spot = sides.get("solo");
+  assert.equal(spot.anchor, "start");
+  assert.equal(spot.dx, 5 + 4);
+});
+
 test("node size is centrality (PageRank within this graph), capped and floored like radiusOf but scaled by rank, not by citations", () => {
   assert.equal(graph.centralityRadius(0), 3.5, "the least central paper is still a dot");
   assert.equal(graph.centralityRadius(1), 13, "the most-depended-on paper in this graph is the largest");

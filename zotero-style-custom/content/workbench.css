@@ -1743,11 +1743,17 @@
 #style-custom-workbench .sc-paper-card .sc-paper-meta { grid-column: 2; grid-row: 2; }
 #style-custom-workbench .sc-paper-card .sc-paper-heading > .sc-metrics { grid-column: 3; grid-row: 2; }
 #style-custom-workbench .sc-paper-card .sc-paper-remark { grid-column: 2 / 4; grid-row: 3; }
+/* A43: the search-hit line follows the memo's own spot in this grid --
+   .sc-paper-identity is display:contents here, so an unplaced child would
+   otherwise fall into whatever cell auto-placement finds free, which turned
+   out to be the narrow checkbox column. */
+#style-custom-workbench .sc-paper-card .sc-paper-search-hit { grid-column: 2 / 4; grid-row: 4; }
 @container sc-workbench (max-width: 760px) {
   #style-custom-workbench .sc-paper-card .sc-paper-heading { grid-template-columns: auto minmax(0, 1fr); }
   #style-custom-workbench .sc-paper-mainline { grid-column: 2; }
   #style-custom-workbench .sc-paper-card .sc-paper-heading > .sc-metrics { grid-column: 2; grid-row: 3; }
   #style-custom-workbench .sc-paper-card .sc-paper-remark { grid-column: 2; grid-row: 4; }
+  #style-custom-workbench .sc-paper-card .sc-paper-search-hit { grid-column: 2; grid-row: 5; }
 }
 /* 주석 나란히: two columns of excerpts under their papers, a row per colour meaning. */
 #style-custom-workbench .sc-annot-compare { display: grid; grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr); gap: 0 14px; margin: 4px 0 14px; font-size: 12px; }
@@ -1877,3 +1883,37 @@
    scope-back spot does not already cover -- a row's 주석 n, say, which
    never touches scope. Same plain text button as the others in .sc-context. */
 #style-custom-workbench .sc-list-origin-back { min-height: 24px; padding: 2px 9px; font-size: 12px; margin-inline-start: 8px; }
+
+/* Citation map label halo: a background-coloured stroke painted under the
+   fill masks whichever edge line runs behind the text, so a label placed on
+   top of a line still reads instead of the line cutting through the title. */
+#style-custom-workbench .sc-graph-label { paint-order: stroke; stroke: var(--sc-surface); stroke-width: 3px; stroke-linejoin: round; }
+
+/* A43: 내 기록 포함 -- the checkbox that widens 보유 문헌's own search, and
+   the line naming where a row matched when that was a memo, note or
+   annotation rather than the paper's own fields. A plain text button, like
+   the memo line above it, not a pill: it names a place, not a status. */
+#style-custom-workbench .sc-search-records { margin-inline-start: 4px; }
+#style-custom-workbench .sc-paper-search-hit { display: block; width: 100%; min-height: 0; margin-top: 1px; padding: 0; border: 0; background: none; font-size: 12px; text-align: start; color: var(--sc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+#style-custom-workbench .sc-paper-search-hit:hover { color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; }
+
+/* A44: 논문 비교's own picker -- plain rows, a search of its own, nothing
+   coloured. .sc-matrix-selection lists what is already chosen; .sc-matrix-picker
+   is the search-and-add panel below the 문헌 추가 toggle. */
+#style-custom-workbench .sc-matrix-selection { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+#style-custom-workbench .sc-matrix-selection-row { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius); background: var(--sc-surface); max-width: 100%; }
+#style-custom-workbench .sc-matrix-selection-title { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+#style-custom-workbench .sc-matrix-picker { margin: 4px 0 10px; padding: 10px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-matrix-picker-results { max-height: 260px; overflow: auto; }
+#style-custom-workbench .sc-matrix-picker-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 2px; border-bottom: 1px solid var(--sc-border); font-size: 12px; }
+#style-custom-workbench .sc-matrix-picker-row:last-child { border-bottom: 0; }
+#style-custom-workbench .sc-matrix-picker-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* A45: 쪽별 기록 and 주석이 있는 쪽 merged into one fold -- a small dot in
+   the annotation's own colour on a page that carries one, and the evidence
+   for whichever page was last clicked, right under the strip. */
+#style-custom-workbench .sc-page-cell { position: relative; }
+#style-custom-workbench .sc-page-annot-mark { position: absolute; inset-inline-end: 1px; inset-block-end: 1px; width: 3px; height: 3px; border-radius: 50%; pointer-events: none; }
+#style-custom-workbench .sc-page-cell[data-chosen=true] { box-shadow: inset 0 0 0 1.5px var(--sc-text); }
+#style-custom-workbench .sc-page-evidence:empty { display: none; }
+#style-custom-workbench .sc-page-evidence { margin-top: 6px; }

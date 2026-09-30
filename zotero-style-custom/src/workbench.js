@@ -11,9 +11,15 @@
   // one-second wait is written when the panel closes rather than lost.
   let memoFields=[];
   let observedContext=null;let draftContext='',draftCounters=new Map();const drafts=new Map(),visibleAnnotationIDs=new Set(),pageRanges=new Map(),openStrips=new Set(),readingFiles=new Map(),openAnnotGroups=new Set(),deletedCardSelections=new Map();
+  // A45: annotations by page, per paper, shared between 쪽별 기록 (the marks
+  // on the strip, and its own summary count) and 주석이 있는 쪽 -- whichever
+  // fold loads first fills this in for the other, rather than each asking
+  // Zotero for the same attachment's annotations separately. pageChosen is
+  // which page's evidence a click last asked 쪽별 기록 to show under the strip.
+  const pageAnnotations=new Map(),pageAnnotationLoads=new Map(),pageChosen=new Map();
   const ui=runtime.cache.workbenchUI&&typeof runtime.cache.workbenchUI==='object'?runtime.cache.workbenchUI:{};
   let returnFocus=null,commandFocus=null,commandIndex=0,commandMatches=[],navigationEpoch=0;const pendingActions=new Set();
-  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:null,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null,focus:''};
+  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:null,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null,focus:'',searchRecords:!!ui.searchRecords};
   // Only an explicit new choice enables OpenAlex. Old subject picks never
   // decide which taxonomy the journals tab opens with.
   state.journalBrowser=ui.journalBrowser==='openalex'?'openalex':'jcr';
@@ -334,6 +340,14 @@
   // Enter, and the box's own clear cross, take effect at once instead of waiting.
   search.addEventListener('keydown',event=>{if(event.key==='Enter')runSearch();});
   search.addEventListener('search',runSearch);
+  /* A43: with something typed, 내 기록 포함 widens the match past the
+     paper's own fields to what was written about it -- the memo, notes and
+     annotation text -- so a search for a method finds the paper it was
+     only ever mentioned on. Off by default and only shown with a query:
+     nothing to widen with an empty box, and always-on made every search
+     slower for a case most searches do not need. */
+  const recordsCheck=check('내 기록 포함',!!ui.searchRecords,on=>{state.searchRecords=on;saveUI({searchRecords:on});render();},controls);
+  const recordsWrap=recordsCheck.closest('label');recordsWrap.classList.add('sc-search-records');
   const scope=node('select',null,controls,{'aria-label':'표시 범위'});node('option','라이브러리',scope,{value:'library'});node('option','선택한 문헌',scope,{value:'selected'});node('option','현재 컬렉션',scope,{value:'collection'});node('option','현재 컬렉션과 하위 컬렉션',scope,{value:'collection-recursive'});
   scope.addEventListener('change',()=>{state.scope=scope.value;state.annotationIDs.clear();if(state.scope!=='selected'){restoreKept();state.selectionLabel='';}run(load);});
   const type=node('select',null,null,{'aria-label':'문헌 유형 필터'});node('option','모든 유형',type,{value:''});
@@ -415,7 +429,7 @@
   });
   for(const [label,ids]of GROUPS){const group=node('div',null,nav,{class:'sc-nav-group'});node('div',label,group,{class:'sc-nav-heading'});for(const id of ids){const label=TABS.find(([key])=>key===id)[1];navButtons.set(id,leadIcon(button(label,()=>navigate(id),group,{'data-tab':id}),id));}}
   const footer=node('footer',null,panel,{class:'sc-selection-bar'});const selectionLabel=node('span','선택한 문헌 없음',footer,{class:'sc-selection-label'});
-  const clearSelection=button('선택 해제',()=>{state.selected.clear();state.annotationIDs.clear();restoreKept();render();},footer);
+  const clearSelection=button('선택 해제',()=>{state.selected.clear();state.annotationIDs.clear();state.matrixUsingSelection=false;restoreKept();render();},footer);
   // Of the three, linking is what the selection is usually for; the other two
   // undo. Only one of them carries a fill.
   /* The bar is the way into the next task with what is chosen: one paper to
@@ -551,6 +565,48 @@
   };
   const parentOptions=()=>({type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
   const ids=()=>Object.values(parentOptions()).some(Boolean)?model.filter(scoped(),parentOptions()).map(item=>String(item.id)):state.scope==='selected'?[...state.selected]:state.scope.startsWith('collection')?[...(state.collectionIDs||[])]:undefined;
+  /* A43: 내 기록 포함. rows() answers what the title/authors/venue/DOI/
+     abstract/tags/memo already say; this widens 보유 문헌's own list past
+     that, to papers found only through a note or an annotation -- after the
+     same scope and non-search filters rows() itself applies, so a status or
+     year filter still narrows what widening can add back in.
+
+     Returns {items, hits}: items is rows() with the extra papers appended,
+     hits maps a paper id to where it matched (a memo already in the base
+     row, or the note/annotation that pulled in an extra one) for the
+     .sc-paper-search-hit line under its title. */
+  async function exploreRows(){
+   const base=rows();
+   if(!state.searchRecords||!state.query.trim())return {items:base,hits:new Map()};
+   const words=String(state.query||'').toLowerCase().split(/\s+/).filter(Boolean);
+   const excerptAround=text=>{const hay=String(text||'').replace(/\s+/g,' ').trim();
+    const at=Math.min(...words.map(w=>hay.toLowerCase().indexOf(w)).filter(i=>i>=0));
+    if(!Number.isFinite(at))return hay.slice(0,140);
+    return (at>20?'…':'')+hay.slice(Math.max(0,at-20),at+120).trim();};
+   const hits=new Map();
+   // A base row already matched by title etc.; only a memo-only match is worth naming.
+   for(const item of base){
+    const own=[item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,...(item.tags||[])].join(' ');
+    if(model.matches(own,state.query))continue;
+    if(item.remark&&model.matches(item.remark,state.query))hits.set(String(item.id),{kind:'memo',label:T('메모'),text:excerptAround(item.remark)});
+   }
+   const pool=model.filter(scoped(),parentOptions());
+   const poolIDs=pool.map(item=>String(item.id));
+   const baseIDs=new Set(base.map(item=>String(item.id)));
+   const [notes,annotations]=await Promise.all([scopeNotes(poolIDs),scopeAnnotations(poolIDs)]).catch(()=>[[],[]]);
+   const extra=[];
+   for(const item of pool){
+    const id=String(item.id);
+    if(baseIDs.has(id)||hits.has(id))continue;
+    const myNotes=(notes||[]).filter(n=>String(n.parentID||'')===id);
+    const noteHit=myNotes.find(n=>model.matches(String(n.title||'')+' '+String(n.text||''),state.query));
+    if(noteHit){hits.set(id,{kind:'note',label:T(`노트 ${myNotes.length}`),text:excerptAround(String(noteHit.title||'')+' '+String(noteHit.text||''))});extra.push(item);continue;}
+    const myAnnotations=(annotations||[]).filter(a=>String(a.parentID||'')===id);
+    const annotHit=myAnnotations.find(a=>model.matches(String(a.text||'')+' '+String(a.comment||''),state.query));
+    if(annotHit){hits.set(id,{kind:'annotation',label:T(`주석 ${myAnnotations.length}`),text:excerptAround(String(annotHit.text||'')+' '+String(annotHit.comment||''))});extra.push(item);}
+   }
+   return {items:extra.length?[...base,...extra]:base,hits};
+  }
   /* Searching notes re-ran the whole library's note read on every keystroke.
      The scope's notes only change when the library is reloaded or a note is
      written, so they are read once per load and kept until then. */
@@ -561,6 +617,18 @@
    const promise=library.notes(scope);
    noteCache={token:loadEpoch,key,promise};
    promise.catch(()=>{if(noteCache&&noteCache.promise===promise)noteCache=null;});
+   return promise;
+  }
+  // A43: the same cache-per-scope-per-load shape as scopeNotes, for
+  // annotations -- 내 기록 포함 reads both to widen a search past the paper's
+  // own fields, and neither should re-read Zotero on every keystroke.
+  let annotationCache=null;
+  function scopeAnnotations(scope){
+   const key=scope===undefined?'*':[...scope].map(String).sort().join(',');
+   if(annotationCache&&annotationCache.token===loadEpoch&&annotationCache.key===key)return annotationCache.promise;
+   const promise=library.annotations(scope);
+   annotationCache={token:loadEpoch,key,promise};
+   promise.catch(()=>{if(annotationCache&&annotationCache.promise===promise)annotationCache=null;});
    return promise;
   }
   function updateSelectionUI(){
@@ -589,6 +657,9 @@
    search.placeholder=T(SEARCH_WHAT[state.tab]||'제목·저자·태그·DOI·초록 검색');
    const nativeJCR=state.tab==='journals'&&state.journalBrowser!=='openalex';
    const applicable=!nativeJCR&&FILTER_TABS.has(state.tab)&&state.tab!=='collections';controls.hidden=!applicable;filterPanel.hidden=!applicable;kindChips.hidden=!applicable;
+   // 보유 문헌's own widened-search checkbox: nothing to widen without a query,
+   // and the memo/note/annotation match it turns on is 보유 문헌's, not every tab's.
+   recordsWrap.hidden=!(applicable&&state.tab==='explore'&&state.query.trim());
    // While the list is narrowed to a selection, the way back is one button, not a menu.
    let back=context.querySelector('.sc-scope-back');
    if(applicable&&state.scope==='selected'){if(!back){
@@ -670,7 +741,7 @@
   }
   function copy(value){runtime.Z.Utilities.Internal.copyTextToClipboard(value);message('클립보드에 복사했습니다.');}
   const scopeContext=()=>JSON.stringify([win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID,state.scope,state.scope.startsWith('collection')?(win.ZoteroPane?.getSelectedCollection?.()?.id??null):null]);
-  async function load(){const token=++loadEpoch,context=scopeContext();if(observedContext!==context){state.collectionIDs=[];epoch++;clear();}observedContext=context;message('문헌을 읽는 중…');const libraryID=win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID;
+  async function load(){const token=++loadEpoch,context=scopeContext();if(observedContext!==context){state.collectionIDs=[];epoch++;clear();}observedContext=context;pageAnnotations.clear();pageAnnotationLoads.clear();message('문헌을 읽는 중…');const libraryID=win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID;
    if(state.libraryID!==libraryID){state.libraryID=libraryID;state.items=[];state.annotationIDs.clear();bindAI(null);}
    const snapshot=await library.snapshot(libraryID);if(disposed||token!==loadEpoch||panel.hidden)return;if(context!==scopeContext())return load();
    if(state.scope.startsWith('collection')){state.collectionIDs=[];const collection=win.ZoteroPane?.getSelectedCollection?.();if(collection){const members=await library.collectionItems(collection.id,{libraryID,recursive:state.scope==='collection-recursive'});if(disposed||token!==loadEpoch||panel.hidden)return;if(context!==scopeContext())return load();state.collectionIDs=members;}}
@@ -762,7 +833,7 @@
    if(Number.isFinite(at)){node('span',T('메모 일치'),line,{class:'sc-paper-remark-label'});const from=Math.max(0,at-30);line.appendChild(doc.createTextNode((from?'…':'')+own.slice(from,from+160).replace(/\s+/g,' ')));}
    else{node('span',T('메모'),line,{class:'sc-paper-remark-label'});line.appendChild(doc.createTextNode(own.split('\n')[0].slice(0,160)));}
   }
-  async function paperList(items,{why}={}){
+  async function paperList(items,{why,hits}={}){
    if(!items.length){
     if(!state.items.length){empty('라이브러리에 문헌이 없습니다. ZotPoP으로 논문을 찾아 추가하세요.');if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP 열기',()=>runtime.Z.ZotPoP.openSearch(win),bar(),{'data-variant':'primary'});return;}
     empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');
@@ -841,13 +912,21 @@
     statusFact('완료','done');statusFact('읽는 중','reading');statusFact('안 읽음','unread');
     if(seconds>0)fact('읽음',runtime.formatReadTime?runtime.formatReadTime(seconds):Math.round(seconds/60)+'분');
     const mi=median(ifs),mc=median(cites);
+    // Sorts by the same figure it names -- pressing again goes back to 기본 순서, as the column heads do.
+    const sortFact=(label,sort,value)=>{if(value==null||value==='')return;const on=state.sort===sort;const b=button('',()=>{state.sort=on?'library':sort;const select=filterInputs.get?.('sort');if(select)select.value=state.sort;render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 기본 순서':'이 순서로 정렬')});node('b',String(value),b);b.appendChild(doc.createTextNode(' '+T(label)));};
     // With how many papers each median rests on: a figure from two of three is not one from three.
-    if(mi!=null)fact(`IF 중앙값 · ${ifs.length}/${items.length}편`,mi.toFixed(1));
-    if(mc!=null)fact(`인용 중앙값 · ${cites.length}/${items.length}편`,Math.round(mc));
+    if(mi!=null)sortFact(`IF 중앙값 · ${ifs.length}/${items.length}편`,'if-desc',mi.toFixed(1));
+    if(mc!=null)sortFact(`인용 중앙값 · ${cites.length}/${items.length}편`,'citations-desc',Math.round(mc));
     if(thisMonth)fact('이번 달 추가',thisMonth);
     // Papers put by for later, still waiting in this library: the way onto 읽기 진행's own queue section.
     const queuedHere=state.items.filter(it=>it.status!=='done'&&it.status!=='reading'&&isQueued(it.id));
-    if(queuedHere.length)button(T(`읽기 대기 ${queuedHere.length}편`),()=>navigate('reading').then(()=>body.querySelector('.sc-reading-queue')?.scrollIntoView?.({block:'nearest'})),facts,{class:'sc-overview-fact',title:T('읽기 진행의 읽기 대기로 이동합니다')});
+    // The count is whole-library, like the queue store itself; 읽기 진행's own
+    // queue section only shows what the current search and filters let through,
+    // so a plain navigate() here used to land on a page missing whatever this
+    // search had hidden. navigateSelection carries the exact papers counted as
+    // the selection and sets the conflicting search aside (되돌리기 by 전체
+    // 목록으로), so the destination shows precisely the number just pressed.
+    if(queuedHere.length)button(T(`읽기 대기 ${queuedHere.length}편`),()=>navigateSelection('reading',queuedHere.map(it=>it.id)).then(()=>body.querySelector('.sc-reading-queue')?.scrollIntoView?.({block:'nearest'})),facts,{class:'sc-overview-fact',title:T('읽기 진행의 읽기 대기로 이동합니다')});
     /* 먼저 읽을 만한: of the unread papers here, the three the field cites
        most for their age -- citations a year since publication, so a classic
        does not bury last year's paper. From the figures on the rows; each
@@ -975,6 +1054,16 @@
    const noteRef=runtime.Z.Items.get(Number(item.id));
    const own=String((noteRef&&runtime.entry?.(noteRef)?.remark)||'').trim();
    if(own)remarkLine(node('span',null,identity,{class:'sc-paper-remark'}),own);
+   /* A43: 내 기록 포함 named where this paper matched -- a memo already on
+      the row above, or the note/annotation that pulled an otherwise-unmatched
+      paper into the list. Pressing it goes where that was found. */
+   const hit=hits?.get(String(item.id));
+   if(hit){
+    const hb=node('button',`${hit.label} · "${hit.text}"`,identity,{class:'sc-paper-search-hit',type:'button',title:T('눌러서 이동합니다')});
+    hb.addEventListener('click',event=>{event.stopPropagation();
+     if(hit.kind==='memo'){state.expandedPaperID=String(item.id);state.focusPaper=String(item.id);render();return;}
+     rememberListOrigin();navigate(hit.kind==='note'?'notes':'annotations');});
+   }
    const metrics=node('div',null,heading,{class:'sc-metrics'});
    metric(metrics,{unit:'IF',name:'impact',text:item.impactFactor??'',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
    metric(metrics,{unit:'인용',name:'citations',text:item.citations??'',label:item.citationSource?`인용 수 · ${item.citationSource}`:'인용 수 · 출처 미확인'});
@@ -1343,9 +1432,16 @@
       chosen paper always gets its label regardless (see the opacity check
       below) -- it is the one node the reader is least willing to lose. */
    const SMALL_GRAPH=16;
-   const labelled=graph.nodes.length<=SMALL_GRAPH
+   const small=graph.nodes.length<=SMALL_GRAPH;
+   const labelled=small
     ?new Set(graph.nodes.map(n=>n.id))
     :graphTools.placeLabels(graph.nodes,{width:W,height:H});
+   // Small enough that every label stays; placeLabelSides picks whichever of
+   // the four sides around a node collides least, instead of always sitting
+   // just right of it -- exactly where an edge to a neighbour usually runs.
+   const sides=small&&typeof graphTools.placeLabelSides==='function'
+    ?graphTools.placeLabelSides(graph.nodes,{width:W,height:H})
+    :null;
    for(const n of graph.nodes){
     const g=doc.createElementNS(SVG,'g');
     g.setAttribute('transform',`translate(${n.x} ${n.y})`);
@@ -1372,7 +1468,9 @@
     // A label on every node at this density is a grey smear, so only the papers
     // worth reading first carry one: the most cited and the best connected.
     const label=doc.createElementNS(SVG,'text');
-    label.setAttribute('x',r+4);label.setAttribute('y','3.5');
+    const side=sides&&sides.get(n.id);
+    label.setAttribute('x',side?side.dx:r+4);label.setAttribute('y',side?side.dy:'3.5');
+    if(side&&side.anchor!=='start')label.setAttribute('text-anchor',side.anchor);
     label.setAttribute('class','sc-graph-label');
     label.textContent=n.labelText;
     if(n.kind==='external')label.dataset.kind='external';
@@ -1645,6 +1743,10 @@
    const sorted=nodes=>[...nodes].filter(keeps).sort(state.tagSort==='unread'?(a,b)=>unreadIn(b.path)-unreadIn(a.path)||a.name.localeCompare(b.name)
     :state.tagSort==='recent'?(a,b)=>readingOf(b.path).last-readingOf(a.path).last||a.name.localeCompare(b.name):(a,b)=>a.name.localeCompare(b.name));
    const treeBox=node('div',null,treeHost,{class:'sc-tag-tree'});
+   // Choosing a tag by name only calls redraw(), not a full render() -- this
+   // Set lives across those calls so a parent the reader opened by hand stays
+   // open instead of collapsing every time the cross-tag panel below it changes.
+   const openPaths=new Set();
    /* A45: the tag's own name chooses it, without leaving 중첩 태그, so the
       papers under it can be cross-read against every other tag those same
       papers carry -- the co-occurring tags, not the ones this tag already
@@ -1678,8 +1780,10 @@
      node('td',row.tag,tr,{class:'sc-tag-cross-name'});
      const countCell=node('td',null,tr,{class:'sc-figure-cell'});
      // "#a ∩ #b": the reader gets there through 중첩 태그, not by remembering
-     // two clicks, so the origin travels with the selection.
-     button(String(row.n),()=>navigateSelection('explore',row.ids,`#${shortName(path)} ∩ #${shortName(row.tag)}`),countCell,{class:'sc-link-button',title:T('이 두 태그가 모두 있는 문헌을 봅니다')});
+     // two clicks, so the origin travels with the selection. Full paths, not
+     // the short leaf name -- two different branches can share a leaf name,
+     // and the shortened label used to say the same thing for both.
+     button(String(row.n),()=>navigateSelection('explore',row.ids,`#${path} ∩ #${row.tag}`),countCell,{class:'sc-link-button',title:T('이 두 태그가 모두 있는 문헌을 봅니다')});
      node('td',String(row.unread),tr,{class:'sc-figure-cell'});
      node('td',row.seconds>0&&runtime.formatReadTime?runtime.formatReadTime(row.seconds):'—',tr,{class:'sc-figure-cell'});
     }
@@ -1692,7 +1796,8 @@
     // that promised children it does not have.
     const hasKids=!!(n.children&&n.children.length);
     const container=hasKids?node('details',null,parent):node('div',null,parent,{class:'sc-tag-leaf'});
-    if(hasKids&&state.tagQuery)container.open=true;
+    if(hasKids&&(state.tagQuery||openPaths.has(n.path)))container.open=true;
+    if(hasKids)container.addEventListener('toggle',()=>{if(container.open)openPaths.add(n.path);else openPaths.delete(n.path);});
     const row=hasKids?node('summary',null,container):node('div',null,container,{class:'sc-tag-row'});
     // The name itself chooses the tag for 함께 붙은 태그, below the tree.
     const nameBtn=button(`${n.name} (${n.count})`,()=>{state.tagFocus=state.tagFocus===n.path?'':n.path;redraw();redrawCross();},row,{class:'sc-tag-name','aria-pressed':String(state.tagFocus===n.path)});
@@ -1740,6 +1845,15 @@
     if(state.query)node('summary',T('새 노트 쓰기'),host);
     const head=node('p',`${target[0].title}에 새 노트`,host,{class:'sc-muted'});button('다른 문헌 고르기',()=>{state.selected=new Set();restoreKept();render();},head,{class:'sc-inline'});
     const draft=node('textarea',null,host,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar(host);const saveNote=button('새 노트 저장',async()=>{if(!draft.value.trim())throw new Error('빈 노트는 만들지 않으니 노트 내용을 먼저 입력하세요.');const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);noteCache=null;finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
+    // 이 문헌의 주석만으로 노트를 만든다. 주석이 없으면 아무것도 만들지 않는다.
+    button('이 문헌 주석에서 노트 만들기',async()=>{
+     const paper=target[0],parent=paper.id,libraryID=state.libraryID;
+     const marks=await library.annotations([parent]);
+     if(!marks.length){message('이 문헌에는 주석이 없어 노트를 만들지 않았습니다.');return;}
+     const id=await library.noteFromAnnotations(marks.map(a=>a.id));noteCache=null;
+     state.lastSavedNote={id,parent,libraryID};await render();
+     message(`주석 ${marks.length}개로 노트를 만들었습니다.`);
+    },actions);
     if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions,{'data-opens':'window'});}
    }
    // The notes: the chosen paper's own when it sits in the scope and nothing
@@ -2011,11 +2125,17 @@
     return;
    }
    button('보이는 주석 전체 선택',()=>{state.annotationIDs=new Set(visibleAnnotationIDs);render();},summary);
-   if(state.annotationIDs.size)button(`선택 해제 (${state.annotationIDs.size})`,()=>{state.annotationIDs=new Set();render();},summary,{'data-role':'annot-clear'});
+   // Drawn every time, hidden by syncChosen() rather than only appearing when
+   // annotationIDs already had something in it at draw time -- selecting the
+   // first card never redraws the panel, so a button that only exists when
+   // the count was already non-zero could never appear on that first click.
+   const clearBtn=button('선택 해제',()=>{state.annotationIDs=new Set();render();},summary,{'data-role':'annot-clear'});
    // The three verbs act on the selection, so with nothing chosen there is
    // nothing here to show -- not a row of disabled buttons waiting for one.
    const syncChosen=()=>{
     const n=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id)).length;
+    clearBtn.hidden=!state.annotationIDs.size;
+    clearBtn.textContent=T(`선택 해제 (${state.annotationIDs.size})`);
     selectionTools.hidden=!n;
     if(!n)return;
     chosenCount.textContent=T(`선택 ${n}개`);
@@ -2122,8 +2242,6 @@
       if(state.annotationIDs.has(a.id))state.annotationIDs.delete(a.id);
       else state.annotationIDs.add(a.id);
       row.dataset.selected=String(state.annotationIDs.has(a.id));
-      const clear=body.querySelector('[data-role=annot-clear]');
-      if(clear)clear.textContent=`선택 해제 (${state.annotationIDs.size})`;
       syncChosen();
      });
      row.addEventListener('keydown',event=>{
@@ -2404,13 +2522,16 @@
    // lastPageIndex, or minus the visited count when no last page is
    // recorded. No page total at all sorts to the very end, not to zero.
    const pagesLeftOf=r=>{const total=Number(r.p.total)||0;if(!total)return null;const li=r.p.lastPageIndex;
-    return Number.isInteger(li)?Math.max(0,total-(li+1)):Math.max(0,total-(Number(r.p.visited)||0));};
+    // No recorded last position is nothing to sort on, not zero pages read --
+    // falling back to the visited count used to float an untouched-since
+    // paper up near the top on a guess. It goes last instead, with the other
+    // papers pagesLeftOf already can't place.
+    return Number.isInteger(li)?Math.max(0,total-(li+1)):null;};
    const bySort=state.readingSort==='time'
     ?(a,b)=>b.seconds-a.seconds
     :state.readingSort==='pages'
     ?(a,b)=>{const la=pagesLeftOf(a),lb=pagesLeftOf(b);if(la==null&&lb==null)return b.seconds-a.seconds;if(la==null)return 1;if(lb==null)return-1;return la-lb;}
     :(a,b)=>String(b.entry.lastRead||'').localeCompare(String(a.entry.lastRead||''))||b.seconds-a.seconds;
-   read.sort(bySort);
    const PER=30;let pages=1;
    /* 이어 읽기: what was being read in the last two weeks and is not finished,
       each with the page to go back to -- the page after the last one the
@@ -2439,7 +2560,12 @@
     const fileWhen=fileRead?(runtime.localStamp?runtime.localStamp(fileRead)?.getTime():Date.parse(fileRead)):NaN;
     return {...r,p,files,fileSeconds,when,shownWhen:Number.isFinite(fileWhen)?fileWhen:when,total,next,status};
    };
+   // Sorted after asResume(), not before: '마지막 위치 뒤 쪽 적은 순' has to read
+   // the chosen file's progress (asResume swaps in readingFiles' pick), not
+   // always the paper's default file, or picking a second file never moved a
+   // row in this order.
    const shaped=read.map(asResume);
+   shaped.sort(bySort);
    // 오늘 읽음 · 지난 7일, off the same `when` asResume already computed: not
    // a second date parse, and the same rows a click on either count narrows to.
    const dayStart=new Date();dayStart.setHours(0,0,0,0);
@@ -2474,8 +2600,33 @@
     :listedAll;
    pages=Math.max(1,Math.ceil(listed.length/PER));
    state.readingPage=Math.max(0,Math.min(state.readingPage||0,pages-1));
-   /* One paper's pages as a strip; the same in 이어 읽기, folded, and in the list below. */
-   const pageStrip=(c,item,p)=>{
+   // A45: the annotations for one paper's pages, cached once per load() and
+   // shared by both 쪽별 기록 (marks and its own count) and 주석이 있는 쪽
+   // (its list) -- whichever opens first fetches for both, one request either
+   // way. force refetches past a cached failure, for 다시 읽기.
+   const loadPageAnnotations=(item,p,{force=false}={})=>{
+    const id=String(item.id);
+    if(!force&&pageAnnotations.has(id))return Promise.resolve(pageAnnotations.get(id));
+    if(!force&&pageAnnotationLoads.has(id))return pageAnnotationLoads.get(id);
+    const promise=(async()=>{
+     if(!p.attachmentID||typeof library.annotations!=='function')return new Map();
+     const all=await library.annotations([item.id]);
+     const mine=all.filter(a=>String(a.attachmentID)===String(p.attachmentID)&&a.pageIndex!=null);
+     const byPage=new Map();
+     for(const a of mine){const list=byPage.get(a.pageIndex)||[];list.push(a);byPage.set(a.pageIndex,list);}
+     pageAnnotations.set(id,byPage);
+     return byPage;
+    })();
+    pageAnnotationLoads.set(id,promise);
+    promise.catch(()=>{}).finally(()=>{if(pageAnnotationLoads.get(id)===promise)pageAnnotationLoads.delete(id);});
+    return promise;
+   };
+   /* One paper's pages as a strip; the same in 이어 읽기, folded, and in the
+      list below. byPage, once known, marks a page that carries an annotation
+      with a small dot in that annotation's own colour; onPick answers a click
+      by naming which page's evidence to show below the strip -- the strip no
+      longer opens the PDF itself, since a glance at what is there comes first. */
+   const pageStrip=(c,item,p,{byPage,onPick}={})=>{
     const rangeSize=100,total=Math.max(0,Number(p.total)||0);let start=pageRanges.get(item.id)||0;
     if(start>=total)start=0;pageRanges.set(item.id,start);
     if(total>rangeSize){const range=node('select',null,c,{'aria-label':item.title+' 페이지 범위'});
@@ -2485,7 +2636,8 @@
     /* The pages as a strip of small squares, each shaded by the time spent
        on it -- the way a year of commits reads on GitHub -- instead of a row
        of numbered circles that took a line each and said nothing until read.
-       The number and the seconds are in the tooltip; a click opens the page. */
+       The number and the seconds are in the tooltip; a click shows what is on
+       that page below the strip. */
     const cells=node('div',null,c,{class:'sc-page-strip',role:'group','aria-label':`${item.title} 페이지별 읽은 시간`});
     const most=Math.max(1,...Object.values(p.pages||{}).map(Number).filter(Number.isFinite));
     for(let n=start;n<Math.min(total,start+rangeSize);n++){
@@ -2495,10 +2647,16 @@
      /* A page glanced at for three seconds is not a page never opened; both
         drew as the same empty cell, so the strip read as less read than it was. */
      const seen=Object.prototype.hasOwnProperty.call(p.pages||{},n);
-     const cell=node('button','',cells,{class:'sc-page-cell',type:'button','data-level':String(level),'aria-label':`${n+1}페이지, ${seen?`${Math.round(sec)}초`:T('안 엶')}`,title:`${n+1}페이지 · ${seen?`${Math.round(sec)}초`:T('안 엶')}`});
+     const notes=byPage?.get(n);
+     const cell=node('button','',cells,{class:'sc-page-cell',type:'button','data-level':String(level),'aria-label':`${n+1}페이지, ${seen?`${Math.round(sec)}초`:T('안 엶')}${notes?.length?', '+T(`주석 ${notes.length}개`):''}`,title:`${n+1}페이지 · ${seen?`${Math.round(sec)}초`:T('안 엶')}`});
      if(seen&&!level)cell.dataset.visited='1';
-     cell.addEventListener('click',()=>run(()=>{if(!p.attachmentID)throw new Error('어느 파일의 몇 쪽인지 기록이 없습니다. 그 PDF를 한 번 열어 읽은 뒤 다시 보세요.');return library.openItem(p.attachmentID,{pageIndex:n});}));
-     cell.disabled=!p.attachmentID;
+     if(notes?.length){
+      const hex=notes.find(a=>/^#[0-9a-f]{6}$/i.test(a.color))?.color;
+      const mark=node('span',null,cell,{class:'sc-page-annot-mark','aria-hidden':'true'});
+      mark.style.background=hex||'var(--sc-muted)';
+     }
+     cell.dataset.chosen=String(pageChosen.get(String(item.id))===n);
+     cell.addEventListener('click',()=>{pageChosen.set(String(item.id),n);onPick?.(n);});
     }
    };
    const fileChooser=(parent,item,files,p)=>{
@@ -2531,31 +2689,32 @@
       that" is answered beside "where was I". Read only when opened, and only
       for this attachment's pages -- the same page number in another PDF is
       another page. Three to start; the rest a press away. */
-   const readingEvidence=(parent,item,p)=>{
+   const readingEvidence=(parent,item,p,onLoaded)=>{
     if(!p.attachmentID||typeof library.annotations!=='function')return;
     const more=node('details',null,parent,{class:'sc-reading-evidence'});
     const summary=node('summary',T('주석이 있는 쪽'),more);
     const box=node('div',null,more,{class:'sc-reading-evidence-list'});
     let loaded=false;
-    const load=async()=>{
+    const load=async(force)=>{
      loaded=true;const generation=epoch;
      box.replaceChildren();node('p',T('주석을 읽는 중…'),box,{class:'sc-muted'});
-     let all;
-     try{all=await library.annotations([item.id]);}
+     let byPage;
+     // A45: the same per-attachment fetch 쪽별 기록 shares -- opening this
+     // fold when that one already loaded costs nothing further.
+     try{byPage=await loadPageAnnotations(item,p,{force});}
      catch(error){
       // A failed read can be tried again from where it failed.
       loaded=false;if(generation!==epoch||disposed||!more.isConnected)return;
       box.replaceChildren();node('p',T('주석을 읽지 못했습니다.'),box,{class:'sc-muted'});
-      button('다시 읽기',()=>run(load),box,{class:'sc-reading-evidence-more'});
+      button('다시 읽기',()=>run(()=>load(true)),box,{class:'sc-reading-evidence-more'});
       runtime.Z.logError?.(error);return;
      }
      if(generation!==epoch||disposed||!more.isConnected)return;
      box.replaceChildren();
-     const mine=all.filter(a=>String(a.attachmentID)===String(p.attachmentID)&&a.pageIndex!=null);
-     const byPage=new Map();
-     for(const a of mine){const list=byPage.get(a.pageIndex)||[];list.push(a);byPage.set(a.pageIndex,list);}
+     const mine=[...byPage.values()].flat();
      // Read once, the summary says what the fold holds, so opening it is not required to know.
      summary.textContent=T(`주석이 있는 쪽 · ${byPage.size}쪽 · 주석 ${mine.length}개`);
+     onLoaded?.(mine);
      if(!byPage.size){node('p',T('이 PDF에는 쪽이 기록된 주석이 없습니다.'),box,{class:'sc-muted'});return;}
      const pagesWith=[...byPage].sort((a,b)=>a[0]-b[0]);
      const drawPage=([index,notes])=>{
@@ -2644,21 +2803,82 @@
      readingStatus(actions,r.item,r.ref);
      const folds=node('div',null,row,{class:'sc-resume-folds'});
      if(r.total){
+      const id=String(r.item.id);
       const more=node('details',null,folds,{class:'sc-resume-pages'});
-      if(openStrips.has(String(r.item.id)))more.open=true;
-      more.addEventListener('toggle',()=>{more.open?openStrips.add(String(r.item.id)):openStrips.delete(String(r.item.id));});
-      node('summary',T('쪽별 기록'),more);
-      // The key belongs to the strip it explains, not the whole page: it sat
-      // above every fold, open or not, whether or not the reader ever opened
-      // one. Inside the fold, it shows only once that fold is open.
-      const legend=node('div',null,more,{class:'sc-page-legend','aria-hidden':'true'});
-      node('span',T('쪽당 읽은 시간 적게'),legend);
-      for(const level of [0,1,2,3,4])node('span','',legend,{class:'sc-page-cell sc-page-key','data-level':String(level)});
-      node('span',T('많이'),legend);
-      pageStrip(more,r.item,r.p);
+      if(openStrips.has(id))more.open=true;
+      /* A45: 방문 쪽/전체 쪽 is known the moment the row is drawn; the
+         annotation count joins it only once known -- from this fold's own
+         open, or from 주석이 있는 쪽's, whichever happened first. */
+      const summary=node('summary',null,more);
+      const known=pageAnnotations.get(id);
+      const annotCount=known?[...known.values()].reduce((sum,list)=>sum+list.length,0):null;
+      summary.textContent=T(`쪽별 기록 · 방문 ${r.p.visited}/${r.total}`)+(annotCount!=null?' · '+T(`주석 ${annotCount}`):'');
+      // The strip itself, and the key that explains it, are built only once
+      // opened: a closed fold that still built thirty thousand cells behind
+      // it was most of a big list's render cost for nothing shown.
+      const stripBox=node('div',null,more,{class:'sc-resume-pages-body'});
+      let built=false;
+      const build=()=>{
+       if(built)return;built=true;
+       const legend=node('div',null,stripBox,{class:'sc-page-legend','aria-hidden':'true'});
+       node('span',T('쪽당 읽은 시간 적게'),legend);
+       for(const level of [0,1,2,3,4])node('span','',legend,{class:'sc-page-cell sc-page-key','data-level':String(level)});
+       node('span',T('많이'),legend);
+       const evidenceBox=node('div',null,stripBox,{class:'sc-page-evidence'});
+       // Choosing a page shows what is on it right below the strip -- the
+       // time spent there and any annotation's excerpt -- with its own way
+       // to open that page, instead of the strip itself opening on a click.
+       const showEvidence=n=>{
+        evidenceBox.replaceChildren();
+        const notes=pageAnnotations.get(id)?.get(n)||[];
+        const sec=Number(r.p.pages?.[n])||0;
+        const line=node('div',null,evidenceBox,{class:'sc-reading-evidence-row'});
+        const said=[T(`${notes[0]?.pageLabel||n+1}쪽`),sec>0&&runtime.formatReadTime?runtime.formatReadTime(sec):'',notes.length?T(`주석 ${notes.length}개`):''].filter(Boolean).join(' · ');
+        button(said,()=>run(()=>{if(!r.p.attachmentID)throw new Error('어느 파일의 몇 쪽인지 기록이 없습니다. 그 PDF를 한 번 열어 읽은 뒤 다시 보세요.');return library.openItem(r.p.attachmentID,{pageIndex:n});}),line,{class:'sc-reading-evidence-page','data-opens':'window',title:T('이 쪽을 엽니다')});
+        for(const a of notes){
+         const words=String(a.comment||a.text||'').replace(/\s+/g,' ').trim();if(!words)continue;
+         const excerpt=node('span',null,line,{class:'sc-reading-evidence-text'});
+         if(a.color){const swatch=node('span',null,excerpt,{class:'sc-reading-evidence-swatch','aria-hidden':'true'});swatch.style.background=a.color;}
+         excerpt.appendChild(doc.createTextNode(words.slice(0,140)));
+        }
+       };
+       pageStrip(stripBox,r.item,r.p,{byPage:pageAnnotations.get(id),onPick:n=>{pageChosen.set(id,n);showEvidence(n);}});
+       if(pageChosen.has(id))showEvidence(pageChosen.get(id));
+      };
+      more.addEventListener('toggle',()=>{
+       more.open?openStrips.add(id):openStrips.delete(id);
+       if(!more.open)return;
+       build();
+       // Switching the file chooser calls refreshReading() itself (see
+       // fileChooser above), which redraws this whole row against the newly
+       // chosen file's r.p -- the strip, the marks and the evidence below it
+       // all follow without any of this needing to know a file was switched.
+       if(!pageAnnotations.has(id))loadPageAnnotations(r.item,r.p).catch(()=>{}).then(()=>{if(!disposed&&more.isConnected)refreshReading();});
+      });
+      if(more.open)build();
      }
      // The annotated pages are their own fold beside it, not one more level down.
-     readingEvidence(folds,r.item,r.p);
+     // Shown only once that fold has actually loaded -- never fetched just for this line.
+     readingEvidence(folds,r.item,r.p,mine=>{
+      if(!mine.length||text.querySelector('.sc-resume-last-annotation'))return;
+      // library.annotations carries no date field yet (src/library.js), so
+      // "most recent" falls back to the highest page until one exists.
+      const dated=mine.filter(a=>a.dateModified||a.modified);
+      const pageOf=a=>a.pageLabel||(a.pageIndex!=null?a.pageIndex+1:null);
+      let best,line;
+      if(dated.length){
+       best=dated.slice().sort((a,b)=>String(b.dateModified||b.modified||'').localeCompare(String(a.dateModified||a.modified||'')))[0];
+       const page=pageOf(best);if(page==null)return;
+       const words=String(best.comment||best.text||'').replace(/\s+/g,' ').trim().slice(0,80);
+       line=words?T(`지난번 마지막 주석: p.${page} · ${words}`):T(`지난번 마지막 주석: p.${page}`);
+      }else{
+       best=mine.slice().sort((a,b)=>(b.pageIndex??-1)-(a.pageIndex??-1))[0];
+       const page=pageOf(best);if(page==null)return;
+       const words=String(best.comment||best.text||'').replace(/\s+/g,' ').trim().slice(0,80);
+       line=words?T(`마지막 쪽 주석: p.${page} · ${words}`):T(`마지막 쪽 주석: p.${page}`);
+      }
+      node('span',line,text,{class:'sc-resume-last-annotation'});
+     });
    };
    if(resume.length){
     sectionHead('이어 읽기',resume.length,list);
@@ -2852,13 +3072,62 @@
      if(n.x!==start.left||n.y!==start.top)run(save);};handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});});
    }
   }
+  /* A44: 문헌 추가 -- a search over the whole library, its own box rather
+     than the top one (that one narrows 보유 문헌 itself; this one only picks
+     who is compared), and the chosen list beside it. Both edit state.selected
+     directly, so the table, references, footer and CSV all follow from the
+     one Set the rest of the panel already reads. */
+  function drawMatrixPicker(parent){
+   const onChange=()=>{state.matrixUsingSelection=true;render();};
+   const chosen=selected();
+   if(chosen.length){
+    const list=node('div',null,parent,{class:'sc-matrix-selection'});
+    for(const item of chosen){
+     const row=node('div',null,list,{class:'sc-matrix-selection-row'});
+     node('span',item.title||T('제목 없음'),row,{class:'sc-matrix-selection-title'});
+     button('빼기',()=>{state.selected.delete(String(item.id));onChange();},row);
+    }
+   }
+   const open=state.matrixPickerOpen??(chosen.length<=1);
+   if(!open)return;
+   const picker=node('div',null,parent,{class:'sc-matrix-picker'});
+   const searchBar=node('div',null,picker,{class:'sc-actions'});
+   const search=node('input',null,searchBar,{type:'search',placeholder:T('제목·저자로 찾기'),'aria-label':T('비교에 추가할 문헌 검색')});
+   search.value=state.matrixPickerQuery||'';
+   const results=node('div',null,picker,{class:'sc-hits sc-matrix-picker-results'});
+   const drawResults=()=>{
+    results.replaceChildren();
+    const chosenIDs=new Set(selected().map(item=>String(item.id)));
+    const q=String(state.matrixPickerQuery||'').trim();
+    const pool=state.items.filter(item=>!chosenIDs.has(String(item.id)));
+    const matched=q?pool.filter(item=>model.matches([item.title,item.authors].join(' '),q)):pool;
+    const limit=state.matrixPickerAll?matched.length:6;
+    for(const item of matched.slice(0,limit)){
+     const row=node('div',null,results,{class:'sc-matrix-picker-row'});
+     node('span',item.title||T('제목 없음'),row,{class:'sc-matrix-picker-title'});
+     if(item.authors)node('span',item.authors,row,{class:'sc-muted'});
+     button('추가',()=>{state.selected.add(String(item.id));onChange();},row);
+    }
+    if(!matched.length)node('p',T('일치하는 문헌이 없습니다.'),results,{class:'sc-muted'});
+    else if(matched.length>limit)button(T(`${matched.length-limit}개 더 보기`),()=>{state.matrixPickerAll=true;drawResults();},results,{class:'sc-local-reading-more'});
+   };
+   drawResults();
+   let typing=null;
+   search.addEventListener('input',()=>{state.matrixPickerQuery=search.value;state.matrixPickerAll=false;win.clearTimeout(typing);typing=win.setTimeout(drawResults,150);});
+  }
   function drawMatrix(){
    const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약']];
    // The deciding figures come right after the name, ahead of venue and
    // authors, so they fit before a docked panel runs out of width; DOI is
    // still there to add back, but nobody compares two papers by their DOI.
    const defaults=['title','status','year','citations','impactFactor','venue','authors'];
-   const scopeItems=selected().length?model.sortItems(selected(),state.sort):rows();
+   /* A44: once the picker has been used -- adding or removing a paper --
+      the comparison is exactly the chosen set, empty included. Before that,
+      nothing has committed to "a selection" yet, so 0 chosen still means
+      "compare what 보유 문헌 is showing", which is what every existing use of
+      this tab (and the tests for it) already expects. */
+   const usingPicker=!!state.matrixUsingSelection||selected().length>0;
+   const scopeItems=usingPicker?model.sortItems(selected(),state.sort):rows();
    // No saved choices yet: a memo on any of these papers earns its own column, right after the reading state.
    const hasMemo=scopeItems.some(item=>String(item.remark||'').trim());
    const defaultFields=hasMemo?[...defaults.slice(0,2),'remark',...defaults.slice(2)]:defaults;
@@ -2869,7 +3138,13 @@
       docked panel without a scrollbar -- but a reader who has chosen a side
       keeps it: null means "decide for me", true/false means they did. */
    const n=scopeItems.length,flip=state.transpose??(n>=2&&n<=4);
-   const b=bar();button('행·열 전환',()=>{state.transpose=!flip;render();},b);
+   const b=bar();if(scopeItems.length)button('행·열 전환',()=>{state.transpose=!flip;render();},b);
+   button('문헌 추가',()=>{state.matrixPickerOpen=!(state.matrixPickerOpen??(selected().length<=1));render();},b);
+   drawMatrixPicker(body);
+   if(!scopeItems.length){
+    empty('비교할 문헌을 추가하세요.');
+    return;
+   }
    const options=node('details',null,body);node('summary','비교 항목 선택',options);
    const fieldNames=Object.fromEntries(available);
    for(const[key,label]of available)check('비교 항목: '+T(label),fields.includes(key),on=>run(async()=>{
@@ -4863,7 +5138,21 @@
    if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';state.selectionLabel='';restoreKept();}const token=++epoch;clear();for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});
    // Said in the panel, never in a modal: the first background write into Extra.
    if(runtime.cache?.citationExtraNoticePending){win.setTimeout(()=>{if(disposed||panel.hidden||!runtime.cache.citationExtraNoticePending)return;message("인용 수를 Extra 필드에 'Citations: N (출처, 날짜)' 한 줄로 기록합니다. 원하지 않으면 설정 → Style Custom → 인용 수·IF → '논문 추가·수정 시 인용 수 조회 후 Extra 저장'을 끄세요.");delete runtime.cache.citationExtraNoticePending;runtime.dirty=true;},0);}try{
-   switch(state.tab){case'explore':await paperList(rows());break;case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
+   switch(state.tab){case'explore':{
+    /* A43's widening only runs a scope note/annotation read when the box is
+       actually on and there is something to widen; otherwise this stays the
+       exact same synchronous call it always was. exploreRows() is async, and
+       awaiting it -- even along its own early-return path -- defers to a
+       microtask; several filter changes fired without awaiting each render
+       (as 보유 문헌's own controls do) could then interleave their clear()s
+       with a paperList() still pending from an earlier one, each adding its
+       own cards on top of the next's. Only take that detour when needed. */
+    if(state.searchRecords&&state.query.trim()){
+     const {items,hits}=await exploreRows();
+     await paperList(items,{hits});
+    } else await paperList(rows());
+    break;
+   }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed)restoreDrafts();
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
   function refreshMetrics(){

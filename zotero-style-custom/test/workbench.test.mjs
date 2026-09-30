@@ -146,6 +146,57 @@ test('all tabs expose functional primary actions and use library service contrac
  await f.bench.show('appearance');f.input('Custom 패널 CSS','.sc-card { color: red; }');await f.click('패널 CSS 적용');assert.ok(f.calls.find(c=>c[0]==='css'));f.input('추가 문헌 열','DOI, language');await f.click('추가 열 적용');assert.ok(f.calls.find(c=>c[0]==='customFields'&&c[1]==='DOI, language'));f.bench.destroy();
 });
 
+test('주석: 선택 해제 appears the moment the first card is selected, with no full render in between',async()=>{
+ const f=fixture();
+ await f.bench.show('annotations');
+ // The annotations tab's own clear button, not the selection-bar's -- both
+ // read '선택 해제', so this test finds it by the marker that names it.
+ const clear=()=>f.body().querySelector('[data-role="annot-clear"]');
+ assert.ok(clear(),'the button is drawn from the first draw, just hidden');
+ assert.equal(clear().hidden,true,'hidden with nothing chosen');
+ const row=f.body().querySelector('.sc-annot');
+ row.dispatchEvent(new f.win.Event('click',{bubbles:true}));
+ assert.equal(row.dataset.selected,'true');
+ // syncChosen() runs off the same click, with no render() between it and the
+ // click -- the button used to only exist when annotationIDs was already
+ // non-zero at draw time, so it could never appear on this very first click.
+ assert.equal(clear().hidden,false,'선택 해제 shows as soon as one card is chosen');
+ assert.equal(clear().textContent,'선택 해제 (1)');
+ clear().dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.annotationIDs.size,0);
+ f.bench.destroy();
+});
+
+test('A43 내 기록 포함: hidden without a query, widens 보유 문헌 past its own fields to notes and annotations, and persists',async()=>{
+ const f=fixture();
+ await f.bench.show('explore');
+ const check=()=>f.bench.panel.querySelector('[aria-label="내 기록 포함"]');
+ assert.ok(check(),'the checkbox exists from the first draw');
+ assert.equal(check().closest('label').hidden,true,'nothing to widen without a query');
+ f.library.notes=async()=>[{id:'9',title:'Method note',text:'a reproducibility check',modified:'today',parentID:'2'}];
+ f.library.annotations=async()=>[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'an epitope map',comment:'',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}];
+ f.input('작업 패널 검색','reproducibility');await settle();
+ assert.equal(check().closest('label').hidden,false,'a query shows the checkbox');
+ assert.equal(f.body().querySelectorAll('.sc-paper-card').length,0,'off by default: neither paper\'s own fields mention it');
+ check().checked=true;check().dispatchEvent(new f.win.Event('change'));await settle();
+ assert.ok(f.calls.find(c=>c[0]==='pref'||c[0]==='flush'),'the checkbox persists to workbenchUI');
+ let cards=[...f.body().querySelectorAll('.sc-paper-card')];
+ assert.equal(cards.length,1,'Beta is pulled in by the note only');
+ let hit=cards[0].querySelector('.sc-paper-search-hit');
+ assert.match(hit.textContent,/노트 1.*reproducibility/);
+ hit.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'notes');
+ await f.bench.show('explore');
+ f.input('작업 패널 검색','epitope');await settle();
+ cards=[...f.body().querySelectorAll('.sc-paper-card')];
+ assert.equal(cards.length,1,'Alpha is pulled in by the annotation only');
+ hit=cards[0].querySelector('.sc-paper-search-hit');
+ assert.match(hit.textContent,/주석 1.*epitope/);
+ hit.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'annotations');
+ f.bench.destroy();
+});
+
 test('search and tab changes during initial snapshot cannot discard loaded items',async()=>{
  const f=fixture(),pending=deferred();f.library.snapshot=()=>pending.promise;const showing=f.bench.show('explore');f.input('작업 패널 검색','Alpha');f.bench.state.tab='graph';await f.bench.render();pending.resolve(f.papers);await showing;
  assert.equal(f.bench.state.items.length,2);assert.ok(f.body().querySelector('svg'));f.bench.destroy();
@@ -183,7 +234,16 @@ test('native previews cannot resume after tab switch or overwrite a newer previe
 
 test('reading refresh preserves controls and offers all pages of the recorded attachment',async()=>{
  const f=fixture();await f.bench.show('reading');const margin=f.body().querySelector('[aria-label="PDF 여백에 주석 표시"]');assert.equal(margin.checked,true);
- f.input('색상 이름','Important');const savedControl=f.body().querySelector('[aria-label="색상 이름"]');const range=f.body().querySelector('[aria-label="Paper Alpha 페이지 범위"]');assert.equal(range.querySelectorAll('option').length,7);range.value='500';range.dispatchEvent(new f.win.Event('change'));await settle();{const cell=f.body().querySelector('.sc-page-cell[aria-label^="551페이지"]');assert.ok(cell,'page 551 square');cell.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();}assert.ok(f.calls.find(c=>c[0]==='open'&&c[1]==='99'&&c[2].pageIndex===550));
+ // A45: the strip (and its range select) is only built once its fold opens.
+ const fold=f.body().querySelector('.sc-resume-pages');fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));
+ f.input('색상 이름','Important');const savedControl=f.body().querySelector('[aria-label="색상 이름"]');const range=f.body().querySelector('[aria-label="Paper Alpha 페이지 범위"]');assert.equal(range.querySelectorAll('option').length,7);range.value='500';range.dispatchEvent(new f.win.Event('change'));await settle();
+ {const cell=f.body().querySelector('.sc-page-cell[aria-label^="551페이지"]');assert.ok(cell,'page 551 square');cell.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+  // Choosing a page shows its evidence below the strip rather than opening
+  // the PDF directly; that line's own button is what opens it now.
+  const openBtn=f.body().querySelector('.sc-page-evidence .sc-reading-evidence-page');
+  assert.ok(openBtn,'the chosen page\'s own line appears below the strip');
+  openBtn.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();}
+ assert.ok(f.calls.find(c=>c[0]==='open'&&c[1]==='99'&&c[2].pageIndex===550));
  f.bench.refreshReading();assert.equal(f.body().querySelector('[aria-label="색상 이름"]'),savedControl);assert.equal(savedControl.value,'Important');assert.equal(f.body().querySelector('[aria-label="Paper Alpha 페이지 범위"]').value,'500');
  for(const [label,method] of [['리더 사이드바 표시','sidebar'],['세로 탭 목록 표시','vertical']]){const c=f.body().querySelector('[aria-label="'+label+'"]');c.checked=true;c.dispatchEvent(new f.win.Event('change'));await settle();assert.ok(f.calls.find(x=>x[0]===method));}
  f.bench.destroy();
@@ -635,6 +695,22 @@ test('관계 그래프 labels are short title + year, a small graph labels every
  const [tx,ty]=target.getAttribute('transform').match(/-?\d+\.?\d*/g).map(Number);
  assert.notEqual(Number(line.getAttribute('x2')),tx);
  assert.notEqual(Number(line.getAttribute('y2')),ty);
+ f.bench.destroy();
+});
+
+test('a small citation map places every label by side rather than always right of the node',async()=>{
+ const f=fixture();
+ const extra=[10].map(n=>({...f.papers[0],id:String(n),key:'K'+n,title:'Neighbour '+n}));
+ f.refs.set(10,{id:10,libraryID:1,key:'K10'});
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ const works={'1:K1':{openalex:'W1',references:['W10']},'1:K10':{openalex:'W10',references:[]},'1:K2':{}};
+ let sidesCalled=0;
+ const graphTools={...PaperGraph,placeLabelSides:(...args)=>{sidesCalled++;return PaperGraph.placeLabelSides(...args);}};
+ f.runtime.graphTools=graphTools;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=JournalIdentity;
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);
+ await f.bench.show('graph');await settle();
+ assert.ok(sidesCalled>0,'a small graph places labels by side instead of always right of the node');
+ assert.ok(f.body().querySelector('.sc-graph-label'),'a label is still drawn');
  f.bench.destroy();
 });
 
@@ -1143,7 +1219,11 @@ test('the general reading record row shares 이어 읽기\'s renderer: one meta 
  const fold=row.querySelector('.sc-resume-pages');
  assert.ok(fold,'the page strip is a fold, as in 이어 읽기, not always open');
  assert.equal(fold.hasAttribute('open'),false,'closed by default');
- assert.ok(fold.querySelector('.sc-page-strip'),'the strip itself is still drawn once opened');
+ // A45: the strip itself is built only once the fold is opened, not eagerly
+ // behind a closed <details>.
+ assert.equal(fold.querySelector('.sc-page-strip'),null,'not built while closed');
+ fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));
+ assert.ok(fold.querySelector('.sc-page-strip'),'the strip itself is drawn once opened');
  assert.ok(row.querySelector('.sc-reading-evidence'),'주석이 있는 쪽 kept');
  assert.equal(row.querySelector('button[data-opens=window]').textContent,'열기','완료 opens rather than offering to "이어 읽기"');
  f.bench.destroy();
@@ -2378,6 +2458,8 @@ test('the panel can live in a Zotero tab, remembers it, and comes back when the 
 test('the pages of a paper read as a strip of shaded squares, with the number and the seconds in the tooltip',async()=>{
  const f=fixture();
  await f.bench.show('reading');
+ // A45: the strip is built only once its fold is opened.
+ const fold=f.body().querySelector('.sc-resume-pages');fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));
  const cells=[...f.body().querySelector('.sc-page-strip').querySelectorAll('.sc-page-cell')];
  assert.equal(cells.length,100,'one square per page of the first hundred');
  assert.equal(cells[0].dataset.level,'0','two seconds is a glance, not reading');assert.equal(cells[1].dataset.level,'0');
@@ -2385,6 +2467,31 @@ test('the pages of a paper read as a strip of shaded squares, with the number an
  assert.equal(cells[0].getAttribute('title'),'1페이지 · 2초');
  assert.equal(cells[0].textContent,'','no number on the square');
  assert.ok(f.body().querySelector('.sc-page-legend'),'a key from little to much');
+ f.bench.destroy();
+});
+
+test('A45 쪽별 기록: summary carries 방문 쪽/전체 쪽 always, and the annotation count once known; annotated pages carry a coloured mark; choosing one shows its evidence below the strip',async()=>{
+ const f=fixture();
+ f.runtime.pageProgress=()=>({pages:{0:2,6:40},total:12,visited:2,percent:16,attachmentID:'99'});
+ f.library.annotations=async()=>[
+  {id:'3',parentID:'1',attachmentID:'99',text:'',comment:'a marked passage',color:'#ffd400',pageLabel:'7',pageIndex:6}];
+ await f.bench.show('reading');
+ const fold=f.body().querySelector('.sc-resume-pages');
+ // Before opening: the visited/total figure is there, the annotation count is not -- unknown yet.
+ assert.match(fold.querySelector('summary').textContent,/쪽별 기록 · 방문 2\/12/);
+ assert.equal(/주석/.test(fold.querySelector('summary').textContent),false,'not claimed before it is known');
+ fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));await settle();
+ // Reopening (a full redraw already ran once the fetch resolved) now knows the count.
+ const foldAgain=f.body().querySelector('.sc-resume-pages');
+ assert.match(foldAgain.querySelector('summary').textContent,/쪽별 기록 · 방문 2\/12 · 주석 1/);
+ const marked=foldAgain.querySelector('.sc-page-cell[aria-label^="7페이지"]');
+ assert.ok(marked.querySelector('.sc-page-annot-mark'),'the annotated page carries a mark');
+ assert.equal(foldAgain.querySelector('.sc-page-cell[aria-label^="1페이지"]').querySelector('.sc-page-annot-mark'),null,'a page with no annotation carries none');
+ assert.equal(foldAgain.querySelector('.sc-page-evidence').textContent,'','nothing chosen yet');
+ marked.dispatchEvent(new f.win.Event('click',{bubbles:true}));
+ const evidence=foldAgain.querySelector('.sc-page-evidence');
+ assert.match(evidence.textContent,/7쪽.*주석 1개.*a marked passage/);
+ assert.match(evidence.querySelector('button[data-opens=window]').textContent,/^7쪽/);
  f.bench.destroy();
 });
 
@@ -2396,6 +2503,7 @@ test('the page-time legend lives inside each 쪽별 기록 fold, not as a standi
  assert.equal([...list.children].some(c=>c.classList?.contains('sc-page-legend')),false,'no standing line at the top of the page');
  const fold=f.body().querySelector('.sc-resume-pages');
  assert.ok(fold,'a fold exists for the paper with a page total');
+ fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));
  assert.ok(fold.querySelector('.sc-page-legend'),'the key is inside the fold that explains it');
  f.bench.destroy();
 });
@@ -3570,6 +3678,49 @@ test('중첩 태그: choosing a tag by its name lists what is carried together w
  f.bench.destroy();
 });
 
+test('태그: opening a parent by hand stays open across the redraw that choosing a tag by name causes',async()=>{
+ const f=fixture();
+ f.library.tagTree=()=>[
+  {name:'topicA',path:'topicA',count:2,children:[{name:'detail',path:'topicA/detail',count:1,children:[]}]},
+  {name:'shared',path:'shared',count:1,children:[]}
+ ];
+ f.library.snapshot=async()=>[
+  {...f.papers[0],id:'1',key:'K1',title:'P1',tags:['topicA','shared']},
+  {id:'4',key:'K4',libraryID:1,title:'P4',itemType:'journalArticle',tags:['topicA','topicA/detail']}
+ ];
+ f.refs.set(4,{id:4});
+ await f.bench.show('tags');
+ const findDetails=()=>[...f.body().querySelectorAll('.sc-tag-tree details')].find(d=>d.querySelector('.sc-tag-name')?.textContent==='topicA (2)');
+ const details=findDetails();
+ assert.ok(details,'topicA has children and renders as <details>');
+ details.open=true;details.dispatchEvent(new f.win.Event('toggle'));
+ // Choosing a different tag by name only calls redraw(), not a full render();
+ // the parent opened by hand used to collapse every time because a fresh
+ // <details> was built with no memory of what the reader had opened.
+ const sharedBtn=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='shared (1)');
+ sharedBtn.click();await settle();
+ assert.equal(findDetails().open,true,'the parent opened by hand stays open after choosing another tag');
+ f.bench.destroy();
+});
+
+test('태그: the "#a ∩ #b" origin label uses full tag paths, not just the last segment',async()=>{
+ const f=fixture();
+ f.library.tagTree=()=>[
+  {name:'methods',path:'proj/methods',count:1,children:[]},
+  {name:'thing',path:'other/thing',count:1,children:[]}
+ ];
+ f.library.snapshot=async()=>[
+  {...f.papers[0],id:'1',key:'K1',title:'P1',tags:['proj/methods','other/thing']}
+ ];
+ await f.bench.show('tags');
+ const nameBtn=[...f.body().querySelectorAll('.sc-tag-name')].find(b=>b.textContent==='methods (1)');
+ nameBtn.click();await settle();
+ const countBtn=f.body().querySelector('.sc-tag-cross-table tbody tr button');
+ countBtn.click();await settle();
+ assert.match(f.bench.panel.querySelector('.sc-context-detail').textContent,/#proj\/methods ∩ #other\/thing/);
+ f.bench.destroy();
+});
+
 test('읽기 기록 정렬 offers fewest-pages-left, with papers that have no page total sorting last',async()=>{
  const f=fixture();
  const extra={...f.papers[0],id:'3',key:'K3',title:'Paper Gamma'};
@@ -3816,5 +3967,130 @@ test('보유 문헌 요약 offers a fact button onto papers waiting to be read i
  await f.click('읽기 대기 1편');
  assert.equal(f.bench.state.tab,'reading','moved to 읽기 진행');
  assert.ok(f.body().querySelector('.sc-reading-queue'),'lands where the queue itself is drawn');
+ f.bench.destroy();
+});
+
+test('읽기 대기 n편 counts the whole library even under a search, and the jump lands on exactly those papers',async()=>{
+ const f=fixture();
+ const known={1:{status:''},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.cache.workbenchUI={...(f.runtime.cache.workbenchUI||{}),readingQueue:{
+  '1:1':{at:new Date(Date.now()-2000).toISOString()},'1:2':{at:new Date().toISOString()}}};
+ await f.bench.show('explore');
+ // A search that only lets Paper Alpha through -- the queue's own section
+ // would show one paper under this search, but the count on this summary is
+ // whole-library and used to send the reader to a page missing the other one.
+ f.input('작업 패널 검색','Alpha');
+ await f.bench.render();
+ const facts=f.body().querySelector('.sc-overview-facts');
+ assert.ok([...facts.querySelectorAll('button')].some(b=>b.textContent==='읽기 대기 2편'),
+  'both waiting papers are counted, not just the one the search lets through');
+ await f.click('읽기 대기 2편');
+ assert.equal(f.bench.state.tab,'reading');
+ assert.equal(f.body().querySelectorAll('.sc-reading-queue-row').length,2,
+  'the jump clears the conflicting search so the destination shows every paper just counted');
+ f.bench.destroy();
+});
+
+test('마지막 위치 뒤 쪽 적은 순 reads the chosen file\'s position, and a paper with no recorded last position sorts last rather than by its visited count',async()=>{
+ const f=fixture();
+ const extra={...f.papers[0],id:'10',key:'K10',title:'Paper Gamma'};
+ f.refs.set(10,{id:10,libraryID:1,key:'K10'});
+ f.library.snapshot=async()=>[...f.papers,extra];
+ // Alpha has two files: 100 (nearly finished, 1 page left) is the default,
+ // 200 (mostly unread, 8 pages left) is the alternative the chooser can pick.
+ f.runtime.cache.items[1]={seconds:10,readingAttachments:{
+  100:{lastRead:'2026-09-01T00:00:00Z'},200:{lastRead:'2026-08-01T00:00:00Z'}}};
+ f.runtime.pageProgress=(ref,att)=>{
+  if(String(ref.id)==='1'){
+   if(Number(att)===200)return {pages:{},total:10,visited:2,percent:20,attachmentID:'200',lastPageIndex:1};
+   return {pages:{},total:10,visited:9,percent:90,attachmentID:'100',lastPageIndex:8};
+  }
+  // Beta: a valid last position with 6 pages left.
+  if(String(ref.id)==='2')return {pages:{},total:10,visited:4,percent:40,attachmentID:'50',lastPageIndex:3};
+  // Gamma: no recorded last position at all, despite having visited 9 of 10 --
+  // the old code fell back to total-visited (=1) and floated it to the front.
+  return {pages:{},total:10,visited:9,percent:90,attachmentID:'60'};
+ };
+ await f.bench.show('reading');
+ const sortSelect=f.body().querySelector('[aria-label="읽기 기록 정렬"]');
+ sortSelect.value='pages';sortSelect.dispatchEvent(new f.win.Event('change'));await settle();
+ const titlesOf=()=>[...f.body().querySelectorAll('.sc-reading-records .sc-resume-title')].map(n=>n.textContent);
+ // Alpha's default file (1 page left) first, Beta (6 left) next, Gamma last
+ // despite its high visited count -- it has nothing pagesLeftOf can trust.
+ assert.deepEqual(titlesOf(),['Paper Alpha','Paper Beta','Paper Gamma']);
+ // Switching Alpha to its other file changes what asResume() resolves for it
+ // (8 pages left there), and the order follows that file, not the old one.
+ const chooser=f.body().querySelector('[aria-label="Paper Alpha 읽은 파일"]');
+ chooser.value='200';chooser.dispatchEvent(new f.win.Event('change'));await settle();
+ assert.deepEqual(titlesOf(),['Paper Beta','Paper Alpha','Paper Gamma']);
+ f.bench.destroy();
+});
+
+test('노트 탭의 "이 문헌 주석에서 노트 만들기"는 고른 문헌의 주석으로 노트를 만들고, 주석이 없으면 아무것도 만들지 않는다',async()=>{
+ const f=fixture();
+ f.setSelection([1]);
+ await f.bench.show('notes');f.bench.state.selected=new Set(['1']);await f.bench.render();
+ await f.click('이 문헌 주석에서 노트 만들기');
+ assert.deepEqual(f.calls.find(c=>c[0]==='annotations')?.slice(1),[['1']]);
+ assert.deepEqual(f.calls.find(c=>c[0]==='extract')?.slice(1),[['3']]);
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/주석 1개로 노트를 만들었습니다/);
+ f.calls.length=0;
+ f.library.annotations=async()=>[];
+ await f.click('이 문헌 주석에서 노트 만들기');
+ assert.ok(!f.calls.find(c=>c[0]==='extract'),'주석이 없으면 노트를 만들지 않는다');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/주석이 없어 노트를 만들지 않았습니다/);
+ f.bench.destroy();
+});
+
+test('이어 읽기 줄은 주석 fold를 연 뒤에만 마지막 주석 한 줄을 보여준다; 날짜가 있으면 최신 것을, 없으면 가장 높은 쪽을 쓴다',async()=>{
+ const f=fixture();
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'reading':''});
+ f.runtime.cache.items[1]={seconds:500,lastRead:new Date().toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{0:5,6:10},total:12,visited:2,percent:16,attachmentID:100,lastPageIndex:6}:{pages:{},total:0,visited:0,percent:0};
+ f.library.annotations=async()=>[
+  {id:'a',parentID:'1',attachmentID:'100',text:'early note',comment:'',pageIndex:0,pageLabel:'1'},
+  {id:'b',parentID:'1',attachmentID:'100',text:'later note',comment:'later comment here, well past the eighty character mark just to be sure it still matches',pageIndex:6,pageLabel:'7',dateModified:'2026-09-20'},
+  {id:'c',parentID:'1',attachmentID:'100',text:'',comment:'',pageIndex:6,pageLabel:'7',dateModified:'2026-01-01'}];
+ await f.bench.show('reading');
+ const row=()=>f.body().querySelector('.sc-resume-row');
+ assert.ok(row(),'a row is drawn');
+ assert.ok(!row().querySelector('.sc-resume-last-annotation'),'nothing before the fold is opened');
+ const evidence=row().querySelector('.sc-reading-evidence');
+ evidence.open=true;evidence.dispatchEvent(new f.win.Event('toggle'));
+ await new Promise(r=>setTimeout(r,20));
+ let line=row().querySelector('.sc-resume-last-annotation');
+ assert.match(line.textContent,/^지난번 마지막 주석: p\.7 · later comment here/,'the most recently modified, not the earlier mark on the same page');
+ // No date field anywhere: the highest page stands in, worded differently.
+ f.library.annotations=async()=>[
+  {id:'a',parentID:'1',attachmentID:'100',text:'early note',comment:'',pageIndex:0,pageLabel:'1'},
+  {id:'b',parentID:'1',attachmentID:'100',text:'a later page mark',comment:'',pageIndex:6,pageLabel:'7'}];
+ await f.bench.show('explore');await f.bench.show('reading');
+ const evidence2=row().querySelector('.sc-reading-evidence');
+ evidence2.open=true;evidence2.dispatchEvent(new f.win.Event('toggle'));
+ await new Promise(r=>setTimeout(r,20));
+ line=row().querySelector('.sc-resume-last-annotation');
+ assert.match(line.textContent,/^마지막 쪽 주석: p\.7 · a later page mark/);
+ f.bench.destroy();
+});
+
+test('보유 문헌 요약의 IF·인용 중앙값은 그 기준으로 정렬하는 버튼이고, 다시 누르면 기본 순서로 돌아간다',async()=>{
+ const f=fixture();
+ f.library.snapshot=async()=>f.papers.map((p,i)=>({...p,impactFactor:i?4:8,citations:i?10:20}));
+ await f.bench.load();await f.bench.show('explore');
+ const facts=()=>f.body().querySelector('.sc-overview-facts');
+ const ifFact=()=>[...facts().querySelectorAll('button')].find(b=>/IF 중앙값/.test(b.textContent));
+ const citeFact=()=>[...facts().querySelectorAll('button')].find(b=>/인용 중앙값/.test(b.textContent));
+ assert.equal(ifFact().getAttribute('aria-pressed'),'false');
+ ifFact().click();await settle();
+ assert.equal(f.bench.state.sort,'if-desc');
+ assert.equal(f.bench.panel.querySelector('[aria-label="문헌 정렬"]').value,'if-desc');
+ assert.equal(ifFact().getAttribute('aria-pressed'),'true');
+ ifFact().click();await settle();
+ assert.equal(f.bench.state.sort,'library','pressing again returns to the default order');
+ assert.equal(f.bench.panel.querySelector('[aria-label="문헌 정렬"]').value,'library');
+ citeFact().click();await settle();
+ assert.equal(f.bench.state.sort,'citations-desc');
+ assert.equal(citeFact().getAttribute('aria-pressed'),'true');
  f.bench.destroy();
 });
