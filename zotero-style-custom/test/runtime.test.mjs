@@ -66,7 +66,7 @@ function fixture() {
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
   const { plugin, columns, observers } = fixture();
   await plugin.start({ id: 'test@focus', version: '0.1', rootURI: 'file:///focus/' });
-  assert.equal(columns.size, 27);
+  assert.equal(columns.size, 28);
   assert.equal(observers.size, 7);
   await plugin.stop();
   assert.equal(columns.size, 0);
@@ -382,9 +382,9 @@ test('legacy unbound progress is not assigned to a PDF or another library',()=>{
 });
 test('custom columns are validated and registration failure keeps previous fields intact',async()=>{
  const {plugin,Z,columns,item}=fixture();await plugin.start({id:'custom',version:'0.5',rootURI:'file:///custom/'});
- Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,29);
+ Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,30);
  const original=Z.ItemTreeManager.registerColumn;Z.ItemTreeManager.registerColumn=options=>options.dataKey==='field-pages'?false:original(options);
- assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,29);assert.ok(plugin.dynamicFieldMap.has('issue'));
+ assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,30);assert.ok(plugin.dynamicFieldMap.has('issue'));
  assert.throws(()=>plugin.setCustomFields('unknown'));const ref=item(1);ref.getField=key=>key==='volume'?'12':'';assert.equal(plugin.value('field-volume',ref),'12');await plugin.stop();
 });
 test('panel CSS is scoped and cannot load remote content or escape its rules',()=>{
@@ -607,6 +607,59 @@ test('while Zotero\'s notifier watches, a painted strip reads no annotation at a
  assert.equal(touched,first,'the second and third paints read nothing');
  plugin.annotationMemo.delete(ref.id);plugin.annotationDistribution(ref);
  assert.ok(touched>first,'after the notifier drops it, it is read again');
+});
+
+test('the collection column names every path from the root, shortest-sort groups the same folder, and a held answer is not re-walked',()=>{
+ const {plugin,item,Z}=fixture();
+ const nodes={10:{id:10,name:'Type I Cas',parentID:11},11:{id:11,name:'CRISPR-Cas',parentID:12},
+  12:{id:12,name:'Defense system',parentID:null},20:{id:20,name:'Reviews',parentID:null}};
+ let walks=0;Z.Collections={get:id=>{walks++;return nodes[id];}};
+ const ref=item(1);ref.getCollections=()=>[10,20];
+ assert.equal(plugin.collectionPath(10),'Defense system › CRISPR-Cas › Type I Cas');
+ walks=0;
+ const entries=plugin.collectionEntries(ref);
+ assert.deepEqual(entries.map(e=>e.path),['Defense system › CRISPR-Cas › Type I Cas','Reviews'],'sorted by path, so the same folder groups');
+ // The sort key is the full path, so it survives a search re-sort untouched.
+ assert.equal(plugin.value('collections',ref),'Defense system › CRISPR-Cas › Type I Cas · Reviews');
+ assert.ok(walks>0,'walked the tree to answer the first time');
+ plugin.itemObserver='watching';
+ const before=walks;
+ assert.deepEqual(plugin.collectionEntries(ref),entries,'held answer, not a fresh walk');
+ assert.equal(walks,before,'no collection was read again');
+ // A child row and an item filed nowhere both draw nothing.
+ const child={...ref,isRegularItem:()=>false};
+ assert.deepEqual(plugin.collectionEntries(child),[]);
+ assert.equal(plugin.value('collections',child),'');
+ const unfiled=item(2);unfiled.getCollections=()=>[];
+ assert.deepEqual(plugin.collectionEntries(unfiled),[]);
+ assert.equal(plugin.value('collections',unfiled),'');
+});
+
+test('a collection rename or a paper moved into one drops every path cached under the old membership',async()=>{
+ const {plugin,Z}=fixture();let observer;
+ Z.Notifier={registerObserver:o=>{observer=o;return 'observer';},unregisterObserver:()=>{}};
+ await plugin.start({id:'custom',version:'0.4',rootURI:'file:///custom/'});
+ plugin.collectionMemo=new Map([[1,{ids:'10',entries:[{id:10,path:'Old name'}]}]]);
+ observer.notify('modify','collection',[10],{});
+ assert.equal(plugin.collectionMemo.size,0,'a renamed or moved collection clears the whole memo');
+ plugin.collectionMemo=new Map([[1,{ids:'10',entries:[{id:10,path:'Folder'}]}]]);
+ observer.notify('add','collection-item',['10-2'],{});
+ assert.equal(plugin.collectionMemo.size,0,'a paper filed or unfiled clears the whole memo too');
+ await plugin.stop();
+});
+
+test('the collection cell keeps only the last two levels; the tooltip names every full path, one per line',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');
+ const {plugin,item}=fixture(),ref=item(1);
+ window.ZoteroPane={itemsView:{getRow:()=>({ref})}};
+ plugin.collectionEntries=r=>r===ref?[{id:10,path:'Defense system › CRISPR-Cas › Type I Cas'},{id:20,path:'Reviews'}]:[];
+ const cell=plugin.renderCell('collections',0,'',{},document);
+ assert.equal(cell.textContent,'CRISPR-Cas › Type I Cas · Reviews','abbreviated to the last two levels in the cell');
+ assert.equal(cell.title,'Defense system › CRISPR-Cas › Type I Cas\nReviews','the full path, one per line, in the tooltip');
+ plugin.collectionEntries=()=>[];
+ const empty=plugin.renderCell('collections',0,'',{},document);
+ assert.equal(empty.textContent,'','nothing drawn for an unfiled paper');
+ assert.equal(empty.title,'컬렉션 없음','said only in the tooltip');
 });
 
 test('an installed CSL style draws any number of papers through one processor, not Quick Copy\'s fifty',async()=>{
@@ -2477,6 +2530,19 @@ test('the item menu opens the panel on the paper under the pointer, not on an em
     assert.match(call, /selected\(win\)\.length!==1/, `${label} asks for exactly one paper`);
     assert.match(call, /문헌을 하나만 선택하세요/, `${label} says what to do about it`);
   }
+});
+
+test('the item menu\'s "컬렉션으로 이동" submenu jumps the left pane to the collection and then to the paper, and is hidden for anything but exactly one paper',()=>{
+  const {plugin} = fixture();
+  const source = plugin.constructor.toString();
+  assert.match(source, /make\("menu","컬렉션으로 이동",body\)/, 'the submenu is built beside the other verbs');
+  // this.selected(win) already drops child rows, so this one guard covers
+  // multi-selection and a click on an attachment/note/annotation alike.
+  assert.match(source, /filedMenu\.hidden=chosen\.length!==1/);
+  assert.match(source, /들어 있는 컬렉션 없음/, 'no collections still shows a line, not a blank submenu');
+  assert.match(source, /collectionsView\.selectCollection\(Number\(id\)\)/, 'jumps the left pane first');
+  assert.match(source, /win\.ZoteroPane\.selectItem\(paper\.id\)/, 'then selects the paper there');
+  assert.match(source, /this\.collectionEntries\(paper\)/, 'lists the full path per collection, not the abbreviated cell text');
 });
 
 test('rows for papers that have left the library are dropped, and a small store is left alone', async () => {

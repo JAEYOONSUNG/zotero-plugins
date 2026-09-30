@@ -273,7 +273,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return {version:this.version||'',recordReading:this.getSetting('recordReading'),selectedTitle:item?String(item.getField('title')||''):'선택한 문헌 없음',readSeconds:item?this.state(item).seconds:0,citationStatus:this.citationJob?'조회 중':'대기',storagePath:this.Z.DataDirectory?.dir?this.Z.DataDirectory.dir+'/style-custom.json':'Zotero 데이터 폴더/style-custom.json'};
   }
   columnFeature(key) {
-    return {if:'IFColumn',oaCitedness:'IFColumn',citations:'citedCountColumn',status:'statusColumn',rating:'ratingColumn',time:'readTimeColumn',tags:'tagsColumn',progress:'readTimeColumn',remark:'remarkColumn',publication:'publicationTagsColumn',authors:'creatorColumn',added:'dateAddedColumn',modified:'dateAddedColumn',lastRead:'Recent',tagCount:'textTagsColumn',summary:'tldr',annotationCount:'annotationColumn',noteCount:'renderItemNotes',venue:'publicationColumn'}[key];
+    return {if:'IFColumn',oaCitedness:'IFColumn',citations:'citedCountColumn',status:'statusColumn',rating:'ratingColumn',time:'readTimeColumn',tags:'tagsColumn',progress:'readTimeColumn',remark:'remarkColumn',publication:'publicationTagsColumn',authors:'creatorColumn',added:'dateAddedColumn',modified:'dateAddedColumn',lastRead:'Recent',tagCount:'textTagsColumn',summary:'tldr',annotationCount:'annotationColumn',noteCount:'renderItemNotes',venue:'publicationColumn',collections:'collectionsColumn'}[key];
   }
   syncFeatureColumns() {
     this.featureColumns||=new Map();
@@ -361,7 +361,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       ["signals","신호","160"],["affiliation","소속","210"],
       // The same facts as Affiliation, one to a column, so each can be sorted and
       // read on its own: who did the work, who answers for it, and how their lab stands.
-      ["firstInstitution","1저자 기관","170"],["correspondingInstitution","교신 기관","170"],["institutionTier","기관 등급","80"]];
+      ["firstInstitution","1저자 기관","170"],["correspondingInstitution","교신 기관","170"],["institutionTier","기관 등급","80"],
+      // Deep collection trees (Defense system › CRISPR-Cas › Type I Cas) made a
+      // search result's folder invisible until the sidebar was clicked open.
+      ["collections","컬렉션","160"]];
     this.syncFeatureColumns();
     try{this.setCustomFields(this.pref('customFields',''),{persist:false});}catch(error){this.Z.logError(error);}
     this.prefPane = await this.Z.PreferencePanes.register({ pluginID: id, src: rootURI + "content/preferences.xhtml", label: "Style Custom",image:rootURI+"content/icons/style-custom.svg",scripts:[rootURI+"src/settings.js"],stylesheets:[rootURI+"content/preferences.css"] });
@@ -405,7 +408,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         for(const [win]of this.windows)for(const tab of this.readerTools.tabs(win))if(tab.itemID)this.tabItems.set(tab.id,tab.itemID);
         if(event==='close')for(const id of ids||[])this.tabItems.delete(id);
       }
-    }},["item","tab"],"style-custom-citations");
+      /* A move, a rename or a delete anywhere in the tree can change a path
+         that some cached paper still points at (a renamed ancestor reaches
+         every descendant), so the whole memo goes rather than guessing which
+         papers it touched. */
+      if((type==='collection'||type==='collection-item')&&this.collectionMemo?.size)this.collectionMemo.clear();
+    }},["item","tab","collection","collection-item"],"style-custom-citations");
     this.Z.debug("Style Custom " + version + " ready");
     // Off the start path: a library sweep must not delay a window opening.
     this.scheduleFlush(60000);
@@ -560,6 +568,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
       if (key === "publication") return this.publicationTags(item).join(' · ');
       if (key === "venue") return ['publicationTitle','proceedingsTitle','university','publisher'].map(field=>item.getField(field)).find(Boolean)||'';
+      // The full path is the sort key, so two papers in the same deep folder
+      // group together; the cell shortens it, but sorting never does.
+      if (key === "collections") return this.collectionEntries(item).map(e=>e.path).join(' · ');
       if (key === "authors") return (item.getCreators?.()||[]).map(c=>[c.firstName,c.lastName||c.name].filter(Boolean).join(' ')).join('; ');
       if (key === "added"||key === "modified")return String(item.getField(key==='added'?'dateAdded':'dateModified')||'');
       // Kept in UTC so it sorts; drawn in the reader's own clock (see localStamp).
@@ -580,6 +591,38 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (key.startsWith('field-'))return String(item.getField(key.slice(6))||'');
       return item.getTags().map(t => t.tag).filter(t => !/^\/(unread|reading|done)$/.test(t) && !/^style-custom:/.test(t) && !/^[★⭐]+$/.test(t)).join(" · ");
     } catch (error) { this.Z.logError(error); return ""; }
+  }
+  // The path from the library root, oldest ancestor first. A collection
+  // deleted mid-walk, or a cycle Zotero should never produce, stops the walk
+  // instead of looping.
+  collectionPath(id) {
+    const names = [], seen = new Set();
+    let current = this.Z.Collections.get(id);
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      names.unshift(String(current.name || ""));
+      current = current.parentID ? this.Z.Collections.get(current.parentID) : null;
+    }
+    return names.join(" › ");
+  }
+  /* One id+path pair per collection a paper is filed in, sorted by path so
+     the column, the context menu and the panel line all read the same order.
+     Kept per paper until its membership changes -- rebuilding every path on
+     every repaint was one tree walk per row per column redraw, for a library
+     with collections nested five deep. */
+  collectionEntries(item) {
+    if (!this.isRegular(item)) return [];
+    this.collectionMemo ||= new Map();
+    const ids = (item.getCollections?.() || []).slice().sort((a, b) => a - b).join(",");
+    const held = this.collectionMemo.get(item.id);
+    if (held && this.itemObserver != null && held.ids === ids) return held.entries;
+    const entries = (item.getCollections?.() || [])
+      .map(id => ({ id, path: this.collectionPath(id) }))
+      .filter(entry => entry.path)
+      .sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+    this.collectionMemo.set(item.id, { ids, entries });
+    if (this.collectionMemo.size > 3000) this.collectionMemo.delete(this.collectionMemo.keys().next().value);
+    return entries;
   }
   // Publishers name supplementary files in a handful of recognisable ways:
   // an explicit word, an "SI"/"supp" token, or a house code (Elsevier mmc1,
@@ -1109,6 +1152,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.style.color = P.faint;
         cell.title = where ? this.affiliationNote(where) : this.t("아직 조회하지 않았습니다. 연구 작업 패널 → 정리 › 관계 그래프 → 인용 목록 가져오기");
       }
+      // Blank on purpose: an unfiled paper is not an error, so it says nothing
+      // in the cell and only names itself in the tooltip.
+      if (key === "collections" && this.isRegular(item)) cell.title = this.t("컬렉션 없음");
       return cell;
     }
     let label = value;
@@ -1363,6 +1409,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       fill.style.cssText = `display:block;height:100%;border-radius:100px;width:${(this.citationShare(count) * 100).toFixed(1)}%;background:${this.tint(young ? P.gray : P.blue, young ? 0.7 : 0.9)};`;
       track.title = young ? `출판 3년 이내 (${year}) — 아직 인용이 쌓이는 중이라 회색 · 길이는 로그 눈금` : '피인용 수 · 길이는 로그 눈금';
       track.appendChild(fill); cell.appendChild(track);
+    } else if (key === "collections" && this.isRegular(item)) {
+      // The cell keeps only the last two levels of a tree that can run five
+      // deep; the tooltip is the only place every level is spelled out.
+      const entries = this.collectionEntries(item);
+      cell.textContent = entries.map(e => e.path.split(" › ").slice(-2).join(" › ")).join(" · ");
+      cell.title = entries.map(e => e.path).join("\n");
+      return cell;
     } else { cell.textContent = label; }
     // Only where nothing better was written above: this line used to replace the
     // journal name and tier with the bare figure, and the status with raw English.
@@ -4612,7 +4665,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       fill:[['rect',{x:2.6,y:3.2,width:10.8,height:9.6,rx:1.2}],['path',{d:'M2.6 8.6l3.2-2.4 2.6 2 2.2-1.6 2.8 2.2V12.8H2.6z',fill:'currentColor',stroke:'none',opacity:'.6'}]],
       signal:[['path',{d:'M8 2.8l5.4 9.6H2.6z'}],['line',{x1:8,y1:6.4,x2:8,y2:9.2}],['circle',{cx:8,cy:10.9,r:.5,fill:'currentColor'}]],
       download:[['path',{d:'M8 2.8v7.2M4.8 7.2L8 10.4l3.2-3.2'}],['path',{d:'M3 12.8h10'}]],
-      palette:[['circle',{cx:8,cy:8,r:5.4}],['circle',{cx:5.6,cy:7,r:.9,fill:'currentColor'}],['circle',{cx:8.4,cy:5.2,r:.9,fill:'currentColor'}],['circle',{cx:10.6,cy:7.6,r:.9,fill:'currentColor'}],['path',{d:'M8 13.4c-1-1.2-.4-2.6.8-2.8 1.3-.2 1.9-1.3 1.4-2.2'}]]
+      palette:[['circle',{cx:8,cy:8,r:5.4}],['circle',{cx:5.6,cy:7,r:.9,fill:'currentColor'}],['circle',{cx:8.4,cy:5.2,r:.9,fill:'currentColor'}],['circle',{cx:10.6,cy:7.6,r:.9,fill:'currentColor'}],['path',{d:'M8 13.4c-1-1.2-.4-2.6.8-2.8 1.3-.2 1.9-1.3 1.4-2.2'}]],
+      collections:[['path',{d:'M2.6 5.1c0-.7.6-1.3 1.3-1.3h2.3l1 1.2h4.9c.7 0 1.3.6 1.3 1.3v5.5c0 .7-.6 1.3-1.3 1.3H3.9c-.7 0-1.3-.6-1.3-1.3z'}]]
     };
   }
 
@@ -5081,6 +5135,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(this.selected(win).length!==1)throw new Error("책임저자는 문헌 하나에서 찾습니다. 문헌을 하나만 선택하세요.");
         state.workbench?.show('authors','pi');
       },body,"authors","마지막에 이름을 올린 저자를 이 논문의 책임저자로 보고, 그 사람의 최근 논문·소속 이동·특허를 엽니다.");
+      /* Deep collection trees hid every folder a search result sat in behind
+         a sidebar click. One paper, so the submenu names collections that
+         belong to it; several selected or a child row have none to offer. */
+      const filedMenu=make("menu","컬렉션으로 이동",body);iconic(filedMenu,"collections");
+      const filedPopup=make("menupopup",null,filedMenu);
       make("menuseparator",null,body);
       body.addEventListener("popupshowing",()=>{
         /* Greyed means "already so" -- for every selected paper, not the first:
@@ -5091,6 +5150,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           for(const [status,node] of Object.entries(statusItems))node.disabled=this.alreadySo(chosen,'status',status);
           for(const [rating,node] of Object.entries(ratingItems))node.disabled=this.alreadySo(chosen,'rating',rating);
           stopItem.hidden=!this.citationJob;
+          // this.selected() already drops child rows, so one paper here means
+          // one regular item was under the pointer, never an attachment.
+          filedMenu.hidden=chosen.length!==1;
+          if(chosen.length===1){
+            const paper=chosen[0],entries=this.collectionEntries(paper);
+            filedPopup.replaceChildren();
+            if(!entries.length){const empty=make("menuitem","들어 있는 컬렉션 없음",filedPopup);empty.disabled=true;}
+            else for(const{id,path}of entries){
+              const entry=make("menuitem",path,filedPopup);
+              entry.addEventListener("command",()=>Promise.resolve().then(async()=>{
+                await win.ZoteroPane.collectionsView.selectCollection(Number(id));
+                win.ZoteroPane.selectItem(paper.id);
+              }).catch(e=>{this.Z.logError(e);this.say(win,e.message);}));
+            }
+          }
         }catch(error){this.Z.logError(error);}
       });
       action("지표·읽기 기록 새로고침",async()=>{state.signature=null;await this.refreshWindows();await this.flush();},body,"refresh","저장된 값을 다시 읽어 열을 새로 그립니다. 네트워크는 쓰지 않습니다.");

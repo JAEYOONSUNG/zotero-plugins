@@ -1697,6 +1697,10 @@
 /* Round 5: the reader's own memo on the row. */
 #style-custom-workbench .sc-paper-remark { display: block; margin-top: 1px; font-size: 12px; color: var(--sc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 #style-custom-workbench .sc-paper-remark-label { color: var(--sc-muted); margin-inline-end: 6px; }
+/* Where the paper is filed, in the expanded detail: plain text, plain links. */
+#style-custom-workbench .sc-paper-collections { display: block; margin: 4px 0; font-size: 12px; color: var(--sc-muted); }
+#style-custom-workbench .sc-paper-collection-link { display: inline; min-height: 0; padding: 0; border: 0; background: none; font-size: 12px; color: var(--sc-text); cursor: pointer; }
+#style-custom-workbench .sc-paper-collection-link:hover { color: var(--sc-accent); text-decoration: underline; }
 /* Round 5: the reading state, set where the reading is. */
 #style-custom-workbench .sc-reading-status { display: inline-flex; }
 #style-custom-workbench .sc-reading-status button { min-height: 22px; padding: 0 7px; font-size: 12px; }

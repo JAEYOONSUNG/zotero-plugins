@@ -1225,6 +1225,24 @@ test('a row carries the reader’s own memo; a collection says when it was last 
  f.bench.destroy();
 });
 
+test('the expanded paper detail names where it is filed, and each path jumps the left pane there and then to the paper',async()=>{
+ const f=fixture();
+ f.runtime.collectionEntries=ref=>ref.id===1
+  ?[{id:4,path:'Defense system › CRISPR-Cas › Type I Cas'},{id:5,path:'Reviews'}]:[];
+ f.win.ZoteroPane.selectItem=f.record('selectItem');
+ await f.bench.show('explore');
+ f.bench.state.selected=new Set(['1','2']);f.bench.state.scope='selected';await f.bench.render();
+ const line=f.body().querySelector('[data-item-id="1"] .sc-paper-collections');
+ assert.ok(line,'drawn once the card is expanded');
+ const links=[...line.querySelectorAll('button')];
+ assert.deepEqual(links.map(b=>b.textContent),['Defense system › CRISPR-Cas › Type I Cas','Reviews'],'the full path, not the column\'s abbreviation');
+ links[0].dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(f.calls.find(c=>c[0]==='collection'),['collection',4],'the left pane jumps to the collection first');
+ assert.deepEqual(f.calls.find(c=>c[0]==='selectItem'),['selectItem',1],'then the paper is selected there');
+ assert.equal(f.body().querySelector('[data-item-id="2"] .sc-paper-collections'),null,'an unfiled paper draws nothing, even expanded the same way');
+ f.bench.destroy();
+});
+
 test('a paper is closed out on 읽기 진행, opened in place in the list, and the unread papers the read ones cite are named',async()=>{
  const f=fixture();
  const recent=new Date(Date.now()-864e5).toISOString();

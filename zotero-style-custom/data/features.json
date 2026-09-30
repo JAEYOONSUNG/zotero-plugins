@@ -281,6 +281,22 @@
       "status": "implemented"
     },
     {
+      "id": "collectionsColumn",
+      "origin": "additional requested workflow",
+      "name": "컬렉션 열",
+      "implementation": {
+        "file": "src/runtime.js",
+        "marker": "collectionEntries"
+      },
+      "tests": [
+        "test/runtime.test.mjs",
+        "test/workbench.test.mjs"
+      ],
+      "entryPoint": "메인 문헌 목록 → 컬렉션 열 · 우클릭 → 컬렉션으로 이동 · 워크벤치 자세히 패널",
+      "condition": "",
+      "status": "implemented"
+    },
+    {
       "id": "creatorColumn",
       "origin": "Ethereal Style 6.0.76 installed preference",
       "name": "저자·기여자 열",

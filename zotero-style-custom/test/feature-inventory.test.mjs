@@ -14,7 +14,7 @@ test('source feature discovery includes multi-line dotted reader features and th
 
 test('captured installed baseline and current feature source/test mappings agree',()=>{
  const read=name=>JSON.parse(fs.readFileSync(new URL('../data/'+name,import.meta.url),'utf8'));
- const result=verifyInventory(read('features.json'),read('style-baseline.json'));assert.equal(result.baseline,50);assert.equal(result.additional,28);
+ const result=verifyInventory(read('features.json'),read('style-baseline.json'));assert.equal(result.baseline,50);assert.equal(result.additional,29);
 });
 
 // Both ledgers sat at 0.8.0 through eight releases, which is how a completeness

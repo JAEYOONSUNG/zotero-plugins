@@ -197,6 +197,15 @@
       "consumer": "featureEnabled"
     },
     {
+      "key": "feature.collectionsColumn",
+      "category": "columns",
+      "label": "컬렉션 열 표시",
+      "type": "boolean",
+      "default": true,
+      "description": "메인 문헌 목록에서 해당 열을 표시합니다.",
+      "consumer": "featureEnabled"
+    },
+    {
       "key": "feature.creatorColumn",
       "category": "columns",
       "label": "저자·기여자 열 사용",

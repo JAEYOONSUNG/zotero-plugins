@@ -1157,7 +1157,21 @@
     const waiting=isQueued(item.id);
     button(waiting?'읽기 대기에서 빼기':'읽기 대기',()=>run(async()=>{await setReadingQueue([item],!waiting);message(waiting?'읽기 대기에서 뺐습니다.':'읽기 진행의 읽기 대기에 넣었습니다.');render();}),acts,{'aria-pressed':String(waiting)});
    }
-   if(detailed){node('p',item.abstract||'초록이 없습니다.',c,{class:'sc-paper-detail'});const ref=runtime.Z.Items.get(Number(item.id));const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);syncRemark(c,submitted);message('메모를 저장했습니다.');},c);}
+   if(detailed){node('p',item.abstract||'초록이 없습니다.',c,{class:'sc-paper-detail'});const ref=runtime.Z.Items.get(Number(item.id));
+    /* Where this paper is filed, each path a door back to the same jump the
+       item-tree menu offers -- the left pane's own selection, not a window. */
+    const filedIn=typeof runtime.collectionEntries==='function'?runtime.collectionEntries(ref):[];
+    if(filedIn.length){
+     const line=node('div',T('컬렉션: '),c,{class:'sc-paper-collections'});
+     filedIn.forEach((entry,index)=>{
+      if(index)node('span',' · ',line);
+      button(entry.path,()=>run(async()=>{
+       await win.ZoteroPane.collectionsView.selectCollection(Number(entry.id));
+       win.ZoteroPane.selectItem?.(Number(item.id));
+      }),line,{class:'sc-paper-collection-link',title:T('클릭하면 왼쪽 컬렉션 트리에서 이 컬렉션으로 이동합니다')});
+     });
+    }
+    const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);syncRemark(c,submitted);message('메모를 저장했습니다.');},c);}
    if(detailed&&(state.scope!=='selected'||items.length===1))details.push((async()=>{
     const results=await Promise.allSettled([library.notes([item.id]),library.annotations([item.id])]);
     if(disposed||epoch!==generation||!c.isConnected)return;
