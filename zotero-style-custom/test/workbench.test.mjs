@@ -4094,3 +4094,157 @@ test('보유 문헌 요약의 IF·인용 중앙값은 그 기준으로 정렬하
  assert.equal(citeFact().getAttribute('aria-pressed'),'true');
  f.bench.destroy();
 });
+
+/* 새 논문: the one view of 관련 논문 that answers about the whole shelf rather
+   than one paper, so it is also the one that works with nothing selected. */
+function shelfBench(f,{rows=[],seeds=2,noWork=0}={}){
+ f.runtime.paperWorks=()=>({'1:K1':{openalex:'https://openalex.org/W1'},'1:K2':{openalex:'W2'}});
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);
+ f.runtime.readingPathCached=async()=>null;
+ const store={};
+ f.runtime.freshCiterStore=()=>store;
+ const asked=[];
+ f.runtime.freshCitersCached=async(key,items,options)=>{
+  asked.push({key,items:items.length,options});
+  return {days:90,since:'2026-07-01',at:new Date().toISOString(),seeds,noWork,found:rows.length,
+   requests:1,budgetGone:false,partial:false,truncated:false,rows};
+ };
+ return {asked,store};
+}
+const newWork=(id,shared,titles,extra={})=>({id,doi:'10.1/'+id,title:'New paper '+id,year:2026,
+ date:'2026-09-0'+shared,venue:'A journal',citations:0,type:'article',authors:['A Author'],
+ shared,cites:titles.map((_,i)=>'W'+(i+1)),citedTitles:titles,inLibrary:false,...extra});
+// Two held papers is one request of up to three pages, and the button says so.
+const FIND_NEW='새 논문 찾기 · OpenAlex (요청 최대 3회)';
+async function onFresh(f){
+ await f.bench.show('related');
+ f.bench.state.selected.clear();
+ f.bench.state.relatedView='fresh';
+ await f.bench.render();await settle();
+}
+
+test('새 논문 opens with nothing selected, and says what it will spend before spending it',async()=>{
+ const f=fixture();
+ const {asked}=shelfBench(f);
+ await onFresh(f);
+ const text=f.body().textContent;
+ assert.match(text,/새로 나온 관련 논문/,'the tab is no longer a page of instructions');
+ assert.match(text,/요청 최대 3회/,'a metered lookup says its cost on the button');
+ assert.equal(asked.length,0,'and nothing is spent until it is pressed');
+ // The three per-paper views are still offered, saying why they cannot answer yet.
+ const modes=[...f.body().querySelectorAll('.sc-segmented button')];
+ assert.deepEqual(modes.map(b=>b.textContent),['읽기 순서','발전 과정','전체 목록','새 논문']);
+ assert.deepEqual(modes.map(b=>!!b.disabled),[true,true,true,false]);
+ assert.equal(modes[0].getAttribute('title'),'문헌을 하나 고르면 볼 수 있습니다');
+ f.bench.destroy();
+});
+
+test('a new paper says how many of your own it cites, and names one so the claim can be checked',async()=>{
+ const f=fixture();
+ const {asked}=shelfBench(f,{rows:[
+  newWork('W10',3,['Held one','Held two','Held three']),
+  newWork('W11',1,['Held one'])
+ ]});
+ await onFresh(f);
+ await f.click(FIND_NEW);await settle();
+ assert.equal(asked.length,1);
+ assert.equal(asked[0].options.days,90);
+ assert.equal(asked[0].items,2,'the shelf it asked about is the scope, not the selection');
+ const why=[...f.body().querySelectorAll('.sc-path-why')].map(p=>p.textContent);
+ assert.match(why[0],/내 서재 3편 인용/);
+ assert.match(why[0],/Held one/,'the claim names a paper of mine, not just a number');
+ assert.match(why[1],/내 서재 1편 인용/);
+ // Most of the shelf first is the whole point of the ranking.
+ const titles=[...f.body().querySelectorAll('.sc-hit-title')].map(t=>t.textContent);
+ assert.ok(titles.indexOf('New paper W10')<titles.indexOf('New paper W11'));
+ f.bench.destroy();
+});
+
+test('a shelf that was only partly asked about never reads as "nothing new"',async()=>{
+ const f=fixture();
+ shelfBench(f,{rows:[],noWork:7});
+ await onFresh(f);
+ await f.click(FIND_NEW);await settle();
+ const text=f.body().textContent;
+ assert.match(text,/새 논문이 없습니다/);
+ assert.match(text,/7편은 OpenAlex 기록이 없어 묻지 못했습니다/,'"never asked" is not reported as "nothing found"');
+ f.bench.destroy();
+});
+
+test('a shelf with no OpenAlex records at all offers the way to fill them instead of an empty list',async()=>{
+ const f=fixture();
+ const {asked}=shelfBench(f);
+ f.runtime.paperWorks=()=>({});
+ await onFresh(f);
+ assert.match(f.body().textContent,/관계 그래프 탭에서 인용 목록을 먼저 가져오세요/);
+ assert.equal(asked.length,0,'nothing is asked when there is nothing to ask about');
+ f.bench.destroy();
+});
+
+test("a kept answer is drawn at once, and 다시 확인 is what goes back out",async()=>{
+ const f=fixture();
+ const state=shelfBench(f,{rows:[newWork('W10',2,['Held one','Held two'])]});
+ await onFresh(f);
+ await f.click(FIND_NEW);await settle();
+ // The panel names a shelf the same way twice running, so the answer it just
+ // stored under that name is the one it finds on the next visit.
+ state.store[state.asked[0].key]={days:90,at:new Date().toISOString(),seeds:2,noWork:0,requests:1,
+  truncated:false,budgetGone:false,partial:false,rows:[newWork('W20',2,['Held one','Held two'])]};
+ await f.bench.render();await settle();
+ assert.match(f.body().textContent,/New paper W20/,'a day-old answer is shown without asking again');
+ assert.equal(state.asked.length,1,'and asks nothing to show it');
+ await f.click('다시 확인');await settle();
+ assert.equal(state.asked.length,2,'다시 확인 is the way to ask again');
+ assert.equal(state.asked[1].options.refresh,true);
+ f.bench.destroy();
+});
+
+test('every button that reaches outside Zotero says so, so the self-check never presses it', () => {
+  /* The self-check presses every button it does not recognise as unsafe, and
+     `data-opens` is the contract that keeps it away from anything that puts a
+     window on screen. Five buttons that open a browser or ZotPoP were relying
+     on the verb blocklist alone.
+
+     The call is read to its own closing bracket rather than for a fixed number
+     of characters: a short window missed the attribute on a long handler, and
+     a long one blamed a button for what the next button did. */
+  const source = fs.readFileSync(new URL('../src/workbench.js', import.meta.url), 'utf8');
+  const callAt = start => {
+    let depth = 0, quote = '';
+    for (let at = start; at < source.length; at++) {
+      const ch = source[at];
+      if (quote) { if (ch === '\\') at++; else if (ch === quote) quote = ''; continue; }
+      if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue; }
+      if (ch === '(') depth++;
+      else if (ch === ')' && --depth === 0) return source.slice(start, at + 1);
+    }
+    return source.slice(start, start + 400);
+  };
+  const unmarked = [];
+  for (const match of source.matchAll(/\bbutton\(/g)) {
+    const call = callAt(match.index + 'button'.length);
+    if (!/launchURL\(|ZotPoP\.openSearch\(|library\.openItem\(/.test(call)) continue;
+    if (/data-opens/.test(call)) continue;
+    unmarked.push(source.slice(match.index, match.index + 60).replace(/\s+/g, ' '));
+  }
+  assert.deepEqual(unmarked, [], 'these buttons open something and do not say so');
+});
+
+test('zooming the graph keeps its middle, instead of walking off to the top-left corner', async () => {
+  /* Anchored at 0 0, two presses of 확대 left half the nodes outside the frame
+     with nothing to pan back with. */
+  const f = fixture();
+  await f.bench.show('graph');
+  await settle();
+  const svg = f.body().querySelector('svg.sc-graph');
+  assert.ok(svg, 'the graph is drawn');
+  const [x0, y0, w0, h0] = svg.getAttribute('viewBox').split(/\s+/).map(Number);
+  await f.click('확대');
+  const [x1, y1, w1, h1] = svg.getAttribute('viewBox').split(/\s+/).map(Number);
+  assert.ok(w1 < w0 && h1 < h0, 'it did zoom in');
+  assert.ok(x1 > x0 && y1 > y0, 'and moved the frame inward rather than pinning it at the corner');
+  // The same centre before and after is what keeps a node under the pointer.
+  assert.equal(Math.round(x0 + w0 / 2), Math.round(x1 + w1 / 2));
+  assert.equal(Math.round(y0 + h0 / 2), Math.round(y1 + h1 / 2));
+  f.bench.destroy();
+});

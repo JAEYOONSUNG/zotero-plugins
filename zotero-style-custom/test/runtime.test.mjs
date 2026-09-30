@@ -2753,3 +2753,142 @@ test('a homepage "photo" that answers with a web page is not counted as a face',
   assert.equal(f.plugin.portraitOf('A2'), null, 'Sam Okafor has no photo rather than a broken one');
   assert.ok(f.plugin.portraitOf('A1'), 'the Commons photo is unaffected');
 });
+
+/* 새로 나온 관련 논문: the sweep that asks what has just been published on top
+   of a shelf. The shapes here are the ones OpenAlex answered with on this
+   library's own collections in September 2026. */
+function shelfFixture({results, pages} = {}) {
+  const f = discoverFixture();
+  f.plugin.active = true;
+  f.plugin.flush = async () => {};
+  const held = [1, 2, 3].map(n => {
+    const ref = f.item(n);
+    ref.getField = key => ({title: 'Held paper ' + n})[key] || '';
+    f.plugin.paperWorks()[f.plugin.identity(ref)] = {openalex: 'https://openalex.org/W' + n, doi: '10.1/h' + n};
+    return ref;
+  });
+  const asked = [];
+  let page = 0;
+  f.Z.HTTP = {request: async (method, url) => {
+    asked.push(url);
+    const body = pages ? pages[Math.min(page++, pages.length - 1)] : {results: results ?? []};
+    return {response: body};
+  }};
+  return {...f, held, asked};
+}
+const citer = (id, {date, refs = [], type = 'article', doi = ''} = {}) => ({
+  id: 'https://openalex.org/' + id, doi: doi ? 'https://doi.org/' + doi : null, title: 'New work ' + id,
+  publication_year: Number(String(date).slice(0, 4)), publication_date: date, cited_by_count: 0, type,
+  primary_location: {source: {display_name: 'A journal'}}, authorships: [],
+  referenced_works: refs.map(r => 'https://openalex.org/' + r)
+});
+
+test('the whole shelf is asked about in one request, and the answer is ranked by how much of it each new paper builds on', async () => {
+  const f = shelfFixture({results: [
+    citer('W10', {date: '2026-09-01', refs: ['W1']}),
+    citer('W11', {date: '2026-07-04', refs: ['W1', 'W2', 'W3']}),
+    citer('W12', {date: '2026-09-20', refs: ['W2', 'W3']})
+  ]});
+  const report = await f.plugin.sweepFreshCiters(f.held, {days: 90});
+  assert.equal(f.asked.length, 1, 'three held papers is one request, not three');
+  assert.match(f.asked[0], /cites%3AW1%7CW2%7CW3/);
+  assert.deepEqual(report.rows.map(r => [r.id, r.shared]), [['W11', 3], ['W12', 2], ['W10', 1]]);
+  // The claim on the row names the held papers it stands on.
+  assert.deepEqual(report.rows[0].citedTitles.sort(), ['Held paper 1', 'Held paper 2', 'Held paper 3']);
+  assert.equal(report.seeds, 3);
+  assert.equal(report.noWork, 0);
+  // Hundreds of reference ids per row are not carried into the saved answer.
+  assert.equal(report.rows[0].references, undefined);
+});
+
+test('held papers OpenAlex has never been asked about are counted, so "nothing new" is never written over "never asked"', async () => {
+  const f = shelfFixture({results: []});
+  const stranger = f.item(9);
+  stranger.getField = () => 'A paper with no OpenAlex record';
+  const report = await f.plugin.sweepFreshCiters([...f.held, stranger], {days: 90});
+  assert.equal(report.seeds, 3);
+  assert.equal(report.noWork, 1, 'the panel can say how much of the shelf could not be asked about');
+  assert.deepEqual(report.rows, []);
+});
+
+test('a shelf with no OpenAlex records at all costs no request', async () => {
+  const f = shelfFixture({results: []});
+  const stranger = f.item(9);
+  stranger.getField = () => 'Unknown';
+  const report = await f.plugin.sweepFreshCiters([stranger]);
+  assert.equal(f.asked.length, 0);
+  assert.equal(report.seeds, 0);
+});
+
+test('datasets and peer reviews are not offered as new papers', async () => {
+  const f = shelfFixture({results: [
+    citer('W10', {date: '2026-09-01', refs: ['W1'], type: 'dataset'}),
+    citer('W11', {date: '2026-09-02', refs: ['W1'], type: 'peer-review'}),
+    citer('W12', {date: '2026-09-03', refs: ['W1'], type: 'article'})
+  ]});
+  const report = await f.plugin.sweepFreshCiters(f.held);
+  assert.deepEqual(report.rows.map(r => r.id), ['W12']);
+});
+
+test('more citers than the pages asked for is reported, not passed off as the whole answer', async () => {
+  const f = shelfFixture({pages: [
+    {results: [citer('W10', {date: '2026-09-09', refs: ['W1']})], meta: {next_cursor: 'c2'}},
+    {results: [citer('W11', {date: '2026-09-08', refs: ['W1']})], meta: {next_cursor: 'c3'}}
+  ]});
+  const report = await f.plugin.sweepFreshCiters(f.held, {pages: 2});
+  assert.equal(report.requests, 2);
+  assert.equal(report.truncated, true);
+  assert.deepEqual(report.rows.map(r => r.id).sort(), ['W10', 'W11']);
+});
+
+test('a spent OpenAlex budget stops the sweep and the half answer is never kept as the answer', async () => {
+  const f = shelfFixture();
+  f.Z.HTTP = {request: async () => { throw Object.assign(new Error('Insufficient budget'), {status: 429}); }};
+  const report = await f.plugin.freshCitersCached('library:1', f.held, {days: 90});
+  assert.equal(report.budgetGone, true);
+  assert.equal(report.partial, true);
+  assert.deepEqual(f.plugin.freshCiterStore(), {}, 'nothing partial is remembered as a finished answer');
+});
+
+test('the answer is kept for a day, and asking again on purpose goes back out', async () => {
+  const f = shelfFixture({results: [citer('W10', {date: '2026-09-01', refs: ['W1']})]});
+  const first = await f.plugin.freshCitersCached('collection:115', f.held, {days: 90});
+  assert.equal(f.asked.length, 1);
+  const again = await f.plugin.freshCitersCached('collection:115', f.held, {days: 90});
+  assert.equal(f.asked.length, 1, 'a question about months is not asked twice in one day');
+  assert.equal(again.at, first.at, 'and the panel can say when it was checked');
+  await f.plugin.freshCitersCached('collection:115', f.held, {days: 90, refresh: true});
+  assert.equal(f.asked.length, 2, '다시 확인 asks again');
+});
+
+test('a page is reduced to the held papers it cites before the next page is asked for', async () => {
+  // A sweep over a whole library is twenty-odd batches, each result carrying
+  // its own bibliography. Only the part naming a held paper is ever read, and
+  // keeping the rest would hold a hundred megabytes of ids in memory.
+  const wide = citer('W10', {date: '2026-09-01', refs: ['W1', ...Array.from({length: 400}, (_, i) => 'WX' + i)]});
+  const f = shelfFixture({results: [wide]});
+  const report = await f.plugin.sweepFreshCiters(f.held);
+  assert.deepEqual(report.rows[0].cites, ['W1']);
+  assert.equal(report.rows[0].shared, 1);
+  assert.equal(report.rows[0].references, undefined, 'and nothing of the other four hundred survives');
+});
+
+test('an empty reading-time cell says nothing was recorded, not that zero seconds were measured', async () => {
+  /* The plugin times Zotero's reader and nothing else, so a paper read on
+     paper has no record. "실제로 읽은 시간 0초" claimed a measurement that was
+     never made, and looked exactly like a paper opened and closed at once. */
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref}), selection: {isSelected: () => false}}};
+  // renderCell reads the live value off the item rather than the argument.
+  plugin.value = () => seconds;
+  let seconds = 0;
+  const blank = plugin.renderCell('time', 0, 0, {}, document);
+  seconds = 4000;
+  const read = plugin.renderCell('time', 0, 4000, {}, document);
+  assert.match(String(blank.title), /읽기 기록 없음/);
+  assert.doesNotMatch(String(blank.title), /0초/);
+  assert.match(String(read.title), /실제로 읽은 시간 4000초/);
+});

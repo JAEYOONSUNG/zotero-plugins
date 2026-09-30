@@ -809,9 +809,10 @@
   #style-custom-workbench .sc-page-cell[data-level="2"] { background: color-mix(in srgb, var(--sc-done) 64%, var(--sc-fill)); }
   #style-custom-workbench .sc-page-cell[data-level="3"] { background: color-mix(in srgb, var(--sc-done) 84%, var(--sc-fill)); }
   #style-custom-workbench .sc-signal-retracted { color: #10131a; }
-  /* Only the filled chips take the accent ink here: the IF figure is bare
-     coloured text, and dark ink on a dark surface is invisible. */
-  #style-custom-workbench .sc-chip-on, #style-custom-workbench .sc-chip-button[aria-pressed=true] { color: var(--sc-accent-ink); }
+  /* The pressed chip is not a filled button: it takes --sc-surface, the same
+     as the panel behind it, so it keeps --sc-text. It used to be given
+     --sc-accent-ink here, which in dark is near-black -- 1.23:1 on that
+     surface, so the selected type filter could not be read at all. */
   #style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #D48A8C; }
   #style-custom-workbench .sc-paper-card[data-mark=orange] { --sc-mark: #C9975F; }
   #style-custom-workbench .sc-paper-card[data-mark=gold]   { --sc-mark: #B89944; }
@@ -1198,7 +1199,10 @@
 #style-custom-workbench .sc-legend-line { display: inline-block; width: 16px; height: 0; border-top: 2px dashed var(--sc-faint); }
 #style-custom-workbench .sc-graph-summary { margin: 2px 0; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-matrix-scroll { max-height: min(60vh, calc(100cqh - 160px)); overflow: auto; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-card); background: var(--sc-surface); }
-#style-custom-workbench .sc-matrix td[data-field=abstract], #style-custom-workbench .sc-matrix td[data-field=summary], #style-custom-workbench .sc-matrix td[data-field=remark] { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+/* Clamped on a child, never on the cell: two adjacent cells that are both
+   -webkit-box are laid out as one, and the flipped table put the second
+   paper's memo inside the first paper's cell. */
+#style-custom-workbench .sc-matrix-clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 #style-custom-workbench .sc-lang { flex: 0 0 auto !important; max-width: 110px; }
 #style-custom-workbench button[data-variant=primary] { background: var(--sc-accent); color: var(--sc-accent-ink, #fff); }
 /* Hover darkens on a light theme and lightens on a dark one: mixing toward

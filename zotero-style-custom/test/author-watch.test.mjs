@@ -458,3 +458,58 @@ test("a batch that fails after its first page does not keep a cursor past what i
   await h.sweepWatchedAuthors();
   assert.equal(h.cache.watchedAuthors[0].resume, undefined, "the next run starts at the first page, where W1 is");
 });
+
+test("a second sweep that turns nothing up says so, instead of re-announcing what is merely unread", async () => {
+  // The weekly check read the same whether something had happened or not: it
+  // counted every paper not yet marked, not what this run actually found.
+  const rows = [person("A1")];
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const h = host({rows, pages: [page([work("W1", ["A1"]), work("W2", ["A1"])]), page([])]});
+  const first = await h.sweepWatchedAuthors();
+  assert.equal(first.added, 2, "both are new the first time");
+  assert.equal(first.works, 2);
+  // The host closes over its own pages, so the second run is a second host
+  // over the same watchlist rows -- which is what a week later actually is.
+  const h2 = host({rows, pages: [page([work("W1", ["A1"]), work("W2", ["A1"])]), page([])]});
+  const again = await h2.sweepWatchedAuthors();
+  assert.equal(again.added, 0, "nothing was found this time, and the message can say so");
+  assert.equal(again.works, 2, "the two still waiting are still reported as waiting");
+});
+
+test("a repository deposit is not counted as a new paper in the tally either", async () => {
+  const rows = [person("A1")];
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const h = host({rows, pages: [page([work("W1", ["A1"], {type: "dataset"}), work("W2", ["A1"])]), page([])]});
+  const result = await h.sweepWatchedAuthors();
+  // Of 64 "new papers" across 109 watched authors, sixteen were copies of work
+  // already published, filed as datasets.
+  assert.equal(result.works, 1);
+  assert.equal(result.added, 1);
+  assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["W2"]);
+});
+
+test("a long-standing collaborator is not announced as a first-time co-author", async () => {
+  /* The history was carried from earlier news -- at most eight papers -- so a
+     colleague of ten years who was not among those came up as new. */
+  const rows = [person("A1", {coauthorsSeen: []})];
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const older = work("W0", ["A1", "Regular"], {publication_date: "2026-01-01"});
+  const news = work("W1", ["A1", "Regular", "Newcomer"]);
+  const h = host({rows, pages: [page([news, older]), page([])]});
+  // Everything of theirs in the window is the record, so only 8 make the news
+  // but all of it counts as history.
+  h.cache.watchedAuthors[0].seen = ["W0"];
+  await h.sweepWatchedAuthors();
+  const row = h.cache.watchedAuthors[0];
+  assert.deepEqual(row.newCoauthors, ["Newcomer"], "the regular collaborator is on their older paper, so not new");
+});
+
+test("a consortium paper's author list is not a hundred new collaborations", async () => {
+  const rows = [person("A1", {coauthorsSeen: ["Regular"]})];
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const crowd = work("W1", ["A1", ...Array.from({length: 40}, (_, n) => "Member" + n)]);
+  const h = host({rows, pages: [page([crowd]), page([])]});
+  await h.sweepWatchedAuthors();
+  assert.deepEqual(h.cache.watchedAuthors[0].newCoauthors, [],
+    "forty names on one paper says nothing about who they have started working with");
+});

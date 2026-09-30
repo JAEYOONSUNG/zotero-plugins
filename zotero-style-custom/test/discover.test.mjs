@@ -406,3 +406,91 @@ test("two similar titles and no exact one: nothing is guessed", () => {
   assert.equal(discover.pickByTitle([a, b], record), null);
   assert.equal(discover.pickByTitle([a], record).id, "W1", "one near miss alone is taken, as before");
 });
+
+/* 새로 나온 관련 논문: what has been published lately on top of the shelf.
+   The counts and the shape here are the ones measured live against OpenAlex
+   on this library's own collections (CBASS: 17 papers held, 68 new works in
+   ninety days, 19 of them citing two or more of the seventeen). */
+const fresh = (id, {date, refs = [], doi = "", citations = 0}) => ({
+  id, doi, title: "Work " + id, date, year: Number(String(date).slice(0, 4)),
+  citations, venue: "A journal", type: "article", references: refs, authors: [], people: []
+});
+
+test("one request asks what cites fifty held papers at once, with a date floor to keep it cheap", () => {
+  const url = discover.freshCitersURL(["W1", "https://openalex.org/w2"], {since: "2026-07-01"});
+  assert.match(url, /filter=[^&]*cites%3AW1%7CW2/, "the ids are OR-ed into one cites filter");
+  assert.match(url, /from_publication_date%3A2026-07-01/);
+  assert.match(url, /sort=publication_date%3Adesc|sort=publication_date:desc/);
+  // The ranking is the count of held papers each result cites, so each result
+  // has to bring its own reference list back with it.
+  assert.match(url, /referenced_works/);
+  // Asked for once, not once per paper: fifty ids is the ceiling OpenAlex takes.
+  assert.equal(discover.freshBatches(Array.from({length: 120}, (_, i) => "W" + i)).length, 3);
+  assert.equal(discover.freshCitersURL([]), null, "no held paper has an OpenAlex id: nothing is asked");
+});
+
+test("a malformed or missing date floor is left out rather than sent as a filter", () => {
+  assert.doesNotMatch(discover.freshCitersURL(["W1"], {since: "last July"}), /from_publication_date/);
+  assert.doesNotMatch(discover.freshCitersURL(["W1"], {}), /from_publication_date/);
+});
+
+test("new papers are ranked by how many of the reader's own papers they build on, then by date", () => {
+  const rows = discover.rankFreshCiters([
+    fresh("W10", {date: "2026-09-01", refs: ["W1"]}),
+    fresh("W11", {date: "2026-07-01", refs: ["W1", "W2", "W3"]}),
+    fresh("W12", {date: "2026-09-20", refs: ["W2", "W3"]}),
+    fresh("W13", {date: "2026-09-25", refs: ["W2", "W3"]})
+  ], {seeds: ["W1", "W2", "W3"], titleOf: id => ({W1: "Held one", W2: "Held two", W3: "Held three"})[id]});
+  assert.deepEqual(rows.map(r => [r.id, r.shared]), [["W11", 3], ["W13", 2], ["W12", 2], ["W10", 1]]);
+  // The row's claim names one of the papers it stands on, so it can be checked.
+  assert.deepEqual(rows[0].citedTitles.sort(), ["Held one", "Held three", "Held two"]);
+});
+
+test("a paper already on the shelf is not offered as news, by DOI or as one of the seeds", () => {
+  const rows = discover.rankFreshCiters([
+    fresh("W10", {date: "2026-09-01", refs: ["W1"], doi: "10.1/HELD"}),
+    fresh("W2", {date: "2026-09-02", refs: ["W1"]}),
+    fresh("W11", {date: "2026-09-03", refs: ["W1"]})
+  ], {seeds: ["W1", "W2"], have: new Set(["https://doi.org/10.1/held"])});
+  assert.deepEqual(rows.map(r => r.id), ["W11"], "the owned DOI and the seed itself both drop out");
+});
+
+test("a work citing papers in two different batches counts both, rather than losing one copy", () => {
+  // Fifty ids at a time means one new paper can come back twice, each time
+  // carrying only the part of the shelf that batch asked about.
+  const rows = discover.rankFreshCiters([
+    fresh("W10", {date: "2026-09-01", refs: ["W1"]}),
+    fresh("W10", {date: "2026-09-01", refs: ["W2", "W3"]})
+  ], {seeds: ["W1", "W2", "W3"]});
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].shared, 3, "the two answers are unioned, not the second one dropped");
+});
+
+test("a new paper that cites none of the reader's papers is not in the answer at all", () => {
+  const rows = discover.rankFreshCiters([fresh("W10", {date: "2026-09-01", refs: ["W99"]})], {seeds: ["W1"]});
+  assert.deepEqual(rows, []);
+});
+
+test("one paper OpenAlex has indexed twice is one row, the journal version over the preprint", () => {
+  // Measured on this library: the Angewandte Chemie and Angewandte Chemie
+  // International Edition records of one article came back as two works.
+  const rows = discover.rankFreshCiters([
+    {...fresh("W10", {date: "2026-09-14", refs: ["W1", "W2"], citations: 3}),
+     title: "An Enzymatic Platform for Late-Stage Isotope Labelling of Oligonucleotides"},
+    {...fresh("W11", {date: "2026-09-14", refs: ["W2", "W3"], citations: 1}),
+     title: "An enzymatic platform for late stage isotope labelling of oligonucleotides!"},
+    {...fresh("W12", {date: "2026-08-01", refs: ["W1"], citations: 40}), type: "preprint",
+     title: "An Enzymatic Platform for Late-Stage Isotope Labelling of Oligonucleotides"}
+  ], {seeds: ["W1", "W2", "W3"]});
+  assert.equal(rows.length, 1, "three records of one article are one row");
+  assert.equal(rows[0].id, "W10", "the journal version wins over a more-cited preprint");
+  assert.equal(rows[0].shared, 3, "and every held paper any version cites is counted once");
+});
+
+test("two different papers that merely share a title's worth of words are both kept", () => {
+  const rows = discover.rankFreshCiters([
+    {...fresh("W10", {date: "2026-09-01", refs: ["W1"]}), title: "Structural basis of phage defence by Wadjet"},
+    {...fresh("W11", {date: "2026-09-02", refs: ["W1"]}), title: "Structural basis of phage defence by Lamassu"}
+  ], {seeds: ["W1"]});
+  assert.equal(rows.length, 2, "this list spans a field; near titles are different papers");
+});

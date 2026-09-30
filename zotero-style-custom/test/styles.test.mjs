@@ -234,3 +234,23 @@ test('no text is set below the 11px floor, except letters drawn inside a shape',
  }
  assert.deepEqual(small, [], 'Korean below 11px loses its strokes');
 });
+
+test('a long comparison field is clamped on a child, never on the cell itself', () => {
+  /* Two adjacent cells that are both `display: -webkit-box` are laid out as
+     one box: with two or three papers compared side by side, the second
+     paper's memo printed inside the first paper's cell. */
+  const css = fs.readFileSync(new URL('../content/workbench.css', import.meta.url), 'utf8');
+  assert.ok(!/td\[data-field=(abstract|summary|remark)\][^}]*-webkit-box/.test(css),
+    'the clamp belongs on .sc-matrix-clamp, not on the td');
+  assert.match(css, /\.sc-matrix-clamp \{[^}]*-webkit-line-clamp/);
+});
+
+test('the pressed chip keeps reading ink in dark, where accent ink is near-black', () => {
+  /* The selected type filter sits on --sc-surface, not on a filled accent, so
+     the accent ink turned it into 1.23:1 dark-on-dark. */
+  const css = fs.readFileSync(new URL('../content/workbench.css', import.meta.url), 'utf8');
+  const dark = css.slice(css.indexOf('@media (prefers-color-scheme: dark)'));
+  assert.ok(!/\.sc-chip-on[^{]*\{[^}]*--sc-accent-ink/.test(dark),
+    'a chip filled with the surface takes the surface ink');
+  assert.ok(!/\.sc-chip-button\[aria-pressed=true\][^{]*\{[^}]*--sc-accent-ink/.test(dark));
+});

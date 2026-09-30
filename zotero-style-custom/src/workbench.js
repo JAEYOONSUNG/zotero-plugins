@@ -835,7 +835,7 @@
   }
   async function paperList(items,{why,hits}={}){
    if(!items.length){
-    if(!state.items.length){empty('라이브러리에 문헌이 없습니다. ZotPoP으로 논문을 찾아 추가하세요.');if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP 열기',()=>runtime.Z.ZotPoP.openSearch(win),bar(),{'data-variant':'primary'});return;}
+    if(!state.items.length){empty('라이브러리에 문헌이 없습니다. ZotPoP으로 논문을 찾아 추가하세요.');if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP 열기',()=>runtime.Z.ZotPoP.openSearch(win),bar(),{'data-variant':'primary','data-opens':'window'});return;}
     empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');
     // The summary that set a filter is gone with the papers; the way back stays on the page.
     if(state.query||state.status||Object.values(parentOptions()).some(Boolean))button('검색과 필터 지우기',()=>resetFilters.click(),bar(),{'data-variant':'primary'});
@@ -1684,8 +1684,12 @@
     group.appendChild(g);
    }
    let zoom=1;
-   button('확대',()=>{zoom=Math.min(3,zoom+.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
-   button('축소',()=>{zoom=Math.max(1,zoom-.25);svg.setAttribute('viewBox',`0 0 ${W/zoom} ${H/zoom}`);},b);
+   /* Zooming keeps the middle of the graph, not its top-left corner. Anchored
+      at 0 0, two presses put half the nodes outside the frame with no way to
+      pan back to them. */
+   const frame=()=>{const w=W/zoom,h=H/zoom;svg.setAttribute('viewBox',`${(W-w)/2} ${(H-h)/2} ${w} ${h}`);};
+   button('확대',()=>{zoom=Math.min(3,zoom+.25);frame();},b);
+   button('축소',()=>{zoom=Math.max(1,zoom-.25);frame();},b);
    if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body,{class:'sc-muted'});
   }
   function drawTags(){
@@ -3072,6 +3076,7 @@
      if(n.x!==start.left||n.y!==start.top)run(save);};handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});});
    }
   }
+  // The fields long enough to need clamping, which is done on a child of the cell.
   /* A44: 문헌 추가 -- a search over the whole library, its own box rather
      than the top one (that one narrows 보유 문헌 itself; this one only picks
      who is compared), and the chosen list beside it. Both edit state.selected
@@ -3115,6 +3120,7 @@
    let typing=null;
    search.addEventListener('input',()=>{state.matrixPickerQuery=search.value;state.matrixPickerAll=false;win.clearTimeout(typing);typing=win.setTimeout(drawResults,150);});
   }
+  const CLAMPED=new Set(['abstract','summary','remark']);
   function drawMatrix(){
    const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약']];
    // The deciding figures come right after the name, ahead of venue and
@@ -3189,6 +3195,12 @@
     const paper=!heading&&field==='title'?pageItems[(flip?j:i)-1]:null;
     const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):paper?null:String(value),tr);
     if(paper)button(String(value),()=>library.openItem(paper.id),cell,{class:'sc-link-button','data-opens':'window',title:'Zotero에서 열기'});
+    /* The long prose fields are clamped on a child, not on the cell.
+       Two adjacent cells that are both `display: -webkit-box` are laid out as
+       one box, so in the flipped table -- which is what two or three papers
+       get -- the second paper's memo printed underneath the first paper's
+       inside the first paper's cell. */
+    if(!heading&&!paper&&CLAMPED.has(field)){cell.textContent='';node('div',String(value),cell,{class:'sc-matrix-clamp'});}
     if(NUMERIC.has(field))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',flip?'row':'col');if(!heading&&field)cell.dataset.field=field;});});
    // Only an explicit pick, not "whatever is on screen": with nothing chosen
    // the table above is the whole list, and there is no fixed set of papers
@@ -3465,7 +3477,7 @@
     return row;
    }
    const actions=node('div',null,row,{class:'sc-hit-actions'});
-   if(!work.doi&&!work.inLibrary&&typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 찾기',()=>runtime.Z.ZotPoP.openSearch(win,{title:work.title||'',year:work.year||''}),actions);
+   if(!work.doi&&!work.inLibrary&&typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 찾기',()=>runtime.Z.ZotPoP.openSearch(win,{title:work.title||'',year:work.year||''}),actions,{'data-opens':'window'});
    if(work.doi)button('추가',()=>run(async()=>{
     message('가져오는 중… ' + (work.title||work.doi).slice(0,50));
     const saved=await runtime.importWork(work,win);
@@ -3508,8 +3520,154 @@
    uses:'이 방법을 쓴 연구',
    tools:'필요할 때 찾아보는 방법·도구'};
   const GROUP_NOTES={citing:'이 논문 이후에 나온 논문 중 이 논문을 참고문헌에 올린 것 — 후속 연구',reference:'이 논문이 참고문헌으로 든 문헌 — 바탕이 된 연구',related:'참고문헌을 많이 공유하거나 OpenAlex가 주제를 가깝게 본 논문 — 옆 연구'};
+  /* 새로 나온 관련 논문: what has been published in the last ninety days on top
+     of the shelf the panel is already showing, most of the shelf first.
+
+     This is the question a reading list cannot answer about itself, and the
+     reason for a journal alert in another window. It is cheap enough to ask
+     from here: OpenAlex ORs fifty of the reader's own papers into one `cites:`
+     filter, so a collection is one request -- this library's seven largest
+     collections together came to 0.0009 of the daily dollar.
+
+     Ranked by how many of the reader's own papers each new one cites, because
+     that is what separates a paper about their corner of the field from one
+     that merely used a method everybody uses. The row says which held papers
+     it stands on, so the claim can be checked rather than believed. */
+  const FRESH_DAYS=90;
+  async function drawFreshCiters(token,head){
+   const shelf=scoped();
+   const works=typeof runtime.paperWorks==='function'?runtime.paperWorks():{};
+   const seedOf=p=>String((works[p.libraryID+':'+p.key]||works[String(p.id)]||{}).openalex||'').split('/').pop().toUpperCase();
+   const seeds=new Set();let noWork=0;
+   for(const paper of shelf){const id=seedOf(paper);if(/^W\d+$/.test(id))seeds.add(id);else noWork++;}
+   const key=`${state.libraryID||''}:${state.scope}:${shelfKey(shelf)}`;
+   const saved=typeof runtime.freshCiterStore==='function'?runtime.freshCiterStore()[key]:null;
+   const kept=saved&&saved.days===FRESH_DAYS&&Date.now()-Date.parse(saved.at)<24*3600e3?saved:null;
+   const list=node('div',null,body);
+   /* How much of the shelf could not be asked about. "Nothing new" and "most
+      of this was never asked" are different answers and only one of them is
+      reassurance, so the gap is said wherever the answer is. */
+   const gapLine=(parent,missing=noWork)=>{
+    if(!missing)return;
+    const line=node('p',T(`이 범위 ${missing}편은 OpenAlex 기록이 없어 묻지 못했습니다.`),parent,{class:'sc-muted sc-path-note'});
+    button('관계 그래프에서 채우기',()=>run(async()=>{await navigate('graph');}),line,{class:'sc-path-jump'});
+   };
+   const draw=report=>{
+    list.replaceChildren();
+    const rows=report.rows||[];
+    const checked=String(report.at||'').slice(0,10);
+    message(rows.length?T(`새 논문 ${rows.length}편 · 최근 ${report.days}일 · 내 문헌 ${report.seeds}편 기준`)
+     :T(`최근 ${report.days}일 사이 이 범위를 인용한 새 논문이 없습니다.`));
+    if(!rows.length){
+     const box=node('div',null,list,{class:'sc-empty'});
+     node('p',T(`최근 ${report.days}일 사이 이 범위의 문헌을 인용한 새 논문이 없습니다.`),box);
+     gapLine(box,report.noWork);
+     return;
+    }
+    const heading=sectionHead('새로 나온 관련 논문',rows.length,list);
+    node('span',T(`최근 ${report.days}일 · 확인함 ${checked}`),heading,{class:'sc-path-head-note'});
+    node('p','이 범위의 문헌을 인용한 새 논문입니다. 내 문헌을 많이 인용한 순서입니다.',list,{class:'sc-muted sc-hit-group-note'});
+    gapLine(list,report.noWork);
+    if(report.truncated)node('p','인용한 논문이 더 있어 최근 것부터 보여 줍니다.',list,{class:'sc-muted sc-path-note'});
+    const box=node('div',null,list,{class:'sc-hits'});
+    const limit=state.freshLimit||12;
+    for(const work of rows.slice(0,limit)){
+     const row=hitRow(work,box);
+     /* Why this paper is here goes directly under its title, as it does in the
+        reading order: above the year and journal, which identify the paper
+        rather than justify it. */
+     const why=node('p',null,null,{class:'sc-path-why'});
+     row.insertBefore(why,row.querySelector('.sc-hit-meta'));
+     node('b',T(`내 서재 ${work.shared}편 인용`),why);
+     const named=(work.citedTitles||[]).filter(Boolean);
+     if(named.length)why.appendChild(doc.createTextNode(' · '+named[0]+(named.length>1?' '+T(`외 ${named.length-1}편`):'')));
+    }
+    if(rows.length>limit){
+     const more=bar(list);
+     node('span',T(`${rows.length}편 중 ${limit}편`),more,{class:'sc-muted'});
+     button(T(`${rows.length}편 모두 보기`),()=>{state.freshLimit=rows.length;render();},more);
+    }
+   };
+   const ask=async({refresh=false}={})=>{
+    freshAbort?.abort?.();
+    const controller=typeof win.AbortController==='function'?new win.AbortController():typeof AbortController==='function'?new AbortController():null;
+    freshAbort=controller;
+    const current=()=>token===epoch&&!disposed&&state.tab==='related';
+    message('OpenAlex에서 새 논문을 찾는 중…');
+    list.replaceChildren();
+    node('p','OpenAlex에서 새 논문을 찾는 중…',list,{class:'sc-muted sc-path-note',role:'status'});
+    let report;
+    try{
+     report=await runtime.freshCitersCached(key,shelf.map(p=>runtime.Z.Items.get(Number(p.id))).filter(Boolean),
+      {days:FRESH_DAYS,refresh,signal:controller?.signal,onProgress:(done,total)=>{
+       if(!current()){controller?.abort?.();return;}
+       if(total>1)message(T(`OpenAlex에서 새 논문을 찾는 중… ${done+1}/${total}`));
+      }});
+    }catch(error){
+     if(!current()||controller?.signal?.aborted)return;
+     list.replaceChildren();
+     throw error;
+    }
+    if(!current())return;
+    draw(report);
+    /* A spent budget is said once, under the answer, and the partial answer
+       above it is honest about being partial rather than being kept. */
+    if(report.budgetGone)node('p','OpenAlex 하루 한도를 다 썼습니다. 한국 시간 오전 9시에 초기화되니 그때 다시 확인하세요.',list,{class:'sc-muted sc-path-note'});
+    else if(report.partial)node('p','일부 조회가 실패해 결과를 저장하지 않았습니다. 다시 확인을 눌러 주세요.',list,{class:'sc-muted sc-path-note'});
+   };
+   button('다시 확인',()=>run(()=>ask({refresh:true})),head,{class:'sc-quiet-action'});
+   if(!seeds.size){
+    const box=node('div',null,list,{class:'sc-empty'});
+    node('p','이 범위에는 OpenAlex에서 확인한 문헌이 없어 새 논문을 찾을 수 없습니다. 관계 그래프 탭에서 인용 목록을 먼저 가져오세요.',box);
+    button('관계 그래프 열기',()=>run(async()=>{await navigate('graph');}),bar(box),{'data-variant':'primary'});
+    return;
+   }
+   if(kept){draw(kept);return;}
+   /* Not asked yet. Every other metered lookup here says what it will spend
+      before it is pressed, and this one can: the shelf is fifty papers per
+      request, and that number is known without asking anything. */
+   const requests=Math.ceil(seeds.size/50)*3;
+   const intro=node('div',null,list,{class:'sc-guide'});
+   node('h2','새로 나온 관련 논문',intro);
+   node('p',T(`이 범위의 문헌 ${seeds.size}편을 인용한 최근 ${FRESH_DAYS}일 논문을 OpenAlex에서 찾습니다. 내 문헌을 많이 인용한 순서로 보여 줍니다.`),intro);
+   gapLine(intro);
+   button(T(`새 논문 찾기 · OpenAlex (요청 최대 ${requests}회)`),()=>run(()=>ask()),bar(intro),{'data-variant':'primary'});
+  }
+
+  /* One shelf, named the same way twice running, so a saved answer is found
+     again and a shelf that has gained a paper asks afresh. */
+  function shelfKey(items){
+   let hash=2166136261;
+   for(const id of items.map(i=>String(i.id)).sort()){
+    for(let at=0;at<id.length;at++){hash^=id.charCodeAt(at);hash=Math.imul(hash,16777619);}
+   }
+   return items.length+'-'+(hash>>>0).toString(36);
+  }
   async function drawRelated(token){
-   let item;try{item=one();}catch(_){
+   let item=null;try{item=one();}catch(_){item=null;}
+   const canPath=typeof runtime.readingPathCached==='function';
+   const canFresh=typeof runtime.freshCitersCached==='function';
+   if(!state.relatedView)state.relatedView=['list','line','fresh'].includes(ui.relatedView)?ui.relatedView:'path';
+   if(!state.pathDepth)state.pathDepth=ui.pathDepth==='full'?'full':'min';
+   /* 새 논문 asks about the shelf the panel is already showing, not about one
+      paper, so it is the one view here that answers with nothing selected --
+      and the tab, which used to be a page of instructions until a paper was
+      picked, now opens on something to read. */
+   const scopeView=canFresh&&state.relatedView==='fresh';
+   const view=scopeView?'fresh':!item?null:canPath?(state.relatedView==='fresh'?'path':state.relatedView):'list';
+   const head=bar();
+   if(canPath||canFresh){
+    const modes=node('div',null,head,{class:'sc-segmented',role:'group','aria-label':'관련 논문 보기'});
+    for(const[key,label]of [['path','읽기 순서'],['line','발전 과정'],['list','전체 목록'],['fresh','새 논문']]){
+     if(key==='fresh'?!canFresh:key!=='list'&&!canPath)continue;
+     const press=button(label,()=>run(async()=>{state.relatedView=key;await saveUI({relatedView:key});await render();body.querySelector('.sc-segmented [aria-pressed="true"]')?.focus?.();}),modes,{'aria-pressed':String(view===key)});
+     // The three per-paper views need a paper; saying so on the control beats
+     // letting it answer with the same guide every time.
+     if(key!=='fresh'&&!item){press.disabled=true;press.title=T('문헌을 하나 고르면 볼 수 있습니다');}
+    }
+   }
+   if(scopeView){await drawFreshCiters(token,head);return;}
+   if(!item){
     /* Nothing selected: say what the tab will do and how to start, instead
        of a single line that read as an error. */
     const guide=node('div',null,body,{class:'sc-guide'});
@@ -3527,19 +3685,9 @@
     return;
    }
    /* The paper's name is already on the line above, in the context bar; a
-      second copy of it pushed the order itself below the fold. */
-   const b=bar();
-   /* Two answers to two questions: the reading order says what to read first
-      and why; the list is everything, grouped by where it came from. */
-   if(!state.relatedView)state.relatedView=['list','line'].includes(ui.relatedView)?ui.relatedView:'path';
-   if(!state.pathDepth)state.pathDepth=ui.pathDepth==='full'?'full':'min';
-   const canPath=typeof runtime.readingPathCached==='function';
-   const view=canPath?state.relatedView:'list';
-   if(canPath){
-    const modes=node('div',null,b,{class:'sc-segmented',role:'group','aria-label':'관련 논문 보기'});
-    for(const[key,label]of [['path','읽기 순서'],['line','발전 과정'],['list','전체 목록']])
-     button(label,()=>run(async()=>{state.relatedView=key;await saveUI({relatedView:key});await render();body.querySelector('.sc-segmented [aria-pressed="true"]')?.focus?.();}),modes,{'aria-pressed':view===key});
-   }
+      second copy of it pushed the order itself below the fold. The views
+      themselves are chosen above, on the one control that also holds 새 논문. */
+   const b=head;
    const list=node('div',null,body);
    async function path({refresh=false}={}){
     const ref=runtime.Z.Items.get(Number(item.id));
@@ -3990,7 +4138,7 @@
     // for the author actually being looked at, and remembered either way.
     paintPortrait(face,{...person,name:profile?.name||person.name,orcid:profile?.orcid});
     const follow=bar(list);
-    if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),follow);
+    if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),follow,{'data-opens':'browser'});
     if(watching){
      // As in the list: letting someone go drops their baseline and news, so the first press only arms it.
      const off=button('관심 해제',()=>{
@@ -4090,7 +4238,7 @@
       node('span',patent.title,head);
       node('p',[patent.id,patent.granted?`등록 ${patent.granted}`:patent.filed?`출원 ${patent.filed}`:'',patent.applicants?.[0]||'',patent.status||''].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
       const actions=node('div',null,c,{class:'sc-hit-actions'});
-      if(patent.link)button('열기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(patent.link),actions);
+      if(patent.link)button('열기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(patent.link),actions,{'data-opens':'browser'});
      }
     }else if(stored&&typeof runtime.patentsKey==='function'&&!runtime.patentsKey()){
      node('p','특허 확인은 설정에 USPTO Open Data Portal 키를 넣으면 켜집니다 (무료).',list,{class:'sc-muted'});
@@ -4276,7 +4424,12 @@
      message(T(result.budgetGone
       ? `OpenAlex 하루 한도를 다 썼습니다. ${result.remaining}묶음이 남았고, 한국 시간 오전 9시에 초기화됩니다. 지금까지 확인한 결과는 저장했습니다.`
       : result.withNews
-       ? `${result.withNews}명이 새 논문 ${result.works}편을 냈습니다. 요청 ${result.requests}회.`
+       /* What this run turned up and what is still waiting are two answers.
+          Reporting only the second made a week in which nothing happened read
+          exactly like one in which something did. */
+       ? result.added
+        ? `새로 찾은 논문 ${result.added}편 · 확인 안 한 논문 ${result.works}편 · ${result.withNews}명. 요청 ${result.requests}회.`
+        : `새로 찾은 논문은 없습니다. 확인 안 한 논문 ${result.works}편이 ${result.withNews}명에게 남아 있습니다.`
        : `새 논문은 없습니다. 저자 ${result.authors}명을 요청 ${result.requests}회로 확인했습니다.`)
       +(result.failed?' '+T(`${result.failed}명은 서버 오류로 확인하지 못해 이전 소식을 그대로 두었습니다. 다시 확인을 누르세요.`):'')
       +(result.unfinished?' '+T(`${result.unfinished}명은 논문이 많아 끝까지 읽지 못했습니다. 다음 확인이 이어서 봅니다.`):''),
@@ -4769,7 +4922,7 @@
     /* A failure says so and offers the ways on. Rows of dashes under real
        column names read as data that had come back empty (Codex, round 3). */
     const actions=bar();
-    button('JCR 원본 열기',()=>runtime.Z.launchURL?.('https://jcr.clarivate.com/jcr/browse-categories'),actions);
+    button('JCR 원본 열기',()=>runtime.Z.launchURL?.('https://jcr.clarivate.com/jcr/browse-categories'),actions,{'data-opens':'browser'});
     button('OpenAlex 주제로 탐색',()=>switchBrowser('openalex'),actions);
     return;
    }
@@ -4832,7 +4985,7 @@
    button(`내 서재 ${byVenue.size}`,()=>{journalView.scope='library';journalView.page=0;render();},scopes,{'aria-pressed':String(journalView.scope!=='all')});
    if(registry.length)button(`저장 저널 ${registry.length.toLocaleString()}`,()=>{journalView.scope='all';journalView.page=0;render();},scopes,{'aria-pressed':String(journalView.scope==='all')});
    button('공식 JCR 카테고리 보기',()=>runtime.Z.launchURL?.('https://jcr.clarivate.com/jcr/browse-categories'),controls,
-    {title:'Clarivate JCR의 Groups와 Categories · 기관 접근 또는 계정 로그인이 필요할 수 있습니다'});
+    {title:'Clarivate JCR의 Groups와 Categories · 기관 접근 또는 계정 로그인이 필요할 수 있습니다','data-opens':'browser'});
    // Journals found by name, abbreviation, publisher or field, apart from the paper search above.
    const find=node('input',null,controls,{type:'search',placeholder:'저널·약어·출판사·분야 검색','aria-label':'저널 검색'});find.value=journalView.query||'';
    // Typing redraws only the list, a beat after the last key, not the whole tab.
@@ -5059,11 +5212,11 @@
    if(!j.profile)node('p','추가 OpenAlex 프로필은 「빈 칸 채우기」로 조회할 수 있습니다. 저장된 분류는 표와 상세에서 동일하게 표시됩니다.',box,{class:'sc-muted sc-fact-note'});
    const actions=bar(box);
    if(j.papers)button('이 저널 문헌 보기',()=>{state.query=search.value=j.venue;navigate('explore');},actions);
-   else if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 이 저널 검색',()=>runtime.Z.ZotPoP.openSearch(win,{venue:j.venue}),actions);
+   else if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 이 저널 검색',()=>runtime.Z.ZotPoP.openSearch(win,{venue:j.venue}),actions,{'data-opens':'window'});
    if(j.abbreviation){
-    {const b=button('JCR에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://jcr.clarivate.com/jcr-jp/journal-profile?journal=${encodeURIComponent(j.abbreviation)}&year=${j.year||new Date().getFullYear()-1}`),actions,{title:'Journal Citation Reports의 저널 페이지 · 기관 로그인이 필요합니다'});journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
+    {const b=button('JCR에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://jcr.clarivate.com/jcr-jp/journal-profile?journal=${encodeURIComponent(j.abbreviation)}&year=${j.year||new Date().getFullYear()-1}`),actions,{title:'Journal Citation Reports의 저널 페이지 · 기관 로그인이 필요합니다','data-opens':'browser'});journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
    }
-   if(j.openAlexID){const b=button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions);journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
+   if(j.openAlexID){const b=button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions,{'data-opens':'browser'});journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
   }
   function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.');pickOne();return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인'});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
    const aiReady=!!(String(runtime.pref('aiEndpoint','')||'').trim()&&String(runtime.pref('aiModel','')||'').trim());

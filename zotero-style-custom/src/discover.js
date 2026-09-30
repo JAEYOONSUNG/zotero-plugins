@@ -704,6 +704,121 @@
     return batches;
   };
 
+  /* What has just been published on top of the papers already on the shelf.
+
+     The related list and the reading order both start from one paper. This
+     starts from a shelf -- a collection, a selection, or the whole library --
+     and answers the question a reader otherwise leaves Zotero for: has
+     anything come out lately that builds on what I already have.
+
+     OpenAlex ORs up to fifty ids into one `cites:` filter, so the question
+     costs one request per fifty of the reader's papers rather than one per
+     paper. A date floor is what keeps it cheap: without one the query walks
+     every citation a well-cited paper has ever had. Measured live on seven
+     of this library's collections, ninety days back: 0.0009 USD for all of
+     them, against a daily budget of one dollar.
+
+     Each result's own reference list has to come back with it -- that is what
+     says how many of the reader's papers it builds on, and the ranking is
+     nothing but that count -- so this cannot use WATCH_FIELDS. Nothing else
+     is asked for: no abstract, no related_works, no topics. */
+  const FRESH_FIELDS = 'id,doi,title,publication_year,publication_date,cited_by_count,type,'
+    + 'primary_location,authorships,open_access,referenced_works';
+  const FRESH_BATCH = 50;
+
+  function freshCitersURL(workIDs, {since, cursor = '*', perPage = 200, ...options} = {}) {
+    const ids = [...new Set((Array.isArray(workIDs) ? workIDs : [])
+      .map(shortID).filter(id => id.startsWith('W')))].slice(0, FRESH_BATCH);
+    if (!ids.length) return null;
+    const filters = ['cites:' + ids.join('|')];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(since || ''))) filters.push('from_publication_date:' + since);
+    return `${API}works?per_page=${Math.max(1, Math.min(200, perPage))}&cursor=${encodeURIComponent(cursor)}`
+      + `&filter=${encodeURIComponent(filters.join(','))}`
+      + `&sort=publication_date:desc&select=${options.fields || FRESH_FIELDS}${credentials(options)}`;
+  }
+
+  const freshBatches = workIDs => {
+    const ids = [...new Set((Array.isArray(workIDs) ? workIDs : [])
+      .map(shortID).filter(id => id.startsWith('W')))];
+    const batches = [];
+    for (let i = 0; i < ids.length; i += FRESH_BATCH) batches.push(ids.slice(i, i + FRESH_BATCH));
+    return batches;
+  };
+
+  /* Which of the reader's own papers each new work is built on, and the order
+     that puts the useful ones first.
+
+     The count of held papers cited is the ranking. A paper citing six of mine
+     is about my corner of the field; one citing a single much-cited method
+     paper usually is not, and on a real collection that difference is the
+     whole list. The date breaks ties, because "what is new" is the question.
+
+     A work already in the library is dropped rather than marked 보유: this
+     list exists to name what the reader does not have. So is a work that is
+     one of the seeds -- a paper on the shelf citing another paper on the
+     shelf is not news. One work can arrive from two batches, citing papers in
+     each, so the counts are unioned rather than the second copy dropped. */
+  function rankFreshCiters(works, {seeds = [], have = new Set(), limit = 40, titleOf = null} = {}) {
+    const wanted = new Set([...(seeds || [])].map(shortID).filter(Boolean));
+    const owned = new Set([...(have || [])].map(bareDOI).filter(Boolean));
+    const byID = new Map();
+    for (const work of Array.isArray(works) ? works : []) {
+      if (!work?.id || wanted.has(work.id)) continue;
+      /* Normalised here rather than trusted: shapeWork already returns a bare
+         lowercase DOI, but a shelf-held paper shown as news is the one mistake
+         this list cannot make, so it does not depend on where the row came from. */
+      const doi = bareDOI(work.doi);
+      if (doi && owned.has(doi)) continue;
+      const cites = (Array.isArray(work.references) ? work.references : []).filter(id => wanted.has(id));
+      if (!cites.length) continue;
+      const seen = byID.get(work.id);
+      if (seen) { for (const id of cites) seen.cites.add(id); continue; }
+      byID.set(work.id, {...work, cites: new Set(cites)});
+    }
+    /* One paper, indexed twice, is one row.
+
+       Measured on this library's own collections: OpenAlex carries the
+       Angewandte Chemie and Angewandte Chemie International Edition records of
+       the same article as two works, and a preprint and its journal version as
+       two more. Shown unmerged, the top of a ninety-day list is the same paper
+       twice. The journal version wins over the preprint, then the more cited
+       one, and the held papers each version cites are pooled.
+
+       Deliberately stricter than the reading order's own version merge, which
+       can afford word overlap because it works inside one paper's
+       bibliography: this list spans a whole field, where two genuinely
+       different papers can share most of a title, and merging those would hide
+       one of them completely. Equal titles only. */
+    const titleKey = value => text(value).toLowerCase().normalize('NFKD')
+      .replace(/<[^>]+>/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').slice(0, 14).join(' ');
+    const isPreprint = work => /preprint|posted-content/i.test(text(work.type));
+    const better = (a, b) => (isPreprint(a) ? 0 : 1) - (isPreprint(b) ? 0 : 1) || (a.citations ?? 0) - (b.citations ?? 0);
+    const versions = new Map();
+    for (const work of byID.values()) {
+      const key = titleKey(work.title);
+      // A paper with no title to speak of is never merged into another one.
+      if (!key || key.split(' ').length < 3) { versions.set(work.id, work); continue; }
+      const seen = versions.get(key);
+      if (!seen) { versions.set(key, work); continue; }
+      const keep = better(work, seen) > 0 ? work : seen;
+      const drop = keep === work ? seen : work;
+      for (const id of drop.cites) keep.cites.add(id);
+      versions.set(key, keep);
+    }
+    return [...versions.values()]
+      .map(work => {
+        const cites = [...work.cites];
+        return {...work, cites, shared: cites.length,
+          // The titles are what the row says out loud: "내 서재 3편 인용" is a
+          // claim, and naming one of them is what makes it checkable.
+          citedTitles: typeof titleOf === 'function' ? cites.map(id => text(titleOf(id))).filter(Boolean) : []};
+      })
+      .sort((a, b) => b.shared - a.shared
+        || String(b.date || '').localeCompare(String(a.date || ''))
+        || (b.citations ?? 0) - (a.citations ?? 0))
+      .slice(0, limit);
+  }
+
   // A work belongs to every followed author on it, so one paper by two
   // colleagues counts as news for both.
   function attribute(works, watchedIDs) {
@@ -773,7 +888,8 @@
     worksByDOIsURL, institutionsURL, readInstitutions,
     workURL, worksByIDsURL, citingURL, PATH_FIELDS, abstractOf, findingOf, abstractsURL, readAbstracts, cleanAbstract, sameTitle, pickByTitle, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials,
-    watchedWorksURL, watchedProfilesURL, readProfiles, authorBatches, attribute, AUTHOR_BATCH};
+    watchedWorksURL, watchedProfilesURL, readProfiles, authorBatches, attribute, AUTHOR_BATCH,
+    freshCitersURL, freshBatches, rankFreshCiters, FRESH_BATCH, FRESH_FIELDS};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleDiscover = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -78,3 +78,17 @@ test('a page scrolled past is not a page read: five seconds on it is the line',(
  assert.equal(scrolled.visited,1,'three pages passed at one second each are not read');
  assert.equal(scrolled.percent,25);
 });
+
+test('cards are laid out on a pitch that clears their own height, and a note does not land on one', () => {
+  /* Cards measure about 200px tall and were placed 130px apart, so the second
+     row covered the bottom of the first -- including its buttons. A memo card
+     always went to (40, 40), which is on top of the first card. */
+  const cache = {};
+  const board = W.createBoard(cache, 'Board');
+  W.addToBoard(cache, board, Array.from({length: 6}, (_, n) => ({id: n + 1, title: 'Paper ' + n})));
+  const rows = [...new Set(board.nodes.map(n => n.y))].sort((a, b) => a - b);
+  assert.ok(rows[1] - rows[0] >= 200, `rows are ${rows[1] - rows[0]}px apart, which a 200px card overlaps`);
+  const note = W.addBoardNote(cache, board, 'a memo');
+  assert.equal(board.nodes.filter(n => n.x === note.x && n.y === note.y).length, 1,
+    'the memo takes the next free place, not the first card\'s');
+});

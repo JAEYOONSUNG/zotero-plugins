@@ -3881,6 +3881,86 @@
       ],
       "status": "verified",
       "review": "이름으로 찾아 한 줄로 더하고, 최근 다섯 개를 기억한다. 내려받기는 하지 않는다."
+    },
+    {
+      "round": "R153",
+      "title": "내 서재를 인용한 새 논문을 범위 단위로 제안",
+      "gap": "Every recommendation here started from one open paper; nothing answered what had just been published on top of a whole collection, which is what a journal alert in another window was for.",
+      "entryPoint": "관련 논문 → 새 논문",
+      "sources": [
+        {
+          "file": "src/discover.js",
+          "marker": "function freshCitersURL(workIDs"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "async sweepFreshCiters(items"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "async function drawFreshCiters(token,head)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/discover.test.mjs",
+          "name": "new papers are ranked by how many of the reader's own papers they build on, then by date"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "the whole shelf is asked about in one request, and the answer is ranked by how much of it each new paper builds on"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a new paper says how many of your own it cites, and names one so the claim can be checked"
+        }
+      ],
+      "status": "verified",
+      "review": "범위의 문헌을 OpenAlex에 50편씩 묶어 한 번에 물어, 최근 90일 새 논문을 내 문헌을 많이 인용한 순으로 보여 준다. 실제 컬렉션 7개로 확인: 0.0009달러, CBASS 17편 기준 90일 새 논문 68편 중 19편이 내 문헌 2편 이상 인용. 같은 논문의 중복 등재는 합치고, 묻지 못한 문헌 수는 따로 밝힌다."
+    },
+    {
+      "round": "R154",
+      "title": "읽기 전용 감사에서 나온 정직성·가독성 수정",
+      "gap": "Four surfaces claimed something they had not measured or could not be read: a dark pressed chip at 1.23:1, a reading-time tooltip reporting 0 seconds where nothing was ever timed, canvas cards laid out closer together than their own height, and a graph zoom anchored at the corner.",
+      "entryPoint": "목록 열 · 캔버스 · 관계 그래프 · 필터 칩",
+      "sources": [
+        {
+          "file": "content/workbench.css",
+          "marker": "It used to be given"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "Nothing recorded is not a measured zero"
+        },
+        {
+          "file": "src/workspace.js",
+          "marker": "y:25+Math.floor(i/3)*220"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "Zooming keeps the middle of the graph"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/styles.test.mjs",
+          "name": "the pressed chip keeps reading ink in dark, where accent ink is near-black"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "an empty reading-time cell says nothing was recorded, not that zero seconds were measured"
+        },
+        {
+          "file": "test/workspace.test.mjs",
+          "name": "cards are laid out on a pitch that clears their own height, and a note does not land on one"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "every button that reaches outside Zotero says so, so the self-check never presses it"
+        }
+      ],
+      "status": "verified",
+      "review": "읽기 전용 감사 에이전트가 찾은 것 중 확실한 것만 반영. 어두운 테마에서 선택된 유형 칩이 1.23:1로 안 보이던 문제, 읽기 기록이 없는데 '0초'라고 말하던 문제, 캔버스 카드가 200px인데 130px 간격으로 놓여 두 번째 줄이 첫 줄 버튼을 덮던 문제, 확대가 좌상단 기준이라 절반이 화면 밖으로 나가던 문제. 창을 여는 버튼 아홉 개에 data-opens가 빠져 있어 자가점검이 누를 수 있었던 것도 함께 고치고, 소스 검사 테스트로 고정."
     }
   ],
   "introducedInVersion": "0.6.0"

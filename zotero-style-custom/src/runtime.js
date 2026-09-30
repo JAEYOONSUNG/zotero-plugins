@@ -326,7 +326,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const cells=win.document.querySelectorAll?.('[data-style-custom-reading]'+only)||[];
       if(cells.length){const P=this.palette(win.document);
       for(const cell of cells){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);
-        if(cell.dataset.styleCustomReading==='time'){cell.textContent=this.formatReadTime(value.seconds);cell.style.color=value.seconds<=0?P.faint:value.seconds>=3600?P.blue:P.text;cell.style.fontWeight=value.seconds>=3600?'590':'';}
+        if(cell.dataset.styleCustomReading==='time'){cell.textContent=this.formatReadTime(value.seconds);cell.style.color=value.seconds<=0?P.faint:P.text;cell.style.fontWeight=value.seconds>=3600?'590':'';}
         else if(cell.firstChild&&cell.lastChild){const tone={unread:P.muted,reading:P.reading,done:P.done}[value.status]||P.muted;cell.firstChild.textContent={unread:'\u25cb',reading:'\u25d0',done:'\u25cf'}[value.status]||'\u25cb';cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status==='unread'?'':this.t({reading:'읽는 중',done:'읽음'}[value.status]||'');cell.lastChild.style.color=value.status==='unread'?P.muted:tone;cell.lastChild.style.fontWeight=value.status==='unread'?'400':'590';}}}
       state.workbench?.refreshMetrics?.();
     }
@@ -1129,7 +1129,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // Untouched papers recede; the longer the session, the more present the number.
       cell.style.color = seconds <= 0 ? P.faint : P.text;
       if (seconds >= 3600) cell.style.fontWeight = "590";
-      cell.title = this.t(`실제로 읽은 시간 ${Math.floor(seconds)}초`);
+      /* Nothing recorded is not a measured zero. This plugin times the Zotero
+         reader and nothing else, so a paper read on paper or in another app
+         has no record -- saying "0초" about it claims a measurement that was
+         never made. */
+      cell.title = seconds > 0 ? this.t(`실제로 읽은 시간 ${Math.floor(seconds)}초`)
+        : this.t('읽기 기록 없음 · Zotero 리더에서 잰 시간이 없습니다');
     } else if (key === "progress") {
       const p=this.isRegular(item)?this.pageProgress(item):{percent:Number(value)};
       cell.textContent=p.percent+'%';
@@ -2263,7 +2268,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   async sweepWatchedAuthors({months = 18, onProgress, signal} = {}) {
     const rows = this.watchedAuthors();
-    const result = {authors: rows.length, withNews: 0, works: 0, requests: 0, budgetGone: false, remaining: 0};
+    const result = {authors: rows.length, withNews: 0, works: 0, added: 0, requests: 0, budgetGone: false, remaining: 0};
     if (!rows.length) return result;
     // A sweep is a request for what is new: the author pages asked earlier are forgotten.
     for (const key of [...(this.discoverCache?.keys?.() || [])]) if (String(key).startsWith('author:')) this.discoverCache.delete(key);
@@ -2383,6 +2388,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          be shown as one either. */
       const papers = fresh.filter(work => !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || '')));
       const short = this.discoverTools.shortID(row.id);
+      /* What this row was already showing before the sweep. Without it, a
+         sweep that finds nothing still announces every paper the reader has
+         not got round to marking, so the weekly check reads the same both
+         when something happened and when nothing did. */
+      const announced = new Set((row.news || []).map(work => work.id));
       const partial = unfinished.has(short) || unfinished.has(row.id) || resumed.has(short) || resumed.has(row.id);
       const earlier = partial ? (row.news || []) : [];
       row.news = papers.slice(0, 8).map(work => ({
@@ -2503,23 +2513,49 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         }
         row.places = now.map(pl => ({name: pl.name, ror: pl.ror, since: pl.since || null}));
       }
-      const seenNames = new Set(row.coauthorsSeen || []);
-      const fresherNames = [];
-      for (const work of papers) for (const p of work.people || []) {
-        if (!p.name || p.id === row.id) continue;
-        if (!seenNames.has(p.name) && !fresherNames.includes(p.name)) fresherNames.push(p.name);
+      /* Who they are publishing with for the first time.
+
+         The history this is measured against used to be the names carried
+         from earlier *news* -- at most eight papers, and only ones the sweep
+         happened to surface. A collaborator of ten years who was not on that
+         handful came up as "처음 함께 낸 저자", which is the one thing this
+         line must never say wrongly. It is measured instead against every
+         paper of theirs in the window, which the sweep already holds.
+
+         A consortium paper names hundreds of people who have not started
+         working with anyone, so a paper over fifteen authors says nothing
+         about collaboration and is left out. */
+      const window = found.get(row.id) || [];
+      const newsIDs = new Set(papers.map(work => work.id));
+      const known = new Set(row.coauthorsSeen || []);
+      for (const work of window) {
+        if (newsIDs.has(work.id)) continue;
+        for (const person of work.people || []) if (person.name && person.id !== row.id) known.add(person.name);
       }
-      // Only meaningful once there is a history to compare against: the very
-      // first sweep would otherwise call every colleague new.
-      row.newCoauthors = seenNames.size ? fresherNames.slice(0, 8) : [];
-      for (const name of fresherNames) seenNames.add(name);
-      row.coauthorsSeen = [...seenNames].slice(-400);
+      const fresherNames = [];
+      for (const work of papers) {
+        if ((work.people || []).length > 15) continue;
+        for (const person of work.people || []) {
+          if (!person.name || person.id === row.id) continue;
+          if (!known.has(person.name) && !fresherNames.includes(person.name)) fresherNames.push(person.name);
+        }
+      }
+      // Only meaningful once there is a record to compare against: with
+      // nothing else of theirs in the window, every colleague would be new.
+      row.newCoauthors = known.size ? fresherNames.slice(0, 8) : [];
+      row.coauthorsSeen = [...known, ...fresherNames].slice(-400);
       /* A finished run moves the date to now. A run that finished a carried
          batch moves it only to when that batch was begun: works newer than
          that sit on the pages it skipped, and the next check must see them. */
       if (!unfinished.has(short) && !unfinished.has(row.id)) row.sweptAt = resumed.get(short) || resumed.get(row.id) || checkedAt;
-      if (fresh.length) result.withNews++;
-      result.works += fresh.length;
+      /* Two different numbers, because they answer two different questions.
+         `works` is what is still waiting to be looked at; `added` is what this
+         run actually turned up. Datasets and repository deposits are in
+         neither: of 64 "new papers" over 109 authors, sixteen were copies of
+         work already published. */
+      if (papers.length) result.withNews++;
+      result.works += papers.length;
+      result.added += row.news.filter(work => !announced.has(work.id)).length;
     }
     this.cache.watchedAuthors = rows;
     this.dirty = true;
@@ -3232,6 +3268,114 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     ]);
     return {work, suggestions: this.discoverTools.mergeSuggestions(work, found,
       {have: have ?? this.libraryDOIs(), limit, citing})};
+  }
+
+  /* 새로 나온 관련 논문: what has been published lately on top of a whole
+     shelf, rather than on top of one paper.
+
+     Every other discovery feature here starts from a paper the reader has
+     already opened. This one starts from a collection, a selection or the
+     library, and answers the question that otherwise means leaving Zotero for
+     a journal alert: has anything come out in the last few months that builds
+     on what I hold. Ranked by how many of the reader's own papers each new
+     one cites -- six of mine is my corner of the field, one much-cited method
+     paper is usually somebody else's.
+
+     Held papers whose OpenAlex record has never been fetched are counted, not
+     skipped in silence: "nothing new" and "most of this shelf was never asked
+     about" are different answers, and only one of them is reassurance. */
+  async sweepFreshCiters(items, {days = 90, limit = 40, pages = 3, signal, onProgress} = {}) {
+    const tools = this.discoverTools, options = this.discoverOptions();
+    const store = this.paperWorks();
+    const since = new Date(Date.now() - Math.max(1, days) * 864e5).toISOString().slice(0, 10);
+    const report = {since, days, rows: [], seeds: 0, noWork: 0, found: 0, requests: 0,
+      budgetGone: false, partial: false, truncated: false, at: new Date().toISOString()};
+    const titleOf = new Map();
+    for (const item of [...new Set(items)]) {
+      if (!this.isRegular(item)) continue;
+      const id = tools.shortID(store[this.identity(item)]?.openalex || '');
+      if (!id.startsWith('W')) { report.noWork++; continue; }
+      if (!titleOf.has(id)) titleOf.set(id, String(item.getField?.('title') || ''));
+    }
+    const seeds = [...titleOf.keys()];
+    report.seeds = seeds.length;
+    if (!seeds.length) return report;
+    const batches = tools.freshBatches(seeds);
+    const works = [];
+    for (const [index, batch] of batches.entries()) {
+      if (signal?.aborted || !this.active || this.stopping) break;
+      let cursor = '*';
+      for (let page = 0; page < Math.max(1, pages) && cursor; page++) {
+        onProgress?.(index, batches.length);
+        const url = tools.freshCitersURL(batch, {...options, since, cursor});
+        if (!url) break;
+        try {
+          const payload = await this.discoverJSON(url, {signal});
+          report.requests++;
+          const found = tools.readWorks(payload);
+          report.found += found.length;
+          /* Each page is reduced to the part of it that matters before the
+             next one is asked for. A whole library is twenty-odd batches, and
+             every result arrives carrying its own bibliography -- hundreds of
+             ids, of which only the handful that name a held paper is ever
+             read. Kept whole, a sweep over this library would hold well over a
+             hundred megabytes of reference lists in memory at once. */
+          const held = new Set(seeds);
+          for (const work of found) {
+            if (CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || ''))) continue;
+            const cites = (work.references || []).filter(id => held.has(id));
+            if (cites.length) works.push({...work, references: cites});
+          }
+          cursor = payload?.meta?.next_cursor || null;
+          if (!found.length) break;
+          // A shelf with more citers than the pages asked for says so, rather
+          // than presenting the newest six hundred as the whole answer.
+          if (cursor && page + 1 >= Math.max(1, pages)) report.truncated = true;
+        } catch (error) {
+          this.Z.logError(error);
+          if (this.outOfBudget(error)) report.budgetGone = true;
+          report.partial = true;
+          break;
+        }
+      }
+      if (report.budgetGone) break;
+    }
+    report.rows = tools.rankFreshCiters(works, {seeds, have: this.libraryDOIs(), limit,
+      titleOf: id => titleOf.get(id)})
+      /* The full reference list of each result existed only to work out which
+         held papers it stands on, and `cites` is that answer. The rest is
+         dropped before this is kept: the data file is read and written whole,
+         and hundreds of ids per row would be paid for on every save. */
+      .map(({references, subjects, people, abstract, finding, related, ...row}) => row);
+    return report;
+  }
+
+  freshCiterStore() {
+    const store = this.cache.freshCiters;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.freshCiters = {});
+  }
+
+  /* The same answer for a day, because it is a question about months.
+
+     A partial answer is shown but never kept: a second visit would read it as
+     the whole answer, and a spent budget is exactly the moment that happens. */
+  async freshCitersCached(key, items, {maxAgeHours = 24, refresh = false, ...options} = {}) {
+    const store = this.freshCiterStore();
+    const saved = store[key];
+    const age = saved ? Date.now() - Date.parse(saved.at) : Infinity;
+    // The key carries what shelf this was asked about, so a changed shelf is a
+    // different question; only the window has to be checked here.
+    if (!refresh && saved && Number.isFinite(age) && age < maxAgeHours * 3600e3
+      && saved.days === (options.days ?? 90)) return saved;
+    const report = await this.sweepFreshCiters(items, options);
+    if (!report.partial && !report.budgetGone) {
+      store[key] = report;
+      const keys = Object.keys(store).sort((a, b) => Date.parse(store[a].at) - Date.parse(store[b].at));
+      while (keys.length > 20) delete store[keys.shift()];
+      this.dirty = true;
+      await this.flush();
+    }
+    return report;
   }
 
   /* Everything the reading order is built from: the paper, its references
