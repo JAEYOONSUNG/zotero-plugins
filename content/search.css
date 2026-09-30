@@ -146,7 +146,7 @@ button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: 
 
 /* ---------------------------------------------------------------- layout */
 #main { display: flex; flex: 1 1 auto; min-height: 0; }
-#metrics { width: 190px; flex: 0 0 auto; padding: 11px 13px; overflow: auto; border-right: 1px solid var(--border); }
+#metrics { width: 250px; flex: 0 0 auto; padding: 11px 13px; overflow: auto; border-right: 1px solid var(--border); }
 #metrics h3 { margin: 0 0 9px; font-size: 12px; letter-spacing: .01em; }
 #metrics-table { width: 100%; border-collapse: collapse; }
 #metrics-table td { padding: 3.5px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
@@ -349,8 +349,19 @@ label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); wh
 /* The metrics sidebar before any search: one line saying what will appear, not a column of dashes. */
 .metrics-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 /* Which index the statistics are read from: plain buttons, the pressed one a step darker. */
-.metrics-basis { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 4px; }
-.metrics-basis button { font-size: 12px; padding: 2px 8px; border-radius: 4px; }
+.metrics-basis { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0 4px; }
+.metrics-basis button { font-size: 11px; padding: 2px 5px; border-radius: 7px; white-space: nowrap; flex: 0 0 auto; }
+/* Each explanation is one line with a (?); the full text opens under it. */
+.metrics-notes { margin-top: 9px; }
+.metrics-note { margin-top: 5px; }
+.metrics-note-line { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.note-help { min-width: 18px; height: 18px; padding: 0; border-radius: 9px; font-size: 11px; line-height: 1; flex: 0 0 auto; }
+.metrics-note-full { margin: 4px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+/* The reading state Style Custom keeps, next to the library check. */
+.read-state { margin-left: 4px; font-size: 11px; font-weight: 400; color: var(--muted); white-space: nowrap; }
+/* Add options: one folded line until rows are chosen. */
+.import-opts { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.import-opts-toggle { font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .metrics-basis button[aria-pressed="true"] { font-weight: 600; }
 
 /* Optional search coverage stays with the query controls. */

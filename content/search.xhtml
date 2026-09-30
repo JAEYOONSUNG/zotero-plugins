@@ -167,7 +167,7 @@
 				<tr><td>hI,annual</td><td id="m-hiannual">–</td></tr>
 				<tr><td>hA-index</td><td id="m-ha">–</td></tr>
 			</table>
-			<p class="hint" data-i18n="metricsScope"></p>
+			<div id="metrics-notes" class="metrics-notes"></div>
 		</aside>
 
 		<div id="vsplit" class="splitter-v"></div>
@@ -252,12 +252,15 @@
 	</div>
 
 	<div id="import-bar" class="glass">
-		<label for="target" data-i18n="addTo"></label>
-		<select id="target"></select>
-		<label class="cb"><input id="opt-pdf" type="checkbox" checked="checked"/> <span data-i18n="optPdf"></span></label>
-		<label class="cb"><input id="opt-skip" type="checkbox" checked="checked"/> <span data-i18n="optSkip"></span></label>
-		<label class="cb"><input id="opt-fillpdf" type="checkbox"/> <span data-i18n="optFillPdf"></span></label>
-		<label class="cb"><input id="opt-extra" type="checkbox" checked="checked"/> <span data-i18n="optExtra"></span></label>
+		<button id="import-opts-toggle" type="button" class="ghost import-opts-toggle" aria-expanded="false" aria-controls="import-opts"></button>
+		<span id="import-opts" class="import-opts">
+			<label for="target" data-i18n="addTo"></label>
+			<select id="target"></select>
+			<label class="cb"><input id="opt-pdf" type="checkbox" checked="checked"/> <span data-i18n="optPdf"></span></label>
+			<label class="cb"><input id="opt-skip" type="checkbox" checked="checked"/> <span data-i18n="optSkip"></span></label>
+			<label class="cb"><input id="opt-fillpdf" type="checkbox"/> <span data-i18n="optFillPdf"></span></label>
+			<label class="cb"><input id="opt-extra" type="checkbox" checked="checked"/> <span data-i18n="optExtra"></span></label>
+		</span>
 		<span class="spacer"></span>
 		<span id="selected-count"></span>
 		<button id="import-btn" type="button" class="primary icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus"/></svg><span data-i18n="importBtn"></span></button>

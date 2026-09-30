@@ -17,12 +17,13 @@
 	const DEFAULT_COLS = {
 		chk: 28, citations: 56, cpy: 74, rank: 60, authorString: 190, title: 320,
 		year: 58, venue: 150, journalIF: 64, affiliation: 150, country: 62, tier: 56,
-		doi: 150, pdf: 44, inLibrary: 44, status: 96
+		doi: 150, pdf: 44, inLibrary: 84, status: 96
 	};
 
 	// 8: Year, Rank and Per year were narrower than their own digits ("20…", "Ra…").
 	// 9: the IF column gained a leading ~ for an estimate and 48px clipped it.
-	const COL_VERSION = 9;
+	// 10: the library column carries Style Custom's reading state beside the check.
+	const COL_VERSION = 10;
 	const COLUMN_KEYS = Object.keys(DEFAULT_COLS);
 	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~56px with its padding)
 	const MIN_COL = 40;
@@ -383,6 +384,8 @@
 		for (let id of ["source", "sort", "opt-pdf", "opt-skip", "opt-extra", "opt-fillpdf", "maxResults"]) {
 			$(id).addEventListener("change", savePrefs);
 		}
+		for (let id of ["target", "opt-pdf", "opt-skip", "opt-extra", "opt-fillpdf"]) $(id).addEventListener("change", () => syncImportBar());
+		$("import-opts-toggle")?.addEventListener("click", () => { state.optsOpen = !state.optsOpen; syncImportBar(); });
 		// detail actions
 		$("d-open").addEventListener("click", () => { let r = detailRecord(); if (r?.url) Zotero.launchURL(r.url); });
 		$("d-pdf").addEventListener("click", () => { let r = detailRecord(); let u = (r?.pdfUrls || [])[0] || r?.pdfUrl; if (u) Zotero.launchURL(u); });
@@ -1593,6 +1596,12 @@
 			r.inLibrary = Boolean(id);
 			if (id) r.libraryItemID = id;
 		}
+		// Style Custom's reading state, for the items just found only.
+		try {
+			let states = typeof ZotPoPImporter.getReadingStates === "function"
+				? await ZotPoPImporter.getReadingStates(state.records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID)) : new Map();
+			for (let r of state.records) r.readState = r.inLibrary && states.get(r.libraryItemID) || null;
+		} catch (e) { /* only a hint */ }
 		render();
 	}
 
@@ -1825,7 +1834,9 @@
 			link.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); Zotero.launchURL("https://doi.org/" + encodeURI(r.doi)); }); doiCell.appendChild(link); }
 		let pdfCell = td("pdf", "mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfClickTip") : "");
 		if (hasPDF(r)) { pdfCell.setAttribute("role", "button"); pdfCell.addEventListener("click", e => { e.stopPropagation(); state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail(); openPreview(r); }); }
+		let readLabel = r.inLibrary && r.readState ? { done: t("readDone"), reading: t("readReading"), unread: t("readUnread") }[r.readState] : "";
 		let libCell = td("inLibrary", "mini lib", r.inLibrary ? "✓" : "", r.inLibrary ? t("thLibClickTip") : "");
+		if (readLabel) { let rs = document.createElement("span"); rs.className = "read-state"; rs.textContent = readLabel; rs.title = t("readStateTip"); libCell.appendChild(rs); }
 		if (r.inLibrary) { libCell.setAttribute("role", "button"); libCell.addEventListener("click", e => { e.stopPropagation(); showInLibrary(r); }); }
 		let st = td("status", "status", r.status || "", r.statusTitle || "");
 		st.dataset.marquee = "status";
@@ -1871,10 +1882,23 @@
 		paintRows();
 	}
 
+	// Add options fold into one line while nothing is chosen; choosing rows opens them.
+	function syncImportBar(n = state.records.filter(r => state.selected.has(r.key)).length) {
+		let toggle = $("import-opts-toggle"), box = $("import-opts"); if (!toggle || !box) return;
+		let open = n > 0 || Boolean(state.optsOpen);
+		box.hidden = !open;
+		toggle.hidden = n > 0;
+		toggle.setAttribute("aria-expanded", String(open));
+		let target = ""; try { target = $("target").options?.[$("target").selectedIndex]?.textContent || ""; } catch (e) { /* no target yet */ }
+		let parts = [["opt-pdf", "optPdfShort"], ["opt-skip", "optSkipShort"], ["opt-fillpdf", "optFillPdfShort"], ["opt-extra", "optExtraShort"]].filter(([id]) => $(id).checked).map(([, key]) => t(key));
+		toggle.textContent = open ? t("optsHide") : t("optsSummary", String(target).trim() || t("optsSummaryNone"), parts) + " ▾";
+	}
+
 	function updateCounts() {
 		let n = state.records.filter(r => state.selected.has(r.key)).length;
 		$("selected-count").textContent = t("selected", n);
 		$("import-btn").disabled = n === 0 || state.importing || state.searching;
+		syncImportBar(n);
 		let all = state.visible.length > 0 && state.visible.every(r => state.selected.has(r.key));
 		let some = state.visible.some(r => state.selected.has(r.key));
 		$("chk-all").checked = all;
@@ -1911,11 +1935,32 @@
 			box.appendChild(b);
 		}
 	}
+	function drawMetricsNotes(notes) {
+		let box = $("metrics-notes"); if (!box) return;
+		box.textContent = "";
+		state.metricsNotesOpen ||= new Set();
+		for (let n of notes) {
+			let open = state.metricsNotesOpen.has(n.key);
+			let row = document.createElement("div"); row.className = "metrics-note";
+			let line = document.createElement("div"); line.className = "metrics-note-line";
+			let short = document.createElement("span"); short.textContent = n.short;
+			let b = document.createElement("button"); b.type = "button"; b.className = "ghost note-help"; b.textContent = "?";
+			b.setAttribute("aria-expanded", String(open)); b.setAttribute("aria-label", t("metricsMore")); b.title = t("metricsMore");
+			let full = document.createElement("p"); full.className = "metrics-note-full"; full.textContent = n.full; full.hidden = !open;
+			b.addEventListener("click", () => {
+				let now = b.getAttribute("aria-expanded") !== "true";
+				b.setAttribute("aria-expanded", String(now)); full.hidden = !now;
+				if (now) state.metricsNotesOpen.add(n.key); else state.metricsNotesOpen.delete(n.key);
+			});
+			line.appendChild(short); line.appendChild(b); row.appendChild(line); row.appendChild(full); box.appendChild(row);
+		}
+	}
 	function renderMetrics(list) {
 		if (searchSurface === "authors" && list.length && !list.some(record => record.citations != null && Number.isFinite(Number(record.citations)))) {
 			$("metrics-hint").hidden = false; $("metrics-hint").textContent = t("authorNoCitationData", list.length); $("metrics-table").hidden = true; return;
 		}
 		if ($("metrics-hint")) $("metrics-hint").textContent = t("metricsHint");
+		if ($("metrics-notes")) $("metrics-notes").textContent = "";
 		let base = ZotPoPMetrics.compute(list);
 		let sources = base.citationSources || [];
 		/* Which index the statistics are read from: the highest per paper (a
@@ -1925,9 +1970,14 @@
 		let m = state.metricsBasis ? ZotPoPMetrics.compute(list, undefined, { provider: state.metricsBasis }) : base;
 		drawMetricsBasis(sources);
 		let set = (id, v) => { $(id).textContent = v; };
-		let hint = $("metrics-hint"); if (hint) { hint.hidden = list.length > 0 && !m.unknownCitations; $("metrics-table").hidden = !list.length; if (list.length && m.unknownCitations) hint.textContent = t("metricsUnknown", m.unknownCitations, list.length);
-			// Several indexes each counted citations; the highest was kept per paper, so the figures below mix networks.
-			if (list.length && !state.metricsBasis && sources.length > 1) { hint.hidden = false; hint.textContent = (m.unknownCitations ? hint.textContent + " " : "") + t("metricsMixed", sources.map(key => ZotPoPSources.SOURCES?.[key]?.label || key).join(", ")); } }
+		let hint = $("metrics-hint"); if (hint) { hint.hidden = list.length > 0; $("metrics-table").hidden = !list.length; }
+		// One line each, the full explanation behind a (?): the numbers stay at the top.
+		let notes = [];
+		if (list.length && m.unknownCitations) notes.push({ key: "unknown", short: t("metricsUnknownShort", m.unknownCitations, list.length), full: t("metricsUnknown", m.unknownCitations, list.length) });
+		// Several indexes each counted citations; the highest was kept per paper, so the figures below mix networks.
+		if (list.length && !state.metricsBasis && sources.length > 1) notes.push({ key: "mixed", short: t("metricsMixedShort"), full: t("metricsMixed", sources.map(key => ZotPoPSources.SOURCES?.[key]?.label || key).join(", ")) });
+		if (list.length) notes.push({ key: "scope", short: t("metricsScopeShort"), full: t("metricsScope") });
+		drawMetricsNotes(notes);
 		set("m-years", m.minYear ? `${m.minYear}–${m.maxYear}` : "–");
 		set("m-cyears", m.minYear ? String(m.citationYears) : "–");
 		set("m-papers", String(m.papers));
@@ -2313,7 +2363,7 @@
 		if (r.inLibrary) {
 			tr.classList.add("in-library");
 			let lib = tr.querySelector("td.lib");
-			if (lib) lib.textContent = "✓";
+			if (lib) { let rs = lib.querySelector(".read-state"); lib.textContent = "✓"; if (rs) lib.appendChild(rs); }
 		}
 	}
 

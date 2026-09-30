@@ -98,6 +98,28 @@ var ZotPoPImporter = (function () {
 	/* The scan below reads every title in the library. Importing eighty papers
 	   ran it eighty times; it is read once and kept for the run. */
 	const titleRuns = new Map();
+	/* The reading state Style Custom keeps as a tag ("/done", "/reading",
+	   "/unread"), read for items already found: one query over their tags, no
+	   item loading, nothing when the plugin never tagged them. Same precedence
+	   as Style Custom: done, then reading, then unread. */
+	async function getReadingStates(itemIDs) {
+		let out = new Map();
+		let ids = [...new Set(itemIDs)].filter(Number.isInteger);
+		if (!ids.length) return out;
+		try {
+			let rank = { done: 3, reading: 2, unread: 1 };
+			for (let i = 0; i < ids.length; i += 500) {
+				let chunk = ids.slice(i, i + 500);
+				let rows = await Zotero.DB.queryAsync("SELECT IT.itemID AS itemID, T.name AS name FROM itemTags IT JOIN tags T ON IT.tagID = T.tagID "
+					+ "WHERE IT.itemID IN (" + chunk.map(() => "?").join(",") + ") AND LOWER(T.name) IN ('/done', '/reading', '/unread')", chunk);
+				for (let row of rows || []) {
+					let state = String(row.name).trim().toLowerCase().slice(1);
+					if (rank[state] > (rank[out.get(row.itemID)] || 0)) out.set(row.itemID, state);
+				}
+			}
+		} catch (e) { /* a missing hint, not a failure */ }
+		return out;
+	}
 	function forgetTitleIndex(libraryID) { if (libraryID == null) titleRuns.clear(); else titleRuns.delete(libraryID); }
 	async function titleIndex(libraryID) {
 		let held = titleRuns.get(libraryID);
@@ -498,5 +520,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { manualItemType, importRecord, fillPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex };
+	return { manualItemType, importRecord, fillPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, getReadingStates };
 })();

@@ -79,7 +79,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 			HTTP: { request: () => { netCalls++; throw new Error("network is off in the preview"); } },
 			Utilities: { Internal: { copyTextToClipboard() {} } } },
 		ZotPoPMarquee: { attach: () => ({ refresh() {}, refreshCell() {} }) },
-		ZotPoPImporter: { getLibraryDOIMap: async () => library, getTargets: () => [{ libraryID: 1, collectionID: null, label: "My Library", depth: 0 }, { libraryID: 1, collectionID: 7, label: "Repair atlases", depth: 1 }],
+		ZotPoPImporter: { getLibraryDOIMap: async () => library, getReadingStates: async ids => new Map(ids.map(id => [id, "reading"])), getTargets: () => [{ libraryID: 1, collectionID: null, label: "My Library", depth: 0 }, { libraryID: 1, collectionID: 7, label: "Repair atlases", depth: 1 }],
 			getCurrentTarget: () => ({ libraryID: 1, collectionID: null }), forgetTitleIndex() {} }
 	});
 	win.Zotero = ctx.Zotero;

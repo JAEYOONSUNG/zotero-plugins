@@ -1152,3 +1152,87 @@ test("a DOI match is exact: underscores and percent signs are not wildcards, and
 	rows = [{ itemID: 4, fieldName: "extra", value: "PMID: 1\nDOI:10.1234/a_b" }];
 	assert.equal(await api.findByDOI(1, "10.1234/a_b"), 4, "and in Extra");
 });
+
+test("the metrics notes are one line each with a (?) that opens the full text, and the table keeps the top", async () => {
+	const Metrics = (await import("../content/metrics.js")).default;
+	const ui = uiHarness({ metrics: Metrics });
+	ui.originalRenderMetrics([paper("a", { citations: 5, citationSource: "openalex", citationSources: ["openalex", "crossref"] }), paper("b", { citations: null })]);
+	assert.equal(ui.get("metrics-hint").hidden, true, "no paragraph above the numbers once there are results");
+	const notes = ui.get("metrics-notes");
+	const helps = notes.querySelectorAll("button");
+	assert.ok(helps.length >= 2, "an unknown-count line and the scope line");
+	assert.match(notes.textContent, /metricsUnknownShort\|1\|2/);
+	assert.doesNotMatch(notes.querySelectorAll("div").filter(d => d.className === "metrics-note-line").map(d => d.textContent).join(""), /metricsUnknown\|/, "the line is the short form");
+	const fulls = notes.querySelectorAll("p");
+	assert.ok(fulls.every(p => p.hidden), "full texts start closed");
+	assert.equal(helps[0].getAttribute("aria-expanded"), "false");
+	helps[0].emit("click");
+	assert.equal(helps[0].getAttribute("aria-expanded"), "true");
+	assert.equal(fulls[0].hidden, false);
+	assert.match(fulls[0].textContent, /metricsUnknown\|1\|2/);
+	helps[0].emit("click");
+	assert.equal(fulls[0].hidden, true);
+});
+
+test("a row already in the library shows Style Custom's reading state beside the check, only when present", async () => {
+	const importer = {
+		getLibraryDOIMap: async () => new Map([["10.1/a", 5], ["10.1/b", 6]]),
+		getReadingStates: async ids => { assert.deepEqual([...ids].sort(), [5, 6]); return new Map([[5, "reading"]]); }
+	};
+	const ui = uiHarness({ importer, realRows: true, search: async () => [paper("a", { doi: "10.1/a" }), paper("b", { doi: "10.1/b" }), paper("c", { doi: "10.1/c" })] });
+	await ui.runSearch();
+	const rec = key => ui.state.records.find(r => r.key === key);
+	assert.equal(rec("a").readState, "reading");
+	assert.equal(rec("b").readState, null);
+	assert.equal(rec("c").readState, null);
+	const cell = key => ui.buildRow(rec(key)).querySelector("td.lib");
+	const badge = cell("a").querySelector(".read-state");
+	assert.equal(badge.textContent, "readReading");
+	assert.equal(badge.title, "readStateTip");
+	assert.equal(cell("b").querySelector(".read-state"), null);
+	assert.equal(cell("c").querySelector(".read-state"), null);
+});
+
+test("Style Custom's tags are read for the found items in one query, done over reading over unread", async () => {
+	const { readFileSync } = await import("node:fs");
+	const vm = await import("node:vm");
+	const source = readFileSync(new URL("../content/importer.js", import.meta.url), "utf8");
+	const queries = [];
+	const sandbox = { Zotero: { logError() {}, DB: { queryAsync: async (sql, params) => { queries.push([sql, params]); return [
+		{ itemID: 1, name: "/unread" }, { itemID: 1, name: "/Done" }, { itemID: 2, name: "/reading" }]; } } }, ZotPoPSources: {}, module: { exports: {} } };
+	sandbox.globalThis = sandbox; vm.createContext(sandbox);
+	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
+	const states = await sandbox.__api.getReadingStates([1, 2, 2, 3]);
+	assert.equal(JSON.stringify([...states]), JSON.stringify([[1, "done"], [2, "reading"]]));
+	assert.equal(queries.length, 1);
+	assert.equal(JSON.stringify(queries[0][1]), "[1,2,3]");
+	assert.equal((await sandbox.__api.getReadingStates([])).size, 0);
+	sandbox.Zotero.DB.queryAsync = async () => { throw new Error("locked"); };
+	assert.equal((await sandbox.__api.getReadingStates([1])).size, 0, "a database that cannot be read is a missing hint");
+});
+
+test("the add options fold into one summary line until a result is selected", async () => {
+	const ui = uiHarness({ search: async () => [paper("a"), paper("b")] });
+	await ui.runSearch(); ui.wireEvents();
+	const toggle = ui.get("import-opts-toggle"), box = ui.get("import-opts");
+	assert.equal(box.hidden, true, "folded with nothing selected");
+	assert.equal(toggle.hidden, false);
+	assert.match(toggle.textContent, /^optsSummary\|/);
+	assert.equal(toggle.getAttribute("aria-expanded"), "false");
+	toggle.emit("click");
+	assert.equal(box.hidden, false, "the toggle opens them by hand");
+	assert.equal(toggle.getAttribute("aria-expanded"), "true");
+	assert.match(toggle.textContent, /optsHide/);
+	toggle.emit("click");
+	assert.equal(box.hidden, true);
+	ui.state.selected.add("a"); ui.render();
+	assert.equal(box.hidden, false, "selecting a row expands them");
+	assert.equal(toggle.hidden, true);
+	assert.equal(ui.get("import-btn").disabled, false);
+	ui.state.selected.clear(); ui.render();
+	assert.equal(box.hidden, true, "and clearing the selection folds them again");
+	// The values are untouched by folding.
+	ui.get("opt-fillpdf").checked = true; ui.get("opt-fillpdf").emit("change");
+	assert.equal(ui.prefs.fillMissingPDF, true);
+	assert.match(toggle.textContent, /optFillPdfShort/);
+});
