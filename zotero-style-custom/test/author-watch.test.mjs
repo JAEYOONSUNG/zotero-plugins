@@ -513,3 +513,45 @@ test("a consortium paper's author list is not a hundred new collaborations", asy
   assert.deepEqual(h.cache.watchedAuthors[0].newCoauthors, [],
     "forty names on one paper says nothing about who they have started working with");
 });
+
+test("an author's back catalogue is not news: only what appeared since they were followed", async () => {
+  /* The baseline taken at follow time is their 25 newest works, but the sweep
+     window reaches 18 months back, so for a prolific author everything between
+     the two arrived as "new" — and after each 확인함 the next eight older
+     papers came back. The inbox never emptied. */
+  const followed = new Date(Date.now() - 30 * 864e5).toISOString();
+  const rows = [person("A1", {checkedAt: followed, seen: []})];
+  const day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const since = work("W1", ["A1"], {publication_date: day(5)});
+  const old1 = work("W2", ["A1"], {publication_date: day(200)});
+  const old2 = work("W3", ["A1"], {publication_date: day(400)});
+  const h = host({rows, pages: [page([since, old1, old2]), page([])]});
+  const result = await h.sweepWatchedAuthors();
+  assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["W1"], "only the paper published since the follow");
+  assert.equal(result.works, 1);
+  // The back catalogue is recorded as known, so a later sweep cannot offer it again.
+  const kept = new Set(h.cache.watchedAuthors[0].seen);
+  assert.ok(kept.has("W2") && kept.has("W3"), "the older papers are held as seen rather than shown");
+});
+
+test("a paper dated just before the last check is still new, because a date can precede indexing", async () => {
+  const checked = new Date(Date.now() - 10 * 864e5).toISOString();
+  const rows = [person("A1", {checkedAt: checked, seen: []})];
+  const day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  // Dated 40 days ago, inside the two months of slack: OpenAlex can index a
+  // paper well after the date printed on it.
+  const h = host({rows, pages: [page([work("W1", ["A1"], {publication_date: day(40)})]), page([])]});
+  await h.sweepWatchedAuthors();
+  assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["W1"]);
+});
+
+test("an author never checked before still sees their whole window, since there is no floor yet", async () => {
+  const rows = [person("A1", {seen: []})];
+  const day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const h = host({rows, pages: [page([work("W1", ["A1"], {publication_date: day(300)})]), page([])]});
+  await h.sweepWatchedAuthors();
+  assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["W1"], "there is nothing to measure it against yet");
+});

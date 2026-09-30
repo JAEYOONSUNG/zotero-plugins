@@ -3961,6 +3961,38 @@
       ],
       "status": "verified",
       "review": "읽기 전용 감사 에이전트가 찾은 것 중 확실한 것만 반영. 어두운 테마에서 선택된 유형 칩이 1.23:1로 안 보이던 문제, 읽기 기록이 없는데 '0초'라고 말하던 문제, 캔버스 카드가 200px인데 130px 간격으로 놓여 두 번째 줄이 첫 줄 버튼을 덮던 문제, 확대가 좌상단 기준이라 절반이 화면 밖으로 나가던 문제. 창을 여는 버튼 아홉 개에 data-opens가 빠져 있어 자가점검이 누를 수 있었던 것도 함께 고치고, 소스 검사 테스트로 고정."
+    },
+    {
+      "round": "R155",
+      "title": "관심 저자 새 논문: 옛 논문이 계속 돌아오던 문제와 확인함 두 갈래",
+      "gap": "The follow baseline is an author's 25 newest works while the sweep window reaches 18 months back, so for a prolific author the gap between the two arrived as news and refilled the inbox after every 확인함. Two separate 확인함 mechanisms disagreed, and the one on the author page threw the stored news away irreversibly. 마지막 확인 showed the newest sweep, hiding authors never checked at all.",
+      "entryPoint": "저자 추적",
+      "sources": [
+        {
+          "file": "src/runtime.js",
+          "marker": "A paper published before this author was followed is not news"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "One 확인함, not two"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "The newest sweep is not the state of the list"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "an author's back catalogue is not news: only what appeared since they were followed"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "a paper dismissed in the inbox is dismissed on the author page too, and the news survives it"
+        }
+      ],
+      "status": "verified",
+      "review": "읽기 전용 감사 에이전트가 54편짜리 저자로 재현한 것: 확인함을 누를 때마다 2025-04까지의 옛 논문 8편이 다시 올라왔다. 마지막 확인 이후로 나온 것만 새 논문으로 세고, 그 이전 것은 조용히 이미 본 것으로 기록한다(색인이 게재일보다 늦는 경우를 위해 두 달 여유). 확인함은 한 곳에서만 기록하고 되돌릴 수 있으며, 스윕이 찾아 둔 소식은 지우지 않는다."
     }
   ],
   "introducedInVersion": "0.6.0"

@@ -2378,9 +2378,34 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!found.has(row.id) && (result.budgetGone || result.remaining)) continue;
       if (failed.has(this.discoverTools.shortID(row.id)) || failed.has(row.id)) continue;
       const seen = new Set(row.seen || []);
-      const fresh = (found.get(row.id) || [])
-        .filter(work => !seen.has(work.id))
-        .sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
+      /* A paper published before this author was followed is not news.
+
+         The baseline taken when someone is followed is their twenty-five
+         newest works, but the sweep window reaches at least eighteen months
+         back. Everything between those two is "not seen", so for a prolific
+         author it all arrives as new. Measured on a fifty-four-work author:
+         every 확인함 was followed by the next eight older papers, back to
+         2025-04, not one of them published since the day they were followed.
+         The inbox never emptied, and the papers that really were new sat
+         underneath the back catalogue.
+
+         So anything older than the last check -- less two months of slack,
+         because a publication date can precede the day OpenAlex indexed it --
+         is recorded as already known rather than shown. */
+      const checkedAtOf = Date.parse(row.checkedAt || row.sweptAt || '');
+      const floor = Number.isFinite(checkedAtOf)
+        ? new Date(checkedAtOf - 60 * 864e5).toISOString().slice(0, 10) : '';
+      const fresh = [], backlog = [];
+      for (const work of found.get(row.id) || []) {
+        if (seen.has(work.id)) continue;
+        (floor && work.date && work.date < floor ? backlog : fresh).push(work);
+      }
+      fresh.sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
+      if (backlog.length) {
+        row.seen = [...new Set([...backlog.map(work => work.id), ...(row.seen || [])])].slice(0, this.SEEN_LIMIT);
+        seen.clear();
+        for (const id of row.seen) seen.add(id);
+      }
       /* Only papers. Of 64 "new papers" across 109 watched authors, 15 were
          PNNL repository deposits and one a Zenodo record -- copies of work
          already published, filed as datasets. OpenAlex types them; the type
@@ -2525,10 +2550,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          A consortium paper names hundreds of people who have not started
          working with anyone, so a paper over fifteen authors says nothing
          about collaboration and is left out. */
-      const window = found.get(row.id) || [];
+      const windowWorks = found.get(row.id) || [];
       const newsIDs = new Set(papers.map(work => work.id));
       const known = new Set(row.coauthorsSeen || []);
-      for (const work of window) {
+      for (const work of windowWorks) {
         if (newsIDs.has(work.id)) continue;
         for (const person of work.people || []) if (person.name && person.id !== row.id) known.add(person.name);
       }

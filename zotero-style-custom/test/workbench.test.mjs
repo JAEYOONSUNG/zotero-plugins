@@ -1761,7 +1761,13 @@ test('following an author adds them to the panel and surfaces what is new next t
  assert.ok(headings().includes('관심 저자 1'));
 
  await f.click('새 논문 1편 확인함');
- assert.ok(f.calls.find(c=>c[0]==='markSeen'),'marking as read is an explicit act');
+ /* Marked in the one per-paper store the inbox also reads, so 확인함 in
+    either place means the same thing and can be undone. It used to call
+    markAuthorSeen and clearAuthorNews, which threw the stored news away for
+    good and left the inbox still offering the same papers. */
+ const marked=f.runtime.cache.workbenchUI?.inboxSeen||{};
+ assert.equal(Object.keys(marked).length,1,'marking as read is an explicit act, recorded per paper');
+ assert.equal(f.calls.some(c=>c[0]==='clearNews'),false,'and the sweep\'s own record is not thrown away');
  f.bench.destroy();
 });
 
@@ -4246,5 +4252,27 @@ test('zooming the graph keeps its middle, instead of walking off to the top-left
   // The same centre before and after is what keeps a node under the pointer.
   assert.equal(Math.round(x0 + w0 / 2), Math.round(x1 + w1 / 2));
   assert.equal(Math.round(y0 + h0 / 2), Math.round(y1 + h1 / 2));
+  f.bench.destroy();
+});
+
+test('a paper dismissed in the inbox is dismissed on the author page too, and the news survives it', async () => {
+  /* The inbox marked papers in its own per-paper store; this page counted from
+     the sweep's baseline. Marking two of four above left the page still saying
+     four, and its button then wiped the stored news for good. */
+  const f = fixture();
+  f.runtime.authorsOfCached = async () => [{id: 'A1', name: 'Only Author', institution: 'Somewhere', position: 'first'}];
+  await f.bench.show('authors');
+  await f.click('관심 저자로 등록');
+  assert.ok(f.findButton('새 논문 1편 확인함'), 'one unread paper to begin with');
+  // The inbox marks by DOI, in workbenchUI.inboxSeen, keyed per library.
+  const news = (await f.runtime.authorUpdates('A1')).fresh[0];
+  const key = `1:${String(news.doi).toLowerCase()}`;
+  f.runtime.cache.workbenchUI = {...(f.runtime.cache.workbenchUI || {}), inboxSeen: {[key]: '2026-09-30T00:00:00Z'}};
+  await f.bench.render();
+  await settle();
+  assert.equal(f.findButton('새 논문 1편 확인함'), undefined,
+    'the page counts the same papers the inbox does');
+  // And nothing was thrown away to achieve it.
+  assert.equal(f.calls.some(c => c[0] === 'clearNews'), false);
   f.bench.destroy();
 });

@@ -4112,7 +4112,19 @@
     message(`${person.name}의 최근 작업을 불러오는 중…`);
     // The shelf first, while OpenAlex is asked.
     list.replaceChildren();node('h3',person.name,list,{class:'sc-hit-group'});drawShelf(person.name,person);
-    const {profile,works,fresh,watching,checkedAt}=await runtime.authorUpdates(person.id);
+    const {profile,works,fresh:reported,watching,checkedAt}=await runtime.authorUpdates(person.id);
+    /* One 확인함, not two.
+
+       The inbox above marks a paper read in its own per-paper store, keyed by
+       DOI, and that is reversible. This page used to count from the sweep's
+       own baseline instead, so marking two of four in the inbox left the
+       person's page still saying four -- and its button then called
+       markAuthorSeen plus clearAuthorNews, which threw the stored news away
+       for good and did not mark anything in the inbox. Both now read and
+       write the one store, so a paper dismissed in either place is dismissed
+       in both, and can be put back. */
+    const newsKey=work=>bareDOI(work.doi)||String(work.id||'');
+    const fresh=reported.filter(work=>!isSeen({key:newsKey(work)}));
     if(token!==epoch||disposed||state.tab!=='authors')return;
     list.replaceChildren();
     if(item){const back=bar(list);button('← 이 논문의 저자 보기',()=>run(loadAuthors),back);}
@@ -4146,10 +4158,10 @@
       return run(async()=>{await runtime.unwatchAuthor(person.id);refreshWatched();await show(person);});
      },follow,{class:'sc-unwatch'});
      if(fresh.length)button(`새 논문 ${fresh.length}편 확인함`,()=>run(async()=>{
-      await runtime.markAuthorSeen(person.id,works);
-      // The badge on the list is the same news; clearing one must clear both,
-      // or the list keeps advertising papers the user has just dismissed.
-      await runtime.clearAuthorNews(person.id);
+      // Marked one by one in the store the inbox reads, so 확인함 above and
+      // here agree and either can be undone. The sweep's own record of what
+      // it has found is left alone; a later sweep replaces it anyway.
+      for(const work of fresh)await setSeen({key:newsKey(work)},true);
       refreshWatched();
       await show(person);
      }),follow);
@@ -4285,12 +4297,26 @@
     const all=mergedNews(watched);
     if(!all.length)return;
     const byDOI=new Map(state.items.filter(i=>i.doi).map(i=>[bareDOI(i.doi),i]));
-    const last=watched.map(p=>p.sweptAt).filter(Boolean).sort().pop();
+    /* The newest sweep is not the state of the list. Reporting the maximum
+       put "마지막 확인 today" over a list in which eleven of a hundred and nine
+       had not been looked at for a month, and over people never checked at
+       all. The oldest is what says whether the list can be trusted. */
+    const stamps=watched.map(p=>p.sweptAt).filter(Boolean).sort();
+    const last=stamps[stamps.length-1];
+    const oldest=stamps[0];
+    const never=watched.filter(p=>!p.sweptAt).length;
+    const staleDays=oldest?Math.floor((Date.now()-Date.parse(oldest))/864e5):0;
     const unseen=all.filter(e=>!isSeen(e)).length;
     const view=state.inboxView||'new';
     const section=node('section',null,parent,{class:'sc-author-inbox-section'});
     sectionHead('저장된 새 논문',all.length,section);
-    if(last)node('p',T(`마지막 확인 ${(runtime.formatStamp&&runtime.localStamp?runtime.formatStamp(runtime.localStamp(last)):String(last).replace('T',' ')).slice(0,16)} · 저자마다 최근 8편까지`),section,{class:'sc-muted sc-inbox-note'});
+    if(last){
+     const shown=(runtime.formatStamp&&runtime.localStamp?runtime.formatStamp(runtime.localStamp(last)):String(last).replace('T',' ')).slice(0,16);
+     const note=node('p',T(`마지막 확인 ${shown} · 저자마다 최근 8편까지`),section,{class:'sc-muted sc-inbox-note'});
+     // What the date above does not cover, said next to it rather than left out.
+     if(never)note.appendChild(doc.createTextNode(' · '+T(`${never}명은 아직 확인하지 않았습니다`)));
+     else if(staleDays>7)note.appendChild(doc.createTextNode(' · '+T(`${staleDays}일 넘게 확인하지 않은 저자가 있습니다`)));
+    }
     const tools=node('div',null,section,{class:'sc-inbox-tools'});
     const views=node('div',null,tools,{class:'sc-segmented',role:'group','aria-label':T('새 논문 보기')});
     for(const [key,label,count] of [['new','미확인',unseen],['seen','확인함',all.length-unseen],['all','전체',all.length]])
@@ -4462,7 +4488,11 @@
        result.busy);
      }),tools);
     }
-    if(!fresh.length&&swept)node('span','새 논문 없음',tools,{class:'sc-watch-quiet'});
+    /* "새 논문 없음" is an answer about everybody, so it waits until everybody
+       has been asked. It used to appear as soon as one person had been swept,
+       over a list where the rest had never been looked at. */
+    const unchecked=watched.filter(person=>!person.sweptAt).length;
+    if(!fresh.length&&swept)node('span',unchecked?T(`확인 전 ${unchecked}명`):T('새 논문 없음'),tools,{class:'sc-watch-quiet'});
     // One chip keeps only the people with something new; a hundred quiet cards hide the ten that matter.
     if(state.watchFreshOnly&&!fresh.length)state.watchFreshOnly=false; // nothing new: an empty grid would say nothing
     if(fresh.length&&fresh.length<watched.length)button(state.watchFreshOnly?'모두 보기':'새 소식만',()=>{state.watchFreshOnly=!state.watchFreshOnly;refreshWatched();},tools,{'aria-pressed':String(!!state.watchFreshOnly)});
