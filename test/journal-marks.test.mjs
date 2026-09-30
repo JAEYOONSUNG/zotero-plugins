@@ -81,7 +81,8 @@ test("an exact code is worn as-is on the badge and pulled to a readable lightnes
 	assert.match(none.ink, /^hsl\(0 0% 12%\)$/, "a black masthead stays black");
 	const derived = J.colours(J.identify("Some Obscure Bulletin"));
 	assert.equal(derived.badge, undefined);
-	assert.match(derived.fill, /^hsl\(\d+ 36% 93%\)$/);
+	// colour-harmony pass: a derived hue is drawn at 38% saturation on a 94% fill, one recipe for every journal
+	assert.match(derived.fill, /^hsl\(\d+ 38% 94%\)$/);
 	const theirs = fs.readFileSync(new URL("../zotero-style-custom/src/journal-identity.js", import.meta.url), "utf8");
 	for (const family of J.FAMILIES) assert.ok(theirs.includes(`key: '${family.key}'`) && (typeof family.hue === "function" || theirs.includes(`hue: ${family.hue}`)), family.key + " must match Style Custom");
 	assert.equal(J.NATURE_TITLES.length, JSON.parse(JSON.stringify(theirs.match(/NATURE_TITLES = \[([\s\S]*?)\];/)[1].match(/\[\/\^/g))).length, "the same sister journals in both plugins");

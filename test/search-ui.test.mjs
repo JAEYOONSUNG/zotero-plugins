@@ -348,7 +348,8 @@ test("the journal cell carries the publisher's mark in its colour, and so does t
 	assert.equal(venue.textContent, "Science", "the name itself carries the colour; no chip crowds it");
 	/* Both themes' inks travel on the cell; the stylesheet picks one with prefers-color-scheme, so a dark
 	   page, a live theme switch and a static copy never wear the light ink. */
-	assert.match(venue.style["--j-ink-l"], /^hsl\(4 81% 36%\)$/);
+	// Science keeps its red hue (4); the colour-harmony pass caps saturation at 55% and draws every ink at one luminance
+	assert.match(venue.style["--j-ink-l"], /^hsl\(4 55% \d+%\)$/);
 	assert.match(venue.style["--j-ink-d"], /^hsl\(\d+ \d+% \d+%\)$/);
 	assert.notEqual(venue.style["--j-ink-l"], venue.style["--j-ink-d"], "a light and a dark ink");
 	assert.equal(venue.style.color, undefined, "no inline colour that would pin one theme");

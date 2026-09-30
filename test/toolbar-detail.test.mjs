@@ -173,8 +173,9 @@ const rgbaOf = v => { const m = /rgba\(([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.
 
 for (const scheme of ["light", "dark"]) {
 	test(`status, muted and journal inks clear 4.5:1 on ${scheme} rows, plain and selected`, () => {
-		const tk = tokens(scheme), page = hexRGB(tk.bg), selected = over(page, rgbaOf(tk["row-sel"]));
-		for (const name of ["ok", "warn", "err", "muted", "accent-ink"]) for (const [what, bg] of [["row", page], ["selected row", selected]]) {
+		// Rows are drawn on the white / dark card; the lightest dark row and the darkest light row is the focused one (selected plus hover).
+		const tk = tokens(scheme), page = hexRGB(tk.card), selected = over(page, rgbaOf(tk["row-sel"])), focused = over(selected, rgbaOf(tk["row-hover"]));
+		for (const name of ["ok", "warn", "err", "muted", "accent-ink"]) for (const [what, bg] of [["row", page], ["selected row", selected], ["focused row", focused]]) {
 			assert.ok(ratio(hexRGB(tk[name]), bg) >= 4.5, `--${name} on a ${what} (${scheme}): ${ratio(hexRGB(tk[name]), bg).toFixed(2)}`);
 		}
 		// every hue the derived journal colours can take, and every exact brand code
@@ -183,7 +184,7 @@ for (const scheme of ["light", "dark"]) {
 		for (const hex of Object.values(JournalMarks.JOURNAL_COLOURS)) inks.push(JournalMarks.tonesFor(hex, scheme === "dark").ink);
 		for (const ink of inks) {
 			const [h, s, l] = /hsl\((\d+) (\d+)% (\d+)%\)/.exec(ink).slice(1).map(Number);
-			for (const bg of [page, selected]) assert.ok(ratio(hslRGB(h, s / 100, l / 100), bg) >= 4.5, `${ink} (${scheme}) ${ratio(hslRGB(h, s / 100, l / 100), bg).toFixed(2)}`);
+			for (const bg of [page, selected, focused]) assert.ok(ratio(hslRGB(h, s / 100, l / 100), bg) >= 4.5, `${ink} (${scheme}) ${ratio(hslRGB(h, s / 100, l / 100), bg).toFixed(2)}`);
 		}
 	});
 }

@@ -1,7 +1,20 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZotPoP search preview (fictional data)</title><style>/* ZotPoP — glass surfaces over Zotero's own light/dark chrome */
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZotPoP search preview (fictional data)</title><style>/* ZotPoP search window.
+   Premium dashboard direction (2026-10-01): a grey canvas, white cards of large radius, one near-black
+   pill for "selected" and "primary", lime for positive, amber for attention. A coloured bar along the
+   edge of a rounded row or card never appears.
+
+   One system, in tokens:
+     colour   canvas / card / field / chip fills, one ink, one muted ink, lime (positive), amber (attention),
+              a red ink only for a hard failure; everything else is one of those.
+     type     11 meta and badges, 12 body and controls, 13 table titles and form values, 14 card titles,
+              16 the detail title; weights 400, 500, 600 only; fixed line heights 16 / 18 / 20 / 22.
+     control  32 (inputs, selects, buttons, a tray), 26 (a segment inside a tray, a small chip),
+              20 (a badge or pill inside a row).
+     space    4 / 8 / 12 / 16 / 24.
+     radius   999 (controls), 18 (cards), 12 (inner containers, menus), 8 (rows inside a menu or table). */
 :root {
 	color-scheme: light dark;
-	/* Premium dashboard (user direction 2026-10-01): a grey canvas, white cards, one dark pill, sparing lime and amber. */
+	/* neutrals */
 	--bg: #f1f2f4;
 	--card: #ffffff;
 	--bg-tint: #f6f7f9;
@@ -12,28 +25,40 @@
 	--border-strong: rgba(20, 22, 30, 0.16);
 	--text: #15171c;
 	--muted: #5b5f68;
+	--chip: rgba(20, 22, 30, 0.06);
+	--row-hover: rgba(20, 22, 30, 0.04);
+	--row-sel: rgba(20, 22, 30, 0.07);
+	--row-alt: transparent;
+	/* the one dark ink: primary buttons, the pressed segment, checkbox fill; links and dots are this family */
 	--accent: #15171c;
-	--accent-ink: #2f4f8f;
+	--accent-ink: #15171c;
 	--accent-soft: rgba(20, 22, 30, 0.10);
 	--accent-text: #ffffff;
 	--pill: #15171c;
 	--pill-text: #ffffff;
-	--row-alt: transparent;
-	--row-hover: rgba(20, 22, 30, 0.04);
-	--row-sel: rgba(20, 22, 30, 0.07);
-	--ok: #2e654b;
-	--warn: #785435;
+	--ring: rgba(20, 22, 30, 0.22);
+	/* lime: positive (owned, added, new); amber: attention (failure banner, status chip); red ink: hard failure text */
+	--pos-bg: #d8ee9a;
+	--pos-ink: #36440f;
+	--att-bg: #fae5bd;
+	--att-ink: #573700;
+	--ok: #53671e;
+	--warn: #7d5208;
 	--err: #934245;
-	--pos-bg: #d8f36a;
-	--pos-ink: #26330a;
-	--att-bg: #fbe3ae;
-	--att-ink: #5e3c00;
-	--chip: rgba(20, 22, 30, 0.06);
 	--card-shadow: 0 1px 2px rgba(20, 22, 30, 0.04), 0 6px 18px rgba(20, 22, 30, 0.04);
 	--r-card: 18px;
-	--r-ctl: 10px;
+	--r-box: 12px;
+	--r-row: 8px;
+	--r-ctl: 999px;
+	--h-ctl: 32px;
+	--h-seg: 26px;
+	--h-chip: 20px;
+	--head-h: 36px;
+	--row-h: 32px;
+	--fade-h: 32px;
 	font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Helvetica, Arial, sans-serif;
 	font-size: 12px;
+	line-height: 18px;
 }
 @media (prefers-color-scheme: dark) {
 	:root {
@@ -46,24 +71,25 @@
 		--border: rgba(255, 255, 255, 0.08);
 		--border-strong: rgba(255, 255, 255, 0.17);
 		--text: #ececf1;
-		--muted: #a3a6b0;
-		--accent: #ececf1;
-		--accent-ink: #a9c0e6;
-		--accent-text: #121317;
-		--accent-soft: rgba(255, 255, 255, 0.14);
-		--pill: #ececf1;
-		--pill-text: #121317;
-		--row-alt: transparent;
+		--muted: #b0b3bd;
+		--chip: rgba(255, 255, 255, 0.09);
 		--row-hover: rgba(255, 255, 255, 0.05);
 		--row-sel: rgba(255, 255, 255, 0.10);
-		--ok: #45ba84;
-		--warn: #cb9c73;
-		--err: #d79395;
-		--pos-bg: rgba(196, 240, 80, 0.20);
-		--pos-ink: #cdf27a;
-		--att-bg: rgba(245, 175, 50, 0.20);
-		--att-ink: #f3c46e;
-		--chip: rgba(255, 255, 255, 0.09);
+		--row-alt: transparent;
+		--accent: #ececf1;
+		--accent-ink: #ececf1;
+		--accent-soft: rgba(255, 255, 255, 0.14);
+		--accent-text: #121317;
+		--pill: #ececf1;
+		--pill-text: #121317;
+		--ring: rgba(255, 255, 255, 0.30);
+		--pos-bg: #3b422d;
+		--pos-ink: #d2ee8c;
+		--att-bg: #433827;
+		--att-ink: #f4cf8a;
+		--ok: #c5e07b;
+		--warn: #f4c871;
+		--err: #e6a5a7;
 		--card-shadow: none;
 	}
 }
@@ -71,194 +97,269 @@
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; color: var(--text); overflow: hidden; }
 body { background: var(--bg); }
-#app { display: flex; flex-direction: column; height: 100vh; }
-.search-modes { display: flex; gap: 5px; padding: 8px 13px 0; }
-.search-modes button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.search-modes button[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent); }
-.author-panel { padding: 12px 13px; border-bottom: 1px solid var(--border); }
-.author-query { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 9px; }
-.author-actions { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 1px; }
-.author-help { margin: 8px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
-.author-profiles { display: flex; flex-wrap: wrap; gap: 8px; max-height: 180px; overflow: auto; }
-.author-profile { display: flex; flex: 1 1 250px; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; min-width: 0; }
-.author-profile.selected { border-color: var(--accent); background: var(--accent-soft); }
-.author-profile-info { min-width: 0; }
-.author-profile-name { font-weight: 650; }
-.author-profile-meta { color: var(--muted); font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
-.author-profile-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+#app { display: flex; flex-direction: column; height: 100vh; padding: 8px 16px 4px; gap: 8px; }
 .sprite { display: none; }
 .ic { width: 14px; height: 14px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
 .ic.muted { color: var(--muted); }
-
-.glass {
-	background: var(--glass);
-	backdrop-filter: saturate(180%) blur(22px);
-	-webkit-backdrop-filter: saturate(180%) blur(22px);
-}
-
-/* ---------------------------------------------------------------- controls */
-.row { display: flex; align-items: center; gap: 6px; }
+.row { display: flex; align-items: center; gap: 8px; }
 .spacer { flex: 1; }
-.sep { width: 1px; height: 17px; background: var(--border-strong); margin: 0 3px; opacity: .7; }
+.sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 4px; opacity: .7; }
 .dash { color: var(--muted); }
+.hint { color: var(--muted); font-size: 11px; line-height: 16px; margin-top: 12px; }
 
+/* ---------------------------------------------------------------- controls: one 32px family */
 input[type=text], input[type=number], input[type=search], select {
-	font: inherit; padding: 4px 7px; color: var(--text);
-	border: 1px solid var(--border-strong); border-radius: 10px;
+	font: inherit; font-size: 13px; line-height: 20px; height: 32px; padding: 0 16px; color: var(--text);
+	border: 1px solid var(--border-strong); border-radius: 999px;
 	background: var(--bg-tint);
 	transition: border-color .12s, box-shadow .12s, background .12s;
 }
-input::placeholder { color: var(--muted); }
+input::placeholder { color: var(--muted); opacity: 1; }
 input:hover, select:hover { border-color: var(--accent); }
-input:focus, select:focus, button:focus-visible {
+input:focus, select:focus, button:focus-visible, .sel-btn:focus-visible, summary:focus-visible {
 	outline: none; border-color: var(--accent);
-	box-shadow: 0 0 0 3px var(--accent-soft);
+	box-shadow: 0 0 0 3px var(--ring);
 }
 select { appearance: none; }
 
 button {
-	font: inherit; padding: 4px 10px; color: var(--text); cursor: pointer;
+	font: inherit; font-weight: 500; height: 32px; padding: 0 16px; color: var(--text); cursor: pointer;
+	display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;
 	border: 1px solid var(--border-strong); border-radius: 999px;
 	background: var(--glass-strong);
 	transition: background .12s, border-color .12s, transform .04s;
 }
-button.icon-text { display: inline-flex; align-items: center; gap: 5px; }
-button:hover:not(:disabled) { background: var(--row-hover); border-color: var(--accent); }
+button:hover:not(:disabled) { background: var(--row-hover); border-color: var(--border-strong); }
 button:active:not(:disabled) { transform: translateY(0.5px); }
-button:disabled { opacity: .42; cursor: default; }
-button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
-button.preview-action { color: var(--accent-ink); border-color: var(--accent); white-space: nowrap; }
-button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.09); }
-button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
-button.ghost:hover:not(:disabled) { background: var(--row-hover); border-color: transparent; color: var(--text); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary, button.primary:hover:not(:disabled) { background: var(--pill); color: var(--pill-text); border-color: transparent; font-weight: 600; }
+button.primary:hover:not(:disabled) { opacity: .88; }
+button.primary:disabled { opacity: 1; background: var(--chip); color: var(--muted); border-color: var(--border); }
+button.preview-action { white-space: nowrap; }
+button.ghost, button.ghost:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--muted); }
+button.ghost:hover:not(:disabled) { background: var(--row-hover); color: var(--text); }
 
-/* ---------------------------------------------------------------- query bar */
-.query {
-	display: flex; flex-wrap: wrap; gap: 8px 11px; padding: 11px 13px;
-	border-bottom: 1px solid var(--border);
+/* a tray of segments: 32px tray, 26px segments, one solid dark pill for the chosen one.
+   The pressed rule names :hover too, so hovering the chosen segment keeps its fill and its ink. */
+.search-modes, .lib-filter, .metrics-basis { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: 999px; background: var(--chip); }
+.search-modes button, .lib-filter button, .metrics-basis button {
+	height: 26px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-weight: 500;
 }
-.field { display: flex; flex-direction: column; gap: 3px; min-width: 112px; }
-.field.grow { flex: 1 1 170px; }
+.search-modes button:hover:not(:disabled), .lib-filter button:hover:not(:disabled), .metrics-basis button:hover:not(:disabled) { background: var(--row-hover); color: var(--text); border-color: transparent; }
+.search-modes button[aria-pressed="true"], .search-modes button[aria-pressed="true"]:hover:not(:disabled),
+.lib-filter button[aria-pressed="true"], .lib-filter button[aria-pressed="true"]:hover:not(:disabled),
+.metrics-basis button[aria-pressed="true"], .metrics-basis button[aria-pressed="true"]:hover:not(:disabled),
+#selected-only[aria-pressed="true"], #selected-only[aria-pressed="true"]:hover:not(:disabled) {
+	background: var(--pill); color: var(--pill-text); border-color: transparent; font-weight: 600;
+}
+
+/* small round icon buttons: 20px for a help mark or a clear cross, 32px for a banner's close */
+.note-help, .filter-clear { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; line-height: 16px; }
+.note-help { border: 1px solid var(--border-strong); }
+.note-help:hover:not(:disabled), .filter-clear:hover:not(:disabled) { background: var(--row-hover); color: var(--text); }
+.filter-clear { font-size: 13px; line-height: 20px; }
+
+/* ---------------------------------------------------------------- cards */
+.query, .combined-options, .author-panel, #metrics, .table-wrap, #detail, #import-bar {
+	background: var(--card); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--card-shadow);
+}
+input[type=checkbox] { accent-color: var(--pill); }
+
+/* ---------------------------------------------------------------- the paper form */
+.search-modes { align-self: flex-start; margin: 0; }
+.query { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 16px 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 112px; }
+.field.grow { flex: 1 1 168px; }
 .field.grow2 { flex: 2 1 240px; }
-.field.narrow { width: 82px; min-width: 82px; }
-.field.years .row input { width: 64px; }
-.field label { font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--muted); }
+.field.narrow { width: 96px; min-width: 96px; }
+.field.years .row input { width: 80px; }
+.field label, .author-query > label.field > span, .pop-native-fields label { font-size: 12px; font-weight: 500; line-height: 18px; color: var(--muted); }
+.query .cond-toggle { justify-content: flex-start; }
+.query > .combined-options { order: 98; flex: 1 1 100%; padding: 12px 0 0; background: transparent; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+.combined-options summary { cursor: pointer; color: var(--muted); }
+.combined-source-list { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; }
+.combined-source-list label { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 12px 0 8px; border: 1px solid var(--border); border-radius: 999px; white-space: nowrap; }
+.combined-options p { margin: 8px 0 0; color: var(--muted); }
+.pop-native-fields { display: flex; flex-wrap: wrap; gap: 8px 16px; padding-top: 8px; }
+.pop-native-fields label { display: flex; flex: 1 1 152px; flex-direction: column; gap: 4px; }
+.pop-native-fields .pop-raw-field { flex-basis: 100%; }
+
+/* the form folds to one line once there are results */
+.cond-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 0 12px 0 16px; border-radius: 999px; background: var(--chip); border-color: transparent; color: var(--text); text-align: left; }
+.cond-toggle:hover:not(:disabled) { background: var(--row-sel); border-color: transparent; }
+.cond-label { flex: none; font-weight: 600; }
+.cond-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-weight: 400; }
+.field.cond { flex: 0 0 auto; min-width: 112px; }
+#query-form.collapsed { flex-wrap: nowrap; align-items: center; padding: 12px 16px; }
+#query-form.collapsed .field:not(.keep) { display: none; }
+#query-form.collapsed .field > label { display: none; }
+#query-form.collapsed .field.grow2 { flex: 0 1 304px; min-width: 160px; }
+#query-form.collapsed .field.cond { flex: 1 1 auto; min-width: 0; }
+#query-form.collapsed .field.buttons { flex: none; }
+#query-form.collapsed .combined-options { display: none; }
+#query-form:not(.collapsed) .field.cond { order: 97; margin-left: auto; flex: 0 0 auto; min-width: 0; align-self: flex-end; }
+#query-form:not(.collapsed) .field.cond > label { display: none; }
+#query-form:not(.collapsed) .cond-toggle { width: auto; background: transparent; border-color: transparent; color: var(--muted); }
+#query-form:not(.collapsed) .cond-toggle:hover:not(:disabled) { background: var(--row-hover); color: var(--text); border-color: transparent; }
+
+/* ---------------------------------------------------------------- the author tab: the same rhythm */
+.author-panel { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 16px; }
+.author-query { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.author-query .field select { min-width: 152px; }
+.author-query .sel { min-width: 152px; }
+.author-query .field.grow2 { flex: 2 1 240px; }
+.author-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.author-helprow { display: flex; align-items: center; gap: 8px; }
+.author-help { margin: 0; color: var(--muted); }
+.author-help-more { max-width: 80ch; }
+.author-profiles { display: flex; flex-wrap: wrap; gap: 8px; max-height: 192px; overflow: auto; }
+.author-profile { display: flex; flex: 1 1 248px; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--r-box); min-width: 0; }
+.author-profile.selected { background: var(--row-sel); border-color: var(--border-strong); }
+.author-profile-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.author-profile-name { font-weight: 600; }
+.author-profile-meta { color: var(--muted); font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
+.author-profile-actions { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
 
 /* ---------------------------------------------------------------- banner */
-.banner {
-	display: flex; align-items: center; gap: 8px; padding: 7px 13px;
-	background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--glass);
-	backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-	border-bottom: 1px solid var(--border); color: var(--text);
-}
+.banner { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--r-box); color: var(--muted); }
+.banner.warn { background: var(--att-bg); color: var(--att-ink); border-color: transparent; }
+.banner .banner-close { width: 32px; padding: 0; border-color: transparent; background: transparent; color: inherit; font-size: 13px; line-height: 20px; }
+.banner .banner-close:hover:not(:disabled) { background: var(--row-hover); border-color: transparent; }
 
 /* ---------------------------------------------------------------- layout */
 #main { display: flex; flex: 1 1 auto; min-height: 0; }
-#metrics { width: 250px; flex: 0 0 auto; padding: 11px 13px; overflow: auto; border-right: 1px solid var(--border); }
-#metrics h3 { margin: 0 0 9px; font-size: 12px; letter-spacing: .01em; }
-#metrics-table { width: 100%; border-collapse: collapse; }
-#metrics-table td { padding: 3.5px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
-#metrics-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; color: var(--text); }
-#metrics-table tr.hl td, #metrics-table tr.hl td:last-child { color: var(--accent-ink); }
-.hint { color: var(--muted); font-size: 11px; margin-top: 11px; line-height: 1.5; }
-
-.splitter-v { flex: 0 0 5px; cursor: col-resize; background: transparent; border-right: 1px solid transparent; }
-.splitter-v:hover, .splitter-v.dragging { background: var(--accent-soft); }
-.splitter-h { height: 5px; cursor: row-resize; background: transparent; }
-.splitter-h:hover, .splitter-h.dragging { background: var(--accent-soft); }
-
+#metrics { width: 250px; flex: 0 0 auto; padding: 16px; overflow: auto; }
 #results { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
-/* One line at 1280px: the search box and the facet chip give way before anything wraps. */
-.toolbar { display: flex; flex-wrap: nowrap; gap: 5px; align-items: center; padding: 7px 11px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.toolbar > button, .toolbar > .lib-filter, .toolbar > .sep { flex: none; }
-.searchbox { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; flex: 1 1 140px; min-width: 96px; width: auto; max-width: 250px;
-	border: 1px solid var(--border-strong); border-radius: 999px; background: var(--bg-tint); }
-.searchbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.searchbox input { border: none; background: transparent; padding: 1px 0; width: 100%; }
+.splitter-v { flex: 0 0 8px; cursor: col-resize; background: transparent; }
+.splitter-h { height: 8px; cursor: row-resize; background: transparent; }
+.splitter-v:hover::after, .splitter-v.dragging::after { content: ""; display: block; width: 2px; height: 100%; margin: 0 auto; background: var(--border-strong); }
+.splitter-h:hover::after, .splitter-h.dragging::after { content: ""; display: block; height: 2px; margin: 3px 0; background: var(--border-strong); }
+
+/* ---------------------------------------------------------------- citation metrics card */
+#metrics h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; line-height: 20px; color: var(--text); }
+#metrics-table { width: 100%; border-collapse: collapse; }
+#metrics-table td { padding: 0; height: 26px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 18px; }
+#metrics-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--text); }
+#metrics-table tr.hl td, #metrics-table tr.hl td:last-child { color: var(--text); }
+#metrics-table tr.hl td:last-child { font-weight: 600; }
+#metrics-table tr:last-child td { border-bottom: 0; }
+.metrics-hint { margin: 4px 0 0; color: var(--muted); }
+/* Results per year: grey bars, the chosen years darker, labels only at the ends. */
+.metrics-years { margin: 0 0 12px; }
+.yr-bars { display: flex; align-items: flex-end; gap: 4px; height: 48px; }
+.yr-bar { flex: 1 1 0; min-width: 2px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; display: flex; align-items: flex-end; cursor: pointer; }
+.yr-bar span { display: block; width: 100%; border-radius: 4px 4px 0 0; background: var(--muted); opacity: .22; }
+.yr-bar.on span { opacity: .5; }
+.yr-bar:hover span { opacity: .75; }
+.yr-bar:hover:not(:disabled) { background: transparent; border-color: transparent; }
+.yr-ends { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 16px; }
+.yr-clear { height: 26px; padding: 0 12px; font-size: 11px; line-height: 16px; white-space: nowrap; }
+.metrics-basis { display: flex; flex-wrap: wrap; margin: 0 0 12px; border-radius: 16px; }
+.metrics-basis button { flex: 0 0 auto; white-space: nowrap; }
+.metrics-notes { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.metrics-note-line { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; line-height: 16px; }
+.note-help { flex: 0 0 auto; }
+.metrics-note-full { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 16px; }
+
+/* ---------------------------------------------------------------- results toolbar: one line at every width */
+.toolbar { display: flex; flex-wrap: nowrap; gap: 8px; align-items: center; min-height: 32px; margin-bottom: 8px; background: transparent; border: 0; white-space: nowrap; }
+.toolbar > * { flex: none; }
+.toolbar > .searchbox { flex: 1 1 144px; min-width: 128px; max-width: 256px; }
+.toolbar > .facet-chip { flex: 0 1 auto; }
+.toolbar > .spacer { flex: 1 1 0; min-width: 0; }
+.searchbox { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 16px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--card); }
+.searchbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.searchbox input { border: none; background: transparent; padding: 0; height: auto; width: 100%; min-width: 0; border-radius: 0; }
 .searchbox input:focus { box-shadow: none; border: none; }
-.filter-clear { border: 0; background: transparent; color: var(--muted); padding: 0 2px; line-height: 1; cursor: pointer; font-size: 14px; }
-.filter-clear:hover { color: var(--text); }
+.facet-chip { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 6px 0 16px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--card); white-space: nowrap; min-width: 0; max-width: 224px; overflow: hidden; }
+#facet-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lib-filter { flex: none; }
+.lib-filter button { padding: 0 4px 0 12px; gap: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lib-filter button:disabled { opacity: .5; }
+/* each count is its own small rounded badge */
+.lib-filter .lib-n { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--card); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 16px; font-variant-numeric: tabular-nums; }
+.lib-filter button[aria-pressed="true"] .lib-n { background: rgba(255, 255, 255, 0.2); color: var(--pill-text); }
+#selected-only { height: 26px; padding: 0 12px; }
+.menu-btn { color: var(--muted); background: transparent; border-color: transparent; white-space: nowrap; padding: 0 12px 0 16px; }
+.menu-btn:hover:not(:disabled), .menu-btn[aria-expanded="true"] { color: var(--text); background: var(--row-hover); border-color: transparent; }
+#toggle-metrics[aria-pressed="false"] { color: var(--muted); }
+@media (prefers-color-scheme: dark) { .lib-filter button[aria-pressed="true"] .lib-n { background: rgba(0, 0, 0, 0.14); } }
+@media (max-width: 1000px) {
+	.toolbar .sep { display: none; }
+	.toolbar { gap: 4px; }
+	.toolbar > .searchbox { min-width: 120px; }
+	.toolbar button:not(.filter-clear) { padding-inline: 12px; }
+	.toolbar #preview-btn span { display: none; }
+	.toolbar .lib-filter button { padding: 0 4px 0 12px; gap: 4px; }
+	.toolbar button.menu-btn { padding: 0 8px 0 12px; }
+	#results-table[data-cols="basic"] [data-k="journalIF"], #results-table[data-cols="basic"] [data-k="pdf"] { display: none; }
+	/* Narrow: the title takes whatever the compact columns leave, so the table fits the pane instead of scrolling sideways. */
+	#results-table[data-cols="basic"][data-status] [data-k="cpy"] { display: none; }
+	#cols col[data-k="title"] { width: auto !important; }
+	#cols col[data-k="venue"] { width: 120px !important; }
+	#cols col[data-k="inLibrary"] { width: 88px !important; }
+	#cols col[data-k="status"] { width: 112px !important; }
+}
 
 /* ---------------------------------------------------------------- table */
-/* Rows sit on the page colour, so the status and journal inks are checked against one known background. */
-.table-wrap { flex: 1 1 auto; overflow: auto; position: relative; background: var(--bg); }
+.table-wrap { flex: 1 1 0; min-height: calc(var(--head-h) + 5 * var(--row-h)); overflow: auto; position: relative; padding-inline: 8px; scroll-padding-top: var(--head-h); scroll-padding-bottom: var(--fade-h); }
 .table-wrap:focus { outline: none; }
+.table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 #results-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
 #results-table th, #results-table td {
-	padding: 6px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+	padding: 0 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 	border-bottom: 1px solid var(--border);
 }
 #results-table th {
-	position: sticky; top: 0; z-index: 2; cursor: pointer; user-select: none;
-	font-weight: 650; font-size: 11px; color: var(--muted);
-	background: var(--glass-strong);
-	backdrop-filter: saturate(180%) blur(22px); -webkit-backdrop-filter: saturate(180%) blur(22px);
-	border-bottom: 1px solid var(--border-strong);
+	position: sticky; top: 0; z-index: 2; cursor: pointer; user-select: none; height: var(--head-h);
+	font-weight: 500; font-size: 12px; color: var(--muted); background: var(--card);
+	border-bottom: 1px solid var(--border);
 }
+#results-table td { height: var(--row-h); }
+#results-table tbody tr:last-child td { border-bottom: 0; }
 #results-table th:hover { color: var(--text); }
 #results-table th[draggable="true"] { cursor: grab; }
 #results-table th.column-dragging { opacity: .45; cursor: grabbing; }
-#results-table th.column-drop-before { box-shadow: inset 3px 0 0 var(--accent); }
-#results-table th.column-drop-after { box-shadow: inset -3px 0 0 var(--accent); }
-#results-table th .rz { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; }
+#results-table th.column-drop-before { box-shadow: inset 4px 0 0 var(--accent); }
+#results-table th.column-drop-after { box-shadow: inset -4px 0 0 var(--accent); }
+#results-table th .rz { position: absolute; top: 0; right: 0; width: 8px; height: 100%; cursor: col-resize; }
 #results-table th .rz:hover { background: var(--accent); opacity: .5; }
-/* The sort mark follows its own header's text (the label gives up 13px to it, so "Rank" does not become "Ra…"). */
+/* The sort mark follows its own header's text (the label gives up 14px to it, so "Rank" does not become "Ra…"). */
 #results-table th[data-sort] > span:first-child { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 #results-table th.sorted-asc > span:first-child, #results-table th.sorted-desc > span:first-child { max-width: calc(100% - 14px); }
-#results-table th .sort-mark { display: inline-block; width: 14px; padding-left: 3px; font-size: 11px; line-height: 1.2; color: var(--text); vertical-align: bottom; }
+#results-table th .sort-mark { display: inline-block; width: 14px; font-size: 11px; line-height: 16px; vertical-align: bottom; color: inherit; }
+#results-table th.sorted-asc, #results-table th.sorted-desc { color: var(--text); }
+#results-table th.sorted-asc .sort-mark::before, #results-table th.sorted-desc .sort-mark::before {
+	content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 4px; vertical-align: 1px;
+	border: 0 solid currentColor; border-right-width: 1.5px; border-bottom-width: 1.5px; transform: rotate(45deg);
+}
+#results-table th.sorted-asc .sort-mark::before { transform: rotate(-135deg); vertical-align: -1px; }
 #results-table td.num, #results-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
-#results-table th.mini, #results-table td.mini { text-align: center; }
+#results-table th.mini, #results-table td.mini { text-align: center; padding-inline: 8px; }
+#results-table th.chk, #results-table td.chk { padding: 0 4px; text-align: center; width: 28px; }
+#results-table td.title { font-size: 13px; font-weight: 500; line-height: 20px; }
 #results-table td.doi a.doi-link { color: inherit; text-decoration: none; }
-#results-table td.doi a.doi-link:hover { text-decoration: underline; color: var(--accent-ink); }
+#results-table td.doi a.doi-link:hover { text-decoration: underline; }
 #results-table td[role="button"] { cursor: pointer; }
-#results-table td[role="button"]:hover { color: var(--accent-ink); }
+#results-table td[data-k="doi"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 16px; }
 .marquee-text { display: block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; scroll-behavior: auto; }
 /* At rest a cell shows its beginning with an ellipsis; the row under the pointer rolls once. */
-#results-table tbody tr:hover:not(.selected) td { background: var(--row-hover); }
-#results-table td.title { font-weight: 500; }
 .marquee-overflow .marquee-text { text-overflow: ellipsis; }
 .marquee-overflow.marquee-active .marquee-text { text-overflow: clip; }
 .marquee-reduced .marquee-text { text-overflow: ellipsis; }
 @media (prefers-reduced-motion: reduce) {
 	.marquee-text { scroll-behavior: auto; text-overflow: ellipsis; }
 }
+/* hover, focus and selection are fills of the row, rounded at its two ends; no outline, no edge bar */
 #results-table tbody tr:nth-child(even) { background: var(--row-alt); }
-#results-table tbody tr:hover { background: var(--row-hover); }
-#results-table tbody tr.selected { background: var(--row-sel); }
-#results-table tbody tr.focused td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
-#results-table tbody tr.focused { outline: 1px solid var(--accent); outline-offset: -1px; }
+#results-table tbody tr:hover, #results-table tbody tr.selected, #results-table tbody tr.focused { background: transparent; outline: 0; }
+#results-table tbody tr:hover:not(.selected):not(.focused) td { background: var(--row-hover); }
+#results-table tbody tr.selected td { background: var(--row-sel); }
+#results-table tbody tr.focused td { background: var(--row-sel) linear-gradient(var(--row-hover), var(--row-hover)); }
+#results-table tbody tr:hover td:first-child, #results-table tbody tr.selected td:first-child, #results-table tbody tr.focused td:first-child { border-radius: var(--r-row) 0 0 var(--r-row); }
+#results-table tbody tr:hover td:last-child, #results-table tbody tr.selected td:last-child, #results-table tbody tr.focused td:last-child { border-radius: 0 var(--r-row) var(--r-row) 0; }
+#results-table tbody tr.selected td, #results-table tbody tr.focused td { border-bottom-color: transparent; }
 #results-table tbody tr.in-library td.title { color: var(--muted); }
-.chk { width: 28px; }
-th.chk, td.chk { text-align: center; padding: 4px 2px; }
-td.lib { color: var(--ok); font-weight: 700; }
-td.pdf { color: var(--accent-ink); }
-td.status.ok { color: var(--ok); }
-td.status.warn { color: var(--warn); }
-td.status.err { color: var(--err); }
-.empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 9px; padding-inline: max(24px, calc(50% - 22ch)); text-align: center; text-wrap: pretty; color: var(--muted); pointer-events: none; }
-#busy { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
-.spinner { width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ---------------------------------------------------------------- detail */
-#detail { height: 190px; flex: 0 0 auto; overflow: auto; padding: 11px 13px; border-top: 1px solid var(--border); }
-.detail-empty { color: var(--muted); padding: 6px 0; }
-.detail-head { display: flex; align-items: flex-start; gap: 10px; }
-#detail-body .badges { margin-top: 4px; }
-.d-title { font-size: 13.5px; font-weight: 650; line-height: 1.4; flex: 1; }
-.badges { display: flex; gap: 4px; flex-wrap: wrap; }
-/* Plain chips: the only colour in the detail is the journal's own mark. */
-.badge { background: var(--chip); color: var(--muted); border-radius: 7px; padding: 1.5px 8px; font-size: 11px; white-space: nowrap; }
-.badge.lib { color: var(--text); font-weight: 600; }
-/* The figures behind the row, as one plain sentence. */
-.d-evidence { margin-top: 4px; color: var(--text); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
-.d-facets { margin-top: 3px; color: var(--muted); font-size: 11.5px; line-height: 1.6; }
-.d-facet button.facet-show { font-size: 11px; padding: 0 7px; border-radius: 7px; color: var(--text); text-decoration: underline; }
-.facet-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border: 1px solid var(--border-strong); border-radius: 7px; font-size: 11.5px; white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 220px; overflow: hidden; }
-#facet-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#facet-chip .filter-clear { flex: none; }
-#selected-only { font-size: 11.5px; padding: 2px 8px; border-radius: 7px; }
-#selected-only[aria-pressed="true"] { font-weight: 650; border-color: var(--border-strong); }
 /* Columns: basic keeps the title readable. Rank, institution, country, tier and DOI
    stay in the detail; Status only appears once a row has one. The narrowest windows
    below ~1400px also send the authors down to the detail. */
@@ -266,334 +367,165 @@ td.status.err { color: var(--err); }
 #results-table[data-cols="basic"] [data-k="country"], #results-table[data-cols="basic"] [data-k="tier"],
 #results-table[data-cols="basic"] [data-k="doi"], #results-table[data-cols="basic"]:not([data-status]) [data-k="status"] { display: none; }
 @media (max-width: 1400px) { #results-table[data-cols="basic"] [data-k="authorString"] { display: none; } }
-td.if { color: var(--text); font-weight: 650; }
-td.if.estimate { color: var(--muted); font-weight: 500; }
-
-/* ---------------------------------------------------------------- journal mark */
-/* The publisher's lettermark, in its colour, ahead of the journal's name. The
-   colour lives on the mark alone; the name stays in ink so the column reads. */
-.jmark {
-	display: inline-flex; align-items: center; justify-content: center; vertical-align: -3px; margin-right: 5px;
-	min-width: 26px; height: 17px; padding: 0 5px; border-radius: 7px;
-	font-size: 11px; font-weight: 700; letter-spacing: .02em; line-height: 1; white-space: nowrap;
-	font-variant-numeric: normal;
+td.if { color: var(--text); font-weight: 500; }
+td.if.estimate { color: var(--muted); font-weight: 400; }
+td.country { font-variant-numeric: tabular-nums; }
+/* the library column: the check sits at one x with or without the reading state after it */
+#results-table th[data-sort="inLibrary"], #results-table td.lib { text-align: left; padding-left: 16px; }
+td.lib { color: var(--ok); font-weight: 600; }
+/* the PDF candidate and the row status share one dot: the same glyph at the same size, in the neutral or the status ink */
+td.pdf { color: var(--muted); font-size: 11px; line-height: 16px; }
+td.status { font-size: 12px; }
+td.status:not(:empty)::before { content: "\25CF"; margin-right: 4px; font-size: 11px; }
+td.status.ok { color: var(--ok); }
+td.status.warn { color: var(--warn); }
+td.status.err { color: var(--err); }
+.read-state { margin-left: 8px; font-size: 11px; line-height: 16px; font-weight: 400; color: var(--muted); white-space: nowrap; vertical-align: middle; }
+.empty { position: absolute; inset: 0; top: var(--head-h); display: flex; align-items: center; justify-content: center; gap: 8px; padding-inline: max(24px, calc(50% - 22ch)); text-align: center; text-wrap: pretty; word-break: keep-all; color: var(--muted); pointer-events: none; }
+#busy { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* the end of a scrolling card fades out instead of cutting a row or a line mid-glyph */
+.table-wrap::after, #metrics::after, #detail::after {
+	content: ""; display: block; flex: none; position: sticky; bottom: 0; height: var(--fade-h); pointer-events: none;
+	background: linear-gradient(to bottom, transparent, var(--card));
 }
-.badges .jmark { height: 18px; min-width: 26px; font-size: 11px; border-radius: 7px; padding: 0 7px; }
+#metrics::after, #detail::after { margin: 0 -16px; }
+#metrics::after { height: 24px; }
+#detail[data-empty]::after { display: none; }
+#metrics, #detail { padding-bottom: 0; }
 
-/* ---------------------------------------------------------------- affiliation */
-/* The country cell is a flag and a code; the tier cell is a chip whose colour says
-   how the lab stands, so a column of them reads at a glance. */
-td.country { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
-.tier { display: inline-block; padding: 1px 7px; border-radius: 7px; font-size: 11px; font-weight: 650; line-height: 1.5; white-space: nowrap; }
+/* ---------------------------------------------------------------- chips: badges and pills of 20px */
+.badge, .pill, .tier, .jmark, .new-mark, #selected-count {
+	display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 8px; border-radius: 999px;
+	font-size: 11px; font-weight: 500; line-height: 16px; white-space: nowrap; vertical-align: middle;
+}
+.badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.badge { background: var(--chip); color: var(--muted); }
+.badge.lib { color: var(--pos-ink); background: var(--pos-bg); font-weight: 600; }
+.badge.src { gap: 4px; }
+.badge .brand-mark { flex: none; width: 12px; height: 12px; opacity: .85; }
+.pill { min-width: 28px; font-weight: 600; }
+.pill.pos { background: var(--pos-bg); color: var(--pos-ink); }
+#results-table td.title .new-mark { margin-right: 8px; background: var(--pos-bg); color: var(--pos-ink); font-weight: 600; }
+.tier { font-weight: 600; }
 .tier-t1 { background: var(--chip); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
 .tier-t2 { background: var(--chip); color: var(--text); }
 .tier-t3 { background: var(--chip); color: var(--muted); }
 .tier-t4 { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
-.d-where { margin-top: 4px; color: var(--muted); line-height: 1.5; }
-.d-where .tier { margin-left: 4px; vertical-align: 1px; }
+#selected-count { background: var(--chip); color: var(--muted); font-variant-numeric: tabular-nums; }
+#selected-count:empty { display: none; }
 
-/* ---------------------------------------------------------------- recent searches */
-.histmenu { min-width: 320px; max-width: 560px; }
-.histmenu .histopt { display: flex; flex-direction: column; gap: 1px; padding: 5px 11px; border-radius: 7px; cursor: pointer; }
-.histmenu .histopt:hover, .histmenu .histopt.hot { background: var(--accent); color: var(--accent-text); }
-.histmenu .histopt .h-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.histmenu .histopt .h-meta { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.histmenu .histempty { padding: 7px 11px; color: var(--muted); }
-.histmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
-.histmenu .histclear { padding: 5px 11px; border-radius: 7px; cursor: pointer; color: var(--muted); }
-.histmenu .histclear:hover { background: var(--row-hover); color: var(--text); }
-.d-authors { margin-top: 4px; }
-.d-meta { margin-top: 3px; color: var(--muted); }
-.d-actions { display: flex; gap: 6px; flex: none; }
-.d-abstract { margin-top: 6px; line-height: 1.6; white-space: pre-wrap; }
-/* What the row's own status says, in words: the tooltip alone hid why an add failed. */
-.d-status { margin-top: 3px; line-height: 1.5; }
+/* ---------------------------------------------------------------- journal mark */
+/* The publisher's lettermark, in its colour, ahead of the journal's name. The
+   colour lives on the mark alone; the name stays in ink so the column reads. */
+.jmark { margin-right: 8px; min-width: 28px; font-weight: 600; letter-spacing: .02em; font-variant-numeric: normal; }
+.badges .jmark { margin-right: 0; }
+/* journal inks: both themes travel on the element (--j-ink-l/-d, --j-fill-l/-d, --j-edge-l/-d);
+   the theme picks here, so a dark page, a live theme switch and a static copy all read true */
+.venue-known { --j-ink: var(--j-ink-l); color: var(--j-ink); font-weight: 600; }
+.jmark { --j-ink: var(--j-ink-l); --j-fill: var(--j-fill-l); --j-edge: var(--j-edge-l); color: var(--j-ink); background: var(--j-fill); box-shadow: inset 0 0 0 1px var(--j-edge); }
+@media (prefers-color-scheme: dark) {
+	.venue-known { --j-ink: var(--j-ink-d); }
+	.jmark { --j-ink: var(--j-ink-d); --j-fill: var(--j-fill-d); --j-edge: var(--j-edge-d); }
+}
+
+/* ---------------------------------------------------------------- detail card */
+#detail { height: 232px; flex: 0 1 auto; min-height: 120px; overflow: auto; padding: 16px; }
+#detail[data-empty] { height: auto !important; min-height: 0; padding: 8px 16px; overflow: hidden; flex: none; }
+.detail-empty { color: var(--muted); }
+#detail[data-empty] .detail-empty { display: flex; align-items: center; min-height: 32px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* one rhythm: 4px between the lines of a block, 8px after the title, 12px between blocks */
+#detail-body { display: flex; flex-direction: column; gap: 4px; }
+.detail-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 4px; }
+.d-title { flex: 1; font-size: 16px; font-weight: 600; line-height: 22px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.d-actions { display: flex; gap: 8px; flex: none; align-self: flex-start; }
+#detail-body .badges { margin-bottom: 4px; }
+.d-evidence { color: var(--muted); font-variant-numeric: tabular-nums; }
+.d-authors { color: var(--text); }
+.d-where, .d-collections, .d-versions, .d-meta, .d-facets { color: var(--muted); }
+.d-facets, .d-meta { font-size: 11px; line-height: 16px; }
+.d-where .tier { margin-left: 4px; }
+.d-status { min-height: 20px; }
 .d-status.ok { color: var(--ok); }
-.d-status.warn { color: var(--warn); }
-.d-status.err { color: var(--err); }
-.d-versions { margin-top: 6px; color: var(--muted); line-height: 1.5; }
-.d-versions button { font-size: 11px; padding: 0 7px; border-radius: 7px; color: var(--text); text-decoration: underline; }
+.d-status.warn, .d-status.err { display: inline-flex; align-items: center; align-self: flex-start; padding: 0 8px; border-radius: 999px; background: var(--att-bg); color: var(--att-ink); }
+.d-versions button, .d-facet button.facet-show { height: 26px; margin-block: -4px; padding: 0 8px; font-size: 11px; line-height: 16px; color: var(--text); text-decoration: underline; vertical-align: middle; }
 .d-fold { margin-top: 8px; color: var(--muted); }
-.d-fold summary { cursor: pointer; }
+.d-abstract { margin-top: 8px; color: var(--text); white-space: pre-wrap; }
+summary { list-style: none; display: flex; align-items: center; min-height: 26px; cursor: pointer; }
+summary::-webkit-details-marker { display: none; }
+summary::marker { content: ""; }
 
 /* ---------------------------------------------------------------- bottom bars */
-#import-bar { display: flex; align-items: center; gap: 12px; padding: 9px 13px; border-top: 1px solid var(--border); flex-wrap: wrap; }
-#import-bar .sel { max-width: 300px; }
-label.cb { display: flex; align-items: center; gap: 5px; color: var(--muted); white-space: nowrap; }
-#selected-count { font-variant-numeric: tabular-nums; color: var(--muted); }
-#statusbar { display: flex; align-items: center; gap: 10px; padding: 5px 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; background: var(--bg-tint); }
+#import-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+#import-bar .sel { min-width: 152px; max-width: 256px; }
+.import-target-label { color: var(--muted); }
+.import-opts-toggle { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--muted); }
+.import-opts-toggle::after { margin-left: 8px; }
+#import-opts { order: 9; flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+label.cb { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 16px 0 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); white-space: nowrap; cursor: pointer; }
+#statusbar { display: flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--muted); font-size: 11px; line-height: 16px; background: transparent; }
 #statusbar.err #status { color: var(--err); }
 #statusbar.warn #status { color: var(--warn); }
-#progress { width: 190px; }
+#progress { width: 192px; }
 
-/* ---------------------------------------------------------------- context menu */
+/* ---------------------------------------------------------------- menus: in-page, soft grey hover */
 .ctxmenu {
-	position: fixed; z-index: 50; min-width: 190px; padding: 5px;
-	background: var(--glass-strong); backdrop-filter: saturate(180%) blur(26px); -webkit-backdrop-filter: saturate(180%) blur(26px);
-	border: 1px solid var(--border-strong); border-radius: 9px;
+	position: fixed; z-index: 50; min-width: 192px; padding: 4px;
+	background: var(--glass-strong);
+	border: 1px solid var(--border-strong); border-radius: var(--r-box);
 }
-.ctxmenu div { padding: 5px 11px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
-.ctxmenu div:hover { background: var(--accent); color: var(--accent-text); }
+.ctxmenu div { padding: 4px 12px; border-radius: var(--r-row); cursor: pointer; white-space: nowrap; }
+.ctxmenu div:hover { background: var(--row-sel); color: var(--text); }
 .ctxmenu div.disabled { opacity: .38; pointer-events: none; }
-.ctxmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
+.ctxmenu hr, .tbmenu hr, .histmenu hr { border: none; border-top: 1px solid var(--border); margin: 4px; }
+.selmenu {
+	position: fixed; z-index: 60; padding: 4px; overflow-y: auto;
+	background: var(--menu-bg); border: 1px solid var(--border-strong);
+	border-radius: var(--r-box);
+}
+.selopt { padding: 4px 12px; border-radius: var(--r-row); cursor: pointer; white-space: nowrap; }
+.selopt.on { font-weight: 600; }
+.selopt.hot, .tbmenu .selopt:focus { background: var(--row-sel); color: var(--text); }
+.tbmenu { min-width: 176px; }
+.tbmenu .selopt::before { content: ""; display: inline-block; width: 16px; }
+.tbmenu .selopt[aria-checked="true"]::before { content: "✓"; }
+.tbmenu .selopt:focus { outline: none; }
+.tbmenu .selopt[aria-disabled="true"] { opacity: .5; }
+.histmenu { min-width: 344px; max-width: 560px; }
+.histmenu .histopt { display: flex; flex-direction: column; gap: 0; padding: 8px 12px; border-radius: var(--r-row); cursor: pointer; }
+.histmenu .histopt:hover, .histmenu .histopt.hot { background: var(--row-sel); color: var(--text); }
+.histmenu .histopt .h-label { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.histmenu .histopt .h-meta { font-size: 11px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.histmenu .histempty { padding: 8px 12px; color: var(--muted); }
+.histmenu .histclear { padding: 8px 12px; border-radius: var(--r-row); cursor: pointer; color: var(--muted); }
+.histmenu .histclear:hover { background: var(--row-hover); color: var(--text); }
 
 /* ---------------------------------------------------------------- dropdowns */
 .sel { position: relative; display: flex; }
 .sel > select { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .sel-btn {
-	flex: 1 1 auto; display: flex; align-items: center; gap: 6px;
-	font: inherit; padding: 4px 7px; color: var(--text); text-align: left; cursor: pointer;
-	border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-tint);
+	flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 32px;
+	font: inherit; font-size: 13px; line-height: 20px; padding: 0 12px 0 16px; color: var(--text); text-align: left; cursor: pointer;
+	border: 1px solid var(--border-strong); border-radius: 999px; background: var(--bg-tint);
 	white-space: nowrap; overflow: hidden;
 }
 .sel-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
 .sel-btn:hover { border-color: var(--accent); background: var(--bg-tint); }
-.sel-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.selmenu {
-	position: fixed; z-index: 60; padding: 5px; overflow-y: auto;
-	background: var(--menu-bg); border: 1px solid var(--border-strong);
-	border-radius: 9px;
-}
-.selopt { padding: 5px 11px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
-.selopt.on { font-weight: 650; }
-.selopt.hot { background: var(--accent); color: var(--accent-text); }
-
-/* ---------------------------------------------------------------- proxy login window */
-#pl-bar { border-bottom: 1px solid var(--border); }
-.pl-url { color: var(--muted); font-size: 11px; max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pl-intro { margin: 0; padding: 9px 13px; color: var(--muted); line-height: 1.5; border-bottom: 1px solid var(--border); }
-#pl-browser-host { flex: 1 1 auto; display: flex; min-height: 0; }
-#pl-browser { flex: 1 1 auto; border: none; }
-
-/* A source badge wears its own mark: nine services rendered as identical grey
-   text is a list you read one word at a time. */
-.badge.src { display: inline-flex; align-items: center; gap: 5px; }
-.badge .brand-mark { flex: none; width: 12px; height: 12px; opacity: .85; }
-
-#toggle-metrics[aria-pressed="false"] { color: var(--muted); }
-.table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-
-/* The metrics sidebar before any search: one line saying what will appear, not a column of dashes. */
-.metrics-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-/* Which index the statistics are read from: plain buttons, the pressed one a step darker. */
-.metrics-basis { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0 4px; }
-.metrics-basis button { font-size: 11px; padding: 2px 5px; border-radius: 7px; white-space: nowrap; flex: 0 0 auto; }
-/* Each explanation is one line with a (?); the full text opens under it. */
-.metrics-notes { margin-top: 9px; }
-.metrics-note { margin-top: 5px; }
-.metrics-note-line { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
-.note-help { min-width: 18px; height: 18px; padding: 0; border-radius: 9px; font-size: 11px; line-height: 1; flex: 0 0 auto; }
-.metrics-note-full { margin: 4px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
-/* The reading state Style Custom keeps, next to the library check. */
-.read-state { margin-left: 4px; font-size: 11px; font-weight: 400; color: var(--muted); white-space: nowrap; }
-/* Add options: one folded line until rows are chosen. */
-.import-opts { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.import-opts-toggle { font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.metrics-basis button[aria-pressed="true"] { font-weight: 600; }
-
-/* Optional search coverage stays with the query controls. */
-.combined-options { flex: 0 0 auto; padding: 6px 16px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
-.combined-options summary { cursor: pointer; color: var(--muted); }
-.combined-source-list { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 8px; }
-.combined-source-list label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-.combined-options p { margin: 8px 0 0; color: var(--muted); }
-
-.pop-native-fields { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-top: 8px; }
-.pop-native-fields label { display: flex; flex: 1 1 150px; flex-direction: column; gap: 4px; }
-.pop-native-fields .pop-raw-field { flex-basis: 100%; }
-
-/* An identifier is not prose: a DOI is read character by character. */
-#results-table td[data-k="doi"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
-/* Korean at the Latin size reads a step small; the lang attribute is already set. */
-html[lang="ko"] .field label, html[lang="ko"] .hint, html[lang="ko"] #results-table th { font-size: 11.5px; }
-
-/* The collections an owned paper is filed in, one plain line. */
-.d-collections { margin-top: 4px; color: var(--muted); line-height: 1.5; }
-/* Results per year: grey bars, the chosen years darker, labels only at the ends. */
-.metrics-years { margin: 6px 0 8px; }
-.yr-bars { display: flex; align-items: flex-end; gap: 1px; height: 44px; }
-.yr-bar { flex: 1 1 0; min-width: 2px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; display: flex; align-items: flex-end; cursor: pointer; }
-.yr-bar span { display: block; width: 100%; background: var(--muted); opacity: .35; }
-.yr-bar.on span { opacity: .8; }
-.yr-bar:hover span { opacity: 1; }
-.yr-bar:hover:not(:disabled) { background: transparent; border-color: transparent; }
-.yr-ends { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.4; }
-.yr-clear { font-size: 11px; padding: 1px 5px; border-radius: 7px; white-space: nowrap; }
-
-/* In library: all / not owned / owned, each with its count after the other filters. */
-.lib-filter { display: inline-flex; align-items: center; gap: 2px; }
-.lib-filter button { font-size: 11.5px; padding: 2px 8px; border-radius: 7px; background: transparent; border-color: transparent; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.lib-filter button:hover:not(:disabled) { color: var(--text); }
-.lib-filter button[aria-pressed="true"] { color: var(--text); font-weight: 650; background: var(--chip); border-color: var(--border-strong); }
-/* Export and View: two plain menus instead of six buttons. */
-.menu-btn { color: var(--muted); background: transparent; border-color: transparent; white-space: nowrap; }
-.menu-btn:hover:not(:disabled), .menu-btn[aria-expanded="true"] { color: var(--text); background: var(--row-hover); border-color: transparent; }
-.tbmenu { min-width: 170px; }
-.tbmenu .selopt::before { content: ""; display: inline-block; width: 1.3em; }
-.tbmenu .selopt[aria-checked="true"]::before { content: "✓"; }
-.tbmenu .selopt:focus { outline: none; background: var(--accent); color: var(--accent-text); }
-.tbmenu .selopt[aria-disabled="true"] { opacity: .5; }
-.tbmenu hr { border: none; border-top: 1px solid var(--border); margin: 5px 4px; }
-
-/* ================================================================ premium dashboard layer
-   User direction 2026-10-01: grey canvas, white cards of large radius, hairline borders, a very
-   soft card elevation, selected = solid near-black pill, lime for positive and amber for attention.
-   No coloured bar ever runs along the edge of a rounded row or card. */
-#app { padding: 10px 14px 6px; gap: 8px; }
-.glass { backdrop-filter: none; -webkit-backdrop-filter: none; }
-.query, .combined-options, .author-panel, #metrics, .table-wrap, #detail, #import-bar {
-	background: var(--card); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--card-shadow);
-}
-input[type=checkbox] { accent-color: var(--pill); }
-
-/* segmented control: paper / author tabs */
-.search-modes { display: inline-flex; align-self: flex-start; gap: 2px; padding: 4px; margin: 0; border-radius: 999px; background: var(--chip); }
-.search-modes button, .search-modes button:hover:not(:disabled) { border: 0; border-radius: 999px; padding: 6px 18px; background: transparent; color: var(--muted); font-weight: 500; }
-.search-modes button:hover:not(:disabled) { color: var(--text); }
-.search-modes button[aria-pressed="true"], .search-modes button[aria-pressed="true"]:hover:not(:disabled) { background: var(--pill); color: var(--pill-text); font-weight: 600; }
-
-/* search form card */
-.query { padding: 12px 18px 14px; gap: 8px 12px; }
-.author-panel { padding: 16px 20px; }
-.field label { font-weight: 500; letter-spacing: 0; }
-input[type=text], input[type=number], input[type=search], select, .sel-btn { padding: 6px 11px; }
-button { padding: 5px 14px; }
-button:hover:not(:disabled) { background: var(--row-hover); border-color: var(--border-strong); }
-button.primary, button.primary:hover:not(:disabled) { background: var(--pill); color: var(--pill-text); border-color: transparent; }
-button.primary:hover:not(:disabled) { filter: none; opacity: .88; }
-button.preview-action { color: var(--text); border-color: var(--border-strong); }
-button.ghost, button.ghost:hover:not(:disabled) { background: transparent; border-color: transparent; }
-button.ghost:hover:not(:disabled) { background: var(--row-hover); }
-.author-profile { border-radius: 14px; }
-.author-profile.selected { border-color: var(--pill); background: var(--row-hover); }
-.combined-options { padding: 7px 18px 9px; }
-
-/* banner */
-.banner { padding: 9px 18px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; }
-.banner.warn { background: var(--att-bg); color: var(--att-ink); border-color: transparent; }
-
-/* the dashboard row: metrics card | results */
-.splitter-v { flex-basis: 12px; }
-.splitter-h { height: 12px; }
-.splitter-v:hover, .splitter-v.dragging, .splitter-h:hover, .splitter-h.dragging { background: transparent; }
-.splitter-v:hover::after, .splitter-v.dragging::after { content: ""; display: block; width: 2px; height: 100%; margin: 0 auto; background: var(--border-strong); }
-.splitter-h:hover::after, .splitter-h.dragging::after { content: ""; display: block; height: 2px; margin: 5px 0; background: var(--border-strong); }
-#metrics { padding: 18px 20px; }
-#metrics h3 { margin: 0 0 12px; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
-#metrics-table td { padding: 6px 0; }
-#metrics-table td:last-child { font-weight: 500; }
-#metrics-table tr:last-child td { border-bottom: 0; }
-.metrics-basis { gap: 4px; margin: 10px 0 6px; }
-.metrics-basis button { padding: 2px 10px; border-radius: 999px; }
-.metrics-basis button[aria-pressed="true"], .lib-filter button[aria-pressed="true"], #selected-only[aria-pressed="true"] { background: var(--pill); color: var(--pill-text); border-color: transparent; font-weight: 600; }
-.yr-bars { gap: 3px; height: 46px; }
-.yr-bar span { border-radius: 5px 5px 0 0; background: var(--muted); opacity: .22; }
-.yr-bar.on span { opacity: .5; }
-.yr-bar:hover span { opacity: .75; }
-.note-help { border-radius: 999px; }
-
-/* toolbar sits on the canvas, above the table card */
-.toolbar.glass { background: transparent; border: 0; padding: 0 2px 10px; }
-.searchbox { padding: 5px 12px; background: var(--card); border-color: var(--border-strong); }
-.facet-chip { border-radius: 999px; background: var(--card); }
-.lib-filter { padding: 3px; border-radius: 999px; background: var(--chip); gap: 1px; margin-left: 4px; }
-.lib-filter button, #selected-only { border-radius: 999px; padding: 3px 11px; }
-.menu-btn { padding: 4px 11px; }
-
-/* results card */
-.table-wrap { background: var(--card); }
-#results-table th { padding: 9px 10px; font-weight: 500; background: var(--card); border-bottom: 1px solid var(--border); backdrop-filter: none; -webkit-backdrop-filter: none; }
-#results-table td { padding: 7px 10px; }
-#results-table tbody tr:last-child td { border-bottom: 0; }
-#results-table td.title { font-weight: 500; }
-#results-table tbody tr.selected { background: var(--row-sel); }
-#results-table tbody tr.focused td:first-child { box-shadow: none; }
-#results-table tbody tr.focused { outline: 1px solid var(--border-strong); outline-offset: -1px; }
-td.lib { font-weight: 600; }
-.pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 1.5; }
-.pill.pos, .badge.lib { background: var(--pos-bg); color: var(--pos-ink); }
-td.status:not(:empty)::before { content: "\25CF"; margin-right: 5px; font-size: 11px; }
-.tier, .badge { border-radius: 999px; }
-.badge { padding: 2px 10px; }
-.badge.lib { font-weight: 600; }
-.tier { padding: 1px 9px; }
-
-/* detail card */
-#detail { padding: 14px 20px; }
-.d-title { font-size: 16px; font-weight: 600; line-height: 1.35; }
-.d-evidence { color: var(--muted); }
-.d-abstract { color: var(--text); }
-.d-status.warn, .d-status.err { display: inline-block; padding: 2px 10px; border-radius: 10px; background: var(--att-bg); color: var(--att-ink); }
-.d-actions button { padding: 6px 16px; }
-
-/* bottom bars */
-#import-bar { padding: 10px 18px; }
-#selected-count { padding: 2px 10px; border-radius: 999px; background: var(--chip); }
-#selected-count:empty { display: none; }
-#statusbar { background: transparent; border-top: 0; padding: 2px 6px 0; }
-
-/* menus */
-.ctxmenu, .selmenu { border-radius: 14px; padding: 6px; }
-.ctxmenu div, .selopt, .histmenu .histopt, .histmenu .histclear { border-radius: 9px; }
-
-/* library filter: each count is its own small rounded badge */
-.lib-filter button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 11px; }
-.lib-filter .lib-n { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--card); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
-.lib-filter button[aria-pressed="true"] .lib-n { background: rgba(255, 255, 255, 0.2); color: var(--pill-text); }
-@media (prefers-color-scheme: dark) { .lib-filter button[aria-pressed="true"] .lib-n { background: rgba(0, 0, 0, 0.14); } }
-
-/* the search form folds to one line once there are results */
-.cond-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 6px 12px; border-radius: 999px; background: var(--chip); border-color: transparent; color: var(--text); text-align: left; }
-.cond-toggle:hover:not(:disabled) { background: var(--row-sel); border-color: transparent; }
-.cond-label { flex: none; font-weight: 600; }
-.cond-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-.field.cond { flex: 0 0 auto; min-width: 112px; }
-#query-form.collapsed { flex-wrap: nowrap; align-items: center; padding: 10px 18px; }
-#query-form.collapsed .field:not(.keep) { display: none; }
-#query-form.collapsed .field > label { display: none; }
-#query-form.collapsed .field.grow2 { flex: 0 1 300px; min-width: 160px; }
-#query-form.collapsed .field.cond { flex: 1 1 auto; min-width: 0; }
-#query-form.collapsed .field.buttons { flex: none; }
-#query-form.collapsed ~ .combined-options { display: none; }
-
-/* author tab: same card rhythm as the paper form */
-.author-panel { padding: 12px 18px 14px; }
-.author-query { gap: 8px 12px; }
-.author-query .field select { min-width: 150px; }
-.author-query .field.grow2 { flex: 2 1 240px; }
-.author-help { margin: 10px 2px 10px; }
-.author-profiles { max-height: 190px; }
-.author-profile { padding: 10px 14px; }
-
-/* ================================================================ fix round: one control family
-   Every single-line control is 32px tall with a pill radius; small in-row chips (count badges, year
-   bars, the metric source switch) sit inside a 32px or card-sized container and say so below.
-   One chevron drawing serves selects, the condition bar, menus and disclosures. */
-:root { --h-ctl: 32px; --r-ctl: 999px; --head-h: 38px; --row-h: 34px; --fade-h: 32px; }
-input[type=text], input[type=number] { height: var(--h-ctl); padding: 0 14px; border-radius: var(--r-ctl); }
-.sel-btn { height: var(--h-ctl); padding: 0 12px 0 14px; border-radius: var(--r-ctl); }
-.query button, .author-panel button:not(.note-help), .toolbar button:not(.filter-clear), #import-bar button, .d-actions button, .search-modes button {
-	height: var(--h-ctl); padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
-}
-.query .cond-toggle { justify-content: flex-start; }
-button:disabled { opacity: .5; }
-button.primary:disabled { opacity: 1; background: var(--chip); color: var(--muted); border-color: var(--border); }
-
+.sel-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+/* one chevron drawing serves selects, the condition bar, menus and disclosures */
 .sel-caret, .cond-chev, .menu-btn::after, .import-opts-toggle::after, .d-fold > summary::before, .combined-options > summary::before {
-	content: ""; display: inline-block; flex: none; width: 6px; height: 6px; margin: 0 3px 3px;
+	content: ""; display: inline-block; flex: none; width: 6px; height: 6px; margin: 0 4px 4px;
 	border: 0 solid currentColor; border-right-width: 1.5px; border-bottom-width: 1.5px; transform: rotate(45deg); opacity: .7;
 }
 .sel-btn[aria-expanded="true"] .sel-caret, .cond-toggle[aria-expanded="true"] .cond-chev, .menu-btn[aria-expanded="true"]::after,
-.import-opts-toggle[aria-expanded="true"]::after { transform: rotate(-135deg); margin: 4px 3px 0; }
-.d-fold > summary::before, .combined-options > summary::before { transform: rotate(-45deg); margin: 0 7px 0 2px; }
-.d-fold[open] > summary::before, .combined-options[open] > summary::before { transform: rotate(45deg); margin: 0 7px 3px 2px; }
-summary { list-style: none; display: flex; align-items: center; }
-summary::-webkit-details-marker { display: none; }
-summary::marker { content: ""; }
+.import-opts-toggle[aria-expanded="true"]::after { transform: rotate(-135deg); margin: 4px 4px 0; }
+.d-fold > summary::before, .combined-options > summary::before { transform: rotate(-45deg); margin: 0 8px 0 4px; }
+.d-fold[open] > summary::before, .combined-options[open] > summary::before { transform: rotate(45deg); margin: 0 8px 4px 4px; }
 
 /* checkboxes: the same rounded box everywhere, filled with the pill colour when on */
 input[type=checkbox] {
-	appearance: none; -webkit-appearance: none; flex: none; width: 16px; height: 16px; margin: 0; padding: 0; cursor: pointer;
+	appearance: none; -webkit-appearance: none; flex: none; width: 16px; height: 16px; margin: 0; padding: 0; cursor: pointer; font: inherit;
 	border: 1.5px solid var(--border-strong); border-radius: 5px; background: var(--card) center / 12px no-repeat;
 }
 input[type=checkbox]:checked, input[type=checkbox]:indeterminate { background-color: var(--pill); border-color: var(--pill); }
@@ -604,158 +536,12 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 	input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23121317' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
 }
 
-/* journal inks: both themes travel on the element (--j-ink-l/-d, --j-fill-l/-d, --j-edge-l/-d);
-   the theme picks here, so a dark page, a live theme switch and a static copy all read true */
-.venue-known { --j-ink: var(--j-ink-l); color: var(--j-ink); font-weight: 600; }
-.jmark { --j-ink: var(--j-ink-l); --j-fill: var(--j-fill-l); --j-edge: var(--j-edge-l); color: var(--j-ink); background: var(--j-fill); box-shadow: inset 0 0 0 1px var(--j-edge); }
-@media (prefers-color-scheme: dark) {
-	.venue-known { --j-ink: var(--j-ink-d); }
-	.jmark { --j-ink: var(--j-ink-d); --j-fill: var(--j-fill-d); --j-edge: var(--j-edge-d); }
-}
-
-/* banner */
-.banner { min-height: 44px; }
-.banner:not(.warn) { color: var(--muted); font-weight: 400; }
-.banner button { height: 28px; padding: 0 14px; font-size: 12px; line-height: 1; }
-.banner button.primary, .banner.warn button.primary { background: var(--pill); color: var(--pill-text); border-color: transparent; }
-.banner .banner-close, .banner #banner-close { width: 28px; padding: 0; font-size: 16px; border-color: transparent; background: transparent; color: inherit; }
-.banner .banner-close:hover:not(:disabled) { background: var(--row-hover); border-color: transparent; }
-
-/* results toolbar: one line at every width */
-.toolbar { gap: 6px; min-height: var(--h-ctl); padding-bottom: 10px; }
-.toolbar > * { flex: none; }
-.toolbar > .searchbox { flex: 1 1 140px; min-width: 128px; height: var(--h-ctl); padding: 0 12px; }
-.toolbar > .facet-chip { flex: 0 1 auto; min-height: var(--h-ctl); padding: 0 6px 0 12px; }
-.toolbar > .spacer { flex: 1 1 0; min-width: 0; }
-.searchbox input { height: auto; padding: 0; border-radius: 0; min-width: 0; }
-.lib-filter { height: var(--h-ctl); padding: 3px; margin-left: 0; }
-.toolbar .lib-filter button { height: 26px; padding: 0 5px 0 12px; }
-.lib-filter button:disabled { opacity: .5; }
-.toolbar button.menu-btn { padding: 0 10px 0 12px; }
-.toolbar button.ghost { padding: 0 12px; }
-@media (max-width: 1000px) {
-	.toolbar .sep { display: none; }
-	.toolbar #preview-btn { padding: 0 11px; }
-	.toolbar #preview-btn span { display: none; }
-	.toolbar { gap: 5px; }
-	.toolbar > .searchbox { min-width: 120px; }
-	.toolbar button.ghost { padding: 0 10px; }
-	.toolbar button.menu-btn { padding: 0 8px 0 10px; }
-	.toolbar .lib-filter button { padding: 0 4px 0 10px; gap: 5px; }
-	#results-table[data-cols="basic"] [data-k="journalIF"], #results-table[data-cols="basic"] [data-k="pdf"] { display: none; }
-	/* Narrow: the title takes whatever the compact columns leave, so the table fits the pane instead of scrolling sideways. */
-	#results-table[data-cols="basic"][data-status] [data-k="cpy"] { display: none; }
-	#cols col[data-k="title"] { width: auto !important; }
-	#cols col[data-k="venue"] { width: 120px !important; }
-	#cols col[data-k="inLibrary"] { width: 88px !important; }
-	#cols col[data-k="status"] { width: 112px !important; }
-}
-
-/* results card */
-.table-wrap { flex: 1 1 0; min-height: calc(var(--head-h) + 5 * var(--row-h)); scroll-padding-top: var(--head-h); scroll-padding-bottom: var(--fade-h); }
-#results-table th { height: var(--head-h); padding: 0 10px; }
-#results-table td { padding: 0 10px; height: var(--row-h); }
-#results-table td.title { font-size: 13px; }
-#results-table th.chk, #results-table td.chk { padding: 0 2px; }
-#results-table th.mini, #results-table td.mini { padding-inline: 6px; }
-.table-wrap { padding-inline: 8px; }
-.empty, #busy { top: var(--head-h); }
-/* the end of a scrolling card fades out instead of cutting a row or a line mid-glyph */
-.table-wrap::after, #metrics::after, #detail::after {
-	content: ""; display: block; flex: none; position: sticky; bottom: 0; height: var(--fade-h); pointer-events: none;
-	background: linear-gradient(to bottom, transparent, var(--card));
-}
-#metrics::after, #detail::after { margin: 0 -20px; }
-#metrics::after { height: 22px; }
-#detail[data-empty]::after { display: none; }
-#metrics { padding-bottom: 0; }
-#detail { padding-bottom: 0; }
-/* focus and selection are fills of the row, rounded at its two ends; no outline, no edge bar */
-#results-table tbody tr:hover, #results-table tbody tr.selected, #results-table tbody tr.focused { background: transparent; outline: 0; }
-#results-table tbody tr.focused td:first-child { box-shadow: none; }
-#results-table tbody tr:hover:not(.selected):not(.focused) td { background: var(--row-hover); }
-#results-table tbody tr.selected td { background: var(--row-sel); }
-#results-table tbody tr.focused td { background: var(--row-sel) linear-gradient(var(--row-hover), var(--row-hover)); }
-#results-table tbody tr:hover td:first-child, #results-table tbody tr.selected td:first-child, #results-table tbody tr.focused td:first-child { border-radius: 10px 0 0 10px; }
-#results-table tbody tr:hover td:last-child, #results-table tbody tr.selected td:last-child, #results-table tbody tr.focused td:last-child { border-radius: 0 10px 10px 0; }
-#results-table tbody tr.selected td, #results-table tbody tr.focused td { border-bottom-color: transparent; }
-/* the sort mark: a small chevron in the header's own ink */
-#results-table th.sorted-asc, #results-table th.sorted-desc { color: var(--text); }
-#results-table th .sort-mark { color: inherit; padding-left: 0; }
-#results-table th.sorted-asc .sort-mark::before, #results-table th.sorted-desc .sort-mark::before {
-	content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 5px; vertical-align: 1px;
-	border: 0 solid currentColor; border-right-width: 1.5px; border-bottom-width: 1.5px; transform: rotate(45deg);
-}
-#results-table th.sorted-asc .sort-mark::before { transform: rotate(-135deg); vertical-align: -1px; }
-/* the library column: the check sits at one x with or without the reading state after it */
-#results-table th[data-sort="inLibrary"], #results-table td.lib { text-align: left; padding-left: 16px; }
-.pill { min-width: 28px; text-align: center; }
-/* rows that are new since the previous run */
-#results-table td.title .new-mark { margin-right: 8px; padding: 1px 8px; white-space: nowrap; border-radius: 999px; background: var(--pos-bg); color: var(--pos-ink); font-size: 11px; font-weight: 600; }
-
-/* citation metrics card */
-#metrics h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text); }
-#metrics-table td { padding: 4px 0; }
-#metrics-table tr.hl td, #metrics-table tr.hl td:last-child { color: var(--text); }
-#metrics-table tr.hl td:last-child { font-weight: 650; }
-.metrics-basis { gap: 2px; padding: 3px; margin: 10px 0 8px; border-radius: 18px; background: var(--chip); }
-.metrics-basis button { height: 26px; padding: 0 11px; border: 0; background: transparent; color: var(--muted); font-size: 11.5px; }
-.metrics-basis button:hover:not(:disabled) { background: var(--row-hover); color: var(--text); border-color: transparent; }
-.metrics-basis button[aria-pressed="true"] { background: var(--pill); color: var(--pill-text); }
-
-/* detail card: one hint row while nothing is chosen, the set height otherwise */
-#detail { height: 216px; flex: 0 1 auto; min-height: 120px; }
-#detail[data-empty] { height: auto !important; min-height: 0; padding: 9px 20px; overflow: hidden; flex: none; }
-#detail[data-empty] .detail-empty { padding: 0; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.d-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.d-fold { margin-top: 6px; }
-.d-fold > summary { min-height: 24px; }
-.d-abstract { margin-top: 4px; }
-.badges .jmark { border-radius: 999px; }
-.d-actions { align-self: flex-start; }
-
-/* in-page menus: hover and keyboard focus are the soft grey fill, like a selected row */
-.ctxmenu div:hover, .selopt.hot, .tbmenu .selopt:focus, .histmenu .histopt:hover, .histmenu .histopt.hot { background: var(--row-sel); color: var(--text); }
-.histmenu .histopt:hover .h-meta, .histmenu .histopt.hot .h-meta { color: var(--muted); }
-.histmenu { min-width: 340px; }
-.histmenu .histopt { padding: 7px 12px; }
-.histmenu .histopt .h-label { font-weight: 500; }
-.histmenu .histopt .h-meta { color: var(--muted); }
-
-/* footer: one layout whatever is selected */
-#import-bar { flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px 10px 18px; }
-.import-target-label { color: var(--muted); }
-#import-bar .sel { min-width: 150px; max-width: 260px; }
-.import-opts-toggle { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; color: var(--muted); }
-.import-opts-toggle::after { margin-left: 8px; }
-#import-opts { order: 9; flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px; padding-top: 2px; }
-label.cb { height: var(--h-ctl); padding: 0 14px 0 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); cursor: pointer; }
-#selected-count { height: 24px; display: inline-flex; align-items: center; padding: 0 10px; }
-#selected-only { font-size: 12px; padding: 0 12px; }
-
-/* the paper form: fold toggle, quiet source rows */
-.cond-toggle { height: var(--h-ctl); padding: 0 12px 0 14px; }
-#query-form:not(.collapsed) .field.cond { order: 97; margin-left: auto; flex: 0 0 auto; min-width: 0; align-self: flex-end; }
-#query-form:not(.collapsed) .field.cond > label { display: none; }
-#query-form:not(.collapsed) .cond-toggle { width: auto; background: transparent; border-color: transparent; color: var(--muted); }
-#query-form:not(.collapsed) .cond-toggle:hover:not(:disabled) { background: var(--row-hover); color: var(--text); border-color: transparent; }
-.query > .combined-options { order: 98; flex: 1 1 100%; margin-top: 2px; padding: 10px 0 0; background: transparent; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; }
-.query > .combined-options > summary { color: var(--muted); font-size: 12px; }
-#query-form.collapsed .combined-options { display: none; }
-.combined-source-list { gap: 8px; padding-top: 10px; }
-.combined-source-list label { height: 28px; padding: 0 12px 0 8px; border: 1px solid var(--border); border-radius: 999px; }
-.combined-options p { color: var(--muted); }
-
-/* author tab: the same rhythm as the paper form */
-.author-query > label.field > span { font-size: 11.5px; font-weight: 500; color: var(--muted); }
-.author-query .sel { min-width: 150px; }
-.author-query .field.narrow { width: 88px; min-width: 88px; }
-.author-actions { align-items: flex-end; }
-.author-helprow { display: flex; align-items: center; gap: 8px; margin: 10px 2px; }
-.author-helprow .author-help { margin: 0; }
-.author-help-more { margin: -4px 2px 10px; max-width: 80ch; }
-.author-profile.selected { background: var(--row-sel); border-color: var(--border-strong); }
-.empty { word-break: keep-all; }
+/* ---------------------------------------------------------------- proxy login window */
+#pl-bar { border-bottom: 1px solid var(--border); }
+.pl-url { color: var(--muted); font-size: 11px; line-height: 16px; max-width: 464px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-intro { margin: 0; padding: 8px 16px; color: var(--muted); border-bottom: 1px solid var(--border); }
+#pl-browser-host { flex: 1 1 auto; display: flex; min-height: 0; }
+#pl-browser { flex: 1 1 auto; border: none; }
 </style></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
 	<symbol id="ic-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" /><path d="M10.4 10.4 14 14" /></symbol>
@@ -963,18 +749,18 @@ label.cb { height: var(--h-ctl); padding: 0 14px 0 10px; border: 1px solid var(-
 드래그하여 열 순서를 바꾸고, 클릭하여 정렬합니다." data-sort="tier" class="mini" data-i18n-title="thTierTip"><span data-i18n="thTier">티어</span><span aria-hidden="true" class="sort-mark"></span><span title="끌어서 너비 조절 · 더블클릭하면 초기화" class="rz"></span></th><th title="드래그하여 열 순서를 바꾸고, 클릭하여 정렬합니다." draggable="true" data-k="doi" data-sort="doi"><span data-i18n="thDoi">DOI</span><span aria-hidden="true" class="sort-mark"></span><span title="끌어서 너비 조절 · 더블클릭하면 초기화" class="rz"></span></th></tr>
 					</thead>
 					<tbody id="results-body"><tr class="in-library" data-key="openalex:demo1"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs</span></td><td data-marquee="authors" title="Mina Kim, Alex Rivera, Jonas Park" data-k="authorString">Mina Kim, Alex Rivera, Jonas Park</td><td class="num" data-k="year">2025</td><td style="--j-ink-l:hsl(16 83% 34%);--j-fill-l:hsl(16 83% 93%);--j-edge-l:hsl(16 71% 84%);--j-ink-d:hsl(16 83% 72%);--j-fill-d:hsl(16 58% 24%);--j-edge-d:hsl(16 58% 36%)" data-marquee="venue" title="Nature Methods · Nat Methods · Nature Portfolio" class="venue venue-known" data-k="venue">Nature Methods</td><td title="출처: OpenAlex" class="num" data-k="citations">214</td><td class="num" data-k="cpy">214.0</td><td title="~32.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 193" class="num if estimate" data-k="journalIF">~32.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span></td><td data-marquee="status" title="Zotero 번역기로 가져옴" class="status ok" data-k="status">추가됨 + PDF</td><td class="num" data-k="rank">1</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.001</a></td></tr><tr class="selected" data-key="openalex:demo9"><td class="chk" data-k="chk"><input checked tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Off-target profiling in primary human cells
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Off-target profiling in primary human cells</span></td><td data-marquee="authors" title="Jenna Dowd, Ben Oakley" data-k="authorString">Jenna Dowd, Ben Oakley</td><td class="num" data-k="year">2024</td><td style="--j-ink-l:hsl(235 95% 36%);--j-fill-l:hsl(235 95% 93%);--j-edge-l:hsl(235 81% 84%);--j-ink-d:hsl(235 95% 80%);--j-fill-d:hsl(235 67% 24%);--j-edge-d:hsl(235 67% 36%)" data-marquee="venue" title="Genome Biology · Genome Biol" class="venue venue-known" data-k="venue">Genome Biology</td><td title="출처: OpenAlex" class="num" data-k="citations">203</td><td class="num" data-k="cpy">101.5</td><td title="~10.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 61" class="num if estimate" data-k="journalIF">~10.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" title="fictional failure" class="status err" data-k="status">실패</td><td class="num" data-k="rank">9</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.009</a></td></tr><tr class="in-library" data-key="crossref:demo8"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Guide design rules learned from a million targets
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Guide design rules learned from a million targets</span></td><td data-marquee="authors" title="Jenna Dowd, Marta Jinkova" data-k="authorString">Jenna Dowd, Marta Jinkova</td><td class="num" data-k="year">2025</td><td style="--j-ink-l:hsl(213 95% 36%);--j-fill-l:hsl(213 95% 93%);--j-edge-l:hsl(213 81% 84%);--j-ink-d:hsl(213 95% 72%);--j-fill-d:hsl(213 67% 24%);--j-edge-d:hsl(213 67% 36%)" data-marquee="venue" title="Nucleic Acids Research · Nucleic Acids Res · Oxford" class="venue venue-known" data-k="venue">Nucleic Acids Research</td><td title="출처: Crossref" class="num" data-k="citations">88</td><td class="num" data-k="cpy">88.0</td><td title="~13.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 79" class="num if estimate" data-k="journalIF">~13.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span></td><td data-marquee="status" title="Zotero 번역기로 가져옴" class="status ok" data-k="status">추가됨 + PDF</td><td class="num" data-k="rank">8</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.008</a></td></tr><tr data-key="europepmc:demo10"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Delivery of editing enzymes across tissue barriers
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Delivery of editing enzymes across tissue barriers</span></td><td data-marquee="authors" title="Jenna Dowd, Sam Sternfield" data-k="authorString">Jenna Dowd, Sam Sternfield</td><td class="num" data-k="year">2025</td><td style="--j-ink-l:hsl(200 95% 28%);--j-fill-l:hsl(200 95% 93%);--j-edge-l:hsl(200 81% 84%);--j-ink-d:hsl(200 95% 72%);--j-fill-d:hsl(200 67% 24%);--j-edge-d:hsl(200 67% 36%)" data-marquee="venue" title="Cell Reports · Cell Rep · Cell Press" class="venue venue-known" data-k="venue">Cell Reports</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">61</td><td class="num" data-k="cpy">61.0</td><td title="~7.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 45" class="num if estimate" data-k="journalIF">~7.5</td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">10</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.010</a></td></tr><tr data-key="crossref:demo2"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="A practical framework for reproducible literature synthesis
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>A practical framework for reproducible literature synthesis</span></td><td data-marquee="authors" title="Sora Lee, Lin Chen" data-k="authorString">Sora Lee, Lin Chen</td><td class="num" data-k="year">2024</td><td style="--j-ink-l:hsl(4 81% 36%);--j-fill-l:hsl(4 81% 93%);--j-edge-l:hsl(4 69% 84%);--j-ink-d:hsl(4 81% 74%);--j-fill-d:hsl(4 57% 24%);--j-edge-d:hsl(4 57% 36%)" data-marquee="venue" title="Science · Science" class="venue venue-known" data-k="venue">Science</td><td title="출처: Crossref" class="num" data-k="citations">97</td><td class="num" data-k="cpy">48.5</td><td title="~45.8는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 275" class="num if estimate" data-k="journalIF">~45.8</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">2</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.002</a></td></tr><tr class="in-library" data-key="crossref:demo4"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Tissue-scale repair atlases from sparse sampling
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Tissue-scale repair atlases from sparse sampling</span></td><td data-marquee="authors" title="Ren Ahn, Paula Silva" data-k="authorString">Ren Ahn, Paula Silva</td><td class="num" data-k="year">2025</td><td style="--j-ink-l:hsl(200 95% 28%);--j-fill-l:hsl(200 95% 93%);--j-edge-l:hsl(200 81% 84%);--j-ink-d:hsl(200 95% 72%);--j-fill-d:hsl(200 67% 24%);--j-edge-d:hsl(200 67% 36%)" data-marquee="venue" title="Cell · Cell Press" class="venue venue-known" data-k="venue">Cell</td><td title="출처: Crossref" class="num" data-k="citations">41</td><td class="num" data-k="cpy">41.0</td><td title="~42.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 255" class="num if estimate" data-k="journalIF">~42.5</td><td class="mini pdf" data-k="pdf"></td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span><span title="Style Custom 읽기 상태" class="read-state">읽는 중</span></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">4</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.004</a></td></tr><tr data-key="europepmc:demo5"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Benchmarks for repair-stage classifiers
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Benchmarks for repair-stage classifiers</span></td><td data-marquee="authors" title="Kai Oh, Chris Voigtland" data-k="authorString">Kai Oh, Chris Voigtland</td><td class="num" data-k="year">2024</td><td style="--j-ink-l:hsl(54 95% 20%);--j-fill-l:hsl(54 95% 93%);--j-edge-l:hsl(54 81% 84%);--j-ink-d:hsl(54 95% 72%);--j-fill-d:hsl(54 67% 24%);--j-edge-d:hsl(54 67% 36%)" data-marquee="venue" title="Nature Biotechnology · Nat Biotechnol · Nature Portfolio" class="venue venue-known" data-k="venue">Nature Biotechnology</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">66</td><td class="num" data-k="cpy">33.0</td><td title="~33.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 199" class="num if estimate" data-k="journalIF">~33.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">5</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.005</a></td></tr><tr data-key="europepmc:demo7"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Compact editors from uncultivated bacteria
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Compact editors from uncultivated bacteria</span></td><td data-marquee="authors" title="Jenna Dowd, Sam Sternfield, Priya Natarajan" data-k="authorString">Jenna Dowd, Sam Sternfield, Priya Natarajan</td><td class="num" data-k="year">2026</td><td style="--j-ink-l:hsl(206 71% 34%);--j-fill-l:hsl(206 71% 93%);--j-edge-l:hsl(206 60% 84%);--j-ink-d:hsl(206 71% 72%);--j-fill-d:hsl(206 50% 24%);--j-edge-d:hsl(206 50% 36%)" data-marquee="venue" title="Proceedings of the National Academy of Sciences · PNAS · PNAS" class="venue venue-known" data-k="venue">Proceedings of the National Academy of Sciences</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">18</td><td class="num" data-k="cpy">18.0</td><td title="~9.4는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 56" class="num if estimate" data-k="journalIF">~9.4</td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">7</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.007</a></td></tr><tr data-key="openalex:demo6"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Preregistered synthesis of repair reviews
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Preregistered synthesis of repair reviews</span></td><td data-marquee="authors" title="Dana Yu, Sora Lee" data-k="authorString">Dana Yu, Sora Lee</td><td class="num" data-k="year">2023</td><td style="--j-ink-l:hsl(215 89% 36%);--j-fill-l:hsl(215 89% 93%);--j-edge-l:hsl(215 76% 84%);--j-ink-d:hsl(215 89% 72%);--j-fill-d:hsl(215 62% 24%);--j-edge-d:hsl(215 62% 36%)" data-marquee="venue" title="eLife · eLife" class="venue venue-known" data-k="venue">eLife</td><td title="출처: OpenAlex" class="num" data-k="citations">12</td><td class="num" data-k="cpy">4.0</td><td title="~6.4는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 38" class="num if estimate" data-k="journalIF">~6.4</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">6</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.006</a></td></tr><tr data-key="openalex:demo3"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Spatial context and cell-state transitions in regeneration
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Spatial context and cell-state transitions in regeneration</span></td><td data-marquee="authors" title="Eva Morgan, Hana Choi" data-k="authorString">Eva Morgan, Hana Choi</td><td class="num" data-k="year">2026</td><td style="--j-ink-l:hsl(331 40% 40%);--j-fill-l:hsl(331 36% 93%);--j-edge-l:hsl(331 30% 84%);--j-ink-d:hsl(331 40% 74%);--j-fill-d:hsl(331 26% 24%);--j-edge-d:hsl(331 26% 36%)" data-marquee="venue" title="bioRxiv" class="venue venue-known" data-k="venue">bioRxiv</td><td title="출처: OpenAlex" class="num" data-k="citations">3</td><td class="num" data-k="cpy">3.0</td><td class="num if" data-k="journalIF"></td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">3</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.003</a></td></tr><tr data-key="europepmc:demo11"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Preregistered synthesis of repair reviews
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Preregistered synthesis of repair reviews</span></td><td data-marquee="authors" title="Dana Yu, Omar Haddad" data-k="authorString">Dana Yu, Omar Haddad</td><td class="num" data-k="year">2022</td><td style="--j-ink-l:hsl(159 40% 28%);--j-fill-l:hsl(159 36% 93%);--j-edge-l:hsl(159 30% 84%);--j-ink-d:hsl(159 40% 74%);--j-fill-d:hsl(159 26% 24%);--j-edge-d:hsl(159 26% 36%)" data-marquee="venue" title="medRxiv" class="venue venue-known" data-k="venue">medRxiv</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">0</td><td class="num" data-k="cpy">0.0</td><td class="num if" data-k="journalIF"></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">11</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.011</a></td></tr><tr data-key="crossref:demo12"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Spatial context and cell-state transitions in regeneration: a commentary
-더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Spatial context and cell-state transitions in regeneration: a commentary</span></td><td data-marquee="authors" title="Tara Novak" data-k="authorString">Tara Novak</td><td class="num" data-k="year">2022</td><td style="--j-ink-l:hsl(326 40% 40%);--j-fill-l:hsl(326 36% 93%);--j-edge-l:hsl(326 30% 84%);--j-ink-d:hsl(326 40% 74%);--j-fill-d:hsl(326 26% 24%);--j-edge-d:hsl(326 26% 36%)" data-marquee="venue" title="Example Journal of Tissue Studies · Example J Tissue Stud" class="venue venue-known" data-k="venue">Example Journal of Tissue Studies</td><td class="num" data-k="citations">–</td><td class="num" data-k="cpy">–</td><td class="num if" data-k="journalIF"></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">12</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.012</a></td></tr></tbody>
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs</span></td><td data-marquee="authors" title="Mina Kim, Alex Rivera, Jonas Park" data-k="authorString">Mina Kim, Alex Rivera, Jonas Park</td><td class="num" data-k="year">2025</td><td style="--j-ink-l:hsl(16 55% 37%);--j-fill-l:hsl(16 55% 94%);--j-edge-l:hsl(16 47% 84%);--j-ink-d:hsl(16 50% 70%);--j-fill-d:hsl(16 30% 22%);--j-edge-d:hsl(16 30% 32%)" data-marquee="venue" title="Nature Methods · Nat Methods · Nature Portfolio" class="venue venue-known" data-k="venue">Nature Methods</td><td title="출처: OpenAlex" class="num" data-k="citations">214</td><td class="num" data-k="cpy">214.0</td><td title="~32.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 193" class="num if estimate" data-k="journalIF">~32.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span></td><td data-marquee="status" title="Zotero 번역기로 가져옴" class="status ok" data-k="status">추가됨 + PDF</td><td class="num" data-k="rank">1</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.001</a></td></tr><tr class="selected" data-key="openalex:demo9"><td class="chk" data-k="chk"><input checked tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Off-target profiling in primary human cells
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Off-target profiling in primary human cells</span></td><td data-marquee="authors" title="Jenna Dowd, Ben Oakley" data-k="authorString">Jenna Dowd, Ben Oakley</td><td class="num" data-k="year">2024</td><td style="--j-ink-l:hsl(235 55% 53%);--j-fill-l:hsl(235 55% 94%);--j-edge-l:hsl(235 47% 84%);--j-ink-d:hsl(235 50% 76%);--j-fill-d:hsl(235 30% 22%);--j-edge-d:hsl(235 30% 32%)" data-marquee="venue" title="Genome Biology · Genome Biol" class="venue venue-known" data-k="venue">Genome Biology</td><td title="출처: OpenAlex" class="num" data-k="citations">203</td><td class="num" data-k="cpy">101.5</td><td title="~10.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 61" class="num if estimate" data-k="journalIF">~10.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" title="fictional failure" class="status err" data-k="status">실패</td><td class="num" data-k="rank">9</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.009</a></td></tr><tr class="in-library" data-key="crossref:demo8"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Guide design rules learned from a million targets
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Guide design rules learned from a million targets</span></td><td data-marquee="authors" title="Jenna Dowd, Marta Jinkova" data-k="authorString">Jenna Dowd, Marta Jinkova</td><td class="num" data-k="year">2025</td><td style="--j-ink-l:hsl(213 55% 39%);--j-fill-l:hsl(213 55% 94%);--j-edge-l:hsl(213 47% 84%);--j-ink-d:hsl(213 50% 71%);--j-fill-d:hsl(213 30% 22%);--j-edge-d:hsl(213 30% 32%)" data-marquee="venue" title="Nucleic Acids Research · Nucleic Acids Res · Oxford" class="venue venue-known" data-k="venue">Nucleic Acids Research</td><td title="출처: Crossref" class="num" data-k="citations">88</td><td class="num" data-k="cpy">88.0</td><td title="~13.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 79" class="num if estimate" data-k="journalIF">~13.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span></td><td data-marquee="status" title="Zotero 번역기로 가져옴" class="status ok" data-k="status">추가됨 + PDF</td><td class="num" data-k="rank">8</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.008</a></td></tr><tr data-key="europepmc:demo10"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Delivery of editing enzymes across tissue barriers
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Delivery of editing enzymes across tissue barriers</span></td><td data-marquee="authors" title="Jenna Dowd, Sam Sternfield" data-k="authorString">Jenna Dowd, Sam Sternfield</td><td class="num" data-k="year">2025</td><td style="--j-ink-l:hsl(200 55% 33%);--j-fill-l:hsl(200 55% 94%);--j-edge-l:hsl(200 47% 84%);--j-ink-d:hsl(200 50% 65%);--j-fill-d:hsl(200 30% 22%);--j-edge-d:hsl(200 30% 32%)" data-marquee="venue" title="Cell Reports · Cell Rep · Cell Press" class="venue venue-known" data-k="venue">Cell Reports</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">61</td><td class="num" data-k="cpy">61.0</td><td title="~7.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 45" class="num if estimate" data-k="journalIF">~7.5</td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">10</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.010</a></td></tr><tr data-key="crossref:demo2"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="A practical framework for reproducible literature synthesis
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>A practical framework for reproducible literature synthesis</span></td><td data-marquee="authors" title="Sora Lee, Lin Chen" data-k="authorString">Sora Lee, Lin Chen</td><td class="num" data-k="year">2024</td><td style="--j-ink-l:hsl(4 55% 42%);--j-fill-l:hsl(4 55% 94%);--j-edge-l:hsl(4 47% 84%);--j-ink-d:hsl(4 50% 73%);--j-fill-d:hsl(4 30% 22%);--j-edge-d:hsl(4 30% 32%)" data-marquee="venue" title="Science · Science" class="venue venue-known" data-k="venue">Science</td><td title="출처: Crossref" class="num" data-k="citations">97</td><td class="num" data-k="cpy">48.5</td><td title="~45.8는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 275" class="num if estimate" data-k="journalIF">~45.8</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">2</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.002</a></td></tr><tr class="in-library" data-key="crossref:demo4"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Tissue-scale repair atlases from sparse sampling
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Tissue-scale repair atlases from sparse sampling</span></td><td data-marquee="authors" title="Ren Ahn, Paula Silva" data-k="authorString">Ren Ahn, Paula Silva</td><td class="num" data-k="year">2025</td><td style="--j-ink-l:hsl(200 55% 33%);--j-fill-l:hsl(200 55% 94%);--j-edge-l:hsl(200 47% 84%);--j-ink-d:hsl(200 50% 65%);--j-fill-d:hsl(200 30% 22%);--j-edge-d:hsl(200 30% 32%)" data-marquee="venue" title="Cell · Cell Press" class="venue venue-known" data-k="venue">Cell</td><td title="출처: Crossref" class="num" data-k="citations">41</td><td class="num" data-k="cpy">41.0</td><td title="~42.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 255" class="num if estimate" data-k="journalIF">~42.5</td><td class="mini pdf" data-k="pdf"></td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span><span title="Style Custom 읽기 상태" class="read-state">읽는 중</span></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">4</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.004</a></td></tr><tr data-key="europepmc:demo5"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Benchmarks for repair-stage classifiers
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Benchmarks for repair-stage classifiers</span></td><td data-marquee="authors" title="Kai Oh, Chris Voigtland" data-k="authorString">Kai Oh, Chris Voigtland</td><td class="num" data-k="year">2024</td><td style="--j-ink-l:hsl(54 55% 26%);--j-fill-l:hsl(54 55% 94%);--j-edge-l:hsl(54 47% 84%);--j-ink-d:hsl(54 50% 49%);--j-fill-d:hsl(54 30% 22%);--j-edge-d:hsl(54 30% 32%)" data-marquee="venue" title="Nature Biotechnology · Nat Biotechnol · Nature Portfolio" class="venue venue-known" data-k="venue">Nature Biotechnology</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">66</td><td class="num" data-k="cpy">33.0</td><td title="~33.1는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 199" class="num if estimate" data-k="journalIF">~33.1</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">5</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.005</a></td></tr><tr data-key="europepmc:demo7"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Compact editors from uncultivated bacteria
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Compact editors from uncultivated bacteria</span></td><td data-marquee="authors" title="Jenna Dowd, Sam Sternfield, Priya Natarajan" data-k="authorString">Jenna Dowd, Sam Sternfield, Priya Natarajan</td><td class="num" data-k="year">2026</td><td style="--j-ink-l:hsl(206 55% 36%);--j-fill-l:hsl(206 55% 94%);--j-edge-l:hsl(206 47% 84%);--j-ink-d:hsl(206 50% 68%);--j-fill-d:hsl(206 30% 22%);--j-edge-d:hsl(206 30% 32%)" data-marquee="venue" title="Proceedings of the National Academy of Sciences · PNAS · PNAS" class="venue venue-known" data-k="venue">Proceedings of the National Academy of Sciences</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">18</td><td class="num" data-k="cpy">18.0</td><td title="~9.4는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 56" class="num if estimate" data-k="journalIF">~9.4</td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">7</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.007</a></td></tr><tr data-key="openalex:demo6"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Preregistered synthesis of repair reviews
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Preregistered synthesis of repair reviews</span></td><td data-marquee="authors" title="Dana Yu, Sora Lee" data-k="authorString">Dana Yu, Sora Lee</td><td class="num" data-k="year">2023</td><td style="--j-ink-l:hsl(215 55% 40%);--j-fill-l:hsl(215 55% 94%);--j-edge-l:hsl(215 47% 84%);--j-ink-d:hsl(215 50% 71%);--j-fill-d:hsl(215 30% 22%);--j-edge-d:hsl(215 30% 32%)" data-marquee="venue" title="eLife · eLife" class="venue venue-known" data-k="venue">eLife</td><td title="출처: OpenAlex" class="num" data-k="citations">12</td><td class="num" data-k="cpy">4.0</td><td title="~6.4는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 38" class="num if estimate" data-k="journalIF">~6.4</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">6</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.006</a></td></tr><tr data-key="openalex:demo3"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Spatial context and cell-state transitions in regeneration
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Spatial context and cell-state transitions in regeneration</span></td><td data-marquee="authors" title="Eva Morgan, Hana Choi" data-k="authorString">Eva Morgan, Hana Choi</td><td class="num" data-k="year">2026</td><td style="--j-ink-l:hsl(331 38% 42%);--j-fill-l:hsl(331 38% 94%);--j-edge-l:hsl(331 32% 84%);--j-ink-d:hsl(331 38% 73%);--j-fill-d:hsl(331 23% 22%);--j-edge-d:hsl(331 23% 32%)" data-marquee="venue" title="bioRxiv" class="venue venue-known" data-k="venue">bioRxiv</td><td title="출처: OpenAlex" class="num" data-k="citations">3</td><td class="num" data-k="cpy">3.0</td><td class="num if" data-k="journalIF"></td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">3</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.003</a></td></tr><tr data-key="europepmc:demo11"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Preregistered synthesis of repair reviews
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Preregistered synthesis of repair reviews</span></td><td data-marquee="authors" title="Dana Yu, Omar Haddad" data-k="authorString">Dana Yu, Omar Haddad</td><td class="num" data-k="year">2022</td><td style="--j-ink-l:hsl(159 38% 29%);--j-fill-l:hsl(159 38% 94%);--j-edge-l:hsl(159 32% 84%);--j-ink-d:hsl(159 38% 58%);--j-fill-d:hsl(159 23% 22%);--j-edge-d:hsl(159 23% 32%)" data-marquee="venue" title="medRxiv" class="venue venue-known" data-k="venue">medRxiv</td><td title="출처: Europe PMC (논문 + 프리프린트)" class="num" data-k="citations">0</td><td class="num" data-k="cpy">0.0</td><td class="num if" data-k="journalIF"></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">11</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.011</a></td></tr><tr data-key="crossref:demo12"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td data-marquee="title" title="Spatial context and cell-state transitions in regeneration: a commentary
+더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><span>Spatial context and cell-state transitions in regeneration: a commentary</span></td><td data-marquee="authors" title="Tara Novak" data-k="authorString">Tara Novak</td><td class="num" data-k="year">2022</td><td style="--j-ink-l:hsl(326 38% 41%);--j-fill-l:hsl(326 38% 94%);--j-edge-l:hsl(326 32% 84%);--j-ink-d:hsl(326 38% 72%);--j-fill-d:hsl(326 23% 22%);--j-edge-d:hsl(326 23% 32%)" data-marquee="venue" title="Example Journal of Tissue Studies · Example J Tissue Stud" class="venue venue-known" data-k="venue">Example Journal of Tissue Studies</td><td class="num" data-k="citations">–</td><td class="num" data-k="cpy">–</td><td class="num if" data-k="journalIF"></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">12</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.012</a></td></tr></tbody>
 				</table>
 				<div hidden id="empty" class="empty">필터와 일치하는 결과가 없습니다. Esc나 ×로 필터를 지우세요.</div>
 				<div hidden id="busy" class="empty"><span class="spinner"></span><span id="busy-text">통합 검색 (선택한 소스) 검색 중…</span></div>
@@ -990,7 +776,7 @@ label.cb { height: var(--h-ctl); padding: 0 14px 0 10px; border: 1px solid var(-
 							<button title="브라우저·PDF·도서관 경로 열기, DOI·인용 복사, 인용 수 다시 확인" id="d-more" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false" data-i18n-title="dMoreTip"><span data-i18n="dMore">더보기</span></button>
 						</div>
 					</div>
-					<div id="d-badges" class="badges"><span title="Cell · Cell Press" style="--j-ink-l:hsl(200 95% 28%);--j-fill-l:hsl(200 95% 93%);--j-edge-l:hsl(200 81% 84%);--j-ink-d:hsl(200 95% 72%);--j-fill-d:hsl(200 67% 24%);--j-edge-d:hsl(200 67% 36%)" class="jmark known">Cell</span><span class="badge src"><svg fill="currentColor" class="brand-mark" focusable="false" aria-hidden="true" height="12" width="12" viewBox="0 0 320 512"><path d="M 310.36246,40 25.167851,134.01757 217.23482,200.00243 310.36246,169.33249 Z M 9.637541,139.12923 V 271.09895 L 201.67195,205.11409 Z m 207.597279,71.09651 -192.039829,65.98482 77.543069,25.53667 192.06689,-65.95772 z m 93.12764,30.6754 -192.06695,65.9848 192.06695,65.98494 z M 102.73806,311.99758 9.637541,342.66751 V 472 L 294.80495,377.9825 Z" /></svg>Crossref</span><span class="badge lib">보유 중</span></div>
+					<div id="d-badges" class="badges"><span title="Cell · Cell Press" style="--j-ink-l:hsl(200 55% 33%);--j-fill-l:hsl(200 55% 94%);--j-edge-l:hsl(200 47% 84%);--j-ink-d:hsl(200 50% 65%);--j-fill-d:hsl(200 30% 22%);--j-edge-d:hsl(200 30% 32%)" class="jmark known">Cell</span><span class="badge src"><svg fill="currentColor" class="brand-mark" focusable="false" aria-hidden="true" height="12" width="12" viewBox="0 0 320 512"><path d="M 310.36246,40 25.167851,134.01757 217.23482,200.00243 310.36246,169.33249 Z M 9.637541,139.12923 V 271.09895 L 201.67195,205.11409 Z m 207.597279,71.09651 -192.039829,65.98482 77.543069,25.53667 192.06689,-65.95772 z m 93.12764,30.6754 -192.06695,65.9848 192.06695,65.98494 z M 102.73806,311.99758 9.637541,342.66751 V 472 L 294.80495,377.9825 Z" /></svg>Crossref</span><span class="badge lib">보유 중</span></div>
 					<div title="~42.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 255" id="d-evidence" class="d-evidence">Crossref 인용 41 · 출판 후 연평균 41.0 · 저널 IF 추정 42.5</div>
 					<div hidden id="d-status" class="d-status"></div>
 					<div id="d-authors" class="d-authors">Ren Ahn, Paula Silva</div>
@@ -1034,7 +820,7 @@ Reading list" id="d-collections" class="d-collections">컬렉션: … › Tissue
 
 	<div id="ctxmenu" class="ctxmenu" hidden></div>
 	<div style="max-height:852px;top:98px;left:auto;right:32px;max-width:560px" id="histmenu" class="selmenu histmenu" role="menu"><div tabindex="0" title="tissue repair · OpenAlex, Crossref, Europe PMC, arXiv
-2026. 10. 1. AM 7:36:14" data-id="4dbd027c51edd9e0" role="menuitem" class="histopt"><span class="h-label">tissue repair · OpenAlex, Crossref, Europe PMC, arXiv</span><span class="h-meta">통합 검색 (선택한 소스) · 12건 · 오늘</span></div><hr><div role="menuitem" class="histclear">저장된 검색 모두 지우기</div></div>
+2026. 10. 1. AM 7:48:38" data-id="4dbd027c51edd9e0" role="menuitem" class="histopt"><span class="h-label">tissue repair · OpenAlex, Crossref, Europe PMC, arXiv</span><span class="h-meta">통합 검색 (선택한 소스) · 12건 · 오늘</span></div><hr><div role="menuitem" class="histclear">저장된 검색 모두 지우기</div></div>
 	<div hidden style="top:3px;left:NaNpx" aria-label="더보기" id="tbmenu" class="selmenu tbmenu" role="menu"></div>
 </div>
 </body></html>
