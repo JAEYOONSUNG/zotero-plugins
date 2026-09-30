@@ -180,7 +180,7 @@
        code actually running, and the stylesheet actually applied, for a marker
        of this build. */
     results.push(await attempt('the running panel is this build, not a cached one', () => {
-      const MARK = 'function drawMatrixPicker(parent){';
+      const MARK = 'const seenWorkKey=work=>';
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
