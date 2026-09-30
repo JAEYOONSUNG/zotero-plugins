@@ -2579,6 +2579,34 @@ test('the journals tab opens on what the library does with each journal: held, u
  f.bench.destroy();
 });
 
+test('내 문헌 분석 carries the official JCR quartile and category rank when a real captured catalog is loaded, and says nothing where it is not in JCR',async()=>{
+ const f=fixture();
+ const extra=[{id:'5',key:'K5',libraryID:1,title:'Cell paper',year:'2023',venue:'Cell',itemType:'journalArticle',tags:[]}];
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ f.refs.set(5,{id:5});
+ f.runtime.journalIdentity={identify:venue=>({Nature:{issns:['0028-0836']},Science:{issns:['0036-8075']}})[venue]||null};
+ // The categories a journal is placed in are not sorted best-first in the
+ // catalog; the row has to pick out Q1 8/140 over Q2 50/300 itself.
+ f.runtime.jcrCatalog={source:{provider:'Clarivate',product:'JCR',metricYear:2025},
+  category:key=>({'MULTIDISCIPLINARY SCIENCES':{name:'Multidisciplinary Sciences'},ENGINEERING:{name:'Engineering'}}[key]||null),
+  journals:[
+   {title:'Nature',issns:['0028-0836'],jif:50.5,categoryMetrics:[
+     {categoryKey:'ENGINEERING',rank:50,rankTotal:300,quartile:2,percentile:83.5},
+     {categoryKey:'MULTIDISCIPLINARY SCIENCES',rank:8,rankTotal:140,quartile:1,percentile:94.3}]},
+   {title:'Science',issns:['0036-8075'],jif:44.7,categoryMetrics:[
+     {categoryKey:'MULTIDISCIPLINARY SCIENCES',rank:12,rankTotal:140,quartile:1,percentile:91.8}]}]};
+ await f.bench.show('journals');
+ const row=venue=>[...f.body().querySelectorAll('.sc-journal-reading-row')].find(r=>r.querySelector('.sc-journal-reading-name-text')?.textContent===venue);
+ assert.equal(row('Nature').querySelector('.sc-journal-reading-jcr').textContent,'IF 50.5 · Q1 8/140 Multidisciplinary Sciences +1','the better of its two categories leads, the other counted');
+ assert.match(row('Nature').querySelector('.sc-journal-reading-jcr').getAttribute('title'),/Clarivate JCR 2025\(공식\).*Multidisciplinary Sciences Q1 8\/140.*Engineering Q2 50\/300/s);
+ assert.equal(row('Science').querySelector('.sc-journal-reading-jcr').textContent,'IF 44.7 · Q1 12/140 Multidisciplinary Sciences','one category, no +N chip');
+ assert.equal(row('Cell').querySelector('.sc-journal-reading-jcr').textContent,'JCR에 없음','looked up and absent, not a blank');
+ assert.match(f.body().querySelector('.sc-journal-reading-jcr-note').textContent,/IF·Q·순위는 Clarivate JCR 2025\(공식\) 기준입니다\./);
+ await f.click('IF 높은 순');
+ assert.deepEqual([...f.body().querySelectorAll('.sc-journal-reading-row:not(.sc-journal-reading-header) .sc-journal-reading-name-text')].map(n=>n.textContent).slice(0,2),['Nature','Science'],'highest JIF first');
+ f.bench.destroy();
+});
+
 test('the journals tab shows the stored catalog with local positions and absent-library markers',async()=>{
  const f=fixture();
  const registry=[{title:'Nature',rank:1,key:'nature',issns:['0028-0836'],abbreviation:'NATURE',impactFactor:50.5,year:2025,quartile:1,publisher:'Nature Portfolio'},

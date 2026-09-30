@@ -105,11 +105,17 @@ test('category journal drilldown uses captured membership and selected-category 
  const alpha=f.host.querySelector('[data-journal-key="alpha"]');
  assert.equal(alpha.querySelector('[data-column="rank"]').textContent,'2/3');
  assert.equal(alpha.querySelector('[data-column="quartile"]').textContent,'Q3');
- assert.equal(alpha.querySelector('[data-column="percentile"]').textContent,'55.5');
+ // The percentile column is the estimate catalog's own hedge; the official
+ // JCR figure already states quartile and rank/rankTotal, so it is dropped.
+ assert.equal(alpha.querySelector('[data-column="percentile"]'),null);
  assert.doesNotMatch(alpha.querySelector('[data-column="quartile"]').textContent,/Q1|Q4/);
  const zulu=f.host.querySelector('[data-journal-key="zulu"]');assert.equal(zulu.querySelector('[data-column="rank"]').textContent,'1/3');
  assert.equal(zulu.querySelector('[data-column="quartile"]').textContent,'—','known rank must not be used to invent missing Q');
  const unknown=f.host.querySelector('[data-journal-key="unknown"]');assert.equal(unknown.querySelector('[data-column="quartile"]').textContent,'N/A');
+ // The category already open on is not repeated in its own column; a journal
+ // in one other category shows it, one in none shows the dash.
+ assert.deepEqual([...alpha.querySelectorAll('[data-column="categories"] li')].map(n=>n.textContent),['Shared Category']);
+ assert.equal(zulu.querySelector('[data-column="categories"]').textContent,'—');
  assert.equal(alpha.querySelector('button').dataset.opens,'window');
  f.click(alpha.querySelector('button'));assert.deepEqual(f.calls.find(c=>c[0]==='journal'),['journal','alpha',{categoryKey:'AGRONOMY'}]);
  f.click(f.button('뒤로'));assert.equal(f.browser.state.view,'groups');assert.ok(f.group('Agricultural Sciences').querySelector('[role="region"]'));
@@ -117,8 +123,25 @@ test('category journal drilldown uses captured membership and selected-category 
  const sharedAlpha=f.host.querySelector('[data-journal-key="alpha"]');
  assert.deepEqual([...sharedAlpha.querySelectorAll('[data-column="rank"] li')].map(n=>n.textContent),['SCIE: 1/2','SSCI: 2/2']);
  assert.deepEqual([...sharedAlpha.querySelectorAll('[data-column="quartile"] li')].map(n=>n.textContent),['SCIE: Q1','SSCI: Q4']);
+ assert.deepEqual([...sharedAlpha.querySelectorAll('[data-column="categories"] li')].map(n=>n.textContent),['Agronomy']);
  assert.equal(f.host.querySelector('[data-journal-key="shared"] [data-column="rank"]').textContent,'—','no locally calculated rank from JIF order');
  f.browser.destroy();
+});
+
+test('the docked-width journal table leads with the answer — JIF and its year in the header, then rank and quartile — and drops the year column when every row shares it',()=>{
+ const f=fixture();f.click(f.group('Clinical Medicine').querySelector('button'));f.click(f.category('MEDICINE'));
+ assert.deepEqual([...f.host.querySelectorAll('thead th')].map(n=>n.textContent),
+  ['저널','JIF 2025','JIF 순위','JIF Q','다른 카테고리','ISSN','검색']);
+ assert.equal(f.host.querySelector('[data-column="year"]'),null,'one shared year moves into the header instead of repeating on every row');
+ assert.equal(f.host.querySelector('[data-journal-key="medicine"] [data-column="categories"]').textContent,'—','MEDICINE is the category already open on');
+});
+
+test('a name search still shows the category\'s own Q and rank next to it, so the fallback list answers "how good" without another press',()=>{
+ const f=fixture();f.search('Alpha Journal');
+ const agronomy=f.button('Agronomy · Q3 2/3');
+ assert.ok(agronomy,'the category link carries its quartile and rank/rankTotal');
+ const shared=f.button('Shared Category · Q1 1/2');
+ assert.ok(shared,'a journal in two categories shows the standing for each');
 });
 
 test('search, direction, pagination and back navigation preserve the route being explored',()=>{

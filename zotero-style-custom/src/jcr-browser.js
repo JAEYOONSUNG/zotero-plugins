@@ -227,9 +227,13 @@
     const memberships=el('ul',null,el('td',null,row),{class:'sc-jcr-memberships'});
     for(const key of journal.categoryKeys||[]){
      const item=el('li',null,memberships);
-     const label=catalog.category(key)?.name||key;
-     if(catalog.category(key))button(displayName(label),item,()=>navigate('journals',key),{class:'sc-jcr-category-link','data-category-key':key,title:label});
-     else el('span',displayName(label),item);
+     const cat=catalog.category(key),label=cat?.name||key;
+     // The Q/rank that answers "how good in this category" travels with the
+     // category name so a name search shows it without another press.
+     const st=(figure.ranks?(cat?standing(journal,cat):[]):(journal.categoryMetrics||[]).filter(m=>m.categoryKey===key))[0];
+     const tail=st&&st.quartile!=null?` · Q${st.quartile}${st.rank!=null&&st.rankTotal!=null?` ${st.rank}/${st.rankTotal}`:''}`:'';
+     if(cat)button(displayName(label)+tail,item,()=>navigate('journals',key),{class:'sc-jcr-category-link','data-category-key':key,title:label});
+     else el('span',displayName(label)+tail,item);
     }
     el('td',journal.issns?.length?journal.issns.join(' · '):'—',row,{'data-column':'issns'});
     figureCell(row,journal[figure.key+'Display']??journal[figure.key],{'data-column':figure.key});
@@ -393,18 +397,25 @@
    }
    controls(parent);const found=sorted(captured),shown=page(found,parent);
    if(!found.length){el('p',t('검색에 맞는 저널이 없습니다.'),parent,{class:'sc-jcr-empty'});return;}
-   const ranked=['rank','quartile',...(figure.percentile?['percentile']:[])];
-   const headings=offered([['title','저널'],['categories',figure.categories],['issns','ISSN'],[figure.key,figure.value],
-    ['rank',figure.rank],['quartile',figure.quartile],...(figure.percentile?[['percentile',figure.percentileLabel]]:[]),['year','지표 연도']]);
+   // JIF Q and rank are the answer to "is this any good"; ISSN and the other
+   // categories are identification, not the reason to look. At the docked
+   // 820px width there is only room for one of the two groups before a
+   // scrollbar, so the figures come right after the name.
+   const ranked=['rank','quartile',...(figure.percentile&&figure.estimate?['percentile']:[])];
+   // 지표 연도 repeated on every one of thousands of rows says nothing a reader
+   // does not already know from the first row; when the whole page shares one
+   // year it moves into the figure header instead of its own column.
+   const commonYear=found.every(j=>j.year===found[0].year)?found[0].year:null;
+   const figureHeading=commonYear!=null?`${t(figure.value)} ${commonYear}`:figure.value;
+   const headings=offered([['title','저널'],[figure.key,figureHeading],
+    ['rank',figure.rank],['quartile',figure.quartile],...(figure.percentile&&figure.estimate?[['percentile',figure.percentileLabel]]:[]),
+    ['categories','다른 카테고리'],['issns','ISSN'],...(commonYear==null?[['year','지표 연도']]:[])]);
    if(typeof options.onSearchJournal==='function')headings.push(['action','검색']);
    const body=table(parent,headings,figure.journalTable);
    for(const journal of shown){
     const row=el('tr',null,body,{'data-journal-key':journal.key}),name=el('td',null,row);
     el('span',journal.title,name,{class:'sc-jcr-journal-title'});
     if(journal.abbreviation)el('span',journal.abbreviation,name,{class:'sc-jcr-abbreviation'});
-    const memberships=el('ul',null,el('td',null,row),{class:'sc-jcr-memberships'});
-    for(const key of journal.categoryKeys)el('li',displayName(catalog.category(key)?.name||key),memberships,{title:catalog.category(key)?.name||key});
-    el('td',journal.issns?.length?journal.issns.join(' · '):'—',row,{'data-column':'issns'});
     figureCell(row,journal[figure.key+'Display']??journal[figure.key],{'data-column':figure.key});
     /* JCR states a journal's standing per category, and per edition inside it,
        in categoryMetrics. The open catalog has one rank and one quarter per
@@ -423,7 +434,17 @@
       el('li',(official.length>1&&editions?editions+': ':'')+display,values,{title:category.name+(editions?' · '+editions:'')});
      }
     }
-    el('td',journal.year??'—',row,{'data-column':'year',class:'sc-jcr-number'});
+    // The category this list is already open on is not repeated: only the
+    // journal's other categories are worth a column here.
+    const others=(journal.categoryKeys||[]).filter(key=>key!==category.key);
+    const categoryCell=el('td',null,row,{'data-column':'categories'});
+    if(!others.length)categoryCell.textContent='—';
+    else{
+     const memberships=el('ul',null,categoryCell,{class:'sc-jcr-memberships'});
+     for(const key of others)el('li',displayName(catalog.category(key)?.name||key),memberships,{title:catalog.category(key)?.name||key});
+    }
+    el('td',journal.issns?.length?journal.issns.join(' · '):'—',row,{'data-column':'issns'});
+    if(commonYear==null)el('td',journal.year??'—',row,{'data-column':'year',class:'sc-jcr-number'});
     if(typeof options.onSearchJournal==='function')button(t(options.searchJournalLabel||'저널 검색'),el('td',null,row),()=>invoke(options.onSearchJournal,journal,{categoryKey:category.key}),{'data-opens':'window'});
    }
   }

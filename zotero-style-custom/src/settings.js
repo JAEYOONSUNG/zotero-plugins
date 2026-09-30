@@ -31,7 +31,7 @@
   const valueOf=state=>state.spec.type==='boolean'?state.input.checked:state.input.value;
   function display(state,value){if(state.spec.type==='boolean')state.input.checked=!!value;else if(state.spec.type==='note')state.input.textContent=String(value??'');else state.input.value=String(value??'');}
   function sync(state){
-   if(FIRST.includes(state.spec.key))refreshFirst();
+   if(FIRST.includes(state.spec.key)||state.spec.key==='aiModel')refreshFirst();
    const busy=state.pending||categories.get(state.spec.category)?.pending;
    state.input.disabled=!!busy||state.loading;
    if(state.apply){state.apply.disabled=!!busy||state.loading||!state.dirty;state.apply.hidden=['boolean','select'].includes(state.spec.type)&&!state.error;}
@@ -165,8 +165,8 @@
    const range=spec.type==='number'?t('기본 {0} · 허용 {1}–{2}').replace('{0}',String(spec.default)).replace('{1}',spec.min??'∞').replace('{2}',spec.max??'∞')+(spec.step&&spec.step!==1&&spec.step!=='any'?' · '+t('{0} 단위').replace('{0}',String(spec.step)):''):'';
    const helpText=[...[spec.description,spec.help].filter(Boolean).map(t),range].filter(Boolean).join(' ')
     ||(spec.type==='note'?t('읽기 전용입니다. 값을 바꾸지 않습니다.')
-    :secret(spec)?t('비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.'):t('이 값은 해당 기능에 적용됩니다.'));
-   const help=node('p',null,row,{id:descriptionID,class:'scs-help'});help.textContent=helpText;
+    :secret(spec)?t('비밀번호로 가려 표시합니다. 분류 기본값 복원으로 지워지지 않습니다.'):'');
+   const help=node('p',null,row,{id:descriptionID,class:'scs-help'});help.textContent=helpText;help.hidden=!helpText;
    if(spec.requires){state.need=node('p','',row,{class:'scs-help scs-need'});state.need.hidden=true;}
    if(spec.key==='readerCustomForeground'){state.contrastNote=node('p','',row,{class:'scs-help scs-need'});state.contrastNote.hidden=true;}
    state.feedback=node('p','',row,{id:feedbackID,class:'scs-feedback',role:'status','aria-live':'polite'});states.set(spec.key,state);sync(state);
@@ -184,10 +184,11 @@
   }
   search.addEventListener('input',filter);clearSearch.addEventListener('click',()=>{search.value='';filter();search.focus();});
   {
-   const heading=node('strong','먼저 할 것',first);node('p','비워 두어도 동작하지만, 채우면 인용 수·저널 정보·AI 기능이 열립니다.',first,{class:'scs-help'});
+   const heading=node('strong','먼저 할 것',first);node('p','비우면 아래 기능이 꺼져 있습니다.',first,{class:'scs-help'});
    const list=node('div',null,first,{class:'scs-first-list'}),rows=new Map();
    for(const key of FIRST){const state=states.get(key);if(!state)continue;const row=node('button',null,list,{type:'button','data-first':key});node('span',state.spec.label,row);node('span',state.spec.category==='ai'?'AI 요약·비교':key==='citationEmail'?'(선택) 빠른 대기열 · 주소가 서버에 남습니다':'없으면 인용 수 열이 비어 있습니다',row,{class:'scs-first-why'});row.addEventListener('click',()=>{selectCategory(state.spec.category);state.input.focus();});rows.set(key,row);}
-   refreshFirst=()=>{if(destroyed)return;let open=0;for(const [key,row]of rows){const state=states.get(key);const blank=!String(valueOf(state)??'').trim();row.hidden=!blank;if(blank)open++;}first.hidden=!open;heading.textContent=t(open>1?'먼저 할 것':'아직 비어 있는 것');};
+   // aiEndpoint's row stays open until aiModel is filled too: AI stays off with either blank.
+   refreshFirst=()=>{if(destroyed)return;let open=0;for(const [key,row]of rows){const state=states.get(key);const partner=key==='aiEndpoint'?states.get('aiModel'):null;const blank=!String(valueOf(state)??'').trim()||(partner&&!String(valueOf(partner)??'').trim());row.hidden=!blank;if(blank)open++;}first.hidden=!open;heading.textContent=t(open>1?'먼저 할 것':'아직 비어 있는 것');};
    refreshFirst();
   }
   nav.addEventListener('keydown',event=>{if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...nav.querySelectorAll('button')],index=buttons.indexOf(doc.activeElement);if(index<0)return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:Math.max(0,Math.min(buttons.length-1,index+(event.key==='ArrowDown'?1:-1)));buttons[next].focus();selectCategory(buttons[next].dataset.category);});

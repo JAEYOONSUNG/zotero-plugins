@@ -23,7 +23,7 @@
 #style-custom-settings-root .scs-nav button{text-align:start;border-color:transparent;background:transparent;min-height:32px}
 #style-custom-settings-root .scs-nav button.active{border-color:color-mix(in srgb,GrayText 35%,transparent);border-radius:10px;font-weight:600;background:ButtonFace}
 #style-custom-settings-root .scs-category-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid color-mix(in srgb,GrayText 25%,transparent);padding:4px 0 10px}
-#style-custom-settings-root .scs-category-heading button{border-radius:100px;padding:5px 12px}
+#style-custom-settings-root .scs-category-heading button{border-radius:6px;padding:5px 12px}
 #style-custom-settings-root .scs-section-status{flex-basis:100%;margin:0}
 #style-custom-settings-root .scs-category{padding-bottom:24px;min-width:0}
 #style-custom-settings-root .scs-setting{padding:13px 0;border-bottom:1px solid color-mix(in srgb,GrayText 25%,transparent)}

@@ -112,7 +112,7 @@
       "label": "최근 문헌 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 최근 문헌",
+      "description": "연구 작업 패널 → 최근 문헌",
       "consumer": "featureEnabled"
     },
     {
@@ -121,7 +121,7 @@
       "label": "태그 추가·제거·경로 이름 변경·병합 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 중첩 태그 · 선택 문헌 범위에서만 변경; 상태·별점 전용 태그 경로 변경 제외",
+      "description": "연구 작업 패널 → 중첩 태그 · 선택 문헌 범위에서만 변경; 상태·별점 전용 태그 경로 변경 제외",
       "consumer": "featureEnabled"
     },
     {
@@ -148,7 +148,7 @@
       "label": "주석 관리·범위 선택·색상 일괄 변경·노트 추출 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 주석 · 현재 컬렉션·하위 컬렉션·선택 문헌 범위",
+      "description": "연구 작업 패널 → 주석 · 현재 컬렉션·하위 컬렉션·선택 문헌 범위",
       "consumer": "featureEnabled"
     },
     {
@@ -166,7 +166,7 @@
       "label": "주석별 참조 노트 수·역링크 사용",
       "type": "boolean",
       "default": true,
-      "description": "PDF 주석 머리글 / 워크벤치 → 주석·역링크 · 같은 PDF의 다른 주석 및 다른 라이브러리 참조 구분",
+      "description": "PDF 주석 머리글 / 연구 작업 패널 → 주석·역링크 · 같은 PDF의 다른 주석 및 다른 라이브러리 참조 구분",
       "consumer": "featureEnabled"
     },
     {
@@ -175,7 +175,7 @@
       "label": "카드·보드 이름·색상·연결 편집과 삭제 복원 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 캔버스 · 문헌/메모 카드; 보드 최대100개, 카드 최대500개",
+      "description": "연구 작업 패널 → 캔버스 · 문헌/메모 카드; 보드 최대100개, 카드 최대500개",
       "consumer": "featureEnabled"
     },
     {
@@ -184,7 +184,7 @@
       "label": "인용 수 열·자동 조회 사용",
       "type": "boolean",
       "default": true,
-      "description": "Cited Count",
+      "description": "문헌 목록에 인용 수 열을 추가하고 OpenAlex로 자동 조회합니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -193,7 +193,7 @@
       "label": "컬렉션 문헌 수 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 컬렉션",
+      "description": "연구 작업 패널 → 컬렉션",
       "consumer": "featureEnabled"
     },
     {
@@ -202,7 +202,7 @@
       "label": "저자·기여자 열 사용",
       "type": "boolean",
       "default": true,
-      "description": "Creators",
+      "description": "문헌 목록에 저자·기여자 열을 추가합니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -211,7 +211,7 @@
       "label": "앱 밝게·어둡게 전환 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 스타일 편집",
+      "description": "연구 작업 패널 → 스타일 편집",
       "consumer": "featureEnabled"
     },
     {
@@ -220,7 +220,7 @@
       "label": "추가일·수정일 열 사용",
       "type": "boolean",
       "default": true,
-      "description": "Added / Modified",
+      "description": "문헌 목록에 추가일·수정일 열을 추가합니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -229,7 +229,7 @@
       "label": "문헌 상세·노트·주석·필터·정렬·페이지 탐색 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 보유 문헌 · 상태·별점·연도 필터 및 현재 컬렉션 범위; 화면100개씩 페이지 이동",
+      "description": "연구 작업 패널 → 보유 문헌 · 상태·별점·연도 필터 및 현재 컬렉션 범위; 화면100개씩 페이지 이동",
       "consumer": "featureEnabled"
     },
     {
@@ -238,7 +238,7 @@
       "label": "컬렉션 즐겨찾기 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 컬렉션",
+      "description": "연구 작업 패널 → 컬렉션",
       "consumer": "featureEnabled"
     },
     {
@@ -247,7 +247,7 @@
       "label": "관계·태그·저자 그래프 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 관계 그래프 · 화면 최대180노드, 검색으로 범위를 좁힘",
+      "description": "연구 작업 패널 → 관계 그래프 · 화면 최대180노드, 검색으로 범위를 좁힘",
       "consumer": "featureEnabled"
     },
     {
@@ -276,7 +276,7 @@
       "label": "작업 메뉴 표시·숨김 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 스타일 편집",
+      "description": "연구 작업 패널 → 스타일 편집",
       "consumer": "featureEnabled"
     },
     {
@@ -285,7 +285,7 @@
       "label": "노트 검색·생성·편집 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 노트 · 기존 리치 노트 편집은 Zotero 네이티브 편집기로 연결",
+      "description": "연구 작업 패널 → 노트 · 기존 리치 노트 편집은 Zotero 네이티브 편집기로 연결",
       "consumer": "featureEnabled"
     },
     {
@@ -294,7 +294,7 @@
       "label": "저널·발행처 열 사용",
       "type": "boolean",
       "default": true,
-      "description": "Publication",
+      "description": "문헌 목록에 저널·발행처 열을 추가합니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -321,7 +321,7 @@
       "label": "읽기 시간·상태 연동 사용",
       "type": "boolean",
       "default": true,
-      "description": "Status",
+      "description": "문헌 목록에 읽음 상태 열을 추가하고 읽기 시간과 연동합니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -384,7 +384,7 @@
       "label": "컬렉션 이름·개수·즐겨찾기 정렬 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 컬렉션",
+      "description": "연구 작업 패널 → 컬렉션",
       "consumer": "featureEnabled"
     },
     {
@@ -402,7 +402,7 @@
       "label": "패널 CSS 편집 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 스타일 편집 · 패널 범위 CSS, 외부 로딩 규칙 제외",
+      "description": "연구 작업 패널 → 스타일 편집 · 패널 범위 CSS, 외부 로딩 규칙 제외",
       "consumer": "featureEnabled"
     },
     {
@@ -411,7 +411,7 @@
       "label": "탭 순서·다른 탭 닫기·저장 그룹 편집 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 탭 관리 · 그룹 이름·내용 갱신; 라이브러리 탭 보호",
+      "description": "연구 작업 패널 → 탭 관리 · 그룹 이름·내용 갱신; 라이브러리 탭 보호",
       "consumer": "featureEnabled"
     },
     {
@@ -420,7 +420,7 @@
       "label": "중첩 태그 탐색 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 중첩 태그",
+      "description": "연구 작업 패널 → 중첩 태그",
       "consumer": "featureEnabled"
     },
     {
@@ -438,7 +438,7 @@
       "label": "텍스트 태그·태그 수 사용",
       "type": "boolean",
       "default": true,
-      "description": "Tags / #Tags",
+      "description": "문헌 목록에 텍스트 태그와 태그 수 열을 추가합니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -493,7 +493,7 @@
       "label": "열 배치 저장·복원·이름·내용 갱신 사용",
       "type": "boolean",
       "default": true,
-      "description": "워크벤치 → 뷰 그룹 · 열 순서·너비·표시·정렬 저장",
+      "description": "연구 작업 패널 → 뷰 그룹 · 열 순서·너비·표시·정렬 저장",
       "consumer": "featureEnabled"
     },
     {
@@ -502,7 +502,7 @@
       "label": "선택 주석 병합 사용",
       "type": "boolean",
       "default": true,
-      "description": "PDF 주석 우클릭·Style 메뉴 / 워크벤치 → 주석 · 동일 PDF·유형·색상인 하이라이트/밑줄, 같은 페이지 또는 인접 두 페이지; 위치·텍스트·메모·태그 보존, 나머지는 휴지통",
+      "description": "PDF 주석 우클릭·Style 메뉴 / 연구 작업 패널 → 주석 · 동일 PDF·유형·색상인 하이라이트/밑줄, 같은 페이지 또는 인접 두 페이지; 위치·텍스트·메모·태그 보존, 나머지는 휴지통",
       "consumer": "featureEnabled"
     },
     {
@@ -526,7 +526,8 @@
       "category": "columns",
       "label": "제목에 읽기 히트맵 표시",
       "type": "boolean",
-      "default": false
+      "default": false,
+      "description": "제목 칸 아래에 얇은 띠를 그려 페이지별로 읽은 시간을 짙기로 보여 줍니다. 읽기 기록이 없는 문헌에는 그리지 않습니다."
     },
     {
       "key": "unreadBold",
@@ -593,7 +594,7 @@
     {
       "key": "autoStatus",
       "category": "storage",
-      "label": "읽기 시작 시 reading 상태 자동 반영",
+      "label": "읽기를 시작하면 '읽는 중'으로 자동 표시",
       "type": "boolean",
       "default": true
     },
@@ -603,7 +604,8 @@
       "category": "storage",
       "label": "읽는 문헌의 수정일 갱신",
       "type": "boolean",
-      "default": false
+      "default": false,
+      "description": "PDF를 읽을 때 그 첨부와 부모 문헌의 '수정일'을 지금으로 바꿉니다. 동기화되고 수정일순 정렬이 바뀝니다. 기본은 꺼짐."
     },
     {
       "key": "recordIntervalMs",
@@ -1032,14 +1034,16 @@
       "category": "metrics",
       "label": "보이는 문헌 인용 수 자동 조회",
       "type": "boolean",
-      "default": true
+      "default": true,
+      "description": "목록에 보이는 문헌의 인용 수를 OpenAlex에서 조회합니다. OpenAlex API 키가 있어야 동작합니다."
     },
     {
       "key": "metadataCitations",
       "category": "metrics",
       "label": "논문 추가·수정 시 인용 수 조회 후 Extra 저장",
       "type": "boolean",
-      "default": true
+      "default": true,
+      "description": "논문을 추가·수정할 때 인용 수를 조회해 Extra에 'Citations: N (출처, 날짜)' 한 줄로 적습니다(동기화됨)."
     },
     {
       "key": "citationRefreshDays",
@@ -1077,7 +1081,7 @@
       "type": "password",
       "default": "",
       "secret": true,
-      "description": "api.openalex.org에만 Authorization 헤더로 보냅니다. openalex.org 계정에서 무료 발급되며, 비워 두면 키 없이 조회합니다."
+      "description": "api.openalex.org에만 보냅니다. openalex.org 계정에서 무료로 받습니다. 비워 두면 자동 인용 수 조회가 멈추고, 우클릭 → 선택한 문헌 인용 수 새로고침만 하루 약 10건 됩니다."
     },
     {
       "key": "authorPortraits",
@@ -1134,11 +1138,15 @@
     },
     {
       "key": "aiLanguage",
-      "description": "요약·번역 결과를 쓸 언어. 한국어로 받으려면 Korean으로 두세요.",
+      "description": "요약·번역 결과를 쓸 언어입니다.",
       "category": "ai",
       "label": "출력 언어",
-      "type": "text",
-      "default": "Korean"
+      "type": "select",
+      "default": "Korean",
+      "options": [
+        { "value": "Korean", "label": "한국어" },
+        { "value": "English", "label": "English" }
+      ]
     },
     {
       "key": "aiTagsPrompt",

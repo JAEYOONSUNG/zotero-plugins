@@ -2,6 +2,47 @@
 (function(root){
  'use strict';
  const HTML='http://www.w3.org/1999/xhtml',SVG='http://www.w3.org/2000/svg';
+ /* The JCR catalog's own journals, indexed once by ISSN and by exact
+    lower-cased title so a library venue can be matched without scanning
+    every journal on every render. Only worth building for a catalog that is
+    actually the official Clarivate JCR (jif/categoryMetrics populated); the
+    shipped OpenAlex placeholder never fills those fields, so its journals
+    would never match and the scan would be wasted. */
+ const jcrCatalogIndex=new WeakMap();
+ function jcrIndex(catalog){
+  let entry=jcrCatalogIndex.get(catalog);
+  if(entry)return entry;
+  const byIssn=new Map(),byTitle=new Map();
+  for(const journal of catalog.journals||[]){
+   for(const raw of journal.issns||[]){
+    const key=String(raw).replace(/[^0-9xX]/g,'').toUpperCase();
+    if(key.length===8&&!byIssn.has(key))byIssn.set(key,journal);
+   }
+   const folded=String(journal.title||'').trim().toLowerCase();
+   if(folded&&!byTitle.has(folded))byTitle.set(folded,journal);
+  }
+  entry={byIssn,byTitle};jcrCatalogIndex.set(catalog,entry);
+  return entry;
+ }
+ // ISSNs first; an exact title is a last resort so two differently named
+ // journals sharing an imprecise title are never merged into one standing.
+ function jcrMatch(catalog,venue,issns){
+  if(!catalog||!venue)return null;
+  const {byIssn,byTitle}=jcrIndex(catalog);
+  for(const raw of issns||[]){
+   const key=String(raw||'').replace(/[^0-9xX]/g,'').toUpperCase();
+   if(key.length===8&&byIssn.has(key))return byIssn.get(key);
+  }
+  return byTitle.get(String(venue).trim().toLowerCase())||null;
+ }
+ // The one category worth leading with: the best quartile, then, inside a
+ // tie, the highest percentile -- Q1 8/140 says more than Q3 402/900 on the
+ // same row, whichever order the categories happen to be captured in.
+ function jcrBestStanding(journal){
+  const rows=(journal.categoryMetrics||[]).filter(m=>m.quartile!=null||m.rank!=null);
+  if(!rows.length)return null;
+  return rows.slice().sort((a,b)=>(a.quartile??5)-(b.quartile??5)||(b.percentile??-1)-(a.percentile??-1))[0];
+ }
  const TABS=[['explore','보유 문헌'],['recent','최근 문헌'],['related','관련 논문'],['authors','저자 추적'],['graph','관계 그래프'],['tags','중첩 태그'],['notes','노트'],['annotations','주석'],['backlinks','역링크'],['attachments','첨부 미리보기'],['reading','읽기 진행'],['tabs','탭 관리'],['views','뷰 그룹'],['canvas','캔버스'],['matrix','논문 비교'],['collections','컬렉션'],['journals','저널 지표'],['assist','번역 · AI'],['appearance','스타일 편집']];
  const GROUPS=[['탐색',['explore','recent','related','authors','collections','journals']],['읽기',['reading','notes','annotations','attachments','backlinks']],['정리',['tags','graph','canvas','matrix']],['도구',['tabs','views','assist','appearance']]];
  const FILTER_TABS=new Set(['explore','recent','collections','journals','reading','notes','annotations','attachments','tags','graph']);
@@ -4858,19 +4899,35 @@
    // The shares' denominators are the whole of what is in view, fixed whatever the order or how many rows show.
    const totalPapers=scope.length,totalSeconds=scope.reduce((n,i)=>n+(Number(i.seconds)||0),0);
    const median=list=>{const s=[...list].sort((a,b)=>a-b);return s.length?(s.length%2?s[(s.length-1)/2]:(s[s.length/2-1]+s[s.length/2])/2):null;};
+   /* The official standing only exists in a real captured JCR catalog: the
+      shipped OpenAlex placeholder is declared as an estimate (source.metric)
+      and never carries jif/categoryMetrics, so it is treated the same as no
+      catalog at all rather than shown under the Clarivate name. */
+   const jcrCatalog=runtime.jcrCatalog&&!runtime.jcrCatalog.source?.metric?runtime.jcrCatalog:null;
    const all=[...groups.values()].map(g=>{
     const known=list=>list.map(i=>i.citations).filter(c=>c!=null&&c!==''&&Number.isFinite(Number(c))).map(Number);
     const cited=known(g.items);
     const reading=g.items.filter(i=>i.status==='done'||i.status==='reading'),unread=g.items.filter(i=>i.status!=='done'&&i.status!=='reading');
     // The citation median split by reading state: what has been taken up against what is waiting.
     const split=[['read',reading],['unread',unread]].map(([key,list])=>{const c=known(list);return {key,n:list.length,known:c.length,median:median(c)};});
+    let jcrJournal=null;
+    if(jcrCatalog&&g.venue){
+     const id=runtime.journalIdentity?.identify?.(g.venue)||null;
+     const record=journalInputs(g.venue,g.items).record;
+     const issns=[...new Set([...(id?.issns||[]),...String(record?.issn||'').split(/[,;\s]+/)])].filter(Boolean);
+     jcrJournal=jcrMatch(jcrCatalog,g.venue,issns);
+    }
+    const jcrStandings=jcrJournal?(jcrJournal.categoryMetrics||[]).filter(m=>m.quartile!=null||m.rank!=null)
+     .sort((a,b)=>(a.quartile??5)-(b.quartile??5)||(b.percentile??-1)-(a.percentile??-1)):[];
     return {...g,key:String(g.venue),unread,
-     seconds:g.items.reduce((n,i)=>n+(Number(i.seconds)||0),0),cited,median:median(cited),split};
+     seconds:g.items.reduce((n,i)=>n+(Number(i.seconds)||0),0),cited,median:median(cited),split,
+     jcrJournal,jcrStandings};
    });
    // One scale for every row's citation marks.
    const citeScale=Math.max(1,...all.flatMap(g=>g.split.map(p=>p.median||0)));
-   const byTime=state.journalReadingSort==='time';
-   all.sort(byTime?(a,b)=>b.seconds-a.seconds||b.items.length-a.items.length:(a,b)=>b.unread.length-a.unread.length||b.items.length-a.items.length);
+   const byTime=state.journalReadingSort==='time',byIF=state.journalReadingSort==='if';
+   all.sort(byIF?(a,b)=>(b.jcrJournal?.jif??-1)-(a.jcrJournal?.jif??-1)||b.items.length-a.items.length
+    :byTime?(a,b)=>b.seconds-a.seconds||b.items.length-a.items.length:(a,b)=>b.unread.length-a.unread.length||b.items.length-a.items.length);
    const box=node('section',null,body,{class:'sc-journal-reading','aria-label':T('내 문헌 분석')});
    const head=node('div',null,box,{class:'sc-journal-reading-head'});
    node('h3',T('내 문헌 분석'),head,{class:'sc-journal-reading-title'});
@@ -4878,16 +4935,36 @@
    // A search or filter above narrows this too; it says so, or a part reads as the whole library.
    const narrowed=[state.query&&T(`검색 “${state.query}”`),state.scope!=='library'&&T('선택 범위'),...Object.values(parentOptions()).filter(Boolean).length?[T('필터 적용')]:[]].filter(Boolean);
    if(narrowed.length)node('span',T('적용 중: ')+narrowed.join(' · '),head,{class:'sc-journal-reading-scope'});
+   if(jcrCatalog?.source?.metricYear)node('p',T(`IF·Q·순위는 Clarivate JCR ${jcrCatalog.source.metricYear}(공식) 기준입니다.`),box,{class:'sc-muted sc-journal-reading-jcr-note'});
    const order=node('div',null,head,{class:'sc-segmented',role:'group','aria-label':T('내 문헌 분석 정렬')});
-   button('안 읽음 많은 순',()=>{state.journalReadingSort='';render();},order,{'aria-pressed':String(!byTime)});
+   button('안 읽음 많은 순',()=>{state.journalReadingSort='';render();},order,{'aria-pressed':String(!byTime&&!byIF)});
    button('읽은 시간순',()=>{state.journalReadingSort='time';render();},order,{'aria-pressed':String(byTime)});
+   if(jcrCatalog)button('IF 높은 순',()=>{state.journalReadingSort='if';render();},order,{'aria-pressed':String(byIF)});
    const shown=all.slice(0,state.journalReadingAll?all.length:8);
    const table=node('div',null,box,{class:'sc-journal-reading-table',role:'table'});
    const header=node('div',null,table,{class:'sc-journal-reading-row sc-journal-reading-header',role:'row'});
    for(const label of ['저널','보유','안 읽음','보유·시간 비중','읽은 시간','인용 중앙값'])node('span',T(label),header,{role:'columnheader'});
    for(const g of shown){
     const row=node('div',null,table,{class:'sc-journal-reading-row',role:'row'});
-    node('span',g.venue,row,{class:'sc-journal-reading-name',role:'cell',title:g.venue});
+    const nameCell=node('div',null,row,{class:'sc-journal-reading-name',role:'cell'});
+    node('span',g.venue,nameCell,{class:'sc-journal-reading-name-text',title:g.venue});
+    // The official standing, one category at a time: the best category leads,
+    // a chip says how many more it is placed in, and the tooltip lists every
+    // one. Looked up and absent reads differently from never having checked.
+    if(jcrCatalog&&g.venue){
+     if(g.jcrStandings.length){
+      const lead=g.jcrStandings[0],name=jcrCatalog.category(lead.categoryKey)?.name||lead.categoryKey;
+      const figure=g.jcrJournal.jif!=null?`IF ${g.jcrJournal.jif}`:'';
+      const standing=[lead.quartile!=null?'Q'+lead.quartile:'',lead.rank!=null&&lead.rankTotal!=null?`${lead.rank}/${lead.rankTotal}`:''].filter(Boolean).join(' ');
+      const more=g.jcrStandings.length>1?` +${g.jcrStandings.length-1}`:'';
+      const text=[figure,[standing,name].filter(Boolean).join(' ')].filter(Boolean).join(' · ')+more;
+      const tip=[T(`Clarivate JCR ${jcrCatalog.source.metricYear}(공식)`),...g.jcrStandings.map(m=>{
+       const catName=jcrCatalog.category(m.categoryKey)?.name||m.categoryKey;
+       return [catName,m.quartile!=null?'Q'+m.quartile:'',m.rank!=null&&m.rankTotal!=null?`${m.rank}/${m.rankTotal}`:''].filter(Boolean).join(' ');
+      })].join(' · ');
+      node('span',text,nameCell,{class:'sc-journal-reading-jcr',title:tip});
+     }else if(g.jcrJournal===null)node('span',T('JCR에 없음'),nameCell,{class:'sc-journal-reading-jcr'});
+    }
     // The count of papers held is the way to them: 보유 문헌, searched for this journal.
     const heldCell=node('span',null,row,{class:'sc-journal-reading-num',role:'cell'});
     if(!g.items[0]?.venue)heldCell.textContent=`${g.items.length}편`;
