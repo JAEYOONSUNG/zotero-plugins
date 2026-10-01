@@ -168,6 +168,25 @@
       return getAllShape;
     }));
 
+    /* The 관련 논문 surroundings talk to Crossref, Europe PMC, Bluesky, Hacker News and
+       Wikipedia through Zotero's own HTTP stack, which the offline tests cannot reach. One
+       paper with a DOI is asked once (cached answers count); nothing opens. */
+    results.push(await attempt('a paper\'s surroundings come back through the live transport', async () => {
+      const item = all.find(entry => entry?.isRegularItem?.() && /^10\./.test(String(entry.getField?.('DOI') || '').trim()));
+      if (!item) return 'skipped: no paper with a DOI';
+      const doi = String(item.getField('DOI')).trim();
+      const issues = await runtime.doiIssues(doi);
+      const reactions = await runtime.doiReactions(doi, [item.getField('url')].filter(Boolean));
+      const status = issues?.summary?.status;
+      if (!['retracted', 'concern', 'corrected', 'clean', 'unknown'].includes(status)) throw new Error('no issue status for ' + doi);
+      const failed = [...(issues.summary.failed || []), ...(reactions?.failed || [])];
+      if (status === 'unknown' && ['Bluesky', 'Wikipedia'].every(name => failed.includes(name))) {
+        throw new Error('every source failed for ' + doi + ': ' + failed.join(', '));
+      }
+      const counts = ['bluesky', 'hackerNews', 'wikipedia'].map(key => `${key} ${reactions?.[key]?.count ?? '-'}`).join(' · ');
+      return `${doi} · ${status} · ${issues.events?.length || 0} events · ${counts} · landing ${reactions?.landing ? 'resolved' : 'none'}${failed.length ? ' · failed ' + failed.join(', ') : ''}`;
+    }));
+
     results.push(await attempt('plugin is live', () => {
       if (!runtime.active) throw new Error('runtime is not active');
       return `v${runtime.version} · ${all.length} papers · ${Object.keys(runtime.cache.items || {}).length} cached`;
@@ -180,15 +199,15 @@
        code actually running, and the stylesheet actually applied, for a marker
        of this build. */
     results.push(await attempt('the running panel is this build, not a cached one', () => {
-      const MARK = 'sc-nav-label';
+      const MARK = 'sc-around-inline';
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
-      /* And a rule only this build's stylesheet has: the rail label that
-         never wraps out of its pill. Update both marks when a change
-         touches only one of the two files. */
-      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-nav-label'
-        && String(rule.style?.getPropertyValue('white-space') || '').includes('nowrap');
+      /* And a rule only this build's stylesheet has: the status line of a
+         paper's surroundings. Update both marks when a change touches only
+         one of the two files. */
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-around-statusline'
+        && String(rule.style?.getPropertyValue('display') || '').includes('flex');
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;
@@ -197,7 +216,7 @@
         catch (error) { throw new Error('the panel stylesheet could not be read: ' + (error.message || error)); }
       }
       // The runtime and the reader tools change without the panel: each gets a mark of its own.
-      const RUNTIME_MARK = 'collectionEntries', READER_MARK = 'labelsByOwner';
+      const RUNTIME_MARK = 'paperIssues', READER_MARK = 'labelsByOwner';
       const liveRuntime = typeof runtime[RUNTIME_MARK] === 'function';
       const readerCode = String(root.CustomStyleReaderTools?.create || '');
       const liveReader = !readerCode || readerCode.includes(READER_MARK);
