@@ -445,6 +445,61 @@
 #style-custom-workbench .sc-filter-chips { display: flex; flex-wrap: wrap; gap: var(--sc-space-2); flex-shrink: 0; padding: var(--sc-space-2) var(--sc-space-4); max-height: 84px; overflow: auto; }
 #style-custom-workbench .sc-filter-chips:empty { display: none; }
 #style-custom-workbench .sc-filter-chips button { color: var(--sc-text); background: var(--sc-fill); }
+/* ==== 포함·제외 규칙: the rule builder inside 상세 필터, and its chips ==== */
+#style-custom-workbench .sc-rules { display: flex; flex-direction: column; gap: var(--sc-space-3); box-sizing: border-box; width: 100%; margin: 0 0 var(--sc-space-3); padding: var(--sc-space-3) var(--sc-space-4); background: var(--sc-surface); border-radius: var(--sc-radius-card); box-shadow: 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-rules-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-rules-title { color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); white-space: nowrap; }
+#style-custom-workbench .sc-rule-kinds { display: flex; flex-wrap: wrap; gap: var(--sc-space-1); flex: 1 1 320px; min-width: 0; }
+#style-custom-workbench .sc-rule-kinds .sc-rule-kind { flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--sc-fill); }
+#style-custom-workbench .sc-rules-bar .sc-segmented button,
+#style-custom-workbench .sc-rule-head .sc-segmented button,
+#style-custom-workbench .sc-rule-body .sc-segmented button { white-space: nowrap; }
+#style-custom-workbench .sc-rule-editor { display: flex; flex-direction: column; gap: var(--sc-space-3); padding: var(--sc-space-3) var(--sc-space-4); background: var(--sc-surface-alt); border-radius: var(--sc-radius); box-shadow: 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-rule-editor[hidden] { display: none; }
+#style-custom-workbench .sc-rule-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-rule-name { color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-font); }
+#style-custom-workbench .sc-rule-body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-rule-body > .sc-check { color: var(--sc-text); }
+#style-custom-workbench .sc-rule-field { display: flex; flex-direction: column; gap: var(--sc-space-1); align-self: stretch; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-rules .sc-rule-field input,
+#style-custom-workbench .sc-rules .sc-rule-field input[type=search] { width: 100%; flex: 0 0 auto; min-width: 0; }
+#style-custom-workbench .sc-rules .sc-rule-range .sc-rule-field input { width: 100%; }
+#style-custom-workbench .sc-rule-range { display: flex; flex-wrap: wrap; gap: var(--sc-space-3); }
+#style-custom-workbench .sc-rule-range .sc-rule-field { flex: 0 0 120px; align-self: auto; }
+#style-custom-workbench .sc-rule-options { display: flex; flex-direction: column; align-self: stretch; max-height: 208px; overflow: auto; padding: var(--sc-space-1); background: var(--sc-surface); border-radius: var(--sc-radius); box-shadow: 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-rule-opt { display: flex; align-items: center; gap: var(--sc-space-2); flex: 0 0 auto; min-height: var(--sc-h-nav); padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-sm); color: var(--sc-text); cursor: pointer; }
+#style-custom-workbench .sc-rule-opt:hover { background: var(--sc-fill); }
+#style-custom-workbench .sc-rule-opt-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-rule-opt .sc-count { flex: 0 0 auto; margin-inline-start: 0; }
+#style-custom-workbench .sc-rule-note,
+#style-custom-workbench .sc-rules-hint { margin: 0; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); overflow-wrap: anywhere; }
+#style-custom-workbench .sc-rule-note[hidden] { display: none; }
+#style-custom-workbench .sc-rule-preview { margin: 0; color: var(--sc-text); font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); overflow-wrap: anywhere; }
+#style-custom-workbench .sc-rule-actions { display: flex; flex-wrap: wrap; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-rule-actions button { white-space: nowrap; }
+#style-custom-workbench .sc-rule-opt-abbr { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); }
+#style-custom-workbench .sc-filter-label { color: var(--sc-muted); font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); white-space: nowrap; }
+#style-custom-workbench .sc-filter-fields { gap: var(--sc-space-2); padding-block: var(--sc-space-1) var(--sc-space-3); }
+/* 저널: in the search box -- the journals under it, a listbox over the page. */
+#style-custom-workbench .sc-controls { position: relative; }
+#style-custom-workbench .sc-suggest { position: absolute; z-index: 20; box-sizing: border-box; display: flex; flex-direction: column; max-height: 288px; overflow: auto; padding: var(--sc-space-1); background: var(--sc-surface); border-radius: var(--sc-radius); box-shadow: var(--sc-shadow); }
+#style-custom-workbench .sc-suggest[hidden] { display: none; }
+#style-custom-workbench .sc-suggest-option { display: flex; align-items: center; gap: var(--sc-space-2); flex: 0 0 auto; min-height: var(--sc-h-nav); padding: 0 var(--sc-space-3); border-radius: var(--sc-radius-sm); color: var(--sc-text); cursor: pointer; font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-suggest-option:hover,
+#style-custom-workbench .sc-suggest-option[aria-selected=true] { background: var(--sc-fill); }
+#style-custom-workbench .sc-suggest-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-suggest-abbr { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sc-muted); font-size: var(--sc-fs-meta); }
+#style-custom-workbench .sc-suggest-option .sc-count { flex: 0 0 auto; margin-inline-start: 0; }
+/* A rule in the chip row: include is a plain grey pill; exclude is the same pill drawn as an outline, with 제외 in its words. */
+#style-custom-workbench .sc-filter-chips .sc-rule-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: var(--sc-h-seg); overflow: hidden; border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-text); }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip[data-mode=ex] { background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border-strong); color: var(--sc-muted); }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip button { min-height: var(--sc-h-seg); border-radius: 0; box-shadow: none; background: transparent; color: inherit; white-space: nowrap; }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip button:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip button:focus-visible { outline-offset: -2px; }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip-main { flex: 0 1 auto; min-width: 0; max-width: 280px; padding: 0 var(--sc-space-1) 0 var(--sc-space-3); overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip-x { flex: 0 0 auto; width: var(--sc-h-seg); padding: 0; }
+#style-custom-workbench .sc-filter-chips .sc-rule-clear { min-height: var(--sc-h-seg); padding: 0 var(--sc-space-3); background: transparent; color: var(--sc-muted); white-space: nowrap; }
+#style-custom-workbench .sc-filter-chips .sc-rule-clear:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
 /* The library by kind: papers, preprints, patents, theses, one chip each. */
 #style-custom-workbench .sc-kind-chips { display: flex; flex-wrap: wrap; gap: var(--sc-space-1); margin-inline-start: auto; padding: 0; }
 #style-custom-workbench .sc-kind-chips:empty { display: none; }

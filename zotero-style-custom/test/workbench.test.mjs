@@ -367,13 +367,26 @@ test('new note draft survives notifier replacement of its editor during a pendin
  const f=fixture(),saving=deferred();f.library.createNote=()=>saving.promise;await f.bench.show('notes');f.input('새 노트 내용','Submitted');const oldEditor=f.body().querySelector('textarea');f.findButton('새 노트 저장').dispatchEvent(new f.win.Event('click'));await settle();await f.bench.load();assert.notEqual(f.body().querySelector('textarea'),oldEditor);f.input('새 노트 내용','Typed in replacement editor');saving.resolve('9');await settle();assert.equal(f.body().querySelector('textarea').value,'Typed in replacement editor');assert.ok(f.runtime.cache.workbenchDrafts.entries.some(([,text])=>text==='Typed in replacement editor'));f.bench.destroy();
 });
 
-test('visible status year rating and sort controls filter exploration and reset together',async()=>{
+test('the sort control and the rule builder filter exploration and reset together; the old single-value row is gone',async()=>{
  const f=fixture();f.runtime.state=ref=>({status:ref.id===1?'done':'reading',rating:ref.id===1?5:2,citations:ref.id===1?0:20});await f.bench.show('explore');
  const change=(label,value)=>{const input=f.bench.panel.querySelector('[aria-label="'+label+'"]');input.value=value;input.dispatchEvent(new f.win.Event('change',{bubbles:true}));};
+ for(const gone of ['읽기 상태 필터','최소 별점','시작 연도','마지막 연도','문헌 유형 필터'])assert.equal(f.bench.panel.querySelector('[aria-label="'+gone+'"]'),null,gone+' is a rule now');
+ assert.deepEqual([...f.bench.panel.querySelectorAll('.sc-filter-fields select,.sc-filter-fields button')].map(b=>b.getAttribute('aria-label')||b.textContent),['문헌 정렬','필터 초기화'],'the row keeps only sort and reset');
  change('문헌 정렬','citations-desc');await settle();assert.match(f.body().querySelector('h3').textContent,/Beta/);
- change('읽기 상태 필터','done');change('최소 별점','4');f.input('시작 연도','2025');await settle();assert.equal(f.body().querySelectorAll('.sc-paper-list > article').length,1);assert.match(f.body().textContent,/Alpha/);
- f.input('마지막 연도','2024');await settle();assert.equal(f.body().querySelectorAll('.sc-paper-list > article').length,0);
+ await f.bench.filters.set([{id:'a',kind:'status',values:['done']},{id:'b',kind:'rating',min:4},{id:'c',kind:'year',min:2025}]);
+ assert.equal(f.body().querySelectorAll('.sc-paper-list > article').length,1);assert.match(f.body().textContent,/Alpha/);
+ await f.bench.filters.set([{id:'a',kind:'status',values:['done']},{id:'b',kind:'rating',min:4},{id:'c',kind:'year',min:2025,max:2024}]);
+ assert.equal(f.body().querySelectorAll('.sc-paper-list > article').length,0);
  await f.click('필터 초기화');assert.equal(f.body().querySelectorAll('.sc-paper-list > article').length,2);f.bench.destroy();
+});
+
+test('single-value filters saved before the rule builder become include rules on 보유 문헌, once',async()=>{
+ const cache={items:{},workbenchUI:{filters:{type:'journalArticle',status:'reading',ratingMin:'3',yearFrom:'2025',yearTo:''}}};
+ const f=fixture(cache);await f.bench.show('explore');await settle();
+ assert.deepEqual(f.bench.filters.rules().map(r=>[r.kind,r.mode]),[['type','in'],['status','in'],['rating','in'],['year','in']]);
+ assert.equal(f.runtime.cache.workbenchUI.filters,undefined,'the old key is retired');
+ assert.equal(f.runtime.cache.workbenchUI.filterRules.explore.length,4,'and the rules are saved');
+ f.bench.destroy();
 });
 
 test('exploration pages past the old 200 item limit and selects exactly the requested page or results',async()=>{
@@ -529,10 +542,10 @@ test('grouped navigation keeps every feature reachable and restores density with
  await f.click('간격 넓게');assert.equal(f.runtime.cache.workbenchUI.density,'comfortable');assert.equal(f.bench.panel.dataset.density,'comfortable');await f.click('논문 비교');assert.equal(f.runtime.cache.workbenchUI.lastTab,'matrix');assert.equal(f.bench.panel.querySelector('.sc-section-title').textContent,'논문 비교');assert.equal(f.bench.panel.querySelector('.sc-search-row').hidden,true);f.bench.destroy();
 });
 
-test('collapsed filter chips remove only the requested filter and parent filters apply to note searches',async()=>{
+test('collapsed filter chips remove only the requested rule and rules apply to note searches',async()=>{
  const f=fixture();f.runtime.state=ref=>({status:ref.id===1?'done':'reading',rating:4});await f.bench.show('notes');assert.equal(f.bench.panel.querySelector('.sc-filters').hasAttribute('open'),false);
- const status=f.bench.panel.querySelector('[aria-label="읽기 상태 필터"]');status.value='done';status.dispatchEvent(new f.win.Event('change',{bubbles:true}));f.input('작업 패널 검색','Rich note');await settle();assert.deepEqual(f.calls.filter(c=>c[0]==='notes').at(-1)[1],['1']);assert.match(f.bench.panel.querySelector('.sc-context-detail').textContent,/1개 문헌/);assert.match(f.body().textContent,/Rich note/);
- const remove=f.bench.panel.querySelector('[aria-label="상태 필터 해제"]');remove.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();assert.equal(f.bench.state.status,'');assert.equal(f.bench.state.query,'Rich note');assert.equal(f.calls.filter(c=>c[0]==='notes').at(-1)[1],undefined);f.bench.destroy();
+ await f.bench.filters.set([{id:'s',kind:'status',values:['done']}]);f.input('작업 패널 검색','Rich note');await settle();assert.deepEqual(f.calls.filter(c=>c[0]==='notes').at(-1)[1],['1']);assert.match(f.bench.panel.querySelector('.sc-context-detail').textContent,/1개 문헌/);assert.match(f.body().textContent,/Rich note/);
+ const remove=f.bench.panel.querySelector('.sc-rule-chip-x');assert.match(remove.getAttribute('aria-label'),/읽기 상태.*규칙 삭제/);remove.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();assert.equal(f.bench.filters.rules().length,0);assert.equal(f.bench.state.query,'Rich note');assert.equal(f.calls.filter(c=>c[0]==='notes').at(-1)[1],undefined);f.bench.destroy();
 });
 
 test('command finder supports keyboard navigation hidden-feature filtering and layered Escape focus restoration',async()=>{
@@ -1019,9 +1032,8 @@ test('the list opens with a summary whose reading counts filter it, and figures 
  assert.match(facts.textContent,/읽는 중/);
  const reading=[...facts.querySelectorAll('button')].find(b=>/읽는 중/.test(b.textContent));
  reading.click();await settle();
- assert.equal(f.bench.state.status,'reading','pressed, the list shows only those');
- f.bench.state.status='';
- await f.bench.render();
+ assert.deepEqual(f.bench.filters.rules().map(r=>[r.kind,r.values[0]]),[['status','reading']],'pressed, the list shows only those');
+ await f.bench.filters.set([]);
  const ifHead=[...f.body().querySelectorAll('.sc-paper-column')].find(b=>b.dataset.metric==='impact');
  ifHead.click();await settle();
  assert.equal(f.bench.state.sort,'if-desc');
@@ -1603,7 +1615,7 @@ test('stalled papers are one view away, journal citations split by reading state
  // spatial is a leaf (no children): its own row is a plain div, not a <details>.
  const jump=[...f.body().querySelectorAll('.sc-tag-unread')].find(b=>b.closest('summary, .sc-tag-row').querySelector('.sc-tag-name').textContent==='spatial 1');
  jump.click();await new Promise(r=>setTimeout(r,20));
- assert.equal(f.bench.state.tab,'explore');assert.equal(f.bench.state.status,'unread');assert.equal(f.bench.state.tag,'methods/spatial');
+ assert.equal(f.bench.state.tab,'explore');assert.deepEqual(f.bench.filters.rules().map(r=>[r.kind,r.values[0]]),[['tag','methods/spatial'],['status','unread']],'a tag and its unread papers arrive as two rules');
  f.bench.destroy();
 });
 
@@ -2489,8 +2501,8 @@ test('the library splits by kind with one chip: patents and theses apart from th
  await f.click('학위논문 1');
  assert.deepEqual([...f.body().querySelectorAll('.sc-paper-title')].map(h=>h.textContent),['학위논문A Thesis']);
  assert.equal(f.bench.panel.querySelector('.sc-kind-chips button[data-kind=thesis]').getAttribute('aria-pressed'),'true');
- // The select says the same thing in the same words.
- assert.equal(f.bench.panel.querySelector('select[aria-label="문헌 유형 필터"]').value,'thesis');
+ // The old 유형 select is folded into the 유형 rule; the chip is the one-press way.
+ assert.equal(f.bench.panel.querySelector('select[aria-label="문헌 유형 필터"]'),null);assert.equal(f.bench.state.type,'thesis');
  await f.click('학위논문 1');
  assert.equal(f.body().querySelectorAll('.sc-paper-card').length,4);
  f.bench.destroy();
@@ -4841,5 +4853,242 @@ test('R18 journal citations share one axis: 64 and 12 on it, unknown as a dash, 
  assert.match(legend,/읽는 중·완료.*안 읽음/);assert.match(legend,/보유.*시간/);
  assert.equal(/읽는 중·완료/.test(head.textContent),false,'no legend in the header cells');
  assert.match(head.querySelector('.sc-journal-citation-axis').textContent,/^0/,'explicit axis ends');
+ f.bench.destroy();
+});
+
+// ---- 상세 필터: 포함·제외 규칙 ----
+const cardCount=f=>f.body().querySelectorAll('.sc-paper-card').length;
+const chipTexts=f=>[...f.bench.panel.querySelectorAll('.sc-rule-chip-main')].map(b=>b.textContent);
+const press=(f,el)=>{el.dispatchEvent(new f.win.Event('click',{bubbles:true}));};
+const key=(f,target,name)=>{const e=new f.win.Event('keydown',{bubbles:true,cancelable:true});e.key=name;target.dispatchEvent(e);return e;};
+
+test('상세 필터 rules: an exclude rule is added in the panel, shows as a 제외 chip, narrows the list and is saved for the tab', async () => {
+ const f=fixture();await f.bench.show('explore');await settle();
+ assert.equal(cardCount(f),2);
+ await f.click('제외');await f.click('태그 제외 규칙 추가');
+ const editor=f.bench.panel.querySelector('.sc-rule-editor');assert.equal(editor.hidden,false);
+ assert.equal(f.bench.panel.querySelector('.sc-filters').hasAttribute('open'),true,'the panel opens for its editor');
+ assert.equal(f.findButton('규칙 적용').disabled,true,'nothing chosen yet: nothing to apply');
+ assert.match(editor.querySelector('.sc-rule-preview').textContent,/조건을 고르면/);
+ const box=editor.querySelector('input[aria-label="topic/a"]');assert.ok(box,'tags of the scope are listed');
+ box.checked=true;box.dispatchEvent(new f.win.Event('change',{bubbles:true}));
+ assert.equal(f.findButton('규칙 적용').disabled,false);
+ assert.match(editor.querySelector('.sc-rule-preview').textContent,/2편 중 1편/);
+ await f.click('규칙 적용');
+ assert.equal(cardCount(f),1);assert.ok(f.body().textContent.includes('Paper Beta')&&!f.body().textContent.includes('Paper Alpha'));
+ assert.deepEqual(chipTexts(f),['제외 · 태그: topic/a']);
+ assert.equal(f.bench.panel.querySelector('.sc-rule-chip').dataset.mode,'ex');
+ assert.equal(f.bench.panel.querySelector('.sc-filters summary').textContent,'상세 필터 · 1개 적용');
+ assert.equal(f.bench.panel.querySelector('.sc-rule-editor').hidden,true,'the editor closes after applying');
+ assert.equal(f.runtime.cache.workbenchUI.filterRules.explore[0].mode,'ex');
+ assert.deepEqual(f.runtime.cache.workbenchUI.filterRules.explore[0].values,['topic/a']);
+ // The chip's × removes the rule and the list is whole again.
+ press(f,f.bench.panel.querySelector('.sc-rule-chip-x'));await settle();
+ assert.equal(cardCount(f),2);assert.deepEqual(f.runtime.cache.workbenchUI.filterRules,{});
+ assert.equal(f.bench.panel.querySelector('.sc-filter-chips').hidden,true);
+ f.bench.destroy();
+});
+
+test('상세 필터 rules: click a chip to edit it, flip it to 포함, and 모두 지우기 clears every rule and filter', async () => {
+ const f=fixture();await f.bench.show('explore');await settle();
+ await f.bench.filters.set([{id:'a',kind:'type',mode:'ex',values:['preprint']},{id:'b',kind:'tag',mode:'in',values:['topic/b']}]);
+ assert.equal(cardCount(f),1);assert.deepEqual(chipTexts(f),['제외 · 유형: 프리프린트','태그: topic/b']);
+ press(f,f.bench.panel.querySelectorAll('.sc-rule-chip-main')[1]);await settle();
+ const editor=f.bench.panel.querySelector('.sc-rule-editor');assert.equal(editor.hidden,false);
+ assert.equal(editor.getAttribute('aria-label'),'태그 규칙 편집');
+ assert.equal(editor.querySelector('input[aria-label="topic/b"]').checked,true,'the rule loads into its editor');
+ press(f,editor.querySelector('.sc-rule-head [data-mode="ex"]'));await settle();
+ await f.click('변경 적용');
+ assert.deepEqual(chipTexts(f),['제외 · 유형: 프리프린트','제외 · 태그: topic/b']);assert.equal(cardCount(f),1);
+ assert.ok(f.body().textContent.includes('Paper Alpha'));
+ f.bench.state.type='journalArticle';await f.bench.render();
+ assert.ok([...f.bench.panel.querySelectorAll('.sc-filter-chips button')].some(b=>b.textContent==='모두 지우기'));
+ await f.click('적용 중인 필터 모두 지우기');
+ assert.equal(cardCount(f),2);assert.equal(f.bench.filters.rules().length,0);assert.equal(f.bench.state.type,'');
+ assert.deepEqual(f.runtime.cache.workbenchUI.filterRules,{});
+ f.bench.destroy();
+});
+
+test('상세 필터 rules: saved rules come back when the panel opens again, per tab, and bad saved data is ignored', async () => {
+ const cache={items:{},workbenchUI:{filterRules:{explore:[{id:'x',kind:'type',mode:'ex',values:['preprint']},{id:'y',kind:'tag',values:['topic/b']},{id:'z',kind:'nope'}],notes:[{id:'n',kind:'pdf'}]}}};
+ const f=fixture(cache);await f.bench.show('explore');await settle();
+ assert.deepEqual(chipTexts(f),['제외 · 유형: 프리프린트','태그: topic/b']);assert.equal(cardCount(f),1);
+ assert.equal(f.bench.panel.querySelector('.sc-filters summary').textContent,'상세 필터 · 2개 적용');
+ await f.bench.show('attachments');await settle();
+ assert.equal(chipTexts(f).length,0,'another tab keeps its own rules');
+ f.bench.destroy();
+ const g=fixture({items:{},workbenchUI:{filterRules:'junk'}});await g.bench.show('explore');await settle();
+ assert.equal(cardCount(g),2);g.bench.destroy();
+});
+
+test('상세 필터 rules: the search box understands -word, "phrase" and field:value', async () => {
+ const f=fixture();await f.bench.show('explore');await settle();
+ const ask=async q=>{f.bench.state.query=q;await f.bench.render();return [...f.body().querySelectorAll('.sc-paper-card')].map(c=>c.textContent.includes('Alpha')?'A':'B').join('');};
+ assert.equal(await ask('-alpha'),'B');assert.equal(await ask('title:alpha'),'A');assert.equal(await ask('-tag:topic/a'),'B');
+ assert.equal(await ask('"paper beta"'),'B');assert.equal(await ask('journal:nature'),'B');assert.equal(await ask('year:2025'),'A');
+ assert.equal(await ask('paper'),'AB','plain text is unchanged');
+ assert.match(f.bench.panel.querySelector('.sc-rules-hint').textContent,/-단어.*제목:.*연도:/);
+ f.bench.destroy();
+});
+
+test('상세 필터 rules: option lists show counts given the other rules, and journals are searchable', async () => {
+ const f=fixture();await f.bench.show('explore');await settle();
+ await f.click('유형 포함 규칙 추가');
+ let opt=[...f.bench.panel.querySelectorAll('.sc-rule-opt')].map(o=>o.textContent);
+ assert.deepEqual(opt,['논문2']);
+ await f.click('취소');
+ await f.bench.filters.set([{id:'t',kind:'tag',mode:'ex',values:['topic/a']}]);
+ await f.click('저널 포함 규칙 추가');
+ opt=[...f.bench.panel.querySelectorAll('.sc-rule-opt')].map(o=>o.textContent);
+ assert.deepEqual(opt,['Nature1','Science0'],'Science only has the excluded paper, so it would find nothing');
+ const search=f.bench.panel.querySelector('input[aria-label="저널 목록 검색"]');search.value='sci';search.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ assert.deepEqual([...f.bench.panel.querySelectorAll('.sc-rule-opt')].map(o=>o.textContent),['Science0']);
+ f.bench.destroy();
+});
+
+test('상세 필터 rules: collections, PDFs and notes are read once, on demand, from the library', async () => {
+ const f=fixture();
+ let reads=0;
+ f.library.collections=async()=>{reads++;return [{id:'c1',name:'Cells',itemIDs:[1],parentID:null},{id:'c2',name:'Sub',itemIDs:[2],parentID:'c1'}];};
+ f.library.childCounts=async()=>({'1':{notes:1,pdfs:1,noteTitles:['first look']}});
+ await f.bench.show('explore');await settle();const before=reads;
+ await f.bench.filters.set([{id:'a',kind:'pdf',mode:'in'}]);
+ assert.equal(cardCount(f),1);assert.ok(f.body().textContent.includes('Paper Alpha'));const after=reads;assert.ok(after>before,'a rule that needs collections reads them');
+ await f.bench.filters.set([{id:'a',kind:'pdf',mode:'ex'},{id:'b',kind:'collection',mode:'in',values:['c1'],sub:true}]);
+ assert.equal(cardCount(f),1);assert.ok(f.body().textContent.includes('Paper Beta'),'Beta is in the subcollection and has no PDF');
+ assert.deepEqual(chipTexts(f),['제외 · 첨부 PDF 있음','컬렉션: Cells +하위']);assert.equal(reads,after,'read once per library load, not per redraw');
+ await f.bench.filters.set([{id:'c',kind:'note',mode:'in'}]);assert.equal(cardCount(f),1);
+ f.bench.state.query='note:first';await f.bench.render();assert.equal(cardCount(f),1,'the note title of paper 1 is found by note:');
+ f.bench.state.query='note:nothing';await f.bench.render();assert.equal(cardCount(f),0);
+ f.bench.destroy();
+});
+
+test('상세 필터 rules: kinds that mean nothing on a tab are not offered there', async () => {
+ const f=fixture();await f.bench.show('explore');await settle();
+ const kinds=()=>[...f.bench.panel.querySelectorAll('.sc-rule-kind')].map(b=>b.dataset.kind);
+ assert.equal(kinds().length,14);
+ await f.bench.show('notes');await settle();assert.equal(kinds().includes('note'),false);assert.equal(kinds().length,13);
+ await f.bench.show('attachments');await settle();assert.equal(kinds().includes('pdf'),false);
+ await f.bench.show('tags');await settle();assert.equal(kinds().includes('tag'),false);
+ await f.bench.show('annotations');await settle();assert.equal(kinds().includes('annotation'),false);
+ f.bench.destroy();
+});
+
+test('상세 필터 rules: every control is labelled, and Esc closes the editor, then the panel, giving focus back', async () => {
+ const f=fixture();await f.bench.show('explore');await settle();
+ await f.click('단어 포함 규칙 추가');
+ const editor=f.bench.panel.querySelector('.sc-rule-editor');
+ for(const el of editor.querySelectorAll('input,button,select,textarea')){
+  assert.ok(el.getAttribute('aria-label')||el.textContent.trim()||el.closest('label')?.textContent.trim(),'unlabelled control in the editor: '+el.outerHTML.slice(0,80));
+ }
+ for(const el of f.bench.panel.querySelectorAll('.sc-rules button'))assert.ok(el.getAttribute('aria-label')||el.textContent.trim());
+ const input=editor.querySelector('input[type=text]');
+ assert.equal(f.doc.activeElement,input,'the editor takes focus on its first field');
+ input.value='alpha';input.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ assert.equal(key(f,input,'Escape').defaultPrevented,true);
+ assert.equal(f.bench.panel.querySelector('.sc-rule-editor').hidden,true);
+ assert.equal(f.doc.activeElement.dataset.kind,'word','focus goes back to the button that opened it');
+ assert.equal(f.bench.panel.hidden,false,'one Esc does not close the whole panel');
+ assert.equal(f.bench.filters.rules().length,0,'a cancelled draft adds nothing');
+ key(f,f.bench.panel.querySelector('.sc-rules-title'),'Escape');
+ assert.equal(f.bench.panel.querySelector('.sc-filters').hasAttribute('open'),false);
+ assert.equal(f.doc.activeElement.tagName.toLowerCase(),'summary');
+ f.bench.destroy();
+});
+
+test('상세 필터 rules: Enter in a field applies the rule; a range rule and a word rule work from the panel', async () => {
+ const f=fixture();await f.bench.show('explore');await settle();
+ await f.click('연도 포함 규칙 추가');
+ const min=f.bench.panel.querySelector('input[aria-label="연도 최소"]');min.value='2025';min.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ key(f,min,'Enter');await settle();
+ assert.deepEqual(chipTexts(f),['연도: 2025 이상']);assert.equal(cardCount(f),1);
+ await f.click('제외');await f.click('단어 제외 규칙 추가');
+ const text=f.bench.panel.querySelector('input[aria-label="찾을 단어 또는 구절"]');text.value='gamma';text.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ await f.click('규칙 적용');
+ assert.deepEqual(chipTexts(f),['연도: 2025 이상','제외 · 단어: “gamma”']);assert.equal(cardCount(f),1,'nothing is called gamma, so nothing more is removed');
+ f.bench.destroy();
+});
+
+test('상세 필터 rules: 필터 초기화 clears the tab\'s rules too', async () => {
+ const f=fixture();await f.bench.show('explore');await settle();
+ await f.bench.filters.set([{id:'a',kind:'tag',values:['topic/a']}]);assert.equal(cardCount(f),1);
+ await f.click('필터 초기화');await settle();
+ assert.equal(cardCount(f),2);assert.deepEqual(f.runtime.cache.workbenchUI.filterRules,{});
+ f.bench.destroy();
+});
+
+function journalFixture(){
+ const f=fixture();
+ const mk=(id,venue,extra={})=>({id:String(id),key:'K'+id,libraryID:1,title:'Study '+id,authors:'',year:'2024',venue,itemType:'journalArticle',tags:[],abstract:'',related:[],...extra});
+ f.library.snapshot=async()=>[mk(1,'Nature Methods'),mk(2,'Nature Methods'),mk(3,'Proceedings of the National Academy of Sciences of the United States of America'),mk(4,'Nucleic Acids Research'),mk(5,'Science',{journalAbbr:'Science'})];
+ f.runtime.journalIdentity={identify:v=>/^Proceedings/.test(v)?{abbreviation:'PNAS',mark:'PNAS'}:null,abbreviate:v=>v==='Nature Methods'?'Nat Methods':v};
+ return f;
+}
+const typeInto=(f,el,value)=>{el.value=value;el.dispatchEvent(new f.win.Event('input',{bubbles:true}));};
+
+test('저널: in the search box lists journals by name, abbreviation or acronym; keys work; picks OR together and 제외 works',async()=>{
+ const f=journalFixture();await f.bench.show('explore');await settle();
+ const search=f.bench.panel.querySelector('[aria-label="작업 패널 검색"]'),box=()=>f.bench.panel.querySelector('.sc-suggest');
+ const options=()=>[...box().querySelectorAll('.sc-suggest-option')].map(o=>o.querySelector('.sc-suggest-name').textContent.split(' ')[0]+(o.querySelector('.sc-suggest-abbr')?'/'+o.querySelector('.sc-suggest-abbr').textContent:''));
+ assert.equal(box().hidden,true);assert.equal(search.getAttribute('role'),'combobox');
+ typeInto(f,search,'deep ');assert.equal(box().hidden,true,'plain text offers nothing');
+ typeInto(f,search,'저널:');assert.equal(box().hidden,false);assert.equal(options().length,4,'every journal in the scope, at once');
+ typeInto(f,search,'저널:pnas');assert.deepEqual(options(),['Proceedings/PNAS']);
+ typeInto(f,search,'저널:nat meth');assert.deepEqual(options(),['Nature/Nat Methods']);
+ typeInto(f,search,'journal:NAR');assert.deepEqual(options(),['Nucleic'],'the acronym');
+ typeInto(f,search,'저널:nature');assert.deepEqual(options(),['Nature/Nat Methods'].concat([]));
+ // keys: ArrowDown wraps, Esc closes without leaving the panel.
+ typeInto(f,search,'저널:n');const n=options().length;assert.ok(n>=3);
+ assert.equal(search.getAttribute('aria-activedescendant'),'sc-journal-suggest-0');
+ assert.equal(key(f,search,'ArrowDown').defaultPrevented,true);assert.equal(search.getAttribute('aria-activedescendant'),'sc-journal-suggest-1');
+ key(f,search,'ArrowUp');key(f,search,'ArrowUp');assert.equal(search.getAttribute('aria-activedescendant'),'sc-journal-suggest-'+(n-1),'wraps');
+ assert.equal(key(f,search,'Escape').defaultPrevented,true);assert.equal(box().hidden,true);assert.equal(f.bench.panel.hidden,false);
+ // Enter on the first suggestion adds a 저널 include rule and takes the token out of the box.
+ typeInto(f,search,'비교 저널:pnas');key(f,search,'Enter');await settle();
+ assert.deepEqual(f.bench.filters.rules().map(r=>[r.kind,r.mode,r.values.length]),[['journal','in',1]]);
+ assert.equal(f.bench.filters.rules()[0].values[0].startsWith('Proceedings'),true);assert.equal(search.value,'비교');assert.equal(f.bench.state.query,'비교');
+ assert.equal(box().hidden,true);
+ // A second pick joins the same rule: any of the journals.
+ f.bench.state.query='';search.value='';await f.bench.render();
+ typeInto(f,search,'저널:nar');key(f,search,'Enter');await settle();
+ assert.deepEqual(f.bench.filters.rules().map(r=>[r.kind,r.mode,r.values.length]),[['journal','in',2]]);
+ assert.equal(f.body().querySelectorAll('.sc-paper-card').length,2,'PNAS and NAR papers');
+ // Journals already picked are not offered again; -저널: makes an exclude rule.
+ typeInto(f,search,'저널:pnas');assert.equal(box().hidden,true);
+ typeInto(f,search,'-저널:science');key(f,search,'Enter');await settle();
+ assert.deepEqual(f.bench.filters.rules().map(r=>[r.kind,r.mode,r.values.length]),[['journal','in',2],['journal','ex',1]]);
+ assert.equal(f.runtime.cache.workbenchUI.filterRules.explore.length,2,'picks are saved');
+ // A mouse pick works too.
+ await f.bench.filters.set([]);typeInto(f,search,'저널:science');
+ box().querySelector('.sc-suggest-option').dispatchEvent(new f.win.Event('mousedown',{bubbles:true,cancelable:true}));await settle();
+ assert.equal(f.bench.filters.rules()[0].values[0],'Science');
+ f.bench.destroy();
+});
+
+test('저널: suggestions are not offered where journals are not a filter',async()=>{
+ const f=journalFixture();await f.bench.show('journals');await settle();
+ const search=f.bench.panel.querySelector('[aria-label="작업 패널 검색"]');
+ if(search){typeInto(f,search,'저널:nat');assert.equal(f.bench.panel.querySelector('.sc-suggest').hidden,true);}
+ f.bench.destroy();
+});
+
+test('저널 rule editor: typing a name, abbreviation or acronym narrows the list at once and several can be ticked',async()=>{
+ const f=journalFixture();await f.bench.show('explore');await settle();
+ await f.click('저널 포함 규칙 추가');
+ const rows=()=>[...f.bench.panel.querySelectorAll('.sc-rule-opt')].map(o=>o.querySelector('.sc-rule-opt-name').textContent.split(' ')[0]);
+ assert.equal(rows().length,4,'the whole list shows before anything is typed');
+ const search=f.bench.panel.querySelector('input[aria-label="저널 목록 검색"]');
+ typeInto(f,search,'pnas');assert.deepEqual(rows(),['Proceedings']);
+ typeInto(f,search,'nat methods');assert.deepEqual(rows(),['Nature']);
+ assert.equal(f.bench.panel.querySelector('.sc-rule-opt-abbr').textContent,'Nat Methods');
+ typeInto(f,search,'nar');assert.deepEqual(rows(),['Nucleic']);
+ typeInto(f,search,'nuc');
+ for(const label of ['Nucleic Acids Research']){const box=f.bench.panel.querySelector(`input[aria-label="${label}"]`);box.checked=true;box.dispatchEvent(new f.win.Event('change',{bubbles:true}));}
+ typeInto(f,search,'pnas');
+ const pnas=[...f.bench.panel.querySelectorAll('.sc-rule-opt input')].find(i=>/^Proceedings/.test(i.getAttribute('aria-label')));pnas.checked=true;pnas.dispatchEvent(new f.win.Event('change',{bubbles:true}));
+ typeInto(f,search,'');assert.equal(rows()[0].length>0,true);
+ assert.equal([...f.bench.panel.querySelectorAll('.sc-rule-opt input')].filter(i=>i.checked).length,2,'ticked journals stay listed whatever is typed');
+ await f.click('규칙 적용');
+ assert.equal(f.bench.filters.rules()[0].values.length,2);assert.equal(f.body().querySelectorAll('.sc-paper-card').length,2);
  f.bench.destroy();
 });

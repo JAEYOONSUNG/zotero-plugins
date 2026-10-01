@@ -60,7 +60,13 @@
   const pageAnnotations=new Map(),pageAnnotationLoads=new Map(),pageChosen=new Map();
   const ui=runtime.cache.workbenchUI&&typeof runtime.cache.workbenchUI==='object'?runtime.cache.workbenchUI:{};
   let returnFocus=null,commandFocus=null,commandIndex=0,commandMatches=[],navigationEpoch=0;const pendingActions=new Set();
-  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:null,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null,focus:'',searchRecords:!!ui.searchRecords};
+  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:null,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null,focus:'',searchRecords:!!ui.searchRecords,rulesByTab:model.cleanRulesByTab?model.cleanRulesByTab(ui.filterRules):{}};
+  /* Single-value filters saved before the rule builder become include rules on 보유 문헌. */
+  if(ui.filters&&typeof ui.filters==='object'&&model.legacyRules){
+   const moved=model.legacyRules(ui.filters),have=new Set((state.rulesByTab.explore||[]).map(r=>r.id));
+   if(moved.length)state.rulesByTab={...state.rulesByTab,explore:[...(state.rulesByTab.explore||[]),...moved.filter(r=>!have.has(r.id))]};
+   delete ui.filters;ui.filterRules=state.rulesByTab;runtime.cache.workbenchUI=ui;runtime.dirty=true;
+  }
   // Only an explicit new choice enables OpenAlex. Old subject picks never
   // decide which taxonomy the journals tab opens with.
   state.journalBrowser=ui.journalBrowser==='openalex'?'openalex':'jcr';
@@ -408,7 +414,63 @@
    searchTimer=win.setTimeout(()=>{searchTimer=null;runSearch();},150);
   });
   // Enter, and the box's own clear cross, take effect at once instead of waiting.
-  search.addEventListener('keydown',event=>{if(event.key==='Enter')runSearch();});
+  search.addEventListener('keydown',event=>{if(suggestKey(event))return;if(event.key==='Enter')runSearch();});
+  /* 저널: in the search box offers the scope's journals right under it -- by name, abbreviation or acronym --
+     and picking one adds a 저널 include rule (-저널: makes it 제외). Picks add to the same rule, so several
+     journals OR together. ↑↓ move, Enter picks, Esc closes. */
+  const suggest=node('div',null,controls,{class:'sc-suggest',role:'listbox','aria-label':'저널 제안',id:'sc-journal-suggest'});suggest.hidden=true;
+  search.setAttribute('role','combobox');search.setAttribute('aria-autocomplete','list');search.setAttribute('aria-expanded','false');search.setAttribute('aria-controls','sc-journal-suggest');
+  let suggestRows=[],suggestAt=-1,suggestToken=null;
+  function journalToken(){
+   if((RULE_HIDDEN[state.tab]||[]).includes('journal')||controls.hidden)return null;
+   // Everything after 저널: to the end of the box is the name being typed, spaces included, until a quote closes or another field starts.
+   const m=/(^|\s)(-?)(?:저널|journal|venue):(.*)$/i.exec(search.value);
+   if(!m)return null;
+   let text=m[3];
+   if(text.startsWith('"')){text=text.slice(1);if(text.includes('"'))return null;}
+   else if(/\s[^\s:"]+:/.test(' '+text))return null;
+   return {neg:m[2]==='-',text:text.trim(),start:m.index+m[1].length};
+  }
+  function closeSuggest(){suggest.hidden=true;suggest.replaceChildren();suggestRows=[];suggestAt=-1;suggestToken=null;search.setAttribute('aria-expanded','false');search.removeAttribute('aria-activedescendant');}
+  function drawSuggest(){
+   const token=journalToken();if(!token){if(!suggest.hidden)closeSuggest();return;}
+   const mode=token.neg?'ex':'in',taken=new Set(activeRules().filter(r=>r.kind==='journal'&&r.mode===mode).flatMap(r=>r.values));
+   const rows=model.journalChoices(scoped(),token.text).filter(c=>!taken.has(c.venue)).slice(0,8);
+   suggestToken=token;suggestRows=rows;suggest.replaceChildren();
+   if(!rows.length){suggest.hidden=true;search.setAttribute('aria-expanded','false');search.removeAttribute('aria-activedescendant');return;}
+   suggestAt=Math.min(Math.max(suggestAt,0),rows.length-1);
+   rows.forEach((row,i)=>{
+    const option=node('div',null,suggest,{class:'sc-suggest-option',role:'option',id:'sc-journal-suggest-'+i,'aria-selected':String(i===suggestAt)});
+    node('span',null,option,{class:'sc-suggest-name',title:row.venue}).textContent=row.venue;
+    if(row.abbreviation)node('span',null,option,{class:'sc-suggest-abbr'}).textContent=row.abbreviation;
+    node('span',String(row.count),option,{class:'sc-count'});
+    option.addEventListener('mousedown',event=>{event.preventDefault();pickJournal(row);});
+   });
+   try{if(Number.isFinite(search.offsetTop)&&search.offsetHeight){suggest.style.top=(search.offsetTop+search.offsetHeight+4)+'px';suggest.style.left=search.offsetLeft+'px';suggest.style.width=Math.max(240,search.offsetWidth)+'px';}}catch(_){}
+   suggest.hidden=false;search.setAttribute('aria-expanded','true');search.setAttribute('aria-activedescendant','sc-journal-suggest-'+suggestAt);
+  }
+  function pickJournal(row){
+   const token=suggestToken;if(!token)return;
+   const mode=token.neg?'ex':'in',list=(state.rulesByTab[state.tab]||[]).slice(),at=list.findIndex(r=>r.kind==='journal'&&r.mode===mode&&model.ruleActive(r));
+   if(at>=0){if(!list[at].values.includes(row.venue))list[at]={...list[at],values:[...list[at].values,row.venue]};}
+   else list.push({id:newRuleID(),kind:'journal',mode,values:[row.venue]});
+   if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}
+   search.value=search.value.slice(0,token.start).trimEnd();state.query=search.value;
+   closeSuggest();setRules(list);
+   Promise.resolve(render()).catch(error=>runtime.Z?.logError?.(error));
+   search.focus?.();
+  }
+  function suggestKey(event){
+   if(event.isComposing||suggest.hidden||!suggestRows.length)return false;
+   const move=delta=>{suggestAt=(suggestAt+delta+suggestRows.length)%suggestRows.length;[...suggest.children].forEach((o,i)=>o.setAttribute('aria-selected',String(i===suggestAt)));search.setAttribute('aria-activedescendant','sc-journal-suggest-'+suggestAt);};
+   if(event.key==='ArrowDown'){event.preventDefault();move(1);return true;}
+   if(event.key==='ArrowUp'){event.preventDefault();move(-1);return true;}
+   if(event.key==='Enter'){event.preventDefault();pickJournal(suggestRows[suggestAt]);return true;}
+   if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeSuggest();return true;}
+   return false;
+  }
+  search.addEventListener('input',drawSuggest);
+  search.addEventListener('blur',()=>{if(!suggest.hidden)closeSuggest();});
   search.addEventListener('search',runSearch);
   /* A43: with something typed, 내 기록 포함 widens the match past the
      paper's own fields to what was written about it -- the memo, notes and
@@ -425,7 +487,7 @@
   button('현재 선택 가져오기',()=>{const picked=runtime.selected(win);if(!picked.length){message('Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.',true);return;}state.selected=new Set(picked.map(i=>String(i.id)));render();},controls);
   button('새로고침',load,controls);
   const filterPanel=node('details',null,panel,{class:'sc-filters'}),filterSummary=node('summary','상세 필터',filterPanel);
-  const filters=node('div',null,filterPanel,{class:'sc-filter-fields','aria-label':'문헌 상세 필터'});filters.appendChild(type);
+  const filters=node('div',null,filterPanel,{class:'sc-filter-fields','aria-label':'정렬과 초기화'});
   const filterChips=node('div',null,panel,{class:'sc-filter-chips','aria-label':'적용 중인 필터'});
   /* What kind of thing each item is, in words, and a row of chips that
      splits the library by kind with one click. The user asked for patents
@@ -447,11 +509,243 @@
   }
   const filterInputs=new Map();
   function selectFilter(key,label,choices){const input=node('select',null,filters,{'aria-label':label});for(const[value,title]of choices)node('option',title,input,{value});input.value=state[key];input.addEventListener('change',()=>{state[key]=input.value;render();});filterInputs.set(key,input);}
-  selectFilter('status','읽기 상태 필터',[['','모든 읽기 상태'],['unread','안 읽음'],['reading','읽는 중'],['done','완료']]);
-  selectFilter('ratingMin','최소 별점',[['','모든 별점'],...Array.from({length:5},(_,i)=>[String(i+1),`${i+1}점 이상`])]);
-  for(const[key,label]of [['yearFrom','시작 연도'],['yearTo','마지막 연도']]){const input=node('input',null,filters,{type:'number',min:1,max:9999,placeholder:label,'aria-label':label});input.addEventListener('input',()=>{state[key]=input.value;render();});filterInputs.set(key,input);}
+  node('span','정렬',filters,{class:'sc-filter-label'});
   selectFilter('sort','문헌 정렬',[['library','기본 순서'],['title','제목순'],['year-desc','최신 발행순'],['if-desc','IF 높은 순'],['citations-desc','인용 많은 순'],['rating-desc','별점 높은 순'],['time-desc','읽기 시간순']]);
-  const resetFilters=button('필터 초기화',()=>{state.recentKind='';state.annotationPaperID='';for(const key of ['status','ratingMin','yearFrom','yearTo']){state[key]='';filterInputs.get(key).value='';}state.query=search.value='';state.type=type.value='';state.tag='';state.color='';state.sort='library';filterInputs.get('sort').value='library';render();},filters);
+  const resetFilters=button('필터 초기화',()=>{state.recentKind='';state.annotationPaperID='';for(const key of ['status','ratingMin','yearFrom','yearTo','tag'])state[key]='';state.query=search.value='';state.type=type.value='';state.color='';state.sort='library';filterInputs.get('sort').value='library';if(activeRules().length||ruleDraft){closeRuleEditor(false);setRules([]);}render();},filters);
+  /* ===== 포함·제외 규칙 =====
+     The old single-value row (유형, 읽기 상태, 별점, 연도) is folded into these
+     rules; `type` stays only as the detached select the kind chips above write
+     through. A rule says
+     "has this" (포함) or "does not have this" (제외) about one aspect of a
+     paper -- words in a field, a type, tags, status, a rating/year/IF/citation
+     range, a collection, a journal, a PDF, annotations, notes, preprint or
+     published. Rules AND together and are kept per tab. The option lists are
+     counted from the library already in memory, given every other rule, so
+     the number beside a value is what choosing it would leave. */
+  const RULE_ORDER=['word','type','tag','status','rating','year','collection','journal','impact','citations','pdf','annotation','note','preprint'];
+  const RULE_HIDDEN={journals:['journal'],tags:['tag'],reading:['status'],notes:['note'],annotations:['annotation'],attachments:['pdf']};
+  const RULE_DATA_KINDS=new Set(['collection','pdf','note','word']);
+  const RULE_LABEL=model.RULE_LABELS||{};
+  const RULE_LIST_LIMIT=150;
+  const activeRules=()=>(state.rulesByTab[state.tab]||[]).filter(r=>model.ruleActive?.(r));
+  const keptRules=()=>Object.keys(state.rulesByTab).length?{rulesByTab:state.rulesByTab}:{};
+  const legacyOptions=()=>({type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
+  const ruleOptions=()=>{const list=activeRules();return list.length?{rules:list,context:state.ruleContext||{}}:{};};
+  const needsRuleData=()=>activeRules().some(r=>RULE_DATA_KINDS.has(r.kind))||/(?:^|\s)-?(?:collection|컬렉션|note|노트|메모):/i.test(state.query||'')||(!!ruleDraft&&RULE_DATA_KINDS.has(ruleDraft.kind));
+  let ruleMode='in',ruleDraft=null,ruleEditing=false,ruleTrigger=null,ruleSearchText='',ruleKindsTab='',ruleDataItems=null,ruleSeq=0;
+  const newRuleID=()=>'r'+Date.now().toString(36)+(++ruleSeq);
+  function saveRules(){const map={};for(const[tab,list]of Object.entries(state.rulesByTab))if(list.length)map[tab]=list;return Promise.resolve(saveUI({filterRules:map})).catch(error=>runtime.Z?.logError?.(error));}
+  function setRulesFor(tab,list){const next={...state.rulesByTab};if(list.length)next[tab]=list;else delete next[tab];state.rulesByTab=next;return saveRules();}
+  const setRules=list=>setRulesFor(state.tab,list);
+  /* One-press shortcuts elsewhere in the panel (a status count, a tag's 안 읽음)
+     are ordinary rules with a fixed id, so they show as chips and clear like any. */
+  const quickTag=path=>({id:'q-tag',kind:'tag',mode:'in',values:[path],children:true});
+  const quickStatus=status=>({id:'q-status',kind:'status',mode:'in',values:[status]});
+  function putQuick(tab,rules){const ids=new Set(rules.map(r=>r.id));return setRulesFor(tab,[...(state.rulesByTab[tab]||[]).filter(r=>!ids.has(r.id)),...rules]);}
+  function dropQuick(tab,...ids){return setRulesFor(tab,(state.rulesByTab[tab]||[]).filter(r=>!ids.includes(r.id)));}
+  /* Collections, notes and PDFs are not part of the paper rows the panel
+     starts from; they are read once, together, the first time a rule or a
+     search term needs them, and read again only after the library reloads. */
+  let ruleDataBusy=null;
+  async function ensureRuleData(){
+   const itemsNow=state.items;
+   if(ruleDataItems===itemsNow)return;
+   if(ruleDataBusy&&ruleDataBusy.items===itemsNow)return ruleDataBusy.promise;
+   const libraryID=state.libraryID;
+   const promise=(async()=>{
+    const [cols,counts]=await Promise.all([typeof library.collections==='function'?library.collections(libraryID).catch(()=>[]):[],typeof library.childCounts==='function'?library.childCounts(itemsNow.map(i=>i.id)).catch(()=>({})):{}]);
+    if(disposed||itemsNow!==state.items)return;
+    const context=model.collectionContext?.(cols)||{},byItem=new Map();
+    for(const c of cols)for(const id of c.itemIDs||[]){const key=String(id);if(!byItem.has(key))byItem.set(key,[]);byItem.get(key).push(String(c.id));}
+    for(const item of itemsNow){const mine=byItem.get(String(item.id))||[],row=counts[item.id];item.collectionIDs=mine;item.collectionNames=mine.map(id=>context.names?.get(id)).filter(Boolean);item.noteCount=row?row.notes:0;item.pdfCount=row?row.pdfs:0;item.noteTitles=row?row.noteTitles:[];}
+    state.ruleContext=context;state.ruleCollections=cols;ruleDataItems=itemsNow;
+   })();
+   ruleDataBusy={items:itemsNow,promise};
+   try{await promise;}finally{if(ruleDataBusy?.promise===promise)ruleDataBusy=null;}
+  }
+  const filtersOpen=()=>filterPanel.hasAttribute('open');
+  const setFiltersOpen=on=>{if(on)filterPanel.setAttribute('open','');else filterPanel.removeAttribute('open');};
+  /* A journal is found by its title, by the abbreviations the library and the plugin's own journal table know
+     ("Nat Methods", "Proc Natl Acad Sci"), and by its acronym (PNAS, NAR, JACS). Read from what is already
+     in memory, once per distinct venue; no request is made. */
+  function addVenueAbbreviations(items){
+   const cache=new Map(),id=runtime.journalIdentity;
+   for(const item of items){
+    const venue=String(item.venue||'').trim();
+    if(!venue){item.venueAbbrs=[];continue;}
+    let found=cache.get(venue);
+    if(!found){
+     found=[];
+     try{const known=id?.identify?.(venue);for(const a of [known?.abbreviation,known?.mark,id?.abbreviate?.(venue)])if(a&&a!==venue&&!found.includes(a))found.push(String(a));}catch(error){runtime.Z?.logError?.(error);}
+     cache.set(venue,found);
+    }
+    item.venueAbbrs=found;
+   }
+  }
+  const rulesBox=node('div',null,filterPanel,{class:'sc-rules',role:'group','aria-label':'포함·제외 규칙'});
+  const rulesBar=node('div',null,rulesBox,{class:'sc-rules-bar'});
+  node('span','규칙 추가',rulesBar,{class:'sc-rules-title'});
+  const addMode=node('div',null,rulesBar,{class:'sc-segmented',role:'group','aria-label':'새 규칙의 방식'});
+  const ruleKindsBox=node('div',null,rulesBar,{class:'sc-rule-kinds'});
+  const addModeButtons=[['in','포함','조건에 맞는 문헌만 남깁니다'],['ex','제외','조건에 맞는 문헌을 뺍니다']].map(([value,label,title])=>button(label,()=>{ruleMode=value;syncAddMode();},addMode,{'aria-pressed':String(value===ruleMode),'data-mode':value,title}));
+  const kindAria=kind=>`${T(RULE_LABEL[kind]||kind)} ${T(ruleMode==='ex'?'제외 규칙 추가':'포함 규칙 추가')}`;
+  function syncAddMode(){for(const b of addModeButtons)b.setAttribute('aria-pressed',String(b.dataset.mode===ruleMode));for(const b of ruleKindsBox.querySelectorAll('button'))b.setAttribute('aria-label',kindAria(b.dataset.kind));}
+  function ruleDefaults(kind){
+   if(kind==='word')return {field:'all',text:'',phrase:true};
+   if(kind==='tag')return {values:[],all:false,children:true};
+   if(kind==='collection')return {values:[],sub:true};
+   if(['type','status','journal'].includes(kind))return {values:[]};
+   if(kind==='preprint')return {value:'preprint'};
+   if(['rating','year','impact','citations'].includes(kind))return {min:'',max:''};
+   return {};
+  }
+  function drawRuleKinds(){
+   if(ruleKindsTab===state.tab)return;
+   if(ruleKindsTab)closeRuleEditor(false);
+   ruleKindsTab=state.tab;ruleKindsBox.replaceChildren();
+   const hidden=RULE_HIDDEN[state.tab]||[];
+   for(const kind of RULE_ORDER){if(hidden.includes(kind))continue;
+    const b=button(RULE_LABEL[kind]||kind,()=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,b),ruleKindsBox,{class:'sc-chip sc-chip-button sc-rule-kind','data-kind':kind,'aria-label':kindAria(kind)});}
+  }
+  const editor=node('div',null,rulesBox,{class:'sc-rule-editor',role:'group'});editor.hidden=true;
+  node('p','검색창 빠른 문법: -단어(제외) · “구절” · 제목:단어 · -저자:김 · 연도:2018-2022 · 태그: · 저널:(이름·약어 제안) · 컬렉션:',rulesBox,{class:'sc-rules-hint'});
+  let editorPool=[];
+  async function openRuleEditor(rule,editing,trigger){
+   const draft={...rule,...(rule.values?{values:[...rule.values]}:{})};
+   ruleDraft=draft;ruleEditing=!!editing;ruleTrigger=trigger||null;ruleSearchText='';setFiltersOpen(true);
+   if(needsRuleData()){try{await ensureRuleData();}catch(error){runtime.Z?.logError?.(error);}}
+   if(disposed||ruleDraft!==draft)return;
+   editorPool=model.filter(scoped(),{query:state.query,...legacyOptions()});
+   drawRuleEditor(true);
+  }
+  function closeRuleEditor(restoreFocus=true){
+   ruleDraft=null;ruleSearchText='';editor.hidden=true;editor.replaceChildren();
+   if(restoreFocus){const target=ruleTrigger?.isConnected?ruleTrigger:ruleKindsBox.querySelector('button')||filterSummary;target?.focus?.();}
+   ruleTrigger=null;
+  }
+  const ruleContextNow=()=>state.ruleContext||{};
+  const collectionPath=id=>{const ctx=ruleContextNow();return [...(ctx.ancestors?.get(String(id))||[]).slice().reverse(),String(id)].map(x=>ctx.names?.get(x)||x).join(' / ');};
+  function ruleOptionList(d){
+   const base=scoped();
+   if(d.kind==='type')return [...new Set(base.map(i=>i.itemType).filter(Boolean))].map(v=>[v,T(kindLabel(v))]);
+   if(d.kind==='status')return ['unread','reading','done'].map(v=>[v,T(model.STATUS_LABELS[v])]);
+   if(d.kind==='journal')return model.journalChoices(base,'').map(c=>[c.venue,c.venue,c.abbreviation]);
+   if(d.kind==='tag')return [...new Set(base.flatMap(i=>i.tags||[]))].map(v=>[v,v]);
+   if(d.kind==='collection')return (state.ruleCollections||[]).map(c=>[String(c.id),collectionPath(c.id)]);
+   return [];
+  }
+  const kindNoun={type:'유형',tag:'태그',status:'읽기 상태',collection:'컬렉션',journal:'저널'};
+  function drawRuleEditor(focus){
+   editor.replaceChildren();
+   const d=ruleDraft;if(!d){editor.hidden=true;return;}
+   editor.hidden=false;
+   const kindName=T(RULE_LABEL[d.kind]||d.kind);
+   editor.setAttribute('aria-label',`${kindName} ${T(ruleEditing?'규칙 편집':'규칙 추가')}`);
+   const head=node('div',null,editor,{class:'sc-rule-head'});
+   node('strong',RULE_LABEL[d.kind]||d.kind,head,{class:'sc-rule-name'});
+   const modeSeg=node('div',null,head,{class:'sc-segmented',role:'group','aria-label':'규칙 방식'});
+   for(const[value,label]of [['in','포함'],['ex','제외']])button(label,()=>{d.mode=value;drawRuleEditor(false);editor.querySelector(`.sc-rule-head [data-mode="${value}"]`)?.focus?.();},modeSeg,{'aria-pressed':String(d.mode===value),'data-mode':value});
+   const form=node('div',null,editor,{class:'sc-rule-body'});
+   const preview=node('p',null,editor,{class:'sc-rule-preview',role:'status','aria-live':'polite'});
+   const actions=node('div',null,editor,{class:'sc-rule-actions'});
+   const apply=button(ruleEditing?'변경 적용':'규칙 적용',()=>commitRule(),actions,{'data-variant':'primary'});
+   button('취소',()=>closeRuleEditor(true),actions);
+   if(ruleEditing)button('규칙 삭제',()=>removeRule(d.id,true),actions);
+   const ctx=ruleContextNow();
+   const refresh=()=>{
+    const ok=model.ruleActive(d);apply.disabled=!ok;
+    const others=model.applyRules(editorPool,activeRules().filter(r=>r.id!==d.id),ctx);
+    if(!ok){preview.textContent=T('조건을 고르면 남는 문헌 수가 여기에 표시됩니다.');return;}
+    const after=model.applyRules(others,[d],ctx).length;
+    preview.textContent=T(`다른 규칙을 적용한 ${others.length}편 중 ${after}편이 남습니다.`);
+   };
+   const seg=(parent,label,options,current,set)=>{const wrap=node('div',null,parent,{class:'sc-segmented',role:'group','aria-label':label});for(const[value,text]of options)button(text,()=>{set(value);for(const b of wrap.querySelectorAll('button'))b.setAttribute('aria-pressed',String(b.dataset.value===String(value)));refresh();},wrap,{'aria-pressed':String(current===value),'data-value':String(value)});return wrap;};
+   const field=(parent,label)=>{const row=node('label',null,parent,{class:'sc-rule-field'});node('span',label,row);return row;};
+   const submitOn=input=>input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();commitRule();}});
+   let focusTarget=null;
+   if(d.kind==='word'){
+    seg(form,'찾을 위치',model.RULE_FIELDS.map(f=>[f,model.FIELD_LABELS[f]]),d.field,v=>{d.field=v;});
+    const row=field(form,'단어 또는 구절');const input=node('input',null,row,{type:'text','aria-label':'찾을 단어 또는 구절',placeholder:'예: deep learning',autocomplete:'off'});input.value=d.text||'';
+    input.addEventListener('input',()=>{d.text=input.value;refresh();});submitOn(input);focusTarget=input;
+    check('구절 그대로 일치',d.phrase!==false,on=>{d.phrase=on;refresh();},form);
+    node('p','끄면 입력한 단어가 모두 들어 있으면 일치합니다.',form,{class:'sc-rule-note'});
+   }else if(['type','tag','status','collection','journal'].includes(d.kind)){
+    const noun=T(kindNoun[d.kind]);
+    if(d.kind==='tag'){
+     seg(form,'여러 태그의 결합',[[false,d.mode==='ex'?'하나라도 가진 문헌':'하나라도 포함'],[true,d.mode==='ex'?'모두 가진 문헌':'모두 포함']],!!d.all,v=>{d.all=v;});
+     check('하위 태그 포함 (a는 a/b도)',d.children!==false,on=>{d.children=on;drawOptions();refresh();},form);
+    }
+    if(d.kind==='collection')check('하위 컬렉션 포함',d.sub!==false,on=>{d.sub=on;drawOptions();refresh();},form);
+    let search=null;
+    if(!['status','type'].includes(d.kind)){
+     const row=field(form,`${noun} 찾기`);search=node('input',null,row,{type:'search','aria-label':`${noun} 목록 검색`,placeholder:d.kind==='journal'?'이름·약어·약칭으로 찾기 (예: Nat Methods, PNAS)':'목록에서 찾기',autocomplete:'off'});search.value=ruleSearchText;
+     search.addEventListener('input',()=>{ruleSearchText=search.value;drawOptions();});focusTarget=search;
+    }
+    const list=node('div',null,form,{class:'sc-rule-options',role:'group','aria-label':`${noun} 선택`});
+    const more=node('p',null,form,{class:'sc-rule-note'});
+    function drawOptions(){
+     list.replaceChildren();
+     const counts=model.countOptions(editorPool,d.kind,{rules:activeRules(),ctx,skipID:d.id,children:d.kind==='collection'?d.sub!==false:d.children!==false});
+     const needle=model.norm(ruleSearchText).trim(),chosen=new Set(d.values);
+     // Journals match by name, abbreviation or acronym and rank exact > prefix > contains; the rest by substring.
+     const scores=d.kind==='journal'?new Map(model.journalChoices(scoped(),ruleSearchText).map(c=>[c.venue,c.score])):null;
+     const all=ruleOptionList(d).map(([value,label,abbr])=>({value,label,abbr,count:counts.get(value)||0,score:scores?scores.get(value)??null:0}))
+      .filter(o=>chosen.has(o.value)||(scores?o.score!==null:(!needle||model.norm(o.label).includes(needle))))
+      .sort((a,b)=>(chosen.has(b.value)-chosen.has(a.value))||((a.score??9)-(b.score??9))||(b.count-a.count)||String(a.label).localeCompare(String(b.label)));
+     for(const o of all.slice(0,RULE_LIST_LIMIT)){
+      const row=node('label',null,list,{class:'sc-rule-opt'});
+      const box=node('input',null,row,{type:'checkbox','aria-label':o.label});box.checked=chosen.has(o.value);
+      box.addEventListener('change',()=>{const at=d.values.indexOf(o.value);if(box.checked&&at<0)d.values.push(o.value);if(!box.checked&&at>=0)d.values.splice(at,1);refresh();});
+      node('span',null,row,{class:'sc-rule-opt-name',title:o.abbr?`${o.label} · ${o.abbr}`:o.label}).textContent=o.label;
+      if(o.abbr)node('span',null,row,{class:'sc-rule-opt-abbr'}).textContent=o.abbr;
+      node('span',String(o.count),row,{class:'sc-count'});
+     }
+     if(!all.length)node('p','맞는 항목이 없습니다.',list,{class:'sc-rule-note'});
+     more.textContent=all.length>RULE_LIST_LIMIT?T(`${all.length}개 중 ${RULE_LIST_LIMIT}개만 표시합니다. 위 검색으로 좁히세요.`):'';
+     more.hidden=!more.textContent;
+    }
+    drawOptions();if(!focusTarget)focusTarget=list.querySelector('input');
+    node('p','숫자는 지금 다른 규칙과 필터를 적용했을 때 그 값에 해당하는 문헌 수입니다.',form,{class:'sc-rule-note'});
+   }else if(['rating','year','impact','citations'].includes(d.kind)){
+    const spec={rating:{min:0,max:5,step:1,unit:'점'},year:{min:1,max:9999,step:1,unit:''},impact:{min:0,step:.1,unit:''},citations:{min:0,step:1,unit:''}}[d.kind];
+    const pair=node('div',null,form,{class:'sc-rule-range'});
+    for(const[key,label]of [['min','최소'],['max','최대']]){
+     const row=field(pair,label);const input=node('input',null,row,{type:'number',min:spec.min,step:spec.step,'aria-label':`${kindName} ${label}`,placeholder:label,inputmode:'decimal'});if(spec.max!==undefined)input.setAttribute('max',spec.max);
+     input.value=d[key]===''?'':String(d[key]);
+     input.addEventListener('input',()=>{d[key]=input.value===''?'':Number(input.value);refresh();});submitOn(input);if(!focusTarget)focusTarget=input;
+    }
+    node('p',d.kind==='rating'?'별점을 매기지 않은 문헌은 0점으로 셉니다.':'값이 기록되지 않은 문헌은 이 범위에 들어가지 않습니다.',form,{class:'sc-rule-note'});
+   }else if(d.kind==='preprint'){
+    seg(form,'프리프린트 또는 출판본',[['preprint','프리프린트'],['published','출판본']],d.value,v=>{d.value=v;});
+   }else{
+    node('p',({pdf:'PDF 첨부가 하나라도 있는 문헌',annotation:'주석이 하나라도 달린 문헌',note:'내가 쓴 노트가 하나라도 있는 문헌'})[d.kind],form,{class:'sc-rule-note'});
+    node('p','포함은 이런 문헌만 남기고, 제외는 이런 문헌을 뺍니다. 읽기 시간 기록용 노트는 세지 않습니다.',form,{class:'sc-rule-note'});
+   }
+   refresh();
+   if(focus)(focusTarget||editor.querySelector('.sc-rule-actions button')||editor).focus?.();
+  }
+  async function commitRule(){
+   const d=ruleDraft;if(!d||!model.ruleActive(d))return;
+   const clean=model.cleanRules([d])[0];if(!clean)return;
+   const list=(state.rulesByTab[state.tab]||[]).slice(),at=list.findIndex(r=>r.id===clean.id);
+   if(at>=0)list[at]=clean;else list.push(clean);
+   const trigger=ruleTrigger;closeRuleEditor(false);setRules(list);
+   await render();
+   const target=(trigger?.isConnected?trigger:null)||filterChips.querySelector(`[data-rule-id="${clean.id}"] .sc-rule-chip-main`)||filterSummary;target?.focus?.();
+  }
+  async function removeRule(id,fromEditor){
+   if(fromEditor)closeRuleEditor(false);
+   setRules((state.rulesByTab[state.tab]||[]).filter(r=>r.id!==id));
+   await render();
+   (filterChips.querySelector('.sc-rule-chip-main')||filterSummary).focus?.();
+  }
+  function ruleChip(rule){
+   const group=node('span',null,filterChips,{class:'sc-rule-chip','data-mode':rule.mode,'data-rule-id':rule.id,'data-kind':rule.kind});
+   const words=model.describeRule(rule,{kindLabel:k=>T(kindLabel(k)),collectionName:id=>state.ruleContext?.names?.get(String(id))||id,t:T});
+   const prefix=rule.mode==='ex'?T('제외')+' · ':'';
+   const main=button(prefix+words,()=>openRuleEditor(rule,true,main),group,{class:'sc-rule-chip-main','aria-label':`${prefix}${words} ${T('규칙 편집')}`,title:`${prefix}${words}`});
+   button('×',()=>removeRule(rule.id,false),group,{class:'sc-rule-chip-x','aria-label':`${prefix}${words} ${T('규칙 삭제')}`,title:T('규칙 삭제')});
+  }
   const shell=node('div',null,panel,{class:'sc-shell'}),nav=node('nav',null,shell,{'aria-label':'작업 종류'}),content=node('div',null,shell,{class:'sc-content'});
   const context=node('div',null,content,{class:'sc-context'}),sectionTitle=node('h2','보유 문헌',context,{class:'sc-section-title'}),contextDetail=node('span',null,context,{class:'sc-context-detail'});context.appendChild(kindChips);
   /* The search row and its filters belong to the page they narrow, so they sit
@@ -539,7 +833,7 @@
    state.listOrigin={tab:state.tab,scope:state.scope,sort:state.sort,pageIndex:state.pageIndex||0,pageKey:state.pageKey,
     selected:[...state.selected],expandedPaperID:state.expandedPaperID||'',
     scrollTop:body.scrollTop||0,anchorID,
-    filters:{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo}};
+    filters:{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,rulesByTab:state.rulesByTab}};
   }
   // The other half: everything rememberListOrigin kept, put back, then the
   // same card scrolled to the same offset and focused (or the nearest one left).
@@ -558,9 +852,9 @@
   }
   function navigateSelection(tab,ids,label){
    rememberListOrigin();
-   const kept={query:state.query,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,type:state.type,tag:state.tag};
+   const kept={query:state.query,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,type:state.type,tag:state.tag,...keptRules()};
    if(Object.values(kept).some(Boolean))state.keptFilters=kept;
-   state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';
+   state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';state.rulesByTab={};
    for(const [,input] of filterInputs)input.value='';type.value='';
    // Called with an explicit id list (a journal's held papers, say) rather than
    // whatever the user last checked: that list becomes the selection.
@@ -630,7 +924,7 @@
      is what was typed comes first, then the ones that begin with it, then the
      ones that merely contain it. Any other sort the user picked still wins. */
   const rows=()=>{
-   const found=model.filter(scoped(),{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
+   const found=model.filter(scoped(),{query:state.query,...parentOptions()});
    return state.query&&state.sort==='library'?model.rankByQuery(found,state.query):model.sortItems(found,state.sort);
   };
   /* 논문 비교's own scope: once the picker has committed to a chosen set --
@@ -639,7 +933,7 @@
      with drawMatrix's scopeItems, or removing the last compared paper still
      reads "비교 중 N편" for the list behind it. */
   const matrixUsingPicker=()=>!!state.matrixUsingSelection||selected().length>0;
-  const parentOptions=()=>({type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
+  const parentOptions=()=>({...legacyOptions(),...ruleOptions()});
   const ids=()=>Object.values(parentOptions()).some(Boolean)?model.filter(scoped(),parentOptions()).map(item=>String(item.id)):state.scope==='selected'?[...state.selected]:state.scope.startsWith('collection')?[...(state.collectionIDs||[])]:undefined;
   /* A43: 내 기록 포함. rows() answers what the title/authors/venue/DOI/
      abstract/tags/memo already say; this widens 보유 문헌's own list past
@@ -653,8 +947,10 @@
      .sc-paper-search-hit line under its title. */
   async function exploreRows(){
    const base=rows();
-   if(!state.searchRecords||!state.query.trim())return {items:base,hits:new Map()};
-   const words=String(state.query||'').toLowerCase().split(/\s+/).filter(Boolean);
+   // The memo/note/annotation widening looks for the plain words; -word, field:value and the rules already acted in rows().
+   const wide=model.plainQuery?model.plainQuery(state.query):state.query;
+   if(!state.searchRecords||!wide.trim())return {items:base,hits:new Map()};
+   const words=String(wide||'').toLowerCase().split(/\s+/).filter(Boolean);
    const excerptAround=text=>{const hay=String(text||'').replace(/\s+/g,' ').trim();
     const at=Math.min(...words.map(w=>hay.toLowerCase().indexOf(w)).filter(i=>i>=0));
     if(!Number.isFinite(at))return hay.slice(0,140);
@@ -663,10 +959,10 @@
    // A base row already matched by title etc.; only a memo-only match is worth naming.
    for(const item of base){
     const own=[item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,...(item.tags||[])].join(' ');
-    if(model.matches(own,state.query))continue;
-    if(item.remark&&model.matches(item.remark,state.query))hits.set(String(item.id),{kind:'memo',label:T('메모'),text:excerptAround(item.remark)});
+    if(model.matches(own,wide))continue;
+    if(item.remark&&model.matches(item.remark,wide))hits.set(String(item.id),{kind:'memo',label:T('메모'),text:excerptAround(item.remark)});
    }
-   const pool=model.filter(scoped(),parentOptions());
+   const pool=model.filter(scoped(),{query:model.syntaxQuery?model.syntaxQuery(state.query):'',...parentOptions()});
    const poolIDs=pool.map(item=>String(item.id));
    const baseIDs=new Set(base.map(item=>String(item.id)));
    const [notes,annotations]=await Promise.all([scopeNotes(poolIDs),scopeAnnotations(poolIDs)]).catch(()=>[[],[]]);
@@ -675,10 +971,10 @@
     const id=String(item.id);
     if(baseIDs.has(id)||hits.has(id))continue;
     const myNotes=(notes||[]).filter(n=>String(n.parentID||'')===id);
-    const noteHit=myNotes.find(n=>model.matches(String(n.title||'')+' '+String(n.text||''),state.query));
+    const noteHit=myNotes.find(n=>model.matches(String(n.title||'')+' '+String(n.text||''),wide));
     if(noteHit){hits.set(id,{kind:'note',label:T(`노트 ${myNotes.length}`),text:excerptAround(String(noteHit.title||'')+' '+String(noteHit.text||''))});extra.push(item);continue;}
     const myAnnotations=(annotations||[]).filter(a=>String(a.parentID||'')===id);
-    const annotHit=myAnnotations.find(a=>model.matches(String(a.text||'')+' '+String(a.comment||''),state.query));
+    const annotHit=myAnnotations.find(a=>model.matches(String(a.text||'')+' '+String(a.comment||''),wide));
     if(annotHit){hits.set(id,{kind:'annotation',label:T(`주석 ${myAnnotations.length}`),text:excerptAround(String(annotHit.text||'')+' '+String(annotHit.comment||''))});extra.push(item);}
    }
    // Merge before sorting: a paper pulled in only through a note ranks and
@@ -790,9 +1086,13 @@
     :state.tab==='matrix'?T(`비교 중 ${matrixUsingPicker()?selected().length:rows().length}편`):state.tab==='collections'?''
     :['related','authors','backlinks'].includes(state.tab)&&selected().length===1?selected()[0].title
     :state.selected.size===1?T('선택한 문헌 1개'):state.selected.size?T(`선택한 문헌 ${state.selected.size}개`):'';}
-   filterChips.replaceChildren();const labels={query:'검색',type:'유형',tag:'태그',status:'상태',ratingMin:'최소 별점',yearFrom:'시작 연도',yearTo:'마지막 연도'};
-   for(const[key,label]of Object.entries(labels))if(state[key]){const value=key==='status'?({unread:'안 읽음',reading:'읽는 중',done:'완료'})[state[key]]:state[key];button(`${label}: ${value} ×`,()=>{state[key]='';if(key==='query')search.value='';else if(key==='type')type.value='';else if(filterInputs.has(key))filterInputs.get(key).value='';return render();},filterChips,{'aria-label':label+' 필터 해제'});}
-   const count=Object.keys(labels).filter(key=>state[key]).length;filterSummary.textContent=T('상세 필터')+(count?' · '+T(`${count}개 적용`):'');filterChips.hidden=!applicable||!count;
+   filterChips.replaceChildren();const labels={query:'검색',type:'유형'};
+   for(const[key,label]of Object.entries(labels))if(state[key]){const value=state[key];button(`${label}: ${value} ×`,()=>{state[key]='';if(key==='query')search.value='';else if(key==='type')type.value='';else if(filterInputs.has(key))filterInputs.get(key).value='';return render();},filterChips,{'aria-label':label+' 필터 해제'});}
+   drawRuleKinds();
+   const ruleList=applicable?activeRules():[];for(const rule of ruleList)ruleChip(rule);
+   const count=Object.keys(labels).filter(key=>state[key]).length+ruleList.length;
+   if(count>1)button('모두 지우기',()=>resetFilters.click(),filterChips,{class:'sc-rule-clear','aria-label':'적용 중인 필터 모두 지우기'});
+   filterSummary.textContent=T('상세 필터')+(count?' · '+T(`${count}개 적용`):'');filterChips.hidden=!applicable||!count;
    for(const group of nav.querySelectorAll('.sc-nav-group'))group.hidden=[...group.querySelectorAll('[data-tab]')].every(button=>button.hidden);
    updateSelectionUI();
   }
@@ -878,6 +1178,7 @@
    if(state.scope.startsWith('collection')){state.collectionIDs=[];const collection=win.ZoteroPane?.getSelectedCollection?.();if(collection){const members=await library.collectionItems(collection.id,{libraryID,recursive:state.scope==='collection-recursive'});if(disposed||token!==loadEpoch||panel.hidden)return;if(context!==scopeContext())return load();state.collectionIDs=members;}}
    // The reader's memo rides with each paper, so the search finds a paper by what was written about it.
    state.items=snapshot.map(i=>{const ref=runtime.Z.Items.get(Number(i.id));return {...i,...(ref?runtime.state(ref):{}),remark:ref?String(runtime.entry?.(ref)?.remark||''):''};});
+   addVenueAbbreviations(state.items);
    /* 주석 n on a row: one grouped count per load, not one lookup per row.
       Absent in an older or fake library, rows simply show nothing extra. */
    if(typeof library.annotationCounts==='function'){
@@ -934,7 +1235,7 @@
   // One paper, found whatever the search and filters were: they are cleared, and the paper opened on its own.
   function showPaper(id){
    rememberListOrigin();
-   state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';
+   state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';state.rulesByTab={};
    for(const [key,input] of filterInputs)input.value='';type.value='';
    state.selected=new Set([String(id)]);state.scope='selected';scope.value='selected';
    return state.tab==='explore'?render():navigate('explore');
@@ -1035,7 +1336,7 @@
     /* The reading counts are the way to those papers: pressed, the list shows
        only them (the status filter above says so, and clears it); pressed
        again, all of them. */
-    const statusFact=(label,key)=>{if(!n[key])return;const on=state.status===key;const b=button('',()=>{state.status=on?'':key;const select=filterInputs.get?.('status');if(select)select.value=state.status;render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 모두 보기':'이 상태만 보기')});node('b',String(n[key]),b);b.appendChild(doc.createTextNode(' '+T(label)));};
+    const statusFact=(label,key)=>{if(!n[key])return;const on=activeRules().some(r=>r.id==='q-status'&&r.values[0]===key);const b=button('',()=>{if(on)dropQuick(state.tab,'q-status');else putQuick(state.tab,[quickStatus(key)]);render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 모두 보기':'이 상태만 보기')});node('b',String(n[key]),b);b.appendChild(doc.createTextNode(' '+T(label)));};
     statusFact('완료','done');statusFact('읽는 중','reading');statusFact('안 읽음','unread');
     if(seconds>0)fact('읽음',runtime.formatReadTime?runtime.formatReadTime(seconds):Math.round(seconds/60)+'분');
     const mi=median(ifs),mc=median(cites);
@@ -1886,7 +2187,7 @@
      if(typeof library.restoreTags==='function')await library.restoreTags(removed);
      else{const groups=new Map();for(const row of removed){if(!groups.has(row.tag))groups.set(row.tag,[]);groups.get(row.tag).push(row.id);}for(const[tag,list]of groups)await library.addTags(list,[tag]);}
      undo.remove();await load();message(`${papers}편에 태그를 다시 붙였습니다.`);},bar());
-   },b);button('태그 필터 해제',()=>{state.tag='';render();},b);
+   },b);button('태그 필터 해제',()=>{dropQuick('explore','q-tag','q-status');render();},b);
    sectionHead('태그 경로 이름 바꾸기',null,edit);
    const rename=bar(edit),from=node('input',null,rename,{'aria-label':'기존 태그 경로',placeholder:'기존 태그 경로'}),to=node('input',null,rename,{'aria-label':'새 태그 경로',placeholder:'새 태그 경로'});let subtree=true;
    check('하위 태그도 변경',true,on=>{subtree=on;},rename);
@@ -1976,7 +2277,7 @@
      node('span',[T(`완료 ${r.done}/${r.total}`),time,r.last?calendarAgo(r.last):''].filter(Boolean).join(' · '),row,{class:'sc-tag-reading'});
      // The unread under this heading, one press away in the list.
      const left=r.total-r.done-r.reading;
-     if(left>0){const go=button(T(`안 읽음 ${left}편`),()=>{state.tag=n.path;state.status='unread';const select=filterInputs.get?.('status');if(select)select.value='unread';return navigate('explore');},row,{class:'sc-tag-unread'});go.addEventListener('click',event=>event.stopPropagation());}}const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},row,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(hasKids)branch(sorted(n.children),container);}}redraw();redrawCross();
+     if(left>0){const go=button(T(`안 읽음 ${left}편`),()=>{putQuick('explore',[quickTag(n.path),quickStatus('unread')]);return navigate('explore');},row,{class:'sc-tag-unread'});go.addEventListener('click',event=>event.stopPropagation());}}const only=button('이 태그만',()=>{putQuick('explore',[quickTag(n.path)]);navigate('explore');},row,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(hasKids)branch(sorted(n.children),container);}}redraw();redrawCross();
   }
   /* A note needs a paper. Opening this tab with the whole library in scope
      used to show a disabled editor and "select a paper", with no paper to
@@ -2006,7 +2307,7 @@
   async function drawNotes(token){const target=selected();
    // 40 at a time, until 더 보기 asks for more; a new query, library, scope
    // or filter starts back at 40 rather than keeping whatever was reached.
-   const noteContext=JSON.stringify([state.query,state.scope,state.libraryID,state.status,state.ratingMin,state.yearFrom,state.yearTo,state.tag,state.type,state.color]);
+   const noteContext=JSON.stringify([state.query,state.scope,state.libraryID,state.status,state.ratingMin,state.yearFrom,state.yearTo,state.tag,state.type,state.color,activeRules()]);
    if(state.noteContext!==noteContext){state.noteContext=noteContext;state.noteLimit=40;}
    // Notes first, so the compose fold can say how many the paper has and stay closed over them.
    const own=target.length===1&&!state.query&&scoped().some(i=>String(i.id)===String(target[0].id));
@@ -3680,10 +3981,10 @@
        if(mix.unread){
         if(said.length)mixText.appendChild(doc.createTextNode(' · '));
         const go=button(T(`안 읽음 ${mix.unread}`),()=>{
-         const kept={query:state.query,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,type:state.type,tag:state.tag};
+         const kept={query:state.query,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,type:state.type,tag:state.tag,...keptRules()};
          if(Object.values(kept).some(Boolean)&&!state.keptFilters)state.keptFilters=kept;
-         state.query='';search.value='';for(const key of ['ratingMin','yearFrom','yearTo','type','tag'])state[key]='';for(const [,input] of filterInputs)input.value='';type.value='';
-         state.status='unread';const select=filterInputs.get?.('status');if(select)select.value='unread';
+         state.query='';search.value='';for(const key of ['ratingMin','yearFrom','yearTo','type','tag'])state[key]='';state.rulesByTab={};for(const [,input] of filterInputs)input.value='';type.value='';
+         state.rulesByTab={explore:[quickStatus('unread')]};
          return open();
         },mixText,{class:'sc-collection-unread',title:T('이 컬렉션의 안 읽은 문헌만 보기')});
         go.addEventListener('click',event=>event.stopPropagation());
@@ -5682,6 +5983,7 @@
    }
   }
   async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';
+   if(needsRuleData()){try{await ensureRuleData();}catch(error){runtime.Z?.logError?.(error);}if(disposed||panel.hidden)return;}
    /* "선택한 문헌" with nothing selected showed an empty list that read as
       broken: after 자세히 the scope stayed on the selection, and the
       selection went away with the next click in the tree. With nothing to
@@ -5724,7 +6026,10 @@
     if(jcrSearch){e.preventDefault();jcrSearch.focus?.();jcrSearch.select?.();}
     else if(!controls.hidden){e.preventDefault();search.focus?.();search.select?.();}
    }
-   else if(e.key==='Escape'){if(e.target?.closest?.('input,textarea')){e.target.blur();return;}e.stopPropagation();toggle(false);}
+   else if(e.key==='Escape'){
+    // The filter layers close one at a time, innermost first, and give focus back.
+    if(filterPanel.contains(e.target)&&(ruleDraft||filtersOpen())){e.preventDefault();e.stopPropagation();if(ruleDraft)closeRuleEditor(true);else{setFiltersOpen(false);filterSummary.focus?.();}return;}
+    if(e.target?.closest?.('input,textarea')){e.target.blur();return;}e.stopPropagation();toggle(false);}
   };panel.addEventListener('keydown',keyboard);
   /* A memo saves itself as it is typed, and the save is an item change that
      reloaded the panel: the field was rebuilt under the cursor a second after
@@ -5748,7 +6053,7 @@
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};
-  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
+  return {filters:{rules:()=>activeRules(),set:list=>{setRules(model.cleanRules(list));return render();},open:()=>{setFiltersOpen(true);},edit:kind=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,null),editor:()=>ruleDraft},toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

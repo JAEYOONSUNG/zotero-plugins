@@ -445,6 +445,61 @@
 #style-custom-workbench .sc-filter-chips { display: flex; flex-wrap: wrap; gap: var(--sc-space-2); flex-shrink: 0; padding: var(--sc-space-2) var(--sc-space-4); max-height: 84px; overflow: auto; }
 #style-custom-workbench .sc-filter-chips:empty { display: none; }
 #style-custom-workbench .sc-filter-chips button { color: var(--sc-text); background: var(--sc-fill); }
+/* ==== 포함·제외 규칙: the rule builder inside 상세 필터, and its chips ==== */
+#style-custom-workbench .sc-rules { display: flex; flex-direction: column; gap: var(--sc-space-3); box-sizing: border-box; width: 100%; margin: 0 0 var(--sc-space-3); padding: var(--sc-space-3) var(--sc-space-4); background: var(--sc-surface); border-radius: var(--sc-radius-card); box-shadow: 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-rules-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-rules-title { color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); white-space: nowrap; }
+#style-custom-workbench .sc-rule-kinds { display: flex; flex-wrap: wrap; gap: var(--sc-space-1); flex: 1 1 320px; min-width: 0; }
+#style-custom-workbench .sc-rule-kinds .sc-rule-kind { flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--sc-fill); }
+#style-custom-workbench .sc-rules-bar .sc-segmented button,
+#style-custom-workbench .sc-rule-head .sc-segmented button,
+#style-custom-workbench .sc-rule-body .sc-segmented button { white-space: nowrap; }
+#style-custom-workbench .sc-rule-editor { display: flex; flex-direction: column; gap: var(--sc-space-3); padding: var(--sc-space-3) var(--sc-space-4); background: var(--sc-surface-alt); border-radius: var(--sc-radius); box-shadow: 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-rule-editor[hidden] { display: none; }
+#style-custom-workbench .sc-rule-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-rule-name { color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-font); }
+#style-custom-workbench .sc-rule-body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-rule-body > .sc-check { color: var(--sc-text); }
+#style-custom-workbench .sc-rule-field { display: flex; flex-direction: column; gap: var(--sc-space-1); align-self: stretch; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-rules .sc-rule-field input,
+#style-custom-workbench .sc-rules .sc-rule-field input[type=search] { width: 100%; flex: 0 0 auto; min-width: 0; }
+#style-custom-workbench .sc-rules .sc-rule-range .sc-rule-field input { width: 100%; }
+#style-custom-workbench .sc-rule-range { display: flex; flex-wrap: wrap; gap: var(--sc-space-3); }
+#style-custom-workbench .sc-rule-range .sc-rule-field { flex: 0 0 120px; align-self: auto; }
+#style-custom-workbench .sc-rule-options { display: flex; flex-direction: column; align-self: stretch; max-height: 208px; overflow: auto; padding: var(--sc-space-1); background: var(--sc-surface); border-radius: var(--sc-radius); box-shadow: 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-rule-opt { display: flex; align-items: center; gap: var(--sc-space-2); flex: 0 0 auto; min-height: var(--sc-h-nav); padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-sm); color: var(--sc-text); cursor: pointer; }
+#style-custom-workbench .sc-rule-opt:hover { background: var(--sc-fill); }
+#style-custom-workbench .sc-rule-opt-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-rule-opt .sc-count { flex: 0 0 auto; margin-inline-start: 0; }
+#style-custom-workbench .sc-rule-note,
+#style-custom-workbench .sc-rules-hint { margin: 0; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); overflow-wrap: anywhere; }
+#style-custom-workbench .sc-rule-note[hidden] { display: none; }
+#style-custom-workbench .sc-rule-preview { margin: 0; color: var(--sc-text); font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); overflow-wrap: anywhere; }
+#style-custom-workbench .sc-rule-actions { display: flex; flex-wrap: wrap; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-rule-actions button { white-space: nowrap; }
+#style-custom-workbench .sc-rule-opt-abbr { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); }
+#style-custom-workbench .sc-filter-label { color: var(--sc-muted); font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); white-space: nowrap; }
+#style-custom-workbench .sc-filter-fields { gap: var(--sc-space-2); padding-block: var(--sc-space-1) var(--sc-space-3); }
+/* 저널: in the search box -- the journals under it, a listbox over the page. */
+#style-custom-workbench .sc-controls { position: relative; }
+#style-custom-workbench .sc-suggest { position: absolute; z-index: 20; box-sizing: border-box; display: flex; flex-direction: column; max-height: 288px; overflow: auto; padding: var(--sc-space-1); background: var(--sc-surface); border-radius: var(--sc-radius); box-shadow: var(--sc-shadow); }
+#style-custom-workbench .sc-suggest[hidden] { display: none; }
+#style-custom-workbench .sc-suggest-option { display: flex; align-items: center; gap: var(--sc-space-2); flex: 0 0 auto; min-height: var(--sc-h-nav); padding: 0 var(--sc-space-3); border-radius: var(--sc-radius-sm); color: var(--sc-text); cursor: pointer; font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-suggest-option:hover,
+#style-custom-workbench .sc-suggest-option[aria-selected=true] { background: var(--sc-fill); }
+#style-custom-workbench .sc-suggest-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-suggest-abbr { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sc-muted); font-size: var(--sc-fs-meta); }
+#style-custom-workbench .sc-suggest-option .sc-count { flex: 0 0 auto; margin-inline-start: 0; }
+/* A rule in the chip row: include is a plain grey pill; exclude is the same pill drawn as an outline, with 제외 in its words. */
+#style-custom-workbench .sc-filter-chips .sc-rule-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: var(--sc-h-seg); overflow: hidden; border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-text); }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip[data-mode=ex] { background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border-strong); color: var(--sc-muted); }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip button { min-height: var(--sc-h-seg); border-radius: 0; box-shadow: none; background: transparent; color: inherit; white-space: nowrap; }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip button:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip button:focus-visible { outline-offset: -2px; }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip-main { flex: 0 1 auto; min-width: 0; max-width: 280px; padding: 0 var(--sc-space-1) 0 var(--sc-space-3); overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip-x { flex: 0 0 auto; width: var(--sc-h-seg); padding: 0; }
+#style-custom-workbench .sc-filter-chips .sc-rule-clear { min-height: var(--sc-h-seg); padding: 0 var(--sc-space-3); background: transparent; color: var(--sc-muted); white-space: nowrap; }
+#style-custom-workbench .sc-filter-chips .sc-rule-clear:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
 /* The library by kind: papers, preprints, patents, theses, one chip each. */
 #style-custom-workbench .sc-kind-chips { display: flex; flex-wrap: wrap; gap: var(--sc-space-1); margin-inline-start: auto; padding: 0; }
 #style-custom-workbench .sc-kind-chips:empty { display: none; }
@@ -2278,7 +2333,7 @@
   #style-custom-workbench > .sc-selection-bar { min-height: 52px; }
   #style-custom-workbench:has(> .sc-selection-bar[hidden]) > .sc-shell { margin-block-end: 52px; }
 }
-</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div><section style="font-size:13px" data-maximized="false" role="region" data-density="comfortable" aria-label="Style Custom 연구 작업 패널" id="style-custom-workbench"><header class="sc-header"><div class="sc-brand"><img aria-hidden="true" alt="" height="24" width="24" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJTdHlsZSBDdXN0b206IGEgbGlicmFyeSByb3cgbWFya2VkIj4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjI4IiBmaWxsPSIjMkIzMjQwIi8+CiAgPGcgZmlsbD0iI0ZGRkZGRiIgb3BhY2l0eT0iMC41Ij4KICAgIDxjaXJjbGUgY3g9IjMxIiBjeT0iNDEiIHI9IjYiLz48Y2lyY2xlIGN4PSIzMSIgY3k9IjY0IiByPSI2Ii8+PGNpcmNsZSBjeD0iMzEiIGN5PSI4NyIgcj0iNiIvPgogIDwvZz4KICA8ZyBmaWxsPSIjRkZGRkZGIj4KICAgIDxyZWN0IHg9IjQ2IiB5PSIzNCIgd2lkdGg9IjU2IiBoZWlnaHQ9IjE0IiByeD0iNyIvPgogICAgPHJlY3QgeD0iNDYiIHk9IjgwIiB3aWR0aD0iNDAiIGhlaWdodD0iMTQiIHJ4PSI3Ii8+CiAgPC9nPgogIDxyZWN0IHg9IjQ2IiB5PSI1NyIgd2lkdGg9IjUwIiBoZWlnaHQ9IjE0IiByeD0iNyIgZmlsbD0iI0U5QTgxQyIvPgo8L3N2Zz4K"><strong>Style Custom</strong><span class="sc-subtitle">연구 작업 패널</span></div><button title="철회 여부 미확인 1146편 · 지표 없는 저널 169종 · 확인 안 한 관심 저자 109명" aria-pressed="false" class="sc-notice-toggle" type="button">자료 점검 3가지</button><div class="sc-header-actions"><button aria-pressed="false" title="간격 좁게" class="sc-icon-button" aria-label="화면 밀도 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="8" x2="13" y1="8" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /></svg></button><button hidden aria-pressed="false" class="sc-icon-button sc-dock" title="탭으로 열기" aria-label="탭으로 열기 / 창으로 띄우기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="8.4" width="10.8" y="4.6" x="2.6" /><path d="M2.6 7.4h10.8M5.2 4.6V3h4.4v1.6" /></svg></button><button aria-pressed="false" class="sc-icon-button sc-maximize" title="전체 화면" aria-label="전체 화면 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4" /></svg></button><button class="sc-icon-button" title="기능 찾기 · ⌘/Ctrl K" aria-label="기능 찾기" aria-keyshortcuts="Meta+K Control+K" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="4.25" cy="7.25" cx="7.25" /><line y2="13.5" x2="13.5" y1="10.5" x1="10.5" /></svg></button><button class="sc-icon-button sc-close" title="닫기" aria-label="작업 패널 닫기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="12" x2="12" y1="4" x1="4" /><line y2="12" x2="4" y1="4" x1="12" /></svg></button></div></header><div class="sc-shell"><nav aria-label="작업 종류"><div class="sc-nav-group"><div class="sc-nav-heading">탐색</div><button tabindex="0" class="active" aria-current="page" title="보유 문헌" data-tab="explore" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.8" height="10" width="3" y="3" x="2.75" /><rect rx="0.8" height="10" width="3" y="3" x="7.25" /><path d="M11.9 3.6l1.9.5-2.2 9.1-1.2-.3" /></svg></span><span class="sc-nav-label">보유 문헌</span><span class="sc-nav-count">6</span></button><button tabindex="-1" aria-current="false" title="최근 문헌" data-tab="recent" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="5.25" cy="8" cx="8" /><path d="M8 5.1V8l2.2 1.7" /></svg></span><span class="sc-nav-label">최근 문헌</span></button><button tabindex="-1" aria-current="false" title="관련 논문" data-tab="related" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.1" cy="11.4" cx="4.4" /><circle r="2.1" cy="4.6" cx="11.5" /><line y2="6.1" x2="10" y1="9.9" x1="6" /></svg></span><span class="sc-nav-label">관련 논문</span></button><button tabindex="-1" aria-current="false" title="저자 추적" data-tab="authors" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.5" cy="5.6" cx="8" /><path d="M3.3 13.1c.7-2.5 2.5-3.8 4.7-3.8s4 1.3 4.7 3.8" /></svg></span><span class="sc-nav-label">저자 추적</span></button><button tabindex="-1" aria-current="false" title="컬렉션" data-tab="collections" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.7 12.6V4.2h3.9l1.4 1.7h5.3v6.7z" /></svg></span><span class="sc-nav-label">컬렉션</span></button><button tabindex="-1" aria-current="false" title="저널 지표" data-tab="journals" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="8.6" x2="4" y1="12.6" x1="4" /><line y2="5" x2="8" y1="12.6" x1="8" /><line y2="10" x2="12" y1="12.6" x1="12" /><line y2="12.6" x2="13.6" y1="12.6" x1="2.4" /></svg></span><span class="sc-nav-label">저널 지표</span></button></div><div class="sc-nav-group"><div class="sc-nav-heading">읽기</div><button tabindex="-1" aria-current="false" title="읽기 진행" data-tab="reading" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z" /><line y2="13.4" x2="8" y1="4.8" x1="8" /></svg></span><span class="sc-nav-label">읽기 진행</span></button><button tabindex="-1" aria-current="false" title="노트" data-tab="notes" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M4 2.6h5.4L12.4 5.6v7.8H4z" /><path d="M9.2 2.7v3h3.1" /><line y2="9" x2="10.4" y1="9" x1="6" /><line y2="11.2" x2="9" y1="11.2" x1="6" /></svg></span><span class="sc-nav-label">노트</span></button><button tabindex="-1" aria-current="false" title="주석" data-tab="annotations" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.9" height="2.6" width="10.8" y="9.6" x="2.6" /><path d="M5.2 9.5l5.6-6 2.3 2.3-5.5 5.7" /></svg></span><span class="sc-nav-label">주석</span></button><button tabindex="-1" aria-current="false" title="첨부 미리보기" data-tab="attachments" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M11.5 7.2l-4.6 4.6a2.4 2.4 0 01-3.4-3.4l5.4-5.4a1.7 1.7 0 012.4 2.4l-5.2 5.2a.9.9 0 01-1.3-1.3l4.5-4.5" /></svg></span><span class="sc-nav-label">첨부 미리보기</span></button><button tabindex="-1" aria-current="false" title="역링크" data-tab="backlinks" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M13.2 11.6a4.2 4.2 0 00-4.2-4.2H3.5" /><path d="M6.2 4.6L3.2 7.4l3 2.8" /></svg></span><span class="sc-nav-label">역링크</span></button></div><div class="sc-nav-group"><div class="sc-nav-heading">정리</div><button tabindex="-1" aria-current="false" title="중첩 태그" data-tab="tags" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8.4 2.6H13v4.6l-6 6a1.1 1.1 0 01-1.6 0L2.8 10.2a1.1 1.1 0 010-1.6z" /><circle r="0.95" cy="5.1" cx="10.5" /></svg></span><span class="sc-nav-label">중첩 태그</span></button><button tabindex="-1" aria-current="false" title="관계 그래프" data-tab="graph" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="1.7" cy="3.6" cx="8" /><circle r="1.7" cy="11.8" cx="3.7" /><circle r="1.7" cy="11.8" cx="12.3" /><line y2="10.2" x2="4.6" y1="5.1" x1="6.9" /><line y2="10.2" x2="11.4" y1="5.1" x1="9.1" /><line y2="11.8" x2="10.6" y1="11.8" x1="5.4" /></svg></span><span class="sc-nav-label">관계 그래프</span></button><button tabindex="-1" aria-current="false" title="캔버스" data-tab="canvas" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.4" height="9.4" width="10.8" y="3.3" x="2.6" /><circle r="1.1" cy="6.6" cx="5.9" /><path d="M3 11.6l3.1-3 2.2 2 2.1-2.4 2.6 3" /></svg></span><span class="sc-nav-label">캔버스</span></button><button tabindex="-1" aria-current="false" title="논문 비교" data-tab="matrix" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="9.6" width="10.8" y="3.2" x="2.6" /><line y2="12.8" x2="8" y1="3.2" x1="8" /><line y2="6.4" x2="13.4" y1="6.4" x1="2.6" /></svg></span><span class="sc-nav-label">논문 비교</span></button></div><div class="sc-nav-group"><div class="sc-nav-heading">도구</div><button tabindex="-1" aria-current="false" title="탭 관리" data-tab="tabs" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.6 12.6V6.2h4.1l1.3-1.8h5.4v8.2z" /><path d="M4.4 4.4h3.2" /></svg></span><span class="sc-nav-label">탭 관리</span></button><button tabindex="-1" aria-current="false" title="뷰 그룹" data-tab="views" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1" height="4.6" width="4.6" y="2.8" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="2.8" x="8.6" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="8.6" /></svg></span><span class="sc-nav-label">뷰 그룹</span></button><button tabindex="-1" aria-current="false" title="번역 · AI" data-tab="assist" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M6 2.9l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" /><path d="M11.4 8.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg></span><span class="sc-nav-label">번역 · AI</span></button><button tabindex="-1" aria-current="false" title="스타일 편집" data-tab="appearance" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /><circle r="1.6" cy="5" cx="6.4" /><circle r="1.6" cy="11" cx="10" /></svg></span><span class="sc-nav-label">스타일 편집</span></button></div></nav><div class="sc-content"><div class="sc-context"><h2 class="sc-section-title">보유 문헌</h2><span class="sc-context-detail">라이브러리 · 6개 문헌</span><div aria-label="문헌 종류" class="sc-kind-chips"><button data-kind="" title="모든 종류" aria-pressed="true" type="button" class="sc-chip sc-chip-button">전체 <span class="sc-count">6</span></button><button data-kind="journalArticle" title="논문만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">논문 <span class="sc-count">5</span></button><button data-kind="preprint" title="프리프린트만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">프리프린트 <span class="sc-count">1</span></button></div></div><div class="sc-controls sc-search-row"><input title="제목·저자·태그·DOI·초록·내 메모 검색" aria-label="작업 패널 검색" placeholder="제목·저자·태그·DOI·초록·내 메모 검색" type="search"><label hidden class="sc-check sc-search-records"><input aria-label="내 기록 포함" type="checkbox"><span>내 기록 포함</span></label><select aria-label="표시 범위"><option value="library">라이브러리</option><option value="selected">선택한 문헌</option><option value="collection">현재 컬렉션</option><option value="collection-recursive">현재 컬렉션과 하위 컬렉션</option></select><button type="button">현재 선택 가져오기</button><button type="button">새로고침</button><details class="sc-filters"><summary>상세 필터</summary><div aria-label="문헌 상세 필터" class="sc-filter-fields"><select aria-label="문헌 유형 필터"><option value="">모든 유형</option><option value="journalArticle">논문</option><option value="preprint">프리프린트</option></select><select aria-label="읽기 상태 필터"><option value="">모든 읽기 상태</option><option value="unread">안 읽음</option><option value="reading">읽는 중</option><option value="done">완료</option></select><select aria-label="최소 별점"><option value="">모든 별점</option><option value="1">1점 이상</option><option value="2">2점 이상</option><option value="3">3점 이상</option><option value="4">4점 이상</option><option value="5">5점 이상</option></select><input aria-label="시작 연도" placeholder="시작 연도" max="9999" min="1" type="number"><input aria-label="마지막 연도" placeholder="마지막 연도" max="9999" min="1" type="number"><select aria-label="문헌 정렬"><option value="library">기본 순서</option><option value="title">제목순</option><option value="year-desc">최신 발행순</option><option value="if-desc">IF 높은 순</option><option value="citations-desc">인용 많은 순</option><option value="rating-desc">별점 높은 순</option><option value="time-desc">읽기 시간순</option></select><button type="button">필터 초기화</button></div></details></div><div hidden aria-label="적용 중인 필터" class="sc-filter-chips"></div><div data-error="false" aria-live="polite" role="status" class="sc-status"></div><div hidden="hidden" class="sc-welcome"></div><div hidden class="sc-notice"></div><div tabindex="-1" class="sc-body"><div aria-label="이 목록 요약" role="group" class="sc-overview"><div aria-hidden="true" class="sc-overview-meter"><span style="flex-grow:1" class="sc-overview-done"></span><span style="flex-grow:2" class="sc-overview-reading"></span><span style="flex-grow:3" class="sc-overview-unread"></span></div><p class="sc-overview-facts"><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>1</b> 완료</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>2</b> 읽는 중</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>3</b> 안 읽음</button><span><b>1h 20m 40s</b> 읽음</span><button title="이 순서로 정렬" aria-pressed="false" class="sc-overview-fact" type="button"><b>12.4</b> IF 중앙값 · 5/6편</button><button title="이 순서로 정렬" aria-pressed="false" class="sc-overview-fact" type="button"><b>53</b> 인용 중앙값 · 4/6편</button></p><details class="sc-local-reading-links"><summary>읽는 중·완료 문헌과 인용으로 이어진 안 읽은 문헌 2편</summary><p class="sc-local-reading-head">읽는 중·완료 문헌이 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">기준 3편 중 참고문헌 기록 2편</p><div class="sc-local-reading-link"><button title="Preregistered synthesis of repair reviews" class="sc-hit-title-link" type="button">Preregistered synthesis of repair reviews</button><span class="sc-local-reading-count">1편에서 인용</span><span title="Mapping cellular responses across tissue repair" class="sc-muted sc-local-reading-from">Mapping cellular responses across tissue repair</span><button aria-pressed="false" class="sc-local-reading-queue" type="button">읽기 대기</button></div><p class="sc-local-reading-head">읽는 중·완료 문헌을 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">안 읽은 3편 중 참고문헌 기록 1편</p><div class="sc-local-reading-link"><button title="Spatial context and cell-state transitions in regeneration" class="sc-hit-title-link" type="button">Spatial context and cell-state transitions in regeneration</button><span class="sc-local-reading-count">읽는 중·완료 문헌 2편 인용</span><span title="Mapping cellular responses across tissue repair
+</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div><section style="font-size:13px" data-maximized="false" role="region" data-density="comfortable" aria-label="Style Custom 연구 작업 패널" id="style-custom-workbench"><header class="sc-header"><div class="sc-brand"><img aria-hidden="true" alt="" height="24" width="24" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJTdHlsZSBDdXN0b206IGEgbGlicmFyeSByb3cgbWFya2VkIj4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjI4IiBmaWxsPSIjMkIzMjQwIi8+CiAgPGcgZmlsbD0iI0ZGRkZGRiIgb3BhY2l0eT0iMC41Ij4KICAgIDxjaXJjbGUgY3g9IjMxIiBjeT0iNDEiIHI9IjYiLz48Y2lyY2xlIGN4PSIzMSIgY3k9IjY0IiByPSI2Ii8+PGNpcmNsZSBjeD0iMzEiIGN5PSI4NyIgcj0iNiIvPgogIDwvZz4KICA8ZyBmaWxsPSIjRkZGRkZGIj4KICAgIDxyZWN0IHg9IjQ2IiB5PSIzNCIgd2lkdGg9IjU2IiBoZWlnaHQ9IjE0IiByeD0iNyIvPgogICAgPHJlY3QgeD0iNDYiIHk9IjgwIiB3aWR0aD0iNDAiIGhlaWdodD0iMTQiIHJ4PSI3Ii8+CiAgPC9nPgogIDxyZWN0IHg9IjQ2IiB5PSI1NyIgd2lkdGg9IjUwIiBoZWlnaHQ9IjE0IiByeD0iNyIgZmlsbD0iI0U5QTgxQyIvPgo8L3N2Zz4K"><strong>Style Custom</strong><span class="sc-subtitle">연구 작업 패널</span></div><button title="철회 여부 미확인 1146편 · 지표 없는 저널 169종 · 확인 안 한 관심 저자 109명" aria-pressed="false" class="sc-notice-toggle" type="button">자료 점검 3가지</button><div class="sc-header-actions"><button aria-pressed="false" title="간격 좁게" class="sc-icon-button" aria-label="화면 밀도 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="8" x2="13" y1="8" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /></svg></button><button hidden aria-pressed="false" class="sc-icon-button sc-dock" title="탭으로 열기" aria-label="탭으로 열기 / 창으로 띄우기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="8.4" width="10.8" y="4.6" x="2.6" /><path d="M2.6 7.4h10.8M5.2 4.6V3h4.4v1.6" /></svg></button><button aria-pressed="false" class="sc-icon-button sc-maximize" title="전체 화면" aria-label="전체 화면 전환" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4" /></svg></button><button class="sc-icon-button" title="기능 찾기 · ⌘/Ctrl K" aria-label="기능 찾기" aria-keyshortcuts="Meta+K Control+K" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="4.25" cy="7.25" cx="7.25" /><line y2="13.5" x2="13.5" y1="10.5" x1="10.5" /></svg></button><button class="sc-icon-button sc-close" title="닫기" aria-label="작업 패널 닫기" type="button"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="12" x2="12" y1="4" x1="4" /><line y2="12" x2="4" y1="4" x1="12" /></svg></button></div></header><div class="sc-shell"><nav aria-label="작업 종류"><div class="sc-nav-group"><div class="sc-nav-heading">탐색</div><button tabindex="0" class="active" aria-current="page" title="보유 문헌" data-tab="explore" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.8" height="10" width="3" y="3" x="2.75" /><rect rx="0.8" height="10" width="3" y="3" x="7.25" /><path d="M11.9 3.6l1.9.5-2.2 9.1-1.2-.3" /></svg></span><span class="sc-nav-label">보유 문헌</span><span class="sc-nav-count">6</span></button><button tabindex="-1" aria-current="false" title="최근 문헌" data-tab="recent" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="5.25" cy="8" cx="8" /><path d="M8 5.1V8l2.2 1.7" /></svg></span><span class="sc-nav-label">최근 문헌</span></button><button tabindex="-1" aria-current="false" title="관련 논문" data-tab="related" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.1" cy="11.4" cx="4.4" /><circle r="2.1" cy="4.6" cx="11.5" /><line y2="6.1" x2="10" y1="9.9" x1="6" /></svg></span><span class="sc-nav-label">관련 논문</span></button><button tabindex="-1" aria-current="false" title="저자 추적" data-tab="authors" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="2.5" cy="5.6" cx="8" /><path d="M3.3 13.1c.7-2.5 2.5-3.8 4.7-3.8s4 1.3 4.7 3.8" /></svg></span><span class="sc-nav-label">저자 추적</span></button><button tabindex="-1" aria-current="false" title="컬렉션" data-tab="collections" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.7 12.6V4.2h3.9l1.4 1.7h5.3v6.7z" /></svg></span><span class="sc-nav-label">컬렉션</span></button><button tabindex="-1" aria-current="false" title="저널 지표" data-tab="journals" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="8.6" x2="4" y1="12.6" x1="4" /><line y2="5" x2="8" y1="12.6" x1="8" /><line y2="10" x2="12" y1="12.6" x1="12" /><line y2="12.6" x2="13.6" y1="12.6" x1="2.4" /></svg></span><span class="sc-nav-label">저널 지표</span></button></div><div class="sc-nav-group"><div class="sc-nav-heading">읽기</div><button tabindex="-1" aria-current="false" title="읽기 진행" data-tab="reading" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8 4.8C6.7 3.7 5.1 3.2 3 3.2v8.6c2.1 0 3.7.5 5 1.6 1.3-1.1 2.9-1.6 5-1.6V3.2c-2.1 0-3.7.5-5 1.6z" /><line y2="13.4" x2="8" y1="4.8" x1="8" /></svg></span><span class="sc-nav-label">읽기 진행</span></button><button tabindex="-1" aria-current="false" title="노트" data-tab="notes" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M4 2.6h5.4L12.4 5.6v7.8H4z" /><path d="M9.2 2.7v3h3.1" /><line y2="9" x2="10.4" y1="9" x1="6" /><line y2="11.2" x2="9" y1="11.2" x1="6" /></svg></span><span class="sc-nav-label">노트</span></button><button tabindex="-1" aria-current="false" title="주석" data-tab="annotations" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="0.9" height="2.6" width="10.8" y="9.6" x="2.6" /><path d="M5.2 9.5l5.6-6 2.3 2.3-5.5 5.7" /></svg></span><span class="sc-nav-label">주석</span></button><button tabindex="-1" aria-current="false" title="첨부 미리보기" data-tab="attachments" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M11.5 7.2l-4.6 4.6a2.4 2.4 0 01-3.4-3.4l5.4-5.4a1.7 1.7 0 012.4 2.4l-5.2 5.2a.9.9 0 01-1.3-1.3l4.5-4.5" /></svg></span><span class="sc-nav-label">첨부 미리보기</span></button><button tabindex="-1" aria-current="false" title="역링크" data-tab="backlinks" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M13.2 11.6a4.2 4.2 0 00-4.2-4.2H3.5" /><path d="M6.2 4.6L3.2 7.4l3 2.8" /></svg></span><span class="sc-nav-label">역링크</span></button></div><div class="sc-nav-group"><div class="sc-nav-heading">정리</div><button tabindex="-1" aria-current="false" title="중첩 태그" data-tab="tags" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M8.4 2.6H13v4.6l-6 6a1.1 1.1 0 01-1.6 0L2.8 10.2a1.1 1.1 0 010-1.6z" /><circle r="0.95" cy="5.1" cx="10.5" /></svg></span><span class="sc-nav-label">중첩 태그</span></button><button tabindex="-1" aria-current="false" title="관계 그래프" data-tab="graph" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><circle r="1.7" cy="3.6" cx="8" /><circle r="1.7" cy="11.8" cx="3.7" /><circle r="1.7" cy="11.8" cx="12.3" /><line y2="10.2" x2="4.6" y1="5.1" x1="6.9" /><line y2="10.2" x2="11.4" y1="5.1" x1="9.1" /><line y2="11.8" x2="10.6" y1="11.8" x1="5.4" /></svg></span><span class="sc-nav-label">관계 그래프</span></button><button tabindex="-1" aria-current="false" title="캔버스" data-tab="canvas" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.4" height="9.4" width="10.8" y="3.3" x="2.6" /><circle r="1.1" cy="6.6" cx="5.9" /><path d="M3 11.6l3.1-3 2.2 2 2.1-2.4 2.6 3" /></svg></span><span class="sc-nav-label">캔버스</span></button><button tabindex="-1" aria-current="false" title="논문 비교" data-tab="matrix" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1.2" height="9.6" width="10.8" y="3.2" x="2.6" /><line y2="12.8" x2="8" y1="3.2" x1="8" /><line y2="6.4" x2="13.4" y1="6.4" x1="2.6" /></svg></span><span class="sc-nav-label">논문 비교</span></button></div><div class="sc-nav-group"><div class="sc-nav-heading">도구</div><button tabindex="-1" aria-current="false" title="탭 관리" data-tab="tabs" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M2.6 12.6V6.2h4.1l1.3-1.8h5.4v8.2z" /><path d="M4.4 4.4h3.2" /></svg></span><span class="sc-nav-label">탭 관리</span></button><button tabindex="-1" aria-current="false" title="뷰 그룹" data-tab="views" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><rect rx="1" height="4.6" width="4.6" y="2.8" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="2.8" x="8.6" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="2.8" /><rect rx="1" height="4.6" width="4.6" y="8.6" x="8.6" /></svg></span><span class="sc-nav-label">뷰 그룹</span></button><button tabindex="-1" aria-current="false" title="번역 · AI" data-tab="assist" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><path d="M6 2.9l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" /><path d="M11.4 8.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg></span><span class="sc-nav-label">번역 · AI</span></button><button tabindex="-1" aria-current="false" title="스타일 편집" data-tab="appearance" type="button"><span class="sc-nav-icon"><svg stroke-linecap="round" stroke-width="1.5" stroke="currentColor" aria-hidden="true" fill="none" height="16" width="16" viewBox="0 0 16 16"><line y2="5" x2="13" y1="5" x1="3" /><line y2="11" x2="13" y1="11" x1="3" /><circle r="1.6" cy="5" cx="6.4" /><circle r="1.6" cy="11" cx="10" /></svg></span><span class="sc-nav-label">스타일 편집</span></button></div></nav><div class="sc-content"><div class="sc-context"><h2 class="sc-section-title">보유 문헌</h2><span class="sc-context-detail">라이브러리 · 6개 문헌</span><div aria-label="문헌 종류" class="sc-kind-chips"><button data-kind="" title="모든 종류" aria-pressed="true" type="button" class="sc-chip sc-chip-button">전체 <span class="sc-count">6</span></button><button data-kind="journalArticle" title="논문만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">논문 <span class="sc-count">5</span></button><button data-kind="preprint" title="프리프린트만 보기" aria-pressed="false" type="button" class="sc-chip sc-chip-button">프리프린트 <span class="sc-count">1</span></button></div></div><div class="sc-controls sc-search-row"><input title="제목·저자·태그·DOI·초록·내 메모 검색" aria-controls="sc-journal-suggest" aria-expanded="false" aria-autocomplete="list" role="combobox" aria-label="작업 패널 검색" placeholder="제목·저자·태그·DOI·초록·내 메모 검색" type="search"><div hidden id="sc-journal-suggest" aria-label="저널 제안" role="listbox" class="sc-suggest"></div><label hidden class="sc-check sc-search-records"><input aria-label="내 기록 포함" type="checkbox"><span>내 기록 포함</span></label><select aria-label="표시 범위"><option value="library">라이브러리</option><option value="selected">선택한 문헌</option><option value="collection">현재 컬렉션</option><option value="collection-recursive">현재 컬렉션과 하위 컬렉션</option></select><button type="button">현재 선택 가져오기</button><button type="button">새로고침</button><details class="sc-filters"><summary>상세 필터</summary><div aria-label="정렬과 초기화" class="sc-filter-fields"><span class="sc-filter-label">정렬</span><select aria-label="문헌 정렬"><option value="library">기본 순서</option><option value="title">제목순</option><option value="year-desc">최신 발행순</option><option value="if-desc">IF 높은 순</option><option value="citations-desc">인용 많은 순</option><option value="rating-desc">별점 높은 순</option><option value="time-desc">읽기 시간순</option></select><button type="button">필터 초기화</button></div><div aria-label="포함·제외 규칙" role="group" class="sc-rules"><div class="sc-rules-bar"><span class="sc-rules-title">규칙 추가</span><div aria-label="새 규칙의 방식" role="group" class="sc-segmented"><button title="조건에 맞는 문헌만 남깁니다" data-mode="in" aria-pressed="true" type="button">포함</button><button title="조건에 맞는 문헌을 뺍니다" data-mode="ex" aria-pressed="false" type="button">제외</button></div><div class="sc-rule-kinds"><button aria-label="단어 포함 규칙 추가" data-kind="word" class="sc-chip sc-chip-button sc-rule-kind" type="button">단어</button><button aria-label="유형 포함 규칙 추가" data-kind="type" class="sc-chip sc-chip-button sc-rule-kind" type="button">유형</button><button aria-label="태그 포함 규칙 추가" data-kind="tag" class="sc-chip sc-chip-button sc-rule-kind" type="button">태그</button><button aria-label="읽기 상태 포함 규칙 추가" data-kind="status" class="sc-chip sc-chip-button sc-rule-kind" type="button">읽기 상태</button><button aria-label="별점 포함 규칙 추가" data-kind="rating" class="sc-chip sc-chip-button sc-rule-kind" type="button">별점</button><button aria-label="연도 포함 규칙 추가" data-kind="year" class="sc-chip sc-chip-button sc-rule-kind" type="button">연도</button><button aria-label="컬렉션 포함 규칙 추가" data-kind="collection" class="sc-chip sc-chip-button sc-rule-kind" type="button">컬렉션</button><button aria-label="저널 포함 규칙 추가" data-kind="journal" class="sc-chip sc-chip-button sc-rule-kind" type="button">저널</button><button aria-label="IF 포함 규칙 추가" data-kind="impact" class="sc-chip sc-chip-button sc-rule-kind" type="button">IF</button><button aria-label="인용 수 포함 규칙 추가" data-kind="citations" class="sc-chip sc-chip-button sc-rule-kind" type="button">인용 수</button><button aria-label="첨부 PDF 포함 규칙 추가" data-kind="pdf" class="sc-chip sc-chip-button sc-rule-kind" type="button">첨부 PDF</button><button aria-label="주석 포함 규칙 추가" data-kind="annotation" class="sc-chip sc-chip-button sc-rule-kind" type="button">주석</button><button aria-label="노트 포함 규칙 추가" data-kind="note" class="sc-chip sc-chip-button sc-rule-kind" type="button">노트</button><button aria-label="프리프린트/출판본 포함 규칙 추가" data-kind="preprint" class="sc-chip sc-chip-button sc-rule-kind" type="button">프리프린트/출판본</button></div></div><div hidden role="group" class="sc-rule-editor"></div><p class="sc-rules-hint">검색창 빠른 문법: -단어(제외) · “구절” · 제목:단어 · -저자:김 · 연도:2018-2022 · 태그: · 저널:(이름·약어 제안) · 컬렉션:</p></div></details></div><div hidden aria-label="적용 중인 필터" class="sc-filter-chips"></div><div data-error="false" aria-live="polite" role="status" class="sc-status"></div><div hidden="hidden" class="sc-welcome"></div><div hidden class="sc-notice"></div><div tabindex="-1" class="sc-body"><div aria-label="이 목록 요약" role="group" class="sc-overview"><div aria-hidden="true" class="sc-overview-meter"><span style="flex-grow:1" class="sc-overview-done"></span><span style="flex-grow:2" class="sc-overview-reading"></span><span style="flex-grow:3" class="sc-overview-unread"></span></div><p class="sc-overview-facts"><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>1</b> 완료</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>2</b> 읽는 중</button><button title="이 상태만 보기" aria-pressed="false" class="sc-overview-fact" type="button"><b>3</b> 안 읽음</button><span><b>1h 20m 40s</b> 읽음</span><button title="이 순서로 정렬" aria-pressed="false" class="sc-overview-fact" type="button"><b>12.4</b> IF 중앙값 · 5/6편</button><button title="이 순서로 정렬" aria-pressed="false" class="sc-overview-fact" type="button"><b>53</b> 인용 중앙값 · 4/6편</button></p><details class="sc-local-reading-links"><summary>읽는 중·완료 문헌과 인용으로 이어진 안 읽은 문헌 2편</summary><p class="sc-local-reading-head">읽는 중·완료 문헌이 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">기준 3편 중 참고문헌 기록 2편</p><div class="sc-local-reading-link"><button title="Preregistered synthesis of repair reviews" class="sc-hit-title-link" type="button">Preregistered synthesis of repair reviews</button><span class="sc-local-reading-count">1편에서 인용</span><span title="Mapping cellular responses across tissue repair" class="sc-muted sc-local-reading-from">Mapping cellular responses across tissue repair</span><button aria-pressed="false" class="sc-local-reading-queue" type="button">읽기 대기</button></div><p class="sc-local-reading-head">읽는 중·완료 문헌을 인용한 안 읽은 문헌</p><p class="sc-muted sc-local-reading-note">안 읽은 3편 중 참고문헌 기록 1편</p><div class="sc-local-reading-link"><button title="Spatial context and cell-state transitions in regeneration" class="sc-hit-title-link" type="button">Spatial context and cell-state transitions in regeneration</button><span class="sc-local-reading-count">읽는 중·완료 문헌 2편 인용</span><span title="Mapping cellular responses across tissue repair
 A practical framework for reproducible literature synthesis" class="sc-muted sc-local-reading-from">Mapping cellular responses across tissue repair · A practical framework for reproducible literatur</span><button aria-pressed="false" class="sc-local-reading-queue" type="button">읽기 대기</button></div></details><p class="sc-overview-picks"><span title="안 읽은 문헌 중 출판 후 해마다 가장 많이 인용된 순서입니다. 철회된 문헌은 뺐습니다." class="sc-overview-picks-label">안 읽은 문헌 · 연도 보정 인용순</span><span class="sc-overview-pick"><button title="Preregistered synthesis of repair reviews" class="sc-hit-title-link" type="button">Preregistered synthesis of repair reviews</button><span class="sc-muted">연 3회</span></span></p></div><div aria-label="정렬할 열" role="group" class="sc-paper-columns"><span class="sc-paper-columns-lead"><details class="sc-selection-tools"><summary>선택 작업</summary><span class="sc-selection-tools-body"><button type="button">현재 페이지 선택</button><button type="button">현재 페이지 선택 해제</button><button type="button">검색 결과 전체 선택</button></span></details><span class="sc-paper-columns-sortlabel">정렬</span></span><button title="높은 순으로 정렬" aria-pressed="false" data-metric="impact" class="sc-paper-column" type="button">IF</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="citations" class="sc-paper-column" type="button">인용</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="rating" class="sc-paper-column" type="button">별점</button><button title="높은 순으로 정렬" aria-pressed="false" data-metric="time" class="sc-paper-column" type="button">읽기</button><span class="sc-paper-columns-tail"></span></div><div class="sc-paper-list"><article tabindex="0" data-selected="true" data-status="reading" data-item-id="1" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|0" aria-label="Mapping cellular responses across tissue repair 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Mapping cellular responses across tissue repair" class="sc-paper-title">Mapping cellular responses across tissue repair</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="1" aria-expanded="false" type="button">자세히</button></div></div><span title="M. Kim; A. Rivera; J. Park · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · M. Kim; A. Rivera; J. Park</span></span><span title="Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것" class="sc-paper-remark"><span class="sc-paper-remark-label">메모</span>Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것</span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">128</span></span><span data-metric="rating" title="별점 4/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★☆</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">20m 40s</span><span title="전체 12쪽 중 6쪽 읽음" aria-label="전체 12쪽 중 6쪽 읽음" role="img" class="sc-row-progress"><span style="width:50%" class="sc-row-progress-fill"></span></span><span aria-hidden="true" class="sc-row-progress-text">6/12</span><button class="sc-row-annotations" type="button">주석 3</button></span></div></div></article><article tabindex="0" data-selected="false" data-status="done" data-item-id="2" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|1" aria-label="A practical framework for reproducible literature synthesis 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="A practical framework for reproducible literature synthesis" class="sc-paper-title">A practical framework for reproducible literature synthesis</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="2" aria-expanded="false" type="button">자세히</button></div></div><span title="S. Lee; L. Chen · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Methods · S. Lee; L. Chen</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">64</span></span><span data-metric="rating" title="별점 5/5" class="sc-metric sc-stars"><span class="sc-metric-value">★★★★★</span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">53m 20s</span><span title="전체 8쪽 중 8쪽 읽음" aria-label="전체 8쪽 중 8쪽 읽음" role="img" class="sc-row-progress"><span style="width:100%" class="sc-row-progress-fill"></span></span><span aria-hidden="true" class="sc-row-progress-text">8/8</span><button class="sc-row-annotations" type="button">주석 2</button></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="3" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|2" aria-label="Spatial context and cell-state transitions in regeneration 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Spatial context and cell-state transitions in regeneration" class="sc-paper-title"><span title="프리프린트" class="sc-preprint sc-kind">프리프린트</span>Spatial context and cell-state transitions in regeneration</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="3" aria-expanded="false" type="button">자세히</button></div></div><span title="E. Morgan; H. Choi · Example Biology" class="sc-paper-meta"><span class="sc-paper-meta-text">2026 · Example Biology · E. Morgan; H. Choi</span></span></div><div class="sc-metrics"><span data-empty="true" data-metric="impact" title="저널 영향력 지수 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">—</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="reading" data-item-id="4" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|3" aria-label="Tissue-scale repair atlases from sparse sampling 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Tissue-scale repair atlases from sparse sampling" class="sc-paper-title">Tissue-scale repair atlases from sparse sampling</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="4" aria-expanded="false" type="button">자세히</button></div></div><span title="R. Ahn; P. Silva · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2025 · Example Cell Research · R. Ahn; P. Silva</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">41</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-metric="time" title="읽은 시간" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">6m 40s</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="5" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|4" aria-label="Benchmarks for repair-stage classifiers 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Benchmarks for repair-stage classifiers" class="sc-paper-title">Benchmarks for repair-stage classifiers</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="5" aria-expanded="false" type="button">자세히</button></div></div><span title="K. Oh; Christopher A. Voigt · Example Cell Research" class="sc-paper-meta"><span class="sc-paper-meta-text">2024 · Example Cell Research · K. Oh; Christopher A. Voigt</span></span></div><div class="sc-metrics"><span data-tone="high" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">12.4</span></span><span data-empty="true" data-metric="citations" title="인용 수 · 출처 미확인 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">—</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article><article tabindex="0" data-selected="false" data-status="unread" data-item-id="6" class="sc-card sc-paper-card"><div class="sc-paper-heading"><label class="sc-check"><input data-draft-key="[&quot;explore&quot;,1,[&quot;1&quot;]]|선택|5" aria-label="Preregistered synthesis of repair reviews 선택" type="checkbox"><span>선택</span></label><div class="sc-paper-identity"><div class="sc-paper-mainline"><h3 title="Preregistered synthesis of repair reviews" class="sc-paper-title">Preregistered synthesis of repair reviews</h3><div class="sc-actions sc-paper-actions"><button data-variant="primary" data-opens="window" type="button">열기</button><button data-detail-for="6" aria-expanded="false" type="button">자세히</button></div></div><span title="D. Yu; S. Lee · Example Methods" class="sc-paper-meta"><span class="sc-paper-meta-text">2023 · Example Methods · D. Yu; S. Lee</span></span></div><div class="sc-metrics"><span data-tone="mid" data-metric="impact" title="저널 영향력 지수" class="sc-metric"><span class="sc-metric-unit">IF</span><span class="sc-metric-value">8.2</span></span><span data-metric="citations" title="인용 수 · 출처 미확인" class="sc-metric"><span class="sc-metric-unit">인용</span><span class="sc-metric-value">12</span></span><span data-metric="rating" title="별점 없음" class="sc-metric sc-stars"><span class="sc-metric-value"></span></span><span data-empty="true" data-metric="time" title="읽은 시간 · 아직 확인하지 않음" class="sc-metric"><span class="sc-metric-unit">읽기</span><span class="sc-metric-value">—</span></span></div></div></article></div></div></div></div><footer data-selected="true" class="sc-selection-bar"><span title="Mapping cellular responses across tissue repair" class="sc-selection-label">문헌 1개 선택</span><button type="button">선택 해제</button><span class="sc-selection-tasks"><button type="button">노트</button><button type="button">주석</button><button hidden data-variant="primary" type="button">논문 비교</button><button hidden type="button">주석 나란히</button></span><details hidden class="sc-selection-relations"><summary>연결 작업</summary><button disabled type="button">관련 문헌으로 연결</button><button disabled type="button">선택 문헌끼리 연결 해제</button></details></footer><div hidden aria-label="기능 바로 찾기" aria-modal="true" role="dialog" class="sc-command-palette"><input aria-controls="sc-command-results" aria-label="찾을 기능 이름" aria-autocomplete="list" aria-expanded="false" role="combobox" placeholder="예: 주석, 비교, 탭…" class="sc-command-search" type="search"><div aria-label="검색된 기능" role="listbox" class="sc-command-results" id="sc-command-results"></div><p class="sc-muted">↑↓ 이동 · Enter 열기 · Esc 닫기</p></div></section><script>/* Pure workspace operations shared by the panel and background regressions. */
 (function(root){
  'use strict';
@@ -2313,26 +2368,264 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
  /* Typing a whole title should put that title first, not bury it in library
     order behind everything else the words happen to appear in. */
  function relevance(item,query){
-  const q=norm(query).trim();if(!q)return 0;
+  const q=plainQuery(query).trim();if(!q)return 0;
   const title=norm(item&&item.title);
   return title===q?0:title.startsWith(q)?1:title.includes(q)?2:3;
  }
  function rankByQuery(items,query){
-  if(!norm(query).trim())return [...items];
+  if(!plainQuery(query).trim())return [...items];
   return items.map((item,index)=>({item,index,tier:relevance(item,query)}))
    .sort((a,b)=>a.tier-b.tier||a.index-b.index).map(entry=>entry.item);
  }
+ /* ---- 검색창 빠른 문법 ----
+    -word  "a phrase"  title:x  -author:kim  year:2018-2022  tag:"deep learning"
+    A field name is only a field when it is one we know (English or Korean);
+    anything else -- a URL, "http://x" -- is plain text, so nothing a person
+    could type before is lost. */
+ const FIELD_ALIASES={title:'title','제목':'title',author:'author',authors:'author','저자':'author',tag:'tag','태그':'tag',journal:'journal',venue:'journal','저널':'journal',year:'year','연도':'year',collection:'collection','컬렉션':'collection',abstract:'abstract','초록':'abstract',note:'note','메모':'note','노트':'note'};
+ function parseQuery(query){
+  const terms=[],re=/(-?)(?:([\p{L}]+):)?(?:"([^"]*)"|(\S+))/gu;
+  for(const m of text(query).matchAll(re)){
+   const neg=m[1]==='-',field=m[2]?FIELD_ALIASES[m[2].toLowerCase()]:'',quoted=m[3]!==undefined;
+   let raw=quoted?m[3]:m[4];
+   if(m[2]&&!field)raw=m[2]+':'+raw;
+   const value=norm(raw).trim();if(!value)continue;
+   terms.push({neg,field:field||'',value,phrase:quoted});
+  }
+  return terms;
+ }
+ /* The words that stay in the box once the syntax is taken out: what the
+    relevance ranking should look at. */
+ const plainQuery=query=>parseQuery(query).filter(t=>!t.neg&&!t.field).map(t=>t.value).join(' ');
+ /* The other half of the box: only the -word and field:value terms, as a query, for code that widens the plain words itself. */
+ const syntaxQuery=query=>parseQuery(query).filter(t=>t.neg||t.field).map(t=>(t.neg?'-':'')+(t.field?t.field+':':'')+(t.phrase||/\s/.test(t.value)?'"'+t.value+'"':t.value)).join(' ');
+ const fieldText=(item,field)=>field==='title'?item.title:field==='author'?item.authors:field==='journal'?item.venue:field==='abstract'?item.abstract:field==='year'?item.year:field==='note'?[item.remark,...(item.noteTitles||[])].join(' '):field==='collection'?(item.collectionNames||[]).join(' / '):'';
+ function yearTerm(value,year){
+  const y=Number(year);if(!Number.isFinite(y)||!year)return false;
+  const range=value.match(/^(\d{4})\s*-\s*(\d{4})$/);if(range)return y>=Number(range[1])&&y<=Number(range[2]);
+  const open=value.match(/^(>=|<=|>|<)\s*(\d{4})$/);if(open){const n=Number(open[2]);return open[1]==='>='?y>=n:open[1]==='<='?y<=n:open[1]==='>'?y>n:y<n;}
+  return String(year).startsWith(value);
+ }
+ function termHit(item,hay,term,starts){
+  const f=term.field;
+  if(!f)return hit(hay,term.value,starts);
+  if(f==='year')return yearTerm(term.value,item.year);
+  if(f==='tag')return (item.tags||[]).some(t=>norm(t).includes(term.value));
+  if(f==='collection')return (item.collectionNames||[]).some(n=>norm(n).includes(term.value));
+  if(f==='journal')return journalScore(journalKeysOf(item),term.value)!==null;
+  const h=norm(fieldText(item,f));
+  return hit(h,term.value,INITIAL.test(term.value)?wordsOf(h):null);
+ }
+ /* ---- 저널 이름 · ISO 4 약어 · 약칭 ----
+    "Nat Methods", "Proc Natl Acad Sci", "PNAS", "NAR" and "JACS" all name a
+    journal. Each journal is known by its full title, every abbreviation the
+    library or the plugin's journal table gives it, and the acronym of its
+    significant words, all folded to lower-case words with no punctuation.
+    A query scores 0 for an exact name, abbreviation or acronym, 1 for a
+    prefix, 2 for a substring or words that each begin a word, and null for
+    no match. */
+ const jfold=value=>text(value).normalize('NFKD').replace(/\p{M}+/gu,'').normalize('NFC').toLowerCase().replace(/&/g,' and ').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+ const J_STOP=new Set(['of','the','and','in','for','on','a','an','at','to','de','der','des','du','la','le','et','und','di','del','della']);
+ function journalKeys(venue,abbreviations=[]){
+  const names=[...new Set([venue,...abbreviations].map(jfold).filter(Boolean))],acr=new Set();
+  for(const name of names){
+   const words=name.split(' ').filter(word=>word&&!J_STOP.has(word));
+   if(words.length>=2)acr.add(words.map(word=>word[0]).join(''));
+   // "...of Sciences of the United States of America" is PNAS, not PNASUSA.
+   const bare=words.filter(word=>!['united','states','america','usa'].includes(word));
+   if(bare.length>=2&&bare.length<words.length)acr.add(bare.map(word=>word[0]).join(''));
+  }
+  return {names,acr:[...acr],compact:names.map(name=>name.replace(/ /g,''))};
+ }
+ function journalScore(keys,query){
+  const q=jfold(query);if(!q)return 3;
+  const qc=q.replace(/ /g,'');
+  if(keys.names.includes(q)||keys.compact.includes(qc)||keys.acr.includes(qc))return 0;
+  if(keys.names.some(name=>name.startsWith(q))||(qc.length>=2&&keys.acr.some(a=>a.startsWith(qc))))return 1;
+  const parts=q.split(' ');
+  if(keys.names.some(name=>name.includes(q)||parts.every(part=>name.split(' ').some(word=>word.startsWith(part)))))return 2;
+  return null;
+ }
+ const JOURNAL_KEYS=new Map();
+ function journalKeysOf(item){
+  const abbreviations=[...(item.venueAbbrs||[]),item.journalAbbr].filter(Boolean),id=text(item.venue)+'\u0001'+abbreviations.join('\u0001');
+  let keys=JOURNAL_KEYS.get(id);
+  if(!keys){if(JOURNAL_KEYS.size>3000)JOURNAL_KEYS.clear();keys=journalKeys(item.venue,abbreviations);JOURNAL_KEYS.set(id,keys);}
+  return keys;
+ }
+ /* Journals in `items`, best match first for `query`: one row per venue with its
+    count and a short name to show beside it. */
+ function journalChoices(items,query=''){
+  const byVenue=new Map();
+  for(const item of items){
+   const venue=text(item.venue).trim();if(!venue)continue;
+   let row=byVenue.get(venue);if(!row){row={venue,count:0,abbreviations:new Set(),keys:null};byVenue.set(venue,row);}
+   row.count++;for(const a of [...(item.venueAbbrs||[]),item.journalAbbr])if(a)row.abbreviations.add(text(a));
+  }
+  const out=[];
+  for(const row of byVenue.values()){
+   row.keys=journalKeys(row.venue,[...row.abbreviations]);
+   const score=journalScore(row.keys,query);if(score===null)continue;
+   const shown=[...row.abbreviations].find(a=>jfold(a)&&jfold(a)!==jfold(row.venue))||'';
+   out.push({venue:row.venue,count:row.count,score,abbreviation:shown});
+  }
+  return out.sort((a,b)=>a.score-b.score||b.count-a.count||a.venue.localeCompare(b.venue));
+ }
+ /* Saved single-value filters from before the rule builder, as rules. */
+ function legacyRules(old){
+  const rules=[];if(!old||typeof old!=='object')return rules;
+  if(old.type)rules.push({id:'legacy-type',kind:'type',mode:'in',values:[old.type]});
+  if(old.status)rules.push({id:'legacy-status',kind:'status',mode:'in',values:[old.status]});
+  if(old.tag)rules.push({id:'legacy-tag',kind:'tag',mode:'in',values:[old.tag],children:true});
+  if(num(old.ratingMin)!==null)rules.push({id:'legacy-rating',kind:'rating',mode:'in',min:num(old.ratingMin),max:''});
+  if(num(old.yearFrom)!==null||num(old.yearTo)!==null)rules.push({id:'legacy-year',kind:'year',mode:'in',min:num(old.yearFrom)??'',max:num(old.yearTo)??''});
+  return cleanRules(rules);
+ }
+ /* ---- 규칙 (포함 / 제외) ----
+    A rule is {id, kind, mode:'in'|'ex', ...parameters}. Rules AND together;
+    a rule asks "does the paper have this?" and 제외 flips the answer, so a
+    paper with no value at all (no year, no impact factor) is never "inside"
+    a range and always survives an excluded one. Several values inside one
+    rule are any-of, or all-of where the rule says all. */
+ const RULE_KINDS=['word','type','tag','status','rating','year','collection','journal','impact','citations','pdf','annotation','note','preprint'];
+ const RULE_FIELDS=['all','title','author','tag','abstract','note'];
+ const LIST_KINDS=new Set(['type','tag','status','collection','journal']);
+ const RANGE_KINDS=new Set(['rating','year','impact','citations']);
+ const num=v=>v===''||v===null||v===undefined||!Number.isFinite(Number(v))?null:Number(v);
+ function ruleActive(rule){
+  if(!rule||!RULE_KINDS.includes(rule.kind))return false;
+  if(rule.kind==='word')return !!norm(rule.text).trim();
+  if(LIST_KINDS.has(rule.kind))return Array.isArray(rule.values)&&rule.values.some(v=>text(v).trim());
+  if(RANGE_KINDS.has(rule.kind))return num(rule.min)!==null||num(rule.max)!==null;
+  if(rule.kind==='preprint')return rule.value==='preprint'||rule.value==='published';
+  return true;
+ }
+ /* What is read back from saved settings is not trusted: unknown kinds,
+    wrong types and runaway lists are dropped, and the result is the shape the
+    matcher expects. */
+ function cleanRules(list){
+  const out=[],seen=new Set();
+  for(const raw of Array.isArray(list)?list.slice(0,40):[]){
+   if(!raw||typeof raw!=='object'||!RULE_KINDS.includes(raw.kind))continue;
+   const rule={id:text(raw.id).slice(0,40)||'r'+(out.length+1),kind:raw.kind,mode:raw.mode==='ex'?'ex':'in'};
+   if(seen.has(rule.id))rule.id+='-'+out.length;seen.add(rule.id);
+   if(rule.kind==='word'){rule.text=text(raw.text).slice(0,200);rule.field=RULE_FIELDS.includes(raw.field)?raw.field:'all';rule.phrase=raw.phrase!==false;}
+   else if(LIST_KINDS.has(rule.kind)){rule.values=(Array.isArray(raw.values)?raw.values:[]).map(v=>text(v).trim().slice(0,300)).filter(Boolean).slice(0,200);
+    if(rule.kind==='tag'){rule.all=!!raw.all;rule.children=raw.children!==false;}
+    if(rule.kind==='collection')rule.sub=raw.sub!==false;}
+   else if(RANGE_KINDS.has(rule.kind)){rule.min=num(raw.min)===null?'':num(raw.min);rule.max=num(raw.max)===null?'':num(raw.max);}
+   else if(rule.kind==='preprint')rule.value=raw.value==='published'?'published':'preprint';
+   if(ruleActive(rule))out.push(rule);
+  }
+  return out;
+ }
+ function cleanRulesByTab(map){
+  const out={};
+  if(map&&typeof map==='object'&&!Array.isArray(map))for(const tab of Object.keys(map).slice(0,40)){const rules=cleanRules(map[tab]);if(rules.length)out[tab]=rules;}
+  return out;
+ }
+ const hasTag=(item,tag,children)=>(item.tags||[]).some(t=>t===tag||(children&&t.startsWith(tag+'/')));
+ function ruleHas(item,rule,ctx={}){
+  switch(rule.kind){
+   case 'word':{
+    const q=norm(rule.text).trim();if(!q)return true;
+    const allText=[item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,item.remark,...(item.noteTitles||[]),...(item.tags||[])].join(' ');
+    const h=norm(!rule.field||rule.field==='all'?allText:rule.field==='tag'?(item.tags||[]).join(' · '):fieldText(item,rule.field));
+    if(rule.phrase!==false)return h.includes(q);
+    const starts=wordsOf(h);return q.split(/\s+/).every(w=>hit(h,w,starts));}
+   case 'type':return rule.values.includes(item.itemType);
+   case 'tag':{const test=t=>hasTag(item,t,rule.children!==false);return rule.all?rule.values.every(test):rule.values.some(test);}
+   case 'status':return rule.values.includes(item.status||'unread');
+   case 'collection':{
+    const mine=new Set((item.collectionIDs||[]).map(String));
+    const test=id=>{if(rule.sub!==false&&ctx.descendants?.get(String(id)))for(const d of ctx.descendants.get(String(id)))if(mine.has(d))return true;return mine.has(String(id));};
+    return rule.values.some(test);}
+   case 'journal':{const v=norm(item.venue).trim();return !!v&&rule.values.some(x=>norm(x).trim()===v);}
+   case 'rating':return inRange(Number(item.rating)||0,rule);
+   case 'year':return item.year!==''&&item.year!=null&&inRange(Number(item.year),rule);
+   case 'impact':return num(item.impactFactor)!==null&&inRange(Number(item.impactFactor),rule);
+   case 'citations':return num(item.citations)!==null&&inRange(Number(item.citations),rule);
+   case 'pdf':return Number(item.pdfCount)>0;
+   case 'annotation':return Number(item.annotations)>0;
+   case 'note':return Number(item.noteCount)>0;
+   case 'preprint':return rule.value==='preprint'?item.itemType==='preprint':item.itemType!=='preprint';
+  }
+  return true;
+ }
+ function inRange(value,rule){
+  if(!Number.isFinite(value))return false;
+  const lo=num(rule.min),hi=num(rule.max);
+  return (lo===null||value>=lo)&&(hi===null||value<=hi);
+ }
+ const ruleKeeps=(item,rule,ctx)=>ruleHas(item,rule,ctx)!==(rule.mode==='ex');
+ function applyRules(items,rules,ctx={},skipID=null){
+  const live=(rules||[]).filter(r=>ruleActive(r)&&r.id!==skipID);
+  return live.length?items.filter(item=>live.every(rule=>ruleKeeps(item,rule,ctx))):items;
+ }
+ /* How many papers each value of a list rule would find, given every other
+    rule (and the box's own filters, which the caller has already applied to
+    `items`). Counted from the library data already in memory. */
+ function countOptions(items,kind,{rules=[],ctx={},skipID=null,children=true}={}){
+  const pool=applyRules(items,rules,ctx,skipID),counts=new Map(),add=(key,item,seen)=>{if(!key||seen.has(key))return;seen.add(key);counts.set(key,(counts.get(key)||0)+1);};
+  const allTags=kind==='tag'?new Set(items.flatMap(i=>i.tags||[])):null;
+  for(const item of pool){
+   const seen=new Set();
+   if(kind==='type')add(item.itemType,item,seen);
+   else if(kind==='status')add(item.status||'unread',item,seen);
+   else if(kind==='journal')add(text(item.venue).trim(),item,seen);
+   else if(kind==='tag')for(const t of item.tags||[]){add(t,item,seen);if(children)for(let i=t.lastIndexOf('/');i>0;i=t.lastIndexOf('/',i-1)){const parent=t.slice(0,i);if(allTags.has(parent))add(parent,item,seen);}}
+   else if(kind==='collection'){
+    for(const id of item.collectionIDs||[]){add(String(id),item,seen);if(children&&ctx.ancestors)for(const a of ctx.ancestors.get(String(id))||[])add(a,item,seen);}
+   }
+  }
+  return counts;
+ }
+ /* descendants: id -> Set(id and everything under it); ancestors: id -> [parents]. */
+ function collectionContext(collections){
+  const byID=new Map((collections||[]).map(c=>[String(c.id),c])),descendants=new Map(),ancestors=new Map();
+  for(const c of byID.values()){
+   const chain=[];let at=c.parentID!=null?byID.get(String(c.parentID)):null,guard=0;
+   while(at&&guard++<50){chain.push(String(at.id));at=at.parentID!=null?byID.get(String(at.parentID)):null;}
+   ancestors.set(String(c.id),chain);
+   for(const parent of [String(c.id),...chain]){if(!descendants.has(parent))descendants.set(parent,new Set());descendants.get(parent).add(String(c.id));}
+  }
+  return {descendants,ancestors,names:new Map([...byID].map(([id,c])=>[id,c.name]))};
+ }
+ const KIND_LABELS={word:'단어',type:'유형',tag:'태그',status:'읽기 상태',rating:'별점',year:'연도',collection:'컬렉션',journal:'저널',impact:'IF',citations:'인용 수',pdf:'첨부 PDF',annotation:'주석',note:'노트',preprint:'프리프린트/출판본'};
+ const STATUS_LABELS={unread:'안 읽음',reading:'읽는 중',done:'완료'};
+ const FIELD_LABELS={all:'전체',title:'제목',author:'저자',tag:'태그',abstract:'초록',note:'메모·노트'};
+ /* The chip's words, without the 제외 prefix: "태그: a, b 외 2", "연도: 2018–2022".
+    `t` puts the fixed words through the panel's translator. */
+ function describeRule(rule,{kindLabel=x=>x,collectionName=x=>x,t=x=>x}={}){
+  const list=(values,map=x=>x)=>{const shown=values.slice(0,2).map(map).join(', ');return values.length>2?`${shown} ${t('외 {0}').replace('{0}',values.length-2)}`:shown;};
+  const range=(unit='')=>{const lo=num(rule.min),hi=num(rule.max);return lo!==null&&hi!==null?(lo===hi?`${lo}${unit}`:`${lo}–${hi}${unit}`):lo!==null?`${lo}${unit} ${t('이상')}`:`${hi}${unit} ${t('이하')}`;};
+  const label=t(KIND_LABELS[rule.kind]||'');
+  switch(rule.kind){
+   case 'word':return `${rule.field&&rule.field!=='all'?t(FIELD_LABELS[rule.field]):label}: ${rule.phrase===false?rule.text:'“'+rule.text+'”'}`;
+   case 'type':return `${label}: ${list(rule.values,kindLabel)}`;
+   case 'tag':return `${label}${rule.all&&rule.values.length>1?' ('+t('모두')+')':''}: ${list(rule.values)}`;
+   case 'status':return `${label}: ${list(rule.values,v=>t(STATUS_LABELS[v]||v))}`;
+   case 'collection':return `${label}: ${list(rule.values,collectionName)}${rule.sub!==false?' +'+t('하위'):''}`;
+   case 'journal':return `${label}: ${list(rule.values)}`;
+   case 'rating':return `${label}: ${range(t('점'))}`;
+   case 'year':case 'impact':case 'citations':return `${label}: ${range()}`;
+   case 'pdf':case 'annotation':case 'note':return `${label} ${t('있음')}`;
+   case 'preprint':return t(rule.value==='published'?'출판본':'프리프린트');
+  }
+  return label;
+ }
  function filter(items,options={}) {
-  const tokens=tokenize(options.query),initials=tokens.some(t=>INITIAL.test(t));
+  const terms=parseQuery(options.query),initials=terms.some(t=>!t.field&&INITIAL.test(t.value)),rules=(options.rules||[]).filter(ruleActive);
   return items.filter(item=>{
    // The reader's own memo counts: a paper is found by what was written about it.
    const hay=norm([item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,item.remark,...(item.tags||[])].join(' '));
    const starts=initials?wordsOf(hay):null;
-   return tokens.every(t=>hit(hay,t,starts)) && (!options.type||item.itemType===options.type)
+   return terms.every(t=>termHit(item,hay,t,starts)!==t.neg) && (!options.type||item.itemType===options.type)
     && (!options.tag||(item.tags||[]).some(t=>t===options.tag||t.startsWith(options.tag+'/')))
     && (!options.status||item.status===options.status)
     && (!options.ratingMin||Number(item.rating)>=Number(options.ratingMin))
-    && (!options.yearFrom||Number(item.year)>=Number(options.yearFrom)) && (!options.yearTo||Number(item.year)<=Number(options.yearTo));
+    && (!options.yearFrom||Number(item.year)>=Number(options.yearFrom)) && (!options.yearTo||Number(item.year)<=Number(options.yearTo))
+    && (!rules.length||rules.every(rule=>ruleKeeps(item,rule,options.context)));
   });
  }
  function sortItems(items,order='library'){
@@ -2387,7 +2680,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
  function unlinkCards(board,from,to){const before=board.edges.length;board.edges=board.edges.filter(e=>!((e.source===from&&e.target===to)||(e.source===to&&e.target===from)));return before-board.edges.length;}
  function deleteBoard(cache,id){const board=(cache.boards||[]).find(b=>b.id===id);if(!board)return null;cache.boards=cache.boards.filter(b=>b.id!==id);cache.boardTrash=[...(cache.boardTrash||[]),board].slice(-20);return board;}
  function restoreBoard(cache){const board=cache.boardTrash?.at(-1);if(!board)return null;if((cache.boards||[]).some(b=>b.id===board.id))throw new Error('같은 이름의 보드가 이미 있습니다. 다른 이름을 쓰세요.');cache.boardTrash.pop();cache.boards=[...(cache.boards||[]),board];return board;}
- const api={filter,sortItems,norm,matches,relevance,rankByQuery,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
+ const api={journalKeys,journalScore,journalChoices,legacyRules,parseQuery,plainQuery,syntaxQuery,RULE_KINDS,RULE_FIELDS,RULE_LABELS:KIND_LABELS,FIELD_LABELS,STATUS_LABELS,ruleActive,cleanRules,cleanRulesByTab,ruleHas,applyRules,countOptions,collectionContext,describeRule,filter,sortItems,norm,matches,relevance,rankByQuery,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
  root.CustomStyleWorkspace=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
 </script><script>/* What to read before a paper, and in what order.
@@ -3852,7 +4145,13 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   const pageAnnotations=new Map(),pageAnnotationLoads=new Map(),pageChosen=new Map();
   const ui=runtime.cache.workbenchUI&&typeof runtime.cache.workbenchUI==='object'?runtime.cache.workbenchUI:{};
   let returnFocus=null,commandFocus=null,commandIndex=0,commandMatches=[],navigationEpoch=0;const pendingActions=new Set();
-  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:null,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null,focus:'',searchRecords:!!ui.searchRecords};
+  const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:null,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null,focus:'',searchRecords:!!ui.searchRecords,rulesByTab:model.cleanRulesByTab?model.cleanRulesByTab(ui.filterRules):{}};
+  /* Single-value filters saved before the rule builder become include rules on 보유 문헌. */
+  if(ui.filters&&typeof ui.filters==='object'&&model.legacyRules){
+   const moved=model.legacyRules(ui.filters),have=new Set((state.rulesByTab.explore||[]).map(r=>r.id));
+   if(moved.length)state.rulesByTab={...state.rulesByTab,explore:[...(state.rulesByTab.explore||[]),...moved.filter(r=>!have.has(r.id))]};
+   delete ui.filters;ui.filterRules=state.rulesByTab;runtime.cache.workbenchUI=ui;runtime.dirty=true;
+  }
   // Only an explicit new choice enables OpenAlex. Old subject picks never
   // decide which taxonomy the journals tab opens with.
   state.journalBrowser=ui.journalBrowser==='openalex'?'openalex':'jcr';
@@ -4200,7 +4499,63 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    searchTimer=win.setTimeout(()=>{searchTimer=null;runSearch();},150);
   });
   // Enter, and the box's own clear cross, take effect at once instead of waiting.
-  search.addEventListener('keydown',event=>{if(event.key==='Enter')runSearch();});
+  search.addEventListener('keydown',event=>{if(suggestKey(event))return;if(event.key==='Enter')runSearch();});
+  /* 저널: in the search box offers the scope's journals right under it -- by name, abbreviation or acronym --
+     and picking one adds a 저널 include rule (-저널: makes it 제외). Picks add to the same rule, so several
+     journals OR together. ↑↓ move, Enter picks, Esc closes. */
+  const suggest=node('div',null,controls,{class:'sc-suggest',role:'listbox','aria-label':'저널 제안',id:'sc-journal-suggest'});suggest.hidden=true;
+  search.setAttribute('role','combobox');search.setAttribute('aria-autocomplete','list');search.setAttribute('aria-expanded','false');search.setAttribute('aria-controls','sc-journal-suggest');
+  let suggestRows=[],suggestAt=-1,suggestToken=null;
+  function journalToken(){
+   if((RULE_HIDDEN[state.tab]||[]).includes('journal')||controls.hidden)return null;
+   // Everything after 저널: to the end of the box is the name being typed, spaces included, until a quote closes or another field starts.
+   const m=/(^|\s)(-?)(?:저널|journal|venue):(.*)$/i.exec(search.value);
+   if(!m)return null;
+   let text=m[3];
+   if(text.startsWith('"')){text=text.slice(1);if(text.includes('"'))return null;}
+   else if(/\s[^\s:"]+:/.test(' '+text))return null;
+   return {neg:m[2]==='-',text:text.trim(),start:m.index+m[1].length};
+  }
+  function closeSuggest(){suggest.hidden=true;suggest.replaceChildren();suggestRows=[];suggestAt=-1;suggestToken=null;search.setAttribute('aria-expanded','false');search.removeAttribute('aria-activedescendant');}
+  function drawSuggest(){
+   const token=journalToken();if(!token){if(!suggest.hidden)closeSuggest();return;}
+   const mode=token.neg?'ex':'in',taken=new Set(activeRules().filter(r=>r.kind==='journal'&&r.mode===mode).flatMap(r=>r.values));
+   const rows=model.journalChoices(scoped(),token.text).filter(c=>!taken.has(c.venue)).slice(0,8);
+   suggestToken=token;suggestRows=rows;suggest.replaceChildren();
+   if(!rows.length){suggest.hidden=true;search.setAttribute('aria-expanded','false');search.removeAttribute('aria-activedescendant');return;}
+   suggestAt=Math.min(Math.max(suggestAt,0),rows.length-1);
+   rows.forEach((row,i)=>{
+    const option=node('div',null,suggest,{class:'sc-suggest-option',role:'option',id:'sc-journal-suggest-'+i,'aria-selected':String(i===suggestAt)});
+    node('span',null,option,{class:'sc-suggest-name',title:row.venue}).textContent=row.venue;
+    if(row.abbreviation)node('span',null,option,{class:'sc-suggest-abbr'}).textContent=row.abbreviation;
+    node('span',String(row.count),option,{class:'sc-count'});
+    option.addEventListener('mousedown',event=>{event.preventDefault();pickJournal(row);});
+   });
+   try{if(Number.isFinite(search.offsetTop)&&search.offsetHeight){suggest.style.top=(search.offsetTop+search.offsetHeight+4)+'px';suggest.style.left=search.offsetLeft+'px';suggest.style.width=Math.max(240,search.offsetWidth)+'px';}}catch(_){}
+   suggest.hidden=false;search.setAttribute('aria-expanded','true');search.setAttribute('aria-activedescendant','sc-journal-suggest-'+suggestAt);
+  }
+  function pickJournal(row){
+   const token=suggestToken;if(!token)return;
+   const mode=token.neg?'ex':'in',list=(state.rulesByTab[state.tab]||[]).slice(),at=list.findIndex(r=>r.kind==='journal'&&r.mode===mode&&model.ruleActive(r));
+   if(at>=0){if(!list[at].values.includes(row.venue))list[at]={...list[at],values:[...list[at].values,row.venue]};}
+   else list.push({id:newRuleID(),kind:'journal',mode,values:[row.venue]});
+   if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}
+   search.value=search.value.slice(0,token.start).trimEnd();state.query=search.value;
+   closeSuggest();setRules(list);
+   Promise.resolve(render()).catch(error=>runtime.Z?.logError?.(error));
+   search.focus?.();
+  }
+  function suggestKey(event){
+   if(event.isComposing||suggest.hidden||!suggestRows.length)return false;
+   const move=delta=>{suggestAt=(suggestAt+delta+suggestRows.length)%suggestRows.length;[...suggest.children].forEach((o,i)=>o.setAttribute('aria-selected',String(i===suggestAt)));search.setAttribute('aria-activedescendant','sc-journal-suggest-'+suggestAt);};
+   if(event.key==='ArrowDown'){event.preventDefault();move(1);return true;}
+   if(event.key==='ArrowUp'){event.preventDefault();move(-1);return true;}
+   if(event.key==='Enter'){event.preventDefault();pickJournal(suggestRows[suggestAt]);return true;}
+   if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeSuggest();return true;}
+   return false;
+  }
+  search.addEventListener('input',drawSuggest);
+  search.addEventListener('blur',()=>{if(!suggest.hidden)closeSuggest();});
   search.addEventListener('search',runSearch);
   /* A43: with something typed, 내 기록 포함 widens the match past the
      paper's own fields to what was written about it -- the memo, notes and
@@ -4217,7 +4572,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   button('현재 선택 가져오기',()=>{const picked=runtime.selected(win);if(!picked.length){message('Zotero 목록에서 선택한 문헌이 없습니다. 목록에서 먼저 고르세요.',true);return;}state.selected=new Set(picked.map(i=>String(i.id)));render();},controls);
   button('새로고침',load,controls);
   const filterPanel=node('details',null,panel,{class:'sc-filters'}),filterSummary=node('summary','상세 필터',filterPanel);
-  const filters=node('div',null,filterPanel,{class:'sc-filter-fields','aria-label':'문헌 상세 필터'});filters.appendChild(type);
+  const filters=node('div',null,filterPanel,{class:'sc-filter-fields','aria-label':'정렬과 초기화'});
   const filterChips=node('div',null,panel,{class:'sc-filter-chips','aria-label':'적용 중인 필터'});
   /* What kind of thing each item is, in words, and a row of chips that
      splits the library by kind with one click. The user asked for patents
@@ -4239,11 +4594,243 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   }
   const filterInputs=new Map();
   function selectFilter(key,label,choices){const input=node('select',null,filters,{'aria-label':label});for(const[value,title]of choices)node('option',title,input,{value});input.value=state[key];input.addEventListener('change',()=>{state[key]=input.value;render();});filterInputs.set(key,input);}
-  selectFilter('status','읽기 상태 필터',[['','모든 읽기 상태'],['unread','안 읽음'],['reading','읽는 중'],['done','완료']]);
-  selectFilter('ratingMin','최소 별점',[['','모든 별점'],...Array.from({length:5},(_,i)=>[String(i+1),`${i+1}점 이상`])]);
-  for(const[key,label]of [['yearFrom','시작 연도'],['yearTo','마지막 연도']]){const input=node('input',null,filters,{type:'number',min:1,max:9999,placeholder:label,'aria-label':label});input.addEventListener('input',()=>{state[key]=input.value;render();});filterInputs.set(key,input);}
+  node('span','정렬',filters,{class:'sc-filter-label'});
   selectFilter('sort','문헌 정렬',[['library','기본 순서'],['title','제목순'],['year-desc','최신 발행순'],['if-desc','IF 높은 순'],['citations-desc','인용 많은 순'],['rating-desc','별점 높은 순'],['time-desc','읽기 시간순']]);
-  const resetFilters=button('필터 초기화',()=>{state.recentKind='';state.annotationPaperID='';for(const key of ['status','ratingMin','yearFrom','yearTo']){state[key]='';filterInputs.get(key).value='';}state.query=search.value='';state.type=type.value='';state.tag='';state.color='';state.sort='library';filterInputs.get('sort').value='library';render();},filters);
+  const resetFilters=button('필터 초기화',()=>{state.recentKind='';state.annotationPaperID='';for(const key of ['status','ratingMin','yearFrom','yearTo','tag'])state[key]='';state.query=search.value='';state.type=type.value='';state.color='';state.sort='library';filterInputs.get('sort').value='library';if(activeRules().length||ruleDraft){closeRuleEditor(false);setRules([]);}render();},filters);
+  /* ===== 포함·제외 규칙 =====
+     The old single-value row (유형, 읽기 상태, 별점, 연도) is folded into these
+     rules; `type` stays only as the detached select the kind chips above write
+     through. A rule says
+     "has this" (포함) or "does not have this" (제외) about one aspect of a
+     paper -- words in a field, a type, tags, status, a rating/year/IF/citation
+     range, a collection, a journal, a PDF, annotations, notes, preprint or
+     published. Rules AND together and are kept per tab. The option lists are
+     counted from the library already in memory, given every other rule, so
+     the number beside a value is what choosing it would leave. */
+  const RULE_ORDER=['word','type','tag','status','rating','year','collection','journal','impact','citations','pdf','annotation','note','preprint'];
+  const RULE_HIDDEN={journals:['journal'],tags:['tag'],reading:['status'],notes:['note'],annotations:['annotation'],attachments:['pdf']};
+  const RULE_DATA_KINDS=new Set(['collection','pdf','note','word']);
+  const RULE_LABEL=model.RULE_LABELS||{};
+  const RULE_LIST_LIMIT=150;
+  const activeRules=()=>(state.rulesByTab[state.tab]||[]).filter(r=>model.ruleActive?.(r));
+  const keptRules=()=>Object.keys(state.rulesByTab).length?{rulesByTab:state.rulesByTab}:{};
+  const legacyOptions=()=>({type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
+  const ruleOptions=()=>{const list=activeRules();return list.length?{rules:list,context:state.ruleContext||{}}:{};};
+  const needsRuleData=()=>activeRules().some(r=>RULE_DATA_KINDS.has(r.kind))||/(?:^|\s)-?(?:collection|컬렉션|note|노트|메모):/i.test(state.query||'')||(!!ruleDraft&&RULE_DATA_KINDS.has(ruleDraft.kind));
+  let ruleMode='in',ruleDraft=null,ruleEditing=false,ruleTrigger=null,ruleSearchText='',ruleKindsTab='',ruleDataItems=null,ruleSeq=0;
+  const newRuleID=()=>'r'+Date.now().toString(36)+(++ruleSeq);
+  function saveRules(){const map={};for(const[tab,list]of Object.entries(state.rulesByTab))if(list.length)map[tab]=list;return Promise.resolve(saveUI({filterRules:map})).catch(error=>runtime.Z?.logError?.(error));}
+  function setRulesFor(tab,list){const next={...state.rulesByTab};if(list.length)next[tab]=list;else delete next[tab];state.rulesByTab=next;return saveRules();}
+  const setRules=list=>setRulesFor(state.tab,list);
+  /* One-press shortcuts elsewhere in the panel (a status count, a tag's 안 읽음)
+     are ordinary rules with a fixed id, so they show as chips and clear like any. */
+  const quickTag=path=>({id:'q-tag',kind:'tag',mode:'in',values:[path],children:true});
+  const quickStatus=status=>({id:'q-status',kind:'status',mode:'in',values:[status]});
+  function putQuick(tab,rules){const ids=new Set(rules.map(r=>r.id));return setRulesFor(tab,[...(state.rulesByTab[tab]||[]).filter(r=>!ids.has(r.id)),...rules]);}
+  function dropQuick(tab,...ids){return setRulesFor(tab,(state.rulesByTab[tab]||[]).filter(r=>!ids.includes(r.id)));}
+  /* Collections, notes and PDFs are not part of the paper rows the panel
+     starts from; they are read once, together, the first time a rule or a
+     search term needs them, and read again only after the library reloads. */
+  let ruleDataBusy=null;
+  async function ensureRuleData(){
+   const itemsNow=state.items;
+   if(ruleDataItems===itemsNow)return;
+   if(ruleDataBusy&&ruleDataBusy.items===itemsNow)return ruleDataBusy.promise;
+   const libraryID=state.libraryID;
+   const promise=(async()=>{
+    const [cols,counts]=await Promise.all([typeof library.collections==='function'?library.collections(libraryID).catch(()=>[]):[],typeof library.childCounts==='function'?library.childCounts(itemsNow.map(i=>i.id)).catch(()=>({})):{}]);
+    if(disposed||itemsNow!==state.items)return;
+    const context=model.collectionContext?.(cols)||{},byItem=new Map();
+    for(const c of cols)for(const id of c.itemIDs||[]){const key=String(id);if(!byItem.has(key))byItem.set(key,[]);byItem.get(key).push(String(c.id));}
+    for(const item of itemsNow){const mine=byItem.get(String(item.id))||[],row=counts[item.id];item.collectionIDs=mine;item.collectionNames=mine.map(id=>context.names?.get(id)).filter(Boolean);item.noteCount=row?row.notes:0;item.pdfCount=row?row.pdfs:0;item.noteTitles=row?row.noteTitles:[];}
+    state.ruleContext=context;state.ruleCollections=cols;ruleDataItems=itemsNow;
+   })();
+   ruleDataBusy={items:itemsNow,promise};
+   try{await promise;}finally{if(ruleDataBusy?.promise===promise)ruleDataBusy=null;}
+  }
+  const filtersOpen=()=>filterPanel.hasAttribute('open');
+  const setFiltersOpen=on=>{if(on)filterPanel.setAttribute('open','');else filterPanel.removeAttribute('open');};
+  /* A journal is found by its title, by the abbreviations the library and the plugin's own journal table know
+     ("Nat Methods", "Proc Natl Acad Sci"), and by its acronym (PNAS, NAR, JACS). Read from what is already
+     in memory, once per distinct venue; no request is made. */
+  function addVenueAbbreviations(items){
+   const cache=new Map(),id=runtime.journalIdentity;
+   for(const item of items){
+    const venue=String(item.venue||'').trim();
+    if(!venue){item.venueAbbrs=[];continue;}
+    let found=cache.get(venue);
+    if(!found){
+     found=[];
+     try{const known=id?.identify?.(venue);for(const a of [known?.abbreviation,known?.mark,id?.abbreviate?.(venue)])if(a&&a!==venue&&!found.includes(a))found.push(String(a));}catch(error){runtime.Z?.logError?.(error);}
+     cache.set(venue,found);
+    }
+    item.venueAbbrs=found;
+   }
+  }
+  const rulesBox=node('div',null,filterPanel,{class:'sc-rules',role:'group','aria-label':'포함·제외 규칙'});
+  const rulesBar=node('div',null,rulesBox,{class:'sc-rules-bar'});
+  node('span','규칙 추가',rulesBar,{class:'sc-rules-title'});
+  const addMode=node('div',null,rulesBar,{class:'sc-segmented',role:'group','aria-label':'새 규칙의 방식'});
+  const ruleKindsBox=node('div',null,rulesBar,{class:'sc-rule-kinds'});
+  const addModeButtons=[['in','포함','조건에 맞는 문헌만 남깁니다'],['ex','제외','조건에 맞는 문헌을 뺍니다']].map(([value,label,title])=>button(label,()=>{ruleMode=value;syncAddMode();},addMode,{'aria-pressed':String(value===ruleMode),'data-mode':value,title}));
+  const kindAria=kind=>`${T(RULE_LABEL[kind]||kind)} ${T(ruleMode==='ex'?'제외 규칙 추가':'포함 규칙 추가')}`;
+  function syncAddMode(){for(const b of addModeButtons)b.setAttribute('aria-pressed',String(b.dataset.mode===ruleMode));for(const b of ruleKindsBox.querySelectorAll('button'))b.setAttribute('aria-label',kindAria(b.dataset.kind));}
+  function ruleDefaults(kind){
+   if(kind==='word')return {field:'all',text:'',phrase:true};
+   if(kind==='tag')return {values:[],all:false,children:true};
+   if(kind==='collection')return {values:[],sub:true};
+   if(['type','status','journal'].includes(kind))return {values:[]};
+   if(kind==='preprint')return {value:'preprint'};
+   if(['rating','year','impact','citations'].includes(kind))return {min:'',max:''};
+   return {};
+  }
+  function drawRuleKinds(){
+   if(ruleKindsTab===state.tab)return;
+   if(ruleKindsTab)closeRuleEditor(false);
+   ruleKindsTab=state.tab;ruleKindsBox.replaceChildren();
+   const hidden=RULE_HIDDEN[state.tab]||[];
+   for(const kind of RULE_ORDER){if(hidden.includes(kind))continue;
+    const b=button(RULE_LABEL[kind]||kind,()=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,b),ruleKindsBox,{class:'sc-chip sc-chip-button sc-rule-kind','data-kind':kind,'aria-label':kindAria(kind)});}
+  }
+  const editor=node('div',null,rulesBox,{class:'sc-rule-editor',role:'group'});editor.hidden=true;
+  node('p','검색창 빠른 문법: -단어(제외) · “구절” · 제목:단어 · -저자:김 · 연도:2018-2022 · 태그: · 저널:(이름·약어 제안) · 컬렉션:',rulesBox,{class:'sc-rules-hint'});
+  let editorPool=[];
+  async function openRuleEditor(rule,editing,trigger){
+   const draft={...rule,...(rule.values?{values:[...rule.values]}:{})};
+   ruleDraft=draft;ruleEditing=!!editing;ruleTrigger=trigger||null;ruleSearchText='';setFiltersOpen(true);
+   if(needsRuleData()){try{await ensureRuleData();}catch(error){runtime.Z?.logError?.(error);}}
+   if(disposed||ruleDraft!==draft)return;
+   editorPool=model.filter(scoped(),{query:state.query,...legacyOptions()});
+   drawRuleEditor(true);
+  }
+  function closeRuleEditor(restoreFocus=true){
+   ruleDraft=null;ruleSearchText='';editor.hidden=true;editor.replaceChildren();
+   if(restoreFocus){const target=ruleTrigger?.isConnected?ruleTrigger:ruleKindsBox.querySelector('button')||filterSummary;target?.focus?.();}
+   ruleTrigger=null;
+  }
+  const ruleContextNow=()=>state.ruleContext||{};
+  const collectionPath=id=>{const ctx=ruleContextNow();return [...(ctx.ancestors?.get(String(id))||[]).slice().reverse(),String(id)].map(x=>ctx.names?.get(x)||x).join(' / ');};
+  function ruleOptionList(d){
+   const base=scoped();
+   if(d.kind==='type')return [...new Set(base.map(i=>i.itemType).filter(Boolean))].map(v=>[v,T(kindLabel(v))]);
+   if(d.kind==='status')return ['unread','reading','done'].map(v=>[v,T(model.STATUS_LABELS[v])]);
+   if(d.kind==='journal')return model.journalChoices(base,'').map(c=>[c.venue,c.venue,c.abbreviation]);
+   if(d.kind==='tag')return [...new Set(base.flatMap(i=>i.tags||[]))].map(v=>[v,v]);
+   if(d.kind==='collection')return (state.ruleCollections||[]).map(c=>[String(c.id),collectionPath(c.id)]);
+   return [];
+  }
+  const kindNoun={type:'유형',tag:'태그',status:'읽기 상태',collection:'컬렉션',journal:'저널'};
+  function drawRuleEditor(focus){
+   editor.replaceChildren();
+   const d=ruleDraft;if(!d){editor.hidden=true;return;}
+   editor.hidden=false;
+   const kindName=T(RULE_LABEL[d.kind]||d.kind);
+   editor.setAttribute('aria-label',`${kindName} ${T(ruleEditing?'규칙 편집':'규칙 추가')}`);
+   const head=node('div',null,editor,{class:'sc-rule-head'});
+   node('strong',RULE_LABEL[d.kind]||d.kind,head,{class:'sc-rule-name'});
+   const modeSeg=node('div',null,head,{class:'sc-segmented',role:'group','aria-label':'규칙 방식'});
+   for(const[value,label]of [['in','포함'],['ex','제외']])button(label,()=>{d.mode=value;drawRuleEditor(false);editor.querySelector(`.sc-rule-head [data-mode="${value}"]`)?.focus?.();},modeSeg,{'aria-pressed':String(d.mode===value),'data-mode':value});
+   const form=node('div',null,editor,{class:'sc-rule-body'});
+   const preview=node('p',null,editor,{class:'sc-rule-preview',role:'status','aria-live':'polite'});
+   const actions=node('div',null,editor,{class:'sc-rule-actions'});
+   const apply=button(ruleEditing?'변경 적용':'규칙 적용',()=>commitRule(),actions,{'data-variant':'primary'});
+   button('취소',()=>closeRuleEditor(true),actions);
+   if(ruleEditing)button('규칙 삭제',()=>removeRule(d.id,true),actions);
+   const ctx=ruleContextNow();
+   const refresh=()=>{
+    const ok=model.ruleActive(d);apply.disabled=!ok;
+    const others=model.applyRules(editorPool,activeRules().filter(r=>r.id!==d.id),ctx);
+    if(!ok){preview.textContent=T('조건을 고르면 남는 문헌 수가 여기에 표시됩니다.');return;}
+    const after=model.applyRules(others,[d],ctx).length;
+    preview.textContent=T(`다른 규칙을 적용한 ${others.length}편 중 ${after}편이 남습니다.`);
+   };
+   const seg=(parent,label,options,current,set)=>{const wrap=node('div',null,parent,{class:'sc-segmented',role:'group','aria-label':label});for(const[value,text]of options)button(text,()=>{set(value);for(const b of wrap.querySelectorAll('button'))b.setAttribute('aria-pressed',String(b.dataset.value===String(value)));refresh();},wrap,{'aria-pressed':String(current===value),'data-value':String(value)});return wrap;};
+   const field=(parent,label)=>{const row=node('label',null,parent,{class:'sc-rule-field'});node('span',label,row);return row;};
+   const submitOn=input=>input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();commitRule();}});
+   let focusTarget=null;
+   if(d.kind==='word'){
+    seg(form,'찾을 위치',model.RULE_FIELDS.map(f=>[f,model.FIELD_LABELS[f]]),d.field,v=>{d.field=v;});
+    const row=field(form,'단어 또는 구절');const input=node('input',null,row,{type:'text','aria-label':'찾을 단어 또는 구절',placeholder:'예: deep learning',autocomplete:'off'});input.value=d.text||'';
+    input.addEventListener('input',()=>{d.text=input.value;refresh();});submitOn(input);focusTarget=input;
+    check('구절 그대로 일치',d.phrase!==false,on=>{d.phrase=on;refresh();},form);
+    node('p','끄면 입력한 단어가 모두 들어 있으면 일치합니다.',form,{class:'sc-rule-note'});
+   }else if(['type','tag','status','collection','journal'].includes(d.kind)){
+    const noun=T(kindNoun[d.kind]);
+    if(d.kind==='tag'){
+     seg(form,'여러 태그의 결합',[[false,d.mode==='ex'?'하나라도 가진 문헌':'하나라도 포함'],[true,d.mode==='ex'?'모두 가진 문헌':'모두 포함']],!!d.all,v=>{d.all=v;});
+     check('하위 태그 포함 (a는 a/b도)',d.children!==false,on=>{d.children=on;drawOptions();refresh();},form);
+    }
+    if(d.kind==='collection')check('하위 컬렉션 포함',d.sub!==false,on=>{d.sub=on;drawOptions();refresh();},form);
+    let search=null;
+    if(!['status','type'].includes(d.kind)){
+     const row=field(form,`${noun} 찾기`);search=node('input',null,row,{type:'search','aria-label':`${noun} 목록 검색`,placeholder:d.kind==='journal'?'이름·약어·약칭으로 찾기 (예: Nat Methods, PNAS)':'목록에서 찾기',autocomplete:'off'});search.value=ruleSearchText;
+     search.addEventListener('input',()=>{ruleSearchText=search.value;drawOptions();});focusTarget=search;
+    }
+    const list=node('div',null,form,{class:'sc-rule-options',role:'group','aria-label':`${noun} 선택`});
+    const more=node('p',null,form,{class:'sc-rule-note'});
+    function drawOptions(){
+     list.replaceChildren();
+     const counts=model.countOptions(editorPool,d.kind,{rules:activeRules(),ctx,skipID:d.id,children:d.kind==='collection'?d.sub!==false:d.children!==false});
+     const needle=model.norm(ruleSearchText).trim(),chosen=new Set(d.values);
+     // Journals match by name, abbreviation or acronym and rank exact > prefix > contains; the rest by substring.
+     const scores=d.kind==='journal'?new Map(model.journalChoices(scoped(),ruleSearchText).map(c=>[c.venue,c.score])):null;
+     const all=ruleOptionList(d).map(([value,label,abbr])=>({value,label,abbr,count:counts.get(value)||0,score:scores?scores.get(value)??null:0}))
+      .filter(o=>chosen.has(o.value)||(scores?o.score!==null:(!needle||model.norm(o.label).includes(needle))))
+      .sort((a,b)=>(chosen.has(b.value)-chosen.has(a.value))||((a.score??9)-(b.score??9))||(b.count-a.count)||String(a.label).localeCompare(String(b.label)));
+     for(const o of all.slice(0,RULE_LIST_LIMIT)){
+      const row=node('label',null,list,{class:'sc-rule-opt'});
+      const box=node('input',null,row,{type:'checkbox','aria-label':o.label});box.checked=chosen.has(o.value);
+      box.addEventListener('change',()=>{const at=d.values.indexOf(o.value);if(box.checked&&at<0)d.values.push(o.value);if(!box.checked&&at>=0)d.values.splice(at,1);refresh();});
+      node('span',null,row,{class:'sc-rule-opt-name',title:o.abbr?`${o.label} · ${o.abbr}`:o.label}).textContent=o.label;
+      if(o.abbr)node('span',null,row,{class:'sc-rule-opt-abbr'}).textContent=o.abbr;
+      node('span',String(o.count),row,{class:'sc-count'});
+     }
+     if(!all.length)node('p','맞는 항목이 없습니다.',list,{class:'sc-rule-note'});
+     more.textContent=all.length>RULE_LIST_LIMIT?T(`${all.length}개 중 ${RULE_LIST_LIMIT}개만 표시합니다. 위 검색으로 좁히세요.`):'';
+     more.hidden=!more.textContent;
+    }
+    drawOptions();if(!focusTarget)focusTarget=list.querySelector('input');
+    node('p','숫자는 지금 다른 규칙과 필터를 적용했을 때 그 값에 해당하는 문헌 수입니다.',form,{class:'sc-rule-note'});
+   }else if(['rating','year','impact','citations'].includes(d.kind)){
+    const spec={rating:{min:0,max:5,step:1,unit:'점'},year:{min:1,max:9999,step:1,unit:''},impact:{min:0,step:.1,unit:''},citations:{min:0,step:1,unit:''}}[d.kind];
+    const pair=node('div',null,form,{class:'sc-rule-range'});
+    for(const[key,label]of [['min','최소'],['max','최대']]){
+     const row=field(pair,label);const input=node('input',null,row,{type:'number',min:spec.min,step:spec.step,'aria-label':`${kindName} ${label}`,placeholder:label,inputmode:'decimal'});if(spec.max!==undefined)input.setAttribute('max',spec.max);
+     input.value=d[key]===''?'':String(d[key]);
+     input.addEventListener('input',()=>{d[key]=input.value===''?'':Number(input.value);refresh();});submitOn(input);if(!focusTarget)focusTarget=input;
+    }
+    node('p',d.kind==='rating'?'별점을 매기지 않은 문헌은 0점으로 셉니다.':'값이 기록되지 않은 문헌은 이 범위에 들어가지 않습니다.',form,{class:'sc-rule-note'});
+   }else if(d.kind==='preprint'){
+    seg(form,'프리프린트 또는 출판본',[['preprint','프리프린트'],['published','출판본']],d.value,v=>{d.value=v;});
+   }else{
+    node('p',({pdf:'PDF 첨부가 하나라도 있는 문헌',annotation:'주석이 하나라도 달린 문헌',note:'내가 쓴 노트가 하나라도 있는 문헌'})[d.kind],form,{class:'sc-rule-note'});
+    node('p','포함은 이런 문헌만 남기고, 제외는 이런 문헌을 뺍니다. 읽기 시간 기록용 노트는 세지 않습니다.',form,{class:'sc-rule-note'});
+   }
+   refresh();
+   if(focus)(focusTarget||editor.querySelector('.sc-rule-actions button')||editor).focus?.();
+  }
+  async function commitRule(){
+   const d=ruleDraft;if(!d||!model.ruleActive(d))return;
+   const clean=model.cleanRules([d])[0];if(!clean)return;
+   const list=(state.rulesByTab[state.tab]||[]).slice(),at=list.findIndex(r=>r.id===clean.id);
+   if(at>=0)list[at]=clean;else list.push(clean);
+   const trigger=ruleTrigger;closeRuleEditor(false);setRules(list);
+   await render();
+   const target=(trigger?.isConnected?trigger:null)||filterChips.querySelector(`[data-rule-id="${clean.id}"] .sc-rule-chip-main`)||filterSummary;target?.focus?.();
+  }
+  async function removeRule(id,fromEditor){
+   if(fromEditor)closeRuleEditor(false);
+   setRules((state.rulesByTab[state.tab]||[]).filter(r=>r.id!==id));
+   await render();
+   (filterChips.querySelector('.sc-rule-chip-main')||filterSummary).focus?.();
+  }
+  function ruleChip(rule){
+   const group=node('span',null,filterChips,{class:'sc-rule-chip','data-mode':rule.mode,'data-rule-id':rule.id,'data-kind':rule.kind});
+   const words=model.describeRule(rule,{kindLabel:k=>T(kindLabel(k)),collectionName:id=>state.ruleContext?.names?.get(String(id))||id,t:T});
+   const prefix=rule.mode==='ex'?T('제외')+' · ':'';
+   const main=button(prefix+words,()=>openRuleEditor(rule,true,main),group,{class:'sc-rule-chip-main','aria-label':`${prefix}${words} ${T('규칙 편집')}`,title:`${prefix}${words}`});
+   button('×',()=>removeRule(rule.id,false),group,{class:'sc-rule-chip-x','aria-label':`${prefix}${words} ${T('규칙 삭제')}`,title:T('규칙 삭제')});
+  }
   const shell=node('div',null,panel,{class:'sc-shell'}),nav=node('nav',null,shell,{'aria-label':'작업 종류'}),content=node('div',null,shell,{class:'sc-content'});
   const context=node('div',null,content,{class:'sc-context'}),sectionTitle=node('h2','보유 문헌',context,{class:'sc-section-title'}),contextDetail=node('span',null,context,{class:'sc-context-detail'});context.appendChild(kindChips);
   /* The search row and its filters belong to the page they narrow, so they sit
@@ -4331,7 +4918,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    state.listOrigin={tab:state.tab,scope:state.scope,sort:state.sort,pageIndex:state.pageIndex||0,pageKey:state.pageKey,
     selected:[...state.selected],expandedPaperID:state.expandedPaperID||'',
     scrollTop:body.scrollTop||0,anchorID,
-    filters:{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo}};
+    filters:{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,rulesByTab:state.rulesByTab}};
   }
   // The other half: everything rememberListOrigin kept, put back, then the
   // same card scrolled to the same offset and focused (or the nearest one left).
@@ -4350,9 +4937,9 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   }
   function navigateSelection(tab,ids,label){
    rememberListOrigin();
-   const kept={query:state.query,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,type:state.type,tag:state.tag};
+   const kept={query:state.query,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,type:state.type,tag:state.tag,...keptRules()};
    if(Object.values(kept).some(Boolean))state.keptFilters=kept;
-   state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';
+   state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';state.rulesByTab={};
    for(const [,input] of filterInputs)input.value='';type.value='';
    // Called with an explicit id list (a journal's held papers, say) rather than
    // whatever the user last checked: that list becomes the selection.
@@ -4422,7 +5009,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      is what was typed comes first, then the ones that begin with it, then the
      ones that merely contain it. Any other sort the user picked still wins. */
   const rows=()=>{
-   const found=model.filter(scoped(),{query:state.query,type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
+   const found=model.filter(scoped(),{query:state.query,...parentOptions()});
    return state.query&&state.sort==='library'?model.rankByQuery(found,state.query):model.sortItems(found,state.sort);
   };
   /* 논문 비교's own scope: once the picker has committed to a chosen set --
@@ -4431,7 +5018,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      with drawMatrix's scopeItems, or removing the last compared paper still
      reads "비교 중 N편" for the list behind it. */
   const matrixUsingPicker=()=>!!state.matrixUsingSelection||selected().length>0;
-  const parentOptions=()=>({type:state.type,tag:state.tag,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo});
+  const parentOptions=()=>({...legacyOptions(),...ruleOptions()});
   const ids=()=>Object.values(parentOptions()).some(Boolean)?model.filter(scoped(),parentOptions()).map(item=>String(item.id)):state.scope==='selected'?[...state.selected]:state.scope.startsWith('collection')?[...(state.collectionIDs||[])]:undefined;
   /* A43: 내 기록 포함. rows() answers what the title/authors/venue/DOI/
      abstract/tags/memo already say; this widens 보유 문헌's own list past
@@ -4445,8 +5032,10 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      .sc-paper-search-hit line under its title. */
   async function exploreRows(){
    const base=rows();
-   if(!state.searchRecords||!state.query.trim())return {items:base,hits:new Map()};
-   const words=String(state.query||'').toLowerCase().split(/\s+/).filter(Boolean);
+   // The memo/note/annotation widening looks for the plain words; -word, field:value and the rules already acted in rows().
+   const wide=model.plainQuery?model.plainQuery(state.query):state.query;
+   if(!state.searchRecords||!wide.trim())return {items:base,hits:new Map()};
+   const words=String(wide||'').toLowerCase().split(/\s+/).filter(Boolean);
    const excerptAround=text=>{const hay=String(text||'').replace(/\s+/g,' ').trim();
     const at=Math.min(...words.map(w=>hay.toLowerCase().indexOf(w)).filter(i=>i>=0));
     if(!Number.isFinite(at))return hay.slice(0,140);
@@ -4455,10 +5044,10 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    // A base row already matched by title etc.; only a memo-only match is worth naming.
    for(const item of base){
     const own=[item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,...(item.tags||[])].join(' ');
-    if(model.matches(own,state.query))continue;
-    if(item.remark&&model.matches(item.remark,state.query))hits.set(String(item.id),{kind:'memo',label:T('메모'),text:excerptAround(item.remark)});
+    if(model.matches(own,wide))continue;
+    if(item.remark&&model.matches(item.remark,wide))hits.set(String(item.id),{kind:'memo',label:T('메모'),text:excerptAround(item.remark)});
    }
-   const pool=model.filter(scoped(),parentOptions());
+   const pool=model.filter(scoped(),{query:model.syntaxQuery?model.syntaxQuery(state.query):'',...parentOptions()});
    const poolIDs=pool.map(item=>String(item.id));
    const baseIDs=new Set(base.map(item=>String(item.id)));
    const [notes,annotations]=await Promise.all([scopeNotes(poolIDs),scopeAnnotations(poolIDs)]).catch(()=>[[],[]]);
@@ -4467,10 +5056,10 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     const id=String(item.id);
     if(baseIDs.has(id)||hits.has(id))continue;
     const myNotes=(notes||[]).filter(n=>String(n.parentID||'')===id);
-    const noteHit=myNotes.find(n=>model.matches(String(n.title||'')+' '+String(n.text||''),state.query));
+    const noteHit=myNotes.find(n=>model.matches(String(n.title||'')+' '+String(n.text||''),wide));
     if(noteHit){hits.set(id,{kind:'note',label:T(`노트 ${myNotes.length}`),text:excerptAround(String(noteHit.title||'')+' '+String(noteHit.text||''))});extra.push(item);continue;}
     const myAnnotations=(annotations||[]).filter(a=>String(a.parentID||'')===id);
-    const annotHit=myAnnotations.find(a=>model.matches(String(a.text||'')+' '+String(a.comment||''),state.query));
+    const annotHit=myAnnotations.find(a=>model.matches(String(a.text||'')+' '+String(a.comment||''),wide));
     if(annotHit){hits.set(id,{kind:'annotation',label:T(`주석 ${myAnnotations.length}`),text:excerptAround(String(annotHit.text||'')+' '+String(annotHit.comment||''))});extra.push(item);}
    }
    // Merge before sorting: a paper pulled in only through a note ranks and
@@ -4582,9 +5171,13 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     :state.tab==='matrix'?T(`비교 중 ${matrixUsingPicker()?selected().length:rows().length}편`):state.tab==='collections'?''
     :['related','authors','backlinks'].includes(state.tab)&&selected().length===1?selected()[0].title
     :state.selected.size===1?T('선택한 문헌 1개'):state.selected.size?T(`선택한 문헌 ${state.selected.size}개`):'';}
-   filterChips.replaceChildren();const labels={query:'검색',type:'유형',tag:'태그',status:'상태',ratingMin:'최소 별점',yearFrom:'시작 연도',yearTo:'마지막 연도'};
-   for(const[key,label]of Object.entries(labels))if(state[key]){const value=key==='status'?({unread:'안 읽음',reading:'읽는 중',done:'완료'})[state[key]]:state[key];button(`${label}: ${value} ×`,()=>{state[key]='';if(key==='query')search.value='';else if(key==='type')type.value='';else if(filterInputs.has(key))filterInputs.get(key).value='';return render();},filterChips,{'aria-label':label+' 필터 해제'});}
-   const count=Object.keys(labels).filter(key=>state[key]).length;filterSummary.textContent=T('상세 필터')+(count?' · '+T(`${count}개 적용`):'');filterChips.hidden=!applicable||!count;
+   filterChips.replaceChildren();const labels={query:'검색',type:'유형'};
+   for(const[key,label]of Object.entries(labels))if(state[key]){const value=state[key];button(`${label}: ${value} ×`,()=>{state[key]='';if(key==='query')search.value='';else if(key==='type')type.value='';else if(filterInputs.has(key))filterInputs.get(key).value='';return render();},filterChips,{'aria-label':label+' 필터 해제'});}
+   drawRuleKinds();
+   const ruleList=applicable?activeRules():[];for(const rule of ruleList)ruleChip(rule);
+   const count=Object.keys(labels).filter(key=>state[key]).length+ruleList.length;
+   if(count>1)button('모두 지우기',()=>resetFilters.click(),filterChips,{class:'sc-rule-clear','aria-label':'적용 중인 필터 모두 지우기'});
+   filterSummary.textContent=T('상세 필터')+(count?' · '+T(`${count}개 적용`):'');filterChips.hidden=!applicable||!count;
    for(const group of nav.querySelectorAll('.sc-nav-group'))group.hidden=[...group.querySelectorAll('[data-tab]')].every(button=>button.hidden);
    updateSelectionUI();
   }
@@ -4670,6 +5263,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    if(state.scope.startsWith('collection')){state.collectionIDs=[];const collection=win.ZoteroPane?.getSelectedCollection?.();if(collection){const members=await library.collectionItems(collection.id,{libraryID,recursive:state.scope==='collection-recursive'});if(disposed||token!==loadEpoch||panel.hidden)return;if(context!==scopeContext())return load();state.collectionIDs=members;}}
    // The reader's memo rides with each paper, so the search finds a paper by what was written about it.
    state.items=snapshot.map(i=>{const ref=runtime.Z.Items.get(Number(i.id));return {...i,...(ref?runtime.state(ref):{}),remark:ref?String(runtime.entry?.(ref)?.remark||''):''};});
+   addVenueAbbreviations(state.items);
    /* 주석 n on a row: one grouped count per load, not one lookup per row.
       Absent in an older or fake library, rows simply show nothing extra. */
    if(typeof library.annotationCounts==='function'){
@@ -4726,7 +5320,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   // One paper, found whatever the search and filters were: they are cleared, and the paper opened on its own.
   function showPaper(id){
    rememberListOrigin();
-   state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';
+   state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';state.rulesByTab={};
    for(const [key,input] of filterInputs)input.value='';type.value='';
    state.selected=new Set([String(id)]);state.scope='selected';scope.value='selected';
    return state.tab==='explore'?render():navigate('explore');
@@ -4827,7 +5421,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     /* The reading counts are the way to those papers: pressed, the list shows
        only them (the status filter above says so, and clears it); pressed
        again, all of them. */
-    const statusFact=(label,key)=>{if(!n[key])return;const on=state.status===key;const b=button('',()=>{state.status=on?'':key;const select=filterInputs.get?.('status');if(select)select.value=state.status;render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 모두 보기':'이 상태만 보기')});node('b',String(n[key]),b);b.appendChild(doc.createTextNode(' '+T(label)));};
+    const statusFact=(label,key)=>{if(!n[key])return;const on=activeRules().some(r=>r.id==='q-status'&&r.values[0]===key);const b=button('',()=>{if(on)dropQuick(state.tab,'q-status');else putQuick(state.tab,[quickStatus(key)]);render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 모두 보기':'이 상태만 보기')});node('b',String(n[key]),b);b.appendChild(doc.createTextNode(' '+T(label)));};
     statusFact('완료','done');statusFact('읽는 중','reading');statusFact('안 읽음','unread');
     if(seconds>0)fact('읽음',runtime.formatReadTime?runtime.formatReadTime(seconds):Math.round(seconds/60)+'분');
     const mi=median(ifs),mc=median(cites);
@@ -5678,7 +6272,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      if(typeof library.restoreTags==='function')await library.restoreTags(removed);
      else{const groups=new Map();for(const row of removed){if(!groups.has(row.tag))groups.set(row.tag,[]);groups.get(row.tag).push(row.id);}for(const[tag,list]of groups)await library.addTags(list,[tag]);}
      undo.remove();await load();message(`${papers}편에 태그를 다시 붙였습니다.`);},bar());
-   },b);button('태그 필터 해제',()=>{state.tag='';render();},b);
+   },b);button('태그 필터 해제',()=>{dropQuick('explore','q-tag','q-status');render();},b);
    sectionHead('태그 경로 이름 바꾸기',null,edit);
    const rename=bar(edit),from=node('input',null,rename,{'aria-label':'기존 태그 경로',placeholder:'기존 태그 경로'}),to=node('input',null,rename,{'aria-label':'새 태그 경로',placeholder:'새 태그 경로'});let subtree=true;
    check('하위 태그도 변경',true,on=>{subtree=on;},rename);
@@ -5768,7 +6362,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      node('span',[T(`완료 ${r.done}/${r.total}`),time,r.last?calendarAgo(r.last):''].filter(Boolean).join(' · '),row,{class:'sc-tag-reading'});
      // The unread under this heading, one press away in the list.
      const left=r.total-r.done-r.reading;
-     if(left>0){const go=button(T(`안 읽음 ${left}편`),()=>{state.tag=n.path;state.status='unread';const select=filterInputs.get?.('status');if(select)select.value='unread';return navigate('explore');},row,{class:'sc-tag-unread'});go.addEventListener('click',event=>event.stopPropagation());}}const only=button('이 태그만',()=>{state.tag=n.path;navigate('explore');},row,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(hasKids)branch(sorted(n.children),container);}}redraw();redrawCross();
+     if(left>0){const go=button(T(`안 읽음 ${left}편`),()=>{putQuick('explore',[quickTag(n.path),quickStatus('unread')]);return navigate('explore');},row,{class:'sc-tag-unread'});go.addEventListener('click',event=>event.stopPropagation());}}const only=button('이 태그만',()=>{putQuick('explore',[quickTag(n.path)]);navigate('explore');},row,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(hasKids)branch(sorted(n.children),container);}}redraw();redrawCross();
   }
   /* A note needs a paper. Opening this tab with the whole library in scope
      used to show a disabled editor and "select a paper", with no paper to
@@ -5798,7 +6392,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   async function drawNotes(token){const target=selected();
    // 40 at a time, until 더 보기 asks for more; a new query, library, scope
    // or filter starts back at 40 rather than keeping whatever was reached.
-   const noteContext=JSON.stringify([state.query,state.scope,state.libraryID,state.status,state.ratingMin,state.yearFrom,state.yearTo,state.tag,state.type,state.color]);
+   const noteContext=JSON.stringify([state.query,state.scope,state.libraryID,state.status,state.ratingMin,state.yearFrom,state.yearTo,state.tag,state.type,state.color,activeRules()]);
    if(state.noteContext!==noteContext){state.noteContext=noteContext;state.noteLimit=40;}
    // Notes first, so the compose fold can say how many the paper has and stay closed over them.
    const own=target.length===1&&!state.query&&scoped().some(i=>String(i.id)===String(target[0].id));
@@ -7472,10 +8066,10 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
        if(mix.unread){
         if(said.length)mixText.appendChild(doc.createTextNode(' · '));
         const go=button(T(`안 읽음 ${mix.unread}`),()=>{
-         const kept={query:state.query,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,type:state.type,tag:state.tag};
+         const kept={query:state.query,status:state.status,ratingMin:state.ratingMin,yearFrom:state.yearFrom,yearTo:state.yearTo,type:state.type,tag:state.tag,...keptRules()};
          if(Object.values(kept).some(Boolean)&&!state.keptFilters)state.keptFilters=kept;
-         state.query='';search.value='';for(const key of ['ratingMin','yearFrom','yearTo','type','tag'])state[key]='';for(const [,input] of filterInputs)input.value='';type.value='';
-         state.status='unread';const select=filterInputs.get?.('status');if(select)select.value='unread';
+         state.query='';search.value='';for(const key of ['ratingMin','yearFrom','yearTo','type','tag'])state[key]='';state.rulesByTab={};for(const [,input] of filterInputs)input.value='';type.value='';
+         state.rulesByTab={explore:[quickStatus('unread')]};
          return open();
         },mixText,{class:'sc-collection-unread',title:T('이 컬렉션의 안 읽은 문헌만 보기')});
         go.addEventListener('click',event=>event.stopPropagation());
@@ -9474,6 +10068,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    }
   }
   async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';
+   if(needsRuleData()){try{await ensureRuleData();}catch(error){runtime.Z?.logError?.(error);}if(disposed||panel.hidden)return;}
    /* "선택한 문헌" with nothing selected showed an empty list that read as
       broken: after 자세히 the scope stayed on the selection, and the
       selection went away with the next click in the tree. With nothing to
@@ -9516,7 +10111,10 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     if(jcrSearch){e.preventDefault();jcrSearch.focus?.();jcrSearch.select?.();}
     else if(!controls.hidden){e.preventDefault();search.focus?.();search.select?.();}
    }
-   else if(e.key==='Escape'){if(e.target?.closest?.('input,textarea')){e.target.blur();return;}e.stopPropagation();toggle(false);}
+   else if(e.key==='Escape'){
+    // The filter layers close one at a time, innermost first, and give focus back.
+    if(filterPanel.contains(e.target)&&(ruleDraft||filtersOpen())){e.preventDefault();e.stopPropagation();if(ruleDraft)closeRuleEditor(true);else{setFiltersOpen(false);filterSummary.focus?.();}return;}
+    if(e.target?.closest?.('input,textarea')){e.target.blur();return;}e.stopPropagation();toggle(false);}
   };panel.addEventListener('keydown',keyboard);
   /* A memo saves itself as it is typed, and the save is an item change that
      reloaded the panel: the field was rebuilt under the cursor a second after
@@ -9540,7 +10138,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};
-  return {toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
+  return {filters:{rules:()=>activeRules(),set:list=>{setRules(model.cleanRules(list));return render();},open:()=>{setFiltersOpen(true);},edit:kind=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,null),editor:()=>ruleDraft},toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
@@ -9725,5 +10323,21 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
  reader.saveAnnotationPalette=async()=>({id:'demo'});reader.closeOtherTabs=()=>({closed:0});
  const bench=Workbench.attach(win,{runtime,library,reader,model:Model,assist:{run:async()=> '이것은 실제 AI 호출 없이 표시한 예시 결과입니다.',cancel(){}}});
  doc.querySelector('link[href="content/workbench.css"]')?.remove();
- if(icon)bench.panel.querySelector('.sc-brand img').src=icon;await bench.show('explore');return {bench,runtime};
+ if(icon)bench.panel.querySelector('.sc-brand img').src=icon;await bench.show('explore');
+ /* design-preview.html?filters=1 shows 상세 필터 open with a few include and
+    exclude rules on the fictional papers; &editor=tag (or journal, year, ...)
+    also opens that rule's editor, with its live counts. */
+ const flags=String(win.location?.search||'')+String(win.location?.hash||'');
+ if(/filters/.test(flags)){
+  await bench.filters.set([
+   {id:'demo1',kind:'year',mode:'in',min:2024,max:2026},
+   {id:'demo2',kind:'word',mode:'in',field:'all',text:'repair',phrase:true},
+   {id:'demo3',kind:'type',mode:'ex',values:['preprint']},
+   {id:'demo4',kind:'journal',mode:'ex',values:['Example Methods']}]);
+  bench.filters.open();
+  const wanted=flags.match(/editor=(\w+)/);if(wanted)await bench.filters.edit(wanted[1]);
+ }
+ /* &suggest=1 types 저널: into the search box, which lists the journals under it. */
+ if(/suggest/.test(flags)){const box=bench.panel.querySelector('[aria-label="작업 패널 검색"]');box.value='저널:exa';box.dispatchEvent(new win.Event('input',{bubbles:true}));box.focus?.();}
+ return {bench,runtime};
 })(window,CustomStyleWorkbench,CustomStyleWorkspace,CustomStyleReadingPath,CustomStylePaperGraph);</script></body></html>

@@ -191,7 +191,23 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  reader.saveAnnotationPalette=async()=>({id:'demo'});reader.closeOtherTabs=()=>({closed:0});
  const bench=Workbench.attach(win,{runtime,library,reader,model:Model,assist:{run:async()=> '이것은 실제 AI 호출 없이 표시한 예시 결과입니다.',cancel(){}}});
  doc.querySelector('link[href="content/workbench.css"]')?.remove();
- if(icon)bench.panel.querySelector('.sc-brand img').src=icon;await bench.show('explore');return {bench,runtime};
+ if(icon)bench.panel.querySelector('.sc-brand img').src=icon;await bench.show('explore');
+ /* design-preview.html?filters=1 shows 상세 필터 open with a few include and
+    exclude rules on the fictional papers; &editor=tag (or journal, year, ...)
+    also opens that rule's editor, with its live counts. */
+ const flags=String(win.location?.search||'')+String(win.location?.hash||'');
+ if(/filters/.test(flags)){
+  await bench.filters.set([
+   {id:'demo1',kind:'year',mode:'in',min:2024,max:2026},
+   {id:'demo2',kind:'word',mode:'in',field:'all',text:'repair',phrase:true},
+   {id:'demo3',kind:'type',mode:'ex',values:['preprint']},
+   {id:'demo4',kind:'journal',mode:'ex',values:['Example Methods']}]);
+  bench.filters.open();
+  const wanted=flags.match(/editor=(\w+)/);if(wanted)await bench.filters.edit(wanted[1]);
+ }
+ /* &suggest=1 types 저널: into the search box, which lists the journals under it. */
+ if(/suggest/.test(flags)){const box=bench.panel.querySelector('[aria-label="작업 패널 검색"]');box.value='저널:exa';box.dispatchEvent(new win.Event('input',{bubbles:true}));box.focus?.();}
+ return {bench,runtime};
 }
 const css=fs.readFileSync(path.join(root,'content/workbench.css'),'utf8');
 const {window:win,document:doc}=parseHTML('<html><head></head><body></body></html>');

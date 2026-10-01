@@ -97,7 +97,7 @@
       const byKey=new Map(items.map(i=>[i.key,String(i.id)]));
       for(let n=0;n<items.length;n++) {
         const item=items[n],creators=safe(()=>item.getCreators(),[]);
-        output.push({id:String(item.id),key:item.key,libraryID:item.libraryID,title:field(item,'title'),year:field(item,'date').match(/\b\d{4}\b/)?.[0]||'',authors:creators.map(c=>[c.firstName,c.lastName||c.name].filter(Boolean).join(' ')).join('; '),venue:field(item,'publicationTitle'),doi:field(item,'DOI'),issn:field(item,'ISSN'),url:field(item,'url'),tags:safe(()=>item.getTags(),[]).map(t=>t.tag),related:safe(()=>item.relatedItems,[]).map(k=>byKey.get(k)).filter(Boolean),itemType:safe(()=>Z.ItemTypes.getName(item.itemTypeID)),abstract:field(item,'abstractNote')});
+        output.push({id:String(item.id),key:item.key,libraryID:item.libraryID,title:field(item,'title'),year:field(item,'date').match(/\b\d{4}\b/)?.[0]||'',authors:creators.map(c=>[c.firstName,c.lastName||c.name].filter(Boolean).join(' ')).join('; '),venue:field(item,'publicationTitle'),journalAbbr:field(item,'journalAbbreviation'),doi:field(item,'DOI'),issn:field(item,'ISSN'),url:field(item,'url'),tags:safe(()=>item.getTags(),[]).map(t=>t.tag),related:safe(()=>item.relatedItems,[]).map(k=>byKey.get(k)).filter(Boolean),itemType:safe(()=>Z.ItemTypes.getName(item.itemTypeID)),abstract:field(item,'abstractNote')});
         if(n%100===99)await pause();
       }
       return output;
@@ -144,6 +144,25 @@
       try { return !!runtime?.legacyReading?.isBookkeeping(html); } catch (_) { return false; }
     };
     async function notes(ids) {return (await children(ids,'notes')).map(i=>{const html=safe(()=>i.getNote());return {id:String(i.id),parentID:i.parentID?String(i.parentID):null,title:safe(()=>i.getNoteTitle())||plain(html).split('\n')[0]||'(Untitled)',text:plain(html),html,modified:field(i,'dateModified')};}).filter(note=>!bookkeeping(note.html));}
+    /* 노트 있음 / 첨부 PDF 있음 filters: one read of the library gives every
+       paper's real notes (not the reading-time bookkeeping) and PDFs, plus the
+       first lines of those notes for the 단어 rule, instead of a lookup per paper. */
+    async function childCounts(ids) {
+      if(Array.isArray(ids)&&!ids.length)return {};
+      const wanted=Array.isArray(ids)?new Set(ids.map(Number)):null,out={};
+      for(const item of await all()) {
+        if(item.parentID==null||(wanted&&!wanted.has(Number(item.parentID))))continue;
+        const key=String(item.parentID);
+        if(item.isNote?.()) {
+          const html=safe(()=>item.getNote());if(bookkeeping(html))continue;
+          const row=out[key]||={notes:0,pdfs:0,noteTitles:[]};row.notes++;
+          if(row.noteTitles.length<20)row.noteTitles.push(safe(()=>item.getNoteTitle())||plain(html).split('\n')[0]||'');
+        } else if(item.isAttachment?.()&&item.attachmentContentType==='application/pdf') {
+          (out[key]||={notes:0,pdfs:0,noteTitles:[]}).pdfs++;
+        }
+      }
+      return out;
+    }
     async function annotations(ids) {
       const out=[];
       for(const i of await children(ids,'annotations')) {
@@ -538,7 +557,7 @@
       }
       return items.length;
     }
-    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
+    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

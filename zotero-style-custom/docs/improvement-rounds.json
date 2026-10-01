@@ -270,7 +270,7 @@
         },
         {
           "file": "src/workbench.js",
-          "marker": "최소 별점"
+          "marker": "ratingMin"
         }
       ],
       "tests": [
@@ -280,7 +280,7 @@
         },
         {
           "file": "test/workbench.test.mjs",
-          "name": "visible status year rating and sort controls filter exploration and reset together"
+          "name": "the sort control and the rule builder filter exploration and reset together; the old single-value row is gone"
         }
       ],
       "status": "verified",
