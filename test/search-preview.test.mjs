@@ -45,7 +45,7 @@ test("search preview: library filter counts, Export/View menus, version lines an
 	assert.equal(trace.library.start, "전체 12 / 미보유 11 / 보유함 1");
 	assert.equal(trace.library.withFacet, "전체 4 / 미보유 4 / 보유함 0", "counts follow the author facet");
 	assert.equal(trace.library.afterImport, "전체 12 / 미보유 9 / 보유함 3", "two added, one failed");
-	assert.deepEqual(trace.menu.labels, ["열: 기본", "열: 전체", "지표", "상세"]);
+	assert.deepEqual(trace.menu.labels, ["열: 기본", "열: 전체", "제목 아래 소속", "지표", "상세"]);
 	assert.deepEqual(trace.menu.export, ["CSV 복사", "CSV 저장"]);
 	assert.equal(trace.versions.explicit.line, "출판본: Cell · 2025 · 보유 · 결과에서 보기");
 	assert.equal(trace.versions.inferred.line, "출판본 추정: eLife · 2023 · 미보유 · 결과에서 보기");

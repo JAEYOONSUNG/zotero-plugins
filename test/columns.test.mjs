@@ -72,7 +72,7 @@ test("header drag moves keyed cells and widths in place while preserving checkbo
 	assert.equal(row.firstChild.firstChild, checkbox);
 	assert.equal(checkbox.checked, true);
 	assert.equal(h.state.selected.has(rec.key), true);
-	assert.equal(title.dataset.marquee, "title");
+	assert.equal(title.firstChild.dataset.marquee, "title");
 	assert.ok(refreshed >= 1);
 	assert.equal(titleCol.style.width, "411px");
 	assert.equal(h.get("cols").children.find(col => col.dataset.k === "year").style.width, "83px");

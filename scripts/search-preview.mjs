@@ -26,23 +26,31 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
 const require_ = (await import("node:module")).createRequire(import.meta.url);
 
 // Fictional records. Every title, author and DOI is made up (10.5555 is a test prefix).
+// Institutions are made up as well. aff[i] is [institution, country] for the i-th author, corr is the corresponding author.
+const EAST = ["Eastbridge University", "US"], KESTREL = ["Kestrel Institute", "GB"], HANBIT = ["Hanbit University", "KR"], MERIDIAN = ["Meridian Institute of Technology", "US"],
+	ALTMARK = ["University of Altmark", "DE"], SATO = ["Sato Research Institute", "JP"], LUMEN = ["Lumen University", "CN"], AURORA = ["Aurora Medical Institute", "CA"];
 export const FAKE = [
-	["Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs", ["Mina Kim", "Alex Rivera", "Jonas Park"], 2025, "Nature Methods", 214, "openalex", { doi: "10.5555/demo.001", pdf: true, jif: 32.1, abstract: "Fictional abstract for the design preview: a single-cell atlas of repair-stage cell states across three tissues." }],
-	["A practical framework for reproducible literature synthesis", ["Sora Lee", "Lin Chen"], 2024, "Science", 97, "crossref", { doi: "10.5555/demo.002", pdf: true, jif: 45.8 }],
-	["Spatial context and cell-state transitions in regeneration", ["Eva Morgan", "Hana Choi"], 2026, "bioRxiv", 3, "openalex", { doi: "10.5555/demo.003", pdf: true, preprint: true, server: "bioRxiv", publishedDoi: "10.5555/demo.004" }],
-	["Tissue-scale repair atlases from sparse sampling", ["Ren Ahn", "Paula Silva"], 2025, "Cell", 41, "crossref", { doi: "10.5555/demo.004", inLibrary: true, jif: 42.5 }],
-	["Benchmarks for repair-stage classifiers", ["Kai Oh", "Chris Voigtland"], 2024, "Nature Biotechnology", 66, "europepmc", { doi: "10.5555/demo.005", pdf: true, jif: 33.1 }],
-	["Preregistered synthesis of repair reviews", ["Dana Yu", "Sora Lee"], 2023, "eLife", 12, "openalex", { doi: "10.5555/demo.006", pdf: true, jif: 6.4 }],
-	["Compact editors from uncultivated bacteria", ["Jenna Dowd", "Sam Sternfield", "Priya Natarajan"], 2026, "Proceedings of the National Academy of Sciences", 18, "europepmc", { doi: "10.5555/demo.007", jif: 9.4 }],
-	["Guide design rules learned from a million targets", ["Jenna Dowd", "Marta Jinkova"], 2025, "Nucleic Acids Research", 88, "crossref", { doi: "10.5555/demo.008", pdf: true, jif: 13.1 }],
-	["Off-target profiling in primary human cells", ["Jenna Dowd", "Ben Oakley"], 2024, "Genome Biology", 203, "openalex", { doi: "10.5555/demo.009", pdf: true, jif: 10.1, abstract: "Fictional abstract for the design preview: guide-level off-target profiles across primary human cell types, compared between three editing enzymes." }],
-	["Delivery of editing enzymes across tissue barriers", ["Jenna Dowd", "Sam Sternfield"], 2025, "Cell Reports", 61, "europepmc", { doi: "10.5555/demo.010", jif: 7.5 }],
-	["Preregistered synthesis of repair reviews", ["Dana Yu", "Omar Haddad"], 2022, "medRxiv", 0, "europepmc", { doi: "10.5555/demo.011", preprint: true, server: "medRxiv" }],
+	["Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs", ["Mina Kim", "Alex Rivera", "Jonas Park"], 2025, "Nature Methods", 214, "openalex", { doi: "10.5555/demo.001", pdf: true, jif: 32.1, abstract: "Fictional abstract for the design preview: a single-cell atlas of repair-stage cell states across three tissues.", aff: [EAST, MERIDIAN, EAST], corr: 2, also: ["crossref"] }],
+	["A practical framework for reproducible literature synthesis", ["Sora Lee", "Lin Chen"], 2024, "Science", 97, "crossref", { doi: "10.5555/demo.002", pdf: true, jif: 45.8, abstract: "Fictional abstract for the design preview: a checklist for synthesis that another group can rerun.", aff: [HANBIT, LUMEN], corr: 1, review: true }],
+	["Spatial context and cell-state transitions in regeneration", ["Eva Morgan", "Hana Choi"], 2026, "bioRxiv", 3, "openalex", { doi: "10.5555/demo.003", pdf: true, preprint: true, server: "bioRxiv", publishedDoi: "10.5555/demo.004", aff: [KESTREL, HANBIT], corr: 1 }],
+	["Tissue-scale repair atlases from sparse sampling", ["Ren Ahn", "Paula Silva"], 2025, "Cell", 41, "crossref", { doi: "10.5555/demo.004", inLibrary: true, jif: 42.5, aff: [HANBIT, ALTMARK], corr: 1 }],
+	["Benchmarks for repair-stage classifiers", ["Kai Oh", "Chris Voigtland"], 2024, "Nature Biotechnology", 66, "europepmc", { doi: "10.5555/demo.005", pdf: true, jif: 33.1, abstract: "Fictional abstract for the design preview: held-out benchmarks for classifiers of repair stage.", aff: [SATO, MERIDIAN], corr: 0 }],
+	["Preregistered synthesis of repair reviews", ["Dana Yu", "Sora Lee"], 2023, "eLife", 12, "openalex", { doi: "10.5555/demo.006", pdf: true, jif: 6.4, aff: [LUMEN, HANBIT], corr: 1, also: ["europepmc"] }],
+	["Compact editors from uncultivated bacteria", ["Jenna Dowd", "Sam Sternfield", "Priya Natarajan"], 2026, "Proceedings of the National Academy of Sciences", 18, "europepmc", { doi: "10.5555/demo.007", jif: 9.4, aff: [AURORA, AURORA, KESTREL], corr: 0 }],
+	["Guide design rules learned from a million targets", ["Jenna Dowd", "Marta Jinkova"], 2025, "Nucleic Acids Research", 88, "crossref", { doi: "10.5555/demo.008", pdf: true, jif: 13.1, aff: [AURORA, ALTMARK], corr: 1 }],
+	["Off-target profiling in primary human cells", ["Jenna Dowd", "Ben Oakley"], 2024, "Genome Biology", 203, "openalex", { doi: "10.5555/demo.009", pdf: true, jif: 10.1, abstract: "Fictional abstract for the design preview: guide-level off-target profiles across primary human cell types, compared between three editing enzymes.", aff: [AURORA, EAST], corr: 0 }],
+	["Delivery of editing enzymes across tissue barriers", ["Jenna Dowd", "Sam Sternfield"], 2025, "Cell Reports", 61, "europepmc", { doi: "10.5555/demo.010", jif: 7.5, aff: [AURORA, AURORA], corr: 1 }],
+	["Preregistered synthesis of repair reviews", ["Dana Yu", "Omar Haddad"], 2022, "medRxiv", 0, "europepmc", { doi: "10.5555/demo.011", preprint: true, server: "medRxiv", aff: [LUMEN, KESTREL], corr: 1 }],
 	["Spatial context and cell-state transitions in regeneration: a commentary", ["Tara Novak"], 2022, "Example Journal of Tissue Studies", null, "crossref", { doi: "10.5555/demo.012" }]
 ];
 
 // demo3 names its published version (demo4, in the library) itself; demo11 is linked to demo6
 // only by title and first author; demo12 has a similar title and no link at all.
+function people(names, x) {
+	if (!x.aff) return null;
+	return names.map((n, i) => ({ name: n, position: i === 0 ? "first" : i === names.length - 1 ? "last" : "middle", corresponding: x.corr === i,
+		institution: x.aff[i]?.[0] || "", institutionId: x.aff[i] ? "I" + (x.aff[i][0].length * 1000 + x.aff[i][0].charCodeAt(0)) : null, country: x.aff[i]?.[1] || null, institutionH: null }));
+}
 function records(Sources) {
 	return Sources.linkPreprintVersions(FAKE.map(([title, names, year, venue, citations, source, x], i) => Sources.makeRecord({
 		source, sourceId: "demo" + (i + 1), title, year, venue, citations, doi: x.doi,
@@ -50,9 +58,25 @@ function records(Sources) {
 		authorString: names.join(", "), abstract: x.abstract || "",
 		pdfUrl: x.pdf ? "https://example.invalid/pdf/" + (i + 1) + ".pdf" : null,
 		itemType: x.preprint ? "preprint" : "journalArticle", preprintServer: x.server || null, publishedDoi: x.publishedDoi || null,
+		workType: x.review ? "review" : null, people: people(names, x), sources: x.also ? [source, ...x.also] : undefined,
 		journalIF: x.jif ?? null, journalIFEstimate: x.jif != null, journalH: x.jif ? Math.round(x.jif * 6) : null,
 		openAccess: Boolean(x.pdf)
 	})));
+}
+
+// Fifty-four years of fictional papers (1973-2026), thin in the old decades and thick in the recent ones,
+// for the year histogram's long span.
+export function longSpan(Sources) {
+	const out = [];
+	let n = 0;
+	for (let year = 1973; year <= 2026; year++) {
+		const count = year < 1990 ? (year === 1973 || year % 7 === 0 ? 1 : 0) : year < 2005 ? 1 + (year % 3) : year < 2015 ? 3 + (year % 4) : 5 + (year * 7) % 9;
+		for (let k = 0; k < count; k++, n++) {
+			out.push(Sources.makeRecord({ source: ["openalex", "crossref", "europepmc"][n % 3], sourceId: "span" + n, title: "Fictional long-span study " + (n + 1) + " of repair kinetics", year, venue: ["Cell", "Science", "eLife", "Nature Methods"][n % 4],
+				citations: (n * 37) % 300, doi: "10.5555/span." + (n + 1), authors: [{ name: "Author " + (n % 9), firstName: "Author", lastName: String(n % 9) }], authorString: "Author " + (n % 9), itemType: "journalArticle" }));
+		}
+	}
+	return out;
 }
 
 // Runs the real UI once and returns the two static pages as strings.
@@ -64,7 +88,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	const errors = [];
 	let netCalls = 0;
 	const importCalls = [];
-	const prefs = { language: locale, searchSurface: "papers", hintShown: true, multiSourceMigrated: true, defaultSource: "multi", multiSourceMigrated2: true };
+	const prefs = { language: locale, searchSurface: "papers", hintShown: true, multiSourceMigrated: true, defaultSource: "multi", multiSourceMigrated2: true, journalLookup: false };
 	const listeners = new Map();
 	// linkedom's window rejects assignments; the UI only needs a small window surface.
 	const win = { document, DOMParser: window.DOMParser, addEventListener: (name, fn) => { if (!listeners.has(name)) listeners.set(name, []); listeners.get(name).push(fn); },
@@ -101,7 +125,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 			getCurrentTarget: () => ({ libraryID: 1, collectionID: null }), forgetTitleIndex() {} }
 	});
 	win.Zotero = ctx.Zotero;
-	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
+	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "filters", "journals", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
 	// linkedom's dataset drops "data-i18n" (a digit in the name); read the attribute instead. Strings stay the real ones.
 	ctx.ZotPoPI18N.apply = (root, t) => {
 		for (const el of root.querySelectorAll("[data-i18n]")) el.textContent = t(el.getAttribute("data-i18n"));
@@ -110,7 +134,8 @@ export async function buildPreview({ locale = "en" } = {}) {
 		for (const el of root.querySelectorAll("[data-i18n-aria]")) el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria")));
 	};
 	// Same search function shape as the real one; only the network is replaced.
-	ctx.ZotPoPSources = Object.assign(Object.create(Sources), { search: async (_s, _q, _h, c) => { let out = runs++ ? [later, ...recs] : recs; c?.onResults?.(out, { final: false }); return out; } });
+	let lastQuery = null, override = null;
+	ctx.ZotPoPSources = Object.assign(Object.create(Sources), { search: async (_s, q, _h, c) => { lastQuery = q; let out = override || (runs++ ? [later, ...recs] : recs); c?.onResults?.(out, { final: false }); return out; } });
 	vm.runInContext(read("content/ui.js"), ctx, { filename: "ui.js" });
 	for (const fn of listeners.get("load") || []) fn();
 	await new Promise(r => setTimeout(r, 30));
@@ -285,6 +310,67 @@ export async function buildPreview({ locale = "en" } = {}) {
 	fire(rowOf("demo4"));
 	await wait(20);
 	const rerun = page();
+	// ---- the filter builder: a popover with rules, chips under the toolbar, the quick syntax of the box
+	const pop = () => document.getElementById("filter-pop");
+	const chipTexts = () => [...document.querySelectorAll("#filter-chips .fchip")].map(c => c.textContent.replace(/\s+/g, " ").trim());
+	const key = (el, k, extra = {}) => { const e = new window.Event("keydown", { bubbles: true, cancelable: true }); Object.assign(e, { key: k }, extra); el.dispatchEvent(e); return e; };
+	const addRule = async kind => { fire(pop().querySelector(`[data-fid="add:${kind}"]`)); await wait(5); return [...pop().querySelectorAll(".fp-rule")].at(-1).getAttribute("data-rule"); };
+	const pick = (id, value) => { const cb = pop().querySelector(`[data-fid="opt:${id}:${value}"]`); cb.checked = true; fire(cb, "change"); };
+	const setMode = (id, m) => fire(pop().querySelector(`[data-fid="mode:${id}:${m}"]`));
+	const setRange = async (id, which, v) => { const input = pop().querySelector(`[data-fid="rule:${id}:${which === "min" ? "first" : "max"}"]`); input.value = v; fire(input, "input"); await wait(300); };
+	const optionTexts = () => [...pop().querySelectorAll(".fp-opt")].map(o => o.textContent.replace(/\s+/g, " ").trim());
+	trace.filters = { before: shown().length };
+	const filterBox = document.getElementById("filter");
+	filterBox.value = "journal:Cell -author:Kim"; fire(filterBox, "input"); await wait(200);
+	trace.filters.quick = { rows: shown().map(Number).sort((a, b) => a - b) };
+	filterBox.value = "\"cell-state transitions\" -commentary"; fire(filterBox, "input"); await wait(200);
+	trace.filters.phrase = { rows: shown().map(Number).sort((a, b) => a - b) };
+	filterBox.value = "-commentary"; fire(filterBox, "input"); await wait(200);
+	trace.filters.negation = shown().length;
+	fire(document.getElementById("filter-btn"));
+	trace.filters.opened = { hidden: pop().hidden, expanded: document.getElementById("filter-btn").getAttribute("aria-expanded"), title: pop().querySelector("h3")?.textContent, kinds: pop().querySelectorAll(".fp-kinds .fp-chip").length };
+	const rJournal = await addRule("journal");
+	trace.filters.journalOptions = optionTexts().slice(0, 4);
+	setMode(rJournal, "exclude");
+	pick(rJournal, "biorxiv"); pick(rJournal, "medrxiv");
+	trace.filters.excludeJournal = { rows: shown().length, chips: chipTexts() };
+	const rAuthor = await addRule("author");
+	pick(rAuthor, "name:jenna dowd"); pick(rAuthor, "name:sora lee");
+	trace.filters.author = { rows: shown().map(Number).sort((a, b) => a - b), chips: chipTexts() };
+	const rYear = await addRule("year");
+	await setRange(rYear, "min", "2024");
+	trace.filters.year = { rows: shown().map(Number).sort((a, b) => a - b), chips: chipTexts() };
+	// the author rule open: every author still on offer, with what picking one leaves
+	fire(pop().querySelector(`[data-fid="rule:${rAuthor}:toggle"]`));
+	trace.filters.authorOptions = optionTexts().slice(0, 6);
+	trace.filters.shownLine = pop().querySelector(".fp-shown")?.textContent;
+	trace.filters.metrics = { papers: text("m-papers"), bars: document.querySelectorAll("#metrics-years .yr-bar").length, lib: libLine() };
+	// Hung under the Filter button the way positionFilterPop does in a real window (no layout here to measure).
+		Object.assign(pop().style, { top: "148px", left: "min(472px, calc(100vw - 536px))", width: "528px", maxHeight: "calc(100vh - 164px)" });
+	const filtersPage = page();
+	// keyboard: Escape closes, and the chips stay
+	key(pop(), "Escape");
+	trace.filters.escape = { hidden: pop().hidden, expanded: document.getElementById("filter-btn").getAttribute("aria-expanded"), chips: chipTexts().length };
+	// a chip opens its rule again; its x lets one go
+	fire(document.querySelector("#filter-chips .fchip-main"));
+	trace.filters.chipEdit = { open: !pop().hidden, editors: pop().querySelectorAll(".fp-edit").length };
+	key(pop(), "Escape");
+	const sizeBefore = shown().length;
+	fire(document.querySelector("#filter-chips .fchip .filter-clear"));
+	trace.filters.chipRemove = { chips: chipTexts().length, rowsBefore: sizeBefore, rows: shown().length };
+	fire(document.querySelector("#filter-chips .fchip-clear"));
+	trace.filters.cleared = { rows: shown().length, chips: chipTexts().length };
+	filterBox.value = ""; fire(filterBox, "input"); await wait(200);
+	// institutions: the table's second line, the detail's authors with an index into the institutions, a click filters
+	fire(rowOf("demo1"));
+	await wait(20);
+	trace.affiliations = { line: [...document.querySelectorAll("#results-body tr")].map(tr => tr.querySelector(".t-aff")?.textContent || ""), rowAttr: document.getElementById("results-table").hasAttribute("data-aff"),
+		detail: text("d-authors").replace(/\s+/g, " ").trim(), instButtons: [...document.querySelectorAll("#d-authors .au-inst-btn")].map(b => b.textContent) };
+	fire(document.querySelector("#d-authors .au-inst-btn"));
+	await wait(20);
+	trace.affiliations.filtered = { rows: shown().map(Number).sort((a, b) => a - b), chips: chipTexts() };
+	fire(document.querySelector("#filter-chips .fchip-clear"));
+	await wait(20);
 	// ---- the author tab: a profile lookup, then that profile's papers (stubbed lookups; fictional people)
 	const dowd = recs.filter(r => r.authorString.startsWith("Jenna Dowd"));
 	const profiles = [
@@ -314,19 +400,59 @@ export async function buildPreview({ locale = "en" } = {}) {
 	fire(document.getElementById("cond-toggle"));
 	trace.fold.afterClick = { collapsed: document.getElementById("query-form").classList.contains("collapsed"), expanded: document.getElementById("cond-toggle").getAttribute("aria-expanded") };
 	const unfolded = page();
+	// ---- the journal box: suggestions as you type, picked journals as chips, the search covers any of them
+	const venue = document.getElementById("venue");
+	const typeVenue = async v => { venue.value = v; fire(venue, "input"); await wait(40); };
+	const options = () => [...document.querySelectorAll("#venue-list .jopt")].map(o => o.textContent.replace(/\s+/g, " ").trim());
+	trace.journals = {};
+	await typeVenue("nat meth");
+	trace.journals.natMethods = options();
+	key(venue, "ArrowDown"); key(venue, "Enter");
+	await typeVenue("PNAS"); trace.journals.pnas = options().slice(0, 3);
+	key(venue, "ArrowDown"); key(venue, "Enter");
+	await typeVenue("nar"); trace.journals.nar = options().slice(0, 3);
+	key(venue, "ArrowDown"); key(venue, "Enter");
+	trace.journals.chips = [...document.querySelectorAll("#venue-chips .jchip")].map(c => c.getAttribute("title"));
+	await typeVenue("proc natl acad");
+	trace.journals.typed = { listOpen: !document.getElementById("venue-list").hidden, expanded: venue.getAttribute("aria-expanded"), options: options().slice(0, 4) };
+	key(venue, "ArrowDown");
+	trace.journals.active = document.querySelector("#venue-list .jopt.hot")?.textContent.replace(/\s+/g, " ").trim();
+	const journalsPage = page();
+	key(venue, "Escape");
+	trace.journals.escape = { hidden: document.getElementById("venue-list").hidden, chips: document.querySelectorAll("#venue-chips .jchip").length };
+	venue.value = "";
+	fire(document.getElementById("query-form"), "submit");
+	await wait(100);
+	trace.journals.query = { venue: lastQuery.venue, venues: (lastQuery.venues || []).map(v => v.name), issnCounts: (lastQuery.venues || []).map(v => v.issns.length) };
+	for (const b of [...document.querySelectorAll("#venue-chips .filter-clear")].reverse()) fire(b);
+	trace.journals.afterRemove = document.querySelectorAll("#venue-chips .jchip").length;
+	// ---- a long span of years: binned, flush to a baseline, labelled at both ends
+	override = longSpan(Sources);
+	fire(document.getElementById("query-form"), "submit");
+	for (let i = 0; i < 100 && shown().length < 50; i++) await wait(20);
+	await wait(80);
+	const bars = [...document.querySelectorAll("#metrics-years .yr-bar")];
+	trace.longSpan = { rows: shown().length, bars: bars.length, ends: [...document.querySelectorAll("#metrics-years .yr-ends span")].map(e => e.textContent), first: bars[0]?.getAttribute("title"), last: bars.at(-1)?.getAttribute("title"),
+		basis: document.querySelectorAll("#metrics-basis button").length };
+	fire(bars[3], "mousedown");
+	await wait(20);
+	trace.longSpan.selected = { rows: shown().length, range: document.querySelector("#metrics-years .yr-clear")?.textContent, title: [...document.querySelectorAll("#metrics-years .yr-bar")][3].getAttribute("title") };
+	fire(document.querySelector("#metrics-years .yr-clear"));
+	await wait(20);
+	const longSpanPage = page();
 	fire(document.getElementById("cond-toggle"));
-	return { results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, unfolded, trace, rows: rows.length, netCalls, errors };
+	return { results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, unfolded, filtersPage, journalsPage, longSpanPage, trace, rows: rows.length, netCalls, errors };
 }
 
 export function checkPreview(out) {
 	const problems = [];
 	if (out.rows < 10) problems.push("expected at least 10 result rows, got " + out.rows);
 	if (out.netCalls) problems.push("network was called");
-	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["unfolded", out.unfolded]]) {
+	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["unfolded", out.unfolded], ["filters", out.filtersPage], ["journals", out.journalsPage], ["longspan", out.longSpanPage]]) {
 		if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
 		if (/(?:src|href)\s*=\s*["'](?:https?:|\/\/|chrome:|resource:)/i.test(html)) problems.push(name + ": external asset");
 		if (/url\(\s*["']?(?:https?:|\/\/|chrome:)/i.test(html)) problems.push(name + ": external css url");
-		if (name === "history" || name === "rerun" || name === "unfolded" || name.startsWith("authors")) { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
+		if (["history", "rerun", "unfolded", "filters", "journals", "longspan"].includes(name) || name.startsWith("authors")) { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
 		for (const needle of ['id="results-table"', 'id="results-body"', 'id="query-form"', name === "facet" ? "Off-target profiling" : "Mapping cellular responses"]) if (!html.includes(needle)) problems.push(name + ": missing " + needle);
 	}
 	if (!out.results.includes('class="in-library')) problems.push("no in-library row");
@@ -334,9 +460,9 @@ export function checkPreview(out) {
 	const t = out.trace, same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 	if (t.columns.basic !== "basic" || t.columns.all !== "all" || t.columns.back !== "basic") problems.push("column view did not switch basic/all/basic");
 	if (t.columns.statusAttr) problems.push("status column shown before any status");
-	if (!t.menu.open || t.menu.expanded !== "true" || t.menu.labels.length !== 4 || !same(t.menu.roles, ["menuitemradio", "menuitemradio", "menuitemcheckbox", "menuitemcheckbox"])) problems.push("the View menu should open with two radio items and two checkable items; got " + JSON.stringify(t.menu));
+	if (!t.menu.open || t.menu.expanded !== "true" || t.menu.labels.length !== 5 || !same(t.menu.roles, ["menuitemradio", "menuitemradio", "menuitemcheckbox", "menuitemcheckbox", "menuitemcheckbox"])) problems.push("the View menu should open with two radio items and three checkable items; got " + JSON.stringify(t.menu));
 	if (!t.menu.closed || !t.menu.closedByOutsideClick) problems.push("a menu should close after a choice and on an outside click");
-	if (!same(t.menu.reopened, ["false", "true", "true", "true"])) problems.push("the reopened View menu should show Columns: all as chosen; got " + t.menu.reopened);
+	if (!same(t.menu.reopened, ["false", "true", "true", "true", "true"])) problems.push("the reopened View menu should show Columns: all as chosen; got " + t.menu.reopened);
 	if (t.menu.export.length < 2) problems.push("the Export menu should offer copy and save");
 	if (!/전체 12 \/ 미보유 11 \/ 보유함 1|All 12 \/ Not owned 11 \/ Owned 1/.test(t.library.start)) problems.push("the library filter should start at 12 / 11 / 1; got " + t.library.start);
 	if (!/4 \/ .* 4 \/ .* 0$/.test(t.library.withFacet)) problems.push("the library counts should follow the author facet; got " + t.library.withFacet);
@@ -392,6 +518,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.writeFileSync(path.join(root, "docs/search-preview-unfolded.html"), out.unfolded);
 	fs.writeFileSync(path.join(root, "docs/search-preview-authors.html"), out.authorsPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-authors-lookup.html"), out.authorsLookup);
+	fs.writeFileSync(path.join(root, "docs/search-preview-filters.html"), out.filtersPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-journals.html"), out.journalsPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-longspan.html"), out.longSpanPage);
 	console.log(`ZotPoP search preview: real markup, CSS and ui.js, ${out.rows} fictional rows, no network: docs/search-preview.html, docs/search-preview-detail.html`);
 	process.exit(0);
 }

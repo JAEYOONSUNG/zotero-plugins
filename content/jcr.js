@@ -71,9 +71,11 @@ var ZotPoPJCR = (function () {
 		};
 	}
 
-	let table = null;
+	let table = null, held = null;
 	// Rows as the export gives them: [title, abbreviation, issn, eIssn, jif].
-	function load(rows) { table = build(Array.isArray(rows) ? rows : []); return table; }
+	function load(rows) { held = Array.isArray(rows) ? rows : []; table = build(held); return table; }
+	// The rows the table was built from: the journal box finds journals by their JCR names and abbreviations too.
+	function rows() { return held || (typeof ZotPoPJCRData !== "undefined" ? ZotPoPJCRData : []); }
 	function shared() {
 		if (!table) table = build(typeof ZotPoPJCRData !== "undefined" ? ZotPoPJCRData : []);
 		return table;
@@ -95,7 +97,7 @@ var ZotPoPJCR = (function () {
 		return n;
 	}
 
-	return { EDITION, build, load, shared, apply, flat, issnKey };
+	return { EDITION, build, load, rows, shared, apply, flat, issnKey };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPJCR;

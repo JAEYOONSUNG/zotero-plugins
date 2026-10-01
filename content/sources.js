@@ -380,6 +380,79 @@ var ZotPoPSources = (function () {
 		return Boolean(q.identifier || (q.keywords || "").trim() || (q.authors || "").trim() || (q.title || "").trim() || (q.venue || "").trim());
 	}
 
+	// ---------------------------------------------------------------- several journals in one query
+	/* The window may pass `venues`: the journals a reader picked, [{ name, issns, openalexId }]. One journal
+	   is just the venue box. Several are an OR: OpenAlex takes the whole list in one filter (resolved to its
+	   source ids once and kept), every other source is asked once per journal and the answers are merged. */
+	function normalizeVenues(list) {
+		let out = [], seen = new Set();
+		for (let v of Array.isArray(list) ? list : []) {
+			let name = String(typeof v === "string" ? v : v?.name || "").replace(/\s+/g, " ").trim();
+			let key = normalizedText(name);
+			if (!key || seen.has(key)) continue;
+			seen.add(key);
+			out.push({ name, issns: (typeof v === "object" && Array.isArray(v.issns) ? v.issns : []).map(i => String(i)).filter(Boolean), openalexId: typeof v === "object" && /^S\d+$/.test(v.openalexId || "") ? v.openalexId : null });
+		}
+		return out;
+	}
+	// What matches records of any of these journals: their names and ISSNs joined with OR (names quoted).
+	function venueExpression(venues) {
+		if (venues.length === 1) return venues[0].name;
+		let terms = [];
+		for (let v of venues) {
+			terms.push('"' + v.name.replace(/["\\]/g, " ").replace(/\s+/g, " ").trim() + '"');
+			for (let issn of v.issns) if (!terms.includes(issn)) terms.push(issn);
+		}
+		return terms.join(" OR ");
+	}
+	const OPENALEX_SOURCE_IDS = new Map();
+	// Journal -> OpenAlex source ids. A picked journal that carries its id costs nothing; one with ISSNs is
+	// looked up in a single request for all of them; one with a name alone is searched as a single venue is.
+	async function openAlexSourceIds(venues, http, ctx) {
+		let ids = new Set(), byIssn = [], byName = [];
+		for (let v of venues) {
+			if (v.openalexId) { ids.add(v.openalexId); continue; }
+			let held = OPENALEX_SOURCE_IDS.get(normalizedText(v.name));
+			if (held) { for (let id of held) ids.add(id); continue; }
+			(v.issns.length ? byIssn : byName).push(v);
+		}
+		if (byIssn.length) {
+			let issns = [...new Set(byIssn.flatMap(v => v.issns))];
+			let data = await withRetry(() => http.getJSON("https://api.openalex.org/sources?filter=issn:" + issns.map(enc).join("|") + "&select=id,display_name,issn&per-page=50" + openAlexAuth(ctx)), {}, ctx);
+			let found = (data.results || []).map(x => ({ id: openAlexId(x.id), issns: (x.issn || []).map(String) })).filter(x => x.id);
+			for (let v of byIssn) {
+				let mine = found.filter(x => x.issns.some(i => v.issns.includes(i))).map(x => x.id);
+				if (!mine.length) { byName.push(v); continue; }
+				OPENALEX_SOURCE_IDS.set(normalizedText(v.name), mine);
+				for (let id of mine) ids.add(id);
+			}
+		}
+		for (let v of byName) {
+			let data = await withRetry(() => http.getJSON("https://api.openalex.org/sources?search=" + enc(v.name) + "&per-page=5" + openAlexAuth(ctx)), {}, ctx);
+			let candidates = data.results || [], name = normalizedText(v.name);
+			let exact = candidates.filter(x => [x.display_name, x.abbreviated_title, ...(x.alternate_titles || [])].some(n => n && normalizedText(n) === name));
+			let mine = (exact.length ? exact : candidates).map(x => openAlexId(x.id)).filter(Boolean);
+			if (mine.length) OPENALEX_SOURCE_IDS.set(name, mine);
+			for (let id of mine) ids.add(id);
+		}
+		return [...ids];
+	}
+	// A source that takes one journal at a time is asked once per journal and the answers are pooled.
+	function perJournal(fn) {
+		return async function (q, http, ctx) {
+			if (!Array.isArray(q.venues) || q.venues.length < 2) return fn(q, http, ctx);
+			let out = [], failed = null;
+			for (let v of q.venues) {
+				throwIfCancelled(ctx);
+				try { out.push(...await fn(Object.assign({}, q, { venue: v.name, venues: undefined }), http, ctx)); }
+				catch (e) { if (e.name === "AbortError") throw e; failed = failed || e; }
+			}
+			if (failed && !out.length) throw failed;
+			if (failed) (ctx.errors || (ctx.errors = [])).push(failed.message);
+			return out;
+		};
+	}
+
 	// ---------------------------------------------------------------- OpenAlex
 	function openAlexAbstract(inv) {
 		if (!inv || typeof inv !== "object") return "";
@@ -483,7 +556,12 @@ var ZotPoPSources = (function () {
 		}
 		if (q.yearFrom) filters.push("from_publication_date:" + q.yearFrom + "-01-01");
 		if (q.yearTo) filters.push("to_publication_date:" + q.yearTo + "-12-31");
-		if (q.venue?.trim()) {
+		if (q.venues?.length > 1) {
+			let ids = await openAlexSourceIds(q.venues, http, ctx);
+			if (!ids.length) return [];
+			filters.push("primary_location.source.id:" + ids.join("|"));
+		}
+		else if (q.venue?.trim()) {
 			// Resolve the venue to an OpenAlex source id first
 			let s = await withRetry(() => http.getJSON("https://api.openalex.org/sources?search=" + enc(q.venue.trim()) + "&per-page=5" + openAlexAuth(ctx)), {}, ctx);
 			let candidates = s.results || [];
@@ -545,7 +623,9 @@ var ZotPoPSources = (function () {
 					issue: w.biblio?.issue || "",
 					pages: w.biblio?.first_page ? (w.biblio.last_page && w.biblio.last_page !== w.biblio.first_page ? w.biblio.first_page + "-" + w.biblio.last_page : w.biblio.first_page) : "",
 					abstract: openAlexAbstract(w.abstract_inverted_index),
-					itemType: OPENALEX_TYPES[w.type] || "journalArticle"
+					itemType: OPENALEX_TYPES[w.type] || "journalArticle",
+					// OpenAlex says "review" where itemType has only articles: kept for the results filter.
+					workType: w.type || null
 				}));
 			}
 			seen += results.length;
@@ -1674,7 +1754,8 @@ var ZotPoPSources = (function () {
 			// identifies it by PMID, never by DOI -- the observed entry is
 			// {source:"MED", id:"38289242", type:"Preprint of"} -- so that is what is kept.
 			publishedPmid: isPreprint ? epmcPublishedPmid(r) : null,
-			itemType: isPreprint ? "preprint" : "journalArticle"
+			itemType: isPreprint ? "preprint" : "journalArticle",
+			workType: (r.pubTypeList?.pubType || []).some(t => /review/i.test(t)) ? "review" : null
 		});
 	}
 
@@ -2378,6 +2459,7 @@ var ZotPoPSources = (function () {
 		if (!a.year && b.year) a.year = b.year;
 		if (!a.publicationDate && b.publicationDate) a.publicationDate = b.publicationDate;
 		if (!a.venue && b.venue) a.venue = b.venue;
+		if (!a.workType && b.workType) a.workType = b.workType;
 		if (!a.publisher && b.publisher) a.publisher = b.publisher;
 		// The one source that knows a posting is on bioRxiv must not lose that when it merges
 		// with a source that only knows the DOI, or the posting reads as a journal article.
@@ -2626,6 +2708,8 @@ var ZotPoPSources = (function () {
 		scholar: { label: "Google Scholar", search: searchScholar, hasCitations: true }
 	};
 	SOURCES.multi = { label: "Combined (OpenAlex + Crossref + Europe PMC + arXiv)", search: searchMulti, hasCitations: true, multi: true };
+	// OpenAlex takes a list of journals natively; the others are asked one journal at a time.
+	for (let key of Object.keys(SOURCES)) if (key !== "openalex" && key !== "multi") SOURCES[key].search = perJournal(SOURCES[key].search);
 
 	function dedupe(records) {
 		return mergeRecords([records]);
@@ -2639,12 +2723,17 @@ var ZotPoPSources = (function () {
 		throwIfCancelled(ctx);
 		query = Object.assign({ sort: "relevance", maxResults: 200 }, query);
 		for (let key of ["keywords", "title", "authors", "venue"]) query[key] = String(query[key] || "").trim();
+		// Several journals: the list is kept (sources fan out over it) and the venue becomes their OR expression for matching.
+		query.venues = normalizeVenues(query.venues);
+		if (query.venues.length > 1) query.venue = venueExpression(query.venues);
+		else if (query.venues.length === 1) query.venue = query.venues[0].name;
+		else delete query.venues;
 		// A DOI, PMID, PMCID or arXiv id pasted on its own names one paper. Searched as
 		// text it named 6,528,758 candidates on Crossref and found none of them.
 		let pasted = IDENTIFIER_SOURCES.has(sourceKey) ? identifierQuery(query) : null;
 		if (pasted) {
 			pasted.raw = query[pasted.field];
-			query = Object.assign({}, query, { identifier: pasted, keywords: "", title: "", authors: "", venue: "" });
+			query = Object.assign({}, query, { identifier: pasted, keywords: "", title: "", authors: "", venue: "", venues: undefined });
 		}
 		if (sourceKey === "multi" && query.sources !== undefined) {
 			let allowed = [...MULTI_SOURCES, "pubmed", "semanticscholar", "scholar"];
@@ -2694,7 +2783,7 @@ var ZotPoPSources = (function () {
 	}
 
 	return {
-		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, withRetry, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
+		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, normalizeVenues, venueExpression, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, withRetry, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();

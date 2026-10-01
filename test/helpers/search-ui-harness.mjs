@@ -7,6 +7,8 @@ import Affiliations from "../../content/affiliations.js";
 import JournalMarks from "../../content/journal-marks.js";
 import JCR from "../../content/jcr.js";
 import Authors from "../../content/authors.js";
+import Filters from "../../content/filters.js";
+import Journals from "../../content/journals.js";
 
 export const paper = (key, extra = {}) => ({
 	key, title: key, citations: 1, year: 2026, authors: [], ...extra
@@ -144,6 +146,8 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPPreview: Preview,
 		ZotPoPHistory: { ...History, memoryIO: () => History.memoryIO(historyFiles) },
 		ZotPoPAffiliations: Affiliations,
+		ZotPoPFilters: Filters,
+		ZotPoPJournals: Journals,
 		ZotPoPJournalMarks: JournalMarks,
 		ZotPoPJCR: JCR,
 		ZotPoPMarquee: marquee || { attach: () => ({ refresh() {}, refreshCell() {} }) },
@@ -165,6 +169,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		globalThis.harness = { journalMark, state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
 			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, renderVersions, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
+			yearBins, filterSpec, addRule, openFilterPop, closeFilterPop, syncFilterUI, clearAllFilters, affLineParts, shortInstitution, renderAuthors, addVenueChip, removeVenueChip, setVenueChips, refreshVenueSuggestions, onVenueKey, wireVenueBox, ensureJournalCatalog,
 			searchMode: () => searchSurface, authorSessions,
 			get history() { return history; },
 			setOpenSelectForTest: value => { openSel = value; } };

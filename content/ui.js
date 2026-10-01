@@ -1,4 +1,4 @@
-/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee, ZotPoPHistory, ZotPoPAffiliations, ZotPoPJournalMarks */
+/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee, ZotPoPHistory, ZotPoPAffiliations, ZotPoPJournalMarks, ZotPoPFilters, ZotPoPJournals */
 "use strict";
 
 (function () {
@@ -97,11 +97,18 @@
 		colWidths: Object.assign({}, DEFAULT_COLS),
 		colOrder: [...COLUMN_KEYS],
 		colsMode: "basic",
+		// The muted second line under each title: first and corresponding author with their institutions.
+		affLine: true,
 		facet: null,
 		selectedOnly: false,
 		// "all" | "new" | "owned": whether the library already has the paper.
 		libraryFilter: "all",
-		libCounts: { all: 0, new: 0, owned: 0 }
+		libCounts: { all: 0, new: 0, owned: 0 },
+		// The filter builder's rules ({ kind, mode, values, ... }, see content/filters.js) and its popover.
+		rules: [],
+		filterOpen: false,
+		filterEdit: null,
+		filterQ: {}
 	};
 	let marquee = null;
 	let history = null;
@@ -356,6 +363,7 @@
 		$("author-stop-btn").addEventListener("click", stopOperation);
 		$("author-help-toggle")?.addEventListener("click", () => { state.authorHelpOpen = !state.authorHelpOpen; updateAuthorHint(); });
 		$("author-history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(); });
+		wireVenueBox();
 		$("query-form").addEventListener("submit", e => { e.preventDefault(); runSearch(); });
 		$("query-form").addEventListener("input", cancelCacheRestore);
 		$("query-form").addEventListener("change", cancelCacheRestore);
@@ -370,6 +378,16 @@
 		$("filter").addEventListener("input", () => { syncFilterClear(); clearTimeout(filterTimer); filterTimer = setTimeout(() => { filterTimer = null; render(); }, 120); });
 		$("filter").addEventListener("keydown", e => { if (e.key === "ArrowDown") { e.preventDefault(); $("table-wrap").focus(); } });
 		$("filter-clear")?.addEventListener("click", () => { clearFilter(); $("filter").focus(); });
+		$("filter-btn")?.addEventListener("click", e => { e.stopPropagation(); toggleFilterPop(); });
+		$("filter-pop")?.addEventListener("keydown", onFilterPopKey);
+		window.addEventListener("resize", () => { if (state.filterOpen) positionFilterPop(); });
+		// A press anywhere else lets the popover go; the keyboard stays where the press put it.
+		document.addEventListener("mousedown", e => {
+			if (!state.filterOpen) return;
+			let el = e.target;
+			if (el?.closest?.("#filter-pop, #filter-btn, .fchip")) return;
+			closeFilterPop(false);
+		});
 		syncFilterClear();
 		$("chk-all").addEventListener("change", e => selectVisible(e.target.checked));
 		$("facet-clear")?.addEventListener("click", () => setFacet(null));
@@ -624,12 +642,12 @@
 	function currentSurfaceKey() { return searchSurface === "authors" ? "author:" + activeAuthorProvider : "papers"; }
 	function saveSurfaceResults() {
 		surfaceSnapshots.set(currentSurfaceKey(), { records: state.records, selected: new Set(state.selected), focusKey: state.focusKey,
-			detailKey: state.detailKey, sortKey: state.sortKey, sortDir: state.sortDir, filter: $("filter").value });
+			detailKey: state.detailKey, sortKey: state.sortKey, sortDir: state.sortDir, filter: $("filter").value, rules: state.rules });
 	}
 	function restoreSurfaceResults() {
 		let saved = surfaceSnapshots.get(currentSurfaceKey());
 		Object.assign(state, saved || { records: [], selected: new Set(), focusKey: null, detailKey: null, sortKey: "rank", sortDir: "asc" });
-		$("filter").value = saved?.filter || ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
+		resetFilters(); $("filter").value = saved?.filter || ""; state.rules = saved?.rules || [];
 	}
 	function applySearchSurface() {
 		$("query-form").hidden = searchSurface === "authors";
@@ -762,7 +780,7 @@
 		session.profile = query.authorProfile || entry.records?.[0]?.authorProfile || null;
 		session.profiles = Array.isArray(query.authorProfiles) && query.authorProfiles.length ? query.authorProfiles : session.profile ? [session.profile] : [];
 		session.action = authorAction = query.authorAction || "profiles";
-		state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
+		state.selected.clear(); state.focusKey = null; state.detailKey = null; resetFilters();
 		state.sortKey = entry.records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc";
 		displaySearchResults(entry.records); updateAuthorHint(); renderAuthorProfiles(); saveAuthorPreferences();
 		setStatus(query.authorAction === "profiles" ? t("authorProfilesFound", session.profiles.length) : t("historyRestored", entry.records.length));
@@ -790,7 +808,7 @@
 		session.action = action;
 		if (action !== "publications") { session.profiles = []; session.profile = null; } else session.profile = profile;
 		saveAuthorPreferences();
-		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; $("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
+		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; resetFilters();
 		state.searching = true; state.cancelled = false;
 		let resolveDone; state.searchDone = new Promise(resolve => { resolveDone = resolve; });
 		let controller = state.searchController = new AbortController();
@@ -854,6 +872,192 @@
 	}
 
 	// ------------------------------------------------------------ query persistence
+	// ------------------------------------------------------------ the journal box
+	/* The publication field of the form finds journals as you type: full names, the abbreviation a
+	   reference list prints ("Nat Methods", "Proc Natl Acad Sci") and the letters people say ("PNAS",
+	   "NAR", "JACS"), from lists on this machine, with OpenAlex's autocomplete asked only when those
+	   have fewer than five answers. A journal picked becomes a chip in the field; several can be
+	   picked and the search covers any of them. Typing a name and pressing Search without picking works
+	   as it always did. The builder's journal rule picks from the results instead (counts), so the two
+	   share the look, not the list. */
+	const J = ZotPoPJournals;
+	const JOURNAL_LIMIT = 8;
+	let journalCatalog = null, journalCatalogLoading = null, journalLookupSeq = 0, journalLookupTimer = null, journalLookupAbort = null;
+	const journalLookupCache = new Map();
+	state.venueChips = [];
+	state.jsug = { items: [], active: -1, open: false, pending: false, query: "" };
+
+	async function loadJournalRegistry() {
+		// The reader's own copy first (it may hold licensed figures), then the one packaged with the plugin.
+		try {
+			let io = diskIO();
+			if (io) { let path = dataPath("journals", "journal-registry.json"); if (await io.exists(path)) return JSON.parse(await io.readText(path)).journals || []; }
+		} catch (e) { log("journal registry (local) not read: " + (e && e.message)); }
+		try {
+			if (typeof fetch === "function") { let res = await fetch("chrome://zotpop/content/journal-registry.json"); return (await res.json()).journals || []; }
+		} catch (e) { log("journal registry not read: " + (e && e.message)); }
+		return [];
+	}
+	function ensureJournalCatalog() {
+		if (journalCatalog) return Promise.resolve(journalCatalog);
+		journalCatalogLoading ||= (async () => {
+			let registry = typeof J.held === "function" && J.held() ? J.held() : await loadJournalRegistry();
+			let jcr = typeof ZotPoPJCR !== "undefined" && typeof ZotPoPJCR.rows === "function" ? ZotPoPJCR.rows() : [];
+			journalCatalog = J.build({ curated: ZotPoPJournalMarks.ABBREVIATIONS, abbreviate: ZotPoPJournalMarks.abbreviateByWords, registry, jcr });
+			return journalCatalog;
+		})();
+		return journalCatalogLoading;
+	}
+
+	// ---- chips
+	function renderVenueChips() {
+		let box = $("venue-chips"); if (!box) return;
+		box.textContent = "";
+		state.venueChips.forEach((chip, i) => {
+			let el = fel("span", "jchip");
+			el.title = [chip.name, chip.abbrev].filter(Boolean).join(" · ");
+			el.appendChild(fel("span", "jchip-name", chip.name));
+			el.appendChild(fbutton("filter-clear", "×", t("venueChipRemove", chip.name), () => { removeVenueChip(i); $("venue").focus(); }));
+			box.appendChild(el);
+		});
+		$("venue-box")?.classList.toggle("has-chips", state.venueChips.length > 0);
+		// With journals picked the field takes more of the row, so the chips lie side by side instead of stacking.
+		$("venue-box")?.parentNode?.classList?.toggle("wide", state.venueChips.length > 0);
+		$("venue")?.setAttribute("placeholder", state.venueChips.length ? t("venueMorePh") : t("venuePh"));
+	}
+	// The same journal can arrive under two spellings (PNAS's short and official names), so a chip
+	// also matches by ISSN, OpenAlex id or abbreviation, not only by its name.
+	function sameJournal(a, b) {
+		if (J.flat(a.name) === J.flat(b.name)) return true;
+		if ((a.issns || []).some(i => (b.issns || []).includes(i))) return true;
+		if (a.openalexId && a.openalexId === b.openalexId) return true;
+		return Boolean(a.abbrev && b.abbrev && J.flat(a.abbrev) === J.flat(b.abbrev));
+	}
+	function addVenueChip(item) {
+		if (!item || !item.name) return;
+		if (!state.venueChips.some(c => sameJournal(c, item))) state.venueChips.push({ name: item.name, abbrev: item.abbrev || "", issns: (item.issns || []).slice(), openalexId: item.openalexId || null });
+		$("venue").value = "";
+		closeVenueList();
+		renderVenueChips();
+		cancelCacheRestore(); saveQuery(); syncQueryCollapse();
+	}
+	function removeVenueChip(i) {
+		state.venueChips.splice(i, 1);
+		renderVenueChips();
+		cancelCacheRestore(); saveQuery(); syncQueryCollapse();
+	}
+	function setVenueChips(list) {
+		state.venueChips = (Array.isArray(list) ? list : []).filter(c => c && c.name).map(c => ({ name: String(c.name), abbrev: c.abbrev || "", issns: Array.isArray(c.issns) ? c.issns : [], openalexId: c.openalexId || null }));
+		renderVenueChips();
+	}
+
+	// ---- the suggestion list
+	function closeVenueList() {
+		let s = state.jsug; s.open = false; s.items = []; s.active = -1; s.pending = false;
+		cancelLater(journalLookupTimer); journalLookupAbort?.abort?.(); journalLookupSeq++;
+		let list = $("venue-list"); if (list) { list.hidden = true; list.textContent = ""; }
+		let input = $("venue"); if (input) { input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); }
+	}
+	function drawVenueList() {
+		let s = state.jsug, list = $("venue-list"), input = $("venue"); if (!list || !input) return;
+		list.textContent = "";
+		list.hidden = !s.open;
+		input.setAttribute("aria-expanded", String(s.open));
+		if (!s.open) return;
+		s.items.forEach((item, i) => {
+			let row = fel("div", "jopt" + (i === s.active ? " hot" : "")); row.id = "venue-opt-" + i;
+			row.setAttribute("role", "option"); row.setAttribute("aria-selected", String(i === s.active));
+			row.appendChild(fel("span", "jopt-name", item.name));
+			let mark = journalMark({ venue: item.name, journalAbbrev: item.abbrev || undefined });
+			// A publisher's mark (the abbreviation in its colour) when the journal is known, the plain abbreviation otherwise.
+			if (mark && item.abbrev) row.appendChild(mark); else if (item.abbrev) row.appendChild(fel("span", "jopt-abbr", item.abbrev));
+			else if (mark && item.source !== "remote") row.appendChild(mark);
+			row.addEventListener("mousedown", e => e.preventDefault());
+			row.addEventListener("click", () => addVenueChip(item));
+			row.addEventListener("mousemove", () => { if (state.jsug.active !== i) { state.jsug.active = i; syncVenueActive(); } });
+			list.appendChild(row);
+		});
+		if (!s.items.length) list.appendChild(fel("div", "jopt-note", s.pending ? t("venueSearching") : t("venueNoMatch")));
+		else if (s.pending) list.appendChild(fel("div", "jopt-note", t("venueSearching")));
+		list.appendChild(fel("div", "jopt-foot", t("venueKeys")));
+		if (s.active >= 0) input.setAttribute("aria-activedescendant", "venue-opt-" + s.active); else input.removeAttribute("aria-activedescendant");
+	}
+	function syncVenueActive() {
+		let list = $("venue-list"), s = state.jsug;
+		[...(list?.children || [])].forEach((row, i) => { if (row.getAttribute?.("role") !== "option") return; row.classList.toggle("hot", i === s.active); row.setAttribute("aria-selected", String(i === s.active)); });
+		let input = $("venue");
+		if (s.active >= 0) { input.setAttribute("aria-activedescendant", "venue-opt-" + s.active); list?.children?.[s.active]?.scrollIntoView?.({ block: "nearest" }); } else input.removeAttribute("aria-activedescendant");
+	}
+	async function refreshVenueSuggestions() {
+		let input = $("venue"), query = input.value, s = state.jsug;
+		if (J.flat(query).length < 2) { closeVenueList(); return; }
+		let catalog = await ensureJournalCatalog();
+		if ($("venue").value !== query) return;
+		s.query = query;
+		let local = J.suggest(catalog, query, { limit: JOURNAL_LIMIT }).filter(x => !state.venueChips.some(c => sameJournal(c, x)));
+		s.open = true; s.items = local; s.active = -1;
+		let wantRemote = local.length < 5 && J.flat(query).length >= 3 && journalLookupAllowed();
+		s.pending = wantRemote;
+		drawVenueList();
+		cancelLater(journalLookupTimer); journalLookupAbort?.abort?.();
+		let seq = ++journalLookupSeq;
+		if (!wantRemote) return;
+		// One request per pause, never per key: OpenAlex is metered. A question asked before is answered from memory.
+		journalLookupTimer = later(async () => {
+			let key = J.flat(query), items = journalLookupCache.get(key);
+			try {
+				if (!items) {
+					journalLookupAbort = new AbortController();
+					let auth = ZotPoPSources.openAlexAuth({ openAlexApiKey: PREF("openAlexApiKey") || "", email: PREF("email") || "" });
+					let data = await http.getJSON("https://api.openalex.org/autocomplete/sources?q=" + encodeURIComponent(query.trim()) + auth, {}, journalLookupAbort.signal);
+					items = (data.results || []).map(J.fromAutocomplete).filter(Boolean);
+					journalLookupCache.set(key, items);
+				}
+			}
+			catch (e) {
+				if (ZotPoPSources.isQuotaError?.(e)) noteOpenAlexSpent({ openAlexSpent: true });
+				items = [];
+			}
+			if (seq !== journalLookupSeq || !s.open) return;
+			s.items = J.mergeSuggestions(s.items, items.filter(x => !state.venueChips.some(c => sameJournal(c, x))), JOURNAL_LIMIT);
+			s.pending = false;
+			drawVenueList();
+		}, 300);
+	}
+	function journalLookupAllowed() {
+		return engineValue() !== "pop" && PREF("journalLookup") !== false && !openAlexHeld() && typeof http?.getJSON === "function";
+	}
+	function onVenueKey(e) {
+		let s = state.jsug, input = $("venue");
+		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+			if (!s.open) { if (e.key === "ArrowDown") { e.preventDefault(); refreshVenueSuggestions(); } return; }
+			e.preventDefault();
+			let n = s.items.length; if (!n) return;
+			s.active = e.key === "ArrowDown" ? (s.active + 1) % n : s.active <= 0 ? (s.active === 0 ? -1 : n - 1) : s.active - 1;
+			syncVenueActive();
+		}
+		else if (e.key === "Enter") {
+			// Pressing Enter on a highlighted journal picks it; otherwise it searches, as it always did.
+			if (s.open && s.active >= 0 && s.items[s.active]) { e.preventDefault(); e.stopPropagation(); addVenueChip(s.items[s.active]); }
+			else closeVenueList();
+		}
+		else if (e.key === "Escape") { if (s.open) { e.preventDefault(); e.stopPropagation(); closeVenueList(); } }
+		else if (e.key === "Backspace" && !input.value && state.venueChips.length) { e.preventDefault(); removeVenueChip(state.venueChips.length - 1); }
+		else if (e.key === "Tab") closeVenueList();
+	}
+	function wireVenueBox() {
+		let input = $("venue"); if (!input) return;
+		input.setAttribute("role", "combobox"); input.setAttribute("aria-autocomplete", "list"); input.setAttribute("aria-controls", "venue-list"); input.setAttribute("aria-expanded", "false");
+		input.setAttribute("autocomplete", "off");
+		input.addEventListener("input", refreshVenueSuggestions);
+		input.addEventListener("keydown", onVenueKey);
+		input.addEventListener("focus", () => { ensureJournalCatalog(); });
+		input.addEventListener("blur", () => closeVenueList());
+		// A press on the empty part of the box (or a chip's gap) goes to the input.
+		$("venue-box")?.addEventListener("mousedown", e => { if (e.target === $("venue-box") || e.target === $("venue-chips")) { e.preventDefault(); input.focus(); } });
+		renderVenueChips();
+	}
+
 	const QUERY_FIELDS = ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "maxResults", "sort"];
 	const POP_FIELDS = ["affiliation", "issn", "citedId", "field", "popRaw", "popOutputSort", "popCachePolicy"];
 	const COMBINED_SOURCES = ["openalex", "crossref", "europepmc", "arxiv", "pubmed", "semanticscholar", "scholar"];
@@ -867,6 +1071,7 @@
 		let saved = {};
 		try { saved = JSON.parse(PREF("lastQuery") || "{}"); } catch (e) {}
 		for (let f of QUERY_FIELDS) if (saved[f] != null) $(f).value = saved[f];
+		setVenueChips(saved.venueChips);
 		restoreCombinedSources(saved.sources);
 		for (let f of POP_FIELDS) if (saved[f] != null) $(f).value = saved[f];
 		if (!$("popOutputSort").value) $("popOutputSort").value = "rank";
@@ -879,6 +1084,7 @@
 	function saveQuery() {
 		let o = {};
 		for (let f of QUERY_FIELDS) o[f] = $(f).value;
+		o.venueChips = state.venueChips;
 		o.sources = readCombinedSources();
 		o.engine = engineValue();
 		for (let f of POP_FIELDS) o[f] = $(f).value;
@@ -974,7 +1180,7 @@
 		if (!active()) return false;
 		state.sortKey = entry.query?.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
-		$("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
+		resetFilters();
 		displaySearchResults(records);
 		let captured = new Date(entry.savedAt).toLocaleString(t.locale || undefined);
 		setStatus(t("historyRestored", records.length));
@@ -1012,6 +1218,8 @@
 		for (let f of POP_FIELDS) $(f).value = query[f] == null ? (f === "popOutputSort" ? "rank" : f === "popCachePolicy" ? "refresh" : "") : String(query[f]);
 		syncSel($("popOutputSort"));
 		for (let f of QUERY_FIELDS) $(f).value = query[f] == null ? "" : String(query[f]);
+		// Journals that were picked come back as chips; their OR expression is not text for the box.
+		if (Array.isArray(query.venues) && query.venues.length) { setVenueChips(query.venues); $("venue").value = ""; } else setVenueChips([]);
 		restoreCombinedSources(query.sources);
 		syncSel($("sort"));
 		let source = $("source");
@@ -1199,6 +1407,7 @@
 			{ label: t("colsBasic"), title: t("colsModeTip"), check: state.colsMode !== "all", radio: true, run: () => setColsMode("basic") },
 			{ label: t("colsAll"), title: t("colsModeTip"), check: state.colsMode === "all", radio: true, run: () => setColsMode("all") },
 			"-",
+			{ label: t("affLineToggle"), title: t("affLineTip"), check: state.affLine, run: () => { state.affLine = !state.affLine; saveLayout(); render(); } },
 			{ label: t("metricsToggle"), title: t("metricsTip"), check: !$("metrics").hidden, run: toggleMetrics },
 			{ label: t("detailToggle"), title: t("detailTip"), check: !$("detail").hidden, run: toggleDetail }
 		];
@@ -1225,6 +1434,7 @@
 		try { state.colOrder = PREF("colOrderVersion") === COL_VERSION ? normalizeColumnOrder(JSON.parse(PREF("colOrder") || "null")) : [...COLUMN_KEYS]; }
 		catch (e) { state.colOrder = [...COLUMN_KEYS]; }
 		state.colsMode = PREF("colsMode") === "all" ? "all" : "basic";
+		state.affLine = PREF("affLine") !== false;
 		// Sizes saved on a large screen are clamped to this window, so a wide
 		// sidebar or a tall detail pane cannot swallow the table on a laptop.
 		let w = parseInt(PREF("metricsWidth"), 10);
@@ -1254,6 +1464,7 @@
 			PREF("colWidths", JSON.stringify(state.colWidths));
 			PREF("colWidthsVersion", COL_VERSION);
 			PREF("colsMode", state.colsMode);
+			PREF("affLine", state.affLine);
 			PREF("winWidth", window.outerWidth);
 			PREF("winHeight", window.outerHeight);
 			PREF("winLeft", window.screenX);
@@ -1587,8 +1798,12 @@
 			let value = Number(raw);
 			return Number.isInteger(value) ? value : raw;
 		};
+		// Journals picked in the box and whatever is still typed there: one journal, or an OR of several.
+		let journals = engineValue() === "pop"
+			? { venue: [...state.venueChips.map(c => c.name), $("venue").value.trim()].filter(Boolean).join(" OR ") }
+			: J.queryFields(state.venueChips, $("venue").value);
 		return {
-			authors: $("authors").value, venue: $("venue").value, title: $("title").value, keywords: $("keywords").value,
+			authors: $("authors").value, ...journals, title: $("title").value, keywords: $("keywords").value,
 			yearFrom: num("yearFrom"), yearTo: num("yearTo"), maxResults: limit(),
 			sort: $("sort").value || "relevance",
 			...(engineValue() === "pop" ? { engine: "pop", popProfile: String(PREF("popDataDir") || "pop-default"),
@@ -1636,7 +1851,7 @@
 		// until the user explicitly sorts a result column again.
 		state.sortKey = q.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
-		$("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null;
+		resetFilters();
 		state.selected.clear();
 		state.focusKey = null;
 		state.detailKey = null;
@@ -1783,10 +1998,12 @@
 			state.searchController = null;
 			$("busy").hidden = true;
 		}
+		setVenueChips([]);
 		for (let id of ["authors", "venue", "title", "keywords", "yearFrom", "yearTo", "filter", ...POP_FIELDS.filter(k => !["popOutputSort", "popCachePolicy"].includes(k))]) $(id).value = "";
 		state.records = [];
 		state.selected.clear();
 		state.libraryFilter = "all";
+		resetFilters();
 		state.focusKey = null;
 		state.detailKey = null;
 		saveQuery();
@@ -1799,16 +2016,13 @@
 	function libraryPass(r) { return state.libraryFilter === "all" || (state.libraryFilter === "owned") === Boolean(r.inLibrary); }
 	// Selected-only is a mode of its own: it answers by selection alone, so a paper checked
 	// and then filtered out still shows, and the other filters return when it is turned off.
-	function matchesFilter(r, f, ignoreYears = false, ignoreLibrary = false) {
+	function matchesFilter(r, spec, ignoreYears = false, ignoreLibrary = false, skipRule = null) {
 		if (state.selectedOnly) return state.selected.has(r.key);
 		if (!ignoreLibrary && !libraryPass(r)) return false;
 		if (state.yearRange && !ignoreYears && !(r.year >= state.yearRange.from && r.year <= state.yearRange.to)) return false;
 		if (!applyLocalFacet(r)) return false;
-		if (!f) return true;
-		let where = affiliationOf(r);
-		let hay = (r.title + " " + r.authorString + " " + r.venue + " " + (r.doi || "") + " " + (r.year || "") + " " + (r.status || "")
-			+ " " + (where ? [where.first?.institution, where.corresponding?.institution, ...where.countries].filter(Boolean).join(" ") : "")).toLowerCase();
-		return f.split(/\s+/).every(w => hay.includes(w));
+		if (typeof spec === "string") spec = Filters.compile(spec, state.rules);
+		return !spec || Filters.matches(r, spec, filterEnv, { ignoreYears, skipRule });
 	}
 
 	function sortValue(r, k) {
@@ -1902,6 +2116,91 @@
 			personLine(where.correspondingKnown ? t("affCorresponding") : t("affLast"), where.corresponding)
 		].filter(Boolean).join("\n");
 	}
+	/* The line under a title: who did the work and where, from data the search already holds. First and
+	   corresponding author, each with an institution (and the country), or nothing at all: a source that
+	   carries no affiliations gets no line and no placeholder. */
+	function shortInstitution(name) {
+		return String(name || "").replace(/\bUniversity\b/g, "Univ.").replace(/\bInstitute\b/g, "Inst.").replace(/\bLaboratory\b/g, "Lab.").replace(/\s+/g, " ").trim();
+	}
+	function affLineParts(r) {
+		let where = affiliationOf(r), out = [];
+		if (!where) return out;
+		if (where.first?.institution) out.push({ role: "first", ...where.first });
+		if (where.corresponding?.institution) out.push({ role: where.correspondingKnown ? "corr" : "last", ...where.corresponding });
+		return out;
+	}
+	function affLineNode(parts) {
+		let line = document.createElement("div");
+		line.className = "t-aff";
+		parts.forEach((p, i) => {
+			if (i) line.appendChild(document.createTextNode(" — "));
+			if (p.role !== "first") { let role = document.createElement("span"); role.className = "aff-role"; role.textContent = t(p.role === "corr" ? "affLineCorr" : "affLineLast") + " "; line.appendChild(role); }
+			line.appendChild(document.createTextNode(p.name + " · " + shortInstitution(p.institution) + (p.country ? " (" + p.country + ")" : "")));
+		});
+		return line;
+	}
+	/* The author line of the detail, as a paper's header writes it: each author with a small index into the
+	   list of institutions right below, the first author in bold and the corresponding one starred. Up to
+	   six authors show; "+N" opens the rest in place. An institution is a button that keeps only that
+	   institution's papers. A paper whose source gave no institutions keeps the plain author line. */
+	const AUTHORS_SHOWN = 6;
+	function filterByInstitution(key, name) {
+		let rule = state.rules.find(x => x.kind === "inst" && x.mode === "include");
+		if (!rule) rule = Filters.newRule("inst", "include");
+		if (!state.rules.includes(rule)) state.rules.push(rule);
+		if (!rule.values.includes(key)) { rule.values.push(key); rule.labels[key] = name; }
+		filtersChanged();
+	}
+	function renderAuthors(r) {
+		let box = $("d-authors");
+		box.textContent = "";
+		let people = (Array.isArray(r.people) ? r.people : []).filter(p => p && String(p.name || "").trim());
+		if (!people.some(p => p.institution)) { box.textContent = r.authorString || t("noAuthors"); box.removeAttribute("title"); return; }
+		state.authorsOpen ||= new Set();
+		let expanded = state.authorsOpen.has(r.key), shown = expanded ? people : people.slice(0, AUTHORS_SHOWN);
+		let flagged = people.some(p => p.corresponding);
+		let index = new Map(), order = [];
+		let names = document.createElement("div"); names.className = "au-list";
+		shown.forEach((p, i) => {
+			if (i) names.appendChild(document.createTextNode(", "));
+			let span = document.createElement("span");
+			span.className = "au" + (p === people[0] || p.position === "first" ? " au-first" : "");
+			span.appendChild(document.createTextNode(p.name));
+			let key = Filters.flat(p.institution);
+			if (key) {
+				if (!index.has(key)) { index.set(key, order.length + 1); order.push({ key, name: p.institution, country: p.country }); }
+				let sup = document.createElement("sup"); sup.textContent = String(index.get(key)); span.appendChild(sup);
+			}
+			if (p.corresponding) { let star = document.createElement("sup"); star.className = "au-corr"; star.textContent = "*"; star.title = t("affCorresponding"); span.appendChild(star); }
+			if (span.classList.contains("au-first")) span.title = t("affFirst");
+			names.appendChild(span);
+		});
+		if (people.length > AUTHORS_SHOWN) {
+			names.appendChild(document.createTextNode(" "));
+			let more = document.createElement("button");
+			more.type = "button"; more.className = "ghost au-more";
+			more.textContent = expanded ? t("authorsFewer") : t("authorsMore", people.length - AUTHORS_SHOWN);
+			more.setAttribute("aria-expanded", String(expanded));
+			more.addEventListener("click", () => { if (expanded) state.authorsOpen.delete(r.key); else state.authorsOpen.add(r.key); renderAuthors(r); });
+			names.appendChild(more);
+		}
+		box.appendChild(names);
+		if (order.length) {
+			let list = document.createElement("div"); list.className = "au-insts";
+			for (let inst of order) {
+				let item = document.createElement("span"); item.className = "au-inst";
+				let num = document.createElement("sup"); num.textContent = String(index.get(inst.key)); item.appendChild(num);
+				let b = document.createElement("button"); b.type = "button"; b.className = "ghost au-inst-btn";
+				b.textContent = inst.name + (inst.country ? " (" + inst.country + ")" : "");
+				b.title = t("instFilterTip", inst.name);
+				b.addEventListener("click", () => filterByInstitution(inst.key, inst.name));
+				item.appendChild(b);
+				list.appendChild(item);
+			}
+			box.appendChild(list);
+		}
+		if (flagged) { let legend = document.createElement("div"); legend.className = "au-legend"; legend.textContent = "* " + t("affCorresponding"); box.appendChild(legend); }
+	}
 	function tierChip(where) {
 		if (!where?.tier) return null;
 		let s = document.createElement("span");
@@ -1915,19 +2214,387 @@
 	function syncFilterClear() { let b = $("filter-clear"); if (b) b.hidden = !$("filter").value; }
 	function clearFilter() { $("filter").value = ""; state.facet = null; state.yearRange = null; state.priorKeys = null; state.focusKey = null; render(); syncFilterClear(); }
 
+	// ------------------------------------------------------------ filter builder
+	/* The results filter has three parts that combine with AND: the box (words, "phrases", -word,
+	   field:value), the rules of the builder (a kind, include or exclude, any-of values) and the
+	   toolbar's library filter. content/filters.js decides who passes; this section is the window's
+	   state and drawing: a button beside the box, a popover with the rules, and a chip per active rule. */
+	const Filters = ZotPoPFilters;
+	const filterEnv = { where: r => affiliationOf(r), cpy: r => ZotPoPMetrics.citesPerYear(r) };
+	function filterSpec() { return Filters.compile($("filter") ? $("filter").value : "", state.rules); }
+	function fel(tag, cls, text) {
+		let e = document.createElement(tag);
+		if (cls) e.className = cls;
+		if (text != null) e.textContent = text;
+		return e;
+	}
+	function fbutton(cls, text, label, onClick) {
+		let b = fel("button", cls, text); b.type = "button";
+		if (label) { b.setAttribute("aria-label", label); b.title = label; }
+		if (onClick) b.addEventListener("click", e => { e.stopPropagation(); onClick(e); });
+		return b;
+	}
+	const ruleById = id => state.rules.find(r => r.id === id) || null;
+	const activeRules = () => state.rules.filter(Filters.ruleActive);
+
+	// ---- words for a rule
+	function rangeText(rule) {
+		let { min, max } = rule, f = v => Number.isInteger(v) ? String(v) : fmt(v, 1);
+		if (min != null && max != null) return min === max ? f(min) : f(min) + "–" + f(max);
+		return min != null ? "≥ " + f(min) : "≤ " + f(max);
+	}
+	function valueLabel(rule, key) {
+		if (rule.kind === "text") return key;
+		if (rule.kind === "type") return t("filterType", key);
+		if (rule.kind === "pdf") return t(key === "yes" ? "filterPdfYes" : "filterPdfNo");
+		if (rule.kind === "source") return sourceLabel(key);
+		if (rule.kind === "country") return (ZotPoPAffiliations.flag(key) + " " + key).trim();
+		return rule.labels[key] || key;
+	}
+	function ruleSummary(rule) {
+		if (Filters.RANGE_KINDS.includes(rule.kind)) return rangeText(rule);
+		let labels = rule.values.map(key => valueLabel(rule, key)), shown = labels.slice(0, 2).join(", ");
+		return labels.length > 2 ? shown + " +" + (labels.length - 2) : shown;
+	}
+	function ruleKindLabel(rule) {
+		return t("filterKind", rule.kind) + (rule.kind === "text" && rule.field !== "all" ? " · " + t("filterField", rule.field) : "");
+	}
+	function ruleText(rule) { return ruleKindLabel(rule) + ": " + ruleSummary(rule); }
+
+	// ---- changing rules
+	function filtersChanged(light = false) {
+		state.focusKey = null;
+		state.popLight = light;
+		try { render(); } finally { state.popLight = false; }
+	}
+	function addRule(kind, mode = "include") {
+		let rule = Filters.newRule(kind, mode);
+		state.rules.push(rule);
+		state.filterEdit = rule.id;
+		return rule;
+	}
+	function removeRule(id) {
+		state.rules = state.rules.filter(r => r.id !== id);
+		if (state.filterEdit === id) state.filterEdit = null;
+		if (state.filterQ) delete state.filterQ[id];
+		filtersChanged();
+	}
+	function toggleRuleValue(rule, key, label, on) {
+		let has = rule.values.includes(key);
+		if (on === undefined) on = !has;
+		if (on && !has) { rule.values.push(key); if (label) rule.labels[key] = label; }
+		else if (!on && has) rule.values = rule.values.filter(v => v !== key);
+		filtersChanged();
+	}
+	function setRuleRange(rule, min, max) {
+		let num = v => { let n = v === "" || v == null ? null : Number(v); return n != null && Number.isFinite(n) ? n : null; };
+		rule.min = num(min); rule.max = num(max);
+		// A reversed pair means the same range the other way round.
+		if (rule.min != null && rule.max != null && rule.min > rule.max) [rule.min, rule.max] = [rule.max, rule.min];
+		filtersChanged(true);
+	}
+	function dropEmptyRules() { state.rules = state.rules.filter(Filters.ruleActive); }
+	function resetFilters() {
+		let box = $("filter"); if (box) box.value = "";
+		state.facet = null; state.yearRange = null; state.priorKeys = null; state.rules = []; state.filterEdit = null; state.filterQ = {};
+		if (state.filterOpen) closeFilterPop(false);
+	}
+	function clearAllFilters() {
+		resetFilters();
+		state.libraryFilter = "all";
+		state.focusKey = null;
+		syncFilterClear();
+		render();
+	}
+
+	// ---- the chips under the toolbar
+	function syncFilterUI() {
+		let rules = activeRules(), btn = $("filter-btn");
+		if (btn) {
+			let count = $("filter-count");
+			if (count) { count.hidden = !rules.length; count.textContent = String(rules.length); }
+			btn.setAttribute("aria-expanded", String(Boolean(state.filterOpen)));
+			btn.disabled = state.records.length === 0;
+			btn.classList.toggle("active", rules.length > 0);
+		}
+		let box = $("filter-chips"); if (!box) return;
+		box.textContent = "";
+		box.hidden = !rules.length;
+		for (let rule of rules) {
+			let exclude = rule.mode === "exclude", text = ruleText(rule);
+			let chip = fel("span", "fchip" + (exclude ? " excl" : "")); chip.setAttribute("role", "listitem");
+			let main = fbutton("fchip-main", null, null, () => openFilterPop(rule.id, main));
+			main.setAttribute("aria-label", (exclude ? t("filterExcluded") + " · " : "") + text + " — " + t("filterChipEdit"));
+			main.title = (exclude ? t("filterExcluded") + " · " : "") + rule.values.map(key => valueLabel(rule, key)).join(", ") || text;
+			if (exclude) main.appendChild(fel("span", "fchip-tag", t("filterExcluded")));
+			main.appendChild(fel("span", "fchip-text", text));
+			chip.appendChild(main);
+			chip.appendChild(fbutton("filter-clear", "×", t("filterChipRemove") + ": " + text, () => removeRule(rule.id)));
+			box.appendChild(chip);
+		}
+		if (rules.length) box.appendChild(fbutton("ghost fchip-clear", t("filterClearAll"), null, () => clearAllFilters()));
+		if (state.filterOpen && !state.popLight) renderFilterPop(); else if (state.filterOpen) renderFilterPopHead();
+	}
+
+	// ---- the popover
+	function openFilterPop(ruleId, opener) {
+		if (!state.records.length) return;
+		closeToolbarMenu?.(); closeSelMenu?.(); closeHistoryMenu?.(); hideCtxMenu?.();
+		state.filterOpen = true;
+		state.filterOpener = opener || $("filter-btn");
+		if (ruleId) state.filterEdit = ruleId;
+		let pop = $("filter-pop"); pop.hidden = false;
+		renderFilterPop();
+		$("filter-btn")?.setAttribute("aria-expanded", "true");
+		let target = ruleId ? pop.querySelector?.(`[data-fid="rule:${ruleId}:first"]`) : null;
+		(target || pop.querySelector?.('[data-fid="close"]'))?.focus?.();
+	}
+	function closeFilterPop(returnFocus = true) {
+		if (!state.filterOpen) return;
+		state.filterOpen = false;
+		let pop = $("filter-pop"); pop.hidden = true; pop.textContent = "";
+		dropEmptyRules();
+		state.filterEdit = null;
+		let opener = state.filterOpener; state.filterOpener = null;
+		$("filter-btn")?.setAttribute("aria-expanded", "false");
+		syncFilterUI();
+		if (returnFocus) (opener && opener.isConnected !== false ? opener : $("filter-btn"))?.focus?.();
+	}
+	function toggleFilterPop() { if (state.filterOpen) closeFilterPop(true); else openFilterPop(null, $("filter-btn")); }
+
+	// The records every other rule lets through: what an option list counts, so a number is what you would get.
+	function baseFor(rule) {
+		let spec = filterSpec();
+		return state.records.filter(r => matchesFilter(r, spec, false, false, rule ? rule.id : null));
+	}
+
+	function renderFilterPopHead() {
+		let shown = $("filter-pop")?.querySelector?.(".fp-shown"); if (shown) shown.textContent = t("filterShown", state.visible.length, state.records.length);
+		// what a rule says about itself changes as its values are typed
+		for (let rule of state.rules) {
+			let sum = $("filter-pop")?.querySelector?.(`[data-rule="${rule.id}"]`)?.querySelector?.(".fp-sum");
+			if (sum) { sum.textContent = Filters.ruleActive(rule) ? ruleSummary(rule) : t("filterNothingYet"); sum.className = "fp-sum" + (Filters.ruleActive(rule) ? "" : " empty"); }
+		}
+		let lib = $("filter-pop")?.querySelector?.(".fp-lib");
+		if (lib) fillLibrarySeg(lib);
+	}
+	function fillLibrarySeg(box) {
+		box.textContent = "";
+		for (let [key, label] of [["all", "libAll"], ["new", "libNew"], ["owned", "libOwned"]]) {
+			let b = fbutton("", t(label) + " " + state.libCounts[key], null, () => { state.libraryFilter = key; filtersChanged(); });
+			b.setAttribute("aria-pressed", String(state.libraryFilter === key)); b.setAttribute("data-fid", "lib:" + key);
+			box.appendChild(b);
+		}
+	}
+
+	function renderFilterPop() {
+		let pop = $("filter-pop"); if (!pop || pop.hidden) return;
+		// A redraw must not drop the keyboard: remember what had focus inside, and give it back.
+		let active = document.activeElement, keep = active && pop.contains?.(active) ? active.getAttribute?.("data-fid") : null;
+		let caret = keep && active.selectionStart != null ? [active.selectionStart, active.selectionEnd] : null;
+		let scroll = pop.querySelector?.(".fp-body")?.scrollTop || 0;
+		pop.textContent = "";
+		pop.setAttribute("aria-label", t("filterPopTitle"));
+
+		let head = fel("div", "fp-head");
+		let title = fel("h3", null, t("filterPopTitle")); title.id = "filter-pop-title";
+		head.appendChild(title);
+		head.appendChild(fel("span", "fp-shown", t("filterShown", state.visible.length, state.records.length)));
+		head.appendChild(fel("span", "spacer"));
+		let any = activeRules().length || $("filter").value.trim() || state.facet || state.yearRange || state.libraryFilter !== "all";
+		let clear = fbutton("ghost", t("filterClearAll"), null, () => clearAllFilters()); clear.disabled = !any; clear.setAttribute("data-fid", "clear-all");
+		head.appendChild(clear);
+		let close = fbutton("filter-clear", "×", t("filterClose"), () => closeFilterPop(true)); close.setAttribute("data-fid", "close");
+		head.appendChild(close);
+		pop.appendChild(head);
+
+		let body = fel("div", "fp-body");
+		// the library filter, the same three choices as the toolbar's
+		let lib = fel("section", "fp-sec");
+		lib.appendChild(fel("div", "fp-label", t("filterLibrary")));
+		let seg = fel("div", "fp-seg fp-lib"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", t("filterLibrary"));
+		fillLibrarySeg(seg); lib.appendChild(seg); body.appendChild(lib);
+
+		// the quick syntax of the box
+		let quick = fel("section", "fp-sec");
+		quick.appendChild(fel("div", "fp-label", t("filterQuickTitle")));
+		let ex = fel("div", "fp-examples");
+		for (let sample of ["journal:Cell", "-author:Kim", "\"exact phrase\"", "year:2020-2024", "inst:Harvard", "country:KR"]) ex.appendChild(fel("code", null, sample));
+		quick.appendChild(ex);
+		quick.appendChild(fel("p", "fp-hint", t("filterQuickHint")));
+		body.appendChild(quick);
+
+		// the rules
+		let rules = fel("section", "fp-sec");
+		rules.appendChild(fel("div", "fp-label", t("filterRules")));
+		if (!state.rules.length) rules.appendChild(fel("p", "fp-hint", t("filterRulesEmpty")));
+		for (let rule of state.rules) rules.appendChild(ruleCard(rule));
+		body.appendChild(rules);
+
+		let add = fel("section", "fp-sec");
+		add.appendChild(fel("div", "fp-label", t("filterAdd")));
+		let kinds = fel("div", "fp-kinds");
+		for (let kind of Filters.KINDS) {
+			let b = fbutton("fp-chip", "+ " + t("filterKind", kind), null, () => { addRule(kind); renderFilterPop(); pop.querySelector?.(`[data-fid="rule:${state.filterEdit}:first"]`)?.focus?.(); });
+			b.setAttribute("data-fid", "add:" + kind);
+			kinds.appendChild(b);
+		}
+		add.appendChild(kinds); body.appendChild(add);
+		pop.appendChild(body);
+		positionFilterPop();
+		body.scrollTop = scroll;
+		if (keep) {
+			let again = pop.querySelector?.(`[data-fid="${keep}"]`);
+			if (again) { again.focus?.(); if (caret) try { again.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
+		}
+	}
+	function positionFilterPop() {
+		let pop = $("filter-pop"), btn = $("filter-btn");
+		if (!pop || typeof btn?.getBoundingClientRect !== "function") return;
+		let r = btn.getBoundingClientRect(), w = Math.min(528, window.innerWidth - 16);
+		pop.style.width = w + "px";
+		pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
+		pop.style.top = (r.bottom + 4) + "px";
+		pop.style.maxHeight = Math.max(240, window.innerHeight - r.bottom - 16) + "px";
+	}
+
+	function ruleCard(rule) {
+		let open = state.filterEdit === rule.id;
+		let card = fel("div", "fp-rule" + (rule.mode === "exclude" ? " excl" : "")); card.setAttribute("data-rule", rule.id);
+		let head = fel("div", "fp-rule-head");
+		let mode = fel("div", "fp-seg fp-mode"); mode.setAttribute("role", "group"); mode.setAttribute("aria-label", t("filterMode"));
+		for (let m of ["include", "exclude"]) {
+			let b = fbutton("", t(m === "include" ? "filterInclude" : "filterExclude"), null, () => { rule.mode = m; filtersChanged(); });
+			b.setAttribute("aria-pressed", String(rule.mode === m)); b.setAttribute("data-fid", "mode:" + rule.id + ":" + m);
+			mode.appendChild(b);
+		}
+		head.appendChild(mode);
+		let toggle = fel("button", "fp-rule-toggle"); toggle.type = "button";
+		toggle.setAttribute("aria-expanded", String(open)); toggle.setAttribute("data-fid", "rule:" + rule.id + ":toggle");
+		toggle.appendChild(fel("span", "fp-kind", ruleKindLabel(rule)));
+		let sum = Filters.ruleActive(rule) ? ruleSummary(rule) : t("filterNothingYet");
+		toggle.appendChild(fel("span", "fp-sum" + (Filters.ruleActive(rule) ? "" : " empty"), sum));
+		toggle.appendChild(fel("span", "fp-chev"));
+		toggle.addEventListener("click", e => { e.stopPropagation(); state.filterEdit = open ? null : rule.id; renderFilterPop(); });
+		head.appendChild(toggle);
+		head.appendChild(fbutton("filter-clear", "×", t("filterRemoveRule") + ": " + ruleKindLabel(rule), () => removeRule(rule.id)));
+		card.appendChild(head);
+		if (open) card.appendChild(ruleEditor(rule));
+		return card;
+	}
+
+	function ruleEditor(rule) {
+		let box = fel("div", "fp-edit");
+		if (rule.kind === "text") return textEditor(rule, box);
+		if (Filters.RANGE_KINDS.includes(rule.kind)) return rangeEditor(rule, box);
+		return optionEditor(rule, box);
+	}
+	function textEditor(rule, box) {
+		let fields = fel("div", "fp-fields"); fields.setAttribute("role", "group"); fields.setAttribute("aria-label", t("filterFieldLabel"));
+		for (let field of Filters.TEXT_FIELDS) {
+			let b = fbutton("fp-chip", t("filterField", field), null, () => { rule.field = field; filtersChanged(); });
+			b.setAttribute("aria-pressed", String(rule.field === field)); b.setAttribute("data-fid", "field:" + rule.id + ":" + field);
+			fields.appendChild(b);
+		}
+		box.appendChild(fields);
+		let row = fel("div", "fp-addrow");
+		let input = fel("input"); input.type = "text"; input.setAttribute("placeholder", t("filterWordsPh")); input.setAttribute("aria-label", t("filterWordsPh"));
+		input.setAttribute("data-fid", "rule:" + rule.id + ":first");
+		let commit = () => { let v = input.value.trim(); if (!v) return; if (!rule.values.includes(v)) rule.values.push(v); input.value = ""; filtersChanged(); };
+		input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); commit(); } });
+		row.appendChild(input);
+		let add = fbutton("", t("filterAddWord"), null, commit); add.setAttribute("data-fid", "rule:" + rule.id + ":add");
+		row.appendChild(add);
+		box.appendChild(row);
+		if (rule.values.length) {
+			let vals = fel("div", "fp-vals");
+			for (let v of rule.values) {
+				let chip = fel("span", "fp-val"); chip.appendChild(fel("span", null, v));
+				chip.appendChild(fbutton("filter-clear", "×", t("filterRemoveValue") + ": " + v, () => toggleRuleValue(rule, v, null, false)));
+				vals.appendChild(chip);
+			}
+			box.appendChild(vals);
+		}
+		return box;
+	}
+	function rangeEditor(rule, box) {
+		let row = fel("div", "fp-range");
+		let make = (which, label) => {
+			let wrap = fel("label", "fp-num"); wrap.appendChild(fel("span", null, label));
+			let input = fel("input"); input.type = "number"; input.value = rule[which] == null ? "" : String(rule[which]);
+			if (rule.kind === "year") { input.min = "1500"; input.max = "2100"; }
+			else input.min = "0";
+			if (rule.kind === "if" || rule.kind === "cpy") input.step = "any";
+			input.setAttribute("aria-label", t("filterKind", rule.kind) + " " + label); input.setAttribute("data-fid", "rule:" + rule.id + (which === "min" ? ":first" : ":max"));
+			input.addEventListener("input", () => { cancelLater(state.rangeTimer); state.rangeTimer = later(() => { let lo = which === "min" ? input.value : (row.querySelector?.('[data-which="min"]')?.value ?? ""), hi = which === "max" ? input.value : (row.querySelector?.('[data-which="max"]')?.value ?? ""); setRuleRange(rule, lo, hi); }, 220); });
+			input.setAttribute("data-which", which);
+			wrap.appendChild(input);
+			return wrap;
+		};
+		row.appendChild(make("min", t("filterMin")));
+		row.appendChild(fel("span", "dash", "–"));
+		row.appendChild(make("max", t("filterMax")));
+		box.appendChild(row);
+		return box;
+	}
+	// Multi-value rules: a search box over the options, each with how many results it would leave.
+	const FILTER_OPTION_LIMIT = 60;
+	function optionEditor(rule, box) {
+		state.filterQ ||= {};
+		let fixed = rule.kind === "type" || rule.kind === "pdf" || rule.kind === "source";
+		let list = fel("div", "fp-opts"); list.setAttribute("role", "group"); list.setAttribute("aria-label", t("filterKind", rule.kind));
+		let fill = () => {
+			list.textContent = "";
+			let tally = Filters.tally(rule.kind, baseFor(rule));
+			let counts = new Map(tally.map(o => [o.key, o]));
+			// What is chosen comes first (even at zero), then the rest by how many results each leaves.
+			let chosen = rule.values.map(key => ({ key, n: counts.get(key)?.n || 0 }));
+			let rest = tally.filter(o => !rule.values.includes(o.key));
+			let named = key => valueLabel({ ...rule, labels: { ...rule.labels, [key]: counts.get(key)?.label || rule.labels[key] || key } }, key);
+			let all = [...chosen, ...rest].map(o => ({ key: o.key, n: o.n, label: named(o.key) }));
+			let found = Filters.searchOptions(all, state.filterQ[rule.id] || "");
+			if (!found.length) list.appendChild(fel("p", "fp-hint", t("filterNoOptions")));
+			for (let o of found.slice(0, FILTER_OPTION_LIMIT)) {
+				let row = fel("label", "fp-opt");
+				let cb = fel("input"); cb.type = "checkbox"; cb.checked = rule.values.includes(o.key); cb.setAttribute("data-fid", "opt:" + rule.id + ":" + o.key);
+				cb.addEventListener("change", () => toggleRuleValue(rule, o.key, counts.get(o.key)?.label || o.label, cb.checked));
+				row.appendChild(cb);
+				row.appendChild(fel("span", "fp-opt-name", o.label));
+				row.appendChild(fel("span", "fp-opt-n" + (o.n ? "" : " zero"), String(o.n)));
+				list.appendChild(row);
+			}
+			if (found.length > FILTER_OPTION_LIMIT) list.appendChild(fel("p", "fp-hint", t("filterMore", found.length - FILTER_OPTION_LIMIT)));
+		};
+		if (!fixed) {
+			let input = fel("input"); input.type = "search"; input.value = state.filterQ[rule.id] || "";
+			input.setAttribute("placeholder", t("filterSearchPh", t("filterKind", rule.kind))); input.setAttribute("aria-label", t("filterSearchPh", t("filterKind", rule.kind)));
+			input.setAttribute("data-fid", "rule:" + rule.id + ":first");
+			input.addEventListener("input", () => { state.filterQ[rule.id] = input.value; fill(); });
+			box.appendChild(input);
+		}
+		fill();
+		box.appendChild(list);
+		if (fixed) { let first = list.querySelector?.("input"); if (first) first.setAttribute("data-fid", "rule:" + rule.id + ":first"); }
+		return box;
+	}
+
+	// Tab stays inside the popover, Escape closes it and hands the keyboard back to where it was opened.
+	function onFilterPopKey(e) {
+		if (!state.filterOpen) return;
+		if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeFilterPop(true); return; }
+		if (e.key !== "Tab") return;
+		let pop = $("filter-pop"), nodes = [...(pop.querySelectorAll?.("button, input, [tabindex]") || [])].filter(n => !n.disabled && n.tabIndex !== -1);
+		if (!nodes.length) return;
+		let first = nodes[0], last = nodes[nodes.length - 1];
+		if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+		else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+	}
+
 	// ------------------------------------------------------------ this search's authors
 	// An author's key: the registry ID when the source gave one, else the name as written.
 	// A name is not a person, so a name key never claims the results are one author's.
 	const nameKey = name => String(name || "").normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
-	function authorKeys(r) {
-		let out = [];
-		for (let a of r.authors || []) {
-			let name = a.name || [a.firstName, a.lastName].filter(Boolean).join(" ");
-			let key = a.openalexId ? "id:" + a.openalexId : a.orcid ? "id:" + a.orcid : name ? "name:" + nameKey(name) : null;
-			if (key && !out.some(o => o.key === key)) out.push({ key, name, byId: key.startsWith("id:") });
-		}
-		return out;
-	}
+	const authorKeys = r => ZotPoPFilters.authorKeys(r);
 	// What the detail says about a paper from this search's own records alone: no request is made.
 	function buildResultContext(r) {
 		let evidence = [], src = r.citationSource ? sourceLabel(r.citationSource) : "";
@@ -1967,7 +2634,8 @@
 		let v = id => String($(id)?.value || "").trim(), parts = [];
 		let source = sourceLabel($("source").value); if (source) parts.push(source);
 		if (v("authors")) parts.push(t("authors") + " " + v("authors"));
-		if (v("venue")) parts.push(t("venue") + " " + v("venue"));
+		let journals = [...state.venueChips.map(c => c.abbrev || c.name), v("venue")].filter(Boolean);
+		if (journals.length) parts.push(t("venue") + " " + journals.join(", "));
 		if (v("title")) parts.push(t("titleWords") + " " + v("title"));
 		let from = v("yearFrom"), to = v("yearTo");
 		if (from || to) parts.push(from && to ? from + "–" + to : from ? from + "–" : "–" + to);
@@ -1991,9 +2659,9 @@
 	function render() {
 		syncQueryCollapse();
 		if (state.selectedOnly && !state.records.some(r => state.selected.has(r.key))) state.selectedOnly = false;
-		let f = $("filter").value.trim().toLowerCase();
+		let spec = filterSpec();
 		// The library counts follow every other filter, but not the library filter itself.
-		let base = state.records.filter(r => matchesFilter(r, f, false, true));
+		let base = state.records.filter(r => matchesFilter(r, spec, false, true));
 		let owned = base.filter(r => r.inLibrary).length;
 		state.libCounts = { all: base.length, new: base.length - owned, owned };
 		let list = state.selectedOnly ? base : base.filter(libraryPass);
@@ -2031,8 +2699,12 @@
 		}
 		tbody.textContent = "";
 		tbody.appendChild(frag);
+		// Rows are two lines tall when any of them carries an affiliation line, one line otherwise,
+		// so the rhythm of the list is the same from the first row to the last.
+		if (list.some(r => state.affLine && affLineParts(r).length)) $("results-table").setAttribute("data-aff", ""); else $("results-table").removeAttribute("data-aff");
 		applyColumnView();
 		syncFacetChip();
+		syncFilterUI();
 		if (!marquee) marquee = ZotPoPMarquee.attach(window, $("table-wrap"), { mode: "hover" });
 		else marquee.refresh();
 
@@ -2092,15 +2764,26 @@
 		td("authorString", "", r.authorString, r.authorString).dataset.marquee = "authors";
 
 		let tt = td("title", "title", null, r.title);
-		tt.dataset.marquee = "title";
 		// Plain text: the title is the widest cell, and a click on "the row" used
 		// to leave Zotero for the browser. Double-click, Enter or the menu do that.
+		// The title and the affiliation line each roll on their own when they overflow.
+		let main = document.createElement("div");
+		main.className = "t-main";
+		main.dataset.marquee = "title";
 		let a = document.createElement("span");
 		if (r.titleMarkup) rich(a, r.titleMarkup); else a.textContent = r.title;
 		if (r.url) tt.title = r.title + "\n" + t("titleOpenTip");
-		tt.appendChild(a);
+		main.appendChild(a);
 		// A small lime mark ahead of the title (so a narrow cell never clips it): this row was not in the previous run of this search.
-		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); mark.title = t("newMarkTip"); tt.insertBefore(mark, a); }
+		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); mark.title = t("newMarkTip"); main.insertBefore(mark, a); }
+		tt.appendChild(main);
+		let affParts = state.affLine ? affLineParts(r) : [];
+		if (affParts.length) {
+			let line = affLineNode(affParts);
+			line.dataset.marquee = "aff";
+			line.title = affiliationTip(affiliationOf(r));
+			tt.appendChild(line);
+		}
 
 		td("year", "num", r.year == null ? "" : String(r.year));
 		let venueCell = td("venue", "venue", r.venue, r.publisher ? r.venue + " · " + r.publisher : r.venue);
@@ -2226,9 +2909,13 @@
 		box.textContent = "";
 		box.hidden = sources.length < 2;
 		if (box.hidden) return;
-		for (let key of [null, ...sources]) {
+		let keys = [null, ...sources];
+		box.setAttribute("data-n", String(keys.length));
+		for (let key of keys) {
 			let b = document.createElement("button");
 			b.type = "button";
+			// An odd count lets the first choice span the tray, so no cell sits alone in a row.
+			if (keys.length % 2 && key === null) b.className = "wide";
 			// The chip names the index; the qualifier in parentheses is in its tooltip.
 			let full = key ? (ZotPoPSources.SOURCES?.[key]?.label || key) : t("metricsBasisMax");
 			b.textContent = key ? String(full).replace(/\s*[(（][^)）]*[)）]\s*$/, "") : full;
@@ -2264,29 +2951,46 @@
 	}
 	// Results per year as small grey bars. Drawn from every result the other filters let
 	// through, so choosing years does not flatten the picture; the chosen range stays dark.
+	// A long span would be a row of specks, so it is grouped into 2, 5, 10, ... year bins
+	// that start on round years (1970-74, 1975-79) and number at most YEAR_BARS_MAX.
+	const YEAR_BARS_MAX = 24;
+	function yearBins(first, last) {
+		let size = [1, 2, 5, 10, 20, 50, 100].find(s => Math.floor(last / s) - Math.floor(first / s) + 1 <= YEAR_BARS_MAX) || 100;
+		let bins = [];
+		for (let start = Math.floor(first / size) * size; start <= last; start += size) {
+			// Clamped to the years that exist, so a tip never names 2027-2029 for a paper from 2026.
+			bins.push({ from: Math.max(start, first), to: Math.min(start + size - 1, last), size });
+		}
+		return bins;
+	}
 	function drawYearHistogram() {
 		let box = $("metrics-years"); if (!box) return;
 		box.textContent = "";
-		let f = $("filter").value.trim().toLowerCase();
-		let counts = new Map();
-		for (let r of state.records) if (Number.isInteger(r.year) && matchesFilter(r, f, true)) counts.set(r.year, (counts.get(r.year) || 0) + 1);
+		let spec = filterSpec(), counts = new Map();
+		for (let r of state.records) if (Number.isInteger(r.year) && matchesFilter(r, spec, true)) counts.set(r.year, (counts.get(r.year) || 0) + 1);
 		let years = [...counts.keys()];
 		box.hidden = years.length < 2 && !state.yearRange;
 		if (box.hidden) return;
-		let last = Math.max(...years), first = Math.max(Math.min(...years), last - 59), peak = Math.max(...counts.values());
+		let last = Math.max(...years), first = Math.min(...years);
+		let bins = yearBins(first, last);
+		for (let bin of bins) { bin.n = 0; for (let y = bin.from; y <= bin.to; y++) bin.n += counts.get(y) || 0; }
+		let peak = Math.max(...bins.map(bin => bin.n), 1);
 		let bars = document.createElement("div"); bars.className = "yr-bars"; bars.setAttribute("role", "group"); bars.setAttribute("aria-label", t("yearHistogram"));
-		let choose = (a, b) => { state.yearRange = { from: Math.min(a, b), to: Math.max(a, b) }; state.focusKey = null; render(); };
-		for (let y = first; y <= last; y++) {
-			let n = counts.get(y) || 0, b = document.createElement("button");
-			b.type = "button"; b.className = "yr-bar";
-			b.classList.toggle("on", !state.yearRange || (y >= state.yearRange.from && y <= state.yearRange.to));
-			b.title = t("yearBarTip", y, n); b.setAttribute("aria-label", b.title);
-			b.setAttribute("aria-pressed", String(Boolean(state.yearRange) && y >= state.yearRange.from && y <= state.yearRange.to));
-			let fill = document.createElement("span"); fill.style.height = (n ? Math.max(6, Math.round(100 * n / peak)) : 0) + "%"; b.appendChild(fill);
+		if (bins.length > 12) bars.setAttribute("data-dense", "");
+		let covers = bin => Boolean(state.yearRange) && bin.to >= state.yearRange.from && bin.from <= state.yearRange.to;
+		let choose = (a, b) => { state.yearRange = { from: Math.min(a.from, b.from), to: Math.max(a.to, b.to) }; state.focusKey = null; render(); };
+		for (let bin of bins) {
+			let b = document.createElement("button");
+			b.type = "button"; b.className = "yr-bar" + (bin.n ? "" : " zero");
+			b.classList.toggle("on", !state.yearRange || covers(bin));
+			b.title = bin.from === bin.to ? t("yearBarTip", bin.from, bin.n) : t("yearBinTip", bin.from, bin.to, bin.n);
+			b.setAttribute("aria-label", b.title);
+			b.setAttribute("aria-pressed", String(covers(bin)));
+			let fill = document.createElement("span"); fill.style.height = (bin.n ? Math.max(6, Math.round(100 * bin.n / peak)) : 0) + "%"; b.appendChild(fill);
 			// Pressing starts a range and passing over other bars with the button held extends it.
-			b.addEventListener("mousedown", e => { if (e.button) return; state.yearAnchor = y; choose(y, y); });
-			b.addEventListener("mouseenter", e => { if (state.yearAnchor != null && e.buttons) choose(state.yearAnchor, y); });
-			b.addEventListener("click", e => { if (!e.detail) choose(y, y); });
+			b.addEventListener("mousedown", e => { if (e.button) return; state.yearAnchor = bin; choose(bin, bin); });
+			b.addEventListener("mouseenter", e => { if (state.yearAnchor != null && e.buttons) choose(state.yearAnchor, bin); });
+			b.addEventListener("click", e => { if (!e.detail) choose(bin, bin); });
 			bars.appendChild(b);
 		}
 		if (!state.yearUpBound) { state.yearUpBound = true; document.addEventListener("mouseup", () => { state.yearAnchor = null; }); }
@@ -2413,7 +3117,7 @@
 		evidence.textContent = context.evidence.join(" · ");
 		evidence.title = r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH);
 
-		$("d-authors").textContent = r.authorString || t("noAuthors");
+		renderAuthors(r);
 		// Other papers of these authors in this search's results only, never the whole library.
 		let facets = $("d-facets");
 		facets.textContent = "";
@@ -2511,8 +3215,8 @@
 	function revealRecord(key) {
 		if (!state.records.some(r => r.key === key)) return;
 		if (!state.visible.some(r => r.key === key)) {
-			$("filter").value = "";
-			state.facet = null; state.yearRange = null; state.libraryFilter = "all"; state.selectedOnly = false;
+			resetFilters();
+			state.libraryFilter = "all"; state.selectedOnly = false;
 			syncFilterClear();
 		}
 		state.focusKey = state.detailKey = key;
@@ -2615,6 +3319,7 @@
 	function onKeyDown(e) {
 		let mod = e.metaKey || e.ctrlKey;
 		if (e.key === "Escape") {
+			if (state.filterOpen) { closeFilterPop(true); return; }
 			if (openTbMenu) { closeToolbarMenu(true); return; }
 			if (openSel) { closeSelMenu(); return; }
 			if (!$("histmenu").hidden) { closeHistoryMenu(); return; }

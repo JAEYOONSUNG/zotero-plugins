@@ -75,7 +75,9 @@ var ZotPoPHistory = (function () {
 		if (query.keywords) bits.push(String(query.keywords).trim());
 		if (query.title) bits.push("title: " + String(query.title).trim());
 		if (query.authors) bits.push(String(query.authors).trim());
-		if (query.venue) bits.push(String(query.venue).trim());
+		// Journals picked from the list read as their names, not as the OR expression the search was run with.
+		if (Array.isArray(query.venues) && query.venues.length) bits.push(query.venues.map(v => String((v && v.name) || v).trim()).filter(Boolean).join(", "));
+		else if (query.venue) bits.push(String(query.venue).trim());
 		if (query.yearFrom || query.yearTo) bits.push([query.yearFrom || "", query.yearTo || ""].join("–"));
 		// Two combined searches over different sources are different searches, and the
 		// menu showed both as the same words.

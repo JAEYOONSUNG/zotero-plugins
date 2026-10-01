@@ -667,26 +667,26 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 		<button id="mode-papers" type="button" aria-pressed="true" data-i18n="modePapers">논문 검색</button>
 		<button id="mode-authors" type="button" aria-pressed="false" data-i18n="modeAuthors">저자 검색</button>
 	</nav>
-	<section id="author-panel" class="author-panel glass" hidden>
+	<section hidden id="author-panel" class="author-panel glass">
 		<form id="author-form" class="author-query" onsubmit="return false;">
 			<label class="field"><span data-i18n="authorProvider">저자 서비스</span><div class="sel"><select aria-hidden="true" tabindex="-1" id="author-provider"><option selected value="scholar">Google Scholar</option><option value="orcid">ORCID</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">Google Scholar</span><span class="sel-caret"></span></button></div></label>
 			<label id="author-input-kind-field" class="field"><span data-i18n="authorInputKind">Scholar 입력 종류</span><div class="sel"><select aria-hidden="true" tabindex="-1" id="author-input-kind"><option selected value="auto" data-i18n="authorAutoKind">자동 판별</option><option value="name" data-i18n="authorNameKind">저자 이름</option><option value="profile" data-i18n="authorProfileKind">프로필 URL·ID</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">자동 판별</span><span class="sel-caret"></span></button></div></label>
-			<label class="field grow2"><span id="author-input-label" data-i18n="authorScholarInput">저자 이름 또는 Scholar 프로필 URL·ID</span><input value="" id="author-input" type="text" autocomplete="off"></label>
+			<label class="field grow2"><span id="author-input-label" data-i18n="authorScholarInput">저자 이름 또는 Scholar 프로필 URL·ID</span><input value="Jenna Dowd" id="author-input" type="text" autocomplete="off"></label>
 			<label class="field narrow"><span data-i18n="maxResults">최대 결과</span><input id="author-max-results" type="number" min="1" max="2000" value="1000"></label>
-			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search" /></svg><span data-i18n="findAuthorProfiles">프로필 찾기</span></button><button id="author-name-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-user" /></svg><span data-i18n="authorNamePapers">이름으로 논문 검색</span></button><button id="author-stop-btn" type="button" class="icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop" /></svg><span data-i18n="stop">중지</span></button><button id="author-history-btn" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history" /></svg><span data-i18n="history">최근 검색</span></button></div>
+			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search" /></svg><span data-i18n="findAuthorProfiles">프로필 찾기</span></button><button id="author-name-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-user" /></svg><span data-i18n="authorNamePapers">이름으로 논문 검색</span></button><button disabled id="author-stop-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop" /></svg><span data-i18n="stop">중지</span></button><button id="author-history-btn" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history" /></svg><span data-i18n="history">최근 검색</span></button></div>
 		</form>
-		<div class="author-helprow"><p id="author-help" class="author-help"></p><button title="전체 설명 보기" id="author-help-toggle" type="button" class="ghost note-help" aria-expanded="false" aria-controls="author-help-more" aria-label="?" data-i18n-title="metricsMore">?</button></div>
-		<p id="author-help-more" class="author-help author-help-more" hidden="hidden"></p>
-		<div id="author-profiles" class="author-profiles" aria-live="polite"></div>
+		<div class="author-helprow"><p id="author-help" class="author-help">이름을 넣고 「프로필 찾기」를 누르거나 Scholar 프로필 URL·ID를 붙여 넣으세요.</p><button title="전체 설명 보기" id="author-help-toggle" type="button" class="ghost note-help" aria-expanded="false" aria-controls="author-help-more" aria-label="?" data-i18n-title="metricsMore">?</button></div>
+		<p id="author-help-more" class="author-help author-help-more" hidden>「이름으로 논문 검색」은 누구의 논문인지 확인하지 않고 목록만 보여줍니다. 프로필 조회에는 Publish or Perish의 접근 권한이 필요할 수 있으며, 이름 검색은 별도 기능이라 동일 인물임을 확인하지 않습니다.</p>
+		<div id="author-profiles" class="author-profiles" aria-live="polite"><article class="author-profile selected"><div class="author-profile-info"><div class="author-profile-name">Jenna Dowd</div><div class="author-profile-meta">Example Institute of Genome Engineering</div><div class="author-profile-meta">DEMOxAUTHOR1</div><div class="author-profile-meta">공개 서비스 프로필</div></div><div class="author-profile-actions"><button type="button">논문 불러오기</button><button type="button">프로필 열기</button></div></article><article class="author-profile"><div class="author-profile-info"><div class="author-profile-name">Jenna M. Dowd</div><div class="author-profile-meta">Fictional University, Dept. of Biology</div><div class="author-profile-meta">DEMOxAUTHOR2</div><div class="author-profile-meta">프로필 식별자 — 인물 정보 미확인</div></div><div class="author-profile-actions"><button type="button">논문 불러오기</button><button type="button">프로필 열기</button></div></article></div>
 	</section>
-	<form id="query-form" class="query glass collapsed" onsubmit="return false;">
+	<form id="query-form" class="query glass" onsubmit="return false;">
 		<div class="field grow2 keep">
 			<label for="keywords" data-i18n="keywords">키워드 (전체 필드)</label>
 			<input value="tissue repair" placeholder="예: CRISPR base editing" id="keywords" type="text" data-i18n-ph="keywordsPh">
 		</div>
 		<div class="field cond keep" id="cond-field">
 			<label>&#160;</label>
-			<button title="검색 조건을 펼치거나 접습니다" id="cond-toggle" type="button" class="cond-toggle" aria-expanded="false" aria-controls="query-form" data-i18n-title="condTip"><span class="cond-label" data-i18n="condLabel">조건</span><span id="cond-summary" class="cond-summary">통합 검색 (선택한 소스)</span><span class="cond-chev" aria-hidden="true"></span></button>
+			<button title="검색 조건을 펼치거나 접습니다" id="cond-toggle" type="button" class="cond-toggle" aria-expanded="true" aria-controls="query-form" data-i18n-title="condTip"><span class="cond-label" data-i18n="condLabel">접기</span><span id="cond-summary" class="cond-summary"></span><span class="cond-chev" aria-hidden="true"></span></button>
 		</div>
 		<div class="field">
 			<label for="engine" data-i18n="engine">검색 방식</label>
@@ -700,10 +700,10 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 			<label for="authors" data-i18n="authors">저자</label>
 			<input title="OpenAlex·통합 검색에서는 ORCID나 OpenAlex 저자 ID로 인물을 지정할 수 있습니다. 이름은 AND·OR·NOT·괄호를 지원하며 이름 일치만으로 같은 인물임을 보장하지는 않습니다." placeholder="이름, ORCID, OpenAlex ID" id="authors" type="text" data-i18n-ph="authorsPh" data-i18n-title="authorsHelp">
 		</div>
-		<div class="field grow venue-field">
+		<div class="field grow venue-field wide">
 			<label for="venue" data-i18n="venue">저널</label>
-			<div id="venue-box" class="jbox"><span id="venue-chips" class="jchips"></span><input autocomplete="off" aria-expanded="false" aria-controls="venue-list" aria-autocomplete="list" role="combobox" title="저널 이름, 약어(Nat Methods) 또는 머리글자(PNAS)를 입력하고 목록에서 고르세요. 여러 개를 고르면 그중 어느 저널이든 검색합니다." placeholder="예: Nucleic Acids Research" id="venue" type="text" data-i18n-ph="venuePh" data-i18n-title="venueTip"></div>
-			<div aria-label="일치하는 저널" id="venue-list" class="jlist" role="listbox" data-i18n-aria="venueListLabel" hidden="hidden"></div>
+			<div id="venue-box" class="jbox has-chips"><span id="venue-chips" class="jchips"><span title="Nature Methods · Nat Methods" class="jchip"><span class="jchip-name">Nature Methods</span><button title="Nature Methods 빼기" aria-label="Nature Methods 빼기" type="button" class="filter-clear">×</button></span><span title="Proceedings of the National Academy of Sciences · PNAS" class="jchip"><span class="jchip-name">Proceedings of the National Academy of Sciences</span><button title="Proceedings of the National Academy of Sciences 빼기" aria-label="Proceedings of the National Academy of Sciences 빼기" type="button" class="filter-clear">×</button></span><span title="Nucleic Acids Research · Nucleic Acids Res" class="jchip"><span class="jchip-name">Nucleic Acids Research</span><button title="Nucleic Acids Research 빼기" aria-label="Nucleic Acids Research 빼기" type="button" class="filter-clear">×</button></span></span><input value="proc natl acad" autocomplete="off" aria-expanded="true" aria-controls="venue-list" aria-autocomplete="list" role="combobox" title="저널 이름, 약어(Nat Methods) 또는 머리글자(PNAS)를 입력하고 목록에서 고르세요. 여러 개를 고르면 그중 어느 저널이든 검색합니다." placeholder="저널 더 추가…" id="venue" type="text" data-i18n-ph="venuePh" data-i18n-title="venueTip"></div>
+			<div aria-label="일치하는 저널" id="venue-list" class="jlist" role="listbox" data-i18n-aria="venueListLabel"><div class="jopt-note">일치하는 저널이 없습니다. 입력한 그대로 검색합니다.</div><div class="jopt-foot">↑ ↓ 이동 · Enter 선택 · Esc 닫기</div></div>
 		</div>
 		<div class="field grow">
 			<label for="title" data-i18n="titleWords">제목 단어</label>
@@ -768,7 +768,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 			<p data-i18n="combinedSourcesHelp">PubMed·Semantic Scholar·Google Scholar를 추가해 검색 범위를 넓힐 수 있습니다. Google Scholar는 설치된 PoP 엔진이 있으면 사용하며, 서비스별 요청 한도가 적용될 수 있습니다.</p>
 		</details>
 	</form>
-	<div hidden id="banner" class="banner warn"><span id="banner-text">1건을 추가하지 못해 선택에 남겨 두었습니다. 논문을 눌러 상세에서 이유를 확인하십시오.</span><span class="spacer"></span><button id="banner-action" type="button" class="primary">실패 1편 다시 시도</button><button id="banner-close" type="button" class="banner-close">×</button></div>
+	<div hidden id="banner" class="banner"><span id="banner-text">통합 검색은 선택한 소스를 조회해 동일 논문을 합칩니다. “통합 검색 소스 선택”을 펼치면 PubMed·Semantic Scholar·Google Scholar도 추가할 수 있습니다. 끝까지 조회하지 못한 소스는 표시합니다.</span><span class="spacer"></span><button hidden id="banner-action" type="button" class="primary"></button><button id="banner-close" type="button" class="banner-close">×</button></div>
 
 	<div id="main">
 		<aside id="metrics" class="glass">
@@ -801,9 +801,9 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 				<span class="searchbox">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic muted"><use href="#ic-search" /></svg>
 					<input value="" title="결과 필터 (⌘F)" placeholder="결과 필터…" id="filter" type="search" data-i18n-ph="filterPh" data-i18n-title="filterTip">
-					<button title="필터 지우기" id="filter-clear" type="button" class="filter-clear" data-i18n-title="filterClear" aria-label="clear" hidden>×</button>
+					<button hidden title="필터 지우기" id="filter-clear" type="button" class="filter-clear" data-i18n-title="filterClear" aria-label="clear">×</button>
 				</span>
-				<button aria-label="필터" title="단어·저자·저널·기관·유형·연도·인용 수 등으로 결과를 포함하거나 제외합니다" id="filter-btn" type="button" class="icon-text filter-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="filter-pop" data-i18n-title="filterBtnTip" data-i18n-aria="filterBtn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-filter" /></svg><span data-i18n="filterBtn">필터</span><span id="filter-count" class="filter-count" hidden>0</span></button>
+				<button aria-label="필터" title="단어·저자·저널·기관·유형·연도·인용 수 등으로 결과를 포함하거나 제외합니다" id="filter-btn" type="button" class="icon-text filter-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="filter-pop" data-i18n-title="filterBtnTip" data-i18n-aria="filterBtn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-filter" /></svg><span data-i18n="filterBtn">필터</span><span hidden id="filter-count" class="filter-count">0</span></button>
 				<span hidden id="facet-chip" class="facet-chip"><span id="facet-text">이름: Jenna Dowd · 이번 검색 4편</span><button title="전체 결과 보기" id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" aria-label="clear">×</button></span>
 				<span class="spacer"></span>
 				<button title="PDF 첫 페이지를 별도 창에서 미리보기 (P)" id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf" /></svg><span data-i18n="previewAction">미리보기</span></button>
@@ -817,7 +817,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 				<button title="보이는 결과를 복사하거나 저장" id="export-btn" type="button" class="menu-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="exportTip"><span data-i18n="exportMenu">내보내기</span></button>
 				<button title="열, 지표 사이드바, 상세 창" id="view-btn" type="button" class="menu-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="viewTip"><span data-i18n="viewMenu">보기</span></button>
 			</div>
-			<div aria-label="적용 중인 필터" id="filter-chips" class="filter-chips" role="list" data-i18n-aria="filterChipsLabel" hidden></div>
+			<div hidden aria-label="적용 중인 필터" id="filter-chips" class="filter-chips" role="list" data-i18n-aria="filterChipsLabel"></div>
 			<div class="table-wrap" id="table-wrap" tabindex="0">
 				<table data-aff="" data-cols="basic" id="results-table">
 					<colgroup id="cols">
@@ -861,11 +861,11 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><div data-marquee="title" class="t-main"><span>A practical framework for reproducible literature synthesis</span></div><div title="1저자: Sora Lee · Hanbit University · 🇰🇷 KR
 교신저자: Lin Chen · Lumen University · 🇨🇳 CN" data-marquee="aff" class="t-aff">Sora Lee · Hanbit Univ. (KR) — <span class="aff-role">교신 </span>Lin Chen · Lumen Univ. (CN)</div></td><td data-marquee="authors" title="Sora Lee, Lin Chen" data-k="authorString">Sora Lee, Lin Chen</td><td class="num" data-k="year">2024</td><td style="--j-ink-l:hsl(4 55% 42%);--j-fill-l:hsl(4 55% 94%);--j-edge-l:hsl(4 47% 84%);--j-ink-d:hsl(4 50% 73%);--j-fill-d:hsl(4 30% 22%);--j-edge-d:hsl(4 30% 32%)" data-marquee="venue" title="Science · Science" class="venue venue-known" data-k="venue">Science</td><td title="출처: Crossref" class="num" data-k="citations">97</td><td class="num" data-k="cpy">48.5</td><td title="~45.8는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 275" class="num if estimate" data-k="journalIF">~45.8</td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">3</td><td data-marquee="affiliation" title="1저자: Sora Lee · Hanbit University · 🇰🇷 KR
 교신저자: Lin Chen · Lumen University · 🇨🇳 CN" class="aff" data-k="affiliation">Hanbit University</td><td title="1저자: Sora Lee · Hanbit University · 🇰🇷 KR
-교신저자: Lin Chen · Lumen University · 🇨🇳 CN" class="mini country" data-k="country">🇰🇷 KR 🇨🇳 CN</td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.002</a></td></tr><tr data-key="openalex:demo3"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Spatial context and cell-state transitions in regeneration
+교신저자: Lin Chen · Lumen University · 🇨🇳 CN" class="mini country" data-k="country">🇰🇷 KR 🇨🇳 CN</td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.002</a></td></tr><tr class="focused" data-key="openalex:demo3"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Spatial context and cell-state transitions in regeneration
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><div data-marquee="title" class="t-main"><span>Spatial context and cell-state transitions in regeneration</span></div><div title="1저자: Eva Morgan · Kestrel Institute · 🇬🇧 GB
 교신저자: Hana Choi · Hanbit University · 🇰🇷 KR" data-marquee="aff" class="t-aff">Eva Morgan · Kestrel Inst. (GB) — <span class="aff-role">교신 </span>Hana Choi · Hanbit Univ. (KR)</div></td><td data-marquee="authors" title="Eva Morgan, Hana Choi" data-k="authorString">Eva Morgan, Hana Choi</td><td class="num" data-k="year">2026</td><td style="--j-ink-l:hsl(331 38% 42%);--j-fill-l:hsl(331 38% 94%);--j-edge-l:hsl(331 32% 84%);--j-ink-d:hsl(331 38% 73%);--j-fill-d:hsl(331 23% 22%);--j-edge-d:hsl(331 23% 32%)" data-marquee="venue" title="bioRxiv" class="venue venue-known" data-k="venue">bioRxiv</td><td title="출처: OpenAlex" class="num" data-k="citations">3</td><td class="num" data-k="cpy">3.0</td><td class="num if" data-k="journalIF"></td><td role="button" title="PDF 후보가 있습니다 (아직 받지 않음) · 클릭하면 미리보기를 시도합니다 (P)" class="mini pdf" data-k="pdf">●</td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">4</td><td data-marquee="affiliation" title="1저자: Eva Morgan · Kestrel Institute · 🇬🇧 GB
 교신저자: Hana Choi · Hanbit University · 🇰🇷 KR" class="aff" data-k="affiliation">Kestrel Institute</td><td title="1저자: Eva Morgan · Kestrel Institute · 🇬🇧 GB
-교신저자: Hana Choi · Hanbit University · 🇰🇷 KR" class="mini country" data-k="country">🇬🇧 GB 🇰🇷 KR</td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.003</a></td></tr><tr class="in-library focused" data-key="crossref:demo4"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Tissue-scale repair atlases from sparse sampling
+교신저자: Hana Choi · Hanbit University · 🇰🇷 KR" class="mini country" data-k="country">🇬🇧 GB 🇰🇷 KR</td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.003</a></td></tr><tr class="in-library" data-key="crossref:demo4"><td class="chk" data-k="chk"><input tabindex="-1" type="checkbox"></td><td title="Tissue-scale repair atlases from sparse sampling
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><div data-marquee="title" class="t-main"><span>Tissue-scale repair atlases from sparse sampling</span></div><div title="1저자: Ren Ahn · Hanbit University · 🇰🇷 KR
 교신저자: Paula Silva · University of Altmark · 🇩🇪 DE" data-marquee="aff" class="t-aff">Ren Ahn · Hanbit Univ. (KR) — <span class="aff-role">교신 </span>Paula Silva · Univ. of Altmark (DE)</div></td><td data-marquee="authors" title="Ren Ahn, Paula Silva" data-k="authorString">Ren Ahn, Paula Silva</td><td class="num" data-k="year">2025</td><td style="--j-ink-l:hsl(200 55% 33%);--j-fill-l:hsl(200 55% 94%);--j-edge-l:hsl(200 47% 84%);--j-ink-d:hsl(200 50% 65%);--j-fill-d:hsl(200 30% 22%);--j-edge-d:hsl(200 30% 32%)" data-marquee="venue" title="Cell · Cell Press" class="venue venue-known" data-k="venue">Cell</td><td title="출처: Crossref" class="num" data-k="citations">41</td><td class="num" data-k="cpy">41.0</td><td title="~42.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 255" class="num if estimate" data-k="journalIF">~42.5</td><td class="mini pdf" data-k="pdf"></td><td role="button" title="이미 라이브러리에 있습니다 · 클릭하면 그 항목을 보여줍니다" class="mini lib" data-k="inLibrary"><span class="pill pos">✓</span><span title="Style Custom 읽기 상태" class="read-state">읽는 중</span></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">5</td><td data-marquee="affiliation" title="1저자: Ren Ahn · Hanbit University · 🇰🇷 KR
 교신저자: Paula Silva · University of Altmark · 🇩🇪 DE" class="aff" data-k="affiliation">Hanbit University</td><td title="1저자: Ren Ahn · Hanbit University · 🇰🇷 KR
@@ -892,32 +892,31 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 더블클릭 또는 Enter로 브라우저에서 엽니다" class="title" data-k="title"><div data-marquee="title" class="t-main"><span>Spatial context and cell-state transitions in regeneration: a commentary</span></div></td><td data-marquee="authors" title="Tara Novak" data-k="authorString">Tara Novak</td><td class="num" data-k="year">2022</td><td style="--j-ink-l:hsl(326 38% 41%);--j-fill-l:hsl(326 38% 94%);--j-edge-l:hsl(326 32% 84%);--j-ink-d:hsl(326 38% 72%);--j-fill-d:hsl(326 23% 22%);--j-edge-d:hsl(326 23% 32%)" data-marquee="venue" title="Example Journal of Tissue Studies · Example J Tissue Stud" class="venue venue-known" data-k="venue">Example Journal of Tissue Studies</td><td class="num" data-k="citations">–</td><td class="num" data-k="cpy">–</td><td class="num if" data-k="journalIF"></td><td class="mini pdf" data-k="pdf"></td><td class="mini lib" data-k="inLibrary"></td><td data-marquee="status" class="status" data-k="status"></td><td class="num" data-k="rank">13</td><td data-marquee="affiliation" class="aff" data-k="affiliation"></td><td class="mini country" data-k="country"></td><td class="mini tiercell" data-k="tier"></td><td data-marquee="doi" title="doi.org에서 열기 · 복사는 행을 오른쪽 클릭" class="doi" data-k="doi"><a class="doi-link" tabindex="-1" href="#">10.5555/demo.012</a></td></tr></tbody>
 				</table>
 				<div hidden id="empty" class="empty">필터와 일치하는 결과가 없습니다. Esc나 ×로 필터를 지우세요.</div>
-				<div hidden id="busy" class="empty"><span class="spinner"></span><span id="busy-text">통합 검색 (선택한 소스) 검색 중…</span></div>
+				<div hidden id="busy" class="empty"><span class="spinner"></span><span id="busy-text">저자 논문을 불러오는 중…</span></div>
 			</div>
 			<div id="hsplit" class="splitter-h"></div>
 			<div id="detail" class="glass">
 				<div hidden id="detail-empty" class="detail-empty" data-i18n="detailEmpty">행을 클릭하거나 ↓를 누르면 상세 · Space 선택 · P 미리보기 · Enter나 더블클릭은 브라우저 열기 · ⌘C 인용 복사 · 오른쪽 클릭에 더 있습니다.</div>
 				<div id="detail-body">
 					<div class="detail-head">
-						<div id="d-title" class="d-title">Tissue-scale repair atlases from sparse sampling</div>
+						<div id="d-title" class="d-title">Spatial context and cell-state transitions in regeneration</div>
 						<div class="d-actions">
-							<button title="라이브러리에서 보기" id="d-primary" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use id="d-primary-icon" href="#ic-library" /></svg><span id="d-primary-label">라이브러리에서 보기</span></button>
+							<button title="이 논문 추가" id="d-primary" type="button" class="icon-text primary"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use id="d-primary-icon" href="#ic-plus" /></svg><span id="d-primary-label">이 논문 추가</span></button>
 							<button title="브라우저·PDF·도서관 경로 열기, DOI·인용 복사, 인용 수 다시 확인" id="d-more" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false" data-i18n-title="dMoreTip"><span data-i18n="dMore">더보기</span></button>
 						</div>
 					</div>
-					<div id="d-badges" class="badges"><span title="Cell · Cell Press" style="--j-ink-l:hsl(200 55% 33%);--j-fill-l:hsl(200 55% 94%);--j-edge-l:hsl(200 47% 84%);--j-ink-d:hsl(200 50% 65%);--j-fill-d:hsl(200 30% 22%);--j-edge-d:hsl(200 30% 32%)" class="jmark known">Cell</span><span class="badge src"><svg fill="currentColor" class="brand-mark" focusable="false" aria-hidden="true" height="12" width="12" viewBox="0 0 320 512"><path d="M 310.36246,40 25.167851,134.01757 217.23482,200.00243 310.36246,169.33249 Z M 9.637541,139.12923 V 271.09895 L 201.67195,205.11409 Z m 207.597279,71.09651 -192.039829,65.98482 77.543069,25.53667 192.06689,-65.95772 z m 93.12764,30.6754 -192.06695,65.9848 192.06695,65.98494 z M 102.73806,311.99758 9.637541,342.66751 V 472 L 294.80495,377.9825 Z" /></svg>Crossref</span><span class="badge lib">보유 중</span></div>
-					<div title="~42.5는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 255" id="d-evidence" class="d-evidence">Crossref 인용 41 · 출판 후 연평균 41.0 · 저널 IF 추정 42.5</div>
+					<div id="d-badges" class="badges"><span title="bioRxiv" style="--j-ink-l:hsl(331 38% 42%);--j-fill-l:hsl(331 38% 94%);--j-edge-l:hsl(331 32% 84%);--j-ink-d:hsl(331 38% 73%);--j-fill-d:hsl(331 23% 22%);--j-edge-d:hsl(331 23% 32%)" class="jmark">bioRxiv</span><span class="badge src"><svg stroke-linejoin="round" stroke-linecap="round" stroke-width="1.5" stroke="currentColor" fill="none" class="brand-mark" focusable="false" aria-hidden="true" height="12" width="12" viewBox="0 0 16 16"><path d="M8 2.2 13.3 13.4H2.7Z" /><line y2="8.4" y1="8.4" x2="10.7" x1="5.3" /></svg>OpenAlex</span></div>
+					<div title="" id="d-evidence" class="d-evidence">OpenAlex 인용 3 · 출판 후 연평균 3.0 · PDF 후보 있음</div>
 					<div hidden id="d-status" class="d-status"></div>
-					<div id="d-authors" class="d-authors"><div class="au-list"><span title="1저자" class="au au-first">Ren Ahn<sup>1</sup></span>, <span class="au">Paula Silva<sup>2</sup><sup title="교신저자" class="au-corr">*</sup></span></div><div class="au-insts"><span class="au-inst"><sup>1</sup><button title="Hanbit University 소속 저자가 있는 논문만 보기" class="ghost au-inst-btn" type="button">Hanbit University (KR)</button></span><span class="au-inst"><sup>2</sup><button title="University of Altmark 소속 저자가 있는 논문만 보기" class="ghost au-inst-btn" type="button">University of Altmark (DE)</button></span></div><div class="au-legend">* 교신저자</div></div>
-					<div title="이 논문의 프리프린트도 결과에 있습니다: 10.5555/demo.003.
-출처가 이 관계를 기록했습니다. 두 논문은 DOI·인용·선택을 각자 유지하는 별개의 기록입니다." id="d-versions" class="d-versions">프리프린트: bioRxiv · 2026 · 미보유 · <button class="ghost" type="button">결과에서 보기</button></div>
-					<div title="Repair atlases › Tissue maps › 2025 reviews
-Reading list" id="d-collections" class="d-collections">컬렉션: … › Tissue maps › 2025 reviews · Reading list</div>
+					<div id="d-authors" class="d-authors"><div class="au-list"><span title="1저자" class="au au-first">Eva Morgan<sup>1</sup></span>, <span class="au">Hana Choi<sup>2</sup><sup title="교신저자" class="au-corr">*</sup></span></div><div class="au-insts"><span class="au-inst"><sup>1</sup><button title="Kestrel Institute 소속 저자가 있는 논문만 보기" class="ghost au-inst-btn" type="button">Kestrel Institute (GB)</button></span><span class="au-inst"><sup>2</sup><button title="Hanbit University 소속 저자가 있는 논문만 보기" class="ghost au-inst-btn" type="button">Hanbit University (KR)</button></span></div><div class="au-legend">* 교신저자</div></div>
+					<div title="이 프리프린트는 이후 정식 게재되었습니다 (10.5555/demo.004). DOI가 서로 달라 각각 별개의 기록이므로 둘 다 표시합니다.
+출처가 이 관계를 기록했습니다. 두 논문은 DOI·인용·선택을 각자 유지하는 별개의 기록입니다." id="d-versions" class="d-versions">출판본: Cell · 2025 · 보유 · <button class="ghost" type="button">결과에서 보기</button></div>
+					<div hidden title="" id="d-collections" class="d-collections"></div>
 					<details id="d-fold" class="d-fold">
 						<summary data-i18n="dFold">서지정보·소속·저자별 보기</summary>
 						<div hidden id="d-facets" class="d-facets"></div>
-						<div id="d-where" class="d-where"><div>1저자: Ren Ahn · Hanbit University · 🇰🇷 KR</div><div>교신저자: Paula Silva · University of Altmark · 🇩🇪 DE</div></div>
-						<div id="d-meta" class="d-meta">Cell · 2025 · DOI 10.5555/demo.004</div>
+						<div id="d-where" class="d-where"><div>1저자: Eva Morgan · Kestrel Institute · 🇬🇧 GB</div><div>교신저자: Hana Choi · Hanbit University · 🇰🇷 KR</div></div>
+						<div id="d-meta" class="d-meta">bioRxiv · 2026 · DOI 10.5555/demo.003</div>
 					</details>
 					<div id="d-abstract" class="d-abstract">초록이 제공되지 않습니다.</div>
 				</div>
@@ -947,7 +946,7 @@ Reading list" id="d-collections" class="d-collections">컬렉션: … › Tissue
 		<progress hidden id="progress" max="100" value="0"></progress>
 	</div>
 
-	<div id="filter-pop" class="filter-pop" role="dialog" aria-modal="false" aria-labelledby="filter-pop-title" hidden="hidden"></div>
+	<div hidden style="width:528px;left:8px;top:4px;max-height:844px" aria-label="결과 필터" id="filter-pop" class="filter-pop" role="dialog" aria-modal="false" aria-labelledby="filter-pop-title"></div>
 	<div id="ctxmenu" class="ctxmenu" hidden></div>
 	<div hidden style="max-height:852px;top:98px;left:auto;right:32px;max-width:560px" id="histmenu" class="selmenu histmenu" role="menu"></div>
 	<div hidden style="top:3px;left:NaNpx" aria-label="더보기" id="tbmenu" class="selmenu tbmenu" role="menu"></div>
