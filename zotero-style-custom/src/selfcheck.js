@@ -184,11 +184,11 @@
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
-      /* And a rule only this build's stylesheet has: the per-paper
-         annotation container of the 2026-10 redesign. Update both marks
-         when a change touches only one of the two files. */
-      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-annot-paper'
-        && String(rule.style?.getPropertyValue('display') || '').includes('flow-root');
+      /* And a rule only this build's stylesheet has: the rail label that
+         never wraps out of its pill. Update both marks when a change
+         touches only one of the two files. */
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-nav-label'
+        && String(rule.style?.getPropertyValue('white-space') || '').includes('nowrap');
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;
