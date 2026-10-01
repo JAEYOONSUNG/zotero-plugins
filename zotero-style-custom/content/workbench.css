@@ -17,6 +17,8 @@
      one clears 4.5:1 on the hover fill too. */
   --sc-faint: #62666f;
   --sc-accent: #15171c;
+  --sc-focus: #6b6f78;
+  --sc-focus-soft: rgba(107, 111, 120, .22);
   --sc-accent-ink: #ffffff;
   --sc-accent-soft: #e7e9ed;
   --sc-selection: #15171c;
@@ -200,8 +202,11 @@
 #style-custom-workbench button[data-variant=primary]:disabled { opacity: 1; cursor: default; background: transparent; box-shadow: inset 0 0 0 1px var(--sc-border-strong); color: var(--sc-muted); }
 /* Working: the soft accent says it, without a rule the panel uses nowhere else. */
 #style-custom-workbench button[aria-busy=true] { opacity: 1; cursor: progress; color: var(--sc-accent); background: var(--sc-accent-soft); }
-/* One focus ring for every control, row and link: 2px in the ink, 2px off the edge. */
-#style-custom-workbench :focus-visible { outline: 2px solid var(--sc-accent); outline-offset: 2px; }
+/* One calm focus ring for every control, row and link: 2px in a mid grey (3:1 on canvas and card), 1px off the edge. Text fields take a grey edge and a soft halo instead of an outer ring. */
+#style-custom-workbench :focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 1px; }
+#style-custom-workbench input:not([type=checkbox]):not([type=radio]):not([type=color]):focus-visible,
+#style-custom-workbench textarea:focus-visible,
+#style-custom-workbench select:focus-visible { outline: 0; box-shadow: inset 0 0 0 1px var(--sc-focus), 0 0 0 3px var(--sc-focus-soft); }
 /* The 26px family: in a row, a card or a strip. */
 #style-custom-workbench .sc-paper-actions button,
 #style-custom-workbench .sc-hit-actions button,
@@ -465,7 +470,8 @@
 #style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); font-weight: var(--sc-fw-strong); box-shadow: none; }
 #style-custom-workbench .sc-shell nav button[data-tab].active .sc-nav-icon,
 #style-custom-workbench .sc-shell nav button[data-tab][aria-current=page] .sc-nav-icon { color: currentColor; }
-#style-custom-workbench .sc-nav-count { margin-inline-start: auto; }
+#style-custom-workbench .sc-nav-label { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#style-custom-workbench .sc-nav-count { margin-inline-start: auto; flex: none; white-space: nowrap; }
 /* The page itself is the white card. */
 #style-custom-workbench .sc-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; background: var(--sc-surface); border-radius: var(--sc-radius-panel); box-shadow: var(--sc-card-shadow), 0 0 0 1px var(--sc-border); overflow: hidden; }
 #style-custom-workbench .sc-context { flex-shrink: 0; display: flex; align-items: center; flex-wrap: wrap; gap: var(--sc-space-2) var(--sc-space-3); padding: var(--sc-space-4) var(--sc-content-padding) var(--sc-space-3); border-block-end: 0; }
@@ -644,7 +650,7 @@
 #style-custom-workbench .sc-command-option small { color: var(--sc-muted); margin-inline-start: 8px; }
 #style-custom-workbench kbd { font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-mono); padding: 0 4px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-sm); color: var(--sc-muted); }
 
-#style-custom-workbench[data-density=compact] { --sc-h-ctl: 28px; --sc-control-height: 28px; --sc-card-padding: 10px; --sc-content-padding: 12px; --sc-paper-gap: 8px; --sc-nav-width: 148px; }
+#style-custom-workbench[data-density=compact] { --sc-h-ctl: 28px; --sc-control-height: 28px; --sc-card-padding: 10px; --sc-content-padding: 12px; --sc-paper-gap: 8px; --sc-nav-width: 172px; }
 #style-custom-workbench[data-density=compact] .sc-header { padding-block: 8px; }
 #style-custom-workbench[data-density=compact] .sc-search-row { padding-block: 8px; }
 #style-custom-workbench[data-density=compact] .sc-nav-group { margin-block-end: 12px; }
@@ -663,6 +669,8 @@
     --sc-muted: #b0b3bd;
     --sc-faint: #a3a7b2;
     --sc-accent: #ececf1;
+    --sc-focus: #9a9ea9;
+    --sc-focus-soft: rgba(154, 158, 169, .26);
     --sc-accent-ink: #121317;
     --sc-accent-soft: #2e2f38;
     --sc-selection: #ececf1;
@@ -694,7 +702,7 @@
 }
 
 /* The panel is resizable independently of the application viewport. */
-@container sc-workbench (max-width: 1000px) { #style-custom-workbench { --sc-nav-width: 148px; } #style-custom-workbench .sc-shell nav { padding-inline: 8px; } }
+@container sc-workbench (max-width: 1000px) { #style-custom-workbench .sc-shell nav { flex-basis: 172px; padding-inline: 8px; } }
 @container sc-workbench (max-width: 760px) {
   #style-custom-workbench .sc-shell { flex-direction: column; }
   /* Nineteen sections wrapped into five rows of chips took a third of a narrow
@@ -873,7 +881,7 @@
 /* A list being refreshed stays readable: the status line says it is loading.
    Dimming it to 60% put its secondary text at 2.3:1. */
 #style-custom-workbench [aria-busy="true"] { opacity: 1; cursor: progress; }
-#style-custom-workbench .sc-path-row:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -2px; }
+#style-custom-workbench .sc-path-row:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: -2px; }
 /* An action beside a set of view toggles: a verb, not a surface. */
 /* The accent marks where the reader is and where a link goes; an action beside
    them is a verb in the panel's own ink, or the colour stops meaning anything. */
@@ -2170,7 +2178,8 @@
 #style-custom-workbench .sc-hit:has(> .sc-hit-owned) > .sc-hit-owned { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
 #style-custom-workbench .sc-hit:has(> .sc-hit-owned) > .sc-hit-actions { grid-column: 3; grid-row: 1 / span 3; align-self: center; }
 #style-custom-workbench .sc-author-inbox-section { margin: 0; }
-@container sc-workbench (max-width: 760px) {
+/* Below 900px the five fixed columns plus the citation lane no longer fit the card beside the rail: the two-line layout starts here. */
+@container sc-workbench (max-width: 900px) {
   #style-custom-workbench .sc-journal-reading-row { grid-template-columns: 52px 52px minmax(0, 1fr) 76px; column-gap: var(--sc-space-3); row-gap: var(--sc-space-1); }
   #style-custom-workbench .sc-journal-reading-name,
   #style-custom-workbench .sc-journal-reading-citation-compare { grid-column: 1 / -1; }
@@ -2266,5 +2275,6 @@
     -webkit-mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
     mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
   }
-  #style-custom-workbench { --sc-bar-reserve: 52px; }
+  #style-custom-workbench > .sc-selection-bar { min-height: 52px; }
+  #style-custom-workbench:has(> .sc-selection-bar[hidden]) > .sc-shell { margin-block-end: 52px; }
 }

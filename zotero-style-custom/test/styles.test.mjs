@@ -38,7 +38,7 @@ test('light and dark semantic text, muted metadata and selected navigation meet 
   for(const foreground of ['--sc-text','--sc-muted'])for(const background of ['--sc-bg','--sc-surface','--sc-surface-alt'])assert.ok(contrast(palette[foreground],palette[background])>=4.5,`${name} ${foreground}/${background}`);
   assert.ok(contrast(palette['--sc-accent'],palette['--sc-accent-soft'])>=4.5,`${name} selected nav`);
   assert.ok(contrast(palette['--sc-error'],palette['--sc-error-bg'])>=4.5,`${name} error`);
-  assert.ok(contrast(palette['--sc-accent'],palette['--sc-surface'])>=3,`${name} focus indicator`);
+  assert.ok(contrast(palette['--sc-focus'],palette['--sc-surface'])>=3,`${name} focus indicator`);assert.ok(contrast(palette['--sc-focus'],palette['--sc-bg'])>=3,`${name} focus indicator on canvas`);
  }
 });
 test('density changes spacing and control height without hiding functionality',()=>{
@@ -255,4 +255,23 @@ test('the pressed chip keeps reading ink in dark, where accent ink is near-black
   assert.ok(!/\.sc-chip-on[^{]*\{[^}]*--sc-accent-ink/.test(dark),
     'a chip filled with the surface takes the surface ink');
   assert.ok(!/\.sc-chip-button\[aria-pressed=true\][^{]*\{[^}]*--sc-accent-ink/.test(dark));
+});
+
+test('no rule inside a container query selects the container element itself',()=>{
+ // A container query cannot style its own container: such a rule never applies.
+ const blocks=[...css.matchAll(/@container\s+sc-workbench\s+\([^{}]+\)\s*\{/g)];
+ assert.ok(blocks.length>5);
+ for(const m of blocks){
+  let depth=1,i=m.index+m[0].length;const start=i;
+  while(depth&&i<css.length){if(css[i]==='{')depth++;else if(css[i]==='}')depth--;i++;}
+  const body=css.slice(start,i-1);
+  for(const r of body.matchAll(/([^{}]+)\{[^{}]*\}/g))for(const sel of r[1].split(',').map(x=>x.trim()))
+   assert.doesNotMatch(sel,/^#style-custom-workbench(?:\[[^\]]*\])*(?::[\w-]+(?:\([^)]*\))?)*$/,'container query styles its own container: '+sel);
+ }
+});
+test('rail labels never wrap: nowrap with an ellipsis, and the badge keeps its size',()=>{
+ const label=rule('#style-custom-workbench .sc-nav-label');
+ assert.equal(label.getPropertyValue('white-space'),'nowrap');assert.equal(label.getPropertyValue('text-overflow'),'ellipsis');assert.equal(label.getPropertyValue('overflow'),'hidden');assert.equal(label.getPropertyValue('min-width'),'0');
+ assert.ok(rules.some(r=>r.selectorText?.split(',').map(x=>x.trim()).includes('#style-custom-workbench .sc-nav-count')&&/^(none|0 0 auto)$/.test(r.style.getPropertyValue('flex'))),'badge does not shrink');
+ const compact=rule('#style-custom-workbench[data-density=compact]').getPropertyValue('--sc-nav-width');assert.ok(parseInt(compact)>=164,'compact rail fits the longest label and a two-digit badge');
 });

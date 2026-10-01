@@ -37,7 +37,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const demoAction=async()=>hint('이 미리보기의 동작은 예시 데이터에만 적용됩니다. 실제 Zotero에는 연결하지 않습니다.');
  const daysAgo=n=>new Date(Date.now()-n*864e5).toISOString();
  // Reading records for the fictional papers, so the reading page shows what a reader sees.
- const cache={items:{4:{seconds:400,lastRead:daysAgo(20)},1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},workbenchUI:{density:'comfortable',welcomed:true},boards:[]};
+ const cache={items:{4:{seconds:400,lastRead:daysAgo(20)},1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},workbenchUI:{density:(typeof process!=='undefined'&&process.env?.PREVIEW_DENSITY==='compact')||(typeof location!=='undefined'&&/[?&]density=compact/.test(location.search))?'compact':'comfortable',welcomed:true},boards:[]};
  const watched=[
   {id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],
    news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},

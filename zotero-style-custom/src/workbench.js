@@ -497,7 +497,7 @@
    for(const b of shown)b.setAttribute('tabindex',b===shown[next]?'0':'-1');
    shown[next].focus();
   });
-  for(const [label,ids]of GROUPS){const group=node('div',null,nav,{class:'sc-nav-group'});node('div',label,group,{class:'sc-nav-heading'});for(const id of ids){const label=TABS.find(([key])=>key===id)[1];navButtons.set(id,leadIcon(button(label,()=>navigate(id),group,{'data-tab':id}),id));}}
+  for(const [label,ids]of GROUPS){const group=node('div',null,nav,{class:'sc-nav-group'});node('div',label,group,{class:'sc-nav-heading'});for(const id of ids){const label=TABS.find(([key])=>key===id)[1];const nb=button('',()=>navigate(id),group,{'data-tab':id,title:T(label)});node('span',label,nb,{class:'sc-nav-label'});navButtons.set(id,leadIcon(nb,id));}}
   const footer=node('footer',null,panel,{class:'sc-selection-bar'});const selectionLabel=node('span','선택한 문헌 없음',footer,{class:'sc-selection-label'});
   const clearSelection=button('선택 해제',()=>{state.selected.clear();state.annotationIDs.clear();state.matrixUsingSelection=false;restoreKept();render();},footer);
   // Of the three, linking is what the selection is usually for; the other two
@@ -740,7 +740,7 @@
    let badge=cur.querySelector('.sc-nav-count');
    if(!Number.isFinite(value)){badge?.remove();return;}
    if(!badge)badge=node('span',null,cur,{class:'sc-nav-count'});
-   badge.textContent=String(value);
+   badge.textContent=value>999?'999+':String(value);if(value>999)badge.title=value.toLocaleString('en-US');else badge.removeAttribute('title');
   }
   function updateChrome(){
    sectionTitle.textContent=T(TABS.find(([id])=>id===state.tab)?.[1]||'');
