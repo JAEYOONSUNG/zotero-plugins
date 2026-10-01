@@ -180,15 +180,15 @@
        code actually running, and the stylesheet actually applied, for a marker
        of this build. */
     results.push(await attempt('the running panel is this build, not a cached one', () => {
-      const MARK = 'annotationOrder';
+      const MARK = 'groupSections';
       const bench = root.CustomStyleWorkbench;
       const code = bench ? String(bench.attach || '') : '';
       const liveScript = code.includes(MARK);
-      /* And a rule only this build's stylesheet has: a collection path
-         button in a paper's 자세히. Update both marks when a
-         change touches only one of the two files. */
-      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-paper-collection-link'
-        && String(rule.style?.getPropertyValue('display') || '').includes('inline');
+      /* And a rule only this build's stylesheet has: the per-paper
+         annotation container of the 2026-10 redesign. Update both marks
+         when a change touches only one of the two files. */
+      const SHEET = rule => String(rule.selectorText || '').trim() === '#style-custom-workbench .sc-annot-paper'
+        && String(rule.style?.getPropertyValue('display') || '').includes('flow-root');
       let liveSheet = false, sheets = 0;
       for (const sheet of win.document.styleSheets) {
         if (!String(sheet.href || '').endsWith('content/workbench.css')) continue;
