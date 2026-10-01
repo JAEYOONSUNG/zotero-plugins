@@ -1115,7 +1115,7 @@
   function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]'))if(drafts.has(input.dataset.draftKey))input.value=drafts.get(input.dataset.draftKey);syncAIApply();}
   function clear(){
    if(jcrMount){state.jcrBrowserState=jcrMount.state;jcrMount.destroy();jcrMount=null;}
-   previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
+   abortAround();aroundRow=null;previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
   }
 
   /* An empty page: one heading and, when the text has a second sentence, a muted hint. */
@@ -4033,6 +4033,14 @@
     const chip=node('span',word,meta,{class:'sc-signal sc-signal-'+(rank>=3?'retracted':rank>=2?'concern':'corrected'),
      title:rank>=3?'철회된 논문입니다. 인용하기 전에 철회 사유를 확인하세요.':rank>=2?'우려 표명(expression of concern)이 게시된 논문입니다.':'정정·정오표가 게시된 논문입니다.'});
     chip.style.marginInlineEnd='6px';
+   }else if(work.doi&&typeof runtime.cachedIssueStatus==='function'){
+    /* Only what an earlier look at this paper left in the cache: a list never asks. */
+    const known=runtime.cachedIssueStatus(work.doi);
+    if(known==='retracted'||known==='concern'){
+     const chip=node('span',known==='retracted'?'철회':'우려',meta,{class:'sc-signal sc-signal-'+known,'data-from':'cache',
+      title:known==='retracted'?'철회된 논문입니다. 인용하기 전에 철회 사유를 확인하세요.':'우려 표명(expression of concern)이 게시된 논문입니다.'});
+     chip.style.marginInlineEnd='6px';
+    }
    }
    /* The year and the citation count are what a reader sorts by; the journal
       and the access note are there to identify the paper. Only the first two
@@ -4052,8 +4060,10 @@
     /* Owned was a dead end: the reader had to go and search their own
        library for it. 보기 selects it in the list behind the panel. */
     const mine=work.doi&&typeof runtime.itemForDOI==='function'?runtime.itemForDOI(work.doi):null;
-    if(mine&&win.ZoteroPane?.selectItem){const acts=node('div',null,row,{class:'sc-hit-actions'});
-     button('보기',()=>run(async()=>{await win.ZoteroPane.selectItem(mine.id);message(`목록에서 선택했습니다 — ${String(mine.getField?.('title')||work.title||'').slice(0,60)}`);}),acts,{title:'Zotero 목록에서 이 논문 선택'});}
+    const acts=node('div',null,row,{class:'sc-hit-actions'});
+    if(mine&&win.ZoteroPane?.selectItem)button('보기',()=>run(async()=>{await win.ZoteroPane.selectItem(mine.id);message(`목록에서 선택했습니다 — ${String(mine.getField?.('title')||work.title||'').slice(0,60)}`);}),acts,{title:'Zotero 목록에서 이 논문 선택'});
+    aroundToggle(row,acts,work);
+    if(!acts.childNodes.length)acts.remove();
     return done();
    }
    const actions=node('div',null,row,{class:'sc-hit-actions'});
@@ -4069,7 +4079,194 @@
    }),actions);
    if(work.doi)button('DOI',()=>copy(work.doi),actions);
    if(work.pdfURL)button('PDF',()=>win.Zotero.launchURL(work.pdfURL),actions,{'data-opens':'browser'});
+   aroundToggle(row,actions,work);
    return done();
+  }
+
+  /* 이 논문 주변: what happened around a paper after it was published --
+     corrections, retractions and comments (Crossref, Europe PMC), and the
+     reactions to it (Bluesky, Hacker News, Wikipedia, Altmetric with the
+     reader's own key). Asked for the paper being looked at, never for a list,
+     abandoned when the reader moves on, and kept by the runtime per DOI. An
+     answer that could not be had is said so; it never reads as a clean bill. */
+  const aroundRuns=new Set();
+  function abortAround(){for(const c of aroundRuns){try{c.abort?.();}catch(_){}}aroundRuns.clear();}
+  const ISSUE_KIND={correction:'정정',retraction:'철회',withdrawal:'철회(저자)','expression-of-concern':'우려 표명',erratum:'정오표'};
+  const ISSUE_STATUS={retracted:'철회됨',concern:'우려 표명',corrected:'정정 있음'};
+  const AROUND_EVENTS=6;
+  const safeURL=url=>/^https?:\/\//i.test(String(url||''))?String(url):'';
+  const dayOf=value=>String(value||'').slice(0,10);
+  // External text (a post, a headline) is shown as text, never as the panel's own markup.
+  const ext=(tag,text,parent,attrs={})=>{const n=doc.createElementNS(HTML,tag);n.textContent=String(text==null?'':text);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,String(v));parent?.appendChild(n);return n;};
+  function drawAround(parent,source,{open=false,onToggle}={}){
+   const box=node('div',null,parent,{class:'sc-around',role:'region','aria-label':'이 논문 주변'});
+   const bar=node('div',null,box,{class:'sc-around-bar'});
+   /* One line by default: the title, how the notices stand, and the counts of
+      reactions. Pressing it opens the two groups below. */
+   const head=node('button',null,bar,{type:'button',class:'sc-around-summary','aria-expanded':String(!!open)});
+   node('span','이 논문 주변',head,{class:'sc-around-title'});
+   const chips=node('span',null,head,{class:'sc-around-chips'});
+   const chevron=node('span',open?'\u25be':'\u25b8',head,{class:'sc-around-chevron','aria-hidden':'true'});
+   const detail=node('div',null,box,{class:'sc-around-detail'});
+   detail.hidden=!open;
+   const pane=label=>{const g=node('section',null,detail,{class:'sc-group sc-around-group'});sectionHead(label,null,g);return node('div',null,g,{class:'sc-around-body'});};
+   const issuesBox=pane('이슈 경과'),reactionsBox=pane('SNS·웹 반응');
+   let controller=null,seq=0;
+   const summary={issues:'loading',reactions:'loading'};
+   function paintSummary(){
+    chips.replaceChildren();
+    const {issues,reactions}=summary;
+    if(issues==='loading'&&reactions==='loading'){node('span','확인 중…',chips,{class:'sc-muted sc-around-chip-note'});return;}
+    if(issues==='loading')node('span','확인 중…',chips,{class:'sc-muted sc-around-chip-note'});
+    else if(issues==='error')node('span','확인 못함',chips,{class:'sc-around-chip','data-status':'unknown'});
+    else{
+     const status=issues.summary?.status||'unknown';
+     node('span',ISSUE_STATUS[status]||(status==='clean'?'정정·철회 없음':'확인 못함'),chips,{class:'sc-around-chip','data-status':status});
+    }
+    if(reactions==='loading')return;
+    if(reactions==='error'||reactions.allFailed){node('span','반응 확인 못함',chips,{class:'sc-muted sc-around-chip-note'});return;}
+    if(reactions.reason==='no-doi')return;
+    const counts=[['Bluesky',reactions.bluesky?.count],['HN',reactions.hackerNews?.count],['Wikipedia',reactions.wikipedia?.count]].filter(([,n])=>n>0);
+    if(reactions.altmetric&&Number(reactions.altmetric.score)>0)counts.push(['Altmetric',Math.round(Number(reactions.altmetric.score))]);
+    if(!counts.length)node('span','반응 없음',chips,{class:'sc-muted sc-around-chip-note'});
+    for(const[name,n]of counts){const chip=node('span',name+' ',chips,{class:'sc-around-badge'});node('b',String(n),chip);}
+   }
+   function setOpen(value){
+    detail.hidden=!value;head.setAttribute('aria-expanded',String(value));chevron.textContent=value?'\u25be':'\u25b8';
+   }
+   head.addEventListener('click',()=>{const next=detail.hidden;setOpen(next);try{onToggle?.(next);}catch(_){}});
+   paintSummary();
+   const note=(parentEl,text,cls='')=>node('p',text,parentEl,{class:'sc-muted sc-around-note'+(cls?' '+cls:'')});
+   function paintIssues(res){
+    const summary=res?.summary||{},status=summary.status||'unknown',failed=Array.isArray(summary.failed)?summary.failed:[];
+    const checked=dayOf(summary.checked),line=node('div',null,issuesBox,{class:'sc-around-statusline'});
+    let said;
+    if(ISSUE_STATUS[status])said=ISSUE_STATUS[status];
+    else if(status==='clean')said=T('알려진 정정·철회 없음')+(checked?' · '+T(`${checked} 확인`):'');
+    else said=T('확인 못함')+(failed.length?' ('+T(`${failed.join(', ')} 응답 없음`)+')':summary.reason==='no-doi'?' ('+T('DOI 없음')+')':'');
+    ext('span',said,line,{class:'sc-around-status','data-status':status,role:'status'});
+    if(ISSUE_STATUS[status]&&checked)node('span',T(`${checked} 확인`),line,{class:'sc-muted sc-around-date'});
+    const events=Array.isArray(res?.events)?res.events:[];
+    if(events.length){
+     const list=node('ol',null,issuesBox,{class:'sc-around-timeline'});
+     const draw=event=>{
+      const row=node('li',null,list,{class:'sc-around-row','data-kind':event.kind});
+      node('span',event.date?dayOf(event.date):T('날짜 미상'),row,{class:'sc-around-when'});
+      const name=event.kind==='comment'?T(`코멘트 ${event.count||1}건`):T(ISSUE_KIND[event.kind]||'정정');
+      const target=safeURL(event.url);
+      if(target){const b=node('button',null,row,{type:'button',class:'sc-around-link','data-opens':'browser',title:target});b.textContent=name;b.addEventListener('click',()=>{try{win.Zotero.launchURL(target);}catch(_){}});}
+      else ext('span',name,row,{class:'sc-around-kind'});
+      ext('span',[event.source,event.via].filter(Boolean).join(' · '),row,{class:'sc-muted sc-around-src'});
+     };
+     events.slice(0,AROUND_EVENTS).forEach(draw);
+     if(events.length>AROUND_EVENTS){const more=button(T(`더 보기 · ${events.length-AROUND_EVENTS}건`),()=>{more.remove();events.slice(AROUND_EVENTS).forEach(draw);},issuesBox,{class:'sc-quiet-action'});}
+    }
+    if(status!=='unknown'&&failed.length)note(issuesBox,T(`응답 없음: ${failed.join(', ')}`));
+    const peer=source.doi?'https://pubpeer.com/search?q='+encodeURIComponent(String(source.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').toLowerCase()):'';
+    if(peer){const acts=node('div',null,issuesBox,{class:'sc-around-actions'});const b=node('button','PubPeer에서 보기',acts,{type:'button',class:'sc-quiet-action','data-opens':'browser'});b.addEventListener('click',()=>{try{win.Zotero.launchURL(peer);}catch(_){}});}
+   }
+   function paintReactions(res){
+    const checked=dayOf(res?.checked),failed=Array.isArray(res?.failed)?res.failed:[];
+    if(res?.reason==='no-doi'){note(reactionsBox,'DOI가 없어 반응을 찾을 수 없습니다');return;}
+    if(res?.allFailed){note(reactionsBox,T('확인 못함')+' ('+T(`${failed.join(', ')} 응답 없음`)+')');return;}
+    const bsky=res?.bluesky||{count:0,top:[]},hn=res?.hackerNews||{count:0,top:[]},wiki=res?.wikipedia||{count:0,articles:[]},alt=res?.altmetric;
+    const counts=[['Bluesky',bsky.count],['Hacker News',hn.count],['Wikipedia',wiki.count]].filter(([,n])=>n>0);
+    if(alt&&Number(alt.score)>0)counts.push(['Altmetric',Math.round(Number(alt.score))]);
+    if(!counts.length){note(reactionsBox,T('찾은 반응 없음')+(checked?' · '+T(`${checked} 확인`):''));}
+    else{
+     const badges=node('div',null,reactionsBox,{class:'sc-around-badges'});
+     for(const[name,n]of counts){const chip=node('span',name+' ',badges,{class:'sc-around-badge'});node('b',String(n),chip);}
+    }
+    const hidden=[];
+    const link=(url,parentEl,label)=>{const target=safeURL(url);if(!target)return;const b=node('button',label,parentEl,{type:'button',class:'sc-quiet-action','data-opens':'browser',title:target});b.addEventListener('click',()=>{try{win.Zotero.launchURL(target);}catch(_){}});};
+    const post=(p,parentEl)=>{
+     const c=node('article',null,parentEl,{class:'sc-around-card','data-source':'bluesky'});
+     const head=node('p',null,c,{class:'sc-around-card-head'});
+     ext('span',p.author||p.handle,head,{class:'sc-around-author'});
+     if(p.date)ext('span',' · '+dayOf(p.date),head,{class:'sc-muted'});
+     ext('p',p.text,c,{class:'sc-around-text'});
+     const foot=node('div',null,c,{class:'sc-around-card-foot'});
+     ext('span','♥ '+(p.likes||0)+'   ↻ '+(p.reposts||0),foot,{class:'sc-muted sc-around-stats','aria-label':T(`좋아요 ${p.likes||0}, 리포스트 ${p.reposts||0}`)});
+     link(p.url,foot,'Bluesky에서 보기');
+    };
+    const story=(h,parentEl)=>{
+     const c=node('article',null,parentEl,{class:'sc-around-card','data-source':'hackernews'});
+     ext('p',h.title,c,{class:'sc-around-text'});
+     const foot=node('div',null,c,{class:'sc-around-card-foot'});
+     ext('span',T(`추천 ${h.points||0} · 댓글 ${h.comments||0}`)+(h.date?' · '+dayOf(h.date):''),foot,{class:'sc-muted sc-around-stats'});
+     link(h.url,foot,'Hacker News에서 보기');
+    };
+    const posts=Array.isArray(bsky.top)?bsky.top:[],stories=Array.isArray(hn.top)?hn.top:[],articles=Array.isArray(wiki.articles)?wiki.articles:[];
+    if(posts.length||stories.length){
+     const cards=node('div',null,reactionsBox,{class:'sc-around-cards'});
+     posts.slice(0,3).forEach(p=>post(p,cards));
+     stories.slice(0,1).forEach(h=>story(h,cards));
+    }
+    const rest=posts.slice(3).length+stories.slice(1).length+articles.length;
+    if(rest){
+     const more=button(T(`더 보기 · ${rest}건`),()=>{
+      more.remove();
+      let cards=reactionsBox.querySelector('.sc-around-cards');if(!cards)cards=node('div',null,reactionsBox,{class:'sc-around-cards'});
+      posts.slice(3).forEach(p=>post(p,cards));stories.slice(1).forEach(h=>story(h,cards));
+      if(articles.length){
+       const wl=node('div',null,reactionsBox,{class:'sc-around-wiki'});
+       node('p','Wikipedia 문서',wl,{class:'sc-muted sc-around-note'});
+       for(const a of articles){const r=node('div',null,wl,{class:'sc-around-row'});link(a.url,r,a.title||'Wikipedia');}
+      }
+     },reactionsBox,{class:'sc-quiet-action'});
+    }
+    if(failed.length)note(reactionsBox,T(`응답 없음: ${failed.join(', ')}`));
+   }
+   async function load(force=false){
+    if(controller){aroundRuns.delete(controller);try{controller.abort?.();}catch(_){}}
+    const mine=++seq;
+    controller=typeof win.AbortController==='function'?new win.AbortController():typeof AbortController==='function'?new AbortController():null;
+    if(controller)aroundRuns.add(controller);
+    const signal=controller?.signal,live=()=>mine===seq&&!disposed&&!signal?.aborted;
+    const ask=(which,target,fn,paint,waiting)=>{
+     target.replaceChildren();target.setAttribute('aria-busy','true');
+     node('p',waiting,target,{class:'sc-muted sc-around-loading',role:'status'});
+     summary[which]='loading';paintSummary();
+     return Promise.resolve().then(()=>fn({signal,force})).then(result=>{
+      if(!live())return;target.replaceChildren();target.removeAttribute('aria-busy');paint(result);summary[which]=result||'error';paintSummary();
+     },error=>{
+      if(!live()||error?.name==='AbortError')return;
+      target.replaceChildren();target.removeAttribute('aria-busy');note(target,'확인하지 못했습니다 — 다시 확인을 눌러 보세요');summary[which]='error';paintSummary();
+     });
+    };
+    await Promise.all([ask('issues',issuesBox,source.issues,paintIssues,'이슈 경과를 확인하는 중…'),ask('reactions',reactionsBox,source.reactions,paintReactions,'SNS·웹 반응을 찾는 중…')]);
+   }
+   button('다시 확인',()=>load(true),bar,{class:'sc-quiet-action'});
+   run(()=>load(false));
+   return {box,destroy(){seq++;if(controller){aroundRuns.delete(controller);try{controller.abort?.();}catch(_){}}box.remove();}};
+  }
+  // A paper known only by its DOI -- a row in a list of related works.
+  function aroundSource(doi,urls=[]){
+   return {doi,issues:o=>runtime.doiIssues(doi,o),reactions:o=>runtime.doiReactions(doi,urls,o)};
+  }
+  /* Only one row is open at a time: opening another closes the first and
+     abandons its request. */
+  let aroundRow=null;
+  function closeAroundRow(){
+   if(!aroundRow)return;
+   const {row,toggle,handle}=aroundRow;aroundRow=null;
+   handle.destroy();toggle.setAttribute('aria-expanded','false');row.removeAttribute('data-around');
+  }
+  function aroundToggle(row,actions,work){
+   if(typeof runtime.doiIssues!=='function'||typeof runtime.doiReactions!=='function')return null;
+   const toggle=node('button','주변 보기',actions,{type:'button',class:'sc-hit-around','aria-expanded':'false'});
+   if(!work.doi){toggle.disabled=true;toggle.title=T('DOI가 없어 확인할 수 없습니다');return toggle;}
+   toggle.title=T('정정·철회와 SNS 반응을 이 논문에 대해서만 찾아봅니다');
+   toggle.addEventListener('click',()=>{
+    const was=aroundRow&&aroundRow.row===row;
+    closeAroundRow();
+    if(was)return;
+    // Beside the row, not inside it: a row's own grid has columns of its own.
+    const handle=drawAround(row.parentNode,aroundSource(work.doi,[work.url].filter(Boolean)),{open:true});handle.box.classList.add('sc-around-inline');row.after(handle.box);
+    aroundRow={row,toggle,handle};
+    toggle.setAttribute('aria-expanded','true');row.setAttribute('data-around','open');
+   });
+   return toggle;
   }
 
   function hitList(works,parent){
@@ -4293,6 +4490,13 @@
       second copy of it pushed the order itself below the fold. The views
       themselves are chosen above, on the one control that also holds 새 논문. */
    const b=head;
+   // The paper's own surroundings, asked for once it is the one in focus.
+   if(typeof runtime.paperIssues==='function'&&typeof runtime.paperReactions==='function'){
+    const ref=runtime.Z.Items.get(Number(item.id));
+    drawAround(node('div',null,body,{class:'sc-around-host'}),{doi:item.doi,
+     issues:o=>runtime.paperIssues(ref,o),reactions:o=>runtime.paperReactions(ref,o)},
+     {open:runtime.cache.workbenchUI?.aroundOpen===true,onToggle:value=>saveUI({aroundOpen:value})});
+   }
    const list=node('div',null,body);
    async function path({refresh=false}={}){
     const ref=runtime.Z.Items.get(Number(item.id));
@@ -4469,7 +4673,7 @@
      row.classList.add('sc-path-row');
      row.setAttribute('tabindex','-1');
      row.dataset.work=work.id;
-     if(work.seed){row.classList.add('sc-path-seed');row.querySelector('.sc-hit-owned')?.remove();}
+     if(work.seed){row.classList.add('sc-path-seed');row.querySelector('.sc-hit-owned')?.remove();row.querySelector('.sc-hit-around')?.remove();}
      const num=number.get(work.id);
      if(num)row.dataset.step=String(num);
      /* On the shelf but not finished: how far it has gone is said once, in
@@ -6048,7 +6252,7 @@
    // panel must write it, not discard it.
    for(const flush of memoFields)Promise.resolve(flush()).catch(error=>runtime.Z.logError?.(error));
    memoFields=[];
-   disposed=true;win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
+   abortAround();disposed=true;win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
   const accent=runtime.pref('accentColor','#374151');if(/^#[a-f\d]{6}$/i.test(accent)&&!['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=Math.max(11,Math.min(20,Number(runtime.pref('panelFontSize',13))||13))+'px';
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.

@@ -320,3 +320,14 @@ test('referenceDate reads PubMed citation strings', () => {
   assert.equal(attention.referenceDate('Foo. 1999;1:1.'), '1999');
   assert.equal(attention.referenceDate('nothing'), '');
 });
+
+test('peekIssues answers from what is kept, of any age, and never makes a request', async () => {
+  const {tools, log, advance} = make(wakefieldRoutes);
+  assert.equal(tools.peekIssues(WAKEFIELD), null, 'nothing kept, nothing asked');
+  assert.equal(log.length, 0);
+  await tools.issues(WAKEFIELD);
+  const asked = log.length;
+  advance(400 * 86400000);
+  assert.equal(tools.peekIssues('https://doi.org/' + WAKEFIELD.toUpperCase()).summary.status, 'retracted', 'a retraction outlives its freshness');
+  assert.equal(log.length, asked);
+});

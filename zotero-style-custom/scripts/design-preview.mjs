@@ -13,7 +13,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const doc=win.document;
  const papers=[
-  {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; J. Park',year:'2025',venue:'Example Cell Research',doi:'',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
+  {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; J. Park',year:'2025',venue:'Example Cell Research',doi:'10.5555/demo.1',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
   {id:'2',title:'A practical framework for reproducible literature synthesis',authors:'S. Lee; L. Chen',year:'2024',venue:'Example Methods',doi:'',tags:['#review/reproducibility'],abstract:'실제 논문이 아닌 화면 구성용 예시 데이터입니다.',itemType:'journalArticle',status:'done',rating:5,citations:64,impactFactor:8.2,seconds:3200},
   {id:'3',title:'Spatial context and cell-state transitions in regeneration',authors:'E. Morgan; H. Choi',year:'2026',venue:'Example Biology',doi:'',tags:['#methods/spatial'],abstract:'새 문헌의 지표가 아직 없을 때 0과 미확인을 구분해 보여줍니다.',itemType:'preprint',status:'unread',rating:0,citations:null,impactFactor:null,seconds:0},
   // Three more on the same shelves, unread, so the journals tab has something to weigh.
@@ -139,6 +139,27 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    return plan;
   },
   relatedWorksCached:async()=>({work:{id:'S'},suggestions:[]}),
+  /* 이 논문 주변, fictional and offline: the paper in focus was corrected and
+     later retracted, and people wrote about it. Other papers answer from
+     the same table, so a row opened in the list has something to say too. */
+  paperIssues:async()=>({events:[
+   {date:'2024-03-06',kind:'correction',source:'Crossref',label:'Correction',url:'https://example.org/notice/1'},
+   {date:'2025-06-12',kind:'retraction',source:'Crossref',via:'Retraction Watch',label:'Retraction',url:'https://example.org/notice/2'},
+   {date:'2025-07-02',kind:'comment',source:'Europe PMC',label:'Comments',count:4,url:'https://example.org/notice/3'}],
+   summary:{status:'retracted',checked:new Date().toISOString(),failed:[],comments:4}}),
+  paperReactions:async()=>({
+   bluesky:{count:12,top:[
+    {author:'Dana Whitfield',handle:'dana.example',text:'Reading the retraction notice next to the original figures is a useful exercise in what a repair atlas can and cannot claim. The sampling argument in the methods never held up for the spatial subset.',date:'2025-06-20T10:00:00Z',likes:48,reposts:12,replies:3,url:'https://example.org/bsky/1'},
+    {author:'Lab of Open Methods',handle:'openmethods.example',text:'Thread on why the control tissue was not comparable.',date:'2025-06-14T10:00:00Z',likes:21,reposts:5,replies:1,url:'https://example.org/bsky/2'},
+    {author:'Mina Park',handle:'mpark.example',text:'Added this to our journal club list.',date:'2025-02-03T10:00:00Z',likes:6,reposts:0,replies:0,url:'https://example.org/bsky/3'}]},
+   hackerNews:{count:1,top:[{title:'Tissue repair atlas retracted after reanalysis',points:214,comments:87,date:'2025-06-13T00:00:00Z',url:'https://example.org/hn/1'}]},
+   wikipedia:{count:28,articles:[{title:'Tissue regeneration',url:'https://example.org/wiki/1'},{title:'Single-cell sequencing',url:'https://example.org/wiki/2'}]},
+   pubpeer:{url:'https://example.org/pubpeer'},checked:new Date().toISOString(),failed:[]}),
+  doiIssues:async doi=>({events:doi==='10.5555/demo-p2'?[{date:'2024-11-02',kind:'expression-of-concern',source:'Crossref',label:'EoC',url:'https://example.org/notice/4'}]:[],
+   summary:{status:doi==='10.5555/demo-p2'?'concern':'clean',checked:new Date().toISOString(),failed:[],comments:0}}),
+  doiReactions:async()=>({bluesky:{count:0,top:[]},hackerNews:{count:0,top:[]},wikipedia:{count:3,articles:[]},pubpeer:{url:''},checked:new Date().toISOString(),failed:['Bluesky']}),
+  // What an earlier look left in the cache, so two rows in the lists wear a badge.
+  cachedIssueStatus:doi=>doi==='10.5555/demo-f3'?'retracted':doi==='10.5555/demo-p2'?'concern':null,
   authorUpdates:async()=>({profile:{name:'Jennifer A. Doudna',hIndex:178,works:512,citations:198432,
     institutions:['UC Berkeley'],topics:[{name:'CRISPR',count:212},{name:'RNA biology',count:88},{name:'Genome editing',count:64}],
     orcid:'https://orcid.org/0000-0001-0000-0000'},
@@ -204,6 +225,19 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    {id:'demo4',kind:'journal',mode:'ex',values:['Example Methods']}]);
   bench.filters.open();
   const wanted=flags.match(/editor=(\w+)/);if(wanted)await bench.filters.edit(wanted[1]);
+ }
+ /* design-preview.html?around=open opens the paper's own summary and 주변 보기 on the
+    third related row (an owned one) as soon as they are drawn, so the opened state can be audited. */
+ if(/around=open/.test(flags)){
+  const opened=new WeakSet();
+  new win.MutationObserver(()=>{
+   // The paper's own summary opens, and so does the third row of the list (an owned one).
+   const head=bench.panel.querySelector('.sc-around-summary[aria-expanded=false]');
+   if(head&&!opened.has(head)){opened.add(head);head.click();}
+   const rows=[...bench.panel.querySelectorAll('.sc-hit-around:not(:disabled)')];
+   const row=rows[2];
+   if(row&&!opened.has(row)&&!bench.panel.querySelector('.sc-hit[data-around=open]')){opened.add(row);row.click();}
+  }).observe(bench.panel,{childList:true,subtree:true});
  }
  /* &suggest=1 types 저널: into the search box, which lists the journals under it. */
  if(/suggest/.test(flags)){const box=bench.panel.querySelector('[aria-label="작업 패널 검색"]');box.value='저널:exa';box.dispatchEvent(new win.Event('input',{bubbles:true}));box.focus?.();}

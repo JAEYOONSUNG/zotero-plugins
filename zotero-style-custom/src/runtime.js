@@ -3926,6 +3926,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return this.attention().reactions(record.DOI, [record.url], {signal, force});
   }
 
+  // The same two questions for a work known only by its DOI (a row in a list of related papers).
+  async doiIssues(doi, {signal, force = false} = {}) { return this.attention().issues(doi, {signal, force}); }
+  async doiReactions(doi, urls, {signal, force = false} = {}) { return this.attention().reactions(doi, urls || [], {signal, force}); }
+  // What an earlier look left in the cache, never a request: the list badge reads this.
+  cachedIssueStatus(doi) { return this.attention().peekIssues(doi)?.summary?.status || null; }
+
   async refreshPaperSignals(items, {signal, onProgress, pace = 0} = {}) {
     const summary = {ok: 0, "not-found": 0, unsupported: 0, error: 0, remaining: 0, budgetGone: false};
     const queue = [...new Set(items)].filter(item => this.isRegular(item));

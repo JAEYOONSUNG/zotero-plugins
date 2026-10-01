@@ -337,7 +337,10 @@
       }, value => value.failed.length ? TTL.failure : TTL.reactions);
     }
 
-    return {issues, reactions, landingURL, TTL};
+    // What is already kept for a paper, of any age and with no request: the list badge.
+    const peekIssues = doiInput => { const slot = record(bareDOI(doiInput)).issues; return slot && slot.value ? slot.value : null; };
+
+    return {issues, reactions, landingURL, peekIssues, TTL};
   }
 
   const api = {create, pubpeerURL, referenceDate, TTL, TIMEOUT};

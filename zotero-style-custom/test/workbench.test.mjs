@@ -5092,3 +5092,251 @@ test('저널 rule editor: typing a name, abbreviation or acronym narrows the lis
  assert.equal(f.bench.filters.rules()[0].values.length,2);assert.equal(f.body().querySelectorAll('.sc-paper-card').length,2);
  f.bench.destroy();
 });
+
+/* 이 논문 주변: what happened around the paper in focus. */
+const aroundIssues = (status, events = [], extra = {}) => ({events, summary: {status, checked: '2026-10-01T03:00:00Z', failed: [], comments: 0, ...extra}});
+const aroundReactions = (extra = {}) => ({bluesky: {count: 0, top: []}, hackerNews: {count: 0, top: []}, wikipedia: {count: 0, articles: []},
+ pubpeer: {url: 'https://pubpeer.com/search?q=x'}, checked: '2026-10-01T03:00:00Z', failed: [], ...extra});
+async function aroundFixture({issues = aroundIssues('clean'), reactions = aroundReactions()} = {}) {
+ const f = await pathFixture();
+ f.asked = [];
+ f.runtime.paperIssues = async (ref, o) => { f.asked.push(['issues', ref.id, o]); return typeof issues === 'function' ? issues(ref, o) : issues; };
+ f.runtime.paperReactions = async (ref, o) => { f.asked.push(['reactions', ref.id, o]); return typeof reactions === 'function' ? reactions(ref, o) : reactions; };
+ f.around = () => f.body().querySelector('.sc-around');
+ f.launched = [];
+ f.win.Zotero = {...(f.win.Zotero || {}), launchURL: url => f.launched.push(url)};
+ return f;
+}
+
+test('around: each issue status reads in its own words and only a retraction is red', async () => {
+ const cases = [['retracted', '철회됨'], ['concern', '우려 표명'], ['corrected', '정정 있음'],
+  ['clean', '알려진 정정·철회 없음 · 2026-10-01 확인'], ['unknown', '확인 못함 (Crossref 응답 없음)']];
+ for (const [status, words] of cases) {
+  const f = await aroundFixture({issues: aroundIssues(status, [], status === 'unknown' ? {failed: ['Crossref']} : {})});
+  try {
+   await f.bench.show('related');await settle();
+   const line = f.around().querySelector('.sc-around-status');
+   assert.equal(line.dataset.status, status);
+   assert.ok(line.textContent.startsWith(words), status + ': ' + line.textContent);
+   const css = fs.readFileSync(new URL('../content/workbench.css', import.meta.url), 'utf8');
+   const red = css.split('\n').filter(l => /sc-around/.test(l) && /var\(--sc-error\)/.test(l));
+   assert.ok(red.every(l => /retraction|withdrawal|retracted/.test(l)), 'red ink is only for a retraction');
+  } finally { f.bench.destroy(); }
+ }
+});
+
+test('around: the timeline names each kind in Korean, dates it, and links out through the safe path', async () => {
+ const events = [
+  {date: '2019-03-01', kind: 'correction', source: 'Crossref', label: 'Correction', url: 'https://doi.org/10.1/c'},
+  {date: '2020-05-02', kind: 'expression-of-concern', source: 'Crossref', label: 'EoC', url: 'https://doi.org/10.1/e'},
+  {date: '2020-06-02', kind: 'erratum', source: 'Europe PMC', label: 'Erratum', url: ''},
+  {date: '2021-01-09', kind: 'retraction', source: 'Crossref', via: 'Retraction Watch', label: 'Retraction', url: 'https://doi.org/10.1/r'},
+  {date: '2021-02-09', kind: 'withdrawal', source: 'Crossref', label: 'Withdrawal', url: 'javascript:alert(1)'},
+  {date: '2021-03-01', kind: 'comment', source: 'Europe PMC', label: 'Comments', count: 3, url: 'https://europepmc.org/article/MED/1'}];
+ const f = await aroundFixture({issues: aroundIssues('retracted', events)});
+ try {
+  await f.bench.show('related');await settle();
+  const rows = [...f.around().querySelectorAll('.sc-around-row')];
+  const said = rows.map(r => r.querySelector('.sc-around-link,.sc-around-kind').textContent);
+  assert.deepEqual(said, ['정정', '우려 표명', '정오표', '철회', '철회(저자)', '코멘트 3건']);
+  assert.match(rows[3].textContent, /2021-01-09.*Crossref · Retraction Watch/);
+  const links = [...f.around().querySelectorAll('.sc-around-timeline .sc-around-link')];
+  assert.equal(links.length, 4, 'a notice without an address, or with an unsafe one, is text, not a link');
+  assert.ok(links.every(b => b.getAttribute('data-opens') === 'browser'));
+  links[0].dispatchEvent(new f.win.Event('click', {bubbles: true}));
+  assert.deepEqual(f.launched, ['https://doi.org/10.1/c']);
+  const peer = [...f.around().querySelectorAll('button')].find(b => b.textContent === 'PubPeer에서 보기');
+  assert.ok(peer && peer.getAttribute('data-opens') === 'browser');
+  peer.dispatchEvent(new f.win.Event('click', {bubbles: true}));
+  assert.match(f.launched.at(-1), /^https:\/\/pubpeer\.com\/search\?q=10\.1234%2Fa$/);
+ } finally { f.bench.destroy(); }
+});
+
+test('around: reactions show counts, the top posts clamped as cards, and more on request', async () => {
+ const post = n => ({author: 'Writer ' + n, handle: 'w' + n + '.bsky.social', text: 'Post <b>' + n + '</b> text', date: '2026-09-0' + n + 'T10:00:00Z', likes: 10 - n, reposts: n, replies: 0, url: 'https://bsky.app/profile/w' + n + '/post/' + n});
+ const f = await aroundFixture({reactions: aroundReactions({
+  bluesky: {count: 12, top: [post(1), post(2), post(3)]},
+  hackerNews: {count: 2, top: [{title: 'HN one', points: 90, comments: 4, date: '2026-09-01T00:00:00Z', url: 'https://news.ycombinator.com/item?id=1'}, {title: 'HN two', points: 5, comments: 0, date: '', url: 'https://news.ycombinator.com/item?id=2'}]},
+  wikipedia: {count: 28, articles: [{title: 'Some article', url: 'https://en.wikipedia.org/wiki/Some_article'}]},
+  altmetric: {score: 41.6}})});
+ try {
+  await f.bench.show('related');await settle();
+  const badges = [...f.around().querySelectorAll('.sc-around-detail .sc-around-badge')].map(b => b.textContent.replace(/\s+/g, ' ').trim());
+  assert.deepEqual(badges, ['Bluesky 12', 'Hacker News 2', 'Wikipedia 28', 'Altmetric 42']);
+  assert.equal(f.around().querySelectorAll('[data-source=bluesky]').length, 3);
+  assert.equal(f.around().querySelectorAll('[data-source=hackernews]').length, 1);
+  const text = f.around().querySelector('.sc-around-text');
+  assert.equal(text.textContent, 'Post <b>1</b> text', 'a post is text, never markup');
+  assert.equal(text.querySelector('b'), null);
+  assert.match(f.around().querySelector('.sc-around-stats').textContent, /♥ 9\s+↻ 1/);
+  const more = [...f.around().querySelectorAll('button')].find(b => b.textContent.startsWith('더 보기'));
+  assert.ok(more, 'there is more to show'); more.dispatchEvent(new f.win.Event('click', {bubbles: true}));
+  assert.equal(f.around().querySelectorAll('[data-source=hackernews]').length, 2);
+  assert.ok(f.around().textContent.includes('Some article'));
+  for (const b of f.around().querySelectorAll('.sc-around-card button, .sc-around-wiki button')) assert.equal(b.getAttribute('data-opens'), 'browser');
+ } finally { f.bench.destroy(); }
+});
+
+test('around: nothing found and sources that failed are said quietly, and never as a clean answer', async () => {
+ let f = await aroundFixture({reactions: aroundReactions()});
+ try {
+  await f.bench.show('related');await settle();
+  const quiet = [...f.around().querySelectorAll('.sc-around-group')][1].textContent;
+  assert.match(quiet, /찾은 반응 없음 · 2026-10-01 확인/);
+ } finally { f.bench.destroy(); }
+ f = await aroundFixture({reactions: aroundReactions({failed: ['Bluesky'], bluesky: {count: 0, top: []}, wikipedia: {count: 4, articles: []}})});
+ try {
+  await f.bench.show('related');await settle();
+  const second = [...f.around().querySelectorAll('.sc-around-group')][1].textContent;
+  assert.match(second, /Wikipedia 4/);assert.match(second, /응답 없음: Bluesky/);
+ } finally { f.bench.destroy(); }
+ f = await aroundFixture({reactions: aroundReactions({allFailed: true, failed: ['Bluesky', 'Wikipedia']})});
+ try {
+  await f.bench.show('related');await settle();
+  const second = [...f.around().querySelectorAll('.sc-around-group')][1].textContent;
+  assert.match(second, /확인 못함/);assert.doesNotMatch(second, /찾은 반응 없음/);
+ } finally { f.bench.destroy(); }
+ f = await aroundFixture({issues: () => { throw new Error('boom'); }});
+ try {
+  await f.bench.show('related');await settle();
+  assert.match(f.around().textContent, /확인하지 못했습니다/);
+  assert.equal(f.around().querySelector('.sc-around-status'), null, 'a failed look is not a status');
+ } finally { f.bench.destroy(); }
+});
+
+test('around: asked only for the paper in focus, abandoned when the reader leaves, and 다시 확인 forces it', async () => {
+ let signals = [];
+ const f = await aroundFixture({issues: (ref, o) => { signals.push(o.signal); return new Promise((_, no) => o.signal?.addEventListener('abort', () => no(Object.assign(new Error('Aborted'), {name: 'AbortError'})))); }});
+ try {
+  await f.bench.show('related');await settle();
+  assert.equal(f.asked.filter(a => a[0] === 'issues').length, 1, 'one paper, one look');
+  assert.equal(f.asked.filter(a => a[0] === 'reactions').length, 1);
+  assert.ok(f.around().querySelector('.sc-around-loading'), 'a small loading line while it waits');
+  assert.equal(signals[0].aborted, false);
+  await f.bench.show('explore');await settle();
+  assert.equal(signals[0].aborted, true, 'leaving the tab stops the request');
+  assert.equal(f.body().querySelector('.sc-around'), null);
+  assert.equal(f.asked.length, 2, 'the explore list asked for nothing');
+ } finally { f.bench.destroy(); }
+ const g = await aroundFixture();
+ try {
+  await g.bench.show('related');await settle();
+  assert.equal(g.asked[0][2].force, false);
+  await g.click('다시 확인');
+  const forced = g.asked.filter(a => a[2]?.force === true).map(a => a[0]).sort();
+  assert.deepEqual(forced, ['issues', 'reactions']);
+  await g.click('전체 목록');
+  assert.ok(g.asked.slice(4).every(a => a[2].force === false), 'a redraw asks the runtime, which answers from its cache; only 다시 확인 forces');
+ } finally { g.bench.destroy(); }
+});
+
+test('around: a list row shows a badge only from the cache, and asks only when the reader opens it', async () => {
+ const f = await aroundFixture();
+ const known = {'10.1/W5': 'retracted', '10.1/W7': 'concern'};
+ f.runtime.cachedIssueStatus = doi => known[doi] || null;
+ f.runtime.doiIssues = async (doi, o) => { f.asked.push(['doiIssues', doi, o]); return aroundIssues('corrected'); };
+ f.runtime.doiReactions = async (doi, urls, o) => { f.asked.push(['doiReactions', doi, o]); return aroundReactions(); };
+ try {
+  await f.bench.show('related');await f.click('전체 목록');await settle();
+  const rows = [...f.body().querySelectorAll('.sc-hit')];
+  assert.ok(rows.length >= 2);
+  const badge = r => r.querySelector('.sc-signal');
+  const w5 = rows.find(r => r.textContent.includes('Paper W5')), w7 = rows.find(r => r.textContent.includes('Paper W7'));
+  assert.equal(badge(w5).textContent, '철회');assert.ok(badge(w5).classList.contains('sc-signal-retracted'));
+  assert.equal(badge(w7).textContent, '우려');
+  assert.equal(f.asked.filter(a => a[0].startsWith('doi')).length, 0, 'drawing a list never fetches');
+  const toggle = [...w5.querySelectorAll('button')].find(b => b.textContent === '주변 보기');
+  assert.ok(toggle);toggle.dispatchEvent(new f.win.Event('click', {bubbles: true}));await settle();
+  assert.deepEqual(f.asked.filter(a => a[0].startsWith('doi')).map(a => a[0] + a[1]), ['doiIssues10.1/W5', 'doiReactions10.1/W5']);
+  assert.ok(w5.nextElementSibling.matches('.sc-around') && w5.nextElementSibling.querySelector('.sc-around-status'));
+  toggle.dispatchEvent(new f.win.Event('click', {bubbles: true}));
+  assert.ok(!w5.nextElementSibling?.matches('.sc-around'), 'a second press closes it');
+ } finally { f.bench.destroy(); }
+});
+
+test('around: every button inside the section that opens a page says so', async () => {
+ const f = await aroundFixture({issues: aroundIssues('retracted', [{date: '2021-01-01', kind: 'retraction', source: 'Crossref', label: 'R', url: 'https://doi.org/10.1/r'}]),
+  reactions: aroundReactions({bluesky: {count: 1, top: [{author: 'A', handle: 'a', text: 't', date: '', likes: 1, reposts: 0, replies: 0, url: 'https://bsky.app/profile/a/post/1'}]}})});
+ try {
+  await f.bench.show('related');await settle();
+  const buttons = [...f.around().querySelectorAll('button')];
+  const controls = b => b.classList.contains('sc-around-summary') || b.textContent === '다시 확인' || b.textContent.startsWith('더 보기');
+  assert.ok(buttons.filter(b => !controls(b)).length >= 3);
+  for (const b of buttons) if (!controls(b)) assert.equal(b.getAttribute('data-opens'), 'browser', b.textContent);
+ } finally { f.bench.destroy(); }
+});
+
+test('around: the focused paper is one summary line until opened, and the choice is remembered', async () => {
+ const f = await aroundFixture({issues: aroundIssues('retracted', [{date: '2021-01-01', kind: 'retraction', source: 'Crossref', label: 'R', url: ''}]),
+  reactions: aroundReactions({bluesky: {count: 12, top: []}, hackerNews: {count: 1, top: []}, wikipedia: {count: 28, articles: []}})});
+ try {
+  await f.bench.show('related');await settle();
+  const head = f.around().querySelector('.sc-around-summary');
+  assert.equal(head.getAttribute('aria-expanded'), 'false');
+  assert.equal(f.around().querySelector('.sc-around-detail').hidden, true, 'the two groups wait');
+  assert.equal(head.textContent.replace(/\s+/g, ' ').trim(), '이 논문 주변철회됨Bluesky 12HN 1Wikipedia 28\u25b8');
+  assert.equal(head.querySelector('.sc-around-chip').dataset.status, 'retracted');
+  head.dispatchEvent(new f.win.Event('click', {bubbles: true}));await settle();
+  assert.equal(f.around().querySelector('.sc-around-detail').hidden, false);
+  assert.equal(f.runtime.cache.workbenchUI.aroundOpen, true, 'remembered');
+  await f.bench.show('explore');await f.bench.show('related');await settle();
+  assert.equal(f.around().querySelector('.sc-around-summary').getAttribute('aria-expanded'), 'true', 'it opens as it was left');
+ } finally { f.bench.destroy(); }
+ const loading = await aroundFixture({issues: () => new Promise(() => {}), reactions: () => new Promise(() => {})});
+ try {
+  await loading.bench.show('related');await settle();
+  assert.match(loading.around().querySelector('.sc-around-summary').textContent, /확인 중…/);
+ } finally { loading.bench.destroy(); }
+ const unknown = await aroundFixture({issues: aroundIssues('unknown', [], {failed: ['Crossref']}), reactions: aroundReactions({allFailed: true, failed: ['Bluesky']})});
+ try {
+  await unknown.bench.show('related');await settle();
+  const text = unknown.around().querySelector('.sc-around-summary').textContent;
+  assert.match(text, /확인 못함/);assert.match(text, /반응 확인 못함/);
+ } finally { unknown.bench.destroy(); }
+});
+
+test('around: every related row offers 주변 보기, one open at a time, and a row without a DOI says why not', async () => {
+ const f = await aroundFixture();
+ f.runtime.doiIssues = async (doi, o) => { f.asked.push(['doiIssues', doi, o]); return new Promise((res, no) => o.signal?.addEventListener('abort', () => no(Object.assign(new Error('x'), {name: 'AbortError'})))); };
+ f.runtime.doiReactions = async (doi, urls, o) => { f.asked.push(['doiReactions', doi, o]); return new Promise(() => {}); };
+ const base = f.runtime.relatedWorksCached;
+ f.runtime.relatedWorksCached = async (...a) => { const r = await base(...a); r.suggestions[0].inLibrary = true; r.suggestions.push({id: 'W9', source: 'related', title: 'No identifier', year: 2020, venue: 'J', authors: [], inLibrary: false}); return r; };
+ try {
+  await f.bench.show('related');await f.click('전체 목록');await settle();
+  const rows = [...f.body().querySelectorAll('.sc-hits .sc-hit')];
+  assert.ok(rows.length >= 3);
+  const toggles = rows.map(r => r.querySelector('.sc-hit-around'));
+  assert.ok(toggles.every(Boolean), 'owned and not owned alike');
+  const bare = toggles[rows.findIndex(r => r.textContent.includes('No identifier'))];
+  assert.equal(bare.disabled, true);assert.equal(bare.title, 'DOI가 없어 확인할 수 없습니다');
+  toggles[0].dispatchEvent(new f.win.Event('click', {bubbles: true}));await settle();
+  const first = f.asked.find(a => a[0] === 'doiIssues');
+  assert.ok(rows[0].nextElementSibling.matches('.sc-around'));
+  assert.equal(rows[0].nextElementSibling.querySelector('.sc-around-summary').getAttribute('aria-expanded'), 'true', 'a row opens in full');
+  toggles[1].dispatchEvent(new f.win.Event('click', {bubbles: true}));await settle();
+  assert.equal(first[2].signal.aborted, true, 'the first row\'s request is abandoned');
+  assert.equal(f.body().querySelectorAll('.sc-hits .sc-around').length, 1, 'one at a time');
+  assert.equal(rows[0].getAttribute('data-around'), null);assert.equal(rows[1].getAttribute('data-around'), 'open');
+ } finally { f.bench.destroy(); }
+});
+
+test('around: an owned path row keeps the path row layout: the same columns and the chip out of the text column', () => {
+ const css = fs.readFileSync(new URL('../content/workbench.css', import.meta.url), 'utf8');
+ const rule = sel => [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(m => m[1].split(',').some(s => s.trim().endsWith(sel))).map(m => m[2]);
+ const base = rule('.sc-path-row').find(b => /grid-template-columns/.test(b));
+ const owned = rule('.sc-path-row:has(> .sc-hit-owned)').find(b => /grid-template-columns/.test(b));
+ assert.ok(owned, 'a path row with a 보유 chip names its columns itself, since a general :has rule would otherwise set them');
+ const lead = b => b.match(/grid-template-columns:\s*(\S+)\s+(\S+)/).slice(1).map(x => x.replace(/minmax\(0,/, '1fr').replace(/\)$/, ''));
+ assert.equal(lead(owned)[0], lead(base)[0], 'the step column is the same width');
+ const chip = rule('.sc-path-row:has(> .sc-hit-owned) > .sc-hit-owned').join(';');
+ assert.match(chip, /grid-column:\s*3/, 'the chip rides the actions column, not the text column');
+});
+
+test('around: the Altmetric key is an optional password setting bound to its preference', async () => {
+ const {default: api} = await import('../src/settings-schema.js');
+ const field = api.schema.settings.find(s => s.key === 'altmetricKey');
+ assert.ok(field, 'altmetricKey is in the schema');
+ assert.equal(field.type, 'password');assert.equal(field.secret, true);assert.equal(field.default, '');
+ assert.match(field.label, /선택/);assert.match(field.description, /Altmetric/);
+ assert.match(fs.readFileSync(new URL('../prefs.js', import.meta.url), 'utf8'), /extensions\.style-custom\.altmetricKey/);
+});
