@@ -24,5 +24,7 @@ pref("extensions.style-custom.touchDateOnRead", false);
 // Optional override. Left empty, the key ZotPoP already holds is used, so
 // the two plugins share one OpenAlex budget instead of competing for it.
 pref("extensions.style-custom.openalexApiKey", "");
+// Optional Altmetric API key: paper attention adds X/news/blog/policy counts only when one is set.
+pref("extensions.style-custom.altmetricKey", "");
 // New releases on GitHub are installed by the plugin itself, once a day while Zotero is open.
 pref("extensions.style-custom.autoUpdate", true);

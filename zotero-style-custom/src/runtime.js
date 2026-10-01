@@ -17,6 +17,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.SUPPLEMENTARY_TAG = 'style-custom:supplementary';
     this.discoverTools = typeof CustomStyleDiscover !== "undefined" ? CustomStyleDiscover : require("./discover.js");
     this.signalTools = typeof CustomStylePaperSignals !== "undefined" ? CustomStylePaperSignals : require("./paper-signals.js");
+    this.attentionTools = typeof CustomStyleAttention !== "undefined" ? CustomStyleAttention : require("./attention.js");
     this.legacyReading = typeof CustomStyleLegacyReading !== "undefined" ? CustomStyleLegacyReading : require("./legacy-reading.js");
     this.journalTools2 = typeof CustomStyleJournalMetrics !== "undefined" ? CustomStyleJournalMetrics : require("./journal-metrics.js");
     this.portraitTools = typeof CustomStyleAuthorPortrait !== "undefined" ? CustomStyleAuthorPortrait : require("./author-portrait.js");
@@ -3884,6 +3885,45 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const summary = this.signalTools.summarise({crossref, openAlex, published, record});
     if (openAlexOut && summary) summary.partial = true;
     return {signals: summary, reason: "ok", openAlexOut};
+  }
+
+  /* What happened around a paper: issues (notices, comments) and reactions
+     (Bluesky, Hacker News, Wikipedia). Lazy, one paper at a time, answered
+     from the per-DOI cache in this.cache.attention. No email goes out: the
+     requests carry a plain User-Agent only. Altmetric is asked only when the
+     reader has typed a key into extensions.style-custom.altmetricKey. */
+  attention() {
+    if (this._attention) return this._attention;
+    const store = {
+      get: key => (this.cache.attention && typeof this.cache.attention === 'object' ? this.cache.attention[key] : null) || null,
+      set: (key, value) => { const all = this.cache.attention && typeof this.cache.attention === 'object' && !Array.isArray(this.cache.attention) ? this.cache.attention : (this.cache.attention = {}); all[key] = value; this.dirty = true; }
+    };
+    const fetch = async (url, {method = 'GET', headers, timeout} = {}) => {
+      if (/^https:\/\/api\.openalex\.org\//.test(url) && this.openAlexSpentUntil && Date.now() < this.openAlexSpentUntil) return {status: 429, json: null, url: ''};
+      const response = await this.Z.HTTP.request(method, url, {responseType: 'json', timeout: timeout || 8000, successCodes: false, headers});
+      // Zotero follows redirects; the address reached is on the request object.
+      return {status: response?.status ?? 0, json: response?.response ?? null, url: response?.responseURL || response?.channel?.URI?.spec || ''};
+    };
+    return this._attention = this.attentionTools.create({
+      fetch, store,
+      userAgent: `StyleCustomZoteroPlugin/${this.version || 'dev'} (Zotero plugin; paper attention)`,
+      altmetricKey: () => this.pref('altmetricKey', ''),
+      openAlexKey: () => this.openAlexKey(),
+      openAlexHeld: () => !!(this.openAlexSpentUntil && Date.now() < this.openAlexSpentUntil)
+    });
+  }
+
+  async paperIssues(item, {signal, force = false} = {}) {
+    const record = this.bibliographyRecord(item);
+    // Signals already fetched OpenAlex's retraction flag: reuse it and spend no budget.
+    const known = this.signalsOf(item);
+    const openAlex = known && !known.partial ? known.rank >= 3 : undefined;
+    return this.attention().issues(record.DOI, {signal, force, openAlex});
+  }
+
+  async paperReactions(item, {signal, force = false} = {}) {
+    const record = this.bibliographyRecord(item);
+    return this.attention().reactions(record.DOI, [record.url], {signal, force});
   }
 
   async refreshPaperSignals(items, {signal, onProgress, pace = 0} = {}) {
