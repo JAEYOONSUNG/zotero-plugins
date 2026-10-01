@@ -1268,7 +1268,7 @@
         },
         {
           "file": "content/workbench.css",
-          "marker": "--sc-accent: #151517"
+          "marker": "--sc-accent: #15171c"
         }
       ],
       "tests": [
@@ -1964,7 +1964,7 @@
       "sources": [
         {
           "file": "content/workbench.css",
-          "marker": "--sc-tone-top: #8556AD"
+          "marker": "--sc-tone-top: #7b41ac"
         },
         {
           "file": "src/journal-identity.js",
@@ -2454,7 +2454,7 @@
       "sources": [
         {
           "file": "content/workbench.css",
-          "marker": "Two button steps, not four"
+          "marker": "The 26px family: in a row, a card or a strip."
         },
         {
           "file": "src/workbench.js",
@@ -3926,7 +3926,7 @@
       "sources": [
         {
           "file": "content/workbench.css",
-          "marker": "It used to be given"
+          "marker": "The chosen chip, segment, sort and filter: one dark pill, never greyed by hover."
         },
         {
           "file": "src/runtime.js",

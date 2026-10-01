@@ -6,10 +6,13 @@ const Runtime = require("../src/runtime.js");
 const discover = require("../src/discover.js");
 
 
+const RECENT = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
 const work = (id, authorIDs, over = {}) => ({
   id: "https://openalex.org/" + id,
   title: id + " title", doi: "https://doi.org/10.1/" + id.toLowerCase(),
-  publication_year: 2026, publication_date: "2026-08-01", cited_by_count: 0, type: "article",
+  // Dated a week ago, not on a fixed day: the sweep treats anything older than its
+  // last check less two months as already known, so a fixed date ages out of "new".
+  publication_year: Number(RECENT.slice(0, 4)), publication_date: RECENT, cited_by_count: 0, type: "article",
   primary_location: {source: {display_name: "Nature"}},
   open_access: {is_oa: false},
   authorships: authorIDs.map(a => ({author: {id: "https://openalex.org/" + a, display_name: a},
@@ -76,7 +79,7 @@ test("news lands on every followed author of the paper, and says what it is", as
   assert.equal(h.cache.watchedAuthors[1].news.length, 1, "a joint paper is news for both colleagues");
   assert.deepEqual(h.cache.watchedAuthors[2].news, []);
   assert.equal(h.cache.watchedAuthors[0].news[0].venue, "Nature");
-  assert.equal(h.cache.watchedAuthors[0].news[0].date, "2026-08-01");
+  assert.equal(h.cache.watchedAuthors[0].news[0].date, RECENT);
   assert.ok(h.saved, "the sweep is worthless if it is not on disk before Zotero closes");
 });
 

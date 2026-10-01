@@ -83,15 +83,15 @@ test('hidden dialogs, keyboard focus, reading status and motion/forced-color acc
  assert.match(rule('#style-custom-workbench :focus-visible').getPropertyValue('outline'),/2px/);
  // Reading state is a dot at the start of the row now, not a rail down its edge,
  // but each state must still be told apart without reading the text.
- const dot=state=>rule(`#style-custom-workbench .sc-paper-card[data-status=${state}]::before`).getPropertyValue('background');
+ const dot=state=>rule(`#style-custom-workbench .sc-paper-card[data-status=${state}] .sc-paper-heading > .sc-check::before`).getPropertyValue('background');
  const states=['reading','done'].map(dot);
  for(const [i,value] of states.entries())assert.ok(value,['reading','done'][i]);
  assert.notEqual(states[0],states[1]);
- assert.ok(rule('#style-custom-workbench .sc-paper-card[data-status]::before').getPropertyValue('background'),'unread needs a mark too');
+ assert.ok(rule('#style-custom-workbench .sc-paper-heading > .sc-check::before').getPropertyValue('background'),'unread needs a mark too');
  assert.ok([...parsed.sheet.cssRules].some(r=>r.media?.mediaText.includes('prefers-reduced-motion')));assert.ok([...parsed.sheet.cssRules].some(r=>r.media?.mediaText.includes('forced-colors')));
 });
 test('selected papers preserve status rails and busy controls use visible non-animated feedback',()=>{
- const selected=rule('#style-custom-workbench .sc-paper-card[data-selected=true]');assert.equal(selected.getPropertyValue('background'),'var(--sc-fill)','selection is a plain grey row');assert.ok(selected.getPropertyValue('outline'));assert.equal(selected.getPropertyValue('box-shadow'),'');assert.equal(selected.getPropertyValue('border-inline-start-color'),'');
+ const selected=rule('#style-custom-workbench .sc-paper-card[data-selected=true]');assert.equal(selected.getPropertyValue('background'),'var(--sc-fill)','selection is a plain grey row');assert.ok(selected.getPropertyValue('box-shadow'),'chosen row is ringed all round');assert.equal(selected.getPropertyValue('outline'),'');assert.equal(selected.getPropertyValue('border-inline-start-color'),'');
  // Actions are held at zero opacity until wanted, so they must come back for
  // keyboard users who can reach them without a pointer.
  assert.equal(rule('#style-custom-workbench .sc-paper-actions').getPropertyValue('opacity'),'0');
@@ -151,9 +151,8 @@ test('every badge colour lands on the same contrast, so no one of them shouts', 
       const max = Math.max(r, g, b), min = Math.min(r, g, b);
       const light = (max + min) / 2;
       const saturation = max === min ? 0 : light > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
-      // User direction 2026-10-01 (premium dashboard look): the one positive lime and
-      // the one attention amber are sanctioned saturated accents; nothing else may be.
-      if (['#C8F03C', '#F6A623', '#1B2300', '#2B1A00'].includes(hex.toUpperCase())) continue;
+      // User direction 2026-10-01 (premium dashboard look): the ZotPoP palette (lime, amber and their inks, the ok/warn/err inks) are the sanctioned saturated colours; nothing else may be.
+      if (['#D8EE9A', '#FAE5BD', '#36440F', '#573700', '#D2EE8C', '#F4CF8A', '#C5E07B', '#F4C871', '#3B422D', '#433827', '#53671E', '#7D5208', '#E6A5A7'].includes(hex.toUpperCase())) continue;
       assert.ok(saturation <= 0.55, `${file} still has ${hex} at saturation ${saturation.toFixed(2)}`);
     }
   }
