@@ -149,9 +149,17 @@ var ZotPoPTip = (function () {
 			show(found, { cursor: null });
 		}
 		function key(e) { if (e.key === "Escape" && (shown || timer)) hide(); }
+		/* A cell whose text overflows rolls sideways while the pointer rests on it (marquee.js moves its
+		   scrollLeft), and that is a scroll event too: the card closed the moment the title began to roll.
+		   Only a scroll that moves the anchor itself -- the table, the page -- closes it. */
+		function scrolled(e) {
+			let t = e.target;
+			if (t && t.nodeType === 1 && (t.classList?.contains("marquee-text") || (anchor && anchor.contains && anchor.contains(t)))) return;
+			hide();
+		}
 		const on = (target, name, fn) => target.addEventListener(name, fn, true);
 		on(doc, "mouseover", over); on(doc, "mouseout", out); on(doc, "focusin", focus); on(doc, "focusout", hide);
-		on(doc, "keydown", key); on(doc, "mousedown", hide); on(doc, "wheel", hide); on(doc, "scroll", hide); on(doc, "contextmenu", hide);
+		on(doc, "keydown", key); on(doc, "mousedown", hide); on(doc, "wheel", hide); on(doc, "scroll", scrolled); on(doc, "contextmenu", hide);
 		win.addEventListener("blur", hide);
 		let api = { card, show: (el, opts) => show({ el, kind: el.getAttribute("data-tip-kind") }, opts), hide, resolve, get open() { return shown; } };
 		last = api;

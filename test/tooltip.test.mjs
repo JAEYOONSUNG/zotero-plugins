@@ -66,7 +66,11 @@ test("one delegated listener: hover shows the card after the delay, a title take
 	assert.equal(tip.card.textContent, "rich body");
 	assert.equal(document.getElementById("rich").hasAttribute("title"), false);
 	assert.equal(inner.hasAttribute("title"), false);
-	fire(document, "scroll"); assert.equal(tip.open, false, "scrolling hides it");
+	// The cell rolling sideways (marquee.js moving its scrollLeft) is a scroll inside the anchor: the card stays.
+	fire(inner, "scroll"); assert.equal(tip.open, true, "a cell rolling under the pointer keeps the card");
+	const rolling = document.createElement("span"); rolling.className = "marquee-text"; document.body.appendChild(rolling);
+	fire(rolling, "scroll"); assert.equal(tip.open, true, "any rolling text keeps the card");
+	fire(document, "scroll"); assert.equal(tip.open, false, "scrolling the page hides it");
 });
 
 test("keyboard focus shows the card at once and focus leaving hides it", async () => {
