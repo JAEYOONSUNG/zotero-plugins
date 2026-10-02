@@ -650,3 +650,37 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 .pl-intro { margin: 0; padding: 8px 16px; color: var(--muted); border-bottom: 1px solid var(--border); }
 #pl-browser-host { flex: 1 1 auto; display: flex; min-height: 0; }
 #pl-browser { flex: 1 1 auto; border: none; }
+
+/* ---------------------------------------------------------------- hover card (replaces the native title tooltip) */
+/* One card for the window (content/tooltip.js). It floats, so it is the one surface besides the filter popover that
+   carries a soft shadow; the menus stay flat. It never takes the pointer. */
+.tip-card {
+	position: fixed; left: 0; top: 0; z-index: 200; max-width: 420px; padding: 10px 12px; overflow: hidden;
+	border: 1px solid var(--border); border-radius: 12px; background: var(--menu-bg); color: var(--text);
+	box-shadow: 0 1px 2px rgba(20, 22, 30, 0.06), 0 12px 32px -6px rgba(20, 22, 30, 0.22);
+	font-size: 12px; line-height: 18px; overflow-wrap: anywhere; word-break: keep-all; pointer-events: none;
+	opacity: 0; transform: translateY(-4px) scale(0.98); transform-origin: 24px 0;
+	transition: opacity .12s ease-out, transform .12s ease-out;
+}
+.tip-card[data-side="above"] { transform: translateY(4px) scale(0.98); transform-origin: 24px 100%; }
+.tip-card.show { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .tip-card { transition: none; } }
+@media (prefers-color-scheme: dark) { .tip-card { border-color: var(--border-strong); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 36px -6px rgba(0, 0, 0, 0.6); } }
+.tip-line { margin: 0; }
+.tip-line + .tip-line { margin-top: 2px; }
+.tip-first { font-weight: 600; }
+.tip-rich > * + * { margin-top: 4px; }
+.tip-title { font-size: 13px; font-weight: 600; line-height: 18px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+.tip-meta { color: var(--muted); }
+.tip-names { color: var(--muted); }
+.tip-strong { color: var(--text); font-weight: 600; }
+.tip-name { color: var(--text); }
+.tip-more { color: var(--muted); }
+.tip-hint { color: var(--muted); font-size: 11px; line-height: 16px; }
+.tip-sect { margin-top: 8px !important; padding-top: 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+.tip-row { display: flex; align-items: baseline; gap: 8px; }
+.tip-label { flex: none; min-width: 56px; color: var(--muted); font-size: 11px; line-height: 18px; }
+.tip-where { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+.tip-where .tier { flex: none; min-width: 26px; padding: 0 6px; }
+.tip-flag { flex: none; }
+.tip-inst { min-width: 0; }

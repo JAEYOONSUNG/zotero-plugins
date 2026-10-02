@@ -82,6 +82,12 @@ export function longSpan(Sources) {
 	return out;
 }
 
+// Where the cells sit in a 1280 and a 1440 wide window (measured from the page in Chrome; the rows are 48px, the first at y=191),
+// for the hover-card states. At 1280 the authors column is folded away.
+const cellRect = (left, right, row) => ({ left, right, top: 191 + 48 * row, bottom: 239 + 48 * row });
+const TIP_RECTS = { title: [cellRect(311, 581, 0), cellRect(311, 581, 0)], aff: [cellRect(581, 741, 1), cellRect(749, 909, 1)],
+	journal: [cellRect(799, 939, 0), cellRect(967, 1107, 0)], authors: [cellRect(581, 749, 0), cellRect(581, 749, 0)] };
+
 // Runs the real UI once and returns the two static pages as strings.
 export async function buildPreview({ locale = "en" } = {}) {
 	const markup = read("content/search.xhtml").replace(/<\?xml[^>]*\?>/, "")
@@ -128,12 +134,12 @@ export async function buildPreview({ locale = "en" } = {}) {
 			getCurrentTarget: () => ({ libraryID: 1, collectionID: null }), forgetTitleIndex() {} }
 	});
 	win.Zotero = ctx.Zotero;
-	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "filters", "journals", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
+	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "filters", "journals", "tooltip", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
 	// linkedom's dataset drops "data-i18n" (a digit in the name); read the attribute instead. Strings stay the real ones.
 	ctx.ZotPoPI18N.apply = (root, t) => {
 		for (const el of root.querySelectorAll("[data-i18n]")) el.textContent = t(el.getAttribute("data-i18n"));
 		for (const el of root.querySelectorAll("[data-i18n-ph]")) el.setAttribute("placeholder", t(el.getAttribute("data-i18n-ph")));
-		for (const el of root.querySelectorAll("[data-i18n-title]")) el.setAttribute("title", t(el.getAttribute("data-i18n-title")));
+		for (const el of root.querySelectorAll("[data-i18n-title]")) ctx.ZotPoPTip.set(el, t(el.getAttribute("data-i18n-title")));
 		for (const el of root.querySelectorAll("[data-i18n-aria]")) el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria")));
 	};
 	// Same search function shape as the real one; only the network is replaced.
@@ -158,6 +164,22 @@ export async function buildPreview({ locale = "en" } = {}) {
 		const body = document.body.outerHTML.replace(/<script\b[\s\S]*?<\/script>/g, "");
 		return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZotPoP search preview (fictional data)</title><style>${css}</style></head>${body}</html>`;
 	};
+	// ---- the hover card, open over the table: the title card of row 1 and the institution card of row 2.
+	// linkedom has no layout, so the anchor rectangles are the measured ones of a 1280-wide window (the title column
+	// starts at the same x at 1440); the card's own position comes from the real placement function.
+	const tipApi = ctx.ZotPoPTip.current(), tipCard = document.getElementById("tip-card"), tipCases = {};
+	const tipState = (index, kind) => {
+		const cell = document.querySelectorAll("#results-body tr")[index].querySelector(`td[data-tip-kind="${kind}"]`);
+		const [narrow, wide] = TIP_RECTS[kind], at = rect => ({ x: rect.left + 40, y: rect.top + 14 }), size = { w: 420, h: 190 };
+		const put = tipApi.show(cell, { rect: narrow, cursor: at(narrow), size, view: { w: 1280, h: 860 }, immediate: true });
+		const bigger = ctx.ZotPoPTip.place({ anchor: wide, size, view: { w: 1440, h: 860 }, cursor: at(wide) });
+		// a static page cannot measure, so the 1440 position rides in a media query
+		const html = page().replace("</style></head>", `@media (min-width: 1400px) { #tip-card { left: ${bigger.left}px !important; top: ${bigger.top}px !important; } }</style></head>`);
+		tipCases[kind] = { text: tipCard.textContent.replace(/\s+/g, " ").trim(), put, describedby: cell.getAttribute("aria-describedby"), tipAttr: cell.hasAttribute("data-tip"), titleAttr: cell.hasAttribute("title") };
+		tipApi.hide(); tipCard.hidden = true; tipCard.classList.remove("show"); tipCard.textContent = ""; tipCard.removeAttribute("style");
+		return html;
+	};
+	const tipTitle = tipState(0, "title"), tipAff = tipState(1, "aff"), tipJournal = tipState(0, "journal"), tipAuthors = tipState(0, "authors");
 	const results = page();
 	rows[0]?.dispatchEvent(new window.Event("click", { bubbles: true }));
 	await new Promise(r => setTimeout(r, 30));
@@ -194,7 +216,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	trace.library = { start: libLine() };
 	// preprint and published version: an explicit relation, an inferred one, an unrelated similar title
 	const versions = { explicit: {}, inferred: {}, unrelated: {} };
-	const versionLine = id => { fire(rowOf(id)); return { line: text("d-versions"), hidden: document.getElementById("d-versions").hidden, title: document.getElementById("d-versions").getAttribute("title"), meta: text("d-meta"), button: Boolean(document.querySelector("#d-versions button")) }; };
+	const versionLine = id => { fire(rowOf(id)); return { line: text("d-versions"), hidden: document.getElementById("d-versions").hidden, title: document.getElementById("d-versions").getAttribute("data-tip"), meta: text("d-meta"), button: Boolean(document.querySelector("#d-versions button")) }; };
 	Object.assign(versions.explicit, versionLine("demo3"));
 	const cb3 = rowOf("demo3").querySelector("input"); cb3.checked = true; fire(cb3, "change");
 	fire(document.querySelector("#d-versions button"));
@@ -280,7 +302,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	trace.single.more = items().map(e => e.textContent);
 	fire(document.body);
 	// ---- the same search again: a later run finds one more paper, the owned row's detail lists its collections
-	const bar = year => [...document.querySelectorAll("#metrics-years .yr-bar")].find(b => b.getAttribute("title").startsWith(year));
+	const bar = year => [...document.querySelectorAll("#metrics-years .yr-bar")].find(b => b.getAttribute("data-tip").startsWith(year));
 	trace.histogram = { bars: document.querySelectorAll("#metrics-years .yr-bar").length, ends: [...document.querySelectorAll("#metrics-years .yr-ends span")].map(e => e.textContent), rows: shown().length };
 	fire(bar("2025"), "mousedown");
 	await wait(20);
@@ -303,10 +325,10 @@ export async function buildPreview({ locale = "en" } = {}) {
 	fire(document.getElementById("query-form"), "submit");
 	for (let i = 0; i < 100 && shown().length < 13; i++) await wait(20);
 	await wait(60);
-	trace.rerun = { rows: shown().length, marked: table().filter(tr => tr.querySelector(".new-mark")).map(tr => tr.dataset.key.replace(/^.*demo/, "")), tip: document.querySelector(".new-mark")?.getAttribute("title") };
+	trace.rerun = { rows: shown().length, marked: table().filter(tr => tr.querySelector(".new-mark")).map(tr => tr.dataset.key.replace(/^.*demo/, "")), tip: document.querySelector(".new-mark")?.getAttribute("data-tip") };
 	fire(rowOf("demo4"));
 	await wait(20);
-	trace.collections = { text: text("d-collections"), tip: document.getElementById("d-collections").getAttribute("title"), hiddenOnUnowned: null };
+	trace.collections = { text: text("d-collections"), tip: document.getElementById("d-collections").getAttribute("data-tip"), hiddenOnUnowned: null };
 	fire(rowOf("demo3"));
 	await wait(20);
 	trace.collections.hiddenOnUnowned = document.getElementById("d-collections").hidden;
@@ -415,7 +437,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	key(venue, "ArrowDown"); key(venue, "Enter");
 	await typeVenue("nar"); trace.journals.nar = options().slice(0, 3);
 	key(venue, "ArrowDown"); key(venue, "Enter");
-	trace.journals.chips = [...document.querySelectorAll("#venue-chips .jchip")].map(c => c.getAttribute("title"));
+	trace.journals.chips = [...document.querySelectorAll("#venue-chips .jchip")].map(c => c.getAttribute("data-tip"));
 	await typeVenue("proc natl acad");
 	trace.journals.typed = { listOpen: !document.getElementById("venue-list").hidden, expanded: venue.getAttribute("aria-expanded"), options: options().slice(0, 4) };
 	key(venue, "ArrowDown");
@@ -435,16 +457,16 @@ export async function buildPreview({ locale = "en" } = {}) {
 	for (let i = 0; i < 100 && shown().length < 50; i++) await wait(20);
 	await wait(80);
 	const bars = [...document.querySelectorAll("#metrics-years .yr-bar")];
-	trace.longSpan = { rows: shown().length, bars: bars.length, ends: [...document.querySelectorAll("#metrics-years .yr-ends span")].map(e => e.textContent), first: bars[0]?.getAttribute("title"), last: bars.at(-1)?.getAttribute("title"),
+	trace.longSpan = { rows: shown().length, bars: bars.length, ends: [...document.querySelectorAll("#metrics-years .yr-ends span")].map(e => e.textContent), first: bars[0]?.getAttribute("data-tip"), last: bars.at(-1)?.getAttribute("data-tip"),
 		basis: document.querySelectorAll("#metrics-basis button").length };
 	fire(bars[3], "mousedown");
 	await wait(20);
-	trace.longSpan.selected = { rows: shown().length, range: document.querySelector("#metrics-years .yr-clear")?.textContent, title: [...document.querySelectorAll("#metrics-years .yr-bar")][3].getAttribute("title") };
+	trace.longSpan.selected = { rows: shown().length, range: document.querySelector("#metrics-years .yr-clear")?.textContent, title: [...document.querySelectorAll("#metrics-years .yr-bar")][3].getAttribute("data-tip") };
 	fire(document.querySelector("#metrics-years .yr-clear"));
 	await wait(20);
 	const longSpanPage = page();
 	fire(document.getElementById("cond-toggle"));
-	return { results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, unfolded, filtersPage, journalsPage, longSpanPage, trace, rows: rows.length, netCalls, errors };
+	return { tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, unfolded, filtersPage, journalsPage, longSpanPage, trace, rows: rows.length, netCalls, errors };
 }
 
 export function checkPreview(out) {
@@ -459,6 +481,9 @@ export function checkPreview(out) {
 		for (const needle of ['id="results-table"', 'id="results-body"', 'id="query-form"', name === "facet" ? "Off-target profiling" : "Mapping cellular responses"]) if (!html.includes(needle)) problems.push(name + ": missing " + needle);
 	}
 	if (!out.results.includes('class="in-library')) problems.push("no in-library row");
+	for (const name of ["tipTitle", "tipAff", "tipJournal", "tipAuthors"]) if (!/class="tip-card show"/.test(out[name])) problems.push(name + ": no open hover card");
+	if (!/tip-title/.test(out.tipTitle) || !/tip-where/.test(out.tipTitle) || !/tier-t/.test(out.tipAff)) problems.push("the hover cards should carry title, institutions and a tier chip");
+	for (const kind of ["title", "aff", "journal", "authors"]) if (!out.tipCases[kind] || out.tipCases[kind].titleAttr || out.tipCases[kind].describedby !== "tip-card") problems.push("hover card " + kind + ": native title left behind or no aria-describedby");
 	if (!/id="detail-body"(?![^>]*hidden)/.test(out.detail)) problems.push("detail pane not shown for the selected row");
 	const t = out.trace, same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 	if (t.columns.basic !== "basic" || t.columns.all !== "all" || t.columns.back !== "basic") problems.push("column view did not switch basic/all/basic");
@@ -514,6 +539,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.mkdirSync(path.join(root, "docs"), { recursive: true });
 	fs.writeFileSync(path.join(root, "docs/search-preview.html"), out.results);
 	fs.writeFileSync(path.join(root, "docs/search-preview-detail.html"), out.detail);
+	fs.writeFileSync(path.join(root, "docs/search-preview-tooltip.html"), out.tipTitle);
+	fs.writeFileSync(path.join(root, "docs/search-preview-tooltip-aff.html"), out.tipAff);
+	fs.writeFileSync(path.join(root, "docs/search-preview-tooltip-journal.html"), out.tipJournal);
+	fs.writeFileSync(path.join(root, "docs/search-preview-tooltip-authors.html"), out.tipAuthors);
 	fs.writeFileSync(path.join(root, "docs/search-preview-facet.html"), out.facet);
 	fs.writeFileSync(path.join(root, "docs/search-preview-import.html"), out.importPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-history.html"), out.historyPage);

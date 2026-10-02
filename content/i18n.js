@@ -464,6 +464,16 @@ var ZotPoPI18N = (function () {
 			affLast: "Last author (no corresponding author flagged)",
 			affHIndex: h => `institution h-index ${h}`,
 			affUnknown: "affiliation unknown",
+			tipCites: n => `${n} cites`,
+			tipPerYear: v => `${v}/yr`,
+			tipTierAbove: (h, tier, min) => `institution h-index ${h} · tier ${tier} (${min} or more)`,
+			tipTierBelow: (h, tier, max) => `institution h-index ${h} · tier ${tier} (below ${max})`,
+			tipAbbrev: "Abbreviation",
+			tipPublisher: "Publisher",
+			tipEstimate: "estimate",
+			tipAuthorsAll: n => `${n} authors`,
+			tipJournal: "Journal",
+			tipAuthorOf: "Of",
 			affIntl: list => `International collaboration · also: ${list}`,
 			affLineCorr: "corr.",
 			affLineLast: "last",
@@ -933,6 +943,16 @@ var ZotPoPI18N = (function () {
 			affLast: "마지막 저자 (교신저자 표시 없음)",
 			affHIndex: h => `기관 h-index ${h}`,
 			affUnknown: "소속 미상",
+			tipCites: n => `인용 ${n}`,
+			tipPerYear: v => `연평균 ${v}`,
+			tipTierAbove: (h, tier, min) => `기관 h-index ${h} · ${tier} 구간(${min} 이상)`,
+			tipTierBelow: (h, tier, max) => `기관 h-index ${h} · ${tier} 구간(${max} 미만)`,
+			tipAbbrev: "약어",
+			tipPublisher: "출판사",
+			tipEstimate: "추정",
+			tipAuthorsAll: n => `저자 ${n}명`,
+			tipJournal: "저널",
+			tipAuthorOf: "소속 저자",
 			affIntl: list => `국제 공동연구 · 다른 나라: ${list}`,
 			affLineCorr: "교신",
 			affLineLast: "마지막",
@@ -971,7 +991,7 @@ var ZotPoPI18N = (function () {
 	function apply(root, t) {
 		for (let el of root.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
 		for (let el of root.querySelectorAll("[data-i18n-ph]")) el.setAttribute("placeholder", t(el.dataset.i18nPh));
-		for (let el of root.querySelectorAll("[data-i18n-title]")) el.setAttribute("title", t(el.dataset.i18nTitle));
+		for (let el of root.querySelectorAll("[data-i18n-title]")) { let text = t(el.dataset.i18nTitle); if (typeof ZotPoPTip !== "undefined") ZotPoPTip.set(el, text); else { el.removeAttribute("title"); el.setAttribute("data-tip", text); } }
 		for (let el of root.querySelectorAll("[data-i18n-aria]")) el.setAttribute("aria-label", t(el.dataset.i18nAria));
 	}
 

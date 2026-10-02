@@ -335,7 +335,9 @@ test("affiliation columns sort, filter and export from the people a source suppl
 	assert.equal(row.querySelector("span.aff-name").dataset.marquee, "affiliation", "only the lab's name rolls, the chip and flag stay");
 	assert.equal(row.querySelector("td.country").textContent, "🇺🇸 US");
 	assert.equal(row.querySelector("span.tier").textContent, "T1");
-	assert.match(row.querySelector("td.aff").title, /^MIT\n🇺🇸 .* · affHIndex\|1800 · T1\naffFirst: A$/);
+	const affCard = ui.tipContent(row.querySelector("td.aff"), "aff").textContent;
+	assert.equal(row.querySelector("td.aff").getAttribute("title"), null, "the native tooltip is gone; the hover card replaces it");
+	assert.match(affCard, /^MIT.*tipTierAbove\|1800\|T1\|1400.*affFirst.*A$/, "institution, tier line with its band, then which author it belongs to");
 	const csv = ui.csvText().split("\n");
 	assert.match(csv[1], /"MIT","US","1800"/);
 	assert.match(csv[3], /"","",""/);
@@ -358,9 +360,11 @@ test("the journal cell carries the publisher's mark in its colour, and so does t
 	assert.match(venue.style["--j-ink-d"], /^hsl\(\d+ \d+% \d+%\)$/);
 	assert.notEqual(venue.style["--j-ink-l"], venue.style["--j-ink-d"], "a light and a dark ink");
 	assert.equal(venue.style.color, undefined, "no inline colour that would pin one theme");
-	assert.equal(venue.title, "Science · Science · American Association for the Advancement of Science (AAAS)");
+	assert.equal(venue.getAttribute("title"), null);
+	const journalCard = ui.tipContent(venue, "journal").textContent;
+	assert.ok(journalCard.startsWith("Science") && journalCard.includes("American Association for the Advancement of Science (AAAS)"), journalCard);
 	assert.equal(venue.dataset.marquee, "venue");
-	assert.match(rows[1].querySelector("td.venue").title, /^Journal of Cleaner Production · J Clean Prod · Elsevier/);
+	assert.match(ui.tipContent(rows[1].querySelector("td.venue"), "journal").textContent, /^Journal of Cleaner Production.*tipAbbrev.*J Clean Prod.*tipPublisher.*Elsevier/);
 	assert.equal(rows[1].querySelector("td.venue").classList.contains("venue-known"), true, "the publisher placed it");
 	assert.equal(rows[2].querySelector("td.venue").style["--j-ink-l"], undefined);
 	// The detail pane shows the abbreviation as a chip in the same colour.
@@ -673,10 +677,10 @@ test("rankless native rows do not display or export an invented original rank", 
 test("native help changes with the engine and history warns without switching profiles", async () => {
 	const ui = uiHarness({ prefs: { popDataDir: "/profile/B" } });
 	ui.get("engine").value = "pop"; ui.get("source").value = "crossref"; ui.sourceHint();
-	assert.equal(ui.get("authors").getAttribute("title"), "popAuthorsHelp");
-	assert.equal(ui.get("title").getAttribute("title"), "popTitleHelp");
+	assert.equal(ui.get("authors").getAttribute("data-tip"), "popAuthorsHelp");
+	assert.equal(ui.get("title").getAttribute("data-tip"), "popTitleHelp");
 	ui.get("engine").value = "direct"; ui.sourceHint();
-	assert.equal(ui.get("authors").getAttribute("title"), "authorsHelp");
+	assert.equal(ui.get("authors").getAttribute("data-tip"), "authorsHelp");
 	const query = { engine: "pop", keywords: "gene", maxResults: 30, popProfile: "/profile/A", popOutputSort: "rank" };
 	const rows = Sources.normalizePoPExactRecords([{ title: "Gene paper", rank: 1 }], "crossref", { engine: "publish-or-perish", source: "crossref", profileId: "/profile/A", invocationId: "profile-A", complete: true });
 	const id = await ui.history.save({ source: "crossref", query, records: rows });
@@ -1201,7 +1205,8 @@ test("a row already in the library shows Style Custom's reading state beside the
 	const cell = key => ui.buildRow(rec(key)).querySelector("td.lib");
 	const badge = cell("a").querySelector(".read-state");
 	assert.equal(badge.textContent, "readReading");
-	assert.equal(badge.title, "readStateTip");
+	assert.equal(badge.getAttribute("data-tip"), "readStateTip");
+	assert.equal(badge.getAttribute("title"), null);
 	assert.equal(cell("b").querySelector(".read-state"), null);
 	assert.equal(cell("c").querySelector(".read-state"), null);
 });
@@ -1383,10 +1388,10 @@ test("the institution cell: unknown is muted and only where the source normally 
 	const cell = key => ui.get("results-body").children.find(r => r.dataset.key === key).children.find(c => c.dataset.k === "affiliation");
 	assert.equal(cell("both").querySelector("span.aff-name").textContent, "Kestrel Inst.");
 	assert.equal(cell("both").querySelector("span.tier").textContent, "T2");
-	assert.match(cell("both").title, /affIntl\|/, "the first author's other country is named in the tooltip");
+	assert.match(ui.tipContent(cell("both"), "aff").textContent, /affIntl\|/, "the first author's other country is named in the hover card");
 	assert.equal(cell("unk").querySelector("span.aff-name").textContent, "affUnknown");
 	assert.match(cell("unk").querySelector("span.aff-name").className, /aff-unknown/);
 	assert.equal(cell("oa").querySelector("span.aff-name").className.includes("aff-unknown"), true);
 	assert.equal(cell("plain").children.length, 0, "a source without institutions gets an empty cell");
-	assert.equal(cell("plain").title, "");
+	assert.equal(ui.tipContent(cell("plain"), "aff"), null);
 });

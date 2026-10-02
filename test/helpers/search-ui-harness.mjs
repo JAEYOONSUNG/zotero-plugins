@@ -9,6 +9,7 @@ import JCR from "../../content/jcr.js";
 import Authors from "../../content/authors.js";
 import Filters from "../../content/filters.js";
 import Journals from "../../content/journals.js";
+import Tip from "../../content/tooltip.js";
 
 export const paper = (key, extra = {}) => ({
 	key, title: key, citations: 1, year: 2026, authors: [], ...extra
@@ -149,6 +150,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPFilters: Filters,
 		ZotPoPJournals: Journals,
 		ZotPoPJournalMarks: JournalMarks,
+		ZotPoPTip: Tip,
 		ZotPoPJCR: JCR,
 		ZotPoPMarquee: marquee || { attach: () => ({ refresh() {}, refreshCell() {} }) },
 		ZotPoPMetrics: metrics || { citesPerYear: () => 1 },
@@ -166,7 +168,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		const originalRenderDetail = renderDetail;
 		renderMetrics = renderDetail = () => {};
 		cacheIO = setupStorage();
-		globalThis.harness = { journalMark, state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
+		globalThis.harness = { tipContent, journalMark, state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
 			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, renderVersions, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			yearBins, filterSpec, addRule, openFilterPop, closeFilterPop, syncFilterUI, clearAllFilters, affLineParts, shortInstitution, renderAuthors, addVenueChip, removeVenueChip, setVenueChips, refreshVenueSuggestions, onVenueKey, wireVenueBox, ensureJournalCatalog,

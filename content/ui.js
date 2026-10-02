@@ -1,4 +1,4 @@
-/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee, ZotPoPHistory, ZotPoPAffiliations, ZotPoPJournalMarks, ZotPoPFilters, ZotPoPJournals */
+/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee, ZotPoPHistory, ZotPoPAffiliations, ZotPoPJournalMarks, ZotPoPFilters, ZotPoPJournals, ZotPoPTip */
 "use strict";
 
 (function () {
@@ -7,6 +7,8 @@
 	const mainWindow = args.mainWindow || null;
 
 	const $ = id => document.getElementById(id);
+	// The hover card (content/tooltip.js) replaces the native title tooltip: data-tip, never title.
+	const tip = (el, text) => { if (typeof ZotPoPTip !== "undefined") ZotPoPTip.set(el, text); else if (el) { el.removeAttribute?.("title"); if (text) el.setAttribute("data-tip", String(text)); } };
 	const PREF = (k, v) => v === undefined
 		? Zotero.Prefs.get("extensions.zotpop." + k, true)
 		: Zotero.Prefs.set("extensions.zotpop." + k, v, true);
@@ -315,6 +317,7 @@
 		document.documentElement.setAttribute("lang", locale);
 		ZotPoPI18N.apply(document, t);
 		document.title = t("windowTitle");
+		if (typeof ZotPoPTip !== "undefined") ZotPoPTip.attach(window, { rich: tipContent });
 
 		$("engine").value = PREF("searchEngine") === "pop" ? "pop" : "direct";
 		let sel = $("source");
@@ -631,8 +634,8 @@
 		let key = $("source").value;
 		let pop = engineValue() === "pop";
 		$("authors").setAttribute("placeholder", t(pop ? "popAuthorsPh" : "authorsPh"));
-		$("authors").setAttribute("title", t(pop ? "popAuthorsHelp" : "authorsHelp"));
-		$("title").setAttribute("title", t(pop ? "popTitleHelp" : "titleHelp"));
+		tip($("authors"), t(pop ? "popAuthorsHelp" : "authorsHelp"));
+		tip($("title"), t(pop ? "popTitleHelp" : "titleHelp"));
 		if ($("combined-options")) $("combined-options").hidden = pop || key !== "multi";
 		if ($("pop-options")) $("pop-options").hidden = !pop;
 		if ($("direct-sort-field")) $("direct-sort-field").hidden = pop;
@@ -922,7 +925,7 @@
 		box.textContent = "";
 		state.venueChips.forEach((chip, i) => {
 			let el = fel("span", "jchip");
-			el.title = [chip.name, chip.abbrev].filter(Boolean).join(" · ");
+			tip(el, [chip.name, chip.abbrev].filter(Boolean).join(" · "));
 			el.appendChild(fel("span", "jchip-name", chip.name));
 			el.appendChild(fbutton("filter-clear", "×", t("venueChipRemove", chip.name), () => { removeVenueChip(i); $("venue").focus(); }));
 			box.appendChild(el);
@@ -1301,7 +1304,7 @@
 			meta.textContent = e.kind === "profiles" ? t("authorHistoryProfiles", provider, e.count, when) : t("historyEntryMeta", provider, e.count, when, Boolean(e.partial));
 			d.appendChild(label);
 			d.appendChild(meta);
-			d.title = label.textContent + "\n" + new Date(e.savedAt).toLocaleString(t.locale || undefined);
+			tip(d, label.textContent + "\n" + new Date(e.savedAt).toLocaleString(t.locale || undefined));
 			d.tabIndex = 0;
 			d.addEventListener("click", ev => { ev.stopPropagation(); closeHistoryMenu(); openHistoryEntry(e.id); });
 			d.addEventListener("keydown", ev => {
@@ -1370,7 +1373,7 @@
 			d.setAttribute("role", item.check === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox");
 			if (item.check !== undefined) d.setAttribute("aria-checked", String(Boolean(item.check)));
 			if (item.disabled) d.setAttribute("aria-disabled", "true");
-			if (item.title) d.title = item.title;
+			if (item.title) tip(d, item.title);
 			d.tabIndex = -1;
 			d.textContent = item.label;
 			let act = () => { if (item.disabled) return; closeToolbarMenu(true); item.run(); };
@@ -1624,7 +1627,7 @@
 			th.dataset.k = key || "chk";
 			if (!key) continue;
 			th.setAttribute("draggable", "true");
-			th.title = [th.title, t("columnDragTip")].filter(Boolean).join("\n");
+			tip(th, [th.getAttribute("data-tip"), t("columnDragTip")].filter(Boolean).join("\n"));
 			th.addEventListener("mousedown", e => {
 				columnDragBlocked = Boolean(e.target.closest?.(".rz"));
 				if (!columnDrag) suppressColumnClickUntil = 0;
@@ -1724,7 +1727,7 @@
 				saveLayout();
 				setStatus(t("columnReset"));
 			});
-			rz.setAttribute("title", t("columnResetTip"));
+			tip(rz, t("columnResetTip"));
 		}
 	}
 
@@ -2115,7 +2118,7 @@
 		// A tinted chip (fill and ink of one hue), never the raw brand colour: a saturated
 		// block would be the loudest thing on the screen. search.css picks the theme's pair.
 		setJournalTones(mark, found);
-		mark.title = found.identity.label ? r.venue + " · " + found.identity.label : r.venue;
+		tip(mark, found.identity.label ? r.venue + " · " + found.identity.label : r.venue);
 		return mark;
 	}
 	// The journal's name written in its publisher's colour, as the library list does.
@@ -2124,7 +2127,6 @@
 		if (!found) return;
 		setJournalTones(cell, found);
 		cell.classList.add("venue-known");
-		cell.title = [r.venue, found.abbrev !== r.venue ? found.abbrev : "", found.identity.label, r.publisher].filter(Boolean).join(" · ");
 	}
 
 	// ------------------------------------------------------------ affiliation
@@ -2217,12 +2219,11 @@
 	   lab with an ellipsis; the lab's own name rolls on hover. Tier appears once the institution's h-index is known. */
 	function buildAffCell(cell, r) {
 		let where = affiliationOf(r), row = affColumnRow(where);
-		cell.title = affCellTip(r, where);
 		if (!row && !affUnknownWanted(r, where)) return;
 		let box = document.createElement("div");
 		box.className = "aff-cell";
 		let chip = row?.tier ? tierChip({ tier: row.tier, hIndex: row.hIndex }) : null;
-		if (chip) { chip.title = ""; box.appendChild(chip); }
+		if (chip) { chip.removeAttribute("data-tip"); box.appendChild(chip); }
 		if (row?.flag) { let f = document.createElement("span"); f.className = "aff-flag"; f.textContent = row.flag; box.appendChild(f); }
 		let name = document.createElement("span");
 		name.className = "aff-name" + (row?.institution ? "" : " aff-unknown");
@@ -2256,7 +2257,7 @@
 		let box = $("d-authors");
 		box.textContent = "";
 		let people = (Array.isArray(r.people) ? r.people : []).filter(p => p && String(p.name || "").trim());
-		if (!people.some(p => p.institution)) { box.textContent = r.authorString || t("noAuthors"); box.removeAttribute("title"); return; }
+		if (!people.some(p => p.institution)) { box.textContent = r.authorString || t("noAuthors"); return; }
 		state.authorsOpen ||= new Set();
 		let expanded = state.authorsOpen.has(r.key), shown = expanded ? people : people.slice(0, AUTHORS_SHOWN);
 		let flagged = people.some(p => p.corresponding);
@@ -2272,8 +2273,8 @@
 				if (!index.has(key)) { index.set(key, order.length + 1); order.push({ key, name: p.institution, country: p.country }); }
 				let sup = document.createElement("sup"); sup.textContent = String(index.get(key)); span.appendChild(sup);
 			}
-			if (p.corresponding) { let star = document.createElement("sup"); star.className = "au-corr"; star.textContent = "*"; star.title = t("affCorresponding"); span.appendChild(star); }
-			if (span.classList.contains("au-first")) span.title = t("affFirst");
+			if (p.corresponding) { let star = document.createElement("sup"); star.className = "au-corr"; star.textContent = "*"; tip(star, t("affCorresponding")); span.appendChild(star); }
+			if (span.classList.contains("au-first")) tip(span, t("affFirst"));
 			names.appendChild(span);
 		});
 		if (people.length > AUTHORS_SHOWN) {
@@ -2293,7 +2294,7 @@
 				let num = document.createElement("sup"); num.textContent = String(index.get(inst.key)); item.appendChild(num);
 				let b = document.createElement("button"); b.type = "button"; b.className = "ghost au-inst-btn";
 				b.textContent = inst.name + (inst.country ? " (" + inst.country + ")" : "");
-				b.title = t("instFilterTip", inst.name);
+				tip(b, t("instFilterTip", inst.name));
 				b.addEventListener("click", () => filterByInstitution(inst.key, inst.name));
 				item.appendChild(b);
 				list.appendChild(item);
@@ -2307,8 +2308,120 @@
 		let s = document.createElement("span");
 		s.className = "tier tier-" + where.tier;
 		s.textContent = tierLabel(where.tier);
-		s.title = t("thTierTip") + (where.hIndex != null ? "\n" + t("affHIndex", where.hIndex) : "");
+		tip(s, t("thTierTip") + (where.hIndex != null ? "\n" + t("affHIndex", where.hIndex) : ""));
 		return s;
+	}
+
+	/* ---- hover cards: built on hover from the record, no network ---- */
+	const TIP_NAMES = 6;
+	function tipRecord(el) {
+		let tr = el.closest ? el.closest("tr") : null, key = tr && tr.dataset.key;
+		return key ? state.records.find(r => r.key === key) || null : null;
+	}
+	function tipTierChip(row) {
+		let chip = fel("span", "tier tier-" + row.tier, tierLabel(row.tier));
+		return chip;
+	}
+	function tipTierText(row) {
+		if (row.hIndex == null || !row.tier) return "";
+		let tiers = ZotPoPAffiliations.TIERS, i = tiers.findIndex(x => x.key === row.tier);
+		return tiers[i].floor > 0 ? t("tipTierAbove", row.hIndex, tierLabel(row.tier), tiers[i].floor) : t("tipTierBelow", row.hIndex, tierLabel(row.tier), tiers[i - 1].floor);
+	}
+	function tipPlace(row) {
+		let line = fel("div", "tip-where");
+		if (row.flag) line.appendChild(fel("span", "tip-flag", row.flag));
+		line.appendChild(fel("span", "tip-inst", row.institution || t("affUnknown")));
+		if (row.tier) line.appendChild(tipTierChip(row));
+		return line;
+	}
+	function tipNames(r, limit) {
+		let people = (Array.isArray(r.people) ? r.people : []).filter(p => p && String(p.name || "").trim());
+		let list = people.length ? people.map((p, i) => ({ name: p.name, first: i === 0 || p.position === "first", corr: Boolean(p.corresponding) }))
+			: (Array.isArray(r.authors) ? r.authors : []).map((a, i) => ({ name: a.name || [a.firstName, a.lastName].filter(Boolean).join(" "), first: i === 0, corr: false })).filter(a => a.name);
+		let box = fel("div", "tip-names");
+		list.slice(0, limit).forEach((p, i) => {
+			if (i) box.appendChild(document.createTextNode(", "));
+			box.appendChild(fel("span", p.first ? "tip-strong" : "tip-name", p.name + (p.corr ? "*" : "")));
+		});
+		if (list.length > limit) box.appendChild(fel("span", "tip-more", " " + t("authorsMore", list.length - limit)));
+		return { box, total: list.length, corr: list.some(p => p.corr) };
+	}
+	function tipTitleCard(r) {
+		let box = fel("div", "tip-rich");
+		box.appendChild(fel("div", "tip-title", r.title));
+		let cpy = ZotPoPMetrics.citesPerYear(r);
+		let meta = [r.venue, r.year, r.citations == null ? "" : t("tipCites", r.citations), cpy == null || !Number.isFinite(cpy) ? "" : t("tipPerYear", fmt(cpy, 1))].filter(x => x !== "" && x != null);
+		if (meta.length) box.appendChild(fel("div", "tip-meta", meta.join(" · ")));
+		let names = tipNames(r, TIP_NAMES);
+		if (names.total) box.appendChild(names.box);
+		let where = affiliationOf(r), rows = [];
+		if (where?.first?.institution) rows.push([t("affFirst"), where.first]);
+		if (where?.corresponding?.institution) rows.push([where.correspondingKnown ? t("affCorresponding") : t("affLast"), where.corresponding]);
+		if (rows.length) {
+			let sect = fel("div", "tip-sect");
+			for (let [label, row] of rows) { let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", label)); line.appendChild(tipPlace(row)); sect.appendChild(line); }
+			box.appendChild(sect);
+		}
+		if (r.url) box.appendChild(fel("div", "tip-hint", t("titleOpenTip")));
+		return box;
+	}
+	function tipAffCard(r) {
+		let where = affiliationOf(r), row = affColumnRow(where);
+		if (!row) return affUnknownWanted(r, where) ? t("affUnknown") : null;
+		let box = fel("div", "tip-rich");
+		box.appendChild(fel("div", "tip-title", row.institution || t("affUnknown")));
+		let place = fel("div", "tip-where");
+		if (row.flag) place.appendChild(fel("span", "tip-flag", row.flag));
+		if (row.country) place.appendChild(fel("span", "tip-inst", countryName(row.country)));
+		if (row.tier) place.appendChild(tipTierChip(row));
+		if (place.firstChild) box.appendChild(place);
+		let tier = tipTierText(row);
+		if (tier) box.appendChild(fel("div", "tip-meta", tier));
+		let sect = fel("div", "tip-sect");
+		let role = where.corresponding ? (where.correspondingKnown ? t("affCorresponding") : t("affLast")) : t("affFirst");
+		let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", role)); line.appendChild(fel("span", "tip-strong", row.name)); sect.appendChild(line);
+		if (where.corresponding && where.first && where.first.institution && ZotPoPFilters.flat(where.first.institution) !== ZotPoPFilters.flat(row.institution)) {
+			let other = fel("div", "tip-row"); other.appendChild(fel("span", "tip-label", t("affFirst"))); other.appendChild(fel("span", "tip-name", where.first.name + " · " + (where.first.flag ? where.first.flag + " " : "") + where.first.institution)); sect.appendChild(other);
+		}
+		box.appendChild(sect);
+		let others = where.countries.filter(c => c !== row.country);
+		if (others.length) box.appendChild(fel("div", "tip-hint", t("affIntl", others.map(c => (ZotPoPAffiliations.flag(c) + " " + countryName(c)).trim()).join(", "))));
+		return box;
+	}
+	function tipJournalCard(r) {
+		if (!r.venue) return null;
+		let box = fel("div", "tip-rich"), found = journalIdentity(r);
+		box.appendChild(fel("div", "tip-title", r.venue));
+		let facts = [];
+		if (found && found.abbrev && found.abbrev !== r.venue) facts.push([t("tipAbbrev"), found.abbrev]);
+		let publisher = r.publisher || found?.identity?.label;
+		if (publisher) facts.push([t("tipPublisher"), publisher]);
+		if (r.journalIF != null) facts.push(["IF", (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1) + (r.journalIFEstimate ? " (" + t("tipEstimate") + ")" : "")]);
+		if (facts.length) {
+			let sect = fel("div", "tip-sect");
+			for (let [label, value] of facts) { let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", label)); line.appendChild(fel("span", label === "IF" ? "tip-strong" : "tip-name", value)); sect.appendChild(line); }
+			box.appendChild(sect);
+		}
+		if (r.journalIF != null) box.appendChild(fel("div", "tip-hint", r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH)));
+		return box;
+	}
+	function tipAuthorsCard(r) {
+		let names = tipNames(r, 60);
+		if (!names.total) return null;
+		let box = fel("div", "tip-rich");
+		box.appendChild(fel("div", "tip-meta tip-head", t("tipAuthorsAll", names.total)));
+		box.appendChild(names.box);
+		if (names.corr) box.appendChild(fel("div", "tip-hint", "* " + t("affCorresponding")));
+		return box;
+	}
+	function tipContent(el, kind) {
+		let r = tipRecord(el);
+		if (!r) return null;
+		if (kind === "title") return tipTitleCard(r);
+		if (kind === "aff") return tipAffCard(r);
+		if (kind === "journal") return tipJournalCard(r);
+		if (kind === "authors") return tipAuthorsCard(r);
+		return null;
 	}
 
 	// The results filter can always be let go of: Escape in the box, the × beside it.
@@ -2331,7 +2444,7 @@
 	}
 	function fbutton(cls, text, label, onClick) {
 		let b = fel("button", cls, text); b.type = "button";
-		if (label) { b.setAttribute("aria-label", label); b.title = label; }
+		if (label) { b.setAttribute("aria-label", label); tip(b, label); }
 		if (onClick) b.addEventListener("click", e => { e.stopPropagation(); onClick(e); });
 		return b;
 	}
@@ -2426,7 +2539,7 @@
 			let chip = fel("span", "fchip" + (exclude ? " excl" : "")); chip.setAttribute("role", "listitem");
 			let main = fbutton("fchip-main", null, null, () => openFilterPop(rule.id, main));
 			main.setAttribute("aria-label", (exclude ? t("filterExcluded") + " · " : "") + text + " — " + t("filterChipEdit"));
-			main.title = (exclude ? t("filterExcluded") + " · " : "") + rule.values.map(key => valueLabel(rule, key)).join(", ") || text;
+			tip(main, (exclude ? t("filterExcluded") + " · " : "") + rule.values.map(key => valueLabel(rule, key)).join(", ") || text);
 			if (exclude) main.appendChild(fel("span", "fchip-tag", t("filterExcluded")));
 			main.appendChild(fel("span", "fchip-text", text));
 			chip.appendChild(main);
@@ -2847,7 +2960,7 @@
 			c.dataset.k = key;
 			if (cls) c.className = cls;
 			if (text != null) c.textContent = text;
-			if (title) c.title = title;
+			if (title) tip(c, title);
 			tr.appendChild(c);
 			return c;
 		};
@@ -2862,9 +2975,9 @@
 		td("citations", "num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : "");
 		td("cpy", "num", fmt(ZotPoPMetrics.citesPerYear(r), 1));
 		td("rank", "num", r.popOriginal ? (r.popRank == null ? "–" : String(r.popRank)) : String(r.rank));
-		td("authorString", "", r.authorString, r.authorString).dataset.marquee = "authors";
+		{ let ac = td("authorString", "", r.authorString); ac.dataset.marquee = "authors"; ac.dataset.tipKind = "authors"; }
 
-		let tt = td("title", "title", null, r.title);
+		let tt = td("title", "title", null); tt.dataset.tipKind = "title";
 		// Plain text: the title is the widest cell, and a click on "the row" used
 		// to leave Zotero for the browser. Double-click, Enter or the menu do that.
 		// The title and the affiliation line each roll on their own when they overflow.
@@ -2873,27 +2986,25 @@
 		main.dataset.marquee = "title";
 		let a = document.createElement("span");
 		if (r.titleMarkup) rich(a, r.titleMarkup); else a.textContent = r.title;
-		if (r.url) tt.title = r.title + "\n" + t("titleOpenTip");
 		main.appendChild(a);
 		// A small lime mark ahead of the title (so a narrow cell never clips it): this row was not in the previous run of this search.
-		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); mark.title = t("newMarkTip"); main.insertBefore(mark, a); }
+		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); tip(mark, t("newMarkTip")); main.insertBefore(mark, a); }
 		tt.appendChild(main);
 		let affParts = state.affLine ? affLineParts(r) : [];
 		if (affLineNeeded(affParts, affiliationOf(r))) {
 			let line = affLineNode(affParts, affiliationOf(r));
 			line.dataset.marquee = "aff";
-			line.title = affiliationTip(affiliationOf(r));
 			tt.appendChild(line);
 		}
 
 		td("year", "num", r.year == null ? "" : String(r.year));
-		let venueCell = td("venue", "venue", r.venue, r.publisher ? r.venue + " · " + r.publisher : r.venue);
+		let venueCell = td("venue", "venue", r.venue); venueCell.dataset.tipKind = "journal";
 		venueCell.dataset.marquee = "venue";
 		paintVenue(venueCell, r);
 		td("journalIF", "num if" + (r.journalIFEstimate ? " estimate" : ""), r.journalIF == null ? "" : (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1),
 			r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
 		let where = affiliationOf(r);
-		buildAffCell(td("affiliation", "aff", null, ""), r);
+		{ let ac = td("affiliation", "aff", null, ""); ac.dataset.tipKind = "aff"; buildAffCell(ac, r); }
 		td("country", "mini country", where ? where.countries.map(c => (ZotPoPAffiliations.flag(c) + " " + c).trim()).join(" ") : "", affiliationTip(where));
 		let tierCell = td("tier", "mini tiercell", null, "");
 		let chip = tierChip(where);
@@ -2906,7 +3017,7 @@
 		let readLabel = r.inLibrary && r.readState ? { done: t("readDone"), reading: t("readReading"), unread: t("readUnread") }[r.readState] : "";
 		let libCell = td("inLibrary", "mini lib", "", r.inLibrary ? t("thLibClickTip") : "");
 		if (r.inLibrary) { let ck = document.createElement("span"); ck.className = "pill pos"; ck.textContent = "✓"; libCell.appendChild(ck); }
-		if (readLabel) { let rs = document.createElement("span"); rs.className = "read-state"; rs.textContent = readLabel; rs.title = t("readStateTip"); libCell.appendChild(rs); }
+		if (readLabel) { let rs = document.createElement("span"); rs.className = "read-state"; rs.textContent = readLabel; tip(rs, t("readStateTip")); libCell.appendChild(rs); }
 		if (r.inLibrary) { libCell.setAttribute("role", "button"); libCell.addEventListener("click", e => { e.stopPropagation(); showInLibrary(r); }); }
 		let st = td("status", "status", r.status || "", r.statusTitle || "");
 		st.dataset.marquee = "status";
@@ -3020,7 +3131,7 @@
 			// The chip names the index; the qualifier in parentheses is in its tooltip.
 			let full = key ? (ZotPoPSources.SOURCES?.[key]?.label || key) : t("metricsBasisMax");
 			b.textContent = key ? String(full).replace(/\s*[(（][^)）]*[)）]\s*$/, "") : full;
-			b.title = full;
+			tip(b, full);
 			b.setAttribute("aria-pressed", String((state.metricsBasis || null) === key));
 			b.addEventListener("click", () => {
 				state.metricsBasis = key; renderMetrics(state.visible || state.records || []);
@@ -3040,7 +3151,7 @@
 			let line = document.createElement("div"); line.className = "metrics-note-line";
 			let short = document.createElement("span"); short.textContent = n.short;
 			let b = document.createElement("button"); b.type = "button"; b.className = "ghost note-help"; b.textContent = "?";
-			b.setAttribute("aria-expanded", String(open)); b.setAttribute("aria-label", t("metricsMore")); b.title = t("metricsMore");
+			b.setAttribute("aria-expanded", String(open)); b.setAttribute("aria-label", t("metricsMore")); tip(b, t("metricsMore"));
 			let full = document.createElement("p"); full.className = "metrics-note-full"; full.textContent = n.full; full.hidden = !open;
 			b.addEventListener("click", () => {
 				let now = b.getAttribute("aria-expanded") !== "true";
@@ -3084,7 +3195,7 @@
 			let b = document.createElement("button");
 			b.type = "button"; b.className = "yr-bar" + (bin.n ? "" : " zero");
 			b.classList.toggle("on", !state.yearRange || covers(bin));
-			b.title = bin.from === bin.to ? t("yearBarTip", bin.from, bin.n) : t("yearBinTip", bin.from, bin.to, bin.n);
+			tip(b, bin.from === bin.to ? t("yearBarTip", bin.from, bin.n) : t("yearBinTip", bin.from, bin.to, bin.n));
 			b.setAttribute("aria-label", b.title);
 			b.setAttribute("aria-pressed", String(covers(bin)));
 			let fill = document.createElement("span"); fill.style.height = (bin.n ? Math.max(6, Math.round(100 * bin.n / peak)) : 0) + "%"; b.appendChild(fill);
@@ -3103,7 +3214,7 @@
 		if (state.yearRange) {
 			let clear = document.createElement("button"); clear.type = "button"; clear.className = "ghost yr-clear";
 			let { from, to } = state.yearRange;
-			clear.textContent = t("yearClear", from === to ? String(from) : from + "–" + to); clear.title = t("yearClearTip");
+			clear.textContent = t("yearClear", from === to ? String(from) : from + "–" + to); tip(clear, t("yearClearTip"));
 			clear.addEventListener("click", () => { state.yearRange = null; state.focusKey = null; render(); });
 			ends.insertBefore(clear, hi);
 		}
@@ -3216,7 +3327,7 @@
 		let context = buildResultContext(r);
 		let evidence = $("d-evidence");
 		evidence.textContent = context.evidence.join(" · ");
-		evidence.title = r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH);
+		tip(evidence, r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
 
 		renderAuthors(r);
 		// Other papers of these authors in this search's results only, never the whole library.
@@ -3227,7 +3338,7 @@
 			line.className = "d-facet";
 			let text = document.createElement("span");
 			text.textContent = t(a.byId ? "facetLineId" : "facetLineName", a.name, a.total, a.unowned) + " ";
-			text.title = t("facetScope");
+			tip(text, t("facetScope"));
 			let btn = document.createElement("button");
 			btn.type = "button"; btn.className = "ghost facet-show";
 			btn.textContent = t("facetShow");
@@ -3266,7 +3377,7 @@
 		// Where the library files this paper: the last two levels of each path, the whole path in the tooltip.
 		let filed = $("d-collections"), paths = r.inLibrary && r.collections || [];
 		filed.textContent = paths.map(p => (p.length > 2 ? "… › " : "") + p.slice(-2).join(" › ")).join(" · ");
-		filed.title = paths.map(p => p.join(" › ")).join("\n");
+		tip(filed, paths.map(p => p.join(" › ")).join("\n"));
 		filed.hidden = !paths.length;
 		if (paths.length) filed.textContent = t("inCollections") + " " + filed.textContent;
 		$("d-abstract").textContent = r.abstract || t("noAbstract");
@@ -3283,7 +3394,7 @@
 		$("d-primary-label").textContent = t(owned ? "dShowLibrary" : "dAdd");
 		$("d-primary-icon").setAttribute("href", owned ? "#ic-library" : "#ic-plus");
 		primary.classList.toggle("primary", !owned);
-		primary.title = t(owned ? "dShowLibrary" : "dAdd");
+		tip(primary, t(owned ? "dShowLibrary" : "dAdd"));
 		primary.disabled = !owned && (state.importing || state.searching);
 	}
 
@@ -3293,7 +3404,7 @@
 	function renderVersions(r) {
 		let box = $("d-versions");
 		box.textContent = "";
-		box.removeAttribute("title");
+		tip(box, "");
 		let link = r.publishedAs ? { kind: "verPublished", tip: "publishedAsTip", to: r.publishedAs } : r.preprintOf ? { kind: "verPreprint", tip: "preprintOfTip", to: r.preprintOf } : null;
 		box.hidden = !link;
 		if (!link) return;
@@ -3301,7 +3412,7 @@
 		let target = state.records.find(o => o.key === to.key)
 			|| (to.doi && state.records.find(o => o.doi && ZotPoPSources.normalizeDOI(o.doi) === ZotPoPSources.normalizeDOI(to.doi)));
 		let bits = [to.venue, to.year, target ? t(target.inLibrary ? "verOwned" : "verNotOwned") : t("verGone")].filter(Boolean);
-		box.title = t(link.tip, to.doi || "") + "\n" + t(estimated ? "verEstimateTip" : "verExplicitTip");
+		tip(box, t(link.tip, to.doi || "") + "\n" + t(estimated ? "verEstimateTip" : "verExplicitTip"));
 		box.appendChild(document.createTextNode(t(link.kind, estimated) + ": " + bits.join(" · ")));
 		if (target) {
 			box.appendChild(document.createTextNode(" · "));
@@ -3575,7 +3686,7 @@
 		if (!tr) return;
 		let td = tr.querySelector("td.status");
 		if (td) {
-			td.textContent = text; td.className = "status " + (cls || ""); td.title = title || "";
+			td.textContent = text; td.className = "status " + (cls || ""); tip(td, title || "");
 			marquee?.refreshCell(td);
 		}
 		if (r.inLibrary) {
