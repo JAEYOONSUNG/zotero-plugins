@@ -13,11 +13,11 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const doc=win.document;
  const papers=[
-  {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; J. Park',year:'2025',venue:'Example Cell Research',doi:'10.5555/demo.1',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
-  {id:'2',title:'A practical framework for reproducible literature synthesis',authors:'S. Lee; L. Chen',year:'2024',venue:'Example Methods',doi:'',tags:['#review/reproducibility'],abstract:'실제 논문이 아닌 화면 구성용 예시 데이터입니다.',itemType:'journalArticle',status:'done',rating:5,citations:64,impactFactor:8.2,seconds:3200},
-  {id:'3',title:'Spatial context and cell-state transitions in regeneration',authors:'E. Morgan; H. Choi',year:'2026',venue:'Example Biology',doi:'',tags:['#methods/spatial'],abstract:'새 문헌의 지표가 아직 없을 때 0과 미확인을 구분해 보여줍니다.',itemType:'preprint',status:'unread',rating:0,citations:null,impactFactor:null,seconds:0},
+  {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; Jennifer A. Doudna',year:'2025',venue:'Example Cell Research',doi:'10.5555/demo.1',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
+  {id:'2',title:'A practical framework for reproducible literature synthesis',authors:'S. Lee; Jennifer A. Doudna',year:'2024',venue:'Example Methods',doi:'',tags:['#review/reproducibility'],abstract:'실제 논문이 아닌 화면 구성용 예시 데이터입니다.',itemType:'journalArticle',status:'done',rating:5,citations:64,impactFactor:8.2,seconds:3200},
+  {id:'3',title:'Spatial context and cell-state transitions in regeneration',authors:'E. Morgan; Jennifer A. Doudna',year:'2026',venue:'Example Biology',doi:'',tags:['#methods/spatial'],abstract:'새 문헌의 지표가 아직 없을 때 0과 미확인을 구분해 보여줍니다.',itemType:'preprint',status:'unread',rating:0,citations:null,impactFactor:null,seconds:0},
   // Three more on the same shelves, unread, so the journals tab has something to weigh.
-  {id:'4',title:'Tissue-scale repair atlases from sparse sampling',authors:'R. Ahn; P. Silva',year:'2025',venue:'Example Cell Research',doi:'10.5555/demo.4',tags:[],abstract:'',itemType:'journalArticle',status:'reading',rating:0,citations:41,impactFactor:12.4,seconds:400},
+  {id:'4',title:'Tissue-scale repair atlases from sparse sampling',authors:'R. Ahn; Jennifer A. Doudna',year:'2021',venue:'Example Cell Research',doi:'10.5555/demo.4',tags:[],abstract:'',itemType:'journalArticle',status:'reading',rating:0,citations:41,impactFactor:12.4,seconds:400},
   {id:'5',title:'Benchmarks for repair-stage classifiers',authors:'K. Oh; Christopher A. Voigt',year:'2024',venue:'Example Cell Research',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:null,impactFactor:12.4,seconds:0},
   {id:'6',title:'Preregistered synthesis of repair reviews',authors:'D. Yu; S. Lee',year:'2023',venue:'Example Methods',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:12,impactFactor:8.2,seconds:0}
  ];
@@ -69,11 +69,11 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const face=(bg,fg)=>({url:'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><rect width="28" height="28" fill="${bg}"/><circle cx="14" cy="11" r="5" fill="${fg}"/><path d="M4 28c0-6 4-9 10-9s10 3 10 9z" fill="${fg}"/></svg>`),page:''});
  const DEMO_FACES={A1:face('#cfd8e6','#6b7a93'),A3:face('#e6d9cf','#93796b'),A5:face('#d3e3d6','#6b9374')};
  const watched=[
-  {id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],
+  {id:'A1',subfield:'Biotechnology',name:'Christopher A. Voigt',institution:'MIT',seen:[],
    news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02',doi:'10.5555/news.1',citations:12,position:'last',corresponding:true,people:['Christopher A. Voigt','Jennifer A. Doudna','Brian Hie']},
          {id:'W2',title:'A portable recombinase toolkit',venue:'Nature Methods',date:'2026-07-18',citations:3,position:'first',people:['Christopher A. Voigt','K. Oh']},
          {id:'W8',title:'Machine-designed promoters across three bacterial hosts',venue:'ACS Synthetic Biology',date:'2026-09-18',doi:'10.5555/news.8',citations:null,position:'last',corresponding:true,people:['Christopher A. Voigt','George M. Church','Brian Hie']}]},
-  {id:'A2',name:'Jennifer A. Doudna',institution:'UC Berkeley',seen:[],
+  {id:'A2',subfield:'Molecular Biology',name:'Jennifer A. Doudna',institution:'UC Berkeley',seen:[],
    news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21',doi:'10.5555/news.3',citations:48,position:'last',corresponding:true,people:['Jennifer A. Doudna','Samuel H. Sternberg']},
          {id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02',doi:'10.5555/news.1',citations:12,position:'first',people:['Christopher A. Voigt','Jennifer A. Doudna','Brian Hie']},
          {id:'W6',title:'Tissue-scale repair atlases from sparse sampling',venue:'Example Cell Research',date:'2026-08-30',doi:'10.5555/demo.4'},
@@ -82,20 +82,22 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    moved:{from:'UC Berkeley',to:'Gladstone Institutes',since:2026,at:'2026-09-01'},
    patents:[{id:'US 12,345,678',title:'Compositions for programmable RNA targeting',granted:'2026-05-12',applicants:['Example University'],fresh:true,link:''}],
    newPatents:[{id:'US 12,345,678'}]},
-  {id:'A3',name:'George M. Church',institution:'Harvard University',seen:[],news:[{id:'W8',title:'Machine-designed promoters across three bacterial hosts',venue:'ACS Synthetic Biology',date:'2026-09-18',doi:'10.5555/news.8',citations:null,position:'',people:['Christopher A. Voigt','George M. Church','Brian Hie']}],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A4',name:'Brian Hie',institution:'Stanford University',seen:[],news:[{id:'W8',title:'Machine-designed promoters across three bacterial hosts',venue:'ACS Synthetic Biology',date:'2026-09-18',doi:'10.5555/news.8',citations:null,position:'first',people:['Christopher A. Voigt','George M. Church','Brian Hie']},{id:'W9',title:'Evolutionary-scale language models for genome design',venue:'bioRxiv',date:'2026-09-10',preprint:true,citations:7,position:'first',corresponding:true,people:['Brian Hie']}],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A5',name:'Tom Ellis',institution:'Imperial College London',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A6',name:'Michael T. Laub',institution:'MIT',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A7',name:'Samuel H. Sternberg',institution:'Columbia University',seen:[],news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21',doi:'10.5555/news.3',citations:48,position:'first',people:['Jennifer A. Doudna','Samuel H. Sternberg']}],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A8',name:'Jason W. Chin',institution:'University of Cambridge',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A9',name:'Randall J. Platt',institution:'ETH Zurich',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A10',name:'Farren J. Isaacs',institution:'Yale University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A11',name:'David R. Liu',institution:'Harvard University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A12',name:'Tobias J. Erb',institution:'Max Planck Institute for Terrestrial Microbiology',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A3',subfield:'Genetics',name:'George M. Church',institution:'Harvard University',seen:[],news:[{id:'W8',title:'Machine-designed promoters across three bacterial hosts',venue:'ACS Synthetic Biology',date:'2026-09-18',doi:'10.5555/news.8',citations:null,position:'',people:['Christopher A. Voigt','George M. Church','Brian Hie']}],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A4',subfield:'Computational Biology',name:'Brian Hie',institution:'Stanford University',seen:[],news:[{id:'W8',title:'Machine-designed promoters across three bacterial hosts',venue:'ACS Synthetic Biology',date:'2026-09-18',doi:'10.5555/news.8',citations:null,position:'first',people:['Christopher A. Voigt','George M. Church','Brian Hie']},{id:'W9',title:'Evolutionary-scale language models for genome design',venue:'bioRxiv',date:'2026-09-10',preprint:true,citations:7,position:'first',corresponding:true,people:['Brian Hie']}],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A5',subfield:'Biotechnology',name:'Tom Ellis',institution:'Imperial College London',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A6',subfield:'Molecular Biology',name:'Michael T. Laub',institution:'MIT',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A7',subfield:'Molecular Biology',name:'Samuel H. Sternberg',institution:'Columbia University',seen:[],news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21',doi:'10.5555/news.3',citations:48,position:'first',people:['Jennifer A. Doudna','Samuel H. Sternberg']}],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A8',subfield:'Biochemistry',name:'Jason W. Chin',institution:'University of Cambridge',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A9',subfield:'Genetics',name:'Randall J. Platt',institution:'ETH Zurich',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A10',subfield:'Biotechnology',name:'Farren J. Isaacs',institution:'Yale University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A11',subfield:'Molecular Biology',name:'David R. Liu',institution:'Harvard University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A12',subfield:'Biochemistry',name:'Tobias J. Erb',institution:'Max Planck Institute for Terrestrial Microbiology',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   // On papers 1, 2 and 6 above, so the watch table's 보유·완료·안 읽음·읽은 시간 columns have real numbers to show.
   {id:'A13',name:'M. Kim',institution:'Example University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A14',name:'S. Lee',institution:'Example Methods',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   // Paper 5 in the library lists K. Oh with Voigt: a co-authorship the 관계 map draws from the shelf alone.
+  {id:'A16',subfield:'Biotechnology',name:'Marie Dupont',institution:'University of Zurich',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A17',name:'Kenji Tanaka',institution:'University of Tokyo',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A15',name:'K. Oh',institution:'Example University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'}
  ];
  if(dense){
@@ -121,13 +123,14 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
   watchedAuthors:()=>watched,
   patentsKey:()=>'demo',
   coauthorsOf:()=>[
-   {id:'A21',name:'Samuel H. Sternberg',institution:'Columbia University',papers:9,last:2026,titles:['A shared paper']},
+   {id:'A7',name:'Samuel H. Sternberg',institution:'Columbia University',papers:9,last:2026,titles:['A shared paper']},
    {id:'A22',name:'Martin Jinek',institution:'University of Zurich',papers:6,last:2025,titles:[]},
    {id:'A23',name:'Krzysztof Chylinski',institution:'IMBA',papers:4,last:2024,titles:[]},
    {id:'A24',name:'Emmanuelle Charpentier',institution:'Max Planck',papers:3,last:2023,titles:[]},
+   {id:'A4',name:'Brian Hie',institution:'Stanford University',papers:3,last:2025,titles:[]},
    {id:'A25',name:'Benjamin Oakes',institution:'Scribe Therapeutics',papers:2,last:2026,titles:[]},
    {id:'A26',name:'Addison Wright',institution:'UC Berkeley',papers:1,last:2022,titles:[]}],
-  placeOf:name=>({'MIT':['US',2400],'UC Berkeley':['US',2100],'Harvard University':['US',2600],'Stanford University':['US',2300],'Imperial College London':['GB',1500],'University of Cambridge':['GB',1900],'ETH Zurich':['CH',1200],'Columbia University':['US',1800],'Yale University':['US',1450],'Max Planck Institute for Terrestrial Microbiology':['DE',650]})[name]?.reduce((c,h)=>({country:c,flag:String.fromCodePoint(...[...c].map(l=>0x1F1E6+l.charCodeAt(0)-65)),hIndex:h,tier:h>=2000?{key:'t1',label:'T1',note:'기관 전체 h-index 2000 이상'}:h>=1400?{key:'t2',label:'T2',note:'기관 전체 h-index 1400 이상'}:h>=400?{key:'t3',label:'T3',note:'기관 전체 h-index 400 이상'}:null}))||null,
+  placeOf:name=>({'MIT':['US',2400],'UC Berkeley':['US',2100],'Harvard University':['US',2600],'Stanford University':['US',2300],'Imperial College London':['GB',1500],'University of Cambridge':['GB',1900],'ETH Zurich':['CH',1200],'Columbia University':['US',1800],'Yale University':['US',1450],'Max Planck Institute for Terrestrial Microbiology':['DE',650],'University of Zurich':['CH',300],'University of Tokyo':['JP',200]})[name]?.reduce((c,h)=>({country:c,flag:String.fromCodePoint(...[...c].map(l=>0x1F1E6+l.charCodeAt(0)-65)),hIndex:h,tier:h>=2000?{key:'t1',label:'T1',note:'기관 전체 h-index 2000 이상'}:h>=1400?{key:'t2',label:'T2',note:'기관 전체 h-index 1400 이상'}:h>=400?{key:'t3',label:'T3',note:'기관 전체 h-index 400 이상'}:null}))||null,
   portraitOf:id=>DEMO_FACES[id]||null,
   fetchPortrait:async()=>null,
   journalRecord:()=>({name:'Example',issn:''}),
@@ -203,7 +206,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
   doiReactions:async()=>({bluesky:{count:0,top:[]},hackerNews:{count:0,top:[]},wikipedia:{count:3,articles:[]},pubpeer:{url:''},checked:new Date().toISOString(),failed:['Bluesky']}),
   // What an earlier look left in the cache, so two rows in the lists wear a badge.
   cachedIssueStatus:doi=>doi==='10.5555/demo-f3'?'retracted':doi==='10.5555/demo-p2'?'concern':null,
-  authorUpdates:async()=>({profile:{name:'Jennifer A. Doudna',hIndex:178,works:512,citations:198432,
+  authorUpdates:async id=>({profile:id==='A1'?{name:'Christopher A. Voigt',hIndex:121,works:402,citations:61250,institutions:['MIT'],topics:[{name:'Synthetic biology',count:180},{name:'Genetic circuits',count:96}],orcid:'https://orcid.org/0000-0002-0000-0000'}:{name:'Jennifer A. Doudna',hIndex:178,works:512,citations:198432,
     institutions:['UC Berkeley'],topics:[{name:'CRISPR',count:212},{name:'RNA biology',count:88},{name:'Genome editing',count:64}],
     orcid:'https://orcid.org/0000-0001-0000-0000'},
    works:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna','S. Sternberg','P. Natarajan']},
@@ -263,7 +266,16 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  /* design-preview.html?graph=author picks Christopher A. Voigt in the 관계 map: his co-authors stay bright, the inbox narrows to him. */
  if(/graph=author/.test(flags)){await bench.show('authors');bench.panel.querySelector('[data-author="A1"]')?.dispatchEvent(new win.Event('click',{bubbles:true}));}
  /* design-preview.html?table=1 opens the watched authors as the 목록 관리 table. */
- if(/table=1/.test(flags)){await bench.show('authors');[...bench.panel.querySelectorAll('button')].find(b=>b.textContent==='목록 관리')?.click();}
+ if(/table=1/.test(flags)){
+  await bench.show('authors');[...bench.panel.querySelectorAll('button')].find(b=>b.textContent==='목록 관리')?.click();
+  /* &group=place|tier|country|field cuts the table into groups; &filter=tier:T1,T2 presses chips; &expand=1 opens
+     one author (Jennifer A. Doudna) right under her row, &expand=A1 another. */
+  const group=flags.match(/group=(\w+)/);if(group)bench.panel.querySelector(`[data-group="${group[1]}"]`)?.click();
+  const filter=flags.match(/filter=([^&#]+)/);
+  if(filter)for(const part of decodeURIComponent(filter[1]).split(';')){const [dim,values]=part.split(':');for(const value of String(values).split(','))[...bench.panel.querySelectorAll(`[data-facet="${dim}"] .sc-watch-chip`)].find(b=>b.textContent.replace(/\d+$/,'').trim()===value)?.click();}
+  const expand=flags.match(/expand=(\w+)/);
+  if(expand){await new Promise(r=>setTimeout(r,0));bench.panel.querySelector(`tr[data-author-id="${/^\d$/.test(expand[1])?'A2':expand[1]}"]`)?.click();}
+ }
  if(/filters/.test(flags)){
   await bench.filters.set([
    {id:'demo1',kind:'year',mode:'in',min:2024,max:2026},

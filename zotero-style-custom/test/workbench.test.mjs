@@ -8,6 +8,7 @@ import JournalIdentity from '../src/journal-identity.js';
 import JCRCategories from '../src/jcr-categories.js';
 import JCRBrowser from '../src/jcr-browser.js';
 import PaperGraph from '../src/paper-graph.js';
+import Discover from '../src/discover.js';
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));};
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 // toolbar: the ids and element names already in the items toolbar, in order, so
@@ -1967,11 +1968,12 @@ test('following an author adds them to the panel and surfaces what is new next t
  // Everything already published becomes the baseline.
  const saved=f.calls.find(c=>c[0]==='watchAuthor')[1];
  assert.deepEqual(saved.seen,['W9']);
- // What is new sits in one box under the name, headed by the date it counts from.
- const news=f.body().querySelector('.sc-author-news');
+ // What is new sits in a container of its own under the name, headed "새 논문 · n"; the date it counts from is in the summary line.
+ const news=f.body().querySelector('.sc-person-news');
  assert.ok(news,'the news has a box of its own');
- assert.match(news.querySelector('.sc-author-head').textContent,/^마지막 확인 이후/);
- assert.match(news.textContent,/새 논문 1편/);
+ assert.match(news.querySelector('.sc-author-head').textContent,/^새 논문 1$/);
+ assert.match(f.body().querySelector('.sc-person .sc-profile').textContent,/마지막 확인 2026-09-17/);
+ assert.ok(news.querySelector('.sc-hits .sc-hit'),'its row is inside the container');
 
  // Re-opening the tab lists them, so they can be checked without the paper in hand.
  await f.bench.show('explore');await f.bench.show('authors');
@@ -2608,6 +2610,179 @@ test('the followed table shows a round face, tier + flag + institution, and cent
  assert.match(css,/\.sc-watch-table th, #style-custom-workbench \.sc-watch-table td \{[^}]*vertical-align: middle/);
  assert.doesNotMatch(css,/\.sc-watch-table th, #style-custom-workbench \.sc-watch-table td \{ vertical-align: top/);
  f.bench.destroy();
+});
+
+const expandFixture=()=>{
+ const f=fixture();
+ const rows=[
+  {id:'A1',name:'Ada Lovelace',institution:'MIT',subfield:'Biotechnology',sweptAt:'2026-09-01T00:00:00Z',seen:[],
+   news:[{id:'W1',title:'Genetic circuits at scale',venue:'Nature Biotechnology',date:'2026-09-02',doi:'10.1/n1',citations:12,position:'last'},
+    {id:'W2',title:'A bioRxiv preprint on recombinases',venue:'bioRxiv (Cold Spring Harbor Laboratory)',date:'2026-08-02',doi:'10.1101/n2',preprint:true,position:'first'}],
+   newCoauthors:['Priya N.'],moved:{from:'MIT',to:'Broad Institute',since:2026}},
+  {id:'A2',name:'Bo Chen',institution:'University of Zurich',subfield:'Molecular Biology',sweptAt:'2026-08-01T00:00:00Z',news:[],seen:[]},
+  {id:'A3',name:'Cy Dunn',institution:'Imperial College London',subfield:'Biotechnology',sweptAt:'2026-08-01T00:00:00Z',news:[],seen:[]},
+  {id:'A4',name:'Di Evans',institution:'Quiet College',news:[],seen:[]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ f.runtime.placeOf=name=>({MIT:['US',2400],'University of Zurich':['CH',300],'Imperial College London':['GB',1500]})[name]?.reduce((c,h)=>({country:c,flag:'',hIndex:h,tier:h>=2000?{key:'t1',label:'T1',note:'n'}:h>=1400?{key:'t2',label:'T2',note:'n'}:h>=400?{key:'t3',label:'T3',note:'n'}:{key:'t4',label:'T4',note:'n'}}))||null;
+ f.runtime.coauthorsOf=()=>[{id:'A2',name:'Bo Chen',institution:'University of Zurich',papers:4,last:2026,titles:[]},{id:'A77',name:'Zed Outsider',institution:'Elsewhere',papers:1,last:2024,titles:[]}];
+ f.runtime.authorUpdates=async id=>({profile:{name:rows.find(r=>r.id===id)?.name||id,hIndex:50,works:120,citations:9000,institutions:['MIT'],topics:[{name:'Topic',count:3}],orcid:''},
+  works:[{id:'R1',title:'A recent paper',venue:'Science',year:2026,citations:5,authors:['x']}],fresh:[],watching:true,checkedAt:'2026-09-17T00:00:00Z'});
+ return {f,rows};
+};
+const personOf=f=>f.body().querySelector('.sc-watch-expand');
+const keyOn=(f,target,value)=>{const e=new f.win.Event('keydown',{bubbles:true,cancelable:true});Object.assign(e,{key:value});target.dispatchEvent(e);return e;};
+
+test('an author row opens its detail right under it: one at a time, Esc and a second press close it, a redraw keeps it',async()=>{
+ const {f}=expandFixture();
+ await f.bench.show('authors');await f.click('목록 관리');
+ const row=id=>f.body().querySelector(`tr.sc-watch-row[data-author-id="${id}"]`);
+ const name=id=>row(id).querySelector('.sc-journal-name');
+ assert.equal(personOf(f),null,'nothing is open at first');
+ assert.equal(name('A1').getAttribute('aria-expanded'),'false');
+ name('A1').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ const open=personOf(f);
+ assert.ok(open,'the detail row exists');
+ assert.equal(open.previousElementSibling,row('A1'),'directly under the row it belongs to');
+ assert.equal(open.querySelector('td').getAttribute('colspan'),String(row('A1').children.length),'one cell spanning every column');
+ assert.ok(row('A1').classList.contains('sc-watch-open'));
+ assert.equal(name('A1').getAttribute('aria-expanded'),'true');
+ assert.equal(f.doc.activeElement,open.querySelector('.sc-watch-expand-body'),'the focus moves into the panel');
+ assert.equal(f.body().querySelector('.sc-person-full').textContent,'상세 보기','the full view stays one press away');
+ // Another author closes the first.
+ row('A2').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.body().querySelectorAll('.sc-watch-expand').length,1,'one at a time');
+ assert.equal(personOf(f).previousElementSibling,row('A2'));
+ assert.equal(name('A1').getAttribute('aria-expanded'),'false');
+ assert.ok(!row('A1').classList.contains('sc-watch-open'));
+ // A redraw of the table (a sort, a search, a refresh) keeps the panel where it was.
+ const sort=f.body().querySelector('select[aria-label="관심 저자 정렬"]');sort.value='name';sort.dispatchEvent(new f.win.Event('change',{bubbles:true}));await settle();
+ assert.equal(personOf(f)?.previousElementSibling,row('A2'),'still open after a redraw');
+ f.input('관심 저자 찾기','bo');await settle();
+ assert.equal(personOf(f)?.previousElementSibling,row('A2'),'and after a search');
+ f.input('관심 저자 찾기','');await settle();
+ // Esc closes it and gives the focus back to the row.
+ const esc=keyOn(f,personOf(f).querySelector('.sc-watch-expand-body'),'Escape');
+ assert.equal(esc.defaultPrevented,true);
+ assert.equal(personOf(f),null);
+ assert.equal(f.doc.activeElement,name('A2'),'focus returns to the name');
+ // A second press on the same row closes it as well.
+ row('A2').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.ok(personOf(f));
+ name('A2').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(personOf(f),null);
+ // The row's own buttons do not open it.
+ await f.click('해제');
+ assert.equal(personOf(f),null,'해제 is its own button');
+ f.bench.destroy();
+});
+
+test('the detail is containers of rows, the same renderer inline and as a page: no heading with loose rows',async()=>{
+ const {f}=expandFixture();
+ f.runtime.cache.workbenchUI={...(f.runtime.cache.workbenchUI||{}),inboxSeen:{}};
+ await f.bench.show('authors');await f.click('목록 관리');
+ f.body().querySelector('tr.sc-watch-row[data-author-id="A1"]').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ const check=(root,where,wanted)=>{
+  const heads=[...root.querySelectorAll('.sc-section-head')];
+  assert.ok(heads.length>=wanted.length,where+': sections are drawn');
+  for(const head of heads){
+   assert.ok(head.parentNode.classList.contains('sc-group'),where+': "'+head.textContent+'" sits in a container');
+   assert.ok(head.nextElementSibling||/마지막 확인 이후/.test(head.textContent),where+': a heading is followed by its rows');
+  }
+  const names=heads.map(h=>h.querySelector('.sc-section-head-name').textContent);
+  for(const name of wanted)assert.ok(names.includes(name),where+': '+name);
+  // Nothing hangs loose between the containers.
+  const wrap=root.querySelector('.sc-person-detail');
+  for(const child of wrap.children)assert.ok(child.matches('.sc-group,.sc-person,.sc-actions,.sc-muted'),where+': loose '+child.className+' '+child.tagName);
+ };
+ const inline=personOf(f);
+ check(inline,'inline',['새 논문','최근 논문','함께 낸 저자']);
+ // News rows keep the inbox's anatomy: a journal in its ink, a Preprint chip, the part played, the actions.
+ const rows=[...inline.querySelectorAll('.sc-author-inbox-row')];
+ assert.equal(rows.length,2);
+ assert.ok(rows[0].querySelector('.sc-paper-venue'),'journal');
+ assert.ok(rows[1].querySelector('.sc-preprint'),'one Preprint chip');
+ assert.match(rows[0].textContent,/마지막 저자/);
+ assert.ok(rows[0].querySelector('.sc-inbox-seen'),'확인함');
+ assert.equal(rows[0].querySelector('.sc-inbox-faces'),null,'no repeated faces for the one person');
+ // The coauthor circle wraps into a grid of chips; a followed one expands where it stands, anyone else has their own page.
+ const chips=[...inline.querySelectorAll('.sc-network .sc-node')];
+ assert.equal(chips.length,2);
+ assert.match(chips[0].textContent,/Bo Chen4편 · 2026/);
+ assert.equal(chips[0].dataset.followed,'true');
+ assert.equal(chips[1].dataset.followed,undefined);
+ chips[0].dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.body().querySelectorAll('.sc-watch-expand').length,1);
+ assert.equal(personOf(f).previousElementSibling.dataset.authorId,'A2','a followed co-author opens in the table');
+ // 상세 보기: the same detail as the full page.
+ await f.click('상세 보기');
+ const page=f.body().querySelector('.sc-author-page');
+ assert.ok(page.querySelector('.sc-person-detail:not(.sc-person-inline)'));
+ check(page,'page',['최근 논문','함께 낸 저자']);
+ f.bench.destroy();
+});
+
+test('the followed table can be grouped, filtered by chips, and remembers both',async()=>{
+ const {f,rows}=expandFixture();
+ await f.bench.show('authors');await f.click('목록 관리');
+ assert.equal(f.body().querySelectorAll('.sc-watch-group').length,0,'no grouping by default');
+ const groups=()=>[...f.body().querySelectorAll('.sc-watch-group')].map(g=>g.querySelector('.sc-watch-group-toggle').textContent.replace(/\s+/g,' ').trim());
+ await f.click('티어');
+ assert.deepEqual(groups(),['T1 1명 새 논문 2','T2 1명','T4 1명','미상 1명'],'tiers in order, the unknown last, new papers counted');
+ assert.ok(groups().at(-1).startsWith('미상'),'the unknown go last');
+ for(const g of f.body().querySelectorAll('.sc-watch-group'))assert.ok(g.classList.contains('sc-group'),'a group is a container');
+ await f.click('국가');
+ assert.equal(groups().length,4,'three countries and the unknown');
+ await f.click('분야');
+ assert.match(groups()[0],/^Biotechnology 2명/,'the biggest field first');
+ assert.ok(groups().some(t=>t.startsWith('분야 미상 1명')));
+ await f.click('소속');
+ assert.equal(groups().length,4);
+ // An open author keeps working inside a group.
+ f.body().querySelector('tr.sc-watch-row[data-author-id="A1"]').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.ok(f.body().querySelector('.sc-watch-group tr.sc-watch-expand'),'the panel opens inside its group');
+ // A group folds, and stays folded.
+ const first=f.body().querySelector('.sc-watch-group-toggle');
+ first.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(first.getAttribute('aria-expanded'),'false');
+ assert.equal(f.runtime.cache.workbenchUI.watchClosed.length,1);
+ assert.equal(f.runtime.cache.workbenchUI.watchGroup,'place');
+ // Filter chips: several of one kind add up, different kinds narrow, every count is live.
+ await f.click('없음');
+ const chip=(dim,label)=>[...f.body().querySelectorAll(`[data-facet="${dim}"] .sc-watch-chip`)].find(b=>b.textContent.replace(/\s*\d+$/,'')===label);
+ const names=()=>[...f.body().querySelectorAll('.sc-watch-row .sc-journal-name')].map(b=>b.textContent);
+ assert.equal(names().length,4);
+ chip('tier','T1').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(names(),['Ada Lovelace']);
+ chip('tier','T2').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(names(),['Ada Lovelace','Cy Dunn'],'T1 and T2 add up');
+ chip('field','Biotechnology').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(names(),['Ada Lovelace','Cy Dunn']);
+ chip('field','Molecular Biology');
+ assert.match(chip('field','Molecular Biology').textContent,/0$/,'a field no one in T1+T2 works in counts 0');
+ f.input('관심 저자 찾기','cy');await settle();
+ assert.deepEqual(names(),['Cy Dunn'],'combined with the name search');
+ f.input('관심 저자 찾기','');await settle();
+ assert.deepEqual(f.runtime.cache.workbenchUI.watchFilters.tier.sort(),['T1','T2']);
+ await f.click('필터 지우기');
+ assert.equal(names().length,4);
+ assert.equal(f.body().querySelector('.sc-watch-clear'),null,'nothing to clear');
+ f.bench.destroy();
+});
+
+test('grouping by field says when the field is still unknown, and the sweep keeps the field it reads',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'Ada',institution:'MIT',news:[],seen:[]},{id:'A2',name:'Bo',institution:'MIT',news:[],seen:[]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ await f.bench.show('authors');await f.click('목록 관리');
+ assert.match(f.body().querySelector('[data-facet="field"]').textContent,/다음 새 논문 확인 때 채워집니다/);
+ await f.click('분야');
+ const head=f.body().querySelector('.sc-watch-group-toggle');
+ assert.match(head.textContent,/분야 미상/);
+ assert.match(head.getAttribute('title'),/분야를 아는 저자 0\/2명/);
+ f.bench.destroy();
+ const [profile]=Discover.readProfiles({results:[{id:'https://openalex.org/A1',display_name:'X',topics:[{count:5,subfield:{display_name:'Biotechnology'},field:{display_name:'Biochemistry, Genetics and Molecular Biology'}},{count:9,subfield:{display_name:'Molecular Biology'},field:{display_name:'Biochemistry, Genetics and Molecular Biology'}},{count:2,subfield:{display_name:'Biotechnology'},field:{display_name:'Biochemistry, Genetics and Molecular Biology'}}]}]});
+ assert.equal(profile.subfield,'Molecular Biology');
+ assert.match(Discover.watchedProfilesURL(['A1']),/select=[^&]*topics/,'same request, one more column');
 });
 
 test('the followed list can be tended as a table: found, sorted, let go',async()=>{

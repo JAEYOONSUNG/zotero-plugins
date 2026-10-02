@@ -2564,3 +2564,100 @@
 #style-custom-workbench .sc-author-graph-mate .sc-count { margin: 0; }
 #style-custom-workbench .sc-author-graph-info .sc-actions { margin: var(--sc-space-2) 0 0; }
 #style-custom-workbench .sc-author-graph-info .sc-actions button { min-height: var(--sc-h-seg); white-space: nowrap; }
+
+/* --- Followed authors: a row opens in place, and the list can be cut by group ---
+   The open row and the panel under it share one soft band, and the panel is a
+   white card on it, so what a row folds away reads as opened out of that row
+   rather than as a second page. No coloured edge on any of it. */
+#style-custom-workbench .sc-watch-row { cursor: pointer; }
+#style-custom-workbench .sc-watch-chevron { position: relative; flex: none; width: 16px; height: 16px; }
+#style-custom-workbench .sc-watch-chevron::before {
+  content: ""; position: absolute; left: 3px; top: 5px; width: 6px; height: 6px; box-sizing: border-box;
+  border-right: 1.5px solid var(--sc-chevron-ink); border-bottom: 1.5px solid var(--sc-chevron-ink);
+  transform: rotate(-45deg); transition: transform .18s ease;
+}
+#style-custom-workbench .sc-watch-row.sc-watch-open .sc-watch-chevron::before,
+#style-custom-workbench .sc-watch-group-toggle[aria-expanded=true] .sc-watch-chevron::before { transform: translate(1px, -1px) rotate(45deg); }
+#style-custom-workbench .sc-watch-table tr.sc-watch-open td,
+#style-custom-workbench .sc-watch-table tr.sc-watch-open:hover td { background: var(--sc-surface-alt); border-block-end-color: transparent; }
+#style-custom-workbench .sc-watch-table tr.sc-watch-expand > td,
+#style-custom-workbench .sc-watch-table tr.sc-watch-expand:hover > td {
+  height: auto; padding: 0 var(--sc-space-3) var(--sc-space-3); background: var(--sc-surface-alt);
+  white-space: normal; overflow: visible; text-overflow: clip;
+}
+#style-custom-workbench .sc-watch-expand-body {
+  box-sizing: border-box; min-width: 0; max-width: 100%; padding: var(--sc-space-4);
+  border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge);
+  white-space: normal; text-align: start; font-weight: var(--sc-fw-regular); cursor: default;
+  outline: none; animation: sc-watch-open .24s ease backwards;
+}
+#style-custom-workbench .sc-watch-expand[data-settled=true] .sc-watch-expand-body { animation: none; }
+#style-custom-workbench .sc-watch-expand-body:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 2px; }
+@keyframes sc-watch-open {
+  from { opacity: 0; transform: translateY(-8px); clip-path: inset(0 0 100% 0 round var(--sc-radius-card)); }
+  to { opacity: 1; transform: none; clip-path: inset(0 0 0 0 round var(--sc-radius-card)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #style-custom-workbench .sc-watch-expand-body { animation: none; }
+  #style-custom-workbench .sc-watch-chevron::before { transition: none; }
+}
+/* The person inside the panel. */
+#style-custom-workbench .sc-person-detail { min-width: 0; }
+#style-custom-workbench .sc-person-compact { margin: 0; }
+#style-custom-workbench .sc-person-compact .sc-profile { margin: 0; align-items: center; }
+#style-custom-workbench .sc-person-compact .sc-chips { margin-block-start: var(--sc-space-2); }
+#style-custom-workbench .sc-profile-place { display: inline-flex; align-items: center; gap: var(--sc-space-2); min-width: 0; }
+#style-custom-workbench .sc-profile-place b { font-weight: var(--sc-fw-medium); }
+#style-custom-workbench .sc-person-detail > .sc-actions { padding: var(--sc-space-3) 0; }
+#style-custom-workbench .sc-person-detail > .sc-person-group { margin: 0 0 var(--sc-space-3); }
+#style-custom-workbench .sc-person-detail > .sc-person-group:last-child { margin-block-end: 0; }
+#style-custom-workbench .sc-person-loading { margin: 0 0 var(--sc-space-3); }
+#style-custom-workbench .sc-person-detail .sc-author-news-line { grid-template-columns: minmax(80px, 96px) minmax(0, 1fr); padding: 0 var(--sc-space-1); }
+#style-custom-workbench .sc-person-group .sc-author-inbox { margin: 0; }
+#style-custom-workbench .sc-person-group .sc-local-reading-more { margin-block-start: var(--sc-space-2); }
+/* The papers of theirs on the shelf: white row cards, the title over a calm status on the right. */
+#style-custom-workbench .sc-author-shelf { display: flex; flex-direction: column; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-author-shelf-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge);
+}
+#style-custom-workbench .sc-author-shelf-row .sc-hit-title-link {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-width: 0; overflow: hidden; overflow-wrap: anywhere;
+  font-weight: var(--sc-fw-medium); line-height: var(--sc-lh-body);
+}
+#style-custom-workbench .sc-author-shelf-meta { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-shelf-year { color: var(--sc-text); }
+#style-custom-workbench .sc-shelf-state { font-weight: var(--sc-fw-medium); }
+#style-custom-workbench .sc-shelf-state[data-status=done] { color: var(--sc-done); }
+#style-custom-workbench .sc-shelf-state[data-status=reading] { color: var(--sc-reading-ink); }
+/* The circle of colleagues: a grid that wraps, never a row cut at the edge. */
+#style-custom-workbench .sc-person-group .sc-network { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--sc-space-2); margin: 0; }
+#style-custom-workbench .sc-person-group .sc-node { padding: var(--sc-space-2) var(--sc-space-3) var(--sc-space-2) var(--sc-space-2); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-person-group .sc-node:hover { background: var(--sc-fill); }
+#style-custom-workbench .sc-person-group .sc-node[data-followed=true] { box-shadow: 0 0 0 1px var(--sc-border-strong); }
+#style-custom-workbench .sc-node-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Grouping and filters over the table. */
+#style-custom-workbench .sc-watch-grouping-label { color: var(--sc-muted); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); white-space: nowrap; }
+#style-custom-workbench .sc-watch-grouping { flex: none; flex-wrap: nowrap; }
+#style-custom-workbench .sc-watch-facets { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sc-space-2); margin: 0 0 var(--sc-space-3); }
+#style-custom-workbench .sc-watch-facet { display: flex; align-items: flex-start; gap: var(--sc-space-3); box-sizing: border-box; width: 100%; max-width: 100%; }
+#style-custom-workbench .sc-watch-facet-chips { flex: 1 1 0; }
+#style-custom-workbench .sc-watch-facet-label { flex: 0 0 36px; padding-block-start: var(--sc-space-1); color: var(--sc-muted); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); white-space: nowrap; }
+#style-custom-workbench .sc-watch-facet-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1); min-width: 0; }
+#style-custom-workbench .sc-watch-facet-note { padding-block-start: var(--sc-space-1); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
+#style-custom-workbench .sc-watch-chip { white-space: nowrap; }
+#style-custom-workbench .sc-watch-group { margin: 0 0 var(--sc-space-3); padding-block-end: var(--sc-group-padding); }
+#style-custom-workbench .sc-watch-group > .sc-watch-group-head { padding: 0; }
+#style-custom-workbench .sc-watch-group-toggle {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: var(--sc-space-2); box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; margin: 0; padding: var(--sc-space-2) var(--sc-space-1);
+  border: 0; border-radius: var(--sc-radius); background: none; box-shadow: none; color: inherit; font: inherit; text-align: start; cursor: pointer; overflow: hidden;
+}
+#style-custom-workbench .sc-watch-group-toggle:hover { background: none; }
+#style-custom-workbench .sc-watch-group-toggle .sc-section-head-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-watch-group-toggle .sc-section-head-count { flex: none; white-space: nowrap; }
+#style-custom-workbench .sc-watch-group-new { flex: none; margin-inline-start: auto; padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-pill); background: var(--sc-lime); color: var(--sc-lime-ink); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-h-badge) var(--sc-font); white-space: nowrap; }
+#style-custom-workbench .sc-watch-group-body { border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); overflow: hidden; }
+#style-custom-workbench .sc-watch-group-body th { background: var(--sc-surface); }
+/* Only the first group shows the column names; the others keep them for the grid's widths without drawing them. */
+#style-custom-workbench .sc-watch-table-continued thead { visibility: collapse; }
+#style-custom-workbench .sc-watch-chip[data-empty=true]:not([aria-pressed=true]) { color: var(--sc-muted); }

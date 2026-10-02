@@ -2609,6 +2609,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const profile = profiles.get(row.id);
       // Kept for the portrait search: Wikidata is found by ORCID.
       if (profile?.orcid) row.orcid = profile.orcid;
+      // Kept so the list can be grouped by what people work on; no request of its own.
+      if (profile?.subfield) row.subfield = profile.subfield;
+      if (profile?.field) row.field = profile.field;
       const now = profile ? profile.places : [];
       if (now.length) {
         const had = Array.isArray(row.places) ? row.places : null;

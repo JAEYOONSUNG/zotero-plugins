@@ -674,7 +674,7 @@
       .map(shortID).filter(id => id.startsWith('A')))].slice(0, AUTHOR_BATCH);
     if (!ids.length) return null;
     return `${API}authors?per_page=${AUTHOR_BATCH}&filter=${encodeURIComponent('ids.openalex:' + ids.join('|'))}`
-      + `&select=id,display_name,orcid,last_known_institutions,affiliations${credentials(options)}`;
+      + `&select=id,display_name,orcid,last_known_institutions,affiliations,topics${credentials(options)}`;
   }
 
   function readProfiles(payload) {
@@ -692,7 +692,18 @@
         });
       // The ORCID rides along for free: it is what finds a face on Wikidata.
       const orcid = (/(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/i.exec(text(a?.orcid)) || [])[1] || '';
-      return {id, name: text(a?.display_name), orcid: orcid.toUpperCase(), places, affiliations};
+      /* What they work on, at the level of a department: the subfield most of
+         their listed topics sit in (OpenAlex's "Molecular Biology",
+         "Biotechnology"), else the field. The same request already returns it. */
+      const tally = (key) => {
+        const counts = new Map();
+        for (const t of Array.isArray(a?.topics) ? a.topics : []) {
+          const name = text(t?.[key]?.display_name); if (!name) continue;
+          counts.set(name, (counts.get(name) || 0) + (Number.isInteger(t?.count) ? t.count : 1));
+        }
+        return [...counts.entries()].sort((m, n) => n[1] - m[1] || m[0].localeCompare(n[0]))[0]?.[0] || '';
+      };
+      return {id, name: text(a?.display_name), orcid: orcid.toUpperCase(), places, affiliations, subfield: tally('subfield'), field: tally('field')};
     }).filter(Boolean);
   }
 
