@@ -149,7 +149,7 @@ test("rows carry a second line of first and corresponding author with institutio
 	assert.deepEqual(plain(ui.affLineParts(ui.state.records[1])), [], "no data, no line and no placeholder");
 	assert.equal(ui.shortInstitution("Harvard University  Medical Laboratory"), "Harvard Univ. Medical Lab.");
 	const [first, second, ...rest] = ui.get("results-body").children;
-	assert.equal(first.querySelector(".t-aff").textContent, "Ann One · Eastbridge Univ. (US) — affLineCorr Bo Two · Kestrel Inst. (GB)");
+	assert.equal(first.querySelector(".t-aff").textContent, "Ann One · 🇺🇸 Eastbridge Univ. — affLineCorr Bo Two", "the corresponding author's lab is the column's; the line names the first author's only when it differs");
 	assert.equal(second.querySelector(".t-aff"), null);
 	assert.equal(ui.get("results-table").hasAttribute("data-aff"), true, "every row is two lines tall when one has a second line");
 	ui.state.records.forEach(r => { r.people = null; });
@@ -284,7 +284,8 @@ test("the preview drives the real handlers: quick syntax, rules, chips, institut
 	assert.equal(t.filters.chipEdit.editors, 1, "a chip opens its own rule");
 	assert.equal(t.filters.chipRemove.chips, 2);
 	assert.deepEqual(t.filters.cleared, { rows: 13, chips: 0 });
-	assert.match(t.affiliations.line[1], /^Mina Kim · Eastbridge Univ\. \(US\) — 교신 Jonas Park · Eastbridge Univ\. \(US\)$/);
+	assert.match(t.affiliations.line[1], /^Mina Kim — 교신 Jonas Park$/);
+	for (const cell of ["T1🇺🇸EastbridgeUniv.", "T1🇨🇳LumenUniv.", "T3🇰🇷HanbitUniv.", "소속미상"]) assert.ok(t.affiliations.cells.includes(cell), "tier chip, flag and the corresponding author's lab, or a muted unknown: " + cell);
 	assert.equal(t.affiliations.line[0], "", "a record from a source without affiliations has no line");
 	assert.equal(t.affiliations.rowAttr, true);
 	assert.equal(t.affiliations.detail, "Mina Kim1, Alex Rivera2, Jonas Park1*1Eastbridge University (US)2Meridian Institute of Technology (US)* 교신저자");

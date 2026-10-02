@@ -373,16 +373,24 @@ input[type=checkbox] { accent-color: var(--pill); }
 #results-table tbody tr:hover td:last-child, #results-table tbody tr.selected td:last-child, #results-table tbody tr.focused td:last-child { border-radius: 0 var(--r-row) var(--r-row) 0; }
 #results-table tbody tr.selected td, #results-table tbody tr.focused td { border-bottom-color: transparent; }
 #results-table tbody tr.in-library td.title { color: var(--muted); }
-/* Columns: basic keeps the title readable. Rank, institution, country, tier and DOI
-   stay in the detail; Status only appears once a row has one. The narrowest windows
+/* Columns: basic keeps the title readable. Rank, country, tier and DOI
+   stay in the detail (the institution column carries tier and flag already); Status only appears once a row has one. The narrowest windows
    below ~1400px also send the authors down to the detail. */
-#results-table[data-cols="basic"] [data-k="rank"], #results-table[data-cols="basic"] [data-k="affiliation"],
+#results-table[data-cols="basic"] [data-k="rank"],
 #results-table[data-cols="basic"] [data-k="country"], #results-table[data-cols="basic"] [data-k="tier"],
 #results-table[data-cols="basic"] [data-k="doi"], #results-table[data-cols="basic"]:not([data-status]) [data-k="status"] { display: none; }
 @media (max-width: 1400px) { #results-table[data-cols="basic"] [data-k="authorString"] { display: none; } }
+/* below ~1100px the title would be left with a few letters; the institution goes down to the detail and the tooltip with the authors */
+@media (max-width: 1100px) { #results-table[data-cols="basic"] [data-k="affiliation"] { display: none; } }
 td.if { color: var(--text); font-weight: 500; }
 td.if.estimate { color: var(--muted); font-weight: 400; }
 td.country { font-variant-numeric: tabular-nums; }
+/* the institution column: tier chip, flag, lab. One line; the lab takes what is left and ends in an ellipsis */
+#results-table td.aff .aff-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#results-table td.aff .aff-cell .tier { flex: none; min-width: 26px; padding: 0 6px; }
+#results-table td.aff .aff-flag { flex: none; font-size: 13px; line-height: 16px; }
+#results-table td.aff .aff-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+#results-table td.aff .aff-name.aff-unknown { color: var(--muted); font-style: italic; }
 /* the library column: the check sits at one x with or without the reading state after it */
 #results-table th[data-sort="inLibrary"], #results-table td.lib { text-align: left; padding-left: 16px; }
 td.lib { color: var(--ok); font-weight: 600; }
@@ -422,7 +430,7 @@ td.status.err { color: var(--err); }
 .pill.pos { background: var(--pos-bg); color: var(--pos-ink); }
 #results-table td.title .new-mark { margin-right: 8px; background: var(--pos-bg); color: var(--pos-ink); font-weight: 600; }
 .tier { font-weight: 600; }
-.tier-t1 { background: var(--chip); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.tier-t1 { background: var(--text); color: var(--card); box-shadow: none; }
 .tier-t2 { background: var(--chip); color: var(--text); }
 .tier-t3 { background: var(--chip); color: var(--muted); }
 .tier-t4 { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }

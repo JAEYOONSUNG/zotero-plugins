@@ -15,11 +15,12 @@
 	// Wider text columns: at the old widths a title showed eight words and an
 	// author list two names, and every one of them rolled at once.
 	// The title comes right after the checkbox. The columns that follow it are the
-	// ones a reader scans; rank, institution, country, tier and DOI (kept in the
-	// detail) and Status (only once something has one) are hidden until "all".
+	// ones a reader scans: authors, then the lab they worked in (tier chip, flag, institution).
+	// Rank, country, tier and DOI (kept in the detail) and Status (only once something has
+	// one) are hidden until "all".
 	const DEFAULT_COLS = {
-		chk: 28, title: 270, authorString: 190, year: 58, venue: 140, citations: 56, cpy: 68, journalIF: 60,
-		pdf: 60, inLibrary: 96, status: 128, rank: 60, affiliation: 150, country: 62, tier: 56, doi: 150
+		chk: 28, title: 270, authorString: 168, affiliation: 160, year: 58, venue: 140, citations: 56, cpy: 68, journalIF: 60,
+		pdf: 60, inLibrary: 96, status: 128, rank: 60, country: 62, tier: 56, doi: 150
 	};
 
 	// 8: Year, Rank and Per year were narrower than their own digits ("20…", "Ra…").
@@ -27,7 +28,10 @@
 	// 10: the library column carries Style Custom's reading state beside the check.
 	// 11: the title moved to second place and five columns are hidden by default.
 	// 12: the status column fits "Added + PDF" and the defaults still add up to the results pane at 1280px.
-	const COL_VERSION = 12;
+	// 13: the institution column joined the default set, right after the authors, and draws tier, flag and lab.
+	//     Widths saved under 12 are still good (the key set only grew); the saved order is migrated in restoreLayout.
+	const COL_VERSION = 13;
+	const COL_VERSION_MIN_WIDTHS = 12;
 	const COLUMN_KEYS = Object.keys(DEFAULT_COLS);
 	// Narrower than this and a column cannot show its own content (a 4-digit year needs ~56px with its padding)
 	const MIN_COL = 40;
@@ -36,6 +40,7 @@
 
 	// Localised string lookup; replaced in init() once the pref is read.
 	let t = ZotPoPI18N.make("en");
+	let uiLocale = "en";
 
 	// Source labels that should follow the UI language rather than the API's own name
 	const SOURCE_LABEL_KEYS = { multi: "srcMulti", preprint: "srcPreprint", europepmc: "srcEuropePMC", scholar: "srcScholar" };
@@ -306,6 +311,7 @@
 		loadJournalFigures();
 		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "auto", Zotero.locale || Services.locale?.appLocaleAsBCP47);
 		t = ZotPoPI18N.make(locale);
+		uiLocale = locale;
 		document.documentElement.setAttribute("lang", locale);
 		ZotPoPI18N.apply(document, t);
 		document.title = t("windowTitle");
@@ -447,6 +453,7 @@
 		window.addEventListener("unload", cancelCacheRestore);
 		window.addEventListener("unload", () => previewManager?.close());
 		window.addEventListener("resize", debounce(saveLayout, 400));
+		window.addEventListener("resize", debounce(fitTitleColumn, 100));
 	}
 
 	// ---------------------------------------------------------------- dropdowns
@@ -1431,7 +1438,12 @@
 	// ------------------------------------------------------------ layout persistence
 	function restoreLayout() {
 		// An order saved before the title moved forward would put it back behind the authors.
-		try { state.colOrder = PREF("colOrderVersion") === COL_VERSION ? normalizeColumnOrder(JSON.parse(PREF("colOrder") || "null")) : [...COLUMN_KEYS]; }
+		try {
+			let orderVersion = PREF("colOrderVersion");
+			state.colOrder = orderVersion === COL_VERSION ? normalizeColumnOrder(JSON.parse(PREF("colOrder") || "null"))
+				: orderVersion === COL_VERSION_MIN_WIDTHS ? normalizeColumnOrder(moveAfter(JSON.parse(PREF("colOrder") || "null"), "affiliation", "authorString"))
+				: [...COLUMN_KEYS];
+		}
 		catch (e) { state.colOrder = [...COLUMN_KEYS]; }
 		state.colsMode = PREF("colsMode") === "all" ? "all" : "basic";
 		state.affLine = PREF("affLine") !== false;
@@ -1445,7 +1457,8 @@
 		if (PREF("detailHidden") === true) setDetailVisible(false);
 		if (PREF("metricsHidden") === true) setMetricsVisible(false);
 		// COL_VERSION guards against stale widths after the defaults change
-		if (PREF("colWidthsVersion") === COL_VERSION) {
+		let widthsVersion = PREF("colWidthsVersion");
+		if (widthsVersion >= COL_VERSION_MIN_WIDTHS && widthsVersion <= COL_VERSION) {
 			try {
 				let saved = JSON.parse(PREF("colWidths") || "{}");
 				for (let k of Object.keys(DEFAULT_COLS)) if (saved[k] >= MIN_COL && saved[k] <= MAX_COL) state.colWidths[k] = saved[k];
@@ -1540,12 +1553,39 @@
 		applyColumnView();
 	}
 
+	/* The fixed defaults add up to more than the results pane at 1280-1440px (the 보유 column was cut off
+	   at the right edge), and to less on a wide screen. Unless the reader has sized the title themselves,
+	   the title takes what the shown columns leave -- never below TITLE_MIN, so a narrow pane rolls sideways
+	   rather than squeezing the title to a few letters. */
+	const TITLE_MIN = 220;
+	function fitTitleColumn() {
+		let wrap = document.querySelector(".table-wrap"), titleCol = document.querySelector('#cols col[data-k="title"]');
+		if (!wrap || !titleCol || state.colWidths.title || !wrap.clientWidth) return;
+		let others = 0;
+		for (let th of document.querySelectorAll("#results-head > th")) {
+			if (th.dataset.k === "title" || getComputedStyle(th).display === "none") continue;
+			let col = document.querySelector(`#cols col[data-k="${th.dataset.k}"]`);
+			others += parseFloat(col?.style.width) || th.offsetWidth || 0;
+		}
+		titleCol.style.width = Math.max(TITLE_MIN, Math.floor(wrap.clientWidth - others - 2)) + "px";
+	}
+
 	// Which columns show is one attribute on the table; search.css hides the rest, in the
 	// header, the colgroup and every row alike. Status shows once any row has one.
 	function applyColumnView() {
 		let table = $("results-table"); if (!table) return;
 		table.setAttribute("data-cols", state.colsMode);
 		if (state.records.some(r => r.status)) table.setAttribute("data-status", "1"); else table.removeAttribute("data-status");
+		fitTitleColumn();
+	}
+
+	// A saved order from before the institution column moved: take it out of its old place and put it behind the authors.
+	function moveAfter(order, key, anchor) {
+		if (!Array.isArray(order)) return order;
+		let rest = order.filter(k => k !== key), at = rest.indexOf(anchor);
+		if (at < 0) return order;
+		rest.splice(at + 1, 0, key);
+		return rest;
 	}
 
 	function normalizeColumnOrder(saved) {
@@ -2028,7 +2068,7 @@
 	function sortValue(r, k) {
 		if (k === "rank" && r.popOriginal) return r.popRank ?? -1;
 		if (k === "cpy") return ZotPoPMetrics.citesPerYear(r) ?? -1;
-		if (k === "affiliation") return (affiliationOf(r)?.first?.institution || "").toLowerCase();
+		if (k === "affiliation") return affiliationSortKey(r);
 		if (k === "country") return (affiliationOf(r)?.countries || []).join("/");
 		if (k === "tier") return affiliationOf(r)?.hIndex ?? -1;
 		if (k === "inLibrary") return r.inLibrary ? 1 : 0;
@@ -2129,16 +2169,77 @@
 		if (where.corresponding?.institution) out.push({ role: where.correspondingKnown ? "corr" : "last", ...where.corresponding });
 		return out;
 	}
-	function affLineNode(parts) {
+	/* The institution has its own column now (tier, flag, lab of the corresponding author, else the first), so
+	   the line under the title no longer repeats it: it names who did the work and who answers for it, which the
+	   authors column cannot say, and adds the first author's lab only where it is a different one from the column's. */
+	function affColumnRow(where) { return where ? (where.corresponding || where.first) : null; }
+	function affLineNode(parts, where) {
 		let line = document.createElement("div");
 		line.className = "t-aff";
+		let columnKey = ZotPoPFilters.flat(affColumnRow(where)?.institution);
 		parts.forEach((p, i) => {
 			if (i) line.appendChild(document.createTextNode(" — "));
 			if (p.role !== "first") { let role = document.createElement("span"); role.className = "aff-role"; role.textContent = t(p.role === "corr" ? "affLineCorr" : "affLineLast") + " "; line.appendChild(role); }
-			line.appendChild(document.createTextNode(p.name + " · " + shortInstitution(p.institution) + (p.country ? " (" + p.country + ")" : "")));
+			line.appendChild(document.createTextNode(p.name));
+			if (p.role === "first" && ZotPoPFilters.flat(p.institution) !== columnKey) line.appendChild(document.createTextNode(" · " + (p.flag ? p.flag + " " : "") + shortInstitution(p.institution)));
 		});
 		return line;
 	}
+	// Nothing to add to the authors column and the institution column: no second line.
+	function affLineNeeded(parts, where) {
+		if (!parts.length) return false;
+		if (parts.some(p => p.role !== "first")) return true;
+		return ZotPoPFilters.flat(parts[0].institution) !== ZotPoPFilters.flat(affColumnRow(where)?.institution);
+	}
+	function countryName(code) {
+		try { return new Intl.DisplayNames([uiLocale], { type: "region" }).of(code) || code; } catch (e) { return code; }
+	}
+	/* A paper whose source normally names institutions but gave none for this author reads as "unknown", muted;
+	   a source that never has them (no people at all, and not OpenAlex) stays empty. */
+	function affUnknownWanted(r, where) { return where ? true : r?.source === "openalex"; }
+	function affCellTip(r, where) {
+		let row = affColumnRow(where);
+		if (!row) return affUnknownWanted(r, where) ? t("affUnknown") : "";
+		let lines = [row.institution || t("affUnknown")];
+		let facts = [];
+		if (row.country) facts.push((row.flag ? row.flag + " " : "") + countryName(row.country));
+		if (row.hIndex != null) facts.push(t("affHIndex", row.hIndex));
+		if (row.tier) facts.push(tierLabel(row.tier));
+		if (facts.length) lines.push(facts.join(" · "));
+		let role = where.corresponding ? (where.correspondingKnown ? t("affCorresponding") : t("affLast")) : t("affFirst");
+		lines.push(role + ": " + row.name);
+		if (where.corresponding && where.first) lines.push(personLine(t("affFirst"), where.first));
+		let others = where.countries.filter(c => c !== row.country);
+		if (others.length) lines.push(t("affIntl", others.map(c => (ZotPoPAffiliations.flag(c) + " " + countryName(c)).trim()).join(", ")));
+		return lines.join("\n");
+	}
+	/* Mirrors Style Custom's column: the tier chip leads so chips line up at the left edge, then the flag, then the
+	   lab with an ellipsis; the lab's own name rolls on hover. Tier appears once the institution's h-index is known. */
+	function buildAffCell(cell, r) {
+		let where = affiliationOf(r), row = affColumnRow(where);
+		cell.title = affCellTip(r, where);
+		if (!row && !affUnknownWanted(r, where)) return;
+		let box = document.createElement("div");
+		box.className = "aff-cell";
+		let chip = row?.tier ? tierChip({ tier: row.tier, hIndex: row.hIndex }) : null;
+		if (chip) { chip.title = ""; box.appendChild(chip); }
+		if (row?.flag) { let f = document.createElement("span"); f.className = "aff-flag"; f.textContent = row.flag; box.appendChild(f); }
+		let name = document.createElement("span");
+		name.className = "aff-name" + (row?.institution ? "" : " aff-unknown");
+		// OpenAlex names carry their country ("BGI Group (China)"); the flag already says so.
+		let inst = row?.institution ? row.institution.replace(/\s*\([^)]+\)\s*$/, row.flag ? "" : "$&").trim() || row.institution : "";
+		name.textContent = inst ? shortInstitution(inst) : t("affUnknown");
+		if (inst) name.dataset.marquee = "affiliation";
+		box.appendChild(name);
+		cell.appendChild(box);
+	}
+	function affiliationSortKey(r) {
+		let row = affColumnRow(affiliationOf(r));
+		if (!row) return "9";
+		let rank = row.tier ? String(["t1", "t2", "t3", "t4"].indexOf(row.tier) + 1) : "5";
+		return rank + (row.institution || "").toLowerCase();
+	}
+
 	/* The author line of the detail, as a paper's header writes it: each author with a small index into the
 	   list of institutions right below, the first author in bold and the corresponding one starred. Up to
 	   six authors show; "+N" opens the rest in place. An institution is a button that keeps only that
@@ -2701,7 +2802,7 @@
 		tbody.appendChild(frag);
 		// Rows are two lines tall when any of them carries an affiliation line, one line otherwise,
 		// so the rhythm of the list is the same from the first row to the last.
-		if (list.some(r => state.affLine && affLineParts(r).length)) $("results-table").setAttribute("data-aff", ""); else $("results-table").removeAttribute("data-aff");
+		if (list.some(r => state.affLine && affLineNeeded(affLineParts(r), affiliationOf(r)))) $("results-table").setAttribute("data-aff", ""); else $("results-table").removeAttribute("data-aff");
 		applyColumnView();
 		syncFacetChip();
 		syncFilterUI();
@@ -2778,8 +2879,8 @@
 		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); mark.title = t("newMarkTip"); main.insertBefore(mark, a); }
 		tt.appendChild(main);
 		let affParts = state.affLine ? affLineParts(r) : [];
-		if (affParts.length) {
-			let line = affLineNode(affParts);
+		if (affLineNeeded(affParts, affiliationOf(r))) {
+			let line = affLineNode(affParts, affiliationOf(r));
 			line.dataset.marquee = "aff";
 			line.title = affiliationTip(affiliationOf(r));
 			tt.appendChild(line);
@@ -2792,7 +2893,7 @@
 		td("journalIF", "num if" + (r.journalIFEstimate ? " estimate" : ""), r.journalIF == null ? "" : (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1),
 			r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
 		let where = affiliationOf(r);
-		td("affiliation", "aff", where?.first?.institution || "", affiliationTip(where)).dataset.marquee = "affiliation";
+		buildAffCell(td("affiliation", "aff", null, ""), r);
 		td("country", "mini country", where ? where.countries.map(c => (ZotPoPAffiliations.flag(c) + " " + c).trim()).join(" ") : "", affiliationTip(where));
 		let tierCell = td("tier", "mini tiercell", null, "");
 		let chip = tierChip(where);

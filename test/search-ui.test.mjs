@@ -317,7 +317,9 @@ test("affiliation columns sort, filter and export from the people a source suppl
 	] });
 	await ui.runSearch();
 	assert.equal(ui.sortValue(ui.state.records[0], "tier"), 900);
-	assert.equal(ui.sortValue(ui.state.records[1], "affiliation"), "mit");
+	assert.equal(ui.sortValue(ui.state.records[1], "affiliation"), "1mit", "tier first, then the lab");
+	assert.equal(ui.sortValue(ui.state.records[0], "affiliation"), "2kaist");
+	assert.equal(ui.sortValue(ui.state.records[2], "affiliation"), "9", "no affiliation sorts last");
 	assert.equal(ui.sortValue(ui.state.records[2], "tier"), -1);
 	assert.equal(ui.sortValue(ui.state.records[1], "country"), "US");
 	ui.state.sortKey = "tier"; ui.state.sortDir = "desc";
@@ -327,10 +329,13 @@ test("affiliation columns sort, filter and export from the people a source suppl
 	assert.equal(ui.matchesFilter(ui.state.records[0], "us"), false);
 	assert.equal(ui.matchesFilter(ui.state.records[1], "us"), true);
 	const row = ui.get("results-body").firstChild;
-	assert.equal(row.querySelector("td.aff").textContent, "MIT");
+	assert.equal(row.querySelector("span.aff-name").textContent, "MIT");
+	assert.equal(row.querySelector("span.aff-flag").textContent, "🇺🇸");
+	assert.equal(row.querySelector("span.tier").textContent, "T1");
+	assert.equal(row.querySelector("span.aff-name").dataset.marquee, "affiliation", "only the lab's name rolls, the chip and flag stay");
 	assert.equal(row.querySelector("td.country").textContent, "🇺🇸 US");
 	assert.equal(row.querySelector("span.tier").textContent, "T1");
-	assert.match(row.querySelector("td.aff").title, /^affFirst: A · MIT · 🇺🇸 US · affHIndex\|1800 · T1$/);
+	assert.match(row.querySelector("td.aff").title, /^MIT\n🇺🇸 .* · affHIndex\|1800 · T1\naffFirst: A$/);
 	const csv = ui.csvText().split("\n");
 	assert.match(csv[1], /"MIT","US","1800"/);
 	assert.match(csv[3], /"","",""/);
@@ -1267,9 +1272,10 @@ test("the default result columns put the title second and hide five columns unti
 	const markup = readFileSync(new URL("../content/search.xhtml", import.meta.url), "utf8");
 	const css = readFileSync(new URL("../content/search.css", import.meta.url), "utf8");
 	const cols = [...markup.matchAll(/<col data-k="([^"]+)"/g)].map(m => m[1]);
-	assert.deepEqual(cols.slice(0, 2), ["chk", "title"]);
+	assert.deepEqual(cols.slice(0, 4), ["chk", "title", "authorString", "affiliation"], "the institution column is visible by default, right behind the authors");
+	assert.doesNotMatch(/\[data-cols="basic"\] \[data-k="rank"\][\s\S]*?\{ display: none; \}/.exec(css)[0], /data-k="affiliation"/);
 	const hidden = /\[data-cols="basic"\] \[data-k="rank"\][\s\S]*?\{ display: none; \}/.exec(css)[0];
-	for (const key of ["rank", "affiliation", "country", "tier", "doi"]) assert.match(hidden, new RegExp(`data-k="${key}"`));
+	for (const key of ["rank", "country", "tier", "doi"]) assert.match(hidden, new RegExp(`data-k="${key}"`));
 	assert.match(hidden, /:not\(\[data-status\]\) \[data-k="status"\]/, "status only shows once a row has one");
 	assert.ok(!markup.includes('id="select-all"'), "the toolbar's second select-all is gone");
 	const ui = await loaded();
@@ -1363,4 +1369,24 @@ test("an import keeps its failures selected, retries only them, and tells a lost
 	ui.get("banner-action").emit("click");
 	await new Promise(resolve => setImmediate(resolve));
 	assert.deepEqual(calls, ["b"], "the retry carries the failed key alone");
+});
+
+test("the institution cell: unknown is muted and only where the source normally has labs; the corresponding author's lab wins; other countries go in the tooltip", async () => {
+	const person = (name, over) => ({ name, position: "middle", corresponding: false, institution: "", institutionId: null, country: null, institutionH: null, ...over });
+	const ui = uiHarness({ realRows: true, search: async () => [
+		paper("both", { people: [person("A", { position: "first", institution: "Hanbit University", country: "KR", institutionH: 500 }), person("B", { position: "last", corresponding: true, institution: "Kestrel Institute", country: "GB", institutionH: 900 })] }),
+		paper("unk", { source: "openalex", people: [person("A", { position: "first", institution: "Hanbit University", country: "KR" }), person("B", { position: "last", corresponding: true })] }),
+		paper("oa", { source: "openalex" }),
+		paper("plain", { source: "crossref" })
+	] });
+	await ui.runSearch();
+	const cell = key => ui.get("results-body").children.find(r => r.dataset.key === key).children.find(c => c.dataset.k === "affiliation");
+	assert.equal(cell("both").querySelector("span.aff-name").textContent, "Kestrel Inst.");
+	assert.equal(cell("both").querySelector("span.tier").textContent, "T2");
+	assert.match(cell("both").title, /affIntl\|/, "the first author's other country is named in the tooltip");
+	assert.equal(cell("unk").querySelector("span.aff-name").textContent, "affUnknown");
+	assert.match(cell("unk").querySelector("span.aff-name").className, /aff-unknown/);
+	assert.equal(cell("oa").querySelector("span.aff-name").className.includes("aff-unknown"), true);
+	assert.equal(cell("plain").children.length, 0, "a source without institutions gets an empty cell");
+	assert.equal(cell("plain").title, "");
 });

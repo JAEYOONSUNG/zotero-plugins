@@ -233,7 +233,7 @@ test("real result rows mark only text columns and retain title links, focus and 
 	await ui.runSearch();
 	const row = ui.get("results-body").firstChild;
 	// The title cell holds two lines that roll on their own (the title, and the affiliation line when there is one), so its marker sits on the title's own block.
-	assert.deepEqual(row.children.filter(cell => cell.dataset.marquee).map(cell => cell.dataset.marquee), ["authors", "venue", "status", "affiliation", "doi"]);
+	assert.deepEqual(row.children.filter(cell => cell.dataset.marquee).map(cell => cell.dataset.marquee), ["authors", "venue", "status", "doi"]);
 	assert.equal(row.querySelector("td.title").firstChild.dataset.marquee, "title");
 	// The title is text now; a click on it stays in the window. The DOI is the row's one link.
 	const link = row.querySelector("a"); let prevented = false, stopped = false;

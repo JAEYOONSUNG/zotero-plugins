@@ -29,6 +29,9 @@ const require_ = (await import("node:module")).createRequire(import.meta.url);
 // Institutions are made up as well. aff[i] is [institution, country] for the i-th author, corr is the corresponding author.
 const EAST = ["Eastbridge University", "US"], KESTREL = ["Kestrel Institute", "GB"], HANBIT = ["Hanbit University", "KR"], MERIDIAN = ["Meridian Institute of Technology", "US"],
 	ALTMARK = ["University of Altmark", "DE"], SATO = ["Sato Research Institute", "JP"], LUMEN = ["Lumen University", "CN"], AURORA = ["Aurora Medical Institute", "CA"];
+// Institution h-index (OpenAlex summary_stats), as the real lookup would have filled it in: T1 >= 1400, T2 >= 800, T3 >= 400, T4 below.
+// Meridian has none on purpose: a lab the lookup has not answered for yet shows its flag and name without a tier.
+const INST_H = { "Eastbridge University": 1920, "Kestrel Institute": 910, "Hanbit University": 640, "University of Altmark": 455, "Sato Research Institute": 310, "Lumen University": 1510, "Aurora Medical Institute": 260 };
 export const FAKE = [
 	["Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs", ["Mina Kim", "Alex Rivera", "Jonas Park"], 2025, "Nature Methods", 214, "openalex", { doi: "10.5555/demo.001", pdf: true, jif: 32.1, abstract: "Fictional abstract for the design preview: a single-cell atlas of repair-stage cell states across three tissues.", aff: [EAST, MERIDIAN, EAST], corr: 2, also: ["crossref"] }],
 	["A practical framework for reproducible literature synthesis", ["Sora Lee", "Lin Chen"], 2024, "Science", 97, "crossref", { doi: "10.5555/demo.002", pdf: true, jif: 45.8, abstract: "Fictional abstract for the design preview: a checklist for synthesis that another group can rerun.", aff: [HANBIT, LUMEN], corr: 1, review: true }],
@@ -39,7 +42,7 @@ export const FAKE = [
 	["Compact editors from uncultivated bacteria", ["Jenna Dowd", "Sam Sternfield", "Priya Natarajan"], 2026, "Proceedings of the National Academy of Sciences", 18, "europepmc", { doi: "10.5555/demo.007", jif: 9.4, aff: [AURORA, AURORA, KESTREL], corr: 0 }],
 	["Guide design rules learned from a million targets", ["Jenna Dowd", "Marta Jinkova"], 2025, "Nucleic Acids Research", 88, "crossref", { doi: "10.5555/demo.008", pdf: true, jif: 13.1, aff: [AURORA, ALTMARK], corr: 1 }],
 	["Off-target profiling in primary human cells", ["Jenna Dowd", "Ben Oakley"], 2024, "Genome Biology", 203, "openalex", { doi: "10.5555/demo.009", pdf: true, jif: 10.1, abstract: "Fictional abstract for the design preview: guide-level off-target profiles across primary human cell types, compared between three editing enzymes.", aff: [AURORA, EAST], corr: 0 }],
-	["Delivery of editing enzymes across tissue barriers", ["Jenna Dowd", "Sam Sternfield"], 2025, "Cell Reports", 61, "europepmc", { doi: "10.5555/demo.010", jif: 7.5, aff: [AURORA, AURORA], corr: 1 }],
+	["Delivery of editing enzymes across tissue barriers", ["Jenna Dowd", "Sam Sternfield"], 2025, "Cell Reports", 61, "europepmc", { doi: "10.5555/demo.010", jif: 7.5, aff: [AURORA], corr: 1 }],
 	["Preregistered synthesis of repair reviews", ["Dana Yu", "Omar Haddad"], 2022, "medRxiv", 0, "europepmc", { doi: "10.5555/demo.011", preprint: true, server: "medRxiv", aff: [LUMEN, KESTREL], corr: 1 }],
 	["Spatial context and cell-state transitions in regeneration: a commentary", ["Tara Novak"], 2022, "Example Journal of Tissue Studies", null, "crossref", { doi: "10.5555/demo.012" }]
 ];
@@ -49,7 +52,7 @@ export const FAKE = [
 function people(names, x) {
 	if (!x.aff) return null;
 	return names.map((n, i) => ({ name: n, position: i === 0 ? "first" : i === names.length - 1 ? "last" : "middle", corresponding: x.corr === i,
-		institution: x.aff[i]?.[0] || "", institutionId: x.aff[i] ? "I" + (x.aff[i][0].length * 1000 + x.aff[i][0].charCodeAt(0)) : null, country: x.aff[i]?.[1] || null, institutionH: null }));
+		institution: x.aff[i]?.[0] || "", institutionId: x.aff[i] ? "I" + (x.aff[i][0].length * 1000 + x.aff[i][0].charCodeAt(0)) : null, country: x.aff[i]?.[1] || null, institutionH: INST_H[x.aff[i]?.[0]] ?? null }));
 }
 function records(Sources) {
 	return Sources.linkPreprintVersions(FAKE.map(([title, names, year, venue, citations, source, x], i) => Sources.makeRecord({
@@ -364,7 +367,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	// institutions: the table's second line, the detail's authors with an index into the institutions, a click filters
 	fire(rowOf("demo1"));
 	await wait(20);
-	trace.affiliations = { line: [...document.querySelectorAll("#results-body tr")].map(tr => tr.querySelector(".t-aff")?.textContent || ""), rowAttr: document.getElementById("results-table").hasAttribute("data-aff"),
+	trace.affiliations = { cells: [...document.querySelectorAll("#results-body td.aff")].map(td => td.textContent.replace(/\s+/g, "")), tips: [...document.querySelectorAll("#results-body td.aff")].map(td => td.title), line: [...document.querySelectorAll("#results-body tr")].map(tr => tr.querySelector(".t-aff")?.textContent || ""), rowAttr: document.getElementById("results-table").hasAttribute("data-aff"),
 		detail: text("d-authors").replace(/\s+/g, " ").trim(), instButtons: [...document.querySelectorAll("#d-authors .au-inst-btn")].map(b => b.textContent) };
 	fire(document.querySelector("#d-authors .au-inst-btn"));
 	await wait(20);

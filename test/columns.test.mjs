@@ -171,3 +171,11 @@ test("edge drag scrolls wide tables, external drags do not reorder or scroll", (
 	event(h.header("title"), "dragend");
 	assert.equal(h.prefs.colOrder, undefined);
 });
+
+test("a layout saved before the institution column moved keeps its widths and order, the column joining the authors", () => {
+	const old = ["chk", "authorString", "title", "year", "venue", "citations", "cpy", "journalIF", "pdf", "inLibrary", "status", "rank", "affiliation", "country", "tier", "doi"];
+	const h = setup({ prefs: { colOrderVersion: 12, colOrder: JSON.stringify(old), colWidthsVersion: 12, colWidths: JSON.stringify({ title: 333, venue: 177 }) } });
+	assert.equal(h.state.colOrder.join(), ["chk", "authorString", "affiliation", "title", "year", "venue", "citations", "cpy", "journalIF", "pdf", "inLibrary", "status", "rank", "country", "tier", "doi"].join());
+	assert.equal(h.state.colWidths.title, 333);
+	assert.equal(h.state.colWidths.venue, 177);
+});
