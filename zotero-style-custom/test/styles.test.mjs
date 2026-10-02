@@ -294,3 +294,8 @@ test('a segmented tray spaces its segments with gap, never negative margins, and
  assert.ok(nowrap.length,'segment buttons are nowrap');
  for(const r of rules.filter(r=>/\.sc-segmented|\.sc-annot-order|\.sc-annot-actions/.test(r.selectorText||'')))assert.ok(!/^-/.test(String(r.style.getPropertyValue('margin')||r.style.getPropertyValue('margin-inline')||'').trim()),'no negative margin on '+r.selectorText);
 });
+
+test("focus rings on rounded rows sit outside them, never inset into the curve", () => {
+  // An inset ring on a rounded row card looked like painted nails on its sides in Zotero.
+  assert.doesNotMatch(css, /\.sc-path-row:focus-visible\s*\{[^}]*outline-offset:\s*-/);
+});

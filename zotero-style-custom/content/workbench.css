@@ -940,7 +940,7 @@
 /* A list being refreshed stays readable: the status line says it is loading.
    Dimming it to 60% put its secondary text at 2.3:1. */
 #style-custom-workbench [aria-busy="true"] { opacity: 1; cursor: progress; }
-#style-custom-workbench .sc-path-row:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: -2px; }
+#style-custom-workbench .sc-path-row:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 2px; }
 /* An action beside a set of view toggles: a verb, not a surface. */
 /* The accent marks where the reader is and where a link goes; an action beside
    them is a verb in the panel's own ink, or the colour stops meaning anything. */

@@ -312,7 +312,11 @@ input[type=checkbox] { accent-color: var(--pill); }
 /* ---------------------------------------------------------------- table */
 .table-wrap { flex: 1 1 0; min-height: calc(var(--head-h) + 5 * var(--row-h)); overflow: auto; position: relative; padding-inline: 8px; scroll-padding-top: var(--head-h); scroll-padding-bottom: var(--fade-h); }
 .table-wrap:focus { outline: none; }
-.table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* No ring on the scrolling table: drawn inside a rounded card whose top and bottom sit under the header and
+   the fade, it showed only as two dark curves at the left and right edges (the reader saw "nails"). The
+   keyboard position is the focused row, which darkens while the table has keyboard focus. */
+.table-wrap:focus-visible { outline: none; }
+.table-wrap:focus-visible #results-table tbody tr.focused td { background: var(--row-sel) linear-gradient(var(--chip), var(--chip)); }
 #results-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
 #results-table th, #results-table td {
 	padding: 0 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

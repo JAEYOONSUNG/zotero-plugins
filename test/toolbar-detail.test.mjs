@@ -272,3 +272,10 @@ test("the journal name and the detail chip carry the ink of both themes, and the
 	assert.doesNotMatch(read_("content/ui.js"), /matchMedia\?\.\("\(prefers-color-scheme/, "the ink is no longer decided when the row is drawn");
 });
 function read_(name) { return readFileSync(new URL("../" + name, import.meta.url), "utf8"); }
+
+test("no focus ring is drawn inside a rounded card: half of it showed as dark 'nails' on the card's sides", () => {
+	// An inset ring (negative outline-offset) on a scroller is clipped by its header and fade and
+	// leaves only the curved left and right edges. The focused row carries keyboard position instead.
+	assert.doesNotMatch(css, /outline-offset:\s*-\d/, "no inset focus rings");
+	assert.match(css, /\.table-wrap:focus-visible\s*\{\s*outline:\s*none;\s*\}/);
+});
