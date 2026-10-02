@@ -31,3 +31,11 @@ pref("extensions.zotpop.searchEngine", "direct");
 pref("extensions.zotpop.popDefaultSource", "scholar");
 // New releases on GitHub are installed by the plugin itself, once a day while Zotero is open.
 pref("extensions.zotpop.autoUpdate", true);
+
+// Abstract translation. The Translate for Zotero plugin is used when installed (its service and key);
+// otherwise an OpenAI-compatible chat endpoint can be entered here (https, or this computer). All optional.
+pref("extensions.zotpop.translateLang", "");
+pref("extensions.zotpop.translateTitle", false);
+pref("extensions.zotpop.aiEndpoint", "");
+pref("extensions.zotpop.aiModel", "");
+pref("extensions.zotpop.aiKey", "");

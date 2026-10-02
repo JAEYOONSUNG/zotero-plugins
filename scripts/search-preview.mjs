@@ -47,6 +47,23 @@ export const FAKE = [
 	["Spatial context and cell-state transitions in regeneration: a commentary", ["Tara Novak"], 2022, "Example Journal of Tissue Studies", null, "crossref", { doi: "10.5555/demo.012" }]
 ];
 
+// Yearly citations (OpenAlex counts_by_year), fictional. The sums follow the citation counts above where the paper has them.
+const CITES_BY_YEAR = {
+	demo1: [[2025, 131], [2026, 83]],
+	demo2: [[2024, 22], [2025, 51], [2026, 24]],
+	demo4: [[2025, 30], [2026, 11]],
+	demo5: [[2024, 20], [2025, 29], [2026, 17]],
+	demo6: [[2023, 1], [2024, 4], [2025, 5], [2026, 2]],
+	demo8: [[2025, 60], [2026, 28]],
+	demo9: [[2024, 48], [2025, 94], [2026, 61]]
+};
+// One older paper with ten years of history, for the trend card.
+export const OLD_PAPER = { sourceId: "demo14", doi: "10.5555/demo.014", title: "A decade of tissue repair kinetics: reference cohorts, reanalysed", year: 2018, venue: "Cell Reports", citations: 638, previous: 611,
+	byYear: [[2018, 12], [2019, 58], [2020, 96], [2021, 121], [2022, 104], [2023, 88], [2024, 74], [2025, 51], [2026, 34]],
+	fresh: { citations: 645, byYear: [[2018, 12], [2019, 58], [2020, 96], [2021, 121], [2022, 104], [2023, 88], [2024, 74], [2025, 51], [2026, 41]] },
+	abstract: "Fictional abstract for the design preview: reference cohorts of tissue repair, sampled across ten years, are reanalysed with one pipeline. Healing speed is steady in young cohorts and falls with age; the effect is smaller than the difference between sampling sites." };
+const fromPairs = list => list ? list.map(([year, n]) => ({ year, n })) : null;
+
 // demo3 names its published version (demo4, in the library) itself; demo11 is linked to demo6
 // only by title and first author; demo12 has a similar title and no link at all.
 function people(names, x) {
@@ -63,7 +80,7 @@ function records(Sources) {
 		itemType: x.preprint ? "preprint" : "journalArticle", preprintServer: x.server || null, publishedDoi: x.publishedDoi || null,
 		workType: x.review ? "review" : null, people: people(names, x), sources: x.also ? [source, ...x.also] : undefined,
 		journalIF: x.jif ?? null, journalIFEstimate: x.jif != null, journalH: x.jif ? Math.round(x.jif * 6) : null,
-		openAccess: Boolean(x.pdf)
+		openAccess: Boolean(x.pdf), citesByYear: fromPairs(CITES_BY_YEAR["demo" + (i + 1)])
 	})));
 }
 
@@ -96,6 +113,10 @@ export async function buildPreview({ locale = "en" } = {}) {
 	const css = read("content/search.css");
 	const errors = [];
 	let netCalls = 0;
+	// What is answered in place of the network: the OpenAlex lookup behind the citation card, and a translation service.
+	const stubbed = { openalex: [], translate: [] };
+	const previewFiles = new Map();
+	let freshWork = null;
 	const importCalls = [];
 	const prefs = { language: locale, searchSurface: "papers", hintShown: true, multiSourceMigrated: true, defaultSource: "multi", multiSourceMigrated2: true, journalLookup: false };
 	const listeners = new Map();
@@ -125,7 +146,11 @@ export async function buildPreview({ locale = "en" } = {}) {
 		window: win, document, AbortController, console, setTimeout, clearTimeout, CSS: { escape: v => v },
 		Zotero: { locale, debug() {}, logError: e => errors.push(e), launchURL() {}, Libraries: { userLibraryID: 1 },
 			Prefs: { get: key => prefs[key.replace("extensions.zotpop.", "")], set: (key, v) => { prefs[key.replace("extensions.zotpop.", "")] = v; } },
-			HTTP: { request: () => { netCalls++; throw new Error("network is off in the preview"); } },
+			HTTP: { request: async (_method, url) => {
+				// The one paper's refresh: answered from the fixture, counted apart from the network (which stays at zero).
+				if (/^https:\/\/api\.openalex\.org\/works\/doi:/.test(url) && freshWork) { stubbed.openalex.push(url.replace(/\?.*/, "")); return { status: 200, response: freshWork }; }
+				netCalls++; throw new Error("network is off in the preview");
+			} },
 			Utilities: { Internal: { copyTextToClipboard() {} } } },
 		ZotPoPMarquee: { attach: () => ({ refresh() {}, refreshCell() {} }) },
 		ZotPoPImporter: { importRecord: async r => { importCalls.push(r.key); return r.sourceId === "demo9" ? { status: "failed", error: "fictional failure" } : { status: "added", item: { id: 100 + importCalls.length }, pdf: r.pdfUrl ? "pdf:oa" : "no pdf", how: "translator" }; },
@@ -134,7 +159,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 			getCurrentTarget: () => ({ libraryID: 1, collectionID: null }), forgetTitleIndex() {} }
 	});
 	win.Zotero = ctx.Zotero;
-	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "filters", "journals", "tooltip", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
+	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "filters", "journals", "tooltip", "cite", "translate", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
 	// linkedom's dataset drops "data-i18n" (a digit in the name); read the attribute instead. Strings stay the real ones.
 	ctx.ZotPoPI18N.apply = (root, t) => {
 		for (const el of root.querySelectorAll("[data-i18n]")) el.textContent = t(el.getAttribute("data-i18n"));
@@ -145,6 +170,17 @@ export async function buildPreview({ locale = "en" } = {}) {
 	// Same search function shape as the real one; only the network is replaced.
 	let lastQuery = null, override = null;
 	ctx.ZotPoPSources = Object.assign(Object.create(Sources), { search: async (_s, q, _h, c) => { lastQuery = q; let out = override || (runs++ ? [later, ...recs] : recs); c?.onResults?.(out, { final: false }); return out; } });
+	// Storage that remembers across this one run, holding a look at the older paper 12 days ago (611 citations).
+	const realMemoryIO = ctx.ZotPoPHistory.memoryIO;
+	ctx.ZotPoPHistory.memoryIO = () => realMemoryIO(previewFiles);
+	previewFiles.set("citations.json", JSON.stringify({ version: 1, entries: [["d:" + OLD_PAPER.doi, OLD_PAPER.previous, Date.now() - 12 * 86400000, null, null]] }));
+	// A fake "Translate for Zotero": the same call shape as the real plugin, answering a fictional Korean text.
+	const KO = new Map([[FAKE[0][6].abstract, "디자인 미리보기를 위한 가상 초록: 세 조직에서 재생 단계의 세포 상태를 보여 주는 단일세포 아틀라스."],
+		[FAKE[0][0], "세 재생 장기에서 단일세포 아틀라스, 공간 맥락, 종단 표본으로 본 조직 복구의 세포 반응 지도"],
+		[OLD_PAPER.abstract, "디자인 미리보기를 위한 가상 초록: 10년에 걸쳐 표본을 모은 조직 복구 기준 코호트를 하나의 분석 파이프라인으로 다시 분석했다. 회복 속도는 젊은 코호트에서 일정하고 나이가 들수록 느려지지만, 그 효과는 표본 채취 부위 사이의 차이보다 작다."],
+		[OLD_PAPER.title, "조직 복구 동역학의 10년: 기준 코호트의 재분석"]]);
+	ctx.Zotero.PDFTranslate = { api: { translate: async (text, options) => { stubbed.translate.push({ chars: text.length, langto: options?.langto, hasPluginID: Boolean(options?.pluginID), keys: Object.keys(options || {}).sort() });
+		return { status: "success", result: KO.get(text) || "(가상 번역) " + text, service: "deeplfree" }; } } };
 	vm.runInContext(read("content/ui.js"), ctx, { filename: "ui.js" });
 	for (const fn of listeners.get("load") || []) fn();
 	await new Promise(r => setTimeout(r, 30));
@@ -466,21 +502,111 @@ export async function buildPreview({ locale = "en" } = {}) {
 	await wait(20);
 	const longSpanPage = page();
 	fire(document.getElementById("cond-toggle"));
-	return { tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, unfolded, filtersPage, journalsPage, longSpanPage, trace, rows: rows.length, netCalls, errors };
+
+	// ---- the citation trend card and a translated abstract, on one older paper with ten years of history
+	const old = OLD_PAPER, oldRecord = Sources.makeRecord({ source: "openalex", sourceId: old.sourceId, title: old.title, year: old.year, venue: old.venue, citations: old.citations, doi: old.doi,
+		authors: [{ name: "Mina Kim", firstName: "Mina", lastName: "Kim" }, { name: "Alex Rivera", firstName: "Alex", lastName: "Rivera" }], authorString: "Mina Kim, Alex Rivera",
+		abstract: old.abstract, itemType: "journalArticle", citesByYear: fromPairs(old.byYear), journalIF: 8.2, journalIFEstimate: true, journalH: 49 });
+	override = [oldRecord, ...recs.slice(0, 8)];
+	freshWork = { id: "https://openalex.org/W14", cited_by_count: old.fresh.citations, counts_by_year: old.fresh.byYear.map(([year, n]) => ({ year, cited_by_count: n })) };
+	document.getElementById("keywords").value = "tissue repair kinetics";
+	fire(document.getElementById("query-form"), "submit");
+	for (let i = 0; i < 100 && !rowOf("demo14"); i++) await wait(20);
+	await wait(80);
+	trace.cite = { rows: shown().length, mark: rowOf("demo14").querySelector("td[data-k=citations] .cite-mark")?.textContent, cellTip: rowOf("demo14").querySelector("td[data-k=citations]").getAttribute("data-tip"),
+		metricsTrend: document.getElementById("metrics-trend").hidden ? "" : document.getElementById("metrics-trend").textContent.replace(/\s+/g, " ").trim(),
+		marks: table().map(tr => tr.querySelector("td[data-k=citations] .cite-mark")?.textContent || "") };
+	// Positions the fixed card would get in a real window (linkedom has no layout): the cell's, and the card's own size.
+	const proto = window.HTMLElement.prototype, realRect = proto.getBoundingClientRect;
+	proto.getBoundingClientRect = function () {
+		const box = (left, top, w, h) => ({ left, top, right: left + w, bottom: top + h, width: w, height: h });
+		if (this.classList?.contains("cite-pop")) return box(0, 0, 440, 430);
+		if (this.dataset?.k === "citations") return box(321, 191, 56, 48);
+		return box(0, 0, 100, 30);
+	};
+	fire(rowOf("demo14").querySelector("td[data-k=citations]"));
+	for (let i = 0; i < 100 && !document.querySelector(".cite-pop .cite-delta"); i++) await wait(20);
+	await wait(40);
+	const citeCard = () => document.querySelector(".cite-pop");
+	trace.cite.pop = { text: citeCard()?.textContent.replace(/\s+/g, " ").trim(), bars: citeCard()?.querySelectorAll(".tr-col").length, peak: citeCard()?.querySelector(".tr-col.peak .tr-y")?.textContent, role: citeCard()?.getAttribute("role"),
+		count: citeCard()?.querySelector(".cite-n")?.textContent, delta: citeCard()?.querySelector(".cite-delta")?.textContent, requests: stubbed.openalex.length, detailStrip: document.getElementById("d-cite").textContent.replace(/\s+/g, " ").trim() };
+	document.getElementById("detail").style.height = "400px";
+	const citePage = page();
+	document.getElementById("detail").style.height = "";
+	// a second click on the same figure, and Escape, close it; a second open within hours asks nobody (cached)
+	document.dispatchEvent(Object.assign(new window.Event("keydown", { bubbles: true, cancelable: true }), { key: "Escape" }));
+	trace.cite.closedByEscape = !citeCard();
+	fire(rowOf("demo14").querySelector("td[data-k=citations]"));
+	await wait(60);
+	trace.cite.requestsAfterReopen = stubbed.openalex.length;
+	document.dispatchEvent(Object.assign(new window.Event("keydown", { bubbles: true, cancelable: true }), { key: "Escape" }));
+	proto.getBoundingClientRect = realRect;
+
+	// translated abstract: the language chosen from the in-page menu, then the real handler; the original stays, with the service named
+	fire(rowOf("demo14"));
+	await wait(20);
+	fire(document.getElementById("d-tr-lang"));
+	const langItem = [...document.querySelectorAll("#tbmenu .selopt")].find(e => e.textContent === "한국어");
+	trace.translate = { langItems: [...document.querySelectorAll("#tbmenu .selopt")].map(e => e.textContent), before: document.getElementById("d-tr-run-label").textContent };
+	fire(langItem);
+	const titleBox = document.getElementById("d-tr-title"); titleBox.checked = true; fire(titleBox, "change");
+	fire(document.getElementById("d-tr-run"));
+	for (let i = 0; i < 100 && document.getElementById("d-tr-out").hidden; i++) await wait(20);
+	await wait(60);
+	const out = () => ({ via: text("d-tr-via"), body: text("d-tr-text"), title: text("d-tr-title-out"), original: text("d-abstract"), originalHidden: document.getElementById("d-abstract").hidden, calls: stubbed.translate.length, shown: !document.getElementById("d-tr-out").hidden });
+	trace.translate.done = out();
+	trace.translate.call = stubbed.translate[0];
+	// a taller pane, as a reader would drag it, so the abstract and its translation are both in view
+	document.getElementById("detail").style.height = "560px";
+	const translatedPage = page();
+	document.getElementById("detail").style.height = "";
+	// again: served from memory; the original folds away and comes back
+	fire(document.getElementById("d-tr-run"));
+	await wait(40);
+	trace.translate.again = { calls: stubbed.translate.length };
+	fire(document.getElementById("d-tr-orig"));
+	trace.translate.folded = { originalHidden: document.getElementById("d-abstract").hidden, label: text("d-tr-orig") };
+	fire(document.getElementById("d-tr-orig"));
+	trace.translate.unfolded = { originalHidden: document.getElementById("d-abstract").hidden, label: text("d-tr-orig") };
+	// no service installed: a plain message that says what to do
+	const installed = ctx.Zotero.PDFTranslate; delete ctx.Zotero.PDFTranslate;
+	fire(rowOf("demo1"));
+	await wait(20);
+	fire(document.getElementById("d-tr-run"));
+	for (let i = 0; i < 50 && !text("d-tr-note"); i++) await wait(20);
+	trace.translate.none = { note: text("d-tr-note"), err: document.getElementById("d-tr-note").className };
+	ctx.Zotero.PDFTranslate = installed;
+	return { tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
 }
 
 export function checkPreview(out) {
 	const problems = [];
 	if (out.rows < 10) problems.push("expected at least 10 result rows, got " + out.rows);
 	if (out.netCalls) problems.push("network was called");
-	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["unfolded", out.unfolded], ["filters", out.filtersPage], ["journals", out.journalsPage], ["longspan", out.longSpanPage]]) {
+	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["unfolded", out.unfolded], ["filters", out.filtersPage], ["journals", out.journalsPage], ["longspan", out.longSpanPage], ["cite", out.citePage], ["translate", out.translatedPage]]) {
 		if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
 		if (/(?:src|href)\s*=\s*["'](?:https?:|\/\/|chrome:|resource:)/i.test(html)) problems.push(name + ": external asset");
 		if (/url\(\s*["']?(?:https?:|\/\/|chrome:)/i.test(html)) problems.push(name + ": external css url");
-		if (["history", "rerun", "unfolded", "filters", "journals", "longspan"].includes(name) || name.startsWith("authors")) { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
+		if (["history", "rerun", "unfolded", "filters", "journals", "longspan", "cite", "translate"].includes(name) || name.startsWith("authors")) { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
 		for (const needle of ['id="results-table"', 'id="results-body"', 'id="query-form"', name === "facet" ? "Off-target profiling" : "Mapping cellular responses"]) if (!html.includes(needle)) problems.push(name + ": missing " + needle);
 	}
 	if (!out.results.includes('class="in-library')) problems.push("no in-library row");
+	{
+		const c = out.trace.cite, tr = out.trace.translate;
+		if (out.stubbed.openalex.length !== 1 || c.pop.requests !== 1 || c.requestsAfterReopen !== 1) problems.push("opening the citation card should make one OpenAlex request and the second open none; got " + JSON.stringify([out.stubbed.openalex.length, c.pop.requests, c.requestsAfterReopen]));
+		if (!/▼/.test(c.mark || "") || !c.marks.some(m => m === "▲") || !/▲|▼/.test(out.results)) problems.push("the table should carry a trend mark; got " + JSON.stringify(c.marks));
+		if (!c.pop.text || c.pop.bars !== 9 || c.pop.peak !== "2021" || c.pop.role !== "dialog" || c.pop.count !== "645") problems.push("the citation card should show nine years, the peak in 2021 and the fresh 645; got " + JSON.stringify(c.pop));
+		if (!/\+34/.test(c.pop.delta || "") || !/→/.test(c.pop.delta || "")) problems.push("the card should say +34 since the last look; got " + c.pop.delta);
+		if (!c.closedByEscape) problems.push("Escape should close the citation card");
+		if (!c.metricsTrend) problems.push("the side card should chart the whole result set's citations per year");
+		if (out.stubbed.translate.length !== 2 || tr.again.calls !== 2) problems.push("translation should make one call for the abstract and one for the title, then none from memory; got " + out.stubbed.translate.length + "/" + tr.again.calls);
+		if (tr.call.langto !== "ko-KR" || !tr.call.hasPluginID || tr.call.keys.join() !== "langto,pluginID") problems.push("Translate for Zotero should be called with langto and pluginID only; got " + JSON.stringify(tr.call));
+		if (!/DeepL Free/.test(tr.done.via) || !/한국어/.test(tr.done.via) || !/가상 초록/.test(tr.done.body) || !tr.done.title || tr.done.originalHidden || !/Fictional abstract/.test(tr.done.original)) problems.push("the translation should sit under the original with the service named; got " + JSON.stringify(tr.done));
+		if (!tr.folded.originalHidden || tr.unfolded.originalHidden) problems.push("the original should fold and unfold");
+		if (!/Translate for Zotero|번역 서비스가 설정/.test(tr.none.note) || !/err/.test(tr.none.err)) problems.push("with no service the card should say how to set one up; got " + JSON.stringify(tr.none));
+		for (const [name, html] of [["cite", out.citePage]]) if (!/class="tip-card cite-pop show"/.test(html)) problems.push(name + ": no open citation card");
+		if (!/class="d-tr-out"(?![^>]*hidden)/.test(out.translatedPage)) problems.push("translate: no translation shown");
+	}
 	for (const name of ["tipTitle", "tipAff", "tipJournal", "tipAuthors"]) if (!/class="tip-card show"/.test(out[name])) problems.push(name + ": no open hover card");
 	if (!/tip-title/.test(out.tipTitle) || !/tip-where/.test(out.tipTitle) || !/tier-t/.test(out.tipAff)) problems.push("the hover cards should carry title, institutions and a tier chip");
 	for (const kind of ["title", "aff", "journal", "authors"]) if (!out.tipCases[kind] || out.tipCases[kind].titleAttr || out.tipCases[kind].describedby !== "tip-card") problems.push("hover card " + kind + ": native title left behind or no aria-describedby");
@@ -553,6 +679,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.writeFileSync(path.join(root, "docs/search-preview-filters.html"), out.filtersPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-journals.html"), out.journalsPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-longspan.html"), out.longSpanPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-cite.html"), out.citePage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-translate.html"), out.translatedPage);
 	console.log(`ZotPoP search preview: real markup, CSS and ui.js, ${out.rows} fictional rows, no network: docs/search-preview.html, docs/search-preview-detail.html`);
 	process.exit(0);
 }

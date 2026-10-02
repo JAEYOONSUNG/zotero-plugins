@@ -22,6 +22,8 @@
 	<script src="chrome://zotpop/content/preview.js"></script>
 	<script src="chrome://zotpop/content/marquee.js"></script>
 	<script src="chrome://zotpop/content/tooltip.js"></script>
+	<script src="chrome://zotpop/content/cite.js"></script>
+	<script src="chrome://zotpop/content/translate.js"></script>
 	<script src="chrome://zotpop/content/ui.js"></script>
 </head>
 <body>
@@ -160,6 +162,7 @@
 		<aside id="metrics" class="glass">
 			<h3 data-i18n="metricsTitle"></h3>
 			<div id="metrics-years" class="metrics-years" hidden="hidden"></div>
+			<div id="metrics-trend" class="metrics-trend" hidden="hidden"></div>
 			<p id="metrics-hint" class="metrics-hint" data-i18n="metricsHint"></p>
 			<table id="metrics-table" hidden="hidden">
 				<tr><td data-i18n="mYears"></td><td id="m-years">–</td></tr>
@@ -246,7 +249,10 @@
 						</div>
 					</div>
 					<div id="d-badges" class="badges"></div>
-					<div id="d-evidence" class="d-evidence"></div>
+					<div class="d-figure">
+						<div id="d-cite" class="d-cite" hidden="hidden"></div>
+						<div id="d-evidence" class="d-evidence"></div>
+					</div>
 					<div id="d-status" class="d-status" hidden="hidden"></div>
 					<div id="d-authors" class="d-authors"></div>
 					<div id="d-versions" class="d-versions" hidden="hidden"></div>
@@ -257,7 +263,20 @@
 						<div id="d-where" class="d-where"></div>
 						<div id="d-meta" class="d-meta"></div>
 					</details>
+					<div id="d-tr" class="d-tr">
+						<button id="d-tr-run" type="button" class="icon-text" data-i18n-title="trButtonTip"><span id="d-tr-run-label" data-i18n="trButton"></span></button>
+						<button id="d-tr-lang" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="trLang"><span id="d-tr-lang-label"></span></button>
+						<label class="cb d-tr-title"><input id="d-tr-title" type="checkbox"/> <span data-i18n="trTitle"></span></label>
+						<span id="d-tr-note" class="d-tr-note" role="status" aria-live="polite"></span>
+						<span class="spacer"></span>
+						<button id="d-tr-orig" type="button" class="ghost" aria-expanded="true" hidden="hidden"></button>
+					</div>
 					<div id="d-abstract" class="d-abstract"></div>
+					<div id="d-tr-out" class="d-tr-out" hidden="hidden">
+						<div class="d-tr-head"><span id="d-tr-via" class="d-tr-via"></span><span class="spacer"></span><button id="d-tr-copy" type="button" class="ghost" data-i18n="trCopy"></button></div>
+						<div id="d-tr-title-out" class="d-tr-title-out" hidden="hidden"></div>
+						<div id="d-tr-text" class="d-tr-text"></div>
+					</div>
 				</div>
 			</div>
 		</section>

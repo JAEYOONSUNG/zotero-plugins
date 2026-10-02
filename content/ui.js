@@ -1,4 +1,4 @@
-/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee, ZotPoPHistory, ZotPoPAffiliations, ZotPoPJournalMarks, ZotPoPFilters, ZotPoPJournals, ZotPoPTip */
+/* global Zotero, Services, Ci, IOUtils, PathUtils, CSS, ZotPoPI18N, ZotPoPSources, ZotPoPMetrics, ZotPoPImporter, ZotPoPPoPBridge, ZotPoPPreview, ZotPoPMarquee, ZotPoPHistory, ZotPoPAffiliations, ZotPoPJournalMarks, ZotPoPFilters, ZotPoPJournals, ZotPoPTip, ZotPoPCite, ZotPoPTranslate */
 "use strict";
 
 (function () {
@@ -119,6 +119,8 @@
 	};
 	let marquee = null;
 	let history = null;
+	let snapshots = null; // last OpenAlex count seen per paper (content/cite.js)
+	let translator = null;
 	let searchSurface = "papers";
 	const surfaceSnapshots = new Map();
 	const authorSessions = { scholar: { input: "", profiles: [], profile: null, action: "profiles" }, orcid: { input: "", profiles: [], profile: null, action: "profiles" } };
@@ -161,6 +163,10 @@
 		let size = parseInt(PREF("historySize"), 10);
 		history = ZotPoPHistory.create({ io, dir: dataPath("history"), join: typeof PathUtils !== "undefined" ? PathUtils.join : undefined,
 			max: size > 0 ? size : 30, maxBytes: 64 * 1024 * 1024 });
+		if (typeof ZotPoPCite !== "undefined") {
+			snapshots = ZotPoPCite.createSnapshots({ io, path: dataPath("citations.json") });
+			snapshots.load().catch(() => {});
+		}
 		return io;
 	}
 	let cacheIO = null;
@@ -253,6 +259,16 @@
 		async getText(url, headers = {}, signal) {
 			let xhr = await requestHTTP(url, headers, "text", signal);
 			return xhr.responseText;
+		},
+		// For a translation endpoint the reader set up: the body is the text and the language, never a key in the URL.
+		async postJSON(url, headers = {}, body) {
+			let xhr;
+			try {
+				xhr = await Zotero.HTTP.request("POST", url, { headers: Object.assign({ Accept: "application/json" }, headers), body: JSON.stringify(body), responseType: "json", timeout: 90000, errorDelayMax: 0 });
+			}
+			catch (e) { throw httpError(e, url); }
+			if (xhr.response === null) throw new Error(t("notJSON", url.split("?")[0]));
+			return xhr.response;
 		}
 	};
 
@@ -318,6 +334,11 @@
 		ZotPoPI18N.apply(document, t);
 		document.title = t("windowTitle");
 		if (typeof ZotPoPTip !== "undefined") ZotPoPTip.attach(window, { rich: tipContent });
+		if (typeof ZotPoPTranslate !== "undefined") {
+			// Its own settings by short name, another plugin's by its full key.
+			translator = ZotPoPTranslate.create({ zotero: Zotero, uiLocale: locale, pluginID: "zotpop@sungjaeyoon.dev", post: http.postJSON,
+				pref: key => (key.startsWith("extensions.") ? Zotero.Prefs.get(key, true) : PREF(key)) });
+		}
 
 		$("engine").value = PREF("searchEngine") === "pop" ? "pop" : "direct";
 		let sel = $("source");
@@ -404,7 +425,7 @@
 		$("select-none").addEventListener("click", () => { state.selected.clear(); render(); });
 		// Changing the library filter never touches the checks: what was chosen stays chosen.
 		for (let b of document.querySelectorAll("#lib-filter button")) b.addEventListener("click", () => { state.libraryFilter = b.dataset.lib; render(); });
-		let toolbarMenus = { "export-btn": () => [exportMenuItems(), t("exportMenu")], "view-btn": () => [viewMenuItems(), t("viewMenu")], "d-more": () => [moreMenuItems(detailRecord()), t("dMore")] };
+		let toolbarMenus = { "export-btn": () => [exportMenuItems(), t("exportMenu")], "view-btn": () => [viewMenuItems(), t("viewMenu")], "d-more": () => [moreMenuItems(detailRecord()), t("dMore")], "d-tr-lang": () => [trLangMenuItems(), t("trLang")] };
 		for (let id of Object.keys(toolbarMenus)) {
 			let open = focusFirst => { let [items, label] = toolbarMenus[id](); openToolbarMenu($(id), items, label, focusFirst); };
 			// A click from the keyboard has no pointer (detail 0), so it also moves focus into the menu.
@@ -412,6 +433,10 @@
 			$(id).addEventListener("keydown", e => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (openTbMenu?.btn === $(id)) openTbMenu.nodes[0]?.focus(); else open(true); } });
 		}
 		$("tbmenu").addEventListener("keydown", onToolbarMenuKey);
+		$("d-tr-run")?.addEventListener("click", runTranslate);
+		$("d-tr-copy")?.addEventListener("click", copyTranslation);
+		$("d-tr-orig")?.addEventListener("click", () => { state.trHideOrig = state.trHideOrig !== true; let r = detailRecord(); if (r) renderTranslate(r); });
+		$("d-tr-title")?.addEventListener("change", e => { PREF("translateTitle", Boolean(e.target.checked)); let r = detailRecord(); if (r) renderTranslate(r); });
 		// An in-page select menu closes when focus leaves it, so Tab does not leave it floating.
 		if (typeof document.addEventListener === "function") document.addEventListener("focusin", e => { if (openSel && !openSel.menu?.contains?.(e.target) && e.target !== selButton(openSel.sel)) closeSelMenu(); });
 		$("preview-btn").addEventListener("click", () => openPreview());
@@ -1172,6 +1197,7 @@
 	// Every finished search is kept, so that typing it again costs nothing. A stopped
 	// search is kept too, marked as incomplete, since what it did fetch was paid for.
 	async function rememberSearch(sourceKey, query, records, partial) {
+		if (records?.length) noteCitationSnapshots(records);
 		if (!history || !records?.length) return;
 		try { await history.save({ source: sourceKey, query, records: stripDisplayFields(records), partial }); }
 		catch (e) { log("saving search history failed: " + e.message); }
@@ -2972,7 +2998,7 @@
 		cb.addEventListener("change", () => toggleSelect(r, cb.checked));
 		c0.appendChild(cb);
 
-		td("citations", "num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : "");
+		decorateCiteCell(td("citations", "num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : ""), r);
 		td("cpy", "num", fmt(ZotPoPMetrics.citesPerYear(r), 1));
 		td("rank", "num", r.popOriginal ? (r.popRank == null ? "–" : String(r.popRank)) : String(r.rank));
 		{ let ac = td("authorString", "", r.authorString); ac.dataset.marquee = "authors"; ac.dataset.tipKind = "authors"; }
@@ -3222,6 +3248,7 @@
 	}
 	function renderMetrics(list) {
 		drawYearHistogram();
+		drawMetricsTrend(list);
 		if (searchSurface === "authors" && list.length && !list.some(record => record.citations != null && Number.isFinite(Number(record.citations)))) {
 			$("metrics-hint").hidden = false; $("metrics-hint").textContent = t("authorNoCitationData", list.length); $("metrics-table").hidden = true; return;
 		}
@@ -3258,6 +3285,319 @@
 		set("m-hinorm", String(m.hiNorm));
 		set("m-hiannual", fmt(m.hiAnnual));
 		set("m-ha", String(m.hA));
+	}
+
+	// ------------------------------------------------------------ citations over time
+	// What OpenAlex counts per year, the last count seen (to say what was added since), and the card that tells it.
+	const hasCite = () => typeof ZotPoPCite !== "undefined";
+	function citeTrend(r) {
+		return hasCite() && r ? ZotPoPCite.trend({ byYear: r.citesByYear, year: r.year, citations: r.citations }) : null;
+	}
+	// A paper can be asked about when OpenAlex can find it: by DOI, its own id or PMID.
+	function citeFindable(r) {
+		return Boolean(r && (r.doi || r.pmid || (r.source === "openalex" && /^W\d+$/.test(r.sourceId || ""))));
+	}
+	const citeShort = n => (n >= 10000 ? Math.round(n / 1000) + "k" : String(n));
+	function citeDate(ms) {
+		let d = new Date(ms), n = new Date();
+		if (d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()) return t("citeToday");
+		let two = v => String(v).padStart(2, "0");
+		return d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate());
+	}
+	const citeSnapshotKey = r => ZotPoPHistory.recordKey(r);
+	// The count OpenAlex itself gave: the one a later look is comparable with.
+	const openAlexCount = r => (r.citationsBy && r.citationsBy.openalex != null ? r.citationsBy.openalex : (r.citationSource === "openalex" ? r.citations : null));
+	async function noteCitationSnapshots(records) {
+		if (!snapshots) return;
+		try {
+			await snapshots.load();
+			for (let r of records) { let c = openAlexCount(r), key = citeSnapshotKey(r); if (key && c != null && Number.isFinite(Number(c))) snapshots.observe(key, Number(c)); }
+			snapshots.flush().catch(e => log("saving citation snapshots failed: " + e.message));
+		}
+		catch (e) { log("citation snapshots failed: " + e.message); }
+	}
+	// ▲ or ▼ and the figures behind it, for the table cell; null when there is no yearly data or no change.
+	function citeMarkOf(r) {
+		let tr = citeTrend(r);
+		if (!tr || !tr.last || !tr.prev || (tr.direction !== "up" && tr.direction !== "down")) return null;
+		let text = t(tr.direction === "up" ? "citeMarkUp" : "citeMarkDown", t("citeYearLine", tr.last.year, tr.last.n) + " / " + t("citeYearLine", tr.prev.year, tr.prev.n), tr.yoy);
+		return { direction: tr.direction, glyph: tr.direction === "up" ? "▲" : "▼", text };
+	}
+	function decorateCiteCell(cell, r) {
+		let mark = citeMarkOf(r), open = citeFindable(r) || Boolean(citeTrend(r));
+		// Five digits fill the column: the mark is left out there and the tip says it.
+		if (mark && String(r.citations).length < 5) {
+			let m = document.createElement("span");
+			m.className = "cite-mark " + mark.direction; m.textContent = mark.glyph; m.setAttribute("aria-hidden", "true");
+			cell.appendChild(m);
+		}
+		if (!open) return;
+		let base = r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : "";
+		tip(cell, t("citeCellTip", base, mark ? mark.text : ""));
+		cell.setAttribute("role", "button"); cell.setAttribute("aria-haspopup", "dialog"); cell.dataset.cite = "1";
+		cell.addEventListener("click", e => { e.stopPropagation(); state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail(); openCitePop(r, cell); });
+	}
+
+	/* Bars for a list of { year, n, partial }: the value above, the year below; compact ones (the side card)
+	   carry both in a tip. The peak is the darkest, the year in progress the lightest. */
+	function citeBars(years, max, compact) {
+		let box = fel("div", "tr-bars" + (compact ? " compact" : ""));
+		box.setAttribute("role", "img");
+		box.setAttribute("aria-label", years.map(y => t("citeYearLine", y.year, y.n)).join(", "));
+		let top = Math.max(0, ...years.map(y => y.n));
+		for (let y of years) {
+			let col = fel("div", "tr-col" + (y.partial ? " partial" : "") + (top > 0 && y.n === top ? " peak" : ""));
+			if (!compact) col.appendChild(fel("span", "tr-v", citeShort(y.n)));
+			let wrap = fel("div", "tr-wrap"), bar = fel("span", "tr-bar" + (y.n > 0 ? " on" : ""));
+			bar.style.height = Math.round(y.n / Math.max(1, max) * 100) + "%";
+			wrap.appendChild(bar); col.appendChild(wrap);
+			if (!compact) col.appendChild(fel("span", "tr-y", String(y.year)));
+			else tip(col, t("citeYearLine", y.year, y.n) + (y.partial ? " (" + t("citeInProgress") + ")" : ""));
+			box.appendChild(col);
+		}
+		return box;
+	}
+	function citeSpark(tr) {
+		let box = fel("span", "spark");
+		box.setAttribute("aria-hidden", "true");
+		for (let y of tr.years) {
+			let b = fel("span", "spark-b" + (y.partial ? " partial" : "") + (y.n > 0 ? " on" : ""));
+			b.style.height = Math.round(y.n / Math.max(1, tr.max) * 100) + "%";
+			box.appendChild(b);
+		}
+		return box;
+	}
+
+	// The detail's own figure: the count large, the yearly average, the last two years' direction, ten years in miniature.
+	function renderCiteStrip(r) {
+		let box = $("d-cite");
+		if (!box) return;
+		box.textContent = "";
+		let tr = citeTrend(r), cpy = ZotPoPMetrics.citesPerYear(r);
+		if (r.citations == null && !tr) { box.hidden = true; return; }
+		box.hidden = false;
+		let btn = fel("button", "cite-strip"); btn.type = "button";
+		btn.setAttribute("aria-haspopup", "dialog");
+		btn.appendChild(fel("span", "cite-strip-n", r.citations == null ? "–" : String(r.citations)));
+		btn.appendChild(fel("span", "cite-strip-l", t("citeLabel")));
+		if (cpy != null && Number.isFinite(cpy)) btn.appendChild(fel("span", "cite-strip-avg", t("citePerYear", fmt(cpy, 1))));
+		let mark = citeMarkOf(r);
+		if (mark) btn.appendChild(fel("span", "cite-strip-mark " + mark.direction, mark.glyph + (tr.yoy == null ? "" : " " + (tr.yoy > 0 ? "+" : "") + tr.yoy + "%")));
+		if (tr) btn.appendChild(citeSpark(tr));
+		tip(btn, t("citeOpenTip"));
+		btn.addEventListener("click", () => openCitePop(r, btn));
+		box.appendChild(btn);
+	}
+
+	// ---- the popover: opens on a click, shows what is saved at once and mends itself when the fresh count arrives
+	let citePop = null, citeToken = 0;
+	function closeCitePop(returnFocus = false) {
+		if (!citePop) return;
+		let { el, opener, off } = citePop;
+		citePop = null; citeToken++;
+		off();
+		el.remove ? el.remove() : el.parentNode?.removeChild(el);
+		if (returnFocus && opener?.focus && opener.tagName === "BUTTON") opener.focus();
+	}
+	function citeCardBody(r, st) {
+		let tr = citeTrend(r), box = fel("div", "cite-card");
+		let top = fel("div", "cite-top");
+		let big = fel("div", "cite-big");
+		big.appendChild(fel("span", "cite-n", r.citations == null ? "–" : String(r.citations)));
+		big.appendChild(fel("span", "cite-l", t("citeLabel")));
+		top.appendChild(big);
+		let close = fel("button", "ghost cite-close", t("citeClose")); close.type = "button";
+		close.addEventListener("click", () => closeCitePop(true));
+		top.appendChild(close);
+		box.appendChild(top);
+		let sub = [], cpy = ZotPoPMetrics.citesPerYear(r);
+		if (cpy != null && Number.isFinite(cpy)) sub.push(t("citePerYear", fmt(cpy, 1)));
+		sub.push(t("citeBasis"));
+		box.appendChild(fel("div", "cite-sub", sub.join(" · ")));
+		if (tr) {
+			let sect = fel("div", "cite-sect");
+			sect.appendChild(fel("div", "cite-h", t("citeSectionYears")));
+			sect.appendChild(citeBars(tr.years, tr.max, false));
+			if (tr.years.some(y => y.partial)) sect.appendChild(fel("div", "cite-foot", tr.current.year + " = " + t("citeInProgress")));
+			box.appendChild(sect);
+			let rec = fel("div", "cite-sect");
+			rec.appendChild(fel("div", "cite-h", t("citeSectionRecent")));
+			let line = [t("citeNow", tr.current.year, tr.current.n)];
+			if (tr.last) line.push(t("citeYearLine", tr.last.year, tr.last.n));
+			if (tr.prev) line.push(t("citeYearLine", tr.prev.year, tr.prev.n));
+			rec.appendChild(fel("div", "cite-line cite-strong", line.join(" · ")));
+			if (tr.last && tr.prev) rec.appendChild(fel("div", "cite-line", tr.yoy == null ? t("citeYoyNone") : t("citeYoy", tr.yoy, tr.last.year, tr.prev.year)));
+			if (tr.peak) rec.appendChild(fel("div", "cite-line", t("citePeak", tr.peak.year, tr.peak.n)));
+			box.appendChild(rec);
+		}
+		let d = st.delta;
+		if (d) box.appendChild(fel("div", "cite-delta", d.change === 0 ? t("citeSinceNone", citeDate(d.from), citeDate(d.to)) : t("citeSince", d.change, citeDate(d.from), citeDate(d.to))));
+		else if (st.phase === "done") box.appendChild(fel("div", "cite-line", t("citeFirstLook")));
+		let note = st.phase === "loading" ? t("citeLoading") : st.phase === "failed" ? t("citeFailed", st.message || "") : st.phase === "budget" ? t("citeBudget")
+			: st.phase === "noid" ? t("citeNoId") : st.phase === "done" && !tr ? t("citeNoYears") : st.phase === "done" && st.at ? t("citeAsOf", citeDate(st.at)) : "";
+		if (note) box.appendChild(fel("div", "cite-foot cite-status", note));
+		return box;
+	}
+	function placeCitePop() {
+		if (!citePop) return;
+		let { el } = citePop, anchor = citePop.anchor;
+		// A re-drawn table or detail leaves the opener behind: the same place in the new one.
+		if (anchor.isConnected === false) {
+			let again = citePop.strip ? $("d-cite")?.querySelector(".cite-strip") : document.querySelector(`#results-body tr[data-key="${CSS.escape(citePop.rec.key)}"] td[data-cite]`);
+			if (again) anchor = citePop.anchor = again;
+			else if (citePop.rect) anchor = { getBoundingClientRect: () => citePop.rect };
+		}
+		if (typeof anchor.getBoundingClientRect === "function") citePop.rect = anchor.getBoundingClientRect();
+		if (typeof el.getBoundingClientRect !== "function" || typeof anchor.getBoundingClientRect !== "function") return;
+		el.style.maxHeight = ""; el.style.visibility = "hidden";
+		let rect = anchor.getBoundingClientRect(), size = el.getBoundingClientRect();
+		let put = ZotPoPTip.place({ anchor: rect, size: { w: size.width, h: size.height }, view: { w: window.innerWidth, h: window.innerHeight }, cursor: null });
+		el.style.left = put.left + "px"; el.style.top = put.top + "px";
+		if (put.maxHeight) el.style.maxHeight = put.maxHeight + "px";
+		el.setAttribute("data-side", put.side);
+		el.style.visibility = "";
+	}
+	function paintCitePop(r, st) {
+		if (!citePop) return;
+		citePop.el.textContent = "";
+		citePop.el.appendChild(citeCardBody(r, st));
+		placeCitePop();
+	}
+	async function openCitePop(r, anchor) {
+		if (!r || typeof ZotPoPTip === "undefined") return;
+		if (citePop && citePop.rec === r && citePop.opener === anchor) { closeCitePop(true); return; }
+		closeCitePop();
+		ZotPoPTip.current?.()?.hide?.();
+		let el = fel("div", "tip-card cite-pop show");
+		el.setAttribute("role", "dialog"); el.setAttribute("aria-label", t("citeOpen")); el.tabIndex = -1;
+		(document.body || document).appendChild(el);
+		let token = ++citeToken, key = citeSnapshotKey(r);
+		let onKey = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeCitePop(true); } };
+		let onDown = e => { if (!el.contains(e.target) && !anchor.contains?.(e.target)) closeCitePop(); };
+		let onAway = e => { if (!el.contains?.(e.target)) closeCitePop(); };
+		let onResize = () => closeCitePop();
+		document.addEventListener("keydown", onKey, true);
+		document.addEventListener("mousedown", onDown, true);
+		document.addEventListener("scroll", onAway, true);
+		window.addEventListener("resize", onResize);
+		window.addEventListener("blur", onResize);
+		citePop = { el, rec: r, opener: anchor, anchor, strip: Boolean(anchor.classList?.contains("cite-strip")), off: () => {
+			document.removeEventListener("keydown", onKey, true); document.removeEventListener("mousedown", onDown, true);
+			document.removeEventListener("scroll", onAway, true); window.removeEventListener?.("resize", onResize); window.removeEventListener?.("blur", onResize);
+		} };
+		if (snapshots) await snapshots.load();
+		if (citeToken !== token) return;
+		let before = snapshots && key ? snapshots.delta(key) : null;
+		if (!citeFindable(r)) { paintCitePop(r, { phase: "noid", delta: before }); el.focus?.(); return; }
+		paintCitePop(r, { phase: "loading", delta: before });
+		el.focus?.();
+		let cctx = { email: PREF("email") || "", openAlexApiKey: PREF("openAlexApiKey") || "", log, openAlexSpent: openAlexHeld() };
+		let res;
+		try { res = await ZotPoPSources.refreshOpenAlexWork(r, http, cctx); }
+		catch (e) { res = { ok: false, reason: "failed", message: e.message }; }
+		noteOpenAlexSpent(cctx);
+		let st;
+		if (res.ok) {
+			let changed = res.citations !== r.citations || (res.citesByYear && JSON.stringify(res.citesByYear) !== JSON.stringify(r.citesByYear));
+			if (res.citesByYear) r.citesByYear = res.citesByYear;
+			(r.citationsBy ||= {}).openalex = res.citations;
+			if (r.citationSource === "openalex" || r.citations == null || res.citations > r.citations) { r.citations = res.citations; r.citationSource = "openalex"; }
+			if (snapshots && key) { snapshots.observe(key, res.citations, res.cached ? undefined : Date.now()); snapshots.flush().catch(e => log("saving citation snapshots failed: " + e.message)); }
+			st = { phase: "done", delta: snapshots && key ? snapshots.delta(key) : null, at: res.at };
+			if (changed) { render(); renderDetail(); }
+		}
+		else st = { phase: res.reason === "budget" ? "budget" : res.reason === "id" ? "noid" : "failed", message: scrubURLs(res.message || ""), delta: before };
+		if (citeToken === token) paintCitePop(r, st);
+	}
+
+	// The side card's small chart: every result's yearly citations added up.
+	function drawMetricsTrend(list) {
+		let box = $("metrics-trend");
+		if (!box) return;
+		box.textContent = "";
+		let sum = hasCite() && list.length ? ZotPoPCite.sumByYear(list) : null;
+		box.hidden = !sum;
+		if (!sum) return;
+		box.appendChild(fel("div", "tr-title", t("metricsTrend")));
+		box.appendChild(citeBars(sum.years, sum.max, true));
+		let ends = fel("div", "yr-ends");
+		ends.appendChild(fel("span", "", String(sum.years[0].year))); ends.appendChild(fel("span", "", String(sum.years[sum.years.length - 1].year)));
+		box.appendChild(ends);
+		box.appendChild(fel("div", "tr-note", t("metricsTrendNote", sum.papers, sum.of)));
+	}
+
+	// ------------------------------------------------------------ translating the abstract
+	let trNote = null; // { key, text, err }
+	const trLang = () => state.trLang || (state.trLang = (translator && translator.defaultLanguage()) || "en");
+	const trTitleOn = () => PREF("translateTitle") === true;
+	function trSet(r, text, err) {
+		trNote = text ? { key: r.key, text, err: Boolean(err) } : null;
+		let note = $("d-tr-note");
+		note.textContent = text || "";
+		note.classList.toggle("err", Boolean(err));
+	}
+	function renderTranslate(r) {
+		let row = $("d-tr");
+		if (!row) return;
+		let lang = typeof ZotPoPTranslate !== "undefined" && translator ? ZotPoPTranslate.byCode(trLang()) : null;
+		if (!translator || !lang) { row.hidden = true; $("d-tr-out").hidden = true; $("d-abstract").hidden = false; return; }
+		row.hidden = false;
+		$("d-tr-lang-label").textContent = lang.name;
+		$("d-tr-title").checked = trTitleOn();
+		let busy = state.trBusy === r.key + "|" + lang.code;
+		$("d-tr-run").disabled = busy;
+		$("d-tr-run-label").textContent = busy ? t("trRunning") : t("trButton");
+		let text = r.abstract ? translator.cached(r.key, lang.code, "abstract") : null;
+		let title = trTitleOn() ? translator.cached(r.key, lang.code, "title") : null;
+		let shown = Boolean(text || title);
+		$("d-tr-out").hidden = !shown;
+		$("d-tr-title-out").hidden = !title; $("d-tr-title-out").textContent = title ? title.text : "";
+		$("d-tr-text").hidden = !text; $("d-tr-text").textContent = text ? text.text : "";
+		$("d-tr-via").textContent = shown ? t("trVia", (text || title).service, lang.name) : "";
+		let orig = $("d-tr-orig"), hide = shown && state.trHideOrig === true && Boolean(r.abstract);
+		orig.hidden = !shown || !r.abstract;
+		orig.textContent = hide ? t("trShowOrig") : t("trHideOrig");
+		orig.setAttribute("aria-expanded", String(!hide));
+		$("d-abstract").hidden = hide;
+		let note = trNote && trNote.key === r.key ? trNote : null;
+		$("d-tr-note").textContent = busy ? "" : note ? note.text : "";
+		$("d-tr-note").classList.toggle("err", Boolean(note && note.err && !busy));
+	}
+	async function runTranslate() {
+		let r = detailRecord();
+		if (!r || !translator) return;
+		let lang = trLang(), wantTitle = trTitleOn(), id = r.key + "|" + lang;
+		if (state.trBusy === id) return;
+		if (!r.abstract && !wantTitle) { trSet(r, t("trNoText"), true); renderTranslate(r); return; }
+		state.trBusy = id; trNote = null;
+		renderTranslate(r);
+		try {
+			// One after the other: the free services refuse a burst.
+			if (r.abstract) await translator.translateCached({ key: r.key, lang, field: "abstract", text: r.abstract });
+			if (wantTitle && r.title) await translator.translateCached({ key: r.key, lang, field: "title", text: r.title });
+			trNote = null;
+		}
+		catch (e) { trNote = { key: r.key, text: e.code === "none" ? t("trNone") : t("trFailed", scrubURLs(e.message || String(e))), err: true }; }
+		finally {
+			if (state.trBusy === id) state.trBusy = null;
+			let now = detailRecord();
+			if (now) renderTranslate(now);
+		}
+	}
+	function copyTranslation() {
+		let r = detailRecord();
+		if (!r || !translator) return;
+		let lang = trLang();
+		let parts = [trTitleOn() ? translator.cached(r.key, lang, "title") : null, translator.cached(r.key, lang, "abstract")].filter(Boolean).map(x => x.text);
+		if (parts.length) copyText(parts.join("\n\n"), t("trCopied"));
+	}
+	function setTrLang(code) {
+		state.trLang = code; PREF("translateLang", code);
+		let r = detailRecord();
+		if (r) renderTranslate(r);
+	}
+	function trLangMenuItems() {
+		return ZotPoPTranslate.LANGUAGES.map(l => ({ label: l.name, check: l.code === trLang(), radio: true, run: () => setTrLang(l.code) }));
 	}
 
 	// ------------------------------------------------------------ detail pane
@@ -3323,6 +3663,7 @@
 		if (mark) badges.appendChild(mark);
 		for (let s of r.sources || [r.source]) sourceChip(s);
 		if (r.inLibrary) chip(t("badgeInLibrary"), "lib");
+		renderCiteStrip(r);
 		// The figures the table already shows, said once as one plain sentence with what each one is.
 		let context = buildResultContext(r);
 		let evidence = $("d-evidence");
@@ -3381,6 +3722,7 @@
 		filed.hidden = !paths.length;
 		if (paths.length) filed.textContent = t("inCollections") + " " + filed.textContent;
 		$("d-abstract").textContent = r.abstract || t("noAbstract");
+		renderTranslate(r);
 
 		// Why the row has the status it has, in words: a failure's cause was only in a tooltip.
 		let statusLine = $("d-status");
