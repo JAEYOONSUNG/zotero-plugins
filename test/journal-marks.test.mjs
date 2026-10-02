@@ -71,7 +71,8 @@ test("an exact code is worn as-is on the badge and pulled to a readable lightnes
 	}
 	{
 		const [h, s, l] = parse(J.colours(J.identify("Nature Biotechnology"), { dark: true }).ink);
-		assert.equal(h, 54);
+		// Review 2026-10-03: the yellow family read as gold on the dark page; its ink moves to olive/khaki (hue 68). Light keeps the journal's own hue.
+		assert.equal(h, 68, "olive, not gold, on a dark page");
 		assert.ok(ratio(h, s / 100, l / 100, 0.0176) >= 4.5, "and on a dark row");
 	}
 	const asm = J.colours(J.identify("mBio"));

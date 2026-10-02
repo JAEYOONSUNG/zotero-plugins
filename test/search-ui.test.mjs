@@ -1388,7 +1388,7 @@ test("the institution cell: unknown is muted and only where the source normally 
 	const cell = key => ui.get("results-body").children.find(r => r.dataset.key === key).children.find(c => c.dataset.k === "affiliation");
 	assert.equal(cell("both").querySelector("span.aff-name").textContent, "Kestrel Inst.");
 	assert.equal(cell("both").querySelector("span.tier").textContent, "T2");
-	assert.match(ui.tipContent(cell("both"), "aff").textContent, /affIntl\|/, "the first author's other country is named in the hover card");
+	assert.match(ui.tipContent(cell("both"), "aff").textContent, /tipCountries/, "the first author's other country is named in the hover card, as a row of its own");
 	assert.equal(cell("unk").querySelector("span.aff-name").textContent, "affUnknown");
 	assert.match(cell("unk").querySelector("span.aff-name").className, /aff-unknown/);
 	assert.equal(cell("oa").querySelector("span.aff-name").className.includes("aff-unknown"), true);

@@ -451,6 +451,8 @@ var ZotPoPJournalMarks = (function () {
 	const capSat = (sat, dark) => Math.round(Math.max(SAT_FLOOR, Math.min(dark ? SAT_CAP.dark : SAT_CAP.light, sat)));
 	// One recipe for every journal, exact code or derived hue: ink at the theme's luminance, a soft fill, a fainter edge.
 	function tones(h, sat, dark) {
+		// On a dark page a bright yellow ink reads as gold; the same family moves toward olive/khaki (hue up, a little less saturation).
+		if (dark && h >= 40 && h <= 65) { h = 68; sat = Math.round(sat * 0.75); }
 		const ink = capSat(sat, dark);
 		return dark
 			? { ink: hsl(h, ink, inkL(h, ink, true)), fill: hsl(h, Math.round(ink * 0.6), 22), edge: hsl(h, Math.round(ink * 0.6), 32) }

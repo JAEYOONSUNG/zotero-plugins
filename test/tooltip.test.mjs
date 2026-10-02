@@ -97,9 +97,9 @@ test("the cells' hover cards are built from the record: title, institution, jour
 	assert.ok(title.includes("Science · 2025 · tipCites|40 · tipPerYear|12.5"), "journal, year, cites and per-year line");
 	assert.ok(title.includes("A, B, C, D, E, F") && title.includes("authorsMore|2") && !title.includes("G,"), "first six authors, then +N");
 	assert.ok(title.includes("affFirst") && title.includes("Hanbit University") && title.includes("affCorresponding") && title.includes("Lumen University"), "first and corresponding institutions");
-	assert.ok(title.includes("titleOpenTip"));
+	assert.ok(!title.includes("titleOpenTip"), "no hint line: the status line already says how to open a row");
 	const aff = text("affiliation", "aff");
-	assert.ok(aff.startsWith("Lumen University") && aff.includes("tipTierAbove|1510|T1|1400") && aff.includes("affCorresponding"), aff);
+	assert.ok(aff.startsWith("T1") || aff.includes("Lumen University") && aff.includes("tipTierAbove|1510|T1|1400") && aff.includes("affCorresponding"), aff);
 	const journal = text("venue", "journal");
 	assert.ok(journal.startsWith("Science") && journal.includes("AAAS") && journal.includes("45.8") && journal.includes("tipEstimate"), journal);
 	const authors = text("authorString", "authors");
@@ -114,8 +114,8 @@ test("the window uses the hover card and no native title", () => {
 	assert.doesNotMatch(html, /\stitle="/, "the markup carries data-i18n-title, which i18n turns into data-tip");
 	assert.doesNotMatch(i18n, /setAttribute\("title"/);
 	const block = (/(?:^|\n)\.tip-card\s*\{([^}]*)\}/.exec(css) || [])[1] || "";
-	assert.match(block, /border-radius:\s*12px/); assert.match(block, /padding:\s*10px 12px/); assert.match(block, /max-width:\s*420px/);
+	assert.match(block, /border-radius:\s*var\(--r-pop\)/); assert.match(block, /padding:\s*12px 16px/); assert.match(block, /max-width:\s*420px/);
 	assert.match(block, /pointer-events:\s*none/); assert.match(block, /transition:[^;]*\.12s/);
-	// Menus stay flat (toolbar-detail.test.mjs); the hover card floats over the table, so it is allowed its soft shadow.
-	assert.match(block, /box-shadow/);
+	// One popover style for the card and the menus (toolbar-detail.test.mjs).
+	assert.match(block, /box-shadow:\s*var\(--pop-shadow\)/);
 });

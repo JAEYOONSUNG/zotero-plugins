@@ -20,9 +20,10 @@
 	// ones a reader scans: authors, then the lab they worked in (tier chip, flag, institution).
 	// Rank, country, tier and DOI (kept in the detail) and Status (only once something has
 	// one) are hidden until "all".
+	const COL_FLOOR = { inLibrary: 112, citations: 68 };
 	const DEFAULT_COLS = {
-		chk: 28, title: 270, authorString: 168, affiliation: 160, year: 58, venue: 140, citations: 56, cpy: 68, journalIF: 60,
-		pdf: 60, inLibrary: 96, status: 128, rank: 60, country: 62, tier: 56, doi: 150
+		chk: 28, title: 200, authorString: 150, affiliation: 150, year: 58, venue: 184, citations: 68, cpy: 64, journalIF: 60,
+		pdf: 60, inLibrary: 112, status: 128, rank: 60, country: 62, tier: 56, doi: 150
 	};
 
 	// 8: Year, Rank and Per year were narrower than their own digits ("20…", "Ra…").
@@ -281,6 +282,8 @@
 	function setStatus(msg, cls, options = {}) {
 		if (statusRevert != null) { cancelLater(statusRevert); statusRevert = null; }
 		$("status").textContent = msg;
+		// one line in the footer; the whole text is in the hover card when it is cut
+		tip($("status"), String(msg || "").length > 48 ? msg : "");
 		$("statusbar").classList.toggle("err", cls === "err");
 		// "DOI copied." is news for a moment, not a state to read back later.
 		if (options.transient) statusRevert = later(() => { statusRevert = null; setStatus(lastStatus.msg, lastStatus.cls); }, 4000);
@@ -296,6 +299,8 @@
 	let bannerAction = null;
 	function showBanner(text, action, options = {}) {
 		$("banner-text").textContent = text;
+		// a long hint is one clause in the banner and the rest in its hover card
+		tip($("banner-text"), options.tip || "");
 		// A banner that reports a failure wears the attention colour; one that offers a hint stays plain.
 		$("banner").classList.toggle("warn", Boolean(options.warn));
 		// A banner can carry one verb: what to do about what it says.
@@ -574,7 +579,7 @@
 		}
 		else {
 			menu.style.maxHeight = Math.max(120, below) + "px";
-			menu.style.top = (r.bottom + 3) + "px";
+			menu.style.top = (r.bottom + 8) + "px";
 		}
 		menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - menu.offsetWidth - 6)) + "px";
 		btn.setAttribute("aria-expanded", "true");
@@ -665,7 +670,7 @@
 		if ($("pop-options")) $("pop-options").hidden = !pop;
 		if ($("direct-sort-field")) $("direct-sort-field").hidden = pop;
 		if ($("pop-sort-field")) $("pop-sort-field").hidden = !pop;
-		if (pop) { showBanner(t("popModeNotice")); return; }
+		if (pop) { showBanner(t("popModeNoticeShort"), null, { tip: t("popModeNotice") }); return; }
 		if (key === "semanticscholar" && !(PREF("s2ApiKey") || "").trim()) showBanner(t("bannerS2"));
 		else if (key === "openalex" && !String(PREF("openAlexApiKey") || "").trim()) showBanner(t("bannerNoKey"));
 		else if (key === "scholar") showBanner(t("bannerScholar"));
@@ -770,15 +775,27 @@
 		let host = $("author-profiles"), session = authorSessions[activeAuthorProvider]; host.textContent = "";
 		for (let profile of session.profiles) {
 			let card = document.createElement("article"); card.className = "author-profile";
-			if (session.profile && profile.id === session.profile.id && profile.name === session.profile.name) card.classList.add("selected");
+			let chosen = Boolean(session.profile && profile.id === session.profile.id && profile.name === session.profile.name);
+			if (chosen) card.classList.add("selected");
 			let info = document.createElement("div"); info.className = "author-profile-info";
-			let line = (cls, value) => { let node = document.createElement("div"); node.className = cls; node.textContent = value; info.appendChild(node); };
-			line("author-profile-name", profile.name || profile.id || t("authorNameUnverified"));
-			if (profile.affiliation) line("author-profile-meta", profile.affiliation);
-			if (profile.id) line("author-profile-meta", profile.id);
-			line("author-profile-meta", t(profile.mode === "name-search" ? "authorNameUnverified" : profile.identityConfirmed ? "authorIdentityConfirmed" : "authorIdentityPending"));
+			// The name, then what is known about who this is as a badge beside it: lime for a public registry profile, amber for "not confirmed".
+			let head = document.createElement("div"); head.className = "author-profile-head";
+			let name = document.createElement("span"); name.className = "author-profile-name"; name.textContent = profile.name || profile.id || t("authorNameUnverified");
+			head.appendChild(name);
+			let confirmed = profile.mode !== "name-search" && profile.identityConfirmed;
+			let badge = document.createElement("span");
+			badge.className = "badge " + (confirmed ? "lib" : "warn");
+			badge.textContent = t(profile.mode === "name-search" ? "authorNameUnverified" : profile.identityConfirmed ? "authorIdentityConfirmed" : "authorIdentityPending");
+			tip(badge, t(confirmed ? "authorIdentityConfirmedTip" : "authorIdentityUnconfirmedTip"));
+			head.appendChild(badge);
+			if (chosen) { let check = document.createElement("span"); check.className = "author-profile-check"; check.appendChild(iconNode("ic-check")); head.appendChild(check); }
+			info.appendChild(head);
+			// the affiliation, and the identifier muted behind it on the same line
+			let meta = [profile.affiliation, profile.id].filter(Boolean);
+			if (meta.length) { let node = document.createElement("div"); node.className = "author-profile-meta"; node.textContent = meta.join(" \u00b7 "); info.appendChild(node); }
 			let actions = document.createElement("div"); actions.className = "author-profile-actions";
 			if (profile.id) { let load = document.createElement("button"); load.type = "button"; load.textContent = t("authorLoadWorks"); load.disabled = state.searching || state.importing;
+				if (chosen) load.classList.add("primary");
 				load.addEventListener("click", () => runAuthorAction("publications", profile)); actions.appendChild(load); }
 			if (/^https:\/\//i.test(profile.url || "")) { let open = document.createElement("button"); open.type = "button"; open.textContent = t("authorOpenProfile");
 				open.addEventListener("click", () => Zotero.launchURL(profile.url)); actions.appendChild(open); }
@@ -874,8 +891,9 @@
 				displaySearchResults(result); await refreshLibraryFlags(); if (!active()) throw abortError();
 				let partial = Boolean(result.partial || ctx.errors.length);
 				setStatus(t(partial ? "incompleteResults" : "resultCount", q.authorProvider === "orcid" ? "ORCID" : "Google Scholar", result.length, false));
-				showBanner(t(action === "name-papers" ? "authorNameUnverified" : q.authorProvider === "orcid" ? "authorOrcidHelp" : "popModeNotice")
-					+ (result.authorProvenance?.truncated ? " " + t("authorLimited", result.length, result.authorProvenance.totalGroups) : ""));
+				let popNotice = action !== "name-papers" && q.authorProvider !== "orcid";
+				showBanner(t(action === "name-papers" ? "authorNameUnverified" : q.authorProvider === "orcid" ? "authorOrcidHelp" : "popModeNoticeShort")
+					+ (result.authorProvenance?.truncated ? " " + t("authorLimited", result.length, result.authorProvenance.totalGroups) : ""), null, popNotice ? { tip: t("popModeNotice") } : {});
 			}
 			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")), null, { warn: true });
 			await history?.save({ source: "author:" + q.authorProvider, query: { ...q, authorProfile: session.profile, authorProfiles: session.profiles },
@@ -951,11 +969,15 @@
 		state.venueChips.forEach((chip, i) => {
 			let el = fel("span", "jchip");
 			tip(el, [chip.name, chip.abbrev].filter(Boolean).join(" · "));
-			el.appendChild(fel("span", "jchip-name", chip.name));
+			// the journal's full name in its publisher's ink, like everywhere else
+			let nameEl = fel("span", "jchip-name", chip.name); paintVenue(nameEl, { venue: chip.name, journalAbbrev: chip.abbrev || undefined });
+			el.appendChild(nameEl);
 			el.appendChild(fbutton("filter-clear", "×", t("venueChipRemove", chip.name), () => { removeVenueChip(i); $("venue").focus(); }));
 			box.appendChild(el);
 		});
 		$("venue-box")?.classList.toggle("has-chips", state.venueChips.length > 0);
+		// one line: more chips than fit scroll sideways inside the box, to the newest
+		if ($("venue-box") && state.venueChips.length) $("venue-box").scrollLeft = $("venue-box").scrollWidth || 0;
 		// With journals picked the field takes more of the row, so the chips lie side by side instead of stacking.
 		$("venue-box")?.parentNode?.classList?.toggle("wide", state.venueChips.length > 0);
 		$("venue")?.setAttribute("placeholder", state.venueChips.length ? t("venueMorePh") : t("venuePh"));
@@ -1012,9 +1034,17 @@
 			row.addEventListener("mousemove", () => { if (state.jsug.active !== i) { state.jsug.active = i; syncVenueActive(); } });
 			list.appendChild(row);
 		});
-		if (!s.items.length) list.appendChild(fel("div", "jopt-note", s.pending ? t("venueSearching") : t("venueNoMatch")));
+		for (let item of s.picked || []) {
+			let row = fel("div", "jopt picked"); row.setAttribute("role", "option"); row.setAttribute("aria-disabled", "true"); row.setAttribute("aria-selected", "false");
+			row.appendChild(fel("span", "jopt-name", item.name));
+			row.appendChild(fel("span", "jopt-abbr", t("venuePicked")));
+			row.addEventListener("mousedown", e => e.preventDefault());
+			list.appendChild(row);
+		}
+		if (!s.items.length && !(s.picked || []).length) list.appendChild(fel("div", "jopt-note", s.pending ? t("venueSearching") : t("venueNoMatch")));
 		else if (s.pending) list.appendChild(fel("div", "jopt-note", t("venueSearching")));
-		list.appendChild(fel("div", "jopt-foot", t("venueKeys")));
+		// The key hints only help when there is something to choose.
+		if (s.items.length) list.appendChild(fel("div", "jopt-foot", t("venueKeys")));
 		if (s.active >= 0) input.setAttribute("aria-activedescendant", "venue-opt-" + s.active); else input.removeAttribute("aria-activedescendant");
 	}
 	function syncVenueActive() {
@@ -1029,8 +1059,10 @@
 		let catalog = await ensureJournalCatalog();
 		if ($("venue").value !== query) return;
 		s.query = query;
-		let local = J.suggest(catalog, query, { limit: JOURNAL_LIMIT }).filter(x => !state.venueChips.some(c => sameJournal(c, x)));
-		s.open = true; s.items = local; s.active = -1;
+		let found = J.suggest(catalog, query, { limit: JOURNAL_LIMIT });
+		// A journal already picked stays in the list, marked, instead of vanishing: typing "proc natl acad" after picking PNAS must not look like "no match".
+		let local = found.filter(x => !state.venueChips.some(c => sameJournal(c, x)));
+		s.open = true; s.items = local; s.active = -1; s.picked = state.venueChips.map(c => found.find(x => sameJournal(c, x))).filter((x, i, all) => x && all.indexOf(x) === i);
 		let wantRemote = local.length < 5 && J.flat(query).length >= 3 && journalLookupAllowed();
 		s.pending = wantRemote;
 		drawVenueList();
@@ -1300,7 +1332,13 @@
 		let query = e.query || {}, names = Array.isArray(query.sources) ? query.sources : [];
 		if (e.query?.mode === "author" || !names.length) return history.describe(query);
 		let plain = key => String(sourceLabel(key) || key).replace(/\s*[(（][^)）]*[)）]\s*$/, "");
-		return [history.describe({ ...query, sources: null }), names.map(plain).join(", ")].filter(Boolean).join(" · ");
+		return history.describe({ ...query, sources: null });
+	}
+	// the sources a saved search ran against, named plainly; the line under its query
+	function historySources(e) {
+		let names = Array.isArray(e.query?.sources) ? e.query.sources : [];
+		if (e.query?.mode === "author" || !names.length) return "";
+		return names.map(key => String(sourceLabel(key) || key).replace(/\s*[(（][^)）]*[)）]\s*$/, "")).join(", ");
 	}
 	async function openHistoryMenu() {
 		let menu = $("histmenu");
@@ -1308,6 +1346,7 @@
 		let entries = [];
 		try { entries = history ? await history.list() : []; }
 		catch (e) { log("listing history failed: " + e.message); }
+		let head = document.createElement("div"); head.className = "menu-head"; head.textContent = t("history"); menu.appendChild(head);
 		if (!entries.length) {
 			let d = document.createElement("div");
 			d.className = "histempty";
@@ -1326,7 +1365,7 @@
 			let meta = document.createElement("span");
 			meta.className = "h-meta";
 			let when = t("historyWhen", daysSince(e.savedAt));
-			let provider = e.query?.mode === "author" ? (e.query.authorProvider === "orcid" ? "ORCID" : "Google Scholar") : sourceLabel(e.source);
+			let provider = e.query?.mode === "author" ? (e.query.authorProvider === "orcid" ? "ORCID" : "Google Scholar") : historySources(e) || sourceLabel(e.source);
 			meta.textContent = e.kind === "profiles" ? t("authorHistoryProfiles", provider, e.count, when) : t("historyEntryMeta", provider, e.count, when, Boolean(e.partial));
 			d.appendChild(label);
 			d.appendChild(meta);
@@ -1344,7 +1383,7 @@
 			let clear = document.createElement("div");
 			clear.className = "histclear";
 			clear.setAttribute("role", "menuitem");
-			clear.textContent = t("historyClear");
+			clear.appendChild(iconNode("ic-clear")); clear.appendChild(document.createTextNode(t("historyClear")));
 			clear.addEventListener("click", async ev => {
 				ev.stopPropagation();
 				closeHistoryMenu();
@@ -1358,7 +1397,7 @@
 		btn.setAttribute("aria-expanded", "true");
 		if (typeof btn.getBoundingClientRect !== "function") return;
 		let r = btn.getBoundingClientRect();
-		let below = window.innerHeight - r.bottom - 8;
+		let below = window.innerHeight - r.bottom - 16;
 		menu.style.maxHeight = Math.max(120, below) + "px";
 		menu.style.top = (r.bottom + 3) + "px";
 		/* Hung from the button's right edge, so the menu opens under the control that opened it and
@@ -1481,8 +1520,9 @@
 		let w = parseInt(PREF("metricsWidth"), 10);
 		if (w >= 140) $("metrics").style.width = Math.min(w, metricsCap()) + "px";
 		let h = parseInt(PREF("detailHeight"), 10);
-		// A stored 0 used to come back as a dead strip with no way to grab the splitter
-		if (h >= 60) $("detail").style.height = Math.min(h, detailCap()) + "px";
+		// A stored 0 used to come back as a dead strip with no way to grab the splitter. The detail sizes to its
+		// content; the saved height is only the most it may grow to.
+		if (h >= 60) $("detail").style.setProperty("--detail-max", Math.min(h, detailCap()) + "px");
 		if (PREF("detailHidden") === true) setDetailVisible(false);
 		if (PREF("metricsHidden") === true) setMetricsVisible(false);
 		// COL_VERSION guards against stale widths after the defaults change
@@ -1500,7 +1540,7 @@
 			PREF("metricsWidth", $("metrics").offsetWidth);
 			// offsetHeight is 0 for a hidden pane; saving that brings it back as a dead strip
 			// Nor the one-line hint it folds to while nothing is chosen.
-			if (!$("detail").hidden && !$("detail").hasAttribute("data-empty")) PREF("detailHeight", $("detail").offsetHeight);
+			if (!$("detail").hidden && !$("detail").hasAttribute("data-empty")) { let cap = parseInt($("detail").style.getPropertyValue("--detail-max"), 10); PREF("detailHeight", cap >= 60 ? cap : $("detail").offsetHeight); }
 			PREF("detailHidden", $("detail").hidden === true);
 			PREF("metricsHidden", $("metrics").hidden === true);
 			PREF("colWidths", JSON.stringify(state.colWidths));
@@ -1545,7 +1585,7 @@
 		drag($("hsplit"), "row-resize", (dx, dy) => {
 			let el = $("detail");
 			let h = Math.max(60, Math.min(detailCap(), el.offsetHeight - dy));
-			el.style.height = h + "px";
+			el.style.setProperty("--detail-max", h + "px");
 		});
 	}
 
@@ -1577,7 +1617,9 @@
 			// The title used to take whatever was left, which below ~1470px was
 			// nothing: fifteen fixed columns ate the width and the title was a strip
 			// of padding. It has a width of its own now, and a grip like the rest.
-			col.style.width = (state.colWidths[k] || DEFAULT_COLS[k]) + "px";
+			// A width saved before a column's content grew (the check plus 읽는 중 in 보유; ▲/▼ beside the
+			// citations) would clip it; those columns keep at least what they now need.
+			col.style.width = Math.max(state.colWidths[k] || DEFAULT_COLS[k], COL_FLOOR[k] || 0) + "px";
 		}
 		applyColumnView();
 	}
@@ -2205,11 +2247,14 @@
 		let line = document.createElement("div");
 		line.className = "t-aff";
 		let columnKey = ZotPoPFilters.flat(affColumnRow(where)?.institution);
+		let put = text => line.appendChild(document.createTextNode(text));
 		parts.forEach((p, i) => {
-			if (i) line.appendChild(document.createTextNode(" — "));
-			if (p.role !== "first") { let role = document.createElement("span"); role.className = "aff-role"; role.textContent = t(p.role === "corr" ? "affLineCorr" : "affLineLast") + " "; line.appendChild(role); }
-			line.appendChild(document.createTextNode(p.name));
-			if (p.role === "first" && ZotPoPFilters.flat(p.institution) !== columnKey) line.appendChild(document.createTextNode(" · " + (p.flag ? p.flag + " " : "") + shortInstitution(p.institution)));
+			if (i) put(" \u00b7 ");
+			let role = document.createElement("span"); role.className = "aff-role";
+			role.textContent = t(p.role === "first" ? "affLineFirst" : p.role === "corr" ? "affLineCorr" : "affLineLast") + " ";
+			line.appendChild(role);
+			put(p.name);
+			if (p.role === "first" && ZotPoPFilters.flat(p.institution) !== columnKey) put(" \u00b7 " + (p.flag ? p.flag + " " : "") + shortInstitution(p.institution));
 		});
 		return line;
 	}
@@ -2317,7 +2362,7 @@
 			let list = document.createElement("div"); list.className = "au-insts";
 			for (let inst of order) {
 				let item = document.createElement("span"); item.className = "au-inst";
-				let num = document.createElement("sup"); num.textContent = String(index.get(inst.key)); item.appendChild(num);
+				let num = document.createElement("span"); num.className = "au-num"; num.textContent = String(index.get(inst.key)); item.appendChild(num);
 				let b = document.createElement("button"); b.type = "button"; b.className = "ghost au-inst-btn";
 				b.textContent = inst.name + (inst.country ? " (" + inst.country + ")" : "");
 				tip(b, t("instFilterTip", inst.name));
@@ -2325,9 +2370,11 @@
 				item.appendChild(b);
 				list.appendChild(item);
 			}
+			// "* corresponding" ends the same line, not a line of its own.
+			if (flagged) { let legend = document.createElement("span"); legend.className = "au-legend"; legend.textContent = "* " + t("affCorrLegend"); list.appendChild(legend); }
 			box.appendChild(list);
 		}
-		if (flagged) { let legend = document.createElement("div"); legend.className = "au-legend"; legend.textContent = "* " + t("affCorresponding"); box.appendChild(legend); }
+		else if (flagged) { let legend = document.createElement("div"); legend.className = "au-legend"; legend.textContent = "* " + t("affCorrLegend"); box.appendChild(legend); }
 	}
 	function tierChip(where) {
 		if (!where?.tier) return null;
@@ -2354,10 +2401,11 @@
 		return tiers[i].floor > 0 ? t("tipTierAbove", row.hIndex, tierLabel(row.tier), tiers[i].floor) : t("tipTierBelow", row.hIndex, tierLabel(row.tier), tiers[i - 1].floor);
 	}
 	function tipPlace(row) {
+		// Always in one order: the tier chip, the flag, then the name.
 		let line = fel("div", "tip-where");
+		if (row.tier) line.appendChild(tipTierChip(row));
 		if (row.flag) line.appendChild(fel("span", "tip-flag", row.flag));
 		line.appendChild(fel("span", "tip-inst", row.institution || t("affUnknown")));
-		if (row.tier) line.appendChild(tipTierChip(row));
 		return line;
 	}
 	function tipNames(r, limit) {
@@ -2376,19 +2424,26 @@
 		let box = fel("div", "tip-rich");
 		box.appendChild(fel("div", "tip-title", r.title));
 		let cpy = ZotPoPMetrics.citesPerYear(r);
-		let meta = [r.venue, r.year, r.citations == null ? "" : t("tipCites", r.citations), cpy == null || !Number.isFinite(cpy) ? "" : t("tipPerYear", fmt(cpy, 1))].filter(x => x !== "" && x != null);
-		if (meta.length) box.appendChild(fel("div", "tip-meta", meta.join(" · ")));
+		let meta = [r.year, r.citations == null ? "" : t("tipCites", r.citations), cpy == null || !Number.isFinite(cpy) ? "" : t("tipPerYear", fmt(cpy, 1))].filter(x => x !== "" && x != null);
+		if (r.venue || meta.length) {
+			// the journal's full name in its own ink, the figures after it in grey
+			let line = fel("div", "tip-meta");
+			if (r.venue) { let name = fel("span", "tip-venue", r.venue); paintVenue(name, r); line.appendChild(name); }
+			if (meta.length) line.appendChild(document.createTextNode((r.venue ? " \u00b7 " : "") + meta.join(" \u00b7 ")));
+			box.appendChild(line);
+		}
 		let names = tipNames(r, TIP_NAMES);
 		if (names.total) box.appendChild(names.box);
 		let where = affiliationOf(r), rows = [];
 		if (where?.first?.institution) rows.push([t("affFirst"), where.first]);
 		if (where?.corresponding?.institution) rows.push([where.correspondingKnown ? t("affCorresponding") : t("affLast"), where.corresponding]);
+		// The same lab for both would be said twice: one row for the two roles.
+		if (rows.length === 2 && ZotPoPFilters.flat(rows[0][1].institution) === ZotPoPFilters.flat(rows[1][1].institution)) rows = [[t(where.correspondingKnown ? "affFirstCorr" : "affFirstLast"), rows[1][1]]];
 		if (rows.length) {
 			let sect = fel("div", "tip-sect");
 			for (let [label, row] of rows) { let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", label)); line.appendChild(tipPlace(row)); sect.appendChild(line); }
 			box.appendChild(sect);
 		}
-		if (r.url) box.appendChild(fel("div", "tip-hint", t("titleOpenTip")));
 		return box;
 	}
 	function tipAffCard(r) {
@@ -2397,27 +2452,28 @@
 		let box = fel("div", "tip-rich");
 		box.appendChild(fel("div", "tip-title", row.institution || t("affUnknown")));
 		let place = fel("div", "tip-where");
+		if (row.tier) place.appendChild(tipTierChip(row));
 		if (row.flag) place.appendChild(fel("span", "tip-flag", row.flag));
 		if (row.country) place.appendChild(fel("span", "tip-inst", countryName(row.country)));
-		if (row.tier) place.appendChild(tipTierChip(row));
 		if (place.firstChild) box.appendChild(place);
 		let tier = tipTierText(row);
 		if (tier) box.appendChild(fel("div", "tip-meta", tier));
 		let sect = fel("div", "tip-sect");
 		let role = where.corresponding ? (where.correspondingKnown ? t("affCorresponding") : t("affLast")) : t("affFirst");
-		let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", role)); line.appendChild(fel("span", "tip-strong", row.name)); sect.appendChild(line);
+		let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", role)); line.appendChild(fel("span", "tip-person", row.name)); sect.appendChild(line);
 		if (where.corresponding && where.first && where.first.institution && ZotPoPFilters.flat(where.first.institution) !== ZotPoPFilters.flat(row.institution)) {
-			let other = fel("div", "tip-row"); other.appendChild(fel("span", "tip-label", t("affFirst"))); other.appendChild(fel("span", "tip-name", where.first.name + " · " + (where.first.flag ? where.first.flag + " " : "") + where.first.institution)); sect.appendChild(other);
+			let other = fel("div", "tip-row"); other.appendChild(fel("span", "tip-label", t("affFirst"))); other.appendChild(fel("span", "tip-person", where.first.name + " \u00b7 " + (where.first.flag ? where.first.flag + " " : "") + where.first.institution)); sect.appendChild(other);
 		}
-		box.appendChild(sect);
 		let others = where.countries.filter(c => c !== row.country);
-		if (others.length) box.appendChild(fel("div", "tip-hint", t("affIntl", others.map(c => (ZotPoPAffiliations.flag(c) + " " + countryName(c)).trim()).join(", "))));
+		if (others.length) { let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", t("tipCountries"))); line.appendChild(fel("span", "tip-person", others.map(c => (ZotPoPAffiliations.flag(c) + " " + countryName(c)).trim()).join(", "))); sect.appendChild(line); }
+		box.appendChild(sect);
 		return box;
 	}
 	function tipJournalCard(r) {
 		if (!r.venue) return null;
 		let box = fel("div", "tip-rich"), found = journalIdentity(r);
-		box.appendChild(fel("div", "tip-title", r.venue));
+		let head = fel("div", "tip-title", r.venue); paintVenue(head, r);
+		box.appendChild(head);
 		let facts = [];
 		if (found && found.abbrev && found.abbrev !== r.venue) facts.push([t("tipAbbrev"), found.abbrev]);
 		let publisher = r.publisher || found?.identity?.label;
@@ -2462,6 +2518,14 @@
 	const Filters = ZotPoPFilters;
 	const filterEnv = { where: r => affiliationOf(r), cpy: r => ZotPoPMetrics.citesPerYear(r) };
 	function filterSpec() { return Filters.compile($("filter") ? $("filter").value : "", state.rules); }
+	// A sprite icon (search.xhtml's <symbol>s) as a node, for buttons built in code.
+	function iconNode(id) {
+		if (typeof document.createElementNS !== "function") return document.createElement("span");
+		let svg = document.createElementNS(SVG_NS, "svg"), use = document.createElementNS(SVG_NS, "use");
+		svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("class", "ic"); svg.setAttribute("aria-hidden", "true");
+		use.setAttribute("href", "#" + id); svg.appendChild(use);
+		return svg;
+	}
 	function fel(tag, cls, text) {
 		let e = document.createElement(tag);
 		if (cls) e.className = cls;
@@ -2615,18 +2679,7 @@
 			let sum = $("filter-pop")?.querySelector?.(`[data-rule="${rule.id}"]`)?.querySelector?.(".fp-sum");
 			if (sum) { sum.textContent = Filters.ruleActive(rule) ? ruleSummary(rule) : t("filterNothingYet"); sum.className = "fp-sum" + (Filters.ruleActive(rule) ? "" : " empty"); }
 		}
-		let lib = $("filter-pop")?.querySelector?.(".fp-lib");
-		if (lib) fillLibrarySeg(lib);
 	}
-	function fillLibrarySeg(box) {
-		box.textContent = "";
-		for (let [key, label] of [["all", "libAll"], ["new", "libNew"], ["owned", "libOwned"]]) {
-			let b = fbutton("", t(label) + " " + state.libCounts[key], null, () => { state.libraryFilter = key; filtersChanged(); });
-			b.setAttribute("aria-pressed", String(state.libraryFilter === key)); b.setAttribute("data-fid", "lib:" + key);
-			box.appendChild(b);
-		}
-	}
-
 	function renderFilterPop() {
 		let pop = $("filter-pop"); if (!pop || pop.hidden) return;
 		// A redraw must not drop the keyboard: remember what had focus inside, and give it back.
@@ -2649,12 +2702,6 @@
 		pop.appendChild(head);
 
 		let body = fel("div", "fp-body");
-		// the library filter, the same three choices as the toolbar's
-		let lib = fel("section", "fp-sec");
-		lib.appendChild(fel("div", "fp-label", t("filterLibrary")));
-		let seg = fel("div", "fp-seg fp-lib"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", t("filterLibrary"));
-		fillLibrarySeg(seg); lib.appendChild(seg); body.appendChild(lib);
-
 		// the quick syntax of the box
 		let quick = fel("section", "fp-sec");
 		quick.appendChild(fel("div", "fp-label", t("filterQuickTitle")));
@@ -2692,10 +2739,12 @@
 		let pop = $("filter-pop"), btn = $("filter-btn");
 		if (!pop || typeof btn?.getBoundingClientRect !== "function") return;
 		let r = btn.getBoundingClientRect(), w = Math.min(528, window.innerWidth - 16);
+		// Under its own button, never past the footer: the card ends 8px above the import bar (or the window's edge).
+		let floor = $("import-bar")?.getBoundingClientRect?.().top || window.innerHeight - 8;
 		pop.style.width = w + "px";
 		pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
-		pop.style.top = (r.bottom + 4) + "px";
-		pop.style.maxHeight = Math.max(240, window.innerHeight - r.bottom - 16) + "px";
+		pop.style.top = (r.bottom + 8) + "px";
+		pop.style.maxHeight = Math.max(240, floor - 8 - (r.bottom + 8)) + "px";
 	}
 
 	function ruleCard(rule) {
@@ -2711,6 +2760,7 @@
 		head.appendChild(mode);
 		let toggle = fel("button", "fp-rule-toggle"); toggle.type = "button";
 		toggle.setAttribute("aria-expanded", String(open)); toggle.setAttribute("data-fid", "rule:" + rule.id + ":toggle");
+		if (rule.mode === "exclude") toggle.appendChild(fel("span", "fchip-tag", t("filterExcluded")));
 		toggle.appendChild(fel("span", "fp-kind", ruleKindLabel(rule)));
 		let sum = Filters.ruleActive(rule) ? ruleSummary(rule) : t("filterNothingYet");
 		toggle.appendChild(fel("span", "fp-sum" + (Filters.ruleActive(rule) ? "" : " empty"), sum));
@@ -2850,7 +2900,12 @@
 			counts.set(a.key, c);
 		}
 		let authors = authorKeys(r).map(a => ({ ...a, ...counts.get(a.key) })).filter(a => a.total > 1);
-		return { evidence, authors };
+		// What the citation strip above the evidence does not already say: where the count comes from, the journal's IF, a PDF.
+		let rest = [];
+		if (src && r.citations != null) rest.push(t("evSource", src));
+		if (r.journalIF != null) rest.push(t("evIF", fmt(r.journalIF, 1), Boolean(r.journalIFEstimate)));
+		if (hasPDF(r)) rest.push(t("evPdf"));
+		return { evidence, rest, authors };
 	}
 	// Whether a record passes the author facet; no facet passes everything.
 	function applyLocalFacet(r) {
@@ -2894,6 +2949,14 @@
 		$("cond-summary").textContent = folded ? conditionSummary() : "";
 		// Folded, the toggle is the summary bar; open, it is a quiet "fold" at the end of the form.
 		let label = form.querySelector(".cond-label"); if (label) label.textContent = t(folded ? "condLabel" : "condFold");
+		// Open, the fold button belongs to the action group (at its end, in line with the others); folded, it is the bar after the keywords.
+		try {
+			let group = form.querySelector(".field.buttons > .row"), keywords = form.querySelector(".field.keep");
+			if (group && keywords && typeof group.appendChild === "function") {
+				if (folded || !has) { if (field.parentNode !== form) form.insertBefore(field, keywords.nextSibling); }
+				else if (field.parentNode !== group) group.appendChild(field);
+			}
+		} catch (e) { log("fold button not moved: " + e.message); }
 	}
 
 	function render() {
@@ -2962,6 +3025,7 @@
 		renderDetail();
 	}
 
+	const NIL_COLUMNS = new Set(["year", "citations", "cpy", "journalIF", "venue", "authorString"]);
 	function buildRow(r) {
 		let tr = document.createElement("tr");
 		tr.dataset.key = r.key;
@@ -3016,6 +3080,7 @@
 		// A small lime mark ahead of the title (so a narrow cell never clips it): this row was not in the previous run of this search.
 		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); tip(mark, t("newMarkTip")); main.insertBefore(mark, a); }
 		tt.appendChild(main);
+		paintRowDot(main, r);
 		let affParts = state.affLine ? affLineParts(r) : [];
 		if (affLineNeeded(affParts, affiliationOf(r))) {
 			let line = affLineNode(affParts, affiliationOf(r));
@@ -3030,7 +3095,7 @@
 		td("journalIF", "num if" + (r.journalIFEstimate ? " estimate" : ""), r.journalIF == null ? "" : (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1),
 			r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
 		let where = affiliationOf(r);
-		{ let ac = td("affiliation", "aff", null, ""); ac.dataset.tipKind = "aff"; buildAffCell(ac, r); }
+		{ let ac = td("affiliation", "aff", null, ""); ac.dataset.tipKind = "aff"; ac.dataset.tipAlign = "start"; buildAffCell(ac, r); }
 		td("country", "mini country", where ? where.countries.map(c => (ZotPoPAffiliations.flag(c) + " " + c).trim()).join(" ") : "", affiliationTip(where));
 		let tierCell = td("tier", "mini tiercell", null, "");
 		let chip = tierChip(where);
@@ -3048,6 +3113,8 @@
 		let st = td("status", "status", r.status || "", r.statusTitle || "");
 		st.dataset.marquee = "status";
 		if (r.statusClass) st.classList.add(r.statusClass);
+		// One muted dash for "no value" in every data column (the PDF and library columns are marks, and stay empty).
+		for (let c of tr.children) if (NIL_COLUMNS.has(c.dataset.k) && (!c.textContent.trim() || c.textContent.trim() === "–")) { c.textContent = "–"; c.classList.add("nil"); }
 		orderColumnCells(tr);
 
 		tr.addEventListener("click", e => {
@@ -3140,6 +3207,7 @@
 		paintRows();
 	}
 
+	const BASIS_ORDER = ["openalex", "crossref", "europepmc", "pubmed", "semanticscholar", "scholar", "arxiv"];
 	function drawMetricsBasis(sources) {
 		let table = $("metrics-table"), box = $("metrics-basis");
 		if (!box && table?.parentNode) { box = document.createElement("div"); box.id = "metrics-basis"; box.className = "metrics-basis"; box.setAttribute("role", "group"); box.setAttribute("aria-label", t("metricsBasisLabel")); table.parentNode.insertBefore(box, table); }
@@ -3147,7 +3215,9 @@
 		box.textContent = "";
 		box.hidden = sources.length < 2;
 		if (box.hidden) return;
-		let keys = [null, ...sources];
+		// always in one order, whatever order the records happened to bring the sources in
+		let rank = k => { let i = BASIS_ORDER.indexOf(k); return i < 0 ? BASIS_ORDER.length : i; };
+		let keys = [null, ...[...sources].sort((a, b) => rank(a) - rank(b))];
 		box.setAttribute("data-n", String(keys.length));
 		for (let key of keys) {
 			let b = document.createElement("button");
@@ -3176,7 +3246,7 @@
 			let row = document.createElement("div"); row.className = "metrics-note";
 			let line = document.createElement("div"); line.className = "metrics-note-line";
 			let short = document.createElement("span"); short.textContent = n.short;
-			let b = document.createElement("button"); b.type = "button"; b.className = "ghost note-help"; b.textContent = "?";
+			let b = document.createElement("button"); b.type = "button"; b.className = "ghost note-help"; b.appendChild(iconNode("ic-help"));
 			b.setAttribute("aria-expanded", String(open)); b.setAttribute("aria-label", t("metricsMore")); tip(b, t("metricsMore"));
 			let full = document.createElement("p"); full.className = "metrics-note-full"; full.textContent = n.full; full.hidden = !open;
 			b.addEventListener("click", () => {
@@ -3213,7 +3283,8 @@
 		let bins = yearBins(first, last);
 		for (let bin of bins) { bin.n = 0; for (let y = bin.from; y <= bin.to; y++) bin.n += counts.get(y) || 0; }
 		let peak = Math.max(...bins.map(bin => bin.n), 1);
-		let bars = document.createElement("div"); bars.className = "yr-bars"; bars.setAttribute("role", "group"); bars.setAttribute("aria-label", t("yearHistogram"));
+		box.appendChild(fel("div", "tr-title", t("yearsTitle")));
+		let bars = document.createElement("div"); bars.className = "yr-bars" + (state.yearRange ? " ranged" : ""); bars.setAttribute("role", "group"); bars.setAttribute("aria-label", t("yearHistogram"));
 		if (bins.length > 12) bars.setAttribute("data-dense", "");
 		let covers = bin => Boolean(state.yearRange) && bin.to >= state.yearRange.from && bin.from <= state.yearRange.to;
 		let choose = (a, b) => { state.yearRange = { from: Math.min(a.from, b.from), to: Math.max(a.to, b.to) }; state.focusKey = null; render(); };
@@ -3382,8 +3453,9 @@
 		btn.appendChild(fel("span", "cite-strip-l", t("citeLabel")));
 		if (cpy != null && Number.isFinite(cpy)) btn.appendChild(fel("span", "cite-strip-avg", t("citePerYear", fmt(cpy, 1))));
 		let mark = citeMarkOf(r);
-		if (mark) btn.appendChild(fel("span", "cite-strip-mark " + mark.direction, mark.glyph + (tr.yoy == null ? "" : " " + (tr.yoy > 0 ? "+" : "") + tr.yoy + "%")));
-		if (tr) btn.appendChild(citeSpark(tr));
+		if (mark) btn.appendChild(fel("span", "cite-strip-mark " + mark.direction, mark.glyph + (tr.yoy == null ? "" : " " + Math.abs(tr.yoy) + "%")));
+		// Two bars are a glitch, not a trend: the miniature waits for a third year.
+		if (tr && tr.years.length > 2) btn.appendChild(citeSpark(tr));
 		tip(btn, t("citeOpenTip"));
 		btn.addEventListener("click", () => openCitePop(r, btn));
 		box.appendChild(btn);
@@ -3406,7 +3478,9 @@
 		big.appendChild(fel("span", "cite-n", r.citations == null ? "–" : String(r.citations)));
 		big.appendChild(fel("span", "cite-l", t("citeLabel")));
 		top.appendChild(big);
-		let close = fel("button", "ghost cite-close", t("citeClose")); close.type = "button";
+		let close = fel("button", "ghost cite-close icon-btn small"); close.type = "button";
+		close.setAttribute("aria-label", t("citeClose")); tip(close, t("citeClose"));
+		close.appendChild(iconNode("ic-close"));
 		close.addEventListener("click", () => closeCitePop(true));
 		top.appendChild(close);
 		box.appendChild(top);
@@ -3418,23 +3492,25 @@
 			let sect = fel("div", "cite-sect");
 			sect.appendChild(fel("div", "cite-h", t("citeSectionYears")));
 			sect.appendChild(citeBars(tr.years, tr.max, false));
-			if (tr.years.some(y => y.partial)) sect.appendChild(fel("div", "cite-foot", tr.current.year + " = " + t("citeInProgress")));
+			if (tr.years.some(y => y.partial)) sect.appendChild(fel("div", "cite-foot", t("citeYearPartial", tr.current.year)));
 			box.appendChild(sect);
-			let rec = fel("div", "cite-sect");
-			rec.appendChild(fel("div", "cite-h", t("citeSectionRecent")));
-			let line = [t("citeNow", tr.current.year, tr.current.n)];
-			if (tr.last) line.push(t("citeYearLine", tr.last.year, tr.last.n));
-			if (tr.prev) line.push(t("citeYearLine", tr.prev.year, tr.prev.n));
-			rec.appendChild(fel("div", "cite-line cite-strong", line.join(" · ")));
-			if (tr.last && tr.prev) rec.appendChild(fel("div", "cite-line", tr.yoy == null ? t("citeYoyNone") : t("citeYoy", tr.yoy, tr.last.year, tr.prev.year)));
-			if (tr.peak) rec.appendChild(fel("div", "cite-line", t("citePeak", tr.peak.year, tr.peak.n)));
-			box.appendChild(rec);
 		}
-		let d = st.delta;
-		if (d) box.appendChild(fel("div", "cite-delta", d.change === 0 ? t("citeSinceNone", citeDate(d.from), citeDate(d.to)) : t("citeSince", d.change, citeDate(d.from), citeDate(d.to))));
-		else if (st.phase === "done") box.appendChild(fel("div", "cite-line", t("citeFirstLook")));
+		// What the bars cannot say: the change against the year before, and what was added since the last look.
+		let d = st.delta, change = fel("div", "cite-sect");
+		if (tr && tr.last && tr.prev) {
+			let line = fel("div", "cite-line");
+			if (tr.yoy == null) line.textContent = t("citeYoyNone");
+			else {
+				line.appendChild(fel("span", "cite-yoy cite-strong " + (tr.yoy > 0 ? "up" : tr.yoy < 0 ? "down" : ""), (tr.yoy > 0 ? "\u25b2 " : tr.yoy < 0 ? "\u25bc " : "") + Math.abs(tr.yoy) + "%"));
+				line.appendChild(document.createTextNode(" " + t("citeYoyVs", tr.last.year, tr.prev.year)));
+			}
+			change.appendChild(line);
+		}
+		if (d) change.appendChild(fel("div", "cite-delta" + (d.change > 0 ? " up" : ""), d.change === 0 ? t("citeSinceNone", citeDate(d.from), citeDate(d.to)) : t("citeSince", d.change, citeDate(d.from), citeDate(d.to))));
+		else if (st.phase === "done") change.appendChild(fel("div", "cite-line", t("citeFirstLook")));
+		if (change.firstChild) { change.insertBefore(fel("div", "cite-h", t("citeSectionRecent")), change.firstChild); box.appendChild(change); }
 		let note = st.phase === "loading" ? t("citeLoading") : st.phase === "failed" ? t("citeFailed", st.message || "") : st.phase === "budget" ? t("citeBudget")
-			: st.phase === "noid" ? t("citeNoId") : st.phase === "done" && !tr ? t("citeNoYears") : st.phase === "done" && st.at ? t("citeAsOf", citeDate(st.at)) : "";
+			: st.phase === "noid" ? t("citeNoId") : st.phase === "done" && !tr ? t("citeNoYears") : st.phase === "done" && st.at && !st.delta && citeDate(st.at) !== t("citeToday") ? t("citeAsOf", citeDate(st.at)) : "";
 		if (note) box.appendChild(fel("div", "cite-foot cite-status", note));
 		return box;
 	}
@@ -3540,25 +3616,28 @@
 		let row = $("d-tr");
 		if (!row) return;
 		let lang = typeof ZotPoPTranslate !== "undefined" && translator ? ZotPoPTranslate.byCode(trLang()) : null;
-		if (!translator || !lang) { row.hidden = true; $("d-tr-out").hidden = true; $("d-abstract").hidden = false; return; }
+		if (!translator || !lang) { row.hidden = true; $("d-tr-out").hidden = true; $("d-abstract").hidden = false; $("d-abs-label").hidden = false; return; }
 		row.hidden = false;
 		$("d-tr-lang-label").textContent = lang.name;
 		$("d-tr-title").checked = trTitleOn();
 		let busy = state.trBusy === r.key + "|" + lang.code;
 		$("d-tr-run").disabled = busy;
-		$("d-tr-run-label").textContent = busy ? t("trRunning") : t("trButton");
 		let text = r.abstract ? translator.cached(r.key, lang.code, "abstract") : null;
 		let title = trTitleOn() ? translator.cached(r.key, lang.code, "title") : null;
 		let shown = Boolean(text || title);
+		$("d-tr-run-label").textContent = busy ? t("trRunning") : t(shown ? "trRetry" : "trButton");
+		$("d-tr-copy").hidden = !shown;
 		$("d-tr-out").hidden = !shown;
 		$("d-tr-title-out").hidden = !title; $("d-tr-title-out").textContent = title ? title.text : "";
 		$("d-tr-text").hidden = !text; $("d-tr-text").textContent = text ? text.text : "";
 		$("d-tr-via").textContent = shown ? t("trVia", (text || title).service, lang.name) : "";
 		let orig = $("d-tr-orig"), hide = shown && state.trHideOrig === true && Boolean(r.abstract);
 		orig.hidden = !shown || !r.abstract;
-		orig.textContent = hide ? t("trShowOrig") : t("trHideOrig");
+		$("d-tr-orig-label").textContent = hide ? t("trShowOrig") : t("trHideOrig");
+		$("d-tr-orig-icon").setAttribute("href", hide ? "#ic-chevron-down" : "#ic-chevron-up");
 		orig.setAttribute("aria-expanded", String(!hide));
 		$("d-abstract").hidden = hide;
+		$("d-abs-label").hidden = hide;
 		let note = trNote && trNote.key === r.key ? trNote : null;
 		$("d-tr-note").textContent = busy ? "" : note ? note.text : "";
 		$("d-tr-note").classList.toggle("err", Boolean(note && note.err && !busy));
@@ -3659,15 +3738,28 @@
 			if (mark) s.insertBefore(mark, s.firstChild);
 			return s;
 		};
-		let mark = journalMark(r);
-		if (mark) badges.appendChild(mark);
-		for (let s of r.sources || [r.source]) sourceChip(s);
+		// The journal by its full name in its own ink, then the year, as one line under the title (no lettermark chip).
+		let venueLine = $("d-venue");
+		venueLine.textContent = "";
+		if (r.venue) {
+			let name = document.createElement("span"); name.className = "d-venue-name"; name.textContent = r.venue;
+			paintVenue(name, r);
+			venueLine.appendChild(name);
+		}
+		if (r.year) venueLine.appendChild(document.createTextNode((r.venue ? " \u00b7 " : "") + r.year));
+		venueLine.hidden = !venueLine.firstChild;
 		if (r.inLibrary) chip(t("badgeInLibrary"), "lib");
+		let sources = r.sources || [r.source];
+		// One source keeps its mark; several fold into one muted count whose tip names them.
+		if (sources.length > 1) { let more = chip(t("badgeSources", sources.length), "src-more"); tip(more, sources.map(sourceLabel).join(" · ")); }
+		else for (let s of sources) sourceChip(s);
+		badges.hidden = !badges.firstChild;
 		renderCiteStrip(r);
+		let cite = $("d-cite");
 		// The figures the table already shows, said once as one plain sentence with what each one is.
 		let context = buildResultContext(r);
 		let evidence = $("d-evidence");
-		evidence.textContent = context.evidence.join(" · ");
+		evidence.textContent = (cite.hidden ? context.evidence : context.rest).join(" · ");
 		tip(evidence, r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
 
 		renderAuthors(r);
@@ -3694,15 +3786,12 @@
 		if (where) {
 			for (let [role, p] of [[t("affFirst"), where.first], [where.correspondingKnown ? t("affCorresponding") : t("affLast"), where.corresponding]]) {
 				if (!p) continue;
+				// Always in the same order: who, then the tier chip, the flag, the lab, the country and the h-index.
 				let line = document.createElement("div");
-				line.textContent = personLine(role, { ...p, hIndex: null });
-				if (p.hIndex != null) {
-					let h = document.createElement("span");
-					h.textContent = " · " + t("affHIndex", p.hIndex);
-					line.appendChild(h);
-				}
+				line.appendChild(document.createTextNode(role + ": " + p.name + " \u00b7 "));
 				let chip = p.tier ? tierChip({ tier: p.tier, hIndex: p.hIndex }) : null;
-				if (chip) line.appendChild(chip);
+				if (chip) { line.appendChild(chip); line.appendChild(document.createTextNode(" ")); }
+				line.appendChild(document.createTextNode((p.flag ? p.flag + " " : "") + (p.institution || t("affUnknown")) + (p.country ? " \u00b7 " + p.country : "") + (p.hIndex != null ? " \u00b7 " + t("affHIndex", p.hIndex) : "")));
 				whereBox.appendChild(line);
 			}
 		}
@@ -3717,7 +3806,7 @@
 		$("d-meta").textContent = bits.join(" · ");
 		// Where the library files this paper: the last two levels of each path, the whole path in the tooltip.
 		let filed = $("d-collections"), paths = r.inLibrary && r.collections || [];
-		filed.textContent = paths.map(p => (p.length > 2 ? "… › " : "") + p.slice(-2).join(" › ")).join(" · ");
+		filed.textContent = paths.map(p => p.slice(-2).join(" › ")).join(" · ");
 		tip(filed, paths.map(p => p.join(" › ")).join("\n"));
 		filed.hidden = !paths.length;
 		if (paths.length) filed.textContent = t("inCollections") + " " + filed.textContent;
@@ -3734,7 +3823,7 @@
 		// The main action: an owned paper shows its library copy, any other is added.
 		let primary = $("d-primary"), owned = Boolean(r.inLibrary);
 		$("d-primary-label").textContent = t(owned ? "dShowLibrary" : "dAdd");
-		$("d-primary-icon").setAttribute("href", owned ? "#ic-library" : "#ic-plus");
+		$("d-primary-icon").setAttribute("href", owned ? "#ic-book" : "#ic-plus");
 		primary.classList.toggle("primary", !owned);
 		tip(primary, t(owned ? "dShowLibrary" : "dAdd"));
 		primary.disabled = !owned && (state.importing || state.searching);
@@ -4019,6 +4108,15 @@
 	}
 
 	// ------------------------------------------------------------ import
+	// A failed or half-done row carries a dot ahead of its title, so it shows even where the Status column is scrolled out of view.
+	function paintRowDot(main, r) {
+		if (!main) return;
+		for (let old of [...(main.querySelectorAll?.(".row-dot") || [])]) old.remove?.();
+		if (!r.status || (r.statusClass !== "err" && r.statusClass !== "warn")) return;
+		let dot = document.createElement("span"); dot.className = "row-dot " + r.statusClass; dot.setAttribute("role", "img");
+		dot.setAttribute("aria-label", r.status); tip(dot, r.status + (r.statusTitle ? " \u00b7 " + r.statusTitle : ""));
+		main.insertBefore(dot, main.firstChild);
+	}
 	function setRowStatus(r, text, cls, title) {
 		r.status = text;
 		r.statusClass = cls;
@@ -4026,6 +4124,7 @@
 		if (text) applyColumnView();
 		let tr = document.querySelector(`#results-body tr[data-key="${CSS.escape(r.key)}"]`);
 		if (!tr) return;
+		paintRowDot(tr.querySelector(".t-main"), r);
 		let td = tr.querySelector("td.status");
 		if (td) {
 			td.textContent = text; td.className = "status " + (cls || ""); tip(td, title || "");

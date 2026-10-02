@@ -149,8 +149,9 @@ test("dashboard rules in the stylesheet (user direction 2026-10-01, replacing th
 	for (const m of css.matchAll(/border-radius:\s*([^;}]+)/g)) for (const px of m[1].matchAll(/([\d.]+)px/g)) assert.ok(Number(px[1]) >= 4, "radius " + m[0]);
 	for (const m of css.matchAll(/(?<![-\w])font-size:\s*([\d.]+)px/g)) assert.ok(Number(m[1]) >= 11, m[0]);
 	const block = sel => new RegExp("(?:^|\\n)" + sel.replace(/[.[\]()*+?^$|]/g, "\\$&") + "\\s*\\{([^}]*)\\}").exec(css)[1];
-	assert.doesNotMatch(block(".ctxmenu"), /box-shadow/);
-	assert.doesNotMatch(block(".selmenu"), /box-shadow/);
+	// every popover shares one radius and one soft shadow (review 2026-10-03: menus were flat while the filter and cite cards floated)
+	assert.match(block(".ctxmenu"), /box-shadow: var\(--pop-shadow\)/);
+	assert.match(block(".selmenu"), /box-shadow: var\(--pop-shadow\)/);
 	assert.ok(Number(/font-size:\s*([\d.]+)px/.exec(block(".histmenu .histopt .h-meta"))[1]) >= 11);
 	for (const sel of ["input[type=text], input[type=number], input[type=search], select", "button", ".sel-btn"]) assert.match(block(sel), /border-radius:\s*(10px|999px)/, sel);
 	assert.match(css, /\.toolbar \{[^}]*flex-wrap: nowrap/, "the toolbar stays on one line");
@@ -196,7 +197,7 @@ test("both locales word the new controls, and the PDF and column tips say what i
 		for (const key of keys) assert.notEqual(t(key, 1), key, `${locale}: ${key}`);
 	}
 	const ko = I18N.make("ko"), en = I18N.make("en");
-	assert.equal(ko("libAll") + " / " + ko("libNew") + " / " + ko("libOwned"), "전체 / 미보유 / 보유함");
+	assert.equal(ko("libAll") + " / " + ko("libNew") + " / " + ko("libOwned"), "전체 / 미보유 / 보유");
 	assert.equal(en("libAll") + " / " + en("libNew") + " / " + en("libOwned"), "All / Not owned / Owned");
 	for (const t of [ko, en]) {
 		assert.match(t("evPdf") + t("thPdfClickTip"), /후보|candidate/i);

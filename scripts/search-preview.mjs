@@ -102,8 +102,8 @@ export function longSpan(Sources) {
 // Where the cells sit in a 1280 and a 1440 wide window (measured from the page in Chrome; the rows are 48px, the first at y=191),
 // for the hover-card states. At 1280 the authors column is folded away.
 const cellRect = (left, right, row) => ({ left, right, top: 191 + 48 * row, bottom: 239 + 48 * row });
-const TIP_RECTS = { title: [cellRect(311, 581, 0), cellRect(311, 581, 0)], aff: [cellRect(581, 741, 1), cellRect(749, 909, 1)],
-	journal: [cellRect(799, 939, 0), cellRect(967, 1107, 0)], authors: [cellRect(581, 749, 0), cellRect(581, 749, 0)] };
+const TIP_RECTS = { title: [cellRect(311, 511, 0), cellRect(311, 511, 0)], aff: [cellRect(511, 661, 1), cellRect(661, 811, 1)],
+	journal: [cellRect(719, 903, 0), cellRect(869, 1053, 0)], authors: [cellRect(511, 661, 0), cellRect(511, 661, 0)] };
 
 // Runs the real UI once and returns the two static pages as strings.
 export async function buildPreview({ locale = "en" } = {}) {
@@ -207,8 +207,10 @@ export async function buildPreview({ locale = "en" } = {}) {
 	const tipState = (index, kind) => {
 		const cell = document.querySelectorAll("#results-body tr")[index].querySelector(`td[data-tip-kind="${kind}"]`);
 		const [narrow, wide] = TIP_RECTS[kind], at = rect => ({ x: rect.left + 40, y: rect.top + 14 }), size = { w: 420, h: 190 };
+		// the institution cell (data-tip-align="start") hangs its card from its own left edge, not from the pointer
+		const aligned = cell.getAttribute("data-tip-align") === "start";
 		const put = tipApi.show(cell, { rect: narrow, cursor: at(narrow), size, view: { w: 1280, h: 860 }, immediate: true });
-		const bigger = ctx.ZotPoPTip.place({ anchor: wide, size, view: { w: 1440, h: 860 }, cursor: at(wide) });
+		const bigger = ctx.ZotPoPTip.place({ anchor: wide, size, view: { w: 1440, h: 860 }, cursor: aligned ? null : at(wide) });
 		// a static page cannot measure, so the 1440 position rides in a media query
 		const html = page().replace("</style></head>", `@media (min-width: 1400px) { #tip-card { left: ${bigger.left}px !important; top: ${bigger.top}px !important; } }</style></head>`);
 		tipCases[kind] = { text: tipCard.textContent.replace(/\s+/g, " ").trim(), put, describedby: cell.getAttribute("aria-describedby"), tipAttr: cell.hasAttribute("data-tip"), titleAttr: cell.hasAttribute("title") };
@@ -353,7 +355,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	trace.history = { entries: [...document.querySelectorAll("#histmenu .histopt .h-meta")].map(e => e.textContent) };
 	document.getElementById("banner").hidden = true; // the popup is the subject of this page, not the import notice behind it
 		// Hung from the right edge of the 최근 검색 button, as ui.js does in a real window (no layout here to measure).
-		Object.assign(document.getElementById("histmenu").style, { top: "98px", left: "auto", right: "32px", maxWidth: "560px" });
+		Object.assign(document.getElementById("histmenu").style, { top: "101px", left: "auto", right: "33px", maxWidth: "560px" });
 	const historyPage = page();
 	fire(document.body);
 	document.getElementById("histmenu").hidden = true;
@@ -407,7 +409,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	trace.filters.shownLine = pop().querySelector(".fp-shown")?.textContent;
 	trace.filters.metrics = { papers: text("m-papers"), bars: document.querySelectorAll("#metrics-years .yr-bar").length, lib: libLine() };
 	// Hung under the Filter button the way positionFilterPop does in a real window (no layout here to measure).
-		Object.assign(pop().style, { top: "148px", left: "min(472px, calc(100vw - 536px))", width: "528px", maxHeight: "calc(100vh - 164px)" });
+		Object.assign(pop().style, { top: "154px", left: "clamp(483px, calc(100vw - 902px), 538px)", width: "528px", maxHeight: "calc(100vh - 224px)" });
 	const filtersPage = page();
 	// keyboard: Escape closes, and the chips stay
 	key(pop(), "Escape");
@@ -521,7 +523,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	proto.getBoundingClientRect = function () {
 		const box = (left, top, w, h) => ({ left, top, right: left + w, bottom: top + h, width: w, height: h });
 		if (this.classList?.contains("cite-pop")) return box(0, 0, 440, 430);
-		if (this.dataset?.k === "citations") return box(321, 191, 56, 48);
+		if (this.dataset?.k === "citations") return box(1053, 191, 68, 48);
 		return box(0, 0, 100, 30);
 	};
 	fire(rowOf("demo14").querySelector("td[data-k=citations]"));
@@ -530,9 +532,9 @@ export async function buildPreview({ locale = "en" } = {}) {
 	const citeCard = () => document.querySelector(".cite-pop");
 	trace.cite.pop = { text: citeCard()?.textContent.replace(/\s+/g, " ").trim(), bars: citeCard()?.querySelectorAll(".tr-col").length, peak: citeCard()?.querySelector(".tr-col.peak .tr-y")?.textContent, role: citeCard()?.getAttribute("role"),
 		count: citeCard()?.querySelector(".cite-n")?.textContent, delta: citeCard()?.querySelector(".cite-delta")?.textContent, requests: stubbed.openalex.length, detailStrip: document.getElementById("d-cite").textContent.replace(/\s+/g, " ").trim() };
-	document.getElementById("detail").style.height = "400px";
+	document.getElementById("detail").style.cssText = "--detail-max: 400px";
 	const citePage = page();
-	document.getElementById("detail").style.height = "";
+	document.getElementById("detail").style.cssText = "";
 	// a second click on the same figure, and Escape, close it; a second open within hours asks nobody (cached)
 	document.dispatchEvent(Object.assign(new window.Event("keydown", { bubbles: true, cancelable: true }), { key: "Escape" }));
 	trace.cite.closedByEscape = !citeCard();
@@ -557,9 +559,9 @@ export async function buildPreview({ locale = "en" } = {}) {
 	trace.translate.done = out();
 	trace.translate.call = stubbed.translate[0];
 	// a taller pane, as a reader would drag it, so the abstract and its translation are both in view
-	document.getElementById("detail").style.height = "560px";
+	document.getElementById("detail").style.cssText = "--detail-max: 560px";
 	const translatedPage = page();
-	document.getElementById("detail").style.height = "";
+	document.getElementById("detail").style.cssText = "";
 	// again: served from memory; the original folds away and comes back
 	fire(document.getElementById("d-tr-run"));
 	await wait(40);
@@ -618,7 +620,7 @@ export function checkPreview(out) {
 	if (!t.menu.closed || !t.menu.closedByOutsideClick) problems.push("a menu should close after a choice and on an outside click");
 	if (!same(t.menu.reopened, ["false", "true", "true", "true", "true"])) problems.push("the reopened View menu should show Columns: all as chosen; got " + t.menu.reopened);
 	if (t.menu.export.length < 2) problems.push("the Export menu should offer copy and save");
-	if (!/전체 12 \/ 미보유 11 \/ 보유함 1|All 12 \/ Not owned 11 \/ Owned 1/.test(t.library.start)) problems.push("the library filter should start at 12 / 11 / 1; got " + t.library.start);
+	if (!/전체 12 \/ 미보유 11 \/ 보유 1|All 12 \/ Not owned 11 \/ Owned 1/.test(t.library.start)) problems.push("the library filter should start at 12 / 11 / 1; got " + t.library.start);
 	if (!/4 \/ .* 4 \/ .* 0$/.test(t.library.withFacet)) problems.push("the library counts should follow the author facet; got " + t.library.withFacet);
 	if (!same(t.library.facetNew.rows.slice().sort(), ["10", "7", "8", "9"])) problems.push("Jenna's not-owned rows should be 7-10; got " + t.library.facetNew.rows);
 	if (t.library.facetNew.selected !== t.facet.selected) problems.push("changing the library filter should keep the checks");

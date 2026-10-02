@@ -113,15 +113,15 @@ test("translations are remembered per paper, language and field; a double ask co
 
 test("the strings exist in Korean and English, and the privacy line says only the text is sent", () => {
 	const keys = ["trButton", "trButtonTip", "trRunning", "trLang", "trTitle", "trHideOrig", "trShowOrig", "trCopy", "trCopied", "trVia", "trNone", "trFailed", "trNoText",
-		"citeOpen", "citeOpenTip", "citeLabel", "citePerYear", "citeBasis", "citeNow", "citeYearLine", "citeYoy", "citeYoyNone", "citePeak", "citeSince", "citeSinceNone", "citeFirstLook",
+		"citeOpen", "citeOpenTip", "citeLabel", "citePerYear", "citeBasis", "citeNow", "citeYearLine", "citeYoyVs", "citeYoyNone", "citeYearPartial", "trRetry", "citePeak", "citeSince", "citeSinceNone", "citeFirstLook",
 		"citeLoading", "citeAsOf", "citeFailed", "citeBudget", "citeNoId", "citeNoYears", "citeMarkUp", "citeMarkDown", "citeCellTip", "metricsTrend", "metricsTrendNote"];
 	for (const locale of ["en", "ko"]) for (const key of keys) assert.ok(I18N.STRINGS[locale][key] !== undefined, locale + " " + key);
 	const ko = I18N.make("ko"), en = I18N.make("en");
 	assert.match(ko("trNone"), /Translate for Zotero/); assert.match(en("trNone"), /Translate for Zotero/);
 	assert.match(ko("trNone"), /aiEndpoint/);
-	assert.match(en("citeSince", 5, "2026-10-01", "today"), /\+5 since the last look \(2026-10-01 → today\)/);
-	assert.match(ko("citeSince", -2, "2026-10-01", "오늘"), /-2회/);
-	assert.match(ko("citeYoy", 6, 2025, 2024), /\+6%/);
+	assert.match(en("citeSince", 5, "2026-10-01", "today"), /\+5 citations since the last look \(2026-10-01 → today\)/);
+	assert.match(ko("citeSince", -2, "2026-10-01", "오늘"), /인용 -2/, "one noun and the number, not a count word");
+	assert.match(ko("citeYoyVs", 2025, 2024), /전년 대비 \(2025년 vs 2024년\)/, "the percentage is drawn with its arrow in the card, not worded with a hyphen or plus");
 	const source = fs.readFileSync(new URL("../content/translate.js", import.meta.url), "utf8");
 	assert.doesNotMatch(source, /\bemail\b|mailto/i, "the translation code never touches the contact address");
 });

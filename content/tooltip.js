@@ -115,7 +115,9 @@ var ZotPoPTip = (function () {
 			let view = opts.view || { w: win.innerWidth, h: win.innerHeight };
 			let rect = opts.rect || anchor.getBoundingClientRect();
 			let size = opts.size || (() => { let r = card.getBoundingClientRect(); return { w: r.width, h: r.height }; })();
-			let put = place({ anchor: rect, size, view, cursor: opts.cursor === undefined ? pointer : opts.cursor });
+			// A cell marked data-tip-align="start" gets its card under its own left edge, not under the pointer.
+			let aligned = anchor.getAttribute && anchor.getAttribute("data-tip-align") === "start";
+			let put = place({ anchor: rect, size, view, cursor: aligned ? null : opts.cursor === undefined ? pointer : opts.cursor });
 			card.style.left = put.left + "px"; card.style.top = put.top + "px";
 			if (put.maxHeight) card.style.maxHeight = put.maxHeight + "px";
 			card.setAttribute("data-side", put.side);

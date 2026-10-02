@@ -44,6 +44,15 @@
 	<symbol id="ic-history" viewBox="0 0 16 16"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8M2.6 2.8v3h3M8 5.2V8l2 1.4"/></symbol>
 	<symbol id="ic-user" viewBox="0 0 16 16"><circle cx="8" cy="5.6" r="2.6"/><path d="M2.9 13.4c.6-2.6 2.6-4 5.1-4s4.5 1.4 5.1 4"/></symbol>
 	<symbol id="ic-quote" viewBox="0 0 16 16"><path d="M6.3 4.5C4.6 5.3 3.5 6.8 3.5 8.6c0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2zM12.6 4.5c-1.7.8-2.8 2.3-2.8 4.1 0 1.5 1 2.6 2.3 2.6 1.2 0 2.1-.9 2.1-2.1 0-1.1-.8-2-1.9-2-.2 0-.4 0-.5.1.2-.9.9-1.7 1.9-2.2z"/></symbol>
+	<symbol id="ic-check" viewBox="0 0 16 16"><path d="M3.5 8.4l3 3 6-6.4"/></symbol>
+	<symbol id="ic-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="0.9"/><circle cx="8" cy="8" r="0.9"/><circle cx="12.5" cy="8" r="0.9"/></symbol>
+	<symbol id="ic-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+	<symbol id="ic-chevron-up" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></symbol>
+	<symbol id="ic-chevron-down" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+	<symbol id="ic-rotate" viewBox="0 0 16 16"><path d="M13.4 8a5.4 5.4 0 1 1-1.6-3.8M13.4 2.8v3h-3"/></symbol>
+	<symbol id="ic-book" viewBox="0 0 16 16"><path d="M2.5 3.5h3.8A1.7 1.7 0 0 1 8 5.2v8.3a1.2 1.2 0 0 0-1.2-1.2H2.5zM13.5 3.5H9.7A1.7 1.7 0 0 0 8 5.2v8.3a1.2 1.2 0 0 1 1.2-1.2h4.3z"/></symbol>
+	<symbol id="ic-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M6.3 6.3a1.8 1.8 0 1 1 2.5 1.7c-.5.3-.8.7-.8 1.3M8 11.3v.1"/></symbol>
+	<symbol id="ic-translate" viewBox="0 0 16 16"><path d="M2.5 4h6.5M5.7 2.6V4M4 4c.3 2.2 1.9 4.2 4.5 5.4M8 4c-.4 2.6-2.4 4.7-5.2 5.8M9.5 13.4l2.2-6 2.2 6M10.2 11.6h3"/></symbol>
 </svg>
 
 <div id="app">
@@ -59,7 +68,7 @@
 			<label class="field narrow"><span data-i18n="maxResults"></span><input id="author-max-results" type="number" min="1" max="2000" value="1000"/></label>
 			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="findAuthorProfiles"></span></button><button id="author-name-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-user"/></svg><span data-i18n="authorNamePapers"></span></button><button id="author-stop-btn" type="button" class="icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop"/></svg><span data-i18n="stop"></span></button><button id="author-history-btn" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history"/></svg><span data-i18n="history"></span></button></div>
 		</form>
-		<div class="author-helprow"><p id="author-help" class="author-help"></p><button id="author-help-toggle" type="button" class="ghost note-help" aria-expanded="false" aria-controls="author-help-more" aria-label="?" data-i18n-title="metricsMore">?</button></div>
+		<div class="author-helprow"><p id="author-help" class="author-help"></p><button id="author-help-toggle" type="button" class="ghost note-help" aria-expanded="false" aria-controls="author-help-more" aria-label="?" data-i18n-title="metricsMore"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-help"/></svg></button></div>
 		<p id="author-help-more" class="author-help author-help-more" hidden="hidden"></p>
 		<div id="author-profiles" class="author-profiles" aria-live="polite"></div>
 	</section>
@@ -126,7 +135,7 @@
 			<div class="row">
 				<button id="search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="search"></span></button>
 				<button id="stop-btn" type="button" class="icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop"/></svg><span data-i18n="stop"></span></button>
-				<button id="clear-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-clear"/></svg><span data-i18n="clear"></span></button>
+				<button id="clear-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-rotate"/></svg><span data-i18n="clear"></span></button>
 				<button id="history-btn" type="button" class="icon-text" data-i18n-title="historyTip" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history"/></svg><span data-i18n="history"></span></button>
 			</div>
 		</div>
@@ -196,7 +205,7 @@
 				<span id="facet-chip" class="facet-chip" hidden="hidden"><span id="facet-text"></span><button id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" aria-label="clear">×</button></span>
 				<span class="spacer"></span>
 				<button id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="previewAction"></span></button>
-				<button id="select-none" type="button" data-i18n-title="selNoneTip" class="ghost icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-none"/></svg><span data-i18n="selNone"></span></button>
+				<button id="select-none" type="button" data-i18n-title="selNoneTip" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-close"/></svg><span data-i18n="selNone"></span></button>
 				<span id="lib-filter" class="lib-filter" role="group" data-i18n-aria="libFilterLabel" data-i18n-title="libFilterTip">
 						<button id="lib-all" type="button" data-lib="all" aria-pressed="true"></button>
 					<button id="lib-new" type="button" data-lib="new" aria-pressed="false"></button>
@@ -245,9 +254,10 @@
 						<div id="d-title" class="d-title"></div>
 						<div class="d-actions">
 							<button id="d-primary" type="button" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use id="d-primary-icon" href="#ic-plus"/></svg><span id="d-primary-label"></span></button>
-							<button id="d-more" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false" data-i18n-title="dMoreTip"><span data-i18n="dMore"></span></button>
+							<button id="d-more" type="button" class="icon-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="dMoreTip" data-i18n-aria="dMore"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-more"/></svg></button>
 						</div>
 					</div>
+					<div id="d-venue" class="d-venue" hidden="hidden"></div>
 					<div id="d-badges" class="badges"></div>
 					<div class="d-figure">
 						<div id="d-cite" class="d-cite" hidden="hidden"></div>
@@ -263,17 +273,18 @@
 						<div id="d-where" class="d-where"></div>
 						<div id="d-meta" class="d-meta"></div>
 					</details>
-					<div id="d-tr" class="d-tr">
-						<button id="d-tr-run" type="button" class="icon-text" data-i18n-title="trButtonTip"><span id="d-tr-run-label" data-i18n="trButton"></span></button>
-						<button id="d-tr-lang" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="trLang"><span id="d-tr-lang-label"></span></button>
-						<label class="cb d-tr-title"><input id="d-tr-title" type="checkbox"/> <span data-i18n="trTitle"></span></label>
-						<span id="d-tr-note" class="d-tr-note" role="status" aria-live="polite"></span>
-						<span class="spacer"></span>
-						<button id="d-tr-orig" type="button" class="ghost" aria-expanded="true" hidden="hidden"></button>
-					</div>
+					<div class="d-label" id="d-abs-label" data-i18n="abstractLabel"></div>
 					<div id="d-abstract" class="d-abstract"></div>
+					<div id="d-tr" class="d-tr">
+						<button id="d-tr-run" type="button" class="icon-text" data-i18n-title="trButtonTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-translate"/></svg><span id="d-tr-run-label" data-i18n="trButton"></span></button>
+						<button id="d-tr-lang" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="trLang"><span id="d-tr-lang-label"></span></button>
+						<label class="d-tr-title"><input id="d-tr-title" type="checkbox"/> <span data-i18n="trTitle"></span></label>
+						<button id="d-tr-orig" type="button" class="icon-text" aria-expanded="true" hidden="hidden"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use id="d-tr-orig-icon" href="#ic-chevron-up"/></svg><span id="d-tr-orig-label"></span></button>
+						<button id="d-tr-copy" type="button" class="icon-text" hidden="hidden"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-copy"/></svg><span data-i18n="trCopy"></span></button>
+						<span id="d-tr-note" class="d-tr-note" role="status" aria-live="polite"></span>
+					</div>
 					<div id="d-tr-out" class="d-tr-out" hidden="hidden">
-						<div class="d-tr-head"><span id="d-tr-via" class="d-tr-via"></span><span class="spacer"></span><button id="d-tr-copy" type="button" class="ghost" data-i18n="trCopy"></button></div>
+						<div class="d-tr-head"><span id="d-tr-via" class="d-tr-via"></span></div>
 						<div id="d-tr-title-out" class="d-tr-title-out" hidden="hidden"></div>
 						<div id="d-tr-text" class="d-tr-text"></div>
 					</div>
@@ -286,9 +297,12 @@
 		<label for="target" class="import-target-label" data-i18n="addTo"></label>
 		<select id="target"></select>
 		<button id="import-opts-toggle" type="button" class="ghost import-opts-toggle" aria-expanded="false" aria-controls="import-opts"></button>
-		<span class="spacer"></span>
+		<div id="statusbar">
+			<span id="status" role="status" aria-live="polite"></span>
+			<progress id="progress" max="100" value="0" hidden="hidden"></progress>
+		</div>
 		<span id="selected-count"></span>
-		<button id="selected-only" type="button" class="ghost" aria-pressed="false" hidden="hidden"></button>
+		<button id="selected-only" type="button" aria-pressed="false" hidden="hidden"></button>
 		<button id="import-btn" type="button" class="primary icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-plus"/></svg><span data-i18n="importBtn"></span></button>
 		<span id="import-opts" class="import-opts" hidden="hidden">
 			<label class="cb"><input id="opt-pdf" type="checkbox" checked="checked"/> <span data-i18n="optPdf"></span></label>
@@ -296,12 +310,6 @@
 			<label class="cb"><input id="opt-fillpdf" type="checkbox"/> <span data-i18n="optFillPdf"></span></label>
 			<label class="cb"><input id="opt-extra" type="checkbox" checked="checked"/> <span data-i18n="optExtra"></span></label>
 		</span>
-	</div>
-
-	<div id="statusbar">
-		<span id="status" role="status" aria-live="polite"></span>
-		<span class="spacer"></span>
-		<progress id="progress" max="100" value="0" hidden="hidden"></progress>
 	</div>
 
 	<div id="filter-pop" class="filter-pop" role="dialog" aria-modal="false" aria-labelledby="filter-pop-title" hidden="hidden"></div>

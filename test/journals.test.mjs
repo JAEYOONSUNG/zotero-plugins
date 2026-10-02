@@ -36,6 +36,20 @@ test("a journal is found by its name, its abbreviation or its letters, whatever 
 	assert.equal(names("nature").length > 0, true);
 });
 
+test("typing the first words of an ISO abbreviation finds the journal (\"proc natl acad\" for PNAS), before the abbreviation is finished", () => {
+	// Review 2026-10-03: "proc natl acad" listed nothing after PNAS had been picked, and read as an abbreviation that is not understood.
+	for (const q of ["proc natl", "proc natl acad", "Proc. Natl. Acad.", "proc nat acad"]) {
+		assert.equal(names(q)[0], "Proceedings of the National Academy of Sciences", q);
+	}
+	assert.ok(names("PROC NATL ACAD SCI U S A")[0].startsWith("Proceedings of the National Academy of Sciences"), "the long ISO form is found too");
+	// the registry's own abbreviation, with nothing curated, is found by its first words as well
+	const bare = J.build({ registry: [{ title: "Journal of Obscure Results", abbreviation: "J Obscure Res" }, { title: "Journal of Other Things", abbreviation: "J Other Thing" }] });
+	assert.deepEqual(J.suggest(bare, "j obs").map(x => x.name), ["Journal of Obscure Results"]);
+	assert.equal(J.suggest(bare, "j obscure").length, 1);
+	// every word may stop short: "proc natl acad sc" is still PNAS (tier 1, a prefix of the ISO abbreviation)
+	assert.equal(J.suggest(catalog, "proc natl acad sc")[0].name, "Proceedings of the National Academy of Sciences");
+});
+
 test("ranking: exact abbreviation or acronym, then names that start with the typing, then the rest", () => {
 	const ranked = J.suggest(catalog, "cell", { limit: 1000 });
 	assert.equal(ranked[0].name, "Cell", "the exact name first");

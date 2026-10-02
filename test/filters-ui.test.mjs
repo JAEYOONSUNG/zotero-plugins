@@ -149,7 +149,7 @@ test("rows carry a second line of first and corresponding author with institutio
 	assert.deepEqual(plain(ui.affLineParts(ui.state.records[1])), [], "no data, no line and no placeholder");
 	assert.equal(ui.shortInstitution("Harvard University  Medical Laboratory"), "Harvard Univ. Medical Lab.");
 	const [first, second, ...rest] = ui.get("results-body").children;
-	assert.equal(first.querySelector(".t-aff").textContent, "Ann One · 🇺🇸 Eastbridge Univ. — affLineCorr Bo Two", "the corresponding author's lab is the column's; the line names the first author's only when it differs");
+	assert.equal(first.querySelector(".t-aff").textContent, "affLineFirst Ann One · 🇺🇸 Eastbridge Univ. · affLineCorr Bo Two", "the corresponding author's lab is the column's; the line names the first author's only when it differs");
 	assert.equal(second.querySelector(".t-aff"), null);
 	assert.equal(ui.get("results-table").hasAttribute("data-aff"), true, "every row is two lines tall when one has a second line");
 	ui.state.records.forEach(r => { r.people = null; });
@@ -175,7 +175,7 @@ test("the detail lists authors with an index into their institutions; an institu
 	names.querySelector(".au-more").emit("click");
 	assert.equal(box.querySelector(".au-list").querySelectorAll(".au").length, 8, "the rest opens in place");
 	assert.equal(box.querySelector(".au-list").querySelector(".au-corr").textContent, "*");
-	assert.equal(box.querySelector(".au-legend").textContent, "* affCorresponding");
+	assert.equal(box.querySelector(".au-legend").textContent, "* affCorrLegend");
 	box.querySelector(".au-inst-btn").emit("click");
 	assert.deepEqual(keys(ui), ["p"], "an institution keeps its papers");
 	assert.equal(ui.state.rules[0].kind, "inst");
@@ -247,6 +247,25 @@ test("the suggestion list: arrows, Enter picks only a highlighted journal, Escap
 	assert.equal(list.hidden, true, "one letter lists nothing");
 });
 
+test("a journal already picked stays in the list, marked, and an empty list has no key hints", async () => {
+	const ui = await loaded({ prefs: { journalLookup: false } });
+	const input = ui.get("venue"), list = ui.get("venue-list");
+	input.value = "pnas"; await ui.refreshVenueSuggestions();
+	ui.onVenueKey({ key: "ArrowDown", preventDefault() {} }); ui.onVenueKey({ key: "Enter", preventDefault() {}, stopPropagation() {} });
+	assert.equal(ui.state.venueChips.length, 1, "PNAS is picked");
+	// typing the start of its ISO abbreviation afterwards must not look like "no match"
+	input.value = "proc natl acad"; await ui.refreshVenueSuggestions();
+	const picked = Array.from(list.querySelectorAll(".jopt")).filter(o => o.classList.contains("picked"));
+	assert.ok(picked.length >= 1, "the picked journal is still listed");
+	assert.equal(picked[0].getAttribute("aria-disabled"), "true");
+	assert.equal(picked[0].querySelector(".jopt-abbr").textContent, "venuePicked");
+	assert.equal(list.querySelector(".jopt-note"), null, "not told there is no match");
+	// nothing to choose: no "arrows / Enter / Esc" footer
+	input.value = "zzzqq"; await ui.refreshVenueSuggestions();
+	assert.ok(list.querySelector(".jopt-note"));
+	assert.equal(list.querySelector(".jopt-foot"), null, "key hints only when there is something to choose");
+});
+
 test("the stylesheet and markup carry the new controls", () => {
 	for (const id of ["filter-btn", "filter-count", "filter-chips", "filter-pop", "venue-box", "venue-chips", "venue-list"]) assert.ok(markup.includes(`id="${id}"`), id);
 	assert.ok(markup.indexOf("content/filters.js") < markup.indexOf("content/ui.js") && markup.indexOf("content/journals.js") < markup.indexOf("content/ui.js"), "loaded before the window code");
@@ -255,8 +274,9 @@ test("the stylesheet and markup carry the new controls", () => {
 	assert.match(css, /\.metrics-basis \{[^}]*display: grid;[^}]*repeat\(2, minmax\(0, 1fr\)\)/);
 	assert.match(css, /\.metrics-basis \{[^}]*border-radius: var\(--r-box\)/);
 	assert.match(css, /\.metrics-basis button\.wide \{ grid-column: 1 \/ -1; \}/);
-	// the chip of an excluded filter is dashed, not coloured, and no chip has an edge bar
-	assert.match(css, /\.fchip\.excl \{[^}]*border-style: dashed/);
+	// the chip of an excluded filter keeps a solid border (review 2026-10-03: dashed read as unfinished) and says "exclude" in an amber tag; no chip has an edge bar
+	assert.doesNotMatch(css, /\.(fchip|fp-rule)\.excl \{[^}]*dashed/);
+	assert.match(css, /\.fchip\.excl \.fchip-tag[^{]*\{[^}]*var\(--att-bg\)/);
 	assert.doesNotMatch(css, /\.(fchip|fp-rule|jchip)[^{]*\{[^}]*border-left/);
 });
 
@@ -278,17 +298,17 @@ test("the preview drives the real handlers: quick syntax, rules, chips, institut
 	assert.equal(t.filters.authorOptions[0], "Jenna Dowd4", "options count against the other rules");
 	assert.equal(t.filters.shownLine, "13편 중 5편 표시");
 	assert.equal(t.filters.metrics.papers, "5", "the metrics follow the filtered set");
-	assert.match(t.filters.metrics.lib, /전체 5 \/ 미보유 4 \/ 보유함 1/);
+	assert.match(t.filters.metrics.lib, /전체 5 \/ 미보유 4 \/ 보유 1/);
 	assert.deepEqual(t.filters.escape, { hidden: true, expanded: "false", chips: 3 });
 	assert.equal(t.filters.chipEdit.open, true);
 	assert.equal(t.filters.chipEdit.editors, 1, "a chip opens its own rule");
 	assert.equal(t.filters.chipRemove.chips, 2);
 	assert.deepEqual(t.filters.cleared, { rows: 13, chips: 0 });
-	assert.match(t.affiliations.line[1], /^Mina Kim — 교신 Jonas Park$/);
+	assert.match(t.affiliations.line[1], /^1저자 Mina Kim · 교신 Jonas Park$/);
 	for (const cell of ["T1🇺🇸EastbridgeUniv.", "T1🇨🇳LumenUniv.", "T3🇰🇷HanbitUniv.", "소속미상"]) assert.ok(t.affiliations.cells.includes(cell), "tier chip, flag and the corresponding author's lab, or a muted unknown: " + cell);
 	assert.equal(t.affiliations.line[0], "", "a record from a source without affiliations has no line");
 	assert.equal(t.affiliations.rowAttr, true);
-	assert.equal(t.affiliations.detail, "Mina Kim1, Alex Rivera2, Jonas Park1*1Eastbridge University (US)2Meridian Institute of Technology (US)* 교신저자");
+	assert.equal(t.affiliations.detail, "Mina Kim1, Alex Rivera2, Jonas Park1*1Eastbridge University (US)2Meridian Institute of Technology (US)* 교신");
 	assert.deepEqual(t.affiliations.filtered.rows, [1, 9], "Eastbridge: Mina Kim's atlas and the Genome Biology paper");
 	assert.deepEqual(t.affiliations.filtered.chips, ["기관: Eastbridge University×"]);
 	assert.equal(t.journals.natMethods[0], "Nature MethodsNat Methods");
