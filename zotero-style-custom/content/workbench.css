@@ -8,6 +8,8 @@
   --sc-bg: #f1f2f4;
   --sc-surface: #ffffff;
   --sc-surface-alt: #f6f7f9;
+  /* A card on a grey group: white in light, one step above the group in dark (a card is never sunk below what holds it). */
+  --sc-row-surface: var(--sc-surface);
   --sc-fill: #eceef1;
   --sc-fill-hover: #e3e5e9;
   --sc-fill-active: #d9dce1;
@@ -36,13 +38,18 @@
   --sc-reading-ink: #53671e;
   --sc-done: #53671e;
   --sc-external: #7d5208;
-  --sc-star: #7d5208;
+  --sc-star: #94600f;
   /* Figure tiers (IF, rank): four hues kept for their meaning, all at one saturation and one
      luminance, the way the journal inks are drawn, so none of them is louder than the rest. */
   --sc-tone-top: #7b41ac;
   --sc-tone-high: #3a5d99;
   --sc-tone-mid: #2b6571;
   --sc-tone-low: #286944;
+  /* Bars: one track and separate fills (the inks above are text colours and look muddy as a fill). 3:1 against the track in both themes. */
+  --sc-track: var(--sc-fill);
+  --sc-bar: #5b5f68;
+  --sc-bar-done: #4a5f2c;
+  --sc-bar-reading: #7c9331;
   --sc-card-shadow: 0 1px 2px rgba(20, 22, 30, .04), 0 6px 18px rgba(20, 22, 30, .04);
   --sc-border: rgba(20, 22, 30, .08);
   --sc-border-strong: rgba(20, 22, 30, .16);
@@ -198,12 +205,12 @@
 #style-custom-workbench input[type=color]::-webkit-color-swatch { border: 0; border-radius: var(--sc-radius-pill); }
 #style-custom-workbench button:hover { background: var(--sc-fill-hover); }
 #style-custom-workbench button:active { background: var(--sc-fill-active); }
-/* The action to take is the dark pill; one that cannot be taken is a hairline. */
+/* The action to take is the dark pill; one that cannot be taken is the flat grey fill, dimmed -- never an outline (only inputs are outlined). */
 #style-custom-workbench button[data-variant=primary] { background: var(--sc-accent); color: var(--sc-accent-ink); font-weight: var(--sc-fw-strong); }
 #style-custom-workbench button[data-variant=primary]:hover:not(:disabled) { background: var(--sc-accent); opacity: .86; }
 #style-custom-workbench button:disabled,
 #style-custom-workbench button[aria-disabled=true],
-#style-custom-workbench button[data-variant=primary]:disabled { opacity: 1; cursor: default; background: transparent; box-shadow: inset 0 0 0 1px var(--sc-border-strong); color: var(--sc-muted); }
+#style-custom-workbench button[data-variant=primary]:disabled { opacity: .55; cursor: default; background: var(--sc-fill); box-shadow: none; color: var(--sc-faint); }
 /* Working: the soft accent says it, without a rule the panel uses nowhere else. */
 #style-custom-workbench button[aria-busy=true] { opacity: 1; cursor: progress; color: var(--sc-accent); background: var(--sc-accent-soft); }
 /* One calm focus ring for every control, row and link: 2px in a mid grey (3:1 on canvas and card), 1px off the edge. Text fields take a grey edge and a soft halo instead of an outer ring. */
@@ -322,7 +329,8 @@
 /* Chips: a button that filters is 26; a label that only names is a 20px badge. */
 #style-custom-workbench .sc-chips { display: flex; flex-wrap: wrap; gap: var(--sc-space-1); margin: var(--sc-space-2) 0 0; }
 #style-custom-workbench .sc-chip { display: inline-flex; align-items: center; min-height: var(--sc-h-badge); padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
-#style-custom-workbench .sc-chip b { margin-inline-start: var(--sc-space-1); font-weight: var(--sc-fw-strong); color: var(--sc-faint); font-variant-numeric: tabular-nums; }
+/* One filter chip: grey, the count after the name in the muted ink and regular weight, a x when it can be removed. */
+#style-custom-workbench .sc-chip b { margin-inline-start: var(--sc-space-1); font-weight: var(--sc-fw-regular); color: var(--sc-muted); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-chip-button { min-height: var(--sc-h-seg); padding: 0 var(--sc-space-3); border: 0; cursor: pointer; font-weight: var(--sc-fw-medium); }
 #style-custom-workbench .sc-chip-button:hover:not([aria-pressed=true]) { background: var(--sc-fill-hover); color: var(--sc-text); }
 #style-custom-workbench .sc-chip-on { font-weight: var(--sc-fw-strong); }
@@ -365,6 +373,7 @@
 #style-custom-workbench .sc-kind,
 #style-custom-workbench .sc-hit-owned,
 #style-custom-workbench .sc-path-start,
+#style-custom-workbench .sc-status-chip,
 #style-custom-workbench .sc-jcr-pill,
 #style-custom-workbench .sc-jcr-memberships li {
   display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
@@ -381,6 +390,11 @@
 #style-custom-workbench .sc-journal-reading-count:hover,
 #style-custom-workbench .sc-journal-reading-count[aria-expanded=true],
 #style-custom-workbench .sc-path-jump[aria-label]:hover { background: var(--sc-fill-hover); }
+/* "안 읽음 1" inside a sentence is amber text with no box, never a bold chip in the middle of the line. */
+#style-custom-workbench .sc-tag-unread,
+#style-custom-workbench .sc-collection-unread { display: inline; height: auto; min-height: 0; min-width: 0; padding: 0; background: none; color: var(--sc-warn); font-weight: var(--sc-fw-medium); font-size: inherit; line-height: inherit; }
+#style-custom-workbench .sc-tag-unread:hover,
+#style-custom-workbench .sc-collection-unread:hover { background: none; text-decoration: underline; text-underline-offset: 2px; }
 #style-custom-workbench .sc-count { margin-inline-start: var(--sc-space-1); }
 #style-custom-workbench .sc-chip-on .sc-count,
 #style-custom-workbench .sc-chip-button[aria-pressed=true] .sc-count,
@@ -393,6 +407,11 @@
 #style-custom-workbench .sc-watch-count[data-state=done] { background: var(--sc-lime); color: var(--sc-lime-ink); }
 #style-custom-workbench .sc-watch-count { background: var(--sc-amber); color: var(--sc-amber-ink); }
 #style-custom-workbench .sc-path-start { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+/* Three badges, no more: a count (grey, lime when it is new), a status chip (lime / amber / soft red) and a filter chip. */
+#style-custom-workbench .sc-count[data-tone=new],
+#style-custom-workbench .sc-status-chip[data-tone=lime] { background: var(--sc-lime); color: var(--sc-lime-ink); }
+#style-custom-workbench .sc-status-chip[data-tone=amber] { background: var(--sc-amber); color: var(--sc-amber-ink); }
+#style-custom-workbench .sc-status-chip[data-tone=red] { background: var(--sc-error-bg); color: var(--sc-error); }
 #style-custom-workbench .sc-new { color: var(--sc-accent); background: var(--sc-accent-soft); }
 /* A quartile keeps its rank in its fill: Q1 the strongest, Q4 the faintest. */
 #style-custom-workbench .sc-quartile { min-width: 24px; color: var(--sc-accent-ink); }
@@ -401,7 +420,7 @@
 #style-custom-workbench .sc-quartile[data-q="3"] { background: var(--sc-muted); }
 #style-custom-workbench .sc-quartile[data-q="4"] { background: var(--sc-fill); color: var(--sc-muted); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 /* A notice on a paper, worst first: solid red for withdrawn, so it cannot read as a paper. */
-#style-custom-workbench .sc-signal-retracted { background: var(--sc-error); color: var(--sc-accent-ink); }
+#style-custom-workbench .sc-signal-retracted { background: var(--sc-error-bg); color: var(--sc-error); }
 #style-custom-workbench .sc-signal-concern { color: var(--sc-amber-ink); background: var(--sc-amber); }
 #style-custom-workbench .sc-signal-corrected { color: var(--sc-muted); background: var(--sc-fill); }
 #style-custom-workbench .sc-hit-meta > .sc-tag,
@@ -541,13 +560,17 @@
 /* The bar lies on the canvas: its secondary buttons are white, and with nothing chosen it keeps its room but hides its buttons. */
 #style-custom-workbench .sc-selection-bar,
 #style-custom-workbench > footer { display: flex; align-items: center; gap: var(--sc-space-2); flex-wrap: wrap; flex-shrink: 0; padding: var(--sc-space-3) var(--sc-content-padding) var(--sc-space-4); border-block-start: 0; background: transparent; }
-#style-custom-workbench > .sc-selection-bar { min-height: var(--sc-bar-reserve); align-content: center; }
-#style-custom-workbench:has(> .sc-selection-bar[hidden]) > .sc-shell { margin-block-end: var(--sc-bar-reserve); }
+/* The bar floats over the foot of the page while something is chosen and takes no room otherwise: no dead band under every screen. The page keeps scroll room under it so the last row stays reachable. */
+#style-custom-workbench > .sc-selection-bar {
+  position: absolute; inset-inline: var(--sc-space-6); inset-block-end: var(--sc-space-4); z-index: 6; min-height: 0; padding: var(--sc-space-2) var(--sc-space-3) var(--sc-space-2) var(--sc-space-4);
+  border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: var(--sc-shadow);
+}
+#style-custom-workbench:has(> .sc-selection-bar:not([hidden])) .sc-body { padding-block-end: calc(var(--sc-content-padding) + var(--sc-bar-reserve)); }
 #style-custom-workbench .sc-selection-bar > span:first-child,
 #style-custom-workbench > footer > span:first-child { margin-inline-end: auto; color: var(--sc-muted); }
 #style-custom-workbench .sc-selection-bar[data-selected=true] > span:first-child { color: var(--sc-text); font-weight: var(--sc-fw-strong); }
 #style-custom-workbench .sc-selection-bar:not([data-selected=true]) button { display: none; }
-#style-custom-workbench .sc-selection-bar button:not([data-variant=primary]):not(:disabled) { background: var(--sc-surface); box-shadow: none; color: var(--sc-text); }
+#style-custom-workbench .sc-selection-bar button:not([data-variant=primary]):not(:disabled) { background: var(--sc-fill); box-shadow: none; color: var(--sc-text); }
 #style-custom-workbench .sc-selection-bar button:not([data-variant=primary]):not(:disabled):hover { background: var(--sc-fill-hover); }
 
 /* Paper hierarchy: status rail, title, provenance, then metrics and actions. */
@@ -557,7 +580,7 @@
 #style-custom-workbench .sc-card {
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--sc-space-1) var(--sc-space-3);
   padding: var(--sc-space-3) var(--sc-card-padding); margin: 0 0 var(--sc-space-2); border: 0;
-  border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow);
+  border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow);
 }
 #style-custom-workbench .sc-card-text { flex: 1 1 200px; min-width: 0; }
 #style-custom-workbench .sc-card h3 { margin: 0; font: var(--sc-card-title); letter-spacing: -.01em; overflow-wrap: anywhere; }
@@ -594,8 +617,8 @@
   flex: 0 0 auto; height: var(--sc-lh-title); margin: 0;
 }
 #style-custom-workbench .sc-paper-heading > .sc-check::before { content: ""; flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; background: var(--sc-faint); }
-#style-custom-workbench .sc-paper-card[data-status=reading] .sc-paper-heading > .sc-check::before { background: var(--sc-reading); }
-#style-custom-workbench .sc-paper-card[data-status=done] .sc-paper-heading > .sc-check::before { background: var(--sc-done); }
+#style-custom-workbench .sc-paper-card[data-status=reading] .sc-paper-heading > .sc-check::before { background: var(--sc-bar-reading); }
+#style-custom-workbench .sc-paper-card[data-status=done] .sc-paper-heading > .sc-check::before { background: var(--sc-bar-done); }
 #style-custom-workbench .sc-paper-card[data-mark] .sc-paper-heading > .sc-check::before { background: var(--sc-mark); }
 #style-custom-workbench .sc-paper-heading > .sc-check span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 #style-custom-workbench .sc-paper-heading > .sc-check input { opacity: 0; transition: opacity .12s ease; }
@@ -608,7 +631,8 @@
   #style-custom-workbench .sc-paper-actions { transition: none; }
 }
 #style-custom-workbench .sc-check { display: inline-flex; align-items: center; gap: 8px; margin: 4px 8px 4px 0; }
-#style-custom-workbench details:not(.sc-filters) { padding-inline-start: 12px; }
+/* A disclosure starts on the content edge, like the titles and the cards around it. */
+#style-custom-workbench details:not(.sc-filters) { padding-inline-start: 0; }
 #style-custom-workbench summary { cursor: pointer; }
 
 /* Existing scientific views stay usable in both color schemes. */
@@ -720,7 +744,8 @@
   #style-custom-workbench {
     --sc-bg: #121317;
     --sc-surface: #1c1d23;
-    --sc-surface-alt: #24252c;
+    --sc-surface-alt: #17181d;
+    --sc-row-surface: #23242b;
     --sc-fill: #2c2d35;
     --sc-fill-hover: #363741;
     --sc-fill-active: #41424d;
@@ -728,8 +753,8 @@
     --sc-muted: #b0b3bd;
     --sc-faint: #a3a7b2;
     --sc-accent: #ececf1;
-    --sc-focus: #9a9ea9;
-    --sc-focus-soft: rgba(154, 158, 169, .26);
+    --sc-focus: #6f737e;
+    --sc-focus-soft: rgba(255, 255, 255, .12);
     --sc-accent-ink: #121317;
     --sc-accent-soft: #2e2f38;
     --sc-selection: #ececf1;
@@ -746,10 +771,14 @@
     --sc-external: #f4c871;
     --sc-star: #f4c871;
     --sc-tone-top: #c0a1db; --sc-tone-high: #97afd8; --sc-tone-mid: #6db9c8; --sc-tone-low: #5bc187;
+    --sc-track: rgba(255, 255, 255, .14);
+    --sc-bar: #a3a7b2;
+    --sc-bar-done: #c5e07b;
+    --sc-bar-reading: #8da650;
     --sc-card-shadow: none;
     --sc-border: rgba(255, 255, 255, .08);
     --sc-border-strong: rgba(255, 255, 255, .17);
-    --sc-card-edge: rgba(255, 255, 255, .12);
+    --sc-card-edge: rgba(255, 255, 255, .10);
     --sc-control-edge: rgba(255, 255, 255, .5);
     --sc-chevron-ink: #b0b3bd;
     --sc-check-ink: #121317;
@@ -763,7 +792,7 @@
 /* The panel is resizable independently of the application viewport. */
 @container sc-workbench (max-width: 1000px) { #style-custom-workbench .sc-shell nav { flex-basis: 172px; padding-inline: 8px; } }
 @container sc-workbench (max-width: 760px) {
-  #style-custom-workbench .sc-shell { flex-direction: column; }
+  #style-custom-workbench .sc-shell { flex-direction: column; padding: 0 var(--sc-space-3) var(--sc-space-3); }
   /* Nineteen sections wrapped into five rows of chips took a third of a narrow
      panel before the work began. One row that scrolls sideways keeps the
      sections reachable and gives the height back to the content. */
@@ -774,6 +803,10 @@
   /* The fade over the last section hid words, and snapping pulled the current
      one out of view; the current section is centred on arrival instead. */
   #style-custom-workbench .sc-shell nav { -webkit-mask-image: none; mask-image: none; scroll-snap-type: none; }
+  /* Only the edge with more behind it fades (set from the strip's own scroll position), 20px of padding wide. */
+  #style-custom-workbench .sc-shell nav[data-fade-end=true] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); }
+  #style-custom-workbench .sc-shell nav[data-fade-start=true] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px); mask-image: linear-gradient(to right, transparent 0, #000 28px); }
+  #style-custom-workbench .sc-shell nav[data-fade-start=true][data-fade-end=true] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); }
   #style-custom-workbench .sc-nav-group { scroll-snap-align: start; }
   #style-custom-workbench .sc-nav-group { flex: 0 0 auto; display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: var(--sc-space-1); margin: 0; }
   /* The group boundary still reads, without a heading to print. */
@@ -835,7 +868,7 @@
    hairline between them, and actions that stay quiet until the row is wanted. */
 #style-custom-workbench .sc-hits { margin: 0; border-top: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-hit { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--sc-border); }
-#style-custom-workbench .sc-hit:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-hit:hover { background: var(--sc-row-surface); }
 #style-custom-workbench .sc-hit-title { grid-column: 1; margin: 0; font: var(--sc-fw-strong) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-title-font); overflow-wrap: anywhere; }
 #style-custom-workbench .sc-hit-meta { grid-column: 1; margin: 0; color: var(--sc-muted); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); font-variant-numeric: tabular-nums; }
 /* 520 and 9 were the same grey: the two figures a reader ranks by take the
@@ -984,7 +1017,7 @@
 #style-custom-workbench .sc-journal-count { font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 /* The profile: a two-column list of facts, a sign before each. */
 #style-custom-workbench .sc-journal-profile { margin: 0; padding: 8px 0 0; border-radius: 0; background: transparent; }
-#style-custom-workbench .sc-journal-table tr.sc-journal-open td, #style-custom-workbench .sc-journal-table .sc-journal-profile-row td { background: var(--sc-surface); }
+#style-custom-workbench .sc-journal-table tr.sc-journal-open td, #style-custom-workbench .sc-journal-table .sc-journal-profile-row td { background: var(--sc-row-surface); }
 #style-custom-workbench .sc-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px 20px; margin: 0; }
 #style-custom-workbench .sc-fact { display: grid; grid-template-columns: 84px 1fr; gap: 4px 8px; align-items: baseline; min-width: 0; }
 #style-custom-workbench .sc-fact dt { display: inline-flex; align-items: baseline; gap: 4px; margin: 0; color: var(--sc-muted); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); letter-spacing: .3px; white-space: normal; overflow-wrap: anywhere; }
@@ -1046,7 +1079,7 @@
 }
 
 /* --- Watchlist: a hundred people, readable at once --- */
-#style-custom-workbench .sc-watch-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2) var(--sc-space-3); margin: 0 0 var(--sc-space-3); padding: 0 var(--sc-space-1); }
+#style-custom-workbench .sc-watch-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2) var(--sc-space-3); margin: 0 0 var(--sc-space-3); padding: 0; }
 #style-custom-workbench .sc-watch-head .sc-hit-group { margin: 0; padding: 0; color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-font); letter-spacing: 0; text-transform: none; }
 #style-custom-workbench .sc-watch-tools { display: flex; align-items: center; gap: var(--sc-space-2); margin-left: auto; }
 /* "새 논문 없음" is an answer the reader reads, not a watermark. */
@@ -1054,7 +1087,7 @@
 /* auto-fill, so a wide panel shows more people rather than more empty space */
 #style-custom-workbench .sc-watch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sc-space-2); margin: 0; }
 /* A followed author is a white row card: a face, the name, its line, the affiliation. */
-#style-custom-workbench .sc-watch { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: var(--sc-space-2); align-items: start; min-width: 0; padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); cursor: pointer; }
+#style-custom-workbench .sc-watch { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: var(--sc-space-2); align-items: start; min-width: 0; padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); cursor: pointer; }
 #style-custom-workbench .sc-watch:hover { background: var(--sc-fill); }
 #style-custom-workbench .sc-watch:active, #style-custom-workbench .sc-node:active { background: var(--sc-fill-active); }
 #style-custom-workbench .sc-watch-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-2); min-width: 0; }
@@ -1063,10 +1096,13 @@
 #style-custom-workbench .sc-watch > .sc-watch-face { grid-row: 1 / span 2; align-self: start; width: 28px; height: 28px; }
 #style-custom-workbench .sc-watch > :not(.sc-watch-face) { grid-column: 2; }
 #style-custom-workbench .sc-watch-face .sc-face-text { font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
-#style-custom-workbench .sc-watch-name { flex: 1 1 100%; min-width: 0; font: var(--sc-fw-medium) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-watch-name { flex: 1 1 128px; min-width: 0; font: var(--sc-fw-medium) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-watch-new .sc-watch-name { font-weight: var(--sc-fw-strong); }
 #style-custom-workbench .sc-watch-badge, #style-custom-workbench .sc-watch-mine { flex: none; }
 #style-custom-workbench .sc-watch-mine { margin: 0; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-watch-subline { display: flex; align-items: baseline; gap: var(--sc-space-2); min-width: 0; }
+#style-custom-workbench .sc-watch-subline > .sc-watch-sub { flex: 1 1 0; min-width: 0; }
+#style-custom-workbench .sc-watch-subline > .sc-watch-mine { flex: none; }
 #style-custom-workbench .sc-watch-sub { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
 #style-custom-workbench .sc-watch-callout { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; padding: 8px 12px; border-radius: var(--sc-radius); background: var(--sc-accent-soft); color: var(--sc-accent); font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
 #style-custom-workbench .sc-watch-callout svg { flex: none; }
@@ -1105,7 +1141,7 @@
 /* The heading's rule is the list's top edge; a second one under it read as a double line. */
 #style-custom-workbench .sc-section-head + .sc-hits { margin: 0 0 var(--sc-space-1); padding: 0 var(--sc-space-2) var(--sc-space-2); border-top: 0; border-radius: 0 0 var(--sc-radius-card) var(--sc-radius-card); background: var(--sc-surface-alt); }
 /* What is new since the last look: one plain box, first under the name. */
-#style-custom-workbench .sc-author-news { margin: var(--sc-space-4) 0 0; padding: var(--sc-space-3) var(--sc-card-padding) var(--sc-space-2); border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-author-news { margin: var(--sc-space-4) 0 0; padding: var(--sc-space-3) var(--sc-card-padding) var(--sc-space-2); border-radius: var(--sc-radius-card); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
 #style-custom-workbench .sc-author-news > .sc-author-head { margin: 0 0 var(--sc-space-2); padding: 0; border: 0; }
 #style-custom-workbench .sc-author-news-line { display: grid; grid-template-columns: 96px 1fr; gap: var(--sc-space-3); margin: 0 0 var(--sc-space-2); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-author-news-label { color: var(--sc-muted); font-weight: var(--sc-fw-strong); }
@@ -1123,6 +1159,8 @@
 }
 #style-custom-workbench .sc-face-text { font: var(--sc-fw-strong) var(--sc-fs-brand)/var(--sc-lh-brand) var(--sc-title-font); color: var(--sc-muted); letter-spacing: .02em; }
 #style-custom-workbench .sc-face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* The same 1px ring whether it is initials or a photograph. */
+#style-custom-workbench .sc-face::after, #style-custom-workbench .sc-node-face::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--sc-border); pointer-events: none; }
 #style-custom-workbench .sc-face[data-has-photo=true] .sc-face-text { display: none; }
 
 /* --- Who they work with --- */
@@ -1197,7 +1235,7 @@
 #style-custom-workbench .sc-annots { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sc-space-2); align-items: start; }
 #style-custom-workbench .sc-annot {
   position: relative; display: flex; flex-direction: column; gap: var(--sc-space-1); margin: 0; padding: var(--sc-space-3) var(--sc-card-padding);
-  border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); cursor: default;
+  border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); cursor: default;
 }
 #style-custom-workbench .sc-annot:hover { box-shadow: 0 0 0 1px var(--sc-border-strong); }
 /* Chosen: a plain grey box with a darker edge all round, never a coloured bar on one side. */
@@ -1217,7 +1255,7 @@
    the page number and the annotation kind (seen in Zotero on the reader's library). */
 #style-custom-workbench .sc-annot-actions {
   position: static; margin-inline-start: auto; flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; gap: var(--sc-space-1); padding: 0; opacity: 0;
-  border-radius: var(--sc-radius-pill); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow);
+  border-radius: var(--sc-radius-pill); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow);
 }
 #style-custom-workbench .sc-annot:hover .sc-annot-actions,
 #style-custom-workbench .sc-annot:focus-within .sc-annot-actions { opacity: 1; }
@@ -1255,7 +1293,7 @@
 /* The memo of this paper: a group container with a label and a white field. */
 #style-custom-workbench .sc-memo { display: flex; flex-direction: column; gap: var(--sc-space-2); margin: var(--sc-space-1) 0 var(--sc-space-3); padding: var(--sc-space-3); border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
 #style-custom-workbench .sc-memo-label { padding: 0 var(--sc-space-1); color: var(--sc-muted); font-weight: var(--sc-fw-strong); }
-#style-custom-workbench .sc-memo .sc-annot-memo { padding: var(--sc-space-2) var(--sc-space-3); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-text); }
+#style-custom-workbench .sc-memo .sc-annot-memo { padding: var(--sc-space-2) var(--sc-space-3); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-text); }
 
 /* The colour tally doubles as a filter: a dot, the colour's meaning, its count, one chip each. */
 #style-custom-workbench .sc-annot-swatch {
@@ -1265,13 +1303,18 @@
 #style-custom-workbench .sc-annot-swatch:hover:not([aria-pressed=true]) { background: var(--sc-fill-hover); color: var(--sc-text); }
 
 /* A lab move on the watched-author card, and a first-time co-author. */
-#style-custom-workbench .sc-watch-moved { color: var(--sc-accent); font-weight: var(--sc-fw-strong); }
 #style-custom-workbench .sc-network-node { display: inline-flex; align-items: center; min-width: 0; min-height: var(--sc-h-seg); padding: 0 var(--sc-space-3); border-radius: var(--sc-radius-pill); background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border); font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-title-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Newness is said by the line it sits in, not by a coloured ring. */
 #style-custom-workbench .sc-network-fresh { box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
 
 /* A patent among the papers: the same row, a filing mark before its title. */
-#style-custom-workbench .sc-watch-patent { background: var(--sc-fill); color: var(--sc-text); }
+/* 특허 is the same badge as 새 논문: one badge, labelled. */
+#style-custom-workbench .sc-watch-patent { background: var(--sc-lime); color: var(--sc-lime-ink); }
+#style-custom-workbench .sc-watch-badge { background: var(--sc-lime); color: var(--sc-lime-ink); }
+#style-custom-workbench .sc-watch-move { display: flex; align-items: center; gap: var(--sc-space-2); color: var(--sc-muted); font-weight: var(--sc-fw-regular); }
+#style-custom-workbench .sc-watch-moved-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-watch-moved .sc-place-name { font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-watch-venue { font-weight: var(--sc-fw-medium); }
 
 /* The map's legend: the commonest journals in it, each in its own mark. */
 #style-custom-workbench .sc-graph-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 8px; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); color: var(--sc-muted); }
@@ -1285,8 +1328,11 @@
 /* Journal · year · authors: the journal in its signature ink and medium weight, the year muted, the authors plain. */
 #style-custom-workbench .sc-paper-meta-text > span + span::before { content: "·"; margin: 0 var(--sc-space-2); color: var(--sc-faint); font-weight: var(--sc-fw-regular); }
 #style-custom-workbench .sc-paper-venue { color: var(--sc-text); font-weight: var(--sc-fw-medium); }
+/* Any journal name drawn through inkJournal() (library cards, inbox, the journal tables, author lines, annotations, related papers). */
 #style-custom-workbench .sc-paper-venue[data-known] { color: var(--j-ink-l); }
-@media (prefers-color-scheme: dark) { #style-custom-workbench .sc-paper-venue[data-known] { color: var(--j-ink-d); } }
+/* On a grey group the ink is eased 12% toward black so it keeps 4.5:1 there too. */
+#style-custom-workbench .sc-ink[data-known] { color: color-mix(in srgb, var(--j-ink-l) 88%, #000); }
+@media (prefers-color-scheme: dark) { #style-custom-workbench .sc-paper-venue[data-known], #style-custom-workbench .sc-ink[data-known] { color: var(--j-ink-d); } }
 #style-custom-workbench .sc-paper-year { color: var(--sc-muted); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-paper-authors { color: var(--sc-text-soft, var(--sc-muted)); }
 
@@ -1304,10 +1350,14 @@
 #style-custom-workbench .sc-watch-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-watch-table th, #style-custom-workbench .sc-watch-table td { box-sizing: border-box; min-width: 0; max-width: none; padding: 8px 8px; border-inline-end: 0; border-block-end: 1px solid var(--sc-border); background: transparent; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; }
 #style-custom-workbench .sc-watch-table th { position: sticky; top: 0; z-index: 1; background: var(--sc-bg); color: var(--sc-faint); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); letter-spacing: .5px; text-transform: uppercase; }
-#style-custom-workbench .sc-watch-table tr:hover td { background: var(--sc-surface); }
+#style-custom-workbench .sc-watch-table tr:hover td { background: var(--sc-row-surface); }
 #style-custom-workbench .sc-watch-table td, #style-custom-workbench .sc-watch-table th { height: 44px; }
-#style-custom-workbench .sc-watch-table th.sc-col-n, #style-custom-workbench .sc-watch-table th.sc-col-act { text-align: end; }
-#style-custom-workbench .sc-watch-table .sc-cell-chip { max-width: 100%; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-watch-table th.sc-col-n, #style-custom-workbench .sc-watch-table td.sc-col-n, #style-custom-workbench .sc-watch-table th.sc-col-act { text-align: end; font-variant-numeric: tabular-nums; }
+/* A cell's pill is one line cut with an ellipsis, in the neutral fill (amber is for what needs a look, not for a reading tally). */
+#style-custom-workbench .sc-watch-table .sc-cell-chip { display: inline-block; box-sizing: border-box; max-width: 100%; height: var(--sc-h-badge); padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-h-badge) var(--sc-font); font-variant-numeric: tabular-nums; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A count in a table cell is a plain number on the right; the unit is in the header. */
+#style-custom-workbench .sc-watch-table .sc-cell-number { display: inline; padding: 0; background: none; color: var(--sc-text); font-weight: var(--sc-fw-strong); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-watch-table td.sc-col-n .sc-none-mark, #style-custom-workbench .sc-watch-table td.sc-none .sc-none-mark { color: var(--sc-faint); }
 /* The name cell: a round face, then the name, on the row's middle line. */
 #style-custom-workbench .sc-watch-who { display: flex; align-items: center; gap: var(--sc-space-2); min-width: 0; }
 #style-custom-workbench .sc-watch-who .sc-watch-face { flex: none; width: 28px; height: 28px; }
@@ -1321,8 +1371,8 @@
 #style-custom-workbench .sc-tier-t2 { background: var(--sc-accent-soft); color: var(--sc-accent); }
 #style-custom-workbench .sc-tier-t3, #style-custom-workbench .sc-tier-t4 { background: transparent; color: var(--sc-muted); font-weight: var(--sc-fw-regular); box-shadow: inset 0 0 0 1px var(--sc-border); }
 #style-custom-workbench .sc-watch-sub .sc-flag { margin-inline-end: var(--sc-space-1); font-size: var(--sc-fs-meta); }
-#style-custom-workbench .sc-watch-table .sc-col-n { width: 52px; text-align: end; font-variant-numeric: tabular-nums; }
-#style-custom-workbench .sc-watch-table .sc-col-date { width: 96px; font-variant-numeric: tabular-nums; color: var(--sc-muted); }
+#style-custom-workbench .sc-watch-table .sc-col-n { width: 64px; text-align: end; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-watch-table .sc-col-date { width: 88px; font-variant-numeric: tabular-nums; color: var(--sc-muted); }
 /* 보유·완료·안 읽음: one cell, not three fixed 64px columns -- those crushed
    name/affiliation near an 800px panel. No fixed width: it shares the same
    auto space as 이름/소속 under table-layout: fixed. */
@@ -1330,13 +1380,15 @@
 /* 읽은 시간: a plain grey bar for time on one scale shared by every row --
    no colour, so it reads as a measurement next to 인용/IF rather than
    another status pill. */
-#style-custom-workbench .sc-watch-table .sc-col-time { width: 88px; }
+#style-custom-workbench .sc-watch-table .sc-col-time { width: 104px; }
 /* Names and places are what a reader scans: they get their share first, 읽기 상태 the rest. */
-#style-custom-workbench .sc-watch-table .sc-col-name { width: 22%; }
-#style-custom-workbench .sc-watch-table .sc-col-place { width: 24%; }
-#style-custom-workbench .sc-watch-time-text { display: block; font-variant-numeric: tabular-nums; }
-#style-custom-workbench .sc-watch-time-bar { display: block; margin-top: 4px; width: 100%; height: 4px; border-radius: var(--sc-radius-sm); background: var(--sc-fill); overflow: hidden; }
-#style-custom-workbench .sc-watch-time-fill { display: block; height: 100%; background: var(--sc-border-strong); border-radius: var(--sc-radius-sm); }
+#style-custom-workbench .sc-watch-table .sc-col-name { width: 21%; }
+#style-custom-workbench .sc-watch-table .sc-col-place { width: 21%; }
+/* The head's "이름" starts where the names do (past the chevron and the face), not over the chevron. */
+#style-custom-workbench .sc-watch-table th.sc-col-name { padding-inline-start: calc(var(--sc-space-2) + 16px + var(--sc-space-2) + 28px + var(--sc-space-2)); }
+#style-custom-workbench .sc-watch-time-text { display: inline-block; vertical-align: middle; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-watch-time-bar { display: inline-block; vertical-align: middle; margin-inline-start: var(--sc-space-2); width: 28px; height: 4px; border-radius: var(--sc-radius-sm); background: var(--sc-track); overflow: hidden; }
+#style-custom-workbench .sc-watch-time-fill { display: block; height: 100%; background: var(--sc-bar); border-radius: var(--sc-radius-sm); }
 #style-custom-workbench .sc-watch-table .sc-col-act { width: 40px; text-align: end; }
 #style-custom-workbench .sc-watch-table td.sc-none { color: var(--sc-faint); }
 #style-custom-workbench .sc-watch-table .sc-journal-name { font-weight: var(--sc-fw-strong); }
@@ -1355,7 +1407,7 @@
 #style-custom-workbench .sc-journal-table thead th { white-space: normal; overflow-wrap: anywhere; }
 #style-custom-workbench .sc-journal-table td { padding: 8px 8px; border-block-end: 1px solid var(--sc-border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #style-custom-workbench .sc-journal-table tr.sc-journal { position: relative; }
-#style-custom-workbench .sc-journal-table tr.sc-journal:hover td { background: var(--sc-surface); }
+#style-custom-workbench .sc-journal-table tr.sc-journal:hover td { background: var(--sc-row-surface); }
 #style-custom-workbench .sc-journal-table .sc-col-rank { width: 76px; text-align: end; }
 #style-custom-workbench .sc-journal-table td.sc-col-rank { color: var(--sc-faint); font: var(--sc-fw-strong) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-mono); }
 #style-custom-workbench .sc-journal-table .sc-col-name { width: 24%; }
@@ -1372,7 +1424,7 @@
 #style-custom-workbench .sc-journal-table .sc-journal-name { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: var(--sc-fs-title); line-height: var(--sc-lh-title); text-align: start; cursor: pointer; min-height: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 #style-custom-workbench .sc-journal-table .sc-journal-name:hover { text-decoration: underline; }
 #style-custom-workbench .sc-journal-table .sc-col-fields { position: relative; }
-#style-custom-workbench .sc-journal-table .sc-hit-actions { position: absolute; inset-inline-end: var(--sc-space-1); inset-inline-start: auto; inset-block-start: 50%; transform: translateY(-50%); z-index: 2; padding: 0 var(--sc-space-1); border-radius: var(--sc-radius-pill); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); white-space: nowrap; opacity: 0; display: flex; gap: var(--sc-space-1); }
+#style-custom-workbench .sc-journal-table .sc-hit-actions { position: absolute; inset-inline-end: var(--sc-space-1); inset-inline-start: auto; inset-block-start: 50%; transform: translateY(-50%); z-index: 2; padding: 0 var(--sc-space-1); border-radius: var(--sc-radius-pill); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); white-space: nowrap; opacity: 0; display: flex; gap: var(--sc-space-1); }
 #style-custom-workbench .sc-journal-table tr.sc-journal:hover .sc-hit-actions, #style-custom-workbench .sc-journal-table tr.sc-journal:focus-within .sc-hit-actions { opacity: 1; }
 
 #style-custom-workbench .sc-journal-table .sc-journal-group th { padding-top: 16px; color: var(--sc-muted); border-block-end: 0; }
@@ -1382,9 +1434,7 @@
 
 /* One colour per tone, everywhere a figure is banded. */
 #style-custom-workbench .sc-journal-if[data-tone=top], #style-custom-workbench .sc-fact[data-tone=top] dd, #style-custom-workbench .sc-metric[data-tone=top] { color: var(--sc-tone-top); }
-#style-custom-workbench .sc-journal-if[data-tone=high], #style-custom-workbench .sc-fact[data-tone=high] dd, #style-custom-workbench .sc-metric[data-tone=high] { color: var(--sc-tone-high); }
-#style-custom-workbench .sc-journal-if[data-tone=mid], #style-custom-workbench .sc-fact[data-tone=mid] dd, #style-custom-workbench .sc-metric[data-tone=mid] { color: var(--sc-tone-mid); }
-#style-custom-workbench .sc-journal-if[data-tone=low], #style-custom-workbench .sc-fact[data-tone=low] dd, #style-custom-workbench .sc-metric[data-tone=low] { color: var(--sc-tone-low); }
+/* Figure tiers: only the top one (IF 30 and up) is coloured; the others stay in the ink, so one purple number means something. The tokens stay for the quartile ranks. */
 #style-custom-workbench .sc-fact[data-tone=top] dd, #style-custom-workbench .sc-fact[data-tone=high] dd { font-weight: var(--sc-fw-strong); }
 
 #style-custom-workbench .sc-legend-external { border-radius: 25%; border: 1px dashed var(--sc-external); background: var(--sc-bg); }
@@ -1428,8 +1478,8 @@
 
 /* Collections: a tree, each row with a bar for what it holds. */
 #style-custom-workbench .sc-collection-tree { display: flex; flex-direction: column; gap: 0; }
-#style-custom-workbench .sc-collection { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 96px; grid-template-areas: "line bar"; gap: var(--sc-space-1) var(--sc-space-3); align-items: center; padding: var(--sc-space-2) var(--sc-space-3) var(--sc-space-2) calc(var(--sc-space-3) + var(--sc-depth, 0) * 16px); border-radius: var(--sc-radius-sm); cursor: pointer; }
-#style-custom-workbench .sc-collection:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-collection { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 64px 40px; grid-template-areas: "line bar ratio"; gap: var(--sc-space-1) var(--sc-space-3); align-items: center; padding: var(--sc-space-2) var(--sc-space-3) var(--sc-space-2) calc(var(--sc-space-3) + var(--sc-depth, 0) * 16px); border-radius: var(--sc-radius-sm); cursor: pointer; }
+#style-custom-workbench .sc-collection:hover { background: var(--sc-fill); }
 #style-custom-workbench .sc-collection-line { grid-area: line; display: flex; align-items: center; flex-wrap: wrap; gap: var(--sc-space-1) var(--sc-space-2); min-width: 0; }
 #style-custom-workbench .sc-collection-branch { color: var(--sc-border-strong); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-collection-icon { display: inline-flex; color: var(--sc-muted); }
@@ -1443,11 +1493,11 @@
 /* Beside the page count it belongs to, not as a rule under the title: full
    width it read as an underline, and it repeats the strip below it. */
 #style-custom-workbench .sc-card > .sc-collection-bar { flex: 0 0 120px; width: 120px; align-self: center; }
-#style-custom-workbench .sc-collection-bar { grid-area: bar; height: 4px; border-radius: var(--sc-radius-pill); background: var(--sc-fill); overflow: hidden; }
+#style-custom-workbench .sc-collection-bar { grid-area: bar; height: 4px; border-radius: var(--sc-radius-pill); background: var(--sc-track); overflow: hidden; }
 /* A long blue rule under each name read as an underline before the name did.
    The bar is short, beside the count it pictures, and grey. */
-#style-custom-workbench .sc-collection-fill { display: block; height: 100%; border-radius: var(--sc-radius-pill); background: var(--sc-muted); opacity: 1; }
-#style-custom-workbench .sc-collection-actions { position: absolute; inset-inline-end: var(--sc-space-2); inset-block-start: 50%; transform: translateY(-50%); z-index: 2; display: flex; align-items: center; gap: var(--sc-space-2); padding: 0 var(--sc-space-1); border-radius: var(--sc-radius-pill); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
+#style-custom-workbench .sc-collection-fill { display: block; height: 100%; border-radius: var(--sc-radius-pill); background: var(--sc-bar); opacity: 1; }
+#style-custom-workbench .sc-collection-actions { position: absolute; inset-inline-end: var(--sc-space-2); inset-block-start: 50%; transform: translateY(-50%); z-index: 2; display: flex; align-items: center; gap: var(--sc-space-2); padding: 0 var(--sc-space-1); border-radius: var(--sc-radius-pill); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
 #style-custom-workbench .sc-collection:not(:hover):not(:focus-within) > .sc-collection-actions { visibility: hidden; }
 
 /* The related tab, before a paper is chosen: what it does, in three lines. */
@@ -1603,9 +1653,6 @@
 #style-custom-workbench .sc-jcr-number .sc-jcr-figure { position: relative; z-index: 1; }
 #style-custom-workbench td[data-column="medianJIF"], #style-custom-workbench td[data-column="jif"] { font-weight: var(--sc-fw-strong); color: var(--sc-text); }
 #style-custom-workbench td[data-tone="top"] { color: var(--sc-tone-top); }
-#style-custom-workbench td[data-tone="high"] { color: var(--sc-tone-high); }
-#style-custom-workbench td[data-tone="mid"] { color: var(--sc-tone-mid); }
-#style-custom-workbench td[data-tone="low"] { color: var(--sc-tone-low); }
 
 /* The name is the link; it reads as a name, not a shout. */
 #style-custom-workbench .sc-jcr-category-link {
@@ -1699,7 +1746,7 @@
 #style-custom-workbench .sc-matrix .sc-link-button { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
 #style-custom-workbench .sc-matrix .sc-link-button:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
 /* An owned row keeps its "보유" on the first line and its one action under it. */
-#style-custom-workbench .sc-hit-owned ~ .sc-hit-actions { grid-row: 2 / span 2; }
+
 
 /* 이어 읽기: three rows, title · pages and when · the page to go back to. Plain, as the list under it. */
 #style-custom-workbench .sc-resume,
@@ -1708,41 +1755,42 @@
    share a second line under it, at any width -- a page number and a status
    control were unreadably squeezed onto the title's own line before. */
 #style-custom-workbench .sc-resume-row,
-#style-custom-workbench .sc-reading-queue-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-3); padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
+#style-custom-workbench .sc-reading-queue-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-3); padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
 #style-custom-workbench .sc-resume-actions { display: flex; align-items: center; gap: 8px; justify-self: end; }
 #style-custom-workbench .sc-resume-title { font: var(--sc-fw-strong) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-title-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-resume-meta { color: var(--sc-muted); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* The list's one-line summary: a thin status meter in the status column's tones, then the figures, bold number first. */
 #style-custom-workbench .sc-overview { display: flex; flex-direction: column; gap: var(--sc-space-3); margin: 0 0 var(--sc-space-4); padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
-#style-custom-workbench .sc-overview-meter { display: flex; height: 8px; overflow: hidden; border-radius: var(--sc-radius-pill); background: var(--sc-fill); }
-#style-custom-workbench .sc-overview-done { background: var(--sc-done); }
-#style-custom-workbench .sc-overview-reading { background: var(--sc-reading); }
-#style-custom-workbench .sc-overview-unread { background: var(--sc-border-strong); }
+#style-custom-workbench .sc-overview-meter { display: flex; height: 8px; overflow: hidden; border-radius: var(--sc-radius-pill); background: var(--sc-track); }
+#style-custom-workbench .sc-overview-done { background: var(--sc-bar-done); }
+#style-custom-workbench .sc-overview-reading { background: var(--sc-bar-reading); }
+#style-custom-workbench .sc-overview-unread { background: transparent; }
 /* The figures are tiles: a small number label over a large one, each a white card. */
-#style-custom-workbench .sc-overview-facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: var(--sc-space-2); color: var(--sc-muted); }
-#style-custom-workbench .sc-overview-facts > * { display: flex; flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; margin: 0; padding: var(--sc-space-2) var(--sc-space-3); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); text-align: start; }
+#style-custom-workbench .sc-overview-facts { margin: 0; display: flex; flex-wrap: wrap; gap: var(--sc-space-2); color: var(--sc-muted); }
+#style-custom-workbench .sc-overview-facts > * { flex: 1 1 128px; display: flex; flex-direction: column; align-items: flex-start; gap: 0; min-width: 120px; margin: 0; padding: var(--sc-space-2) var(--sc-space-3); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); text-align: start; }
 /* In Zotero's own window a <button> tile kept one control's height and its label fell out under the
    box (the reader's screenshot; a headless browser draws it fine). Number and label are two blocks in a
    plain box that grows with them -- no native appearance, no inherited control height. */
 #style-custom-workbench .sc-overview-facts > button.sc-overview-fact { -moz-appearance: none; appearance: none; display: block; height: auto; min-height: 0; max-height: none; line-height: var(--sc-lh-meta); white-space: normal; }
 #style-custom-workbench .sc-overview-facts b, #style-custom-workbench .sc-overview-fact-label { display: block; }
-#style-custom-workbench .sc-overview-fact-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#style-custom-workbench .sc-overview-facts b { color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-brand)/var(--sc-lh-brand) var(--sc-font); font-variant-numeric: tabular-nums; }
+/* One tile everywhere: the figure never wraps, the label is never cut (the qualifier goes in the title). */
+#style-custom-workbench .sc-overview-fact-label { white-space: normal; overflow-wrap: anywhere; }
+#style-custom-workbench .sc-overview-facts b { color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-brand)/var(--sc-lh-brand) var(--sc-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #style-custom-workbench .sc-overview-facts > button:hover { background: var(--sc-fill-hover); }
 #style-custom-workbench .sc-overview-facts > button[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
 #style-custom-workbench .sc-overview-facts > button[aria-pressed=true] b { color: var(--sc-nav-on-ink); }
-#style-custom-workbench .sc-overview-facts > button:disabled { background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-muted); }
+#style-custom-workbench .sc-overview-facts > button:disabled { background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-muted); }
 #style-custom-workbench .sc-overview > .sc-local-reading-links,
 #style-custom-workbench .sc-overview > .sc-overview-picks { padding: 0 var(--sc-space-1); }
 
 /* Pages read, as a short grey meter after the reading time. */
-#style-custom-workbench .sc-row-progress { display: inline-block; align-self: center; width: 28px; height: 4px; margin-inline-start: var(--sc-space-1); border-radius: var(--sc-radius-pill); background: var(--sc-fill); vertical-align: middle; overflow: hidden; }
-#style-custom-workbench .sc-row-progress-fill { display: block; height: 100%; background: var(--sc-muted); }
+#style-custom-workbench .sc-row-progress { display: inline-block; align-self: center; width: 28px; height: 4px; margin-inline-start: var(--sc-space-1); border-radius: var(--sc-radius-pill); background: var(--sc-track); vertical-align: middle; overflow: hidden; }
+#style-custom-workbench .sc-row-progress-fill { display: block; height: 100%; background: var(--sc-bar); }
 
 /* 저장된 새 논문: two lines a paper -- title, then date · journal · who -- and what the library knows, at the right. */
 #style-custom-workbench .sc-author-inbox { display: flex; flex-direction: column; gap: var(--sc-space-2); margin: 0 0 var(--sc-space-2); }
-#style-custom-workbench .sc-author-inbox-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(76px, auto); column-gap: var(--sc-space-3); align-items: center; padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-author-inbox-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(76px, auto); column-gap: var(--sc-space-3); align-items: center; padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
 #style-custom-workbench .sc-author-inbox-row > .sc-hit-title, #style-custom-workbench .sc-author-inbox-row > .sc-hit-meta { grid-column: 1; margin: 0; }
 #style-custom-workbench .sc-inbox-status { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: flex; gap: 8px; align-items: center; color: var(--sc-muted); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); white-space: nowrap; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-inbox-note { margin: 0 var(--sc-space-2) var(--sc-space-2); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
@@ -1808,7 +1856,7 @@
 #style-custom-workbench .sc-journal-reading-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2) var(--sc-space-3); padding: 0; }
 #style-custom-workbench .sc-journal-reading-head .sc-segmented { margin-left: auto; }
 #style-custom-workbench .sc-journal-reading-table { display: flex; flex-direction: column; gap: var(--sc-space-2); }
-#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 56px 64px 136px 72px 224px; column-gap: var(--sc-space-3); align-items: center; min-height: 56px; box-sizing: border-box; padding: var(--sc-space-2) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 56px 64px 136px 72px 224px; column-gap: var(--sc-space-3); align-items: center; min-height: 56px; box-sizing: border-box; padding: var(--sc-space-2) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-journal-reading-row.sc-journal-reading-header { padding-block: 0; min-height: 0; align-items: end; background: transparent; box-shadow: none; font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); color: var(--sc-muted); }
 #style-custom-workbench .sc-journal-reading-header > span:not(:first-child):not(.sc-journal-reading-mix-head):not(.sc-journal-citation-head) { text-align: right; }
 #style-custom-workbench .sc-journal-reading-name { display: flex; flex-direction: column; gap: 0; min-width: 0; }
@@ -1824,9 +1872,9 @@
 #style-custom-workbench .sc-journal-reading-mix { display: flex; flex-direction: column; gap: var(--sc-space-1); min-width: 0; }
 #style-custom-workbench .sc-journal-reading-share { display: grid; grid-template-columns: 24px minmax(0,1fr) 32px; align-items: center; gap: var(--sc-space-2); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); color: var(--sc-muted); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-journal-reading-pct { text-align: right; color: var(--sc-text); }
-#style-custom-workbench .sc-journal-reading-bar { display: block; height: 4px; border-radius: var(--sc-radius-pill); background: var(--sc-fill); overflow: hidden; }
-#style-custom-workbench .sc-journal-reading-bar > span { display: block; height: 100%; background: var(--sc-muted); }
-#style-custom-workbench .sc-journal-reading-papers { display: flex; flex-direction: column; gap: var(--sc-space-1); padding: var(--sc-space-2) var(--sc-card-padding) var(--sc-space-2) var(--sc-space-8); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-journal-reading-bar { display: block; height: 4px; border-radius: var(--sc-radius-pill); background: var(--sc-track); overflow: hidden; }
+#style-custom-workbench .sc-journal-reading-bar > span { display: block; height: 100%; background: var(--sc-bar); }
+#style-custom-workbench .sc-journal-reading-papers { display: flex; flex-direction: column; gap: var(--sc-space-1); padding: var(--sc-space-2) var(--sc-card-padding) var(--sc-space-2) var(--sc-space-8); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
 #style-custom-workbench .sc-journal-reading-paper { display: flex; gap: var(--sc-space-2); align-items: baseline; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); min-width: 0; }
 #style-custom-workbench .sc-journal-reading-paper .sc-hit-title-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 @container sc-workbench (max-width: 640px) {
@@ -1889,6 +1937,12 @@
 }
 /* Round 4: reading inside each collection's bar, colour meanings on the annotation chips, the week on 최근 문헌. */
 #style-custom-workbench .sc-collection-fill.sc-collection-mix { display: flex; background: transparent; }
+#style-custom-workbench .sc-collection-fill:not(.sc-collection-mix) { background: transparent; }
+#style-custom-workbench .sc-collection > .sc-collection-bar { align-self: center; width: 64px; justify-self: start; }
+/* "4/6": the papers done of the papers in it, tabular, beside the bar. */
+#style-custom-workbench .sc-collection-ratio { grid-area: ratio; align-self: center; justify-self: end; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#style-custom-workbench .sc-collection-none { color: var(--sc-faint); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-collection-kids { color: var(--sc-muted); }
 #style-custom-workbench .sc-collection-mixtext { margin-inline-start: 12px; font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); color: var(--sc-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-annot-meaning { font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); color: var(--sc-text); }
 #style-custom-workbench .sc-recent-week { margin: 0 0 12px; }
@@ -2122,7 +2176,7 @@
 #style-custom-workbench .sc-matrix-picker-results { display: flex; flex-direction: column; gap: var(--sc-space-1); max-height: 260px; overflow: auto; }
 /* Title, authors in a column of their own, then the button: the names line up down the list. */
 #style-custom-workbench .sc-matrix-picker-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: var(--sc-space-3); align-items: center; padding: var(--sc-space-2); border-radius: var(--sc-radius-sm); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
-#style-custom-workbench .sc-matrix-picker-row:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-matrix-picker-row:hover { background: var(--sc-row-surface); }
 #style-custom-workbench .sc-matrix-picker-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @container sc-workbench (max-width: 680px) {
   #style-custom-workbench .sc-matrix-picker-row { grid-template-columns: minmax(0, 1fr) auto; }
@@ -2166,7 +2220,7 @@
 #style-custom-workbench .sc-group > .sc-section-head:has(+ .sc-hits),
 #style-custom-workbench .sc-group > .sc-section-head:has(+ .sc-resume),
 #style-custom-workbench .sc-group > .sc-section-head:has(+ .sc-reading-queue) {
-  margin: 0; padding: var(--sc-space-3) var(--sc-space-1) var(--sc-space-2); background: transparent; border-radius: 0; border: 0; gap: var(--sc-space-1) var(--sc-space-2); align-items: center;
+  margin: 0; padding: var(--sc-space-3) 0 var(--sc-space-2); background: transparent; border-radius: 0; border: 0; gap: var(--sc-space-1) var(--sc-space-2); align-items: center;
 }
 #style-custom-workbench .sc-group > .sc-section-head:first-child { margin-block-start: 0; }
 /* A heading whose rows are a plain list, outside any group: the name on its own line, no container. */
@@ -2179,7 +2233,7 @@
 #style-custom-workbench .sc-group > :last-child { margin-block-end: 0; }
 #style-custom-workbench .sc-group .sc-card,
 #style-custom-workbench .sc-group .sc-paper-card,
-#style-custom-workbench .sc-settings-part .sc-card { background: var(--sc-surface); }
+#style-custom-workbench .sc-settings-part .sc-card { background: var(--sc-row-surface); }
 #style-custom-workbench .sc-group .sc-paper-card[data-selected=true] { background: var(--sc-fill); }
 #style-custom-workbench .sc-group .sc-actions { padding: var(--sc-space-2) 0; }
 /* A heading with its actions at the right: the one head of a group. */
@@ -2187,15 +2241,15 @@
 #style-custom-workbench .sc-section-head-actions { margin-inline-start: auto; display: inline-flex; flex-wrap: wrap; gap: var(--sc-space-2); align-items: center; font-weight: var(--sc-fw-regular); }
 /* Related papers: each step is a group like any other; its rows are white cards, eight apart, no hairlines. */
 #style-custom-workbench .sc-group > .sc-path-head,
-#style-custom-workbench .sc-group > .sc-path-head:first-child { margin: 0; padding: var(--sc-space-3) var(--sc-space-1) var(--sc-space-2); border: 0; align-items: center; }
-#style-custom-workbench .sc-group > .sc-hit-group-note { margin: calc(var(--sc-space-1) * -1) var(--sc-space-1) var(--sc-space-2); }
+#style-custom-workbench .sc-group > .sc-path-head:first-child { margin: 0; padding: var(--sc-space-3) 0 var(--sc-space-2); border: 0; align-items: center; }
+#style-custom-workbench .sc-group > .sc-hit-group-note { margin: calc(var(--sc-space-1) * -1) 0 var(--sc-space-2); }
 #style-custom-workbench .sc-group .sc-hits { display: flex; flex-direction: column; gap: var(--sc-space-2); border-top: 0; }
-#style-custom-workbench .sc-group .sc-hit { padding: var(--sc-space-3) var(--sc-card-padding); border: 0; border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
-#style-custom-workbench .sc-group .sc-hit:hover { background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-border-strong); }
+#style-custom-workbench .sc-group .sc-hit { padding: var(--sc-space-3) var(--sc-card-padding); border: 0; border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-group .sc-hit:hover { background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-border-strong); }
 /* Rows of a card in a group: a paper, a collection tree, a tag tree, an attachment. */
 #style-custom-workbench .sc-group .sc-attachment-group { margin: 0 0 var(--sc-space-3); }
-#style-custom-workbench .sc-group .sc-attachment-group-title { margin: var(--sc-space-2) var(--sc-space-1); }
-#style-custom-workbench .sc-group .sc-attachment-row { margin: 0 0 var(--sc-space-2); padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-group .sc-attachment-group-title { margin: var(--sc-space-2) 0; }
+#style-custom-workbench .sc-group .sc-attachment-row { margin: 0 0 var(--sc-space-2); padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
 #style-custom-workbench .sc-group .sc-attachment-row + .sc-attachment-row { border-block-start: 0; }
 
 /* The reading record: one row card per paper, its title over its lines, its actions at the end. */
@@ -2228,7 +2282,6 @@
   #style-custom-workbench .sc-paper-card .sc-stars:has(.sc-metric-value:empty) { display: none; }
   #style-custom-workbench .sc-paper-card .sc-metrics { row-gap: var(--sc-space-1); column-gap: var(--sc-space-4); }
   #style-custom-workbench .sc-paper-card .sc-metric-value { min-width: 0 !important; }
-  #style-custom-workbench .sc-overview > .sc-overview-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @container sc-workbench (max-width: 680px) {
   #style-custom-workbench .sc-paper-columns { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2); padding: 0 0 var(--sc-space-2); border-block-end: 0; }
@@ -2247,12 +2300,16 @@
 }
 
 /* ==== Collections: each top-level collection is a soft grey group, its row the header ==== */
-#style-custom-workbench .sc-collection-tree { display: flex; flex-direction: column; gap: var(--sc-space-2); padding-block-start: var(--sc-space-2); }
-#style-custom-workbench .sc-collection-group { display: flex; flex-direction: column; padding: var(--sc-space-1) var(--sc-group-padding) var(--sc-group-padding); border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-collection-tree { display: flex; flex-direction: column; gap: var(--sc-space-2); padding: 0; }
+#style-custom-workbench .sc-stat-slot { margin: 0 0 var(--sc-space-3); }
+#style-custom-workbench .sc-stat-slot:empty { display: none; }
+/* A top-level collection is a white row card on the grey group; its subcollections sit inside the card. */
+#style-custom-workbench .sc-collection-group { display: flex; flex-direction: column; padding: var(--sc-space-1) var(--sc-space-2); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
 #style-custom-workbench .sc-collection-group > .sc-collection { border-radius: var(--sc-radius); padding-inline-start: calc(var(--sc-space-3) + var(--sc-depth, 0) * 16px); }
-#style-custom-workbench .sc-collection-group > .sc-collection:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-collection-group > .sc-collection:hover { background: var(--sc-fill); }
 #style-custom-workbench .sc-collection-group > .sc-collection[data-depth="0"] { padding-block: var(--sc-space-2); font-weight: var(--sc-fw-strong); }
 #style-custom-workbench .sc-collection-group > .sc-collection[data-depth="0"]:hover { background: transparent; }
+#style-custom-workbench .sc-collection-group > .sc-collection-empty { opacity: .8; }
 #style-custom-workbench .sc-collection-name { font-weight: var(--sc-fw-medium); }
 #style-custom-workbench .sc-collection[data-depth="0"] .sc-collection-name { font-weight: var(--sc-fw-strong); }
 #style-custom-workbench .sc-collection-empty .sc-collection-name { color: var(--sc-muted); font-weight: var(--sc-fw-regular); }
@@ -2260,7 +2317,7 @@
 #style-custom-workbench .sc-collection-empty > .sc-collection-bar { display: none; }
 #style-custom-workbench .sc-collection-group > .sc-collection-empty { padding-block: var(--sc-space-2); min-height: 0; }
 @container sc-workbench (max-width: 680px) {
-  #style-custom-workbench .sc-collection { grid-template-columns: minmax(0, 1fr) 64px; grid-template-areas: "line bar"; }
+  #style-custom-workbench .sc-collection { grid-template-columns: minmax(0, 1fr) 64px 40px; grid-template-areas: "line bar ratio"; }
 }
 
 /* ==== Annotations: one container per paper, its title stuck at the top of it ==== */
@@ -2290,14 +2347,18 @@
   #style-custom-workbench .sc-journal-citation-line { display: inline-flex; grid-column: auto; }
 }
 /* The map: the zoom lies on it, top right; a label lies on a surface-coloured plate so a line behind it never cuts through. */
-#style-custom-workbench .sc-graph-frame { position: relative; }
-#style-custom-workbench .sc-graph-zoom { position: absolute; inset-block-start: var(--sc-space-3); inset-inline-end: var(--sc-space-3); z-index: 2; display: flex; gap: 0; padding: calc((var(--sc-h-ctl) - var(--sc-h-seg)) / 2); border-radius: var(--sc-radius-pill); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
+#style-custom-workbench .sc-graph-frame { position: relative; margin-block-end: var(--sc-space-4); }
+#style-custom-workbench .sc-graph-zoom { position: absolute; inset-block-start: var(--sc-space-3); inset-inline-end: var(--sc-space-3); z-index: 2; display: flex; gap: 0; padding: calc((var(--sc-h-ctl) - var(--sc-h-seg)) / 2); border-radius: var(--sc-radius-pill); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
 #style-custom-workbench .sc-graph-zoom button { background: transparent; box-shadow: none; }
 #style-custom-workbench .sc-graph-zoom button:hover { background: var(--sc-fill-hover); }
 #style-custom-workbench .sc-graph-caption { margin: var(--sc-space-2) var(--sc-space-1) var(--sc-space-3); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-graph-label-bg { fill: var(--sc-surface); fill-opacity: .94; pointer-events: none; }
 #style-custom-workbench .sc-graph-label { stroke-width: 2px; }
-#style-custom-workbench .sc-fetch-action { min-height: var(--sc-h-ctl); padding: 0 var(--sc-space-4); background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border-strong); color: var(--sc-text); }
+/* The fetch buttons are plain grey buttons; the metered quota trails in the muted ink. */
+#style-custom-workbench .sc-fetch-action { display: inline-flex; align-items: center; gap: var(--sc-space-2); min-height: var(--sc-h-ctl); padding: 0 var(--sc-space-4); background: var(--sc-fill); box-shadow: none; color: var(--sc-text); }
+#style-custom-workbench .sc-fetch-quota { color: var(--sc-muted); font-weight: var(--sc-fw-regular); }
+#style-custom-workbench .sc-graph-footnote { margin: 0 0 var(--sc-space-2); color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
+#style-custom-workbench .sc-graph-summary + .sc-graph-footnote, #style-custom-workbench .sc-overview-facts + .sc-graph-summary { margin-block-start: var(--sc-space-2); }
 #style-custom-workbench .sc-fetch-action:hover { background: var(--sc-fill-hover); }
 /* The comparison table: row rules only, the first column told apart by its tint. */
 #style-custom-workbench .sc-matrix-options { margin-block: var(--sc-space-5) var(--sc-space-3); }
@@ -2310,20 +2371,36 @@
 #style-custom-workbench .sc-matrix-scroll[data-more=true] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
 #style-custom-workbench .sc-matrix-hint { margin: var(--sc-space-2) var(--sc-space-1) 0; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 /* 노트: the compose box is a white card. */
-#style-custom-workbench .sc-note-compose { margin: 0 0 var(--sc-space-2); padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-note-compose { margin: 0 0 var(--sc-space-2); padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
 #style-custom-workbench .sc-attachment-nopreview { font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 /* 태그: rows are in the group, counts are badges. */
 #style-custom-workbench .sc-tag-tree { display: flex; flex-direction: column; gap: var(--sc-space-1); }
 #style-custom-workbench .sc-tag-tree summary,
 #style-custom-workbench .sc-tag-tree .sc-tag-row { padding: var(--sc-space-2) var(--sc-space-3); border-radius: var(--sc-radius); align-items: center; }
-#style-custom-workbench .sc-tag-tree summary { display: flex; flex-wrap: wrap; }
+/* One grid for every row, so the meta starts on the same x at every depth: chevron | name and count (240, less the 20 a level steps in) | reading | unread | only. */
+#style-custom-workbench .sc-tag-tree summary,
+#style-custom-workbench .sc-tag-tree .sc-tag-row {
+  display: grid; align-items: center; column-gap: var(--sc-space-2);
+  grid-template-columns: 8px calc(200px - var(--sc-tag-depth, 0) * var(--sc-space-5)) minmax(0, 240px) auto 1fr;
+}
+#style-custom-workbench .sc-tag-tree summary::before { grid-column: 1; margin: 0; }
+#style-custom-workbench .sc-tag-tree .sc-tag-name { grid-column: 2; display: flex; align-items: center; justify-content: space-between; gap: var(--sc-space-2); min-width: 0; width: 100%; margin: 0; overflow: hidden; white-space: nowrap; }
+#style-custom-workbench .sc-tag-tree .sc-tag-name .sc-count { margin-inline-start: auto; flex: none; }
+#style-custom-workbench .sc-tag-tree .sc-tag-reading { grid-column: 3; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-tag-tree .sc-tag-unread { grid-column: 4; white-space: nowrap; }
+#style-custom-workbench .sc-tag-tree .sc-tag-only { grid-column: 5; justify-self: end; }
+/* Each top-level tag is a white row card on the grey group; the branches inside it are plain rows. */
+#style-custom-workbench .sc-tag-tree > details,
+#style-custom-workbench .sc-tag-tree > .sc-tag-leaf { border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
 #style-custom-workbench .sc-tag-tree summary:hover,
-#style-custom-workbench .sc-tag-tree .sc-tag-row:hover { background: var(--sc-surface); }
+#style-custom-workbench .sc-tag-tree .sc-tag-row:hover { background: var(--sc-fill); }
 #style-custom-workbench .sc-tag-name .sc-count { margin-inline-start: var(--sc-space-1); }
 #style-custom-workbench .sc-tag-name:hover { text-decoration: none; }
 #style-custom-workbench .sc-tag-reading { margin-inline-end: var(--sc-space-1); }
 /* A leaf lines up with the names of its siblings (the chevron's width and the row's padding), children sit one step in. */
-#style-custom-workbench .sc-tag-tree .sc-tag-leaf { padding-inline-start: 32px; }
+#style-custom-workbench .sc-tag-tree .sc-tag-leaf { padding-inline-start: 0; }
+#style-custom-workbench .sc-tag-tools { flex-wrap: nowrap; }
+#style-custom-workbench .sc-tag-tools input[type=search] { flex: 0 1 220px; min-width: 120px; }
 #style-custom-workbench .sc-tag-tree details > :not(summary) { margin-inline-start: var(--sc-space-5); }
 /* 번역·AI / 모양: no result yet is one quiet line, not a blank box with a resize grip. */
 #style-custom-workbench .sc-ai-output:placeholder-shown { min-height: 0 !important; height: 44px; resize: none; }
@@ -2334,7 +2411,7 @@
 #style-custom-workbench summary { list-style: none; cursor: pointer; }
 #style-custom-workbench summary::-webkit-details-marker { display: none; }
 #style-custom-workbench summary:not(.sc-path-owned)::before {
-  content: ""; display: inline-block; flex: none; box-sizing: border-box; width: 7px; height: 7px; margin-inline: var(--sc-space-1) var(--sc-space-2); vertical-align: 1px;
+  content: ""; display: inline-block; flex: none; box-sizing: border-box; width: 7px; height: 7px; margin-inline: 0 var(--sc-space-2); vertical-align: 1px;
   border-inline-end: 1.6px solid currentColor; border-block-end: 1.6px solid currentColor; opacity: .75;
   transform: rotate(-45deg); transition: transform .12s ease;
 }
@@ -2352,11 +2429,17 @@
   display: flex; flex-direction: column; align-items: center; gap: var(--sc-space-2); max-width: 420px; margin: var(--sc-space-6) auto; padding: var(--sc-space-6);
   border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); color: var(--sc-muted); text-align: center; text-wrap: pretty;
 }
-#style-custom-workbench .sc-empty::before {
-  content: ""; display: block; box-sizing: border-box; width: 32px; height: 24px; margin-block-end: var(--sc-space-2);
-  border: 1.6px solid var(--sc-muted); border-radius: var(--sc-radius-sm); opacity: .85;
-  background: linear-gradient(var(--sc-muted), var(--sc-muted)) center 13px / 14px 1.6px no-repeat;
-}
+#style-custom-workbench .sc-none-mark { color: var(--sc-faint); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-empty-icon { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-block-end: var(--sc-space-1); border-radius: 50%; background: var(--sc-row-surface); color: var(--sc-muted); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-empty-icon svg { width: 20px; height: 20px; stroke-width: 1.5; }
+#style-custom-workbench .sc-empty-tiers { list-style: none; display: flex; flex-direction: column; gap: var(--sc-space-2); width: 100%; margin: var(--sc-space-2) 0; padding: 0; text-align: start; }
+#style-custom-workbench .sc-empty-tiers li { display: grid; grid-template-columns: 24px auto 1fr; align-items: center; gap: var(--sc-space-2); padding: var(--sc-space-2) var(--sc-space-3); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-empty-tiers li strong { color: var(--sc-text); font-weight: var(--sc-fw-strong); white-space: nowrap; }
+#style-custom-workbench .sc-empty-tier-icon { display: inline-flex; color: var(--sc-muted); }
+#style-custom-workbench .sc-empty-tier-icon svg { width: 16px; height: 16px; }
+#style-custom-workbench .sc-empty-tier-note { color: var(--sc-muted); min-width: 0; }
+#style-custom-workbench .sc-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sc-space-2); margin-block-start: var(--sc-space-2); }
+#style-custom-workbench .sc-empty p { margin: 0; }
 #style-custom-workbench .sc-empty-title,
 #style-custom-workbench .sc-empty > strong { color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-font); }
 #style-custom-workbench .sc-empty-hint { font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
@@ -2369,21 +2452,17 @@
   #style-custom-workbench .sc-search-row > *:not(input[type=search]) { flex: 0 1 auto; }
   #style-custom-workbench .sc-search-row > .sc-filters { margin-inline-start: auto; padding: 0; }
   #style-custom-workbench .sc-search-row > .sc-filters[open] { flex-basis: 100%; }
-  #style-custom-workbench .sc-shell nav {
-    padding: var(--sc-space-2) var(--sc-space-5); scroll-padding-inline: 28px;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
-  }
-  #style-custom-workbench > .sc-selection-bar { min-height: 52px; }
-  #style-custom-workbench:has(> .sc-selection-bar[hidden]) > .sc-shell { margin-block-end: 52px; }
+  #style-custom-workbench .sc-shell nav { padding: var(--sc-space-2) var(--sc-space-3); scroll-padding-inline: 28px; }
 }
 
 /* 이 논문 주변: issues and reactions around one paper. Two soft groups under a quiet title;
    red appears only for a retraction, amber for a concern or a correction. */
 #style-custom-workbench .sc-around { display: flex; flex-direction: column; gap: var(--sc-space-2); margin: var(--sc-space-3) 0 var(--sc-space-4); min-width: 0; }
 /* Opened under a related row: one white card like the rows around it, not loose text on the group's grey. */
-#style-custom-workbench .sc-around.sc-around-inline, #style-custom-workbench .sc-group .sc-around.sc-around-inline { margin: 0; padding: var(--sc-space-3) var(--sc-space-4) var(--sc-space-4); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
-#style-custom-workbench .sc-around-inline .sc-around-group { padding: var(--sc-space-1) var(--sc-space-3) var(--sc-space-3); border-radius: var(--sc-radius); background: var(--sc-surface-alt); }
+/* Three surfaces at most: the expanded detail is itself the grey one (canvas, group, card), its inner groups are bare. */
+#style-custom-workbench .sc-around.sc-around-inline, #style-custom-workbench .sc-group .sc-around.sc-around-inline { margin: 0; padding: var(--sc-space-3) var(--sc-space-4) var(--sc-space-4); border-radius: var(--sc-radius); background: var(--sc-surface-alt); box-shadow: none; }
+#style-custom-workbench .sc-around-inline .sc-around-group { padding: 0; margin: 0; border-radius: 0; background: transparent; }
+#style-custom-workbench .sc-around-inline .sc-around-summary { background: transparent; box-shadow: none; padding-inline: 0; }
 #style-custom-workbench .sc-around-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2); }
 #style-custom-workbench .sc-around-title { margin: 0; color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-font); }
 #style-custom-workbench .sc-around-group { margin: 0; }
@@ -2400,12 +2479,12 @@
 #style-custom-workbench .sc-around-note,
 #style-custom-workbench .sc-around-loading { margin: 0; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-around-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sc-space-2); width: 100%; }
-#style-custom-workbench .sc-around-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sc-space-1) var(--sc-space-3); padding: var(--sc-space-3) var(--sc-card-padding, 16px); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-around-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sc-space-1) var(--sc-space-3); padding: var(--sc-space-3) var(--sc-card-padding, 16px); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-around-when { color: var(--sc-muted); font-variant-numeric: tabular-nums; min-width: 80px; }
 #style-custom-workbench .sc-around-kind,
 #style-custom-workbench .sc-around-link { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); text-align: start; overflow-wrap: anywhere; }
-#style-custom-workbench .sc-around-link { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--sc-border-strong); }
-#style-custom-workbench .sc-around-link:hover { color: var(--sc-accent); text-decoration-color: currentColor; }
+#style-custom-workbench .sc-around-link { cursor: pointer; text-decoration: none; }
+#style-custom-workbench .sc-around-link:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
 #style-custom-workbench .sc-around-row[data-kind=retraction] .sc-around-kind,
 #style-custom-workbench .sc-around-row[data-kind=retraction] .sc-around-link,
 #style-custom-workbench .sc-around-row[data-kind=withdrawal] .sc-around-link { color: var(--sc-error); }
@@ -2417,12 +2496,15 @@
 #style-custom-workbench .sc-around-badge b { color: var(--sc-text); font-weight: var(--sc-fw-strong); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-around-cards,
 #style-custom-workbench .sc-around-wiki { display: flex; flex-direction: column; gap: var(--sc-space-2); width: 100%; }
-#style-custom-workbench .sc-around-card { display: flex; flex-direction: column; gap: var(--sc-space-1); padding: var(--sc-space-3) var(--sc-card-padding, 16px); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); min-width: 0; }
+#style-custom-workbench .sc-around-card { display: flex; flex-direction: column; gap: var(--sc-space-1); padding: var(--sc-space-3) var(--sc-card-padding, 16px); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); min-width: 0; }
 #style-custom-workbench .sc-around-card-head { margin: 0; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-around-author { color: var(--sc-text); font-weight: var(--sc-fw-strong); }
 #style-custom-workbench .sc-around-text { margin: 0; color: var(--sc-text); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 #style-custom-workbench .sc-around-card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2); margin-block-start: var(--sc-space-1); }
-#style-custom-workbench .sc-around-stats { margin-inline-end: auto; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-around-stats { display: inline-flex; align-items: center; gap: var(--sc-space-3); margin-inline-end: auto; color: var(--sc-muted); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-around-stat { display: inline-flex; align-items: center; gap: var(--sc-space-1); }
+#style-custom-workbench .sc-around-stat-icon { display: inline-flex; color: var(--sc-muted); }
+#style-custom-workbench .sc-around-stat-icon svg { width: 14px; height: 14px; stroke-width: 1.4; }
 #style-custom-workbench .sc-around-actions { display: flex; gap: var(--sc-space-2); }
 /* Opened under a row of a related-papers list: its own block just after the row. */
 #style-custom-workbench .sc-hit[data-around=open] .sc-hit-actions { opacity: 1; visibility: visible; }
@@ -2432,13 +2514,15 @@
 #style-custom-workbench .sc-hits > .sc-around .sc-around-row,
 #style-custom-workbench .sc-hits > .sc-around .sc-around-card,
 #style-custom-workbench .sc-group > .sc-around .sc-around-row,
-#style-custom-workbench .sc-group > .sc-around .sc-around-card { background: var(--sc-surface-alt); }
+#style-custom-workbench .sc-group > .sc-around .sc-around-card { background: var(--sc-row-surface); }
 
 /* The one-line summary: title, status, counts and a chevron inside one soft pill; it grows, never spills. */
-#style-custom-workbench .sc-around-summary { flex: 1 1 280px; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-2); min-height: var(--sc-h-ctl); padding: var(--sc-space-1) var(--sc-space-3); border: 0; border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-text); text-align: start; cursor: pointer; }
-#style-custom-workbench .sc-around-summary:hover { box-shadow: 0 0 0 1px var(--sc-border-strong); background: var(--sc-surface); }
+#style-custom-workbench .sc-around-summary { flex: 1 1 280px; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-2); min-height: var(--sc-h-ctl); padding: var(--sc-space-1) var(--sc-space-3); border: 0; border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-text); text-align: start; cursor: pointer; }
+#style-custom-workbench .sc-around-summary:hover { box-shadow: 0 0 0 1px var(--sc-border-strong); background: var(--sc-row-surface); }
 #style-custom-workbench .sc-around-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-2); min-width: 0; }
-#style-custom-workbench .sc-around-chevron { margin-inline-start: auto; color: var(--sc-muted); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+/* The shared chevron: the same outline mark every disclosure uses, turning when open. */
+#style-custom-workbench .sc-around-chevron { flex: none; box-sizing: border-box; width: 7px; height: 7px; margin-inline: auto var(--sc-space-1); border-inline-end: 1.6px solid var(--sc-chevron-ink); border-block-end: 1.6px solid var(--sc-chevron-ink); transform: rotate(-45deg); transition: transform .12s ease; }
+#style-custom-workbench .sc-around-summary[aria-expanded=true] .sc-around-chevron { transform: rotate(45deg) translate(-1px, -1px); }
 #style-custom-workbench .sc-around-chip { display: inline-flex; align-items: center; height: var(--sc-h-badge); padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-muted); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); white-space: nowrap; }
 #style-custom-workbench .sc-around-chip[data-status=retracted] { background: var(--sc-error-bg); color: var(--sc-error); }
 #style-custom-workbench .sc-around-chip[data-status=concern] { background: var(--sc-amber); color: var(--sc-amber-ink); }
@@ -2453,15 +2537,8 @@
 #style-custom-workbench .sc-hit-around { background: var(--sc-fill); box-shadow: none; color: var(--sc-text); }
 #style-custom-workbench .sc-hit-around:hover:not(:disabled) { background: var(--sc-fill-hover); }
 #style-custom-workbench .sc-hit-around:disabled { color: var(--sc-muted); cursor: not-allowed; }
-/* A path row that holds a 보유 chip keeps the path template: step, text, then the chip over the actions. */
-#style-custom-workbench .sc-path-row:has(> .sc-hit-owned) { grid-template-columns: 22px minmax(0, 1fr) auto; }
-#style-custom-workbench .sc-path-row:has(> .sc-hit-owned) > .sc-hit-owned { grid-column: 3; grid-row: 1; align-self: start; justify-self: end; }
-#style-custom-workbench .sc-path-row:has(> .sc-hit-owned) > .sc-hit-actions { grid-column: 3; grid-row: 2 / span 2; align-self: start; }
-@container sc-workbench (max-width: 560px) {
-  #style-custom-workbench .sc-path-row:has(> .sc-hit-owned) { grid-template-columns: 18px minmax(0, 1fr); }
-  #style-custom-workbench .sc-path-row:has(> .sc-hit-owned) > .sc-hit-owned,
-  #style-custom-workbench .sc-path-row:has(> .sc-hit-owned) > .sc-hit-actions { grid-column: 2; grid-row: auto; justify-self: start; }
-}
+/* The 보유 chip rides the start of the meta line, so the title line and the actions keep their own columns. */
+#style-custom-workbench .sc-hit-meta > .sc-hit-owned { margin-inline-end: var(--sc-space-2); vertical-align: middle; }
 @container sc-workbench (max-width: 560px) {
   #style-custom-workbench .sc-path-row > .sc-hit-actions:has(.sc-hit-around) { display: flex; }
 }
@@ -2511,7 +2588,7 @@
 #style-custom-workbench .sc-inbox-meta .sc-preprint { vertical-align: middle; }
 #style-custom-workbench .sc-inbox-who { white-space: nowrap; }
 #style-custom-workbench .sc-inbox-person { margin: 0; vertical-align: baseline; }
-#style-custom-workbench .sc-inbox-role { margin-inline-start: var(--sc-space-1); color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
+#style-custom-workbench .sc-inbox-role { margin-inline-start: var(--sc-space-1); color: var(--sc-muted); font-size: inherit; line-height: inherit; }
 #style-custom-workbench .sc-inbox-fact { color: var(--sc-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #style-custom-workbench .sc-inbox-read { white-space: nowrap; }
 #style-custom-workbench .sc-inbox-status .sc-hit-owned { flex: none; }
@@ -2550,7 +2627,7 @@
 #style-custom-workbench .sc-author-graph g[data-state=dim] .sc-author-ring { opacity: .3; }
 #style-custom-workbench .sc-author-graph g[role=button]:focus-visible { outline: 0; }
 #style-custom-workbench .sc-author-graph g[role=button]:focus-visible .sc-author-ring { stroke: var(--sc-text); stroke-width: 3; stroke-dasharray: 3 2; }
-#style-custom-workbench .sc-author-graph-info { margin: var(--sc-space-2) 0 0; padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); min-width: 0; }
+#style-custom-workbench .sc-author-graph-info { margin: var(--sc-space-2) 0 0; padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); min-width: 0; }
 #style-custom-workbench .sc-author-graph-info[hidden] { display: none; }
 #style-custom-workbench .sc-author-graph-who { display: flex; align-items: center; gap: var(--sc-space-3); min-width: 0; }
 #style-custom-workbench .sc-author-graph-who .sc-watch-face { flex: none; width: 28px; height: 28px; }
@@ -2586,8 +2663,8 @@
   white-space: normal; overflow: visible; text-overflow: clip;
 }
 #style-custom-workbench .sc-watch-expand-body {
-  box-sizing: border-box; min-width: 0; max-width: 100%; padding: var(--sc-space-4);
-  border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge);
+  box-sizing: border-box; min-width: 0; max-width: 100%; padding: var(--sc-space-2) 0 0;
+  border-radius: 0; background: transparent; box-shadow: none;
   white-space: normal; text-align: start; font-weight: var(--sc-fw-regular); cursor: default;
   outline: none; animation: sc-watch-open .24s ease backwards;
 }
@@ -2603,6 +2680,12 @@
 }
 /* The person inside the panel. */
 #style-custom-workbench .sc-person-detail { min-width: 0; }
+/* Three surfaces only: the opened row and its detail are one grey band; what is inside it is white cards on that grey, not a grey box in a white box in a grey box. */
+#style-custom-workbench .sc-watch-expand-body .sc-person-group,
+#style-custom-workbench .sc-watch-expand-body .sc-author-news { margin: 0 0 var(--sc-space-4); padding: 0; background: transparent; box-shadow: none; border-radius: 0; }
+#style-custom-workbench .sc-watch-expand-body .sc-person-group > .sc-section-head { padding-inline: 0; }
+#style-custom-workbench .sc-watch-expand-body .sc-person-detail > .sc-actions { padding: var(--sc-space-3) 0 var(--sc-space-2); }
+#style-custom-workbench .sc-author-head-date { margin-inline-start: var(--sc-space-2); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-person-compact { margin: 0; }
 #style-custom-workbench .sc-person-compact .sc-profile { margin: 0; align-items: center; }
 #style-custom-workbench .sc-person-compact .sc-chips { margin-block-start: var(--sc-space-2); }
@@ -2612,14 +2695,14 @@
 #style-custom-workbench .sc-person-detail > .sc-person-group { margin: 0 0 var(--sc-space-3); }
 #style-custom-workbench .sc-person-detail > .sc-person-group:last-child { margin-block-end: 0; }
 #style-custom-workbench .sc-person-loading { margin: 0 0 var(--sc-space-3); }
-#style-custom-workbench .sc-person-detail .sc-author-news-line { grid-template-columns: minmax(80px, 96px) minmax(0, 1fr); padding: 0 var(--sc-space-1); }
+#style-custom-workbench .sc-person-detail .sc-author-news-line { grid-template-columns: minmax(80px, 96px) minmax(0, 1fr); padding: 0; }
 #style-custom-workbench .sc-person-group .sc-author-inbox { margin: 0; }
 #style-custom-workbench .sc-person-group .sc-local-reading-more { margin-block-start: var(--sc-space-2); }
 /* The papers of theirs on the shelf: white row cards, the title over a calm status on the right. */
 #style-custom-workbench .sc-author-shelf { display: flex; flex-direction: column; gap: var(--sc-space-2); }
 #style-custom-workbench .sc-author-shelf-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sc-space-3);
-  padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge);
+  padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge);
 }
 #style-custom-workbench .sc-author-shelf-row .sc-hit-title-link {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-width: 0; overflow: hidden; overflow-wrap: anywhere;
@@ -2632,7 +2715,7 @@
 #style-custom-workbench .sc-shelf-state[data-status=reading] { color: var(--sc-reading-ink); }
 /* The circle of colleagues: a grid that wraps, never a row cut at the edge. */
 #style-custom-workbench .sc-person-group .sc-network { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--sc-space-2); margin: 0; }
-#style-custom-workbench .sc-person-group .sc-node { padding: var(--sc-space-2) var(--sc-space-3) var(--sc-space-2) var(--sc-space-2); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-person-group .sc-node { padding: var(--sc-space-2) var(--sc-space-3) var(--sc-space-2) var(--sc-space-2); border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
 #style-custom-workbench .sc-person-group .sc-node:hover { background: var(--sc-fill); }
 #style-custom-workbench .sc-person-group .sc-node[data-followed=true] { box-shadow: 0 0 0 1px var(--sc-border-strong); }
 #style-custom-workbench .sc-node-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -2656,8 +2739,220 @@
 #style-custom-workbench .sc-watch-group-toggle .sc-section-head-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-watch-group-toggle .sc-section-head-count { flex: none; white-space: nowrap; }
 #style-custom-workbench .sc-watch-group-new { flex: none; margin-inline-start: auto; padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-pill); background: var(--sc-lime); color: var(--sc-lime-ink); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-h-badge) var(--sc-font); white-space: nowrap; }
-#style-custom-workbench .sc-watch-group-body { border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); overflow: hidden; }
+#style-custom-workbench .sc-watch-group-body { border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); overflow: hidden; }
 #style-custom-workbench .sc-watch-group-body th { background: var(--sc-surface); }
 /* Only the first group shows the column names; the others keep them for the grid's widths without drawing them. */
 #style-custom-workbench .sc-watch-table-continued thead { visibility: collapse; }
 #style-custom-workbench .sc-watch-chip[data-empty=true]:not([aria-pressed=true]) { color: var(--sc-muted); }
+
+/* ==== Detail review 2026-10-03, tabs 저널 지표 / 읽기 진행 / 노트 / 주석 / 첨부 미리보기 ==== */
+/* 저널 지표: counts are plain numbers (the unit is in the header), the name column is capped so the plot takes the slack. */
+#style-custom-workbench .sc-journal-reading-row { grid-template-columns: minmax(140px, 240px) 52px 60px 124px 68px minmax(272px, 1fr); }
+#style-custom-workbench .sc-journal-reading-count { height: auto; min-height: 0; min-width: 0; padding: 0; border-radius: var(--sc-radius-sm); background: transparent; color: var(--sc-text); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-journal-reading-num > .sc-journal-reading-count { min-width: 0; margin-inline-start: auto; }
+#style-custom-workbench button.sc-journal-reading-count:hover,
+#style-custom-workbench .sc-journal-reading-count[aria-expanded=true] { background: transparent; text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-journal-reading-count-none { color: var(--sc-faint); }
+#style-custom-workbench .sc-journal-reading-count-none:hover { background: transparent; text-decoration: none; }
+#style-custom-workbench .sc-journal-reading-unnamed { color: var(--sc-muted); font-weight: var(--sc-fw-regular); }
+#style-custom-workbench .sc-journal-reading-name-text[data-known] { font-weight: var(--sc-fw-strong); }
+/* The bars carry no per-row words (the legend says which is which). */
+#style-custom-workbench .sc-journal-reading-share { grid-template-columns: minmax(0, 1fr) 36px; }
+#style-custom-workbench .sc-journal-legend-line { display: flex; flex-wrap: wrap; gap: var(--sc-space-1) var(--sc-space-4); }
+/* The tick labels sit over the plot only: grid column 1, not across the value column. */
+#style-custom-workbench .sc-journal-citation-axis { grid-column: 1; }
+#style-custom-workbench .sc-journal-citation-head,
+#style-custom-workbench .sc-journal-reading-citation-compare { grid-template-columns: 136px minmax(0, 1fr); }
+#style-custom-workbench .sc-journal-citation-title { grid-column: 1 / -1; }
+#style-custom-workbench .sc-journal-citation-coverage { color: var(--sc-muted); }
+#style-custom-workbench .sc-journal-citation-line .sc-none-mark { color: var(--sc-faint); }
+#style-custom-workbench .sc-journal-reading-num .sc-none-mark { margin-inline-start: auto; }
+/* The unavailable-catalog notice is a full-width card like every other empty state. */
+#style-custom-workbench .sc-jcr-unavailable.sc-empty { max-width: none; margin: var(--sc-space-4) 0; }
+/* Narrow: no header row over a stacked layout; the two counts say what they are, the coverage moves to the tooltip. */
+@container sc-workbench (max-width: 900px) {
+  #style-custom-workbench .sc-journal-reading-header { display: none; }
+  #style-custom-workbench .sc-journal-reading-row { grid-template-columns: auto auto minmax(0, 1fr) auto; justify-content: start; }
+  #style-custom-workbench .sc-journal-reading-num[data-label] { justify-content: flex-start; gap: var(--sc-space-1); }
+  #style-custom-workbench .sc-journal-reading-num[data-label]::before { content: attr(data-label); color: var(--sc-muted); font-size: var(--sc-fs-meta); }
+  #style-custom-workbench .sc-journal-reading-count::after { content: attr(data-unit); }
+  #style-custom-workbench .sc-journal-reading-num > .sc-journal-reading-count { margin-inline-start: 0; }
+  #style-custom-workbench .sc-journal-citation-coverage { display: none; }
+}
+
+
+/* ==== 보유 문헌 · 최근 문헌 (detail review 2026-10-03) ==========================
+   The summary is one soft card: today's step as its head, the status bar, six tiles that always fill
+   their rows, the unread picks as a small table. The list is one soft group ("보유 문헌 · 403") whose
+   toolbar carries the selection verbs and the pager, with the column heads under it. */
+#style-custom-workbench .sc-overview { padding: var(--sc-space-3) var(--sc-space-4); }
+#style-custom-workbench .sc-overview > .sc-today { margin: 0; padding-block-end: var(--sc-space-2); }
+#style-custom-workbench .sc-overview > .sc-today ~ .sc-overview-meter { margin-block-start: 0; }
+#style-custom-workbench .sc-overview > .sc-local-reading-links,
+#style-custom-workbench .sc-overview > .sc-overview-picks,
+#style-custom-workbench .sc-overview > .sc-overview-month { padding: 0; margin: 0; }
+#style-custom-workbench .sc-overview-month { font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+/* Tiles: a grid whose column count follows the tile count, so a row is never left with one lone tile. */
+#style-custom-workbench .sc-overview-facts[data-tiles] { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+#style-custom-workbench .sc-overview-facts[data-tiles] > * { flex: none; min-width: 0; }
+#style-custom-workbench .sc-overview-facts[data-tiles="1"] { grid-template-columns: minmax(0, 240px); }
+#style-custom-workbench .sc-overview-facts[data-tiles="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#style-custom-workbench .sc-overview-facts[data-tiles="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#style-custom-workbench .sc-overview-facts[data-tiles="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#style-custom-workbench .sc-overview-facts[data-tiles="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#style-custom-workbench .sc-overview-facts[data-tiles="7"],
+#style-custom-workbench .sc-overview-facts[data-tiles="8"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#style-custom-workbench .sc-overview-queue { grid-column: 1 / -1; justify-self: start; min-height: var(--sc-h-seg); background: var(--sc-fill); box-shadow: none; }
+@container sc-workbench (max-width: 900px) {
+  #style-custom-workbench .sc-overview-facts[data-tiles="5"],
+  #style-custom-workbench .sc-overview-facts[data-tiles="6"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #style-custom-workbench .sc-overview-facts[data-tiles="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@container sc-workbench (max-width: 560px) {
+  #style-custom-workbench .sc-overview-facts[data-tiles] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #style-custom-workbench .sc-overview-facts[data-tiles="1"] { grid-template-columns: minmax(0, 1fr); }
+}
+/* Today's step, at the card's head. */
+#style-custom-workbench .sc-today-item[data-opens] { font-weight: var(--sc-fw-medium); }
+/* The unread picks: a label, then a title and its yearly rate on one line each, the rate flush right. */
+#style-custom-workbench .sc-overview-picks { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 0; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-overview-picks-label { display: block; padding-block-end: var(--sc-space-1); color: var(--sc-muted); font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-overview-pick { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sc-space-3); width: 100%; max-width: none; padding-block: 2px; }
+#style-custom-workbench .sc-overview-pick .sc-hit-title-link { flex: 1 1 auto; min-width: 0; max-width: none; font-weight: var(--sc-fw-medium); }
+#style-custom-workbench .sc-overview-pick-rate { flex: none; font-variant-numeric: tabular-nums; text-align: end; }
+/* The list's toolbar: the selection verbs at the left, the pager at the right end. */
+#style-custom-workbench .sc-list-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sc-space-2) var(--sc-space-3); margin: 0 0 var(--sc-space-1); }
+#style-custom-workbench .sc-list-toolbar .sc-selection-tools { flex: 1 1 auto; }
+#style-custom-workbench .sc-list-toolbar .sc-selection-tools > summary { min-height: var(--sc-h-seg); display: inline-flex; align-items: center; padding: 0 var(--sc-space-3) 0 0; }
+#style-custom-workbench .sc-pager { display: inline-flex; align-items: center; gap: var(--sc-space-2); margin-inline-start: auto; color: var(--sc-muted); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-pager button { min-height: var(--sc-h-seg); padding: 0 var(--sc-space-3); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-pager button:disabled { background: var(--sc-fill); box-shadow: none; }
+/* The column heads: a quiet 제목 over the titles, the figures' names over their columns. */
+#style-custom-workbench .sc-paper-columns-title { padding-inline-start: 28px; color: var(--sc-faint); font-weight: var(--sc-fw-strong); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-paper-card .sc-paper-meta,
+#style-custom-workbench .sc-paper-card .sc-paper-remark { align-self: start; }
+#style-custom-workbench .sc-paper-column[data-metric=rating] { justify-content: center; }
+#style-custom-workbench .sc-paper-card .sc-stars { justify-content: center; }
+#style-custom-workbench .sc-paper-card .sc-stars .sc-metric-value { letter-spacing: 0; min-width: 0; }
+/* The title leads; the journal under it is medium, in its ink. */
+#style-custom-workbench .sc-paper-title { font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-paper-meta .sc-kind { flex: none; margin-inline-end: var(--sc-space-2); }
+/* The status dot and the selection box share one 16px slot: the dot rests there, the box takes its place under the pointer. */
+#style-custom-workbench .sc-paper-heading > .sc-check { width: 16px; justify-content: center; }
+#style-custom-workbench .sc-paper-heading > .sc-check input { position: absolute; inset-inline-start: 0; inset-block-start: 50%; transform: translateY(-50%); }
+#style-custom-workbench .sc-paper-card:hover .sc-paper-heading > .sc-check::before,
+#style-custom-workbench .sc-paper-card:focus-within .sc-paper-heading > .sc-check::before,
+#style-custom-workbench .sc-paper-card[data-selected=true] .sc-paper-heading > .sc-check::before { opacity: 0; }
+/* 읽기: the time on its own line, flush right; pages and 주석 on a quiet second line. */
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] { display: inline-flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; }
+#style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] .sc-metric-value { min-width: 0; text-align: end; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-metric-sub { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--sc-space-1); color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); white-space: nowrap; }
+#style-custom-workbench .sc-metric-sub .sc-row-progress { margin-inline-start: 0; }
+#style-custom-workbench .sc-metric-sub .sc-row-annotations { margin-inline-start: var(--sc-space-1); }
+/* 상세 필터: a grey button with the funnel and its count, pressed while the fields are open, so the row never reflows. */
+#style-custom-workbench .sc-search-row > .sc-filters > summary,
+#style-custom-workbench .sc-filters > summary { display: inline-flex; align-items: center; gap: var(--sc-space-2); min-height: var(--sc-h-ctl); padding: 0 var(--sc-space-4); border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-text); font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); white-space: nowrap; }
+#style-custom-workbench .sc-filters > summary::before { display: none; }
+#style-custom-workbench .sc-filters > summary:hover { background: var(--sc-fill-hover); }
+#style-custom-workbench .sc-filters[open] > summary,
+#style-custom-workbench .sc-filters > summary[data-active=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+#style-custom-workbench .sc-filters > summary .sc-nav-icon { color: currentColor; }
+/* Narrow (760): the sort heads are one left-packed tray, "정렬 IF 인용 별점 읽기". */
+@container sc-workbench (max-width: 760px) {
+  #style-custom-workbench .sc-paper-columns { display: inline-flex; width: max-content; max-width: 100%; flex-wrap: wrap; gap: 0; padding: calc((var(--sc-h-ctl) - var(--sc-h-seg)) / 2); border-radius: var(--sc-radius-pill); background: var(--sc-fill); border-block-end: 0; }
+  #style-custom-workbench .sc-paper-columns-title { display: none; }
+  #style-custom-workbench .sc-paper-columns-lead { padding-inline: var(--sc-space-3) var(--sc-space-1); color: var(--sc-muted); font-weight: var(--sc-fw-medium); }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-column { width: auto; min-height: var(--sc-h-seg); padding: 0 var(--sc-space-3); border-radius: var(--sc-radius-pill); background: transparent; color: var(--sc-muted); align-items: center; justify-content: center; }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-column[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+  #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] { flex-direction: row; align-items: center; gap: var(--sc-space-2); }
+  #style-custom-workbench .sc-metric-sub { justify-content: flex-start; }
+}
+
+/* ==== 논문 비교 (detail review 2026-10-03) ==== */
+#style-custom-workbench .sc-matrix-pager { display: inline-flex; align-items: center; gap: var(--sc-space-1); margin-inline-start: auto; }
+#style-custom-workbench .sc-matrix-pager-count { min-width: 40px; text-align: center; color: var(--sc-muted); font-variant-numeric: tabular-nums; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-matrix-pager .sc-icon-button { background: var(--sc-fill); }
+#style-custom-workbench .sc-matrix-pager .sc-icon-button:disabled { background: var(--sc-fill); }
+#style-custom-workbench .sc-matrix-scope { margin: 0 0 var(--sc-space-2); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+/* The title column keeps room to be read; the table scrolls sideways inside its frame with padding at the end, and a cell that overflows ends in an ellipsis. */
+#style-custom-workbench .sc-matrix-scroll { padding-inline-end: var(--sc-space-4); }
+#style-custom-workbench .sc-matrix th[scope=col]:first-child, #style-custom-workbench .sc-matrix td[data-field=title] { min-width: 260px; }
+#style-custom-workbench .sc-matrix:not([data-fit="true"]) td[data-field=venue], #style-custom-workbench .sc-matrix:not([data-fit="true"]) td[data-field=authors] { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-matrix th.sc-figure-cell, #style-custom-workbench .sc-matrix td.sc-figure-cell { text-align: end; }
+/* 최근 문헌: the week is a card of tiles; the event word on a row is a quiet lead-in, set like the rest of the meta line. */
+#style-custom-workbench .sc-paper-why { color: var(--sc-muted); font-weight: var(--sc-fw-regular); margin-inline-end: 0; }
+#style-custom-workbench .sc-paper-why::after { content: "·"; margin: 0 var(--sc-space-2); color: var(--sc-faint); font-weight: var(--sc-fw-regular); }
+
+/* 읽기 진행: the two tiles are compact (not half the page each); the memo is a quiet quote line with a label; the add button joins the right-hand actions;
+   controls inside a row are 26 tall; the record tabs are the one segmented style. */
+#style-custom-workbench .sc-reading-today > * { flex: 0 1 148px; }
+#style-custom-workbench .sc-resume-row select,
+#style-custom-workbench .sc-resume-row button,
+#style-custom-workbench .sc-reading-queue-row button { min-height: var(--sc-h-seg); }
+#style-custom-workbench .sc-resume-row .sc-segmented,
+#style-custom-workbench .sc-reading-queue-row .sc-segmented { min-height: var(--sc-h-seg); padding: 2px; }
+#style-custom-workbench .sc-resume-row .sc-segmented button,
+#style-custom-workbench .sc-reading-queue-row .sc-segmented button { min-height: calc(var(--sc-h-seg) - 4px); padding: 0 var(--sc-space-3); }
+#style-custom-workbench .sc-resume-row select { padding-inline-end: 28px; }
+#style-custom-workbench .sc-resume-remark { min-height: 0; padding: 0; background: none; box-shadow: none; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); text-align: start; max-width: 100%; }
+#style-custom-workbench .sc-resume-remark:hover { background: none; color: var(--sc-text); text-decoration: underline; text-underline-offset: 2px; }
+#style-custom-workbench .sc-resume-remark::before { content: "메모"; margin-inline-end: var(--sc-space-2); color: var(--sc-faint); font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-resume-remark-box:has(.sc-resume-remark-add) { margin-inline-start: auto; }
+#style-custom-workbench .sc-resume-row:has(.sc-resume-remark-add) > .sc-resume-actions { margin-inline-start: 0; }
+#style-custom-workbench .sc-segmented .sc-count { background: var(--sc-row-surface); }
+#style-custom-workbench details.sc-reader-look { margin-block-start: var(--sc-space-4); padding-inline: var(--sc-group-padding); }
+#style-custom-workbench .sc-reader-look > summary { display: flex; align-items: center; min-height: var(--sc-h-ctl); padding-top: var(--sc-space-1); color: var(--sc-text); font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-reader-look:not([open]) { padding-block-end: var(--sc-space-1); }
+@container sc-workbench (max-width: 760px) {
+  /* Narrow: the actions sit under the meta, left-aligned, and the status control keeps its x row to row (fixed-width first buttons). */
+  #style-custom-workbench .sc-resume-actions { flex: 0 1 auto; min-width: 0; margin-inline-start: 0; justify-content: flex-start; flex-wrap: wrap; }
+  #style-custom-workbench .sc-resume-actions > .sc-segmented { flex: 0 0 auto; }
+  #style-custom-workbench .sc-resume-actions > button:not([aria-pressed]) { min-width: 88px; }
+  #style-custom-workbench .sc-resume-remark-box:has(.sc-resume-remark-add) { margin-inline-start: 0; min-width: 88px; }
+  #style-custom-workbench .sc-resume-remark-box:has(.sc-resume-remark-add) > button { width: 100%; }
+}
+/* 노트: the trash is last, apart, and quiet. */
+#style-custom-workbench .sc-card .sc-danger-soft { margin-inline-start: auto; background: transparent; color: var(--sc-muted); }
+#style-custom-workbench .sc-card .sc-danger-soft:hover { background: var(--sc-error-bg); color: var(--sc-error); }
+/* 주석: equal-height cards, the card's text edge for labels and memo, a ring on every colour dot, a quiet select-all. */
+#style-custom-workbench .sc-annots { align-items: stretch; }
+#style-custom-workbench .sc-annot-paper .sc-annot-file { margin: var(--sc-space-3) 0 var(--sc-space-2) var(--sc-card-padding); }
+#style-custom-workbench .sc-annot-memo-row { display: flex; align-items: flex-start; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-annot-memo-label { flex: none; padding-block: var(--sc-space-1); color: var(--sc-faint); font: var(--sc-fw-strong) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-annot-memo-row .sc-annot-memo { flex: 1 1 auto; width: auto; min-width: 0; margin-inline-start: calc(var(--sc-space-2) * -1); }
+#style-custom-workbench .sc-annot-dot,
+#style-custom-workbench .sc-annot-page::before { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .28); }
+#style-custom-workbench .sc-annot-select-all { background: transparent; box-shadow: none; color: var(--sc-muted); font-weight: var(--sc-fw-regular); }
+#style-custom-workbench .sc-annot-select-all:hover { background: var(--sc-fill-hover); color: var(--sc-text); }
+#style-custom-workbench .sc-annot-group-meta { margin: 0 0 var(--sc-space-2); color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+/* 첨부 미리보기: the type badge sits after the name, the group title is on the content edge. */
+#style-custom-workbench .sc-attachment-kind { margin-inline-start: var(--sc-space-2); }
+#style-custom-workbench .sc-attachment-group-title { margin-inline: 0; }
+
+/* ==== 스타일 편집: grouped switches, a stepper, one row of look controls ==== */
+#style-custom-workbench .sc-settings-sublabel { margin: var(--sc-space-3) 0 var(--sc-space-1); color: var(--sc-muted); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); letter-spacing: .08em; }
+#style-custom-workbench .sc-settings-note + .sc-settings-sublabel { margin-block-start: var(--sc-space-2); }
+#style-custom-workbench .sc-stepper { display: inline-flex; align-items: center; gap: var(--sc-space-1); box-sizing: border-box; min-height: var(--sc-h-ctl); padding: calc((var(--sc-h-ctl) - var(--sc-h-seg)) / 2); border-radius: var(--sc-radius-pill); background: var(--sc-fill); }
+#style-custom-workbench .sc-stepper-value { min-width: 28px; text-align: center; font: var(--sc-fw-strong) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-stepper .sc-stepper-button { min-height: var(--sc-h-seg); min-width: var(--sc-h-seg); width: var(--sc-h-seg); padding: 0; background: var(--sc-surface); box-shadow: none; }
+#style-custom-workbench .sc-stepper .sc-stepper-button:hover:not(:disabled) { background: var(--sc-fill-hover); }
+#style-custom-workbench .sc-settings-part input[type=color] { height: var(--sc-h-ctl); min-height: var(--sc-h-ctl); }
+#style-custom-workbench .sc-settings-part .sc-actions { align-items: center; }
+/* 상세 필터 open (detail review 2026-10-03): the label sits in its own column and the kinds wrap under the kinds, not under the label; one muted hint style; zero-count options are dimmed; the active-rule chips are the grey filter chip on the content edge. */
+#style-custom-workbench .sc-rules-bar { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: start; gap: var(--sc-space-2) var(--sc-space-3); }
+#style-custom-workbench .sc-rules-bar .sc-rules-title { display: inline-flex; align-items: center; min-height: var(--sc-h-seg); }
+#style-custom-workbench .sc-rule-opt[data-zero=true] .sc-rule-opt-name,
+#style-custom-workbench .sc-rule-opt[data-zero=true] .sc-rule-opt-abbr { color: var(--sc-muted); }
+#style-custom-workbench .sc-rule-opt[data-zero=true] .sc-count { background: transparent; color: var(--sc-faint); }
+#style-custom-workbench .sc-rule-preview { color: var(--sc-muted); font-weight: var(--sc-fw-regular); }
+#style-custom-workbench .sc-rules-hint { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-3); }
+#style-custom-workbench .sc-rules-hint-label { font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-rules-hint-code { padding: 1px var(--sc-space-2); border-radius: var(--sc-radius-sm); background: var(--sc-fill); color: var(--sc-text); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) ui-monospace, SFMono-Regular, Menlo, monospace; }
+#style-custom-workbench .sc-filter-chips { padding: var(--sc-space-2) var(--sc-content-padding); max-height: none; }
+#style-custom-workbench .sc-filter-chips .sc-rule-chip[data-mode=ex] { background: var(--sc-fill); box-shadow: none; color: var(--sc-text); }
+#style-custom-workbench .sc-filters { margin: 0; }
+#style-custom-workbench .sc-group > .sc-empty { margin: var(--sc-space-2) auto; background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+/* 저널 지표 narrow: the stacked row keeps fixed tracks so the bars and times line up down the list. */
+@container sc-workbench (max-width: 900px) {
+  #style-custom-workbench .sc-journal-reading-row { grid-template-columns: 96px 116px minmax(0, 1fr) 60px; }
+}

@@ -695,7 +695,7 @@
      on the page -- most journal colours are dark enough -- and only pulled
      along its own hue, at its own saturation, when it does not. Black stays
      black. The fill is the same hue washed nearly out. */
-  const WHITE = '#ffffff', DARK_BG = '#1c1c1f';
+  const WHITE = '#ffffff', DARK_BG = '#2c2d35'; // the lightest dark fill a name sits on (a selected row, 2026-10-03), so it reads on every dark surface
   function contrast(a, b) {
     const la = luminance(a), lb = luminance(b);
     return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);

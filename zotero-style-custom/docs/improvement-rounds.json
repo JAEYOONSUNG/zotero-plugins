@@ -2530,7 +2530,7 @@
       "sources": [
         {
           "file": "src/workbench.js",
-          "marker": "하위 포함 ${c.deepCount}편"
+          "marker": "하위 컬렉션까지 ${c.deepCount}편"
         },
         {
           "file": "src/library.js",

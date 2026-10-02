@@ -544,6 +544,31 @@
       return `${buttons.length} icons`;
     }));
 
+    /* A journal the registry knows is printed in its own ink in 보유 문헌: the span carries data-known and
+       both themes' inks. Every rendered venue is checked against the registry's own verdict, and a venue
+       the registry knows must be present for the check to say anything (Science and Nature always are). */
+    results.push(await attempt('a known journal is drawn in its ink in 보유 문헌', async () => {
+      const state = runtime.windows.get(win);
+      const bench = state && state.workbench;
+      if (!bench) throw new Error('workbench not attached');
+      const identity = runtime.journalIdentity;
+      if (!identity || typeof identity.identify !== 'function') throw new Error('no journal identity on the runtime');
+      for (const name of ['Science', 'Nature']) if (!identity.identify(name)) throw new Error(name + ' is not known to the registry');
+      await bench.show('explore');
+      const spans = [...bench.panel.querySelectorAll('.sc-paper-venue')];
+      const bad = [], inked = [];
+      for (const span of spans) {
+        const known = identity.identify(String(span.textContent).trim());
+        if (!known) continue;
+        const ink = span.style.getPropertyValue('--j-ink-l');
+        if (span.dataset.known !== '1' || !ink) bad.push(span.textContent);
+        else inked.push(span.textContent);
+      }
+      try { await bench.toggle(false); } catch (ignored) {}
+      if (bad.length) throw new Error('known journals without their ink: ' + [...new Set(bad)].slice(0, 5).join(' | '));
+      return `${inked.length} of ${spans.length} venues in ink`;
+    }));
+
     results.push(await attempt('every library-wide sweep reads real items', async () => {
       const got = await runtime.libraryItems(library);
       if (!Array.isArray(got) || !got.length) throw new Error('libraryItems returned ' + (got && got.length));

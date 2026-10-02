@@ -43,7 +43,7 @@
   if(!rows.length)return null;
   return rows.slice().sort((a,b)=>(a.quartile??5)-(b.quartile??5)||(b.percentile??-1)-(a.percentile??-1))[0];
  }
- const TABS=[['explore','보유 문헌'],['recent','최근 문헌'],['related','관련 논문'],['authors','저자 추적'],['graph','관계 그래프'],['tags','중첩 태그'],['notes','노트'],['annotations','주석'],['backlinks','역링크'],['attachments','첨부 미리보기'],['reading','읽기 진행'],['tabs','탭 관리'],['views','뷰 그룹'],['canvas','캔버스'],['matrix','논문 비교'],['collections','컬렉션'],['journals','저널 지표'],['assist','번역 · AI'],['appearance','스타일 편집']];
+ const TABS=[['explore','보유 문헌'],['recent','최근 문헌'],['related','관련 논문'],['authors','저자 추적'],['graph','관계 그래프'],['tags','중첩 태그'],['notes','노트'],['annotations','주석'],['backlinks','역링크'],['attachments','첨부 미리보기'],['reading','읽기 진행'],['tabs','탭 관리'],['views','뷰 그룹'],['canvas','캔버스'],['matrix','논문 비교'],['collections','컬렉션'],['journals','저널 지표'],['assist','번역·AI'],['appearance','스타일 편집']];
  const GROUPS=[['탐색',['explore','recent','related','authors','collections','journals']],['읽기',['reading','notes','annotations','attachments','backlinks']],['정리',['tags','graph','canvas','matrix']],['도구',['tabs','views','assist','appearance']]];
  const FILTER_TABS=new Set(['explore','recent','collections','journals','reading','notes','annotations','attachments','tags','graph']);
  function attach(win,{runtime,library,reader,model,assist}){
@@ -215,6 +215,11 @@
   const SVG_NS='http://www.w3.org/2000/svg';
   const ICONS={
    density:[['line',{x1:3,y1:5,x2:13,y2:5}],['line',{x1:3,y1:8,x2:13,y2:8}],['line',{x1:3,y1:11,x2:13,y2:11}]],
+   matrixPrev:[['path',{d:'M9.8 3.5 5.3 8l4.5 4.5'}]],
+   matrixNext:[['path',{d:'M6.2 3.5 10.7 8l-4.5 4.5'}]],
+   like:[['path',{d:'M8 13.2 3.3 8.6a2.9 2.9 0 0 1 4.1-4.1L8 5.1l.6-.6a2.9 2.9 0 0 1 4.1 4.1z'}]],
+   repost:[['path',{d:'M3 7V6a2 2 0 0 1 2-2h7.5M10.5 2l2 2-2 2M13 9v1a2 2 0 0 1-2 2H3.5M5.5 14l-2-2 2-2'}]],
+   comment:[['path',{d:'M3 3.5h10v7H7.5L4.5 13v-2.5H3z'}]],
    search:[['circle',{cx:7.25,cy:7.25,r:4.25}],['line',{x1:10.5,y1:10.5,x2:13.5,y2:13.5}]],
    close:[['line',{x1:4,y1:4,x2:12,y2:12}],['line',{x1:12,y1:4,x2:4,y2:12}]],
    maximize:[['path',{d:'M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4'}]],
@@ -224,6 +229,7 @@
    // One drawn shape per tab. Nineteen identical lines of text is a list you
    // read; nineteen distinct silhouettes is a list you recognise, which is the
    // difference between finding a tab and scanning for it every time.
+   filter:[['path',{d:'M2.5 4h11l-4.2 5v3.6l-2.6 1.2V9z'}]],
    explore:[['rect',{x:2.75,y:3,width:3,height:10,rx:.8}],['rect',{x:7.25,y:3,width:3,height:10,rx:.8}],
     ['path',{d:'M11.9 3.6l1.9.5-2.2 9.1-1.2-.3'}]],
    recent:[['circle',{cx:8,cy:8,r:5.25}],['path',{d:'M8 5.1V8l2.2 1.7'}]],
@@ -294,7 +300,9 @@
   // Initials are what stands in for a face until one is found, and what stands
   // in permanently for someone who has no public portrait.
   function initials(name){
-   const parts=String(name||'').trim().split(/\s+/).filter(Boolean);
+   /* A generational suffix is not a surname: "Michael B. Elowitz II" is ME, not MI. */
+   const all=String(name||'').trim().split(/\s+/).filter(Boolean);
+   const parts=all.filter((word,index)=>index===0||!/^(jr|sr|ii|iii|iv|v)\.?,?$/i.test(word));
    if(!parts.length)return '?';
    const first=parts[0][0]||'';
    const last=parts.length>1?parts[parts.length-1][0]:'';
@@ -327,11 +335,13 @@
   /* A journal's name in its own signature ink, the one treatment shared by the
      library cards and the inbox: the full name once, never beside a badge that
      spells the same journal again. Both themes' inks travel with it. */
+  function inkJournal(element,venue){
+   const J=runtime.journalIdentity,known=J?.identify?.(String(venue||'').trim());
+   if(known&&typeof J.colours==='function'){const light=J.colours(known,{dark:false})||{},dark=J.colours(known,{dark:true})||{};if(light.ink&&dark.ink){element.style.setProperty('--j-ink-l',light.ink);element.style.setProperty('--j-ink-d',dark.ink);element.dataset.known='1';element.classList.add('sc-ink');}}
+   return element;
+  }
   function venueSpan(parent,venue){
-   const span=node('span',venue,parent,{class:'sc-paper-venue'});
-   const J=runtime.journalIdentity,known=J?.identify?.(String(venue).trim());
-   if(known&&typeof J.colours==='function'){const light=J.colours(known,{dark:false})||{},dark=J.colours(known,{dark:true})||{};if(light.ink&&dark.ink){span.style.setProperty('--j-ink-l',light.ink);span.style.setProperty('--j-ink-d',dark.ink);span.dataset.known='1';}}
-   return span;
+   return inkJournal(node('span',venue,parent,{class:'sc-paper-venue'}),venue);
   }
   /* A preprint server as a reader names it: OpenAlex spells bioRxiv out as
      "bioRxiv (Cold Spring Harbor Laboratory)", a repository's collection after
@@ -551,7 +561,7 @@
    if(counts.size<2)return;
    const order=['journalArticle','preprint','conferencePaper','patent','thesis','book','bookSection','report'];
    const kinds=[...counts].sort((a,b)=>(order.indexOf(a[0])+1||99)-(order.indexOf(b[0])+1||99)||b[1]-a[1]);
-   const chip=(label,value,count,title)=>{const b=node('button',null,kindChips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(state.type===value),title});withCount(b,label,count);b.dataset.kind=value;b.addEventListener('click',()=>{state.type=state.type===value?'':value;type.value=state.type;render();});return b;};
+   const chip=(label,value,count,title)=>{const b=node('button',null,kindChips,{class:'sc-chip sc-chip-button',type:'button','aria-pressed':String(state.type===value),title:T(title)+' · '+T(`라이브러리 전체 ${fmtN(count)}편 기준`)});withCount(b,label,count);b.dataset.kind=value;b.addEventListener('click',()=>{state.type=state.type===value?'':value;type.value=state.type;render();});return b;};
    chip('전체','',state.items.length,'모든 종류');
    for(const [kind,count] of kinds)chip(kindLabel(kind),kind,count,`${T(kindLabel(kind))}만 보기`);
   }
@@ -633,11 +643,9 @@
   const rulesBox=node('div',null,filterPanel,{class:'sc-rules',role:'group','aria-label':'포함·제외 규칙'});
   const rulesBar=node('div',null,rulesBox,{class:'sc-rules-bar'});
   node('span','규칙 추가',rulesBar,{class:'sc-rules-title'});
-  const addMode=node('div',null,rulesBar,{class:'sc-segmented',role:'group','aria-label':'새 규칙의 방식'});
   const ruleKindsBox=node('div',null,rulesBar,{class:'sc-rule-kinds'});
-  const addModeButtons=[['in','포함','조건에 맞는 문헌만 남깁니다'],['ex','제외','조건에 맞는 문헌을 뺍니다']].map(([value,label,title])=>button(label,()=>{ruleMode=value;syncAddMode();},addMode,{'aria-pressed':String(value===ruleMode),'data-mode':value,title}));
-  const kindAria=kind=>`${T(RULE_LABEL[kind]||kind)} ${T(ruleMode==='ex'?'제외 규칙 추가':'포함 규칙 추가')}`;
-  function syncAddMode(){for(const b of addModeButtons)b.setAttribute('aria-pressed',String(b.dataset.mode===ruleMode));for(const b of ruleKindsBox.querySelectorAll('button'))b.setAttribute('aria-label',kindAria(b.dataset.kind));}
+  /* 포함 or 제외 is chosen once, in the editor that opens (it was asked twice: here and there). */
+  const kindAria=kind=>`${T(RULE_LABEL[kind]||kind)} ${T('규칙 추가')}`;
   function ruleDefaults(kind){
    if(kind==='word')return {field:'all',text:'',phrase:true};
    if(kind==='tag')return {values:[],all:false,children:true};
@@ -656,7 +664,16 @@
     const b=button(RULE_LABEL[kind]||kind,()=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,b),ruleKindsBox,{class:'sc-chip sc-chip-button sc-rule-kind','data-kind':kind,'aria-label':kindAria(kind)});}
   }
   const editor=node('div',null,rulesBox,{class:'sc-rule-editor',role:'group'});editor.hidden=true;
-  node('p','검색창 빠른 문법: -단어(제외) · “구절” · 제목:단어 · -저자:김 · 연도:2018-2022 · 태그: · 저널:(이름·약어 제안) · 컬렉션:',rulesBox,{class:'sc-rules-hint'});
+  {
+   /* The search box's shorthand as code chips with a worked example each (a bare "태그:" said nothing). */
+   const hint=node('p',null,rulesBox,{class:'sc-rules-hint'});
+   node('span',T('검색창 빠른 문법'),hint,{class:'sc-rules-hint-label'});
+   for(const [code,note] of [['-단어','제외'],['“구절”','문장 그대로'],['제목:단어',''],['-저자:김','제외'],['연도:2018-2022',''],['태그:methods',''],['저널:Nat Methods','이름·약어 제안'],['컬렉션:Review','']]){
+    const entry=node('span',null,hint,{class:'sc-rules-hint-item'});
+    node('code',code,entry,{class:'sc-rules-hint-code'});
+    if(note)entry.appendChild(doc.createTextNode(' '+T(note)));
+   }
+  }
   let editorPool=[];
   async function openRuleEditor(rule,editing,trigger){
    const draft={...rule,...(rule.values?{values:[...rule.values]}:{})};
@@ -747,6 +764,7 @@
       node('span',null,row,{class:'sc-rule-opt-name',title:o.abbr?`${o.label} · ${o.abbr}`:o.label}).textContent=o.label;
       if(o.abbr)node('span',null,row,{class:'sc-rule-opt-abbr'}).textContent=o.abbr;
       node('span',String(o.count),row,{class:'sc-count'});
+      row.dataset.zero=String(!o.count);
      }
      if(!all.length)node('p','맞는 항목이 없습니다.',list,{class:'sc-rule-note'});
      more.textContent=all.length>RULE_LIST_LIMIT?T(`${all.length}개 중 ${RULE_LIST_LIMIT}개만 표시합니다. 위 검색으로 좁히세요.`):'';
@@ -810,13 +828,36 @@
   content.append(controls,filterChips,status,welcome,notice);
   const body=node('div',null,content,{class:'sc-body',tabindex:'-1'});
   const navButtons=new Map();
+  /* The rail scrolls only when the current section is actually out of sight. scrollIntoView honoured the rail's
+     scroll padding, so an item inside the top 32px lifted the whole rail by 4px on that one tab. A strip that
+     scrolls sideways (narrow panel) fades only the edge that has more behind it. */
+  function syncNavFade(){
+   const row=nav.scrollWidth>nav.clientWidth+2&&nav.scrollHeight<=nav.clientHeight+2;
+   nav.dataset.fadeStart=String(row&&nav.scrollLeft>2);
+   nav.dataset.fadeEnd=String(row&&nav.scrollLeft+nav.clientWidth<nav.scrollWidth-2);
+  }
+  function revealNav(button,center){
+   if(!button||disposed)return;
+   const a=button.getBoundingClientRect(),b=nav.getBoundingClientRect();
+   if(!b.width||!b.height){syncNavFade();return;}
+   const row=nav.scrollWidth>nav.clientWidth+2&&nav.scrollHeight<=nav.clientHeight+2;
+   if(row){
+    const out=a.left<b.left+24||a.right>b.right-24;
+    if(out||center&&Math.abs((a.left+a.width/2)-(b.left+b.width/2))>b.width/3)nav.scrollLeft+=(a.left+a.width/2)-(b.left+b.width/2);
+   }else if(a.top<b.top||a.bottom>b.bottom){
+    nav.scrollTop+=a.top<b.top?a.top-b.top-12:a.bottom-b.bottom+12;
+   }
+   syncNavFade();
+  }
+  nav.addEventListener('scroll',syncNavFade,{passive:true});
+  try{new win.ResizeObserver(()=>syncNavFade()).observe(nav);}catch{}
   async function navigate(id,{focus=false}={}){if(!TABS.some(([key])=>key===id)||hiddenTabs().has(id))return;const request=++navigationEpoch;
    /* An error belongs to the page that raised it. "OpenAlex에서 이 논문의 저자를
       찾지 못했습니다" followed the reader into reading, notes and comparison and
       sat there in red. */
    // A message belongs to the page that wrote it, error or not.
    message('');
-   state.tab=id;await render();navButtons.get(id)?.scrollIntoView?.({block:'nearest',inline:'center'});if(disposed||panel.hidden||request!==navigationEpoch||state.tab!==id)return;await saveUI({lastTab:id});if(focus&&!disposed&&!panel.hidden&&request===navigationEpoch&&state.tab===id&&commands.hidden)body.focus?.();}
+   state.tab=id;await render();revealNav(navButtons.get(id),true);if(disposed||panel.hidden||request!==navigationEpoch||state.tab!==id)return;await saveUI({lastTab:id});if(focus&&!disposed&&!panel.hidden&&request===navigationEpoch&&state.tab===id&&commands.hidden)body.focus?.();}
   // The label stays: an icon alone would be a guessing game for nineteen tabs.
   // The icon is what makes the right one findable without reading all of them.
   function leadIcon(element,name){
@@ -1130,17 +1171,19 @@
    if(['explore','recent'].includes(state.tab)&&applicable&&Number.isFinite(n))setNavBadge(n);
    else if(!Number.isFinite(state.tabCount))setNavBadge(null);
    const originNote=state.scope==='selected'&&state.selectionLabel?' · '+state.selectionLabel:'';
-   contextDetail.textContent=nativeJCR?[runtime.jcrCatalog?.source?.provider,runtime.jcrCatalog?.source?.product].filter(Boolean).join(' · '):applicable?T(inside?`${scopeName} · ${n}개 문헌 범위 · 내용 검색`:`${scopeName} · ${n}개 문헌`)+originNote
-    :state.tab==='matrix'?T(`비교 중 ${matrixUsingPicker()?selected().length:rows().length}편`):state.tab==='collections'?''
+   contextDetail.textContent=nativeJCR?[runtime.jcrCatalog?.source?.provider,runtime.jcrCatalog?.source?.product].filter(Boolean).join(' · '):applicable?(state.scope==='library'?scopeName:T(`${scopeName} · ${n}개 문헌`))+originNote
+    :state.tab==='matrix'?(matrixUsingPicker()?T(`비교 중 ${selected().length}편`):T(`현재 목록 ${rows().length}편`)):state.tab==='collections'?''
     :['related','authors','backlinks'].includes(state.tab)&&selected().length===1?selected()[0].title
-    :state.selected.size===1?T('선택한 문헌 1개'):state.selected.size?T(`선택한 문헌 ${state.selected.size}개`):'';}
+    :state.selected.size===1?T('선택한 문헌 1개'):state.selected.size?T(`선택한 문헌 ${state.selected.size}개`):'';
+    /* The chip names the scope; the count lives in the kind chips and the nav badge, and in the tooltip. */
+    contextDetail.title=applicable&&Number.isFinite(n)?T(`${scopeName} · ${n}개 문헌`)+(inside?' · '+T('내용 검색'):''):'';}
    filterChips.replaceChildren();const labels={query:'검색',type:'유형'};
    for(const[key,label]of Object.entries(labels))if(state[key]){const value=state[key];button(`${label}: ${value} ×`,()=>{state[key]='';if(key==='query')search.value='';else if(key==='type')type.value='';else if(filterInputs.has(key))filterInputs.get(key).value='';return render();},filterChips,{'aria-label':label+' 필터 해제'});}
    drawRuleKinds();
    const ruleList=applicable?activeRules():[];for(const rule of ruleList)ruleChip(rule);
    const count=Object.keys(labels).filter(key=>state[key]).length+ruleList.length;
    if(count>1)button('모두 지우기',()=>resetFilters.click(),filterChips,{class:'sc-rule-clear','aria-label':'적용 중인 필터 모두 지우기'});
-   filterSummary.textContent=T('상세 필터')+(count?' · '+T(`${count}개 적용`):'');filterChips.hidden=!applicable||!count;
+   filterSummary.textContent=T('상세 필터')+(count?' · '+T(`${count}개 적용`):'');leadIcon(filterSummary,'filter');filterSummary.dataset.active=String(count>0);filterChips.hidden=!applicable||!count;
    for(const group of nav.querySelectorAll('.sc-nav-group'))group.hidden=[...group.querySelectorAll('[data-tab]')].every(button=>button.hidden);
    updateSelectionUI();
   }
@@ -1166,13 +1209,41 @@
    abortAround();aroundRow=null;previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
   }
 
+  /* One empty state for every tab: the tab's own outline icon, a heading, a muted hint, and the actions the page
+     offers inside the same card (callers append buttons to the returned element's .sc-empty-actions). */
+  function emptyCard(parent,{title='',hint='',icon,role}={}){
+   const card=node('div',null,parent,{class:'sc-empty',...(role?{role}:{})});
+   const name=icon||state.tab;
+   if(ICONS[name]){const holder=node('span',null,card,{class:'sc-empty-icon','aria-hidden':'true'});setIcon(holder,name);const svg=holder.firstChild;if(svg){svg.setAttribute('width','20');svg.setAttribute('height','20');}}
+   if(title)node('strong',T(title),card,{class:'sc-empty-title'});
+   if(hint)node('span',T(hint),card,{class:'sc-empty-hint'});
+   return card;
+  }
+  /* Actions that belong to an empty state sit inside its card, centred. */
+  function emptyActions(card){return node('div',null,card,{class:'sc-empty-actions'});}
   /* An empty page: one heading and, when the text has a second sentence, a muted hint. */
-  function empty(text){
-   const p=node('p',null,body,{class:'sc-empty'});
+  function empty(text,parent=body){
    const said=String(T(text)),cut=said.search(/[.!?。]\s+\S/);
-   if(cut<0){node('strong',said,p,{class:'sc-empty-title'});return;}
-   node('strong',said.slice(0,cut+1),p,{class:'sc-empty-title'});p.appendChild(doc.createTextNode(' '));
-   node('span',said.slice(cut+1).trim(),p,{class:'sc-empty-hint'});
+   if(cut<0)return emptyCard(parent,{title:said});
+   return emptyCard(parent,{title:said.slice(0,cut+1),hint:said.slice(cut+1).trim()});
+  }
+  /* The one empty-value marker: a dash in the faint ink, laid out like the values around it. */
+  const noneMark=parent=>node('span','—',parent,{class:'sc-none-mark'});
+  /* A figure with thousands separators, the same in every locale: 198,432. */
+  const fmtN=value=>{const n=Number(value);return Number.isFinite(n)?n.toLocaleString('en-US'):String(value??'');};
+  /* The one stat-tile row: a value over a label, the same tile on every page. entries are
+     {value,label,title,pressed,onClick,disabled}; a tile with onClick is a button. Label never truncates:
+     long qualifiers go in the title. */
+  function statTiles(parent,entries,{label:aria}={}){
+   const row=node('div',null,parent,{class:'sc-overview-facts',role:'group',...(aria?{'aria-label':T(aria)}:{})});
+   row.dataset.tiles=String(Math.min(8,entries.filter(e=>e&&e.value!=null&&e.value!=='').length));
+   for(const entry of entries.filter(e=>e&&e.value!=null&&e.value!=='')){
+    const tile=entry.onClick?button('',entry.onClick,row,{class:'sc-overview-fact',...(entry.pressed!=null?{'aria-pressed':String(!!entry.pressed)}:{})}):node('span',null,row,{class:'sc-overview-fact'});
+    if(entry.title)tile.title=T(entry.title);
+    if(entry.disabled&&entry.onClick)tile.disabled=true;
+    node('b',String(entry.value),tile);tile.appendChild(doc.createTextNode(' '));node('span',T(entry.label),tile,{class:'sc-overview-fact-label'});
+   }
+   return row;
   }
   function bar(parent=body){return node('div',null,parent,{class:'sc-actions'});}
   // The headline and its detail go in their own block so that everything a
@@ -1182,8 +1253,8 @@
      grey, over a rule. Every tab used to make its own -- an 11px grey capital
      label on one, a 19px title on another, none on a third -- so no two pages
      could be read the same way. */
-  function sectionHead(label,count,parent=body,extra=''){
-   const h=node('h3',null,parent,{class:'sc-hit-group sc-section-head'+(extra?' '+extra:'')});
+  function sectionHead(label,count,parent=body,extra='',tag='h3'){
+   const h=node(tag,null,parent,{class:'sc-hit-group sc-section-head'+(extra?' '+extra:''),...(tag==='h3'?{}:{role:'heading','aria-level':'3'})});
    node('span',T(label),h,{class:'sc-section-head-name'});
    // A real space between name and count, not only the gap the layout draws:
    // read as text, "논문1" is one word.
@@ -1313,7 +1384,7 @@
    if(Number.isFinite(at)){node('span',T('메모 일치'),line,{class:'sc-paper-remark-label'});const from=Math.max(0,at-30);line.appendChild(doc.createTextNode((from?'…':'')+own.slice(from,from+160).replace(/\s+/g,' ')));}
    else{node('span',T('메모'),line,{class:'sc-paper-remark-label'});line.appendChild(doc.createTextNode(own.split('\n')[0].slice(0,160)));}
   }
-  async function paperList(items,{why,hits}={}){
+  async function paperList(items,{why,hits,lead:weekHead}={}){
    if(!items.length){
     if(!state.items.length){empty('라이브러리에 문헌이 없습니다. ZotPoP으로 논문을 찾아 추가하세요.');if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP 열기',()=>runtime.Z.ZotPoP.openSearch(win),bar(),{'data-variant':'primary','data-opens':'window'});return;}
     empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');
@@ -1352,6 +1423,7 @@
       duplicates -- the cited-unread count is the fold's own summary line, and
       the longest-waiting paper is the first row of 읽기 대기 (oldest first),
       one press from the 읽기 대기 fact. */
+   let todayDraw=null;
    if(state.tab==='explore'&&!state.selected.size&&!state.query&&!state.status&&!Object.values(parentOptions()).some(Boolean)&&state.scope==='library'){
     const DAY_=864e5,stamp=v=>runtime.localStamp?runtime.localStamp(v)?.getTime():Date.parse(v||'');
     const recent=state.items.filter(i=>i.status!=='done').map(i=>{const ref=runtime.Z.Items.get(Number(i.id));const e=ref?runtime.entry(ref):{};return {i,ref,at:stamp(e.lastRead)};})
@@ -1359,12 +1431,15 @@
     // Local calendar date, not UTC: dismissing at 11pm should not reappear at 8am the same evening in a +9 zone.
     const now_=new Date(),todayKey=now_.getFullYear()+'-'+String(now_.getMonth()+1).padStart(2,'0')+'-'+String(now_.getDate()).padStart(2,'0');
     if(recent&&runtime.cache.workbenchUI?.todayHidden!==todayKey){
-     const strip=node('div',null,body,{class:'sc-today',role:'group','aria-label':T('오늘의 읽기')});
+     /* The strip is the head of the summary card when there is one (drawn below), else it stands alone. */
+     todayDraw=parent=>{
+     const strip=node('div',null,parent,{class:'sc-today',role:'group','aria-label':T('오늘의 읽기')});
      node('span',T('오늘의 읽기'),strip,{class:'sc-today-label'});
      if(recent){const p_=runtime.pageProgress(recent.ref);const next=Number.isInteger(p_.lastPageIndex)&&p_.lastPageIndex<(Number(p_.total)||0)?p_.lastPageIndex:null;
       button(T('이어 읽기')+' · '+String(recent.i.title||'').slice(0,48)+(next!=null?' · '+T(`${next+1}쪽`):''),()=>run(()=>library.openItem(p_.attachmentID||recent.i.id,next!=null?{pageIndex:next}:undefined)),strip,{class:'sc-today-item','data-opens':'window',title:recent.i.title||''});}
      // Dismissed for today only: it comes back once the local date turns over.
      button(T('오늘은 닫기'),()=>run(async()=>{await saveUI({todayHidden:todayKey});await render();}),strip,{class:'sc-today-item sc-today-close',title:T('오늘 하루만 이 줄을 숨깁니다')});
+     };
     }
    }
    // Narrowed to one paper by a search or filter, the summary stays: it is the way back.
@@ -1376,24 +1451,27 @@
      if(Number.isFinite(Number(it.citations))&&it.citations!==null&&it.citations!=='')cites.push(Number(it.citations));
      const added=runtime.localStamp?runtime.localStamp(it.dateAdded)?.getTime():Date.parse(it.dateAdded||'');if(added>=month.getTime())thisMonth++;}
     const median=list=>{if(!list.length)return null;const v=[...list].sort((a,b)=>a-b),m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2;};
-    const box=node('div',null,body,{class:'sc-overview',role:'group','aria-label':T('이 목록 요약')});
+    const box=node('div',null,body,{class:'sc-overview'+(weekHead?' sc-recent-week':''),role:'group','aria-label':T('이 목록 요약')});
+    // 오늘의 읽기 is the head of this card, not a loose strip over it.
+    if(todayDraw){todayDraw(box);todayDraw=null;}
+    /* 최근 문헌 puts its week in this card's place: one row of tiles, not a second strip over a card. */
+    if(weekHead){node('span',T(weekHead.label),box,{class:'sc-overview-picks-label'});statTiles(box,weekHead.tiles);weekHead.drawn=true;}
+    else{
     const meter=node('div',null,box,{class:'sc-overview-meter','aria-hidden':'true'});
     for(const key of ['done','reading','unread'])if(n[key])node('span',null,meter,{class:'sc-overview-'+key}).style.flexGrow=String(n[key]);
-    const facts=node('p',null,box,{class:'sc-overview-facts'});
-    const fact=(label,value)=>{if(value==null||value==='')return;const span=node('span',null,facts);node('b',String(value),span);span.appendChild(doc.createTextNode(' '+T(label)));};
+    const tiles=[];
     /* The reading counts are the way to those papers: pressed, the list shows
        only them (the status filter above says so, and clears it); pressed
        again, all of them. */
-    const statusFact=(label,key)=>{if(!n[key])return;const on=activeRules().some(r=>r.id==='q-status'&&r.values[0]===key);const b=button('',()=>{if(on)dropQuick(state.tab,'q-status');else putQuick(state.tab,[quickStatus(key)]);render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 모두 보기':'이 상태만 보기')});node('b',String(n[key]),b);node('span',T(label),b,{class:'sc-overview-fact-label'});};
-    statusFact('완료','done');statusFact('읽는 중','reading');statusFact('안 읽음','unread');
-    if(seconds>0)fact('읽음',runtime.formatReadTime?runtime.formatReadTime(seconds):Math.round(seconds/60)+'분');
+    const statusTile=(label,key)=>{if(!n[key])return;const on=activeRules().some(r=>r.id==='q-status'&&r.values[0]===key);tiles.push({value:fmtN(n[key]),label,pressed:on,title:on?'다시 누르면 모두 보기':'이 상태만 보기',onClick:()=>{if(on)dropQuick(state.tab,'q-status');else putQuick(state.tab,[quickStatus(key)]);render();}});};
+    statusTile('완료','done');statusTile('읽는 중','reading');statusTile('안 읽음','unread');
+    if(seconds>0)tiles.push({value:runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):Math.round(seconds/60)+'분',label:'읽음',title:T('이 목록 문헌의 누적 읽기 시간')});
     const mi=median(ifs),mc=median(cites);
     // Sorts by the same figure it names -- pressing again goes back to 기본 순서, as the column heads do.
-    const sortFact=(label,sort,value)=>{if(value==null||value==='')return;const on=state.sort===sort;const b=button('',()=>{state.sort=on?'library':sort;const select=filterInputs.get?.('sort');if(select)select.value=state.sort;render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 기본 순서':'이 순서로 정렬')});node('b',String(value),b);node('span',T(label),b,{class:'sc-overview-fact-label'});};
-    // With how many papers each median rests on: a figure from two of three is not one from three.
-    if(mi!=null)sortFact(`IF 중앙값 · ${ifs.length}/${items.length}편`,'if-desc',mi.toFixed(1));
-    if(mc!=null)sortFact(`인용 중앙값 · ${cites.length}/${items.length}편`,'citations-desc',Math.round(mc));
-    if(thisMonth)fact('이번 달 추가',thisMonth);
+    const sortTile=(label,sort,value,basis)=>{if(value==null||value==='')return;const on=state.sort===sort;tiles.push({value,label,pressed:on,title:basis+' · '+T(on?'다시 누르면 기본 순서':'이 순서로 정렬'),onClick:()=>{state.sort=on?'library':sort;const select=filterInputs.get?.('sort');if(select)select.value=state.sort;render();}});};
+    // With how many papers each median rests on (in the tooltip): a figure from two of three is not one from three.
+    if(mi!=null)sortTile('IF 중앙값','if-desc',mi.toFixed(1),T(`${ifs.length}/${items.length}편 기준`));
+    if(mc!=null)sortTile('인용 중앙값','citations-desc',fmtN(Math.round(mc)),T(`${cites.length}/${items.length}편 기준`));
     // Papers put by for later, still waiting in this library: the way onto 읽기 진행's own queue section.
     const queuedHere=state.items.filter(it=>it.status!=='done'&&it.status!=='reading'&&isQueued(it.id));
     // The count is whole-library, like the queue store itself; 읽기 진행's own
@@ -1402,7 +1480,12 @@
     // search had hidden. navigateSelection carries the exact papers counted as
     // the selection and sets the conflicting search aside (되돌리기 by 전체
     // 목록으로), so the destination shows precisely the number just pressed.
-    if(queuedHere.length)button(T(`읽기 대기 ${queuedHere.length}편`),()=>navigateSelection('reading',queuedHere.map(it=>it.id)).then(()=>body.querySelector('.sc-reading-queue')?.scrollIntoView?.({block:'nearest'})),facts,{class:'sc-overview-fact',title:T('읽기 진행의 읽기 대기로 이동합니다')});
+    const facts=statTiles(box,tiles);
+    // Not a figure but a way on: one quiet button beside the tiles, so the tile row stays at six.
+    if(queuedHere.length)button(T(`읽기 대기 ${queuedHere.length}편`),()=>navigateSelection('reading',queuedHere.map(it=>it.id)).then(()=>body.querySelector('.sc-reading-queue')?.scrollIntoView?.({block:'nearest'})),facts,{class:'sc-overview-queue',title:T('읽기 진행의 읽기 대기로 이동합니다')});
+    /* "이번 달 추가" is a fact about the list, not a way into one: a quiet line under the tiles. */
+    if(thisMonth)node('p',T(`이번 달 추가 ${thisMonth}편`),box,{class:'sc-muted sc-overview-month'});
+    }
     /* 먼저 읽을 만한: of the unread papers here, the three the field cites
        most for their age -- citations a year since publication, so a classic
        does not bury last year's paper. From the figures on the rows; each
@@ -1453,23 +1536,22 @@
      }
     }
     if(picks.length&&n.unread>1){
-     const line=node('p',null,box,{class:'sc-overview-picks'});
+     /* A label, then one paper a line: the title, and its yearly citation rate flush right in a tabular column. */
+     const line=node('div',null,box,{class:'sc-overview-picks'});
      node('span',T('안 읽은 문헌 · 연도 보정 인용순'),line,{class:'sc-overview-picks-label',title:T('안 읽은 문헌 중 출판 후 해마다 가장 많이 인용된 순서입니다. 철회된 문헌은 뺐습니다.')});
      for(const {it,rate} of picks){
       const pick=node('span',null,line,{class:'sc-overview-pick'});
       button(String(it.title||T('제목 없음')),()=>openInList(it),pick,{class:'sc-hit-title-link',title:it.title||''});
-      node('span',T(`연 ${Math.round(rate)}회`),pick,{class:'sc-muted'});
+      node('span',T(`연 ${fmtN(Math.round(rate))}회 인용`),pick,{class:'sc-muted sc-overview-pick-rate'});
      }
     }
    }
+   if(weekHead&&!weekHead.drawn){const solo=node('div',null,body,{class:'sc-overview sc-recent-week',role:'group','aria-label':T(weekHead.label)});node('span',T(weekHead.label),solo,{class:'sc-overview-picks-label'});statTiles(solo,weekHead.tiles);weekHead.drawn=true;}
    const start=state.pageIndex*pageSize,page=items.slice(start,start+pageSize);
-   // The page controls take a row only when there is more than one page.
-   const paging=items.length>pageSize?bar():node('div',null,null);
-   if(items.length>pageSize){
-    node('span',`${start+1}–${start+page.length} / ${items.length}개`,paging,{role:'status','aria-label':'문헌 페이지 범위'});
-    button('이전 페이지',()=>{state.pageIndex--;render();},paging).disabled=state.pageIndex===0;
-    button('다음 페이지',()=>{state.pageIndex++;render();},paging).disabled=start+pageSize>=items.length;
-   }
+   // The list is one soft group headed "Name · n" (groupSections wraps this head and what follows it).
+   sectionHead(state.tab==='recent'?'최근 문헌':'보유 문헌',fmtN(items.length),body,'sc-list-head','div');
+   // One toolbar over the column heads: the selection verbs at the left, the pager at the right end.
+   const toolbar=node('div',null,body,{class:'sc-list-toolbar'});
    const choose=(values,on)=>{state.annotationIDs.clear();for(const item of values)on?state.selected.add(String(item.id)):state.selected.delete(String(item.id));render();};
    /* Three selection buttons were a row of their own over every list; they
       fold into one, left as the reader left it. */
@@ -1483,13 +1565,20 @@
    button('현재 페이지 선택',()=>choose(page,true),picks);button('현재 페이지 선택 해제',()=>choose(page,false),picks);button('검색 결과 전체 선택',()=>choose(items,true),picks);
    const waitable=selected().filter(i=>i.status!=='done'&&i.status!=='reading'&&!isQueued(i.id));
    if(waitable.length)button(T(`안 읽은 문헌 ${waitable.length}편 읽기 대기에 추가`),()=>run(async()=>{const n=await setReadingQueue(waitable,true);message(T(`읽기 대기에 ${n}편을 넣었습니다.`));render();}),picks);
+   toolbar.appendChild(selecting);
+   if(items.length>pageSize){
+    const paging=node('div',null,toolbar,{class:'sc-pager'});
+    node('span',`${fmtN(start+1)}–${fmtN(start+page.length)} / ${fmtN(items.length)}개`,paging,{role:'status','aria-label':'문헌 페이지 범위'});
+    button('이전 페이지',()=>{state.pageIndex--;render();},paging).disabled=state.pageIndex===0;
+    button('다음 페이지',()=>{state.pageIndex++;render();},paging).disabled=start+pageSize>=items.length;
+   }
    /* One header over the figures, so a column reads as a column and its name
       is said once rather than on every row; a name sorts by it, highest first,
       and pressed again goes back to the library's order. */
    const columns=node('div',null,body,{class:'sc-paper-columns',role:'group','aria-label':T('정렬할 열')});
    // Over the titles the lead is blank; at a narrow width, where the figures wrap under each title, the heads become one line that says what they do.
    const lead=node('span',null,columns,{class:'sc-paper-columns-lead'});
-   lead.appendChild(selecting);
+   node('span',T('제목'),lead,{class:'sc-paper-columns-title'});
    node('span',T('정렬'),lead,{class:'sc-paper-columns-sortlabel'});
    for(const [key,label,sort] of [['impact','IF','if-desc'],['citations','인용','citations-desc'],['rating','별점','rating-desc'],['time','읽기','time-desc']]){
     const on=state.sort===sort;
@@ -1513,11 +1602,12 @@
       biology title was cut to half its width by the figures beside it. */
    const mainline=node('div',null,identity,{class:'sc-paper-mainline'});
    const h3=node('h3',null,mainline,{class:'sc-paper-title',title:item.title||''});
-   if(item.itemType&&item.itemType!=='journalArticle'&&KIND_LABELS[item.itemType])node('span',kindLabel(item.itemType),h3,{class:'sc-preprint sc-kind',title:kindLabel(item.itemType)});
    rich(h3,item.title||T('제목 없음'));
    const meta=node('span',null,identity,{class:'sc-paper-meta',title:[item.authors,item.venue].filter(Boolean).join(' · ')});
    // A list that is in an order for a reason says the reason first: 최근 문헌 says what happened, and when.
    const reason=why?.(item);
+   // The kind (Preprint, patent, thesis...) opens the meta line, so the title always starts at the same x.
+   if(item.itemType&&item.itemType!=='journalArticle'&&KIND_LABELS[item.itemType])node('span',kindLabel(item.itemType),meta,{class:'sc-status-chip sc-kind',title:kindLabel(item.itemType),'data-tone':'lime'});
    if(reason)node('span',reason,meta,{class:'sc-paper-why'});
    /* Journal · year · authors, each told apart by how it is set: the journal's full name in its own
       signature colour (no abbreviation badge beside a name that is already spelled out), the year
@@ -1550,24 +1640,25 @@
    }
    const metrics=node('div',null,heading,{class:'sc-metrics'});
    metric(metrics,{unit:'IF',name:'impact',text:item.impactFactor??'',tone:impactTone(item.impactFactor),label:'저널 영향력 지수'});
-   metric(metrics,{unit:'인용',name:'citations',text:item.citations??'',label:item.citationSource?`인용 수 · ${item.citationSource}`:'인용 수 · 출처 미확인'});
+   metric(metrics,{unit:'인용',name:'citations',text:item.citations==null||item.citations===''?'':fmtN(item.citations),label:item.citationSource?`인용 수 · ${item.citationSource}`:'인용 수 · 출처 미확인'});
    // Stars only once a paper has been rated: five hollow stars on every row were noise.
    // The slot is always there, so the figures line up down the list; it is
    // filled only once the paper has been rated.
    const stars=node('span',null,metrics,{class:'sc-metric sc-stars',title:item.rating?`별점 ${item.rating}/5`:'별점 없음'});stars.dataset.metric='rating';
    node('span',item.rating?'\u2605'.repeat(item.rating)+'\u2606'.repeat(5-item.rating):'',stars,{class:'sc-metric-value'});
-   const timeCell=metric(metrics,{unit:'읽기',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
+   const timeCell=metric(metrics,{unit:'읽기',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds,{compact:true}):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
    /* How far in, beside how long: twenty minutes on a paper says little
       until it is set against four of eight pages. A short grey meter, no
       colour: the pages read over the pages the PDF has. */
+   let sub=null;
    {const ref=runtime.Z?.Items?.get?.(Number(item.id)),p=ref&&typeof runtime.pageProgress==='function'?runtime.pageProgress(ref):null;
-    if(p?.total&&timeCell){const meter=node('span',null,timeCell,{class:'sc-row-progress',role:'img','aria-label':T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`),title:T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`)});
+    if(p?.total&&timeCell){sub=sub||node('span',null,timeCell,{class:'sc-metric-sub'});const meter=node('span',null,sub,{class:'sc-row-progress',role:'img','aria-label':T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`),title:T(`전체 ${p.total}쪽 중 ${p.visited}쪽 읽음`)});
      node('span',null,meter,{class:'sc-row-progress-fill'}).style.width=Math.round(100*p.visited/p.total)+'%';
-     node('span',`${p.visited}/${p.total}`,timeCell,{class:'sc-row-progress-text','aria-hidden':'true'});}}
+     node('span',`${p.visited}/${p.total}`,sub,{class:'sc-row-progress-text','aria-hidden':'true'});}}
    // Loaded once per list, grouped by parent (see load()); a paper with no annotations shows nothing extra.
    // A count used to be all it said; a click now takes the reader straight to
    // just this paper's marks, the scope and everything else on the list kept.
-   if(Number(item.annotations)>0&&timeCell)button(T(`주석 ${item.annotations}`),()=>{rememberListOrigin();state.annotationPaperID=String(item.id);navigate('annotations');},timeCell,{class:'sc-row-annotations'});
+   if(Number(item.annotations)>0&&timeCell){sub=sub||node('span',null,timeCell,{class:'sc-metric-sub'});button(T(`주석 ${fmtN(item.annotations)}`),()=>{rememberListOrigin();state.annotationPaperID=String(item.id);navigate('annotations');},sub,{class:'sc-row-annotations'});}
    const actions=bar(mainline);actions.classList.add('sc-paper-actions');button('열기',()=>library.openItem(item.id),actions,{'data-opens':'window','data-variant':'primary'});/* 자세히 opens the paper under its own row: the list keeps its search,
       filters, page, selection and place. One at a time; pressed again, it
       closes and the focus goes back to it. */
@@ -1633,17 +1724,15 @@
    const inWeek=field=>all.filter(item=>timestamp(item[field])>=week).length;
    const weekRead=all.filter(item=>timestamp(item.lastRead)>=week);
    const weekSeconds=weekRead.reduce((n,item)=>n+(Number(item.seconds)||0),0);
+   let weekLead=null;
    if(state.recentKind||(recent.length&&(weekRead.length||inWeek('dateAdded')||inWeek('dateModified')))){
-    const line=node('p',null,body,{class:'sc-overview-facts sc-recent-week'});
-    const fact=(label,value,kind)=>{
+    /* The week is one row of tiles (drawn as the head of the summary card by paperList): a figure and its verb. */
+    const tile=(label,value,kind)=>{
      const on=state.recentKind===kind;
-     const b=button('',()=>{state.recentKind=on?'':kind;render();},line,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 모두 보기':'이것만 보기')});
-     node('b',String(value),b);b.appendChild(doc.createTextNode(T(label)));
-     if(!value&&!on)b.disabled=true;
+     return {value:T(`${fmtN(value)}편`),label,pressed:on,disabled:!value&&!on,title:on?'다시 누르면 모두 보기':'이것만 보기',onClick:()=>{state.recentKind=on?'':kind;render();}};
     };
-    node('span',T('지난 7일'),line);
-    fact('편 읽음',weekRead.length,'read');fact('편 추가',inWeek('dateAdded'),'added');fact('편 수정',inWeek('dateModified'),'edited');
-    if(weekSeconds>0)node('span',T(`읽은 문헌의 누적 시간 ${runtime.formatReadTime?runtime.formatReadTime(weekSeconds):Math.round(weekSeconds/60)+'분'}`),line,{title:T('이번 주에 읽은 문헌들이 지금까지 쌓은 전체 읽기 시간입니다')});
+    weekLead={label:'지난 7일',tiles:[tile('읽음',weekRead.length,'read'),tile('추가',inWeek('dateAdded'),'added'),tile('수정',inWeek('dateModified'),'edited')]};
+    if(weekSeconds>0)weekLead.tiles.push({value:runtime.formatReadTime?runtime.formatReadTime(weekSeconds,{compact:true}):Math.round(weekSeconds/60)+'분',label:'읽은 시간',title:'이번 주에 읽은 문헌들이 지금까지 쌓은 전체 읽기 시간입니다'});
    }
    // Nothing recent in a scope that has papers is not a search that missed:
    // "검색어나 필터를 지우세요" pointed at filters that were not set.
@@ -1662,7 +1751,7 @@
     const unopened=kind==='추가'&&!read&&!(Number(item.seconds)>0)&&item.status!=='done'&&item.status!=='reading'&&Date.now()-added<7*864e5?' · '+T('읽기 기록 없음'):'';
     return T(kind)+' · '+(at>=today.getTime()?T('오늘'):T(`${days}일 전`))+unopened;
    };
-   await paperList(recent,{why:what});
+   await paperList(recent,{why:what,lead:weekLead});
   }
   /* The citation map.
 
@@ -1822,7 +1911,7 @@
       sweep; counting it kept "3편 남음" on a button that could do nothing. */
    const unasked=chosen.filter(paper=>!(works[paper.libraryID+':'+paper.key]||works[String(paper.id)])).length;
    // 주변 mode draws only from what is already cached; it never offers a fetch.
-   if(!neighbourMode&&unasked)button(`인용 목록 가져오기 · OpenAlex (${unasked}편 남음)`,()=>run(async()=>{
+   if(!neighbourMode&&unasked){const fetchLists=button('',()=>run(async()=>{
     const wanted=[];
     for(const paper of chosen){
      const found=await runtime.Z.Items.getAsync(Number(paper.id));
@@ -1834,6 +1923,7 @@
      +(report.missing?` · OpenAlex에 없음 ${report.missing}`:'')+(report.noDOI?` · DOI 없음 ${report.noDOI}`:''));
     await render();
    }),b,{class:'sc-fetch-action'});
+   node('span',T('인용 목록 가져오기'),fetchLists);node('span',T(`OpenAlex · ${unasked}편 남음`),fetchLists,{class:'sc-fetch-quota'});}
    if(!withRefs){
     // Nothing fetched yet is not nothing to show. The related-items graph
     // stands in until the reference lists arrive, so the tab is never a blank
@@ -1852,16 +1942,16 @@
    // One metered request per paper: the button says so before it is pressed.
    // 주변 mode already found who cites the centre from cached reference
    // lists, so it never asks OpenAlex for the same thing.
-   if(citersDue)button(`인용한 논문 가져오기 (${citersDue}편 남음 · 요청 최대 ${citersDue}회)`,()=>run(async()=>{
+   if(citersDue){const fetchCiters=button('',()=>run(async()=>{
     const report=await runtime.sweepCitedBy(items,{onProgress:(d,t)=>message(`인용한 논문 ${d+1}/${t}`)});
     message(`${report.found}편에서 인용 ${report.citers}건`
      +(report.noWork?` · 인용 목록 먼저 필요 ${report.noWork}`:'')+(report.errors?` · 실패 ${report.errors}`:''));
     await render();
    }),b,{class:'sc-fetch-action'});
+   node('span',T('인용한 논문 가져오기'),fetchCiters);node('span',T(`${citersDue}편 남음 · 요청 최대 ${citersDue}회`),fetchCiters,{class:'sc-fetch-quota'});}
    const graph=graphTools.layout(graphTools.build(papers,{citedBy}),{width:W,height:H});
    const counted=graph.counted||{direct:0,coupled:0,isolated:0};
-   node('p',`이어진 논문 ${graph.nodes.filter(n=>n.kind==='paper').length} · 인용 ${counted.direct}건 · 공통 참고문헌 쌍 ${counted.coupled}`,body,{class:'sc-muted sc-graph-summary'});
-   {const left=[counted.isolated?T(`연결 없음 ${counted.isolated}`):'',withRefs<papers.length?T(`인용 목록 없음 ${papers.length-withRefs}`):'',counted.external?T(`바깥 논문 ${counted.external}`):''].filter(Boolean);if(left.length)node('p',`그리지 않음: ${left.join(' · ')}`,body,{class:'sc-muted sc-graph-summary'});}
+   const notDrawn=[counted.isolated?T(`연결 없음 ${counted.isolated}`):'',withRefs<papers.length?T(`인용 목록 없음 ${papers.length-withRefs}`):'',counted.external?T(`바깥 논문 ${counted.external}`):''].filter(Boolean);
    /* The picture in one sentence: how many separate clusters the papers
       form, and which paper this library cites most among its own -- the one
       the rest stands on. Read off the same edges the map draws. */
@@ -1875,8 +1965,12 @@
     const citedIn=new Map();for(const e of inner)if(e.kind==='cites')citedIn.set(e.target,(citedIn.get(e.target)||0)+1);
     const [topID,topN]=[...citedIn].sort((a,b)=>b[1]-a[1])[0]||[];
     const top=topID?papers.find(p=>p.id===topID):null;
-    const parts=[clusters?T(`이 그래프에서 서로 이어진 묶음 ${clusters}개`):'',top&&topN>1?T(`이 그래프 안에서 가장 많이 인용된 논문: ${String(top.title||'').slice(0,60)} (${topN}편이 인용)`):''].filter(Boolean);
+    // The figures are one tile row; the sentence under it names only the paper the rest stands on.
+    statTiles(body,[{value:fmtN(graph.nodes.filter(n=>n.kind==='paper').length),label:'이어진 논문'},{value:fmtN(counted.direct),label:'인용',title:'서재 안에서 확인된 인용 관계(건)'},
+     counted.coupled?{value:fmtN(counted.coupled),label:'공통 참고문헌 쌍'}:null,{value:fmtN(clusters),label:'묶음',title:'서로 이어진 묶음의 수'}],{label:'관계 그래프 요약'});
+    const parts=[top&&topN>1?T(`이 그래프 안에서 가장 많이 인용된 논문: ${String(top.title||'').slice(0,60)} (${topN}편이 인용)`):''].filter(Boolean);
     if(parts.length)node('p',parts.join(' · '),body,{class:'sc-muted sc-graph-summary sc-graph-insight'});
+    if(notDrawn.length)node('p',`그리지 않음: ${notDrawn.join(' · ')}`,body,{class:'sc-muted sc-graph-footnote'});
    }
    drawJournalLegend(graph.nodes.filter(n=>n.kind==='paper'),body);
    if(!graph.nodes.length){
@@ -1925,8 +2019,12 @@
    // and the year, e.g. "Mapping cellular… 2025" -- a journal mark and a year
    // named the journal, not the paper, and read the same for every paper in it.
    const shortTitle=title=>{const s=plain(title||'').trim();
-    return s.length>26?s.slice(0,26).replace(/\s+\S*$/,'')+'…':s;};
-   for(const n of graph.nodes)n.labelText=[shortTitle(n.label),n.year].filter(Boolean).join(' ')||T('제목 없음');
+    if(s.length<=26)return s;
+    // Cut at a word, then drop function words the cut left hanging: "Phase separation of" reads as a mistake.
+    let cut=s.slice(0,26).replace(/\s+\S*$/,'');
+    while(/\s(and|of|the|in|for|to|a|an|on|with|by|at|from)$/i.test(cut))cut=cut.replace(/\s+\S+$/,'');
+    return cut+'…';};
+   for(const n of graph.nodes)n.labelText=[shortTitle(n.label),n.year].filter(Boolean).join(' \u00b7 ')||T('제목 없음');
    /* A small graph shows every title; there is room, and nothing to decide.
       Past that, placeLabels picks what fits without collision, and the
       chosen paper always gets its label regardless (see the opacity check
@@ -1967,7 +2065,8 @@
      // never mistaken for something already on the shelf.
      for(const[k,v]of Object.entries({x:-r,y:-r,width:r*2,height:r*2,rx:2}))circle.setAttribute(k,v);
     } else circle.setAttribute('r',r);
-    circle.setAttribute('fill',external?'var(--sc-bg)':(tone?tone.fill:'var(--sc-fill)'));
+    circle.setAttribute('fill',external?'var(--sc-bg)':state.selected.has(n.id)?'var(--sc-lime)':(tone?tone.fill:'var(--sc-fill)'));
+    circle.dataset.fill=tone?'journal':'plain';
     circle.setAttribute('stroke',external?'var(--sc-external)':(tone?tone.ink:'var(--sc-muted)'));
     circle.setAttribute('stroke-width',state.selected.has(n.id)?2.4:1);
     if(external)circle.setAttribute('stroke-dasharray','2 2');
@@ -1994,7 +2093,7 @@
      n.rank!=null?T(`중심성 ${(n.rank*100).toFixed(0)}%`):null].filter(Boolean).join(' · ');
     g.appendChild(title);
     // Selecting a node marks it in place: a redraw would reset the zoom and the hover.
-    const activate=()=>{state.selected=new Set([n.id]);labelled=placeAll();focusNode(n.id);updateSelectionUI();message(n.label);showInfo(n);for(const [key,m] of marks)m.circle.setAttribute('stroke-width',key===n.id?2.4:1);if(n.kind!=='external')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
+    const activate=()=>{state.selected=new Set([n.id]);labelled=placeAll();focusNode(n.id);updateSelectionUI();message(n.label);showInfo(n);for(const [key,m] of marks){m.circle.setAttribute('stroke-width',key===n.id?2.4:1);if(m.circle.tagName==='circle'){const node0=positions.get(key);const idv=node0&&node0.venue?identity.identify(node0.venue):null;const tn=idv?identity.colours(idv,{dark:darkScheme()}):null;m.circle.setAttribute('fill',key===n.id?'var(--sc-lime)':(tn?tn.fill:'var(--sc-fill)'));}}if(n.kind!=='external')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
     g.addEventListener('click',activate);
     g.addEventListener('dblclick',()=>run(()=>n.kind==='external'
      ?runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${n.openalex}`)
@@ -2051,7 +2150,7 @@
     node('p',local?.title||n.label||n.id,info,{class:'sc-graph-info-title'});
     if(local){
      const at=runtime.localStamp?runtime.localStamp(local.lastRead)?.getTime():Date.parse(local.lastRead||'');
-     node('p',[local.status==='done'?T('완료'):local.status==='reading'?T('읽는 중'):T('안 읽음'),Number(local.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(local.seconds):'',Number.isFinite(at)?T(`${Math.max(0,Math.floor((Date.now()-at)/864e5))}일 전 읽음`):''].filter(Boolean).join(' · '),info,{class:'sc-muted'});
+     node('p',[local.status==='done'?T('완료'):local.status==='reading'?T('읽는 중'):T('안 읽음'),Number(local.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(local.seconds,{compact:true}):'',Number.isFinite(at)?T(`${Math.max(0,Math.floor((Date.now()-at)/864e5))}일 전 읽음`):''].filter(Boolean).join(' · '),info,{class:'sc-muted'});
     }else node('p',T('내 서재에 없는 논문'),info,{class:'sc-muted'});
     const direct=graph.edges.filter(e=>e.kind==='cites');
     const citing=[...new Set(direct.filter(e=>e.target===n.id).map(e=>e.source))],cited=[...new Set(direct.filter(e=>e.source===n.id).map(e=>e.target))];
@@ -2229,7 +2328,7 @@
       nothing, and when they worked the reader had to go and look. Each now
       refuses in words, reports what it did, and a removal can be taken back. */
    const names=()=>value.value.split(',').map(t=>t.trim()).filter(Boolean);
-   const ready=()=>{if(!state.selected.size)throw new Error('태그를 붙일 문헌을 먼저 선택하세요. 보유 문헌에서 고르거나 「현재 선택 가져오기」를 누르세요.');const tags=names();if(!tags.length)throw new Error('여러 개는 쉼표로 구분해 태그 이름을 입력하세요.');return tags;};
+   const ready=()=>{if(!state.selected.size)throw new Error('태그를 붙일 문헌을 먼저 선택하세요. 보유 문헌에서 고르거나 “현재 선택 가져오기”를 누르세요.');const tags=names();if(!tags.length)throw new Error('여러 개는 쉼표로 구분해 태그 이름을 입력하세요.');return tags;};
    button('선택 문헌에 태그 추가',async()=>{const tags=ready(),n=state.selected.size;await library.addTags([...state.selected],tags);await load();message(`${n}편에 태그 ${tags.join(', ')}를 붙였습니다.`);},b);
    button('선택 문헌에서 태그 제거',async()=>{
     const tags=ready(),ids=[...state.selected];
@@ -2260,8 +2359,9 @@
    const calendarAgo=at=>{const start=new Date();start.setHours(0,0,0,0);return at>=start.getTime()?T('오늘 읽음'):T(`${Math.ceil((start.getTime()-at)/864e5)}일 전 읽음`);};
    const inView=rows(),stampOf=v=>runtime.localStamp?runtime.localStamp(v)?.getTime():Date.parse(v||'');
    const tagReading=path=>{let done=0,reading=0,total=0,last=0,seconds=0;for(const it of inView){if(!(it.tags||[]).some(t=>t===path||t.startsWith(path+'/')))continue;total++;if(it.status==='done')done++;if(it.status==='reading')reading++;seconds+=Number(it.seconds)||0;const at=stampOf(it.lastRead);if(Number.isFinite(at)&&at>last)last=at;}return {done,reading,total,last,seconds};};
-   const tree=library.tagTree(inView);sectionHead('태그 목록',tree.length,treeHost);
-   const tools=bar(treeHost);
+   const tree=library.tagTree(inView);const treeHead=sectionHead('태그 목록',tree.length,treeHost);
+   // The tag search and sort live in the group's own head: one place to look, not a second search bar stacked under the page's.
+   const tools=node('span',null,treeHead,{class:'sc-section-head-actions sc-tag-tools'});
    const find=node('input',null,tools,{type:'search',placeholder:T('태그 경로 검색'),'aria-label':T('태그 경로 검색')});find.value=state.tagQuery||'';
    const order=node('select',null,tools,{'aria-label':T('태그 정렬')});
    for(const [v,l] of [['name','이름순'],['unread','안 읽음 많은 순'],['recent','최근 읽은 순']])node('option',T(l),order,{value:v});
@@ -2300,7 +2400,7 @@
     const list=[...co].map(([t,c])=>({tag:t,n:c.ids.size,unread:c.unread,seconds:c.seconds,ids:[...c.ids]})).sort((a,b)=>b.n-a.n||a.tag.localeCompare(b.tag)).slice(0,5);
     sectionHead('함께 붙은 태그',list.length,crossBox);
     node('p',T(`#${shortName(path)} 태그가 붙은 문헌들이 함께 갖는 태그입니다.`),crossBox,{class:'sc-muted'});
-    if(!list.length){node('p',T('함께 붙은 태그가 없습니다.'),crossBox,{class:'sc-empty'});return;}
+    if(!list.length){emptyCard(crossBox,{title:'함께 붙은 태그가 없습니다.',icon:'tags'});return;}
     const table=node('table',null,crossBox,{class:'sc-tag-cross-table'});
     const hr=node('tr',null,node('thead',null,table));
     node('th',T('태그'),hr);node('th',T('문헌 수'),hr);node('th',T('안 읽음'),hr);node('th',T('읽은 시간'),hr);
@@ -2315,17 +2415,18 @@
      // and the shortened label used to say the same thing for both.
      button(String(row.n),()=>navigateSelection('explore',row.ids,`#${path} ∩ #${row.tag}`),countCell,{class:'sc-link-button',title:T('이 두 태그가 모두 있는 문헌을 봅니다')});
      node('td',String(row.unread),tr,{class:'sc-figure-cell'});
-     node('td',row.seconds>0&&runtime.formatReadTime?runtime.formatReadTime(row.seconds):'—',tr,{class:'sc-figure-cell'});
+     node('td',row.seconds>0&&runtime.formatReadTime?runtime.formatReadTime(row.seconds,{compact:true}):'—',tr,{class:'sc-figure-cell'});
     }
    };
-   const redraw=()=>{treeBox.replaceChildren();branch(sorted(tree),treeBox);if(!treeBox.childNodes.length)node('p',T(tree.length?'검색에 맞는 태그가 없습니다.':'태그가 없습니다. 문헌을 선택하고 태그를 추가하세요.'),treeBox,{class:'sc-empty'});};
+   const redraw=()=>{treeBox.replaceChildren();branch(sorted(tree),treeBox);if(!treeBox.childNodes.length){const none=emptyCard(treeBox,{title:tree.length?'검색에 맞는 태그가 없습니다.':'태그가 없습니다.',hint:tree.length?'':'문헌을 선택하고 태그를 추가하세요.',icon:'tags'});if(tree.length&&state.tagQuery)button('검색 지우기',()=>{state.tagQuery='';find.value='';redraw();},emptyActions(none));}};
    let typing=null;find.addEventListener('input',()=>{state.tagQuery=find.value;win.clearTimeout(typing);typing=win.setTimeout(redraw,120);});
    order.addEventListener('change',()=>{state.tagSort=order.value;redraw();});
-   function branch(nodes,parent){for(const n of nodes){
+   function branch(nodes,parent,depth=0){for(const n of nodes){
     // A leaf has nothing to disclose, so it skips <details> and the triangle
     // that promised children it does not have.
     const hasKids=!!(n.children&&n.children.length);
     const container=hasKids?node('details',null,parent):node('div',null,parent,{class:'sc-tag-leaf'});
+    container.style.setProperty('--sc-tag-depth',String(depth));
     if(hasKids&&(state.tagQuery||openPaths.has(n.path)))container.open=true;
     if(hasKids)container.addEventListener('toggle',()=>{if(container.open)openPaths.add(n.path);else openPaths.delete(n.path);});
     const row=hasKids?node('summary',null,container):node('div',null,container,{class:'sc-tag-row'});
@@ -2334,11 +2435,11 @@
     // The count is a badge, not a parenthesis: "#methods 2".
     nameBtn.appendChild(doc.createTextNode(' '));node('span',String(n.count),nameBtn,{class:'sc-count'});
     nameBtn.addEventListener('click',event=>event.stopPropagation());
-    const r=readingOf(n.path);if(r.total){const time=r.seconds>0&&runtime.formatReadTime?runtime.formatReadTime(r.seconds):'';
+    const r=readingOf(n.path);if(r.total){const time=r.seconds>0&&runtime.formatReadTime?runtime.formatReadTime(r.seconds,{compact:true}):'';
      node('span',[T(`완료 ${r.done}/${r.total}`),time,r.last?calendarAgo(r.last):''].filter(Boolean).join(' · '),row,{class:'sc-tag-reading'});
      // The unread under this heading, one press away in the list.
      const left=r.total-r.done-r.reading;
-     if(left>0){const go=button(T(`안 읽음 ${left}편`),()=>{putQuick('explore',[quickTag(n.path),quickStatus('unread')]);return navigate('explore');},row,{class:'sc-tag-unread'});go.addEventListener('click',event=>event.stopPropagation());}}const only=button('이 태그만',()=>{putQuick('explore',[quickTag(n.path)]);navigate('explore');},row,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(hasKids)branch(sorted(n.children),container);}}redraw();redrawCross();
+     if(left>0){const go=button(T(`안 읽음 ${left}편`),()=>{putQuick('explore',[quickTag(n.path),quickStatus('unread')]);return navigate('explore');},row,{class:'sc-tag-unread'});go.addEventListener('click',event=>event.stopPropagation());}}const only=button('이 태그만',()=>{putQuick('explore',[quickTag(n.path)]);navigate('explore');},row,{class:'sc-tag-only'});only.addEventListener('click',event=>event.stopPropagation());if(hasKids)branch(sorted(n.children),container,depth+1);}}redraw();redrawCross();
   }
   /* A note needs a paper. Opening this tab with the whole library in scope
      used to show a disabled editor and "select a paper", with no paper to
@@ -2582,7 +2683,6 @@
    // neutral name here; its hex only shows in the title, on hover.
    [...counts].sort((a,b)=>b[1]-a[1]).forEach(([hex,n],i)=>{
     const on=state.color===colorKey(hex);
-    if(i)node('span',' · ',summary,{class:'sc-muted','aria-hidden':'true'});
     const meaning=hex?colorMeaning(hex):'';
     const label=hex?(meaning||T('이름 없는 색')):T('색 없음');
     const chip=node('button',null,summary,{class:'sc-annot-swatch',type:'button','aria-pressed':String(on),
@@ -2673,11 +2773,11 @@
    if(state.annotationPaperID)button(T(`문헌: ${String(paperByID.get(state.annotationPaperID)?.title||'').slice(0,30)} ×`),()=>{state.annotationPaperID='';render();},summary,{class:'sc-annot-paper-filter'});
    if(!filtered.length){
     selectionTools.hidden=true;
-    empty('이 색·문헌 조건에 맞는 주석이 없습니다. 위 표나 색에서 다른 칸을 고르거나 필터를 해제하세요.');
-    button('색·문헌 필터 해제',()=>{state.color='';state.annotationPaperID='';render();},body,{'data-variant':'primary'});
+    const emptied=empty('이 색·문헌 조건에 맞는 주석이 없습니다. 위 표나 색에서 다른 칸을 고르거나 필터를 해제하세요.');
+    button('색·문헌 필터 해제',()=>{state.color='';state.annotationPaperID='';render();},emptyActions(emptied),{'data-variant':'primary'});
     return;
    }
-   button('보이는 주석 전체 선택',()=>{state.annotationIDs=new Set(visibleAnnotationIDs);render();},summary);
+   button('보이는 주석 전체 선택',()=>{state.annotationIDs=new Set(visibleAnnotationIDs);render();},summary,{class:'sc-annot-select-all'});
    // Drawn every time, hidden by syncChosen() rather than only appearing when
    // annotationIDs already had something in it at draw time -- selecting the
    // first card never redraws the panel, so a button that only exists when
@@ -2758,7 +2858,12 @@
     const paper=paperByID.get(String(parentKey||''));
     if(paper){
      const status=paper.status==='done'?T('완료'):paper.status==='reading'?T('읽는 중'):T('안 읽음');
-     node('p',[paper.year,paper.venue,status,state.query?T(`일치 주석 ${paperEntry.count}개`):''].filter(Boolean).join(' · '),paperBox,{class:'sc-annot-group-meta'});
+     // The journal in its own ink, like the library cards; the pieces joined by one separator style.
+     const metaLine=node('p',null,paperBox,{class:'sc-annot-group-meta'});
+     [paper.year,paper.venue,status,state.query?T(`일치 주석 ${paperEntry.count}개`):''].filter(Boolean).forEach((part,index)=>{
+      if(index)metaLine.appendChild(doc.createTextNode(' · '));
+      const piece=node('span',String(part),metaLine);if(part===paper.venue)inkJournal(piece,part);
+     });
     }
     const capped=papers.length>1&&!openAnnotGroups.has(paperEntry.key)&&paperEntry.count>3;
     // What is drawn is what is spent.
@@ -2796,7 +2901,9 @@
        // The annotation's own comment is the memo: it travels with the highlight,
        // shows in the reader and syncs, so there is no second place to look.
        const writeMemo=(focus)=>{
-        const memo=node('textarea',null,row,{class:'sc-annot-memo',rows:'1',
+        const memoRow=node('div',null,row,{class:'sc-annot-memo-row'});
+        node('span',T('메모'),memoRow,{class:'sc-annot-memo-label','aria-hidden':'true'});
+        const memo=node('textarea',null,memoRow,{class:'sc-annot-memo',rows:'1',
          placeholder:'메모','aria-label':'이 주석의 메모'});
         memo.value=a.comment||'';
         autoGrow(memo);
@@ -2890,11 +2997,16 @@
    bindMemo(field,value=>Promise.resolve(library.setRemark(item.id,value)).then(result=>{const held=state.items.find(i=>String(i.id)===String(item.id));if(held)held.remark=String(value||'');return result;}),item.title||'문헌');
   }
 
-  const pickOne=()=>{
+  /* The way to a paper when none is chosen: with an empty card the hint and the buttons go inside it, centred;
+     the buttons are plain grey everywhere (the one dark pill is the page's main action, and this is not it). */
+  const pickOne=(card=null)=>{
    const chosen=selected();
-   if(chosen.length>1){node('p',`선택한 ${chosen.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});const pickBar=bar();for(const it of chosen.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar);}
-   const acts=bar();button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});button('보유 문헌에서 고르기',()=>navigate('explore'),acts);};
-  async function drawBacklinks(token){let item;try{item=one();}catch(_){empty('역링크를 확인할 문헌 하나를 선택하세요.');pickOne();return;}
+   if(chosen.length>1){
+    if(card)node('span',`선택한 ${chosen.length}편 중 하나를 고르세요`,card,{class:'sc-empty-hint'});else node('p',`선택한 ${chosen.length}편 중 하나를 고르세요`,body,{class:'sc-muted'});
+    const pickBar=card?emptyActions(card):bar();for(const it of chosen.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar);
+   }
+   const acts=card?emptyActions(card):bar();button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},acts);button('보유 문헌에서 고르기',()=>navigate('explore'),acts);};
+  async function drawBacklinks(token){let item;try{item=one();}catch(_){pickOne(empty('역링크를 확인할 문헌 하나를 선택하세요.'));return;}
    // The scan reads every note in the library; the page says so while it runs instead of standing blank.
    const waiting=node('p','이 문헌을 가리키는 노트와 관련 문헌을 라이브러리 전체에서 찾는 중…',body,{class:'sc-muted'});
    const found=await library.backlinks(item.id);if(token!==epoch||disposed)return;waiting.remove();
@@ -2928,7 +3040,9 @@
    const details=node('details',null,parent,{class:'sc-attachment-findings'});
    if(state.attachmentFindingsOpen)details.open=true;
    details.addEventListener('toggle',()=>{state.attachmentFindingsOpen=details.open;});
-   node('summary',T(`자료 점검 · 보충자료 ${found.supplementary.length} · 중복 ${found.duplicate.length} · 다른 논문 ${found.foreign.length} · 보충자료만 있는 문헌 ${(found.orphan||[]).length} · 첨부 없음 ${found.missing.length}`),details);
+   // Only the findings that exist: a row of zeros says nothing.
+   const facts=[['보충자료',found.supplementary.length],['중복',found.duplicate.length],['다른 논문',found.foreign.length],['보충자료만 있는 문헌',(found.orphan||[]).length],['첨부 없음',found.missing.length]].filter(([,count])=>count>0);
+   node('summary',T('자료 점검')+' · '+(facts.length?facts.map(([label,count])=>`${T(label)} ${count}`).join(' · '):T('이상 없음')),details);
    if(found.unread){
     button(`아직 안 읽은 ${found.unread}개 판별`,()=>run(async()=>{
      const items=await runtime.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());
@@ -3029,7 +3143,10 @@
     for(const a of files){
      const row=node('div',null,group,{class:'sc-attachment-row'});
      const text=node('div',null,row,{class:'sc-attachment-text'});
-     node('span',[a.title,kindWord(a.contentType)].filter(Boolean).join(' · '),text,{class:'sc-attachment-name'});
+     // The type is a badge only when the title does not already say it ("Full text PDF" needs no second PDF).
+     const kind=kindWord(a.contentType),title=String(a.title||'');
+     const name=node('span',title||kind,text,{class:'sc-attachment-name'});
+     if(title&&kind&&!title.toLowerCase().includes(String(kind).toLowerCase()))node('span',kind,name,{class:'sc-count sc-attachment-kind'});
      cardOf.set(String(a.id),text);
      // This file's own reading record -- the article and its supplement each keep their own place.
      const p=parentRef?runtime.pageProgress(parentRef,Number(a.id)):{total:0,visited:0,pages:{},lastPageIndex:null};
@@ -3040,13 +3157,13 @@
       const at=lastRead?(runtime.localStamp?runtime.localStamp(lastRead)?.getTime():Date.parse(lastRead)):NaN;
       const days=Number.isFinite(at)?Math.floor((Date.now()-at)/864e5):null;
       const whenLabel=days==null?'':days?T(`${days}일 전`):T('오늘');
-      const parts=[seconds>0&&runtime.formatReadTime?runtime.formatReadTime(seconds):'',p.total?`${p.visited}/${p.total}쪽`:'',whenLabel].filter(Boolean);
+      const parts=[seconds>0&&runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):'',p.total?`${p.visited}/${p.total}쪽`:'',whenLabel].filter(Boolean);
       node('span',parts.join(' · '),text,{class:'sc-attachment-reading'});
      } else {
       node('span',T('읽기 기록 없음'),text,{class:'sc-attachment-reading sc-muted'});
      }
      const actions=node('div',null,row,{class:'sc-attachment-actions'});
-     button(hasPage?`${p.lastPageIndex+1}쪽에서`:'열기',()=>library.openItem(a.id,hasPage?{pageIndex:p.lastPageIndex}:undefined),actions,{'data-opens':'window'});
+     button(hasPage?`${p.lastPageIndex+1}쪽부터 열기`:'열기',()=>library.openItem(a.id,hasPage?{pageIndex:p.lastPageIndex}:undefined),actions,{'data-opens':'window'});
      const supported=(['application/pdf','application/epub+zip','application/epub','text/html'].includes(a.contentType)||/^(image|audio|video)\//.test(a.contentType||''))&&a.path!==null;
      // Said on the file it is about, and pointing at the button on that same row, whatever it is called.
      if(!supported){node('span',T('미리보기를 지원하지 않는 형식입니다. 같은 줄의 버튼으로 파일을 여세요.'),text,{class:'sc-attachment-reading sc-muted sc-attachment-nopreview'});continue;}
@@ -3279,7 +3396,7 @@
       await runtime.edit([ref],{status:key});
       if(disposed)return;
       item.status=key;
-      message(T(`「${String(item.title||'').slice(0,40)}」 · ${T(label)}`));
+      message(T(`“${String(item.title||'').slice(0,40)}” · ${T(label)}`));
       refreshReading();
      }),group,{'aria-pressed':String(key===now)});
    };
@@ -3297,7 +3414,7 @@
     const drawPage=([index,notes])=>{
      const row=node('div',null,box,{class:'sc-reading-evidence-row'});
      const sec=Number(p.pages?.[index])||0;
-     const said=[T(`${notes[0].pageLabel||index+1}쪽`),sec>0&&runtime.formatReadTime?runtime.formatReadTime(sec):'',T(`주석 ${notes.length}개`)].filter(Boolean).join(' · ');
+     const said=[T(`${notes[0].pageLabel||index+1}쪽`),sec>0&&runtime.formatReadTime?runtime.formatReadTime(sec,{compact:true}):'',T(`주석 ${notes.length}개`)].filter(Boolean).join(' · ');
      button(said,()=>run(()=>library.openItem(p.attachmentID,{pageIndex:index})),row,{class:'sc-reading-evidence-page','data-opens':'window',title:T('이 쪽을 엽니다')});
      const first=notes.find(a=>a.comment)||notes[0];
      const words=String(first.comment||first.text||'').replace(/\s+/g,' ').trim();
@@ -3354,7 +3471,11 @@
      const btn=button('',()=>{state.readingView=on?'':key;state.readingPage=0;refreshReading();},line,{class:'sc-overview-fact','aria-pressed':String(on)});
      node('b',T(`${value}편`),btn);btn.appendChild(doc.createTextNode(' '+T(label)));
      if(!value)btn.disabled=true;
-    }}
+    }
+    // The tab's count in the sidebar is the papers with a reading record: it is also shown here, so the badge matches a number on the page.
+    const total=node('span',null,line,{class:'sc-overview-fact',title:T('읽은 시간이나 쪽 기록이 있는 문헌 전체 (사이드바의 숫자)')});
+    node('b',T(`${read.length}편`),total);total.appendChild(doc.createTextNode(' '+T('읽기 기록')));
+   }
    /* One row, shared by 이어 읽기 and the general record list below it: a
       title and memo on the first line, 열기/이어 읽기 and the status control
       at the end of the second -- the general list used to build its own
@@ -3403,7 +3524,7 @@
      const days=hasDate?Math.floor((now-r.shownWhen)/DAY):null;
      // With files to choose between, the time is this file's, and says so; the paper's total is the list's.
      const seconds=r.files.length>1?r.fileSeconds:r.seconds;
-     const timeText=seconds>0&&runtime.formatReadTime?runtime.formatReadTime(seconds):'';
+     const timeText=seconds>0&&runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):'';
      let parts;
      if(opts.recordMeta){
       const timeLabel=timeText?T(r.files.length>1?`이 파일 읽은 시간 ${timeText}`:`읽은 시간 ${timeText}`):T('읽은 시간 기록 없음');
@@ -3485,7 +3606,7 @@
         const notes=pageAnnotations.get(pid)?.get(n)||[];
         const sec=Number(r.p.pages?.[n])||0;
         const line=node('div',null,evidenceBox,{class:'sc-reading-evidence-row'});
-        const said=[T(`${notes[0]?.pageLabel||n+1}쪽`),sec>0&&runtime.formatReadTime?runtime.formatReadTime(sec):'',notes.length?T(`주석 ${notes.length}개`):''].filter(Boolean).join(' · ');
+        const said=[T(`${notes[0]?.pageLabel||n+1}쪽`),sec>0&&runtime.formatReadTime?runtime.formatReadTime(sec,{compact:true}):'',notes.length?T(`주석 ${notes.length}개`):''].filter(Boolean).join(' · ');
         button(said,()=>run(()=>{if(!r.p.attachmentID)throw new Error('어느 파일의 몇 쪽인지 기록이 없습니다. 그 PDF를 한 번 열어 읽은 뒤 다시 보세요.');return library.openItem(r.p.attachmentID,{pageIndex:n});}),line,{class:'sc-reading-evidence-page','data-opens':'window',title:T('이 쪽을 엽니다')});
         for(const a of notes){
          const words=String(a.comment||a.text||'').replace(/\s+/g,' ').trim();if(!words)continue;
@@ -3536,7 +3657,7 @@
       const why=node('details',null,text,{class:'sc-queue-reason'});
       node('summary',entry.reason.direction==='citing'?T(`담은 이유: 읽던 ${sources.length}편을 인용`):T(`담은 이유: 읽던 ${sources.length}편이 인용`),why);
       node('p',T('인용 관계는 담을 때의 기록이고, 상태와 시간은 지금 값입니다.'),why,{class:'sc-muted'});
-      for(const src of sources)node('p',[src.title,T('지금')+' '+(src.status==='done'?T('완료'):src.status==='reading'?T('읽는 중'):T('안 읽음')),Number(src.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(src.seconds):''].filter(Boolean).join(' · '),why,{class:'sc-queue-reason-paper'});
+      for(const src of sources)node('p',[src.title,T('지금')+' '+(src.status==='done'?T('완료'):src.status==='reading'?T('읽는 중'):T('안 읽음')),Number(src.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(src.seconds,{compact:true}):''].filter(Boolean).join(' · '),why,{class:'sc-queue-reason-paper'});
      }
      const memo=String(item.remark||'').trim();
      if(memo)node('span',memo.split('\n')[0].slice(0,140),text,{class:'sc-resume-remark'});
@@ -3586,7 +3707,7 @@
      drewStrip=true;
     }
    }
-   if(!drewStrip&&!list.childNodes.length)node('p','읽은 시간과 페이지는 PDF를 열어 읽는 동안 자동으로 기록됩니다. 아직 기록이 없습니다.',list,{class:'sc-empty'});
+   if(!drewStrip&&!list.childNodes.length)empty('읽은 시간과 페이지는 PDF를 열어 읽는 동안 자동으로 기록됩니다. 아직 기록이 없습니다.',list);
    // The key used to stand above every strip whether or not any fold was
    // open; it now draws inside each 쪽별 기록 fold instead, so it is only
    // seen once one is actually opened.
@@ -3620,20 +3741,22 @@
    },body);
    /* The reading data is what the tab is for; the reader's appearance and
       annotation colours sat above it and pushed it below the fold. */
-   const look=node('details',null,body,{class:'sc-filters sc-reader-look'});node('summary','리더 모양·주석 색',look);
+   const look=node('details',null,body,{class:'sc-group sc-reader-look'});node('summary','리더 모양·주석 색',look);
    for(const el of [...body.children])if(el!==progress&&el!==look)look.appendChild(el);
    look.open=!!runtime.cache.workbenchUI?.readerLook;look.addEventListener('toggle',()=>saveUI({readerLook:look.open}));
    refreshReading();
   }
   function drawTabs(){
-   const b=bar();check('세로 탭 목록 표시',!!runtime.cache.readerSettings?.verticalTabs,on=>run(()=>reader.setVerticalTabs(win,on)),b);
+   // The switch has its own line: a 16px box beside a 32px field made the row three heights.
+   check('세로 탭 목록 표시',!!runtime.cache.readerSettings?.verticalTabs,on=>run(()=>reader.setVerticalTabs(win,on)),bar());
+   const b=bar();
    const tabs=reader.tabs(win);
    /* Saving needs a name and a document open: the button says so by being off,
       instead of answering the press in English. A saved name is cleared, so a
       second press does not make a second group of the same name. */
    const docs=tabs.filter(tab=>tab.itemID).length;
    const name=node('input',null,b,{placeholder:'탭 그룹 이름','aria-label':'탭 그룹 이름'});
-   const saveGroup=button('열린 탭 저장',async()=>{const submitted=name.value.trim();await reader.saveTabGroup(win,submitted);finishDraft(name,name.value,true);await render();message(`「${submitted}」 탭 그룹을 저장했습니다 · 문서 ${docs}개`);},b,{title:docs?'':T('PDF 탭을 하나 이상 연 뒤 저장할 수 있습니다')});
+   const saveGroup=button('열린 탭 저장',async()=>{const submitted=name.value.trim();await reader.saveTabGroup(win,submitted);finishDraft(name,name.value,true);await render();message(`“${submitted}” 탭 그룹을 저장했습니다 · 문서 ${docs}개`);},b,{title:docs?'':T('PDF 탭을 하나 이상 연 뒤 저장할 수 있습니다')});
    const syncSave=()=>{saveGroup.disabled=!docs||!name.value.trim();};
    name.addEventListener('input',syncSave);syncSave();
    sectionHead('열린 탭',tabs.length);
@@ -3648,7 +3771,7 @@
    const groups=reader.tabGroups();
    sectionHead('저장된 탭 그룹',groups.length||'');
    // A heading over nothing reads as a page that failed to load.
-   if(!groups.length)node('p','저장한 탭 그룹이 없습니다. 위에서 이름을 적고 「열린 탭 저장」을 누르면 지금 열린 문서 탭을 한 묶음으로 저장합니다.',body,{class:'sc-muted sc-settings-note'});
+   if(!groups.length)empty('저장한 탭 그룹이 없습니다. 위에서 이름을 적고 "열린 탭 저장"을 누르면 지금 열린 문서 탭을 한 묶음으로 저장합니다.');
    for(const group of groups){
     const c=card(group.name,`${group.tabs.length}개 탭`),title=node('input',null,c,{'aria-label':'저장된 탭 그룹 이름'});title.value=group.name;title.dataset.draftKey=JSON.stringify(['tab-group-name',group.id]);
     button('복원',async()=>{const result=await reader.restoreTabGroup(win,group.id);await render();message(`복원 ${result.opened} · 찾지 못함 ${result.missing}`);},c);
@@ -3658,7 +3781,8 @@
    }
   }
   function drawViews(){
-   const b=bar(),name=node('input',null,b,{placeholder:'현재 열 배치 이름','aria-label':'뷰 그룹 이름'});const saveView=button('현재 뷰 저장',async()=>{const submitted=name.value.trim();await reader.saveView(win,submitted);finishDraft(name,name.value,true);await render();message(`「${submitted}」 뷰를 저장했습니다.`);},b);
+   // Nothing saved yet: the name field and its button live inside the empty card, not above it.
+   const b=reader.viewGroups().length?bar():emptyActions(emptyCard(body,{title:'저장한 뷰 그룹이 없습니다.',hint:'열 표시·순서·너비·정렬을 조절한 뒤 현재 뷰를 저장하세요.'})),name=node('input',null,b,{placeholder:'현재 열 배치 이름','aria-label':'뷰 그룹 이름'});const saveView=button('현재 뷰 저장',async()=>{const submitted=name.value.trim();await reader.saveView(win,submitted);finishDraft(name,name.value,true);await render();message(`“${submitted}” 뷰를 저장했습니다.`);},b);
    {const sync=()=>{saveView.disabled=!name.value.trim();};name.addEventListener('input',sync);sync();}
    for(const view of reader.viewGroups()){
     const c=card(view.name,`${view.columns.length}개 열 설정`),title=node('input',null,c,{'aria-label':'저장된 뷰 그룹 이름'});title.value=view.name;title.dataset.draftKey=JSON.stringify(['view-group-name',view.id]);
@@ -3667,15 +3791,14 @@
     button('현재 열 배치로 뷰 갱신',async()=>{await reader.updateView(win,view.id);render();},c);
     button('삭제',async()=>{await reader.deleteView(view.id);render();},c);
    }
-   if(!reader.viewGroups().length)empty('열 표시·순서·너비·정렬을 조절한 뒤 현재 뷰를 저장하세요.');
   }
-  function drawCanvas(){const b=bar(),name=node('input',null,b,{placeholder:'새 보드 이름','aria-label':'보드 이름'});button('보드 만들기',async()=>{const board=model.createBoard(runtime.cache,name.value);state.boardID=board.id;runtime.dirty=true;await runtime.flush();render();},b,{'data-variant':'primary'});const select=node('select',null,b,{'aria-label':'캔버스 선택'});node('option','보드 선택',select,{value:''});for(const board of runtime.cache.boards||[])node('option',board.name,select,{value:board.id});select.value=state.boardID||'';select.addEventListener('change',()=>{state.boardID=select.value;state.cardIDs.clear();render();});const board=(runtime.cache.boards||[]).find(b=>b.id===state.boardID);
+  function drawCanvas(){const noBoards=!(runtime.cache.boards||[]).length;const b=noBoards?emptyActions(emptyCard(body,{title:'보드를 만들고 선택한 문헌을 카드로 추가하세요.'})):bar(),name=node('input',null,b,{placeholder:'새 보드 이름','aria-label':'보드 이름'});button('보드 만들기',async()=>{const board=model.createBoard(runtime.cache,name.value);state.boardID=board.id;runtime.dirty=true;await runtime.flush();render();},b,{'data-variant':'primary'});const select=node('select',null,b,{'aria-label':'캔버스 선택'});node('option','보드 선택',select,{value:''});for(const board of runtime.cache.boards||[])node('option',board.name,select,{value:board.id});select.value=state.boardID||'';select.addEventListener('change',()=>{state.boardID=select.value;state.cardIDs.clear();render();});const board=(runtime.cache.boards||[]).find(b=>b.id===state.boardID);
    button('보드 삭제',async()=>{if(!board)throw new Error('삭제할 보드를 선택하세요.');deletedCardSelections.set(board.id,[...state.cardIDs]);model.deleteBoard(runtime.cache,board.id);state.boardID=null;state.cardIDs.clear();runtime.dirty=true;await runtime.flush();render();},b,{class:'sc-danger-soft'}).hidden=!board;
    // Nothing to act on is shown as off, as the matrix's paging and the tab
    // manager's moves already are, instead of an error after the press.
-   select.disabled=!(runtime.cache.boards||[]).length;
+   select.disabled=noBoards;if(noBoards)select.hidden=true;
    button('삭제 취소',async()=>{const restored=model.restoreBoard(runtime.cache);if(!restored)throw new Error('되돌릴 보드가 없습니다. 보드를 지운 뒤에만 되돌릴 수 있습니다.');state.boardID=restored.id;state.cardIDs=new Set((deletedCardSelections.get(restored.id)||[]).filter(id=>restored.nodes.some(n=>n.id===id)));runtime.dirty=true;await runtime.flush();render();},b).hidden=!(deletedCardSelections.size||(runtime.cache.boardTrash||[]).length);
-   if(!board){empty('보드를 만들고 선택한 문헌을 카드로 추가하세요.');return;}
+   if(!board){if(!noBoards)empty('보드를 선택하거나 새로 만드세요.');return;}
    const save=async()=>{runtime.dirty=true;await runtime.flush();render();};button('선택 문헌 추가',async()=>{const chosen=selected();if(!chosen.length)throw new Error('카드로 올릴 문헌을 먼저 선택하세요.');model.addToBoard(runtime.cache,board,chosen);await save();},b);button('메모 카드 추가',async()=>{model.addBoardNote(runtime.cache,board,'새 메모');await save();},b);button('카드 연결',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('두 카드를 선택하세요.');model.linkCards(board,...ids);await save();},b);button('선택 카드 삭제',async()=>{
     if(!state.cardIDs.size)throw new Error('지울 카드를 먼저 선택하세요.');
     /* A board can be restored after deletion; its cards, with their memos,
@@ -3715,6 +3838,8 @@
      who is compared), and the chosen list beside it. Both edit state.selected
      directly, so the table, references, footer and CSV all follow from the
      one Set the rest of the panel already reads. */
+  /* With a table already on screen (the chosen papers, or the whole list) the picker stays folded behind 문헌 추가. */
+  const matrixPickerDefaultOpen=()=>selected().length<1&&!rows().length;
   function drawMatrixPicker(parent){
    const onChange=()=>{state.matrixUsingSelection=true;render();};
    const chosen=selected();
@@ -3727,7 +3852,7 @@
     }
    }
    // With a comparison already on screen the picker stays folded; 문헌 추가 opens it.
-   const open=state.matrixPickerOpen??(chosen.length<1);
+   const open=state.matrixPickerOpen??matrixPickerDefaultOpen();
    if(!open)return;
    const picker=node('div',null,parent,{class:'sc-matrix-picker'});
    const searchBar=node('div',null,picker,{class:'sc-actions'});
@@ -3779,7 +3904,7 @@
       keeps it: null means "decide for me", true/false means they did. */
    const n=scopeItems.length,flip=state.transpose??(n>=2&&n<=4);
    const b=bar();if(scopeItems.length)button('행·열 전환',()=>{state.transpose=!flip;render();},b);
-   button('문헌 추가',()=>{state.matrixPickerOpen=!(state.matrixPickerOpen??(selected().length<1));render();},b);
+   button('문헌 추가',()=>{state.matrixPickerOpen=!(state.matrixPickerOpen??matrixPickerDefaultOpen());render();},b);
    drawMatrixPicker(body);
    if(!scopeItems.length){
     empty('비교할 문헌을 추가하세요.');
@@ -3801,7 +3926,7 @@
     const seconds=Number(item.seconds)||0;
     return {...item,tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||'',
      status:T(STATUS[item.status]||item.status||'안 읽음'),
-     seconds:seconds>0?(runtime.formatReadTime?runtime.formatReadTime(seconds):`${seconds}초`):''};
+     seconds:seconds>0?(runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):`${seconds}초`):''};
    });
    const data=model.matrix(values,fields,flip);
    button('CSV 복사',()=>copy(model.csv(data.map((row,i)=>row.map((value,j)=>(flip?j===0:i===0)?T(fieldNames[value]||String(value)):value)))),b);
@@ -3810,12 +3935,14 @@
    state.matrixPage=Math.max(0,Math.min(state.matrixPage||0,Math.max(0,total-1)));
    // One page of everything never needed paging chrome; it only crowded the bar.
    if(total>1){
-    node('span',`전체 ${values.length}개 · ${state.matrixPage+1}/${Math.max(1,total)} 페이지 · CSV는 전체 문헌`,b);
-    button('비교 이전 페이지',()=>{state.matrixPage--;render();},b).disabled=state.matrixPage===0;
-    button('비교 다음 페이지',()=>{state.matrixPage++;render();},b).disabled=state.matrixPage+1>=total;
+    /* The pager is the right end of the toolbar: ‹ 1/9 ›, with the totals in its tooltip. */
+    const pager=node('span',null,b,{class:'sc-matrix-pager',role:'group','aria-label':T('비교 표 페이지'),title:T(`전체 ${values.length}개 · ${state.matrixPage+1}/${Math.max(1,total)} 페이지 · CSV는 전체 문헌`)});
+    const prev=button('',()=>{state.matrixPage--;render();},pager,{class:'sc-icon-button','aria-label':'비교 이전 페이지',title:T('이전 페이지')});setIcon(prev,'matrixPrev');prev.disabled=state.matrixPage===0;
+    node('span',`${state.matrixPage+1}/${Math.max(1,total)}`,pager,{class:'sc-matrix-pager-count',role:'status'});
+    const next=button('',()=>{state.matrixPage++;render();},pager,{class:'sc-icon-button','aria-label':'비교 다음 페이지',title:T('다음 페이지')});setIcon(next,'matrixNext');next.disabled=state.matrixPage+1>=total;
    }
    // With nothing selected the table is the whole list on screen; it says so.
-   if(!selected().length)node('span','선택 없음 · 현재 목록 전체',b,{class:'sc-muted'});
+   if(!selected().length)node('p','선택 없음 · 현재 목록 전체',body,{class:'sc-muted sc-matrix-scope'});
    const shown=model.matrix(values.slice(state.matrixPage*pageSize,(state.matrixPage+1)*pageSize),fields,flip);
    const scroll=node('div',null,body,{class:'sc-matrix-scroll'});
    const moreHint=node('p',T('표가 옆으로 더 이어집니다. 가로로 밀어서 보세요.'),body,{class:'sc-muted sc-matrix-hint'});moreHint.hidden=true;
@@ -3905,7 +4032,7 @@
      node('td',fetched?(citing.includes(p)?'✓':''):T('미확보'),tr,{class:'sc-ref-check'+(fetched?'':' sc-ref-unknown')});
     }
     const libCell=node('td',null,tr);
-    if(held)node('span',[T(STATUS[held.status]||'안 읽음'),Number(held.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(held.seconds):''].filter(Boolean).join(' · '),libCell);
+    if(held)node('span',[T(STATUS[held.status]||'안 읽음'),Number(held.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(held.seconds,{compact:true}):''].filter(Boolean).join(' · '),libCell);
     else node('span','서재에 없음',libCell,{class:'sc-muted'});
    }
   }
@@ -3946,7 +4073,7 @@
    output.hidden=!have;if(have)output.value=state.compareOutput;
    const actions=bar(section);actions.classList.add('sc-compare-actions');actions.hidden=!have;
    button('결과 복사',()=>copy(output.value),actions,{'data-ai-copy':'true'});
-   button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 「함께 읽기」를 눌러 결과를 받으세요.');noteCache=null;await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
+   button('첫 문헌의 노트로 저장',()=>run(async()=>{if(!output.value.trim()||state.compareKey!==key)throw new Error('먼저 “함께 읽기”를 눌러 결과를 받으세요.');noteCache=null;await library.createNote(chosen[0].id,`함께 읽기 (${chosen.map(paper=>plain(paper.title||'').slice(0,40)).join(' · ')})\n\n`+output.value);message('첫 문헌 아래에 노트로 저장했습니다.');}),actions);
   }
   /* Collections as a tree, each with a bar for how much it holds. A list of
      boxed cards, one per collection with a button and a checkbox, said no
@@ -3955,6 +4082,7 @@
      a name is the way in. */
   async function drawCollections(token){
    const collections=await library.collections(win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries.userLibraryID);if(token!==epoch||disposed)return;
+   const tilesAt=node('div',null,body,{class:'sc-stat-slot'});
    const b=bar();
    const find=node('input',null,b,{type:'search',placeholder:'컬렉션 이름 검색','aria-label':'컬렉션 검색'});
    const sort=node('select',null,b,{'aria-label':'컬렉션 정렬'});sort.hidden=!enabled('sortCollectionItem');
@@ -3981,8 +4109,17 @@
    // touched in the last two weeks, off the same last-read data as each row's own bar.
    const recentDays=14*864e5,now=Date.now();
    const recent=collections.filter(c=>{const last=readingMix(deepIDs(c)).last;return last>0&&now-last<=recentDays;}).length;
-   node('span',T(`컬렉션 ${collections.length}개 · 서로 다른 문헌 ${distinct}편 · 빈 컬렉션 ${collections.filter(c=>!c.deepCount).length}개 · 최근 14일에 읽은 컬렉션 ${recent}개`),b,{class:'sc-muted'});
-   const list=node('div',null,body,{class:'sc-collection-tree'});
+   /* The summary is one stat-tile row above the search, not a sentence packed into the toolbar. */
+   {const tiles=statTiles(tilesAt,[
+     {value:fmtN(collections.length),label:'컬렉션',title:`컬렉션 ${collections.length}개`},
+     {value:fmtN(distinct),label:'서로 다른 문헌',title:`서로 다른 문헌 ${distinct}편: 여러 컬렉션에 든 문헌은 한 번만 셉니다`},
+     {value:fmtN(collections.filter(c=>!c.deepCount).length),label:'빈 컬렉션'},
+     {value:fmtN(recent),label:'최근 14일 읽음',title:`최근 14일에 읽은 컬렉션 ${recent}개`}],{label:'컬렉션 요약'});
+    tiles.setAttribute('aria-label',T(`컬렉션 ${collections.length}개 · 서로 다른 문헌 ${distinct}편 · 빈 컬렉션 ${collections.filter(c=>!c.deepCount).length}개 · 최근 14일에 읽은 컬렉션 ${recent}개`));}
+   /* One soft group, "컬렉션 · n" over its rows; each top-level collection is a white row card inside it. */
+   const treeGroup=node('section',null,body,{class:'sc-group sc-collection-section'});
+   sectionHead('컬렉션',collections.length,treeGroup);
+   const list=node('div',null,treeGroup,{class:'sc-collection-tree'});
    function draw(){
     list.replaceChildren();
     const favorites=runtime.cache.favoriteCollections||[];
@@ -4022,14 +4159,19 @@
             setIcon(node('span',null,nameLine,{class:'sc-collection-icon'}),'collections');
       node('span',c.name,nameLine,{class:'sc-collection-name',title:c.name});
       const kids=(byParent.get(c.id)||[]).length;
-      if(kids)node('span',`하위 ${kids}`,nameLine,{class:'sc-collection-kids'});
-      if(enabled('collectionItemCount'))node('span',c.deepCount>c.count?`하위 포함 ${c.deepCount}편`:c.count?`${c.count}편`:'비어 있음',nameLine,{class:'sc-collection-count',title:c.deepCount>c.count?T(`이 컬렉션 ${c.count}편 · 하위 컬렉션까지 ${c.deepCount}편`):''});
+      /* "3편 · 하위 컬렉션 1": the count badge is the papers (with what is filed below), the sub-collections are said in words. An empty one is a dim word, not a badge. */
+      if(enabled('collectionItemCount')){
+       if(c.deepCount)node('span',`${c.deepCount}편`,nameLine,{class:'sc-collection-count',title:c.deepCount>c.count?T(`이 컬렉션 ${c.count}편 · 하위 컬렉션까지 ${c.deepCount}편`):''});
+       else node('span',T('비어 있음'),nameLine,{class:'sc-collection-none'});
+      }
+      if(kids)node('span',T(`하위 컬렉션 ${kids}`),nameLine,{class:'sc-collection-kids'});
       /* The bar's length is still the collection's size; inside it, how much
          has been read -- the summary's three tones -- so a collection that was
          filed and never opened shows as one. Read off the loaded papers. */
       const barBox=node('div',null,row,{class:'sc-collection-bar','aria-hidden':'true'});
-      const fill=node('span',null,barBox,{class:'sc-collection-fill'});fill.style.width=`${Math.round(100*(c.deepCount||0)/most)}%`;
+      const fill=node('span',null,barBox,{class:'sc-collection-fill'});fill.style.width='100%';
       const mix=readingMix(deepIDs(c));
+      if(c.deepCount)node('span',`${mix.done}/${c.deepCount}`,row,{class:'sc-collection-ratio',title:T(`완료 ${mix.done}편 / 전체 ${c.deepCount}편`)});
       if(mix.known){
        fill.classList.add('sc-collection-mix');
        for(const key of ['done','reading','unread'])if(mix[key])node('span',null,fill,{class:'sc-overview-'+key}).style.flexGrow=String(mix[key]);
@@ -4050,7 +4192,7 @@
         },mixText,{class:'sc-collection-unread',title:T('이 컬렉션의 안 읽은 문헌만 보기')});
         go.addEventListener('click',event=>event.stopPropagation());
        }
-       if(mix.seconds)mixText.appendChild(doc.createTextNode((said.length||mix.unread?' · ':'')+(runtime.formatReadTime?runtime.formatReadTime(mix.seconds):Math.round(mix.seconds/60)+'분')));
+       if(mix.seconds)mixText.appendChild(doc.createTextNode((said.length||mix.unread?' · ':'')+(runtime.formatReadTime?runtime.formatReadTime(mix.seconds,{compact:true}):Math.round(mix.seconds/60)+'분')));
        if(mix.last)mixText.appendChild(doc.createTextNode((said.length||mix.unread||mix.seconds?' · ':'')+ago(mix.last)));
       }
       const actions=node('div',null,row,{class:'sc-collection-actions'});
@@ -4061,7 +4203,10 @@
      }
     };
     walk('',0);
-    if(!drawn)node('p',q?'검색에 맞는 컬렉션이 없습니다.':'컬렉션이 없습니다.',list,{class:'sc-empty'});
+    if(!drawn){
+     const none=emptyCard(list,{title:q?'검색에 맞는 컬렉션이 없습니다.':'컬렉션이 없습니다.',icon:'collections'});
+     if(q)button('검색 지우기',()=>{find.value='';draw();},emptyActions(none));
+    }
    }
    sort.value='name';sort.addEventListener('change',draw);
    let typing=null;find.addEventListener('input',()=>{win.clearTimeout(typing);typing=win.setTimeout(draw,120);});
@@ -4116,8 +4261,8 @@
        a paper on the shelf and a paper read are two different answers. */
     const bare=v=>String(v||'').toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
     const held=work.doi?state.items.find(i=>i.doi&&bare(i.doi)===bare(work.doi)):null;
-    const said=held?[T('보유'),held.status==='done'?T('완료'):held.status==='reading'?T('읽는 중'):T('안 읽음'),Number(held.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(held.seconds):''].filter(Boolean).join(' · '):'보유';
-    node('span',said,row,{class:'sc-hit-owned'});
+    const said=held?[T('보유'),held.status==='done'?T('완료'):held.status==='reading'?T('읽는 중'):T('안 읽음'),Number(held.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(held.seconds,{compact:true}):''].filter(Boolean).join(' · '):'보유';
+    const ownedChip=node('span',said,null,{class:'sc-hit-owned'});meta.insertBefore(ownedChip,meta.firstChild);
     /* Owned was a dead end: the reader had to go and search their own
        library for it. 보기 selects it in the list behind the panel. */
     const mine=work.doi&&typeof runtime.itemForDOI==='function'?runtime.itemForDOI(work.doi):null;
@@ -4167,11 +4312,12 @@
    const head=node('button',null,bar,{type:'button',class:'sc-around-summary','aria-expanded':String(!!open)});
    node('span','이 논문 주변',head,{class:'sc-around-title'});
    const chips=node('span',null,head,{class:'sc-around-chips'});
-   const chevron=node('span',open?'\u25be':'\u25b8',head,{class:'sc-around-chevron','aria-hidden':'true'});
+   const chevron=node('span',null,head,{class:'sc-around-chevron','aria-hidden':'true'});
    const detail=node('div',null,box,{class:'sc-around-detail'});
    detail.hidden=!open;
-   const pane=label=>{const g=node('section',null,detail,{class:'sc-group sc-around-group'});sectionHead(label,null,g);return node('div',null,g,{class:'sc-around-body'});};
-   const issuesBox=pane('이슈 경과'),reactionsBox=pane('SNS·웹 반응');
+   const heads=[];
+   const pane=label=>{const g=node('section',null,detail,{class:'sc-group sc-around-group'});heads.push(sectionHead(label,null,g));return node('div',null,g,{class:'sc-around-body'});};
+   const issuesBox=pane('이슈 경과'),reactionsBox=pane('SNS·웹 반응'),issuesHead=heads[0];
    let controller=null,seq=0;
    const summary={issues:'loading',reactions:'loading'};
    function paintSummary(){
@@ -4187,13 +4333,13 @@
     if(reactions==='loading')return;
     if(reactions==='error'||reactions.allFailed){node('span','반응 확인 못함',chips,{class:'sc-muted sc-around-chip-note'});return;}
     if(reactions.reason==='no-doi')return;
-    const counts=[['Bluesky',reactions.bluesky?.count],['HN',reactions.hackerNews?.count],['Wikipedia',reactions.wikipedia?.count]].filter(([,n])=>n>0);
+    const counts=[['Bluesky',reactions.bluesky?.count],['Hacker News',reactions.hackerNews?.count],['Wikipedia',reactions.wikipedia?.count]].filter(([,n])=>n>0);
     if(reactions.altmetric&&Number(reactions.altmetric.score)>0)counts.push(['Altmetric',Math.round(Number(reactions.altmetric.score))]);
     if(!counts.length)node('span','반응 없음',chips,{class:'sc-muted sc-around-chip-note'});
     for(const[name,n]of counts){const chip=node('span',name+' ',chips,{class:'sc-around-badge'});node('b',String(n),chip);}
    }
    function setOpen(value){
-    detail.hidden=!value;head.setAttribute('aria-expanded',String(value));chevron.textContent=value?'\u25be':'\u25b8';
+    detail.hidden=!value;head.setAttribute('aria-expanded',String(value));
    }
    head.addEventListener('click',()=>{const next=detail.hidden;setOpen(next);try{onToggle?.(next);}catch(_){}});
    paintSummary();
@@ -4224,7 +4370,8 @@
     }
     if(status!=='unknown'&&failed.length)note(issuesBox,T(`응답 없음: ${failed.join(', ')}`));
     const peer=source.doi?'https://pubpeer.com/search?q='+encodeURIComponent(String(source.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').toLowerCase()):'';
-    if(peer){const acts=node('div',null,issuesBox,{class:'sc-around-actions'});const b=node('button','PubPeer에서 보기',acts,{type:'button',class:'sc-quiet-action','data-opens':'browser'});b.addEventListener('click',()=>{try{win.Zotero.launchURL(peer);}catch(_){}});}
+    issuesHead.querySelector('.sc-section-head-actions')?.remove();
+    if(peer){const acts=node('span',null,issuesHead,{class:'sc-section-head-actions'});const b=node('button','PubPeer에서 보기',acts,{type:'button',class:'sc-quiet-action','data-opens':'browser'});b.addEventListener('click',()=>{try{win.Zotero.launchURL(peer);}catch(_){}});}
    }
    function paintReactions(res){
     const checked=dayOf(res?.checked),failed=Array.isArray(res?.failed)?res.failed:[];
@@ -4240,21 +4387,26 @@
     }
     const hidden=[];
     const link=(url,parentEl,label)=>{const target=safeURL(url);if(!target)return;const b=node('button',label,parentEl,{type:'button',class:'sc-quiet-action','data-opens':'browser',title:target});b.addEventListener('click',()=>{try{win.Zotero.launchURL(target);}catch(_){}});};
-    const post=(p,parentEl)=>{
-     const c=node('article',null,parentEl,{class:'sc-around-card','data-source':'bluesky'});
+    /* One card template for every source: who and when, the text, then the figures with their outline icons and the link. */
+    const stat=(parentEl,icon,value,label)=>{const span=node('span',null,parentEl,{class:'sc-around-stat',title:label,'aria-label':label});const mark=node('span',null,span,{class:'sc-around-stat-icon','aria-hidden':'true'});setIcon(mark,icon);const svg=mark.firstChild;if(svg){svg.setAttribute('width','14');svg.setAttribute('height','14');}node('span',fmtN(value),span);return span;};
+    const card=(source,who,date,text,parentEl)=>{
+     const c=node('article',null,parentEl,{class:'sc-around-card','data-source':source});
      const head=node('p',null,c,{class:'sc-around-card-head'});
-     ext('span',p.author||p.handle,head,{class:'sc-around-author'});
-     if(p.date)ext('span',' · '+dayOf(p.date),head,{class:'sc-muted'});
-     ext('p',p.text,c,{class:'sc-around-text'});
-     const foot=node('div',null,c,{class:'sc-around-card-foot'});
-     ext('span','♥ '+(p.likes||0)+'   ↻ '+(p.reposts||0),foot,{class:'sc-muted sc-around-stats','aria-label':T(`좋아요 ${p.likes||0}, 리포스트 ${p.reposts||0}`)});
+     ext('span',who,head,{class:'sc-around-author'});
+     if(date)ext('span',' · '+dayOf(date),head,{class:'sc-muted'});
+     ext('p',text,c,{class:'sc-around-text'});
+     return node('div',null,c,{class:'sc-around-card-foot'});
+    };
+    const post=(p,parentEl)=>{
+     const foot=card('bluesky',p.author||p.handle||'Bluesky',p.date,p.text,parentEl);
+     const stats=node('span',null,foot,{class:'sc-around-stats'});
+     stat(stats,'like',p.likes||0,T(`좋아요 ${p.likes||0}`));stat(stats,'repost',p.reposts||0,T(`리포스트 ${p.reposts||0}`));
      link(p.url,foot,'Bluesky에서 보기');
     };
     const story=(h,parentEl)=>{
-     const c=node('article',null,parentEl,{class:'sc-around-card','data-source':'hackernews'});
-     ext('p',h.title,c,{class:'sc-around-text'});
-     const foot=node('div',null,c,{class:'sc-around-card-foot'});
-     ext('span',T(`추천 ${h.points||0} · 댓글 ${h.comments||0}`)+(h.date?' · '+dayOf(h.date):''),foot,{class:'sc-muted sc-around-stats'});
+     const foot=card('hackernews','Hacker News',h.date,h.title,parentEl);
+     const stats=node('span',null,foot,{class:'sc-around-stats'});
+     stat(stats,'like',h.points||0,T(`추천 ${h.points||0}`));stat(stats,'comment',h.comments||0,T(`댓글 ${h.comments||0}`));
      link(h.url,foot,'Hacker News에서 보기');
     };
     const posts=Array.isArray(bsky.top)?bsky.top:[],stories=Array.isArray(hn.top)?hn.top:[],articles=Array.isArray(wiki.articles)?wiki.articles:[];
@@ -4523,7 +4675,7 @@
     const modes=node('div',null,head,{class:'sc-segmented',role:'group','aria-label':'관련 논문 보기'});
     for(const[key,label]of [['path','읽기 순서'],['line','발전 과정'],['list','전체 목록'],['fresh','새 논문']]){
      if(key==='fresh'?!canFresh:key!=='list'&&!canPath)continue;
-     const press=button(label,()=>run(async()=>{state.relatedView=key;await saveUI({relatedView:key});await render();body.querySelector('.sc-segmented [aria-pressed="true"]')?.focus?.();}),modes,{'aria-pressed':String(view===key)});
+     const press=button(label,()=>run(async()=>{state.relatedView=key;await saveUI({relatedView:key});await render();body.querySelector('.sc-segmented [aria-pressed="true"]')?.focus?.();}),modes,{'aria-pressed':String((view||(item?null:state.relatedView==='fresh'?'path':state.relatedView))===key)});
      // The three per-paper views need a paper; saying so on the control beats
      // letting it answer with the same guide every time.
      if(key!=='fresh'&&!item){press.disabled=true;press.title=T('문헌을 하나 고르면 볼 수 있습니다');}
@@ -4533,17 +4685,17 @@
    if(!item){
     /* Nothing selected: say what the tab will do and how to start, instead
        of a single line that read as an error. */
-    const guide=node('div',null,body,{class:'sc-guide'});
-    node('h2','관련 논문',guide);
-    node('p','문헌을 하나 고르면 참고문헌과 인용 관계를 분석해 무엇을 어떤 순서로 읽을지 짜 드립니다: 개관 → 기초 → 직계 선행연구 → 이 논문 → 후속 연구.',guide);
-    node('p','전체 목록 보기에서는 OpenAlex에서 찾은 세 묶음을 모두 볼 수 있습니다.',guide);
-    const steps=node('ul',null,guide,{class:'sc-guide-list'});
-    for(const [key,label] of Object.entries(GROUP_LABELS)){const li=node('li',null,steps);node('strong',label,li);node('span',' — '+T(GROUP_NOTES[key]),li);}
-    node('p','보유하지 않은 논문은 행의 버튼으로 ZotPoP에서 바로 찾거나 가져올 수 있습니다.',guide,{class:'sc-muted'});
+    const guide=emptyCard(body,{title:'문헌을 하나 고르세요.',hint:'참고문헌과 인용 관계를 분석해 무엇을 어떤 순서로 읽을지 짜 드립니다: 개관 → 기초 → 직계 선행연구 → 이 논문 → 후속 연구.'});
+    const tiers=node('ul',null,guide,{class:'sc-empty-tiers'});
+    for(const [key,label,icon] of [['citing',GROUP_LABELS.citing,'recent'],['reference',GROUP_LABELS.reference,'backlinks'],['related',GROUP_LABELS.related,'related']]){
+     const li=node('li',null,tiers);const mark=node('span',null,li,{class:'sc-empty-tier-icon','aria-hidden':'true'});setIcon(mark,icon);
+     node('strong',label,li);node('span',T(GROUP_NOTES[key]),li,{class:'sc-empty-tier-note'});
+    }
+    node('span',T('보유하지 않은 논문은 행의 버튼으로 ZotPoP에서 바로 찾거나 가져올 수 있습니다.'),guide,{class:'sc-empty-hint'});
     const chosen=selected();
-    if(chosen.length>1){node('p',`선택한 ${chosen.length}편 중 하나를 고르세요`,guide,{class:'sc-muted'});const pickBar=bar(guide);for(const it of chosen.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar);}
-    const acts=bar(guide);
-    button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},acts,{'data-variant':'primary'});
+    if(chosen.length>1){node('span',`선택한 ${chosen.length}편 중 하나를 고르세요`,guide,{class:'sc-empty-hint'});const pickBar=emptyActions(guide);for(const it of chosen.slice(0,12))button(it.title,()=>{state.selected=new Set([String(it.id)]);render();},pickBar);}
+    const acts=emptyActions(guide);
+    button('현재 선택 가져오기',()=>{state.selected=new Set(runtime.selected(win).map(i=>String(i.id)));render();},acts);
     button('보유 문헌에서 고르기',()=>navigate('explore'),acts);
     return;
    }
@@ -4671,8 +4823,8 @@
     const c=plan.counts||{},fetched=c.fetched??c.references??0;
     const total=c.total&&c.total>fetched?`${fetched}/${c.total}`:String(fetched);
     const gaps=plan.partial?.length?T(plan.budgetGone?' · OpenAlex 한도로 일부를 읽지 못했습니다':' · 일부 조회가 실패했습니다'):'';
-    message(c.total||fetched?`참고문헌 ${total}편 · 인용한 논문 ${c.citers||0}편에서 ${n}편을 골랐습니다${gaps}`
-     :`OpenAlex에 이 논문의 참고문헌 목록이 없어 인용한 논문 ${c.citers||0}편만 살폈습니다${gaps}`);
+    message(c.total||fetched?`참고문헌 ${total}편 · 인용한 논문 ${c.citers||0}편에서 ${n}편을 골랐습니다${gaps}.`
+     :`OpenAlex에 이 논문의 참고문헌 목록이 없어 인용한 논문 ${c.citers||0}편만 살폈습니다${gaps}.`);
     const notes=[];
     if(plan.titleMatched)notes.push('DOI가 없어 제목으로 찾은 논문입니다. 아래 "이 논문" 줄이 맞는지 확인하세요.');
     if(plan.mode==='review')notes.push('이 문헌은 리뷰라서, 뒤에 읽을 선행연구 대신 리뷰가 딛고 선 원논문을 보여 줍니다.');
@@ -4744,7 +4896,7 @@
      const owned=row.querySelector('.sc-hit-owned');
      if(work.inLibrary&&!work.seed&&work.local&&owned&&owned.textContent==='보유'){
       const l=work.local,said=[T('보유'),l.status==='reading'?T('읽는 중'):T('안 읽음')];
-      if(Number(l.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(l.seconds));
+      if(Number(l.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(l.seconds,{compact:true}));
       owned.textContent=said.join(' · ');
      }
      // The PDF is the one action a reader takes from this list without
@@ -4986,7 +5138,7 @@
      const row=node('div',null,mine,{class:'sc-author-shelf-row'});
      button(item.title||T('제목 없음'),()=>showPaper(item.id),row,{class:'sc-hit-title-link',title:item.title||''});
      const meta=node('span',null,row,{class:'sc-muted sc-author-shelf-meta'});
-     const said=[[item.year,'sc-shelf-year'],[item.status==='done'?T('완료'):item.status==='reading'?T('읽는 중'):T('안 읽음'),'sc-shelf-state'],[Number(item.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(item.seconds):'','sc-shelf-time']].filter(([text])=>text);
+     const said=[[item.year,'sc-shelf-year'],[item.status==='done'?T('완료'):item.status==='reading'?T('읽는 중'):T('안 읽음'),'sc-shelf-state'],[Number(item.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(item.seconds,{compact:true}):'','sc-shelf-time']].filter(([text])=>text);
      said.forEach(([text,cls],index)=>{if(index)meta.appendChild(doc.createTextNode(' · '));{const chip=node('span',String(text),meta,{class:cls});if(cls==='sc-shelf-state')chip.dataset.status=item.status||'unread';}});
     }
     if(ordered.length>8)button(state.authorShelfAll?'8편만 보기':T(`${ordered.length}편 모두 보기`),()=>{state.authorShelfAll=!state.authorShelfAll;redo();},g,{class:'sc-local-reading-more'});
@@ -5046,17 +5198,20 @@
      node('span',T('소속')+' ',span);
      if(places)node('b',places,span);else placeLine({institution},span);
     }
-    for(const [label,value] of [['h-index',profile?.hIndex],['논문',profile?.works],['총 인용',profile?.citations],['마지막 확인',(checkedAt||stored?.sweptAt||'').slice(0,10)]]){
+    /* 마지막 확인 is the stored sweep (what the table row says); the profile's own fetch date only stands in when no sweep has recorded one. */
+    const checkedOn=(stored&&stored.sweptAt)||checkedAt||'';
+    for(const [label,value] of [['h-index',profile?.hIndex],['논문',profile?.works!=null?fmtN(profile.works):null],['총 인용',profile?.citations!=null?fmtN(profile.citations):null],['마지막 확인',checkedOn.slice(0,10)]]){
      if(value==null||value==='')continue;
      const span=node('span',label+' ',stats);node('b',String(value),span);
     }
     if(profile?.topics?.length){
      const chips=node('div',null,who,{class:'sc-chips'});
-     for(const topic of profile.topics){const chip=node('span',topic.name,chips,{class:'sc-chip'});if(topic.count)node('b',String(topic.count),chip);}
+     for(const topic of profile.topics){const chip=node('span',topic.name,chips,{class:'sc-chip'});if(topic.count)node('b',fmtN(topic.count),chip);}
     }
     // A portrait is a nice-to-have on a metered budget, so it is fetched only
     // for the author actually being looked at, and remembered either way.
     if(face)paintPortrait(face,{...person,name:profile?.name||person.name,orcid:profile?.orcid});
+    const unseenStored=stored?unseenWorks(stored):[];
     const follow=bar(wrap);
     if(inline)button('상세 보기',()=>run(()=>show(person)),follow,{class:'sc-person-full',title:T('이 저자의 전체 화면 보기')});
     if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),follow,{'data-opens':'browser'});
@@ -5069,11 +5224,13 @@
        return run(async()=>{await runtime.unwatchAuthor(person.id);await refreshed();});
       },follow,{class:'sc-unwatch'});
      }
-     if(fresh.length)button(`새 논문 ${fresh.length}편 확인함`,()=>run(async()=>{
+     /* The count is the list shown under it (the stored unseen papers when there are any), so the button and the group agree. */
+     const toMark=unseenStored.length?unseenStored:fresh;
+     if(toMark.length)button(`새 논문 ${toMark.length}편 확인함`,()=>run(async()=>{
       // Marked one by one in the store the inbox reads, so 확인함 above and
       // here agree and either can be undone. The sweep's own record of what
       // it has found is left alone; a later sweep replaces it anyway.
-      for(const work of fresh)await setSeen({key:newsKey(work)},true);
+      for(const work of toMark)await setSeen({key:newsKey(work)},true);
       if(inline)state.watchRefocus=true;
       await refreshed();
      }),follow);
@@ -5091,7 +5248,6 @@
     const newCoauthors=stored?.newCoauthors||[];
     const moved=stored?.moved?.to?stored.moved:null;
     const newPatents=stored?.newPatents?.length||0;
-    const unseenStored=stored?unseenWorks(stored):[];
     if(watching&&(unseenStored.length||fresh.length)){
      const g=personGroup('새 논문',unseenStored.length||fresh.length,wrap,'sc-person-news');
      if(unseenStored.length){
@@ -5102,7 +5258,7 @@
     }
     if(moved||newCoauthors.length||newPatents){
      const news=node('section',null,wrap,{class:'sc-group sc-person-group sc-author-news','aria-label':T('마지막 확인 이후')});
-     sectionHead('마지막 확인 이후',checkedAt?checkedAt.slice(0,10):'',news,'sc-author-head');
+     {const head=sectionHead('마지막 확인 이후','',news,'sc-author-head');if(checkedOn)node('span',checkedOn.slice(0,10),head,{class:'sc-muted sc-author-head-date'});}
      if(moved){
       const line=node('p',null,news,{class:'sc-author-news-line'});
       node('span',T('소속 이동'),line,{class:'sc-author-news-label'});
@@ -5269,7 +5425,7 @@
     });});
     parts.forEach((make,index)=>{if(index)meta.appendChild(doc.createTextNode(' · '));make(meta);});
     const status=node('span',null,row,{class:'sc-inbox-status'});
-    if(mine){node('span',T('보유'),status,{class:'sc-hit-owned'});const said=[mine.status==='done'?T('완료'):mine.status==='reading'?T('읽는 중'):T('안 읽음')];if(Number(mine.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(mine.seconds));node('span',said.join(' · '),status,{class:'sc-inbox-read'});}
+    if(mine){node('span',T('보유'),status,{class:'sc-hit-owned'});const said=[mine.status==='done'?T('완료'):mine.status==='reading'?T('읽는 중'):T('안 읽음')];if(Number(mine.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(mine.seconds,{compact:true}));node('span',said.join(' · '),status,{class:'sc-inbox-read'});}
     else{
      // Not on the shelf: taken in from here, as from any list of suggestions.
      if(work.doi&&typeof runtime.importWork==='function'){const add=button('추가',()=>run(async()=>{message('가져오는 중… '+String(work.title||work.doi).slice(0,50));await runtime.importWork(work,win);add.remove();node('span',T('보유'),status,{class:'sc-hit-owned'});message(`추가했습니다 — ${work.title||work.doi}`);}),status);}
@@ -5683,7 +5839,9 @@
        above everything else -- the whole page was names, and the ten that
        mattered were somewhere inside it. Whoever has an unread paper, a new
        filing or a move is shown; the rest sit behind one button. */
-    const manage=button(state.watchManage?'카드로 보기':'목록 관리',()=>{state.watchManage=!state.watchManage;refreshWatched();},tools,{'aria-pressed':String(!!state.watchManage)});
+    /* 카드 / 표 is one segmented choice, not a dark button that changes its own name. */
+    const viewSwitch=node('div',null,tools,{class:'sc-segmented sc-watch-view',role:'group','aria-label':T('저자 보기 방식')});
+    for(const [manageOn,label] of [[false,'카드로 보기'],[true,'목록 관리']])button(label,()=>{if(!!state.watchManage===manageOn)return;state.watchManage=manageOn;refreshWatched();},viewSwitch,{'aria-pressed':String(!!state.watchManage===manageOn)});
     if(state.watchManage){drawWatchManager(watched,parent);return;}
     // A grid, not a column: at this panel width one name per row turned a
     // hundred people into a scroll, and the whole point is to see them at once.
@@ -5705,28 +5863,39 @@
      watchFace(person,row);
      const line=node('div',null,row,{class:'sc-watch-line'});
      node('span',person.name,line,{class:'sc-watch-name'});
-     if(count)node('span',String(count),line,{class:'sc-watch-badge',title:`확인 안 한 새 논문 ${count}편`});
+     /* The name's own line carries what is new about the person, at its right: a labelled badge, never a bare number. */
      /* The full name, when the library spells it the same way; otherwise the
         family name and first initial, which can take in a namesake, and says
         it is a guess. */
      const stats=statsFor(person.name);
-     if(stats.n&&!stats.guess)node('span',T(`서재 ${stats.n}`),line,{class:'sc-watch-mine',title:T(`내 서재에 이 저자의 문헌 ${stats.n}편 · 완료 ${stats.done}편 (이름 전체가 같은 문헌) · `)+COAUTHOR_NOTE});
-     else if(stats.n)node('span',T(`서재 ${stats.n}?`),line,{class:'sc-watch-mine',title:T(`성과 이름 첫 글자가 같은 문헌 ${stats.n}편 · 완료 ${stats.done}편 · 같은 이름의 다른 사람이 섞였을 수 있습니다 · `)+COAUTHOR_NOTE});
+     const mineHost=node('span',null,null);
+     if(stats.n&&!stats.guess)node('span',T(`서재 ${stats.n}`),mineHost,{class:'sc-watch-mine',title:T(`내 서재에 이 저자의 문헌 ${stats.n}편 · 완료 ${stats.done}편 (이름 전체가 같은 문헌) · `)+COAUTHOR_NOTE});
+     else if(stats.n)node('span',T(`서재 ${stats.n}?`),mineHost,{class:'sc-watch-mine',title:T(`성과 이름 첫 글자가 같은 문헌 ${stats.n}편 · 완료 ${stats.done}편 · 같은 이름의 다른 사람이 섞였을 수 있습니다 · `)+COAUTHOR_NOTE});
+     if(count)node('span',T(`새 논문 ${count}`),line,{class:'sc-watch-badge',title:`확인 안 한 새 논문 ${count}편`});
      const patents=person.newPatents?.length||0;
-     if(patents)node('span',`특허 ${patents}`,line,{class:'sc-watch-badge sc-watch-patent',title:`마지막 확인 이후 새 특허 ${patents}건`});
+     if(patents)node('span',T(`특허 ${patents}`),line,{class:'sc-watch-badge sc-watch-patent',title:`마지막 확인 이후 새 특허 ${patents}건`});
      // With news, the line says what the news is; without it, who they are.
      const latest=count?left[0]:null;
-     /* A move outranks a paper on the card: a lab relocating or a postdoc going
-        independent is the news a person watching someone most wants, and it
-        is read off the same records with no request of its own. */
+     /* A move is its own small amber badge and a muted line of where; it no longer
+        replaces the line about the latest paper, which is what the reader came for. */
      const moved=person.moved&&person.moved.to?person.moved:null;
-     const sub=node('span',moved?`${moved.from||'?'} → ${moved.to}`
-      :latest?`${latest.date?latest.date.slice(0,7)+' · ':''}${latest.venue||latest.title||''}`
-      :latest?`${latest.date?latest.date.slice(0,7)+' · ':''}${latest.venue||latest.title||''}`:'',row,{class:'sc-watch-sub'+(moved?' sc-watch-moved':'')});
-     if(!moved&&!latest){sub.textContent='';const where=runtime.placeOf?.(person.institution);if(where?.flag)node('span',where.flag,sub,{class:'sc-flag','aria-hidden':'true'});node('span',person.institution||'소속 미확인',sub);}
-     sub.title=moved?(moved.since?`소속이 바뀐 것으로 보입니다 · ${moved.since}년부터 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`:`소속이 바뀐 것으로 보입니다 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`)
-      :latest?`${latest.title||''}${latest.venue?' · '+latest.venue:''}`
-      :(person.institution||'');
+     let sub=null;
+     if(latest){
+      sub=node('span',null,row,{class:'sc-watch-sub'});
+      if(latest.date)sub.appendChild(doc.createTextNode(latest.date.slice(0,7)+' · '));
+      if(latest.venue)inkJournal(node('span',latest.venue,sub,{class:'sc-watch-venue'}),String(latest.venue).trim());
+      else sub.appendChild(doc.createTextNode(latest.title||''));
+      sub.title=`${latest.title||''}${latest.venue?' · '+latest.venue:''}`;
+     }
+     if(moved){
+      const mv=node('span',null,row,{class:'sc-watch-sub sc-watch-move'});
+      node('span',T('소속 이동'),mv,{class:'sc-status-chip','data-tone':'amber'});
+      node('span',`${moved.from||'?'} → ${moved.to}`,mv,{class:'sc-watch-moved-text'});
+      mv.title=moved.since?`소속이 바뀐 것으로 보입니다 · ${moved.since}년부터 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`:`소속이 바뀐 것으로 보입니다 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`;
+     }
+     if(!moved&&!latest){sub=node('span',null,row,{class:'sc-watch-sub'});const where=runtime.placeOf?.(person.institution);if(where?.flag)node('span',where.flag,sub,{class:'sc-flag','aria-hidden':'true'});node('span',person.institution||'소속 미확인',sub);sub.title=person.institution||'';}
+     /* What the shelf holds of them rides the end of the first detail line, so the name line keeps its room for the badges. */
+     if(mineHost.firstChild){const first=row.querySelector('.sc-watch-sub');if(first){const subline=node('div',null,null,{class:'sc-watch-subline'});row.insertBefore(subline,first);subline.appendChild(first);subline.appendChild(mineHost.firstChild);}}
      row.title=count?`${person.name} · 새 논문 ${count}편`
       :person.sweptAt?`${person.name} · 새 논문 없음 (확인 ${person.sweptAt.slice(0,10)})`
       :`${person.name} · 아직 확인하지 않음`;
@@ -5839,16 +6008,20 @@
     /* The chip is inside the cell, not the cell itself: a badge class on the td
        made it inline-flex, which pulled it out of the table row's middle line. */
     const readCell=node('td',null,tr,{class:'sc-col-reading'+(parts.length?'':' sc-none'),title:parts.length?(stats.guess?T('성과 이름 첫 글자만 같아 짐작한 값입니다 · ')+COAUTHOR_NOTE:COAUTHOR_NOTE):''});
-    if(parts.length)node('span',parts.join(' · '),readCell,{class:'sc-watch-count sc-cell-chip'});else readCell.textContent='—';
+    if(parts.length)node('span',parts.join(' · '),readCell,{class:'sc-cell-chip'});else noneMark(readCell);
     const timeCell=node('td',null,tr,{class:'sc-col-time'});
     if(stats.seconds){
-     node('span',runtime.formatReadTime?runtime.formatReadTime(stats.seconds):Math.round(stats.seconds/60)+'분',timeCell,{class:'sc-watch-time-text'});
-     const meter=node('span',null,timeCell,{class:'sc-watch-time-bar',role:'img','aria-label':T(`읽은 시간 ${runtime.formatReadTime?runtime.formatReadTime(stats.seconds):Math.round(stats.seconds/60)+'분'}`),title:COAUTHOR_NOTE});
+     node('span',runtime.formatReadTime?runtime.formatReadTime(stats.seconds,{compact:true}):Math.round(stats.seconds/60)+'분',timeCell,{class:'sc-watch-time-text'});
+     const meter=node('span',null,timeCell,{class:'sc-watch-time-bar',role:'img','aria-label':T(`읽은 시간 ${runtime.formatReadTime?runtime.formatReadTime(stats.seconds,{compact:true}):Math.round(stats.seconds/60)+'분'}`),title:COAUTHOR_NOTE});
      node('span',null,meter,{class:'sc-watch-time-fill'}).style.width=Math.round(100*stats.seconds/maxSeconds)+'%';
-    } else node('span','—',timeCell,{class:'sc-none'});
-    node('td',person.sweptAt?person.sweptAt.slice(0,10):'아직 없음',tr,{class:'sc-col-date'});
-    const news=unseenWorks(person).length;const newsCell=node('td',null,tr,{class:'sc-col-n'+(news?'':' sc-none')});if(news)node('span',String(news),newsCell,{class:'sc-watch-count sc-cell-chip',title:`확인 안 한 새 논문 ${news}편`});else newsCell.textContent='—';
-    const patents=person.patents?.length||0;node('td',patents?String(patents)+(person.newPatents?.length?` (+${person.newPatents.length})`:''):'—',tr,{class:'sc-col-n'+(patents?'':' sc-none')});
+    } else noneMark(timeCell);
+    /* The same source as the opened panel (the stored sweep), so the row and the detail cannot disagree. */
+    const dateCell=node('td',null,tr,{class:'sc-col-date'+(person.sweptAt?'':' sc-none')});
+    if(person.sweptAt)dateCell.textContent=person.sweptAt.slice(0,10);else node('span',T('아직 없음'),dateCell,{class:'sc-none-mark'});
+    const news=unseenWorks(person).length;const newsCell=node('td',null,tr,{class:'sc-col-n'+(news?'':' sc-none')});if(news)node('span',String(news),newsCell,{class:'sc-cell-number sc-cell-new',title:`확인 안 한 새 논문 ${news}편`});else noneMark(newsCell);
+    const patents=person.patents?.length||0;
+    const patentCell=node('td',null,tr,{class:'sc-col-n'+(patents?'':' sc-none')});
+    if(patents)patentCell.textContent=String(patents)+(person.newPatents?.length?` · ${T('새')} ${person.newPatents.length}`:'');else noneMark(patentCell);
     const act=node('td',null,tr,{class:'sc-col-act'});
     // Letting someone go drops their baseline and news: the first press only arms the button.
     const off=button('해제',()=>{
@@ -5940,7 +6113,7 @@
     facetHost.hidden=!facetHost.childElementCount;
     // One scale for every reading-time bar in the table, from what is actually shown.
     const maxSeconds=Math.max(1,...shown.map(p=>statsFor(p.name).seconds));
-    const heads=[['이름','sc-col-name',''],['소속','sc-col-place',''],['읽기 상태','sc-col-reading',COAUTHOR_NOTE],['읽은 시간','sc-col-time',COAUTHOR_NOTE],['마지막 확인','sc-col-date',''],['새 논문','sc-col-n',''],['특허','sc-col-n',''],['','sc-col-act','']];
+    const heads=[['이름','sc-col-name',''],['소속','sc-col-place',''],['읽기 상태','sc-col-reading',COAUTHOR_NOTE],['읽은 시간','sc-col-time',COAUTHOR_NOTE],['마지막 확인','sc-col-date',''],['새 논문','sc-col-n','확인 안 한 새 논문 (편)'],['특허','sc-col-n','특허 (건)'],['','sc-col-act','']];
     const makeTable=(parent,people,index=0)=>{
      const table=node('table',null,parent,{class:'sc-watch-table'+(index?' sc-watch-table-continued':'')});
      const thead=node('thead',null,table);const head=node('tr',null,thead);
@@ -6026,7 +6199,7 @@
      return;
     }
     section('이 논문의 저자',people.length);
-    message(`저자 ${people.length}명. 이름을 눌러 최근 작업을 확인하세요.`);
+    message(`이 논문의 저자 ${people.length}명. 이름을 눌러 최근 작업을 확인하세요.`);
     const authors=node('div',null,list,{class:'sc-hits'});
     for(const person of people){
      const row=node('div',null,authors,{class:'sc-hit',role:'button',tabindex:'0'});
@@ -6055,7 +6228,8 @@
    }
    refreshWatched();
    if(!item){
-    message(`관심 저자 ${runtime.watchedAuthors().length}명`);
+    // The count is already the group's own head (관심 저자 · n); a second line saying it again was noise.
+    message('');
     node('p','문헌을 하나 고르면 OpenAlex에서 그 논문의 저자를 찾고, 관심 저자로 등록하면 새 논문·소속 이동·특허를 알려줍니다.',body,{class:'sc-muted'});pickOne();
     return;
    }
@@ -6235,7 +6409,7 @@
     // A paper with no journal is still part of the whole: it counts under its own row.
     const rank=item.venue?runtime.journalIdentity?.registryRank?.(item.venue):null;
     const key=!item.venue?'\u0000none':rank?'#'+rank:String(item.venue).trim().toLowerCase();
-    if(!groups.has(key))groups.set(key,{venue:item.venue||T('저널 미기재'),items:[]});
+    if(!groups.has(key))groups.set(key,{venue:item.venue||T('저널 미기재'),unnamed:!item.venue,items:[]});
     groups.get(key).items.push(item);
    }
    if(!groups.size)return;
@@ -6281,6 +6455,8 @@
    const byTime=state.journalReadingSort==='time',byIF=state.journalReadingSort==='if';
    all.sort(byIF?(a,b)=>(b.jcrJournal?.jif??-1)-(a.jcrJournal?.jif??-1)||b.items.length-a.items.length
     :byTime?(a,b)=>b.seconds-a.seconds||b.items.length-a.items.length:(a,b)=>b.unread.length-a.unread.length||b.items.length-a.items.length);
+   // The papers with no journal named are the whole's remainder, not a journal: pinned last, whatever the order.
+   all.sort((a,b)=>(a.unnamed?1:0)-(b.unnamed?1:0));
    const box=node('section',null,body,{class:'sc-journal-reading','aria-label':T('내 문헌 분석')});
    const head=node('div',null,box,{class:'sc-journal-reading-head'});
    node('h3',T('내 문헌 분석'),head,{class:'sc-journal-reading-title'});
@@ -6294,13 +6470,16 @@
    button('읽은 시간순',()=>{state.journalReadingSort='time';render();},order,{'aria-pressed':String(byTime)});
    if(jcrCatalog)button('IF 높은 순',()=>{state.journalReadingSort='if';render();},order,{'aria-pressed':String(byIF)});
    // The legend, once, under the title: what the two bars and the two marks mean.
-   node('p',null,box,{class:'sc-muted sc-journal-legend-line'}).textContent=[T('비중')+' '+T('위 보유 / 아래 시간'),T('인용 중앙값')+' '+T('● 읽는 중·완료 / ■ 안 읽음')+' · '+T('로그 눈금')].join(' · ');
+   // Two plain legend items: what the marks are, and what the two bars are.
+   const legendLine=node('div',null,box,{class:'sc-muted sc-journal-legend-line'});
+   node('span',T('● 읽는 중·완료  ■ 안 읽음')+' · '+T('로그 눈금'),legendLine,{class:'sc-journal-legend-item'});
+   node('span',T('막대: 위 보유 · 아래 시간'),legendLine,{class:'sc-journal-legend-item'});
    const shown=all.slice(0,state.journalReadingAll?all.length:8);
    const table=node('div',null,box,{class:'sc-journal-reading-table',role:'table'});
    const header=node('div',null,table,{class:'sc-journal-reading-row sc-journal-reading-header',role:'row'});
    // Legends live here once, not on every row.
    // Numbers are right-aligned under right-aligned headers; the two charts (비중, 인용 중앙값) are left-aligned with theirs.
-   for(const label of ['저널','보유','안 읽음'])node('span',T(label),header,{role:'columnheader'});
+   for(const label of ['저널','보유 (편)','안 읽음 (편)'])node('span',T(label),header,{role:'columnheader'});
    const mixHead=node('span',null,header,{role:'columnheader',class:'sc-journal-reading-mix-head'});
    node('span',T('비중'),mixHead);
    node('span',T('읽은 시간'),header,{role:'columnheader'});
@@ -6311,7 +6490,8 @@
    for(const g of shown){
     const row=node('div',null,table,{class:'sc-journal-reading-row',role:'row'});
     const nameCell=node('div',null,row,{class:'sc-journal-reading-name',role:'cell'});
-    node('span',g.venue,nameCell,{class:'sc-journal-reading-name-text',title:g.venue});
+    const nameText=node('span',g.venue,nameCell,{class:'sc-journal-reading-name-text'+(g.unnamed?' sc-journal-reading-unnamed':''),title:g.venue});
+    if(!g.unnamed)inkJournal(nameText,g.venue);
     // The official standing, one category at a time: the best category leads,
     // a chip says how many more it is placed in, and the tooltip lists every
     // one. Looked up and absent reads differently from never having checked.
@@ -6333,12 +6513,14 @@
     const heldCell=node('span',null,row,{class:'sc-journal-reading-num',role:'cell'});
     // Exactly this group's papers, by id -- a text search on the venue name
     // also matched "Nature Methods" under "Nature". The group with no journal named gets the same badge: it is the biggest group more often than not, and a bare number there read as a different kind of cell.
-    button(`${g.items.length}편`,()=>navigateSelection('explore',g.items.map(i=>i.id)),heldCell,{class:'sc-journal-reading-count',title:T(`${g.venue} 문헌을 보유 문헌에서 보기`)});
+    heldCell.dataset.label=T('보유');
+    button(fmtN(g.items.length),()=>navigateSelection('explore',g.items.map(i=>i.id)),heldCell,{class:'sc-journal-reading-count','data-unit':'편',title:T(`${g.venue} 문헌을 보유 문헌에서 보기`)});
     const unread=node('span',null,row,{class:'sc-journal-reading-num sc-journal-reading-unread',role:'cell'});
     const open=state.journalReadingOpen===g.key;
     if(g.unread.length){
-     const b=button(`${g.unread.length}편`,()=>{state.journalReadingOpen=open?'':g.key;render();},unread,{class:'sc-journal-reading-count','aria-expanded':String(open),title:T(open?'다시 누르면 접기':'안 읽은 문헌 펼치기')});
-    }else node('span','0편',unread,{class:'sc-journal-reading-count sc-journal-reading-count-none'});
+     const b=button(fmtN(g.unread.length),()=>{state.journalReadingOpen=open?'':g.key;render();},unread,{class:'sc-journal-reading-count','data-unit':'편','aria-expanded':String(open),title:T(open?'다시 누르면 접기':'안 읽은 문헌 펼치기')});
+    }else node('span','0',unread,{class:'sc-journal-reading-count sc-journal-reading-count-none','data-unit':'편'});
+    unread.dataset.label=T('안 읽음');
     /* What share of the papers in view this journal holds, and what share of
        the reading time went to it, on one 0-100% scale: a journal collected
        much and read little shows as a long bar over a short one. */
@@ -6347,14 +6529,14 @@
      // Label left, bar, value right: the same three tracks on both lines, so the labels, bars and figures each form a column.
      const line=node('span',null,mix,{class:'sc-journal-reading-share'});
      const pct=whole>0?Math.round(100*part/whole):null;
-     node('span',T(label),line,{class:'sc-journal-reading-share-label','aria-hidden':'true'});
      const scale=node('span',null,line,{class:'sc-journal-reading-bar','aria-hidden':'true'});
      if(pct!=null)node('span',null,scale).style.width=`${pct}%`;
      node('span',pct==null?'—':`${pct}%`,line,{class:'sc-journal-reading-pct',title:T(label)});
     };
     share('보유',g.items.length,totalPapers);
     share('시간',g.seconds,totalSeconds);
-    node('span',g.seconds>0?(runtime.formatReadTime?runtime.formatReadTime(g.seconds):Math.round(g.seconds/60)+'분'):'—',row,{class:'sc-journal-reading-num',role:'cell'});
+    const timeCell=node('span',null,row,{class:'sc-journal-reading-num',role:'cell'});
+    if(g.seconds>0)timeCell.textContent=runtime.formatReadTime?runtime.formatReadTime(g.seconds,{compact:true}):Math.round(g.seconds/60)+'분';else noneMark(timeCell);
     /* Both medians on one axis shared by every row (0 to the header's end value): a dot for the papers read or being read, a square for the unread, in two lanes so equal values never fully overlap, joined by a thin line when both exist. No record is no mark and —; a real 0 sits at the axis start. */
     const cell=node('span',null,row,{class:'sc-journal-reading-num sc-journal-reading-citation-compare',role:'cell',title:T('인용 수를 아는 문헌만으로 계산합니다'),'data-label':T('인용 중앙값')});
     const plot=node('span',null,cell,{class:'sc-journal-citation-plot','aria-hidden':'true'});
@@ -6371,7 +6553,9 @@
     for(const part of g.split){
      const line=node('span',null,cell,{class:'sc-journal-citation-line','data-group':part.key});
      node('span',part.key==='read'?'●':'■',line,{class:'sc-journal-citation-mark','aria-hidden':'true'});
-     node('span',part.median==null?'—':`${Math.round(part.median).toLocaleString()} · ${part.known}/${part.n}편`,line,{class:'sc-journal-citation-value'});
+     if(part.median==null)noneMark(line).classList.add('sc-journal-citation-value');
+     else{const value=node('span',fmtN(Math.round(part.median)),line,{class:'sc-journal-citation-value'});node('span',` · ${part.known}/${part.n}편`,value,{class:'sc-journal-citation-coverage'});}
+     line.title=T(`인용 수를 아는 문헌 ${part.known}편 / 전체 ${part.n}편`);
     }
     if(open){
      const list=node('div',null,table,{class:'sc-journal-reading-papers',role:'row'});
@@ -6379,7 +6563,7 @@
       const line=node('div',null,list,{class:'sc-journal-reading-paper'});
       button(item.title||T('제목 없음'),()=>{state.selected=new Set([String(item.id)]);state.scope='selected';scope.value='selected';return navigate('explore');},line,{class:'sc-hit-title-link',title:T('이 문헌 자세히 보기')});
       // With its year and citations, so the unread list can be weighed where it opens; unknown is not 0.
-      const c=item.citations;node('span',[item.year,c!=null&&c!==''&&Number.isFinite(Number(c))?T(`인용 ${Number(c)}`):T('인용 미확인')].filter(Boolean).join(' · '),line,{class:'sc-muted'});
+      const c=item.citations;node('span',[item.year,c!=null&&c!==''&&Number.isFinite(Number(c))?T(`인용 ${fmtN(Number(c))}`):T('인용 미확인')].filter(Boolean).join(' · '),line,{class:'sc-muted'});
      }
      if(g.unread.length>20)node('p',T(`외 ${g.unread.length-20}편`),list,{class:'sc-muted'});
     }
@@ -6395,7 +6579,7 @@
    }
    const browser=runtime.jcrBrowser||root.CustomStyleJCRBrowser;
    if(!runtime.jcrCatalog||typeof browser?.mount!=='function'){
-    node('p','공식 JCR 카테고리 자료를 불러오지 못했습니다. 플러그인 업데이트를 확인하거나 아래에서 다른 탐색 방법을 고르세요.',body,{class:'sc-jcr-unavailable sc-empty',role:'alert'});
+    emptyCard(body,{title:'공식 JCR 카테고리 자료를 불러오지 못했습니다.',hint:'플러그인 업데이트를 확인하거나 아래에서 다른 탐색 방법을 고르세요.',role:'alert'}).classList.add('sc-jcr-unavailable');
     /* A failure says so and offers the ways on. Rows of dashes under real
        column names read as data that had come back empty (Codex, round 3). */
     const actions=bar();
@@ -6686,7 +6870,7 @@
    }
    if(j.globalRank)fact('quartile','로컬 JIF 순번',`${j.globalRank.toLocaleString()}번째 / ${(runtime.journalIdentity?.registryRanked?.()||[]).length.toLocaleString()}`,{title:'저장된 목록의 JIF 순번 · 공식 JCR 카테고리 순위 아님'});
    fact('library','내 서재',j.papers?`${j.papers}편 · 읽음 ${j.read} · 평균 피인용 ${j.avgCited}${j.span?' · '+(j.span[0]===j.span[1]?j.span[0]:j.span[0]+'–'+j.span[1]):''}`:'없음',{title:'이 서재에서 이 저널의 문헌'});
-   if(!j.profile)node('p','추가 OpenAlex 프로필은 「빈 칸 채우기」로 조회할 수 있습니다. 저장된 분류는 표와 상세에서 동일하게 표시됩니다.',box,{class:'sc-muted sc-fact-note'});
+   if(!j.profile)node('p','추가 OpenAlex 프로필은 “빈 칸 채우기”로 조회할 수 있습니다. 저장된 분류는 표와 상세에서 동일하게 표시됩니다.',box,{class:'sc-muted sc-fact-note'});
    const actions=bar(box);
    if(j.papers)button('이 저널 문헌 보기',()=>{state.query=search.value=j.venue;navigate('explore');},actions);
    else if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 이 저널 검색',()=>runtime.Z.ZotPoP.openSearch(win,{venue:j.venue}),actions,{'data-opens':'window'});
@@ -6695,7 +6879,7 @@
    }
    if(j.openAlexID){const b=button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions,{'data-opens':'browser'});journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
   }
-  function drawAssist(){let item;try{item=one();}catch(_){empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.');pickOne();return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인',placeholder:T('요청하면 결과가 여기에 나타납니다.')});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
+  function drawAssist(){let item;try{item=one();}catch(_){pickOne(empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.'));return;}bindAI(item.id);node('h2',item.title,body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인',placeholder:T('요청하면 결과가 여기에 나타납니다.')});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
    const aiReady=!!(String(runtime.pref('aiEndpoint','')||'').trim()&&String(runtime.pref('aiModel','')||'').trim());
    /* Two parts, named: what to ask, and what came back. The request row and
       the result box used to run together under the paper's title, and the
@@ -6724,11 +6908,17 @@
    const menusOn=enabled('menuVisibility');
    if(menusOn){
     const menus=part('작업 메뉴','왼쪽 목록에 보일 기능을 고릅니다. 숨긴 기능은 ⌘/Ctrl K 검색에서도 빠집니다.');
-    const grid=node('div',null,menus,{class:'sc-settings-grid'});
-    // The grid's heading says what these are, so each shows only its name; a
-    // screen reader, reaching one on its own, still hears the whole phrase.
-    for(const [id,label]of TABS)if(id!=='appearance')check(T(label),!hiddenTabs().has(id),on=>run(async()=>{const hidden=hiddenTabs();on?hidden.delete(id):hidden.add(id);runtime.cache.hiddenWorkbenchTabs=[...hidden];runtime.dirty=true;await runtime.flush();render();}),grid)
-     .setAttribute('aria-label',T(label)+' '+T('메뉴 표시'));
+    // The switches follow the sidebar: one small head per group (탐색, 읽기, 정리, 도구), its own grid under it.
+    for(const [groupLabel,ids] of GROUPS){
+     const members=ids.filter(id=>id!=='appearance'&&TABS.some(([key])=>key===id));
+     if(!members.length)continue;
+     node('div',T(groupLabel),menus,{class:'sc-settings-sublabel'});
+     const grid=node('div',null,menus,{class:'sc-settings-grid'});
+     // The grid's heading says what these are, so each shows only its name; a
+     // screen reader, reaching one on its own, still hears the whole phrase.
+     for(const id of members){const label=TABS.find(([key])=>key===id)[1];check(T(label),!hiddenTabs().has(id),on=>run(async()=>{const hidden=hiddenTabs();on?hidden.delete(id):hidden.add(id);runtime.cache.hiddenWorkbenchTabs=[...hidden];runtime.dirty=true;await runtime.flush();render();}),grid)
+      .setAttribute('aria-label',T(label)+' '+T('메뉴 표시'));}
+    }
     // Resetting every menu undoes the grid above it, so it sits under the grid as a verb that removes.
     button('메뉴 기본값 복원',async()=>{runtime.cache.hiddenWorkbenchTabs=[];runtime.dirty=true;await runtime.flush();render();},bar(menus),{class:'sc-danger-soft'});
    }
@@ -6737,9 +6927,19 @@
    node('span',T('강조 색'),form,{class:'sc-settings-label'});
    const accent=node('input',null,form,{type:'color','aria-label':'강조 색상'});accent.value=runtime.pref('accentColor','#374151');
    node('span',T('글꼴 크기'),form,{class:'sc-settings-label'});
-   const size=node('input',null,form,{type:'number',min:'11',max:'20','aria-label':'패널 글꼴 크기'});size.value=runtime.pref('panelFontSize',13);
+   /* A stepper, not the native number spinner (two 6px arrows no one can hit): minus, the size, plus; 11 to 20. */
+   const size={value:String(runtime.pref('panelFontSize',13))};
+   const stepper=node('span',null,form,{class:'sc-stepper',role:'group','aria-label':T('패널 글꼴 크기')});
+   const shown=node('span',size.value,stepper,{class:'sc-stepper-value',role:'status'});
+   const nudge=delta=>{const next=Math.max(11,Math.min(20,(Number(size.value)||13)+delta));size.value=String(next);shown.textContent=size.value;minus.disabled=next<=11;plus.disabled=next>=20;};
+   const minus=button('−',()=>nudge(-1),stepper,{'aria-label':'글꼴 크기 줄이기',class:'sc-stepper-button'});
+   stepper.insertBefore(minus,shown);
+   const plus=button('+',()=>nudge(1),stepper,{'aria-label':'글꼴 크기 키우기',class:'sc-stepper-button'});
+   nudge(0);
+   // The app's own light/dark switch only flips between the two (the setting has no 'follow the system' value), so it sits on the same row as the other panel look controls.
+   node('span',T('앱 테마'),form,{class:'sc-settings-label'});
+   button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),form);
    button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);message(`패널 모양을 저장했습니다 · 글꼴 ${fontSize}px`);},form,{'data-variant':'primary'});
-   button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),bar(look));
    const list=part('목록 표시','Zotero 문헌 목록의 제목 열과 항목 아이콘에 적용됩니다.');
    const opts=node('div',null,list,{class:'sc-settings-stack'});
    check('제목 옆 색상·별점 태그',runtime.pref('titleTags',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleTags',on,true);runtime.refreshWindows();},opts);
@@ -6787,12 +6987,12 @@
     } else {await paperList(rows());}
     break;
    }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
-   if(token===epoch&&!disposed){groupSections();restoreDrafts();navButtons.get(state.tab)?.scrollIntoView?.({block:'nearest',inline:'nearest'});}
+   if(token===epoch&&!disposed){groupSections();restoreDrafts();revealNav(navButtons.get(state.tab),false);}
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
   function refreshMetrics(){
    if(disposed||panel.hidden)return;
    for(const item of state.items){const ref=runtime.Z.Items.get(Number(item.id));if(ref)Object.assign(item,runtime.state(ref));}
-   for(const card of body.querySelectorAll('[data-item-id]')){const item=state.items.find(row=>String(row.id)===card.dataset.itemId);if(!item)continue;card.dataset.status=item.status;const time=card.querySelector('[data-metric=time] .sc-metric-value');if(time)time.textContent=Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds):Math.floor(item.seconds)+'초'):'';const status=card.querySelector('[data-metric=status]');if(status)status.textContent=({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음';}
+   for(const card of body.querySelectorAll('[data-item-id]')){const item=state.items.find(row=>String(row.id)===card.dataset.itemId);if(!item)continue;card.dataset.status=item.status;const time=card.querySelector('[data-metric=time] .sc-metric-value');if(time)time.textContent=Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds,{compact:true}):Math.floor(item.seconds)+'초'):'';const status=card.querySelector('[data-metric=status]');if(status)status.textContent=({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음';}
   }
   async function applyPreferences(){panel.dataset.density=setting('workbenchDensity',runtime.cache.workbenchUI?.density||'comfortable');syncDensity();const accent=setting('accentColor','#374151');if(['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=setting('panelFontSize',13)+'px';await render();}
   const keyboard=e=>{if(e.isComposing||panel.hidden)return;

@@ -217,7 +217,8 @@ test('A43 내 기록 포함: merges the note/annotation matches before sorting, 
  const cards=[...f.body().querySelectorAll('.sc-paper-card')];
  assert.equal(cards.length,2);
  assert.deepEqual(cards.map(c=>c.dataset.itemId),['1','2'],'merged first, then sorted by the chosen order -- Alpha (2025) ahead of Beta (2024)');
- assert.match(f.bench.panel.querySelector('.sc-context-detail').textContent,/2개 문헌/,'the scope count is the merged list, not the plain search');
+ // 2026-10-03 detail review: the chip says only the scope (the count is in the kind chips); the count stays in its tooltip.
+ assert.match(f.bench.panel.querySelector('.sc-context-detail').title,/2개 문헌/,'the scope count is the merged list, not the plain search');
  f.bench.destroy();
 });
 
@@ -545,7 +546,7 @@ test('grouped navigation keeps every feature reachable and restores density with
 
 test('collapsed filter chips remove only the requested rule and rules apply to note searches',async()=>{
  const f=fixture();f.runtime.state=ref=>({status:ref.id===1?'done':'reading',rating:4});await f.bench.show('notes');assert.equal(f.bench.panel.querySelector('.sc-filters').hasAttribute('open'),false);
- await f.bench.filters.set([{id:'s',kind:'status',values:['done']}]);f.input('작업 패널 검색','Rich note');await settle();assert.deepEqual(f.calls.filter(c=>c[0]==='notes').at(-1)[1],['1']);assert.match(f.bench.panel.querySelector('.sc-context-detail').textContent,/1개 문헌/);assert.match(f.body().textContent,/Rich note/);
+ await f.bench.filters.set([{id:'s',kind:'status',values:['done']}]);f.input('작업 패널 검색','Rich note');await settle();assert.deepEqual(f.calls.filter(c=>c[0]==='notes').at(-1)[1],['1']);/* 2026-10-03: the chip names the scope; the count is in its tooltip. */assert.match(f.bench.panel.querySelector('.sc-context-detail').title,/1개 문헌/);assert.match(f.body().textContent,/Rich note/);
  const remove=f.bench.panel.querySelector('.sc-rule-chip-x');assert.match(remove.getAttribute('aria-label'),/읽기 상태.*규칙 삭제/);remove.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();assert.equal(f.bench.filters.rules().length,0);assert.equal(f.bench.state.query,'Rich note');assert.equal(f.calls.filter(c=>c[0]==='notes').at(-1)[1],undefined);f.bench.destroy();
 });
 
@@ -656,7 +657,9 @@ test('the citation map names the papers it says you lack, and asks only about wh
  assert.match(text,/The paper everyone cites/,'a title, not W99');
  assert.equal(/\bW99\b/.test([...f.body().querySelectorAll('.sc-hit-title')].map(t=>t.textContent).join(' ')),false);
  // The graph in a sentence: one cluster, and the paper the others here stand on.
- assert.match(f.body().querySelector('.sc-graph-insight')?.textContent||'',/묶음 1개.*Paper Alpha \(3편이 인용\)/);
+ // 2026-10-03: the figures are stat tiles now (이어진 논문 · 인용 · 묶음); the sentence names only the most cited paper.
+ assert.match(f.body().querySelector('.sc-graph-insight')?.textContent||'',/Paper Alpha \(3편이 인용\)/);
+ assert.ok([...f.body().querySelectorAll('.sc-overview-fact')].some(t=>/^1\s*묶음$/.test(t.textContent)),'묶음 1 is a tile: '+[...f.body().querySelectorAll('.sc-overview-fact')].map(t=>t.textContent).join('|'));
  // A node chosen is pinned under the map, with who cites it.
  const alphaNode=[...f.body().querySelectorAll('svg g[tabindex]')].find(g=>/Paper Alpha/.test(g.querySelector('title')?.textContent||''));
  alphaNode.dispatchEvent(new f.win.Event('click'));
@@ -736,7 +739,9 @@ test('관계 그래프 labels are short title + year, a small graph labels every
  // Short title + year, not a journal mark and a year: a long title is cut and the year follows.
  const long=labels.find(l=>l.textContent.includes('…'));
  assert.ok(long,'the long title is shortened');
- assert.match(long.textContent,/…\s*\d{4}$/);
+ // 2026-10-03: the year follows after a middle dot, and no title ends on a function word.
+ assert.match(long.textContent,/…\s·\s\d{4}$/);
+ assert.ok(!/\s(and|of|the|in|for|to|a|on)…/i.test(long.textContent),'no hanging function word');
  // A small graph, well under any collision limit: nothing is hidden for lack of room.
  assert.ok(labels.every(l=>l.getAttribute('display')!=='none'),'a small graph labels every node');
  // Paper Alpha (1) cites Neighbour 10; the line should stop short of its centre, or the arrowhead draws under the node.
@@ -957,7 +962,7 @@ test('a tab group needs a name and an open document, says it was saved, and clea
  assert.equal(f.findButton('열린 탭 저장').disabled,false);
  await f.click('열린 탭 저장');
  assert.deepEqual(f.calls.find(c=>c[0]==='saveTabs').slice(2),['Morning reading']);
- assert.match(f.bench.panel.querySelector('.sc-status').textContent,/「Morning reading」 탭 그룹을 저장했습니다 · 문서 1개/);
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/“Morning reading” 탭 그룹을 저장했습니다 · 문서 1개/);
  assert.equal(f.body().querySelector('[aria-label="탭 그룹 이름"]').value,'','the name is cleared for the next group');
  f.reader.tabs=()=>[{id:'lib',title:'Library'}];await f.bench.render();
  f.input('탭 그룹 이름','Nothing open');
@@ -1151,7 +1156,7 @@ test('collections show how much of each has been read, colour chips say what the
  await f.bench.show('annotations');
  assert.equal(f.body().querySelector('.sc-annot-swatch .sc-annot-meaning')?.textContent,'핵심 결과','matched regardless of case');
  await f.bench.show('recent');
- assert.match(f.body().querySelector('.sc-recent-week').textContent,/지난 7일\s*1편 읽음\s*1편 추가/);
+ assert.match(f.body().querySelector('.sc-recent-week').textContent,/지난 7일\s*1편\s*읽음\s*1편\s*추가/);
  f.bench.destroy();
 });
 
@@ -2269,10 +2274,11 @@ test('followed authors are listed whether or not a paper happens to be selected'
     mattered were somewhere inside it. */
  assert.deepEqual(names,['George M. Church']);
  const badges=[...f.body().querySelectorAll('.sc-watch-badge')].map(n=>n.textContent);
- assert.deepEqual(badges,['1'],'only the author with news is marked');
+ assert.deepEqual(badges,['새 논문 1'],'only the author with news is marked, with a labelled badge (user direction 2026-10-03: never a bare number)');
  // The subtitle earns its line: what the news is, not the same date on every row.
  assert.equal(f.body().querySelector('.sc-watch-sub').textContent,'2026-09 · Nature');
- assert.match(f.bench.panel.querySelector('.sc-status').textContent,/관심 저자 2명/,'the count is still everybody');
+ // The subtitle that repeated the group head is gone (user direction 2026-10-03); the group head still counts everybody.
+ assert.ok([...f.body().querySelectorAll('.sc-section-head')].some(h=>/^관심 저자\s+2$/.test(h.textContent.trim())),'the count is still everybody');
  // The quiet one is one press away, and the press says how many.
  await f.click('조용한 저자 1명 보기');
  const all=[...f.body().querySelectorAll('.sc-watch-name')].map(n=>n.textContent);
@@ -2501,7 +2507,8 @@ test('the library splits by kind with one chip: patents and theses apart from th
  const kinds=[...f.body().querySelectorAll('.sc-paper-card')].map(c=>c.querySelector('.sc-kind')?.textContent||'');
  assert.deepEqual(kinds.sort(),['','','Preprint','학위논문']);
  await f.click('학위논문 1');
- assert.deepEqual([...f.body().querySelectorAll('.sc-paper-title')].map(h=>h.textContent),['학위논문A Thesis']);
+ // 2026-10-03: the kind chip opens the meta line, so every title starts at the same x.
+ assert.deepEqual([...f.body().querySelectorAll('.sc-paper-title')].map(h=>h.textContent),['A Thesis']);assert.equal(f.body().querySelector('.sc-paper-meta .sc-kind')?.textContent,'학위논문');
  assert.equal(f.bench.panel.querySelector('.sc-kind-chips button[data-kind=thesis]').getAttribute('aria-pressed'),'true');
  // The old 유형 select is folded into the 유형 rule; the chip is the one-press way.
  assert.equal(f.bench.panel.querySelector('select[aria-label="문헌 유형 필터"]'),null);assert.equal(f.bench.state.type,'thesis');
@@ -2604,7 +2611,8 @@ test('the followed table shows a round face, tier + flag + institution, and cent
  assert.ok(tr(2).querySelector('.sc-tier-t4'));
  assert.equal(tr(3).querySelector('.sc-place-name').textContent,'소속 미상');
  assert.equal(tr(3).querySelector('.sc-tier'),null);
- assert.ok(tr(1).querySelector('td.sc-col-n .sc-watch-count'),'the count chip sits inside its cell');
+ // User direction 2026-10-03 (detail review): a count in a table cell is a plain right-aligned number, the unit is in the header; no pill per cell.
+ assert.ok(tr(1).querySelector('td.sc-col-n .sc-cell-number'),'the count is a plain number inside its cell');
  assert.equal(tr(1).querySelector('td.sc-watch-count'),null,'no badge class on a td');
  const css=fs.readFileSync(new URL('../content/workbench.css',import.meta.url),'utf8');
  assert.match(css,/\.sc-watch-table th, #style-custom-workbench \.sc-watch-table td \{[^}]*vertical-align: middle/);
@@ -2799,7 +2807,7 @@ test('the followed list can be tended as a table: found, sorted, let go',async()
  const place=f.body().querySelector('.sc-watch-table tbody tr:nth-child(1) td:nth-child(2)');
  assert.match(place.querySelector('.sc-place').getAttribute('title'),/^MIT · 등록 당시: MIT chemistry$/);
  assert.ok(f.body().querySelector('.sc-watch-table tbody tr:nth-child(2) td.sc-watch-moved'),'a move is shaded');
- assert.deepEqual([...f.body().querySelectorAll('.sc-watch-table thead th')].map(t=>t.textContent),['이름','소속','읽기 상태','읽은 시간','마지막 확인','새 논문','특허','']);
+ assert.deepEqual([...f.body().querySelectorAll('.sc-watch-table thead th')].map(t=>t.textContent),['이름','소속','읽기 상태','읽은 시간','마지막 확인','새 논문','특허','']); // counts are plain numbers; the unit is the header's title (user direction 2026-10-03)
  f.input('관심 저자 찾기','bo');
  assert.deepEqual(names(),['Bo']);
  f.input('관심 저자 찾기','');
@@ -3042,11 +3050,12 @@ test('the journals tab opens on what the library does with each journal: held, u
  const rows=[...f.body().querySelectorAll('.sc-journal-reading-row:not(.sc-journal-reading-header)')];
  assert.deepEqual(rows.map(r=>r.querySelector('.sc-journal-reading-name').textContent),['Nature','Science'],'most unread first');
  const cells=[...rows[0].querySelectorAll('[role=cell]')].map(c=>c.textContent);
- assert.equal(cells[1],'3편');
- assert.match(cells[2],/^2편/);
+ // User direction 2026-10-03: counts are plain numbers; the unit (편) is in the column header.
+ assert.equal(cells[1],'3');
+ assert.match(cells[2],/^2$/);
  assert.match(cells[3],/75%.*100%/s,'three of the four papers, all the reading time');
  assert.match(cells[5],/10 · 1\/1편.*4 · 1\/2편/s,'the median of the known ones in each reading state, and on how many');
- await f.click('2편');
+ await f.click('2');
  assert.deepEqual([...f.body().querySelectorAll('.sc-journal-reading-paper .sc-hit-title-link')].map(n=>n.textContent).sort(),['Nature three','Paper Beta']);
  await f.click('읽은 시간순');
  assert.equal(f.body().querySelector('.sc-journal-reading-row:not(.sc-journal-reading-header) .sc-journal-reading-name').textContent,'Nature');
@@ -3742,7 +3751,9 @@ test('the collections header counts how many hold something read in the last 14 
  f.runtime.state=ref=>({citations:3,impactFactor:4,status:'done',lastRead:ref.id===1?recent:old});
  f.library.collections=async()=>[{id:'4',name:'Live',count:1,itemIDs:[1],parentID:null},{id:'6',name:'Shelved',count:1,itemIDs:[2],parentID:null}];
  await f.bench.show('collections');
- assert.match(f.body().textContent,/최근 14일에 읽은 컬렉션 1개/,'only Live, holding the recently-read paper');
+ // The sentence became a stat-tile row (user direction 2026-10-03): the figure and its label are tiles, the full sentence is the row's accessible name.
+ assert.match(f.body().querySelector('.sc-overview-facts').getAttribute('aria-label'),/최근 14일에 읽은 컬렉션 1개/,'only Live, holding the recently-read paper');
+ assert.equal([...f.body().querySelectorAll('.sc-overview-fact')].find(t=>/최근 14일 읽음/.test(t.textContent)).querySelector('b').textContent,'1');
  f.bench.destroy();
 });
 
@@ -3776,8 +3787,8 @@ test('첨부 미리보기 groups a paper\'s files under one head, each with its 
  assert.equal(rows.length,2,'both PDFs under the one head');
  assert.match(rows[0].querySelector('.sc-attachment-reading').textContent,/1240s.*6\/12쪽/,'the main text\'s own time and pages');
  assert.match(rows[1].querySelector('.sc-attachment-reading').textContent,/90s.*1\/4쪽/,'the supplement\'s own time and pages');
- const openMain=[...rows[0].querySelectorAll('button')].find(b=>b.textContent==='7쪽에서');
- const openSupp=[...rows[1].querySelectorAll('button')].find(b=>b.textContent==='2쪽에서');
+ const openMain=[...rows[0].querySelectorAll('button')].find(b=>b.textContent==='7쪽부터 열기');// 2026-10-03: the attachment button says what it does
+ const openSupp=[...rows[1].querySelectorAll('button')].find(b=>b.textContent==='2쪽부터 열기');
  assert.ok(openMain,'main text opens at its own last page, 1-based');
  assert.ok(openSupp,'the supplement opens at its own last page');
  openMain.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
@@ -3821,9 +3832,10 @@ test('a collection opens onto its papers and counts each paper once',async()=>{
  // "1" is filed twice; Parent holds its papers only through Child.
  f.library.collections=async()=>[{id:'4',name:'Research',count:2,itemIDs:[1,2],parentID:null},{id:'6',name:'Parent',count:0,itemIDs:[],parentID:null},{id:'7',name:'Child',count:1,itemIDs:[1],parentID:'6'}];
  await f.bench.show('collections');
- assert.match(f.body().textContent+f.bench.panel.textContent,/서로 다른 문헌 2편 · 빈 컬렉션 0개/);
+ assert.match(f.body().querySelector('.sc-overview-facts').getAttribute('aria-label'),/서로 다른 문헌 2편 · 빈 컬렉션 0개/);
  const parent=f.body().querySelector('.sc-collection[data-id="6"]');
- assert.match(parent.textContent,/하위 포함 1편/,'a parent with papers below it is not empty');
+ assert.match(parent.textContent,/1편/,'a parent with papers below it is not empty');
+ assert.match(parent.textContent,/하위 컬렉션 1/,'and its sub-collections are said in words ("1편 · 하위 컬렉션 1", user direction 2026-10-03)');
  parent.click();await settle();
  assert.equal(f.bench.state.tab,'explore','the panel shows the papers, not the tree again');
  assert.equal(f.bench.state.scope,'collection-recursive','a parent opens with its subcollections');
@@ -4100,11 +4112,11 @@ test('the annotation colour tally reads as one line by meaning, not a row of pil
  assert.match(swatches[1].getAttribute('title'),/#5fb236/i);
  // No colour at all: 색 없음, still one of the parts.
  assert.equal(swatches[2].querySelector('.sc-annot-meaning').textContent,'색 없음');
- // The parts read as one sentence, joined by " · ".
+ // The chips are one line of filter chips with no separator between them (2026-10-03: a dangling "·" between chips read as a stray mark).
  const parent=swatches[0].parentElement;
  const dots=[...parent.querySelectorAll('.sc-annot-dot')].map(()=>1).length;
  assert.equal(dots,3);
- assert.match(parent.textContent,/핵심 결과2\s*·\s*이름 없는 색1\s*·\s*색 없음1/);
+ assert.match(parent.textContent,/핵심 결과2\s*이름 없는 색1\s*색 없음1/);assert.doesNotMatch(parent.textContent,/핵심 결과2\s*·/);
  swatches[0].click();await settle();
  assert.equal(f.bench.state.color,'#ffd400','pressing a part filters by that colour, same as before');
  f.bench.destroy();
@@ -5107,7 +5119,9 @@ test('논문 비교: with a comparison on screen the picker stays folded, 문헌
  const g=fixture();
  g.setSelection([]);g.bench.state.selected=new Set();
  await g.bench.show('matrix');
- assert.ok(g.body().querySelector('.sc-matrix-picker'),'nothing chosen yet: the picker is the way in');
+ // 2026-10-03 (detail review): with the whole list already on screen the picker is folded behind 문헌 추가; it opens by default only when there is nothing to compare.
+ assert.equal(g.body().querySelector('.sc-matrix-picker'),null,'the list is the comparison: the picker waits behind 문헌 추가');
+ await g.click('문헌 추가');assert.ok(g.body().querySelector('.sc-matrix-picker'),'문헌 추가 opens the way in');
  g.bench.destroy();
 });
 
@@ -5233,7 +5247,8 @@ test('R19 내 문헌 분석 reads evenly: identical count badges in every row, a
  for(const r of rows){
   for(const c of cells(r)){assert.equal(c.className.split(' ').includes('sc-journal-reading-num'),true);assert.ok(c.querySelector('.sc-journal-reading-count'),'every count cell holds the badge, whatever the value');}
   assert.equal(sig(r.children[1].firstElementChild),sig(rows[0].children[1].firstElementChild),'held badges are the same element and classes');
-  assert.match(r.children[1].textContent,/^\d+편$/);
+  // User direction 2026-10-03: counts are plain numbers, the unit (편) is in the column header.
+  assert.match(r.children[1].textContent,/^\d+$/);
  }
  // A log axis: the outlier lands inside the plot box, and the small values are not squashed to the start.
  const lefts=r=>[...r.querySelectorAll('.sc-journal-citation-dot')].map(d=>d.style.left);
@@ -5262,7 +5277,7 @@ const key=(f,target,name)=>{const e=new f.win.Event('keydown',{bubbles:true,canc
 test('상세 필터 rules: an exclude rule is added in the panel, shows as a 제외 chip, narrows the list and is saved for the tab', async () => {
  const f=fixture();await f.bench.show('explore');await settle();
  assert.equal(cardCount(f),2);
- await f.click('제외');await f.click('태그 제외 규칙 추가');
+ await f.click('태그 규칙 추가');await f.click('제외');
  const editor=f.bench.panel.querySelector('.sc-rule-editor');assert.equal(editor.hidden,false);
  assert.equal(f.bench.panel.querySelector('.sc-filters').hasAttribute('open'),true,'the panel opens for its editor');
  assert.equal(f.findButton('규칙 적용').disabled,true,'nothing chosen yet: nothing to apply');
@@ -5330,12 +5345,12 @@ test('상세 필터 rules: the search box understands -word, "phrase" and field:
 
 test('상세 필터 rules: option lists show counts given the other rules, and journals are searchable', async () => {
  const f=fixture();await f.bench.show('explore');await settle();
- await f.click('유형 포함 규칙 추가');
+ await f.click('유형 규칙 추가');
  let opt=[...f.bench.panel.querySelectorAll('.sc-rule-opt')].map(o=>o.textContent);
  assert.deepEqual(opt,['논문2']);
  await f.click('취소');
  await f.bench.filters.set([{id:'t',kind:'tag',mode:'ex',values:['topic/a']}]);
- await f.click('저널 포함 규칙 추가');
+ await f.click('저널 규칙 추가');
  opt=[...f.bench.panel.querySelectorAll('.sc-rule-opt')].map(o=>o.textContent);
  assert.deepEqual(opt,['Nature1','Science0'],'Science only has the excluded paper, so it would find nothing');
  const search=f.bench.panel.querySelector('input[aria-label="저널 목록 검색"]');search.value='sci';search.dispatchEvent(new f.win.Event('input',{bubbles:true}));
@@ -5373,7 +5388,7 @@ test('상세 필터 rules: kinds that mean nothing on a tab are not offered ther
 
 test('상세 필터 rules: every control is labelled, and Esc closes the editor, then the panel, giving focus back', async () => {
  const f=fixture();await f.bench.show('explore');await settle();
- await f.click('단어 포함 규칙 추가');
+ await f.click('단어 규칙 추가');
  const editor=f.bench.panel.querySelector('.sc-rule-editor');
  for(const el of editor.querySelectorAll('input,button,select,textarea')){
   assert.ok(el.getAttribute('aria-label')||el.textContent.trim()||el.closest('label')?.textContent.trim(),'unlabelled control in the editor: '+el.outerHTML.slice(0,80));
@@ -5395,11 +5410,11 @@ test('상세 필터 rules: every control is labelled, and Esc closes the editor,
 
 test('상세 필터 rules: Enter in a field applies the rule; a range rule and a word rule work from the panel', async () => {
  const f=fixture();await f.bench.show('explore');await settle();
- await f.click('연도 포함 규칙 추가');
+ await f.click('연도 규칙 추가');
  const min=f.bench.panel.querySelector('input[aria-label="연도 최소"]');min.value='2025';min.dispatchEvent(new f.win.Event('input',{bubbles:true}));
  key(f,min,'Enter');await settle();
  assert.deepEqual(chipTexts(f),['연도: 2025 이상']);assert.equal(cardCount(f),1);
- await f.click('제외');await f.click('단어 제외 규칙 추가');
+ await f.click('단어 규칙 추가');await f.click('제외');
  const text=f.bench.panel.querySelector('input[aria-label="찾을 단어 또는 구절"]');text.value='gamma';text.dispatchEvent(new f.win.Event('input',{bubbles:true}));
  await f.click('규칙 적용');
  assert.deepEqual(chipTexts(f),['연도: 2025 이상','제외 · 단어: “gamma”']);assert.equal(cardCount(f),1,'nothing is called gamma, so nothing more is removed');
@@ -5471,7 +5486,7 @@ test('저널: suggestions are not offered where journals are not a filter',async
 
 test('저널 rule editor: typing a name, abbreviation or acronym narrows the list at once and several can be ticked',async()=>{
  const f=journalFixture();await f.bench.show('explore');await settle();
- await f.click('저널 포함 규칙 추가');
+ await f.click('저널 규칙 추가');
  const rows=()=>[...f.bench.panel.querySelectorAll('.sc-rule-opt')].map(o=>o.querySelector('.sc-rule-opt-name').textContent.split(' ')[0]);
  assert.equal(rows().length,4,'the whole list shows before anything is typed');
  const search=f.bench.panel.querySelector('input[aria-label="저널 목록 검색"]');
@@ -5565,7 +5580,9 @@ test('around: reactions show counts, the top posts clamped as cards, and more on
   const text = f.around().querySelector('.sc-around-text');
   assert.equal(text.textContent, 'Post <b>1</b> text', 'a post is text, never markup');
   assert.equal(text.querySelector('b'), null);
-  assert.match(f.around().querySelector('.sc-around-stats').textContent, /♥ 9\s+↻ 1/);
+  // 2026-10-03: outline icons replace the ♥ ↻ glyphs; the figures stay, with their labels as titles.
+  assert.match(f.around().querySelector('.sc-around-stats').textContent, /9\s*1/);
+  assert.equal(f.around().querySelector('.sc-around-stat').title, '좋아요 9');
   const more = [...f.around().querySelectorAll('button')].find(b => b.textContent.startsWith('더 보기'));
   assert.ok(more, 'there is more to show'); more.dispatchEvent(new f.win.Event('click', {bubbles: true}));
   assert.equal(f.around().querySelectorAll('[data-source=hackernews]').length, 2);
@@ -5671,7 +5688,7 @@ test('around: the focused paper is one summary line until opened, and the choice
   const head = f.around().querySelector('.sc-around-summary');
   assert.equal(head.getAttribute('aria-expanded'), 'false');
   assert.equal(f.around().querySelector('.sc-around-detail').hidden, true, 'the two groups wait');
-  assert.equal(head.textContent.replace(/\s+/g, ' ').trim(), '이 논문 주변철회됨Bluesky 12HN 1Wikipedia 28\u25b8');
+  assert.equal(head.textContent.replace(/\s+/g, ' ').trim(), '이 논문 주변철회됨Bluesky 12Hacker News 1Wikipedia 28');
   assert.equal(head.querySelector('.sc-around-chip').dataset.status, 'retracted');
   head.dispatchEvent(new f.win.Event('click', {bubbles: true}));await settle();
   assert.equal(f.around().querySelector('.sc-around-detail').hidden, false);
@@ -5717,16 +5734,11 @@ test('around: every related row offers 주변 보기, one open at a time, and a 
  } finally { f.bench.destroy(); }
 });
 
-test('around: an owned path row keeps the path row layout: the same columns and the chip out of the text column', () => {
+test('around: an owned related row carries its 보유 chip in the meta line, so the path row keeps one layout', () => {
+ // User direction 2026-10-03 (detail review): the chip used to stack above the 주변 보기 button in the actions column and shifted its y; it now leads the meta line.
  const css = fs.readFileSync(new URL('../content/workbench.css', import.meta.url), 'utf8');
- const rule = sel => [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(m => m[1].split(',').some(s => s.trim().endsWith(sel))).map(m => m[2]);
- const base = rule('.sc-path-row').find(b => /grid-template-columns/.test(b));
- const owned = rule('.sc-path-row:has(> .sc-hit-owned)').find(b => /grid-template-columns/.test(b));
- assert.ok(owned, 'a path row with a 보유 chip names its columns itself, since a general :has rule would otherwise set them');
- const lead = b => b.match(/grid-template-columns:\s*(\S+)\s+(\S+)/).slice(1).map(x => x.replace(/minmax\(0,/, '1fr').replace(/\)$/, ''));
- assert.equal(lead(owned)[0], lead(base)[0], 'the step column is the same width');
- const chip = rule('.sc-path-row:has(> .sc-hit-owned) > .sc-hit-owned').join(';');
- assert.match(chip, /grid-column:\s*3/, 'the chip rides the actions column, not the text column');
+ assert.match(css, /\.sc-hit-meta > \.sc-hit-owned \{/, 'the chip is styled as part of the meta line');
+ assert.ok(!/\.sc-path-row:has\(> \.sc-hit-owned\)/.test(css), 'no second grid template for owned rows');
 });
 
 test('around: the Altmetric key is an optional password setting bound to its preference', async () => {

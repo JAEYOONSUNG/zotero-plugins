@@ -255,7 +255,7 @@
   }
   return {descendants,ancestors,names:new Map([...byID].map(([id,c])=>[id,c.name]))};
  }
- const KIND_LABELS={word:'단어',type:'유형',tag:'태그',status:'읽기 상태',rating:'별점',year:'연도',collection:'컬렉션',journal:'저널',impact:'IF',citations:'인용 수',pdf:'첨부 PDF',annotation:'주석',note:'노트',preprint:'프리프린트/출판본'};
+ const KIND_LABELS={word:'단어',type:'유형',tag:'태그',status:'읽기 상태',rating:'별점',year:'연도',collection:'컬렉션',journal:'저널',impact:'IF',citations:'인용 수',pdf:'첨부 PDF',annotation:'주석',note:'노트',preprint:'Preprint/출판본'};
  const STATUS_LABELS={unread:'안 읽음',reading:'읽는 중',done:'완료'};
  const FIELD_LABELS={all:'전체',title:'제목',author:'저자',tag:'태그',abstract:'초록',note:'메모·노트'};
  /* The chip's words, without the 제외 prefix: "태그: a, b 외 2", "연도: 2018–2022".

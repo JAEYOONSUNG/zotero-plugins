@@ -7,19 +7,20 @@ import Workbench from '../src/workbench.js';
 import Model from '../src/workspace.js';
 import ReadingPath from '../src/reading-path.js';
 import PaperGraph from '../src/paper-graph.js';
+import JournalIdentity from '../src/journal-identity.js';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 
 // Fictional papers and memory-only services: never reads the user's library.
-async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
+async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph,JournalIdentity){
  const doc=win.document;
  const papers=[
-  {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; Jennifer A. Doudna',year:'2025',venue:'Example Cell Research',doi:'10.5555/demo.1',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
-  {id:'2',title:'A practical framework for reproducible literature synthesis',authors:'S. Lee; Jennifer A. Doudna',year:'2024',venue:'Example Methods',doi:'',tags:['#review/reproducibility'],abstract:'실제 논문이 아닌 화면 구성용 예시 데이터입니다.',itemType:'journalArticle',status:'done',rating:5,citations:64,impactFactor:8.2,seconds:3200},
+  {id:'1',title:'Mapping cellular responses across tissue repair',authors:'M. Kim; A. Rivera; Jennifer A. Doudna',year:'2025',venue:'Cell Reports',doi:'10.5555/demo.1',tags:['#methods/single-cell','#repair'],abstract:'디자인 미리보기용 예시 초록입니다. 문헌의 읽기 상태, 지표, 노트와 주석을 한곳에서 확인하는 흐름을 보여줍니다.',itemType:'journalArticle',status:'reading',rating:4,citations:128,impactFactor:12.4,seconds:1240},
+  {id:'2',title:'A practical framework for reproducible literature synthesis',authors:'S. Lee; Jennifer A. Doudna',year:'2024',venue:'Nature Methods',doi:'',tags:['#review/reproducibility'],abstract:'실제 논문이 아닌 화면 구성용 예시 데이터입니다.',itemType:'journalArticle',status:'done',rating:5,citations:64,impactFactor:8.2,seconds:3200},
   {id:'3',title:'Spatial context and cell-state transitions in regeneration',authors:'E. Morgan; Jennifer A. Doudna',year:'2026',venue:'Example Biology',doi:'',tags:['#methods/spatial'],abstract:'새 문헌의 지표가 아직 없을 때 0과 미확인을 구분해 보여줍니다.',itemType:'preprint',status:'unread',rating:0,citations:null,impactFactor:null,seconds:0},
   // Three more on the same shelves, unread, so the journals tab has something to weigh.
-  {id:'4',title:'Tissue-scale repair atlases from sparse sampling',authors:'R. Ahn; Jennifer A. Doudna',year:'2021',venue:'Example Cell Research',doi:'10.5555/demo.4',tags:[],abstract:'',itemType:'journalArticle',status:'reading',rating:0,citations:41,impactFactor:12.4,seconds:400},
-  {id:'5',title:'Benchmarks for repair-stage classifiers',authors:'K. Oh; Christopher A. Voigt',year:'2024',venue:'Example Cell Research',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:null,impactFactor:12.4,seconds:0},
-  {id:'6',title:'Preregistered synthesis of repair reviews',authors:'D. Yu; S. Lee',year:'2023',venue:'Example Methods',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:12,impactFactor:8.2,seconds:0}
+  {id:'4',title:'Tissue-scale repair atlases from sparse sampling',authors:'R. Ahn; Jennifer A. Doudna',year:'2021',venue:'Cell Reports',doi:'10.5555/demo.4',tags:[],abstract:'',itemType:'journalArticle',status:'reading',rating:0,citations:41,impactFactor:12.4,seconds:400},
+  {id:'5',title:'Benchmarks for repair-stage classifiers',authors:'K. Oh; Christopher A. Voigt',year:'2024',venue:'Cell Reports',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:null,impactFactor:12.4,seconds:0},
+  {id:'6',title:'Preregistered synthesis of repair reviews',authors:'D. Yu; S. Lee',year:'2023',venue:'Nature Methods',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:12,impactFactor:8.2,seconds:0}
  ];
  /* design-preview.html?dense=1: a library as crowded as a real one (48 papers with long titles,
     journals and author lists, citing each other; 20 more watched authors with long names and
@@ -41,7 +42,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  }
  if(dense){
   /* 내 문헌 분석 under a real library's skew: one big group with no journal named (93), journals of every size down to one paper, an outlier citation median (~13k), zeros and unknowns. */
-  const spec=[['',93,[2,40]],['Science',69,[13308,13308]],['Example Cell Research',62,[3,60]],['Cell Reports',48,[22,90]],['Bioinformatics',31,[0,0]],['PLOS ONE',24,[7,15]],['Nature Methods',12,[310,420]],['eLife',6,[null,5]],['Zero Cites Quarterly',3,[0,0]],['Single Paper Letters',1,[null,null]]];
+  const spec=[['',93,[2,40]],['Science',69,[13308,13308]],['Cell Reports',62,[3,60]],['Cell Reports',48,[22,90]],['Bioinformatics',31,[0,0]],['PLOS ONE',24,[7,15]],['Nature Methods',12,[310,420]],['eLife',6,[null,5]],['Zero Cites Quarterly',3,[0,0]],['Single Paper Letters',1,[null,null]]];
   let n=200;
   for(const [venue,count,[lo,hi]] of spec)for(let i=0;i<count;i++,n++){
    papers.push({id:String(n),title:'Journal-reading demo paper '+n,authors:'A. Demo',year:String(2010+(n%15)),venue,doi:'',tags:[],abstract:'',itemType:'journalArticle',
@@ -73,10 +74,10 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02',doi:'10.5555/news.1',citations:12,position:'last',corresponding:true,people:['Christopher A. Voigt','Jennifer A. Doudna','Brian Hie']},
          {id:'W2',title:'A portable recombinase toolkit',venue:'Nature Methods',date:'2026-07-18',citations:3,position:'first',people:['Christopher A. Voigt','K. Oh']},
          {id:'W8',title:'Machine-designed promoters across three bacterial hosts',venue:'ACS Synthetic Biology',date:'2026-09-18',doi:'10.5555/news.8',citations:null,position:'last',corresponding:true,people:['Christopher A. Voigt','George M. Church','Brian Hie']}]},
-  {id:'A2',subfield:'Molecular Biology',name:'Jennifer A. Doudna',institution:'UC Berkeley',seen:[],
+  {id:'A2',subfield:'Molecular Biology',name:'Jennifer A. Doudna',institution:'UC Berkeley',seen:[],sweptAt:'2026-09-18T00:00:00Z',
    news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21',doi:'10.5555/news.3',citations:48,position:'last',corresponding:true,people:['Jennifer A. Doudna','Samuel H. Sternberg']},
          {id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02',doi:'10.5555/news.1',citations:12,position:'first',people:['Christopher A. Voigt','Jennifer A. Doudna','Brian Hie']},
-         {id:'W6',title:'Tissue-scale repair atlases from sparse sampling',venue:'Example Cell Research',date:'2026-08-30',doi:'10.5555/demo.4'},
+         {id:'W6',title:'Tissue-scale repair atlases from sparse sampling',venue:'Cell Reports',date:'2026-08-30',doi:'10.5555/demo.4'},
          {id:'W7',title:'Rapid editing screens in primary cells',venue:'bioRxiv (Cold Spring Harbor Laboratory)',date:'2026-06-10',preprint:true,signals:{rank:3},doi:'10.1101/2026.06.10.demo',people:['Jennifer A. Doudna']}],
    newCoauthors:['Priya Natarajan','Luis Ortega'],
    moved:{from:'UC Berkeley',to:'Gladstone Institutes',since:2026,at:'2026-09-01'},
@@ -94,7 +95,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
   {id:'A12',subfield:'Biochemistry',name:'Tobias J. Erb',institution:'Max Planck Institute for Terrestrial Microbiology',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   // On papers 1, 2 and 6 above, so the watch table's 보유·완료·안 읽음·읽은 시간 columns have real numbers to show.
   {id:'A13',name:'M. Kim',institution:'Example University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A14',name:'S. Lee',institution:'Example Methods',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A14',name:'S. Lee',institution:'Nature Methods',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   // Paper 5 in the library lists K. Oh with Voigt: a co-authorship the 관계 map draws from the shelf alone.
   {id:'A16',subfield:'Biotechnology',name:'Marie Dupont',institution:'University of Zurich',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A17',name:'Kenji Tanaka',institution:'University of Tokyo',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
@@ -139,7 +140,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
   sweepWatchedAuthors:async()=>({authors:watched.length,withNews:2,works:3,requests:1,budgetGone:false,remaining:0}),
   clearAuthorNews:demoAction,watchAuthor:demoAction,unwatchAuthor:demoAction,markAuthorSeen:demoAction,
   // The panel's own formatter, so the preview shows what Zotero shows.
-  formatReadTime:seconds=>{const v=Math.max(0,Math.floor(Number(seconds)||0));const h=Math.floor(v/3600),m=Math.floor(v%3600/60),x=v%60;return h?`${h}h ${m}m ${x}s`:m?`${m}m ${x}s`:`${x}s`;},
+  formatReadTime:(seconds,o)=>{const v=Math.max(0,Math.floor(Number(seconds)||0));const h=Math.floor(v/3600),m=Math.floor(v%3600/60),x=v%60;if(o&&o.compact)return h?(m?`${h}h ${m}m`:`${h}h`):m?`${m}m`:`${x}s`;return h?`${h}h ${m}m ${x}s`:m?`${m}m ${x}s`:`${x}s`;},
   // The paper's authors, fictional, so the author page draws every section.
   authorsOfCached:async()=>[
    {id:'A2',name:'Jennifer A. Doudna',institution:'UC Berkeley',position:'last'},
@@ -151,6 +152,8 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
   pathTools:ReadingPath,
   // The graph layout Zotero uses, so the preview does not fall back to the old placer.
   graphTools:PaperGraph,
+  // The real journal registry, so a known journal wears its ink in the preview as it does in Zotero.
+  journalIdentity:JournalIdentity,
   libraryDOIs:()=>new Set(['10.5555/demo-f2','10.5555/demo-p1']),
   forgetReadingPath:()=>{},
   identity:ref=>'demo:'+ref?.id,
@@ -173,7 +176,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    const P2=W('P2',2023,'Mapping repair responses across two tissues',[F1.id,F2.id,F3.id,P1.id],{citations:150,oa:true,
     finding:'예시 요약입니다. 같은 접근을 두 조직으로 넓혔습니다.'});
    const seed=W('S',2025,papers[0].title,[F1.id,F2.id,F3.id,R1.id,P1.id,P2.id],
-    {venue:'Example Cell Research',citations:128});
+    {venue:'Cell Reports',citations:128});
    const C1=W('C1',2026,'Repair maps applied to a new tissue',[seed.id,P2.id,F2.id],{citations:18,oa:true,
     finding:'예시 요약입니다. 이 논문의 지도를 다른 조직에 적용했습니다.'});
    const C2=W('C2',2026,'A shared vocabulary for repair-stage maps',[seed.id,P1.id,P2.id,F3.id],{citations:9,
@@ -229,7 +232,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const notes=[{id:'10',parentID:'1',title:'연구 질문과 후속 확인',text:'핵심 결과를 재현할 수 있는가?\n비교할 문헌과 연결해 검토합니다.',modified:'2026-09-15'}];
  const annotations=[{id:'11',text:'예시 하이라이트 — 근거와 해석을 분리해 기록합니다.',comment:'후속 문헌과 비교',color:'#ffd400',pageLabel:'3',pageIndex:2,type:'highlight',attachmentID:'9',parentID:'1'},{id:'12',text:'대조군은 같은 조직에서 손상 없이 채취',comment:'',color:'#5fb236',pageLabel:'6',pageIndex:5,type:'highlight',attachmentID:'9',parentID:'1'},{id:'13',text:'재현 조건: 세 번의 독립 반복과 사전 등록된 분석 계획',comment:'방법 절 비교용',color:'#5fb236',pageLabel:'4',pageIndex:3,type:'highlight',attachmentID:'8',parentID:'2'},{id:'14',text:'결과는 재현 가능한 합성 절차에서 일관되었다',comment:'',color:'#ffd400',pageLabel:'7',pageIndex:6,type:'highlight',attachmentID:'8',parentID:'2'},{id:'15',text:'보충 실험의 대조군 배치',comment:'',color:'#5fb236',pageLabel:'2',pageIndex:1,type:'highlight',attachmentID:'10',parentID:'1'}];
  // The two PDFs attachmentFindings already reports on: paper 1's article and its supplement.
- const attachmentRows=[{id:'9',parentID:'1',title:'Full text PDF',contentType:'application/pdf',path:null},{id:'10',parentID:'1',title:'Supplementary information',contentType:'application/pdf',path:null}];
+ const attachmentRows=[{id:'9',parentID:'1',title:'Full text PDF',contentType:'application/pdf',path:'/demo/full-text.pdf'},{id:'10',parentID:'1',title:'Supplementary information',contentType:'application/pdf',path:'/demo/supplement.pdf'}];
  /* A41: a real nested tree, not one flat sibling per whole tag string --
     #methods/single-cell and #methods/spatial share a #methods parent with
     two children, the same shape src/library.js's own tagTree builds, so the
@@ -281,7 +284,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    {id:'demo1',kind:'year',mode:'in',min:2024,max:2026},
    {id:'demo2',kind:'word',mode:'in',field:'all',text:'repair',phrase:true},
    {id:'demo3',kind:'type',mode:'ex',values:['preprint']},
-   {id:'demo4',kind:'journal',mode:'ex',values:['Example Methods']}]);
+   {id:'demo4',kind:'journal',mode:'ex',values:['Nature Methods']}]);
   bench.filters.open();
   const wanted=flags.match(/editor=(\w+)/);if(wanted)await bench.filters.edit(wanted[1]);
  }
@@ -305,7 +308,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
 const css=fs.readFileSync(path.join(root,'content/workbench.css'),'utf8');
 const {window:win,document:doc}=parseHTML('<html><head></head><body></body></html>');
 Object.defineProperty(win.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this._value??this.querySelector('option')?.getAttribute('value')??'';},set(value){this._value=String(value);}});
-const {bench}=await mountDemo(win,Workbench,Model,ReadingPath,PaperGraph);
+const {bench}=await mountDemo(win,Workbench,Model,ReadingPath,PaperGraph,JournalIdentity);
 const icon='data:image/svg+xml;base64,'+Buffer.from(fs.readFileSync(path.join(root,'content/icons/style-custom.svg'))).toString('base64');
 bench.panel.querySelector('.sc-brand img').src=icon;
 assert.equal(bench.panel.querySelectorAll('nav [data-tab]').length,19);
@@ -315,7 +318,7 @@ assert.equal(bench.panel.querySelector('.sc-command-palette').hidden,true);
 const snapshot=bench.panel.outerHTML;
 bench.destroy();
 const inline=file=>fs.readFileSync(path.join(root,file),'utf8').replace(/<\/script/gi,'<\\/script');
-const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta id="demo-icon" content="${icon}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Style Custom 0.8.0 · 디자인 미리보기</title><style>body{margin:0;background:#e5e7eb;font:12px system-ui;color:#374151}.demo-bar{height:40px;display:flex;align-items:center;gap:12px;padding:0 18px}.demo-bar strong{font-weight:650}.demo-bar span{color:#4b5563}.demo-feedback{position:fixed;bottom:4px;left:18px;right:18px;font-size:11px} ${css}</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div>${snapshot}<script>${inline('src/workspace.js')}</script><script>${inline('src/reading-path.js')}</script><script>${inline('src/paper-graph.js')}</script><script>${inline('src/workbench.js')}</script><script>document.getElementById('style-custom-workbench').remove();(${mountDemo.toString()})(window,CustomStyleWorkbench,CustomStyleWorkspace,CustomStyleReadingPath,CustomStylePaperGraph);</script></body></html>`;
+const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta id="demo-icon" content="${icon}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Style Custom 0.8.0 · 디자인 미리보기</title><style>body{margin:0;background:#e5e7eb;font:12px system-ui;color:#374151}.demo-bar{height:40px;display:flex;align-items:center;gap:12px;padding:0 18px}.demo-bar strong{font-weight:650}.demo-bar span{color:#4b5563}.demo-feedback{position:fixed;bottom:4px;left:18px;right:18px;font-size:11px} ${css}</style></head><body><div class="demo-bar"><strong>디자인 미리보기</strong><span>예시 문헌 · 실제 라이브러리 연결 없음</span></div><div id="demo-feedback" class="demo-feedback" role="status">간격 조절, 기능 찾기, 필터와 문헌 상세를 직접 확인할 수 있습니다.</div>${snapshot}<script>${inline('src/workspace.js')}</script><script>${inline('src/reading-path.js')}</script><script>${inline('src/paper-graph.js')}</script><script>${inline('src/journal-identity.js')}</script><script>${inline('src/workbench.js')}</script><script>document.getElementById('style-custom-workbench').remove();(${mountDemo.toString()})(window,CustomStyleWorkbench,CustomStyleWorkspace,CustomStyleReadingPath,CustomStylePaperGraph,CustomStyleJournalIdentity);</script></body></html>`;
 assert.ok(!html.includes('<script src=')&&!html.includes('<link '));
 const target=path.join(root,'docs/design-preview.html');fs.writeFileSync(target,html);
 console.log('Offline design preview verified: actual workbench DOM, 19 sections, 6 fictional papers, no external assets: '+target);

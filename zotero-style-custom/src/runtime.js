@@ -302,7 +302,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`;
   }
 
-  formatReadTime(seconds) {
+  formatReadTime(seconds, options) {
     // Both settings are read for every cell in the column. They are preferences,
     // so they change when a preference changes and not once per row; the memo
     // is dropped whenever one is set.
@@ -314,6 +314,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if(format==='seconds')return value+'초';
     const h=Math.floor(value/3600),m=Math.floor(value%3600/60),s=value%60;
     if(format==='clock')return [h,m,s].map(n=>String(n).padStart(2,'0')).join(':');
+    /* The panel's own wording (options.compact): the two largest units only, and never a unit that is zero --
+       "39h 52m", "20m", "40s" -- so a figure fits its tile instead of wrapping as "39h 52m 40s". The items-tree
+       column keeps the exact one, because it ticks while a paper is open. */
+    if(options&&options.compact)return h?(m?`${h}h ${m}m`:`${h}h`):m?`${m}m`:`${s}s`;
     return h?`${h}h ${m}m ${s}s`:m?`${m}m ${s}s`:`${s}s`;
   }
   /* One reading tick changes one paper. Every tick used to repaint every

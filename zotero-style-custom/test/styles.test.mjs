@@ -152,8 +152,9 @@ test('every badge colour lands on the same contrast, so no one of them shouts', 
       const max = Math.max(r, g, b), min = Math.min(r, g, b);
       const light = (max + min) / 2;
       const saturation = max === min ? 0 : light > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+      // User direction 2026-10-03 (detail review): the star amber #94600F replaces the muddy #7D5208 for rating stars (4.5:1 on the grey fill, warmer on screen).
       // User direction 2026-10-01 (premium dashboard look): the ZotPoP palette (lime, amber and their inks, the ok/warn/err inks) are the sanctioned saturated colours; nothing else may be.
-      if (['#D8EE9A', '#FAE5BD', '#36440F', '#573700', '#D2EE8C', '#F4CF8A', '#C5E07B', '#F4C871', '#3B422D', '#433827', '#53671E', '#7D5208', '#E6A5A7'].includes(hex.toUpperCase())) continue;
+      if (['#D8EE9A', '#FAE5BD', '#36440F', '#573700', '#D2EE8C', '#F4CF8A', '#C5E07B', '#F4C871', '#3B422D', '#433827', '#53671E', '#7D5208', '#E6A5A7', '#94600F'].includes(hex.toUpperCase())) continue;
       assert.ok(saturation <= 0.55, `${file} still has ${hex} at saturation ${saturation.toFixed(2)}`);
     }
   }
