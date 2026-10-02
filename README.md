@@ -31,6 +31,7 @@ Everything works without these. They live in Settings → the plugin's page.
 | OpenAlex API key | Raises the daily allowance for citation counts, journal facts and author tracking about a hundredfold | [openalex.org](https://openalex.org), free |
 | Contact email | Puts OpenAlex and Crossref requests in their faster "polite pool". The address is recorded by those two services on every request | your own address |
 | AI endpoint and model | Translation, summaries and paper comparison in Style Custom | any OpenAI-compatible Chat Completions endpoint |
+| Altmetric API key | Altmetric attention counts beside a paper's Bluesky, Hacker News and Wikipedia reception | [altmetric.com](https://www.altmetric.com) |
 | easyScholar key, USPTO key | Further journal grades such as CAS; patents filed by followed authors | free keys from each service |
 
 ---
@@ -44,9 +45,13 @@ Open it from the **magnifier** button in the items toolbar or **Tools → ZotPoP
 ### Searching
 
 - **Sources**: a combined index (OpenAlex + Crossref + Europe PMC + arXiv), OpenAlex, Crossref, PubMed, Europe PMC, Semantic Scholar, arXiv, preprint servers, and Google Scholar (Scholar may ask for a CAPTCHA).
-- **Criteria**: authors, journal, title words, keywords in any field, a year range, a maximum number of results (up to 2,000) and a sort order. Boolean expressions (`AND`, `OR`, `NOT`, parentheses, quoted phrases) mean the same thing in every source.
-- **The result table**: citations, citations per year, rank, authors, title, year, journal (in the journal's own colour), impact factor, first author's institution and country, institution tier, DOI, whether a PDF is available and whether the paper is already in your library. Column widths and order are remembered. A cell whose text overflows scrolls once while the pointer rests on it.
-- **Citation metrics** (left): the span of publication years, paper count, total citations, h-index, g-index, hI,norm, hI,annual and hA-index, recomputed for whatever the filter leaves visible.
+- **Criteria**: authors, journals (type a name, an ISO abbreviation such as *Nat Methods* or an acronym such as *PNAS* and pick from the list; several journals can be chosen at once), title words, keywords in any field, a year range, a maximum number of results (up to 2,000) and a sort order. Boolean expressions (`AND`, `OR`, `NOT`, parentheses, quoted phrases) mean the same thing in every source.
+- **The result table**: citations (with ▲/▼ against the previous year), citations per year, rank, authors, title, year, journal (in the journal's own colour), impact factor, a **소속** column with the institution's tier (T1–T4, from its OpenAlex h-index), flag and name, DOI, whether a PDF is available and whether the paper is already in your library. Under each title the first and corresponding authors are named. The title column takes whatever width the other columns leave. Column widths and order are remembered.
+- **Hover cards**: resting the pointer on a title, an institution, a journal or the authors opens a card with the full details — the whole title, journal, year and citations, every author, and each institution with its country, h-index band and the author it belongs to.
+- **Filters**: a **필터** button sets rules that include or exclude by words (in any field or a chosen one), authors, journals, institutions, countries, document type, source, year range, citations, citations per year, impact factor, PDF availability and whether you already hold the paper — each with live counts. The filter box also takes a short syntax: `-word`, `"exact phrase"`, `journal:Cell`, `-author:Kim`, `inst:Harvard`, `country:KR`, `year:2018-2022`.
+- **Citation metrics** (left): a histogram of publication years (long spans are grouped), the year-by-year citations of the whole result set, the paper count, total citations, h-index, g-index, hI,norm, hI,annual and hA-index, recomputed for whatever the filter leaves visible.
+- **A paper's citations over time**: the detail card shows the citation count large with a ten-year sparkline. Clicking it opens the citations per year, this year against the last two, the change from the year before, the peak year, and how many citations arrived since you last looked at the paper (one OpenAlex request, cached for six hours).
+- **Abstract translation**: **번역** in the detail card translates the abstract (and, if ticked, the title) into the language you choose, through the installed *Translate for Zotero* plugin and the service already set up there; an OpenAI-compatible endpoint can be used instead.
 - **Recent searches**: the last search is kept on disk and restored the next time the window opens. A search that was stopped part-way is marked incomplete.
 
 ### Importing
@@ -77,13 +82,13 @@ Reading status and rating; search this paper in ZotPoP; related papers; follow t
 
 ### Tabs
 
-**Library** — the whole library or the selection or a collection, one line per paper. Search by title, author or tag; filter by type, tag, status, rating and year; chips for each kind (papers, preprints, theses, books, patents, datasets). Pick papers to link as related or send to the comparison table.
+**Library** — the whole library or the selection or a collection, one card per paper: the title, then the journal in its own colour, the year and the authors. Search by title, author or tag. **상세 필터** builds rules that include or exclude by words, type, tags, reading status, rating, year, collections, journals (found by full name, abbreviation or acronym), impact factor, citations, and whether a paper has a PDF, annotations or notes; the search box understands `-word`, `"phrase"`, `저자:…`, `저널:…` and `연도:2018-2022`. Chips for each kind (papers, preprints, theses, books, patents, datasets). Pick papers to link as related or send to the comparison table.
 
 ![The Library tab](docs/images/style-custom-explore.png)
 
-**Related papers** — for one paper, the papers that cite it, the works it cites, and papers close to it in subject, from OpenAlex, in three groups. A paper you do not hold can be found or imported through ZotPoP from its row.
+**Related papers** — for one paper, the papers that cite it, the works it cites, and papers close to it in subject, from OpenAlex, in three groups. A paper you do not hold can be found or imported through ZotPoP from its row. **주변 보기** on any row (and a one-line summary for the paper itself) shows what happened around a paper: corrections, retractions and expressions of concern with their dates (Crossref, including Retraction Watch, and Europe PMC), comment counts, a PubPeer link, and its reception on Bluesky, Hacker News and Wikipedia (Altmetric counts too if you enter your own Altmetric key).
 
-**Authors** — the authors of a paper with their recent work, affiliation, h-index and topics. **Follow** someone and one check reports their new papers, moves between institutions, first-time coauthors and, with a USPTO key, patent filings. The right-click entry **Follow the senior author** opens the last-listed author directly.
+**Authors** — the authors of a paper with their recent work, affiliation, h-index and topics. The list of followed authors shows each person's photo, and their institution with its tier and country flag. **Follow** someone and one check reports their new papers, moves between institutions, first-time coauthors and, with a USPTO key, patent filings. The right-click entry **Follow the senior author** opens the last-listed author directly.
 
 **Journal metrics** — Clarivate JCR browsed as it is organised: **groups → categories → journals**. Each category shows its journal count, citable items, total citations and median JIF; each journal its JIF, rank within the category, quartile and percentile. **Browse by OpenAlex subject** switches to 22,594 journals filtered by domain › field › subfield, for the journals in your library or all of them.
 
@@ -111,7 +116,7 @@ Settings → Style Custom. A **Start here** block at the top lists the three key
 
 ### Self-check
 
-After an install, when Zotero starts, 36 checks run against the real library and their report is written to `<Zotero data folder>/style-custom-selfcheck.json`. No window is opened.
+After an install, when Zotero starts, 41 checks run against the real library and their report is written to `<Zotero data folder>/style-custom-selfcheck.json`. No window is opened. One of them lays out every tab of the panel in Zotero itself, at the panel's real size and in both densities, and lists anything that overflows its box, wraps where it should not or overlaps other text in `style-custom-layout.json`.
 
 ---
 
@@ -124,6 +129,10 @@ After an install, when Zotero starts, 36 checks run against the real library and
 | Crossref, Europe PMC, PubMed, Semantic Scholar, arXiv | ZotPoP search, citation cross-checks |
 | Google Scholar | Scholar search and author profiles |
 | USPTO Open Data Portal | Patents of followed authors (key required) |
+| Crossref updates (with Retraction Watch), Europe PMC comments and corrections | Corrections, retractions and expressions of concern around a paper |
+| Bluesky, Hacker News, Wikipedia (public search) | A paper's reception, asked only when you open it |
+| Altmetric | Attention counts (your own key, optional) |
+| Translate for Zotero (if installed) | Abstract translation in ZotPoP, through the service you set up there |
 
 Email addresses and API keys are sent only to the service they belong to, and only if you entered them yourself.
 
