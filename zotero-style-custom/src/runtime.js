@@ -3375,6 +3375,38 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return added;
   }
 
+  /* Where a followed author works, as far as the data already on disk says:
+     the country and h-index of the institution by name, read from the papers'
+     author records and the institution table. No request is made; an
+     institution never seen in either has no country and no tier. */
+  placeOf(institution) {
+    const key = value => String(value || '').replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+    const wanted = key(institution);
+    if (!wanted) return null;
+    const table = this.institutionTable(), works = this.paperWorks();
+    const signature = `${Object.keys(table).length}:${Object.keys(works).length}`;
+    if (!this.placeIndex || this.placeIndex.signature !== signature) {
+      const byName = new Map();
+      const add = (name, country, ror) => {
+        const k = key(name);
+        if (!k) return;
+        const row = byName.get(k) || {country: '', ror: ''};
+        if (!row.country && country) row.country = String(country).toUpperCase();
+        if (!row.ror && ror) row.ror = ror;
+        byName.set(k, row);
+      };
+      for (const row of Object.values(table)) if (row && !row.unknown) add(row.name, row.country, row.ror);
+      for (const work of Object.values(works)) for (const person of work?.people || []) add(person.institution, person.country, person.ror);
+      this.placeIndex = {signature, byName};
+    }
+    const hit = this.placeIndex.byName.get(wanted);
+    if (!hit) return null;
+    const record = hit.ror ? table[hit.ror] : null;
+    const hIndex = record?.hIndex ?? null;
+    return {country: hit.country || record?.country || '', flag: this.affiliationTools.flag(hit.country || record?.country),
+      hIndex, tier: hIndex ? this.affiliationTools.tierOf(hIndex) : null};
+  }
+
   // What the row should say about where this paper came from.
   affiliationOf(item) {
     const work = this.paperWorks()[this.identity(item)];

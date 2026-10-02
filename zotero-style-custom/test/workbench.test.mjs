@@ -2575,6 +2575,38 @@ test('the comparison table reads its papers together and keeps the reading as a 
  f.bench.destroy();
 });
 
+test('the followed table shows a round face, tier + flag + institution, and centres every cell',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'Ada Lovelace',institution:'MIT',sweptAt:'2026-09-01T00:00:00Z',news:[{id:'W1'}],seen:[]},
+  {id:'A2',name:'Bo',institution:'Quiet College',sweptAt:'2026-08-01T00:00:00Z',news:[],seen:[]},
+  {id:'A3',name:'Cy',institution:'',news:[],seen:[]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ f.runtime.portraitOf=id=>id==='A1'?{url:'data:image/png;base64,AAAA',page:'https://example.org'}:null;
+ f.runtime.placeOf=name=>name==='MIT'?{country:'US',flag:'\u{1F1FA}\u{1F1F8}',hIndex:2400,tier:{key:'t1',label:'T1',note:'note'}}:name==='Quiet College'?{country:'',flag:'',hIndex:300,tier:{key:'t4',label:'T4',note:'note'}}:null;
+ await f.bench.show('authors');
+ await f.click('목록 관리');
+ const tr=n=>f.body().querySelector(`.sc-watch-table tbody tr:nth-child(${n})`);
+ const photo=tr(1).querySelector('.sc-face img');
+ assert.ok(photo,'a held photo is the avatar');assert.equal(photo.getAttribute('alt'),'Ada Lovelace');assert.equal(photo.loading,'lazy');
+ assert.equal(tr(2).querySelector('.sc-face img'),null,'no photo: initials');
+ assert.equal(tr(2).querySelector('.sc-face .sc-face-text').textContent,'B');
+ assert.ok(tr(1).querySelector('td:first-child .sc-face + button'),'the face comes before the name');
+ const place=tr(1).querySelector('.sc-place');
+ assert.equal(place.querySelector('.sc-tier-t1').textContent,'T1');
+ assert.equal(place.querySelector('.sc-flag').textContent,'\u{1F1FA}\u{1F1F8}');
+ assert.match(place.getAttribute('title'),/MIT · .* · 기관 h-index 2400/);
+ assert.equal(tr(2).querySelector('.sc-flag'),null,'unknown country: no flag');
+ assert.ok(tr(2).querySelector('.sc-tier-t4'));
+ assert.equal(tr(3).querySelector('.sc-place-name').textContent,'소속 미상');
+ assert.equal(tr(3).querySelector('.sc-tier'),null);
+ assert.ok(tr(1).querySelector('td.sc-col-n .sc-watch-count'),'the count chip sits inside its cell');
+ assert.equal(tr(1).querySelector('td.sc-watch-count'),null,'no badge class on a td');
+ const css=fs.readFileSync(new URL('../content/workbench.css',import.meta.url),'utf8');
+ assert.match(css,/\.sc-watch-table th, #style-custom-workbench \.sc-watch-table td \{[^}]*vertical-align: middle/);
+ assert.doesNotMatch(css,/\.sc-watch-table th, #style-custom-workbench \.sc-watch-table td \{ vertical-align: top/);
+ f.bench.destroy();
+});
+
 test('the followed list can be tended as a table: found, sorted, let go',async()=>{
  const f=fixture();
  const rows=[{id:'A1',name:'Ada',institution:'MIT',institutionGiven:'MIT chemistry',sweptAt:'2026-09-01T00:00:00Z',news:[{id:'W1'}],seen:[]},
@@ -2587,7 +2619,7 @@ test('the followed list can be tended as a table: found, sorted, let go',async()
  const names=()=>[...f.body().querySelectorAll('.sc-watch-table td:first-child button')].map(b=>b.textContent);
  assert.deepEqual(names(),['Ada','Bo','Cy'],'news first');
  const place=f.body().querySelector('.sc-watch-table tbody tr:nth-child(1) td:nth-child(2)');
- assert.equal(place.getAttribute('title'),'등록 당시: MIT chemistry');
+ assert.match(place.querySelector('.sc-place').getAttribute('title'),/^MIT · 등록 당시: MIT chemistry$/);
  assert.ok(f.body().querySelector('.sc-watch-table tbody tr:nth-child(2) td.sc-watch-moved'),'a move is shaded');
  assert.deepEqual([...f.body().querySelectorAll('.sc-watch-table thead th')].map(t=>t.textContent),['이름','소속','읽기 상태','읽은 시간','마지막 확인','새 논문','특허','']);
  f.input('관심 저자 찾기','bo');

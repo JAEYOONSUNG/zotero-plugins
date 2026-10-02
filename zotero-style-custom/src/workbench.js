@@ -301,14 +301,43 @@
    return (first+last).toUpperCase();
   }
   // A found photograph over the initials; the initials stay if it fails to load.
-  function showFace(face,found){
+  function showFace(face,found,alt=''){
    if(disposed||!face||!found?.url)return;
    const img=doc.createElementNS(HTML,'img');
-   img.src=found.url;img.alt='';img.setAttribute('aria-hidden','true');
+   img.src=found.url;img.alt=alt;if(!alt)img.setAttribute('aria-hidden','true');
+   img.loading='lazy';img.decoding='async';img.width=28;img.height=28;
    img.addEventListener('error',()=>img.remove());
    img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});
    face.appendChild(img);
    face.title=found.page?`사진 출처: ${found.page}`:'';
+  }
+  /* Country names for a tooltip, from the platform's own list when it has one. */
+  function countryLabel(code){
+   try{return new Intl.DisplayNames(['ko'],{type:'region'}).of(code)||code;}catch(error){return code;}
+  }
+  /* A followed author's round face: the photo the plugin already holds
+     (never fetched for the sake of drawing), the initials otherwise. */
+  function watchFace(person,parent){
+   const face=node('span',null,parent,{class:'sc-face sc-watch-face'});
+   if(!runtime.portraitOf?.(person.id))face.setAttribute('aria-hidden','true');
+   node('span',initials(person.name),face,{class:'sc-face-text'});
+   showFace(face,runtime.portraitOf?.(person.id),person.name);
+   return face;
+  }
+  /* Tier, flag and institution, as the items tree's 소속 column reads. T1 and T2
+     are drawn firm, T3 and T4 quiet; what is not known is left out rather than guessed. */
+  function placeLine(person,parent){
+   const where=runtime.placeOf?.(person.institution)||null;
+   const wrap=node('span',null,parent,{class:'sc-place'});
+   if(where?.tier?.label)node('span',where.tier.label,wrap,{class:'sc-tier sc-tier-'+where.tier.key,title:where.tier.note});
+   if(where?.flag)node('span',where.flag,wrap,{class:'sc-flag','aria-hidden':'true'});
+   const name=person.institution?String(person.institution).replace(/\s*\([^)]+\)\s*$/,where?.flag?'':'$&').trim()||person.institution:'';
+   node('span',name||'소속 미상',wrap,{class:'sc-place-name'+(name?'':' sc-none')});
+   const notes=[person.institution||'소속 미상'];
+   if(where?.country)notes.push(countryLabel(where.country));
+   if(where?.hIndex)notes.push(`기관 h-index ${where.hIndex}`);
+   wrap.title=notes.join(' · ');
+   return wrap;
   }
   async function paintPortrait(face,person){
    if(!runtime.fetchPortrait||!person?.id)return;
@@ -5330,9 +5359,7 @@
      const open=()=>run(()=>show(person));
      row.addEventListener('click',open);
      row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
-     const face=node('span',null,row,{class:'sc-face sc-watch-face','aria-hidden':'true'});
-     node('span',initials(person.name),face,{class:'sc-face-text'});
-     showFace(face,runtime.portraitOf?.(person.id));
+     watchFace(person,row);
      const line=node('div',null,row,{class:'sc-watch-line'});
      node('span',person.name,line,{class:'sc-watch-name'});
      if(count)node('span',String(count),line,{class:'sc-watch-badge',title:`확인 안 한 새 논문 ${count}편`});
@@ -5352,7 +5379,8 @@
      const moved=person.moved&&person.moved.to?person.moved:null;
      const sub=node('span',moved?`${moved.from||'?'} → ${moved.to}`
       :latest?`${latest.date?latest.date.slice(0,7)+' · ':''}${latest.venue||latest.title||''}`
-      :(person.institution||'소속 미확인'),row,{class:'sc-watch-sub'+(moved?' sc-watch-moved':'')});
+      :latest?`${latest.date?latest.date.slice(0,7)+' · ':''}${latest.venue||latest.title||''}`:'',row,{class:'sc-watch-sub'+(moved?' sc-watch-moved':'')});
+     if(!moved&&!latest){sub.textContent='';const where=runtime.placeOf?.(person.institution);if(where?.flag)node('span',where.flag,sub,{class:'sc-flag','aria-hidden':'true'});node('span',person.institution||'소속 미확인',sub);}
      sub.title=moved?(moved.since?`소속이 바뀐 것으로 보입니다 · ${moved.since}년부터 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`:`소속이 바뀐 것으로 보입니다 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`)
       :latest?`${latest.title||''}${latest.venue?' · '+latest.venue:''}`
       :(person.institution||'');
@@ -5401,14 +5429,19 @@
     const maxSeconds=Math.max(1,...shown.map(p=>statsFor(p.name).seconds));
     const table=node('table',null,host,{class:'sc-watch-table'});
     const thead=node('thead',null,table);const head=node('tr',null,thead);
-    for(const [label,cls,title] of [['이름','',''],['소속','',''],['읽기 상태','sc-col-reading',COAUTHOR_NOTE],['읽은 시간','sc-col-time',COAUTHOR_NOTE],['마지막 확인','sc-col-date',''],['새 논문','sc-col-n',''],['특허','sc-col-n',''],['','sc-col-act','']]){
+    for(const [label,cls,title] of [['이름','sc-col-name',''],['소속','sc-col-place',''],['읽기 상태','sc-col-reading',COAUTHOR_NOTE],['읽은 시간','sc-col-time',COAUTHOR_NOTE],['마지막 확인','sc-col-date',''],['새 논문','sc-col-n',''],['특허','sc-col-n',''],['','sc-col-act','']]){
      const attrs={scope:'col',class:cls};if(title)attrs.title=title;node('th',label,head,attrs);
     }
     const tbody=node('tbody',null,table);
     for(const person of shown){
      const tr=node('tr',null,tbody);
-     const nameCell=node('td',null,tr);const open=node('button',person.name,nameCell,{class:'sc-journal-name',type:'button',title:'상세 보기'});open.addEventListener('click',()=>run(()=>show(person)));
-     const place=node('td',person.institution||'소속 미확인',tr,{title:person.institution||''});if(person.institutionGiven&&person.institutionGiven!==person.institution)place.title=`등록 당시: ${person.institutionGiven}`;
+     const nameCell=node('td',null,tr,{class:'sc-col-name'});
+     const who=node('span',null,nameCell,{class:'sc-watch-who'});
+     watchFace(person,who);
+     const open=node('button',person.name,who,{class:'sc-journal-name',type:'button',title:'상세 보기'});open.addEventListener('click',()=>run(()=>show(person)));
+     const place=node('td',null,tr,{class:'sc-col-place'});
+     const line=placeLine(person,place);
+     if(person.institutionGiven&&person.institutionGiven!==person.institution)line.title+=` · 등록 당시: ${person.institutionGiven}`;
      if(person.moved&&person.moved.to)place.classList.add('sc-watch-moved');
      // 보유·완료·안 읽음: three fixed columns near 800px width crushed name
      // and affiliation, so they share one cell now, still matched by name
@@ -5419,7 +5452,10 @@
      if(stats.done)parts.push(T(`완료 ${stats.done}`));
      if(stats.unread)parts.push(T(`안 읽음 ${stats.unread}`));
      if(stats.last)parts.push(calendarAgo(stats.last));
-     node('td',parts.length?parts.join(' · '):'—',tr,{class:'sc-col-reading'+(parts.length?' sc-watch-count':' sc-none'),title:parts.length?(stats.guess?T('성과 이름 첫 글자만 같아 짐작한 값입니다 · ')+COAUTHOR_NOTE:COAUTHOR_NOTE):''});
+     /* The chip is inside the cell, not the cell itself: a badge class on the td
+        made it inline-flex, which pulled it out of the table row's middle line. */
+     const readCell=node('td',null,tr,{class:'sc-col-reading'+(parts.length?'':' sc-none'),title:parts.length?(stats.guess?T('성과 이름 첫 글자만 같아 짐작한 값입니다 · ')+COAUTHOR_NOTE:COAUTHOR_NOTE):''});
+     if(parts.length)node('span',parts.join(' · '),readCell,{class:'sc-watch-count sc-cell-chip'});else readCell.textContent='—';
      const timeCell=node('td',null,tr,{class:'sc-col-time'});
      if(stats.seconds){
       node('span',runtime.formatReadTime?runtime.formatReadTime(stats.seconds):Math.round(stats.seconds/60)+'분',timeCell,{class:'sc-watch-time-text'});
@@ -5427,7 +5463,7 @@
       node('span',null,meter,{class:'sc-watch-time-fill'}).style.width=Math.round(100*stats.seconds/maxSeconds)+'%';
      } else node('span','—',timeCell,{class:'sc-none'});
      node('td',person.sweptAt?person.sweptAt.slice(0,10):'아직 없음',tr,{class:'sc-col-date'});
-     const news=unseenWorks(person).length;node('td',news?String(news):'—',tr,{class:'sc-col-n'+(news?' sc-watch-count':' sc-none')});
+     const news=unseenWorks(person).length;const newsCell=node('td',null,tr,{class:'sc-col-n'+(news?'':' sc-none')});if(news)node('span',String(news),newsCell,{class:'sc-watch-count sc-cell-chip',title:`확인 안 한 새 논문 ${news}편`});else newsCell.textContent='—';
      const patents=person.patents?.length||0;node('td',patents?String(patents)+(person.newPatents?.length?` (+${person.newPatents.length})`:''):'—',tr,{class:'sc-col-n'+(patents?'':' sc-none')});
      const act=node('td',null,tr,{class:'sc-col-act'});
      // Letting someone go drops their baseline and news: the first press only arms the button.

@@ -38,6 +38,9 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const daysAgo=n=>new Date(Date.now()-n*864e5).toISOString();
  // Reading records for the fictional papers, so the reading page shows what a reader sees.
  const cache={items:{4:{seconds:400,lastRead:daysAgo(20)},1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},workbenchUI:{density:(typeof process!=='undefined'&&process.env?.PREVIEW_DENSITY==='compact')||(typeof location!=='undefined'&&/[?&]density=compact/.test(location.search))?'compact':'comfortable',welcomed:true},boards:[]};
+ // Fictional portraits drawn as simple shapes; everyone else shows initials.
+ const face=(bg,fg)=>({url:'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><rect width="28" height="28" fill="${bg}"/><circle cx="14" cy="11" r="5" fill="${fg}"/><path d="M4 28c0-6 4-9 10-9s10 3 10 9z" fill="${fg}"/></svg>`),page:''});
+ const DEMO_FACES={A1:face('#cfd8e6','#6b7a93'),A3:face('#e6d9cf','#93796b'),A5:face('#d3e3d6','#6b9374')};
  const watched=[
   {id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],
    news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},
@@ -85,7 +88,8 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    {id:'A24',name:'Emmanuelle Charpentier',institution:'Max Planck',papers:3,last:2023,titles:[]},
    {id:'A25',name:'Benjamin Oakes',institution:'Scribe Therapeutics',papers:2,last:2026,titles:[]},
    {id:'A26',name:'Addison Wright',institution:'UC Berkeley',papers:1,last:2022,titles:[]}],
-  portraitOf:()=>null,
+  placeOf:name=>({'MIT':['US',2400],'UC Berkeley':['US',2100],'Harvard University':['US',2600],'Stanford University':['US',2300],'Imperial College London':['GB',1500],'University of Cambridge':['GB',1900],'ETH Zurich':['CH',1200],'Columbia University':['US',1800],'Yale University':['US',1450],'Max Planck Institute for Terrestrial Microbiology':['DE',650]})[name]?.reduce((c,h)=>({country:c,flag:String.fromCodePoint(...[...c].map(l=>0x1F1E6+l.charCodeAt(0)-65)),hIndex:h,tier:h>=2000?{key:'t1',label:'T1',note:'기관 전체 h-index 2000 이상'}:h>=1400?{key:'t2',label:'T2',note:'기관 전체 h-index 1400 이상'}:h>=400?{key:'t3',label:'T3',note:'기관 전체 h-index 400 이상'}:null}))||null,
+  portraitOf:id=>DEMO_FACES[id]||null,
   fetchPortrait:async()=>null,
   journalRecord:()=>({name:'Example',issn:''}),
   fetchJournalMetric:async()=>({citedness:12.3,name:'Example Journal'}),
@@ -217,6 +221,8 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
     exclude rules on the fictional papers; &editor=tag (or journal, year, ...)
     also opens that rule's editor, with its live counts. */
  const flags=String(win.location?.search||'')+String(win.location?.hash||'');
+ /* design-preview.html?table=1 opens the watched authors as the 목록 관리 table. */
+ if(/table=1/.test(flags)){await bench.show('authors');[...bench.panel.querySelectorAll('button')].find(b=>b.textContent==='목록 관리')?.click();}
  if(/filters/.test(flags)){
   await bench.filters.set([
    {id:'demo1',kind:'year',mode:'in',min:2024,max:2026},

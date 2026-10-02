@@ -3023,3 +3023,17 @@ test('an empty reading-time cell says nothing was recorded, not that zero second
   assert.doesNotMatch(String(blank.title), /0초/);
   assert.match(String(read.title), /실제로 읽은 시간 4000초/);
 });
+
+test('placeOf reads a followed author\'s country and tier from data already held, with no request', () => {
+  const { plugin } = fixture();
+  plugin.cache.institutions = { 'r1': { ror: 'r1', name: 'Example University', country: 'KR', hIndex: 2100 } };
+  plugin.cache.works = { a: { people: [{ name: 'X', institution: 'Lab Co (Japan)', country: 'jp', ror: '' }] } };
+  const hit = plugin.placeOf('Example University');
+  assert.equal(hit.country, 'KR');
+  assert.equal(hit.tier.key, 't1');
+  assert.equal(hit.hIndex, 2100);
+  assert.equal(plugin.placeOf('lab co').country, 'JP', 'name matched without its country suffix');
+  assert.equal(plugin.placeOf('lab co').tier, null, 'no h-index, no tier');
+  assert.equal(plugin.placeOf('Nowhere Institute'), null);
+  assert.equal(plugin.placeOf(''), null);
+});

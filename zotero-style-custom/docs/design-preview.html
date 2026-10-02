@@ -1292,7 +1292,23 @@
 #style-custom-workbench .sc-watch-table th, #style-custom-workbench .sc-watch-table td { box-sizing: border-box; min-width: 0; max-width: none; padding: 8px 8px; border-inline-end: 0; border-block-end: 1px solid var(--sc-border); background: transparent; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; }
 #style-custom-workbench .sc-watch-table th { position: sticky; top: 0; z-index: 1; background: var(--sc-bg); color: var(--sc-faint); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); letter-spacing: .5px; text-transform: uppercase; }
 #style-custom-workbench .sc-watch-table tr:hover td { background: var(--sc-surface); }
-#style-custom-workbench .sc-watch-table .sc-col-n { width: 64px; text-align: end; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-watch-table td, #style-custom-workbench .sc-watch-table th { height: 44px; }
+#style-custom-workbench .sc-watch-table th.sc-col-n, #style-custom-workbench .sc-watch-table th.sc-col-act { text-align: end; }
+#style-custom-workbench .sc-watch-table .sc-cell-chip { max-width: 100%; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; }
+/* The name cell: a round face, then the name, on the row's middle line. */
+#style-custom-workbench .sc-watch-who { display: flex; align-items: center; gap: var(--sc-space-2); min-width: 0; }
+#style-custom-workbench .sc-watch-who .sc-watch-face { flex: none; width: 28px; height: 28px; }
+#style-custom-workbench .sc-watch-who .sc-journal-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
+/* 소속: tier, flag, institution -- T1/T2 firm, T3/T4 quiet; one line, ellipsis. */
+#style-custom-workbench .sc-place { display: flex; align-items: center; gap: var(--sc-space-2); min-width: 0; }
+#style-custom-workbench .sc-place-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-flag { flex: none; font-size: var(--sc-fs-body); line-height: 1; }
+#style-custom-workbench .sc-tier { flex: none; display: inline-flex; align-items: center; box-sizing: border-box; height: var(--sc-h-badge); padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-pill); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-tier-t1 { background: var(--sc-accent); color: var(--sc-bg); }
+#style-custom-workbench .sc-tier-t2 { background: var(--sc-accent-soft); color: var(--sc-accent); }
+#style-custom-workbench .sc-tier-t3, #style-custom-workbench .sc-tier-t4 { background: transparent; color: var(--sc-muted); font-weight: var(--sc-fw-regular); box-shadow: inset 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-watch-sub .sc-flag { margin-inline-end: var(--sc-space-1); font-size: var(--sc-fs-meta); }
+#style-custom-workbench .sc-watch-table .sc-col-n { width: 52px; text-align: end; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-watch-table .sc-col-date { width: 96px; font-variant-numeric: tabular-nums; color: var(--sc-muted); }
 /* 보유·완료·안 읽음: one cell, not three fixed 64px columns -- those crushed
    name/affiliation near an 800px panel. No fixed width: it shares the same
@@ -1301,11 +1317,14 @@
 /* 읽은 시간: a plain grey bar for time on one scale shared by every row --
    no colour, so it reads as a measurement next to 인용/IF rather than
    another status pill. */
-#style-custom-workbench .sc-watch-table .sc-col-time { width: 110px; }
+#style-custom-workbench .sc-watch-table .sc-col-time { width: 88px; }
+/* Names and places are what a reader scans: they get their share first, 읽기 상태 the rest. */
+#style-custom-workbench .sc-watch-table .sc-col-name { width: 22%; }
+#style-custom-workbench .sc-watch-table .sc-col-place { width: 24%; }
 #style-custom-workbench .sc-watch-time-text { display: block; font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-watch-time-bar { display: block; margin-top: 4px; width: 100%; height: 4px; border-radius: var(--sc-radius-sm); background: var(--sc-fill); overflow: hidden; }
 #style-custom-workbench .sc-watch-time-fill { display: block; height: 100%; background: var(--sc-border-strong); border-radius: var(--sc-radius-sm); }
-#style-custom-workbench .sc-watch-table .sc-col-act { width: 64px; text-align: end; }
+#style-custom-workbench .sc-watch-table .sc-col-act { width: 40px; text-align: end; }
 #style-custom-workbench .sc-watch-table td.sc-none { color: var(--sc-faint); }
 #style-custom-workbench .sc-watch-table .sc-journal-name { font-weight: var(--sc-fw-strong); }
 #style-custom-workbench .sc-watch-table .sc-unwatch { background: transparent; color: var(--sc-muted); opacity: 0; }
@@ -1466,8 +1485,7 @@
    under 이름 instead of losing a whole column. */
 @container sc-workbench (max-width: 900px) {
   #style-custom-workbench .sc-watch-table .sc-watch-time-bar { display: none; }
-  #style-custom-workbench .sc-watch-table th, #style-custom-workbench .sc-watch-table td { vertical-align: top; }
-  #style-custom-workbench .sc-watch-table .sc-col-reading { white-space: normal; overflow: visible; text-overflow: clip; }
+  #style-custom-workbench .sc-watch-table .sc-col-reading { overflow: hidden; text-overflow: ellipsis; }
 }
 @container sc-workbench (max-width: 760px) {
   #style-custom-workbench .sc-watch-table .sc-col-time { display: none; }
@@ -4476,14 +4494,43 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    return (first+last).toUpperCase();
   }
   // A found photograph over the initials; the initials stay if it fails to load.
-  function showFace(face,found){
+  function showFace(face,found,alt=''){
    if(disposed||!face||!found?.url)return;
    const img=doc.createElementNS(HTML,'img');
-   img.src=found.url;img.alt='';img.setAttribute('aria-hidden','true');
+   img.src=found.url;img.alt=alt;if(!alt)img.setAttribute('aria-hidden','true');
+   img.loading='lazy';img.decoding='async';img.width=28;img.height=28;
    img.addEventListener('error',()=>img.remove());
    img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});
    face.appendChild(img);
    face.title=found.page?`사진 출처: ${found.page}`:'';
+  }
+  /* Country names for a tooltip, from the platform's own list when it has one. */
+  function countryLabel(code){
+   try{return new Intl.DisplayNames(['ko'],{type:'region'}).of(code)||code;}catch(error){return code;}
+  }
+  /* A followed author's round face: the photo the plugin already holds
+     (never fetched for the sake of drawing), the initials otherwise. */
+  function watchFace(person,parent){
+   const face=node('span',null,parent,{class:'sc-face sc-watch-face'});
+   if(!runtime.portraitOf?.(person.id))face.setAttribute('aria-hidden','true');
+   node('span',initials(person.name),face,{class:'sc-face-text'});
+   showFace(face,runtime.portraitOf?.(person.id),person.name);
+   return face;
+  }
+  /* Tier, flag and institution, as the items tree's 소속 column reads. T1 and T2
+     are drawn firm, T3 and T4 quiet; what is not known is left out rather than guessed. */
+  function placeLine(person,parent){
+   const where=runtime.placeOf?.(person.institution)||null;
+   const wrap=node('span',null,parent,{class:'sc-place'});
+   if(where?.tier?.label)node('span',where.tier.label,wrap,{class:'sc-tier sc-tier-'+where.tier.key,title:where.tier.note});
+   if(where?.flag)node('span',where.flag,wrap,{class:'sc-flag','aria-hidden':'true'});
+   const name=person.institution?String(person.institution).replace(/\s*\([^)]+\)\s*$/,where?.flag?'':'$&').trim()||person.institution:'';
+   node('span',name||'소속 미상',wrap,{class:'sc-place-name'+(name?'':' sc-none')});
+   const notes=[person.institution||'소속 미상'];
+   if(where?.country)notes.push(countryLabel(where.country));
+   if(where?.hIndex)notes.push(`기관 h-index ${where.hIndex}`);
+   wrap.title=notes.join(' · ');
+   return wrap;
   }
   async function paintPortrait(face,person){
    if(!runtime.fetchPortrait||!person?.id)return;
@@ -9505,9 +9552,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      const open=()=>run(()=>show(person));
      row.addEventListener('click',open);
      row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
-     const face=node('span',null,row,{class:'sc-face sc-watch-face','aria-hidden':'true'});
-     node('span',initials(person.name),face,{class:'sc-face-text'});
-     showFace(face,runtime.portraitOf?.(person.id));
+     watchFace(person,row);
      const line=node('div',null,row,{class:'sc-watch-line'});
      node('span',person.name,line,{class:'sc-watch-name'});
      if(count)node('span',String(count),line,{class:'sc-watch-badge',title:`확인 안 한 새 논문 ${count}편`});
@@ -9527,7 +9572,8 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      const moved=person.moved&&person.moved.to?person.moved:null;
      const sub=node('span',moved?`${moved.from||'?'} → ${moved.to}`
       :latest?`${latest.date?latest.date.slice(0,7)+' · ':''}${latest.venue||latest.title||''}`
-      :(person.institution||'소속 미확인'),row,{class:'sc-watch-sub'+(moved?' sc-watch-moved':'')});
+      :latest?`${latest.date?latest.date.slice(0,7)+' · ':''}${latest.venue||latest.title||''}`:'',row,{class:'sc-watch-sub'+(moved?' sc-watch-moved':'')});
+     if(!moved&&!latest){sub.textContent='';const where=runtime.placeOf?.(person.institution);if(where?.flag)node('span',where.flag,sub,{class:'sc-flag','aria-hidden':'true'});node('span',person.institution||'소속 미확인',sub);}
      sub.title=moved?(moved.since?`소속이 바뀐 것으로 보입니다 · ${moved.since}년부터 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`:`소속이 바뀐 것으로 보입니다 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`)
       :latest?`${latest.title||''}${latest.venue?' · '+latest.venue:''}`
       :(person.institution||'');
@@ -9576,14 +9622,19 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     const maxSeconds=Math.max(1,...shown.map(p=>statsFor(p.name).seconds));
     const table=node('table',null,host,{class:'sc-watch-table'});
     const thead=node('thead',null,table);const head=node('tr',null,thead);
-    for(const [label,cls,title] of [['이름','',''],['소속','',''],['읽기 상태','sc-col-reading',COAUTHOR_NOTE],['읽은 시간','sc-col-time',COAUTHOR_NOTE],['마지막 확인','sc-col-date',''],['새 논문','sc-col-n',''],['특허','sc-col-n',''],['','sc-col-act','']]){
+    for(const [label,cls,title] of [['이름','sc-col-name',''],['소속','sc-col-place',''],['읽기 상태','sc-col-reading',COAUTHOR_NOTE],['읽은 시간','sc-col-time',COAUTHOR_NOTE],['마지막 확인','sc-col-date',''],['새 논문','sc-col-n',''],['특허','sc-col-n',''],['','sc-col-act','']]){
      const attrs={scope:'col',class:cls};if(title)attrs.title=title;node('th',label,head,attrs);
     }
     const tbody=node('tbody',null,table);
     for(const person of shown){
      const tr=node('tr',null,tbody);
-     const nameCell=node('td',null,tr);const open=node('button',person.name,nameCell,{class:'sc-journal-name',type:'button',title:'상세 보기'});open.addEventListener('click',()=>run(()=>show(person)));
-     const place=node('td',person.institution||'소속 미확인',tr,{title:person.institution||''});if(person.institutionGiven&&person.institutionGiven!==person.institution)place.title=`등록 당시: ${person.institutionGiven}`;
+     const nameCell=node('td',null,tr,{class:'sc-col-name'});
+     const who=node('span',null,nameCell,{class:'sc-watch-who'});
+     watchFace(person,who);
+     const open=node('button',person.name,who,{class:'sc-journal-name',type:'button',title:'상세 보기'});open.addEventListener('click',()=>run(()=>show(person)));
+     const place=node('td',null,tr,{class:'sc-col-place'});
+     const line=placeLine(person,place);
+     if(person.institutionGiven&&person.institutionGiven!==person.institution)line.title+=` · 등록 당시: ${person.institutionGiven}`;
      if(person.moved&&person.moved.to)place.classList.add('sc-watch-moved');
      // 보유·완료·안 읽음: three fixed columns near 800px width crushed name
      // and affiliation, so they share one cell now, still matched by name
@@ -9594,7 +9645,10 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
      if(stats.done)parts.push(T(`완료 ${stats.done}`));
      if(stats.unread)parts.push(T(`안 읽음 ${stats.unread}`));
      if(stats.last)parts.push(calendarAgo(stats.last));
-     node('td',parts.length?parts.join(' · '):'—',tr,{class:'sc-col-reading'+(parts.length?' sc-watch-count':' sc-none'),title:parts.length?(stats.guess?T('성과 이름 첫 글자만 같아 짐작한 값입니다 · ')+COAUTHOR_NOTE:COAUTHOR_NOTE):''});
+     /* The chip is inside the cell, not the cell itself: a badge class on the td
+        made it inline-flex, which pulled it out of the table row's middle line. */
+     const readCell=node('td',null,tr,{class:'sc-col-reading'+(parts.length?'':' sc-none'),title:parts.length?(stats.guess?T('성과 이름 첫 글자만 같아 짐작한 값입니다 · ')+COAUTHOR_NOTE:COAUTHOR_NOTE):''});
+     if(parts.length)node('span',parts.join(' · '),readCell,{class:'sc-watch-count sc-cell-chip'});else readCell.textContent='—';
      const timeCell=node('td',null,tr,{class:'sc-col-time'});
      if(stats.seconds){
       node('span',runtime.formatReadTime?runtime.formatReadTime(stats.seconds):Math.round(stats.seconds/60)+'분',timeCell,{class:'sc-watch-time-text'});
@@ -9602,7 +9656,7 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
       node('span',null,meter,{class:'sc-watch-time-fill'}).style.width=Math.round(100*stats.seconds/maxSeconds)+'%';
      } else node('span','—',timeCell,{class:'sc-none'});
      node('td',person.sweptAt?person.sweptAt.slice(0,10):'아직 없음',tr,{class:'sc-col-date'});
-     const news=unseenWorks(person).length;node('td',news?String(news):'—',tr,{class:'sc-col-n'+(news?' sc-watch-count':' sc-none')});
+     const news=unseenWorks(person).length;const newsCell=node('td',null,tr,{class:'sc-col-n'+(news?'':' sc-none')});if(news)node('span',String(news),newsCell,{class:'sc-watch-count sc-cell-chip',title:`확인 안 한 새 논문 ${news}편`});else newsCell.textContent='—';
      const patents=person.patents?.length||0;node('td',patents?String(patents)+(person.newPatents?.length?` (+${person.newPatents.length})`:''):'—',tr,{class:'sc-col-n'+(patents?'':' sc-none')});
      const act=node('td',null,tr,{class:'sc-col-act'});
      // Letting someone go drops their baseline and news: the first press only arms the button.
@@ -10464,6 +10518,9 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
  const daysAgo=n=>new Date(Date.now()-n*864e5).toISOString();
  // Reading records for the fictional papers, so the reading page shows what a reader sees.
  const cache={items:{4:{seconds:400,lastRead:daysAgo(20)},1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},workbenchUI:{density:(typeof process!=='undefined'&&process.env?.PREVIEW_DENSITY==='compact')||(typeof location!=='undefined'&&/[?&]density=compact/.test(location.search))?'compact':'comfortable',welcomed:true},boards:[]};
+ // Fictional portraits drawn as simple shapes; everyone else shows initials.
+ const face=(bg,fg)=>({url:'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><rect width="28" height="28" fill="${bg}"/><circle cx="14" cy="11" r="5" fill="${fg}"/><path d="M4 28c0-6 4-9 10-9s10 3 10 9z" fill="${fg}"/></svg>`),page:''});
+ const DEMO_FACES={A1:face('#cfd8e6','#6b7a93'),A3:face('#e6d9cf','#93796b'),A5:face('#d3e3d6','#6b9374')};
  const watched=[
   {id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],
    news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},
@@ -10511,7 +10568,8 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
    {id:'A24',name:'Emmanuelle Charpentier',institution:'Max Planck',papers:3,last:2023,titles:[]},
    {id:'A25',name:'Benjamin Oakes',institution:'Scribe Therapeutics',papers:2,last:2026,titles:[]},
    {id:'A26',name:'Addison Wright',institution:'UC Berkeley',papers:1,last:2022,titles:[]}],
-  portraitOf:()=>null,
+  placeOf:name=>({'MIT':['US',2400],'UC Berkeley':['US',2100],'Harvard University':['US',2600],'Stanford University':['US',2300],'Imperial College London':['GB',1500],'University of Cambridge':['GB',1900],'ETH Zurich':['CH',1200],'Columbia University':['US',1800],'Yale University':['US',1450],'Max Planck Institute for Terrestrial Microbiology':['DE',650]})[name]?.reduce((c,h)=>({country:c,flag:String.fromCodePoint(...[...c].map(l=>0x1F1E6+l.charCodeAt(0)-65)),hIndex:h,tier:h>=2000?{key:'t1',label:'T1',note:'기관 전체 h-index 2000 이상'}:h>=1400?{key:'t2',label:'T2',note:'기관 전체 h-index 1400 이상'}:h>=400?{key:'t3',label:'T3',note:'기관 전체 h-index 400 이상'}:null}))||null,
+  portraitOf:id=>DEMO_FACES[id]||null,
   fetchPortrait:async()=>null,
   journalRecord:()=>({name:'Example',issn:''}),
   fetchJournalMetric:async()=>({citedness:12.3,name:'Example Journal'}),
@@ -10643,6 +10701,8 @@ A practical framework for reproducible literature synthesis" class="sc-muted sc-
     exclude rules on the fictional papers; &editor=tag (or journal, year, ...)
     also opens that rule's editor, with its live counts. */
  const flags=String(win.location?.search||'')+String(win.location?.hash||'');
+ /* design-preview.html?table=1 opens the watched authors as the 목록 관리 table. */
+ if(/table=1/.test(flags)){await bench.show('authors');[...bench.panel.querySelectorAll('button')].find(b=>b.textContent==='목록 관리')?.click();}
  if(/filters/.test(flags)){
   await bench.filters.set([
    {id:'demo1',kind:'year',mode:'in',min:2024,max:2026},
