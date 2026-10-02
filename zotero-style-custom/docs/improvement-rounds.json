@@ -1498,7 +1498,7 @@
       "tests": [
         {
           "file": "test/workbench.test.mjs",
-          "name": "the map names its commonest journals in their own colours, and a card wears its journal mark"
+          "name": "the map names its commonest journals in their own colours, and a card names its journal in that colour"
         }
       ],
       "status": "verified",
@@ -4006,7 +4006,7 @@
         },
         {
           "file": "src/workbench.js",
-          "marker": "The same row anatomy as every other list of papers in this panel"
+          "marker": "library cards and the inbox: the full name once"
         }
       ],
       "tests": [
@@ -4016,7 +4016,7 @@
         },
         {
           "file": "test/workbench.test.mjs",
-          "name": "an inbox row is the same shape as every other paper row: mark first, preprint as a chip"
+          "name": "an inbox row says each thing once: the journal in its ink, Preprint as one chip, the followed author with their part"
         }
       ],
       "status": "verified",

@@ -1805,21 +1805,25 @@
 /* 내 문헌 분석 (journals tab): a plain table, one grey scale for the bars. */
 #style-custom-workbench .sc-journal-reading { display: flex; flex-direction: column; gap: var(--sc-space-2); margin: 0 0 var(--sc-space-4); padding: var(--sc-space-3); border-radius: var(--sc-radius-card); background: var(--sc-surface-alt); }
 #style-custom-workbench .sc-journal-reading-title { margin: 0; color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-font); }
-#style-custom-workbench .sc-journal-reading-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2) var(--sc-space-3); padding: 0 var(--sc-space-1); }
+#style-custom-workbench .sc-journal-reading-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2) var(--sc-space-3); padding: 0; }
 #style-custom-workbench .sc-journal-reading-head .sc-segmented { margin-left: auto; }
 #style-custom-workbench .sc-journal-reading-table { display: flex; flex-direction: column; gap: var(--sc-space-2); }
-#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 56px 64px 120px 84px 208px; gap: var(--sc-space-3); align-items: center; padding: var(--sc-space-2) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
-#style-custom-workbench .sc-journal-reading-row.sc-journal-reading-header { padding-block: 0; background: transparent; box-shadow: none; font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); color: var(--sc-muted); }
-#style-custom-workbench .sc-journal-reading-header > span:not(:first-child) { text-align: right; }
+#style-custom-workbench .sc-journal-reading-row { display: grid; grid-template-columns: minmax(0,1fr) 56px 64px 136px 72px 224px; column-gap: var(--sc-space-3); align-items: center; min-height: 56px; box-sizing: border-box; padding: var(--sc-space-2) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-journal-reading-row.sc-journal-reading-header { padding-block: 0; min-height: 0; align-items: end; background: transparent; box-shadow: none; font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); color: var(--sc-muted); }
+#style-custom-workbench .sc-journal-reading-header > span:not(:first-child):not(.sc-journal-reading-mix-head):not(.sc-journal-citation-head) { text-align: right; }
 #style-custom-workbench .sc-journal-reading-name { display: flex; flex-direction: column; gap: 0; min-width: 0; }
 #style-custom-workbench .sc-journal-reading-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--sc-fw-strong); color: var(--sc-text); }
 /* The official standing, right under the name it belongs to: IF, quartile and
    rank in one line, muted so the name above it still leads. */
 #style-custom-workbench .sc-journal-reading-jcr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); font-weight: var(--sc-fw-regular); color: var(--sc-muted); }
 #style-custom-workbench .sc-journal-reading-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--sc-text); white-space: nowrap; }
-#style-custom-workbench .sc-journal-reading-unread { text-align: right; }
-#style-custom-workbench .sc-journal-reading-mix { display: flex; flex-direction: column; gap: var(--sc-space-1); }
-#style-custom-workbench .sc-journal-reading-share { display: grid; grid-template-columns: 36px 1fr; align-items: center; gap: var(--sc-space-2); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); color: var(--sc-muted); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-journal-reading-num > .sc-journal-reading-count { margin-inline-start: auto; min-width: 44px; }
+#style-custom-workbench .sc-journal-reading-num { display: flex; justify-content: flex-end; align-items: center; }
+#style-custom-workbench .sc-journal-reading-count-none { color: var(--sc-muted); cursor: default; }
+#style-custom-workbench .sc-journal-reading-count-none:hover { background: var(--sc-fill); }
+#style-custom-workbench .sc-journal-reading-mix { display: flex; flex-direction: column; gap: var(--sc-space-1); min-width: 0; }
+#style-custom-workbench .sc-journal-reading-share { display: grid; grid-template-columns: 24px minmax(0,1fr) 32px; align-items: center; gap: var(--sc-space-2); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); color: var(--sc-muted); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-journal-reading-pct { text-align: right; color: var(--sc-text); }
 #style-custom-workbench .sc-journal-reading-bar { display: block; height: 4px; border-radius: var(--sc-radius-pill); background: var(--sc-fill); overflow: hidden; }
 #style-custom-workbench .sc-journal-reading-bar > span { display: block; height: 100%; background: var(--sc-muted); }
 #style-custom-workbench .sc-journal-reading-papers { display: flex; flex-direction: column; gap: var(--sc-space-1); padding: var(--sc-space-2) var(--sc-card-padding) var(--sc-space-2) var(--sc-space-8); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
@@ -1849,7 +1853,7 @@
 #style-custom-workbench .sc-overview-pick { display: inline-flex; gap: 4px; align-items: baseline; min-width: 0; max-width: 100%; }
 #style-custom-workbench .sc-overview-pick .sc-hit-title-link { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-journal-reading-scope { font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); color: var(--sc-text); }
-#style-custom-workbench .sc-journal-reading-jcr-note, #style-custom-workbench .sc-journal-legend-line { margin: 0; padding: 0 var(--sc-space-1); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-journal-reading-jcr-note, #style-custom-workbench .sc-journal-legend-line { margin: 0; padding: 0; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
 #style-custom-workbench .sc-resume-folds { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 20px; }
 #style-custom-workbench .sc-resume-folds:empty { display: none; }
 #style-custom-workbench .sc-resume-folds > details[open] { flex-basis: 100%; }
@@ -1987,8 +1991,9 @@
 #style-custom-workbench .sc-author-shelf-row .sc-hit-title-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 #style-custom-workbench .sc-author-shelf-meta { white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* 인용 중앙값: one shared axis, a dot (read) and a square (unread) in two lanes, joined by a thin line. */
-#style-custom-workbench .sc-journal-reading-citation-compare { display: grid; grid-template-columns: 84px minmax(0,1fr); grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: start; }
-#style-custom-workbench .sc-journal-citation-plot { grid-column: 1; grid-row: 1 / span 2; position: relative; height: 24px; }
+#style-custom-workbench .sc-journal-reading-citation-compare { display: grid; grid-template-columns: 112px minmax(0,1fr); grid-template-rows: auto auto; column-gap: 8px; align-items: center; justify-content: start; text-align: start; }
+#style-custom-workbench .sc-journal-citation-plot { grid-column: 1; grid-row: 1 / span 2; position: relative; height: 32px; }
+#style-custom-workbench .sc-journal-citation-grid { position: absolute; top: calc(50% - 2px); height: 5px; border-left: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-journal-citation-plot::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-journal-citation-join { position: absolute; top: 50%; height: 0; border-top: 1px solid var(--sc-muted); }
 #style-custom-workbench .sc-journal-citation-dot { position: absolute; transform: translate(-50%, 0); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); color: var(--sc-text); }
@@ -1997,11 +2002,13 @@
 #style-custom-workbench .sc-journal-citation-line { grid-column: 2; display: flex; gap: 4px; align-items: baseline; font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); white-space: nowrap; }
 #style-custom-workbench .sc-journal-citation-mark { color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
 #style-custom-workbench .sc-journal-citation-value { color: var(--sc-text); }
-#style-custom-workbench .sc-journal-citation-head { display: grid; grid-template-columns: 84px minmax(0,1fr); column-gap: 8px; text-align: start; }
-#style-custom-workbench .sc-journal-citation-axis { grid-column: 1; grid-row: 1 / span 2; display: flex; justify-content: space-between; align-self: end; padding: 0 0; font-variant-numeric: tabular-nums; }
-#style-custom-workbench .sc-journal-citation-title, #style-custom-workbench .sc-journal-legend { grid-column: 2; }
+#style-custom-workbench .sc-journal-citation-head { display: grid; grid-template-columns: 112px minmax(0,1fr); grid-template-rows: auto auto; column-gap: 8px; text-align: start; }
+#style-custom-workbench .sc-journal-citation-axis { grid-column: 1 / -1; grid-row: 2; position: relative; height: var(--sc-lh-meta); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-journal-citation-tick { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+#style-custom-workbench .sc-journal-citation-tick[data-edge=end] { transform: translateX(-100%); }
+#style-custom-workbench .sc-journal-citation-title, #style-custom-workbench .sc-journal-legend { grid-column: 1 / -1; grid-row: 1; }
 #style-custom-workbench .sc-journal-legend { display: block; font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); color: var(--sc-muted); white-space: nowrap; }
-#style-custom-workbench .sc-journal-reading-mix-head { display: flex; flex-direction: column; }
+#style-custom-workbench .sc-journal-reading-mix-head { display: flex; flex-direction: column; min-width: 0; }
 #style-custom-workbench .sc-journal-reading-header > .sc-journal-citation-head, #style-custom-workbench .sc-journal-reading-header > .sc-journal-reading-mix-head { text-align: start; }
 @container sc-workbench (max-width: 640px) {
  #style-custom-workbench .sc-journal-citation-plot, #style-custom-workbench .sc-journal-citation-axis { display: none; }
@@ -2475,3 +2482,85 @@
 #style-custom-workbench .sc-matrix-selection-row button { white-space: nowrap; flex: none; }
 #style-custom-workbench .sc-segmented { gap: 2px; }
 #style-custom-workbench .sc-segmented button { margin: 0; }
+
+/* ==== 저자 추적: the inbox row, the segmented counts, the 관계 map =============== */
+/* A segment's words and its count badge are one line, centred on one axis, pressed or not. The
+   segment is a flex row (the badge is inline-flex 20px; as inline content beside text it rode the
+   baseline and sat a pixel or two off the words). */
+#style-custom-workbench .sc-segmented button,
+#style-custom-workbench .sc-annot-order button,
+#style-custom-workbench .sc-chip-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0; box-sizing: border-box;
+  line-height: var(--sc-lh-body); white-space: nowrap; margin: 0;
+}
+#style-custom-workbench .sc-segmented button .sc-count,
+#style-custom-workbench .sc-annot-order button .sc-count,
+#style-custom-workbench .sc-chip-button .sc-count { align-self: center; margin-block: 0; vertical-align: baseline; flex: none; }
+
+/* One row of the inbox: the followed author's face, the paper over its one line, then what the library knows, then the actions. */
+#style-custom-workbench .sc-author-inbox-row { grid-template-columns: auto minmax(0, 1fr) auto auto; column-gap: var(--sc-space-3); }
+#style-custom-workbench .sc-inbox-faces { grid-column: 1; grid-row: 1; display: flex; align-items: center; min-width: 28px; }
+#style-custom-workbench .sc-inbox-faces .sc-watch-face { flex: none; width: 28px; height: 28px; box-shadow: 0 0 0 2px var(--sc-surface), inset 0 0 0 1px var(--sc-border); }
+#style-custom-workbench .sc-inbox-faces .sc-watch-face + .sc-watch-face { margin-inline-start: -10px; }
+#style-custom-workbench .sc-inbox-faces-more { margin-inline-start: var(--sc-space-1); color: var(--sc-muted); font: var(--sc-fw-medium) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); white-space: nowrap; }
+#style-custom-workbench .sc-inbox-text { grid-column: 2; grid-row: 1; min-width: 0; }
+#style-custom-workbench .sc-inbox-text > .sc-hit-title, #style-custom-workbench .sc-inbox-text > .sc-hit-meta { margin: 0; }
+#style-custom-workbench .sc-inbox-text > .sc-hit-meta { margin-block-start: 2px; }
+#style-custom-workbench .sc-inbox-status { grid-column: 3; grid-row: 1; }
+#style-custom-workbench .sc-inbox-actions { grid-column: 4; grid-row: 1; }
+#style-custom-workbench .sc-inbox-meta .sc-preprint { vertical-align: middle; }
+#style-custom-workbench .sc-inbox-who { white-space: nowrap; }
+#style-custom-workbench .sc-inbox-person { margin: 0; vertical-align: baseline; }
+#style-custom-workbench .sc-inbox-role { margin-inline-start: var(--sc-space-1); color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
+#style-custom-workbench .sc-inbox-fact { color: var(--sc-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#style-custom-workbench .sc-inbox-read { white-space: nowrap; }
+#style-custom-workbench .sc-inbox-status .sc-hit-owned { flex: none; }
+@container sc-workbench (max-width: 640px) {
+ #style-custom-workbench .sc-author-inbox-row { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: var(--sc-space-1); }
+ #style-custom-workbench .sc-inbox-faces { grid-row: 1; }
+ #style-custom-workbench .sc-inbox-text { grid-column: 2; grid-row: 1; }
+ #style-custom-workbench .sc-inbox-actions { grid-column: 3; grid-row: 1; }
+ #style-custom-workbench .sc-inbox-status { grid-column: 2 / -1; grid-row: 2; white-space: normal; flex-wrap: wrap; }
+}
+/* The author the map has picked: one removable pill over the list. */
+#style-custom-workbench .sc-inbox-focus { display: flex; margin: 0 0 var(--sc-space-2); padding: 0 var(--sc-space-1); min-width: 0; }
+#style-custom-workbench .sc-inbox-focus[hidden] { display: none; }
+#style-custom-workbench .sc-focus-chip,
+#style-custom-workbench .sc-focus-chip:hover { display: inline-flex; align-items: center; gap: var(--sc-space-2); max-width: 100%; min-height: var(--sc-h-seg); padding: 0 var(--sc-space-3); background: var(--sc-nav-on); color: var(--sc-nav-on-ink); box-shadow: none; white-space: nowrap; font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-focus-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-focus-chip-x { flex: none; }
+
+/* 관계 */
+#style-custom-workbench .sc-graph-toggle { margin-inline-start: auto; min-height: var(--sc-h-seg); white-space: nowrap; flex: none; }
+#style-custom-workbench .sc-author-graph-wrap { margin: 0 0 var(--sc-space-2); min-width: 0; }
+#style-custom-workbench .sc-author-graph-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2) var(--sc-space-3); margin: 0 0 var(--sc-space-2); padding: 0 var(--sc-space-1); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-author-graph-tools .sc-graph-all { min-height: var(--sc-h-seg); white-space: nowrap; flex: none; }
+#style-custom-workbench .sc-author-graph-empty { margin: 0; padding: 0 var(--sc-space-1); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-author-graph { background: var(--sc-surface); border-radius: var(--sc-radius-card); }
+#style-custom-workbench .sc-author-graph line { stroke-linecap: round; }
+#style-custom-workbench .sc-author-graph .sc-author-dot { fill: var(--sc-fill); }
+#style-custom-workbench .sc-author-graph .sc-author-ring { fill: none; stroke: var(--sc-border-strong); stroke-width: 1; }
+#style-custom-workbench .sc-author-graph .sc-author-initials { fill: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); pointer-events: none; }
+#style-custom-workbench .sc-author-graph g[role=button]:hover .sc-author-ring { stroke: var(--sc-text); stroke-width: 2; }
+#style-custom-workbench .sc-author-graph g[data-state=near] .sc-author-ring { stroke: var(--sc-muted); stroke-width: 1.6; }
+#style-custom-workbench .sc-author-graph g[data-state=selected] .sc-author-ring { stroke: var(--sc-text); stroke-width: 3; }
+#style-custom-workbench .sc-author-graph g[data-state=dim] .sc-author-initials { display: none; }
+#style-custom-workbench .sc-author-graph g[data-state=dim] .sc-author-dot,
+#style-custom-workbench .sc-author-graph g[data-state=dim] image,
+#style-custom-workbench .sc-author-graph g[data-state=dim] .sc-author-ring { opacity: .3; }
+#style-custom-workbench .sc-author-graph g[role=button]:focus-visible { outline: 0; }
+#style-custom-workbench .sc-author-graph g[role=button]:focus-visible .sc-author-ring { stroke: var(--sc-text); stroke-width: 3; stroke-dasharray: 3 2; }
+#style-custom-workbench .sc-author-graph-info { margin: var(--sc-space-2) 0 0; padding: var(--sc-space-3) var(--sc-card-padding); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); min-width: 0; }
+#style-custom-workbench .sc-author-graph-info[hidden] { display: none; }
+#style-custom-workbench .sc-author-graph-who { display: flex; align-items: center; gap: var(--sc-space-3); min-width: 0; }
+#style-custom-workbench .sc-author-graph-who .sc-watch-face { flex: none; width: 28px; height: 28px; }
+#style-custom-workbench .sc-author-graph-name { display: flex; flex-direction: column; min-width: 0; }
+#style-custom-workbench .sc-author-graph-name strong { color: var(--sc-text); font-weight: var(--sc-fw-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-author-graph-name .sc-place { color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); min-width: 0; }
+#style-custom-workbench .sc-author-graph-figures { margin: var(--sc-space-2) 0 0; font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-author-graph-mates { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-2); margin: var(--sc-space-2) 0 0; }
+#style-custom-workbench .sc-author-graph-mate { display: inline-flex; align-items: center; gap: var(--sc-space-1); max-width: 100%; min-height: var(--sc-h-seg); padding: 0 var(--sc-space-2) 0 var(--sc-space-3); white-space: nowrap; }
+#style-custom-workbench .sc-author-graph-mate .sc-mate-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-author-graph-mate .sc-count { margin: 0; }
+#style-custom-workbench .sc-author-graph-info .sc-actions { margin: var(--sc-space-2) 0 0; }
+#style-custom-workbench .sc-author-graph-info .sc-actions button { min-height: var(--sc-h-seg); white-space: nowrap; }

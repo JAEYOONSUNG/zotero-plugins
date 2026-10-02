@@ -2494,10 +2494,10 @@ test('the library splits by kind with one chip: patents and theses apart from th
  f.library.snapshot=async()=>[...f.papers,...extra];
  await f.bench.show('explore');
  const chips=[...f.bench.panel.querySelectorAll('.sc-kind-chips button')].map(b=>b.textContent);
- assert.deepEqual(chips,['전체 4','논문 2','프리프린트 1','학위논문 1']);
+ assert.deepEqual(chips,['전체 4','논문 2','Preprint 1','학위논문 1']);
  // The card says what kind of thing it is, unless it is a plain paper.
  const kinds=[...f.body().querySelectorAll('.sc-paper-card')].map(c=>c.querySelector('.sc-kind')?.textContent||'');
- assert.deepEqual(kinds.sort(),['','','프리프린트','학위논문']);
+ assert.deepEqual(kinds.sort(),['','','Preprint','학위논문']);
  await f.click('학위논문 1');
  assert.deepEqual([...f.body().querySelectorAll('.sc-paper-title')].map(h=>h.textContent),['학위논문A Thesis']);
  assert.equal(f.bench.panel.querySelector('.sc-kind-chips button[data-kind=thesis]').getAttribute('aria-pressed'),'true');
@@ -4611,25 +4611,175 @@ test('a paper dismissed in the inbox is dismissed on the author page too, and th
   f.bench.destroy();
 });
 
-test('an inbox row is the same shape as every other paper row: mark first, preprint as a chip', async () => {
-  /* It was a poorer hitRow — no publisher mark, and 프리프린트 as plain text at
-     the end of the row, in a column whose position moved with the content. */
+test('an inbox row says each thing once: the journal in its ink, Preprint as one chip, the followed author with their part',async()=>{
+  /* The row used to carry an abbreviation badge, the journal's long name and a
+     Korean chip -- bioRxiv three times -- and named nobody's part in the paper. */
   const f = fixture();
-  const rows = [{id: 'A1', name: 'Ada', seen: [], news: [
-    {id: 'W1', title: 'A preprint', venue: 'bioRxiv', date: '2026-09-01', type: 'preprint', preprint: true},
-    {id: 'W2', title: 'A paper', venue: 'Nature', date: '2026-08-01', type: 'article'}
-  ]}];
+  f.runtime.journalIdentity = {identify: v => v === 'ACS Synthetic Biology' ? {impactFactor: 4.2, year: 2025} : null,
+   colours: () => ({fill: '#eef', ink: '#335', edge: '#99a'})};
+  f.runtime.journalMarkForVenue = () => { const m = f.bench.panel.ownerDocument.createElement('span'); m.className = 'sc-mark'; return m; };
+  const people = ['Ada', 'Brent'];
+  const rows = [
+   {id: 'A1', name: 'Ada', seen: [], news: [
+    {id: 'W1', title: 'A preprint', venue: 'bioRxiv (Cold Spring Harbor Laboratory)', date: '2026-09-01', type: 'preprint', preprint: true, people, position: 'first', citations: 7},
+    {id: 'W2', title: 'A paper', venue: 'ACS Synthetic Biology', date: '2026-08-01', type: 'article', people, position: 'last', corresponding: true, citations: 31, doi: '10.1/w2'}]},
+   {id: 'A2', name: 'Brent', seen: [], news: [
+    {id: 'W2', title: 'A paper', venue: 'ACS Synthetic Biology', date: '2026-08-01', type: 'article', people, position: '', citations: 31, doi: '10.1/w2'}]}];
   f.runtime.watchedAuthors = () => rows;
   f.runtime.watchedAuthorsByNews = () => rows;
   await f.bench.show('authors');
-  const metas = [...f.body().querySelectorAll('.sc-author-inbox-row .sc-hit-meta')];
-  assert.equal(metas.length, 2);
-  const chip = metas[0].querySelector('.sc-preprint');
-  assert.ok(chip, 'a preprint says so as a chip, beside the mark');
-  assert.equal(chip.textContent, '프리프린트');
-  assert.equal(metas[1].querySelector('.sc-preprint'), null, 'a journal article carries no chip');
-  // The word no longer trails the row on the right.
-  assert.equal(/프리프린트/.test(f.body().querySelector('.sc-inbox-status')?.textContent || ''), false);
+  const inbox = [...f.body().querySelectorAll('.sc-author-inbox-row')];
+  assert.equal(inbox.length, 2, 'a paper two followed authors share is one row');
+  const [preprint, paper] = inbox;
+  const pm = preprint.querySelector('.sc-hit-meta'), jm = paper.querySelector('.sc-hit-meta');
+  assert.equal(pm.querySelectorAll('.sc-preprint').length, 1, 'one chip');
+  assert.equal(pm.querySelector('.sc-preprint').textContent, 'Preprint', 'in English, not mixed with Korean');
+  assert.equal(pm.querySelector('.sc-paper-venue').textContent, 'bioRxiv', 'the server once, shortened');
+  assert.equal(pm.textContent.match(/bioRxiv/g).length, 1);
+  assert.equal(jm.querySelector('.sc-preprint'), null, 'a journal paper carries no chip');
+  assert.equal(jm.querySelectorAll('.sc-paper-venue').length, 1, 'the journal is named once');
+  assert.equal(jm.querySelector('.sc-mark'), null, 'no abbreviation badge beside the full name');
+  assert.equal(jm.querySelector('.sc-paper-venue').dataset.known, '1', 'in the journal\'s signature ink');
+  assert.equal(jm.querySelector('.sc-paper-venue').style.getPropertyValue('--j-ink-l'), '#335');
+  // Order: journal, date, then the figures, then the authors.
+  const text = jm.textContent;
+  assert.ok(text.indexOf('ACS Synthetic Biology') < text.indexOf('2026-08-01') && text.indexOf('2026-08-01') < text.indexOf('Ada'));
+  assert.match(text, /IF 4\.2/);assert.match(text, /인용 31/);
+  // The followed authors lead with their faces, and say what part they had.
+  assert.equal(paper.querySelectorAll('.sc-inbox-faces .sc-watch-face').length, 2);
+  const roles = [...jm.querySelectorAll('.sc-inbox-who')].map(w => w.textContent);
+  assert.deepEqual(roles, ['Ada마지막 저자 · 교신', 'Brent']);
+  assert.equal([...pm.querySelectorAll('.sc-inbox-role')].map(r => r.textContent).join(), '1저자');
+  assert.equal(/프리프린트/.test(f.body().querySelector('.sc-author-inbox').textContent), false);
+  f.bench.destroy();
+});
+
+test('저자 추적 order: 관심 저자 first, then 관계, then 저장된 새 논문, toolbar on top',async()=>{
+  const f = fixture();
+  const rows = [{id: 'A1', name: 'Ada', seen: [], news: [{id: 'W1', title: 'T', venue: 'Nature', date: '2026-09-01', doi: '10.1/x'}]}];
+  f.runtime.watchedAuthors = () => rows;
+  f.runtime.watchedAuthorsByNews = () => rows;
+  f.runtime.graphTools = PaperGraph;
+  await f.bench.show('authors');
+  const heads = [...f.body().querySelectorAll('.sc-author-watch .sc-section-head-name')].map(h => h.textContent);
+  assert.deepEqual(heads, ['관심 저자', '관계', '저장된 새 논문']);
+  const area = f.body().querySelector('.sc-author-watch');
+  assert.equal(area.firstElementChild.className.includes('sc-watch-head'), true, 'the toolbar stays on top');
+  f.bench.destroy();
+});
+
+test('segmented controls centre the label and the count on one axis, pressed or not',()=>{
+  const css = fs.readFileSync(new URL('../content/workbench.css', import.meta.url), 'utf8');
+  const rule = css.match(/#style-custom-workbench \.sc-segmented button,\n#style-custom-workbench \.sc-annot-order button,\n#style-custom-workbench \.sc-chip-button \{([^}]*)\}/);
+  assert.ok(rule, 'one rule for every segmented family');
+  assert.match(rule[1], /display: inline-flex/);assert.match(rule[1], /align-items: center/);
+  assert.match(css, /\.sc-segmented button \.sc-count[^{]*\{[^}]*align-self: center/);
+  assert.match(css, /#style-custom-workbench \.sc-segmented button \{ margin: 0; \}/, 'Zotero\'s chrome margin stays reset');
+});
+
+const coWorks = () => {
+  const mk = (id, name, news) => ({id, name, institution: 'Somewhere', seen: [], sweptAt: '2026-09-18T00:00:00Z', news});
+  const shared = (id, doi, date, venue, copy) => ({id, title: 'Paper ' + id, doi, date, venue, people: ['Ada', 'Brent', 'Cleo'], ...copy});
+  return [
+   mk('A1', 'Ada', [shared('W1', '10.1/a', '2026-09-03', 'Nature', {position: 'first'}), shared('W4', '10.1/d', '2026-09-01', 'Science', {people: ['Ada', 'Brent']})]),
+   mk('A2', 'Brent', [shared('W1', '10.1/a', '2026-09-03', 'Nature', {position: 'last', corresponding: true})]),
+   mk('A3', 'Cleo', [shared('W1', '10.1/a', '2026-09-03', 'Nature', {})]),
+   mk('A4', 'Dan', [{id: 'W9', title: 'Solo', doi: '10.1/s', date: '2026-08-01', venue: 'eLife', people: ['Dan']}])];
+};
+const graphFixture = async () => {
+  const f = fixture();
+  const rows = coWorks();
+  f.runtime.watchedAuthors = () => rows;
+  f.runtime.watchedAuthorsByNews = () => rows;
+  f.runtime.graphTools = PaperGraph;
+  await f.bench.show('authors');
+  return f;
+};
+const dot = (f, id) => f.body().querySelector(`.sc-author-graph [data-author="${id}"]`);
+const rowTitles = f => [...f.body().querySelectorAll('.sc-author-inbox-row .sc-hit-title')].map(t => t.textContent);
+
+test('관계 graph: edges are co-authorship among followed authors, weighted by shared papers',async()=>{
+  const f = await graphFixture();
+  const lines = [...f.body().querySelectorAll('.sc-author-graph line')];
+  const pair = (a, b) => lines.find(l => [l.getAttribute('data-a'), l.getAttribute('data-b')].sort().join() === [a, b].sort().join());
+  assert.equal(lines.length, 3, 'Ada-Brent, Ada-Cleo, Brent-Cleo; Dan writes with no one followed');
+  assert.ok(pair('A1', 'A2') && pair('A1', 'A3') && pair('A2', 'A3'));
+  assert.equal(dot(f, 'A4'), null, 'an unlinked author is not drawn by default');
+  // Two shared papers (W1, W4) draw thicker than one.
+  assert.ok(Number(pair('A1', 'A2').getAttribute('stroke-width')) > Number(pair('A1', 'A3').getAttribute('stroke-width')));
+  assert.match(pair('A1', 'A2').querySelector('title').textContent, /2편/);
+  // Nodes are named, focusable buttons.
+  assert.equal(dot(f, 'A1').getAttribute('role'), 'button');
+  assert.equal(dot(f, 'A1').getAttribute('aria-label'), 'Ada');
+  assert.equal(f.body().querySelectorAll('.sc-author-graph [tabindex="0"]').length, 1, 'one tab stop, arrows move within');
+  // No label box overlaps another (labels that would collide are hidden).
+  const shown = [...f.body().querySelectorAll('.sc-author-graph .sc-graph-label')].filter(l => l.getAttribute('display') !== 'none');
+  assert.ok(shown.length >= 1);
+  f.bench.destroy();
+});
+
+test('관계 graph: choosing an author highlights their circle, narrows the inbox to them, and clears from the chip, a second press or Escape',async()=>{
+  const f = await graphFixture();
+  assert.equal(rowTitles(f).length, 3, 'W1 (three authors, one row), W4 and the solo paper');
+  dot(f, 'A2').dispatchEvent(new f.bench.panel.ownerDocument.defaultView.Event('click', {bubbles: true}));
+  await settle();
+  assert.deepEqual(rowTitles(f), ['Paper W1']);
+  const chip = f.body().querySelector('.sc-focus-chip');
+  assert.match(chip.textContent, /저자: Brent/);
+  assert.equal(dot(f, 'A2').dataset.state, 'selected');
+  assert.equal(dot(f, 'A1').dataset.state, 'near');
+  assert.equal(dot(f, 'A3').dataset.state, 'near');
+  const info = f.body().querySelector('.sc-author-graph-info');
+  assert.equal(info.hidden, false);
+  assert.match(info.textContent, /Brent/);assert.match(info.textContent, /Ada/);
+  assert.match(f.body().querySelector('.sc-inbox-tools .sc-segmented button').textContent, /미확인 1/, 'the counts follow the narrowed list');
+  // The chip clears it.
+  chip.dispatchEvent(new f.bench.panel.ownerDocument.defaultView.Event('click', {bubbles: true}));
+  await settle();
+  assert.equal(rowTitles(f).length, 3);assert.equal(f.body().querySelector('.sc-focus-chip'), null);
+  assert.equal(dot(f, 'A2').dataset.state, '');
+  // A second press on the same node clears, and so does Escape.
+  const win = f.bench.panel.ownerDocument.defaultView;
+  dot(f, 'A2').dispatchEvent(new win.Event('click', {bubbles: true}));dot(f, 'A2').dispatchEvent(new win.Event('click', {bubbles: true}));
+  await settle();
+  assert.equal(rowTitles(f).length, 3, 'pressed again');
+  dot(f, 'A1').dispatchEvent(new win.Event('click', {bubbles: true}));
+  assert.equal(rowTitles(f).length, 2);
+  const esc = new win.Event('keydown', {bubbles: true});esc.key = 'Escape';
+  dot(f, 'A1').dispatchEvent(esc);
+  await settle();
+  assert.equal(rowTitles(f).length, 3, 'Escape clears');
+  f.bench.destroy();
+});
+
+test('관계 graph is keyboard operable: Enter and Space choose, arrows move the one tab stop',async()=>{
+  const f = await graphFixture();
+  const win = f.bench.panel.ownerDocument.defaultView;
+  const key = (el, k) => {const e = new win.Event('keydown', {bubbles: true});e.key = k;el.dispatchEvent(e);};
+  const first = f.body().querySelector('.sc-author-graph [tabindex="0"]');
+  key(first, 'Enter');
+  assert.equal(first.getAttribute('aria-pressed'), 'true');
+  assert.equal(rowTitles(f).length >= 1, true);
+  key(first, 'Space');key(first, ' ');
+  assert.equal(first.getAttribute('aria-pressed'), 'false', 'Space on a chosen node lets it go');
+  key(first, ' ');
+  assert.equal(first.getAttribute('aria-pressed'), 'true');
+  key(first, 'ArrowRight');
+  f.bench.destroy();
+});
+
+test('관계 graph with many authors shows the connected ones and the most active, and 모두 보기 shows everyone',async()=>{
+  const f = fixture();
+  const rows = [];
+  for (let i = 0; i < 60; i++) rows.push({id: 'P' + i, name: 'Person' + String.fromCharCode(65 + i % 26) + ' Surname' + String.fromCharCode(97 + Math.floor(i / 26)) + i, institution: 'X', seen: [], sweptAt: '2026-09-18T00:00:00Z', news: []});
+  for (let i = 0; i < 10; i += 2) {
+   const work = {id: 'S' + i, title: 'Shared ' + i, doi: '10.1/s' + i, date: '2026-09-01', venue: 'Nature', people: [rows[i].name, rows[i + 1].name]};
+   rows[i].news.push(work);rows[i + 1].news.push(work);
+  }
+  f.runtime.watchedAuthors = () => rows;f.runtime.watchedAuthorsByNews = () => rows;f.runtime.graphTools = PaperGraph;
+  await f.bench.show('authors');
+  assert.equal(f.body().querySelectorAll('.sc-author-graph [data-author]').length, 10, 'only the linked ones, unlinked quiet authors are left out');
+  assert.equal(f.body().querySelector('.sc-graph-all'), null, 'nothing hidden by the limit, so no toggle');
   f.bench.destroy();
 });
 
@@ -4887,7 +5037,44 @@ test('R18 journal citations share one axis: 64 and 12 on it, unknown as a dash, 
  const legend=f.body().querySelector('.sc-journal-legend-line').textContent;
  assert.match(legend,/읽는 중·완료.*안 읽음/);assert.match(legend,/보유.*시간/);
  assert.equal(/읽는 중·완료/.test(head.textContent),false,'no legend in the header cells');
- assert.match(head.querySelector('.sc-journal-citation-axis').textContent,/^0/,'explicit axis ends');
+ assert.match(head.querySelector('.sc-journal-citation-axis').textContent,/^1/,'decade ticks, from 1');
+ f.bench.destroy();
+});
+
+test('R19 내 문헌 분석 reads evenly: identical count badges in every row, a log citation axis that survives an outlier, columns aligned with their headers',async()=>{
+ const f=fixture();
+ const mk=(id,venue,status,citations)=>({...f.papers[0],id:String(id),title:'P'+id,venue,status,citations});
+ const list=[];let id=100;
+ for(const [venue,n,cites] of [['',5,3],['Outlier',3,13308],['Small',2,4],['Zeros',2,0],['Nocite',1,null]])for(let i=0;i<n;i++){id++;list.push(mk(id,venue,i%2?'done':'',cites));}
+ const by=new Map(list.map(p=>[Number(p.id),p]));
+ f.runtime.state=ref=>({status:by.get(ref.id)?.status||'',citations:by.get(ref.id)?.citations??null,impactFactor:null});
+ for(const p of list)f.refs.set(Number(p.id),{id:Number(p.id)});
+ f.library.snapshot=async()=>list;
+ await f.bench.load();await f.bench.show('journals');
+ const rows=[...f.body().querySelectorAll('.sc-journal-reading-row:not(.sc-journal-reading-header)')];
+ assert.equal(rows.length,5,'the no-journal group is a row like the rest');
+ const sig=el=>`${el.tagName}.${el.className}`;
+ const cells=r=>[r.children[1],r.children[2]];
+ for(const r of rows){
+  for(const c of cells(r)){assert.equal(c.className.split(' ').includes('sc-journal-reading-num'),true);assert.ok(c.querySelector('.sc-journal-reading-count'),'every count cell holds the badge, whatever the value');}
+  assert.equal(sig(r.children[1].firstElementChild),sig(rows[0].children[1].firstElementChild),'held badges are the same element and classes');
+  assert.match(r.children[1].textContent,/^\d+편$/);
+ }
+ // A log axis: the outlier lands inside the plot box, and the small values are not squashed to the start.
+ const lefts=r=>[...r.querySelectorAll('.sc-journal-citation-dot')].map(d=>d.style.left);
+ const frac=l=>Number(/\* ([0-9.e-]+)\)$/.exec(l)[1]);
+ const outlier=rows.find(r=>r.querySelector('.sc-journal-reading-name-text').textContent==='Outlier');
+ const small=rows.find(r=>r.querySelector('.sc-journal-reading-name-text').textContent==='Small');
+ for(const r of rows)for(const l of lefts(r)){const v=frac(l);assert.ok(v>=0&&v<=1,'every mark is inside the plot box');}
+ assert.equal(Math.max(...lefts(outlier).map(frac)),1,'the top of the axis is the outlier');
+ assert.ok(Math.max(...lefts(small).map(frac))>0.1,'a median of 4 is not pressed against the start (linear would be 0.0003)');
+ assert.match([...f.body().querySelectorAll('.sc-journal-citation-tick')].map(t=>t.textContent).join(' '),/^1 10 100 1k 10k$/);
+ // Header and content alignment is a stylesheet contract.
+ const css=fs.readFileSync(new URL('../content/workbench.css',import.meta.url),'utf8');
+ assert.match(css,/\.sc-journal-reading-header > span:not\(:first-child\):not\([^)]*\):not\([^)]*\) \{ text-align: right; \}/,'number headers right-aligned');
+ assert.match(css,/\.sc-journal-reading-header > \.sc-journal-citation-head, [^{]*\.sc-journal-reading-mix-head \{ text-align: start; \}/,'chart headers left-aligned');
+ assert.match(css,/\.sc-journal-reading-num \{ display: flex; justify-content: flex-end;/,'count cells right-aligned');
+ assert.match(css,/\.sc-journal-reading-row \{[^}]*min-height: 56px/,'uniform row height');
  f.bench.destroy();
 });
 
@@ -4927,14 +5114,14 @@ test('상세 필터 rules: an exclude rule is added in the panel, shows as a 제
 test('상세 필터 rules: click a chip to edit it, flip it to 포함, and 모두 지우기 clears every rule and filter', async () => {
  const f=fixture();await f.bench.show('explore');await settle();
  await f.bench.filters.set([{id:'a',kind:'type',mode:'ex',values:['preprint']},{id:'b',kind:'tag',mode:'in',values:['topic/b']}]);
- assert.equal(cardCount(f),1);assert.deepEqual(chipTexts(f),['제외 · 유형: 프리프린트','태그: topic/b']);
+ assert.equal(cardCount(f),1);assert.deepEqual(chipTexts(f),['제외 · 유형: Preprint','태그: topic/b']);
  press(f,f.bench.panel.querySelectorAll('.sc-rule-chip-main')[1]);await settle();
  const editor=f.bench.panel.querySelector('.sc-rule-editor');assert.equal(editor.hidden,false);
  assert.equal(editor.getAttribute('aria-label'),'태그 규칙 편집');
  assert.equal(editor.querySelector('input[aria-label="topic/b"]').checked,true,'the rule loads into its editor');
  press(f,editor.querySelector('.sc-rule-head [data-mode="ex"]'));await settle();
  await f.click('변경 적용');
- assert.deepEqual(chipTexts(f),['제외 · 유형: 프리프린트','제외 · 태그: topic/b']);assert.equal(cardCount(f),1);
+ assert.deepEqual(chipTexts(f),['제외 · 유형: Preprint','제외 · 태그: topic/b']);assert.equal(cardCount(f),1);
  assert.ok(f.body().textContent.includes('Paper Alpha'));
  f.bench.state.type='journalArticle';await f.bench.render();
  assert.ok([...f.bench.panel.querySelectorAll('.sc-filter-chips button')].some(b=>b.textContent==='모두 지우기'));
@@ -4947,7 +5134,7 @@ test('상세 필터 rules: click a chip to edit it, flip it to 포함, and 모�
 test('상세 필터 rules: saved rules come back when the panel opens again, per tab, and bad saved data is ignored', async () => {
  const cache={items:{},workbenchUI:{filterRules:{explore:[{id:'x',kind:'type',mode:'ex',values:['preprint']},{id:'y',kind:'tag',values:['topic/b']},{id:'z',kind:'nope'}],notes:[{id:'n',kind:'pdf'}]}}};
  const f=fixture(cache);await f.bench.show('explore');await settle();
- assert.deepEqual(chipTexts(f),['제외 · 유형: 프리프린트','태그: topic/b']);assert.equal(cardCount(f),1);
+ assert.deepEqual(chipTexts(f),['제외 · 유형: Preprint','태그: topic/b']);assert.equal(cardCount(f),1);
  assert.equal(f.bench.panel.querySelector('.sc-filters summary').textContent,'상세 필터 · 2개 적용');
  await f.bench.show('attachments');await settle();
  assert.equal(chipTexts(f).length,0,'another tab keeps its own rules');

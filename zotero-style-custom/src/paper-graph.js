@@ -277,7 +277,7 @@
   /* Force-directed layout. Edges pull, every pair pushes, and the whole thing is
      nudged toward the middle so a component with no edges out of it does not
      drift off the canvas. */
-  function layout(graph, {width = 760, height = 480, iterations = 400, seed = 7, pad = 30} = {}) {
+  function layout(graph, {width = 760, height = 480, iterations = 400, seed = 7, pad = 30, nodeRadius = null, gap = 9} = {}) {
     const nodes = ((graph && graph.nodes) || []).map(node => Object.assign({}, node));
     if (!nodes.length) {
       return {nodes: [], edges: (graph && graph.edges) || [], missing: (graph && graph.missing) || [],
@@ -305,7 +305,7 @@
       // Every node keeps its drawn size, so the layout can refuse to let two of
       // them sit on top of each other. Size is centrality within this graph
       // (see centralityRadius), not a citation count from the world outside it.
-      node.r = centralityRadius(node.rank);
+      node.r = nodeRadius ? nodeRadius(node) : centralityRadius(node.rank);
     });
     const edges = ((graph && graph.edges) || [])
       .map(edge => Object.assign({}, edge, {a: index.get(String(edge.source)), b: index.get(String(edge.target))}))
@@ -361,10 +361,10 @@
          crowded pairs either way -- and the run drops from 302ms to 124ms.
          The final passes are what actually settle it. */
       if (step % 4 === 0 || step > iterations - 12) {
-        separate(nodes, random, step > iterations * 0.4 ? 1 : 0.5);
+        separate(nodes, random, step > iterations * 0.4 ? 1 : 0.5, gap);
       }
     }
-    for (let extra = 0; extra < 14; extra++) separate(nodes, random, 1);
+    for (let extra = 0; extra < 14; extra++) separate(nodes, random, 1, gap);
 
     // Fit to the box, leaving room for a label.
     const xs = nodes.map(node => node.x), ys = nodes.map(node => node.y);
@@ -378,7 +378,7 @@
       delete node.vx; delete node.vy;
       // Kept, because label placement has to know how far out to start; the
       // same centralityRadius as at layout's start, so nothing resizes mid-draw.
-      node.r = centralityRadius(node.rank);
+      node.r = nodeRadius ? nodeRadius(node) : centralityRadius(node.rank);
     }
     return {nodes, edges: (graph && graph.edges) || [], missing: (graph && graph.missing) || [],
       isolated: (graph && graph.isolated) || [],
@@ -387,8 +387,7 @@
 
   // Push apart any two nodes whose drawn circles overlap, plus a gap for the
   // stroke. Run inside the loop so the forces settle around real sizes.
-  function separate(nodes, random, strength) {
-    const gap = 9;
+  function separate(nodes, random, strength, gap = 9) {
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i], b = nodes[j];
@@ -576,7 +575,7 @@
     return min + (max - min) * Math.sqrt(value);
   }
 
-  const api = {build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels, placeLabelSides};
+  const api = {build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels, placeLabelSides, textWidth};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStylePaperGraph = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

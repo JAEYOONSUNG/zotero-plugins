@@ -2534,7 +2534,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         inLibrary: !!work.doi && owned.has(work.doi),
         // The first few names, so a new collaborator can be spotted later
         // without another request.
-        people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean)
+        people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean),
+        // What the same record says about this followed author's part in it and how often it is cited, so the inbox can say so without a request.
+        citations: Number.isInteger(work.citations) ? work.citations : null,
+        position: (work.people || []).find(p => p.id && (p.id === row.id || p.id === short))?.position || '',
+        corresponding: !!(work.people || []).find(p => p.id && (p.id === row.id || p.id === short))?.corresponding
       }));
       // A batch that was not read to the end adds to what the row said; it does not replace it.
       // Newest first across both runs, so a carried batch's older finds do not push out the news already shown.

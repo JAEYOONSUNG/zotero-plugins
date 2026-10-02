@@ -39,6 +39,15 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
    denseWorks['1:DEMO'+n]={openalex:'W'+n,references:[...new Set([0,1,2].map(k=>'W'+(7+(i*5+k*11)%48)).concat(i%4===0?['W1','W4']:[]))].filter(r=>r!=='W'+n)};
   }
  }
+ if(dense){
+  /* 내 문헌 분석 under a real library's skew: one big group with no journal named (93), journals of every size down to one paper, an outlier citation median (~13k), zeros and unknowns. */
+  const spec=[['',93,[2,40]],['Science',69,[13308,13308]],['Example Cell Research',62,[3,60]],['Cell Reports',48,[22,90]],['Bioinformatics',31,[0,0]],['PLOS ONE',24,[7,15]],['Nature Methods',12,[310,420]],['eLife',6,[null,5]],['Zero Cites Quarterly',3,[0,0]],['Single Paper Letters',1,[null,null]]];
+  let n=200;
+  for(const [venue,count,[lo,hi]] of spec)for(let i=0;i<count;i++,n++){
+   papers.push({id:String(n),title:'Journal-reading demo paper '+n,authors:'A. Demo',year:String(2010+(n%15)),venue,doi:'',tags:[],abstract:'',itemType:'journalArticle',
+    status:['unread','unread','reading','done'][n%4],rating:0,citations:lo==null?null:Math.round(lo+(hi-lo)*((i*7)%10)/10),impactFactor:null,seconds:n%4>1?(n%7)*240:0});
+  }
+ }
  for(const paper of papers){paper.key='DEMO'+paper.id;paper.libraryID=1;}
  // Dates relative to today, so 최근 문헌 and its week line have something to say.
  const stamp=n=>new Date(Date.now()-n*864e5).toISOString();
@@ -61,22 +70,23 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
  const DEMO_FACES={A1:face('#cfd8e6','#6b7a93'),A3:face('#e6d9cf','#93796b'),A5:face('#d3e3d6','#6b9374')};
  const watched=[
   {id:'A1',name:'Christopher A. Voigt',institution:'MIT',seen:[],
-   news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},
-         {id:'W2',title:'A portable recombinase toolkit',venue:'Nature Methods',date:'2026-07-18'}]},
+   news:[{id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02',doi:'10.5555/news.1',citations:12,position:'last',corresponding:true,people:['Christopher A. Voigt','Jennifer A. Doudna','Brian Hie']},
+         {id:'W2',title:'A portable recombinase toolkit',venue:'Nature Methods',date:'2026-07-18',citations:3,position:'first',people:['Christopher A. Voigt','K. Oh']},
+         {id:'W8',title:'Machine-designed promoters across three bacterial hosts',venue:'ACS Synthetic Biology',date:'2026-09-18',doi:'10.5555/news.8',citations:null,position:'last',corresponding:true,people:['Christopher A. Voigt','George M. Church','Brian Hie']}]},
   {id:'A2',name:'Jennifer A. Doudna',institution:'UC Berkeley',seen:[],
-   news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21'},
-         {id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02'},
+   news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21',doi:'10.5555/news.3',citations:48,position:'last',corresponding:true,people:['Jennifer A. Doudna','Samuel H. Sternberg']},
+         {id:'W1',title:'Genetic circuit design automation at scale',venue:'Nature Biotechnology',date:'2026-09-02',doi:'10.5555/news.1',citations:12,position:'first',people:['Christopher A. Voigt','Jennifer A. Doudna','Brian Hie']},
          {id:'W6',title:'Tissue-scale repair atlases from sparse sampling',venue:'Example Cell Research',date:'2026-08-30',doi:'10.5555/demo.4'},
-         {id:'W7',title:'Rapid editing screens in primary cells',venue:'bioRxiv',date:'2026-06-10',preprint:true,signals:{rank:3}}],
+         {id:'W7',title:'Rapid editing screens in primary cells',venue:'bioRxiv (Cold Spring Harbor Laboratory)',date:'2026-06-10',preprint:true,signals:{rank:3},doi:'10.1101/2026.06.10.demo',people:['Jennifer A. Doudna']}],
    newCoauthors:['Priya Natarajan','Luis Ortega'],
    moved:{from:'UC Berkeley',to:'Gladstone Institutes',since:2026,at:'2026-09-01'},
    patents:[{id:'US 12,345,678',title:'Compositions for programmable RNA targeting',granted:'2026-05-12',applicants:['Example University'],fresh:true,link:''}],
    newPatents:[{id:'US 12,345,678'}]},
-  {id:'A3',name:'George M. Church',institution:'Harvard University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A4',name:'Brian Hie',institution:'Stanford University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A3',name:'George M. Church',institution:'Harvard University',seen:[],news:[{id:'W8',title:'Machine-designed promoters across three bacterial hosts',venue:'ACS Synthetic Biology',date:'2026-09-18',doi:'10.5555/news.8',citations:null,position:'',people:['Christopher A. Voigt','George M. Church','Brian Hie']}],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A4',name:'Brian Hie',institution:'Stanford University',seen:[],news:[{id:'W8',title:'Machine-designed promoters across three bacterial hosts',venue:'ACS Synthetic Biology',date:'2026-09-18',doi:'10.5555/news.8',citations:null,position:'first',people:['Christopher A. Voigt','George M. Church','Brian Hie']},{id:'W9',title:'Evolutionary-scale language models for genome design',venue:'bioRxiv',date:'2026-09-10',preprint:true,citations:7,position:'first',corresponding:true,people:['Brian Hie']}],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A5',name:'Tom Ellis',institution:'Imperial College London',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A6',name:'Michael T. Laub',institution:'MIT',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A7',name:'Samuel H. Sternberg',institution:'Columbia University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  {id:'A7',name:'Samuel H. Sternberg',institution:'Columbia University',seen:[],news:[{id:'W3',title:'Compact editors from uncultivated bacteria',venue:'Science',date:'2026-08-21',doi:'10.5555/news.3',citations:48,position:'first',people:['Jennifer A. Doudna','Samuel H. Sternberg']}],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A8',name:'Jason W. Chin',institution:'University of Cambridge',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A9',name:'Randall J. Platt',institution:'ETH Zurich',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A10',name:'Farren J. Isaacs',institution:'Yale University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
@@ -84,13 +94,18 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
   {id:'A12',name:'Tobias J. Erb',institution:'Max Planck Institute for Terrestrial Microbiology',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   // On papers 1, 2 and 6 above, so the watch table's 보유·완료·안 읽음·읽은 시간 columns have real numbers to show.
   {id:'A13',name:'M. Kim',institution:'Example University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
-  {id:'A14',name:'S. Lee',institution:'Example Methods',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'}
+  {id:'A14',name:'S. Lee',institution:'Example Methods',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
+  // Paper 5 in the library lists K. Oh with Voigt: a co-authorship the 관계 map draws from the shelf alone.
+  {id:'A15',name:'K. Oh',institution:'Example University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'}
  ];
  if(dense){
   const lastNames=['Stockwell','Becker','Barrangou','Elowitz','Bintu','Billerbeck','Jewett','Kuhlman','Mutalik','Khalil'];
-  for(let i=0;i<20;i++)watched.push({id:'D'+i,name:['Brent R.','Anke','Rodolphe','Michael B.','Lacramioara','Sonja','Michael C.','Brian','Vivek K.','Ahmad S.'][i%10]+' '+lastNames[i%10]+(i>9?' II':''),
+  const dname=i=>['Brent R.','Anke','Rodolphe','Michael B.','Lacramioara','Sonja','Michael C.','Brian','Vivek K.','Ahmad S.'][i%10]+' '+lastNames[i%10]+(i>9?' II':'');
+  for(let i=0;i<20;i++)watched.push({id:'D'+i,name:dname(i),
    institution:'Max Planck Institute for Terrestrial Microbiology and the Department of Biochemistry '+i,seen:[],
-   news:i%2?[{id:'DW'+i,title:'A long preprint title about programmable transposases in thermophiles number '+i,venue:'bioRxiv · Synthetic Biology',date:'2026-09-'+String(10+i%15),preprint:true}]:[],sweptAt:'2026-09-18T00:00:00Z'});
+   news:[...(i%2?[{id:'DW'+i,title:'A long preprint title about programmable transposases in thermophiles number '+i,venue:'bioRxiv · Synthetic Biology',date:'2026-09-'+String(10+i%15),preprint:true,doi:'10.1101/dense.'+i,citations:i,position:['first','last','',][i%3]}]:[]),
+    // Pairs of them share a paper, so the map has links among the twenty.
+    ...(i%4<2?[{id:'DS'+(i-i%2),title:'Shared study of promoter libraries '+(i-i%2),venue:'Nature Communications',date:'2026-09-0'+(1+i%9),doi:'10.5555/dense.s'+(i-i%2),citations:20+i,position:i%2?'last':'first',corresponding:!!(i%2),people:[dname(i-i%2),dname(i-i%2+1)]}]:[])],sweptAt:'2026-09-18T00:00:00Z'});
  }
  let pending={signals:1146,journals:169,authors:109};
  const runtime={rootURI:'',cache,
@@ -245,6 +260,8 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
     exclude rules on the fictional papers; &editor=tag (or journal, year, ...)
     also opens that rule's editor, with its live counts. */
  const flags=String(win.location?.search||'')+String(win.location?.hash||'');
+ /* design-preview.html?graph=author picks Christopher A. Voigt in the 관계 map: his co-authors stay bright, the inbox narrows to him. */
+ if(/graph=author/.test(flags)){await bench.show('authors');bench.panel.querySelector('[data-author="A1"]')?.dispatchEvent(new win.Event('click',{bubbles:true}));}
  /* design-preview.html?table=1 opens the watched authors as the 목록 관리 table. */
  if(/table=1/.test(flags)){await bench.show('authors');[...bench.panel.querySelectorAll('button')].find(b=>b.textContent==='목록 관리')?.click();}
  if(/filters/.test(flags)){

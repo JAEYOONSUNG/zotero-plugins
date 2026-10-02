@@ -274,7 +274,7 @@
    case 'rating':return `${label}: ${range(t('점'))}`;
    case 'year':case 'impact':case 'citations':return `${label}: ${range()}`;
    case 'pdf':case 'annotation':case 'note':return `${label} ${t('있음')}`;
-   case 'preprint':return t(rule.value==='published'?'출판본':'프리프린트');
+   case 'preprint':return t(rule.value==='published'?'출판본':'Preprint');
   }
   return label;
  }
