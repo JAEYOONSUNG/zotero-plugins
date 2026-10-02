@@ -2133,5 +2133,6 @@
  "회색": "Gray",
  "후보가 둘입니다 — 직접 고르세요: {0}": "There are two candidates — choose one: {0}",
  "후속 연구": "Follow-up work",
- "휴지통으로": "Move to trash"
+ "휴지통으로": "Move to trash",
+ "LinkedIn에서 이 사람 찾기 (ORCID에 프로필이 있으면 바로 열기)": "Find this person on LinkedIn (opens their profile directly when ORCID lists one)"
 }

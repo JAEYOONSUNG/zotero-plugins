@@ -3956,6 +3956,25 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     });
   }
 
+  /* The LinkedIn profile a person listed on their own public ORCID record, or ''. Asked only when the
+     reader presses LinkedIn on an author; remembered for a month either way. No email, no key. */
+  async orcidLinkedIn(orcid) {
+    const id = String(orcid || '').match(/\d{4}-\d{4}-\d{4}-\d{3}[\dX]/i)?.[0];
+    if (!id) return '';
+    const store = (this.cache.orcidLinks ||= {}), kept = store[id];
+    if (kept && Date.now() - kept.at < 30 * 864e5) return kept.url;
+    let url = '';
+    try {
+      const reply = await this.Z.HTTP.request('GET', `https://pub.orcid.org/v3.0/${id}/researcher-urls`,
+        {responseType: 'json', timeout: 15000, headers: {Accept: 'application/json'}, successCodes: false});
+      const rows = reply?.response?.['researcher-url'] || [];
+      url = rows.map(row => String(row?.url?.value || '')).find(value => /^https:\/\/([a-z]{2,3}\.)?(www\.)?linkedin\.com\//i.test(value)) || '';
+    } catch (_) { url = ''; }
+    store[id] = {url, at: Date.now()};
+    this.scheduleFlush?.();
+    return url;
+  }
+
   async paperIssues(item, {signal, force = false} = {}) {
     const record = this.bibliographyRecord(item);
     // Signals already fetched OpenAlex's retraction flag: reuse it and spend no budget.

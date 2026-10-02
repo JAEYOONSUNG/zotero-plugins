@@ -5217,6 +5217,15 @@
     const follow=bar(wrap);
     if(inline)button('상세 보기',()=>run(()=>show(person)),follow,{class:'sc-person-full',title:T('이 저자의 전체 화면 보기')});
     if(profile?.orcid)button('ORCID 열기',()=>win.Zotero.launchURL(profile.orcid),follow,{'data-opens':'browser'});
+    /* LinkedIn has no public search API and its pages are behind a login, so nothing is fetched from it:
+       the button opens the reader's browser on LinkedIn's people search for the name and the latest
+       institution -- the profile itself when the person's ORCID record lists one. */
+    {const who=profile?.name||person.name||'',where=stored?.institution||person.institution||profile?.institutions?.[0]||'';
+     if(who)button('LinkedIn',()=>run(async()=>{let url='';
+      const id=String(profile?.orcid||person.orcid||'').match(/\d{4}-\d{4}-\d{4}-\d{3}[\dX]/i)?.[0];
+      if(id&&typeof runtime.orcidLinkedIn==='function'){try{url=await runtime.orcidLinkedIn(id);}catch(_){url='';}}
+      if(!/^https:\/\/([a-z]{2,3}\.)?(www\.)?linkedin\.com\//i.test(url||''))url='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent([who,where].filter(Boolean).join(' '));
+      win.Zotero.launchURL(url);}),follow,{'data-opens':'browser',title:T('LinkedIn에서 이 사람 찾기 (ORCID에 프로필이 있으면 바로 열기)')});}
     const refreshed=async()=>{refreshWatched();if(!inline)await show(person);};
     if(watching){
      // As in the list: letting someone go drops their baseline and news, so the first press only arms it.

@@ -135,6 +135,7 @@
  "JIF가 없으면 분야 안에서 줄을 세울 수 없습니다.": "Without a JIF there is nothing to order it by inside its subject.",
  "Journal Citation Reports의 저널 페이지 · 기관 로그인이 필요합니다": "The journal\\u2019s page on Journal Citation Reports · needs an institutional login",
  "Journal Tags / 저널 지표 · 추가 등급 조회는 본인의 easyScholar 키 필요": "Journal tags / metrics · the extra rank lookup needs your own easyScholar key",
+ "LinkedIn에서 이 사람 찾기 (ORCID에 프로필이 있으면 바로 열기)": "Find this person on LinkedIn (opens their profile directly when ORCID lists one)",
  "OA 2년 평균 피인용": "OA 2-yr mean citedness",
  "OA 선택 시 APC ${0}": "APC ${0} when OA is chosen",
  "ORCID 열기": "Open ORCID",
