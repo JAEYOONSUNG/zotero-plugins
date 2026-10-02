@@ -2386,6 +2386,7 @@
 #style-custom-workbench .sc-tag-tree summary::before { grid-column: 1; margin: 0; }
 #style-custom-workbench .sc-tag-tree .sc-tag-name { grid-column: 2; display: flex; align-items: center; justify-content: space-between; gap: var(--sc-space-2); min-width: 0; width: 100%; margin: 0; overflow: hidden; white-space: nowrap; }
 #style-custom-workbench .sc-tag-tree .sc-tag-name .sc-count { margin-inline-start: auto; flex: none; }
+#style-custom-workbench .sc-tag-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-tag-tree .sc-tag-reading { grid-column: 3; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-tag-tree .sc-tag-unread { grid-column: 4; white-space: nowrap; }
 #style-custom-workbench .sc-tag-tree .sc-tag-only { grid-column: 5; justify-self: end; }

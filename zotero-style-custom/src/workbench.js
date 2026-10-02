@@ -2431,7 +2431,9 @@
     if(hasKids)container.addEventListener('toggle',()=>{if(container.open)openPaths.add(n.path);else openPaths.delete(n.path);});
     const row=hasKids?node('summary',null,container):node('div',null,container,{class:'sc-tag-row'});
     // The name itself chooses the tag for 함께 붙은 태그, below the tree.
-    const nameBtn=button(n.name,()=>{state.tagFocus=state.tagFocus===n.path?'':n.path;redraw();redrawCross();},row,{class:'sc-tag-name','aria-pressed':String(state.tagFocus===n.path)});
+    const nameBtn=button('',()=>{state.tagFocus=state.tagFocus===n.path?'':n.path;redraw();redrawCross();},row,{class:'sc-tag-name','aria-pressed':String(state.tagFocus===n.path),title:n.path||n.name});
+    // The name in its own box so a long tag ends in an ellipsis instead of being cut (arXiv category tags run long).
+    node('span',n.name,nameBtn,{class:'sc-tag-label'});
     // The count is a badge, not a parenthesis: "#methods 2".
     nameBtn.appendChild(doc.createTextNode(' '));node('span',String(n.count),nameBtn,{class:'sc-count'});
     nameBtn.addEventListener('click',event=>event.stopPropagation());
