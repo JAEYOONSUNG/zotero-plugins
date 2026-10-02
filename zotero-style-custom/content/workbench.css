@@ -1282,6 +1282,13 @@
 /* The mark sits beside the words; the words alone take the ellipsis, which a
    bare text node inside a flex box would not. */
 #style-custom-workbench .sc-paper-meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Journal · year · authors: the journal in its signature ink and medium weight, the year muted, the authors plain. */
+#style-custom-workbench .sc-paper-meta-text > span + span::before { content: "·"; margin: 0 var(--sc-space-2); color: var(--sc-faint); font-weight: var(--sc-fw-regular); }
+#style-custom-workbench .sc-paper-venue { color: var(--sc-text); font-weight: var(--sc-fw-medium); }
+#style-custom-workbench .sc-paper-venue[data-known] { color: var(--j-ink-l); }
+@media (prefers-color-scheme: dark) { #style-custom-workbench .sc-paper-venue[data-known] { color: var(--j-ink-d); } }
+#style-custom-workbench .sc-paper-year { color: var(--sc-muted); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-paper-authors { color: var(--sc-text-soft, var(--sc-muted)); }
 
 /* The subject line: three menus, large to small, on one line. */
 #style-custom-workbench .sc-field-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }

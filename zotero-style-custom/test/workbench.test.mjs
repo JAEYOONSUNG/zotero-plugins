@@ -2508,7 +2508,7 @@ test('the library splits by kind with one chip: patents and theses apart from th
  f.bench.destroy();
 });
 
-test('the map names its commonest journals in their own colours, and a card wears its journal mark',async()=>{
+test('the map names its commonest journals in their own colours, and a card names its journal in that colour',async()=>{
  const f=fixture();
  f.runtime.journalIdentity={identify:venue=>({mark:venue.slice(0,3).toUpperCase(),hue:200,label:''}),colours:()=>({fill:'#dde','ink':'#335',edge:'#99a'})};
  f.runtime.palette=()=>({dark:false});
@@ -2519,7 +2519,10 @@ test('the map names its commonest journals in their own colours, and a card wear
  assert.equal(f.body().querySelectorAll('.sc-legend-entry .sc-legend-dot').length,3,'a swatch in the node\'s own paint, plus the dashed outside square');
  assert.ok(f.body().querySelector('.sc-legend-line'),'and the dashed tie');
  await f.bench.show('explore');
- assert.deepEqual([...f.body().querySelectorAll('.sc-paper-meta .sc-mark')].map(m=>m.textContent).sort(),['NAT','SCI']);
+ // The card spells the journal out in its own ink -- no abbreviation badge beside the full name (user, 2026-10-02).
+ assert.equal(f.body().querySelectorAll('.sc-paper-meta .sc-mark').length,0);
+ const venues=[...f.body().querySelectorAll('.sc-paper-meta .sc-paper-venue[data-known]')];
+ assert.ok(venues.length>=2&&venues.every(v=>v.style.getPropertyValue('--j-ink-l')==='#335'));
  f.bench.destroy();
 });
 

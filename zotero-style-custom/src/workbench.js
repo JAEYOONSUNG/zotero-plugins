@@ -1497,14 +1497,20 @@
    if(item.itemType&&item.itemType!=='journalArticle'&&KIND_LABELS[item.itemType])node('span',kindLabel(item.itemType),h3,{class:'sc-preprint sc-kind',title:kindLabel(item.itemType)});
    rich(h3,item.title||T('제목 없음'));
    const meta=node('span',null,identity,{class:'sc-paper-meta',title:[item.authors,item.venue].filter(Boolean).join(' · ')});
-   // The journal's mark before its name, the same mark the tree and the map use.
-   const P=runtime.palette?.(doc);
-   const venueMark=item.venue&&P&&typeof runtime.journalMarkForVenue==='function'?runtime.journalMarkForVenue(doc,item.venue,P):null;
-   if(venueMark){venueMark.style.marginInlineEnd='5px';meta.appendChild(venueMark);}
    // A list that is in an order for a reason says the reason first: 최근 문헌 says what happened, and when.
    const reason=why?.(item);
    if(reason)node('span',reason,meta,{class:'sc-paper-why'});
-   node('span',[item.year,item.venue,item.authors].filter(Boolean).join(' · '),meta,{class:'sc-paper-meta-text'});
+   /* Journal · year · authors, each told apart by how it is set: the journal's full name in its own
+      signature colour (no abbreviation badge beside a name that is already spelled out), the year
+      quiet, the authors plain. Both themes' inks travel with the name; the stylesheet picks one. */
+   const metaText=node('span',null,meta,{class:'sc-paper-meta-text'});
+   if(item.venue){
+    const venue=node('span',item.venue,metaText,{class:'sc-paper-venue'});
+    const J=runtime.journalIdentity,identity=J?.identify?.(String(item.venue).trim());
+    if(identity&&typeof J.colours==='function'){const light=J.colours(identity,{dark:false})||{},dark=J.colours(identity,{dark:true})||{};if(light.ink&&dark.ink){venue.style.setProperty('--j-ink-l',light.ink);venue.style.setProperty('--j-ink-d',dark.ink);venue.dataset.known='1';}}
+   }
+   if(item.year)node('span',String(item.year),metaText,{class:'sc-paper-year'});
+   if(item.authors)node('span',item.authors,metaText,{class:'sc-paper-authors'});
    /* What the reader wrote about the paper, first line, under what it is:
       the note that says why it was kept is worth more on the row than a
       third line of authors. Only when there is one. */
