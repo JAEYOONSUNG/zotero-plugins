@@ -127,6 +127,9 @@
 	const authorSessions = { scholar: { input: "", profiles: [], profile: null, action: "profiles" }, orcid: { input: "", profiles: [], profile: null, action: "profiles" } };
 	let activeAuthorProvider = "scholar";
 	let authorAction = "profiles";
+	// What a profile card remembers while the window is open: the folded-away profiles, which summaries are open,
+	// the LinkedIn address ORCID listed for a person (or false when it listed none).
+	const authorView = { showAll: false, summaries: new Map(), open: new Set(), bioOpen: new Set(), linkedin: new Map(), disk: null };
 
 	// ------------------------------------------------------------ files
 	// Where ZotPoP keeps what it learned: recent searches with their results, and the
@@ -768,15 +771,125 @@
 	function authorInputChanged() {
 		cancelCacheRestore();
 		if (searchSurface === "authors") state.searchController?.abort();
-		let session = authorSessions[activeAuthorProvider]; session.profiles = []; session.profile = null; session.action = authorAction = "profiles";
+		let session = authorSessions[activeAuthorProvider]; session.profiles = []; session.profile = null; session.action = authorAction = "profiles"; authorView.showAll = false;
 		saveAuthorPreferences(); renderAuthorProfiles();
+	}
+	// ------------------------------------------------------------ profile cards
+	const SUMMARY_TTL = 30 * 24 * 3600 * 1000;
+	async function summaryDisk() {
+		if (authorView.disk) return authorView.disk;
+		let all = {};
+		if (cacheIO) { try { let saved = JSON.parse(await cacheIO.readText(dataPath("orcid-summaries.json"))); if (saved && typeof saved === "object") all = saved; } catch (_) {} }
+		return authorView.disk = all;
+	}
+	async function loadOrcidSummary(profile) {
+		let id = profile.id, entry = authorView.summaries.get(id);
+		if (entry && entry.status !== "error") return;
+		authorView.summaries.set(id, { status: "loading" }); renderAuthorProfiles();
+		try {
+			let disk = await summaryDisk(), hit = disk[id];
+			let data = hit && Date.now() - hit.at < SUMMARY_TTL ? hit.data : null;
+			if (!data) {
+				data = await ZotPoPAuthors.orcidSummary(id, http, {});
+				disk[id] = { at: Date.now(), data };
+				for (let key of Object.keys(disk).sort((x, y) => disk[y].at - disk[x].at).slice(40)) delete disk[key];
+				if (cacheIO && !data.partial) cacheIO.writeText(dataPath("orcid-summaries.json"), JSON.stringify(disk)).catch(e => log("saving ORCID summaries failed: " + e.message));
+			}
+			if (data.linkedin) authorView.linkedin.set(id, data.linkedin);
+			else if (!data.partial) authorView.linkedin.set(id, false);
+			authorView.summaries.set(id, { status: "ready", data });
+		} catch (error) { log("ORCID summary failed: " + error.message); authorView.summaries.set(id, { status: "error" }); }
+		renderAuthorProfiles();
+	}
+	function toggleOrcidSummary(profile) {
+		if (authorView.open.has(profile.id)) authorView.open.delete(profile.id); else { authorView.open.add(profile.id); loadOrcidSummary(profile); }
+		renderAuthorProfiles();
+	}
+	function summaryYears(row) {
+		let present = t("authorSummaryPresent");
+		if (row.start && row.end) return row.start === row.end ? String(row.start) : row.start + "–" + row.end;
+		if (row.start) return row.start + "–" + (row.current ? present : "");
+		return row.end ? String(row.end) : "";
+	}
+	function summaryList(title, rows, max, line) {
+		if (!rows.length) return null;
+		let box = document.createElement("div"); box.className = "author-sum-block";
+		let h = document.createElement("div"); h.className = "author-sum-title"; h.textContent = title; box.appendChild(h);
+		for (let row of rows.slice(0, max)) { let item = document.createElement("div"); item.className = "author-sum-row"; item.textContent = line(row); box.appendChild(item); }
+		if (rows.length > max) { let more = document.createElement("div"); more.className = "author-sum-more"; more.textContent = t("authorSummaryMore", rows.length - max); box.appendChild(more); }
+		return box;
+	}
+	function renderOrcidSummary(profile) {
+		let panel = document.createElement("div"); panel.className = "author-summary";
+		let entry = authorView.summaries.get(profile.id) || { status: "loading" };
+		let note = text => { let n = document.createElement("div"); n.className = "author-sum-note"; n.textContent = text; panel.appendChild(n); };
+		if (entry.status === "loading") { note(t("authorSummaryLoading")); return panel; }
+		if (entry.status === "error") { note(t("authorSummaryFail")); return panel; }
+		let data = entry.data;
+		if (data.empty) { note(t("authorSummaryEmpty")); return panel; }
+		if (data.bio) {
+			let bio = document.createElement("div"); bio.className = "author-bio" + (authorView.bioOpen.has(profile.id) ? "" : " clamped"); bio.textContent = data.bio; panel.appendChild(bio);
+			if (data.bio.length > 160) {
+				let toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "ghost author-bio-toggle"; toggle.textContent = t(authorView.bioOpen.has(profile.id) ? "authorBioLess" : "authorBioMore");
+				toggle.addEventListener("click", () => { if (authorView.bioOpen.has(profile.id)) authorView.bioOpen.delete(profile.id); else authorView.bioOpen.add(profile.id); renderAuthorProfiles(); });
+				panel.appendChild(toggle);
+			}
+		}
+		let joined = (parts) => parts.filter(Boolean).join(" · ");
+		let jobs = summaryList(t("authorSummaryJobs"), data.employments, 4, row => joined([row.role, row.org, summaryYears(row)]));
+		let studies = summaryList(t("authorSummaryStudies"), data.educations, 3, row => joined([row.role, row.org, row.end || row.start]));
+		for (let block of [jobs, studies]) if (block) panel.appendChild(block);
+		if (data.keywords.length) {
+			let box = document.createElement("div"); box.className = "badges author-sum-chips";
+			for (let word of data.keywords) { let chip = document.createElement("span"); chip.className = "badge"; chip.textContent = word; box.appendChild(chip); }
+			panel.appendChild(box);
+		}
+		if (data.websites.length) {
+			let box = document.createElement("div"); box.className = "author-sum-sites";
+			for (let site of data.websites) {
+				let open = document.createElement("button"); open.type = "button"; open.className = "ghost author-site";
+				open.appendChild(iconNode(site.linkedin ? "ic-linkedin" : "ic-external"));
+				let label = document.createElement("span"); label.textContent = site.linkedin ? t("authorLinkedIn") : (site.name || site.url.replace(/^https?:\/\/(?:www\.)?/, "").replace(/\/$/, ""));
+				open.appendChild(label); tip(open, site.url);
+				open.addEventListener("click", () => Zotero.launchURL(site.url)); box.appendChild(open);
+			}
+			panel.appendChild(box);
+		}
+		if (data.partial) note(t("authorSummaryPartial"));
+		return panel;
+	}
+	// LinkedIn is only ever linked to, never read. For an ORCID person the record may name a profile; asked once, when pressed.
+	function linkedInState(profile) {
+		let known = profile.provider === "orcid" ? authorView.linkedin.get(profile.id) : undefined;
+		let target = ZotPoPAuthors.linkedInTarget({ ...profile, linkedin: known || profile.linkedin });
+		let tipKey = target?.kind === "profile" ? "authorLinkedInProfileTip" : profile.provider === "orcid" && known === undefined ? "authorLinkedInMaybeTip" : "authorLinkedInSearchTip";
+		return { target, known, tipKey };
+	}
+	async function openLinkedIn(profile, button) {
+		let state_ = linkedInState(profile);
+		if (profile.provider === "orcid" && profile.id && state_.known === undefined) {
+			button.disabled = true;
+			try { authorView.linkedin.set(profile.id, await ZotPoPAuthors.orcidLinkedIn(profile.id, http, {}) || false); }
+			catch (error) { log("ORCID researcher-urls failed: " + error.message); }
+			button.disabled = false; state_ = linkedInState(profile);
+		}
+		if (state_.target) Zotero.launchURL(state_.target.url);
+		renderAuthorProfiles();
 	}
 	function renderAuthorProfiles() {
 		let host = $("author-profiles"), session = authorSessions[activeAuthorProvider]; host.textContent = "";
+		let isChosen = profile => Boolean(session.profile && profile.id === session.profile.id && profile.name === session.profile.name);
+		// Profiles with no papers anywhere wait behind "more" while better matches exist.
+		let weak = session.profiles.filter(profile => profile.weak && !isChosen(profile));
+		let folded = !authorView.showAll && weak.length > 0 && weak.length < session.profiles.length;
 		for (let profile of session.profiles) {
+			if (folded && profile.weak && !isChosen(profile)) continue;
 			let card = document.createElement("article"); card.className = "author-profile";
-			let chosen = Boolean(session.profile && profile.id === session.profile.id && profile.name === session.profile.name);
+			let chosen = isChosen(profile);
 			if (chosen) card.classList.add("selected");
+			let orcid = profile.provider === "orcid" && profile.id;
+			let summaryOpen = Boolean(orcid && authorView.open.has(profile.id));
+			if (summaryOpen) card.classList.add("open");
 			let info = document.createElement("div"); info.className = "author-profile-info";
 			// The name, then what is known about who this is as a badge beside it: lime for a public registry profile, amber for "not confirmed".
 			let head = document.createElement("div"); head.className = "author-profile-head";
@@ -790,16 +903,52 @@
 			head.appendChild(badge);
 			if (chosen) { let check = document.createElement("span"); check.className = "author-profile-check"; check.appendChild(iconNode("ic-check")); head.appendChild(check); }
 			info.appendChild(head);
+			// papers, citations and h-index as small badges: what OpenAlex counts under this ORCID iD
+			if (profile.worksCount != null || profile.hIndex != null) {
+				let stats = document.createElement("div"); stats.className = "badges author-profile-stats";
+				let add = (text, hint) => { let chip = document.createElement("span"); chip.className = "badge"; chip.textContent = text; if (hint) tip(chip, hint); stats.appendChild(chip); };
+				if (profile.worksCount != null) add(t("authorStatWorks", Number(profile.worksCount).toLocaleString(t.locale || undefined)));
+				if (profile.citations != null) add(t("authorStatCited", Number(profile.citations).toLocaleString(t.locale || undefined)));
+				if (profile.hIndex != null) add(t("authorStatH", profile.hIndex));
+				info.appendChild(stats);
+			}
 			// the affiliation, and the identifier muted behind it on the same line
 			let meta = [profile.affiliation, profile.id].filter(Boolean);
-			if (meta.length) { let node = document.createElement("div"); node.className = "author-profile-meta"; node.textContent = meta.join(" \u00b7 "); info.appendChild(node); }
+			if (meta.length) { let node = document.createElement("div"); node.className = "author-profile-meta"; node.textContent = meta.join(" · ");
+				if (profile.institutions?.length > 2) node.setAttribute("data-tip", profile.institutions.join("; "));
+				info.appendChild(node); }
+			// where OpenAlex last saw them (with the country flag) and what they write about most
+			let last = profile.lastInstitution, shown = (profile.affiliation || "").toLowerCase();
+			let where = last && !(shown && shown.includes(String(last.name).toLowerCase())) ? ((last.country ? ZotPoPAffiliations.flag(last.country) + " " : "") + last.name) : "";
+			let extra = [where, profile.topic].filter(Boolean);
+			if (extra.length) { let node = document.createElement("div"); node.className = "author-profile-meta"; node.textContent = extra.join(" · "); info.appendChild(node); }
+			if (orcid) {
+				let toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "ghost author-sum-toggle"; toggle.setAttribute("aria-expanded", String(summaryOpen));
+				toggle.appendChild(iconNode(summaryOpen ? "ic-chevron-up" : "ic-chevron-down")); let label = document.createElement("span"); label.textContent = t(summaryOpen ? "authorSummaryHide" : "authorSummary"); toggle.appendChild(label);
+				toggle.addEventListener("click", () => toggleOrcidSummary(profile)); info.appendChild(toggle);
+				if (summaryOpen) info.appendChild(renderOrcidSummary(profile));
+			}
 			let actions = document.createElement("div"); actions.className = "author-profile-actions";
-			if (profile.id) { let load = document.createElement("button"); load.type = "button"; load.textContent = t("authorLoadWorks"); load.disabled = state.searching || state.importing;
+			if (profile.id) { let load = document.createElement("button"); load.type = "button"; load.className = "author-load"; load.textContent = t("authorLoadWorks"); load.disabled = state.searching || state.importing;
 				if (chosen) load.classList.add("primary");
 				load.addEventListener("click", () => runAuthorAction("publications", profile)); actions.appendChild(load); }
 			if (/^https:\/\//i.test(profile.url || "")) { let open = document.createElement("button"); open.type = "button"; open.textContent = t("authorOpenProfile");
 				open.addEventListener("click", () => Zotero.launchURL(profile.url)); actions.appendChild(open); }
+			let li = linkedInState(profile);
+			if (li.target) {
+				let linkedin = document.createElement("button"); linkedin.type = "button"; linkedin.className = "author-linkedin";
+				linkedin.appendChild(iconNode("ic-linkedin")); let label = document.createElement("span"); label.textContent = t("authorLinkedIn"); linkedin.appendChild(label);
+				tip(linkedin, t(li.tipKey)); linkedin.addEventListener("click", () => openLinkedIn(profile, linkedin)); actions.appendChild(linkedin);
+			}
+			// the card itself is the quickest way to the papers
+			if (profile.id) { card.classList.add("pickable");
+				card.addEventListener("click", event => { if (event.target.closest?.("button, a, .author-summary")) return; if (!state.searching && !state.importing) runAuthorAction("publications", profile); }); }
 			card.appendChild(info); card.appendChild(actions); host.appendChild(card);
+		}
+		if (weak.length && (folded || authorView.showAll)) {
+			let more = document.createElement("button"); more.type = "button"; more.className = "ghost author-more";
+			more.textContent = folded ? t("authorMoreProfiles", weak.length) : t("authorFewerProfiles");
+			more.addEventListener("click", () => { authorView.showAll = !authorView.showAll; renderAuthorProfiles(); }); host.appendChild(more);
 		}
 	}
 	function authorQuery(action = authorAction, profile = authorSessions[activeAuthorProvider].profile) {
@@ -858,7 +1007,7 @@
 		authorAction = action;
 		let session = authorSessions[activeAuthorProvider];
 		session.action = action;
-		if (action !== "publications") { session.profiles = []; session.profile = null; } else session.profile = profile;
+		if (action !== "publications") { session.profiles = []; session.profile = null; authorView.showAll = false; } else { session.profile = profile; authorView.open.clear(); }
 		saveAuthorPreferences();
 		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; resetFilters();
 		state.searching = true; state.cancelled = false;
@@ -871,6 +1020,7 @@
 		$("search-btn").disabled = true; $("busy").hidden = action === "profiles"; $("busy-text").textContent = message;
 		setStatus(message); hideBanner(); renderAuthorProfiles(); render();
 		let ctx = { signal: controller.signal, isCancelled: () => controller.signal.aborted, errors: [], scholarInputKind: q.authorInputKind || "auto", DOMParser: window.DOMParser,
+			email: String(PREF("email") || ""), openAlexApiKey: String(PREF("openAlexApiKey") || ""), openAlexSpent: openAlexHeld(),
 			popSearchSource: typeof ZotPoPPoPBridge !== "undefined" && ZotPoPPoPBridge.searchSource ? (source, query, context) => ZotPoPPoPBridge.searchSource(source, query, context) : undefined,
 			onProgress: (msg, n, total) => { if (active()) { setStatus(msg); setProgress(n, total); } },
 			onResults: records => { if (active()) { received = records; state.sortKey = records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc"; displaySearchResults(records); } }, log };
@@ -887,12 +1037,15 @@
 					if (action === "publications" && session.profiles.some(item => item.id === session.profile.id)) session.profiles = session.profiles.map(item => item.id === session.profile.id ? session.profile : item);
 					else session.profiles = [session.profile];
 				}
-				state.sortKey = result.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc";
+				let orcidWorks = action === "publications" && q.authorProvider === "orcid";
+				// An ORCID person's papers read newest first, whichever source they came from.
+				state.sortKey = orcidWorks ? "year" : result.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = orcidWorks ? "desc" : "asc";
 				displaySearchResults(result); await refreshLibraryFlags(); if (!active()) throw abortError();
 				let partial = Boolean(result.partial || ctx.errors.length);
-				setStatus(t(partial ? "incompleteResults" : "resultCount", q.authorProvider === "orcid" ? "ORCID" : "Google Scholar", result.length, false));
+				if (orcidWorks) setStatus(t("authorOrcidWorks", session.profile.name || session.profile.id, session.profile.id, result.length, Boolean(result.partial)));
+				else setStatus(t(partial ? "incompleteResults" : "resultCount", q.authorProvider === "orcid" ? "ORCID" : "Google Scholar", result.length, false));
 				let popNotice = action !== "name-papers" && q.authorProvider !== "orcid";
-				showBanner(t(action === "name-papers" ? "authorNameUnverified" : q.authorProvider === "orcid" ? "authorOrcidHelp" : "popModeNoticeShort")
+				showBanner(t(action === "name-papers" ? "authorNameUnverified" : q.authorProvider === "orcid" ? (result.authorProvenance?.via === "openalex" ? "authorOrcidViaOpenAlex" : "authorOrcidViaOrcid") : "popModeNoticeShort")
 					+ (result.authorProvenance?.truncated ? " " + t("authorLimited", result.length, result.authorProvenance.totalGroups) : ""), null, popNotice ? { tip: t("popModeNotice") } : {});
 			}
 			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")), null, { warn: true });

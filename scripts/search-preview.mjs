@@ -105,6 +105,32 @@ const cellRect = (left, right, row) => ({ left, right, top: 191 + 48 * row, bott
 const TIP_RECTS = { title: [cellRect(311, 511, 0), cellRect(311, 511, 0)], aff: [cellRect(511, 661, 1), cellRect(661, 811, 1)],
 	journal: [cellRect(719, 903, 0), cellRect(869, 1053, 0)], authors: [cellRect(511, 661, 0), cellRect(511, 661, 0)] };
 
+
+// ---- fictional ORCID people for the author tab's name lookup (valid ORCID checksums, made-up everything else)
+const ORCID_IDS = { main: "0000-0001-1111-1118", second: "0000-0003-3333-3330", empty: "0000-0002-2222-2224", other: "0000-0004-4444-4447" };
+const orcidRow = (id, given, family, institutions) => ({ "orcid-id": id, "given-names": given, "family-names": family, "credit-name": null, "other-name": [], "institution-name": institutions });
+const orcidAlexAuthor = (id, works, cites, h, inst, country, topic) => ({ id: "https://openalex.org/A" + works, orcid: "https://orcid.org/" + id, works_count: works, cited_by_count: cites,
+	summary_stats: { h_index: h }, last_known_institutions: [{ display_name: inst, country_code: country }], topics: [{ display_name: topic }] });
+let orcidWorksJSON = [];
+const aff = (kind, rows) => ({ "affiliation-group": rows.map(r => ({ summaries: [{ [kind + "-summary"]: { "role-title": r[0], organization: { name: r[1] }, "start-date": { year: { value: String(r[2]) } }, "end-date": r[3] ? { year: { value: String(r[3]) } } : null } }] })) });
+function orcidFixtureAnswer(url) {
+	const main = ORCID_IDS.main;
+	if (url.startsWith("https://pub.orcid.org/v3.0/expanded-search/")) return { "num-found": 4, "expanded-result": [
+		orcidRow(ORCID_IDS.other, "Jennifer", "Dowdell", []), orcidRow(ORCID_IDS.second, "Jenna", "Dowd", ["Fictional University"]),
+		orcidRow(ORCID_IDS.empty, "Jenna M.", "Dowd", ["Hanbit University"]), orcidRow(main, "Jenna A.", "Dowd", ["Aurora Medical Institute", "Example Institute of Genome Engineering"])] };
+	if (url.startsWith("https://api.openalex.org/authors?")) return { results: [
+		orcidAlexAuthor(ORCID_IDS.second, 14, 380, 6, "Fictional University", "US", "Plant genomics"),
+		orcidAlexAuthor(main, 212, 18420, 54, "Aurora Medical Institute", "CA", "Genome editing and delivery")] };
+	if (url.startsWith("https://api.openalex.org/works?filter=authorships.author.orcid:")) return { meta: { count: orcidWorksJSON.length }, results: orcidWorksJSON };
+	if (url.startsWith("https://api.openalex.org/")) return { meta: { count: 0 }, results: [] };
+	if (url === `https://pub.orcid.org/v3.0/${main}/person`) return { path: `/${main}/person`, name: null,
+		biography: { content: "Fictional biography for the design preview. Jenna Dowd studies how compact genome editors can be delivered across tissue barriers, and how their off-target behaviour is measured in primary human cells. She leads a small group that shares guide design rules and benchmark data openly." },
+		keywords: { keyword: ["genome editing", "delivery", "off-target profiling", "benchmarks"].map(content => ({ content })) },
+		"researcher-urls": { "researcher-url": [{ "url-name": "Group site", url: { value: "https://lab.example.org/dowd" } }, { "url-name": "Profile", url: { value: "https://www.linkedin.com/in/jenna-dowd-example" } }] } };
+	if (url === `https://pub.orcid.org/v3.0/${main}/employments`) return { path: `/${main}/employments`, ...aff("employment", [["Associate Director", "Aurora Medical Institute", 2021, null], ["Group Leader", "Example Institute of Genome Engineering", 2016, 2021], ["Postdoctoral Fellow", "Fictional University", 2011, 2016], ["Research Assistant", "Hanbit University", 2008, 2011], ["Intern", "Lumen University", 2007, 2008]]) };
+	if (url === `https://pub.orcid.org/v3.0/${main}/educations`) return { path: `/${main}/educations`, ...aff("education", [["PhD", "Fictional University", 2007, 2011], ["BSc", "Hanbit University", 2003, 2007]]) };
+	return null;
+}
 // Runs the real UI once and returns the two static pages as strings.
 export async function buildPreview({ locale = "en" } = {}) {
 	const markup = read("content/search.xhtml").replace(/<\?xml[^>]*\?>/, "")
@@ -114,7 +140,8 @@ export async function buildPreview({ locale = "en" } = {}) {
 	const errors = [];
 	let netCalls = 0;
 	// What is answered in place of the network: the OpenAlex lookup behind the citation card, and a translation service.
-	const stubbed = { openalex: [], translate: [] };
+	const stubbed = { openalex: [], translate: [], orcid: [], orcidAlex: [] };
+	const launched = [];
 	const previewFiles = new Map();
 	let freshWork = null;
 	const importCalls = [];
@@ -143,12 +170,15 @@ export async function buildPreview({ locale = "en" } = {}) {
 	let runs = 0;
 	const library = new Map([["10.5555/demo.004", 1]]);
 	const ctx = vm.createContext({
-		window: win, document, AbortController, console, setTimeout, clearTimeout, CSS: { escape: v => v },
-		Zotero: { locale, debug() {}, logError: e => errors.push(e), launchURL() {}, Libraries: { userLibraryID: 1 },
+		window: win, document, AbortController, URL, console, setTimeout, clearTimeout, CSS: { escape: v => v },
+		Zotero: { locale, debug() {}, logError: e => errors.push(e), launchURL: url => launched.push(url), Libraries: { userLibraryID: 1 },
 			Prefs: { get: key => prefs[key.replace("extensions.zotpop.", "")], set: (key, v) => { prefs[key.replace("extensions.zotpop.", "")] = v; } },
 			HTTP: { request: async (_method, url) => {
 				// The one paper's refresh: answered from the fixture, counted apart from the network (which stays at zero).
 				if (/^https:\/\/api\.openalex\.org\/works\/doi:/.test(url) && freshWork) { stubbed.openalex.push(url.replace(/\?.*/, "")); return { status: 200, response: freshWork }; }
+				// The ORCID name lookup and the OpenAlex answers behind it: fictional people, answered in place of the network.
+				const fictional = orcidFixtureAnswer(url);
+				if (fictional) { (/^https:\/\/pub\.orcid\.org\//.test(url) ? stubbed.orcid : stubbed.orcidAlex).push(url.replace(/\?.*/, "")); return { status: 200, response: fictional }; }
 				netCalls++; throw new Error("network is off in the preview");
 			} },
 			Utilities: { Internal: { copyTextToClipboard() {} } } },
@@ -436,6 +466,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	await wait(20);
 	// ---- the author tab: a profile lookup, then that profile's papers (stubbed lookups; fictional people)
 	const dowd = recs.filter(r => r.authorString.startsWith("Jenna Dowd"));
+	const realAuthors = { searchProfiles: ctx.ZotPoPAuthors.searchProfiles, loadPublications: ctx.ZotPoPAuthors.loadPublications };
 	const profiles = [
 		{ provider: "scholar", id: "DEMOxAUTHOR1", name: "Jenna Dowd", affiliation: "Example Institute of Genome Engineering", url: "https://scholar.google.com/citations?user=DEMOxAUTHOR1", mode: "profile", identityConfirmed: true },
 		{ provider: "scholar", id: "DEMOxAUTHOR2", name: "Jenna M. Dowd", affiliation: "Fictional University, Dept. of Biology", url: "https://scholar.google.com/citations?user=DEMOxAUTHOR2", mode: "profile", identityConfirmed: false }
@@ -456,6 +487,40 @@ export async function buildPreview({ locale = "en" } = {}) {
 	await wait(30);
 	trace.authors = { rows: table().length, profiles: document.querySelectorAll("#author-profiles .author-profile").length, formHidden: document.getElementById("author-panel").hidden, paperFormHidden: document.getElementById("query-form").hidden };
 	const authorsPage = page();
+	// ---- the same tab with ORCID: a name finds people (real authors.js; only the answers are fictional), one pick lists their papers
+	ctx.ZotPoPAuthors.searchProfiles = realAuthors.searchProfiles; ctx.ZotPoPAuthors.loadPublications = realAuthors.loadPublications;
+	orcidWorksJSON = dowd.map((r, i) => ({ id: "https://openalex.org/W9" + String(i).padStart(3, "0"), doi: "https://doi.org/" + r.doi, title: r.title, publication_year: r.year, publication_date: r.year + "-06-01", type: "article",
+		cited_by_count: r.citations, counts_by_year: [{ year: 2025, cited_by_count: Math.round(r.citations * 0.6) }], biblio: {},
+		authorships: r.authors.map((a, n) => ({ author: { display_name: a.name, orcid: a.name === "Jenna Dowd" ? "https://orcid.org/" + ORCID_IDS.main : null }, author_position: n === 0 ? "first" : "last",
+			institutions: [{ display_name: "Aurora Medical Institute", country_code: "CA" }] })),
+		primary_location: { source: { id: "https://openalex.org/S9" + i, display_name: r.venue } } })).concat([{ id: "https://openalex.org/W9100", doi: "https://doi.org/10.5555/dowd.old", title: "Delivery of compact editors: an early look", publication_year: 2019, publication_date: "2019-02-01", type: "article", cited_by_count: 340, counts_by_year: [], biblio: {},
+		authorships: [{ author: { display_name: "Jenna Dowd", orcid: "https://orcid.org/" + ORCID_IDS.main }, author_position: "first", institutions: [{ display_name: "Example Institute of Genome Engineering", country_code: "GB" }] }], primary_location: { source: { display_name: "Genome Research" } } }]);
+	const select = document.getElementById("author-provider"); select.value = "orcid"; fire(select, "change");
+	await wait(30);
+	document.getElementById("author-input").value = "Jenna Dowd";
+	fire(document.getElementById("author-form"), "submit");
+	for (let i = 0; i < 100 && !document.querySelector("#author-profiles .author-profile"); i++) await wait(20);
+	await wait(40);
+	const orcidCards = () => [...document.querySelectorAll("#author-profiles .author-profile")];
+	trace.orcid = { cards: orcidCards().length, names: orcidCards().map(c => c.querySelector(".author-profile-name").textContent), more: document.querySelector("#author-profiles .author-more")?.textContent || "",
+		firstStats: [...orcidCards()[0].querySelectorAll(".author-profile-stats .badge")].map(b => b.textContent.replace(/\s+/g, " ")), status: text("status"), requestsBeforePick: stubbed.orcid.length + stubbed.orcidAlex.length };
+	const orcidLookup = page();
+	fire(orcidCards()[0].querySelector(".author-sum-toggle"));
+	for (let i = 0; i < 100 && !document.querySelector("#author-profiles .author-summary .author-bio"); i++) await wait(20);
+	await wait(40);
+	trace.orcid.summary = { text: document.querySelector("#author-profiles .author-summary")?.textContent.replace(/\s+/g, " ").trim() || "", jobs: document.querySelectorAll("#author-profiles .author-summary .author-sum-row").length,
+		more: [...document.querySelectorAll("#author-profiles .author-sum-more")].map(n => n.textContent), chips: document.querySelectorAll("#author-profiles .author-sum-chips .badge").length, clamped: Boolean(document.querySelector("#author-profiles .author-bio.clamped")) };
+	fire(orcidCards()[0].querySelector(".author-linkedin")); await wait(30);
+	trace.orcid.linkedin = launched.slice(); trace.orcid.linkedinTip = orcidCards()[0].querySelector(".author-linkedin").getAttribute("data-tip") || "";
+	const orcidSummary = page();
+	fire(orcidCards()[0].querySelector("button.author-load"));
+	for (let i = 0; i < 150 && !table().length; i++) await wait(20);
+	await wait(100);
+	trace.orcid.rows = table().length; trace.orcid.statusAfter = text("status"); trace.orcid.banner = text("banner-text"); trace.orcid.sort = document.querySelector("#results-table th[aria-sort]")?.textContent.trim() || "";
+	trace.orcid.firstYears = table().slice(0, 3).map(r => r.querySelector('td[data-k="year"]')?.textContent || "");
+	trace.orcid.requests = { orcid: stubbed.orcid.length, alex: stubbed.orcidAlex.length };
+	const orcidWorks = page();
+	select.value = "scholar"; fire(select, "change"); await wait(30);
 	fire(document.getElementById("mode-papers"));
 	await wait(40);
 	// the paper form folds once there are results, and the summary names the conditions
@@ -578,18 +643,18 @@ export async function buildPreview({ locale = "en" } = {}) {
 	for (let i = 0; i < 50 && !text("d-tr-note"); i++) await wait(20);
 	trace.translate.none = { note: text("d-tr-note"), err: document.getElementById("d-tr-note").className };
 	ctx.Zotero.PDFTranslate = installed;
-	return { tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
+	return { tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
 }
 
 export function checkPreview(out) {
 	const problems = [];
 	if (out.rows < 10) problems.push("expected at least 10 result rows, got " + out.rows);
 	if (out.netCalls) problems.push("network was called");
-	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["unfolded", out.unfolded], ["filters", out.filtersPage], ["journals", out.journalsPage], ["longspan", out.longSpanPage], ["cite", out.citePage], ["translate", out.translatedPage]]) {
+	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["orcid", out.orcidLookup], ["orcid-summary", out.orcidSummary], ["orcid-works", out.orcidWorks], ["unfolded", out.unfolded], ["filters", out.filtersPage], ["journals", out.journalsPage], ["longspan", out.longSpanPage], ["cite", out.citePage], ["translate", out.translatedPage]]) {
 		if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
 		if (/(?:src|href)\s*=\s*["'](?:https?:|\/\/|chrome:|resource:)/i.test(html)) problems.push(name + ": external asset");
 		if (/url\(\s*["']?(?:https?:|\/\/|chrome:)/i.test(html)) problems.push(name + ": external css url");
-		if (["history", "rerun", "unfolded", "filters", "journals", "longspan", "cite", "translate"].includes(name) || name.startsWith("authors")) { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
+		if (["history", "rerun", "unfolded", "filters", "journals", "longspan", "cite", "translate"].includes(name) || name.startsWith("authors") || name.startsWith("orcid")) { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
 		for (const needle of ['id="results-table"', 'id="results-body"', 'id="query-form"', name === "facet" ? "Off-target profiling" : "Mapping cellular responses"]) if (!html.includes(needle)) problems.push(name + ": missing " + needle);
 	}
 	if (!out.results.includes('class="in-library')) problems.push("no in-library row");
@@ -656,6 +721,17 @@ export function checkPreview(out) {
 	if (!t.collections.text.includes("Tissue maps › 2025 reviews") || !t.collections.tip.includes("Repair atlases › Tissue maps › 2025 reviews") || !t.collections.hiddenOnUnowned) problems.push("owned row should list its collections; got " + t.collections.text);
 	if (!t.fold.collapsed || t.fold.expanded !== "false" || !t.fold.summary) problems.push("the paper form should fold after a search; got " + JSON.stringify(t.fold));
 	if (t.fold.afterClick.collapsed || t.fold.afterClick.expanded !== "true") problems.push("the conditions toggle should unfold the form");
+	{
+		const o = t.orcid || {};
+		if (out.netCalls || out.stubbed.orcid.length < 4) problems.push("the ORCID states should run on the stubbed ORCID answers only; got " + JSON.stringify([out.netCalls, out.stubbed.orcid.length]));
+		if (o.cards !== 2 || !/Jenna A\. Dowd/.test(o.names?.[0] || "") || !o.more) problems.push("the ORCID lookup should show the two profiles with papers and fold the other two; got " + JSON.stringify([o.cards, o.names, o.more]));
+		if (o.requestsBeforePick !== 2) problems.push("a name lookup should cost one ORCID search and one batched OpenAlex request; got " + o.requestsBeforePick);
+		if (!(o.firstStats || []).some(x => /212/.test(x)) || !(o.firstStats || []).some(x => /54/.test(x))) problems.push("the first candidate should show its works and h-index; got " + JSON.stringify(o.firstStats));
+		if (!o.summary?.jobs || !o.summary.more.length || o.summary.chips !== 4 || !o.summary.clamped) problems.push("the profile summary should list positions, a +n more, four keywords and a clamped biography; got " + JSON.stringify(o.summary));
+		if (!same(o.linkedin, ["https://www.linkedin.com/in/jenna-dowd-example"])) problems.push("the LinkedIn button should open the profile ORCID lists; got " + JSON.stringify(o.linkedin));
+		if (o.rows !== 5 || !/ORCID 0000-0001-1111-1118/.test(o.statusAfter || "") || !/Jenna A\. Dowd/.test(o.statusAfter || "")) problems.push("picking a profile should list its five papers with the person named in the status; got " + JSON.stringify([o.rows, o.statusAfter]));
+		if (!same(o.firstYears, ["2026", "2025", "2025"])) problems.push("an ORCID person's papers should be newest first; got " + JSON.stringify(o.firstYears));
+	}
 	if (t.authors.rows !== 4 || t.authors.profiles !== 2 || t.authors.formHidden || !t.authors.paperFormHidden) problems.push("the author tab should list two profiles and four papers; got " + JSON.stringify(t.authors));
 	return problems;
 }
@@ -678,6 +754,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.writeFileSync(path.join(root, "docs/search-preview-unfolded.html"), out.unfolded);
 	fs.writeFileSync(path.join(root, "docs/search-preview-authors.html"), out.authorsPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-authors-lookup.html"), out.authorsLookup);
+	fs.writeFileSync(path.join(root, "docs/search-preview-orcid.html"), out.orcidLookup);
+	fs.writeFileSync(path.join(root, "docs/search-preview-orcid-summary.html"), out.orcidSummary);
+	fs.writeFileSync(path.join(root, "docs/search-preview-orcid-works.html"), out.orcidWorks);
 	fs.writeFileSync(path.join(root, "docs/search-preview-filters.html"), out.filtersPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-journals.html"), out.journalsPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-longspan.html"), out.longSpanPage);

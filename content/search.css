@@ -241,6 +241,29 @@ input[type=checkbox] { accent-color: var(--pill); }
 .author-profile-name { font-weight: 600; }
 .author-profile-meta { color: var(--muted); font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
 .author-profile-actions { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+/* inside a card every control is 26px */
+.author-profile button { height: 26px; padding: 0 12px; font-size: 12px; line-height: 16px; }
+.author-profile.pickable { cursor: pointer; }
+.author-profile.pickable:hover:not(.selected) { background: var(--row-hover); }
+.author-profile.open { flex-basis: 100%; align-items: flex-start; }
+.author-profiles:has(.author-profile.open) { max-height: 300px; }
+.author-profile.open .author-profile-info { flex: 1 1 auto; }
+.author-profile-stats { margin: 0; }
+.author-sum-toggle, .author-bio-toggle { align-self: flex-start; justify-self: start; padding: 0 8px; margin-left: -8px; }
+.author-linkedin .ic { width: 14px; height: 14px; }
+.author-more { align-self: center; }
+.author-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px 24px; align-items: start; margin-top: 4px; padding: 12px; border-radius: var(--r-box); background: var(--bg-tint); cursor: default; }
+.author-bio { font-size: 12px; line-height: 18px; color: var(--text); overflow-wrap: anywhere; }
+.author-bio.clamped { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.author-sum-block { display: flex; flex-direction: column; gap: 2px; }
+.author-sum-title { font-size: 11px; line-height: 16px; font-weight: 600; color: var(--muted); }
+.author-sum-row { font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.author-bio, .author-bio-toggle, .author-sum-chips, .author-sum-sites, .author-sum-note { grid-column: 1 / -1; }
+.author-sum-more, .author-sum-note { font-size: 11px; line-height: 16px; color: var(--muted); }
+.author-sum-chips { gap: 4px; }
+.author-sum-sites { display: flex; flex-wrap: wrap; gap: 4px; }
+.author-site { padding: 0 8px; max-width: 100%; }
+.author-site span { overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------------------------------------------------------------- banner */
 .banner { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--r-box); color: var(--muted); }

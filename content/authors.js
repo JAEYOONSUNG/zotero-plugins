@@ -72,7 +72,7 @@ var ZotPoPAuthors = (function () {
 		return records;
 	}
 
-	async function orcidJSON(id, section, http, ctx) {
+	async function orcidFetch(url, http, ctx, expectedPath = null, label = "response") {
 		if (typeof http?.getJSON !== "function") throw new Error("ORCID requires a JSON HTTP transport");
 		const headers = { Accept: "application/json" };
 		if (ctx.orcidAccessToken) {
@@ -80,17 +80,272 @@ var ZotPoPAuthors = (function () {
 			headers.Authorization = "Bearer " + ctx.orcidAccessToken;
 		}
 		try {
-			const result = await cancellable(() => http.getJSON("https://pub.orcid.org/v3.0/" + id + "/" + section, headers, ctx.signal), ctx);
+			const result = await cancellable(() => http.getJSON(url, headers, ctx.signal), ctx);
 			if (!result || typeof result !== "object" || Array.isArray(result)
-				|| result.path && result.path !== "/" + id + "/" + section) throw new Error("ORCID returned an invalid " + section + " response");
+				|| expectedPath && result.path && result.path !== expectedPath) throw new Error("ORCID returned an invalid " + label);
 			return result;
 		} catch (error) {
 			if (error.name === "AbortError") throw error;
 			if ([401, 403].includes(error.status)) throw Object.assign(new Error("ORCID public access was denied. Configure an ORCID public API token or retry through the public record."), { status: error.status, code: "ORCID_ACCESS_REQUIRED" });
-			if (error.status === 404) throw Object.assign(new Error("ORCID record was not found: " + id), { status: 404 });
+			if (error.status === 404) throw Object.assign(new Error("ORCID record was not found" + (expectedPath ? ": " + expectedPath.split("/")[1] : "")), { status: 404 });
 			if (error.status === 429) throw Object.assign(new Error("ORCID rate limit reached. Retry later."), { status: 429 });
 			throw error;
 		}
+	}
+	function orcidJSON(id, section, http, ctx) {
+		return orcidFetch("https://pub.orcid.org/v3.0/" + id + "/" + section, http, ctx, "/" + id + "/" + section, section + " response");
+	}
+
+	// ---------------------------------------------------------------- ORCID by name
+	// ORCID's expanded search is fielded Solr. A free-text query for "Michael Jewett" returns 107,000 noisy
+	// profiles; given-names / family-name (and credit-name, other-names) name the person. Typed names come
+	// as "Given Family", "Family, Given", "J. Family" or "Family JA", so every plausible reading goes into
+	// one OR query and the ranking afterwards decides which profile is the one meant.
+	const ORCID_SEARCH = "https://pub.orcid.org/v3.0/expanded-search/";
+	const ORCID_ROWS = 20;
+	const CJK = /[\u1100-\u11ff\u3040-\u30ff\u3130-\u318f\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff]/u;
+	const PARTICLES = new Set(["van", "von", "der", "den", "de", "del", "della", "di", "da", "dos", "das", "du", "la", "le", "bin", "ben", "al", "el", "ter", "ten", "op", "zu"]);
+	const isInitial = token => /^\p{Lu}$/u.test(token) || /^\p{Lu}{2,3}$/u.test(token);
+	const fold = value => String(value ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+	const nameTokens = value => fold(value).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+	const significant = tokens => { const long = tokens.filter(token => token.length > 1); return long.length ? long : tokens; };
+
+	/* What was typed, as { raw, cjk, variants: [{ given: [...], family }] }. A Korean, Chinese or Japanese
+	   name is kept exactly as typed (no split, no reorder): it is searched as a whole credit or other name. */
+	function parseNameInput(input) {
+		let value = String(input ?? "").normalize("NFC").replace(/[^\p{L}\p{M}'\u2019.,\s-]/gu, " ").replace(/\s+/g, " ").trim();
+		value = value.replace(/^(?:(?:dr|prof|professor|mr|ms|mrs)\.?\s+)+/i, "").trim();
+		if (!value) return { raw: "", cjk: false, variants: [] };
+		if (CJK.test(value)) return { raw: value, cjk: true, variants: [] };
+		const clean = token => token.replace(/^[.,'\u2019-]+/, "").replace(/[.,]+$/, "");
+		const split = token => /^(?:\p{L}\.){2,}$/u.test(token) ? token.match(/\p{L}/gu) : [token];
+		const initials = tokens => tokens.flatMap(token => token.length > 1 && token === token.toUpperCase() && isInitial(token) ? [...token] : [token]);
+		if (value.includes(",")) {
+			const [family, ...rest] = value.split(",");
+			const given = rest.join(" ").split(/\s+/).flatMap(split).map(clean).filter(Boolean);
+			if (clean(family.trim())) return { raw: value, cjk: false, variants: [{ given: initials(given), family: family.trim().split(/\s+/).map(clean).filter(Boolean).join(" ") }] };
+		}
+		let tokens = value.split(" ").flatMap(split).map(clean).filter(Boolean);
+		if (tokens.length > 2 && /^(?:jr|sr|ii|iii|iv)$/i.test(tokens.at(-1))) tokens.pop();
+		if (!tokens.length) return { raw: value, cjk: false, variants: [] };
+		if (tokens.length === 1) return { raw: value, cjk: false, variants: [{ given: [], family: tokens[0] }] };
+		const n = tokens.length, variants = [];
+		// "Doudna JA", "Doudna J A": the initials come last, the surname first.
+		let k = n; while (k > 1 && isInitial(tokens[k - 1])) k--;
+		if (k < n && !isInitial(tokens[0])) return { raw: value, cjk: false, variants: [{ given: initials(tokens.slice(k)), family: tokens.slice(0, k).join(" ") }] };
+		let i = n - 1; while (i > 1 && PARTICLES.has(tokens[i - 1].toLowerCase())) i--;
+		variants.push({ given: tokens.slice(0, i), family: tokens.slice(i).join(" ") });
+		// Surname first ("Sung Jae Yoon") is as common in the registry as surname last, so both are asked.
+		if (!tokens.some(isInitial)) variants.push({ given: tokens.slice(1), family: tokens[0] });
+		return { raw: value, cjk: false, variants };
+	}
+
+	function orcidNameQuery(input) {
+		const parsed = parseNameInput(input);
+		const quote = value => '"' + String(value).replace(/["\\]/g, " ").replace(/\s+/g, " ").trim() + '"';
+		const clauses = [];
+		if (parsed.cjk) clauses.push("credit-name:" + quote(parsed.raw), "other-names:" + quote(parsed.raw));
+		else {
+			for (const { given, family } of parsed.variants) {
+				const names = given.filter(token => !isInitial(token));
+				const first = names.length ? names.map(token => "given-names:" + quote(token)).join(" AND ")
+					: given.length ? "given-names:" + (given[0].replace(/[^\p{L}]/gu, "")[0] || "") + "*" : "";
+				clauses.push("(" + (first ? first + " AND " : "") + "family-name:" + quote(family) + ")");
+			}
+			const primary = parsed.variants[0];
+			if (primary?.given.some(token => !isInitial(token))) {
+				const full = [...primary.given, primary.family].join(" ");
+				clauses.push("credit-name:" + quote(full), "other-names:" + quote(full));
+			}
+		}
+		const unique = [...new Set(clauses)];
+		if (!unique.length) return null;
+		const q = unique.join(" OR ");
+		return { parsed, q, url: ORCID_SEARCH + "?q=" + encodeURIComponent(q) + "&rows=" + ORCID_ROWS };
+	}
+
+	function orcidCandidate(row) {
+		const id = parseOrcid(row?.["orcid-id"]);
+		if (!id) return null;
+		const given = text(row["given-names"]), family = text(row["family-names"]);
+		const credit = text(row["credit-name"]);
+		const list = value => (Array.isArray(value) ? value : value ? [value] : []).map(item => text(item)).filter(Boolean);
+		const institutions = [...new Set(list(row["institution-name"]))];
+		return { provider: "orcid", id, name: credit || [given, family].filter(Boolean).join(" ") || id, givenNames: given, familyNames: family, creditName: credit,
+			affiliation: institutions.slice(0, 2).join("; "), institutions, otherNames: list(row["other-name"]), url: "https://orcid.org/" + id,
+			identityConfirmed: true, mode: "profile" };
+	}
+
+	/* How well a candidate's name is the typed one: 2 = every name part agrees (a middle initial aside),
+	   1 = the typed parts are all in the candidate's name or the other way round (initial, missing middle name), 0 = anything else. */
+	function nameTier(parsed, candidate) {
+		const typed = significant(nameTokens(parsed.raw));
+		if (!typed.length) return 0;
+		const names = [[candidate.givenNames, candidate.familyNames].filter(Boolean).join(" "), candidate.creditName, ...(candidate.otherNames || [])].filter(Boolean);
+		let best = 0;
+		for (const name of names) {
+			const have = significant(nameTokens(name));
+			if (!have.length) continue;
+			const a = new Set(typed), b = new Set(have);
+			if (a.size === b.size && [...a].every(token => b.has(token))) return 2;
+			const initialOk = (small, big) => [...small].every(token => big.has(token) || token.length === 1 && [...big].some(other => other.startsWith(token)));
+			if (initialOk(a, b) || initialOk(b, a)) best = 1;
+		}
+		return best;
+	}
+
+	/* Exact full-name match first, then by how much OpenAlex has under the person's name. Profiles with
+	   no works anywhere are marked `weak`: the card list keeps them behind "more" when better ones exist. */
+	function rankOrcidCandidates(candidates, parsed) {
+		const known = candidates.some(c => c.worksCount != null);
+		candidates.forEach((c, index) => { c.rankIndex = index; c.nameTier = nameTier(parsed, c); c.weak = known && !(c.worksCount > 0); });
+		if (candidates.every(c => c.weak)) candidates.forEach(c => { c.weak = false; });
+		candidates.sort((a, b) => Number(a.weak) - Number(b.weak) || b.nameTier - a.nameTier || (b.worksCount || 0) - (a.worksCount || 0) || a.rankIndex - b.rankIndex);
+		return candidates;
+	}
+
+	// One OpenAlex request for all the candidates: papers, citations, h-index, last institution, top topic.
+	async function enrichCandidates(candidates, http, ctx) {
+		if (!candidates.length || ctx.openAlexSpent || typeof http?.getJSON !== "function") return false;
+		const url = "https://api.openalex.org/authors?filter=orcid:" + candidates.map(c => encodeURIComponent(c.id)).join("|")
+			+ "&select=id,orcid,display_name,works_count,cited_by_count,summary_stats,last_known_institutions,topics&per-page=50" + Sources.openAlexAuth(ctx);
+		try {
+			const data = await cancellable(() => Sources.withRetry(() => http.getJSON(url, {}, ctx.signal), {}, ctx), ctx);
+			const byId = new Map();
+			for (const a of Array.isArray(data?.results) ? data.results : []) { const id = parseOrcid(a?.orcid); if (id) byId.set(id, a); }
+			for (const c of candidates) {
+				const a = byId.get(c.id);
+				c.enriched = true;
+				if (!a) { c.worksCount = 0; continue; }
+				const inst = a.last_known_institutions?.[0];
+				Object.assign(c, { worksCount: Number(a.works_count) || 0, citations: Number(a.cited_by_count) || 0,
+					hIndex: Number.isFinite(Number(a.summary_stats?.h_index)) ? Number(a.summary_stats.h_index) : null,
+					topic: text(a.topics?.[0]?.display_name), openalexId: Sources.openAlexAuthorId?.(a.id) || String(a.id || "").replace("https://openalex.org/", "") || null,
+					lastInstitution: inst?.display_name ? { name: inst.display_name, country: String(inst.country_code || "").toUpperCase() || null } : null });
+			}
+			return true;
+		} catch (error) {
+			if (error.name === "AbortError") throw error;
+			ctx.log?.("OpenAlex author enrichment failed: " + error.message);
+			if (!ctx.errors) ctx.errors = [];
+			ctx.errors.push("OpenAlex: paper counts for these profiles are unavailable: " + error.message);
+			return false;
+		}
+	}
+
+	async function searchOrcidNames(value, http, ctx) {
+		const built = orcidNameQuery(value);
+		if (!built) throw new Error("Enter an ORCID iD or an author name");
+		if (typeof http?.getJSON !== "function") throw new Error("ORCID requires a JSON HTTP transport");
+		const data = await orcidFetch(built.url, http, ctx);
+		const rows = data["expanded-result"] ?? [];
+		if (!Array.isArray(rows)) throw new Error("ORCID returned an invalid search response");
+		const seen = new Set(), candidates = [];
+		for (const row of rows) { const c = orcidCandidate(row); if (c && !seen.has(c.id)) { seen.add(c.id); candidates.push(c); } }
+		await enrichCandidates(candidates, http, ctx);
+		rankOrcidCandidates(candidates, built.parsed);
+		const provenance = { provider: "orcid", endpoint: "expanded-search", query: built.q, numFound: Number(data["num-found"]) || candidates.length, capturedAt: new Date().toISOString(), complete: true, publicOnly: true };
+		for (const c of candidates) c.provenance = { provider: "orcid", endpoint: "expanded-search", capturedAt: provenance.capturedAt };
+		candidates.authorProvenance = provenance;
+		return candidates;
+	}
+
+	// ---------------------------------------------------------------- LinkedIn (links only: nothing is fetched from LinkedIn)
+	function linkedInProfileURL(value) {
+		let raw = String(value ?? "").trim();
+		if (!raw || /\s/.test(raw)) return null;
+		if (!/^[a-z][a-z0-9+.-]*:/i.test(raw)) raw = "https://" + raw.replace(/^\/\//, "");
+		let url;
+		try { url = new URL(raw); } catch (_) { return null; }
+		if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.port) return null;
+		const host = url.hostname.toLowerCase();
+		if (host !== "linkedin.com" && !host.endsWith(".linkedin.com")) return null;
+		if (!/^\/(?:in|pub)\/[^/]+/i.test(url.pathname)) return null;
+		return "https://" + host + url.pathname;
+	}
+	function linkedInInstitution(person) {
+		const first = value => text(value).split(/[;|]/)[0].trim();
+		return text(person?.institutions?.[0]) || text(person?.lastInstitution?.name) || first(person?.affiliation);
+	}
+	function linkedInSearchURL(person) {
+		const keywords = [text(person?.name), linkedInInstitution(person)].filter(Boolean).join(" ").replace(/\s+/g, " ").slice(0, 120).trim();
+		if (!keywords) return null;
+		return "https://www.linkedin.com/search/results/people/?keywords=" + encodeURIComponent(keywords);
+	}
+	// What the button opens now: a LinkedIn profile ORCID listed, if one is already known, else a name and institution search.
+	function linkedInTarget(person) {
+		const known = linkedInProfileURL(person?.linkedin);
+		if (known) return { kind: "profile", url: known };
+		const url = linkedInSearchURL(person);
+		return url ? { kind: "search", url } : null;
+	}
+	// The LinkedIn address on an ORCID record (researcher-urls), or null. One request, made only when asked for.
+	async function orcidLinkedIn(id, http, ctx = {}) {
+		const orcid = parseOrcid(id);
+		if (!orcid) return null;
+		const data = await orcidJSON(orcid, "researcher-urls", http, ctx);
+		for (const item of Array.isArray(data["researcher-url"]) ? data["researcher-url"] : []) {
+			const url = linkedInProfileURL(text(item?.url));
+			if (url) return url;
+		}
+		return null;
+	}
+
+	// ---------------------------------------------------------------- the public ORCID record, condensed
+	const BIO_LIMIT = 1200;
+	function clampText(value, limit) {
+		const plain = String(value ?? "").replace(/\s+/g, " ").trim();
+		if (plain.length <= limit) return { text: plain, clamped: false };
+		const cut = plain.slice(0, limit), space = cut.lastIndexOf(" ");
+		return { text: cut.slice(0, space > limit * 0.6 ? space : limit).replace(/[\s.,;:]+$/, "") + "…", clamped: true };
+	}
+	function dateYear(value) { const year = Number(text(value?.year)); return Number.isInteger(year) && year > 1500 && year < 2200 ? year : null; }
+	function affiliationRows(data, kind) {
+		const rows = [];
+		for (const group of Array.isArray(data?.["affiliation-group"]) ? data["affiliation-group"] : []) {
+			for (const entry of Array.isArray(group?.summaries) ? group.summaries : []) {
+				const item = entry?.[kind + "-summary"] || entry;
+				if (!item || typeof item !== "object") continue;
+				const org = text(item.organization?.name);
+				if (!org) continue;
+				rows.push({ role: text(item["role-title"]), department: text(item["department-name"]), org, start: dateYear(item["start-date"]), end: dateYear(item["end-date"]),
+					current: !dateYear(item["end-date"]) && !item["end-date"]?.month, displayIndex: Number(item["display-index"]) || 0 });
+			}
+		}
+		// newest first: what is still going on, then by start year
+		rows.sort((a, b) => (b.current - a.current) || ((b.start ?? b.end ?? 0) - (a.start ?? a.end ?? 0)) || b.displayIndex - a.displayIndex);
+		return rows.slice(0, 20).map(({ displayIndex, ...row }) => row);
+	}
+	/* { person, employments, educations } as ORCID returns them -> what a card can show:
+	   biography (capped), keywords, websites (LinkedIn first), employments and educations newest first. */
+	function summarizeOrcidRecord({ person, employments, educations } = {}) {
+		const bio = clampText(text(person?.biography?.content), BIO_LIMIT);
+		const keywords = [...new Set((Array.isArray(person?.keywords?.keyword) ? person.keywords.keyword : []).map(item => text(item?.content)).filter(Boolean))].slice(0, 12);
+		const websites = [];
+		for (const item of Array.isArray(person?.["researcher-urls"]?.["researcher-url"]) ? person["researcher-urls"]["researcher-url"] : []) {
+			const raw = text(item?.url);
+			let url = null;
+			try { const parsed = new URL(raw); if (["https:", "http:"].includes(parsed.protocol) && !parsed.username && !parsed.password) url = parsed.href; } catch (_) {}
+			if (!url) continue;
+			const linkedin = linkedInProfileURL(raw);
+			websites.push({ name: text(item["url-name"]), url: linkedin || url, linkedin: Boolean(linkedin) });
+		}
+		websites.sort((a, b) => Number(b.linkedin) - Number(a.linkedin));
+		const jobs = affiliationRows(employments, "employment"), studies = affiliationRows(educations, "education");
+		const linkedin = websites.find(site => site.linkedin)?.url || null;
+		return { bio: bio.text, bioClamped: bio.clamped, keywords, websites: websites.slice(0, 6), employments: jobs, educations: studies, linkedin,
+			empty: !bio.text && !keywords.length && !websites.length && !jobs.length && !studies.length };
+	}
+	/* Three small public requests rather than /record, which carries every work summary too; run together,
+	   only when a card's summary is opened. A section that fails is left out; all of them failing is an error. */
+	async function orcidSummary(id, http, ctx = {}) {
+		const orcid = parseOrcid(id);
+		if (!orcid) throw new Error("Invalid ORCID profile iD");
+		const parts = await Promise.allSettled(["person", "employments", "educations"].map(section => orcidJSON(orcid, section, http, ctx)));
+		for (const part of parts) if (part.status === "rejected" && part.reason?.name === "AbortError") throw part.reason;
+		if (parts.every(part => part.status === "rejected")) throw parts[0].reason;
+		const [person, employments, educations] = parts.map(part => part.status === "fulfilled" ? part.value : null);
+		return { ...summarizeOrcidRecord({ person, employments, educations }), id: orcid, capturedAt: new Date().toISOString(), partial: parts.some(part => part.status === "rejected") };
 	}
 
 	async function scholarQuery(source, query, ctx) {
@@ -128,7 +383,11 @@ var ZotPoPAuthors = (function () {
 		if (!value) throw new Error("Enter an author name or profile identifier");
 		if (provider === "orcid") {
 			const id = parseOrcid(value);
-			if (!id) throw new Error("Enter a valid ORCID iD or orcid.org profile URL; ORCID name search is not available in this mode");
+			if (!id) {
+				// Something shaped like an iD, URL or OpenAlex ID that fails its checksum is a mistake, not a name.
+				if (/https?:\/\/|orcid\.org|^orcid:|^\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{3}[\dXx]$|^A\d+$/i.test(value)) throw new Error("Enter a valid ORCID iD or orcid.org profile URL, or type a name");
+				return searchOrcidNames(value, http, ctx);
+			}
 			const person = await orcidJSON(id, "person", http, ctx);
 			if (!["name", "biography", "other-names", "researcher-urls"].some(key => Object.hasOwn(person, key))) throw new Error("ORCID returned an invalid person schema");
 			const given = text(person.name?.["given-names"]), family = text(person.name?.["family-name"]);
@@ -262,16 +521,44 @@ var ZotPoPAuthors = (function () {
 		}
 		const id = parseOrcid(profile.id);
 		if (!id) throw new Error("Invalid ORCID profile iD");
+		/* OpenAlex first: it carries the byline, venue, citations and yearly counts that an ORCID work
+		   summary does not. It is skipped when asked to be (options.orcidOnly), when its budget is spent,
+		   and falls through to the ORCID record when it errors or knows no works under this iD. */
+		if (!options.orcidOnly && !ctx.openAlexSpent) {
+			// An empty OpenAlex answer must not blank the window before the ORCID list is read.
+			const outer = ctx.onResults;
+			if (outer) ctx.onResults = (records, details) => { if (records.length) outer(records, details); };
+			try {
+				const found = await Sources.search("openalex", { authors: id, sort: "date", maxResults }, http, ctx);
+				if (found.length) {
+					const actual = { ...profile, id, url: "https://orcid.org/" + id, identityConfirmed: true };
+					const total = Number.isFinite(profile.worksCount) ? profile.worksCount : null;
+					const truncated = found.length >= maxResults && (total == null || total > found.length);
+					return attach(found, actual, { provider: "orcid", id, endpoint: "openalex-works", via: "openalex", capturedAt: new Date().toISOString(),
+						publicOnly: false, mode: "profile", identityConfirmed: true, totalGroups: total, returned: found.length, truncated, complete: !truncated,
+						authorListComplete: true, citationCountsAvailable: true }, ctx);
+				}
+			} catch (error) {
+				if (error.name === "AbortError") throw error;
+				ctx.log?.("OpenAlex works for ORCID " + id + " failed, using the ORCID record: " + error.message);
+			} finally { if (outer) ctx.onResults = outer; }
+		}
 		const data = await orcidJSON(id, "works", http, ctx);
 		if (!Array.isArray(data.group)) throw new Error("ORCID returned an invalid works schema");
 		const actual = { ...profile, id, url: "https://orcid.org/" + id, identityConfirmed: true };
 		// /works returns all public groups in one response; each group is one work,
 		// and display-index selects its preferred assertion without merging by title.
 		const records = data.group.map((group, index) => orcidWork(group, index, actual)).slice(0, maxResults);
+		// The DOIs ask OpenAlex for their citation counts; the list keeps ORCID's order and the window sorts it.
+		if (records.some(record => record.doi) && !ctx.openAlexSpent && typeof http?.getJSON === "function") {
+			try {
+				await Sources.enrichFromOpenAlex(records, { getJSON: (url, headers) => cancellable(() => http.getJSON(url, headers, ctx.signal), ctx) }, ctx);
+			} catch (error) { if (error.name === "AbortError") throw error; ctx.log?.("OpenAlex DOI enrichment failed: " + error.message); }
+		}
 		const provenance = { provider: "orcid", id, endpoint: "works", capturedAt: new Date().toISOString(),
 			publicOnly: true, mode: "profile", identityConfirmed: true, totalGroups: data.group.length,
-			returned: records.length, truncated: data.group.length > maxResults, complete: data.group.length <= maxResults,
-			authorListComplete: false, citationCountsAvailable: false };
+			returned: records.length, truncated: data.group.length > maxResults, complete: data.group.length <= maxResults, via: "orcid",
+			authorListComplete: false, citationCountsAvailable: records.some(record => record.citations != null) };
 		return attach(records, actual, provenance, ctx);
 	}
 
@@ -284,7 +571,8 @@ var ZotPoPAuthors = (function () {
 		return attach(records, profile, { ...clone(result.provenance), provider: "scholar", mode: "name-search", identityConfirmed: false }, ctx);
 	}
 
-	return { searchProfiles, loadPublications, loadNamePublications, parseScholarProfile, parseOrcid };
+	return { searchProfiles, loadPublications, loadNamePublications, parseScholarProfile, parseOrcid, parseNameInput, orcidNameQuery, rankOrcidCandidates,
+		linkedInProfileURL, linkedInSearchURL, linkedInTarget, orcidLinkedIn, summarizeOrcidRecord, orcidSummary };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPAuthors;

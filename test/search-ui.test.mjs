@@ -703,11 +703,14 @@ test("ORCID author mode finds a real profile shape, loads unknown-citation works
 	assert.equal(ui.get("author-name-btn").hidden, true);
 	let entries = await ui.history.list(); assert.equal(entries[0].kind, "profiles"); assert.equal(entries[0].count, 1);
 	const profileEntry = entries[0];
-	ui.get("author-profiles").querySelector("button").emit("click");
+	ui.get("author-profiles").querySelector("button.author-load").emit("click");
 	await new Promise(resolve => setImmediate(resolve)); await ui.state.searchDone;
-	assert.equal(ui.state.records.length, 2); assert.equal(requests.length, 2);
+	// OpenAlex is asked first for an ORCID iD's papers and knows none in this fixture, so the ORCID list is read
+	assert.equal(ui.state.records.length, 2); assert.equal(requests.length, 3);
+	assert.match(requests[1], /^https:\/\/api\.openalex\.org\/works\?filter=authorships\.author\.orcid:0000-0001-8277-5907/);
 	assert.ok(ui.state.records.every(row => row.citations === null && row.authors.length === 0));
-	assert.match(ui.get("status").textContent, /incompleteResults/);
+	assert.equal(ui.get("status").textContent, `authorOrcidWorks|Sheila Ingemann Jensen|${id}|2|true`);
+	assert.match(ui.get("banner-text").textContent, /authorOrcidViaOrcid/); assert.equal(ui.state.sortKey, "year"); assert.equal(ui.state.sortDir, "desc");
 	assert.match(ui.get("banner-text").textContent, /authorLimited\|2\|3/);
 	ui.originalRenderMetrics(ui.state.records);
 	assert.equal(ui.get("metrics-table").hidden, true); assert.match(ui.get("metrics-hint").textContent, /authorNoCitationData\|2/);
@@ -751,7 +754,7 @@ test("Scholar profile access errors stay visible and the separate name-paper act
 	await ui.runAuthorAction("name-papers"); assert.deepEqual(calls, ["scholarauthor", "scholar"]);
 	assert.match(ui.get("banner-text").textContent, /authorNameUnverified/); assert.match(ui.get("author-profiles").textContent, /authorNameUnverified/);
 	assert.equal(ui.state.records[0].authorProfile.identityConfirmed, false);
-	assert.equal(ui.get("author-profiles").querySelector("button"), null, "name results cannot be selected as a confirmed profile");
+	assert.doesNotMatch(ui.get("author-profiles").textContent, /authorLoadWorks/, "name results cannot be selected as a confirmed profile");
 	const [entry] = await ui.history.list(); assert.equal(entry.query.authorAction, "name-papers"); assert.equal(entry.query.authorProfileId, "");
 });
 
@@ -784,7 +787,7 @@ test("editing author input cancels the active request and provider inputs persis
 
 test("author mode validates ORCID, missing bridge and raw profile/name actions without fabricated cards", async () => {
 	const ui = uiHarness(); await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("orcid");
-	ui.get("author-input").value = "Sheila Jensen"; await ui.runAuthorAction("profiles");
+	ui.get("author-input").value = "0000-0002-1825-0098"; await ui.runAuthorAction("profiles");
 	assert.match(ui.get("banner-text").textContent, /valid ORCID/); assert.equal(ui.get("author-profiles").children.length, 0);
 	await ui.switchAuthorProvider("scholar"); ui.get("author-input").value = "Some Author"; await ui.runAuthorAction("profiles");
 	assert.match(ui.get("banner-text").textContent, /Publish or Perish command-line tool/);
@@ -1394,4 +1397,79 @@ test("the institution cell: unknown is muted and only where the source normally 
 	assert.equal(cell("oa").querySelector("span.aff-name").className.includes("aff-unknown"), true);
 	assert.equal(cell("plain").children.length, 0, "a source without institutions gets an empty cell");
 	assert.equal(ui.tipContent(cell("plain"), "aff"), null);
+});
+
+test("ORCID name search lists ranked profile cards, picking one lists all its papers, and the session remembers both", async () => {
+	const A = "0000-0001-1111-1118", B = "0000-0002-2222-2224", C = "0000-0003-3333-3330", files = new Map(), prefs = {}, requests = [], opened = [];
+	const row = (id, given, family) => ({ "orcid-id": id, "given-names": given, "family-names": family, "institution-name": ["Example University"], "other-name": [], "credit-name": null });
+	const alexAuthor = (id, works) => ({ id: "https://openalex.org/A" + works, orcid: "https://orcid.org/" + id, works_count: works, cited_by_count: works * 10, summary_stats: { h_index: 7 },
+		last_known_institutions: [{ display_name: "Elsewhere Institute", country_code: "KR" }], topics: [{ display_name: "Gene editing" }] });
+	const alexWork = n => ({ id: "https://openalex.org/W" + n, doi: "https://doi.org/10.5555/o" + n, title: "Paper " + n, publication_year: 2019 + n, publication_date: (2019 + n) + "-01-01", type: "article",
+		cited_by_count: n, counts_by_year: [], authorships: [{ author: { display_name: "Jennifer Doudna", orcid: "https://orcid.org/0000-0001-1111-1118" } }], primary_location: { source: { display_name: "Journal X" } }, biblio: {} });
+	const request = async (_method, url) => {
+		requests.push(url);
+		if (url.startsWith("https://pub.orcid.org/v3.0/expanded-search/")) return { status: 200, response: { "num-found": 3, "expanded-result": [row(C, "Jenny", "Doudna"), row(A, "Jennifer", "Doudna"), row(B, "Jennifer A.", "Doudna")] } };
+		if (url.startsWith("https://api.openalex.org/authors?")) return { status: 200, response: { results: [alexAuthor(A, 120), alexAuthor(B, 0)] } };
+		if (url.startsWith("https://api.openalex.org/works?")) return { status: 200, response: { meta: { count: 3 }, results: [alexWork(1), alexWork(2), alexWork(3)] } };
+		throw Object.assign(new Error("Unexpected HTTP request"), { status: 404 });
+	};
+	const ui = uiHarness({ realRows: true, prefs, historyFiles: files, request, launchURL: url => opened.push(url) });
+	await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("orcid");
+	ui.get("author-input").value = "Jennifer Doudna"; ui.authorInputChanged();
+	await ui.runAuthorAction("profiles");
+	const cards = () => ui.get("author-profiles").children.filter(child => child.className.includes("author-profile"));
+	assert.equal(requests.length, 2, "one ORCID search and one batched OpenAlex request");
+	assert.equal(cards().length, 1, "the profile with no papers waits behind the more button");
+	assert.match(cards()[0].textContent, /Jennifer Doudna/); assert.match(cards()[0].textContent, /authorStatWorks\|120/); assert.match(cards()[0].textContent, /authorStatH\|7/);
+	assert.match(cards()[0].textContent, /Example University/); assert.match(cards()[0].textContent, /Gene editing/); assert.match(ui.get("author-profiles").textContent, /authorMoreProfiles\|2/);
+	assert.equal(ui.get("status").textContent, "authorProfilesFound|3");
+	const entries = await ui.history.list(); assert.equal(entries[0].kind, "profiles"); assert.equal(entries[0].query.authorInput, "Jennifer Doudna");
+	// the LinkedIn button asks ORCID once for a listed profile (this stub has none) and then opens a name-and-institution search; LinkedIn itself is never fetched
+	ui.get("author-profiles").querySelector("button.author-linkedin").emit("click");
+	await new Promise(resolve => setImmediate(resolve)); await new Promise(resolve => setImmediate(resolve));
+	assert.equal(requests.filter(url => url === `https://pub.orcid.org/v3.0/${A}/researcher-urls`).length, 1); assert.ok(requests.every(url => !/linkedin/i.test(url)));
+	assert.equal(opened.length, 1); assert.match(opened[0], /^https:\/\/www\.linkedin\.com\/search\/results\/people\/\?keywords=Jennifer%20Doudna%20Example%20University$/);
+	// picking the card lists the papers at once
+	ui.get("author-profiles").querySelector("button.author-load").emit("click");
+	await new Promise(resolve => setImmediate(resolve)); await ui.state.searchDone;
+	assert.equal(ui.state.records.length, 3); assert.equal(ui.state.sortKey, "year"); assert.equal(ui.state.sortDir, "desc");
+	assert.equal(ui.get("status").textContent, `authorOrcidWorks|Jennifer Doudna|${A}|3|false`);
+	assert.match(ui.get("banner-text").textContent, /authorOrcidViaOpenAlex/);
+	assert.ok(requests.some(url => url.startsWith("https://api.openalex.org/works?filter=authorships.author.orcid:" + A)));
+	// session and recent searches
+	assert.equal(ui.authorSessions.orcid.profile.id, A); assert.equal(ui.authorSessions.orcid.input, "Jennifer Doudna"); assert.equal(ui.authorSessions.orcid.profiles.length, 3);
+	const saved = JSON.parse(prefs.lastAuthorQuery || prefs["extensions.zotpop.lastAuthorQuery"] || "{}");
+	assert.equal(saved.sessions.orcid.input, "Jennifer Doudna"); assert.equal(saved.sessions.orcid.profile.id, A);
+	const fresh = uiHarness({ prefs, historyFiles: files, request: () => assert.fail("restoring must not use the network") }); fresh.restoreAuthorPreferences();
+	assert.equal(fresh.get("author-provider").value, "orcid"); assert.equal(fresh.get("author-input").value, "Jennifer Doudna"); assert.equal(fresh.authorSessions.orcid.profile.id, A);
+	const list = await ui.history.list(); const works = list.find(entry => entry.query.authorAction === "publications");
+	assert.equal(works.query.authorProfileId, A); assert.equal(works.query.authorProfiles.length, 3);
+});
+
+test("the ORCID LinkedIn button opens the profile ORCID lists, falling back to a search when it lists none", async () => {
+	const A = "0000-0001-1111-1118", opened = [], urls = []; let listed = "https://www.linkedin.com/in/jane-doe";
+	const ui = uiHarness({ launchURL: url => opened.push(url), request: async (_method, url) => {
+		urls.push(url);
+		if (url.endsWith("/researcher-urls")) return { status: 200, response: { path: `/${A}/researcher-urls`, "researcher-url": listed ? [{ "url-name": "LI", url: { value: listed } }] : [] } };
+		throw Object.assign(new Error("no"), { status: 404 });
+	} });
+	await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("orcid");
+	ui.authorSessions.orcid.profiles = [{ provider: "orcid", id: A, name: "Jane Doe", affiliation: "Example University", institutions: ["Example University"], identityConfirmed: true, mode: "profile", url: "https://orcid.org/" + A }];
+	ui.renderAuthorProfiles();
+	const button = () => ui.get("author-profiles").querySelector("button.author-linkedin");
+	assert.equal(button().getAttribute("data-tip"), "authorLinkedInMaybeTip");
+	button().emit("click"); for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+	assert.deepEqual(opened, ["https://www.linkedin.com/in/jane-doe"]); assert.equal(button().getAttribute("data-tip"), "authorLinkedInProfileTip");
+	button().emit("click"); for (let i = 0; i < 3; i++) await new Promise(resolve => setImmediate(resolve));
+	assert.equal(urls.length, 1, "asked once per person"); assert.equal(opened.length, 2);
+	const other = uiHarness({ launchURL: url => opened.push(url), request: async () => ({ status: 200, response: { path: `/${A}/researcher-urls`, "researcher-url": [] } }) });
+	await other.switchSearchMode("authors"); await other.switchAuthorProvider("orcid");
+	other.authorSessions.orcid.profiles = [{ provider: "orcid", id: A, name: "Jane Doe", institutions: ["Example University"], identityConfirmed: true, mode: "profile" }]; other.renderAuthorProfiles();
+	opened.length = 0; other.get("author-profiles").querySelector("button.author-linkedin").emit("click"); for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+	assert.deepEqual(opened, ["https://www.linkedin.com/search/results/people/?keywords=Jane%20Doe%20Example%20University"]);
+	assert.equal(other.get("author-profiles").querySelector("button.author-linkedin").getAttribute("data-tip"), "authorLinkedInSearchTip");
+	// Scholar cards get the search button too
+	await other.switchAuthorProvider("scholar");
+	other.authorSessions.scholar.profiles = [{ provider: "scholar", id: "dsdG3ewAAAAJ", name: "Curtis Bonk", affiliation: "Indiana University", mode: "profile", identityConfirmed: true }]; other.renderAuthorProfiles();
+	assert.equal(other.get("author-profiles").querySelector("button.author-linkedin").getAttribute("data-tip"), "authorLinkedInSearchTip");
 });

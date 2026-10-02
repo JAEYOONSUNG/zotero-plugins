@@ -241,6 +241,29 @@ input[type=checkbox] { accent-color: var(--pill); }
 .author-profile-name { font-weight: 600; }
 .author-profile-meta { color: var(--muted); font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
 .author-profile-actions { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+/* inside a card every control is 26px */
+.author-profile button { height: 26px; padding: 0 12px; font-size: 12px; line-height: 16px; }
+.author-profile.pickable { cursor: pointer; }
+.author-profile.pickable:hover:not(.selected) { background: var(--row-hover); }
+.author-profile.open { flex-basis: 100%; align-items: flex-start; }
+.author-profiles:has(.author-profile.open) { max-height: 300px; }
+.author-profile.open .author-profile-info { flex: 1 1 auto; }
+.author-profile-stats { margin: 0; }
+.author-sum-toggle, .author-bio-toggle { align-self: flex-start; justify-self: start; padding: 0 8px; margin-left: -8px; }
+.author-linkedin .ic { width: 14px; height: 14px; }
+.author-more { align-self: center; }
+.author-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px 24px; align-items: start; margin-top: 4px; padding: 12px; border-radius: var(--r-box); background: var(--bg-tint); cursor: default; }
+.author-bio { font-size: 12px; line-height: 18px; color: var(--text); overflow-wrap: anywhere; }
+.author-bio.clamped { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.author-sum-block { display: flex; flex-direction: column; gap: 2px; }
+.author-sum-title { font-size: 11px; line-height: 16px; font-weight: 600; color: var(--muted); }
+.author-sum-row { font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.author-bio, .author-bio-toggle, .author-sum-chips, .author-sum-sites, .author-sum-note { grid-column: 1 / -1; }
+.author-sum-more, .author-sum-note { font-size: 11px; line-height: 16px; color: var(--muted); }
+.author-sum-chips { gap: 4px; }
+.author-sum-sites { display: flex; flex-wrap: wrap; gap: 4px; }
+.author-site { padding: 0 8px; max-width: 100%; }
+.author-site span { overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------------------------------------------------------------- banner */
 .banner { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--r-box); color: var(--muted); }
@@ -821,6 +844,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 	<symbol id="ic-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6" /><path d="M10.5 5.5v-1a1.5 1.5 0 0 0-1.5-1.5H4a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 4 11h1" /></symbol>
 	<symbol id="ic-save" viewBox="0 0 16 16"><path d="M8 2.5v7.5M5 7.2 8 10.2l3-3M2.8 12.5h10.4" /></symbol>
 	<symbol id="ic-panel" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2" /><path d="M2.5 10h11" /></symbol>
+	<symbol id="ic-linkedin" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2" /><path d="M5.7 7.2v3.3M8.2 10.5V7.2M8.2 8.6c0-.9.6-1.5 1.4-1.5s1.2.5 1.2 1.5v1.9" /><circle cx="5.7" cy="5.6" r=".35" /></symbol>
 	<symbol id="ic-external" viewBox="0 0 16 16"><path d="M9 3h4v4M13 3 7.6 8.4M12 9.5v3A1.5 1.5 0 0 1 10.5 14h-7A1.5 1.5 0 0 1 2 12.5v-7A1.5 1.5 0 0 1 3.5 4h3" /></symbol>
 	<symbol id="ic-pdf" viewBox="0 0 16 16"><path d="M4 2.5h5l3 3v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z" /><path d="M9 2.5v3h3" /><path d="M5.4 11.6V8.9h1a.9.9 0 0 1 0 1.8h-1" /></symbol>
 	<symbol id="ic-library" viewBox="0 0 16 16"><path d="M2.5 13.5h11M3.5 13.5V6.2M6.5 13.5V6.2M9.5 13.5V6.2M12.5 13.5V6.2M8 2.2l5.5 3.2h-11z" /></symbol>
@@ -1128,7 +1152,7 @@ Reading list" id="d-collections" class="d-collections">컬렉션: Tissue maps �
 	<div id="filter-pop" class="filter-pop" role="dialog" aria-modal="false" aria-labelledby="filter-pop-title" hidden="hidden"></div>
 	<div id="ctxmenu" class="ctxmenu" hidden></div>
 	<div style="max-height:844px;top:101px;left:auto;right:33px;max-width:560px" id="histmenu" class="selmenu histmenu" role="menu"><div class="menu-head">최근 검색</div><div tabindex="0" data-tip="tissue repair
-2026. 10. 3. AM 1:46:09" data-id="4dbd027c51edd9e0" role="menuitem" class="histopt"><span class="h-label">tissue repair</span><span class="h-meta">OpenAlex, Crossref, Europe PMC, arXiv · 12편 · 오늘</span></div><hr><div role="menuitem" class="histclear"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-clear" /></svg>저장된 검색 모두 지우기</div></div>
+2026. 10. 3. AM 8:46:00" data-id="4dbd027c51edd9e0" role="menuitem" class="histopt"><span class="h-label">tissue repair</span><span class="h-meta">OpenAlex, Crossref, Europe PMC, arXiv · 12편 · 오늘</span></div><hr><div role="menuitem" class="histclear"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-clear" /></svg>저장된 검색 모두 지우기</div></div>
 	<div hidden style="top:3px;left:NaNpx" aria-label="더보기" id="tbmenu" class="selmenu tbmenu" role="menu"></div>
 </div>
 <div hidden data-side="below" role="tooltip" class="tip-card" id="tip-card"></div></body></html>
