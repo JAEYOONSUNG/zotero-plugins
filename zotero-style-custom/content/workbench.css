@@ -168,6 +168,10 @@
 #style-custom-workbench textarea {
   min-height: var(--sc-h-ctl);
   max-width: 100%;
+  /* Zotero's own sheets give every html button and input a margin (on macOS a button gets
+     `margin: 0 -2px -1px; max-height: 25px`, an input `margin: 2px 4px`): segments overlapped each
+     other, buttons were cut to 25px and wrapped text spilled out of them. The panel owns its spacing. */
+  margin: 0;
   padding: 0 var(--sc-space-4);
   border: 0;
   border-radius: var(--sc-radius-pill);
@@ -176,7 +180,7 @@
   font: inherit;
   transition: background .12s ease;
 }
-#style-custom-workbench button { cursor: pointer; font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench button { -moz-appearance: none; appearance: none; max-height: none; cursor: pointer; font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
 #style-custom-workbench input:not([type=checkbox]):not([type=color]),
 #style-custom-workbench textarea,
 #style-custom-workbench select { background: var(--sc-surface); box-shadow: inset 0 0 0 1px var(--sc-border-strong); }
@@ -1063,7 +1067,7 @@
 #style-custom-workbench .sc-watch-new .sc-watch-name { font-weight: var(--sc-fw-strong); }
 #style-custom-workbench .sc-watch-badge, #style-custom-workbench .sc-watch-mine { flex: none; }
 #style-custom-workbench .sc-watch-mine { margin: 0; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); white-space: nowrap; font-variant-numeric: tabular-nums; }
-#style-custom-workbench .sc-watch-sub { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
+#style-custom-workbench .sc-watch-sub { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
 #style-custom-workbench .sc-watch-callout { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; padding: 8px 12px; border-radius: var(--sc-radius); background: var(--sc-accent-soft); color: var(--sc-accent); font: var(--sc-fw-medium) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
 #style-custom-workbench .sc-watch-callout svg { flex: none; }
 
@@ -1198,7 +1202,7 @@
 #style-custom-workbench .sc-annot:hover { box-shadow: 0 0 0 1px var(--sc-border-strong); }
 /* Chosen: a plain grey box with a darker edge all round, never a coloured bar on one side. */
 #style-custom-workbench .sc-annot[data-selected=true] { background: var(--sc-fill); box-shadow: 0 0 0 1.5px var(--sc-control-edge); }
-#style-custom-workbench .sc-annot-head { display: flex; align-items: center; gap: var(--sc-space-2); min-height: var(--sc-lh-body); }
+#style-custom-workbench .sc-annot-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-2); min-height: var(--sc-lh-body); min-width: 0; }
 #style-custom-workbench .sc-annot-dot {
   flex: none;
   width: 10px;
@@ -1209,8 +1213,10 @@
 #style-custom-workbench .sc-annot-page { font: var(--sc-fw-strong) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-mono); color: var(--sc-text); }
 /* The actions appear when the pointer or the keyboard is on the annotation,
    rather than two buttons standing under every line of quoted text. */
+/* In the head row, pushed to its end -- not floated over it: on a narrow card the floating bar sat on
+   the page number and the annotation kind (seen in Zotero on the reader's library). */
 #style-custom-workbench .sc-annot-actions {
-  position: absolute; inset-block-start: var(--sc-space-2); inset-inline-end: var(--sc-space-2); display: flex; gap: var(--sc-space-1); padding: 0; opacity: 0;
+  position: static; margin-inline-start: auto; flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; gap: var(--sc-space-1); padding: 0; opacity: 0;
   border-radius: var(--sc-radius-pill); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow);
 }
 #style-custom-workbench .sc-annot:hover .sc-annot-actions,
@@ -1683,7 +1689,7 @@
    recognise it, and the whole title is on the pointer. */
 #style-custom-workbench .sc-actions button[data-pick] { display: block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A title in the comparison table opens the paper: text that reads as a title, a link on hover. */
-#style-custom-workbench .sc-matrix .sc-link-button { min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-matrix .sc-link-button { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
 #style-custom-workbench .sc-matrix .sc-link-button:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
 /* An owned row keeps its "보유" on the first line and its one action under it. */
 #style-custom-workbench .sc-hit-owned ~ .sc-hit-actions { grid-row: 2 / span 2; }
@@ -2067,7 +2073,7 @@
 #style-custom-workbench .sc-reference-matrix thead th { position: sticky; top: 0; background: var(--sc-surface-alt); z-index: 1; }
 #style-custom-workbench .sc-reference-matrix .sc-ref-unknown { color: var(--sc-faint); }
 #style-custom-workbench .sc-reference-matrix td.sc-ref-check { text-align: center; }
-#style-custom-workbench .sc-reference-matrix .sc-link-button { min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
+#style-custom-workbench .sc-reference-matrix .sc-link-button { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 0; border: 0; background: none; padding: 0; margin: 0; font: inherit; text-align: start; cursor: pointer; color: var(--sc-text); box-shadow: none; }
 #style-custom-workbench .sc-reference-matrix .sc-link-button:hover { color: var(--sc-accent); text-decoration: underline; text-underline-offset: 2px; }
 #style-custom-workbench .sc-compare-insight-fold { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--sc-border); }
 #style-custom-workbench .sc-compare-insight-fold > summary { cursor: pointer; color: var(--sc-muted); font-size: var(--sc-fs-title); line-height: var(--sc-lh-title); font-weight: var(--sc-fw-strong); }
@@ -2447,3 +2453,18 @@
 }
 #style-custom-workbench .sc-path-row:not(:hover):not(:focus-within) .sc-hit-actions > .sc-hit-around { visibility: visible; }
 #style-custom-workbench .sc-around-chevron { font-size: var(--sc-fs-title); line-height: var(--sc-lh-body); }
+
+/* One-line controls never wrap and never shrink below their words (Zotero's chrome made 확인함 two lines inside a 26px pill). */
+#style-custom-workbench .sc-segmented button,
+#style-custom-workbench .sc-annot-order button,
+#style-custom-workbench .sc-annot-actions button,
+#style-custom-workbench .sc-inbox-seen,
+#style-custom-workbench .sc-quiet-action,
+#style-custom-workbench .sc-resume-remark-add,
+#style-custom-workbench .sc-local-reading-more,
+#style-custom-workbench .sc-chip-button,
+#style-custom-workbench .sc-hit-around,
+#style-custom-workbench .sc-matrix-picker-row button,
+#style-custom-workbench .sc-matrix-selection-row button { white-space: nowrap; flex: none; }
+#style-custom-workbench .sc-segmented { gap: 2px; }
+#style-custom-workbench .sc-segmented button { margin: 0; }

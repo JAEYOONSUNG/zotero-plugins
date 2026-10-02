@@ -276,3 +276,21 @@ test('rail labels never wrap: nowrap with an ellipsis, and the badge keeps its s
  assert.ok(rules.some(r=>r.selectorText?.split(',').map(x=>x.trim()).includes('#style-custom-workbench .sc-nav-count')&&/^(none|0 0 auto)$/.test(r.style.getPropertyValue('flex'))),'badge does not shrink');
  const compact=rule('#style-custom-workbench[data-density=compact]').getPropertyValue('--sc-nav-width');assert.ok(parseInt(compact)>=164,'compact rail fits the longest label and a two-digit badge');
 });
+
+test("Zotero's own button and input margins and heights are reset on every panel control",()=>{
+ // Zotero's sheets give html buttons `margin: 0 -2px -1px; max-height: 25px` (macOS) and inputs `margin: 2px 4px`:
+ // segments overlapped, 26px pills were cut and wrapped text spilled out. Seen in Zotero's own engine, not in Chrome.
+ const base=rules.find(r=>r.selectorText==='#style-custom-workbench button').style;
+ assert.equal(base.getPropertyValue('max-height'),'none');
+ assert.match(base.cssText,/appearance:\s*none/,'native appearance off');
+ const shared=rules.find(r=>r.selectorText?.split(',').map(x=>x.trim()).includes('#style-custom-workbench textarea')&&r.style.getPropertyValue('min-height'));
+ assert.equal(shared.style.getPropertyValue('margin'),'0');
+ for(const tag of ['button','input','select','textarea'])assert.ok(shared.selectorText.includes('#style-custom-workbench '+tag),tag+' shares the reset');
+});
+
+test('a segmented tray spaces its segments with gap, never negative margins, and its buttons stay one line',()=>{
+ assert.ok(/#style-custom-workbench \.sc-segmented \{ gap: 2px; \}/.test(css));
+ const nowrap=rules.filter(r=>/\.sc-segmented button/.test(r.selectorText||'')&&r.style.getPropertyValue('white-space')==='nowrap');
+ assert.ok(nowrap.length,'segment buttons are nowrap');
+ for(const r of rules.filter(r=>/\.sc-segmented|\.sc-annot-order|\.sc-annot-actions/.test(r.selectorText||'')))assert.ok(!/^-/.test(String(r.style.getPropertyValue('margin')||r.style.getPropertyValue('margin-inline')||'').trim()),'no negative margin on '+r.selectorText);
+});

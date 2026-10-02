@@ -21,6 +21,24 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
   {id:'5',title:'Benchmarks for repair-stage classifiers',authors:'K. Oh; Christopher A. Voigt',year:'2024',venue:'Example Cell Research',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:null,impactFactor:12.4,seconds:0},
   {id:'6',title:'Preregistered synthesis of repair reviews',authors:'D. Yu; S. Lee',year:'2023',venue:'Example Methods',doi:'',tags:[],abstract:'',itemType:'journalArticle',status:'unread',rating:0,citations:12,impactFactor:8.2,seconds:0}
  ];
+ /* design-preview.html?dense=1: a library as crowded as a real one (48 papers with long titles,
+    journals and author lists, citing each other; 20 more watched authors with long names and
+    affiliations and unseen news), so the graph, matrix, reading and author pages are laid out
+    under the load Zotero's own self-check found them failing under. Fictional text only. */
+ const dense=/dense=1/.test(String(win.location?.search||'')+String(win.location?.hash||''));
+ const denseWorks={};
+ if(dense){
+  const words=['Structural','mechanism','of','programmable','CRISPR-associated','transposases','in','thermophilic','bacteria','Landscape','profiling','Phase','separation-mediated','multienzyme','assembly','Orthogonal','tRNA','synthetase','evolution','Genome','modeling','and','restriction','systems','Comparative','analysis'];
+  const venues=['Nucleic Acids Research','Nature Communications','Proceedings of the National Academy of Sciences','ACS Synthetic Biology','Journal of Biological Chemistry','Molecular Cell'];
+  for(let i=0;i<48;i++){
+   const n=7+i,pick=k=>words[(i*7+k*3)%words.length];
+   papers.push({id:String(n),title:[pick(0),pick(1),pick(2),pick(3),pick(4),pick(5),pick(6),'in a long real-world title number '+n].join(' '),
+    authors:['Brent R. Stockwell','Rodolphe Barrangou','Lacramioara Bintu'].slice(0,1+i%3).join('; '),year:String(1995+(i*7)%31),
+    venue:venues[i%venues.length],doi:'10.5555/dense.'+n,tags:i%4?['#dense/topic'+(i%5)]:[],abstract:'',itemType:'journalArticle',
+    status:['unread','reading','done'][i%3],rating:0,citations:(i*37)%900,impactFactor:3+(i%9),seconds:(i%3)*300});
+   denseWorks['1:DEMO'+n]={openalex:'W'+n,references:[...new Set([0,1,2].map(k=>'W'+(7+(i*5+k*11)%48)).concat(i%4===0?['W1','W4']:[]))].filter(r=>r!=='W'+n)};
+  }
+ }
  for(const paper of papers){paper.key='DEMO'+paper.id;paper.libraryID=1;}
  // Dates relative to today, so 최근 문헌 and its week line have something to say.
  const stamp=n=>new Date(Date.now()-n*864e5).toISOString();
@@ -68,6 +86,12 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
   {id:'A13',name:'M. Kim',institution:'Example University',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'},
   {id:'A14',name:'S. Lee',institution:'Example Methods',seen:[],news:[],sweptAt:'2026-09-18T00:00:00Z'}
  ];
+ if(dense){
+  const lastNames=['Stockwell','Becker','Barrangou','Elowitz','Bintu','Billerbeck','Jewett','Kuhlman','Mutalik','Khalil'];
+  for(let i=0;i<20;i++)watched.push({id:'D'+i,name:['Brent R.','Anke','Rodolphe','Michael B.','Lacramioara','Sonja','Michael C.','Brian','Vivek K.','Ahmad S.'][i%10]+' '+lastNames[i%10]+(i>9?' II':''),
+   institution:'Max Planck Institute for Terrestrial Microbiology and the Department of Biochemistry '+i,seen:[],
+   news:i%2?[{id:'DW'+i,title:'A long preprint title about programmable transposases in thermophiles number '+i,venue:'bioRxiv · Synthetic Biology',date:'2026-09-'+String(10+i%15),preprint:true}]:[],sweptAt:'2026-09-18T00:00:00Z'});
+ }
  let pending={signals:1146,journals:169,authors:109};
  const runtime={rootURI:'',cache,
   backfillPending:()=>pending,
@@ -174,8 +198,8 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph){
     {id:'W6',title:'An RNA-guided transposase for large insertions',venue:'Science',year:2025,citations:140,openAccess:true,authors:['J. Doudna','S. Sternberg','M. Jinek']},
     {id:'W7',title:'Off-target profiling in primary human cells',venue:'Nature Methods',year:2024,citations:203,openAccess:false,authors:['J. Doudna','B. Oakes']}],
    fresh:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna']}],
-   watching:true,checkedAt:'2026-09-18'}),selected:()=>[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,canEdit:()=>true,edit:async(items,patch)=>{for(const item of items){const paper=papers.find(p=>Number(p.id)===item.id);if(paper&&patch.status)paper.status=patch.status;}},
-  paperWorks:()=>({'1:DEMO1':{openalex:'W1',references:['W4','W6']},'1:DEMO2':{openalex:'W2',references:['W4']},'1:DEMO3':{openalex:'W3',references:['https://openalex.org/W1','W2','W2']},'1:DEMO4':{openalex:'W4',references:[]},'1:DEMO6':{openalex:'W6',references:[]}}),
+   watching:true,checkedAt:'2026-09-18'}),selected:()=>dense?[]:[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,canEdit:()=>true,edit:async(items,patch)=>{for(const item of items){const paper=papers.find(p=>Number(p.id)===item.id);if(paper&&patch.status)paper.status=patch.status;}},
+  paperWorks:()=>({...denseWorks,'1:DEMO1':{openalex:'W1',references:['W4','W6']},'1:DEMO2':{openalex:'W2',references:['W4']},'1:DEMO3':{openalex:'W3',references:['https://openalex.org/W1','W2','W2']},'1:DEMO4':{openalex:'W4',references:[]},'1:DEMO6':{openalex:'W6',references:[]}}),
   // So 첨부 미리보기's findings section has something to show: one supplement filed
   // under its paper, and two papers with no PDF at all, one unread and one already done.
   attachmentFindings:async()=>({supplementary:[{id:'1',fileID:'10',title:papers[0].title,year:'2025',file:'Supplementary information.pdf',why:'첫 쪽에 Supplementary라고 적혀 있음'}],duplicate:[],foreign:[],orphan:[],missing:[{id:'3',title:papers[2].title,year:'2026'},{id:'2',title:papers[1].title,year:'2024'}],unread:0}),

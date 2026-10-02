@@ -737,7 +737,7 @@ test('관계 그래프 labels are short title + year, a small graph labels every
  assert.ok(long,'the long title is shortened');
  assert.match(long.textContent,/…\s*\d{4}$/);
  // A small graph, well under any collision limit: nothing is hidden for lack of room.
- assert.ok(labels.every(l=>l.getAttribute('opacity')!=='0'),'a small graph labels every node');
+ assert.ok(labels.every(l=>l.getAttribute('display')!=='none'),'a small graph labels every node');
  // Paper Alpha (1) cites Neighbour 10; the line should stop short of its centre, or the arrowhead draws under the node.
  const line=f.body().querySelector('svg line[marker-end]');
  assert.ok(line,'the citation carries an arrow');

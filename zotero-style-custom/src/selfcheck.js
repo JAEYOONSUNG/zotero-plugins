@@ -296,6 +296,11 @@
       const label = el => { const c = typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).join('.') : ''; return el.localName + (c ? '.' + c : '') + ' "' + String(el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 32) + '"'; };
       const shown = el => { const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const s = style(n); if (s.display === 'none' || s.visibility === 'hidden') return false; if (n.localName === 'details' && !n.open && !el.closest('summary')) return false; if (n.id === 'style-custom-workbench') break; } return true; };
       const framed = n => { const s = style(n); return (parseFloat(s.borderTopLeftRadius) || 0) >= 4 && (s.backgroundColor !== 'rgba(0, 0, 0, 0)' || parseFloat(s.borderTopWidth) > 0 || s.boxShadow !== 'none'); };
+      // The part of a box actually on screen: cut by every ancestor that clips (an ellipsis cell, a scroller).
+      const visibleRect = el => { const r = el.getBoundingClientRect(); let L = r.left, T = r.top, R = r.right, B = r.bottom;
+        for (let n = el.parentElement; n && n.nodeType === 1; n = n.parentElement) { const s = style(n); if (s.overflowX !== 'visible' || s.overflowY !== 'visible') { const q = n.getBoundingClientRect(); L = Math.max(L, q.left); T = Math.max(T, q.top); R = Math.min(R, q.right); B = Math.min(B, q.bottom); } if (n.id === 'style-custom-workbench') break; }
+        return R - L >= 1 && B - T >= 1 ? {left: L, top: T, right: R, bottom: B} : null; };
+      const faded = el => { for (let n = el; n && n.nodeType === 1; n = n.parentElement) { if (Number(style(n).opacity) === 0) return true; if (n.id === 'style-custom-workbench') break; } return false; };
       const probe = where => {
         const rootEl = host(); if (!rootEl) return;
         const all = [...rootEl.querySelectorAll('*')].filter(shown);
@@ -307,7 +312,8 @@
           if (p && p !== rootEl && style(p).overflow === 'visible') { const q = p.getBoundingClientRect(); const over = Math.max(q.left - r.left, r.right - q.right, q.top - r.top, r.bottom - q.bottom); if (over > 1.5) note('escape · ' + label(el) + ' out of ' + label(p), where); }
           const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
           if (own) {
-            texts.push({el, r});
+            const seen = visibleRect(el);
+            if (seen && !faded(el)) texts.push({el, r: seen});
             if (el.scrollWidth > el.clientWidth + 2 && s.overflowX !== 'visible' && s.textOverflow !== 'ellipsis' && el.clientWidth > 0) note('clipped · ' + label(el), where);
           }
           if (el.matches('button,[role=button],summary,select,.sc-chip,.sc-count,.sc-nav-count,[class*=badge],[class*=pill]') && !el.matches('.sc-hit-title-link,.sc-hit-title,.sc-overview-fact')) {

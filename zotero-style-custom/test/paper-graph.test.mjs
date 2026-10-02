@@ -297,3 +297,18 @@ test("placeLabelSides keeps a label off the lines and off the other nodes when i
   const away = graph.placeLabelSides(crowded).get("a");
   assert.ok(!(away.anchor === "start" && away.dy === 3.5), "a label does not start on top of a neighbouring node");
 });
+
+test("a dense graph keeps at most the limit of labels, none overlapping each other or another paper's dot, the chosen paper first", () => {
+  const nodes = [];
+  for (let i = 0; i < 45; i++) nodes.push({id: "n" + i, x: 20 + (i * 53) % 400, y: 20 + (i * 97) % 380, r: 4 + (i % 5), degree: i % 7, rank: ((i * 13) % 100) / 100, labelText: "A long real-world paper title… " + (1990 + i % 35)});
+  const opts = {width: 760, height: 420, lineHeight: 14, pad: 4, limit: 32, avoidDots: true};
+  const shown = graph.placeLabels(nodes, opts);
+  assert.ok(shown.size > 0 && shown.size <= 32, "limit respected: " + shown.size);
+  const boxes = nodes.filter(n => shown.has(n.id)).map(n => ({n, x: n.x + n.r + 3 - 4, y: n.y - 7 - 4, w: graph.placeLabels.length >= 0 ? (String(n.labelText).length * 6.5 + 8) : 0, h: 22}));
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const a = boxes[i], b = boxes[j];
+    assert.ok(!(a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y), "labels " + a.n.id + " and " + b.n.id + " collide");
+  }
+  const chosen = nodes[20];
+  assert.ok(graph.placeLabels(nodes, {...opts, first: [chosen.id]}).has(chosen.id) || !(chosen.x + 200 < 760), "the chosen paper is offered its place first");
+});

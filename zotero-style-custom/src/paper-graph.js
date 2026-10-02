@@ -428,12 +428,15 @@
      The result is that the busiest part of the picture -- where the labels
      would collide -- shows the few that earned it, and the sparse edges show
      many. */
-  function placeLabels(nodes, {lineHeight = 11, limit = 60, pad = 2, width = Infinity, height = Infinity} = {}) {
+  function placeLabels(nodes, {lineHeight = 11, limit = 60, pad = 2, width = Infinity, height = Infinity, first = null, avoidDots = false} = {}) {
+    // `first`: ids that must be offered a place before anything else (the chosen paper).
+    const firstIDs = new Set([...(first || [])].map(String));
     const wanted = [...nodes]
       // Work you do not hold is the payoff of the whole map, so it is offered a
       // label before a paper already on the shelf.
-      .sort((a, b) => (b.kind === 'external') - (a.kind === 'external')
-        || (b.rank || 0) - (a.rank || 0) || b.degree - a.degree);
+      .sort((a, b) => (firstIDs.has(String(b.id)) - firstIDs.has(String(a.id)))
+        || (b.kind === 'external') - (a.kind === 'external')
+        || (b.rank || 0) - (a.rank || 0) || (b.degree || 0) - (a.degree || 0));
     const placed = [];
     const shown = new Set();
     for (const node of wanted) {
@@ -448,6 +451,13 @@
         h: lineHeight + pad * 2
       };
       if (box.x < 0 || box.y < 0 || box.x + box.w > width || box.y + box.h > height) continue;
+      // A label drawn across another paper's dot reads as that paper's label: keep it off every dot but its own.
+      const onDot = nodes.some(other => other !== node && avoidDots && (() => {
+        const rr = (other.r || 6) + 1;
+        const nx = Math.max(box.x, Math.min(other.x, box.x + box.w)), ny = Math.max(box.y, Math.min(other.y, box.y + box.h));
+        return Math.hypot(other.x - nx, other.y - ny) < rr;
+      })());
+      if (onDot && !firstIDs.has(String(node.id))) continue;
       const clash = placed.some(other =>
         box.x < other.x + other.w && box.x + box.w > other.x
         && box.y < other.y + other.h && box.y + box.h > other.y);

@@ -1910,9 +1910,16 @@
       below) -- it is the one node the reader is least willing to lose. */
    const SMALL_GRAPH=16;
    const small=graph.nodes.length<=SMALL_GRAPH;
-   const labelled=small
+   /* A label that would collide is not drawn at all (display none, not opacity 0: a hidden label
+      still took part in layout and in every overlap check) and appears with the hover or focus. At
+      most LABEL_LIMIT are shown; the chosen paper is placed first so it never loses its words. The
+      boxes are estimated generously (14px line, 4px each side) because real glyph widths vary. */
+   const LABEL_LIMIT=32;
+   const placeAll=()=>small
     ?new Set(graph.nodes.map(n=>n.id))
-    :graphTools.placeLabels(graph.nodes,{width:W,height:H});
+    :graphTools.placeLabels(graph.nodes,{width:W,height:H,lineHeight:14,pad:4,limit:LABEL_LIMIT,first:state.selected,avoidDots:true});
+   let labelled=placeAll();
+   const setLabel=(m,on)=>{for(const el of [m.label,m.backdrop]){if(!el)continue;if(on)el.removeAttribute('display');else el.setAttribute('display','none');}};
    // Small enough that every label stays; placeLabelSides picks whichever of
    // the four sides around a node collides least, instead of always sitting
    // just right of it -- exactly where an edge to a neighbour usually runs.
@@ -1956,7 +1963,6 @@
     g.appendChild(backdrop);
     // A label is drawn when it fits, not when a number clears a threshold:
     // forty of them piled up in the middle is worse than showing none.
-    if(!(labelled.has(n.id)||state.selected.has(n.id))){label.setAttribute('opacity','0');backdrop.setAttribute('opacity','0');}
     g.appendChild(label);
     const title=doc.createElementNS(SVG,'title');
     title.textContent=`${plain(n.label)}\n`+[n.venue,n.year,
@@ -1965,7 +1971,7 @@
      n.rank!=null?T(`중심성 ${(n.rank*100).toFixed(0)}%`):null].filter(Boolean).join(' · ');
     g.appendChild(title);
     // Selecting a node marks it in place: a redraw would reset the zoom and the hover.
-    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);showInfo(n);for(const [key,m] of marks)m.circle.setAttribute('stroke-width',key===n.id?2.4:1);if(n.kind!=='external')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
+    const activate=()=>{state.selected=new Set([n.id]);labelled=placeAll();focusNode(n.id);updateSelectionUI();message(n.label);showInfo(n);for(const [key,m] of marks)m.circle.setAttribute('stroke-width',key===n.id?2.4:1);if(n.kind!=='external')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
     g.addEventListener('click',activate);
     g.addEventListener('dblclick',()=>run(()=>n.kind==='external'
      ?runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${n.openalex}`)
@@ -2004,10 +2010,12 @@
         back when the focus goes. */
      mark.g.setAttribute('opacity',1);
      mark.circle?.setAttribute('opacity',near?1:0.22);
-     const on=id?near:(labelled.has(key)||state.selected.has(key));
-     mark.label.setAttribute('opacity',on?'1':'0');mark.backdrop?.setAttribute('opacity',on?'1':'0');
+     // The hovered paper always gets its words; the labels already placed stay while they are near; nothing else is added, so hovering never piles titles up.
+     const on=id?(key===id||(near&&labelled.has(key))):labelled.has(key);
+     setLabel(mark,on);
     }
    }
+   focusNode(null);
    /* The chosen paper, pinned under the map: its whole title, how far it has
       been read, and the papers on the map that cite it or that it cites --
       direct citations only, not shared references. A title goes to that
@@ -2153,7 +2161,7 @@
     group.appendChild(line);
    }
    for(const n of laid.nodes)n.labelText=String(n.label).slice(0,34);
-   const labelled=tools?tools.placeLabels(laid.nodes):new Set(laid.nodes.map(n=>n.id));
+   const labelled=tools?tools.placeLabels(laid.nodes,{width:W,height:H,lineHeight:14,pad:4,limit:32,first:state.selected,avoidDots:true}):new Set(laid.nodes.map(n=>n.id));
    for(const n of laid.nodes){
     const g=doc.createElementNS(SVG,'g');
     g.setAttribute('transform',`translate(${n.x} ${n.y})`);
@@ -2167,7 +2175,8 @@
     label.setAttribute('x',(n.r||5)+4);label.setAttribute('y','3.5');
     label.setAttribute('class','sc-graph-label');
     label.textContent=n.labelText;
-    if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('opacity','0');
+    if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('display','none');
+    g.addEventListener('mouseenter',()=>label.removeAttribute('display'));g.addEventListener('mouseleave',()=>{if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('display','none');});
     g.appendChild(label);
     const title=doc.createElementNS(SVG,'title');title.textContent=`${n.label}\n`+T(`연결 ${n.degree}`);g.appendChild(title);
     const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);for(const other of group.querySelectorAll('circle[data-picked]')){other.removeAttribute('data-picked');other.setAttribute('fill','var(--sc-fill)');other.setAttribute('stroke','var(--sc-muted)');}circle.setAttribute('data-picked','1');circle.setAttribute('fill','var(--sc-accent)');circle.setAttribute('stroke','var(--sc-accent)');};
@@ -3800,7 +3809,7 @@
     // A title is the way to the paper, as it is everywhere else in the panel.
     const paper=!heading&&field==='title'?pageItems[(flip?j:i)-1]:null;
     const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):paper?null:String(value),tr);
-    if(paper)button(String(value),()=>library.openItem(paper.id),cell,{class:'sc-link-button','data-opens':'window',title:'Zotero에서 열기'});
+    if(paper)button(String(value),()=>library.openItem(paper.id),cell,{class:'sc-link-button','data-opens':'window',title:`${value} · Zotero에서 열기`});
     /* The long prose fields are clamped on a child, not on the cell.
        Two adjacent cells that are both `display: -webkit-box` are laid out as
        one box, so in the flipped table -- which is what two or three papers
@@ -3863,7 +3872,7 @@
     // Opening the reference used to reuse openInList, which points the whole
     // panel's selection at it -- one press out of a comparison and the set
     // being compared was gone. It opens in Zotero instead, leaving state.selected alone.
-    if(held)button(String(held.title||refID),()=>run(()=>library.openItem(held.id)),titleCell,{class:'sc-link-button','data-opens':'window',title:T('Zotero에서 열기')});
+    if(held)button(String(held.title||refID),()=>run(()=>library.openItem(held.id)),titleCell,{class:'sc-link-button','data-opens':'window',title:`${held.title||refID} · ${T('Zotero에서 열기')}`});
     else node('span',String(cache[refID]?.title||refID),titleCell,{title:refID});
     // A blank cell used to mean either "confirmed not cited" or "we never
     // fetched this paper's list, so we don't know" -- the same mark for two
