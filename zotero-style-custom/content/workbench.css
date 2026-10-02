@@ -1709,6 +1709,12 @@
 /* The figures are tiles: a small number label over a large one, each a white card. */
 #style-custom-workbench .sc-overview-facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: var(--sc-space-2); color: var(--sc-muted); }
 #style-custom-workbench .sc-overview-facts > * { display: flex; flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; margin: 0; padding: var(--sc-space-2) var(--sc-space-3); border-radius: var(--sc-radius); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); text-align: start; }
+/* In Zotero's own window a <button> tile kept one control's height and its label fell out under the
+   box (the reader's screenshot; a headless browser draws it fine). Number and label are two blocks in a
+   plain box that grows with them -- no native appearance, no inherited control height. */
+#style-custom-workbench .sc-overview-facts > button.sc-overview-fact { -moz-appearance: none; appearance: none; display: block; height: auto; min-height: 0; max-height: none; line-height: var(--sc-lh-meta); white-space: normal; }
+#style-custom-workbench .sc-overview-facts b, #style-custom-workbench .sc-overview-fact-label { display: block; }
+#style-custom-workbench .sc-overview-fact-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #style-custom-workbench .sc-overview-facts b { color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-brand)/var(--sc-lh-brand) var(--sc-font); font-variant-numeric: tabular-nums; }
 #style-custom-workbench .sc-overview-facts > button:hover { background: var(--sc-fill-hover); }
 #style-custom-workbench .sc-overview-facts > button[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }

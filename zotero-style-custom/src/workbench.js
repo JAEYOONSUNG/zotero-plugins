@@ -1365,12 +1365,12 @@
     /* The reading counts are the way to those papers: pressed, the list shows
        only them (the status filter above says so, and clears it); pressed
        again, all of them. */
-    const statusFact=(label,key)=>{if(!n[key])return;const on=activeRules().some(r=>r.id==='q-status'&&r.values[0]===key);const b=button('',()=>{if(on)dropQuick(state.tab,'q-status');else putQuick(state.tab,[quickStatus(key)]);render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 모두 보기':'이 상태만 보기')});node('b',String(n[key]),b);b.appendChild(doc.createTextNode(' '+T(label)));};
+    const statusFact=(label,key)=>{if(!n[key])return;const on=activeRules().some(r=>r.id==='q-status'&&r.values[0]===key);const b=button('',()=>{if(on)dropQuick(state.tab,'q-status');else putQuick(state.tab,[quickStatus(key)]);render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 모두 보기':'이 상태만 보기')});node('b',String(n[key]),b);node('span',T(label),b,{class:'sc-overview-fact-label'});};
     statusFact('완료','done');statusFact('읽는 중','reading');statusFact('안 읽음','unread');
     if(seconds>0)fact('읽음',runtime.formatReadTime?runtime.formatReadTime(seconds):Math.round(seconds/60)+'분');
     const mi=median(ifs),mc=median(cites);
     // Sorts by the same figure it names -- pressing again goes back to 기본 순서, as the column heads do.
-    const sortFact=(label,sort,value)=>{if(value==null||value==='')return;const on=state.sort===sort;const b=button('',()=>{state.sort=on?'library':sort;const select=filterInputs.get?.('sort');if(select)select.value=state.sort;render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 기본 순서':'이 순서로 정렬')});node('b',String(value),b);b.appendChild(doc.createTextNode(' '+T(label)));};
+    const sortFact=(label,sort,value)=>{if(value==null||value==='')return;const on=state.sort===sort;const b=button('',()=>{state.sort=on?'library':sort;const select=filterInputs.get?.('sort');if(select)select.value=state.sort;render();},facts,{class:'sc-overview-fact','aria-pressed':String(on),title:T(on?'다시 누르면 기본 순서':'이 순서로 정렬')});node('b',String(value),b);node('span',T(label),b,{class:'sc-overview-fact-label'});};
     // With how many papers each median rests on: a figure from two of three is not one from three.
     if(mi!=null)sortFact(`IF 중앙값 · ${ifs.length}/${items.length}편`,'if-desc',mi.toFixed(1));
     if(mc!=null)sortFact(`인용 중앙값 · ${cites.length}/${items.length}편`,'citations-desc',Math.round(mc));

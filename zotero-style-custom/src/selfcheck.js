@@ -280,6 +280,83 @@
       return `${tabs.length} tabs, ${errorsBefore.length} errors`;
     }));
 
+    /* What a headless Chrome preview cannot show: how Zotero's own engine lays the panel out on
+       the reader's real library. Every tab, in normal and compact density: a box poking out of the
+       rounded or filled box that holds it, a one-line control whose text wrapped, text clipped
+       without an ellipsis, and two texts drawn over each other. Read only; nothing is pressed. */
+    results.push(await attempt('every tab lays out inside its frames in Zotero itself', async () => {
+      if (!win) throw new Error('no main window');
+      const bench = runtime.windows.get(win)?.workbench;
+      if (!bench) throw new Error('workbench not attached');
+      const tabs = (root.CustomStyleWorkbench && root.CustomStyleWorkbench.TABS || []).map(row => row[0]);
+      const host = () => bench.panel?.closest?.('#style-custom-workbench') || win.document.getElementById('style-custom-workbench');
+      const found = new Map();
+      const note = (key, where) => { if (!found.has(key)) found.set(key, new Set()); found.get(key).add(where); };
+      const style = el => win.getComputedStyle(el);
+      const label = el => { const c = typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).join('.') : ''; return el.localName + (c ? '.' + c : '') + ' "' + String(el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 32) + '"'; };
+      const shown = el => { const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const s = style(n); if (s.display === 'none' || s.visibility === 'hidden') return false; if (n.localName === 'details' && !n.open && !el.closest('summary')) return false; if (n.id === 'style-custom-workbench') break; } return true; };
+      const framed = n => { const s = style(n); return (parseFloat(s.borderTopLeftRadius) || 0) >= 4 && (s.backgroundColor !== 'rgba(0, 0, 0, 0)' || parseFloat(s.borderTopWidth) > 0 || s.boxShadow !== 'none'); };
+      const probe = where => {
+        const rootEl = host(); if (!rootEl) return;
+        const all = [...rootEl.querySelectorAll('*')].filter(shown);
+        const texts = [];
+        for (const el of all) {
+          const s = style(el), r = el.getBoundingClientRect();
+          if (s.position === 'fixed' || s.position === 'absolute') continue;
+          let p = el.parentElement; while (p && p !== rootEl && !framed(p)) { if (style(p).overflow !== 'visible') { p = null; break; } p = p.parentElement; }
+          if (p && p !== rootEl && style(p).overflow === 'visible') { const q = p.getBoundingClientRect(); const over = Math.max(q.left - r.left, r.right - q.right, q.top - r.top, r.bottom - q.bottom); if (over > 1.5) note('escape · ' + label(el) + ' out of ' + label(p), where); }
+          const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+          if (own) {
+            texts.push({el, r});
+            if (el.scrollWidth > el.clientWidth + 2 && s.overflowX !== 'visible' && s.textOverflow !== 'ellipsis' && el.clientWidth > 0) note('clipped · ' + label(el), where);
+          }
+          if (el.matches('button,[role=button],summary,select,.sc-chip,.sc-count,.sc-nav-count,[class*=badge],[class*=pill]') && !el.matches('.sc-hit-title-link,.sc-hit-title,.sc-overview-fact')) {
+            const walker = win.document.createTreeWalker(el, 4); let tn;
+            while ((tn = walker.nextNode())) { if (!tn.textContent.trim()) continue; const range = win.document.createRange(); range.selectNodeContents(tn); const tops = [...range.getClientRects()].filter(x => x.width > 1).map(x => x.top); const lh = parseFloat(style(tn.parentElement).lineHeight) || 14; if (tops.length > 1 && Math.max(...tops) - Math.min(...tops) > lh * 0.6) { note('wrap · ' + label(el), where); break; } }
+            if (el.scrollHeight > el.clientHeight + 2 && s.overflowY === 'visible' && el.clientHeight > 0) note('taller than its box · ' + label(el), where);
+          }
+        }
+        // Raw text outside its box: a text node's own rectangles against the nearest framed element holding it.
+        const walk = win.document.createTreeWalker(rootEl, 4); let node;
+        while ((node = walk.nextNode())) {
+          if (!node.textContent.trim() || !node.parentElement || !shown(node.parentElement)) continue;
+          let box = node.parentElement; while (box && box !== rootEl && !framed(box)) { if (style(box).overflow !== 'visible') { box = null; break; } box = box.parentElement; }
+          if (!box || box === rootEl || style(box).overflow !== 'visible') continue;
+          const q = box.getBoundingClientRect(), range = win.document.createRange(); range.selectNodeContents(node);
+          for (const r of range.getClientRects()) { const over = Math.max(q.left - r.left, r.right - q.right, q.top - r.top, r.bottom - q.bottom); if (r.width > 1 && over > 1.5) { note('text escape · "' + node.textContent.trim().slice(0, 24) + '" out of ' + label(box), where); break; } }
+        }
+        for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
+          const a = texts[i], b = texts[j]; if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+          const x = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left), y = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+          if (x > 3 && y > 3) note('overlap · ' + label(a.el) + ' ⟷ ' + label(b.el), where);
+        }
+      };
+      const panel = host();
+      if (!panel) throw new Error('panel not found');
+      const density = panel.getAttribute('data-density');
+      let width = 0; const diag = {};
+      try {
+        for (const mode of ['normal', 'compact']) {
+          if (mode === 'compact') panel.setAttribute('data-density', 'compact'); else panel.removeAttribute('data-density');
+          for (const tab of tabs) { try { await bench.show(tab); await new Promise(r => win.setTimeout(r, 120)); width = width || Math.round(host().getBoundingClientRect().width); probe(mode + ':' + tab);
+            const tile = tab === 'explore' && host().querySelector('.sc-overview-fact');
+            if (tile) { const cs = style(tile); diag[mode] = {display: cs.display, height: cs.height, minHeight: cs.minHeight, maxHeight: cs.maxHeight, appearance: cs.appearance || cs.MozAppearance, lineHeight: cs.lineHeight, box: Math.round(tile.getBoundingClientRect().height), kids: [...tile.children].map(k => k.localName + ':' + Math.round(k.getBoundingClientRect().top - tile.getBoundingClientRect().top) + '+' + Math.round(k.getBoundingClientRect().height))}; } } catch (error) { note('error · ' + (error.message || error), mode + ':' + tab); } }
+        }
+      } finally {
+        if (density) panel.setAttribute('data-density', density); else panel.removeAttribute('data-density');
+        try { await bench.toggle(false); } catch (ignored) {}
+      }
+      const lines = [...found].map(([key, places]) => key + ' [' + [...places].slice(0, 4).join(', ') + (places.size > 4 ? ' +' + (places.size - 4) : '') + ']');
+      // The whole list goes to a file beside the report; the result line keeps the first forty.
+      try {
+        const io = globalThis.IOUtils || win.IOUtils, paths = globalThis.PathUtils || win.PathUtils;
+        await io.writeUTF8(paths.join(Zotero.DataDirectory.dir, 'style-custom-layout.json'),
+          JSON.stringify({width, density, diag, at: new Date().toISOString(), problems: [...found].map(([key, places]) => ({key, places: [...places]}))}, null, 1));
+      } catch (ignored) {}
+      if (lines.length) throw new Error(`panel ${width}px: ${lines.length} layout problems: ` + lines.slice(0, 40).join(' | '));
+      return `panel ${width}px · ${tabs.length} tabs × 2 densities · clean`;
+    }));
+
     results.push(await attempt('every safe button on every tab survives a press', async () => {
       /* The real DOM, not the fixture: XUL quirks, missing globals and stale
          handlers show up here. Buttons that reach the network, write to the
