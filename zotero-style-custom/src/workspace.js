@@ -46,7 +46,7 @@
     A field name is only a field when it is one we know (English or Korean);
     anything else -- a URL, "http://x" -- is plain text, so nothing a person
     could type before is lost. */
- const FIELD_ALIASES={title:'title','제목':'title',author:'author',authors:'author','저자':'author',tag:'tag','태그':'tag',journal:'journal',venue:'journal','저널':'journal',year:'year','연도':'year',collection:'collection','컬렉션':'collection',abstract:'abstract','초록':'abstract',note:'note','메모':'note','노트':'note'};
+ const FIELD_ALIASES={title:'title','제목':'title',author:'author',authors:'author','저자':'author',tag:'tag','태그':'tag',journal:'journal',venue:'journal','저널':'journal',year:'year','연도':'year',collection:'collection','컬렉션':'collection',abstract:'abstract','초록':'abstract',note:'note','메모':'note','노트':'note',annotation:'annotation',annotations:'annotation','주석':'annotation'};
  /* The box's text as tokens: terms (with -, field: and "phrase"), parentheses,
     and the operator OR (or |). OR is only an operator in capitals and on its
     own, so "or" and "ORCID" stay words. Parentheses are always grouping. */
@@ -83,12 +83,12 @@
    return of.length===1?of[0]:{op:'and',of};}
   return orExpr();
  }
- function evalTree(node,item,hay,starts){
+ function evalTree(node,item,hay,starts,extra){
   switch(node.op){
-   case 'term':return termHit(item,hay,node.term,starts)!==node.term.neg;
-   case 'not':return !evalTree(node.of,item,hay,starts);
-   case 'or':return node.of.some(n=>evalTree(n,item,hay,starts));
-   default:return node.of.every(n=>evalTree(n,item,hay,starts));
+   case 'term':return termHit(item,hay,node.term,starts,extra)!==node.term.neg;
+   case 'not':return !evalTree(node.of,item,hay,starts,extra);
+   case 'or':return node.of.some(n=>evalTree(n,item,hay,starts,extra));
+   default:return node.of.every(n=>evalTree(n,item,hay,starts,extra));
   }
  }
  /* The words that stay in the box once the syntax is taken out: what the
@@ -96,21 +96,25 @@
  const plainQuery=query=>isBoolean(query)?'':parseQuery(query).filter(t=>!t.neg&&!t.field).map(t=>t.value).join(' ');
  /* The other half of the box: only the -word and field:value terms, as a query, for code that widens the plain words itself. */
  const syntaxQuery=query=>isBoolean(query)?'':parseQuery(query).filter(t=>t.neg||t.field).map(t=>(t.neg?'-':'')+(t.field?t.field+':':'')+(t.phrase||/\s/.test(t.value)?'"'+t.value+'"':t.value)).join(' ');
- const fieldText=(item,field)=>field==='title'?item.title:field==='author'?item.authors:field==='journal'?item.venue:field==='abstract'?item.abstract:field==='year'?item.year:field==='note'?[item.remark,...(item.noteTitles||[])].join(' '):field==='collection'?(item.collectionNames||[]).join(' / '):'';
+ const fieldText=(item,field)=>field==='annotation'?'':field==='title'?item.title:field==='author'?item.authors:field==='journal'?item.venue:field==='abstract'?item.abstract:field==='year'?item.year:field==='note'?[item.remark,...(item.noteTitles||[])].join(' '):field==='collection'?(item.collectionNames||[]).join(' / '):'';
  function yearTerm(value,year){
   const y=Number(year);if(!Number.isFinite(y)||!year)return false;
   const range=value.match(/^(\d{4})\s*-\s*(\d{4})$/);if(range)return y>=Number(range[1])&&y<=Number(range[2]);
   const open=value.match(/^(>=|<=|>|<)\s*(\d{4})$/);if(open){const n=Number(open[2]);return open[1]==='>='?y>=n:open[1]==='<='?y<=n:open[1]==='>'?y>n:y<n;}
   return String(year).startsWith(value);
  }
- function termHit(item,hay,term,starts){
+ /* extra: the paper's note and annotation text, already folded by norm() when
+    the panel indexed them. They are part of the paper's one document: the
+    plain words see them in hay, note: sees the note text and annotation: the
+    annotation text, so -x, OR and field prefixes all see the same thing. */
+ function termHit(item,hay,term,starts,extra){
   const f=term.field;
   if(!f)return hit(hay,term.value,starts);
   if(f==='year')return yearTerm(term.value,item.year);
   if(f==='tag')return (item.tags||[]).some(t=>norm(t).includes(term.value));
   if(f==='collection')return (item.collectionNames||[]).some(n=>norm(n).includes(term.value));
   if(f==='journal')return journalScore(journalKeysOf(item),term.value)!==null;
-  const h=norm(fieldText(item,f));
+  const h=f==='annotation'?(extra&&extra.annotation)||'':f==='note'&&extra&&extra.note?norm(fieldText(item,f))+' '+extra.note:norm(fieldText(item,f));
   return hit(h,term.value,INITIAL.test(term.value)?wordsOf(h):null);
  }
  /* ---- 저널 이름 · ISO 4 약어 · 약칭 ----
@@ -313,12 +317,14 @@
  }
  function filter(items,options={}) {
   const terms=parseQuery(options.query),initials=terms.some(t=>!t.field&&INITIAL.test(t.value)),rules=(options.rules||[]).filter(ruleActive);
-  const tree=isBoolean(options.query)?parseTree(options.query):null;
+  const tree=isBoolean(options.query)?parseTree(options.query):null,records=options.records||null;
   return items.filter(item=>{
    // The reader's own memo counts: a paper is found by what was written about it.
-   const hay=norm([item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,item.remark,...(item.tags||[])].join(' '));
+   const extra=records?(records.get?records.get(String(item.id)):records(String(item.id))):null;
+   const hay=norm([item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,item.remark,...(item.tags||[])].join(' '))
+    +(extra?' '+(extra.note||'')+' '+(extra.annotation||''):'');
    const starts=initials?wordsOf(hay):null;
-   return (tree?evalTree(tree,item,hay,starts):terms.every(t=>termHit(item,hay,t,starts)!==t.neg)) && (!options.type||item.itemType===options.type)
+   return (tree?evalTree(tree,item,hay,starts,extra):terms.every(t=>termHit(item,hay,t,starts,extra)!==t.neg)) && (!options.type||item.itemType===options.type)
     && (!options.tag||(item.tags||[]).some(t=>t===options.tag||t.startsWith(options.tag+'/')))
     && (!options.status||item.status===options.status)
     && (!options.ratingMin||Number(item.rating)>=Number(options.ratingMin))

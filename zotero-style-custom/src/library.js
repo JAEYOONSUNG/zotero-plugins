@@ -102,24 +102,51 @@
       }
       return output;
     }
-    function graph(items,{mode='related',query=''}={}) {
+    /* Neighbours are found across every paper that passes the query, and only
+       then is the drawing limited. Slicing the library to its first 500 before
+       looking for neighbours lost every link of paper #800. When more papers
+       qualify than `limit`, the ones kept are `focus` and its neighbours first,
+       then the best-connected, so what is drawn is what is linked. */
+    function graph(items,{mode='related',query='',limit=500,focus=null}={}) {
       if(!['related','tags','authors'].includes(mode))throw new Error('Unknown graph mode');
-      const q=String(query).toLocaleLowerCase();
+      const q=String(query).toLocaleLowerCase(),cap=Math.max(1,Number(limit)||500);
       const filtered=items.filter(i=>!q||[i.title,i.authors,i.venue,...(i.tags||[])].join(' ').toLocaleLowerCase().includes(q));
-      const rows=filtered.slice(0,500),nodes=rows.map(i=>({id:String(i.id),label:i.title||'(Untitled)',itemID:String(i.id),kind:'item'}));
-      const ids=new Set(nodes.map(n=>n.id)),edges=[],seen=new Set();let truncated=filtered.length>rows.length;
-      function edge(a,b) {a=String(a);b=String(b);if(a===b||!ids.has(a)||!ids.has(b))return;const pair=[a,b].sort(),key=pair.join('\0');if(seen.has(key))return;if(edges.length>=2000){truncated=true;return;}seen.add(key);edges.push({source:pair[0],target:pair[1],kind:mode});}
-      if(mode==='related')for(const row of rows)for(const id of row.related||[])edge(row.id,id);
+      const ids=new Set(filtered.map(i=>String(i.id))),all=[],seen=new Set();
+      function edge(a,b) {a=String(a);b=String(b);if(a===b||!ids.has(a)||!ids.has(b))return;const pair=[a,b].sort(),key=pair.join('\0');if(seen.has(key))return;seen.add(key);all.push({source:pair[0],target:pair[1],kind:mode});}
+      if(mode==='related')for(const row of filtered)for(const id of row.related||[])edge(row.id,id);
       else {
         const groups=new Map();
-        for(const row of rows)for(const token of mode==='tags'?row.tags||[]:String(row.authors||'').split(';')) {
+        for(const row of filtered)for(const token of mode==='tags'?row.tags||[]:String(row.authors||'').split(';')) {
           const key=String(token).trim().toLocaleLowerCase();if(!key)continue;
           if(!groups.has(key))groups.set(key,[]);groups.get(key).push(String(row.id));
         }
         // A spanning star per shared value keeps dense topic graphs navigable.
         for(const members of groups.values())for(let i=1;i<members.length;i++)edge(members[0],members[i]);
       }
-      return {nodes,edges,truncated};
+      const centre=focus===null||focus===undefined?null:String(focus);
+      let keep=ids;
+      if(filtered.length>cap){
+        const degree=new Map();
+        for(const e of all){degree.set(e.source,(degree.get(e.source)||0)+1);degree.set(e.target,(degree.get(e.target)||0)+1);}
+        const order=new Map(filtered.map((row,index)=>[String(row.id),index]));
+        const rank=(a,b)=>(degree.get(b)||0)-(degree.get(a)||0)||order.get(a)-order.get(b);
+        const chosen=[];
+        if(centre&&ids.has(centre)){
+          chosen.push(centre);
+          chosen.push(...all.filter(e=>e.source===centre||e.target===centre).map(e=>e.source===centre?e.target:e.source).sort(rank));
+        }
+        chosen.push(...[...ids].sort(rank));
+        keep=new Set(chosen.slice(0,cap).length?[...new Set(chosen)].slice(0,cap):[]);
+      }
+      const rows=filtered.filter(i=>keep.has(String(i.id))),nodes=rows.map(i=>({id:String(i.id),label:i.title||'(Untitled)',itemID:String(i.id),kind:'item'}));
+      let edges=all.filter(e=>keep.has(e.source)&&keep.has(e.target));
+      let truncated=filtered.length>rows.length;
+      if(edges.length>2000){
+        // The focus paper's own links first: they are what an ego view is for.
+        if(centre)edges=[...edges.filter(e=>e.source===centre||e.target===centre),...edges.filter(e=>e.source!==centre&&e.target!==centre)];
+        edges=edges.slice(0,2000);truncated=true;
+      }
+      return {nodes,edges,truncated,total:filtered.length};
     }
     function tagTree(items) {
       const roots=new Map();

@@ -8316,3 +8316,222 @@ test('모양 tab: a Language / 언어 control names each language in its own lan
   f.bench.destroy();
  }finally{i18n.use('ko-KR');}
 });
+
+/* ---- Audit 2026-10-04, item 1: "Is this the same paper?" ---- */
+test('a near match for a paper without a DOI asks "같은 논문인가요?" with 예/아니요 buttons the self-check never presses', async () => {
+ const f=fixture();
+ const candidate={id:'W77',title:'Inhibition of Notch signalling',year:2020,venue:'Cell',authors:['Jane Smith']};
+ const error=Object.assign(new Error('x'),{candidates:[candidate],code:'same-paper'});
+ let linked=null,refused=null,failing=true;
+ const good=f.runtime.authorsOfCached;
+ f.runtime.authorsOfCached=async(...args)=>{if(failing)throw error;return good(...args);};
+ f.runtime.confirmWorkLink=async(item,id)=>{linked=id;failing=false;};
+ f.runtime.rejectWorkLink=async(item,id)=>{refused=id;};
+ f.bench.state.selected=new Set(['1']);
+ await f.bench.show('authors');await settle();
+ assert.match(f.body().textContent,/같은 논문인가요\?/);
+ assert.ok(f.body().textContent.includes('Inhibition of Notch signalling'));
+ const yes=f.findButton('예'),no=f.findButton('아니요');
+ assert.ok(yes&&no);
+ assert.equal(yes.getAttribute('data-writes'),'cache');assert.equal(no.getAttribute('data-writes'),'cache');
+ no.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(refused,'W77');assert.equal(f.body().querySelector('.sc-same-candidate'),null);
+ f.bench.destroy();
+ const g=fixture();let confirmed=null,fail2=true;const ok=g.runtime.authorsOfCached;
+ g.runtime.authorsOfCached=async(...a)=>{if(fail2)throw error;return ok(...a);};
+ g.runtime.confirmWorkLink=async(item,id)=>{confirmed=id;fail2=false;};
+ g.bench.state.selected=new Set(['1']);await g.bench.show('authors');await settle();
+ g.findButton('예').dispatchEvent(new g.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(confirmed,'W77');assert.ok(g.body().textContent.includes('A Author'),'asked again after the yes');
+ g.bench.destroy();
+});
+
+/* ---- Audit 2026-10-04, item 2: one searchable document per paper, the whole query evaluated once ---- */
+test('내 기록 포함 evaluates the whole query against one document: -exclusions, OR and note: reach notes and annotations',async()=>{
+ const f=fixture();
+ await f.bench.show('explore');
+ // Alpha: a CRISPR paper whose note says "toxic". Beta: nothing about CRISPR in its own fields, but a note about mitosis.
+ f.papers[0].title='CRISPR screens in yeast';f.papers[1].title='A second paper';
+ f.library.notes=async()=>[{id:'9',title:'Alpha note',text:'this guide RNA looks toxic',modified:'today',parentID:'1'},
+  {id:'10',title:'Beta note',text:'mitosis timing and CRISPR controls',modified:'today',parentID:'2'}];
+ f.library.annotations=async()=>[{id:'3',key:'K3',parentID:'2',attachmentID:'99',text:'spindle assembly',comment:'',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}];
+ await f.bench.load();
+ const check=f.bench.panel.querySelector('[aria-label="내 기록 포함"]');
+ const ids=async query=>{f.input('작업 패널 검색',query);await settle();
+  if(!check.checked){check.checked=true;check.dispatchEvent(new f.win.Event('change'));await settle();}
+  return [...f.body().querySelectorAll('.sc-paper-card')].map(c=>c.dataset.itemId).sort();};
+ assert.deepEqual(await ids('CRISPR'),['1','2'],'both mention CRISPR, one only in a note');
+ assert.deepEqual(await ids('CRISPR -toxic'),['2'],'Alpha\'s note says toxic, so the exclusion removes it');
+ assert.deepEqual(await ids('CRISPR OR mitosis'),['1','2'],'the OR is evaluated over notes too');
+ assert.deepEqual(await ids('mitosis'),['2']);
+ assert.deepEqual(await ids('note:mitosis'),['2'],'a note: term finds a paper only a note matches');
+ assert.deepEqual(await ids('note:toxic'),['1']);
+ assert.deepEqual(await ids('annotation:spindle'),['2'],'annotation text is its own tagged field');
+ assert.deepEqual(await ids('title:crispr note:toxic'),['1'],'fields combine in one evaluation');
+ assert.deepEqual(await ids('title:crispr -note:toxic'),[]);
+ f.bench.destroy();
+});
+
+test('내 기록 포함 indexes notes and annotations once per load, not once per keystroke',async()=>{
+ const f=fixture();
+ await f.bench.show('explore');
+ let noteReads=0,annotationReads=0;
+ f.library.notes=async()=>{noteReads++;return [{id:'9',title:'n',text:'reproducibility',modified:'today',parentID:'2'}];};
+ f.library.annotations=async()=>{annotationReads++;return [];};
+ await f.bench.load();noteReads=0;annotationReads=0;
+ f.input('작업 패널 검색','repro');await settle();
+ const check=f.bench.panel.querySelector('[aria-label="내 기록 포함"]');check.checked=true;check.dispatchEvent(new f.win.Event('change'));await settle();
+ for(const q of ['reprod','reproducib','reproducibility','reproducibility -x','reproducibility OR zzz'])f.input('작업 패널 검색',q),await settle();
+ assert.equal(noteReads,1);assert.equal(annotationReads,1);
+ f.bench.destroy();
+});
+
+test('the relation graph hands the whole library to library.graph; nothing slices it to 500 first',()=>{
+ const source=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const calls=[...source.matchAll(/library\.graph\(([^;]*?),\{mode:/g)].map(m=>m[1]);
+ assert.ok(calls.length>=2);
+ for(const arg of calls)assert.doesNotMatch(arg,/slice\(/,'library.graph(' + arg + ') must not pre-slice');
+});
+
+/* ---- Audit 2026-10-04, item 3: the checked date, 새로고침, and one refresh when a stale record is opened ---- */
+test('a stored citation list shows when it was checked and has its own 새로고침 (data-writes); a stale one refreshes once on opening',async()=>{
+ const f=scopeFixture({graphKind:'paper',graphPaper:'1'});
+ let state={works:{state:'fresh',checkedAt:'2026-09-20T00:00:00Z',missing:false},citers:{state:'fresh',checkedAt:''}};
+ const refreshed=[];const wait=()=>new Promise(r=>setTimeout(r,30));
+ f.runtime.citationState=()=>state;f.runtime.checkedDate=at=>String(at).slice(0,10);
+ f.runtime.refreshPaperLists=async ref=>{refreshed.push(ref.id);state={works:{state:'fresh',checkedAt:'2026-10-04T00:00:00Z'},citers:{state:'fresh',checkedAt:''}};};
+ await f.bench.show('graph');await settle();
+ assert.match(f.bench.panel.querySelector('.sc-list-checked').textContent,/2026-09-20/,'the checked date is shown');
+ assert.equal(refreshed.length,0,'a fresh list asks nothing');
+ const button=[...f.body().querySelectorAll('button')].find(b=>b.textContent==='새로고침');assert.ok(button,'a stored list still has its refresh button');
+ assert.equal(button.getAttribute('data-writes'),'cache');
+ button.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(refreshed,[1],'only that paper');
+ assert.match(f.bench.panel.querySelector('.sc-list-checked').textContent,/2026-10-04/);
+ // A stale record: opened once, refreshed once, not again on the next draw.
+ state={works:{state:'stale',checkedAt:'2020-01-01T00:00:00Z'},citers:{state:'fresh',checkedAt:''}};
+ refreshed.length=0;f.bench.state.listsRefreshed=undefined;
+ await f.bench.show('graph');await wait();await settle();
+ assert.deepEqual(refreshed,[1],'refreshed when opened');
+ state={works:{state:'stale',checkedAt:'2020-01-01T00:00:00Z'},citers:{state:'fresh',checkedAt:''}};
+ await f.bench.show('graph');await wait();await settle();
+ assert.deepEqual(refreshed,[1],'and not in a loop');
+ f.bench.destroy();
+});
+
+test('a "not found" citation record still offers a refresh button instead of hiding it',async()=>{
+ const f=scopeFixture({graphKind:'paper',graphPaper:'2'});
+ f.runtime.paperWorks=()=>({'1:K2':{doi:'10.1/x',missing:true,checkedAt:'2026-09-30T00:00:00Z'}});
+ f.runtime.citationState=()=>({works:{state:'fresh',checkedAt:'2026-09-30T00:00:00Z',missing:true},citers:{state:'missing',checkedAt:''}});
+ f.runtime.checkedDate=at=>String(at).slice(0,10);let called=0;f.runtime.refreshPaperLists=async()=>{called++;};
+ await f.bench.show('graph');await settle();
+ const button=[...f.body().querySelectorAll('button')].find(b=>b.textContent==='새로고침');assert.ok(button,'the missing record can be asked again');
+ button.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();assert.equal(called,1);
+ f.bench.destroy();
+});
+
+test('a journal profile says when OpenAlex was last asked, refreshes only that journal, shows an unknown APC as — with a tooltip',async()=>{
+ const f=fixture();
+ f.runtime.journalIdentity={identify:()=>({quartile:1,abbreviation:'SCIENCE',issns:['0036-8075'],impactFactor:44.7,year:2025,publisher:'AAAS'})};
+ f.runtime.journalRecord=()=>({name:'Science',issn:''});
+ f.runtime.journalProfile=()=>({citedness:null,fields:['Multidisciplinary'],topics:[],hIndex:300,works:900,isOA:false,inDoaj:false,apc:null,country:'US'});
+ let status={state:'fresh',checkedAt:'2026-08-01T00:00:00Z',found:true};const asked=[];
+ f.runtime.journalStatus=()=>status;f.runtime.checkedDate=at=>String(at).slice(0,10);
+ f.runtime.refreshJournal=async ref=>{asked.push(ref.id);status={state:'fresh',checkedAt:'2026-10-04T00:00:00Z',found:true};};
+ await f.bench.show('journals');await f.click('Science');
+ assert.match(f.body().querySelector('.sc-journal-checked').textContent,/2026-08-01/);
+ const fact=label=>[...f.body().querySelectorAll('.sc-fact')].find(r=>r.querySelector('dt').textContent===label);
+ assert.match(fact('오픈액세스').querySelector('dd').textContent,/APC —/,'unknown, not $0');
+ assert.doesNotMatch(fact('오픈액세스').querySelector('dd').textContent,/\$0/);
+ assert.match(fact('오픈액세스').getAttribute('title'),/알 수 없는 값/);
+ assert.match(fact('발행·피인용').querySelector('dd').textContent,/2년 평균 피인용 —/);
+ assert.equal(asked.length,0);
+ const refresh=[...f.body().querySelectorAll('.sc-journal-profile button')].find(b=>b.textContent==='새로고침');
+ assert.ok(refresh);assert.equal(refresh.getAttribute('data-writes'),'cache');
+ refresh.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(asked,[1],'that journal only');
+ f.bench.destroy();
+ // A stale one is refreshed once when its profile is opened.
+ const g=fixture();
+ g.runtime.journalIdentity={identify:()=>({quartile:1,abbreviation:'SCIENCE',issns:['0036-8075'],impactFactor:44.7,year:2025,publisher:'AAAS'})};
+ g.runtime.journalRecord=()=>({name:'Science',issn:''});g.runtime.journalProfile=()=>({citedness:7,fields:[],topics:[],isOA:false,apc:null});
+ let again=0;g.runtime.journalStatus=()=>({state:'stale',checkedAt:'2020-01-01T00:00:00Z',found:true});g.runtime.checkedDate=at=>String(at).slice(0,10);
+ g.runtime.refreshJournal=async()=>{again++;};
+ const wait=()=>new Promise(r=>setTimeout(r,25));
+ await g.bench.show('journals');await g.click('Science');await wait();await settle();
+ assert.equal(again,1,'refreshed on opening');
+ await g.bench.show('journals');await g.click('Science');await wait();await settle();
+ assert.equal(again,1,'once per session');
+ g.bench.destroy();
+});
+
+/* ---- Audit 2026-10-04, item 7: annotations from several papers become one standalone note ---- */
+test('선택 주석을 노트로: one paper keeps noteFromAnnotations, several papers use synthesisNote with a section per paper',async()=>{
+ const f=fixture();
+ const mark=(id,parent)=>({id,key:'K'+id,parentID:parent,attachmentID:'9'+id,text:'text '+id,comment:'',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0});
+ f.library.annotations=async()=>[mark('3','1'),mark('4','2'),mark('5','2')];
+ f.library.openItem=async()=>{};
+ let single=null,combined=null;
+ f.library.noteFromAnnotations=async ids=>{single=ids;return '70';};
+ f.library.synthesisNote=async(entries,options)=>{combined={entries,options};return '71';};
+ await f.bench.show('annotations');await settle();
+ f.bench.state.annotationIDs=new Set(['4','5']);
+ await f.click('선택 주석을 노트로');await settle();
+ assert.deepEqual(single,['4','5'],'annotations of one paper use the existing function');assert.equal(combined,null);
+ single=null;
+ f.bench.state.annotationIDs=new Set(['3','4','5']);
+ await f.click('선택 주석을 노트로');await settle();
+ assert.equal(single,null,'a mixed selection no longer reaches the one-parent function');
+ assert.deepEqual(combined.entries.map(e=>[e.id,e.annotationIDs]),[['1',['3']],['2',['4','5']]],'one entry (a heading) per paper, with its annotations');
+ assert.match(combined.options.title,/주석 모음/);
+ assert.notEqual(f.bench.panel.querySelector('.sc-status').dataset.error,'true');
+ f.bench.destroy();
+});
+
+/* ---- Audit 2026-10-04, item 8: a reading tick touches one paper, not the whole library ---- */
+test('a reading-time tick recomputes one paper (via an id index), not 1,200; totals follow at most every few seconds',async()=>{
+ const f=fixture();
+ f.runtime.formatReadTime=s=>Math.floor(s||0)+'s';
+ f.papers.splice(0);
+ for(let id=1;id<=1200;id++){f.papers.push({id:String(id),title:'Paper '+id,itemType:'journalArticle',tags:[]});f.refs.set(id,{id});}
+ const seconds=new Map();let computeCalls=0;
+ f.runtime.state=ref=>{computeCalls++;const s=seconds.get(ref.id)||0;return {seconds:s,status:s?'reading':'unread',citations:null,impactFactor:null};};
+ await f.bench.show('explore');
+ const card=f.body().querySelector('[data-item-id="1"]');assert.ok(card,'the first page of cards is drawn');
+ // Before: every tick called state() for every paper in the library.
+ computeCalls=0;f.bench.refreshMetrics();
+ assert.equal(computeCalls,1200,'the legacy full pass is what each 1 s tick used to cost');
+ // After: the tick names the paper that changed.
+ seconds.set(1,5);computeCalls=0;
+ f.bench.refreshMetrics(1);
+ assert.equal(computeCalls,1,'one computeState per tick');
+ assert.match(card.querySelector('[data-metric=time] .sc-metric-value').textContent,/5s/,'that paper\'s card is updated');
+ assert.equal(card.dataset.status,'reading');
+ for(let tick=0;tick<30;tick++){seconds.set(1,6+tick);f.bench.refreshMetrics(1);}
+ assert.equal(computeCalls,31,'thirty more ticks, thirty more lookups: constant per tick');
+ // An id the panel does not hold costs nothing.
+ computeCalls=0;f.bench.refreshMetrics(999999);assert.equal(computeCalls,0);
+ f.bench.destroy();
+});
+
+test('the list summary\'s reading total is recomputed at most every few seconds, from papers already in memory',async()=>{
+ const f=fixture();
+ f.runtime.formatReadTime=s=>Math.floor(s||0)+'s';
+ const seconds=new Map([[1,100]]);
+ f.runtime.state=ref=>{const s=seconds.get(ref.id)||0;return {seconds:s,status:s?'reading':'unread',citations:null,impactFactor:null};};
+ await f.bench.show('explore');
+ const tile=()=>f.body().querySelector('[data-total="seconds"] b');
+ assert.ok(tile(),'the 읽음 tile is marked as a total');
+ seconds.set(1,160);
+ const realNow=Date.now;let clock=realNow();Date.now=()=>clock;
+ try{
+  f.bench.refreshMetrics(1);
+  const primed=tile().textContent;
+  assert.match(primed,/160s/,'the first tick brings the total up to date');
+  clock+=1000;seconds.set(1,161);f.bench.refreshMetrics(1);
+  assert.equal(tile().textContent,primed,'inside the interval the total is left alone');
+  clock+=4000;seconds.set(1,170);f.bench.refreshMetrics(1);
+  assert.match(tile().textContent,/170s/,'after a few seconds it catches up');
+ }finally{Date.now=realNow;}
+ f.bench.destroy();
+});

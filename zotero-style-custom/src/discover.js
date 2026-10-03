@@ -271,23 +271,52 @@
     for (const word of x) if (y.has(word)) shared++;
     return shared / Math.max(x.size, y.size) >= threshold;
   }
-  /* The exact title first, over every candidate: the first merely similar
-     hit was taken even when the paper itself was second. Two exact matches
-     in the same year are not guessed between. */
-  function pickByTitle(works, record) {
-    const year = Number(String(record?.year || record?.date || '').match(/\d{4}/)?.[0]) || null;
+  /* A paper without a DOI is linked to an OpenAlex work only on three facts
+     together: the normalised title is identical, the year is within one, and
+     the first author's family name agrees. A similar title ("Activation of
+     Notch" for "Inhibition of Notch") or a right title with another lab's
+     author is a candidate the reader confirms, never a link made silently. */
+  const recordYear = record => Number(String(record?.year || record?.date || '').match(/\d{4}/)?.[0]) || null;
+  const familyOfName = value => {
+    const parts = plain(value).split(' ').filter(Boolean);
+    while (parts.length > 1 && SUFFIXES.has(parts[parts.length - 1])) parts.pop();
+    return parts.length ? parts[parts.length - 1] : '';
+  };
+  // The family name Zotero holds for the first author ('' when nobody is recorded).
+  function recordFamily(record) {
+    const first = (Array.isArray(record?.creators) ? record.creators : [])
+      .find(c => c && (!c.creatorType || c.creatorType === 'author') && (c.lastName || c.name));
+    if (!first) return '';
+    return first.lastName ? plain(first.lastName) : familyOfName(first.name);
+  }
+  const workFirstName = work => text(work?.people?.[0]?.name) || text(work?.authors?.[0]);
+  function sameFirstAuthor(record, work) {
+    const family = recordFamily(record), name = plain(workFirstName(work));
+    if (!family || !name) return false;
+    // Family name last ("Jane Smith"), or first where a record keeps East Asian order ("Kim Jae").
+    return name === family || name.endsWith(' ' + family) || name.startsWith(family + ' ');
+  }
+  const candidateOf = work => ({id: work.id, doi: work.doi || '', title: work.title, year: work.year ?? null,
+    venue: work.venue || '', authors: (work.authors || []).slice(0, 3)});
+  function matchWork(works, record) {
+    const year = recordYear(record);
     const near = work => !year || !work.year || Math.abs(work.year - year) <= 1;
     const list = (works || []).filter(Boolean);
-    const exact = list.filter(work => plainTitle(work.title) && plainTitle(work.title) === plainTitle(record?.title) && near(work));
-    if (exact.length === 1) return exact[0];
-    if (exact.length > 1) {
-      const sameYear = exact.filter(work => year && work.year === year);
-      return sameYear.length === 1 ? sameYear[0] : null;
+    const title = plainTitle(record?.title);
+    const same = work => !!title && plainTitle(work.title) === title && near(work);
+    const sure = list.filter(work => same(work) && sameFirstAuthor(record, work));
+    let match = null;
+    if (sure.length === 1) match = sure[0];
+    else if (sure.length > 1) {
+      const sameYear = sure.filter(work => year && work.year === year);
+      match = sameYear.length === 1 ? sameYear[0] : null;
     }
-    // Near misses are taken only when one stands alone: two similar titles are not guessed between either.
-    const similar = list.filter(work => sameTitle(work.title, record?.title) && near(work));
-    return similar.length === 1 ? similar[0] : null;
+    const candidates = match ? [] : list
+      .filter(work => near(work) && (same(work) || sameTitle(work.title, record?.title)))
+      .slice(0, 3).map(candidateOf);
+    return {match, candidates};
   }
+  const pickByTitle = (works, record) => matchWork(works, record).match;
 
   // Matching an author by name alone picks the wrong person often enough to be
   // useless. An institution narrows it decisively, so it is scored first and a
@@ -900,7 +929,7 @@
 
   const api = {API, GROUPS, scoreAuthor, pickAuthor, authorQueries, institutionAgrees, topicsAgree,
     worksByDOIsURL, institutionsURL, readInstitutions,
-    workURL, worksByIDsURL, citingURL, PATH_FIELDS, abstractOf, findingOf, abstractsURL, readAbstracts, cleanAbstract, sameTitle, pickByTitle, readWork, readWorks, mergeSuggestions, relevance,
+    workURL, worksByIDsURL, citingURL, PATH_FIELDS, abstractOf, findingOf, abstractsURL, readAbstracts, cleanAbstract, sameTitle, pickByTitle, matchWork, sameFirstAuthor, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials,
     watchedWorksURL, watchedProfilesURL, readProfiles, authorBatches, attribute, AUTHOR_BATCH,
     freshCitersURL, freshBatches, rankFreshCiters, FRESH_BATCH, FRESH_FIELDS};

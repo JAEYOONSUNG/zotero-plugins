@@ -3810,7 +3810,7 @@
       "sources": [
         {
           "file": "src/discover.js",
-          "marker": "const exact = list.filter("
+          "marker": "const sure = list.filter("
         }
       ],
       "tests": [

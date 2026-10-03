@@ -59,10 +59,20 @@
       + `&select=${SELECT}${credentials(options)}`;
   }
 
+  /* A missing figure is not zero. Number(null) and Number('') are both 0, so a
+     journal with no recorded APC or no 2-year mean citedness read as "APC $0"
+     and "0.0". Null, undefined and blank are dropped before converting. */
+  function numberOrNull(value) {
+    if (value === null || value === undefined || typeof value === 'boolean') return null;
+    if (typeof value === 'string' && !value.trim()) return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
   function shapeSource(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const stats = raw.summary_stats || {};
-    const metric = Number(stats['2yr_mean_citedness']);
+    const metric = numberOrNull(stats['2yr_mean_citedness']);
     return {
       id: text(raw.id).replace(/^https?:\/\/openalex\.org\//i, ''),
       name: text(raw.display_name),
@@ -75,7 +85,7 @@
       works: Number.isInteger(raw.works_count) ? raw.works_count : null,
       // Rounded to one place: the extra digits are false precision for a figure
       // this rough, and a column of them is harder to scan.
-      citedness: Number.isFinite(metric) && metric >= 0 ? Math.round(metric * 10) / 10 : null,
+      citedness: metric !== null && metric >= 0 ? Math.round(metric * 10) / 10 : null,
       hIndex: Number.isInteger(stats.h_index) ? stats.h_index : null,
       titles: [text(raw.display_name), ...(Array.isArray(raw.alternate_titles) ? raw.alternate_titles.map(text) : [])]
         .filter(Boolean),
@@ -92,13 +102,13 @@
       .filter(t => t.name).slice(0, 6);
     const fields = [];
     for (const t of topics) if (t.field && !fields.includes(t.field)) fields.push(t.field);
-    const apc = Number(raw?.apc_usd);
+    const apc = numberOrNull(raw?.apc_usd);
     return {
       publisher: text(raw?.host_organization_name),
       country: text(raw?.country_code).toUpperCase(),
       homepage: /^https?:\/\//i.test(text(raw?.homepage_url)) ? text(raw.homepage_url) : '',
       isOA: raw?.is_oa === true, inDoaj: raw?.is_in_doaj === true,
-      apc: Number.isFinite(apc) && apc >= 0 ? apc : null,
+      apc: apc !== null && apc >= 0 ? apc : null,
       cited: Number.isInteger(raw?.cited_by_count) ? raw.cited_by_count : null,
       topics, fields
     };
@@ -142,7 +152,7 @@
     return code.length === 8 ? 'issn:' + code : 'name:' + normalise(name);
   };
 
-  const api = {API, lookupURL, pickSource, shapeSource, profileOf, profilesURL, readSources, cacheKey, normalise, cleanISSN, issnList, credentials};
+  const api = {API, VERSION: 2, numberOrNull, lookupURL, pickSource, shapeSource, profileOf, profilesURL, readSources, cacheKey, normalise, cleanISSN, issnList, credentials};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalMetrics = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

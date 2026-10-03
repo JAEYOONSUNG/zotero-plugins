@@ -343,7 +343,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       for(const cell of cells){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);
         if(cell.dataset.styleCustomReading==='time'){cell.textContent=this.formatReadTime(value.seconds);cell.style.color=value.seconds<=0?P.faint:P.text;cell.style.fontWeight=value.seconds>=3600?'590':'';}
         else if(cell.firstChild&&cell.lastChild){const tone={unread:P.muted,reading:P.reading,done:P.done}[value.status]||P.muted;cell.firstChild.textContent={unread:'\u25cb',reading:'\u25d0',done:'\u25cf'}[value.status]||'\u25cb';cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status==='unread'?'':this.t({reading:'읽는 중',done:'읽음'}[value.status]||'');cell.lastChild.style.color=value.status==='unread'?P.muted:tone;cell.lastChild.style.fontWeight=value.status==='unread'?'400':'590';}}}
-      state.workbench?.refreshMetrics?.();
+      state.workbench?.refreshMetrics?.(itemID);
     }
   }
   async start({ id, version, rootURI }) {
@@ -354,6 +354,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     this.cache = loaded; this.active = true;
     this.retireLooseMoves();
+    try { if (this.recheckStoredLinks()) this.dirty = true; } catch (error) { this.Z.logError?.(error); }
     for (const entry of Object.values(loaded.items)) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Invalid Style Custom item cache");
       if (entry.citationPending) { delete entry.citationPending; this.dirty=true; }
@@ -987,12 +988,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     mark.textContent = this.journalAbbreviationOf(item);
     const bg = tone.badge || tone.fill, ink = tone.badge ? tone.badgeInk : tone.ink, edge = tone.badge ? 'transparent' : tone.edge;
-    // One box: 14px tall, the line exactly as tall, so the 9px text sits in
-    // the middle of it rather than on its upper edge.
+    // One box, the line exactly as tall, so the text sits in the middle of it
+    // rather than on its upper edge. 11px is the shared minimum (--sc-fs-meta);
+    // the badge used to be 9px inline.
+    const px = this.journalIdentity.BADGE_FONT_PX || 11, box = px + 5;
     mark.style.cssText = `flex:none;display:inline-block;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;vertical-align:middle;`
-      + `min-width:22px;height:14px;padding:0 4px;border-radius:3px;white-space:nowrap;`
+      + `min-width:24px;height:${box}px;padding:0 4px;border-radius:3px;white-space:nowrap;`
       + `background:${bg};color:${ink};box-shadow:inset 0 0 0 .5px ${edge};`
-      + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:14px;font-variant-numeric:normal;`;
+      + `font-size:${px}px;font-weight:700;letter-spacing:.02em;line-height:${box}px;font-variant-numeric:normal;`;
     mark.title = found.identity.label ? `${found.title} · ${found.identity.label}` : found.title;
     return mark;
   }
@@ -1012,10 +1015,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     mark.textContent = this.journalIdentity.ABBREVIATIONS[title] || this.journalIdentity.abbreviate(title) || identity.mark;
     const bg = tone.badge || tone.fill, ink = tone.badge ? tone.badgeInk : tone.ink, edge = tone.badge ? 'transparent' : tone.edge;
+    const px = this.journalIdentity.BADGE_FONT_PX || 11;
     mark.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;`
-      + `min-width:22px;height:14px;padding:0 4px;border-radius:3px;white-space:nowrap;vertical-align:middle;`
+      + `min-width:24px;height:${px + 5}px;padding:0 4px;border-radius:3px;white-space:nowrap;vertical-align:middle;`
       + `background:${bg};color:${ink};box-shadow:inset 0 0 0 .5px ${edge};`
-      + `font-size:9px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
+      + `font-size:${px}px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
     mark.title = identity.label ? `${title} · ${identity.label}` : title;
     return mark;
   }
@@ -1151,7 +1155,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // A tier with no label is one that sorts but is not worth drawing: the
     // middle bucket sat on three rows in four, which is a texture, not a mark.
     if (!tier || !tier.label) return null;
-    const tone = {t1: P.blue, t2: P.teal, t3: P.gray, t4: P.faint}[tier.key] || P.blue;
+    // T4 used P.faint, a placeholder grey at 3.04:1 on white (2.45:1 in dark). Its own hue, walked until it reads (4.5:1).
+    const tone = tier.key === 't4' ? this.journalIdentity.readable(P.faint, !!P.dark)
+      : {t1: P.blue, t2: P.teal, t3: P.gray}[tier.key] || P.blue;
     const badge = this.pill(doc, tier.label, tone, P);
     badge.style.fontWeight = "600";
     const h = where.hIndex ?? Math.max(where.first?.hIndex || 0, where.corresponding?.hIndex || 0);
@@ -1168,6 +1174,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         + (where.corresponding.country ? ` (${where.corresponding.country})` : "")
         + (where.corresponding.hIndex ? ` · ${this.t("기관 h-index")} ${where.corresponding.hIndex}` : "") : null,
       where.correspondingKnown ? null : this.t("교신저자 표시가 없어 마지막 저자를 교신저자로 간주했습니다."),
+      where.firstIsCorresponding ? this.t("1저자가 교신저자를 겸합니다.") : null,
       where.extraCorresponding ? this.t(`교신저자가 ${where.extraCorresponding + 1}명입니다.`) : null,
       where.international ? this.t("국제 공동연구") : null
     ].filter(Boolean).join("\n");
@@ -2501,31 +2508,82 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return {name: ['publicationTitle', 'proceedingsTitle'].map(field).find(Boolean) || '', issn: field('ISSN')};
   }
 
-  // One lookup per journal, kept for good: 1,116 items in this library share
-  // 255 journals, so caching by journal is the difference between a sweep that
-  // fits the daily budget and one that cannot.
-  async fetchJournalMetric(record, {signal} = {}) {
+  /* How long each kind of OpenAlex answer is trusted. Past this a record is
+     "stale": it is still shown, with the date it was checked, and it is asked
+     again only for the one paper or journal the reader opens or refreshes. Expiry
+     never starts a bulk fetch -- the sweeps below still ask only about what has
+     never been asked. A not-found answer comes back sooner than a found one. */
+  static get EXPIRY_DAYS() { return {citationList: 30, citers: 30, journalMetric: 90, notFound: 14}; }
+  static get JOURNAL_VERSION() { return 2; }
+  expiredAt(at, days) {
+    const time = Date.parse(at);
+    return !Number.isFinite(time) || Date.now() - time > days * 864e5;
+  }
+  checkedDate(at) {
+    const time = Date.parse(at);
+    return Number.isFinite(time) ? new Date(time).toISOString().slice(0, 10) : '';
+  }
+
+  // A row written before version 2 may hold a zero that was really "missing"
+  // (Number(null)); it reads as unknown until the journal is refetched.
+  trustedJournalRow(row) {
+    if (!row || (row.v || 1) >= this.constructor.JOURNAL_VERSION) return row;
+    if (row.citedness !== 0 && row.apc !== 0) return row;
+    return {...row, citedness: row.citedness === 0 ? null : row.citedness, apc: row.apc === 0 ? null : row.apc};
+  }
+
+  // {state: 'none' | 'missing' | 'fresh' | 'stale', found, checkedAt, why}
+  journalStatus(item) {
+    const record = this.journalRecord(item);
+    if (!record.name && !record.issn) return {state: 'none', found: false, checkedAt: '', why: ''};
+    const row = this.journalCache()[this.journalTools2.cacheKey(record)];
+    if (!row) return {state: 'missing', found: false, checkedAt: '', why: ''};
+    const E = this.constructor.EXPIRY_DAYS, found = row.citedness != null;
+    const old = (row.v || 1) < this.constructor.JOURNAL_VERSION && (row.citedness === 0 || row.apc === 0);
+    const expired = this.expiredAt(row.checkedAt, found ? E.journalMetric : E.notFound);
+    return {state: old || expired ? 'stale' : 'fresh', found, checkedAt: row.checkedAt || '',
+      why: old ? 'version' : expired ? 'expired' : ''};
+  }
+
+  // One lookup per journal: 1,116 items in this library share 255 journals, so
+  // caching by journal is the difference between a sweep that fits the daily
+  // budget and one that cannot. An expired row is returned as it is; only
+  // `refresh` (the reader's press, or opening that journal) asks again.
+  async fetchJournalMetric(record, {signal, refresh = false} = {}) {
     const key = this.journalTools2.cacheKey(record);
     if (!record.name && !record.issn) return null;
     const store = this.journalCache();
-    if (store[key]) return store[key];
+    if (store[key] && !refresh) return store[key];
     const url = this.journalTools2.lookupURL(record, this.discoverOptions());
     if (!url) return null;
     const payload = await this.discoverJSON(url, {signal});
     const source = this.journalTools2.pickSource(payload, record);
+    const now = new Date().toISOString(), version = this.constructor.JOURNAL_VERSION;
     if (!source || source.citedness == null) {
-      // Remember the miss too, or every sweep pays for it again.
-      store[key] = {citedness: null, checkedAt: new Date().toISOString()};
+      // Remember the miss too, or every sweep pays for it again. A journal that
+      // was found before keeps its figures: "not found now" is not "never was".
+      const before = store[key];
+      store[key] = before && before.citedness != null && !((before.v || 1) < version && before.citedness === 0)
+        ? {...before, checkedAt: now, v: version}
+        : {citedness: null, checkedAt: now, v: version};
       this.dirty = true;
       return store[key];
     }
     store[key] = {
+      v: version,
       citedness: source.citedness, name: source.name, issn: source.issn,
-      openAlexID: source.id, checkedAt: new Date().toISOString(),
-      ...this.journalProfileFields(source), profileAt: new Date().toISOString()
+      openAlexID: source.id, checkedAt: now,
+      ...this.journalProfileFields(source), profileAt: now
     };
     this.dirty = true;
     return store[key];
+  }
+
+  // The reader asked about this one journal: ask OpenAlex again for it alone.
+  async refreshJournal(item, {signal} = {}) {
+    const hit = await this.fetchJournalMetric(this.journalRecord(item), {signal, refresh: true});
+    await this.flush();
+    return hit;
   }
 
   journalProfileFields(source) {
@@ -2542,7 +2600,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   journalProfile(item) {
     const record = this.journalRecord(item);
     if (!record.name && !record.issn) return null;
-    const hit = this.journalCache()[this.journalTools2.cacheKey(record)];
+    const hit = this.trustedJournalRow(this.journalCache()[this.journalTools2.cacheKey(record)]);
     return hit && hit.citedness != null ? hit : null;
   }
 
@@ -2602,7 +2660,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   journalCitedness(item) {
     const record = this.journalRecord(item);
     if (!record.name && !record.issn) return null;
-    const hit = this.journalCache()[this.journalTools2.cacheKey(record)];
+    const hit = this.trustedJournalRow(this.journalCache()[this.journalTools2.cacheKey(record)]);
     return hit && hit.citedness != null ? hit : null;
   }
 
@@ -2622,6 +2680,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const record = this.journalRecord(item);
       if (!record.name && !record.issn) continue;
       const key = this.journalTools2.cacheKey(record);
+      // Only journals never asked about: an expired or old-version row waits for the reader to open or refresh it.
       if (!wanted.has(key) && !this.journalCache()[key]) wanted.set(key, record);
     }
     const queue = [...wanted.values()];
@@ -3865,7 +3924,37 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.institutions = {});
   }
 
-  async sweepPaperWorks(items, {signal, onProgress, refetch = false} = {}) {
+  /* Citation lists expire: 30 days for a found list, 14 for "OpenAlex has no
+     such paper". An expired row is kept and shown with its date; it is asked
+     again only by a press on that paper (refreshPaperLists) or by the graph's
+     own fetch button with `stale`. No background sweep passes `stale`. */
+  paperRowStatus(row) {
+    if (!row) return 'missing';
+    const E = this.constructor.EXPIRY_DAYS;
+    return this.expiredAt(row.checkedAt, row.missing ? E.notFound : E.citationList) ? 'stale' : 'fresh';
+  }
+  citedByRowStatus(row) {
+    if (!row) return 'missing';
+    return this.expiredAt(row.checkedAt, this.constructor.EXPIRY_DAYS.citers) ? 'stale' : 'fresh';
+  }
+  // For one paper, what the graph should say about its stored lists.
+  citationState(item) {
+    const key = this.identity(item), works = this.paperWorks()[key], citers = this.citedByStore()[key];
+    return {works: {state: this.paperRowStatus(works), checkedAt: works?.checkedAt || '', missing: !!works?.missing},
+      citers: {state: this.citedByRowStatus(citers), checkedAt: citers?.checkedAt || ''}};
+  }
+  // The reader's press on one paper: its own lists again, nothing else.
+  async refreshPaperLists(item, {signal} = {}) {
+    const key = this.identity(item), hadCiters = !!this.citedByStore()[key];
+    const works = await this.sweepPaperWorks([item], {signal, refetch: true});
+    let citers = null;
+    const row = this.paperWorks()[key];
+    if (hadCiters && row?.openalex && !signal?.aborted) citers = await this.sweepCitedBy([item], {signal, refetch: true, limit: 50});
+    if (works.found || works.missing || citers?.asked) { this.bumpState?.(); await this.refreshWindows?.(); }
+    return {works, citers};
+  }
+
+  async sweepPaperWorks(items, {signal, onProgress, refetch = false, stale = false} = {}) {
     const store = this.paperWorks();
     const report = {asked: 0, found: 0, noDOI: 0, missing: 0, already: 0, references: 0, errors: 0, institutions: 0};
     const options = this.discoverOptions();
@@ -3878,7 +3967,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       /* Entries written before schema 2 (the last-author fallback, 2026-09-28)
          lack the corresponding/last author; they are refetched once, in the same
          batches of fifty. A "missing" answer has nothing to enrich and stays. */
-      if (!refetch && store[key] && (store[key].doi || '') === (doi || '') && (store[key].missing || store[key].v >= 2)) { report.already++; continue; }
+      if (!refetch && store[key] && (store[key].doi || '') === (doi || '') && (store[key].missing || store[key].v >= 2)
+        && !(stale && doi && this.paperRowStatus(store[key]) === 'stale')) { report.already++; continue; }
       if (!doi) { report.noDOI++; store[key] = {doi: '', missing: true, checkedAt: new Date().toISOString()}; continue; }
       wanted.push({key, doi, item});
     }
@@ -3894,7 +3984,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const byDOI = new Map(works.map(work => [this.discoverTools.bareDOI(work.doi), work]));
         for (const row of batch) {
           const work = byDOI.get(row.doi);
-          if (!work) { report.missing++; store[row.key] = {doi: row.doi, missing: true, checkedAt: new Date().toISOString()}; continue; }
+          if (!work) {
+            report.missing++;
+            // A list found before is not lost to one empty answer; it is dated again.
+            if (store[row.key]?.openalex && store[row.key].doi === row.doi) store[row.key].checkedAt = new Date().toISOString();
+            else store[row.key] = {doi: row.doi, missing: true, checkedAt: new Date().toISOString()};
+            continue;
+          }
           report.found++;
           report.references += work.references.length;
           store[row.key] = {
@@ -3935,7 +4031,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      citing papers are by definition ones the library may not hold, so they have
      to be asked for. One request per paper, so this is scoped to what the user
      is actually looking at rather than run over everything. */
-  async sweepCitedBy(items, {signal, onProgress, limit = 40, refetch = false} = {}) {
+  async sweepCitedBy(items, {signal, onProgress, limit = 40, refetch = false, stale = false} = {}) {
     const store = this.citedByStore();
     const works = this.paperWorks();
     const report = {asked: 0, found: 0, citers: 0, already: 0, noWork: 0, errors: 0};
@@ -3945,7 +4041,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (signal?.aborted || !this.active || this.stopping) break;
       onProgress?.(index, list.length);
       const key = this.identity(item);
-      if (!refetch && store[key]) { report.already++; continue; }
+      if (!refetch && store[key] && !(stale && this.citedByRowStatus(store[key]) === 'stale')) { report.already++; continue; }
       const work = works[key];
       if (!work?.openalex) { report.noWork++; continue; }
       const url = this.discoverTools.citingURL(work.openalex, {...options, limit});
@@ -4210,16 +4306,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const tools = this.discoverTools;
     const record = this.bibliographyRecord(item);
     const hasDOI = !!tools.bareDOI(record.DOI);
-    const url = tools.workURL(record, {...options, fields: options.fields + ',abstract_inverted_index', candidates: 5});
-    if (!url) throw new Error('이 문헌에는 DOI나 제목이 없어 조회할 수 없습니다. 둘 중 하나를 채운 뒤 다시 실행하세요.');
-    const payload = await this.discoverJSON(url, {signal});
-    const seed = hasDOI ? tools.readWork(payload) : tools.pickByTitle(tools.readWorks(payload), record);
-    if (!seed) {
-      if (!hasDOI && tools.readWorks(payload).length) {
-        throw new Error('OpenAlex가 찾은 논문이 선택한 문헌과 제목이 다릅니다. 문헌에 DOI를 채운 뒤 다시 찾으세요.');
-      }
-      return null;
-    }
+    const found0 = await this.findSeed(item, {signal, fields: options.fields + ',abstract_inverted_index'});
+    if (found0.refused) throw this.sameWorkError(found0);
+    const seed = found0.work;
+    if (!seed) return null;
     const partial = [];
     let budgetGone = false;
     const settle = async (label, promise) => {
@@ -4410,6 +4500,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   readingPathCached(item, options = {}) {
     const key = this.identity(item);
+    this.demoteStoredLink(item);
     const saved = this.readingPathStore()[key];
     const age = saved ? Date.now() - Date.parse(saved.at) : Infinity;
     const seed = this.workFingerprint(item);
@@ -4450,15 +4541,124 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      are asked for and one must match the title and year, as the reading
      order already required. */
   async seedWork(item, {signal, fields} = {}) {
+    const found = await this.findSeed(item, {signal, fields});
+    if (found.refused) throw this.sameWorkError(found);
+    return found.work;
+  }
+
+  /* Links from a paper without a DOI to an OpenAlex work. Only a normalised
+     exact title, a year within one and the same first-author family name make
+     one on their own; near matches wait here as candidates for the reader's
+     "Is this the same paper?" and a yes is the only other way a link exists.
+     Everything is keyed by the paper and valid while its title and year are
+     as they were. */
+  workLinkStore() {
+    const store = this.cache.workLinks;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.workLinks = {});
+  }
+  workLinkRow(item) {
+    const row = this.workLinkStore()[this.identity(item)];
+    return row && row.seed === this.workFingerprint(item) ? row : null;
+  }
+  workCandidates(item) {
+    return (this.workLinkRow(item)?.candidates || []).slice();
+  }
+  sameWorkError(found) {
+    const error = new Error('OpenAlex가 찾은 논문이 선택한 문헌과 제목이 다릅니다. 문헌에 DOI를 채운 뒤 다시 찾으세요.');
+    error.candidates = found.candidates || [];
+    error.code = 'same-paper';
+    return error;
+  }
+  setCandidates(item, candidates) {
+    const store = this.workLinkStore(), key = this.identity(item), seed = this.workFingerprint(item);
+    const row = store[key]?.seed === seed ? store[key] : (store[key] = {seed});
+    const rejected = new Set(row.rejected || []);
+    row.candidates = (candidates || []).filter(c => c?.id && !rejected.has(c.id) && c.id !== row.confirmed);
+    if (!row.candidates.length && !row.confirmed && !(row.rejected || []).length) delete store[key];
+    this.dirty = true;
+  }
+  async confirmWorkLink(item, workID) {
+    const store = this.workLinkStore(), key = this.identity(item), seed = this.workFingerprint(item);
+    const row = store[key]?.seed === seed ? store[key] : (store[key] = {seed});
+    row.confirmed = this.discoverTools.shortID(workID);
+    row.candidates = [];
+    this.forgetReadingPath(item);
+    this.forgetLookup(item, 'related:'); this.forgetLookup(item, 'authors:');
+    this.dirty = true;
+    await this.flush?.();
+    return row.confirmed;
+  }
+  async rejectWorkLink(item, workID) {
+    const store = this.workLinkStore(), key = this.identity(item), seed = this.workFingerprint(item);
+    const row = store[key]?.seed === seed ? store[key] : (store[key] = {seed});
+    const id = this.discoverTools.shortID(workID);
+    row.rejected = [...new Set([id, ...(row.rejected || [])])].slice(0, 50);
+    row.candidates = (row.candidates || []).filter(c => c.id !== id);
+    if (row.confirmed === id) delete row.confirmed;
+    this.dirty = true;
+    await this.flush?.();
+    return row;
+  }
+
+  /* The paper OpenAlex means: {work, candidates, refused}. By DOI the DOI
+     answers. Without one, a link the reader confirmed wins; otherwise the
+     three-fact match; otherwise the near matches become candidates. */
+  async findSeed(item, {signal, fields} = {}) {
     const tools = this.discoverTools, record = this.bibliographyRecord(item);
     const hasDOI = !!tools.bareDOI(record.DOI);
-    const url = tools.workURL(record, {...this.discoverOptions(), ...(fields ? {fields} : {}), candidates: 5});
-    if (!url) return null;
+    const options = this.discoverOptions();
+    const url = tools.workURL(record, {...options, ...(fields ? {fields} : {}), candidates: 5});
+    if (!url) return {work: null, candidates: [], refused: false};
+    if (!hasDOI) {
+      const confirmed = this.workLinkRow(item)?.confirmed;
+      if (confirmed) {
+        const byID = tools.worksByIDsURL([confirmed], {...options, ...(fields ? {fields} : {})});
+        const got = tools.readWorks(await this.discoverJSON(byID, {signal}))[0];
+        if (got) return {work: got, candidates: [], refused: false, confirmed: true};
+      }
+    }
     const payload = await this.discoverJSON(url, {signal});
-    const work = hasDOI ? tools.readWork(payload) : tools.pickByTitle(tools.readWorks(payload), record);
-    if (!work && !hasDOI && tools.readWorks(payload).length)
-      throw new Error('OpenAlex가 찾은 논문이 선택한 문헌과 제목이 다릅니다. 문헌에 DOI를 채운 뒤 다시 찾으세요.');
-    return work;
+    if (hasDOI) return {work: tools.readWork(payload), candidates: [], refused: false};
+    const hits = tools.readWorks(payload);
+    const {match, candidates} = tools.matchWork(hits, record);
+    if (match && !(this.workLinkRow(item)?.rejected || []).includes(match.id)) return {work: match, candidates: [], refused: false};
+    const rejected = new Set(this.workLinkRow(item)?.rejected || []);
+    const open = candidates.filter(c => !rejected.has(c.id));
+    this.setCandidates(item, open);
+    return {work: null, candidates: open, refused: hits.length > 0};
+  }
+
+  /* Links stored before the three-fact rule: a kept reading plan for a paper
+     without a DOI names the work it was built on. One that no longer passes
+     is demoted to a candidate for the reader to confirm; the plan, derived
+     from the wrong paper, is dropped, and nothing else is deleted. No request. */
+  recheckStoredLinks() {
+    const tools = this.discoverTools, store = this.readingPathStore();
+    let demoted = 0;
+    for (const key of Object.keys(store)) {
+      const [libraryID, itemKey] = key.split(':');
+      const item = this.Z.Items.getByLibraryAndKey?.(Number(libraryID), itemKey);
+      if (!item || !this.isRegular(item)) continue;
+      if (this.demoteStoredLink(item)) demoted++;
+    }
+    return demoted;
+  }
+  demoteStoredLink(item) {
+    const tools = this.discoverTools, key = this.identity(item), saved = this.readingPathStore()[key];
+    if (!saved) return false;
+    const record = this.bibliographyRecord(item);
+    if (tools.bareDOI(record.DOI)) return false;
+    const seedRow = (saved.plan?.steps || []).flatMap(step => [...(step.works || []), ...(step.more || [])]).find(work => work?.seed);
+    if (!seedRow) return false;
+    const work = {...seedRow, people: (seedRow.authors || []).map(name => ({name}))};
+    if (this.workLinkRow(item)?.confirmed === seedRow.id) return false;
+    if (tools.matchWork([work], record).match) return false;
+    this.setCandidates(item, [{id: seedRow.id, doi: seedRow.doi || '', title: seedRow.title, year: seedRow.year ?? null,
+      venue: seedRow.venue || '', authors: (seedRow.authors || []).slice(0, 3)}]);
+    delete this.readingPathStore()[key];
+    this.discoverCache.delete('path:' + key + '|' + this.workFingerprint(item));
+    this.dirty = true;
+    return true;
   }
 
   async authorsOf(item, {signal} = {}) {
@@ -5854,7 +6054,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (!chip) {
       chip = win.document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       chip.className = 'style-custom-kind';
-      chip.style.cssText = `display:inline-block;margin-inline-end:6px;padding:0 5px;border-radius:3px;font-size:9px;font-weight:700;line-height:14px;vertical-align:middle;pointer-events:none;`;
+      chip.style.cssText = `display:inline-block;margin-inline-end:6px;padding:0 5px;border-radius:3px;font-size:11px;font-weight:700;line-height:16px;vertical-align:middle;pointer-events:none;`;
       cell.insertBefore(chip, cell.firstChild);
       state.titleNodes.add(chip);
     }

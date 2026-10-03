@@ -80,12 +80,20 @@
     const first = list.find(person => person.position === 'first') || list[0];
     const flagged = list.filter(person => person.corresponding);
     const last = list.find(person => person.position === 'last') || list[list.length - 1];
-    const corresponding = flagged.length ? flagged[0] : (list.length > 1 ? last : null);
+    /* Every flagged author is kept. The compact display wants one, and prefers
+       a corresponding author who is not the first author: a first author who
+       is also corresponding used to stop the search there, so a second
+       corresponding author was never looked for. */
+    const elsewhere = flagged.find(person => person !== first);
+    const corresponding = flagged.length ? (elsewhere || null) : (list.length > 1 && last !== first ? last : null);
     return {
       first,
-      corresponding: corresponding && corresponding !== first ? corresponding : null,
+      corresponding,
+      allCorresponding: flagged,
+      firstIsCorresponding: flagged.includes(first),
       correspondingKnown: flagged.length > 0,
-      others: flagged.length > 1 ? flagged.length - 1 : 0
+      others: flagged.length > 1 ? flagged.length - 1 : 0,
+      everyone: list
     };
   }
 
@@ -112,16 +120,28 @@
     if (!picked) return null;
     const first = describe(picked.first, institutions);
     const corresponding = describe(picked.corresponding, institutions);
-    const countries = [...new Set([first?.country, corresponding?.country].filter(Boolean))];
-    const best = [first, corresponding].filter(row => row?.tier)
+    /* The ends of the paper: the first author and every corresponding author
+       (the last author stands in when nobody is flagged). */
+    const ends = [first, ...(picked.allCorresponding.length ? picked.allCorresponding.map(p => describe(p, institutions)) : [corresponding])]
+      .filter(Boolean);
+    const correspondingAll = picked.allCorresponding.map(p => describe(p, institutions));
+    const countries = [...new Set(ends.map(row => row.country).filter(Boolean))];
+    const everyone = picked.everyone.map(p => describe(p, institutions));
+    const best = [...new Set(ends)].filter(row => row?.tier)
       .sort((a, b) => (b.hIndex || 0) - (a.hIndex || 0))[0] || null;
     return {
-      first, corresponding, countries,
+      first, corresponding, correspondingAll, countries,
+      institutions: [...new Set(ends.map(row => row.institution).filter(Boolean))],
+      // Every listed author, for a collaboration that is wider than the two ends.
+      allCountries: [...new Set(everyone.map(row => row.country).filter(Boolean))],
+      allInstitutions: [...new Set(everyone.map(row => row.institution).filter(Boolean))],
+      firstIsCorresponding: picked.firstIsCorresponding,
       correspondingKnown: picked.correspondingKnown,
       extraCorresponding: picked.others,
       tier: best?.tier || null,
-      // International when the two ends of the paper are in different countries,
-      // which is a different thing from a long author list.
+      // International when the ends of the paper (first and every corresponding
+      // author) are in different countries, which is a different thing from a
+      // long author list; allCountries carries that wider picture.
       international: countries.length > 1
     };
   }
@@ -132,7 +152,7 @@
     for (const work of Array.isArray(works) ? works : []) {
       const picked = principals(work?.people);
       if (!picked) continue;
-      for (const person of [picked.first, picked.corresponding]) {
+      for (const person of [picked.first, picked.corresponding, ...picked.allCorresponding]) {
         const ror = text(person?.ror);
         if (ror && !known[ror]) wanted.add(ror);
       }

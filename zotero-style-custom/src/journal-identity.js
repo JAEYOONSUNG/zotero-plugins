@@ -487,7 +487,7 @@
     const family = row ? familyForPublisher(row.publisher) : null;
     const info = family ? familyInfo(family, row.publisher) : null;
     if (info) {
-      return {family, label: info.label, hue: info.hue, known: true, viaPublisher: true,
+      return {family, label: info.label, hue: typeof info.hue === 'function' ? info.hue(name) : info.hue, known: true, viaPublisher: true,
         mark: abbreviate(name) || monogram(row.abbreviation || name),
         publisher: row.publisher, quartile: row.quartile, abbreviation: row.abbreviation,
         issns: row.issns || [], impactFactor: row.impactFactor ?? null, year: row.year ?? null};
@@ -645,20 +645,26 @@
   // a derived one, so a recognised publisher reads first.
   function colours(identity, {dark = false} = {}) {
     if (identity?.exact) return tonesFor(identity.hex, dark);
-    const hue = identity?.hue ?? 0;
+    const hue = Number.isFinite(identity?.hue) ? identity.hue : 0;
     const known = !!identity?.known;
     // A journal the registry never heard of used to get a hue from its own name,
     // separated from a real house colour only by a saturation step nobody can see
     // on a chip this size. With most of the shipped registry carrying no publisher,
     // that dressed four rows in five in a brand that does not exist. Absence is
     // drawn as absence: grey, so a colour on the column always means something.
-    return dark
-      ? known
-        ? {ink: hsl(hue, 62, 74), fill: hsl(hue, 44, 24), edge: hsl(hue, 44, 36)}
-        : {ink: hsl(hue, 0, 62), fill: hsl(hue, 0, 22), edge: hsl(hue, 0, 30)}
-      : known
-        ? {ink: hsl(hue, 62, 40), fill: hsl(hue, 62, 93), edge: hsl(hue, 52, 84)}
-        : {ink: hsl(hue, 0, 45), fill: hsl(hue, 0, 94), edge: hsl(hue, 0, 88)};
+    // The ink is walked along its own hue until it reads on the page and on its
+    // own fill (4.5:1); a fixed lightness left yellows and teals at 3:1.
+    const [sat, light, fillSat, fillLight, edgeSat, edgeLight] = dark
+      ? known ? [62, 74, 44, 24, 44, 36] : [0, 62, 0, 22, 0, 30]
+      : known ? [62, 40, 62, 93, 52, 84] : [0, 45, 0, 94, 0, 88];
+    const fill = hslToHex(hue, fillSat / 100, fillLight / 100);
+    const behind = [dark ? DARK_BG : WHITE, fill];
+    let ink = null;
+    for (let at = light, step = 0; step < 100 && at >= 0 && at <= 100; at += dark ? 1 : -1, step++) {
+      const candidate = hslToHex(hue, sat / 100, at / 100);
+      if (behind.every(surface => contrast(candidate, surface) >= MIN_CONTRAST)) { ink = hsl(hue, sat, at); break; }
+    }
+    return {ink: ink || (dark ? 'hsl(0 0% 91%)' : 'hsl(0 0% 11%)'), fill: hsl(hue, fillSat, fillLight), edge: hsl(hue, edgeSat, edgeLight)};
   }
 
   const hsl = (h, s, l) => `hsl(${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%)`;
@@ -710,35 +716,52 @@
   // Walk the lightness until the colour clears the contrast it needs, keeping
   // hue and saturation exactly as the brand has them. The bar is 4.5, what a
   // reader needs for a journal name at list size, not the 3:1 of a swatch.
-  function readable(hex, dark) {
-    const behind = dark ? DARK_BG : WHITE;
-    if (contrast(hex, behind) >= 4.5) return hex;
+  // `also` lists further surfaces the text sits on (its own tinted fill).
+  const MIN_CONTRAST = 4.5;
+  function readable(hex, dark, also = []) {
+    const behind = [dark ? DARK_BG : WHITE, ...also];
+    const clears = value => behind.every(surface => contrast(value, surface) >= MIN_CONTRAST);
+    if (clears(hex)) return hex;
     const {h, s, l} = hexToHsl(hex);
     let light = l;
-    for (let step = 0; step < 40; step++) {
+    for (let step = 0; step < 50; step++) {
       light += dark ? 0.02 : -0.02;
-      if (light <= 0.04 || light >= 0.96) break;
+      if (light <= 0.02 || light >= 0.98) break;
       const candidate = hslToHex(h, s, light);
-      if (contrast(candidate, behind) >= 4.5) return candidate;
+      if (clears(candidate)) return candidate;
     }
     return dark ? '#e8e8ed' : '#1c1c1e';
   }
+  const inkOn = readable;
+  /* Lettering on a coloured badge: white or dark, whichever reads better, by
+     computing the contrast instead of guessing from luminance (the old
+     0.42 cut-off left Nature Methods at 3.5:1). #111 first for its softness;
+     pure black only when #111 cannot reach 4.5, which no background in the
+     middle of the range lets it. Black and white together always reach 4.58. */
+  function badgeInkFor(background) {
+    const white = contrast('#ffffff', background), soft = contrast('#111111', background);
+    if (white >= MIN_CONTRAST && white >= soft) return '#ffffff';
+    if (soft >= MIN_CONTRAST) return '#111111';
+    return white >= contrast('#000000', background) ? '#ffffff' : '#000000';
+  }
+  // The one size every badge is drawn at, matching --sc-fs-meta; nothing in the list is smaller.
+  const BADGE_FONT_PX = 11;
   function tonesFor(hex, dark) {
     if (!hex) return dark
       ? {ink: 'hsl(0 0% 88%)', fill: 'hsl(0 0% 24%)', edge: 'hsl(0 0% 36%)'}
       : {ink: 'hsl(0 0% 12%)', fill: 'hsl(0 0% 93%)', edge: 'hsl(0 0% 84%)'};
     const {h, s} = hexToHsl(hex);
     const sat = Math.round(s * 100);
-    // The badge wears the exact code, with black or white lettering by luminance,
-    // so the colour the journal actually prints is the colour on the row.
-    const badge = {badge: hex, badgeInk: luminance(hex) > 0.42 ? '#111111' : '#ffffff'};
-    const ink = readable(hex, dark);
+    // The badge wears the exact code; its lettering is white or dark by measured contrast.
+    const badge = {badge: hex, badgeInk: badgeInkFor(hex)};
+    const fillHex = dark ? hslToHex(h, Math.round(sat * 0.7) / 100, 0.24) : hslToHex(h, sat / 100, 0.93);
+    const ink = readable(hex, dark, [fillHex]);
     return dark
       ? {...badge, ink, fill: hsl(h, Math.round(sat * 0.7), 24), edge: hsl(h, Math.round(sat * 0.7), 36)}
       : {...badge, ink, fill: hsl(h, sat, 93), edge: hsl(h, Math.round(sat * 0.85), 84)};
   }
 
-  const api = {registryFieldRanks, registryLevels, resolveLevels, registryRevision, identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, registryRanked, registryRank, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
+  const api = {registryFieldRanks, registryLevels, resolveLevels, registryRevision, identify, colours, monogram, abbreviate, derivedHue, natureHue, hexToHsl, hslToHex, contrast, readable, inkOn, badgeInkFor, BADGE_FONT_PX, MIN_CONTRAST, DARK_BG, tonesFor, familyForPublisher, familyInfo, PUBLISHER_FAMILY, loadRegistry, registryLookup, registryByIssn, registryRanked, registryRank, _registrySize: () => (REGISTRY ? REGISTRY.size : 0), FAMILIES, NATURE_TITLES, ABBREVIATIONS, JOURNAL_HUES, JOURNAL_COLOURS, _cacheSize: () => seen.size};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleJournalIdentity = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

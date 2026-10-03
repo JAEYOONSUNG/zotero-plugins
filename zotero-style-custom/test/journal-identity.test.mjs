@@ -420,3 +420,61 @@ test('shipped journals with colliding normalized titles retain distinct metrics 
     }
   }
 });
+
+/* ---- Audit 2026-10-04, item 9: every colour the badges and names use reads, at 11px or more ---- */
+const hexOf = value => {
+  const m = /^hsl\((-?\d+(?:\.\d+)?) (\d+)% (\d+)%\)$/.exec(value);
+  return m ? journals.hslToHex(Number(m[1]), Number(m[2]) / 100, Number(m[3]) / 100) : value;
+};
+
+test("every journal in the registry has a badge, ink and fill that reach 4.5:1 in light and dark, and badges are 11px", () => {
+  journals.loadRegistry(JSON.parse(readFileSync(new URL("../data/journal-registry.json", import.meta.url), "utf8")));
+  const names = new Set([...Object.keys(journals.JOURNAL_COLOURS), ...Object.keys(journals.JOURNAL_HUES)]);
+  for (const row of JSON.parse(readFileSync(new URL("../data/journal-registry.json", import.meta.url), "utf8")).journals) names.add(row.title);
+  assert.ok(names.size > 20000, "the whole registry is walked, not a sample");
+  const seen = new Set(), failures = [];
+  for (const name of names) {
+    const id = journals.identify(name);
+    if (!id) continue;
+    const key = id.exact ? id.hex : `${id.known}:${id.hue}`;
+    if (seen.has(key)) continue;           // one identity is one colour, whatever the journal
+    seen.add(key);
+    assert.ok(Number.isFinite(id.hue), `${name}: a journal always has a hue`);
+    for (const dark of [false, true]) {
+      const tone = journals.colours(id, {dark}), surface = dark ? journals.DARK_BG : "#ffffff";
+      const check = (label, a, b) => { const ratio = journals.contrast(hexOf(a), hexOf(b)); if (ratio < 4.5) failures.push(`${name} ${dark ? "dark" : "light"} ${label} ${ratio.toFixed(2)}`); };
+      if (tone.badge) check("badge", tone.badgeInk, tone.badge);
+      check("ink on page", tone.ink, surface);
+      check("ink on fill", tone.ink, tone.fill);
+    }
+  }
+  assert.deepEqual(failures.slice(0, 10), [], `${failures.length} colour pairs under 4.5:1`);
+  assert.ok(seen.size > 500, "hundreds of distinct colours were walked");
+  assert.ok(journals.BADGE_FONT_PX >= 11, "badges are drawn at the shared 11px token or larger");
+});
+
+test("the reviewed badges: Nature Methods, Nature Communications and a mid-tone background all reach 4.5:1", () => {
+  for (const name of ["Nature Methods", "Nature Communications", "Metabolic Engineering", "EMBO Journal"]) {
+    const id = journals.identify(name);
+    for (const dark of [false, true]) {
+      const tone = journals.colours(id, {dark});
+      if (tone.badge) assert.ok(journals.contrast(tone.badgeInk, tone.badge) >= 4.5, `${name} badge`);
+      assert.ok(journals.contrast(hexOf(tone.ink), dark ? journals.DARK_BG : "#ffffff") >= 4.5, `${name} ink ${dark ? "dark" : "light"}`);
+    }
+  }
+  // For any background, white or dark lettering reaches the bar: sweep the whole grey ramp and the saturated primaries.
+  for (let v = 0; v <= 255; v += 5) {
+    const grey = "#" + v.toString(16).padStart(2, "0").repeat(3);
+    assert.ok(journals.contrast(journals.badgeInkFor(grey), grey) >= 4.5, "grey " + grey);
+  }
+  for (const hex of ["#ff0000", "#00ff00", "#0000ff", "#e87224", "#0085c8", "#ff0095", "#efd600"]) {
+    assert.ok(journals.contrast(journals.badgeInkFor(hex), hex) >= 4.5, hex);
+  }
+});
+
+test("a dark ink is lightened and a light ink darkened along its own hue, never swapped for another colour", () => {
+  const yellow = "#efd600", ink = journals.readable(yellow, false);
+  assert.ok(journals.contrast(ink, "#ffffff") >= 4.5);
+  const before = journals.hexToHsl(yellow), after = journals.hexToHsl(ink);
+  assert.ok(Math.abs(before.h - after.h) < 8, "the hue is kept");
+});

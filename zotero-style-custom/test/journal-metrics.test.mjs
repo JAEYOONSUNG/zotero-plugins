@@ -100,3 +100,15 @@ test("fifty journals are asked for in one request, by ISSN", () => {
   assert.equal(metrics.profilesURL([]), null);
   assert.equal(metrics.readSources({results: [source("Nature"), null]}).length, 1);
 });
+
+test("a missing APC or mean citedness is unknown, never 0 (Number(null) is 0)", () => {
+  for (const missing of [null, undefined, "", "  "]) {
+    assert.equal(metrics.shapeSource(source("X", {apc_usd: missing})).apc, null, JSON.stringify(missing));
+    assert.equal(metrics.shapeSource(source("X", {summary_stats: {"2yr_mean_citedness": missing}})).citedness, null, JSON.stringify(missing));
+  }
+  assert.equal(metrics.shapeSource(source("X", {apc_usd: 0})).apc, 0, "a recorded zero is a zero");
+  assert.equal(metrics.shapeSource(source("X", {apc_usd: "2850"})).apc, 2850);
+  assert.equal(metrics.shapeSource(source("X", {summary_stats: {"2yr_mean_citedness": 0}})).citedness, 0);
+  assert.equal(metrics.shapeSource(source("X", {apc_usd: true})).apc, null);
+  assert.equal(metrics.numberOrNull(null), null);
+});

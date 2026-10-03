@@ -106,3 +106,29 @@ test("no authors means no claim about where the paper came from", () => {
   assert.equal(affiliations.summarise(null), null);
   assert.equal(affiliations.principals([{name: ""}]), null);
 });
+
+/* ---- Audit 2026-10-04, item 5: every corresponding author is kept ---- */
+test("a first author who is also corresponding does not hide the co-corresponding author", () => {
+  const first = person("Kim", "first", {ror: "R1", country: "KR", institution: "KAIST", corresponding: true});
+  const co = person("Mueller", "middle", {ror: "R2", country: "DE", institution: "MPI", corresponding: true});
+  const last = person("Senior", "last", {ror: "R1", country: "KR", institution: "KAIST"});
+  const picked = affiliations.principals([first, co, last]);
+  assert.equal(picked.corresponding.name, "Mueller", "the compact display prefers a corresponding author who is not the first author");
+  assert.deepEqual(picked.allCorresponding.map(p => p.name), ["Kim", "Mueller"], "all of them are kept");
+  assert.equal(picked.firstIsCorresponding, true);
+  const summary = affiliations.summarise([first, co, last]);
+  assert.equal(summary.corresponding.name, "Mueller");
+  assert.deepEqual(summary.countries.sort(), ["DE", "KR"], "the countries include every corresponding author");
+  assert.equal(summary.international, true);
+  assert.deepEqual(summary.correspondingAll.map(r => r.name), ["Kim", "Mueller"]);
+  assert.deepEqual(summary.institutions.sort(), ["KAIST", "MPI"]);
+  assert.deepEqual(summary.allCountries.sort(), ["DE", "KR"], "and every author's country is aggregated too");
+  assert.equal(summary.firstIsCorresponding, true);
+  // Only the first author corresponding: nothing else to show, and not international.
+  const solo = affiliations.summarise([first, person("Mid", "middle", {country: "KR"}), last]);
+  assert.equal(solo.corresponding, null);
+  assert.equal(solo.firstIsCorresponding, true);
+  assert.equal(solo.international, false);
+  // Institutions the sweep must look up include the co-corresponding author's.
+  assert.deepEqual(affiliations.institutionsNeeded([{people: [first, co, last]}]).sort(), ["R1", "R2"]);
+});

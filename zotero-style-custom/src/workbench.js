@@ -53,7 +53,7 @@
   // Every self-saving memo currently on screen, so an edit still inside its
   // one-second wait is written when the panel closes rather than lost.
   let memoFields=[];
-  let observedContext=null;let draftContext='',draftCounters=new Map();const drafts=new Map(),visibleAnnotationIDs=new Set(),pageRanges=new Map(),openStrips=new Set(),readingFiles=new Map(),openAnnotGroups=new Set(),deletedCardSelections=new Map();
+  let observedContext=null;let draftContext='',draftCounters=new Map();const drafts=new Map(),visibleAnnotationIDs=new Set(),annotationPaper=new Map(),pageRanges=new Map(),openStrips=new Set(),readingFiles=new Map(),openAnnotGroups=new Set(),deletedCardSelections=new Map();
   // A45: annotations by page, per paper, shared between 쪽별 기록 (the marks
   // on the strip, and its own summary count) and 주석이 있는 쪽 -- whichever
   // fold loads first fills this in for the other, rather than each asking
@@ -313,6 +313,30 @@
   const failures=root.CustomStyleFailures||{describe:error=>error?.message||String(error)};
   const readable=error=>failures.describe(error)||String(error?.message||error||'');
   async function run(fn){try{return await fn();}catch(error){if(!disposed)message(readable(error),true);return null;}}
+  /* A paper without a DOI whose title almost matched: the lookup stopped and
+     asks instead of linking it. Yes writes the link (kept, so it is asked once),
+     No remembers the refusal; both carry data-writes so the self-check never
+     presses them. Returns true when it drew the question. */
+  function askSamePaper(error,box,item,retry){
+   const candidates=error?.candidates;
+   if(!Array.isArray(candidates)||!candidates.length||typeof runtime.confirmWorkLink!=='function')return false;
+   box.replaceChildren();box.removeAttribute?.('aria-busy');
+   const card=node('div',null,box,{class:'sc-empty sc-same-paper',role:'group','aria-label':T('같은 논문인가요?')});
+   node('p','같은 논문인가요?',card,{class:'sc-same-title'});
+   node('p','DOI가 없어 제목으로 찾았지만 제목, 연도, 제1저자가 모두 일치하지는 않았습니다. 같은 논문이면 예를 누르세요.',card,{class:'sc-muted'});
+   const ref=()=>runtime.Z.Items.get(Number(item.id));
+   for(const candidate of candidates){
+    const row=node('div',null,card,{class:'sc-hit sc-same-candidate'});
+    node('p',candidate.title||T('제목 없음'),row,{class:'sc-hit-title'});
+    node('p',[(candidate.authors||[]).join(', '),candidate.year,candidate.venue].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
+    const acts=node('div',null,row,{class:'sc-hit-actions'});
+    button('예',()=>run(async()=>{await runtime.confirmWorkLink(ref(),candidate.id);await retry();}),acts,{'data-writes':'cache',title:T('이 논문을 같은 논문으로 연결합니다')});
+    button('아니요',()=>run(async()=>{await runtime.rejectWorkLink(ref(),candidate.id);row.remove();
+     if(!card.querySelector('.sc-same-candidate'))message('연결하지 않았습니다. 문헌에 DOI를 채운 뒤 다시 찾으세요.');}),acts,{'data-writes':'cache',title:T('다른 논문이므로 다시 묻지 않습니다')});
+   }
+   message('같은 논문인지 확인해 주세요.');
+   return true;
+  }
   /* Every button whose handler writes to the library (items, notes, tags,
      collections, relations, the trash) is named here by its source label and
      carries data-writes. The self-check sweep skips by this attribute, so it
@@ -1245,43 +1269,57 @@
      .sc-paper-search-hit line under its title. */
   async function exploreRows(){
    const base=rows();
-   // The memo/note/annotation widening looks for the plain words; -word, field:value and the rules already acted in rows().
-   const wide=model.plainQuery?model.plainQuery(state.query):state.query;
-   if(!state.searchRecords||!wide.trim())return {items:base,hits:new Map()};
-   const words=String(wide||'').toLowerCase().split(/\s+/).filter(Boolean);
+   if(!state.searchRecords||!state.query.trim())return {items:base,hits:new Map()};
+   /* One searchable document per paper: its own fields and memo, plus the text
+      of its notes and annotations, indexed once per load. The whole query --
+      AND, OR, -exclusions, title:/note:/annotation: -- is evaluated once
+      against that document, so "-toxic" also reads the notes and "OR" and
+      "note:" find a paper only a note matches. */
+   const index=await scopeRecords().catch(()=>new Map());
+   const items=model.filter(scoped(),{query:state.query,...parentOptions(),records:index});
+   const words=(model.parseQuery?model.parseQuery(state.query):[]).filter(t=>!t.neg).map(t=>t.value).filter(Boolean);
+   const norm=model.norm||(v=>String(v||'').toLowerCase());
    const excerptAround=text=>{const hay=String(text||'').replace(/\s+/g,' ').trim();
     const at=Math.min(...words.map(w=>hay.toLowerCase().indexOf(w)).filter(i=>i>=0));
     if(!Number.isFinite(at))return hay.slice(0,140);
     return (at>20?'…':'')+hay.slice(Math.max(0,at-20),at+120).trim();};
-   const hits=new Map();
-   // A base row already matched by title etc.; only a memo-only match is worth naming.
-   for(const item of base){
-    const own=[item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,...(item.tags||[])].join(' ');
-    if(model.matches(own,wide))continue;
-    if(item.remark&&model.matches(item.remark,wide))hits.set(String(item.id),{kind:'memo',label:T('메모'),text:excerptAround(item.remark)});
-   }
-   const pool=model.filter(scoped(),{query:model.syntaxQuery?model.syntaxQuery(state.query):'',...parentOptions()});
-   const poolIDs=pool.map(item=>String(item.id));
+   const mentions=text=>{const hay=norm(text);return words.some(w=>hay.includes(w));};
    const baseIDs=new Set(base.map(item=>String(item.id)));
-   const [notes,annotations]=await Promise.all([scopeNotes(poolIDs),scopeAnnotations(poolIDs)]).catch(()=>[[],[]]);
-   const extra=[];
-   for(const item of pool){
+   const hits=new Map();
+   for(const item of items){
     const id=String(item.id);
-    if(baseIDs.has(id)||hits.has(id))continue;
-    const myNotes=(notes||[]).filter(n=>String(n.parentID||'')===id);
-    const noteHit=myNotes.find(n=>model.matches(String(n.title||'')+' '+String(n.text||''),wide));
-    if(noteHit){hits.set(id,{kind:'note',label:T(`노트 ${myNotes.length}`),text:excerptAround(String(noteHit.title||'')+' '+String(noteHit.text||''))});extra.push(item);continue;}
-    const myAnnotations=(annotations||[]).filter(a=>String(a.parentID||'')===id);
-    const annotHit=myAnnotations.find(a=>model.matches(String(a.text||'')+' '+String(a.comment||''),wide));
-    if(annotHit){hits.set(id,{kind:'annotation',label:T(`주석 ${myAnnotations.length}`),text:excerptAround(String(annotHit.text||'')+' '+String(annotHit.comment||''))});extra.push(item);}
+    if(baseIDs.has(id)){
+     // A base row already matched by title etc.; only a memo-only match is worth naming.
+     const own=[item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,...(item.tags||[])].join(' ');
+     if(words.length&&!mentions(own)&&item.remark&&mentions(item.remark))hits.set(id,{kind:'memo',label:T('메모'),text:excerptAround(item.remark)});
+     continue;
+    }
+    const mine=index.get(id);if(!mine)continue;
+    const noteHit=mine.notes.find(n=>mentions(String(n.title||'')+' '+String(n.text||'')));
+    if(noteHit){hits.set(id,{kind:'note',label:T(`노트 ${mine.notes.length}`),text:excerptAround(String(noteHit.title||'')+' '+String(noteHit.text||''))});continue;}
+    const annotHit=mine.annotations.find(a=>mentions(String(a.text||'')+' '+String(a.comment||'')));
+    if(annotHit)hits.set(id,{kind:'annotation',label:T(`주석 ${mine.annotations.length}`),text:excerptAround(String(annotHit.text||'')+' '+String(annotHit.comment||''))});
    }
-   // Merge before sorting: a paper pulled in only through a note ranks and
-   // orders exactly as any other would, rather than trailing the base list
-   // regardless of the chosen sort (or the median-sort facts, which count
-   // whatever this returns).
-   if(!extra.length)return {items:base,hits};
-   const merged=[...base,...extra];
-   return {items:state.query&&state.sort==='library'?model.rankByQuery(merged,state.query):model.sortItems(merged,state.sort),hits};
+   // Sorted after the merge: a paper found only through a note ranks and orders as any other would.
+   return {items:state.query&&state.sort==='library'?model.rankByQuery(items,state.query):model.sortItems(items,state.sort),hits};
+  }
+  /* The index behind 내 기록 포함: id -> {note, annotation} folded text for the
+     query, and the records themselves for the excerpt. Built from the two
+     once-per-load reads below, and rebuilt only when either is read again. */
+  let recordIndex=null;
+  function scopeRecords(){
+   const np=scopeNotes(),ap=scopeAnnotations();
+   if(recordIndex&&recordIndex.np===np&&recordIndex.ap===ap)return recordIndex.promise;
+   const norm=model.norm||(v=>String(v||'').toLowerCase());
+   const promise=Promise.all([np,ap]).catch(()=>[[],[]]).then(([notes,annotations])=>{
+    const map=new Map();
+    const slot=id=>{let r=map.get(id);if(!r){r={note:'',annotation:'',notes:[],annotations:[]};map.set(id,r);}return r;};
+    for(const n of notes||[]){const id=String(n.parentID||'');if(!id)continue;const r=slot(id);r.notes.push(n);r.note+=' '+norm(String(n.title||'')+' '+String(n.text||''));}
+    for(const a of annotations||[]){const id=String(a.parentID||'');if(!id)continue;const r=slot(id);r.annotations.push(a);r.annotation+=' '+norm(String(a.text||'')+' '+String(a.comment||''));}
+    return map;
+   });
+   recordIndex={np,ap,promise};
+   return promise;
   }
   /* Searching notes re-ran the whole library's note read on every keystroke.
      The scope's notes only change when the library is reloaded or a note is
@@ -1439,7 +1477,7 @@
   function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]')){const key=input.dataset.draftKey,binding=memoBindings.get(input);if(binding&&binding.base!==undefined){binding.restore();continue;}if(!drafts.has(key))continue;input.value=drafts.get(key);}syncAIApply();}
   function clear(){
    if(jcrMount){state.jcrBrowserState=jcrMount.state;jcrMount.destroy();jcrMount=null;}
-   abortAround();aroundRow=null;previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
+   abortAround();aroundRow=null;previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();annotationPaper.clear();
    // Editors that were just taken off the screen: their autosave timers are cancelled (their input is already a draft the new editor restores).
    memoFields=memoFields.filter(entry=>{if(entry.field.isConnected)return true;const gone=memoBindings.get(entry.field);gone?.preserveDetached?.();gone?.cancelTimer?.();return false;});
   }
@@ -1475,6 +1513,7 @@
    for(const entry of entries.filter(e=>e&&e.value!=null&&e.value!=='')){
     const tile=entry.onClick?button('',entry.onClick,row,{class:'sc-overview-fact',...(entry.pressed!=null?{'aria-pressed':String(!!entry.pressed)}:{})}):node('span',null,row,{class:'sc-overview-fact'});
     if(entry.title)tile.title=T(entry.title);
+    if(entry.total)tile.dataset.total=entry.total;
     if(entry.disabled&&entry.onClick)tile.disabled=true;
     node('b',String(entry.value),tile);tile.appendChild(doc.createTextNode(' '));node('span',T(entry.label),tile,{class:'sc-overview-fact-label'});
    }
@@ -1746,7 +1785,8 @@
        again, all of them. */
     const statusTile=(label,key)=>{if(!n[key])return;const on=activeRules().some(r=>r.id==='q-status'&&r.values[0]===key);tiles.push({value:fmtN(n[key]),label,pressed:on,title:on?'다시 누르면 모두 보기':'이 상태만 보기',onClick:()=>{if(on)dropQuick(state.tab,'q-status');else putQuick(state.tab,[quickStatus(key)]);render();}});};
     statusTile('완료','done');statusTile('읽는 중','reading');statusTile('안 읽음','unread');
-    if(seconds>0)tiles.push({value:runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):Math.round(seconds/60)+'분',label:'읽음',title:T('이 목록 문헌의 누적 읽기 시간')});
+    state.totalsItems=items;
+    if(seconds>0)tiles.push({value:runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):Math.round(seconds/60)+'분',label:'읽음',total:'seconds',title:T('이 목록 문헌의 누적 읽기 시간')});
     const mi=median(ifs),mc=median(cites);
     // Sorts by the same figure it names -- pressing again goes back to 기본 순서, as the column heads do.
     const sortTile=(label,sort,value,basis)=>{if(value==null||value==='')return;const on=state.sort===sort;tiles.push({value,label,pressed:on,title:basis+' · '+T(on?'다시 누르면 기본 순서':'이 순서로 정렬'),onClick:()=>{state.sort=on?'library':sort;const select=filterInputs.get?.('sort');if(select)select.value=state.sort;render();}});};
@@ -2335,9 +2375,28 @@
    const metaCache=runtime.cache&&typeof runtime.cache.workMeta==='object'?runtime.cache.workMeta:{};
    const all=!!state.graphAll;
    const g=runtime.graphTools.egoGraph(id,records,{meta:metaCache,citers:cached?cached.citers:[],depth2:state.graphDepth2,limit:60,all});
+   /* A stored list says when it was checked and can be asked for again, for this
+      paper alone. One past its expiry (30 days; 14 when OpenAlex had no such
+      paper) is refreshed once when the paper is opened, never by a sweep. */
+   const listState=typeof runtime.citationState==='function'?runtime.citationState(centreItem):null;
+   const refreshLists=()=>run(async()=>{
+    message('이 논문의 인용 목록을 OpenAlex에서 다시 받는 중…');
+    const found=await runtime.Z.Items.getAsync(Number(id));
+    await runtime.refreshPaperLists(found);
+    message('인용 목록을 새로 받았습니다.');await render();
+   });
+   if(listState&&(work||cached)&&typeof runtime.refreshPaperLists==='function'){
+    const when=runtime.checkedDate?runtime.checkedDate(listState.works.checkedAt):'';
+    const stale=listState.works.state==='stale'||(cached&&listState.citers.state==='stale');
+    node('span',when?T(`인용 목록 확인 ${when}`)+(stale?' · '+T('오래되었습니다'):''):'',b,{class:'sc-muted sc-list-checked',title:T('인용 목록은 30일, OpenAlex에 없다는 답은 14일 뒤 다시 확인합니다')});
+    button('새로고침',refreshLists,b,{'data-writes':'cache',class:'sc-fetch-action',title:T('이 논문의 인용 목록만 OpenAlex에서 다시 받습니다 (요청 최대 2회)')});
+    const autoKey=runtime.identity(centreItem);
+    (state.listsRefreshed||(state.listsRefreshed=new Set()));
+    if(stale&&!state.listsRefreshed.has(autoKey)){state.listsRefreshed.add(autoKey);win.setTimeout(()=>{if(!disposed&&state.tab==='graph')refreshLists();},0);}
+   }
    if(!work||!work.openalex){
     node('p','이 논문의 인용 목록이 아직 없습니다. OpenAlex에서 한 번 가져오면 이 논문의 참고문헌과 인용한 내 문헌이 보입니다.',body,{class:'sc-muted'});
-    if(!work&&typeof runtime.sweepPaperWorks==='function')button('이 논문의 인용 목록 가져오기',()=>run(async()=>{
+    if((!work||work.missing)&&!(listState&&work&&typeof runtime.refreshPaperLists==='function')&&typeof runtime.sweepPaperWorks==='function')button('이 논문의 인용 목록 가져오기',()=>run(async()=>{
      const found=await runtime.Z.Items.getAsync(Number(id));
      const report=await runtime.sweepPaperWorks(found?[found]:[],{});
      message(report.found?`참고문헌 ${report.references}건을 가져왔습니다.`:'OpenAlex에서 이 논문을 찾지 못했습니다.');await render();
@@ -2393,7 +2452,7 @@
   }
   // The other graph kinds around one paper: the paper and whoever shares a tag, an author or a related link with it.
   function egoLegacyItems(centreItem){
-   const raw=library.graph(state.items.slice(0,500),{mode:state.graphMode==='citations'?'related':state.graphMode});
+   const raw=library.graph(state.items,{mode:state.graphMode==='citations'?'related':state.graphMode,focus:centreItem.id,limit:Math.max(500,state.items.length)});
    const ids=new Set([String(centreItem.id)]);
    for(const e of raw.edges){if(String(e.source)===String(centreItem.id))ids.add(String(e.target));if(String(e.target)===String(centreItem.id))ids.add(String(e.source));}
    return state.items.filter(i=>ids.has(String(i.id)));
@@ -2411,10 +2470,12 @@
    const shownItems=items.slice(0,limit),toRecord=graphRecord(works);
    const records=shownItems.map(toRecord),everyone=state.items.map(toRecord);
    const withRefs=records.filter(r=>r.references.length).length;
-   const unasked=shownItems.filter(i=>!(works[i.libraryID+':'+i.key]||works[String(i.id)])).length;
+   const rowOf=i=>works[i.libraryID+':'+i.key]||works[String(i.id)];
+   // Lists past their expiry are counted with the missing ones, so the reader's own press brings them up to date; nothing refreshes them unasked.
+   const unasked=shownItems.filter(i=>{const r=rowOf(i);return !r||(r.doi&&runtime.paperRowStatus?.(r)==='stale');}).length;
    if(unasked&&typeof runtime.sweepPaperWorks==='function'){const fetchLists=button('',()=>run(async()=>{
     const wanted=[];for(const i of shownItems){const found=await runtime.Z.Items.getAsync(Number(i.id));if(found)wanted.push(found);}
-    const report=await runtime.sweepPaperWorks(wanted,{onProgress:(done,total)=>message(`인용 목록 ${done}/${total}`)});
+    const report=await runtime.sweepPaperWorks(wanted,{stale:true,onProgress:(done,total)=>message(`인용 목록 ${done}/${total}`)});
     message(`${report.found}편에서 참고문헌 ${report.references}건`+(report.missing?` · OpenAlex에 없음 ${report.missing}`:''));await render();
    }),b,{class:'sc-fetch-action'});
    node('span',T('인용 목록 가져오기'),fetchLists);node('span',T(`OpenAlex · ${unasked}편 남음`),fetchLists,{class:'sc-fetch-quota'});}
@@ -2568,7 +2629,7 @@
    /* "Remaining" is what a press would still ask about. A paper OpenAlex does
       not know, or one with no DOI, is answered already and is skipped by the
       sweep; counting it kept "3편 남음" on a button that could do nothing. */
-   const unasked=chosen.filter(paper=>!(works[paper.libraryID+':'+paper.key]||works[String(paper.id)])).length;
+   const unasked=chosen.filter(paper=>{const r=works[paper.libraryID+':'+paper.key]||works[String(paper.id)];return !r||(r.doi&&runtime.paperRowStatus?.(r)==='stale');}).length;
    // 주변 mode draws only from what is already cached; it never offers a fetch.
    if(!neighbourMode&&unasked){const fetchLists=button('',()=>run(async()=>{
     const wanted=[];
@@ -2577,7 +2638,7 @@
      if(found)wanted.push(found);
     }
     const report=await runtime.sweepPaperWorks(wanted,
-     {onProgress:(done,total)=>message(`인용 목록 ${done}/${total}`)});
+     {stale:true,onProgress:(done,total)=>message(`인용 목록 ${done}/${total}`)});
     message(`${report.found}편에서 참고문헌 ${report.references}건 · 기관 ${report.institutions}곳`
      +(report.missing?` · OpenAlex에 없음 ${report.missing}`:'')+(report.noDOI?` · DOI 없음 ${report.noDOI}`:''));
     await render();
@@ -2903,7 +2964,7 @@
      a graph so it can be read" has one answer. */
   function drawLegacyGraph(b,scopeItems){
    const limit=setting('graphNodeLimit',180);
-   const raw=library.graph((scopeItems||rows()).slice(0,limit),{mode:state.graphMode==='citations'?'related':state.graphMode});
+   const raw=library.graph(scopeItems||rows(),{mode:state.graphMode==='citations'?'related':state.graphMode,limit,focus:state.graphFocus&&/^\d+$/.test(String(state.graphFocus))?state.graphFocus:null});
    if(!raw.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
    const W=graphWidth(),H=graphHeight(raw.nodes.length);
    /* The good layout when it is there, the old placer when it is not.
@@ -3284,8 +3345,18 @@
    button('선택 주석을 노트로',async()=>{
     const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
     if(!chosen.length)throw new Error('현재 범위의 주석을 선택하세요.');
-    const id=await library.noteFromAnnotations(chosen);noteCache=null;
-    await library.openItem(id);message('출처 링크가 포함된 노트를 만들었습니다.');
+    /* One paper keeps the note made under it. Annotations of several papers
+       cannot share a parent, so they become one standalone note with a
+       heading per paper and a link back to each annotation's place. */
+    const owners=[...new Set(chosen.map(id=>annotationPaper.get(String(id))||''))];
+    let id;
+    if(owners.length>1&&!owners.includes('')){
+     const entries=owners.map(owner=>({id:owner,evidence:[],annotationIDs:chosen.filter(c=>annotationPaper.get(String(c))===owner)}));
+     const collection=win.ZoteroPane?.getSelectedCollection?.();
+     id=await library.synthesisNote(entries,{title:T('주석 모음')+' · '+new Date().toISOString().slice(0,10),collectionID:collection?.id});
+    }else id=await library.noteFromAnnotations(chosen);
+    noteCache=null;
+    await library.openItem(id);message(owners.length>1?T(`문헌 ${owners.length}편의 주석으로 노트를 만들었습니다. 각 주석 위치로 가는 링크가 들어 있습니다.`):'출처 링크가 포함된 노트를 만들었습니다.');
    },selectionTools,{'data-opens':'window'});
    // Offered only from a second annotation on; the restriction used to stand
    // as its own paragraph under the list all the time, whether or not merging
@@ -3536,7 +3607,7 @@
      const stack=node('div',null,paperBox,{class:'sc-annots'});
      for(const a of group.slice(0,left)){
       left--;
-       visibleAnnotationIDs.add(a.id);
+       visibleAnnotationIDs.add(a.id);annotationPaper.set(String(a.id),String(a.parentID||''));
        const tint=/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'var(--sc-faint)';
        const row=node('article',null,stack,{class:'sc-annot',tabindex:'0','data-selected':String(state.annotationIDs.has(a.id))});
        // The annotation's colour, shown as a square before its page (see the CSS).
@@ -5949,6 +6020,7 @@
      if(!current()||controller?.signal?.aborted)return;
      list.removeAttribute('aria-busy');
      list.querySelector('[role=status]')?.remove();
+     if(askSamePaper(error,list,item,()=>path()))return;
      throw error;
     }
     if(!current())return;
@@ -6216,7 +6288,10 @@
    async function find({refresh=false}={}){
     if(refresh){const ref=runtime.Z.Items.get(Number(item.id));if(typeof runtime.forgetLookup==='function')runtime.forgetLookup(ref,'related:');else runtime.discoverCache.delete('related:'+runtime.identity(ref));}
     message('OpenAlex에서 관련 논문을 찾는 중…');
-    const {work,suggestions}=await runtime.relatedWorksCached(runtime.Z.Items.get(Number(item.id)));
+    let found;
+    try{found=await runtime.relatedWorksCached(runtime.Z.Items.get(Number(item.id)));}
+    catch(error){if(token!==epoch||disposed||state.tab!=='related')return;if(askSamePaper(error,list,item,()=>find()))return;throw error;}
+    const {work,suggestions}=found;
     if(token!==epoch||disposed||state.tab!=='related')return;
     list.replaceChildren();
     if(!work){message('이 논문을 OpenAlex에서 찾지 못했습니다.',true);return;}
@@ -6249,6 +6324,7 @@
     }});}catch(error){
      if(!current()||controller?.signal?.aborted)return;
      list.removeAttribute('aria-busy');list.querySelector('[role=status]')?.remove();
+     if(askSamePaper(error,list,item,()=>timeline()))return;
      throw error;
     }
     if(!current())return;
@@ -7443,7 +7519,9 @@
 
    async function loadAuthors(){
     message('저자 정보를 확인하는 중…');
-    const people=await runtime.authorsOfCached(runtime.Z.Items.get(Number(item.id)));
+    let people;
+    try{people=await runtime.authorsOfCached(runtime.Z.Items.get(Number(item.id)));}
+    catch(error){if(token!==epoch||disposed||state.tab!=='authors')return;if(askSamePaper(error,list,item,()=>loadAuthors()))return;throw error;}
     if(token!==epoch||disposed||state.tab!=='authors')return;
     list.replaceChildren();
     refreshWatched();
@@ -8090,7 +8168,7 @@
    const actions=node('div',null,fieldsCell,{class:'sc-hit-actions'});
    if(j.items.length)button('지표 조회',async()=>{
     const ref=runtime.Z.Items.get(Number(j.items[0].id));
-    const hit=await runtime.fetchJournalMetric(runtime.journalRecord(ref));
+    const hit=await runtime.fetchJournalMetric(runtime.journalRecord(ref),{refresh:runtime.journalStatus?.(ref)?.state==='stale'});
     await load();
     message(hit&&hit.citedness!=null
      ?`${hit.name||j.venue}: 2년 평균 피인용 ~${hit.citedness} (OpenAlex 추정치, 공식 JIF 아님)`
@@ -8121,9 +8199,11 @@
    fact('issn','ISSN',j.issns.length?j.issns.join(' · '):null);
    if(j.fields.length){const span=doc.createElementNS(HTML,'span');j.fields.forEach(f=>{node('span',f,span,{class:'sc-chip sc-chip-tiny'});});fact('field','OpenAlex 분야',span,{title:'표와 필터에 사용하는 동일한 OpenAlex 분류 경로'});}
    fact('hindex','h-index',j.hIndex!=null?String(j.hIndex):null,{title:'OpenAlex 기준 저널 h-index'});
-   fact('works','발행·피인용',j.works!=null?(j.citedness!=null?T(`${compact(j.works)}편 · 2년 평균 피인용 ${j.citedness}`):T(`${compact(j.works)}편`)):null,{title:'OpenAlex 기준 누적 논문 수와 2년 평균 피인용 (공식 JIF 아님)'});
-   const access=!j.profile?null:[T(j.isOA?'전면 OA':'구독형'),j.inDoaj?T('DOAJ 등재'):'',j.apc!=null?T(j.isOA?'APC ${0}':'OA 선택 시 APC ${0}').replace('{0}',j.apc.toLocaleString(LOC())):''].filter(Boolean).join(' · ');
-   fact('access','오픈액세스',access,{tone:j.isOA?'low':''});
+   fact('works','발행·피인용',j.works!=null?(j.citedness!=null?T(`${compact(j.works)}편 · 2년 평균 피인용 ${j.citedness}`):T(`${compact(j.works)}편 · 2년 평균 피인용 —`)):null,{title:j.works!=null&&j.citedness==null?T('OpenAlex에 이 저널의 2년 평균 피인용이 없습니다. 0이 아니라 알 수 없는 값입니다.'):'OpenAlex 기준 누적 논문 수와 2년 평균 피인용 (공식 JIF 아님)'});
+   // An APC OpenAlex does not record is unknown, not free: it reads "—" with a tooltip, never "$0".
+   const apcText=j.apc!=null?T(j.isOA?'APC ${0}':'OA 선택 시 APC ${0}').replace('{0}',j.apc.toLocaleString(LOC())):T('APC —');
+   const access=!j.profile?null:[T(j.isOA?'전면 OA':'구독형'),j.inDoaj?T('DOAJ 등재'):'',apcText].filter(Boolean).join(' · ');
+   fact('access','오픈액세스',access,{tone:j.isOA?'low':'',title:j.profile&&j.apc==null?T('OpenAlex에 이 저널의 APC가 없습니다. 무료가 아니라 알 수 없는 값입니다.'):''});
    fact('country','국가',j.country?`${COUNTRY_NAMES[j.country]||j.country}`:null);
    if(j.homepage){const a=node('a',j.homepage.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),null,{href:'#',title:j.homepage});a.addEventListener('click',e=>{e.preventDefault();runtime.Z.launchURL&&runtime.Z.launchURL(j.homepage);});fact('link','홈페이지',a);}
    const profileRanks=selectedJournalRanks(j),rankNames=new Map();
@@ -8137,7 +8217,22 @@
    if(j.globalRank)fact('quartile','로컬 JIF 순번',`${j.globalRank.toLocaleString(LOC())}번째 / ${(runtime.journalIdentity?.registryRanked?.()||[]).length.toLocaleString(LOC())}`,{title:'저장된 목록의 JIF 순번 · 공식 JCR 카테고리 순위 아님'});
    fact('library','내 서재',j.papers?`${j.papers}편 · 읽음 ${j.read} · 평균 피인용 ${j.avgCited}${j.span?' · '+(j.span[0]===j.span[1]?j.span[0]:j.span[0]+'–'+j.span[1]):''}`:'없음',{title:'이 서재에서 이 저널의 문헌'});
    if(!j.profile)node('p','추가 OpenAlex 프로필은 “빈 칸 채우기”로 조회할 수 있습니다. 저장된 분류는 표와 상세에서 동일하게 표시됩니다.',box,{class:'sc-muted sc-fact-note'});
+   /* When OpenAlex was last asked, and a press that asks again about this journal
+      alone. A record past its expiry (90 days; 14 when OpenAlex had no figure)
+      or written by the old code is refreshed once when the journal is opened,
+      one request, never as a sweep. */
+   const ref0=j.items.length&&typeof runtime.journalStatus==='function'?runtime.Z.Items.get(Number(j.items[0].id)):null;
+   const status=ref0?runtime.journalStatus(ref0):null;
    const actions=bar(box);
+   if(status&&status.state!=='none'&&typeof runtime.refreshJournal==='function'){
+    const when=status.checkedAt&&runtime.checkedDate?runtime.checkedDate(status.checkedAt):'';
+    const refreshJournal=()=>run(async()=>{message(`${j.venue}: OpenAlex에서 다시 확인하는 중…`);await runtime.refreshJournal(ref0);await load();message(`${j.venue}: OpenAlex 지표를 새로 받았습니다.`);});
+    node('p',when?T(`OpenAlex 확인 ${when}`)+(status.state==='stale'?' · '+T('오래되었습니다'):''):T('OpenAlex 아직 확인 안 함'),box,{class:'sc-muted sc-fact-note sc-journal-checked',title:T('저널 지표는 90일, 지표가 없다는 답은 14일 뒤 다시 확인합니다')});
+    if(status.state!=='missing')button('새로고침',refreshJournal,actions,{'data-writes':'cache',title:T('이 저널의 OpenAlex 지표만 다시 받습니다 (요청 1회)')});
+    (state.journalsRefreshed||(state.journalsRefreshed=new Set()));
+    const once=j.venue;
+    if(status.state==='stale'&&!state.journalsRefreshed.has(once)){state.journalsRefreshed.add(once);win.setTimeout(()=>{if(!disposed&&state.tab==='journals')refreshJournal();},0);}
+   }
    if(j.papers)button('이 저널 문헌 보기',()=>{state.query=search.value=j.venue;navigate('explore');},actions);
    else if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 이 저널 검색',()=>runtime.Z.ZotPoP.openSearch(win,{venue:j.venue}),actions,{'data-opens':'window'});
    if(j.abbreviation){
@@ -8272,10 +8367,50 @@
    }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed){groupSections();restoreDrafts();revealNav(navButtons.get(state.tab),false);}
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
-  function refreshMetrics(){
+  /* A reading tick changes one paper. It used to run runtime.state() over the
+     whole library (1,200 computeState calls a second with the panel open); it
+     now names the paper that changed, finds it through an id index, and
+     repaints that paper's card. Without an id the whole pass still runs, for
+     the callers that really changed everything. */
+  let itemIndex=null,totalsAt=0;
+  function itemsByID(){
+   if(!itemIndex||itemIndex.source!==state.items||itemIndex.length!==state.items.length){
+    itemIndex={source:state.items,length:state.items.length,map:new Map(state.items.map(row=>[String(row.id),row]))};
+   }
+   return itemIndex.map;
+  }
+  function paintMetrics(item,card){
+   card.dataset.status=item.status;
+   const time=card.querySelector('[data-metric=time] .sc-metric-value');
+   if(time)time.textContent=Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds,{compact:true}):Math.floor(item.seconds)+T('초')):'';
+   const status=card.querySelector('[data-metric=status]');
+   if(status)status.textContent=T(({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음');
+  }
+  // The summary card's reading total: summed from papers already in memory, at most every three seconds.
+  function refreshTotals(force){
+   const now=Date.now();
+   if(!force&&now-totalsAt<3000)return;
+   totalsAt=now;
+   const tile=body.querySelector('[data-total="seconds"]');
+   if(!tile||!state.totalsItems)return;
+   const seconds=state.totalsItems.reduce((n,row)=>n+(Number(row.seconds)||0),0);
+   const value=tile.querySelector('b');
+   if(value&&seconds>0)value.textContent=runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):Math.round(seconds/60)+'분';
+  }
+  function refreshMetrics(itemID){
    if(disposed||panel.hidden)return;
-   for(const item of state.items){const ref=runtime.Z.Items.get(Number(item.id));if(ref)Object.assign(item,runtime.state(ref));}
-   for(const card of body.querySelectorAll('[data-item-id]')){const item=state.items.find(row=>String(row.id)===card.dataset.itemId);if(!item)continue;card.dataset.status=item.status;const time=card.querySelector('[data-metric=time] .sc-metric-value');if(time)time.textContent=Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds,{compact:true}):Math.floor(item.seconds)+T('초')):'';const status=card.querySelector('[data-metric=status]');if(status)status.textContent=T(({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음');}
+   if(itemID==null){
+    for(const item of state.items){const ref=runtime.Z.Items.get(Number(item.id));if(ref)Object.assign(item,runtime.state(ref));}
+    for(const card of body.querySelectorAll('[data-item-id]')){const item=itemsByID().get(card.dataset.itemId);if(item)paintMetrics(item,card);}
+    refreshTotals(true);
+    return;
+   }
+   const key=String(itemID).replace(/[^\w-]/g,''),item=itemsByID().get(key);
+   if(!item)return;
+   const ref=runtime.Z.Items.get(Number(key));
+   if(ref)Object.assign(item,runtime.state(ref));
+   for(const card of body.querySelectorAll('[data-item-id="'+key+'"]'))paintMetrics(item,card);
+   refreshTotals(false);
   }
   async function applyPreferences(){panel.dataset.density=setting('workbenchDensity',runtime.cache.workbenchUI?.density||'comfortable');syncDensity();const accent=setting('accentColor','#374151');if(['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=setting('panelFontSize',13)+'px';await render();}
   const keyboard=e=>{if(e.isComposing||panel.hidden)return;

@@ -1258,11 +1258,11 @@ test('a paper without a DOI is matched among five title hits, not taken as the f
   const hit = (id, title, author) => ({id: 'https://openalex.org/' + id, title, publication_year: 2024,
     authorships: [{author: {id: 'https://openalex.org/' + author, display_name: author}, author_position: 'first', institutions: []}]});
   f.Z.HTTP.request = async (method, url) => /title\.search/.test(decodeURIComponent(url))
-    ? {response: {results: [hit('W1', 'Plasmid systems in yeast', 'AWrong'), hit('W2', 'An antiplasmid system in Vibrio.', 'ARight')]}}
+    ? {response: {results: [hit('W1', 'Plasmid systems in yeast', 'AWrong Zongo'), hit('W2', 'An antiplasmid system in Vibrio.', 'ARight Zongo')]}}
     : {response: {results: []}};
   const people = await f.plugin.authorsOf(f.ref);
-  assert.deepEqual(people.map(p => p.name), ['ARight'], 'the second hit, which is this paper');
-  f.Z.HTTP.request = async () => ({response: {results: [hit('W1', 'Plasmid systems in yeast', 'AWrong')]}});
+  assert.deepEqual(people.map(p => p.name), ['ARight Zongo'], 'the second hit, which is this paper');
+  f.Z.HTTP.request = async () => ({response: {results: [hit('W1', 'Plasmid systems in yeast', 'AWrong Zongo')]}});
   await assert.rejects(f.plugin.authorsOf(f.ref), /제목이 다릅니다/, 'no match is said, not guessed');
 });
 
@@ -2714,12 +2714,13 @@ function pathFixture({fields = {title: 'A seed paper', DOI: '10.1/seed', date: '
   const f = fixture();
   const ref = f.item(1);
   ref.getField = key => fields[key] || '';
-  ref.getCreators = () => [];
+  ref.getCreators = () => [{creatorType: 'author', firstName: 'Sam', lastName: 'Seed'}];
   const asked = [];
   const W = (id, title, refs, extra = {}) => ({id: 'https://openalex.org/' + id, title, publication_year: 2015,
     doi: 'https://doi.org/10.1/' + id.toLowerCase(), cited_by_count: 50, type: 'article', topics: [TOPIC],
     referenced_works: refs.map(r => 'https://openalex.org/' + r), ...extra});
-  const seed = W('W1', 'A seed paper', ['W7', 'W8', 'W9'], {publication_year: 2022});
+  const seed = W('W1', 'A seed paper', ['W7', 'W8', 'W9'], {publication_year: 2022,
+    authorships: [{author: {id: 'https://openalex.org/A9', display_name: 'Sam Seed'}, author_position: 'first', institutions: []}]});
   f.Z.HTTP = {request: async (method, url) => {
     asked.push(url);
     const failure = fail(url);
@@ -4559,4 +4560,199 @@ test('merge rollback (R22-1): a failure after the merge\'s memo was saved (note 
   assert.ok(out instanceof Error, 'the merge failed');
   assert.equal(plugin.entry(pub).remark, 'BASE\n\nPREPRINT', 'the saved memo stands: no rollback over it');
   assert.equal(plugin.mergeLedger()['1'], undefined, 'and no ledger was made for a failed merge');
+});
+
+/* ---- Audit 2026-10-04, item 1: a paper without a DOI is never linked to a similar-looking paper ---- */
+test('no-DOI link: Kim\'s "Activation of Notch" is not linked to Smith\'s "Inhibition of Notch"; it becomes a candidate the reader confirms', async () => {
+  const f = pathFixture({fields: {title: 'Activation of Notch signalling in neural stem cells', date: '2020'},
+    searchHits: [{id: 'https://openalex.org/W77', title: 'Inhibition of Notch signalling in neural stem cells', publication_year: 2020,
+      authorships: [{author: {id: 'https://openalex.org/A5', display_name: 'Jane Smith'}, author_position: 'first', institutions: []}]}]});
+  f.ref.getCreators = () => [{creatorType: 'author', firstName: 'Jae', lastName: 'Kim'}];
+  const error = await f.plugin.authorsOf(f.ref).then(() => null, e => e);
+  assert.ok(error, 'refused, not linked');
+  assert.equal(error.code, 'same-paper');
+  assert.deepEqual(error.candidates.map(c => c.id), ['W77']);
+  assert.deepEqual(f.plugin.workCandidates(f.ref).map(c => c.id), ['W77'], 'kept for the panel to ask about');
+  // No: remembered, never offered again, still not linked.
+  await f.plugin.rejectWorkLink(f.ref, 'W77');
+  const again = await f.plugin.authorsOf(f.ref).then(() => null, e => e);
+  assert.deepEqual(again.candidates, [], 'a refusal is not asked twice');
+});
+
+test('no-DOI link: answering Yes links that work from then on, and editing the title cancels it', async () => {
+  const f = pathFixture({fields: {title: 'Activation of Notch signalling in neural stem cells', date: '2020'},
+    searchHits: [{id: 'https://openalex.org/W77', title: 'Inhibition of Notch signalling in neural stem cells', publication_year: 2020,
+      authorships: [{author: {id: 'https://openalex.org/A5', display_name: 'Jane Smith'}, author_position: 'first', institutions: []}]}]});
+  f.ref.getCreators = () => [{creatorType: 'author', firstName: 'Jae', lastName: 'Kim'}];
+  await f.plugin.authorsOf(f.ref).catch(() => null);
+  await f.plugin.confirmWorkLink(f.ref, 'W77');
+  const asked = f.asked.length;
+  const seedWork = await f.plugin.seedWork(f.ref).catch(e => e);
+  assert.ok(f.asked.slice(asked).some(url => /openalex_id/.test(decodeURIComponent(url))), 'the confirmed id is fetched, not a title search');
+  assert.ok(!(seedWork instanceof Error));
+  // A different title is a different paper: the confirmation does not carry over.
+  const fields = {title: 'Something else', date: '2020'};
+  f.ref.getField = key => fields[key] || '';
+  assert.equal(f.plugin.workLinkRow(f.ref), null);
+});
+
+test('no-DOI link: a link stored under the old rule that fails the new one is demoted to a candidate, and nothing is deleted', () => {
+  const f = pathFixture({fields: {title: 'Activation of Notch signalling in neural stem cells', date: '2020'}});
+  f.ref.getCreators = () => [{creatorType: 'author', firstName: 'Jae', lastName: 'Kim'}];
+  f.Z.Items = {getByLibraryAndKey: (lib, key) => (String(f.ref.key) === key ? f.ref : null)};
+  f.plugin.isRegular = () => true;
+  const key = f.plugin.identity(f.ref);
+  const seedRow = {id: 'W77', title: 'Inhibition of Notch signalling in neural stem cells', year: 2020, seed: true, authors: ['Jane Smith']};
+  f.plugin.readingPathStore()[key] = {at: new Date().toISOString(), seed: f.plugin.workFingerprint(f.ref),
+    plan: {v: f.plugin.PATH_VERSION, steps: [{key: 'seed', works: [seedRow], more: []}], rest: []}};
+  // A link that passes (same title, same first author) is left alone.
+  const good = pathFixture({fields: {title: 'A seed paper', date: '2022'}});
+  assert.equal(f.plugin.recheckStoredLinks(), 1, 'one demoted');
+  assert.equal(f.plugin.readingPathStore()[key], undefined, 'the plan built on the wrong paper is dropped');
+  assert.deepEqual(f.plugin.workCandidates(f.ref).map(c => c.id), ['W77'], 'the work itself is kept as a candidate');
+  f.plugin.readingPathStore()[key] = {at: new Date().toISOString(), seed: f.plugin.workFingerprint(f.ref),
+    plan: {v: f.plugin.PATH_VERSION, steps: [{key: 'seed', works: [{...seedRow, title: 'Activation of Notch signalling in neural stem cells', authors: ['Jae Kim']}], more: []}], rest: []}};
+  assert.equal(f.plugin.recheckStoredLinks(), 0, 'a link that passes the new rule stays');
+  assert.ok(good);
+});
+
+/* ---- Audit 2026-10-04, items 3 and 6: expiry, the checked date, one-item refresh, unknown is not zero ---- */
+const daysAgo = n => new Date(Date.now() - n * 864e5).toISOString();
+
+test('expiry: a citation list is trusted 30 days, a not-found answer 14, and expiry alone never fetches anything', async () => {
+  const f = discoverFixture();
+  f.plugin.active = true; f.plugin.flush = async () => {}; f.plugin.refreshWindows = async () => {}; f.plugin.sweepInstitutions = async () => 0;
+  const key = f.plugin.identity(f.ref), doi = '10.1038/s41467-024-48219-y';
+  const store = f.plugin.paperWorks();
+  store[key] = {v: 2, doi, openalex: 'W1', people: [], references: [], checkedAt: daysAgo(31)};
+  assert.equal(f.plugin.citationState(f.ref).works.state, 'stale');
+  assert.equal(f.plugin.citationState(f.ref).works.checkedAt, store[key].checkedAt, 'the date is there to be shown');
+  store[key].checkedAt = daysAgo(29);
+  assert.equal(f.plugin.citationState(f.ref).works.state, 'fresh');
+  store[key] = {doi, missing: true, checkedAt: daysAgo(15)};
+  assert.equal(f.plugin.citationState(f.ref).works.state, 'stale', 'not found is retried after 14 days');
+  store[key].checkedAt = daysAgo(13);
+  assert.equal(f.plugin.citationState(f.ref).works.state, 'fresh');
+  // A stale record is not fetched by any sweep that has not been told to, however old.
+  store[key] = {v: 2, doi, openalex: 'W1', people: [], references: [], checkedAt: daysAgo(2000)};
+  const before = f.asked.length;
+  const report = await f.plugin.sweepPaperWorks([f.ref]);
+  assert.equal(f.asked.length, before, 'expiry never triggers a bulk fetch');
+  assert.equal(report.already, 1);
+  // The graph's own fetch button passes `stale`, and then it is asked again.
+  f.Z.HTTP.request = async (method, url) => { f.asked.push(url); return {response: {results: [{id: 'https://openalex.org/W1', doi: 'https://doi.org/' + doi, publication_year: 2024, cited_by_count: 9, authorships: [], referenced_works: []}]}}; };
+  const again = await f.plugin.sweepPaperWorks([f.ref], {stale: true});
+  assert.equal(again.asked, 1);
+  assert.ok(Date.now() - Date.parse(store[key].checkedAt) < 5000, 'dated again');
+});
+
+test('refreshPaperLists refetches only that paper, on request, and keeps a list an empty answer would erase', async () => {
+  const f = discoverFixture();
+  f.plugin.active = true; f.plugin.flush = async () => {}; f.plugin.refreshWindows = async () => {}; f.plugin.sweepInstitutions = async () => 0;
+  const key = f.plugin.identity(f.ref), doi = '10.1038/s41467-024-48219-y';
+  f.plugin.paperWorks()[key] = {v: 2, doi, openalex: 'W1', citations: 1, people: [], references: ['W7'], checkedAt: daysAgo(100)};
+  f.plugin.citedByStore()[key] = {openalex: 'W1', citers: [], checkedAt: daysAgo(100)};
+  f.asked.length = 0;
+  f.Z.HTTP.request = async (method, url) => {
+    f.asked.push(decodeURIComponent(url));
+    if (/cites:/.test(decodeURIComponent(url))) return {response: {results: [{id: 'https://openalex.org/W5', title: 'Later', publication_year: 2026}]}};
+    return {response: {results: [{id: 'https://openalex.org/W1', doi: 'https://doi.org/' + doi, publication_year: 2024, cited_by_count: 12, authorships: [], referenced_works: ['https://openalex.org/W7', 'https://openalex.org/W8']}]}};
+  };
+  const out = await f.plugin.refreshPaperLists(f.ref);
+  assert.equal(out.works.found, 1);
+  assert.equal(f.asked.length, 2, 'one request for its list, one for its citers');
+  assert.equal(f.plugin.paperWorks()[key].citations, 12);
+  assert.equal(f.plugin.citedByStore()[key].citers.length, 1);
+  assert.equal(f.plugin.citationState(f.ref).works.state, 'fresh');
+  // OpenAlex answers with nothing this time: the old list stays, dated now.
+  f.plugin.paperWorks()[key].checkedAt = daysAgo(100);
+  f.Z.HTTP.request = async () => ({response: {results: []}});
+  await f.plugin.refreshPaperLists(f.ref);
+  assert.equal(f.plugin.paperWorks()[key].citations, 12);
+  assert.equal(f.plugin.citationState(f.ref).works.state, 'fresh');
+});
+
+test('journal metrics expire after 90 days (14 when not found), refetch only that journal, and never in a bulk sweep', async () => {
+  const f = discoverFixture();
+  f.plugin.active = true; f.plugin.flush = async () => {}; f.plugin.refreshWindows = async () => {}; f.plugin.pause = async () => {};
+  const fields = {publicationTitle: 'Nature Methods', ISSN: '1548-7091', title: 'T', date: '2024'};
+  f.ref.getField = k => fields[k] || '';
+  const key = f.plugin.journalTools2.cacheKey(f.plugin.journalRecord(f.ref));
+  const store = f.plugin.journalCache();
+  store[key] = {v: 2, citedness: 28.1, name: 'Nature Methods', checkedAt: daysAgo(91)};
+  assert.equal(f.plugin.journalStatus(f.ref).state, 'stale');
+  store[key].checkedAt = daysAgo(89);
+  assert.equal(f.plugin.journalStatus(f.ref).state, 'fresh');
+  store[key] = {v: 2, citedness: null, checkedAt: daysAgo(15)};
+  assert.equal(f.plugin.journalStatus(f.ref).state, 'stale');
+  store[key].checkedAt = daysAgo(13);
+  assert.equal(f.plugin.journalStatus(f.ref).state, 'fresh');
+  store[key] = {v: 2, citedness: 28.1, name: 'Nature Methods', checkedAt: daysAgo(500)};
+  f.asked.length = 0;
+  const sweep = await f.plugin.refreshJournalCitedness([f.ref]);
+  assert.equal(sweep.journals, 0, 'a stale journal is not part of a bulk sweep');
+  assert.equal(f.asked.length, 0);
+  assert.equal((await f.plugin.fetchJournalMetric(f.plugin.journalRecord(f.ref))).citedness, 28.1, 'and an ordinary lookup returns what is stored');
+  assert.equal(f.asked.length, 0);
+  f.Z.HTTP.request = async (m, url) => { f.asked.push(url); return {response: {results: [{id: 'https://openalex.org/S9', display_name: 'Nature Methods', issn_l: '1548-7091', issn: ['1548-7091'], summary_stats: {'2yr_mean_citedness': 30.04, h_index: 500}, apc_usd: null, works_count: 9}]}}; };
+  const hit = await f.plugin.refreshJournal(f.ref);
+  assert.equal(f.asked.length, 1, 'one request, for that journal');
+  assert.equal(hit.citedness, 30);
+  assert.equal(hit.apc, null, 'a missing APC stays unknown');
+  assert.equal(f.plugin.journalStatus(f.ref).state, 'fresh');
+});
+
+test('unknown APC and citedness are not zero, and a zero stored by the old code reads as unknown until that journal is refetched', async () => {
+  const f = discoverFixture();
+  f.plugin.active = true;
+  const fields = {publicationTitle: 'Nature Methods', ISSN: '1548-7091'};
+  f.ref.getField = k => fields[k] || '';
+  const key = f.plugin.journalTools2.cacheKey(f.plugin.journalRecord(f.ref));
+  // Stored by the old code: Number(null) turned "missing" into 0.
+  f.plugin.journalCache()[key] = {citedness: 5, name: 'X', apc: 0, checkedAt: daysAgo(1), isOA: false};
+  assert.equal(f.plugin.journalProfile(f.ref).apc, null, 'an APC of 0 from an old row is unknown, not free');
+  assert.equal(f.plugin.journalStatus(f.ref).state, 'stale', 'and it is refetched lazily, when that journal is opened');
+  f.plugin.journalCache()[key] = {citedness: 0, name: 'X', apc: 0, checkedAt: daysAgo(1)};
+  assert.equal(f.plugin.journalCitedness(f.ref), null, 'a mean citedness of 0 from an old row is unknown');
+  // A row the new code wrote is believed, including a real zero.
+  f.plugin.journalCache()[key] = {v: 2, citedness: 0, name: 'X', apc: 0, checkedAt: daysAgo(1)};
+  assert.equal(f.plugin.journalProfile(f.ref).apc, 0);
+  assert.equal(f.plugin.journalStatus(f.ref).state, 'fresh');
+});
+
+test('a reading tick hands the changed item id to the open panel, so it repaints that paper only', () => {
+  const {plugin} = fixture();
+  const got = [];
+  const win = {closed: false, document: {querySelectorAll: () => []}};
+  plugin.windows = new Map([[win, {workbench: {refreshMetrics: id => got.push(id)}}]]);
+  plugin.refreshReadingDisplays(42);
+  assert.deepEqual(got, [42]);
+});
+
+test('runtime badges are drawn at 11px with ink that reaches 4.5:1, and the T4 label reads on white and on dark', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document} = parseHTML('<html><body></body></html>');
+  const {plugin} = fixture();
+  plugin.journalIdentity.loadRegistry?.([]);
+  const J = plugin.journalIdentity;
+  for (const dark of [false, true]) {
+    const P = {...plugin.palette(document), ...plugin.palette({defaultView: {matchMedia: () => ({matches: dark})}})};
+    const surface = dark ? J.DARK_BG : '#ffffff';
+    for (const venue of ['Nature Methods', 'Nature Communications', 'Cell', 'Science']) {
+      const mark = plugin.journalMarkForVenue(document, venue, P);
+      assert.ok(mark, venue);
+      const css = mark.style.cssText;
+      assert.match(css, /font-size:\s*11px/, venue + ' is 11px, not 9px');
+      assert.doesNotMatch(css, /font-size:\s*9px/);
+      const bg = /background:\s*(#[0-9a-f]{6})/i.exec(css)?.[1], ink = /(?:^|;)\s*color:\s*(#[0-9a-f]{6})/i.exec(css)?.[1];
+      if (bg && ink) assert.ok(J.contrast(ink, bg) >= 4.5, `${venue} ${dark ? 'dark' : 'light'} ${J.contrast(ink, bg).toFixed(2)}`);
+    }
+    for (const key of ['t1', 't2', 't3', 't4']) {
+      const pill = plugin.tierPill(document, {tier: {key, label: key.toUpperCase(), note: 'x'}, hIndex: 10}, P);
+      const ink = /(?:^|;)\s*color:\s*(#[0-9a-f]{6})/i.exec(pill.style.cssText)?.[1];
+      assert.ok(ink, key);
+      assert.ok(J.contrast(ink, surface) >= 4.5, `${key} ${dark ? 'dark' : 'light'} ${J.contrast(ink, surface).toFixed(2)}`);
+      assert.match(pill.style.cssText, /font-size:\s*11px/);
+    }
+  }
 });

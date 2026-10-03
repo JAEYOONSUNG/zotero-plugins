@@ -113,3 +113,15 @@ test('the search box takes OR, parentheses and quoted phrases next to the field 
   assert.equal(W.isBoolean('cats OR graph'), true);
   assert.equal(W.isBoolean('cats graph'), false);
 });
+
+test('filter with records: one document per paper, and the tree is evaluated once over it (-x, OR, note:, annotation:)', async () => {
+  const {default: W} = await import('../src/workspace.js');
+  const items = [{id: '1', title: 'CRISPR screens', remark: ''}, {id: '2', title: 'Other', remark: ''}];
+  const records = new Map([['1', {note: 'toxic guide', annotation: ''}], ['2', {note: 'mitosis', annotation: 'spindle'}]]);
+  const ids = query => W.filter(items, {query, records}).map(i => i.id);
+  assert.deepEqual(ids('CRISPR -toxic'), []);
+  assert.deepEqual(ids('CRISPR OR mitosis'), ['1', '2']);
+  assert.deepEqual(ids('note:mitosis'), ['2']);
+  assert.deepEqual(ids('annotation:spindle'), ['2']);
+  assert.deepEqual(W.filter(items, {query: 'note:mitosis'}).map(i => i.id), [], 'without records nothing changes');
+});

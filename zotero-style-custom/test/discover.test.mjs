@@ -391,20 +391,40 @@ test("titles in Korean match themselves and tell different Korean titles apart",
   assert.equal(discover.sameTitle("Café society in Paris", "Cafe society in Paris"), true, "accents still come off");
 });
 
+const by = (name) => ({people: [{name}], authors: [name]});
+const creators = (last) => [{creatorType: "author", firstName: "A", lastName: last}];
+
 test("the exact title is chosen over a similar one listed first, and two exact twins are not guessed between", () => {
-  const record = {title: "CRISPR interference in thermophilic bacteria", year: 2021};
-  const similar = {id: "W1", title: "CRISPR interference in thermophilic bacteria and archaea", year: 2021};
-  const exact = {id: "W2", title: "CRISPR Interference in Thermophilic Bacteria.", year: 2021};
+  const record = {title: "CRISPR interference in thermophilic bacteria", year: 2021, creators: creators("Smith")};
+  const similar = {id: "W1", title: "CRISPR interference in thermophilic bacteria and archaea", year: 2021, ...by("Ann Smith")};
+  const exact = {id: "W2", title: "CRISPR Interference in Thermophilic Bacteria.", year: 2021, ...by("Ann Smith")};
   assert.equal(discover.pickByTitle([similar, exact], record).id, "W2");
   assert.equal(discover.pickByTitle([exact, {...exact, id: "W3"}], record), null, "two of the same title and year");
 });
 
-test("two similar titles and no exact one: nothing is guessed", () => {
-  const record = {title: "Phage defence by retrons in Escherichia coli bacteria", year: 2022};
-  const a = {id: "W1", title: "Phage defence by retrons in Escherichia coli bacteria cells", year: 2022};
-  const b = {id: "W2", title: "Phage defence by retrons in Escherichia coli bacteria colonies", year: 2022};
+test("a paper without a DOI is linked only on exact title, year within one and the first author's family name", () => {
+  const record = {title: "Inhibition of Notch signalling in neural stem cells", year: 2020, creators: creators("Smith")};
+  const right = {id: "W1", title: "Inhibition of Notch signalling in neural stem cells", year: 2021, ...by("Jane Smith")};
+  assert.equal(discover.pickByTitle([right], record).id, "W1", "year +1 is fine");
+  assert.equal(discover.pickByTitle([{...right, year: 2023}], record), null, "year off by three");
+  assert.equal(discover.pickByTitle([{...right, ...by("Jae Kim")}], record), null, "right title, another lab");
+  // The reviewer's example: Kim's "Activation of Notch" must never become Smith's "Inhibition of Notch".
+  const kim = {title: "Activation of Notch signalling in neural stem cells", year: 2020, creators: creators("Kim")};
+  assert.equal(discover.pickByTitle([right], kim), null, "80% word overlap and the same year is not a link");
+  const {match, candidates} = discover.matchWork([right], kim);
+  assert.equal(match, null);
+  assert.deepEqual(candidates.map(c => c.id), ["W1"], "it is offered to the reader instead");
+  assert.equal(discover.pickByTitle([right], {...record, creators: []}), null, "no recorded author: nothing to confirm with");
+  assert.equal(discover.pickByTitle([{...right, ...by("Victor de Lorenzo")}], {...record, creators: creators("de Lorenzo")}).id, "W1", "a particle belongs to the family name");
+});
+
+test("two similar titles and no exact one: nothing is linked, both are candidates", () => {
+  const record = {title: "Phage defence by retrons in Escherichia coli bacteria", year: 2022, creators: creators("Smith")};
+  const a = {id: "W1", title: "Phage defence by retrons in Escherichia coli bacteria cells", year: 2022, ...by("Ann Smith")};
+  const b = {id: "W2", title: "Phage defence by retrons in Escherichia coli bacteria colonies", year: 2022, ...by("Ann Smith")};
   assert.equal(discover.pickByTitle([a, b], record), null);
-  assert.equal(discover.pickByTitle([a], record).id, "W1", "one near miss alone is taken, as before");
+  assert.equal(discover.pickByTitle([a], record), null, "one near miss alone is no longer taken");
+  assert.deepEqual(discover.matchWork([a, b], record).candidates.map(c => c.id), ["W1", "W2"]);
 });
 
 /* 새로 나온 관련 논문: what has been published lately on top of the shelf.

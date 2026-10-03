@@ -318,3 +318,29 @@ test('r21 synthesisNote makes one standalone note from several papers: evidence,
  await assert.rejects(f.service.synthesisNote([{id:1,annotationIDs:[8]}]),/another paper/);
  await assert.rejects(f.service.synthesisNote([]),/Select papers/);
 });
+
+test('graph finds neighbours across the whole library and limits only what is drawn (paper #800 keeps its links)', () => {
+ const s = fixture().service;
+ const rows = Array.from({length: 1200}, (_, i) => ({id: String(i + 1), title: 'P' + (i + 1), related: [], tags: [], authors: ''}));
+ rows[799].related = ['5', '1100'];
+ rows[4].related = [];
+ const g = s.graph(rows, {mode: 'related', limit: 500});
+ const ids = new Set(g.nodes.map(n => n.id));
+ assert.equal(g.nodes.length, 500, 'the drawing is limited');
+ assert.ok(ids.has('800') && ids.has('5') && ids.has('1100'), 'linked papers beyond #500 are drawn before isolated ones');
+ assert.equal(g.edges.length, 2, 'both of #800\'s links survive');
+ assert.equal(g.truncated, true);
+ assert.equal(g.total, 1200);
+ // A focused paper's neighbours come first even when the limit is tiny.
+ const ego = s.graph(rows, {mode: 'related', limit: 3, focus: '800'});
+ assert.deepEqual(ego.nodes.map(n => n.id).sort(), ['1100', '5', '800']);
+ // Tags and authors: a shared tag between #5 and #900 is found though #900 is past the first 500.
+ const tagged = rows.map(r => ({...r, tags: r.id === '5' || r.id === '900' ? ['shared'] : []}));
+ const t = s.graph(tagged, {mode: 'tags', limit: 500});
+ assert.ok(t.edges.some(e => [e.source, e.target].sort().join() === ['5', '900'].sort().join()));
+ // Past 2,000 edges the focus paper's own links are the ones kept.
+ const dense = Array.from({length: 2500}, (_, i) => ({id: String(i + 1), title: 'D', related: i > 0 ? [String(i)] : [], tags: [], authors: ''}));
+ const cut = s.graph(dense, {mode: 'related', limit: 3000, focus: '2500'});
+ assert.equal(cut.edges.length, 2000);
+ assert.ok(cut.edges.some(e => e.source === '2499' || e.target === '2499'), 'the focus link is kept');
+});
