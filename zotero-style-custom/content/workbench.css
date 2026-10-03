@@ -3000,3 +3000,43 @@
 #style-custom-workbench .sc-memo-kept-card pre { margin: 0; padding: var(--sc-space-2) var(--sc-space-3); max-height: 9em; overflow: auto; white-space: pre-wrap; font: inherit; color: var(--sc-text); border-radius: var(--sc-radius-card); box-shadow: 0 0 0 1px var(--sc-card-edge); }
 #style-custom-workbench .sc-memo-conflict-texts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sc-space-2); }
 #style-custom-workbench .sc-memo-conflict-text pre { margin: 0; padding: var(--sc-space-2) var(--sc-space-3); max-height: 9em; overflow: auto; white-space: pre-wrap; font: inherit; color: var(--sc-text); border-radius: var(--sc-radius-card); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+
+/* ==== 보유 문헌 rows: one set of column widths for the header and every row ====
+   The header and each row's figures take the same four tracks, the same gap and
+   the same right inset, so a value sits right-aligned under its label. A row is
+   a title line over a journal line (the figures on the second); the hover
+   actions are held in the title line without adding to its height, and 읽기 is
+   one line (pages and annotations to the left of the time), so a row is the
+   same height whether or not it has a reading time, progress or the pointer. */
+#style-custom-workbench {
+  --sc-col-if: 56px; --sc-col-cites: 72px; --sc-col-stars: 72px; --sc-col-time: 184px; --sc-col-gap: 12px;
+  --sc-paper-pad-y: 12px;
+}
+#style-custom-workbench[data-density=compact] { --sc-paper-pad-y: 8px; }
+@container sc-workbench (min-width: 761px) {
+  #style-custom-workbench .sc-paper-columns,
+  #style-custom-workbench .sc-paper-card .sc-metrics {
+    display: grid; column-gap: var(--sc-col-gap); align-items: center; justify-items: end;
+  }
+  #style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) var(--sc-col-if) var(--sc-col-cites) var(--sc-col-stars) var(--sc-col-time); padding-inline: var(--sc-card-padding); }
+  #style-custom-workbench .sc-paper-card .sc-metrics { grid-template-columns: var(--sc-col-if) var(--sc-col-cites) var(--sc-col-stars) var(--sc-col-time); width: calc(var(--sc-col-if) + var(--sc-col-cites) + var(--sc-col-stars) + var(--sc-col-time) + 3 * var(--sc-col-gap)); min-height: 0; margin: 0; padding: 0; align-self: center; }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-column,
+  #style-custom-workbench .sc-paper-card .sc-metric[data-metric] { width: 100%; justify-content: flex-end; text-align: end; margin: 0; }
+  #style-custom-workbench .sc-paper-column[data-metric=rating],
+  #style-custom-workbench .sc-paper-card .sc-stars { justify-content: flex-end; }
+  #style-custom-workbench .sc-paper-card .sc-metric .sc-metric-value { min-width: 0; text-align: end; font-variant-numeric: tabular-nums; }
+  /* 읽기: [pages · 주석] then the time, all on the meta line; the label's right edge is the time's. */
+  #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] { display: flex; flex-direction: row-reverse; justify-content: flex-start; align-items: center; gap: var(--sc-space-2); }
+  #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] .sc-metric-value { flex: none; min-width: 3.6em; }
+  #style-custom-workbench .sc-paper-card .sc-metric-sub { flex: 0 1 auto; min-width: 0; justify-content: flex-end; }
+  #style-custom-workbench .sc-paper-card .sc-row-annotations { height: var(--sc-lh-meta); min-height: 0; max-height: none; margin: 0; padding: 0; line-height: var(--sc-lh-meta); }
+  /* The row: padding and the two lines, nothing taller than its text. */
+  #style-custom-workbench .sc-paper-card { padding-block: var(--sc-paper-pad-y); }
+  #style-custom-workbench .sc-paper-card .sc-paper-heading { row-gap: 4px; grid-template-columns: 16px minmax(0, 1fr) auto; }
+  #style-custom-workbench .sc-paper-card .sc-paper-heading > .sc-check { height: var(--sc-lh-title); }
+  #style-custom-workbench .sc-paper-mainline { min-height: var(--sc-lh-title); }
+  #style-custom-workbench .sc-paper-card .sc-paper-mainline > .sc-paper-actions { margin-block: calc((var(--sc-lh-title) - var(--sc-h-seg)) / 2); padding: 0; }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-columns-lead { justify-self: start; justify-content: flex-start; }
+  #style-custom-workbench .sc-paper-card .sc-paper-meta { align-self: center; min-height: var(--sc-lh-body); }
+  #style-custom-workbench .sc-paper-card .sc-paper-meta .sc-kind { margin-block: calc((var(--sc-lh-body) - var(--sc-h-badge)) / 2); }
+}

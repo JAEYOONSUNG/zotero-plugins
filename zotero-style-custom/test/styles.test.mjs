@@ -11,7 +11,7 @@ function parse(source){
  let nativeContainerSyntax=true;
  try{CSSOM.parse('@container sc-workbench (max-width: 720px) {.sc-body {padding:8px}}');}catch(_){nativeContainerSyntax=false;}
  const headers=[...source.matchAll(/@container\s+([^{}]+)\{/g)].map(m=>m[1].trim());
- for(const header of headers)assert.match(header,/^sc-workbench \(max-(?:width|height): \d+px\)$/,'validated container condition');
+ for(const header of headers)assert.match(header,/^sc-workbench \((?:max|min)-(?:width|height): \d+px\)$/,'validated container condition');
  const supported=nativeContainerSyntax?source:source.replace(/@container\s+sc-workbench\s+(\([^{}]+\))\s*\{/g,'@media $1 {');
  return {sheet:CSSOM.parse(supported),nativeContainerSyntax,headers};
 }
