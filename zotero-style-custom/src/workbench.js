@@ -91,13 +91,15 @@
   const DRAFT_TRUNC='\u0001trunc';
   // Bases are compared by hash (the stored base would otherwise be cut like the draft): length and a 32-bit FNV-1a.
   const hashOf=text=>{text=String(text);let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return 'h'+text.length+'.'+h.toString(36);};
-  const isHash=value=>typeof value==='string'&&/^h\d+\.[0-9a-z]+$/.test(value);
+  // A base is stored only in the tagged form 'H1:'+hash; raw memo text is never compared with it, and a text that merely looks like a hash is just text.
+  const BASE_TAG='H1:';
+  const baseTag=text=>BASE_TAG+hashOf(text);
   const ownerWindow=owner=>String(owner).split('.')[0];
   function draftMeta(key){const raw=cachedDrafts().get(key+DRAFT_OWN);if(typeof raw!=='string')return null;const cut=raw.lastIndexOf('|');return cut<0?null:{owner:raw.slice(0,cut),rev:Number(raw.slice(cut+1))};}
   function updateDraft(key,value,base,owner){
    if(!key||key.length>1000||/password|secret|api.?key|access.?token|bearer/i.test(key))return;
    const saved=cachedDrafts(),before=draftMeta(key);saved.delete(key);drafts.delete(key);saved.delete(key+DRAFT_BASE);drafts.delete(key+DRAFT_BASE);saved.delete(key+DRAFT_OWN);drafts.delete(key+DRAFT_OWN);saved.delete(key+DRAFT_TRUNC);drafts.delete(key+DRAFT_TRUNC);
-   if(value!==undefined){const cut=String(value).length>DRAFT_LENGTH;value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);if(cut){saved.set(key+DRAFT_TRUNC,'1');drafts.set(key+DRAFT_TRUNC,'1');}if(typeof owner==='string'){const o=owner+'|'+((before?.rev||0)+1);saved.set(key+DRAFT_OWN,o);drafts.set(key+DRAFT_OWN,o);}if(typeof base==='string'){const b=isHash(base)?base:hashOf(base);saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);}}
+   if(value!==undefined){const cut=String(value).length>DRAFT_LENGTH;value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);if(cut){saved.set(key+DRAFT_TRUNC,'1');drafts.set(key+DRAFT_TRUNC,'1');}if(typeof owner==='string'){const o=owner+'|'+((before?.rev||0)+1);saved.set(key+DRAFT_OWN,o);drafts.set(key+DRAFT_OWN,o);}if(typeof base==='string'||(base&&typeof base.tagged==='string')){const b=typeof base==='string'?baseTag(base):base.tagged;saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);}}
    let total=[...saved.values()].reduce((sum,text)=>sum+text.length,0);
    while(saved.size>DRAFT_LIMIT||total>DRAFT_TOTAL){const oldest=saved.keys().next().value;total-=saved.get(oldest).length;saved.delete(oldest);}
    for(const existing of drafts.keys())if(!saved.has(existing))drafts.delete(existing);
@@ -1333,8 +1335,9 @@
    const binding=memoBindings.get(input),key=input.dataset.draftKey;
    if(binding&&binding.base!==undefined&&binding.itemID!==undefined){
     const saved=cachedDrafts(),existing=saved.get(key),meta=draftMeta(key);
-    // Foreign: a live OTHER window wrote it. A leftover of a closed window or an earlier session is restorable, not protected.
-    const foreign=typeof existing==='string'&&!!meta&&ownerWindow(meta.owner)!==WINDOW_ID&&LIVE_DRAFT_WINDOWS.has(ownerWindow(meta.owner))&&existing!==input.value&&existing!==storedMemo(binding.itemID);
+    // Foreign: any shared draft this binding did not write (its owner may be alive, closed, or unknown) that differs from the new text and
+    // the stored memo goes to the kept drafts first. A closed owner only matters when a draft is claimed on restore, never for overwriting.
+    const foreign=typeof existing==='string'&&(!meta||meta.owner!==binding.id)&&existing!==input.value&&existing!==storedMemo(binding.itemID);
     if(foreign)keepDraft(binding.itemID,existing,saved.get(key+DRAFT_BASE),saved.has(key+DRAFT_TRUNC));
     updateDraft(key,input.value,binding.base,binding.id);
     if(foreign)binding.drawKept?.();
@@ -1897,6 +1900,7 @@
     const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.dataset.memoItem=String(item.id);
     const loaded=String(runtime.entry(ref).remark||'');remark.value=loaded;
     const remarkBinding=bindMemo(remark,(value,base)=>library.setRemark(item.id,value,{base}),item.title||'문헌',{manual:true,memo:{itemID:item.id,base:loaded,host:c}});
+    remarkBinding.restore();
     button('메모 저장',async()=>{const submitted=remark.value,token=remarkBinding.draftToken();const out=await remarkBinding.commit({force:true,throws:true});if(out.stale||!out.ok){message('저장된 메모가 그 사이 바뀌어 아무것도 덮어쓰지 않았습니다. 아래에서 고르세요.',true);return;}finishDraft(remark,submitted,false,token);syncRemark(c,remarkBinding.base);message('메모를 저장했습니다.');},c,{'data-writes':'library'});}
    if(detailed&&(state.scope!=='selected'||items.length===1))details.push((async()=>{
     const results=await Promise.allSettled([library.notes([item.id]),library.annotations([item.id])]);
@@ -3763,9 +3767,9 @@
     const sameAsStored=draft===stored||(truncated&&stored.slice(0,DRAFT_LENGTH)===draft);
     const otherLive=!!meta&&ownerWindow(meta.owner)!==WINDOW_ID&&LIVE_DRAFT_WINDOWS.has(ownerWindow(meta.owner));
     if(otherLive){if(!sameAsStored&&draft!==field.value){keepDraft(cas.itemID,draft,draftBase,truncated);drawKept();}return;}
-    if(draft===field.value&&!truncated){binding.claimDraft(draft,draftBase,meta);return;}
+    if(draft===field.value&&!truncated){binding.claimDraft(draft,typeof draftBase==='string'?{tagged:draftBase}:undefined,meta);return;}
     if(sameAsStored){binding.dropDraft(meta);return;}
-    if(!truncated&&(draftBase===hashOf(stored)||draftBase===stored)&&field.value===binding.base){field.value=draft;grow();binding.claimDraft(draft,draftBase,meta);return;}
+    if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.base){field.value=draft;grow();binding.claimDraft(draft,{tagged:draftBase},meta);return;}
     keepDraft(cas.itemID,draft,draftBase,truncated);binding.dropDraft(meta);drawKept();
    };
    memoBindings.set(field,binding);
@@ -3818,6 +3822,7 @@
    // Saved here or under a row, the memo is the same one: the search sees it either way.
    const memoBinding=bindMemo(field,(value,base)=>Promise.resolve(library.setRemark(item.id,value,{base})).then(async result=>{if(result&&result.stale)return result;const held=state.items.find(i=>String(i.id)===String(item.id));if(held&&(field.value===value||field.value===result))held.remark=typeof result==='string'?result:String(value||'');await showConflict();return result;}),item.title||'문헌',{memo:{itemID:item.id,base:loaded,host:staleHost}});
    memoBinding.refresh=showConflict;
+   memoBinding.restore();
    showConflict();
    /* The memo lives in this plugin's own file; this puts the same text into one
       child note (tagged style-custom:memo) so it is in Zotero too. The note is not opened. */
@@ -4411,9 +4416,11 @@
       const editor=node('div',null,remarkBox,{class:'sc-resume-memo-editor'});
       const field=node('textarea',null,editor,{rows:'2','aria-label':T(`${r.item.title} 메모`),placeholder:T('짧게 적어두세요. 노트 항목은 만들지 않습니다.')});
       const loaded=String(r.entry.remark||'');field.value=loaded;field.dataset.memoItem=String(r.item.id);
+      // One draft per paper for this editor, whichever tab or redraw created it (the automatic key depends on where it was drawn).
+      field.dataset.draftKey=JSON.stringify(['remark-row',state.libraryID,r.item.id]);
       field.focus();
       let typing=true;for(const [type,on] of [['focus',true],['input',true],['blur',false]])field.addEventListener(type,()=>{typing=on;});
-      bindMemo(field,(value,base)=>Promise.resolve(library.setRemark(r.item.id,value,{base})).then(result=>{
+      const rowBinding=bindMemo(field,(value,base)=>Promise.resolve(library.setRemark(r.item.id,value,{base})).then(result=>{
        if(result&&result.stale)return result;
        const stored=typeof result==='string'?result:String(value||'');
        // A later keystroke's save must not be overwritten by this earlier answer.
@@ -4424,6 +4431,7 @@
        renderRemarkView();
        return result;
       }),r.item.title||'문헌',{memo:{itemID:r.item.id,base:loaded,host:editor}});
+      rowBinding.restore(); // a draft left by an earlier editor of this paper comes back (or waits as a kept card), never silently dropped
      };
      renderRemarkView();
      // No recorded date is a different fact from "read today" (days===0), and

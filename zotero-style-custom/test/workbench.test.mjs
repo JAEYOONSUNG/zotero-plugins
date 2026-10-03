@@ -7217,3 +7217,64 @@ test('invariant: a memo draft is written or deleted only by writeMemoDraft, the 
  assert.match(fd,/memo\.finishOwn\(/);assert.match(fd,/memoItem!==undefined\)return/,'a memo editor without a binding deletes nothing');
  for(const call of src.matchAll(/finishDraft\(([^,)]*)/g))assert.match(call[1].trim(),/^[A-Za-z_][\w.]*$/,'finishDraft first argument is a real input: '+call[1]);
 });
+
+test('memo drafts (R8-1): a draft of a window that closed is never overwritten by another window typing: it becomes a kept card',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g);
+ await f.bench.show('explore');await f.click('자세히');await g.bench.show('explore');await g.click('자세히');
+ const a=f.body().querySelector('[aria-label="읽기 메모"]'),b=g.body().querySelector('[aria-label="읽기 메모"]');
+ casType(f,a,'UNSAVED A');
+ f.bench.destroy(); // closed without saving
+ casType(g,b,'something else');
+ const kept=Object.values(g.runtime.cache.memoKept||{}).flat();
+ assert.ok(kept.some(e=>e.text==='UNSAVED A'),'kept: '+JSON.stringify(kept));
+ g.bench.destroy();
+});
+
+test('memo drafts (R8-2): a draft rejected by CAS in a reading-list editor comes back as a kept card when the editor is created again',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={seconds:125,lastRead:new Date().toISOString(),remark:'A'};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:20,visited:5,percent:25,attachmentID:100,lastPageIndex:4}:{pages:{},total:0,visited:0,percent:0};
+ await f.bench.show('reading');
+ f.body().querySelector('.sc-resume-remark').click();
+ let field=f.body().querySelector('.sc-resume-memo-editor textarea');
+ casType(f,field,'UNSAVED L');
+ f.runtime.cache.items[1].remark='NEW R'; // saved through another path
+ field.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'NEW R');
+ await f.bench.show('explore');await settle();await f.bench.show('reading');
+ f.body().querySelector('.sc-resume-remark').click();
+ field=f.body().querySelector('.sc-resume-memo-editor textarea');
+ assert.equal(field.value,'NEW R');
+ const card=f.body().querySelector('.sc-resume-memo-editor .sc-memo-kept-card');
+ assert.ok(card&&/UNSAVED L/.test(card.textContent),'the rejected draft is offered');
+ casType(f,field,'NEXT');
+ assert.ok(JSON.stringify(f.runtime.cache.memoKept).includes('UNSAVED L'),'and is in the cache after typing on');
+ f.bench.destroy();
+});
+
+test('memo drafts (R8-4): a stored memo that looks like a hash is not mistaken for a draft base',async()=>{
+ const f=fixture();casLibrary(f);
+ const fnv=t=>{let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return 'h'+t.length+'.'+h.toString(36);};
+ const lookalike=fnv('NEWER');
+ f.runtime.cache.items[1]={remark:'NEWER'};
+ await f.bench.show('annotations');await settle();
+ let el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'STALE DRAFT'); // its base is the hash of NEWER
+ f.runtime.cache.items[1].remark=lookalike; // the memo is now literally that hash text
+ f.calls.length=0;
+ await f.bench.show('annotations');await settle();
+ el=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(el.value,lookalike,'the stale draft was not put back');
+ assert.ok(f.body().querySelector('.sc-memo-kept-card'),'it waits as a kept card');
+ el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.deepEqual(casWritten(f),[]);
+ assert.equal(f.runtime.cache.items[1].remark,lookalike);
+ f.bench.destroy();
+});
+
+test('invariant: every memo editor is followed by a restore of its draft',()=>{
+ const lines=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8').split('\n');
+ const at=[];lines.forEach((l,i)=>{if(/memo:\{itemID:/.test(l))at.push(i);});
+ assert.ok(at.length>=3,'the memo editors: '+at.length);
+ for(const i of at)assert.match(lines.slice(i,i+25).join('\n'),/\.restore\(\)/,'memo editor at line '+(i+1)+' has no restore() after it');
+});

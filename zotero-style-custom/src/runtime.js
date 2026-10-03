@@ -2310,6 +2310,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const noteSame = !!live && String(live.getNote()) === saved.after;
     if (memoSame && noteSame) {
       const id = this.identity(held), inflight = this.memoInflight || (this.memoInflight = new Map());
+      const rev0 = row.memoRev || 0; // anything that changes the memo, baseline or conflict during the awaits below bumps it
       inflight.set(id, norm(saved.created ? '' : this.constructor.memoFromNoteHTML(saved.before)));
       try {
         if (saved.created) live.deleted = true; else live.setNote(saved.before);
@@ -2318,13 +2319,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // Only a note that reads back as exactly what undo restored may set the baseline; anything else was written by someone else.
       // (A note edit made during that save reaches mirrorMemoNote, which waits for this job and judges it afterwards.)
       const restored = saved.created || String(live.getNote()) === saved.before;
+      const moved = (row.memoRev || 0) !== rev0; // a memo saved meanwhile is the newest word, whatever text it holds
       if (!restored) {
         // The note was edited while undo saved it: that edit stays, the old baseline stays, and both current sides wait in the conflict box.
-        if (String(row.remark || '') === memo.after) row.remark = memo.before;
+        if (!moved && String(row.remark || '') === memo.after) row.remark = memo.before;
         const now = this.constructor.memoFromNoteHTML(live.getNote()), local = String(row.remark || '');
         if (norm(local) === norm(now)) this._memoSetBase(row, now, live);
         else row.memoConflict = {local, remote: now, at: new Date().toISOString()};
-      } else if (String(row.remark || '') === memo.after) {
+      } else if (!moved && String(row.remark || '') === memo.after) {
         row.remark = memo.before; delete row.memoConflict; restoredAll = true;
         if (saved.syncedBefore === null) { delete row.memoSynced; delete row.memoSyncedVer; } else row.memoSynced = saved.syncedBefore;
       } else {
@@ -4606,10 +4608,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       note.libraryID = item.libraryID; note.parentID = item.id;
       note.setTags([{tag: this.constructor.MEMO_NOTE_TAG, type: 0}]);
     }
+    // A memo typed during the write is fine (it is newer, and the baseline is the note as written); the baseline or the conflict being changed by someone else is not.
+    const syncedBefore = row.memoSynced, conflictBefore = row.memoConflict;
     await this._memoWrite(item, note, text);
-    // The baseline moves only when the note reads back as exactly what this job wrote.
+    // The baseline moves only when the note reads back as exactly what this job wrote AND nobody else moved the baseline or the conflict meanwhile.
     const mirrored = this.constructor.memoFromNoteHTML(note.getNote());
-    if (this.constructor.memoNorm(mirrored) === this.constructor.memoNorm(text)) this._memoSetBase(row, mirrored, note);
+    if (row.memoSynced === syncedBefore && row.memoConflict === conflictBefore && this.constructor.memoNorm(mirrored) === this.constructor.memoNorm(text)) this._memoSetBase(row, mirrored, note);
     else this._memoNoWrite(row, note, this._memoSituation(row, mirrored, row.memoSynced));
     await this.flush();
     this.bumpState?.();
@@ -4632,14 +4636,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this._memoBump(row); await this.flush();
       return {resolved: false, stale: true, conflict: row.memoConflict, text: local};
     }
+    const rev0 = row.memoRev || 0; // the memo, baseline and conflict as judged above; compared again after the note is written
     const final = choice === 'note' ? there : choice === 'local' ? local
       : (there.trim() && local.trim() ? there + this.constructor.memoSep() + local : there.trim() ? there : local);
     if (choice !== 'note' && norm(final) !== norm(there)) {
       if (!note) { note = new this.Z.Item('note'); note.libraryID = item.libraryID; note.parentID = item.id; note.setTags([{tag: this.constructor.MEMO_NOTE_TAG, type: 0}]); }
       await this._memoWrite(item, note, final);
       if (norm(this.constructor.memoFromNoteHTML(note.getNote())) !== norm(final)) throw new Error('노트를 쓰는 사이 노트가 다시 바뀌어 아무것도 확정하지 않았습니다. 두 내용을 다시 확인하세요.');
-      // The memo was typed while the note was saved: the newer memo stays, nothing is confirmed, and both sides go back into the box.
-      if (String(row.remark || '') !== local) {
+      // The memo was saved while the note was written (even back to the same text): the newer memo stays, nothing is confirmed, and both sides go back into the box.
+      if ((row.memoRev || 0) !== rev0 || String(row.remark || '') !== local) {
         const now = String(row.remark || ''), remote = this.constructor.memoFromNoteHTML(note.getNote());
         row.memoConflict = {local: now, remote, at: new Date().toISOString()}; this._memoBump(row); await this.flush(); this.bumpState?.();
         return {resolved: false, stale: true, conflict: row.memoConflict, text: String(row.remark || '')};

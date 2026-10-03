@@ -4091,3 +4091,84 @@ test('memo revision: every source of change to remark, baseline or conflict bump
   await v.lib.resolveMemoConflict(3, 'note', await v.lib.memoConflict(3));
   assert.ok(v.row.memoRev > before, 'resolve');
 });
+
+test('memo revision (R8-3a): 둘 다 합치기 whose note save overlaps a memo saved L -> L2 -> L keeps the latest memo and the conflict', async () => {
+  const w = memoWorld({remark: 'L', base: 'B', note: 'R'});
+  await w.setting(); await w.plugin.memoToNote(w.c);
+  assert.ok(w.row.memoConflict);
+  const seen = await w.lib.memoConflict(3);
+  const orig = w.fx.Z.Item.prototype.saveTx;
+  let release; const gate = new Promise(r => { release = r; }), first = {v: true};
+  w.fx.Z.Item.prototype.saveTx = async function () { if (first.v) { first.v = false; await gate; } return orig.call(this); };
+  const resolving = w.lib.resolveMemoConflict(3, 'both', seen);
+  await new Promise(r => setTimeout(r, 5));
+  const saves = [w.lib.setRemark(3, 'L2'), w.lib.setRemark(3, 'L')]; // the memo ends as the same text again
+  await new Promise(r => setTimeout(r, 5));
+  assert.equal(w.row.remark, 'L');
+  release();
+  const out = await resolving; await Promise.all(saves);
+  w.fx.Z.Item.prototype.saveTx = orig;
+  assert.notEqual(out.resolved, true);
+  assert.equal(w.row.remark, 'L', 'the latest memo is not replaced by the merge result');
+  assert.ok(w.row.memoConflict, 'the conflict stays');
+});
+
+test('memo revision (R8-3b): undo whose note save overlaps a memo saved M2 -> M keeps the latest memo and the ledger', async () => {
+  const {fx, plugin, pre, pub} = mergeWorld();
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  const memo = new fx.Z.Item('note');
+  memo.libraryID = 1; memo.parentID = 2; memo.parentItemID = 2; memo.setTags([{tag: 'style-custom:memo', type: 0}]);
+  memo.setNote(Runtime.memoNoteHTML('existing memo')); await memo.saveTx();
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'existing memo', memoSynced: 'existing memo'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'preprint memo', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  await plugin.mergePreprintIntoPublished(1);
+  const row = plugin.entry(pub), merged = row.remark;
+  const orig = memo.saveTx;
+  memo.saveTx = async function () {
+    row.remark = 'M2'; plugin._memoBump(row);
+    row.remark = merged; plugin._memoBump(row); // saved back to exactly the merged text
+    return orig.call(this);
+  };
+  await plugin.restorePreprint(1);
+  memo.saveTx = orig;
+  assert.equal(row.remark, merged, 'the memo saved meanwhile is not rolled back to the pre-merge text');
+  assert.ok(plugin.mergeLedger()['1'], 'the ledger is kept');
+});
+
+test('memo revision (R8-3c): the note job does not move the baseline or clear a conflict when the memo was saved during its write', async () => {
+  const w = memoWorld({remark: 'A', base: 'A', note: 'A'});
+  await w.setting();
+  const orig = w.fx.Z.Item.prototype.saveTx;
+  let release; const gate = new Promise(r => { release = r; }), first = {v: true};
+  w.fx.Z.Item.prototype.saveTx = async function () { if (first.v) { first.v = false; await gate; } return orig.call(this); };
+  w.row.remark = 'B'; w.plugin._memoBump(w.row);
+  const job = w.plugin.memoToNote(w.c);
+  await new Promise(r => setTimeout(r, 5));
+  w.row.remark = 'B2'; w.plugin._memoBump(w.row); w.row.remark = 'B'; w.plugin._memoBump(w.row); // saved meanwhile, ending as the same text
+  release(); await job;
+  w.fx.Z.Item.prototype.saveTx = orig;
+  assert.equal(w.row.remark, 'B');
+  assert.equal(noteText(w.note), 'B');
+});
+
+test('invariant: a runtime function that awaits and then writes memo fields compares memoRev after the await', () => {
+  const lines = require('node:fs').readFileSync(new URL('../src/runtime.js', import.meta.url), 'utf8').split('\n');
+  const hdr = /^  (?:static |async )*(\w+)\(.*\)\s*\{\s*$/, writes = /(\.remark\s*=[^=]|\.memoSynced\s*=[^=]|\.memoConflict\s*=[^=]|_memoSetBase\(|_memoNoWrite\(|_memoBump\()/;
+  // These read and write in one synchronous block (no await between), so there is nothing to compare.
+  const syncOnly = new Set(['_mergePreprintIntoPublished', 'connectPublished', '_memoSetBase', '_memoNoWrite', '_memoBump', '_mirrorMemoNote']);
+  const bodies = [];
+  lines.forEach((line, i) => { const m = hdr.exec(line); if (m) bodies.push({name: m[1], start: i}); });
+  bodies.forEach((b, k) => { b.end = k + 1 < bodies.length ? bodies[k + 1].start : lines.length; });
+  const bad = [];
+  for (const b of bodies) {
+    if (syncOnly.has(b.name)) continue;
+    const text = lines.slice(b.start, b.end);
+    const firstAwait = text.findIndex(l => /\bawait\b/.test(l));
+    if (firstAwait < 0) continue;
+    if (!text.slice(firstAwait).some(l => writes.test(l))) continue;
+    // memoRev, or (for the note job, where a newer memo is expected) a snapshot of the baseline and conflict compared after the await.
+    if (!/memoRev|syncedBefore/.test(text.join('\n'))) bad.push(b.name);
+  }
+  assert.deepEqual(bad, [], 'awaits then writes memo fields without comparing memoRev');
+});
