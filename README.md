@@ -5,7 +5,7 @@ Two plugins kept in one repository and installed separately. ZotPoP: Zotero 7–
 | Plugin | What it does | Latest |
 |---|---|---|
 | **ZotPoP** | Search and import. Find papers by author, journal, title, keywords and years across several indexes, read citation counts and h-index-style metrics while you choose, and add the papers to your library. | [zotpop-0.49.0.xpi](https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/zotpop-v0.49.0/zotpop-0.49.0.xpi) |
-| **Style Custom** | A research workbench inside Zotero: your library, related papers, author tracking, journal metrics, annotations and notes, a citation graph and reading progress in one panel, plus journal-metric, citation, reading-time and journal-mark columns in the item list. | [style-custom-0.59.2.xpi](https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/style-custom-v0.59.2/style-custom-0.59.2.xpi) |
+| **Style Custom** | A research workbench inside Zotero: your library, related papers, author tracking, journal metrics, annotations and notes, a citation graph and reading progress in one panel, plus journal-metric, citation, reading-time and journal-mark columns in the item list. | [style-custom-0.59.3.xpi](https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/style-custom-v0.59.3/style-custom-0.59.3.xpi) |
 
 ![The Zotero item list with Style Custom's columns: impact factor, citation count with a bar, reading status, the journal in its own colour, rating, reading time, file kinds, and the corresponding institution with its tier and flag](docs/images/library-columns.png)
 
