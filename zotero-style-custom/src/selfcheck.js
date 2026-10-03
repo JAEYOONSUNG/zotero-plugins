@@ -556,11 +556,15 @@
       await bench.show('explore');
       if (!bench.docked() && !bench.dock()) throw new Error('Zotero_Tabs.add refused: ' + (bench.dockError?.() || 'no reason given'));
       try {
-        await new Promise(resolve => win.setTimeout(resolve, 250));
+        // Docking re-renders the list on a large library; wait for it (up to 3 s) rather than a fixed 250 ms.
+        let drawn = null;
+        for (let waited = 0; waited < 3000 && !drawn; waited += 100) {
+          await new Promise(resolve => win.setTimeout(resolve, 100));
+          drawn = bench.panel.querySelector('.sc-paper-card, .sc-empty, .sc-hits');
+        }
         const inTab = !!bench.panel.closest('#tabs-deck, .tab-container, [id^="zotero-tabs"], deck') || bench.panel.parentNode !== win.document.documentElement;
         const rect = bench.panel.getBoundingClientRect();
         const tabID = win.Zotero_Tabs.selectedID;
-        const drawn = bench.panel.querySelector('.sc-paper-card, .sc-empty, .sc-hits');
         if (!inTab) throw new Error('the panel did not move into the tab');
         if (rect.width < 400 || rect.height < 300) throw new Error(`the panel measures ${Math.round(rect.width)}×${Math.round(rect.height)} in the tab`);
         if (!drawn) throw new Error('nothing drawn inside the tab');
