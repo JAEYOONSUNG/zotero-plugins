@@ -738,7 +738,8 @@
           cell = runtime.renderCell('files', 0, runtime.value('files', item), {className: ''}, doc);
         } finally { view.getRow = original; }
         const text = String(cell.textContent || '');
-        if (!text.includes(label)) throw new Error(`${label}: the cell reads "${text}"`);
+        const shown = typeof runtime.t === 'function' ? runtime.t(label) : label;
+        if (!text.includes(label) && !text.includes(shown)) throw new Error(`${label}: the cell reads "${text}"`);
         said.push(`${label} ${rows.length} -> "${text}"`);
       }
       return said.join(' · ');
