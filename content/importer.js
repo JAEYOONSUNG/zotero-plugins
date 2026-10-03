@@ -118,6 +118,17 @@ var ZotPoPImporter = (function () {
 				}
 			}
 		} catch (e) { /* a missing hint, not a failure */ }
+		// Style Custom's own state (seconds-aware) when it is installed, so both plugins say the same thing.
+		try {
+			let sc = typeof ZotPoPSignals !== "undefined" ? ZotPoPSignals.runtimeOf(Zotero) : null;
+			if (sc) {
+				let items = await Zotero.Items.getAsync(ids);
+				for (let item of items || []) {
+					let st = ZotPoPSignals.readingState(sc, item, out.get(item.id));
+					if (st) out.set(item.id, st); else out.delete(item.id);
+				}
+			}
+		} catch (e) { /* the tags already answered */ }
 		return out;
 	}
 	/* The collections each item is filed in, as name paths from the top collection down
@@ -500,12 +511,28 @@ var ZotPoPImporter = (function () {
 				pdf = r.ok ? "pdf:" + r.how : "no pdf";
 				if (!r.ok && r.proxyLogin) proxyLoginNeeded = true;
 			}
+			if (opts.translatedNote) { try { await addTranslatedNote(item, opts.translatedNote); } catch (e) { log?.("Translated abstract note failed: " + e.message); warnings.push("note"); } }
 			return { status: "added", item, how, pdf, proxyLoginNeeded, warnings };
 		}
 		catch (e) {
 			Zotero.logError(e);
 			return { status: "failed", error: e.message || String(e) };
 		}
+	}
+
+	/* The translated abstract the user asked for, kept as a child note headed "번역된 초록 (<language>)".
+	   note = { heading, text, service? }. Returns the note, or null when there is nothing to keep. */
+	async function addTranslatedNote(item, note) {
+		let text = String(note?.text || "").trim();
+		if (!item || !text) return null;
+		let esc = v => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		let child = new Zotero.Item("note");
+		child.libraryID = item.libraryID;
+		child.parentID = item.id;
+		child.setNote("<h2>" + esc(note.heading || "") + "</h2>" + text.split(/\n{2,}/).map(p => "<p>" + esc(p).replace(/\n/g, "<br/>") + "</p>").join("")
+			+ (note.service ? "<p><em>" + esc(note.service) + "</em></p>" : ""));
+		await child.saveTx();
+		return child;
 	}
 
 	// Editable libraries with their collections, flattened for a <select>
@@ -545,5 +572,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { manualItemType, importRecord, fillPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, getReadingStates, getCollectionPaths };
+	return { manualItemType, importRecord, fillPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, getReadingStates, getCollectionPaths, addTranslatedNote };
 })();

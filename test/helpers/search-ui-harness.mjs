@@ -9,6 +9,7 @@ import JCR from "../../content/jcr.js";
 import Authors from "../../content/authors.js";
 import Filters from "../../content/filters.js";
 import Journals from "../../content/journals.js";
+import Signals from "../../content/signals.js";
 import Tip from "../../content/tooltip.js";
 
 export const paper = (key, extra = {}) => ({
@@ -87,7 +88,7 @@ export function mockElement(tagName = "div") {
 }
 
 export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {
-}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null } = {}) {
+}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null, zotero = {}, sources = {} } = {}) {
 	const copied = [];
 	const elements = new Map(), errors = [], events = new Map();
 	const get = id => {
@@ -138,10 +139,10 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		document,
 		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set: (key, value) => { prefs[key.replace("extensions.zotpop.", "")] = value; } }, debug() {}, logError: e => errors.push(e), launchURL, Utilities: { Internal: { copyTextToClipboard: text => copied.push(String(text)) } },
 			Libraries: { userLibraryID: 1 },
-			HTTP: { request: request || (() => { throw new Error("Unexpected HTTP request"); }) } },
+			HTTP: { request: request || (() => { throw new Error("Unexpected HTTP request"); }) }, ...zotero },
 		ZotPoPI18N: { make: () => (key, ...args) => key === "csvHead" ? ["head"] : [key, ...args].join("|") },
 		ZotPoPSources: { SOURCES: { openalex: { label: "OpenAlex" } }, POP_SOURCES: Sources.POP_SOURCES, normalizeDOI: Sources.normalizeDOI, filterRecords: (records, query) => Sources.filterRecords ? Sources.filterRecords(records, query) : records,
-			search: search || (async (_source, query) => query.sort === "citations" ? [...apiRecords].reverse() : [...apiRecords]) },
+			search: search || (async (_source, query) => query.sort === "citations" ? [...apiRecords].reverse() : [...apiRecords]), ...sources },
 		ZotPoPPoPBridge: popBridge,
 		ZotPoPAuthors: authorsService,
 		ZotPoPPreview: Preview,
@@ -149,6 +150,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPAffiliations: Affiliations,
 		ZotPoPFilters: Filters,
 		ZotPoPJournals: Journals,
+		ZotPoPSignals: Signals,
 		ZotPoPJournalMarks: JournalMarks,
 		ZotPoPTip: Tip,
 		ZotPoPJCR: JCR,
@@ -170,12 +172,12 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		cacheIO = setupStorage();
 		globalThis.harness = { tipContent, journalMark, state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
-			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, renderVersions, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
+			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, renderVersions, renderSignals, followAuthor, heldVersion, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			yearBins, filterSpec, addRule, openFilterPop, closeFilterPop, syncFilterUI, clearAllFilters, affLineParts, shortInstitution, renderAuthors, addVenueChip, removeVenueChip, setVenueChips, refreshVenueSuggestions, onVenueKey, wireVenueBox, ensureJournalCatalog,
 			searchMode: () => searchSurface, authorSessions,
 			get history() { return history; },
 			setOpenSelectForTest: value => { openSel = value; } };
 	`);
 	vm.runInContext(code, context);
-	return { copied,  ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
+	return { copied, Z: context.Zotero, ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
 }

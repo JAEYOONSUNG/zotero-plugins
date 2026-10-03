@@ -371,6 +371,8 @@
 		$("opt-fillpdf").checked = PREF("fillMissingPDF") === true;
 		$("opt-skip").checked = PREF("skipDuplicates") !== false;
 		$("opt-extra").checked = PREF("citationsInExtra") !== false;
+		$("opt-trnote").checked = PREF("keepTranslatedAbstract") === true;
+		tip($("opt-trnote-wrap"), t("optTrNoteTip"));
 
 		restoreLayout();
 		populateTargets();
@@ -458,10 +460,10 @@
 		for (let key of COMBINED_SOURCES) $("multi-source-" + key)?.addEventListener("change", () => { cancelCacheRestore(); saveQuery(); });
 
 		setupColumnOrder();
-		for (let id of ["source", "sort", "opt-pdf", "opt-skip", "opt-extra", "opt-fillpdf", "maxResults"]) {
+		for (let id of ["source", "sort", "opt-pdf", "opt-skip", "opt-extra", "opt-trnote", "opt-fillpdf", "maxResults"]) {
 			$(id).addEventListener("change", savePrefs);
 		}
-		for (let id of ["target", "opt-pdf", "opt-skip", "opt-extra", "opt-fillpdf"]) $(id).addEventListener("change", () => syncImportBar());
+		for (let id of ["target", "opt-pdf", "opt-skip", "opt-extra", "opt-trnote", "opt-fillpdf"]) $(id).addEventListener("change", () => syncImportBar());
 		$("import-opts-toggle")?.addEventListener("click", () => { state.optsOpen = !state.optsOpen; syncImportBar(); });
 		// detail actions
 		// An owned paper's main action shows its library copy; any other adds it.
@@ -638,6 +640,7 @@
 		PREF("fillMissingPDF", $("opt-fillpdf").checked);
 		PREF("skipDuplicates", $("opt-skip").checked);
 		PREF("citationsInExtra", $("opt-extra").checked);
+		PREF("keepTranslatedAbstract", $("opt-trnote").checked);
 		let m = parseInt($("maxResults").value, 10);
 		if (m > 0) PREF("maxResults", m);
 	}
@@ -934,6 +937,10 @@
 				load.addEventListener("click", () => runAuthorAction("publications", profile)); actions.appendChild(load); }
 			if (/^https:\/\//i.test(profile.url || "")) { let open = document.createElement("button"); open.type = "button"; open.textContent = t("authorOpenProfile");
 				open.addEventListener("click", () => Zotero.launchURL(profile.url)); actions.appendChild(open); }
+			if (profile.provider === "orcid" && profile.openalexId) {
+				let w = watchButton({ openalexId: profile.openalexId, name: profile.name || profile.id, institution: profile.affiliation || profile.lastInstitution?.name || "" }, renderAuthorProfiles);
+				if (w) { w.classList.add("author-watch"); actions.appendChild(w); }
+			}
 			let li = linkedInState(profile);
 			if (li.target) {
 				let linkedin = document.createElement("button"); linkedin.type = "button"; linkedin.className = "author-linkedin";
@@ -2228,6 +2235,7 @@
 		state.doiMap = await ZotPoPImporter.getLibraryDOIMap(libraryID);
 		// The title index is read again too: a DOI corrected since the last search counts.
 		ZotPoPImporter.forgetTitleIndex?.();
+		state.heldVersions?.clear();
 		for (let r of state.records) {
 			let id = r.doi ? state.doiMap.get(r.doi) : null;
 			if (!id && typeof ZotPoPImporter.findByTitle === "function" && r.title) {
@@ -3232,6 +3240,7 @@
 		main.appendChild(a);
 		// A small lime mark ahead of the title (so a narrow cell never clips it): this row was not in the previous run of this search.
 		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); tip(mark, t("newMarkTip")); main.insertBefore(mark, a); }
+		if (r.retracted) { let mark = document.createElement("span"); mark.className = "retract-mark"; mark.textContent = t("retractedChip"); tip(mark, t("retractedTip")); main.insertBefore(mark, main.firstChild); }
 		tt.appendChild(main);
 		paintRowDot(main, r);
 		let affParts = state.affLine ? affLineParts(r) : [];
@@ -3318,7 +3327,7 @@
 		box.hidden = !open;
 		toggle.hidden = false;
 		toggle.setAttribute("aria-expanded", String(open));
-		let parts = [["opt-pdf", "optPdfShort"], ["opt-skip", "optSkipShort"], ["opt-fillpdf", "optFillPdfShort"], ["opt-extra", "optExtraShort"]].filter(([id]) => $(id).checked).map(([, key]) => t(key));
+		let parts = [["opt-pdf", "optPdfShort"], ["opt-skip", "optSkipShort"], ["opt-fillpdf", "optFillPdfShort"], ["opt-extra", "optExtraShort"], ["opt-trnote", "optTrNoteShort"]].filter(([id]) => $(id).checked).map(([, key]) => t(key));
 		toggle.textContent = open ? t("optsHide") : t("optsSummary", parts.length ? parts : [t("optsSummaryNone")]);
 	}
 
@@ -3901,6 +3910,7 @@
 		}
 		if (r.year) venueLine.appendChild(document.createTextNode((r.venue ? " \u00b7 " : "") + r.year));
 		venueLine.hidden = !venueLine.firstChild;
+		if (r.retracted) tip(chip(t("retractedChip"), "retracted"), t("retractedTip"));
 		if (r.inLibrary) chip(t("badgeInLibrary"), "lib");
 		let sources = r.sources || [r.source];
 		// One source keeps its mark; several fold into one muted count whose tip names them.
@@ -3972,6 +3982,7 @@
 		statusLine.className = "d-status" + (r.statusClass ? " " + r.statusClass : "");
 		statusLine.hidden = !r.status;
 		renderVersions(r);
+		renderSignals(r);
 
 		// The main action: an owned paper shows its library copy, any other is added.
 		let primary = $("d-primary"), owned = Boolean(r.inLibrary);
@@ -3980,6 +3991,112 @@
 		primary.classList.toggle("primary", !owned);
 		tip(primary, t(owned ? "dShowLibrary" : "dAdd"));
 		primary.disabled = !owned && (state.importing || state.searching);
+	}
+
+	/* ---- what the library says about the open paper, and following its authors (Style Custom, optional) ---- */
+	const styleCustom = () => typeof ZotPoPSignals !== "undefined" ? ZotPoPSignals.runtimeOf(Zotero) : null;
+	const canWatch = sc => Boolean(sc && typeof sc.watchAuthor === "function");
+	function watchedRows(sc = styleCustom()) { try { return sc ? sc.watchedAuthors() || [] : []; } catch (e) { return []; } }
+	const isFollowed = (id, sc) => watchedRows(sc).some(row => ZotPoPSignals.shortWork(row.id) === ZotPoPSignals.shortWork(id));
+	state.sigRefs = new Map();
+	state.sigOpen = null;
+	function libraryItemOfKey(key) {
+		try {
+			let [lib, k] = String(key).split(":");
+			let item = Zotero.Items.getByLibraryAndKey(Number(lib), k);
+			return item && !item.deleted ? { id: item.id, title: String(item.getField("title") || "").trim() || k } : null;
+		} catch (e) { return null; }
+	}
+	/* Follows an author in Style Custom with the works already listed marked seen, so the first sweep
+	   does not report them as news. Resolves true when followed. */
+	async function followAuthor(person) {
+		let sc = styleCustom();
+		if (!canWatch(sc)) return false;
+		let payload = ZotPoPSignals.watchPayload(person, ZotPoPSignals.seenWorksOf(state.records, person.openalexId || person.id));
+		if (!payload) return false;
+		try { await sc.watchAuthor(payload); setStatus(t("watchAuthorDone", payload.name), "", { transient: true }); return true; }
+		catch (e) { setStatus(t("watchAuthorFail", e.message || String(e)), "err"); return false; }
+	}
+	function watchButton(person, after) {
+		let sc = styleCustom();
+		if (!canWatch(sc) || !ZotPoPSignals.watchPayload(person, [])) return null;
+		let on = isFollowed(person.openalexId || person.id, sc);
+		let b = document.createElement("button");
+		b.type = "button"; b.className = "watch-btn";
+		b.textContent = t(on ? "watchAuthorOn" : "watchAuthor");
+		b.setAttribute("aria-pressed", String(on));
+		tip(b, t(on ? "watchAuthorOnTip" : "watchAuthorTip", person.name));
+		b.addEventListener("click", async () => { if (on) return; b.disabled = true; await followAuthor(person); after(); });
+		return b;
+	}
+	// Up to three people worth following: first author, corresponding author(s) and last author, those with an OpenAlex id.
+	function principalAuthors(r) {
+		let people = (Array.isArray(r.people) ? r.people : []).filter(p => p && p.openalexId);
+		let picks = [people[0], ...people.filter(p => p.corresponding), people[people.length - 1]].filter(Boolean);
+		return [...new Map(picks.map(p => [p.openalexId, p])).values()].slice(0, 3);
+	}
+	async function loadReferences(r) {
+		let sc = styleCustom();
+		if (!sc || state.sigRefs.has(r.key) || openAlexHeld() || !ZotPoPSignals.libraryWorks(sc).length) return;
+		state.sigRefs.set(r.key, { status: "loading" });
+		let cctx = { email: PREF("email") || "", openAlexApiKey: PREF("openAlexApiKey") || "", log, openAlexSpent: openAlexHeld() };
+		let got = await ZotPoPSources.fetchReferencedWorks(r, http, cctx).catch(() => ({ ok: false }));
+		noteOpenAlexSpent(cctx);
+		state.sigRefs.set(r.key, got.ok ? { status: "done", id: got.id, ids: got.ids } : { status: "failed" });
+		if (detailRecord() === r) renderSignals(r);
+	}
+	function renderSignals(r) {
+		let box = $("d-signals");
+		box.textContent = "";
+		let sc = styleCustom();
+		if (!sc) { box.hidden = true; return; }
+		let works = ZotPoPSignals.libraryWorks(sc);
+		let refs = state.sigRefs.get(r.key) || null;
+		let again = () => { if (detailRecord() === r) renderSignals(r); };
+		let line = () => { let l = document.createElement("div"); l.className = "sig-line"; box.appendChild(l); return l; };
+		let followed = ZotPoPSignals.followedIn(r, watchedRows(sc));
+		if (followed.length) {
+			let chip = document.createElement("span"); chip.className = "badge lib";
+			chip.textContent = t("sigFollowed", followed.map(f => f.name).join(", "));
+			line().appendChild(chip);
+		}
+		if (works.length) {
+			let own = r.source === "openalex" && /^W\d+$/i.test(r.sourceId || "") ? r.sourceId : refs?.id || null;
+			let groups = [];
+			let citing = own ? ZotPoPSignals.libraryCiting(own, works).filter(k => libraryItemOfKey(k)) : [];
+			if (citing.length) groups.push({ id: "citedBy", keys: citing, label: t("sigCitedByMine", citing.length), tip: t("sigCitedByMineTip") });
+			let cited = refs?.status === "done" ? ZotPoPSignals.libraryCited(refs.ids, works).filter(k => libraryItemOfKey(k)) : [];
+			if (cited.length) groups.push({ id: "cites", keys: cited, label: t("sigCitesMine", cited.length), tip: t("sigCitesMineTip") });
+			if (!refs) loadReferences(r);
+			let row = groups.length || refs?.status === "loading" ? line() : null;
+			for (let g of groups) {
+				let open = state.sigOpen && state.sigOpen.key === r.key && state.sigOpen.id === g.id;
+				let b = document.createElement("button"); b.type = "button"; b.className = "sig-count"; b.textContent = g.label;
+				b.setAttribute("aria-expanded", String(open)); tip(b, g.tip);
+				b.addEventListener("click", () => { state.sigOpen = open ? null : { key: r.key, id: g.id }; again(); });
+				row.appendChild(b);
+			}
+			if (refs?.status === "loading" && row) { let wait = document.createElement("span"); wait.textContent = t("sigChecking"); row.appendChild(wait); }
+			let shown = groups.find(g => state.sigOpen && state.sigOpen.key === r.key && state.sigOpen.id === g.id);
+			if (shown) {
+				let list = document.createElement("div"); list.className = "sig-list";
+				for (let k of shown.keys) {
+					let it = libraryItemOfKey(k); if (!it) continue;
+					let item = document.createElement("div"); item.className = "sig-item";
+					let name = document.createElement("span"); name.className = "sig-title"; name.textContent = it.title; tip(name, it.title);
+					let go = document.createElement("button"); go.type = "button"; go.className = "ghost"; go.textContent = t("sigShowInLibrary");
+					go.addEventListener("click", () => { try { mainWindow?.ZoteroPane?.selectItem(it.id); } catch (e) { log("selectItem failed: " + e.message); } });
+					item.appendChild(name); item.appendChild(go); list.appendChild(item);
+				}
+				box.appendChild(list);
+			}
+		}
+		if (canWatch(sc)) for (let p of principalAuthors(r)) {
+			let b = watchButton(p, again);
+			if (!b) continue;
+			let l = line(), who = document.createElement("span"); who.textContent = p.name; l.appendChild(who); l.appendChild(b);
+		}
+		box.hidden = !box.firstChild;
 	}
 
 	/* A preprint and the article it became are two records with two DOIs, so they are not
@@ -3995,7 +4112,9 @@
 		let { to } = link, estimated = to.basis === "title";
 		let target = state.records.find(o => o.key === to.key)
 			|| (to.doi && state.records.find(o => o.doi && ZotPoPSources.normalizeDOI(o.doi) === ZotPoPSources.normalizeDOI(to.doi)));
-		let bits = [to.venue, to.year, target ? t(target.inLibrary ? "verOwned" : "verNotOwned") : t("verGone")].filter(Boolean);
+		// Not among the results: the library may still hold it, by DOI at once or by title once asked.
+		let held = target ? Boolean(target.inLibrary) : heldVersion(to, () => { if (detailRecord() === r) renderVersions(r); });
+		let bits = [to.venue, to.year, target ? t(target.inLibrary ? "verOwned" : "verNotOwned") : t(held ? "verOwned" : "verGone")].filter(Boolean);
 		tip(box, t(link.tip, to.doi || "") + "\n" + t(estimated ? "verEstimateTip" : "verExplicitTip"));
 		box.appendChild(document.createTextNode(t(link.kind, estimated) + ": " + bits.join(" · ")));
 		if (target) {
@@ -4006,6 +4125,21 @@
 			go.addEventListener("click", () => revealRecord(target.key));
 			box.appendChild(go);
 		}
+	}
+	/* Whether the user's library holds the other version of a paper: true by DOI map at once; by title and
+	   year (the import's own rule) asked once and remembered, calling again() when the answer arrives. */
+	state.heldVersions = new Map();
+	function heldVersion(to, again) {
+		let doi = to.doi ? ZotPoPSources.normalizeDOI(to.doi) : null;
+		if (doi && state.doiMap.has(doi)) return true;
+		let id = doi || ("t:" + to.title + "|" + to.year);
+		if (state.heldVersions.has(id)) return state.heldVersions.get(id) === true;
+		if (!to.title || typeof ZotPoPImporter.findByTitle !== "function") return false;
+		state.heldVersions.set(id, null);
+		Promise.resolve(ZotPoPImporter.findByTitle(state.libraryID ?? currentTarget().libraryID, to.title, to.year, { doi: to.doi }))
+			.then(found => { state.heldVersions.set(id, Boolean(found)); if (found) again(); })
+			.catch(() => state.heldVersions.set(id, false));
+		return false;
 	}
 	// Opens another row and its detail in this window; a filter that hides it is let go first.
 	function revealRecord(key) {
@@ -4315,7 +4449,13 @@
 			let r = recs[i];
 			setStatus(t("adding", i + 1, recs.length, r.title.slice(0, 70)));
 			setRowStatus(r, t("statusAdding"), "");
-			let res = await ZotPoPImporter.importRecord(r, opts);
+			// The abstract the user translated here, kept as a child note when asked.
+			let translatedNote = null;
+			if ($("opt-trnote").checked && translator && r.abstract) {
+				let lang = ZotPoPTranslate.byCode(trLang()), done = lang && translator.cached(r.key, lang.code, "abstract");
+				if (done) translatedNote = { heading: t("noteTranslatedTitle", lang.name), text: done.text, service: done.service };
+			}
+			let res = await ZotPoPImporter.importRecord(r, translatedNote ? Object.assign({}, opts, { translatedNote }) : opts);
 			if (res.status === "added") {
 				added++;
 				r.inLibrary = true;

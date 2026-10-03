@@ -45,6 +45,8 @@
 	--ok: #53671e;
 	--warn: #7d5208;
 	--err: #934245;
+	--neg-bg: #f8dddd;
+	--neg-ink: #7b1d22;
 	--card-shadow: 0 1px 2px rgba(20, 22, 30, 0.04), 0 6px 18px rgba(20, 22, 30, 0.04);
 	--r-card: 18px;
 	--r-pop: 14px;
@@ -95,6 +97,8 @@
 		--ok: #c5e07b;
 		--warn: #f4c871;
 		--err: #e6a5a7;
+		--neg-bg: #4d2a2d;
+		--neg-ink: #f6bfc1;
 		--card-shadow: none;
 		--pop-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 36px -6px rgba(0, 0, 0, 0.6);
 		--seg-on: #3a3b43;
@@ -489,6 +493,20 @@ td.status.err { color: var(--err); }
 .badge .brand-mark { flex: none; width: 12px; height: 12px; opacity: .85; }
 .pill { min-width: 28px; font-weight: 600; }
 .pill.pos { background: var(--pos-bg); color: var(--pos-ink); }
+/* Retracted: the one red in the window. A soft red chip, never an edge bar. */
+.badge.retracted, .retract-mark { background: var(--neg-bg); color: var(--neg-ink); font-weight: 600; }
+.retract-mark { display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; line-height: 16px; white-space: nowrap; vertical-align: middle; }
+#results-table td.title .retract-mark { margin-right: 8px; }
+.d-signals { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; color: var(--muted); font-size: 11px; line-height: 16px; }
+.d-signals .sig-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.d-signals button.sig-count { height: 26px; padding: 0 12px; font-size: 11px; line-height: 16px; }
+.d-signals .sig-list { width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: var(--r-box); background: var(--bg-tint); }
+.d-signals .sig-item { display: flex; align-items: center; gap: 8px; min-height: 26px; color: var(--text); }
+.d-signals .sig-item .sig-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-signals .sig-item button { height: 26px; padding: 0 8px; font-size: 11px; line-height: 16px; flex: none; }
+button.watch-btn { height: var(--h-seg); padding: 0 12px; font-size: 11px; line-height: 16px; }
+button.watch-btn[aria-pressed="true"] { background: var(--seg-on); color: var(--seg-on-ink); border-color: transparent; }
+.au-watch { height: 20px; padding: 0 8px; font-size: 11px; line-height: 16px; vertical-align: baseline; }
 #results-table td.title .new-mark { margin-right: 8px; background: var(--pos-bg); color: var(--pos-ink); font-weight: 600; }
 .tier { font-weight: 600; }
 /* tint steps only, never an outline: T1 solid, T2 chip in ink, T3 chip in muted ink, T4 the same chip, fainter */
@@ -879,7 +897,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 		</form>
 		<div class="author-helprow"><p id="author-help" class="author-help">이름을 입력하면 ORCID 프로필을 찾아 줍니다. ORCID iD나 URL을 붙여 넣어도 됩니다. 사람을 고르면 그 사람의 논문이 바로 나옵니다.</p><button data-tip="전체 설명 보기" id="author-help-toggle" type="button" class="ghost note-help" aria-expanded="false" aria-controls="author-help-more" aria-label="?" data-i18n-title="metricsMore"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-help" /></svg></button></div>
 		<p id="author-help-more" class="author-help author-help-more" hidden>이름은 공개된 ORCID 프로필의 이름(성·이름 순서 모두)과 맞춰 봅니다. 한글·한자·가나 이름은 입력한 그대로 검색합니다. 논문은 그 ORCID iD에 연결된 OpenAlex 기록에서 가져오고, OpenAlex에 없으면 ORCID에 공개된 목록을 쓰며 이 목록에는 전체 저자 정보가 없습니다.</p>
-		<div id="author-profiles" class="author-profiles" aria-live="polite"><article class="author-profile pickable"><div class="author-profile-info"><div class="author-profile-head"><span class="author-profile-name">Jenna A. Dowd</span><span data-tip="공개 서비스에 등록된 프로필입니다." class="badge lib">공개 프로필</span></div><div class="badges author-profile-stats"><span class="badge">논문 212</span><span class="badge">인용 18,420</span><span class="badge">h-index 54</span></div><div class="author-profile-meta">Aurora Medical Institute; Example Institute of Genome Engineering · 0000-0001-1111-1118</div><div class="author-profile-meta">Genome editing and delivery</div><button aria-expanded="false" class="ghost author-sum-toggle" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-chevron-down" /></svg><span>프로필 요약</span></button></div><div class="author-profile-actions"><button class="author-load" type="button">논문 불러오기</button><button type="button">프로필 열기</button><button data-tip="ORCID에 등록된 LinkedIn 프로필이 있으면 그것을, 없으면 LinkedIn에서 이름·소속으로 검색합니다" class="author-linkedin" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-linkedin" /></svg><span>LinkedIn</span></button></div></article><article class="author-profile pickable"><div class="author-profile-info"><div class="author-profile-head"><span class="author-profile-name">Jenna Dowd</span><span data-tip="공개 서비스에 등록된 프로필입니다." class="badge lib">공개 프로필</span></div><div class="badges author-profile-stats"><span class="badge">논문 14</span><span class="badge">인용 380</span><span class="badge">h-index 6</span></div><div class="author-profile-meta">Fictional University · 0000-0003-3333-3330</div><div class="author-profile-meta">Plant genomics</div><button aria-expanded="false" class="ghost author-sum-toggle" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-chevron-down" /></svg><span>프로필 요약</span></button></div><div class="author-profile-actions"><button class="author-load" type="button">논문 불러오기</button><button type="button">프로필 열기</button><button data-tip="ORCID에 등록된 LinkedIn 프로필이 있으면 그것을, 없으면 LinkedIn에서 이름·소속으로 검색합니다" class="author-linkedin" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-linkedin" /></svg><span>LinkedIn</span></button></div></article><button class="ghost author-more" type="button">2명 더 보기</button></div>
+		<div id="author-profiles" class="author-profiles" aria-live="polite"><article class="author-profile pickable"><div class="author-profile-info"><div class="author-profile-head"><span class="author-profile-name">Jenna A. Dowd</span><span data-tip="공개 서비스에 등록된 프로필입니다." class="badge lib">공개 프로필</span></div><div class="badges author-profile-stats"><span class="badge">논문 212</span><span class="badge">인용 18,420</span><span class="badge">h-index 54</span></div><div class="author-profile-meta">Aurora Medical Institute; Example Institute of Genome Engineering · 0000-0001-1111-1118</div><div class="author-profile-meta">Genome editing and delivery</div><button aria-expanded="false" class="ghost author-sum-toggle" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-chevron-down" /></svg><span>프로필 요약</span></button></div><div class="author-profile-actions"><button class="author-load" type="button">논문 불러오기</button><button type="button">프로필 열기</button><button data-tip="Jenna A. Dowd 저자를 Style Custom 관심 저자로 추가합니다. 이미 나온 논문은 본 것으로 처리합니다." aria-pressed="false" class="watch-btn author-watch" type="button">관심 저자로 추가</button><button data-tip="ORCID에 등록된 LinkedIn 프로필이 있으면 그것을, 없으면 LinkedIn에서 이름·소속으로 검색합니다" class="author-linkedin" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-linkedin" /></svg><span>LinkedIn</span></button></div></article><article class="author-profile pickable"><div class="author-profile-info"><div class="author-profile-head"><span class="author-profile-name">Jenna Dowd</span><span data-tip="공개 서비스에 등록된 프로필입니다." class="badge lib">공개 프로필</span></div><div class="badges author-profile-stats"><span class="badge">논문 14</span><span class="badge">인용 380</span><span class="badge">h-index 6</span></div><div class="author-profile-meta">Fictional University · 0000-0003-3333-3330</div><div class="author-profile-meta">Plant genomics</div><button aria-expanded="false" class="ghost author-sum-toggle" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-chevron-down" /></svg><span>프로필 요약</span></button></div><div class="author-profile-actions"><button class="author-load" type="button">논문 불러오기</button><button type="button">프로필 열기</button><button data-tip="Jenna Dowd 저자를 Style Custom 관심 저자로 추가합니다. 이미 나온 논문은 본 것으로 처리합니다." aria-pressed="false" class="watch-btn author-watch" type="button">관심 저자로 추가</button><button data-tip="ORCID에 등록된 LinkedIn 프로필이 있으면 그것을, 없으면 LinkedIn에서 이름·소속으로 검색합니다" class="author-linkedin" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-linkedin" /></svg><span>LinkedIn</span></button></div></article><button class="ghost author-more" type="button">2명 더 보기</button></div>
 	</section>
 	<form hidden id="query-form" class="query glass" onsubmit="return false;">
 		<div class="field grow2 keep">
@@ -1072,7 +1090,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 						</div>
 					</div>
 					<div id="d-venue" class="d-venue"><span style="--j-ink-l:hsl(206 55% 36%);--j-fill-l:hsl(206 55% 94%);--j-edge-l:hsl(206 47% 84%);--j-ink-d:hsl(206 50% 68%);--j-fill-d:hsl(206 30% 22%);--j-edge-d:hsl(206 30% 32%)" class="d-venue-name venue-known">Proceedings of the National Academy of Sciences</span> · 2026</div>
-					<div id="d-badges" class="badges"><span class="badge src"><svg stroke-linejoin="round" stroke-linecap="round" stroke-width="1.5" stroke="currentColor" fill="none" class="brand-mark" focusable="false" aria-hidden="true" height="12" width="12" viewBox="0 0 16 16"><circle r="5.4" cy="8" cx="8" /><path d="M2.9 6.2h10.2M2.9 9.8h10.2" /><path d="M8 2.6c-2 2-2 8.8 0 10.8 2-2 2-8.8 0-10.8Z" /></svg>Europe PMC (논문 + 프리프린트)</span></div>
+					<div id="d-badges" class="badges"><span data-tip="OpenAlex 또는 Europe PMC가 철회된 논문으로 표시했습니다. 인용하기 전에 철회 공지를 확인하세요." class="badge retracted">철회</span><span class="badge src"><svg stroke-linejoin="round" stroke-linecap="round" stroke-width="1.5" stroke="currentColor" fill="none" class="brand-mark" focusable="false" aria-hidden="true" height="12" width="12" viewBox="0 0 16 16"><circle r="5.4" cy="8" cx="8" /><path d="M2.9 6.2h10.2M2.9 9.8h10.2" /><path d="M8 2.6c-2 2-2 8.8 0 10.8 2-2 2-8.8 0-10.8Z" /></svg>Europe PMC (논문 + 프리프린트)</span></div>
 					<div class="d-figure">
 						<div id="d-cite" class="d-cite"><button data-tip="연도별 인용과 지난번 확인 이후의 증감" aria-haspopup="dialog" type="button" class="cite-strip"><span class="cite-strip-n">18</span><span class="cite-strip-l">인용</span><span class="cite-strip-avg">연평균 18.0</span></button></div>
 						<div data-tip="~9.4는 추정치: OpenAlex 2년 평균 피인용도 (JCR에 없는 저널) · 저널 h-index 56" id="d-evidence" class="d-evidence">Europe PMC (논문 + 프리프린트) 기준 · 저널 IF 추정 9.4</div>
@@ -1080,6 +1098,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 					<div hidden id="d-status" class="d-status"></div>
 					<div id="d-authors" class="d-authors"><div class="au-list"><span data-tip="1저자" class="au au-first">Jenna Dowd<sup>1</sup><sup data-tip="교신저자" class="au-corr">*</sup></span>, <span class="au">Sam Sternfield<sup>1</sup></span>, <span class="au">Priya Natarajan<sup>2</sup></span></div><div class="au-insts"><span class="au-inst"><span class="au-num">1</span><button data-tip="Aurora Medical Institute 소속 저자가 있는 논문만 보기" class="ghost au-inst-btn" type="button">Aurora Medical Institute (CA)</button></span><span class="au-inst"><span class="au-num">2</span><button data-tip="Kestrel Institute 소속 저자가 있는 논문만 보기" class="ghost au-inst-btn" type="button">Kestrel Institute (GB)</button></span><span class="au-legend">* 교신</span></div></div>
 					<div hidden aria-label="이 프리프린트는 이후 정식 게재되었습니다 (10.5555/demo.004). DOI가 서로 달라 각각 별개의 기록이므로 둘 다 표시합니다." id="d-versions" class="d-versions"></div>
+					<div id="d-signals" class="d-signals"><div class="sig-line"><span>Jenna Dowd</span><button data-tip="Jenna Dowd 저자를 Style Custom 관심 저자로 추가합니다. 이미 나온 논문은 본 것으로 처리합니다." aria-pressed="false" class="watch-btn" type="button">관심 저자로 추가</button></div><div class="sig-line"><span>Priya Natarajan</span><button data-tip="Priya Natarajan 저자를 Style Custom 관심 저자로 추가합니다. 이미 나온 논문은 본 것으로 처리합니다." aria-pressed="false" class="watch-btn" type="button">관심 저자로 추가</button></div></div>
 					<div hidden id="d-collections" class="d-collections"></div>
 					<details id="d-fold" class="d-fold">
 						<summary data-i18n="dFold">서지정보·소속·저자별 보기</summary>
@@ -1124,6 +1143,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 			<label class="cb"><input id="opt-skip" type="checkbox" checked> <span data-i18n="optSkip">중복 건너뛰기 (DOI)</span></label>
 			<label class="cb"><input id="opt-fillpdf" type="checkbox"> <span data-i18n="optFillPdf">보유 문헌에 PDF 없으면 채우기</span></label>
 			<label class="cb"><input id="opt-extra" type="checkbox" checked> <span data-i18n="optExtra">인용 수를 Extra에 기록</span></label>
+			<label data-tip="여기서 초록을 번역한 논문에는 &quot;번역된 초록 (언어)&quot; 하위 메모가 추가됩니다." class="cb" id="opt-trnote-wrap"><input id="opt-trnote" type="checkbox"> <span data-i18n="optTrNote">번역한 초록을 메모로 보관</span></label>
 		</span>
 	</div>
 

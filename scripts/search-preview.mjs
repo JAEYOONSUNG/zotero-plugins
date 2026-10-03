@@ -39,7 +39,7 @@ export const FAKE = [
 	["Tissue-scale repair atlases from sparse sampling", ["Ren Ahn", "Paula Silva"], 2025, "Cell", 41, "crossref", { doi: "10.5555/demo.004", inLibrary: true, jif: 42.5, aff: [HANBIT, ALTMARK], corr: 1 }],
 	["Benchmarks for repair-stage classifiers", ["Kai Oh", "Chris Voigtland"], 2024, "Nature Biotechnology", 66, "europepmc", { doi: "10.5555/demo.005", pdf: true, jif: 33.1, abstract: "Fictional abstract for the design preview: held-out benchmarks for classifiers of repair stage.", aff: [SATO, MERIDIAN], corr: 0 }],
 	["Preregistered synthesis of repair reviews", ["Dana Yu", "Sora Lee"], 2023, "eLife", 12, "openalex", { doi: "10.5555/demo.006", pdf: true, jif: 6.4, aff: [LUMEN, HANBIT], corr: 1, also: ["europepmc"] }],
-	["Compact editors from uncultivated bacteria", ["Jenna Dowd", "Sam Sternfield", "Priya Natarajan"], 2026, "Proceedings of the National Academy of Sciences", 18, "europepmc", { doi: "10.5555/demo.007", jif: 9.4, aff: [AURORA, AURORA, KESTREL], corr: 0 }],
+	["Compact editors from uncultivated bacteria", ["Jenna Dowd", "Sam Sternfield", "Priya Natarajan"], 2026, "Proceedings of the National Academy of Sciences", 18, "europepmc", { doi: "10.5555/demo.007", jif: 9.4, aff: [AURORA, AURORA, KESTREL], corr: 0, retracted: true }],
 	["Guide design rules learned from a million targets", ["Jenna Dowd", "Marta Jinkova"], 2025, "Nucleic Acids Research", 88, "crossref", { doi: "10.5555/demo.008", pdf: true, jif: 13.1, aff: [AURORA, ALTMARK], corr: 1 }],
 	["Off-target profiling in primary human cells", ["Jenna Dowd", "Ben Oakley"], 2024, "Genome Biology", 203, "openalex", { doi: "10.5555/demo.009", pdf: true, jif: 10.1, abstract: "Fictional abstract for the design preview: guide-level off-target profiles across primary human cell types, compared between three editing enzymes.", aff: [AURORA, EAST], corr: 0 }],
 	["Delivery of editing enzymes across tissue barriers", ["Jenna Dowd", "Sam Sternfield"], 2025, "Cell Reports", 61, "europepmc", { doi: "10.5555/demo.010", jif: 7.5, aff: [AURORA], corr: 1 }],
@@ -66,9 +66,11 @@ const fromPairs = list => list ? list.map(([year, n]) => ({ year, n })) : null;
 
 // demo3 names its published version (demo4, in the library) itself; demo11 is linked to demo6
 // only by title and first author; demo12 has a similar title and no link at all.
+// A made-up OpenAlex author id per name (the same name, the same id), so a followed author is found by id.
+const authorId = name => "A" + (5000 + [...name].reduce((sum, ch) => sum + ch.charCodeAt(0), 0));
 function people(names, x) {
 	if (!x.aff) return null;
-	return names.map((n, i) => ({ name: n, position: i === 0 ? "first" : i === names.length - 1 ? "last" : "middle", corresponding: x.corr === i,
+	return names.map((n, i) => ({ name: n, openalexId: authorId(n), position: i === 0 ? "first" : i === names.length - 1 ? "last" : "middle", corresponding: x.corr === i,
 		institution: x.aff[i]?.[0] || "", institutionId: x.aff[i] ? "I" + (x.aff[i][0].length * 1000 + x.aff[i][0].charCodeAt(0)) : null, country: x.aff[i]?.[1] || null, institutionH: INST_H[x.aff[i]?.[0]] ?? null }));
 }
 function records(Sources) {
@@ -78,7 +80,7 @@ function records(Sources) {
 		authorString: names.join(", "), abstract: x.abstract || "",
 		pdfUrl: x.pdf ? "https://example.invalid/pdf/" + (i + 1) + ".pdf" : null,
 		itemType: x.preprint ? "preprint" : "journalArticle", preprintServer: x.server || null, publishedDoi: x.publishedDoi || null,
-		workType: x.review ? "review" : null, people: people(names, x), sources: x.also ? [source, ...x.also] : undefined,
+		workType: x.review ? "review" : null, retracted: Boolean(x.retracted), people: people(names, x), sources: x.also ? [source, ...x.also] : undefined,
 		journalIF: x.jif ?? null, journalIFEstimate: x.jif != null, journalH: x.jif ? Math.round(x.jif * 6) : null,
 		openAccess: Boolean(x.pdf), citesByYear: fromPairs(CITES_BY_YEAR["demo" + (i + 1)])
 	})));
@@ -144,7 +146,15 @@ export async function buildPreview({ locale = "en" } = {}) {
 	const launched = [];
 	const previewFiles = new Map();
 	let freshWork = null;
-	const importCalls = [];
+	const importCalls = [], importNotes = new Map();
+	// Style Custom, fictional: the library's stored works (demo1 is cited by two of them and cites two others), one followed author.
+	const watchCalls = [];
+	const LIB = { LIBA: ["Repair-stage markers in regenerating tissue", "W7001", ["W9001"]], LIBB: ["A field guide to atlas-scale sampling", "W7002", []], LIBC: ["Spatial cell-state methods compared", "W7003", ["W9001"]] };
+	const watchedRows = [{ id: authorId("Jonas Park"), name: "Jonas Park", institution: "Eastbridge University" }];
+	const styleCustom = { paperWorks: () => Object.fromEntries(Object.entries(LIB).map(([k, [, id, refs]]) => ["1:" + k, { openalex: id, references: refs }])),
+		watchedAuthors: () => watchedRows, state: () => ({ status: "unread" }),
+		watchAuthor: async p => { watchCalls.push(p); watchedRows.push({ id: p.id, name: p.name, institution: p.institution }); return p; } };
+	const refRequests = [];
 	const prefs = { language: locale, searchSurface: "papers", hintShown: true, multiSourceMigrated: true, defaultSource: "multi", multiSourceMigrated2: true, journalLookup: false };
 	const listeners = new Map();
 	// linkedom's window rejects assignments; the UI only needs a small window surface.
@@ -173,7 +183,11 @@ export async function buildPreview({ locale = "en" } = {}) {
 		window: win, document, AbortController, URL, console, setTimeout, clearTimeout, CSS: { escape: v => v },
 		Zotero: { locale, debug() {}, logError: e => errors.push(e), launchURL: url => launched.push(url), Libraries: { userLibraryID: 1 },
 			Prefs: { get: key => prefs[key.replace("extensions.zotpop.", "")], set: (key, v) => { prefs[key.replace("extensions.zotpop.", "")] = v; } },
+			StyleCustom: styleCustom,
+			Items: { getByLibraryAndKey: (_lib, key) => LIB[key] ? { id: 500 + Object.keys(LIB).indexOf(key), deleted: false, getField: () => LIB[key][0] } : null },
 			HTTP: { request: async (_method, url) => {
+				// One paper's reference list (select=referenced_works): the fictional demo1 cites two of the library's papers.
+				if (/select=id,referenced_works/.test(url)) { refRequests.push(url.replace(/\?.*/, "")); return { status: 200, response: /demo\.001/.test(url) ? { id: "https://openalex.org/W9001", referenced_works: ["https://openalex.org/W7001", "https://openalex.org/W7002", "https://openalex.org/W8888"] } : { id: "https://openalex.org/W9999", referenced_works: [] } }; }
 				// The one paper's refresh: answered from the fixture, counted apart from the network (which stays at zero).
 				if (/^https:\/\/api\.openalex\.org\/works\/doi:/.test(url) && freshWork) { stubbed.openalex.push(url.replace(/\?.*/, "")); return { status: 200, response: freshWork }; }
 				// The ORCID name lookup and the OpenAlex answers behind it: fictional people, answered in place of the network.
@@ -183,13 +197,13 @@ export async function buildPreview({ locale = "en" } = {}) {
 			} },
 			Utilities: { Internal: { copyTextToClipboard() {} } } },
 		ZotPoPMarquee: { attach: () => ({ refresh() {}, refreshCell() {} }) },
-		ZotPoPImporter: { importRecord: async r => { importCalls.push(r.key); return r.sourceId === "demo9" ? { status: "failed", error: "fictional failure" } : { status: "added", item: { id: 100 + importCalls.length }, pdf: r.pdfUrl ? "pdf:oa" : "no pdf", how: "translator" }; },
+		ZotPoPImporter: { importRecord: async (r, o) => { importCalls.push(r.key); importNotes.set(r.key, o?.translatedNote || null); return r.sourceId === "demo9" ? { status: "failed", error: "fictional failure" } : { status: "added", item: { id: 100 + importCalls.length }, pdf: r.pdfUrl ? "pdf:oa" : "no pdf", how: "translator" }; },
 			getLibraryDOIMap: async () => library, getReadingStates: async ids => new Map(ids.map(id => [id, "reading"])),
 			getCollectionPaths: async ids => new Map(ids.filter(id => id === 1).map(id => [id, [["Repair atlases", "Tissue maps", "2025 reviews"], ["Reading list"]]])), getTargets: () => [{ libraryID: 1, collectionID: null, label: "My Library", depth: 0 }, { libraryID: 1, collectionID: 7, label: "Repair atlases", depth: 1 }],
 			getCurrentTarget: () => ({ libraryID: 1, collectionID: null }), forgetTitleIndex() {} }
 	});
 	win.Zotero = ctx.Zotero;
-	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "filters", "journals", "tooltip", "cite", "translate", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
+	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "filters", "journals", "signals", "tooltip", "cite", "translate", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
 	// linkedom's dataset drops "data-i18n" (a digit in the name); read the attribute instead. Strings stay the real ones.
 	ctx.ZotPoPI18N.apply = (root, t) => {
 		for (const el of root.querySelectorAll("[data-i18n]")) el.textContent = t(el.getAttribute("data-i18n"));
@@ -252,6 +266,30 @@ export async function buildPreview({ locale = "en" } = {}) {
 	rows[0]?.dispatchEvent(new window.Event("click", { bubbles: true }));
 	await new Promise(r => setTimeout(r, 30));
 	const detail = page();
+	// What the library says about the open paper (stubbed Style Custom): counts, a list opened from one, follow buttons.
+	const sigText = id => document.getElementById(id).textContent;
+	const signals = { text: document.getElementById("d-signals").textContent, hidden: document.getElementById("d-signals").hidden, refRequests: refRequests.length,
+		buttons: [...document.querySelectorAll("#d-signals button.watch-btn")].map(b => [b.textContent, b.getAttribute("aria-pressed")]),
+		counts: [...document.querySelectorAll("#d-signals button.sig-count")].map(b => b.textContent) };
+	document.querySelector("#d-signals button.sig-count").dispatchEvent(new window.Event("click", { bubbles: true, cancelable: true }));
+	signals.list = [...document.querySelectorAll("#d-signals .sig-title")].map(n => n.textContent);
+	const signalsPage = page();
+	document.querySelector("#d-signals button.sig-count").dispatchEvent(new window.Event("click", { bubbles: true, cancelable: true }));
+	// follow a principal author (the first one): the real handler, the stubbed watch call
+	const followBtn = [...document.querySelectorAll("#d-signals button.watch-btn")].find(b => b.getAttribute("aria-pressed") === "false");
+	followBtn.dispatchEvent(new window.Event("click", { bubbles: true, cancelable: true }));
+	await new Promise(r => setTimeout(r, 30));
+	signals.watch = { calls: watchCalls.map(c => ({ ...c })), buttons: [...document.querySelectorAll("#d-signals button.watch-btn")].map(b => b.getAttribute("aria-pressed")) };
+	// the retracted paper: its row chip and detail chip
+	const retractedRow = [...document.querySelectorAll("#results-body tr")].find(tr => tr.dataset.key.endsWith("demo7"));
+	signals.retractedRow = retractedRow.querySelector(".retract-mark")?.textContent || null;
+	signals.retractedRows = document.querySelectorAll("#results-body .retract-mark").length;
+	retractedRow.dispatchEvent(new window.Event("click", { bubbles: true }));
+	await new Promise(r => setTimeout(r, 30));
+	signals.retractedDetail = [...document.querySelectorAll("#d-badges .badge.retracted")].map(n => n.textContent);
+	const retractedPage = page();
+	document.querySelectorAll("#results-body tr")[0].dispatchEvent(new window.Event("click", { bubbles: true }));
+	await new Promise(r => setTimeout(r, 30));
 
 	// ---- drive states through the real handlers
 	const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -635,6 +673,18 @@ export async function buildPreview({ locale = "en" } = {}) {
 	trace.translate.folded = { originalHidden: document.getElementById("d-abstract").hidden, label: text("d-tr-orig") };
 	fire(document.getElementById("d-tr-orig"));
 	trace.translate.unfolded = { originalHidden: document.getElementById("d-abstract").hidden, label: text("d-tr-orig") };
+	// the add option "keep translated abstract as a note": the translated demo14 abstract travels with the import, others do not
+	{
+		const box = document.getElementById("opt-trnote"); box.checked = true; fire(box, "change");
+		for (const tr of table()) { const c = tr.querySelector("input"); if (c.checked) { c.checked = false; fire(c, "change"); } }
+		const c14 = rowOf("demo14").querySelector("input"), c2 = rowOf("demo2").querySelector("input"); c14.checked = true; fire(c14, "change"); c2.checked = true; fire(c2, "change");
+		importCalls.length = 0; importNotes.clear();
+		fire(document.getElementById("import-btn"));
+		for (let i = 0; i < 100 && importCalls.length < 2; i++) await wait(20);
+		await wait(40);
+		var translateNote = { withTranslation: importNotes.get([...importNotes.keys()].find(k => k.endsWith("demo14"))) || null, without: (k => k ? importNotes.get(k) : "missing")([...importNotes.keys()].find(k => k.endsWith("demo2"))) };
+		box.checked = false; fire(box, "change");
+	}
 	// no service installed: a plain message that says what to do
 	const installed = ctx.Zotero.PDFTranslate; delete ctx.Zotero.PDFTranslate;
 	fire(rowOf("demo1"));
@@ -643,18 +693,20 @@ export async function buildPreview({ locale = "en" } = {}) {
 	for (let i = 0; i < 50 && !text("d-tr-note"); i++) await wait(20);
 	trace.translate.none = { note: text("d-tr-note"), err: document.getElementById("d-tr-note").className };
 	ctx.Zotero.PDFTranslate = installed;
-	return { tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
+	trace.signals = signals;
+	trace.translateNote = translateNote;
+	return { retractedPage, signalsPage, tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
 }
 
 export function checkPreview(out) {
 	const problems = [];
 	if (out.rows < 10) problems.push("expected at least 10 result rows, got " + out.rows);
 	if (out.netCalls) problems.push("network was called");
-	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["orcid", out.orcidLookup], ["orcid-summary", out.orcidSummary], ["orcid-works", out.orcidWorks], ["unfolded", out.unfolded], ["filters", out.filtersPage], ["journals", out.journalsPage], ["longspan", out.longSpanPage], ["cite", out.citePage], ["translate", out.translatedPage]]) {
+	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["orcid", out.orcidLookup], ["orcid-summary", out.orcidSummary], ["orcid-works", out.orcidWorks], ["unfolded", out.unfolded], ["filters", out.filtersPage], ["journals", out.journalsPage], ["longspan", out.longSpanPage], ["cite", out.citePage], ["translate", out.translatedPage], ["signals", out.signalsPage], ["retracted", out.retractedPage]]) {
 		if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
 		if (/(?:src|href)\s*=\s*["'](?:https?:|\/\/|chrome:|resource:)/i.test(html)) problems.push(name + ": external asset");
 		if (/url\(\s*["']?(?:https?:|\/\/|chrome:)/i.test(html)) problems.push(name + ": external css url");
-		if (["history", "rerun", "unfolded", "filters", "journals", "longspan", "cite", "translate"].includes(name) || name.startsWith("authors") || name.startsWith("orcid")) { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
+		if (["history", "rerun", "unfolded", "filters", "journals", "longspan", "cite", "translate", "signals", "retracted"].includes(name) || name.startsWith("authors") || name.startsWith("orcid")) { if (!html.includes('id="results-table"')) problems.push(name + ": no table"); continue; }
 		for (const needle of ['id="results-table"', 'id="results-body"', 'id="query-form"', name === "facet" ? "Off-target profiling" : "Mapping cellular responses"]) if (!html.includes(needle)) problems.push(name + ": missing " + needle);
 	}
 	if (!out.results.includes('class="in-library')) problems.push("no in-library row");
@@ -732,6 +784,18 @@ export function checkPreview(out) {
 		if (o.rows !== 5 || !/ORCID 0000-0001-1111-1118/.test(o.statusAfter || "") || !/Jenna A\. Dowd/.test(o.statusAfter || "")) problems.push("picking a profile should list its five papers with the person named in the status; got " + JSON.stringify([o.rows, o.statusAfter]));
 		if (!same(o.firstYears, ["2026", "2025", "2025"])) problems.push("an ORCID person's papers should be newest first; got " + JSON.stringify(o.firstYears));
 	}
+	{
+		const g = t.signals || {};
+		if (g.hidden || !/(내 문헌 2편이 이 논문을 인용|2 of my papers cite this)/.test(g.text || "") || !/(이 논문이 내 문헌 2편을 인용|This cites 2 of my papers)/.test(g.text || "")) problems.push("the detail should say 1 of my papers cite it and it cites 2 of mine (LIBA/LIBC cite W9001, the reference list holds LIBA and LIBB); got " + g.text);
+		if (!/(관심 저자 참여|Followed author): Jonas Park/.test(g.text || "")) problems.push("the followed author's chip is missing; got " + g.text);
+		if (g.refRequests !== 1) problems.push("opening the detail should cost one referenced_works request; got " + g.refRequests);
+		if (!same(g.list, ["Repair-stage markers in regenerating tissue", "Spatial cell-state methods compared"]) && !same(g.list, ["Repair-stage markers in regenerating tissue", "A field guide to atlas-scale sampling"])) problems.push("the count should open a list of library titles; got " + JSON.stringify(g.list));
+		if (!g.buttons.length || !g.buttons.some(b => b[1] === "true") || !g.buttons.some(b => b[1] === "false")) problems.push("follow buttons should show both a followed and a not-yet-followed author; got " + JSON.stringify(g.buttons));
+		if (!g.watch || g.watch.calls.length !== 1 || !/^A\d+$/.test(g.watch.calls[0].id) || !g.watch.calls[0].institution || !Array.isArray(g.watch.calls[0].seen) || g.watch.buttons.includes("false")) problems.push("following should call watchAuthor once with id, name, institution and seen, then show every button pressed; got " + JSON.stringify(g.watch));
+		if (g.retractedRows !== 1 || !/^(철회|Retracted)$/.test(g.retractedRow || "") || !same(g.retractedDetail, [g.retractedRow])) problems.push("exactly the retracted paper should carry the chip, in the row and the detail; got " + JSON.stringify([g.retractedRows, g.retractedRow, g.retractedDetail]));
+		const n = t.translateNote || {};
+		if (!n.withTranslation || !/^(번역된 초록|Translated abstract) \(/.test(n.withTranslation.heading) || !n.withTranslation.text || n.without !== null) problems.push("the translated abstract should go with the import only for the paper translated here; got " + JSON.stringify(n));
+	}
 	if (t.authors.rows !== 4 || t.authors.profiles !== 2 || t.authors.formHidden || !t.authors.paperFormHidden) problems.push("the author tab should list two profiles and four papers; got " + JSON.stringify(t.authors));
 	return problems;
 }
@@ -762,6 +826,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.writeFileSync(path.join(root, "docs/search-preview-longspan.html"), out.longSpanPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-cite.html"), out.citePage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-translate.html"), out.translatedPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-signals.html"), out.signalsPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-retracted.html"), out.retractedPage);
 	console.log(`ZotPoP search preview: real markup, CSS and ui.js, ${out.rows} fictional rows, no network: docs/search-preview.html, docs/search-preview-detail.html`);
 	process.exit(0);
 }

@@ -292,6 +292,8 @@ var ZotPoPSources = (function () {
 				corresponding: Boolean(a.is_corresponding),
 				institution: inst.display_name || (a.raw_affiliation_strings || [])[0] || "",
 				institutionId: openAlexId(inst.id),
+				openalexId: openAlexId(a.author?.id),
+				orcid: a.author?.orcid || a.raw_orcid || null,
 				country: String(inst.country_code || (a.countries || [])[0] || "").toUpperCase() || null,
 				institutionH: null
 			};
@@ -311,7 +313,7 @@ var ZotPoPSources = (function () {
 			source: "", sourceId: "", title: "", authors: [], year: null, publicationDate: null, venue: "", publisher: "",
 			doi: null, pmid: null, pmcid: null, arxiv: null, url: null, pdfUrl: null, pdfUrls: [], citations: null, citationSource: null, citesByYear: null, sources: null,
 			journalId: null, issn: null, journalIF: null, journalH: null,
-			preprintServer: null, publishedDoi: null, publishedPmid: null, people: null,
+			preprintServer: null, publishedDoi: null, publishedPmid: null, people: null, retracted: false,
 			volume: "", issue: "", pages: "", abstract: "", itemType: "journalArticle"
 		}, r, { doi });
 		rec.publishedDoi = normalizeDOI(rec.publishedDoi);
@@ -580,7 +582,7 @@ var ZotPoPSources = (function () {
 		else if (sort === "citations") params.push("sort=cited_by_count:desc");
 		let auth = openAlexAuth(ctx);
 		if (auth) params.push(auth.replace(/^&/, "").replace(/&/g, "&"));
-		params.push("select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,counts_by_year,open_access,best_oa_location,locations,abstract_inverted_index,ids");
+		params.push("select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,counts_by_year,open_access,best_oa_location,locations,abstract_inverted_index,ids,is_retracted");
 
 		let max = q.maxResults || 200;
 		let out = [];
@@ -626,7 +628,8 @@ var ZotPoPSources = (function () {
 					abstract: openAlexAbstract(w.abstract_inverted_index),
 					itemType: OPENALEX_TYPES[w.type] || "journalArticle",
 					// OpenAlex says "review" where itemType has only articles: kept for the results filter.
-					workType: w.type || null
+					workType: w.type || null,
+					retracted: w.is_retracted === true
 				}));
 			}
 			seen += results.length;
@@ -657,12 +660,13 @@ var ZotPoPSources = (function () {
 			throwIfCancelled(ctx);
 			if (ctx.openAlexSpent) break;
 			let chunk = dois.slice(i, i + 50);
-			let url = "https://api.openalex.org/works?filter=doi:" + chunk.map(enc).join("|") + "&per-page=50&select=doi,ids,cited_by_count,counts_by_year,best_oa_location,open_access,locations" + openAlexAuth(ctx);
+			let url = "https://api.openalex.org/works?filter=doi:" + chunk.map(enc).join("|") + "&per-page=50&select=doi,ids,cited_by_count,counts_by_year,best_oa_location,open_access,locations,is_retracted" + openAlexAuth(ctx);
 			try {
 				let data = await withRetry(() => http.getJSON(url), {}, ctx);
 				for (let w of data.results || []) {
 					for (let r of byDoi.get(normalizeDOI(w.doi)) || []) {
 						r.citations = toInt(w.cited_by_count);
+						if (w.is_retracted === true) r.retracted = true;
 						if (r.citations != null) r.citationSource = "openalex";
 						if (!r.citesByYear) r.citesByYear = parseCountsByYear(w.counts_by_year);
 						if (!r.pdfUrl) r.pdfUrl = w.best_oa_location?.pdf_url || w.open_access?.oa_url || null;
@@ -683,6 +687,33 @@ var ZotPoPSources = (function () {
 			ctx.onProgress?.(`Citation counts: ${Math.min(i + 50, dois.length)} / ${dois.length}`, i + 50, dois.length);
 		}
 		return records;
+	}
+
+	/* The works one paper cites, for "this paper cites n of my papers": one request
+	   (select=referenced_works), remembered for a day, never made once the budget is spent.
+	   Resolves { ok, cached, id: "W1", ids: ["W123", ...] } or { ok: false, reason: "id" | "budget" | "failed" }. */
+	const REF_TTL = 24 * 3600 * 1000, REF_CACHE_MAX = 300;
+	const REF_CACHE = new Map();
+	async function fetchReferencedWorks(rec, http, ctx = {}, now = Date.now()) {
+		let path = openAlexWorkPath(rec);
+		if (!path) return { ok: false, reason: "id" };
+		let hit = REF_CACHE.get(path);
+		if (hit && now - hit.at < REF_TTL) return { ok: true, cached: true, id: hit.id, ids: hit.ids };
+		if (ctx.openAlexSpent) return { ok: false, reason: "budget" };
+		try {
+			let w = await withRetry(() => http.getJSON("https://api.openalex.org/works/" + path + "?select=id,referenced_works" + openAlexAuth(ctx)), {}, ctx);
+			let ids = (Array.isArray(w?.referenced_works) ? w.referenced_works : []).map(openAlexId).filter(Boolean);
+			if (REF_CACHE.size >= REF_CACHE_MAX) REF_CACHE.delete(REF_CACHE.keys().next().value);
+			let id = openAlexId(w?.id);
+			REF_CACHE.set(path, { id, ids, at: now });
+			return { ok: true, cached: false, id, ids };
+		}
+		catch (e) {
+			if (e.name === "AbortError") throw e;
+			if (isQuotaError(e)) { ctx.openAlexSpent = true; return { ok: false, reason: "budget", message: e.message }; }
+			ctx.log?.("OpenAlex references failed: " + e.message);
+			return { ok: false, reason: "failed", message: e.message };
+		}
 	}
 
 	// ---------------------------------------------------------------- journal metrics
@@ -1805,7 +1836,9 @@ var ZotPoPSources = (function () {
 			// {source:"MED", id:"38289242", type:"Preprint of"} -- so that is what is kept.
 			publishedPmid: isPreprint ? epmcPublishedPmid(r) : null,
 			itemType: isPreprint ? "preprint" : "journalArticle",
-			workType: (r.pubTypeList?.pubType || []).some(t => /review/i.test(t)) ? "review" : null
+			workType: (r.pubTypeList?.pubType || []).some(t => /review/i.test(t)) ? "review" : null,
+			// The paper itself, not the notice ("Retraction of Publication").
+			retracted: (r.pubTypeList?.pubType || []).some(t => /^retracted publication$/i.test(String(t).trim()))
 		});
 	}
 
@@ -2510,6 +2543,8 @@ var ZotPoPSources = (function () {
 		if (!a.publicationDate && b.publicationDate) a.publicationDate = b.publicationDate;
 		if (!a.venue && b.venue) a.venue = b.venue;
 		if (!a.workType && b.workType) a.workType = b.workType;
+		// One source saying "retracted" is enough: a missed retraction costs more than a false flag.
+		if (b.retracted) a.retracted = true;
 		if (!a.publisher && b.publisher) a.publisher = b.publisher;
 		// The one source that knows a posting is on bioRxiv must not lose that when it merges
 		// with a source that only knows the DOI, or the posting reads as a journal article.
@@ -2639,8 +2674,8 @@ var ZotPoPSources = (function () {
 			// The target's key and why the two were linked, so the UI can jump to the other row
 			// and say "estimated" when the link rests on title and authors, not a deposited relation.
 			let basis = pre.publishedDoi || pre.publishedPmid ? "explicit" : "title";
-			pre.publishedAs = { key: pub.key || null, doi: pub.doi || null, venue: pub.venue || null, year: pub.year || null, basis };
-			pub.preprintOf = { key: pre.key || null, doi: pre.doi || null, venue: pre.venue || null, year: pre.year || null, basis };
+			pre.publishedAs = { key: pub.key || null, title: pub.title || null, doi: pub.doi || null, venue: pub.venue || null, year: pub.year || null, basis };
+			pub.preprintOf = { key: pre.key || null, title: pre.title || null, doi: pre.doi || null, venue: pre.venue || null, year: pre.year || null, basis };
 		}
 		return records;
 	}
@@ -2834,7 +2869,7 @@ var ZotPoPSources = (function () {
 	}
 
 	return {
-		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, normalizeVenues, venueExpression, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, withRetry, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, parseCountsByYear, refreshOpenAlexWork, clearWorkCache: () => WORK_CACHE.clear(), exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
+		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, normalizeVenues, venueExpression, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, withRetry, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, parseCountsByYear, refreshOpenAlexWork, fetchReferencedWorks, clearWorkCache: () => { WORK_CACHE.clear(); REF_CACHE.clear(); }, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();

@@ -216,8 +216,8 @@ test("version links keep the target's key and why they were made; a similar unre
 	const pub = mk({ sourceId: "q", doi: "10.1234/pub", venue: "Nature" });
 	const similar = mk({ sourceId: "s", doi: "10.1234/sim", title: "Genome engineering through improved recombinase specificity: a commentary", venue: "Nature", authors: [{ name: "Bob Brown" }] });
 	Sources.linkPreprintVersions([pre, pub, similar]);
-	assert.deepEqual({ ...pre.publishedAs }, { key: pub.key, doi: "10.1234/pub", venue: "Nature", year: 2025, basis: "title" });
-	assert.deepEqual({ ...pub.preprintOf }, { key: pre.key, doi: "10.1234/pre", venue: "bioRxiv", year: 2025, basis: "title" });
+	assert.deepEqual({ ...pre.publishedAs }, { key: pub.key, title: pub.title, doi: "10.1234/pub", venue: "Nature", year: 2025, basis: "title" });
+	assert.deepEqual({ ...pub.preprintOf }, { key: pre.key, title: pre.title, doi: "10.1234/pre", venue: "bioRxiv", year: 2025, basis: "title" });
 	assert.equal(similar.preprintOf, undefined);
 	const explicit = mk({ sourceId: "e", doi: "10.1234/e", itemType: "preprint", title: "A different title", publishedDoi: "10.1234/pub" });
 	Sources.linkPreprintVersions([explicit, pub]);

@@ -45,6 +45,8 @@
 	--ok: #53671e;
 	--warn: #7d5208;
 	--err: #934245;
+	--neg-bg: #f8dddd;
+	--neg-ink: #7b1d22;
 	--card-shadow: 0 1px 2px rgba(20, 22, 30, 0.04), 0 6px 18px rgba(20, 22, 30, 0.04);
 	--r-card: 18px;
 	--r-pop: 14px;
@@ -95,6 +97,8 @@
 		--ok: #c5e07b;
 		--warn: #f4c871;
 		--err: #e6a5a7;
+		--neg-bg: #4d2a2d;
+		--neg-ink: #f6bfc1;
 		--card-shadow: none;
 		--pop-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 36px -6px rgba(0, 0, 0, 0.6);
 		--seg-on: #3a3b43;
@@ -489,6 +493,20 @@ td.status.err { color: var(--err); }
 .badge .brand-mark { flex: none; width: 12px; height: 12px; opacity: .85; }
 .pill { min-width: 28px; font-weight: 600; }
 .pill.pos { background: var(--pos-bg); color: var(--pos-ink); }
+/* Retracted: the one red in the window. A soft red chip, never an edge bar. */
+.badge.retracted, .retract-mark { background: var(--neg-bg); color: var(--neg-ink); font-weight: 600; }
+.retract-mark { display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; line-height: 16px; white-space: nowrap; vertical-align: middle; }
+#results-table td.title .retract-mark { margin-right: 8px; }
+.d-signals { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; color: var(--muted); font-size: 11px; line-height: 16px; }
+.d-signals .sig-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.d-signals button.sig-count { height: 26px; padding: 0 12px; font-size: 11px; line-height: 16px; }
+.d-signals .sig-list { width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: var(--r-box); background: var(--bg-tint); }
+.d-signals .sig-item { display: flex; align-items: center; gap: 8px; min-height: 26px; color: var(--text); }
+.d-signals .sig-item .sig-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-signals .sig-item button { height: 26px; padding: 0 8px; font-size: 11px; line-height: 16px; flex: none; }
+button.watch-btn { height: var(--h-seg); padding: 0 12px; font-size: 11px; line-height: 16px; }
+button.watch-btn[aria-pressed="true"] { background: var(--seg-on); color: var(--seg-on-ink); border-color: transparent; }
+.au-watch { height: 20px; padding: 0 8px; font-size: 11px; line-height: 16px; vertical-align: baseline; }
 #results-table td.title .new-mark { margin-right: 8px; background: var(--pos-bg); color: var(--pos-ink); font-weight: 600; }
 .tier { font-weight: 600; }
 /* tint steps only, never an outline: T1 solid, T2 chip in ink, T3 chip in muted ink, T4 the same chip, fainter */
@@ -1081,6 +1099,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 					<div id="d-authors" class="d-authors"><div class="au-list"><span data-tip="1저자" class="au au-first">Eva Morgan<sup>1</sup></span>, <span class="au">Hana Choi<sup>2</sup><sup data-tip="교신저자" class="au-corr">*</sup></span></div><div class="au-insts"><span class="au-inst"><span class="au-num">1</span><button data-tip="Kestrel Institute 소속 저자가 있는 논문만 보기" class="ghost au-inst-btn" type="button">Kestrel Institute (GB)</button></span><span class="au-inst"><span class="au-num">2</span><button data-tip="Hanbit University 소속 저자가 있는 논문만 보기" class="ghost au-inst-btn" type="button">Hanbit University (KR)</button></span><span class="au-legend">* 교신</span></div></div>
 					<div data-tip="이 프리프린트는 이후 정식 게재되었습니다 (10.5555/demo.004). DOI가 서로 달라 각각 별개의 기록이므로 둘 다 표시합니다.
 출처가 이 관계를 기록했습니다. 두 논문은 DOI·인용·선택을 각자 유지하는 별개의 기록입니다." aria-label="이 프리프린트는 이후 정식 게재되었습니다 (10.5555/demo.004). DOI가 서로 달라 각각 별개의 기록이므로 둘 다 표시합니다." id="d-versions" class="d-versions">출판본: Cell · 2025 · 보유 · <button class="ghost" type="button">결과에서 보기</button></div>
+					<div id="d-signals" class="d-signals"><div class="sig-line"><span>Eva Morgan</span><button data-tip="Eva Morgan 저자를 Style Custom 관심 저자로 추가합니다. 이미 나온 논문은 본 것으로 처리합니다." aria-pressed="false" class="watch-btn" type="button">관심 저자로 추가</button></div><div class="sig-line"><span>Hana Choi</span><button data-tip="Hana Choi 저자를 Style Custom 관심 저자로 추가합니다. 이미 나온 논문은 본 것으로 처리합니다." aria-pressed="false" class="watch-btn" type="button">관심 저자로 추가</button></div></div>
 					<div hidden id="d-collections" class="d-collections"></div>
 					<details id="d-fold" class="d-fold">
 						<summary data-i18n="dFold">서지정보·소속·저자별 보기</summary>
@@ -1126,6 +1145,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 			<label class="cb"><input id="opt-skip" type="checkbox" checked> <span data-i18n="optSkip">중복 건너뛰기 (DOI)</span></label>
 			<label class="cb"><input id="opt-fillpdf" type="checkbox"> <span data-i18n="optFillPdf">보유 문헌에 PDF 없으면 채우기</span></label>
 			<label class="cb"><input id="opt-extra" type="checkbox" checked> <span data-i18n="optExtra">인용 수를 Extra에 기록</span></label>
+			<label data-tip="여기서 초록을 번역한 논문에는 &quot;번역된 초록 (언어)&quot; 하위 메모가 추가됩니다." class="cb" id="opt-trnote-wrap"><input id="opt-trnote" type="checkbox"> <span data-i18n="optTrNote">번역한 초록을 메모로 보관</span></label>
 		</span>
 	</div>
 
