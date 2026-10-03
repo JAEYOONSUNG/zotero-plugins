@@ -425,42 +425,13 @@
 
     results.push(await attempt('every safe button on every tab survives a press', async () => {
       /* The real DOM, not the fixture: XUL quirks, missing globals and stale
-         handlers show up here. Buttons that reach the network, write to the
-         library or let go of something are skipped by their verbs; the rest
-         are pressed once, and a status line naming a JavaScript error fails. */
+         handlers show up here. Only buttons marked data-safe="view" are pressed
+         (once each); a status line naming a JavaScript error fails. */
       const state = runtime.windows.get(win);
       const bench = state && state.workbench;
       if (!bench) throw new Error('workbench not attached');
-      /* data-opens is the contract for windows; these verbs are the second net,
-         for anything that writes to the library or edits an item in place. */
-      const skip = /가져오기|조회|새로고침|확인|함께 읽기|검색|내려받기|채우기|저장|복사|열기|이동|해제|병합|휴지통|초기화|복원|삭제|중지|등록|전환|만들기|추가|연결|적용|다시|찾기|가리기|표시|보기|JCR|OpenAlex|ZotPoP|번역|요약|제안|정리|옮기기|지우기|되돌리기|편집|바꾸기|노트로|전체 선택/;
-      const jsError = /TypeError|ReferenceError|RangeError|is not a function|Cannot read|Cannot set|undefined|NaN/;
       const tabs = (root.CustomStyleWorkbench && root.CustomStyleWorkbench.TABS || []).map(row => row[0]);
-      const broken = []; let pressed = 0;
-      // Whatever a press saves as the user's panel preference is put back.
-      const savedUI = JSON.parse(JSON.stringify(runtime.cache.workbenchUI || {}));
-      for (const tab of tabs) {
-        try { await bench.show(tab); } catch (error) { broken.push(tab + ' · show → ' + (error.message || error)); continue; }
-        const seen = new Set();
-        /* A note title is a button label, so the verb list cannot catch it:
-           anything that opens a Zotero window says so with data-opens, and the
-           sweep leaves those alone instead of stacking empty note editors. */
-        /* A result row's buttons reach outside: a title or PDF opens the
-           browser, DOI overwrites the clipboard. A view switch saves the
-           user's choice of view. Neither is the sweep's to press. */
-        const buttons = [...bench.panel.querySelectorAll('.sc-body button')].filter(b => !b.disabled && !b.hidden && !b.hasAttribute('data-opens') && !b.hasAttribute('data-writes') && !b.closest('.sc-hit, .sc-segmented') && b.textContent.trim() && !skip.test(b.textContent) && !seen.has(b.textContent.trim()));
-        for (const b of buttons.slice(0, 12)) {
-          const label = b.textContent.trim(); seen.add(label);
-          if (!b.isConnected) continue;
-          try { b.click(); pressed++; } catch (error) { broken.push(`${tab} · ${label} → ${error.message || error}`); continue; }
-          await new Promise(resolve => win.setTimeout(resolve, 60));
-          const status = bench.panel.querySelector('.sc-status');
-          if (status && status.dataset.error === 'true' && jsError.test(status.textContent)) broken.push(`${tab} · ${label} → ${status.textContent.slice(0, 80)}`);
-          if (bench.state.tab !== tab) { try { await bench.show(tab); } catch (ignored) {} }
-        }
-      }
-      try { await bench.toggle(false); } catch (ignored) {}
-      if (JSON.stringify(savedUI) !== JSON.stringify(runtime.cache.workbenchUI || {})) { runtime.cache.workbenchUI = savedUI; runtime.dirty = true; }
+      const {pressed, broken} = await sweepSafeButtons({bench, runtime, tabs, wait: ms => new Promise(resolve => win.setTimeout(resolve, ms))});
       if (broken.length) throw new Error(broken.join(' | '));
       return `${pressed} buttons pressed across ${tabs.length} tabs, none threw`;
     }));
@@ -1164,7 +1135,37 @@
     };
   }
 
-  const api = {run, journalLayerReport, jcrPrecedence, statusContradictions, worksWithDuplicatePeople, missingMembers};
+  /* The sweep presses ONLY buttons the workbench marked data-safe="view": tab and view switches, disclosure,
+     "more"/"less", focus. Everything else is left alone whatever its label, language or other attributes, so a new
+     button that writes is safe until someone deliberately marks it. data-writes / data-opens stay as documentation. */
+  function safeButtons(panel) {
+    return [...panel.querySelectorAll('.sc-body button[data-safe="view"]')]
+      .filter(b => !b.disabled && !b.hidden && b.getAttribute('data-safe') === 'view' && b.textContent.trim());
+  }
+  async function sweepSafeButtons({bench, runtime, tabs, wait, limit = 12}) {
+    const jsError = /TypeError|ReferenceError|RangeError|is not a function|Cannot read|Cannot set|undefined|NaN/;
+    const broken = []; let pressed = 0;
+    // Some view switches remember the choice as the panel preference: whatever a press saved is put back, only if it changed.
+    const savedUI = JSON.parse(JSON.stringify(runtime.cache.workbenchUI || {}));
+    for (const tab of tabs) {
+      try { await bench.show(tab); } catch (error) { broken.push(tab + ' · show → ' + (error.message || error)); continue; }
+      const seen = new Set();
+      for (const b of safeButtons(bench.panel).filter(b => { const k = b.textContent.trim(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, limit)) {
+        const label = b.textContent.trim();
+        if (!b.isConnected) continue;
+        try { b.click(); pressed++; } catch (error) { broken.push(`${tab} · ${label} → ${error.message || error}`); continue; }
+        await wait(60);
+        const status = bench.panel.querySelector('.sc-status');
+        if (status && status.dataset.error === 'true' && jsError.test(status.textContent)) broken.push(`${tab} · ${label} → ${status.textContent.slice(0, 80)}`);
+        if (bench.state.tab !== tab) { try { await bench.show(tab); } catch (ignored) {} }
+      }
+    }
+    try { await bench.toggle(false); } catch (ignored) {}
+    if (JSON.stringify(savedUI) !== JSON.stringify(runtime.cache.workbenchUI || {})) { runtime.cache.workbenchUI = savedUI; runtime.dirty = true; }
+    return {pressed, broken};
+  }
+
+  const api = {run, safeButtons, sweepSafeButtons, journalLayerReport, jcrPrecedence, statusContradictions, worksWithDuplicatePeople, missingMembers};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleSelfCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

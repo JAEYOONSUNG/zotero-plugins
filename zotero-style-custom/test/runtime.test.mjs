@@ -3587,7 +3587,7 @@ test('a memo note synced from another computer is adopted, never erased or silen
   assert.equal(Runtime.memoFromNoteHTML(n2.getNote()), 'remote text', 'the note keeps its text');
   assert.equal(plugin.entry(b).remark, 'remote text');
   assert.equal(adopted.created, false);
-  // Both differ: keep both, say so.
+  // Both differ and there is no baseline to tell who moved: nothing is written, both texts are held.
   const c = paper(fx.item(3));
   const n3 = new fx.Z.Item('note');
   n3.libraryID = c.libraryID; n3.parentID = c.id; n3.setTags([{tag: 'style-custom:memo', type: 0}]);
@@ -3595,74 +3595,204 @@ test('a memo note synced from another computer is adopted, never erased or silen
   await n3.saveTx();
   plugin.cache.items[plugin.identity(c)] = {remark: 'typed here', memoSynced: 'older shared text'};
   plugin.memoChecked?.add?.(plugin.identity(c));
-  const merged = await plugin.memoToNote(c);
-  assert.equal(merged.merged, true);
-  const text = Runtime.memoFromNoteHTML(n3.getNote());
-  assert.ok(text.includes('from the other computer') && text.includes('typed here'), 'nothing lost');
-  assert.equal(plugin.entry(c).remark, text);
+  const held = await plugin.memoToNote(c);
+  assert.equal(held.conflict, true); assert.equal(held.wrote, false);
+  assert.equal(Runtime.memoFromNoteHTML(n3.getNote()), 'from the other computer', 'the note is untouched');
+  assert.equal(plugin.entry(c).remark, 'typed here', 'the memo is untouched');
+  assert.deepEqual({l: plugin.entry(c).memoConflict.local, r: plugin.entry(c).memoConflict.remote}, {l: 'typed here', r: 'from the other computer'});
 });
 
-test('typing during a conflict-merge save keeps the remote text and the later input (no base finalised)', async () => {
+function memoWorld({remark, base, note: noteText} = {}) {
   const fx = fixture(), {plugin} = fx;
-  const {paper} = noteWorld(fx);
+  const {paper, all} = noteWorld(fx);
   plugin.active = true;
   const c = paper(fx.item(3));
   const Library = require('../src/library.js');
   const lib = Library.create({Zotero: Object.assign(fx.Z, {Items: Object.assign(fx.Z.Items, {getAsync: async id => fx.Z.Items.get(id)})}), runtime: plugin});
-  await plugin.setSetting('memoToNote', true, {apply: false});
-  const n3 = new fx.Z.Item('note');
-  n3.libraryID = c.libraryID; n3.parentID = c.id; n3.setTags([{tag: 'style-custom:memo', type: 0}]);
-  n3.setNote(Runtime.memoNoteHTML('R remote'));
-  await n3.saveTx();
-  plugin.cache.items[plugin.identity(c)] = {remark: 'old', memoSynced: 'old'};
+  const note = new fx.Z.Item('note');
+  note.libraryID = c.libraryID; note.parentID = c.id; note.setTags([{tag: 'style-custom:memo', type: 0}]);
+  note.setNote(Runtime.memoNoteHTML(noteText)); note.saves = 0;
+  all.set(note.id, note); c.notes.push(note.id);
+  const row = {remark}; if (base !== undefined) row.memoSynced = base;
+  plugin.cache.items[plugin.identity(c)] = row;
   (plugin.memoChecked ||= new Set()).add(plugin.identity(c));
-  const noteSave = fx.Z.Item.prototype.saveTx;
-  fx.Z.Item.prototype.saveTx = async function () { await new Promise(r => setTimeout(r, 20)); return noteSave.call(this); };
-  const first = lib.setRemark(3, 'L1');
+  return {fx, plugin, c, lib, note, row, setting: () => plugin.setSetting('memoToNote', true, {apply: false}),
+    slow(ms) { const orig = fx.Z.Item.prototype.saveTx; fx.Z.Item.prototype.saveTx = async function () { await new Promise(r => setTimeout(r, ms)); return orig.call(this); }; return () => { fx.Z.Item.prototype.saveTx = orig; }; }};
+}
+const noteText = (n) => Runtime.memoFromNoteHTML(n.getNote());
+
+test('memo/note (1): the note changed AND the memo changed -> nothing written, both texts kept in a conflict', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B' + Runtime.memoSep() + 'remote'});
+  await w.setting();
+  const out = await w.lib.setRemark(3, 'L');
+  assert.equal(out, 'L');
+  assert.equal(noteText(w.note), 'B' + Runtime.memoSep() + 'remote', 'the note is untouched');
+  assert.equal(w.note.saves, 0);
+  assert.equal(w.row.remark, 'L');
+  assert.deepEqual(await w.lib.memoConflict(3), {local: 'L', remote: 'B' + Runtime.memoSep() + 'remote'});
+  assert.equal(w.row.memoSynced, 'B', 'the baseline did not move');
+  // Autosave keeps saving the memo locally only, and the box follows it.
+  await w.lib.setRemark(3, 'L2');
+  assert.equal(w.row.remark, 'L2'); assert.equal(w.note.saves, 0);
+  assert.equal((await w.lib.memoConflict(3)).local, 'L2');
+});
+
+test('memo/note (2): typing during a save is never lost and the baseline is only what was written', async () => {
+  const w = memoWorld({remark: 'old', base: 'old', note: 'old'});
+  await w.setting();
+  const restore = w.slow(20);
+  const first = w.lib.setRemark(3, 'L1');
   await new Promise(r => setTimeout(r, 5));
-  const second = lib.setRemark(3, 'L2');
+  const second = w.lib.setRemark(3, 'L2');
   await Promise.all([first, second]);
-  fx.Z.Item.prototype.saveTx = noteSave;
-  const text = Runtime.memoFromNoteHTML(n3.getNote());
-  assert.ok(text.includes('R remote') && text.includes('L2'), 'remote and the later input both survive: ' + text);
-  assert.ok(!text.includes('L1'), 'the superseded input is not duplicated: ' + text);
+  restore();
+  assert.equal(noteText(w.note), 'L2'); assert.equal(w.row.remark, 'L2'); assert.equal(w.row.memoSynced, 'L2');
+  assert.equal(w.row.memoConflict, undefined);
+  // Typed into the cache while one job saves (no second save yet): the baseline is what the job wrote, so the next job pushes the rest.
+  const restore2 = w.slow(20);
+  const job = w.plugin.memoToNote(w.c);
+  w.row.remark = 'L2 and more'; // typed while the job runs: the job read 'L2' first
+  w.row.remark = 'L2';
+  await new Promise(r => setTimeout(r, 3));
+  w.row.remark = 'L2 and more';
+  await job; restore2();
+  assert.equal(noteText(w.note), 'L2'); assert.equal(w.row.remark, 'L2 and more'); assert.equal(w.row.memoSynced, 'L2');
+  await w.plugin.memoToNote(w.c);
+  assert.equal(noteText(w.note), 'L2 and more'); assert.equal(w.row.memoSynced, 'L2 and more');
 });
 
-test('identical notifier events do not re-append the conflict text', async () => {
-  const fx = fixture(), {plugin} = fx;
-  const {paper} = noteWorld(fx);
-  const c = paper(fx.item(3));
-  const n3 = new fx.Z.Item('note');
-  n3.libraryID = c.libraryID; n3.parentID = c.id; n3.setTags([{tag: 'style-custom:memo', type: 0}]);
-  n3.setNote(Runtime.memoNoteHTML('R remote'));
-  await n3.saveTx();
-  plugin.cache.items[plugin.identity(c)] = {remark: 'L local', memoSynced: 'older'};
-  (plugin.memoChecked ||= new Set()).add(plugin.identity(c));
-  assert.equal(plugin.mirrorMemoNote(n3.id), true);
-  const once = plugin.entry(c).remark;
-  assert.ok(once.includes('R remote') && once.includes('L local'));
-  assert.equal(plugin.mirrorMemoNote(n3.id), false, 'the same event again changes nothing');
-  assert.equal(plugin.entry(c).remark, once);
+test('memo/note (2b): a note changed by someone else while this job saved is never taken as the baseline', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  const orig = w.fx.Z.Item.prototype.saveTx;
+  w.fx.Z.Item.prototype.saveTx = async function () { await orig.call(this); this.setNote(Runtime.memoNoteHTML('ext during save')); };
+  await w.lib.setRemark(3, 'L');
+  w.fx.Z.Item.prototype.saveTx = orig;
+  assert.equal(w.row.memoSynced, 'B', 'the job did not read back what it wrote');
+  assert.deepEqual(await w.lib.memoConflict(3), {local: 'L', remote: 'ext during save'});
 });
 
-test('library.setRemark returns the merged text after a conflict merge', async () => {
-  const fx = fixture(), {plugin} = fx;
-  const {paper} = noteWorld(fx);
-  plugin.active = true;
-  const c = paper(fx.item(3));
+test('memo/note (4): identical notifier events change nothing, and the memo plus the note keep their texts', async () => {
+  const w = memoWorld({remark: 'L local', base: 'older', note: 'R remote'});
+  assert.equal(w.plugin.mirrorMemoNote(w.note.id), true);
+  assert.equal(w.row.remark, 'L local'); assert.equal(noteText(w.note), 'R remote');
+  const once = JSON.stringify(w.row.memoConflict);
+  assert.deepEqual({l: w.row.memoConflict.local, r: w.row.memoConflict.remote}, {l: 'L local', r: 'R remote'});
+  assert.equal(w.plugin.mirrorMemoNote(w.note.id), false, 'the same event again changes nothing');
+  assert.equal(JSON.stringify(w.row.memoConflict), once);
+  // The plugin's own write is its echo, a real change is not hidden by it.
+  const echo = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await echo.setting();
+  const orig = echo.fx.Z.Item.prototype.saveTx;
+  let during = null;
+  echo.fx.Z.Item.prototype.saveTx = async function () { during = echo.plugin.mirrorMemoNote(this.id); return orig.call(this); };
+  await echo.lib.setRemark(3, 'L');
+  echo.fx.Z.Item.prototype.saveTx = orig;
+  assert.equal(during, false, 'the echo of our own text is not news');
+  assert.equal(echo.row.memoConflict, undefined);
+  echo.note.setNote(Runtime.memoNoteHTML('a real external change'));
+  assert.equal(echo.plugin.mirrorMemoNote(echo.note.id), true, 'but another text is');
+  assert.equal(echo.row.remark, 'a real external change', 'memo was unchanged since the baseline, so it adopts the note');
+});
+
+test('memo/note (5): the note changed and the memo did not -> the memo adopts the note', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'R'});
+  assert.equal(w.plugin.mirrorMemoNote(w.note.id), true);
+  assert.equal(w.row.remark, 'R'); assert.equal(w.row.memoSynced, 'R'); assert.equal(w.row.memoConflict, undefined);
+  const v = memoWorld({remark: 'B', base: 'B', note: 'R'});
+  await v.setting();
+  assert.equal(await v.lib.setRemark(3, 'B'), 'R', 'an unchanged memo returns the adopted note text');
+  assert.equal(v.note.saves, 0);
+});
+
+test('memo/note (6): the memo changed and the note did not -> the note is written and the baseline set', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  assert.equal(await w.lib.setRemark(3, 'B edited'), 'B edited');
+  assert.equal(noteText(w.note), 'B edited'); assert.equal(w.row.memoSynced, 'B edited'); assert.equal(w.note.saves, 1);
+  assert.equal(w.plugin.mirrorMemoNote(w.note.id), false);
+});
+
+test('memo/note (7): the user resolves a conflict in each of the three ways, and a changed side is never overwritten unseen', async () => {
+  for (const [choice, memo, note] of [['note', 'R', 'R'], ['local', 'L', 'L'], ['both', 'R' + Runtime.memoSep() + 'L', 'R' + Runtime.memoSep() + 'L']]) {
+    const w = memoWorld({remark: 'L', base: 'B', note: 'R'});
+    await w.setting();
+    await w.plugin.memoToNote(w.c);
+    assert.ok(w.row.memoConflict, choice);
+    const out = await w.lib.resolveMemoConflict(3, choice, await w.lib.memoConflict(3));
+    assert.equal(out.resolved, true);
+    assert.equal(w.row.remark, memo, choice); assert.equal(noteText(w.note), note, choice);
+    assert.equal(w.row.memoSynced, note); assert.equal(w.row.memoConflict, undefined);
+  }
+  const w = memoWorld({remark: 'L', base: 'B', note: 'R'});
+  await w.setting(); await w.plugin.memoToNote(w.c);
+  const seen = await w.lib.memoConflict(3);
+  w.note.setNote(Runtime.memoNoteHTML('R changed again'));
+  const stale = await w.lib.resolveMemoConflict(3, 'local', seen);
+  assert.equal(stale.stale, true);
+  assert.equal(noteText(w.note), 'R changed again', 'nothing written over the newer note');
+  assert.equal(stale.conflict.remote, 'R changed again'); assert.equal(w.row.remark, 'L');
+});
+
+test('memo/note: undo with the note changed since the merge keeps both and asks; a write in flight does not lose either', async () => {
+  const {fx, plugin, pre, pub} = mergeWorld();
+  await plugin.setSetting('memoToNote', true, {apply: false});
   const Library = require('../src/library.js');
   const lib = Library.create({Zotero: Object.assign(fx.Z, {Items: Object.assign(fx.Z.Items, {getAsync: async id => fx.Z.Items.get(id)})}), runtime: plugin});
-  await plugin.setSetting('memoToNote', true, {apply: false});
-  const n = new fx.Z.Item('note');
-  n.libraryID = c.libraryID; n.parentID = c.id; n.setTags([{tag: 'style-custom:memo', type: 0}]);
-  n.setNote(Runtime.memoNoteHTML('R remote'));
-  await n.saveTx();
-  plugin.cache.items[plugin.identity(c)] = {remark: 'old', memoSynced: 'old'};
-  (plugin.memoChecked ||= new Set()).add(plugin.identity(c));
-  const out = await lib.setRemark(3, 'L1');
-  assert.ok(out.includes('R remote') && out.includes('L1') && out !== 'L1');
-  assert.equal(out, plugin.entry(c).remark);
-  assert.equal(await lib.setRemark(3, out), out, 'an unchanged memo returns itself');
+  const memo = new fx.Z.Item('note');
+  memo.libraryID = 1; memo.parentID = 2; memo.parentItemID = 2; memo.setTags([{tag: 'style-custom:memo', type: 0}]);
+  memo.setNote(Runtime.memoNoteHTML('existing memo')); await memo.saveTx();
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'existing memo', memoSynced: 'existing memo'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'preprint memo', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  await plugin.mergePreprintIntoPublished(1);
+  const merged = 'existing memo\n\npreprint memo';
+  assert.equal(plugin.entry(pub).memoSynced, merged);
+  memo.setNote(Runtime.memoNoteHTML('edited elsewhere'));
+  const slow = memo.saveTx; memo.saveTx = async function () { await new Promise(r => setTimeout(r, 15)); return slow.call(this); };
+  pub.hasChanged = () => false;
+  const write = lib.setRemark(2, merged + ' plus');
+  const undo = plugin.restorePreprint(1);
+  await Promise.all([write, undo]);
+  const row = plugin.entry(pub);
+  assert.equal(noteText(memo), 'edited elsewhere', 'the note edited elsewhere is not overwritten');
+  assert.equal(row.remark, merged + ' plus', 'the typed memo is kept');
+  assert.deepEqual({l: row.memoConflict.local, r: row.memoConflict.remote}, {l: merged + ' plus', r: 'edited elsewhere'});
+  // Note-only change, no write in flight: undo restores nothing and asks.
+  const w = mergeWorld();
+  await w.plugin.setSetting('memoToNote', true, {apply: false});
+  const m2 = new w.fx.Z.Item('note');
+  m2.libraryID = 1; m2.parentID = 2; m2.parentItemID = 2; m2.setTags([{tag: 'style-custom:memo', type: 0}]);
+  m2.setNote(Runtime.memoNoteHTML('existing memo')); await m2.saveTx();
+  (w.plugin.memoChecked ||= new Set()).add(w.plugin.identity(w.pub)); w.plugin.memoChecked.add(w.plugin.identity(w.pre));
+  w.plugin.cache.items[w.plugin.identity(w.pub)] = {remark: 'existing memo', memoSynced: 'existing memo'};
+  w.plugin.cache.items[w.plugin.identity(w.pre)] = {remark: 'preprint memo', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  await w.plugin.mergePreprintIntoPublished(1);
+  m2.setNote(Runtime.memoNoteHTML('only the note changed'));
+  await w.plugin.restorePreprint(1);
+  assert.equal(noteText(m2), 'only the note changed');
+  assert.equal(w.plugin.entry(w.pub).remark, merged);
+  assert.deepEqual({l: w.plugin.entry(w.pub).memoConflict.local, r: w.plugin.entry(w.pub).memoConflict.remote}, {l: merged, r: 'only the note changed'});
+});
+
+test('undo works after Zotero restored the preprint from the trash itself, and the merge can run again', async () => {
+  const {plugin, pre, pub, file, note} = mergeWorld();
+  await plugin.mergePreprintIntoPublished(1);
+  assert.equal(file.parentItemID, 2);
+  pre.deleted = false; // Zotero's own Restore from the trash: the ledger is still there
+  assert.ok(plugin.mergeLedger()['1']);
+  assert.equal(await plugin.restorePreprint(1), true, 'the ledger decides, not the trash flag');
+  assert.equal(file.parentItemID, 1); assert.equal(note.parentItemID, 1);
+  assert.equal(plugin.mergeLedger()['1'], undefined);
+  await plugin.mergePreprintIntoPublished(1);
+  assert.equal(file.parentItemID, 2, 're-merge allowed after undo');
+  // A stale ledger with the preprint already restored is undone before a new merge, not refused.
+  pre.deleted = false;
+  await plugin.mergePreprintIntoPublished(1);
+  assert.equal(file.parentItemID, 2); assert.ok(plugin.mergeLedger()['1']);
+  assert.equal(await plugin.restorePreprint(1), true);
+  assert.equal(await plugin.restorePreprint(1), false, 'nothing left to undo');
+  void pub;
 });
 
 test('the self-check is read-only by default: no write method is called and a legacy rating tag is left alone', async () => {

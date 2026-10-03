@@ -369,14 +369,23 @@
       if(runtime.memoToNote&&runtime.getSetting?.('memoToNote')&&(value.trim()||runtime.memoNoteOf?.(item))){
         let result;
         try{result=await runtime.memoToNote(item,{prior});}catch(error){throw new Error('메모는 저장했지만 노트로 옮기지 못했습니다: '+(error&&error.message||error));}
-        // A conflict merge changed the stored memo: the caller's editor, cache and autosave baseline must take that text, not the one it submitted.
-        if(result&&!result.skipped&&(result.merged||result.adopted)&&typeof result.text==='string')return result.text;
+        // The note's newer text was adopted into the memo: the caller's editor, cache and autosave baseline must take it. A conflict returns the submitted text; the conflict itself is read with memoConflict().
+        if(result&&!result.skipped&&result.adopted&&typeof result.text==='string')return result.text;
       }
       return value;
     }
     async function memoToNote(itemID) {
       const item=await get(itemID);guard([item]);if(!runtime?.memoToNote)throw new Error('Memo notes are unavailable');
       return runtime.memoToNote(item);
+    }
+    // The two texts of a memo/note conflict, or null. Nothing is merged for the user.
+    async function memoConflict(itemID) {
+      const item=await get(itemID);const row=runtime?.entry?.(item);
+      return row&&row.memoConflict?{local:String(row.memoConflict.local),remote:String(row.memoConflict.remote)}:null;
+    }
+    async function resolveMemoConflict(itemID,choice,seen) {
+      const item=await get(itemID);guard([item]);if(!runtime?.resolveMemoConflict)throw new Error('Memo notes are unavailable');
+      return runtime.resolveMemoConflict(item,choice,{seen});
     }
     async function setTags(ids,tags) {
       if(!Array.isArray(tags)||tags.some(t=>typeof t!=='string'||!t.trim()))throw new TypeError('Tags must be nonempty strings');
@@ -631,7 +640,7 @@
       }
       return items.length;
     }
-    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,synthesisNote,setRemark,memoToNote,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
+    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,synthesisNote,setRemark,memoToNote,memoConflict,resolveMemoConflict,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

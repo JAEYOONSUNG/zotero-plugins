@@ -2994,3 +2994,6 @@
 #style-custom-workbench .sc-scope-lists [data-node-id][aria-current=true],
 #style-custom-workbench .sc-graph-info [data-node-id] { background: var(--sc-fill); }
 #style-custom-workbench .sc-graph-info .sc-hit { border: 0; }
+#style-custom-workbench .sc-memo-conflict { display: flex; flex-direction: column; gap: var(--sc-space-2); padding: var(--sc-space-3); border-radius: var(--sc-radius-card); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-memo-conflict-texts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sc-space-2); }
+#style-custom-workbench .sc-memo-conflict-text pre { margin: 0; padding: var(--sc-space-2) var(--sc-space-3); max-height: 9em; overflow: auto; white-space: pre-wrap; font: inherit; color: var(--sc-text); border-radius: var(--sc-radius-card); box-shadow: 0 0 0 1px var(--sc-card-edge); }

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {parseHTML} from 'linkedom';
+import {createRequire} from 'node:module';
 import Workbench from '../src/workbench.js';
 import Model from '../src/workspace.js';
 import JournalIdentity from '../src/journal-identity.js';
@@ -9,11 +10,13 @@ import JCRCategories from '../src/jcr-categories.js';
 import JCRBrowser from '../src/jcr-browser.js';
 import PaperGraph from '../src/paper-graph.js';
 import Discover from '../src/discover.js';
+const require=createRequire(import.meta.url);
+const SelfCheck=require('../src/selfcheck.js');
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));};
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 // toolbar: the ids and element names already in the items toolbar, in order, so
 // a test can check where the button is placed among them.
-function fixture(initialCache,toolbar,{nativeJCR=false,catalog}={}){
+function fixture(initialCache,toolbar,{nativeJCR=false,catalog,locale}={}){
  const {window:win,document:doc}=parseHTML('<html><head></head><body><div id="zotero-items-toolbar"></div></body></html>');
  if(toolbar){
   const bar=doc.getElementById('zotero-items-toolbar');
@@ -83,6 +86,7 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog}={}){
  Object.assign(reader,{moveTab:(...args)=>{calls.push(['moveTab',...args]);},closeOtherTabs:(...args)=>{calls.push(['closeOtherTabs',...args]);return {closed:1};},renameTabGroup:record('renameTabGroup'),updateTabGroup:record('updateTabGroup'),renameView:record('renameView'),updateView:record('updateView'),marginOptions:()=>({width:210,side:'right',textLimit:1500}),setMarginOptions:record('setMarginOptions'),resetAppearance:record('resetAppearance')});
  const assist={run:record('ai','Generated result'),cancel:()=>calls.push(['cancelAI'])};
  const model={...Model,deleteBoard:(cache,id)=>{calls.push(['deleteBoard',id]);cache.testDeleted=cache.boards.find(b=>b.id===id);cache.boards=cache.boards.filter(b=>b.id!==id);return cache.testDeleted;},restoreBoard:cache=>{calls.push(['restoreBoard']);const board=cache.testDeleted;if(board){cache.boards.push(board);delete cache.testDeleted;}return board;}};
+ if(locale){const i18n=require('../src/i18n.js');i18n.load(require('../src/strings.js').en);i18n.use(locale);runtime.i18n=i18n;}
  const bench=Workbench.attach(win,{runtime,library,reader,model,assist});
  const body=()=>bench.panel.querySelector('.sc-body');
  // An icon button carries its name in the tooltip and the accessible label,
@@ -6288,10 +6292,8 @@ test('every button whose handler writes to the library carries data-writes, and 
  const move=f.findButton('노트로 옮기기');
  assert.equal(move.getAttribute('data-writes'),'library');
  move.textContent='Move to note';
- const sc=fs.readFileSync(new URL('../src/selfcheck.js',import.meta.url),'utf8');
- const filter=sc.match(/\.filter\(b => [^\n]*data-opens[^\n]*\)/)[0];
- assert.match(filter,/hasAttribute\('data-writes'\)/);
- assert.equal(move.hasAttribute('data-writes'),true,'English text or Korean, the attribute is what the sweep reads');
+ assert.equal(move.hasAttribute('data-writes'),true,'English text or Korean, the attribute documents it');
+ assert.notEqual(move.getAttribute('data-safe'),'view','and the sweep presses only data-safe buttons, so this one is never pressed');
  assert.equal(/Move to note/.test(move.textContent)&&!/가져오기|노트로|옮기기/.test(move.textContent),true,'the English label is not matched by the Korean verbs');
  f.bench.destroy();
 });
@@ -6345,7 +6347,7 @@ test('two collection papers that share only an outside work are drawn with it, n
  f.bench.destroy();
 });
 
-test('a conflict-merged memo replaces the editor text, so the next keystroke keeps the remote part',async()=>{
+test('an adopted note text replaces the editor text, so the next keystroke keeps the remote part',async()=>{
  const f=fixture();
  const saves=[];
  f.library.setRemark=async(id,text)=>{saves.push(text);return saves.length===1?'remote part\n---\n'+text:text;};
@@ -6360,7 +6362,7 @@ test('a conflict-merged memo replaces the editor text, so the next keystroke kee
  f.bench.destroy();
 });
 
-test('text typed while a merging save runs is preserved in the editor',async()=>{
+test('text typed while a save that adopts the note runs is preserved in the editor',async()=>{
  const f=fixture(),saving=deferred();
  f.library.setRemark=async(id,text)=>{await saving.promise;return 'remote\n---\n'+text;};
  await f.bench.show('annotations');
@@ -6376,13 +6378,11 @@ test('text typed while a merging save runs is preserved in the editor',async()=>
 test('the self-check sweep leaves every button that writes plugin state alone (boards, views, queue, settings), by attribute not wording',async()=>{
  const board={id:'b1',name:'Board one',nodes:[{id:'n1',label:'Card',x:1,y:1,note:'',color:'#ffffff'}],edges:[]};
  const f=fixture({items:{},readerSettings:{},boards:[board],favoriteCollections:['4'],matrixFields:['title','authors','venue']});
- const sc=fs.readFileSync(new URL('../src/selfcheck.js',import.meta.url),'utf8');
- assert.match(sc.match(/\.filter\(b => [^\n]*data-opens[^\n]*\)/)[0],/hasAttribute\('data-writes'\)/);
- const pressed=[],bad=[],snap=()=>JSON.stringify(f.runtime.cache,(k,v)=>k==='lastTab'?undefined:v);/* lastTab is only where the panel was left */
+ const pressed=[],bad=[],snap=()=>JSON.stringify(f.runtime.cache,(k,v)=>k==='lastTab'||k==='workbenchUI'?undefined:v);/* lastTab and workbenchUI are only where and how the panel was left: the sweep restores them */
  for(const [tab] of Workbench.TABS){
   await f.bench.show(tab);
   /* what the sweep presses: no verb list at all, as in a UI language the list does not know */
-  const buttons=[...f.bench.panel.querySelectorAll('.sc-body button')].filter(b=>!b.disabled&&!b.hidden&&!b.hasAttribute('data-opens')&&!b.hasAttribute('data-writes')&&!b.closest('.sc-hit, .sc-segmented')&&b.textContent.trim());
+  const buttons=SelfCheck.safeButtons(f.bench.panel);
   for(const b of buttons.slice(0,40)){
    const before=snap(),flushes=f.calls.filter(c=>['remark','addTags','removeTags','relate','trashItems'].includes(c[0])).length;
    if(!b.isConnected)continue;
@@ -6395,7 +6395,7 @@ test('the self-check sweep leaves every button that writes plugin state alone (b
   }
  }
  assert.deepEqual(bad,[],'buttons that save plugin state without data-writes');
- assert.ok(pressed.length>10,'the sweep really presses buttons: '+pressed.length);
+ assert.ok(pressed.length>=3,'the sweep really presses buttons: '+pressed.length);
  await f.bench.show('canvas');
  for(const label of ['보드 만들기','보드 삭제'])assert.equal([...f.bench.panel.querySelectorAll('button')].find(b=>b.textContent.trim()===label)?.getAttribute('data-writes'),'cache',label);
  f.bench.destroy();
@@ -6409,5 +6409,87 @@ test('the collection graph counts a group formed only through an outside work (A
  const tiles=[...f.bench.panel.querySelectorAll('.sc-overview-fact')].map(t=>t.textContent.replace(/\s+/g,' ').trim());
  assert.ok(tiles.includes('1 묶음'),'both papers meet at the outside work: '+tiles.join('|'));
  assert.ok(tiles.includes('0 연결 없는 논문'),tiles.join('|'));
+ f.bench.destroy();
+});
+
+/* The self-check presses ONLY buttons marked data-safe="view". This runs the real sweep (SelfCheck.sweepSafeButtons) over the
+   fixture panel in both locales with a spy on every write path: not one may be called, and nothing but the panel's own
+   remembered view may change in the cache. */
+const WRITE_NAMES=/^(edit|saveTx|save|pref|indexItems|importWork|watchAuthor|unwatchAuthor|markSeen|setSeen|setSeenMany|setReadingQueue|queueForReading|resolveNamesake|acceptUnverified|rejectUnverified|remark|setRemark|memoToNote|resolveMemoConflict|addTags|removeTags|restoreTags|relate|unrelate|trashItems|createNote|extract|synthesis|mergeAnnotations|recolor|savePalette|applyPalette|deletePalette|theme|margin|color|sidebar|vertical|css|customFields|clearNews|moveTab|closeOtherTabs|renameTabGroup|updateTabGroup|renameView|updateView|setMarginOptions|resetAppearance|restoreTabs|applyView|deleteBoard|restoreBoard|trash|merge|mergePreprintIntoPublished|restorePreprint|findPDFs|writes)$/i;
+for(const locale of ['ko-KR','en-US']){
+ test(`self-check sweep (${locale}): only data-safe="view" buttons are pressed and no write path is touched`,async()=>{
+  const i18n=require('../src/i18n.js');
+  try{
+   const board={id:'b1',name:'Board one',nodes:[{id:'n1',label:'Card',x:1,y:1,note:'',color:'#ffffff'}],edges:[]};
+   const f=fixture({items:{},readerSettings:{},boards:[board],favoriteCollections:['4'],matrixFields:['title','authors','venue']},undefined,{locale});
+   const writes=[];
+   // Extra spies on write paths the fixture does not record.
+   for(const name of ['edit','setSeen','setSeenMany','setReadingQueue','queueForReading','resolveNamesake','acceptUnverified','rejectUnverified','indexItems','mergePreprintIntoPublished','restorePreprint','memoToNote','resolveMemoConflict'])f.runtime[name]=async(...a)=>{writes.push([name,...a]);return true;};
+   f.runtime.Z.FullText={indexItems:async(...a)=>{writes.push(['FullText.indexItems',...a]);}};
+   for(const ref of f.refs.values())ref.saveTx=async()=>{writes.push(['saveTx',ref.id]);};
+   for(const lib of ['setRemark','resolveMemoConflict','memoToNote','setTags','createNote','trashItems'])if(typeof f.library[lib]==='function'){const real=f.library[lib];f.library[lib]=async(...a)=>{writes.push(['library.'+lib,...a]);return real(...a);};}
+   // Unverified namesake works for a watched author: the approve / reject buttons exist and are never pressed.
+   const person={id:'A1',name:'Ann Author',institution:'Somewhere',seen:[],news:[{id:'W4',title:'Fresh paper',doi:'10.1/f',date:'2026-09-01',places:[]}],works:[],unverified:[{id:'W3',title:'Namesake paper',doi:'10.1/n',date:'2020-01-01',places:['Elsewhere']}]};
+   f.runtime.watchedAuthors=()=>[person];f.runtime.watchedAuthorsByNews=()=>[person];
+   const tabs=Workbench.TABS.map(([key])=>key);
+   const uiBefore=JSON.stringify(f.runtime.cache.workbenchUI||{});
+   const rest=()=>JSON.stringify(f.runtime.cache,(k,v)=>k==='workbenchUI'||k==='lastTab'?undefined:k==='items'&&v&&typeof v==='object'?Object.fromEntries(Object.entries(v).filter(([,row])=>Object.keys(row).length)):v);/* reading a paper creates its empty row: not a change */
+   const dataBefore=rest(),callsBefore=f.calls.length;
+   const labelsSeen=new Set(),unsafeSeen=[];
+   for(const tab of tabs){await f.bench.show(tab);await f.bench.load();for(const b of f.bench.panel.querySelectorAll('.sc-body button')){labelsSeen.add(b.textContent.trim());if(b.getAttribute('data-safe')!=='view')unsafeSeen.push(b.textContent.trim());}}
+   const {pressed,broken}=await SelfCheck.sweepSafeButtons({bench:f.bench,runtime:f.runtime,tabs,wait:()=>settle()});
+   assert.deepEqual(broken,[],'a press must never surface a JavaScript error');
+   assert.ok(pressed>=3,'the sweep really presses the marked view buttons: '+pressed);
+   assert.deepEqual(writes,[],'no write path was called');
+   const newCalls=f.calls.slice(callsBefore).filter(c=>WRITE_NAMES.test(String(c[0])));
+   assert.deepEqual(newCalls,[],'no recorded write call: '+JSON.stringify(newCalls.map(c=>c[0])));
+   assert.equal(rest(),dataBefore,'nothing but the panel view changed in the cache');
+   assert.equal(JSON.stringify(f.runtime.cache.workbenchUI||{}),uiBefore,'the remembered view was put back');
+   // The cases the review found are present in this locale and none is data-safe.
+   const find=text=>[...f.bench.panel.querySelectorAll('button')].filter(b=>b.textContent.trim()===text);
+   const tr=k=>locale==='en-US'?(require('../src/strings.js').en[k]||k):k;
+   const L={yes:tr('이 저자의 논문입니다'),no:tr('다른 사람입니다'),pdf:tr('PDF 찾기'),sepia:tr('세피아 PDF'),apply:tr('패널 CSS 적용'),seen:tr('확인함')};
+   if(locale==='en-US')assert.notEqual(L.yes,'이 저자의 논문입니다','the English label really is English');
+   await f.bench.show('authors');await f.bench.load();
+   for(const key of ['yes','no','seen']){const hit=find(L[key]);assert.ok(hit.length,'rendered: '+L[key]);for(const b of hit)assert.notEqual(b.getAttribute('data-safe'),'view',L[key]);}
+   for(const tab of ['attachments','explore','reading','appearance']){await f.bench.show(tab);await f.bench.load();for(const key of ['pdf','sepia','apply'])for(const b of find(L[key]))assert.notEqual(b.getAttribute('data-safe'),'view',L[key]);}
+   assert.ok(unsafeSeen.length>20,'most buttons are not marked, and so are skipped whatever their wording: '+unsafeSeen.length);
+   assert.deepEqual(SelfCheck.safeButtons(f.bench.panel).filter(b=>b.hasAttribute('data-writes')||b.hasAttribute('data-opens')).map(b=>b.textContent),[],'a view button never also writes or opens');
+   f.bench.destroy();
+  }finally{i18n.use('ko-KR');}
+ });
+}
+
+test('every data-safe view button handler is free of library, cache and setting writes (saveUI alone remembers the view)',()=>{
+ const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const forbidden=/library\.\w+\(|runtime\.(importWork|edit|flush|set[A-Z]\w*|queue\w*|watch\w*|resolve\w*|merge\w*|dirty\s*=[^=])|Prefs\.set|\bsetSeen|\bsetReadingQueue|\bqueueForReading|\bsaveWatchOptions|\bputQuick|\bdropQuick|\breader\.\w+\(|\bmodel\.\w+\(|FullText|saveTx|\.edit\(/;
+ const lines=src.split('\n').filter(line=>/viewButton\(|'data-safe':'view'/.test(line)&&!/const viewButton=/.test(line));
+ assert.ok(lines.length>=40,'the marked buttons: '+lines.length);
+ const bad=lines.filter(line=>forbidden.test(line.replace(/saveUI\(\{[^}]*\}\)/g,'')));
+ assert.deepEqual(bad.map(l=>l.trim().slice(0,100)),[],'a view button must only change what is shown');
+ const sc=fs.readFileSync(new URL('../src/selfcheck.js',import.meta.url),'utf8');
+ assert.match(sc,/button\[data-safe="view"\]/,'the self-check selects by the allowlist attribute');
+ assert.doesNotMatch(sc.slice(sc.indexOf('function safeButtons'),sc.indexOf('const api = {')),/skip\s*=|가져오기|data-writes/,'and keeps no verb or attribute blocklist');
+});
+
+test('a memo/note conflict shows both texts under the memo and the user\'s button decides; nothing resolves itself',async()=>{
+ const f=fixture();
+ let conflict={local:'my memo',remote:'text from the note'};
+ const resolved=[];
+ f.library.memoConflict=async()=>conflict;
+ f.library.resolveMemoConflict=async(id,choice,seen)=>{resolved.push([id,choice,seen]);conflict=null;return {resolved:true,text:choice==='note'?seen.remote:choice==='local'?seen.local:seen.remote+'\n\n--\n'+seen.local};};
+ await f.bench.show('annotations');await settle();
+ const box=f.bench.panel.querySelector('.sc-memo-conflict');
+ assert.ok(box,'the conflict box is under the memo editor');
+ assert.match(box.textContent,/다른 곳에서 바뀐 노트가 있습니다/);
+ assert.match(box.textContent,/my memo/);assert.match(box.textContent,/text from the note/);
+ const labels=[...box.querySelectorAll('button')].map(b=>b.textContent);
+ assert.deepEqual(labels,['노트 내용 쓰기','이 메모 쓰기','둘 다 합치기']);
+ assert.equal(resolved.length,0,'nothing is written until a button is pressed');
+ for(const b of box.querySelectorAll('button'))assert.notEqual(b.getAttribute('data-safe'),'view');
+ await f.click('둘 다 합치기');
+ assert.deepEqual(resolved[0].slice(0,2),['1','both']);assert.deepEqual(resolved[0][2],{local:'my memo',remote:'text from the note'},'what the box showed is what the choice is checked against');
+ assert.equal(f.bench.panel.querySelector('.sc-memo-conflict'),null,'the box goes away once resolved');
+ assert.equal(f.body().querySelector('textarea.sc-annot-memo').value,'text from the note\n\n--\nmy memo');
  f.bench.destroy();
 });

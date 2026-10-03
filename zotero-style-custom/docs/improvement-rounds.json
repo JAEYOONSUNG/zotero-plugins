@@ -1944,7 +1944,7 @@
         },
         {
           "file": "src/selfcheck.js",
-          "marker": "A note title is a button label, so the verb list cannot catch it"
+          "marker": "The sweep presses ONLY buttons the workbench marked"
         }
       ],
       "tests": [
@@ -2156,7 +2156,7 @@
         },
         {
           "file": "src/selfcheck.js",
-          "marker": "data-opens is the contract for windows; these verbs are the second net,"
+          "marker": "The sweep presses ONLY buttons the workbench marked"
         }
       ],
       "tests": [

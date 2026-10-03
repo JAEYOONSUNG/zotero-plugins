@@ -2200,7 +2200,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async _mergePreprintIntoPublished(preprintID, {publishedID} = {}) {
     const preprint = this.Z.Items.get(Number(preprintID));
     // State is read when this job's turn comes, not when it was asked for: an earlier merge may have finished meanwhile.
-    if (preprint && (preprint.deleted || this.mergeLedger()[String(preprint.id)])) throw new Error('이 프리프린트는 이미 게재본에 합쳐졌습니다. 되돌리려면 휴지통에서 복원하세요.');
+    if (preprint && preprint.deleted && this.mergeLedger()[String(preprint.id)]) throw new Error('이 프리프린트는 이미 게재본에 합쳐졌습니다. 되돌리려면 휴지통에서 복원하세요.');
+    // Zotero's own trash restore leaves a ledger behind with the preprint back in the library: undo it first, then this merge may run again.
+    if (preprint && !preprint.deleted && this.mergeLedger()[String(preprint.id)]) await this._undoMerge(this.mergeLedger()[String(preprint.id)], {untrash: false});
     if (!preprint || !this.isRegular(preprint)) throw new Error('프리프린트를 찾지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요.');
     const given = publishedID != null ? this.Z.Items.get(Number(publishedID)) : null;
     const held = given && this.isRegular(given) && !given.deleted ? given : (await this.publishedStatus(preprint))?.held;
@@ -2264,10 +2266,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         this.entry(held).remark = after; this.dirty = true; copied.memo = true; rec.memo = {before: mine, after};
         await this.flush();
         if (this.getSetting('memoToNote')) {
-          await this.memoToNote(held);
+          const wrote = await this.memoToNote(held);
           // What the note was, and what the merge made it, so undo can put the note and its sync baseline back with the memo.
           const noteAfter = this.memoNoteOf(held);
-          if (noteAfter) rec.memo.note = {id: noteAfter.id, created: !noteBefore, before: htmlBefore, after: String(noteAfter.getNote()), syncedBefore: syncedBefore === undefined ? null : syncedBefore, syncedAfter: this.entry(held).memoSynced ?? null};
+          if (noteAfter && wrote?.wrote) rec.memo.note = {id: noteAfter.id, created: !noteBefore, before: htmlBefore, after: String(noteAfter.getNote()), syncedBefore: syncedBefore === undefined ? null : syncedBefore, syncedAfter: this.entry(held).memoSynced ?? null};
         }
       }
     } catch (error) {
@@ -2282,6 +2284,42 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.bumpState?.();
     await this.refreshWindows();
     return {published: held, preprint, copied};
+  }
+  /* Undo puts the memo and its note back exactly as the merge recorded them, but only when neither
+     moved since. If either did, nothing is picked for the user: both texts go into the conflict box. */
+  async _undoMemo(held, memo) {
+    const norm = this.constructor.memoNorm, row = this.entry(held), saved = memo.note;
+    const note = saved ? this.Z.Items.get(Number(saved.id)) : this.memoNoteOf(held);
+    const live = note && !note.deleted ? note : null;
+    const there = live ? this.constructor.memoFromNoteHTML(live.getNote()) : '';
+    const memoSame = String(row.remark || '') === memo.after;
+    if (!saved) {
+      if (!memoSame) return;
+      row.remark = memo.before; this.dirty = true;
+      if (row.memoConflict) {
+        if (!live) delete row.memoConflict;
+        else {
+          const situation = this._memoSituation(row, there, row.memoSynced);
+          if (situation === 'push') delete row.memoConflict; else this._memoNoWrite(row, live, situation);
+        }
+      }
+      await this.flush(); return;
+    }
+    const noteSame = !!live && String(live.getNote()) === saved.after;
+    if (memoSame && noteSame) {
+      const id = this.identity(held), inflight = this.memoInflight || (this.memoInflight = new Map());
+      inflight.set(id, norm(saved.created ? '' : this.constructor.memoFromNoteHTML(saved.before)));
+      try {
+        if (saved.created) live.deleted = true; else live.setNote(saved.before);
+        await live.saveTx();
+      } finally { inflight.delete(id); }
+      row.remark = memo.before; delete row.memoConflict;
+      if (saved.syncedBefore === null) { delete row.memoSynced; delete row.memoSyncedVer; } else row.memoSynced = saved.syncedBefore;
+      this.dirty = true;
+    } else if (norm(String(row.remark || '')) !== norm(there)) {
+      row.memoConflict = {local: String(row.remark || ''), remote: there, at: new Date().toISOString()}; this.dirty = true;
+    }
+    await this.flush();
   }
   async _undoMerge(rec, {untrash = true} = {}) {
     const get = id => this.Z.Items.get(Number(id));
@@ -2306,23 +2344,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (rec.status && this.state(held).status === rec.status.after) patch.status = rec.status.before;
       if (rec.rating && this.state(held).rating === rec.rating.after) patch.rating = rec.rating.before;
       if (Object.keys(patch).length) await this.edit([held], patch);
-      if (rec.memo && String(this.entry(held).remark || '') === rec.memo.after) {
-        const row = this.entry(held), saved = rec.memo.note, note = saved ? get(saved.id) : null;
-        row.remark = rec.memo.before; this.dirty = true;
-        // The memo note goes back with the memo, unless the note itself was edited since: then both stay as they are.
-        if (saved && note && !note.deleted && String(note.getNote()) === saved.after) {
-          this.memoWriting = (this.memoWriting || 0) + 1;
-          try {
-            if (saved.created) note.deleted = true; else note.setNote(saved.before);
-            await note.saveTx();
-          } finally { this.memoWriting--; }
-          if (saved.syncedBefore === null) delete row.memoSynced; else row.memoSynced = saved.syncedBefore;
-        } else if (saved && note && !note.deleted) {
-          // The note was edited since: keep it, and make the memo agree with it rather than losing either.
-          row.remark = rec.memo.after; row.memoSynced = this.constructor.memoFromNoteHTML(note.getNote());
-        }
-        await this.flush();
-      }
+      if (rec.memo) await this._memoSerial(held, () => this._undoMemo(held, rec.memo));
     }
     if (untrash && preprint?.deleted) { preprint.deleted = false; await preprint.saveTx(); }
     delete this.mergeLedger()[String(rec.preprint)]; this.dirty = true;
@@ -2331,10 +2353,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   restorePreprint(preprintID) { return this._mergeSerial(preprintID, () => this._restorePreprint(preprintID)); }
   async _restorePreprint(preprintID) {
     const item = this.Z.Items.get(Number(preprintID));
-    if (!item || !item.deleted) return false;
+    if (!item) return false;
     const rec = this.mergeLedger()[String(item.id)];
-    if (rec) await this._undoMerge(rec);
-    else { item.deleted = false; await item.saveTx(); }
+    // The ledger decides, not the trash flag: Zotero's own restore may have run already.
+    if (rec) await this._undoMerge(rec, {untrash: !!item.deleted});
+    else if (item.deleted) { item.deleted = false; await item.saveTx(); }
+    else return false;
     this.bumpState?.(); await this.refreshWindows();
     return true;
   }
@@ -4458,12 +4482,43 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     return null;
   }
-  /* The memo note's text as the last sync left it: what the local memo and the
-     note agreed on. A note that differs from it was written elsewhere (sync). */
+  /* The memo and its note never merge by themselves. `memoSynced` is the exact
+     text both sides last agreed on (with the note's version then). Against it:
+       note unchanged, memo changed  -> the memo is written to the note;
+       memo unchanged, note changed  -> the note's text becomes the memo;
+       both changed                  -> nothing is written: row.memoConflict holds
+                                        both texts until the user picks one (or both).
+     A job only moves the baseline to text it wrote itself and read back. */
   static memoSep() { return '\n\n--- 이 컴퓨터의 메모 ---\n'; }
+  static memoNorm(text) { return String(text ?? '').replace(/\n+$/, ''); }
+  _memoSetBase(row, text, note) {
+    row.memoSynced = String(text);
+    const version = note && (note.version ?? note.dateModified);
+    if (version === undefined || version === null) delete row.memoSyncedVer; else row.memoSyncedVer = version;
+    delete row.memoConflict; this.dirty = true;
+  }
+  /* What a note's text means for a paper's memo, without writing anything to the note:
+     'same' (agreed), 'pull' (memo unchanged since the baseline: take the note), 'push'
+     (note unchanged: the memo is the newer side), 'conflict' (both changed, or no baseline to tell). */
+  _memoSituation(row, there, base) {
+    const norm = this.constructor.memoNorm, local = String(row.remark || '');
+    if (norm(local) === norm(there)) return 'same';
+    if (base === undefined) return !local.trim() ? 'pull' : !String(there).trim() ? 'push' : 'conflict';
+    const localChanged = norm(local) !== norm(base), remoteChanged = norm(there) !== norm(base);
+    return !remoteChanged ? 'push' : !localChanged ? 'pull' : 'conflict';
+  }
+  _memoNoWrite(row, note, situation) {
+    const there = this.constructor.memoFromNoteHTML(note.getNote());
+    if (situation === 'same') { if (row.memoSynced !== there || row.memoConflict) this._memoSetBase(row, there, note); return true; }
+    if (situation === 'pull') { row.remark = there; this._memoSetBase(row, there, note); return true; }
+    if (situation === 'conflict') {
+      const had = row.memoConflict, local = String(row.remark || '');
+      if (!had || had.local !== local || had.remote !== there) { row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this.dirty = true; return true; }
+    }
+    return false;
+  }
   /* A tagged memo note that exists already (written on another computer and
-     synced, or by an earlier session) is read once per paper and per session:
-     with no local memo it becomes the memo. Never overwrites typed text. */
+     synced, or by an earlier session) is read once per paper and per session. */
   adoptMemoNote(item) {
     const id = this.identity(item), checked = this.memoChecked || (this.memoChecked = new Set());
     if (checked.has(id)) return false;
@@ -4471,29 +4526,38 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (typeof item?.getNotes !== 'function') return false;
     const note = this.memoNoteOf(item);
     if (!note) return false;
-    const text = this.constructor.memoFromNoteHTML(note.getNote());
     const row = this.cache.items[id] ||= {};
-    if (!text.trim() || String(row.remark || '') === text) { if (text.trim() && row.memoSynced === undefined) row.memoSynced = text; return false; }
-    if (!String(row.remark || '').trim() || row.memoSynced !== undefined && String(row.remark) === row.memoSynced) {
-      row.remark = text; row.memoSynced = text; this.dirty = true; return true;
-    }
-    return false;
+    const there = this.constructor.memoFromNoteHTML(note.getNote());
+    if (!there.trim()) return false;
+    return this._memoNoWrite(row, note, this._memoSituation(row, there, row.memoSynced));
+  }
+  /* A note written by this plugin, expected back from the notifier: it is our own echo, not news. */
+  _memoWrite(item, note, text) {
+    const id = this.identity(item), inflight = this.memoInflight || (this.memoInflight = new Map()), norm = this.constructor.memoNorm(text);
+    inflight.set(id, norm);
+    note.setNote(this.constructor.memoNoteHTML(text));
+    return note.saveTx().finally(() => { if (inflight.get(id) === norm) inflight.delete(id); });
+  }
+  _memoSerial(item, job, {revisioned = false} = {}) {
+    const id = this.identity(item);
+    const queues = this.memoQueues || (this.memoQueues = new Map()), revisions = this.memoRevisions || (this.memoRevisions = new Map());
+    const revision = revisioned ? (revisions.get(id) || 0) + 1 : 0;
+    if (revisioned) revisions.set(id, revision);
+    const previous = queues.get(id) || Promise.resolve();
+    const run = previous.catch(() => {}).then(() => revisioned && revisions.get(id) !== revision
+      ? {created: false, text: String(this.cache.items[id]?.remark || ''), skipped: true}
+      : job());
+    queues.set(id, run);
+    const clear = () => { if (queues.get(id) === run) queues.delete(id); };
+    run.then(clear, clear);
+    return run;
   }
   async memoToNote(item, {prior} = {}) {
     if (!this.isRegular(item)) throw new Error('메모를 노트로 옮길 문헌을 찾지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요.');
     if (!this.canEdit(item)) throw new Error('이 라이브러리는 편집할 수 없어 노트를 만들지 못했습니다. 편집할 수 있는 라이브러리에서 시도하세요.');
     /* One queue per paper, and a revision: a job that a newer call has
-       overtaken writes nothing (the newer one carries the latest text), so an
-       older save finishing late cannot put its text back. */
-    const id = this.identity(item);
-    const queues = this.memoQueues || (this.memoQueues = new Map()), revisions = this.memoRevisions || (this.memoRevisions = new Map());
-    const revision = (revisions.get(id) || 0) + 1; revisions.set(id, revision);
-    const previous = queues.get(id) || Promise.resolve();
-    const job = previous.catch(() => {}).then(() => revisions.get(id) !== revision
-      ? {created: false, text: String(this.entry(item).remark || ''), skipped: true}
-      : this._memoToNote(item, {prior}));
-    queues.set(id, job);
-    try { return await job; } finally { if (queues.get(id) === job) queues.delete(id); }
+       overtaken writes nothing (the newer one carries the latest text). */
+    return this._memoSerial(item, () => this._memoToNote(item, {prior}), {revisioned: true});
   }
   async _memoToNote(item, {prior} = {}) {
     this.adoptMemoNote(item);
@@ -4501,60 +4565,79 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     let note = this.memoNoteOf(item);
     if (!text.trim() && !note) throw new Error('메모가 비어 있어 옮길 내용이 없습니다. 메모를 먼저 적으세요.');
     const created = !note;
-    let merged = false, adopted = false, write = text, remoteBefore;
     if (note) {
       const there = this.constructor.memoFromNoteHTML(note.getNote());
-      if (text.replace(/\n+$/, '') === there.replace(/\n+$/, '')) write = null;
-      else {
-        const base = row.memoSynced !== undefined ? row.memoSynced : (prior !== undefined ? String(prior) : undefined);
-        const unchanged = base !== undefined && String(base).replace(/\n+$/, '') === there.replace(/\n+$/, '');
-        if (unchanged) write = text;
-        else if (!text.trim() || there.includes(text.trim())) { write = null; adopted = true; }
-        else if (text.includes(there.trim())) write = text;
-        else if (!there.trim()) write = text;
-        else if (base !== undefined && String(base).trim() && there.startsWith(String(base) + this.constructor.memoSep())) {
-          // An earlier merge of this paper's remote text and a now-superseded input: merge the newer input with the remote text again.
-          write = String(base) + this.constructor.memoSep() + text; merged = true; remoteBefore = String(base);
-        } else { write = there + this.constructor.memoSep() + text; merged = true; remoteBefore = there; }
+      const base = row.memoSynced !== undefined ? row.memoSynced : (prior !== undefined ? String(prior) : undefined);
+      const situation = this._memoSituation(row, there, base);
+      if (situation !== 'push') {
+        // Nothing is written: agreed, adopted from the note, or held for the user.
+        const changed = this._memoNoWrite(row, note, situation);
+        if (changed) { await this.flush(); this.bumpState?.(); }
+        return {created: false, text: String(row.remark || ''), wrote: false, adopted: situation === 'pull', conflict: situation === 'conflict'};
       }
     } else {
       note = new this.Z.Item('note');
       note.libraryID = item.libraryID; note.parentID = item.id;
       note.setTags([{tag: this.constructor.MEMO_NOTE_TAG, type: 0}]);
     }
-    if (write !== null) {
-      note.setNote(this.constructor.memoNoteHTML(write));
-      this.memoWriting = (this.memoWriting || 0) + 1;
-      try { await note.saveTx(); } finally { this.memoWriting--; }
-    }
-    // The local memo mirrors the note it now has -- unless it was edited while the note was written.
+    await this._memoWrite(item, note, text);
+    // The baseline moves only when the note reads back as exactly what this job wrote.
     const mirrored = this.constructor.memoFromNoteHTML(note.getNote());
-    const now = String(row.remark || '');
-    if (mirrored !== now && now === text) { row.remark = mirrored; this.dirty = true; }
-    // A conflict merge that the user typed over while it was saved is not the new shared base: the next job merges the later input with the remote text again.
-    row.memoSynced = merged && remoteBefore !== undefined && now !== text ? remoteBefore : mirrored; this.dirty = true;
+    if (this.constructor.memoNorm(mirrored) === this.constructor.memoNorm(text)) this._memoSetBase(row, mirrored, note);
+    else this._memoNoWrite(row, note, this._memoSituation(row, mirrored, row.memoSynced));
     await this.flush();
     this.bumpState?.();
-    return {created, text: mirrored, merged, adopted};
+    return {created, text: String(row.remark || ''), wrote: true, adopted: false, conflict: !!row.memoConflict};
   }
-  /* An edit made to the memo note inside Zotero (or arriving by sync) flows
-     back into the local memo; a memo typed here since the last sync is kept
-     beside it, never replaced. */
+  /* The user's answer to a conflict: 'note' | 'local' | 'both'. `seen` is what the box showed;
+     if either side changed since, nothing is written and the new texts are returned. */
+  resolveMemoConflict(item, choice, {seen} = {}) {
+    if (!this.canEdit(item)) throw new Error('이 라이브러리는 편집할 수 없습니다. 편집할 수 있는 라이브러리에서 시도하세요.');
+    return this._memoSerial(item, () => this._resolveMemoConflict(item, choice, {seen}));
+  }
+  async _resolveMemoConflict(item, choice, {seen} = {}) {
+    if (!['note', 'local', 'both'].includes(choice)) throw new Error('알 수 없는 선택입니다. 노트 내용 쓰기, 이 메모 쓰기, 둘 다 합치기 중에서 고르세요.');
+    const row = this.entry(item);
+    if (!row.memoConflict) return {resolved: false, conflict: null, text: String(row.remark || '')};
+    const norm = this.constructor.memoNorm;
+    let note = this.memoNoteOf(item);
+    const there = note ? this.constructor.memoFromNoteHTML(note.getNote()) : '', local = String(row.remark || '');
+    if (seen && (norm(seen.local) !== norm(local) || norm(seen.remote) !== norm(there))) {
+      row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this.dirty = true; await this.flush();
+      return {resolved: false, stale: true, conflict: row.memoConflict, text: local};
+    }
+    const final = choice === 'note' ? there : choice === 'local' ? local
+      : (there.trim() && local.trim() ? there + this.constructor.memoSep() + local : there.trim() ? there : local);
+    if (choice !== 'note' && norm(final) !== norm(there)) {
+      if (!note) { note = new this.Z.Item('note'); note.libraryID = item.libraryID; note.parentID = item.id; note.setTags([{tag: this.constructor.MEMO_NOTE_TAG, type: 0}]); }
+      await this._memoWrite(item, note, final);
+      if (norm(this.constructor.memoFromNoteHTML(note.getNote())) !== norm(final)) throw new Error('노트를 쓰는 사이 노트가 다시 바뀌어 아무것도 확정하지 않았습니다. 두 내용을 다시 확인하세요.');
+    }
+    row.remark = final; this._memoSetBase(row, note ? this.constructor.memoFromNoteHTML(note.getNote()) : final, note);
+    await this.flush(); this.bumpState?.();
+    return {resolved: true, conflict: null, text: final};
+  }
+  /* An edit made to the memo note inside Zotero (or arriving by sync). Judged against the
+     baseline, never suppressed: only the text this plugin is itself writing is its own echo. */
   mirrorMemoNote(noteID) {
     const note = this.Z.Items?.get?.(noteID);
-    if (!note || !note.isNote?.() || !note.parentID || (this.memoWriting || 0) > 0) return false;
+    if (!note || !note.isNote?.() || !note.parentID) return false;
     if (!(note.getTags?.() || []).some(tag => tag.tag === this.constructor.MEMO_NOTE_TAG)) return false;
     const parent = this.Z.Items.get(note.parentID);
     if (!parent) return false;
-    const text = this.constructor.memoFromNoteHTML(note.getNote());
-    const row = this.entry(parent), mine = String(row.remark || '');
-    if (text === mine) { if (row.memoSynced !== text) { row.memoSynced = text; this.dirty = true; } return false; }
-    if (text === row.memoSynced) return false;
-    const typedHere = mine.trim() && mine !== row.memoSynced && !text.includes(mine.trim());
-    row.remark = typedHere ? (text.trim() ? text + this.constructor.memoSep() + mine : mine) : text;
-    row.memoSynced = text; this.dirty = true; this.bumpState?.();
-    this.flush?.().catch?.(error => this.Z.logError?.(error));
-    return true;
+    const text = this.constructor.memoFromNoteHTML(note.getNote()), id = this.identity(parent), norm = this.constructor.memoNorm;
+    if (this.memoInflight?.get(id) === norm(text)) return false;
+    const row = this.entry(parent);
+    if (row.memoSynced !== undefined && norm(text) === norm(row.memoSynced) && !row.memoConflict) return false;
+    const situation = this._memoSituation(row, text, row.memoSynced);
+    if (situation === 'push') {
+      // The note is back at the baseline: a pending conflict is over, the memo is simply the newer side.
+      if (row.memoConflict) { delete row.memoConflict; this.dirty = true; this.flush?.().catch?.(error => this.Z.logError?.(error)); return true; }
+      return false;
+    }
+    const changed = this._memoNoWrite(row, note, situation);
+    if (changed) { this.bumpState?.(); this.flush?.().catch?.(error => this.Z.logError?.(error)); }
+    return changed;
   }
 
   /* 프리프린트 -> 게재본. A stored signal says a preprint has a published
