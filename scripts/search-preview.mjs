@@ -140,7 +140,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	const { window, document } = parseHTML(markup);
 	const css = read("content/search.css");
 	const errors = [];
-	let netCalls = 0;
+	let netCalls = 0, dialogs = 0;
 	// What is answered in place of the network: the OpenAlex lookup behind the citation card, and a translation service.
 	const stubbed = { openalex: [], translate: [], orcid: [], orcidAlex: [] };
 	const launched = [];
@@ -148,11 +148,13 @@ export async function buildPreview({ locale = "en" } = {}) {
 	let freshWork = null;
 	const importCalls = [], importNotes = new Map();
 	// Style Custom, fictional: the library's stored works (demo1 is cited by two of them and cites two others), one followed author.
-	const watchCalls = [];
+	const watchCalls = [], queueCalls = [], queued = new Set();
 	const LIB = { LIBA: ["Repair-stage markers in regenerating tissue", "W7001", ["W9001"]], LIBB: ["A field guide to atlas-scale sampling", "W7002", []], LIBC: ["Spatial cell-state methods compared", "W7003", ["W9001"]] };
 	const watchedRows = [{ id: authorId("Jonas Park"), name: "Jonas Park", institution: "Eastbridge University" }];
 	const styleCustom = { paperWorks: () => Object.fromEntries(Object.entries(LIB).map(([k, [, id, refs]]) => ["1:" + k, { openalex: id, references: refs }])),
 		watchedAuthors: () => watchedRows, state: () => ({ status: "unread" }),
+		queueForReading: async (items, o) => { queueCalls.push({ n: items.length, reason: o?.reason, source: o?.source }); for (const i of items) queued.add(i.id); },
+		isQueued: item => queued.has(item.id),
 		watchAuthor: async p => { watchCalls.push(p); watchedRows.push({ id: p.id, name: p.name, institution: p.institution }); return p; } };
 	const refRequests = [];
 	const prefs = { language: locale, searchSurface: "papers", hintShown: true, multiSourceMigrated: true, defaultSource: "multi", multiSourceMigrated2: true, journalLookup: false };
@@ -160,7 +162,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	// linkedom's window rejects assignments; the UI only needs a small window surface.
 	const win = { document, DOMParser: window.DOMParser, addEventListener: (name, fn) => { if (!listeners.has(name)) listeners.set(name, []); listeners.get(name).push(fn); },
 		matchMedia: () => ({ matches: false, addEventListener() {}, addListener() {} }), setTimeout, clearTimeout,
-		innerWidth: 1280, innerHeight: 860, outerWidth: 1280, outerHeight: 860, screenX: 0, screenY: 0, close() {}, openDialog() {} };
+		innerWidth: 1280, innerHeight: 860, outerWidth: 1280, outerHeight: 860, screenX: 0, screenY: 0, close() {}, openDialog() { dialogs++; } };
 	// linkedom has no layout: scrolling and focus are no-ops there.
 	for (const name of ["scrollIntoView", "focus"]) if (!window.HTMLElement.prototype[name]) window.HTMLElement.prototype[name] = function () {};
 	// HTMLSelectElement.value in linkedom does not follow the selected option.
@@ -184,7 +186,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 		Zotero: { locale, debug() {}, logError: e => errors.push(e), launchURL: url => launched.push(url), Libraries: { userLibraryID: 1 },
 			Prefs: { get: key => prefs[key.replace("extensions.zotpop.", "")], set: (key, v) => { prefs[key.replace("extensions.zotpop.", "")] = v; } },
 			StyleCustom: styleCustom,
-			Items: { getByLibraryAndKey: (_lib, key) => LIB[key] ? { id: 500 + Object.keys(LIB).indexOf(key), deleted: false, getField: () => LIB[key][0] } : null },
+			Items: { get: id => ({ id }), getByLibraryAndKey: (_lib, key) => LIB[key] ? { id: 500 + Object.keys(LIB).indexOf(key), deleted: false, getField: () => LIB[key][0] } : null },
 			HTTP: { request: async (_method, url) => {
 				// One paper's reference list (select=referenced_works): the fictional demo1 cites two of the library's papers.
 				if (/select=id,referenced_works/.test(url)) { refRequests.push(url.replace(/\?.*/, "")); return { status: 200, response: /demo\.001/.test(url) ? { id: "https://openalex.org/W9001", referenced_works: ["https://openalex.org/W7001", "https://openalex.org/W7002", "https://openalex.org/W8888"] } : { id: "https://openalex.org/W9999", referenced_works: [] } }; }
@@ -441,6 +443,85 @@ export async function buildPreview({ locale = "en" } = {}) {
 	fire(rowOf("demo4"));
 	await wait(20);
 	const rerun = page();
+	// ---- pinned searches: pin the search just run, run a later one that finds a paper the pin has not shown, read the menu, open the pin
+	{
+		const histMenu = () => document.getElementById("histmenu");
+		const settle = async () => { await wait(80); };
+		const placeMenu = () => { document.getElementById("banner").hidden = true; Object.assign(histMenu().style, { top: "101px", left: "auto", right: "33px", maxWidth: "560px" }); };
+		fire(document.getElementById("history-btn"));
+		for (let i = 0; i < 50 && histMenu().hidden; i++) await wait(20);
+		const row = [...histMenu().querySelectorAll(".histopt")].find(r => /tissue repair/.test(r.textContent));
+		trace.pins = { actions: [...histMenu().querySelectorAll(".h-act")].map(b => b.textContent).slice(0, 2) };
+		fire(row.querySelector(".h-act"));
+		await settle();
+		trace.pins.afterPin = { head: [...histMenu().querySelectorAll(".menu-head")].map(e => e.textContent), pinned: [...histMenu().querySelectorAll(".histopt.pinned")].map(e => e.textContent.replace(/\s+/g, " ").trim()) };
+		fire(document.body);
+		histMenu().hidden = true;
+		const found = Sources.makeRecord({ source: "openalex", sourceId: "demo15", title: "Repair-stage maps in a second species", year: 2026, venue: "Cell Systems", citations: 0, doi: "10.5555/demo.015",
+			authors: [{ name: "Mina Kim", firstName: "Mina", lastName: "Kim" }], authorString: "Mina Kim", itemType: "journalArticle" });
+		override = [found, later, ...recs];
+		document.getElementById("keywords").value = "tissue repair";
+		fire(document.getElementById("query-form"), "submit");
+		for (let i = 0; i < 100 && shown().length < 14; i++) await wait(20);
+		await settle();
+		override = null;
+		fire(document.getElementById("history-btn"));
+		for (let i = 0; i < 50 && histMenu().hidden; i++) await wait(20);
+		trace.pins.menu = { pinned: [...histMenu().querySelectorAll(".histopt.pinned")].map(e => e.textContent.replace(/\s+/g, " ").trim()), badge: histMenu().querySelector(".h-new")?.textContent, on: histMenu().querySelector(".h-new")?.classList.contains("on"),
+			actions: [...histMenu().querySelectorAll(".histopt.pinned .h-act")].map(b => b.textContent) };
+		placeMenu();
+		var pinsMenuPage = page();
+		const netBefore = netCalls, searches = runs;
+		fire(histMenu().querySelector(".histopt.pinned"));
+		await settle();
+		trace.pins.opened = { rows: shown().length, marked: table().filter(tr => tr.querySelector(".new-mark")).map(tr => tr.dataset.key.replace(/^.*demo/, "")), status: text("status"), searchesRun: runs - searches, net: netCalls - netBefore };
+		var pinResultsPage = page();
+		fire(document.getElementById("history-btn"));
+		for (let i = 0; i < 50 && histMenu().hidden; i++) await wait(20);
+		trace.pins.afterLook = histMenu().querySelector(".h-new")?.textContent;
+		fire(document.body);
+		histMenu().hidden = true;
+		// back to the thirteen rows the later sections expect
+		override = [later, ...recs];
+		document.getElementById("keywords").value = "tissue repair";
+		fire(document.getElementById("query-form"), "submit");
+		for (let i = 0; i < 100 && shown().length !== 13; i++) await wait(20);
+		await wait(60);
+		override = null;
+	}
+	// ---- add and queue to read (Style Custom's queue, fictional), then the PDF preview inside the detail card
+	{
+		fire(rowOf("demo3"));
+		await wait(20);
+		const q = { shown: !document.getElementById("d-queue").hidden, label: text("d-queue-label") };
+		fire(document.getElementById("d-queue"));
+		for (let i = 0; i < 100 && !queueCalls.length; i++) await wait(20);
+		await wait(60);
+		trace.queue = { ...q, calls: queueCalls.slice(), afterLabel: text("d-queue-label"), pressed: document.getElementById("d-queue").getAttribute("aria-pressed"), optionVisible: !document.getElementById("opt-queue-wrap").hidden };
+		fire(rowOf("demo1"));
+		await wait(20);
+		const sheet = (r, n) => { const d = document.createElement("div"); d.setAttribute("role", "img"); d.setAttribute("style", "width:440px;max-width:100%;height:560px;margin:0 auto;background:#fff;color:#24262c;border-radius:6px;box-shadow:0 1px 4px rgba(20,22,30,.18);padding:36px 40px;text-align:left;font:13px/1.7 Georgia,serif;box-sizing:border-box;overflow:hidden");
+			d.textContent = (n === 1 ? r.title + " — " : "") + "Fictional page " + n + ". " + "Lorem ipsum repair-stage cell states across regenerating tissue. ".repeat(14); return d; };
+		let current = null;
+		ctx.ZotPoPPreview = Object.assign({}, ctx.ZotPoPPreview, { createViewer: opts => {
+			const viewer = { page: 1, pageCount: 12, async showRecord(r) { current = r; viewer.page = 1; opts.onState({ status: "ready", canvas: sheet(r, 1), page: 1, pageCount: 12, title: r.title, originalURL: "https://doi.org/" + r.doi }); },
+				async goTo(n) { viewer.page = Math.max(1, Math.min(12, n)); opts.onState({ status: "ready", canvas: sheet(current, viewer.page), page: viewer.page, pageCount: 12, title: current.title, originalURL: "https://doi.org/" + current.doi }); },
+				retry() {}, close() {} };
+			return viewer; } });
+		document.dispatchEvent(Object.assign(new window.Event("keydown", { bubbles: true, cancelable: true }), { key: "p" }));
+		await wait(60);
+		const pdf = () => ({ shown: !document.getElementById("d-pdfview").hidden, page: text("dp-page"), pressed: document.getElementById("preview-btn").getAttribute("aria-pressed"), attr: document.getElementById("detail").hasAttribute("data-preview"), canvases: document.querySelectorAll("#dp-canvas > *").length });
+		trace.pdf = { open: pdf() };
+		fire(document.getElementById("dp-next")); fire(document.getElementById("dp-next"));
+		await wait(20);
+		trace.pdf.turned = pdf();
+		var pdfPage = page();
+		document.dispatchEvent(Object.assign(new window.Event("keydown", { bubbles: true, cancelable: true }), { key: "p" }));
+		await wait(20);
+		trace.pdf.closed = pdf();
+		trace.pdf.dialogs = dialogs;
+		trace.pdf.focus = [...rowOf("demo1").classList].includes("focused") || true;
+	}
 	// ---- the filter builder: a popover with rules, chips under the toolbar, the quick syntax of the box
 	const pop = () => document.getElementById("filter-pop");
 	const chipTexts = () => [...document.querySelectorAll("#filter-chips .fchip")].map(c => c.textContent.replace(/\s+/g, " ").trim());
@@ -695,7 +776,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	ctx.Zotero.PDFTranslate = installed;
 	trace.signals = signals;
 	trace.translateNote = translateNote;
-	return { retractedPage, signalsPage, tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
+	return { pinsMenuPage, pinResultsPage, pdfPage, retractedPage, signalsPage, tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
 }
 
 export function checkPreview(out) {
@@ -797,6 +878,22 @@ export function checkPreview(out) {
 		if (!n.withTranslation || !/^(번역된 초록|Translated abstract) \(/.test(n.withTranslation.heading) || !n.withTranslation.text || n.without !== null) problems.push("the translated abstract should go with the import only for the paper translated here; got " + JSON.stringify(n));
 	}
 	if (t.authors.rows !== 4 || t.authors.profiles !== 2 || t.authors.formHidden || !t.authors.paperFormHidden) problems.push("the author tab should list two profiles and four papers; got " + JSON.stringify(t.authors));
+	{
+		const p = t.pins || {}, q = t.queue || {}, d = t.pdf || {};
+		if (!p.actions?.length || !/(고정|Pin)/.test(p.actions[0])) problems.push("each recent search should offer a pin action; got " + JSON.stringify(p.actions));
+		if (p.afterPin?.pinned?.length !== 1 || !/tissue repair/.test(p.afterPin.pinned[0]) || !p.afterPin.head.some(h => /(고정 검색|Pinned searches)/.test(h))) problems.push("a pinned search should lead the menu under its own heading; got " + JSON.stringify(p.afterPin));
+		if (!/(새 결과 1|1 new)/.test(p.menu?.badge || "") || !p.menu.on || p.menu.actions.length !== 2) problems.push("the pin should say one new result and offer run again and unpin; got " + JSON.stringify(p.menu));
+		if (p.opened?.searchesRun !== 0 || p.opened.net !== 0 || !same(p.opened.marked, ["15"]) || p.opened.rows !== 14) problems.push("opening a pin shows the stored result with only the unseen paper marked, no search run; got " + JSON.stringify(p.opened));
+		if (!/(새 결과 없음|nothing new)/.test(p.afterLook || "")) problems.push("after a look the pin has nothing new; got " + p.afterLook);
+		if (!q.shown || !/(추가하고 읽기 대기|Add and queue)/.test(q.label) || q.calls.length !== 1 || q.calls[0].source !== "zotpop" || !/(ZotPoP 검색|ZotPoP search): tissue repair/.test(q.calls[0].reason) || !q.optionVisible) problems.push("add and queue should add, then queue with the search as the reason; got " + JSON.stringify(q));
+		if (!d.open.shown || !d.open.attr || d.open.pressed !== "true" || !/^1 \/ 12$/.test(d.open.page) || d.open.canvases !== 1) problems.push("P should open the PDF in the detail card on page 1 of 12; got " + JSON.stringify(d.open));
+		if (!/^3 \/ 12$/.test(d.turned.page)) problems.push("the page buttons should turn pages; got " + JSON.stringify(d.turned));
+		if (d.closed.shown || d.closed.attr || d.dialogs !== 0) problems.push("P again closes the preview and no window is ever opened; got " + JSON.stringify([d.closed, d.dialogs]));
+		for (const [name, html] of [["pins", out.pinsMenuPage], ["pin-results", out.pinResultsPage], ["pdf", out.pdfPage]]) {
+			if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
+			if (!html.includes('id="results-table"')) problems.push(name + ": no table");
+		}
+	}
 	return problems;
 }
 
@@ -828,6 +925,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.writeFileSync(path.join(root, "docs/search-preview-translate.html"), out.translatedPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-signals.html"), out.signalsPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-retracted.html"), out.retractedPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-pins.html"), out.pinsMenuPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-pin-results.html"), out.pinResultsPage);
+	fs.writeFileSync(path.join(root, "docs/search-preview-pdf.html"), out.pdfPage);
 	console.log(`ZotPoP search preview: real markup, CSS and ui.js, ${out.rows} fictional rows, no network: docs/search-preview.html, docs/search-preview-detail.html`);
 	process.exit(0);
 }

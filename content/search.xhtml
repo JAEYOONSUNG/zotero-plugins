@@ -255,8 +255,24 @@
 					<div class="detail-head">
 						<div id="d-title" class="d-title"></div>
 						<div class="d-actions">
+							<button id="d-queue" type="button" class="icon-text" aria-pressed="false" hidden="hidden"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-book"/></svg><span id="d-queue-label"></span></button>
 							<button id="d-primary" type="button" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use id="d-primary-icon" href="#ic-plus"/></svg><span id="d-primary-label"></span></button>
 							<button id="d-more" type="button" class="icon-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="dMoreTip" data-i18n-aria="dMore"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-more"/></svg></button>
+						</div>
+					</div>
+					<div id="d-pdfview" class="d-preview" hidden="hidden">
+						<div class="dp-bar">
+							<button id="dp-prev" type="button" class="icon-btn" data-i18n-title="previewPrev" data-i18n-aria="previewPrev">&#8249;</button>
+							<span id="dp-page" class="dp-page" role="status" aria-live="polite"></span>
+							<button id="dp-next" type="button" class="icon-btn" data-i18n-title="previewNext" data-i18n-aria="previewNext">&#8250;</button>
+							<span class="dp-spacer"></span>
+							<button id="dp-original" type="button" class="ghost" data-i18n="previewOriginal"></button>
+							<button id="dp-close" type="button" class="ghost" data-i18n="previewClose"></button>
+						</div>
+						<div id="dp-view" class="dp-view">
+							<div id="dp-canvas" class="dp-canvas"></div>
+							<p id="dp-message" class="dp-message" role="status" aria-live="polite"></p>
+							<button id="dp-retry" type="button" data-i18n="previewRetry" hidden="hidden"></button>
 						</div>
 					</div>
 					<div id="d-venue" class="d-venue" hidden="hidden"></div>
@@ -312,6 +328,7 @@
 			<label class="cb"><input id="opt-skip" type="checkbox" checked="checked"/> <span data-i18n="optSkip"></span></label>
 			<label class="cb"><input id="opt-fillpdf" type="checkbox"/> <span data-i18n="optFillPdf"></span></label>
 			<label class="cb"><input id="opt-extra" type="checkbox" checked="checked"/> <span data-i18n="optExtra"></span></label>
+			<label class="cb" id="opt-queue-wrap" hidden="hidden"><input id="opt-queue" type="checkbox"/> <span data-i18n="optQueue"></span></label>
 			<label class="cb" id="opt-trnote-wrap"><input id="opt-trnote" type="checkbox"/> <span data-i18n="optTrNote"></span></label>
 		</span>
 	</div>

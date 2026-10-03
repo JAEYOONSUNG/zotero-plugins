@@ -155,31 +155,84 @@ test("renderer cancellation stops PDF loading and releases the worker", async ()
 	assert.equal(destroyed, 1);
 });
 
-test("search UI preview opens the focused or selected result separately without importing", async () => {
-	const opened = [], shown = [];
-	const ui = uiHarness({ openDialog(url, name, features, payload) {
-		opened.push({ url, name, features, payload });
-		return { closed: false, focus() {}, ZotPoPPreviewWindow: { showRecord: record => shown.push(record.key) } };
-	} });
+test("search UI preview shows inside the detail card: no window, follows the open paper, P toggles", async () => {
+	const shown = [], closed = [];
+	let dialogs = 0;
+	const fake = { page: 1, pageCount: 3, showRecord(r) { shown.push(r.key); }, goTo() {}, retry() {}, close() { closed.push(1); } };
+	const ui = uiHarness({ openDialog() { dialogs++; }, previewModule: { ...Preview, createViewer: () => fake } });
 	await ui.runSearch();
 	assert.equal(ui.get("preview-btn").disabled, true);
 	ui.state.selected.add("relevant");
 	ui.render();
 	assert.equal(ui.get("preview-btn").disabled, false);
 	ui.openPreview();
-	assert.equal(opened[0].payload.record.key, "relevant");
-	assert.equal(opened[0].url, "chrome://zotpop/content/preview.xhtml");
-	assert.match(opened[0].features, /dialog=no/);
-	ui.state.focusKey = "popular";
-	ui.render();
-	assert.deepEqual(shown, ["popular"]);
-	ui.render();
-	assert.deepEqual(shown, ["popular"], "redraws do not reload the same preview");
+	assert.deepEqual(shown, ["relevant"]);
+	assert.equal(ui.state.detailKey, "relevant");
+	assert.equal(ui.get("d-pdfview").hidden, false);
+	assert.equal(ui.get("preview-btn").getAttribute("aria-pressed"), "true");
+	ui.syncPreview();
+	assert.deepEqual(shown, ["relevant"], "redraws do not reload the same preview");
 	ui.onKeyDown({ key: "p", preventDefault() {} });
-	assert.deepEqual(shown, ["popular", "popular"], "P explicitly reopens/retries the focused preview");
-	assert.equal(opened.length, 1);
+	assert.equal(ui.state.preview.on, false, "P closes it");
+	assert.equal(ui.get("d-pdfview").hidden, true);
+	assert.equal(closed.length >= 1, true);
+	ui.onKeyDown({ key: "p", preventDefault() {} });
+	assert.equal(ui.state.preview.on, true);
+	assert.deepEqual(shown, ["relevant", "relevant"]);
+	assert.equal(dialogs, 0, "openDialog is never called");
 	assert.equal(ui.state.importing, false);
 	assert.equal(ui.state.records.length, 2);
+});
+
+test("a quick run over rows fetches only the row it stops on", async () => {
+	const shown = [];
+	const fake = { page: 1, pageCount: 1, showRecord(r) { shown.push(r.key); }, goTo() {}, retry() {}, close() {} };
+	const ui = uiHarness({ previewModule: { ...Preview, createViewer: () => fake } });
+	await ui.runSearch();
+	ui.openPreview(ui.state.records[0]);
+	shown.length = 0;
+	ui.state.detailKey = "popular"; ui.syncPreview(true);
+	ui.state.detailKey = "relevant"; ui.syncPreview(true);
+	ui.state.detailKey = "popular"; ui.syncPreview(true);
+	await new Promise(r => setTimeout(r, 300));
+	assert.deepEqual(shown, ["popular"]);
+});
+
+test("the in-window viewer turns pages, and a stale page or paper render is ignored", async () => {
+	const states = [], renders = [];
+	const mkPdf = () => ({ numPages: 3, getPage: async n => ({ getViewport: ({ scale }) => ({ width: 100 * scale, height: 100 * scale }),
+		render: () => { const d = deferred(); renders.push({ n, d, cancelled: false }); const task = { promise: d.promise, cancel() { renders.at(-1).cancelled = true; } }; return task; } }) });
+	let destroyed = 0;
+	const canvas = () => ({ width: 0, height: 0, style: {}, getContext: () => ({}), tag: Math.random() });
+	const viewer = Preview.createViewer({
+		fetchPDF: async () => bytes(),
+		getLibrary: async () => ({ GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.resolve(mkPdf()), destroy: async () => { destroyed++; } }) }),
+		createCanvas: canvas, width: () => 400, pixelRatio: () => 1, onState: s => states.push(s)
+	});
+	const first = viewer.showRecord(paper("a", { pdfUrl: "https://example.org/a.pdf" }));
+	await new Promise(r => setTimeout(r, 10));
+	renders[0].d.resolve(); await first;
+	assert.equal(states.at(-1).status, "ready");
+	assert.equal(states.at(-1).pageCount, 3);
+	// Page 2 starts, page 3 is asked before it finishes: only page 3 is shown.
+	const two = viewer.goTo(2); await new Promise(r => setTimeout(r, 5));
+	const three = viewer.goTo(3); await new Promise(r => setTimeout(r, 5));
+	renders[1].d.resolve(); renders[2].d.resolve(); await two; await three;
+	assert.equal(renders[1].cancelled, true);
+	assert.equal(states.at(-1).page, 3);
+	assert.equal(viewer.page, 3);
+	// A new paper while a page renders: the old canvas never lands.
+	const turning = viewer.goTo(2); await new Promise(r => setTimeout(r, 5));
+	const next = viewer.showRecord(paper("b", { pdfUrl: "https://example.org/b.pdf" }));
+	const before = states.length;
+	renders.at(-1).d.resolve(); await turning;
+	assert.equal(states.slice(before).some(s => s.status === "ready" && s.page === 2 && s.title === "a"), false);
+	await new Promise(r => setTimeout(r, 10));
+	renders.at(-1).d.resolve(); await next;
+	assert.equal(states.at(-1).title, "b");
+	assert.equal(states.at(-1).page, 1);
+	assert.ok(destroyed >= 1);
+	viewer.close();
 });
 
 test("preview markup has a separate window identity and visible original/preview actions", async () => {

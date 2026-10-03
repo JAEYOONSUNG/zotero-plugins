@@ -88,7 +88,7 @@ export function mockElement(tagName = "div") {
 }
 
 export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {
-}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null, zotero = {}, sources = {} } = {}) {
+}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null, zotero = {}, sources = {}, previewModule = null } = {}) {
 	const copied = [];
 	const elements = new Map(), errors = [], events = new Map();
 	const get = id => {
@@ -134,7 +134,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 	const apiRecords = [paper("relevant", { title: "Precise match" }),
 		paper("popular", { title: "Broad review", citations: 10000, year: 2020 })];
 	const context = vm.createContext({
-		AbortController,
+		AbortController, setTimeout, clearTimeout,
 		window: { addEventListener(name, fn) { events.set(name, fn); winEvents.addEventListener(name, fn); }, openDialog, arguments: mainWindow ? [{ mainWindow }] : undefined },
 		document,
 		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set: (key, value) => { prefs[key.replace("extensions.zotpop.", "")] = value; } }, debug() {}, logError: e => errors.push(e), launchURL, Utilities: { Internal: { copyTextToClipboard: text => copied.push(String(text)) } },
@@ -145,7 +145,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 			search: search || (async (_source, query) => query.sort === "citations" ? [...apiRecords].reverse() : [...apiRecords]), ...sources },
 		ZotPoPPoPBridge: popBridge,
 		ZotPoPAuthors: authorsService,
-		ZotPoPPreview: Preview,
+		ZotPoPPreview: previewModule || Preview,
 		ZotPoPHistory: { ...History, memoryIO: () => History.memoryIO(historyFiles) },
 		ZotPoPAffiliations: Affiliations,
 		ZotPoPFilters: Filters,
@@ -170,7 +170,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		const originalRenderDetail = renderDetail;
 		renderMetrics = renderDetail = () => {};
 		cacheIO = setupStorage();
-		globalThis.harness = { tipContent, journalMark, state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
+		globalThis.harness = { tipContent, journalMark, state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, closePreview, togglePreview, syncPreview, viewerOfPreview, paintPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
 			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, renderVersions, renderSignals, followAuthor, heldVersion, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			yearBins, filterSpec, addRule, openFilterPop, closeFilterPop, syncFilterUI, clearAllFilters, affLineParts, shortInstitution, renderAuthors, addVenueChip, removeVenueChip, setVenueChips, refreshVenueSuggestions, onVenueKey, wireVenueBox, ensureJournalCatalog,

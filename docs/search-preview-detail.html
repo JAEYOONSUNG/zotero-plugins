@@ -250,7 +250,10 @@ input[type=checkbox] { accent-color: var(--pill); }
 .author-profile.pickable { cursor: pointer; }
 .author-profile.pickable:hover:not(.selected) { background: var(--row-hover); }
 .author-profile.open { flex-basis: 100%; align-items: flex-start; }
-.author-profiles:has(.author-profile.open) { max-height: 300px; }
+/* An opened profile shows its whole summary (employment, education, works) rather than a 300px slice: the list
+   grows with it, up to most of the window, and only then scrolls. Only a long expanded bio scrolls by itself. */
+.author-profiles:has(.author-profile.open) { max-height: min(64vh, 620px); }
+.author-bio:not(.clamped) { max-height: 220px; overflow: auto; }
 .author-profile.open .author-profile-info { flex: 1 1 auto; }
 .author-profile-stats { margin: 0; }
 .author-sum-toggle, .author-bio-toggle { align-self: flex-start; justify-self: start; padding: 0 8px; margin-left: -8px; }
@@ -410,6 +413,9 @@ input[type=checkbox] { accent-color: var(--pill); }
 #results-table td.title { font-size: 13px; font-weight: 500; line-height: 20px; }
 /* the title and, under it, who did the work and where: two lines when any row has the second one */
 #results-table td.title .t-main, #results-table td.title .t-aff { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A title may take two lines where the row is two lines tall anyway and has no second line of its own */
+#results-table[data-aff] td.title .t-main:only-child { display: flex; align-items: flex-start; white-space: normal; line-height: 20px; }
+#results-table[data-aff] td.title .t-main:only-child > :last-child { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-width: 0; overflow-wrap: anywhere; }
 #results-table td.title .t-aff { font-size: 11px; font-weight: 400; line-height: 16px; color: var(--muted); }
 #results-table td.title .t-aff .aff-role { font-weight: 600; }
 #results-table td.doi a.doi-link { color: inherit; text-decoration: none; }
@@ -690,10 +696,17 @@ label.cb { display: flex; align-items: center; gap: 8px; height: 32px; padding: 
 .tbmenu .selopt[aria-disabled="true"] { opacity: .5; }
 .menu-head { padding: 8px 12px 4px; color: var(--muted); font-size: 11px; font-weight: 600; line-height: 16px; }
 .histmenu { min-width: 344px; max-width: 560px; }
-.histmenu .histopt { display: flex; flex-direction: column; gap: 0; padding: 8px 12px; border-radius: var(--r-row); cursor: pointer; }
+.histmenu .histopt { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-row); cursor: pointer; }
 .histmenu .histopt:hover, .histmenu .histopt.hot { background: var(--row-sel); color: var(--text); }
 .histmenu .histopt .h-label { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .histmenu .histopt .h-meta { font-size: 11px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.histmenu .histopt .h-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.histmenu .histopt .h-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.histmenu .histopt .h-new { flex: none; padding: 0 8px; border-radius: 999px; font-size: 11px; line-height: 16px; background: var(--chip); color: var(--muted); }
+.histmenu .histopt .h-new.on { background: var(--pos-bg); color: var(--pos-ink); font-weight: 600; }
+.histmenu .histopt .h-acts { flex: none; display: flex; gap: 4px; }
+.histmenu .histopt .h-act { height: 26px; padding: 0 10px; font-size: 12px; background: transparent; border-color: var(--border-strong); }
+.histmenu .histopt.pinned { background: var(--chip); margin: 2px 0; }
 .histmenu .histempty { padding: 8px 12px; color: var(--muted); }
 .histmenu .histclear { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-row); cursor: pointer; color: var(--muted); }
 .histmenu .histclear:hover { background: var(--row-hover); color: var(--text); }
@@ -852,6 +865,23 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 .tip-where .tier { flex: none; min-width: 26px; padding: 0 6px; }
 .tip-flag { flex: none; }
 .tip-inst { min-width: 0; }
+
+/* PDF preview inside the detail card: the title and actions stay, the rest of the card makes room. */
+#detail[data-preview] { max-height: min(82vh, 760px); }
+#detail[data-preview] #detail-body > :not(.detail-head):not(.d-preview) { display: none; }
+.d-preview { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.d-preview[hidden] { display: none; }
+.dp-bar { display: flex; align-items: center; gap: 8px; }
+.dp-bar button { height: 26px; }
+.dp-bar .icon-btn { width: 26px; font-size: 16px; line-height: 1; }
+.dp-page { min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; color: var(--text); font-size: 12px; }
+.dp-spacer { flex: 1; }
+.dp-view { position: relative; height: min(44vh, 460px); min-height: 220px; overflow: auto; padding: 16px; border-radius: 16px; background: var(--chip); border: 1px solid var(--border); text-align: center; }
+.dp-canvas canvas { display: block; margin: 0 auto; background: #fff; border-radius: 6px; box-shadow: 0 1px 4px rgba(20,22,30,.18); }
+.dp-view[data-busy="true"] .dp-canvas { opacity: .5; }
+.dp-message { margin: 0 auto; max-width: 420px; padding: 24px 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.dp-message[hidden], #dp-retry[hidden] { display: none; }
+#dp-retry { height: 26px; }
 </style></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
 	<symbol id="ic-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" /><path d="M10.4 10.4 14 14" /></symbol>
@@ -1027,7 +1057,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 				<button aria-label="필터" data-tip="단어·저자·저널·기관·유형·연도·인용 수 등으로 결과를 포함하거나 제외합니다" id="filter-btn" type="button" class="icon-text filter-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="filter-pop" data-i18n-title="filterBtnTip" data-i18n-aria="filterBtn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-filter" /></svg><span data-i18n="filterBtn">필터</span><span id="filter-count" class="filter-count" hidden>0</span></button>
 				<span id="facet-chip" class="facet-chip" hidden><span id="facet-text"></span><button data-tip="전체 결과 보기" id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" aria-label="clear">×</button></span>
 				<span class="spacer"></span>
-				<button data-tip="PDF 첫 페이지를 별도 창에서 미리보기 (P)" id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf" /></svg><span data-i18n="previewAction">미리보기</span></button>
+				<button aria-pressed="false" data-tip="PDF를 상세 카드 안에서 미리보기 (P)" id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf" /></svg><span data-i18n="previewAction">미리보기</span></button>
 				<button disabled data-tip="선택 모두 해제" id="select-none" type="button" data-i18n-title="selNoneTip" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-close" /></svg><span data-i18n="selNone">선택 해제</span></button>
 				<span aria-label="보유" data-tip="이미 라이브러리에 있는 논문인지로 결과를 좁힙니다. 편수는 다른 필터를 적용한 결과 기준이며, 체크한 논문은 그대로 유지됩니다." id="lib-filter" class="lib-filter" role="group" data-i18n-aria="libFilterLabel" data-i18n-title="libFilterTip">
 						<button id="lib-all" type="button" data-lib="all" aria-pressed="true"><span class="lib-name">전체</span> <span class="lib-n">12</span></button>
@@ -1104,8 +1134,24 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 					<div class="detail-head">
 						<div id="d-title" class="d-title">Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs</div>
 						<div class="d-actions">
+							<button id="d-queue" type="button" class="icon-text" aria-pressed="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-book" /></svg><span id="d-queue-label">추가하고 읽기 대기</span></button>
 							<button data-tip="이 논문 추가" id="d-primary" type="button" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use id="d-primary-icon" href="#ic-plus" /></svg><span id="d-primary-label">이 논문 추가</span></button>
 							<button aria-label="더보기" data-tip="브라우저·PDF·도서관 경로 열기, DOI·인용 복사, 인용 수 다시 확인" id="d-more" type="button" class="icon-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="dMoreTip" data-i18n-aria="dMore"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-more" /></svg></button>
+						</div>
+					</div>
+					<div id="d-pdfview" class="d-preview" hidden>
+						<div class="dp-bar">
+							<button aria-label="이전 페이지" data-tip="이전 페이지" id="dp-prev" type="button" class="icon-btn" data-i18n-title="previewPrev" data-i18n-aria="previewPrev">‹</button>
+							<span id="dp-page" class="dp-page" role="status" aria-live="polite"></span>
+							<button aria-label="다음 페이지" data-tip="다음 페이지" id="dp-next" type="button" class="icon-btn" data-i18n-title="previewNext" data-i18n-aria="previewNext">›</button>
+							<span class="dp-spacer"></span>
+							<button id="dp-original" type="button" class="ghost" data-i18n="previewOriginal">원문 열기</button>
+							<button id="dp-close" type="button" class="ghost" data-i18n="previewClose">미리보기 닫기</button>
+						</div>
+						<div id="dp-view" class="dp-view">
+							<div id="dp-canvas" class="dp-canvas"></div>
+							<p id="dp-message" class="dp-message" role="status" aria-live="polite"></p>
+							<button id="dp-retry" type="button" data-i18n="previewRetry" hidden="hidden">다시 시도</button>
 						</div>
 					</div>
 					<div id="d-venue" class="d-venue"><span style="--j-ink-l:hsl(16 55% 37%);--j-fill-l:hsl(16 55% 94%);--j-edge-l:hsl(16 47% 84%);--j-ink-d:hsl(16 50% 70%);--j-fill-d:hsl(16 30% 22%);--j-edge-d:hsl(16 30% 32%)" class="d-venue-name venue-known">Nature Methods</span> · 2025</div>
@@ -1163,6 +1209,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 			<label class="cb"><input id="opt-skip" type="checkbox" checked> <span data-i18n="optSkip">중복 건너뛰기 (DOI)</span></label>
 			<label class="cb"><input id="opt-fillpdf" type="checkbox"> <span data-i18n="optFillPdf">보유 문헌에 PDF 없으면 채우기</span></label>
 			<label class="cb"><input id="opt-extra" type="checkbox" checked> <span data-i18n="optExtra">인용 수를 Extra에 기록</span></label>
+			<label data-tip="추가한 뒤 Style Custom의 읽기 대기에 넣습니다 (이미 라이브러리에 있는 논문도 포함)." class="cb" id="opt-queue-wrap"><input id="opt-queue" type="checkbox"> <span data-i18n="optQueue">읽기 대기에도 넣기</span></label>
 			<label data-tip="여기서 초록을 번역한 논문에는 &quot;번역된 초록 (언어)&quot; 하위 메모가 추가됩니다." class="cb" id="opt-trnote-wrap"><input id="opt-trnote" type="checkbox"> <span data-i18n="optTrNote">번역한 초록을 메모로 보관</span></label>
 		</span>
 	</div>

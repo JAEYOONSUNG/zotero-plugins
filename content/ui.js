@@ -373,6 +373,7 @@
 		$("opt-extra").checked = PREF("citationsInExtra") !== false;
 		$("opt-trnote").checked = PREF("keepTranslatedAbstract") === true;
 		tip($("opt-trnote-wrap"), t("optTrNoteTip"));
+		tip($("opt-queue-wrap"), t("optQueueTip"));
 
 		restoreLayout();
 		populateTargets();
@@ -449,7 +450,12 @@
 		$("d-tr-title")?.addEventListener("change", e => { PREF("translateTitle", Boolean(e.target.checked)); let r = detailRecord(); if (r) renderTranslate(r); });
 		// An in-page select menu closes when focus leaves it, so Tab does not leave it floating.
 		if (typeof document.addEventListener === "function") document.addEventListener("focusin", e => { if (openSel && !openSel.menu?.contains?.(e.target) && e.target !== selButton(openSel.sel)) closeSelMenu(); });
-		$("preview-btn").addEventListener("click", () => openPreview());
+		$("preview-btn").addEventListener("click", () => togglePreview());
+		$("dp-prev").addEventListener("click", () => previewViewer?.goTo(previewViewer.page - 1));
+		$("dp-next").addEventListener("click", () => previewViewer?.goTo(previewViewer.page + 1));
+		$("dp-close").addEventListener("click", closePreview);
+		$("dp-retry").addEventListener("click", () => previewViewer?.retry());
+		$("dp-original").addEventListener("click", () => { let u = state.preview.originalURL; if (u && ZotPoPPreview.safeURL(u)) Zotero.launchURL(u); });
 		$("import-btn").addEventListener("click", () => importRecords(state.records.filter(r => state.selected.has(r.key))));
 		$("target").addEventListener("change", () => { state.doiMap.clear(); refreshLibraryFlags(); });
 		$("source").addEventListener("change", sourceHint);
@@ -467,6 +473,7 @@
 		$("import-opts-toggle")?.addEventListener("click", () => { state.optsOpen = !state.optsOpen; syncImportBar(); });
 		// detail actions
 		// An owned paper's main action shows its library copy; any other adds it.
+		$("d-queue").addEventListener("click", () => queueDetail());
 		$("d-primary").addEventListener("click", () => { let r = detailRecord(); if (!r) return; if (r.inLibrary) showInLibrary(r); else importRecords([r]); });
 
 		// Pressing in the results hands keyboard focus to the table. Done on mousedown because
@@ -489,7 +496,7 @@
 		window.addEventListener("unload", saveLayout);
 		window.addEventListener("unload", () => state.searchController?.abort());
 		window.addEventListener("unload", cancelCacheRestore);
-		window.addEventListener("unload", () => previewManager?.close());
+		window.addEventListener("unload", () => { clearTimeout(previewTimer); previewViewer?.close(); });
 		window.addEventListener("resize", debounce(saveLayout, 400));
 		window.addEventListener("resize", debounce(fitTitleColumn, 100));
 	}
@@ -1395,7 +1402,7 @@
 		catch (e) { log("saving search history failed: " + e.message); }
 	}
 
-	async function showHistoryEntry(entry, active = () => true) {
+	async function showHistoryEntry(entry, active = () => true, baseline = null) {
 		if (entry.query?.mode === "author") return showAuthorHistory(entry, active);
 		let records = entry.records || [];
 		if (!records.length) return false;
@@ -1409,6 +1416,9 @@
 		state.sortKey = entry.query?.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
 		resetFilters();
+		state.priorKeys = baseline;
+		state.queryText = history?.describe(entry.query || {}) || "";
+		state.lastSig = entry.id || null;
 		displaySearchResults(records);
 		let captured = new Date(entry.savedAt).toLocaleString(t.locale || undefined);
 		setStatus(t("historyRestored", records.length));
@@ -1427,11 +1437,13 @@
 	}
 
 	// Bring a recent search back: its boxes, its source, and its results, from disk.
-	async function openHistoryEntry(id) {
+	async function openHistoryEntry(id, { pin = null, rerun = false } = {}) {
 		if (state.searching || state.importing || !history) return;
 		cancelCacheRestore();
 		let entry = await history.get(id);
-		if (!entry) { setStatus(t("historyMissing"), "err"); return; }
+		// A pin outlives its stored result: running it again needs only the pin itself.
+		if (!entry && pin && rerun) entry = { query: pin.query, source: pin.source, records: [], savedAt: pin.lastRun || pin.pinnedAt };
+		if (!entry) { setStatus(t(pin ? "pinGone" : "historyMissing"), "err"); return; }
 		if (state.searching || state.importing) return;
 		let stillMine = () => !state.searching && !state.importing;
 		let query = entry.query || {};
@@ -1461,7 +1473,42 @@
 		state.selected.clear();
 		state.focusKey = null;
 		state.detailKey = null;
-		await showHistoryEntry(entry, stillMine);
+		if (pin && rerun) {
+			// An explicit run: the rows are compared with what the pin has seen, and then count as seen.
+			state.pinLook = pin.id;
+			await runSearch();
+			return;
+		}
+		if (!pin) { await showHistoryEntry(entry, stillMine); return; }
+		let tooMany = entry.records.length > history.SEEN_CAP;
+		let baseline = tooMany ? null : await history.baseline(pin.id);
+		if (!await showHistoryEntry(entry, stillMine, baseline)) return;
+		restorePinFilters(pin);
+		if (tooMany) { setStatus(t("pinTooMany")); return; }
+		await history.markSeen(pin.id, entry.records);
+		setStatus(t("pinShown", state.records.filter(r => r.isNew).length));
+	}
+	function restorePinFilters(pin) {
+		let f = pin.filters;
+		if (!f) return;
+		try {
+			if (typeof f.text === "string") $("filter").value = f.text;
+			if (Array.isArray(f.rules)) state.rules = f.rules;
+			if (f.yearRange && Number.isFinite(f.yearRange.from) && Number.isFinite(f.yearRange.to)) state.yearRange = f.yearRange;
+			render();
+		}
+		catch (e) { log("restoring pin filters failed: " + e.message); }
+	}
+	function currentFilters() {
+		let text = $("filter")?.value || "", rules = Array.isArray(state.rules) ? JSON.parse(JSON.stringify(state.rules)) : [];
+		if (!text && !rules.length && !state.yearRange) return null;
+		return { text, rules, ...(state.yearRange ? { yearRange: { from: state.yearRange.from, to: state.yearRange.to } } : {}) };
+	}
+	async function pinEntry(id) {
+		// The filters on screen go with the pin only when the pinned search is the one on screen.
+		let filters = state.lastSig === id ? currentFilters() : null;
+		let pinned = await history.pin(id, { filters }).catch(e => { log("pinning failed: " + e.message); return null; });
+		if (pinned) setStatus(t("pinPinned"), "", { transient: true });
 	}
 
 	function closeHistoryMenu() {
@@ -1500,14 +1547,64 @@
 		if (e.query?.mode === "author" || !names.length) return "";
 		return names.map(key => String(sourceLabel(key) || key).replace(/\s*[(（][^)）]*[)）]\s*$/, "")).join(", ");
 	}
+	// A small text action inside a menu row; it must not also open the row.
+	function menuAction(text, title, run) {
+		let b = document.createElement("button");
+		b.type = "button"; b.className = "h-act"; b.textContent = text;
+		tip(b, title);
+		b.addEventListener("click", ev => { ev.stopPropagation(); run(); });
+		b.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") ev.stopPropagation(); });
+		return b;
+	}
+	// A pinned search: its words, its sources, what is new since it was last looked at, and two actions.
+	function pinRow(p) {
+		let d = document.createElement("div");
+		d.className = "histopt pinned";
+		d.setAttribute("role", "menuitem");
+		d.dataset.id = p.id;
+		let body = document.createElement("div"); body.className = "h-body";
+		let label = document.createElement("span"); label.className = "h-label";
+		label.textContent = historyLabel(p);
+		let meta = document.createElement("span"); meta.className = "h-meta";
+		meta.textContent = t("pinMeta", historySources(p) || sourceLabel(p.source), p.seen.length, t("historyWhen", daysSince(p.lastRun || p.pinnedAt)), Boolean(p.partial));
+		let n = Number(p.newCount);
+		let badge = document.createElement("span"); badge.className = "h-new" + (n > 0 ? " on" : "");
+		badge.textContent = n > 0 ? t("pinNew", n) : t("pinNoNew");
+		let line = document.createElement("span"); line.className = "h-line";
+		line.appendChild(meta); line.appendChild(badge);
+		body.appendChild(label); body.appendChild(line);
+		let acts = document.createElement("span"); acts.className = "h-acts";
+		acts.appendChild(menuAction(t("pinRerun"), t("pinRerunTip"), () => { closeHistoryMenu(); openHistoryEntry(p.id, { pin: p, rerun: true }); }));
+		acts.appendChild(menuAction(t("unpinAction"), t("unpinAction"), async () => { await history.unpin(p.id).catch(() => {}); await openHistoryMenu(); }));
+		d.appendChild(body); d.appendChild(acts);
+		tip(d, label.textContent);
+		d.tabIndex = 0;
+		d.addEventListener("click", ev => { ev.stopPropagation(); closeHistoryMenu(); openHistoryEntry(p.id, { pin: p }); });
+		d.addEventListener("keydown", ev => {
+			if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); d.click(); }
+			else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); (ev.key === "ArrowDown" ? d.nextElementSibling : d.previousElementSibling)?.focus?.(); }
+		});
+		return d;
+	}
 	async function openHistoryMenu() {
 		let menu = $("histmenu");
 		menu.textContent = "";
 		let entries = [];
 		try { entries = history ? await history.list() : []; }
 		catch (e) { log("listing history failed: " + e.message); }
-		let head = document.createElement("div"); head.className = "menu-head"; head.textContent = t("history"); menu.appendChild(head);
-		if (!entries.length) {
+		let pins = [];
+		try { pins = history && searchSurface !== "authors" ? await history.pins() : []; }
+		catch (e) { log("listing pins failed: " + e.message); }
+		let pinnedIds = new Set(pins.map(p => p.id));
+		let isAuthors = searchSurface === "authors";
+		if (pins.length) {
+			let ph = document.createElement("div"); ph.className = "menu-head"; ph.textContent = t("pinnedSearches") + " · " + pins.length; menu.appendChild(ph);
+			for (let p of pins) menu.appendChild(pinRow(p));
+			entries = entries.filter(e => !pinnedIds.has(e.id));
+			if (entries.length) menu.appendChild(document.createElement("hr"));
+		}
+		let head = document.createElement("div"); head.className = "menu-head"; head.textContent = t("history"); if (entries.length || !pins.length) menu.appendChild(head);
+		if (!entries.length && !pins.length) {
 			let d = document.createElement("div");
 			d.className = "histempty";
 			d.textContent = t("historyEmpty");
@@ -1527,8 +1624,15 @@
 			let when = t("historyWhen", daysSince(e.savedAt));
 			let provider = e.query?.mode === "author" ? (e.query.authorProvider === "orcid" ? "ORCID" : "Google Scholar") : historySources(e) || sourceLabel(e.source);
 			meta.textContent = e.kind === "profiles" ? t("authorHistoryProfiles", provider, e.count, when) : t("historyEntryMeta", provider, e.count, when, Boolean(e.partial));
-			d.appendChild(label);
-			d.appendChild(meta);
+			let body = document.createElement("div"); body.className = "h-body";
+			body.appendChild(label);
+			body.appendChild(meta);
+			d.appendChild(body);
+			if (e.query?.mode !== "author" && e.kind !== "profiles") {
+				let acts = document.createElement("span"); acts.className = "h-acts";
+				acts.appendChild(menuAction(t("pinAction"), t("pinActionTip"), async () => { await pinEntry(e.id); await openHistoryMenu(); }));
+				d.appendChild(acts);
+			}
 			tip(d, label.textContent + "\n" + new Date(e.savedAt).toLocaleString(t.locale || undefined));
 			d.tabIndex = 0;
 			d.addEventListener("click", ev => { ev.stopPropagation(); closeHistoryMenu(); openHistoryEntry(e.id); });
@@ -1538,9 +1642,10 @@
 			});
 			menu.appendChild(d);
 		}
-		if (entries.length) {
+		if (entries.length || pins.length) {
 			menu.appendChild(document.createElement("hr"));
 			let clear = document.createElement("div");
+			if (pins.length) tip(clear, t("historyClearKeepsPins"));
 			clear.className = "histclear";
 			clear.setAttribute("role", "menuitem");
 			clear.appendChild(iconNode("ic-clear")); clear.appendChild(document.createTextNode(t("historyClear")));
@@ -1788,17 +1893,38 @@
 	   at the right edge), and to less on a wide screen. Unless the reader has sized the title themselves,
 	   the title takes what the shown columns leave -- never below TITLE_MIN, so a narrow pane rolls sideways
 	   rather than squeezing the title to a few letters. */
-	const TITLE_MIN = 220;
+	const TITLE_MIN = 220, TITLE_WANT = 340;
+	// Columns that give width back to the title, down to these floors, when it would otherwise be cut short.
+	const SQUEEZE = { authorString: 100, affiliation: 100, venue: 110 };
+	/* The title has a default width like every column, so "has the reader sized it" is whether it still
+	   equals that default: it used to be always truthy, and the fit below never ran -- titles stayed at 200px
+	   with the leftover space unused. Titles are what tells results apart, so they come first: the title
+	   takes the leftover, and if that is less than TITLE_WANT the authors, institution and journal columns
+	   (when the reader has not sized them) narrow toward their floors to make room. */
 	function fitTitleColumn() {
 		let wrap = document.querySelector(".table-wrap"), titleCol = document.querySelector('#cols col[data-k="title"]');
-		if (!wrap || !titleCol || state.colWidths.title || !wrap.clientWidth) return;
-		let others = 0;
+		if (!wrap || !titleCol || state.colWidths.title !== DEFAULT_COLS.title || !wrap.clientWidth) return;
+		let others = 0, give = [];
 		for (let th of document.querySelectorAll("#results-head > th")) {
 			if (th.dataset.k === "title" || getComputedStyle(th).display === "none") continue;
 			let col = document.querySelector(`#cols col[data-k="${th.dataset.k}"]`);
-			others += parseFloat(col?.style.width) || th.offsetWidth || 0;
+			let width = parseFloat(col?.style.width) || th.offsetWidth || 0;
+			others += width;
+			let floor = SQUEEZE[th.dataset.k];
+			if (col && floor && state.colWidths[th.dataset.k] === DEFAULT_COLS[th.dataset.k] && width > floor) give.push({ col, width, floor });
 		}
-		titleCol.style.width = Math.max(TITLE_MIN, Math.floor(wrap.clientWidth - others - 2)) + "px";
+		let room = wrap.clientWidth - others - 2;
+		if (room < TITLE_WANT) {
+			let need = TITLE_WANT - room;
+			for (let g of give) {
+				if (need <= 0) break;
+				let take = Math.min(need, g.width - g.floor);
+				g.col.style.width = (g.width - take) + "px";
+				need -= take; others -= take;
+			}
+			room = wrap.clientWidth - others - 2;
+		}
+		titleCol.style.width = Math.max(TITLE_MIN, Math.floor(room)) + "px";
 	}
 
 	// Which columns show is one attribute on the table; search.css hides the rest, in the
@@ -2109,6 +2235,11 @@
 		savePrefs();
 		let sourceKey = $("source").value;
 		let label = sourceLabel(sourceKey);
+		// A pinned search is compared with what its pin has seen, however it was started; only a run
+		// begun from the pin itself (look) counts as seen afterwards.
+		let pinLook = state.pinLook; state.pinLook = null;
+		state.lastSig = history ? history.signature(sourceKey, q) : null;
+		state.queryText = history ? history.describe(q) : "";
 		state.searching = true;
 		state.cancelled = false;
 		let searchDone; state.searchDone = new Promise(res => { searchDone = res; });
@@ -2136,6 +2267,7 @@
 		// The last run of this same search, kept only as keys, to mark what is new this time.
 		// Read while the search runs; the rows are marked when the final list is drawn.
 		let prior = Promise.resolve(history?.previousKeys(sourceKey, q)).catch(() => null);
+		let pinFound = Promise.resolve(history?.pinFor(sourceKey, q)).catch(() => null);
 		let ctx = {
 			email: PREF("email") || "",
 			s2ApiKey: PREF("s2ApiKey") || "",
@@ -2166,7 +2298,9 @@
 			// Decided before the first draw: the empty-table message depends on it.
 			state.searched = true;
 			state.lastPartial = Boolean(ctx.errors?.length || recs.partial || recs.popProvenance?.complete === false);
-			state.priorKeys = await prior || null;
+			let pin = await pinFound;
+			if (!pin) pinLook = null;
+			state.priorKeys = pin ? (recs.length > history.SEEN_CAP ? null : await history.baseline(pin.id)) : await prior || null;
 			displaySearchResults(recs);
 			await refreshLibraryFlags();
 			if (!active()) throw abortError();
@@ -2176,7 +2310,13 @@
 			   relevance of fifteen thousand, with nothing to say so. */
 			let capped = Object.values(ctx.sourceStatus || {}).find(s => s && s.reason === "result-limit" && Number(s.total) > recs.length);
 			setStatus(partial ? t("incompleteResults", label, recs.length) : t("resultCount", label, recs.length, false, capped ? Number(capped.total) : 0));
-			rememberSearch(sourceKey, q, recs, partial);
+			let kept = rememberSearch(sourceKey, q, recs, partial);
+				if (pin && pinLook) {
+					// Looked at now. Zero results, a partial run or an oversized one never reset what was seen (markSeen only adds).
+					await kept;
+					await history.markSeen(pin.id, recs);
+					if (recs.length > history.SEEN_CAP) setStatus(t("pinTooMany"));
+				}
 			if (q.engine === "pop") showBanner(t("popModeNotice") + (recs.popProvenance?.cached ? " " + t("popCachedNotice") : ""));
 			if (ctx.errors?.length) {
 				// A bare "HTTP 429" from OpenAlex is its exhausted daily budget, which the user
@@ -3324,10 +3464,11 @@
 	function syncImportBar() {
 		let toggle = $("import-opts-toggle"), box = $("import-opts"); if (!toggle || !box) return;
 		let open = Boolean(state.optsOpen);
+		$("opt-queue-wrap").hidden = !queueApi();
 		box.hidden = !open;
 		toggle.hidden = false;
 		toggle.setAttribute("aria-expanded", String(open));
-		let parts = [["opt-pdf", "optPdfShort"], ["opt-skip", "optSkipShort"], ["opt-fillpdf", "optFillPdfShort"], ["opt-extra", "optExtraShort"], ["opt-trnote", "optTrNoteShort"]].filter(([id]) => $(id).checked).map(([, key]) => t(key));
+		let parts = [["opt-pdf", "optPdfShort"], ["opt-skip", "optSkipShort"], ["opt-fillpdf", "optFillPdfShort"], ["opt-extra", "optExtraShort"], ["opt-trnote", "optTrNoteShort"], ["opt-queue", "optQueueShort"]].filter(([id]) => $(id).checked && (id !== "opt-queue" || queueApi())).map(([, key]) => t(key));
 		toggle.textContent = open ? t("optsHide") : t("optsSummary", parts.length ? parts : [t("optsSummaryNone")]);
 	}
 
@@ -3361,7 +3502,6 @@
 		$("select-none").disabled = n === 0;
 		let noRows = state.records.length === 0;
 		for (let id of ["export-btn", "view-btn", "lib-all", "lib-new", "lib-owned"]) { let b = $(id); if (b) b.disabled = noRows; }
-		previewManager?.update(previewRecord());
 	}
 
 	function selectVisible(on) {
@@ -3842,22 +3982,77 @@
 	}
 
 	// ------------------------------------------------------------ detail pane
-	let previewManager;
+	/* The PDF preview lives inside the detail card: no window is ever opened for it. It follows the
+	   open paper, a quick run over the rows waits a moment before fetching anything, and the viewer
+	   drops whatever the previous row was still doing. */
+	const PREVIEW_FOLLOW_DELAY = 150;
+	state.preview = { on: false, key: null };
+	let previewViewer = null, previewTimer = null;
 	function previewRecord() {
 		return state.records.find(r => r.key === state.focusKey)
 			|| state.records.find(r => state.selected.has(r.key)) || detailRecord();
 	}
+	function viewerOfPreview() {
+		if (!previewViewer) previewViewer = ZotPoPPreview.createViewer({
+			fetchPDF: (url, signal) => ZotPoPPreview.fetchPDF(url, signal, Zotero),
+			getLibrary: () => import("resource://zotero/reader/pdf/build/pdf.mjs"),
+			createCanvas: () => document.createElement("canvas"),
+			width: () => ($("dp-view").clientWidth || 640) - 32,
+			pixelRatio: () => window.devicePixelRatio || 1,
+			onState: paintPreview
+		});
+		return previewViewer;
+	}
+	function paintPreview(st) {
+		let turning = st.status === "turning", ready = st.status === "ready";
+		$("dp-page").textContent = t("previewPageOf", st.page || 1, st.pageCount || 0);
+		$("dp-prev").disabled = !(ready || turning) || st.page <= 1;
+		$("dp-next").disabled = !(ready || turning) || st.page >= st.pageCount;
+		$("dp-original").disabled = !st.originalURL;
+		state.preview.originalURL = st.originalURL || null;
+		$("dp-retry").hidden = st.status !== "error";
+		let host = $("dp-canvas");
+		if (ready && st.canvas) {
+			st.canvas.setAttribute("role", "img");
+			st.canvas.setAttribute("aria-label", `${t("previewPageOf", st.page, st.pageCount)} — ${st.title}`);
+			host.textContent = "";
+			host.appendChild(st.canvas);
+			$("dp-view").scrollTop = 0;
+		}
+		else if (!turning) host.textContent = "";
+		$("dp-view").setAttribute("data-busy", String(st.status === "loading" || turning));
+		$("dp-message").hidden = ready || turning;
+		if (!ready && !turning) {
+			let key = st.status === "loading" ? "previewLoading" : st.status === "unavailable" ? "previewUnavailable"
+				: st.error?.name === "PreviewSizeError" ? "previewTooLarge" : "previewFailed";
+			$("dp-message").textContent = t(key);
+		}
+	}
+	// Brings the panel in line with the state: shown for the open paper, fetched once per paper.
+	function syncPreview(follow = false) {
+		let r = detailRecord(), on = Boolean(state.preview.on && r);
+		$("d-pdfview").hidden = !on;
+		if (on) $("detail").setAttribute("data-preview", ""); else $("detail").removeAttribute("data-preview");
+		$("preview-btn").setAttribute("aria-pressed", String(Boolean(state.preview.on)));
+		clearTimeout(previewTimer);
+		if (!on) { if (state.preview.key != null) previewViewer?.close(); state.preview.key = null; return; }
+		if (state.preview.key === r.key) return;
+		previewViewer?.close();
+		state.preview.key = r.key;
+		paintPreview({ status: "loading", page: 1, pageCount: 0, title: r.title, originalURL: ZotPoPPreview.originalURL(r) });
+		let start = () => { if (state.preview.on && state.preview.key === r.key) viewerOfPreview().showRecord(r); };
+		if (follow) previewTimer = setTimeout(start, PREVIEW_FOLLOW_DELAY); else start();
+	}
 	function openPreview(record = previewRecord()) {
 		if (!record) return;
-		if (!previewManager) previewManager = ZotPoPPreview.createManager(payload => window.openDialog(
-			"chrome://zotpop/content/preview.xhtml", "zotpop-preview",
-			"chrome,centerscreen,resizable=yes,dialog=no,width=860,height=960", payload
-		));
-		// t.locale is the already-resolved language. The old fallback passed the
-		// raw preference on, which would hand "auto" to the preview as if that
-		// were a language; English is the safe answer when there is no locale.
-		return previewManager.open(record, { Zotero, language: t.locale || "en" });
+		state.preview.on = true;
+		state.detailKey = record.key;
+		syncPreview();
+		paintRows(); renderDetail();
+		$("detail").scrollIntoView?.({ block: "nearest" });
 	}
+	function closePreview() { state.preview.on = false; syncPreview(); }
+	function togglePreview() { if (state.preview.on) closePreview(); else openPreview(); }
 	function detailRecord() { return state.records.find(r => r.key === state.detailKey) || null; }
 
 	function renderDetail() {
@@ -3868,6 +4063,7 @@
 		// the user set stays on the element and returns with the next choice.
 		if (r) $("detail").removeAttribute("data-empty"); else $("detail").setAttribute("data-empty", "");
 		syncDetailSplitter();
+		syncPreview(true);
 		if (!r) return;
 		$("d-title").textContent = "";
 		if (r.titleMarkup) {
@@ -3985,6 +4181,7 @@
 		renderSignals(r);
 
 		// The main action: an owned paper shows its library copy, any other is added.
+		syncQueueButton(r);
 		let primary = $("d-primary"), owned = Boolean(r.inLibrary);
 		$("d-primary-label").textContent = t(owned ? "dShowLibrary" : "dAdd");
 		$("d-primary-icon").setAttribute("href", owned ? "#ic-book" : "#ic-plus");
@@ -4265,6 +4462,7 @@
 			}
 			if (document.activeElement === $("filter") && ($("filter").value || state.facet || state.yearRange)) { clearFilter(); return; }
 			if (document.activeElement === $("filter")) { $("table-wrap").focus(); return; }
+			if (state.preview.on) { closePreview(); return; }
 			if (state.detailKey) { state.detailKey = null; paintRows(); renderDetail(); return; }
 			return;
 		}
@@ -4286,7 +4484,7 @@
 			else copyText(citationText(r), t("copiedCite"));
 			return;
 		}
-		if (!mod && !e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); openPreview(); return; }
+		if (!mod && !e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); togglePreview(); return; }
 		if (!state.visible.length) return;
 		let idx = state.visible.findIndex(r => r.key === state.focusKey);
 		if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "PageDown" || e.key === "PageUp") {
@@ -4424,7 +4622,48 @@
 		}
 	}
 
-	async function importRecords(recs) {
+	/* Style Custom's reading queue, when that plugin offers it; every control for it stays hidden otherwise. */
+	const queueApi = () => { let sc = Zotero.StyleCustom; return sc && typeof sc.queueForReading === "function" ? sc : null; };
+	function isQueuedItem(item) {
+		try { let sc = Zotero.StyleCustom; return Boolean(item && typeof sc?.isQueued === "function" && sc.isQueued(item)); }
+		catch (e) { return false; }
+	}
+	function libraryItemOf(r) {
+		try { return r?.libraryItemID ? Zotero.Items.get(r.libraryItemID) || null : null; } catch (e) { return null; }
+	}
+	function queueQueryText() {
+		try { return state.queryText || history?.describe(readQuery()) || ""; } catch (e) { return state.queryText || ""; }
+	}
+	async function queueItems(items) {
+		let sc = queueApi();
+		if (!sc || !items.length) return 0;
+		try {
+			await sc.queueForReading(items, { reason: t("queueReason", queueQueryText()), source: "zotpop" });
+			return items.length;
+		}
+		catch (e) { log("queueForReading failed: " + (e.message || e)); return -1; }
+	}
+	function syncQueueButton(r) {
+		let btn = $("d-queue"), api = queueApi();
+		btn.hidden = !api;
+		if (!api) return;
+		let item = r.inLibrary ? libraryItemOf(r) : null, queued = Boolean(item && isQueuedItem(item));
+		$("d-queue-label").textContent = t(queued ? "dQueued" : r.inLibrary ? "dQueue" : "dAddQueue");
+		btn.setAttribute("aria-pressed", String(queued));
+		btn.disabled = queued || (!r.inLibrary && (state.importing || state.searching)) || (r.inLibrary && !item);
+	}
+	async function queueDetail() {
+		let r = detailRecord();
+		if (!r || !queueApi()) return;
+		if (!r.inLibrary) { await importRecords([r], { queue: true }); return; }
+		let item = libraryItemOf(r);
+		if (!item || isQueuedItem(item)) return;
+		let n = await queueItems([item]);
+		setStatus(n > 0 ? t("queuedN", n) : t("queueFailed"), n > 0 ? "" : "err", { transient: n > 0 });
+		if (detailRecord() === r) syncQueueButton(r);
+	}
+
+	async function importRecords(recs, { queue } = {}) {
 		if (state.importing || state.searching || !recs.length) return;
 		let { libraryID, collections } = currentTarget();
 		let opts = {
@@ -4435,6 +4674,7 @@
 			citationsInExtra: $("opt-extra").checked,
 			http, email: PREF("email") || "", proxyPrefix: PREF("proxyPrefix") || "", log
 		};
+		let wantQueue = Boolean(queueApi() && (queue === undefined ? $("opt-queue").checked : queue)), toQueue = [];
 		state.importing = true;
 		state.cancelled = false;
 		$("import-btn").disabled = true;
@@ -4458,6 +4698,7 @@
 			let res = await ZotPoPImporter.importRecord(r, translatedNote ? Object.assign({}, opts, { translatedNote }) : opts);
 			if (res.status === "added") {
 				added++;
+				if (res.item) toQueue.push(res.item);
 				r.inLibrary = true;
 				r.libraryItemID = res.item?.id;
 				if (r.doi) state.doiMap.set(r.doi, res.item.id);
@@ -4476,6 +4717,7 @@
 			}
 			else if (res.status === "exists") {
 				exists++;
+				if (res.item) toQueue.push(res.item);
 				r.inLibrary = true;
 				// The tick then leads to the copy found, whether or not it has a DOI.
 				r.libraryItemID = res.item?.id;
@@ -4500,7 +4742,9 @@
 		setProgress(null);
 		// Redrawn, not just repainted: an added paper leaves "not owned", and the counts say so.
 		render();
-		setStatus(t("importDone", added, pdfs, exists, failed, state.cancelled));
+		let queued = wantQueue ? await queueItems(toQueue.filter(item => !isQueuedItem(item))) : 0;
+		setStatus(t("importDone", added, pdfs, exists, failed, state.cancelled) + (queued > 0 ? " · " + t("queuedN", queued) : ""));
+		if (queued < 0) showBanner(t("queueFailed"), null, { warn: true });
 		if (failed) showBanner(pdfMissedCount ? t("importFailuresPdf", failed, pdfMissedCount) : t("importFailures", failed), { label: t("importRetry", failed), run: () => { hideBanner(); importRecords(failedRecs); } }, { warn: true });
 		else if (pdfMissedCount) showBanner(t("importPdfMissed", pdfMissedCount), null, { warn: true });
 		else if (proxyLoginNeeded) showBanner(t("loginNeeded"), null, { warn: true });

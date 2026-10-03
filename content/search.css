@@ -250,7 +250,10 @@ input[type=checkbox] { accent-color: var(--pill); }
 .author-profile.pickable { cursor: pointer; }
 .author-profile.pickable:hover:not(.selected) { background: var(--row-hover); }
 .author-profile.open { flex-basis: 100%; align-items: flex-start; }
-.author-profiles:has(.author-profile.open) { max-height: 300px; }
+/* An opened profile shows its whole summary (employment, education, works) rather than a 300px slice: the list
+   grows with it, up to most of the window, and only then scrolls. Only a long expanded bio scrolls by itself. */
+.author-profiles:has(.author-profile.open) { max-height: min(64vh, 620px); }
+.author-bio:not(.clamped) { max-height: 220px; overflow: auto; }
 .author-profile.open .author-profile-info { flex: 1 1 auto; }
 .author-profile-stats { margin: 0; }
 .author-sum-toggle, .author-bio-toggle { align-self: flex-start; justify-self: start; padding: 0 8px; margin-left: -8px; }
@@ -410,6 +413,9 @@ input[type=checkbox] { accent-color: var(--pill); }
 #results-table td.title { font-size: 13px; font-weight: 500; line-height: 20px; }
 /* the title and, under it, who did the work and where: two lines when any row has the second one */
 #results-table td.title .t-main, #results-table td.title .t-aff { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A title may take two lines where the row is two lines tall anyway and has no second line of its own */
+#results-table[data-aff] td.title .t-main:only-child { display: flex; align-items: flex-start; white-space: normal; line-height: 20px; }
+#results-table[data-aff] td.title .t-main:only-child > :last-child { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-width: 0; overflow-wrap: anywhere; }
 #results-table td.title .t-aff { font-size: 11px; font-weight: 400; line-height: 16px; color: var(--muted); }
 #results-table td.title .t-aff .aff-role { font-weight: 600; }
 #results-table td.doi a.doi-link { color: inherit; text-decoration: none; }
@@ -690,10 +696,17 @@ label.cb { display: flex; align-items: center; gap: 8px; height: 32px; padding: 
 .tbmenu .selopt[aria-disabled="true"] { opacity: .5; }
 .menu-head { padding: 8px 12px 4px; color: var(--muted); font-size: 11px; font-weight: 600; line-height: 16px; }
 .histmenu { min-width: 344px; max-width: 560px; }
-.histmenu .histopt { display: flex; flex-direction: column; gap: 0; padding: 8px 12px; border-radius: var(--r-row); cursor: pointer; }
+.histmenu .histopt { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-row); cursor: pointer; }
 .histmenu .histopt:hover, .histmenu .histopt.hot { background: var(--row-sel); color: var(--text); }
 .histmenu .histopt .h-label { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .histmenu .histopt .h-meta { font-size: 11px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.histmenu .histopt .h-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.histmenu .histopt .h-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.histmenu .histopt .h-new { flex: none; padding: 0 8px; border-radius: 999px; font-size: 11px; line-height: 16px; background: var(--chip); color: var(--muted); }
+.histmenu .histopt .h-new.on { background: var(--pos-bg); color: var(--pos-ink); font-weight: 600; }
+.histmenu .histopt .h-acts { flex: none; display: flex; gap: 4px; }
+.histmenu .histopt .h-act { height: 26px; padding: 0 10px; font-size: 12px; background: transparent; border-color: var(--border-strong); }
+.histmenu .histopt.pinned { background: var(--chip); margin: 2px 0; }
 .histmenu .histempty { padding: 8px 12px; color: var(--muted); }
 .histmenu .histclear { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-row); cursor: pointer; color: var(--muted); }
 .histmenu .histclear:hover { background: var(--row-hover); color: var(--text); }
@@ -852,3 +865,20 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 .tip-where .tier { flex: none; min-width: 26px; padding: 0 6px; }
 .tip-flag { flex: none; }
 .tip-inst { min-width: 0; }
+
+/* PDF preview inside the detail card: the title and actions stay, the rest of the card makes room. */
+#detail[data-preview] { max-height: min(82vh, 760px); }
+#detail[data-preview] #detail-body > :not(.detail-head):not(.d-preview) { display: none; }
+.d-preview { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.d-preview[hidden] { display: none; }
+.dp-bar { display: flex; align-items: center; gap: 8px; }
+.dp-bar button { height: 26px; }
+.dp-bar .icon-btn { width: 26px; font-size: 16px; line-height: 1; }
+.dp-page { min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; color: var(--text); font-size: 12px; }
+.dp-spacer { flex: 1; }
+.dp-view { position: relative; height: min(44vh, 460px); min-height: 220px; overflow: auto; padding: 16px; border-radius: 16px; background: var(--chip); border: 1px solid var(--border); text-align: center; }
+.dp-canvas canvas { display: block; margin: 0 auto; background: #fff; border-radius: 6px; box-shadow: 0 1px 4px rgba(20,22,30,.18); }
+.dp-view[data-busy="true"] .dp-canvas { opacity: .5; }
+.dp-message { margin: 0 auto; max-width: 420px; padding: 24px 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.dp-message[hidden], #dp-retry[hidden] { display: none; }
+#dp-retry { height: 26px; }

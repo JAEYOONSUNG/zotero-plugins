@@ -118,17 +118,39 @@ var ZotPoPPreview = (function () {
 		finally { signal.removeEventListener("abort", onAbort); }
 	}
 
+	// Sizes one page to the available width and draws it on a canvas. Shared by the one-page
+	// renderer and the in-window viewer; the caller owns cancelling the returned task.
+	function startPage(page, { createCanvas, width, pixelRatio }) {
+		let base = page.getViewport({ scale: 1 });
+		if (!Number.isFinite(base.width) || !Number.isFinite(base.height) || base.width <= 0 || base.height <= 0) throw new Error("Invalid PDF page dimensions");
+		let cssWidth = Math.max(280, Math.min(1400, width()));
+		let ratio = Math.min(2, Math.max(1, pixelRatio()));
+		let scale = Math.min(cssWidth / base.width * ratio, 8000 / base.height, Math.sqrt(16e6 / (base.width * base.height)));
+		let viewport = page.getViewport({ scale });
+		let canvas = createCanvas();
+		canvas.width = Math.ceil(viewport.width);
+		canvas.height = Math.ceil(viewport.height);
+		canvas.style.width = `${Math.min(cssWidth, viewport.width / ratio)}px`;
+		canvas.style.maxWidth = "100%";
+		canvas.style.height = "auto";
+		return { canvas, task: page.render({ canvasContext: canvas.getContext("2d"), viewport }) };
+	}
+
+	function openDocument(library, bytes) {
+		library.GlobalWorkerOptions.workerSrc = PDF_ROOT + "build/pdf.worker.mjs";
+		return library.getDocument({
+			data: bytes, isEvalSupported: false, enableXfa: false,
+			cMapUrl: PDF_ROOT + "web/cmaps/", cMapPacked: true,
+			standardFontDataUrl: PDF_ROOT + "web/standard_fonts/",
+			wasmUrl: PDF_ROOT + "web/wasm/"
+		});
+	}
+
 	function createRenderer({ getLibrary, createCanvas, width, pixelRatio }) {
 		return async function renderPDF(bytes, signal) {
 			let library = await getLibrary();
 			if (signal.aborted) throw aborted();
-			library.GlobalWorkerOptions.workerSrc = PDF_ROOT + "build/pdf.worker.mjs";
-			let loadingTask = library.getDocument({
-				data: bytes, isEvalSupported: false, enableXfa: false,
-				cMapUrl: PDF_ROOT + "web/cmaps/", cMapPacked: true,
-				standardFontDataUrl: PDF_ROOT + "web/standard_fonts/",
-				wasmUrl: PDF_ROOT + "web/wasm/"
-			});
+			let loadingTask = openDocument(library, bytes);
 			let renderTask, destroyed;
 			let destroy = () => destroyed || (destroyed = loadingTask.destroy());
 			let onAbort = () => { renderTask?.cancel(); destroy().catch(() => {}); };
@@ -139,22 +161,11 @@ var ZotPoPPreview = (function () {
 				if (signal.aborted) throw aborted();
 				let page = await pdf.getPage(1);
 				if (signal.aborted) throw aborted();
-				let base = page.getViewport({ scale: 1 });
-				if (!Number.isFinite(base.width) || !Number.isFinite(base.height) || base.width <= 0 || base.height <= 0) throw new Error("Invalid PDF page dimensions");
-				let cssWidth = Math.max(280, Math.min(1400, width()));
-				let ratio = Math.min(2, Math.max(1, pixelRatio()));
-				let scale = Math.min(cssWidth / base.width * ratio, 8000 / base.height, Math.sqrt(16e6 / (base.width * base.height)));
-				let viewport = page.getViewport({ scale });
-				let canvas = createCanvas();
-				canvas.width = Math.ceil(viewport.width);
-				canvas.height = Math.ceil(viewport.height);
-				canvas.style.width = `${Math.min(cssWidth, viewport.width / ratio)}px`;
-				canvas.style.maxWidth = "100%";
-				canvas.style.height = "auto";
-				renderTask = page.render({ canvasContext: canvas.getContext("2d"), viewport });
+				let started = startPage(page, { createCanvas, width, pixelRatio });
+				renderTask = started.task;
 				await renderTask.promise;
 				if (signal.aborted) throw aborted();
-				return { canvas, pageCount: pdf.numPages };
+				return { canvas: started.canvas, pageCount: pdf.numPages };
 			}
 			catch (e) { if (signal.aborted) throw aborted(); throw e; }
 			finally {
@@ -162,6 +173,84 @@ var ZotPoPPreview = (function () {
 				await destroy();
 			}
 		};
+	}
+
+	/* The preview inside the search window: one PDF is fetched and kept open while its pages are
+	   turned, and a newer request (another row, another page) cancels the older one, so a slow
+	   render never lands on the wrong paper or page. No window is created anywhere. */
+	function createViewer({ fetchPDF, getLibrary, createCanvas, width, pixelRatio, onState }) {
+		let version = 0, controller = null, session = null, record = null, info = null, page = 1, pageCount = 0, pageToken = 0, pageTask = null;
+		function release() {
+			pageTask?.cancel?.(); pageTask = null;
+			let old = session; session = null;
+			old?.destroy?.().catch?.(() => {});
+		}
+		async function draw(n, signal, active) {
+			let token = ++pageToken;
+			pageTask?.cancel?.(); pageTask = null;
+			let pdfPage = await session.pdf.getPage(n);
+			if (!active() || token !== pageToken) return;
+			let started = startPage(pdfPage, { createCanvas, width, pixelRatio });
+			pageTask = started.task;
+			try { await started.task.promise; }
+			catch (e) { if (!active() || token !== pageToken) return; throw e; }
+			if (!active() || token !== pageToken) return;
+			pageTask = null;
+			page = n;
+			onState({ ...info, status: "ready", canvas: started.canvas, page, pageCount, url: session.url });
+		}
+		let api = {
+			get page() { return page; },
+			get pageCount() { return pageCount; },
+			async showRecord(next) {
+				controller?.abort(); release();
+				controller = new AbortController();
+				let signal = controller.signal, current = ++version;
+				let active = () => current === version && !signal.aborted;
+				record = next; page = 1; pageCount = 0; ++pageToken;
+				info = { title: next.title || "", originalURL: originalURL(next) };
+				let urls = candidates(next);
+				onState({ ...info, status: urls.length ? "loading" : "unavailable", page: 1, pageCount: 0 });
+				let lastError;
+				for (let url of urls) {
+					let task;
+					try {
+						let bytes = pdfBytes(await fetchPDF(url, signal));
+						if (!active()) return;
+						let library = await getLibrary();
+						if (!active()) return;
+						task = openDocument(library, bytes);
+						let pdf = await task.promise;
+						if (!active()) { task.destroy().catch(() => {}); return; }
+						session = { pdf, url, destroy: () => task.destroy() };
+						pageCount = pdf.numPages;
+						await draw(1, signal, active);
+						return;
+					}
+					catch (e) {
+						if (!active() || e.name === "AbortError") { task?.destroy?.().catch?.(() => {}); return; }
+						release();
+						lastError = e.name === "NotPDFError" || e.name === "PreviewSizeError" ? e : Object.assign(e, { name: e.name || "Error" });
+					}
+				}
+				if (urls.length && active()) onState({ ...info, status: lastError?.name === "NotPDFError" ? "unavailable" : "error", error: lastError, page: 1, pageCount: 0 });
+			},
+			async goTo(n) {
+				if (!session) return false;
+				let target = Math.max(1, Math.min(pageCount, Math.round(Number(n)) || 1));
+				if (target === page && !pageTask) return true;
+				let current = version, signal = controller.signal;
+				let active = () => current === version && !signal.aborted;
+				// The number moves at once; the page follows when drawn.
+				onState({ ...info, status: "turning", page: target, pageCount, canvas: null, url: session.url });
+				try { await draw(target, signal, active); }
+				catch (e) { if (active()) onState({ ...info, status: "error", error: e, page, pageCount }); }
+				return true;
+			},
+			retry() { return record ? api.showRecord(record) : undefined; },
+			close() { version++; ++pageToken; controller?.abort(); release(); record = null; }
+		};
+		return api;
 	}
 
 	function initWindow(win) {
@@ -210,7 +299,7 @@ var ZotPoPPreview = (function () {
 		if (currentRecord) controller.showRecord(currentRecord);
 	}
 
-	return { safeURL, candidates, originalURL, pdfBytes, createManager, createController, createRenderer, fetchPDF, initWindow };
+	return { safeURL, candidates, originalURL, pdfBytes, createManager, createController, createRenderer, createViewer, fetchPDF, initWindow };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPPreview;

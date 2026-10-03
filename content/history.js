@@ -92,9 +92,12 @@ var ZotPoPHistory = (function () {
 		let doi = String(record.doi || "").trim().toLowerCase().replace(/^https?:\/\/(?:dx\.)?doi\.org\//, "");
 		return doi ? "d:" + doi : record.key ? "k:" + record.key : "";
 	}
-	function keysOf(records) {
-		return [...new Set(records.map(recordKey).filter(Boolean))].slice(0, KEY_CAP);
+	function keysOf(records, cap = KEY_CAP) {
+		return [...new Set(records.map(recordKey).filter(Boolean))].slice(0, cap);
 	}
+	// A pinned search remembers what it has shown, so it keeps far more than an ordinary entry.
+	// Past this many results the comparison is not trustworthy and nothing is marked.
+	const SEEN_CAP = 3000;
 
 	function create({ io, dir, join, max = 30, maxBytes = 12 * 1024 * 1024, now = () => new Date() } = {}) {
 		if (!io) throw new TypeError("History storage requires an io adapter");
@@ -102,6 +105,23 @@ var ZotPoPHistory = (function () {
 		let ready = null;
 		let index = null;
 		let writes = Promise.resolve();
+		let pinList = null;
+		const PINS = "pins.json";
+		async function loadPins() {
+			if (pinList) return pinList;
+			try {
+				let parsed = JSON.parse(await io.readText(path(PINS)));
+				pinList = Array.isArray(parsed?.pins) ? parsed.pins.filter(p => p && typeof p.id === "string" && p.query && Array.isArray(p.seen)) : [];
+			}
+			catch (_) { pinList = []; }
+			return pinList;
+		}
+		async function writePins() { await io.writeText(path(PINS), JSON.stringify({ version: 1, pins: pinList })); }
+		let newAmong = (records, seen) => {
+			if (records.length > SEEN_CAP) return null;
+			let known = new Set(seen);
+			return keysOf(records, SEEN_CAP).filter(k => !known.has(k)).length;
+		};
 
 		async function load() {
 			if (index) return index;
@@ -147,15 +167,22 @@ var ZotPoPHistory = (function () {
 			if (body.length > maxBytes) return null;
 			return serial(async () => {
 				await load();
+				await loadPins();
 				await io.writeText(path(id + ".json"), body);
 				index = index.filter(e => e.id !== id);
 				let profileOnly = query?.mode === "author" && query.authorAction === "profiles";
 				index.push({ id, source, label: label || describe(query), query, count: profileOnly ? profiles.length : records.length,
 					...(profileOnly ? { kind: "profiles" } : {}), savedAt, partial });
 				index.sort((a, b) => String(a.savedAt).localeCompare(String(b.savedAt)));
-				let dropped = index.splice(0, Math.max(0, index.length - max));
+				// A pinned search is kept whatever its age; the oldest others make room.
+				let over = Math.max(0, index.length - max), pinned = new Set(pinList.map(p => p.id)), dropped = [];
+				for (let e of index) { if (over <= 0) break; if (!pinned.has(e.id)) { dropped.push(e); over--; } }
+				index = index.filter(e => !dropped.includes(e));
 				for (let e of dropped) await io.remove(path(e.id + ".json")).catch(() => {});
 				await writeIndex();
+				// What this run turned up that the pin has not shown yet, for the menu to say.
+				let pin = pinList.find(p => p.id === id);
+				if (pin) { pin.newCount = newAmong(records, pin.seen); pin.lastRun = savedAt; pin.partial = Boolean(partial); await writePins(); }
 				return id;
 			});
 		}
@@ -193,6 +220,57 @@ var ZotPoPHistory = (function () {
 			return keys.length && keys.length < KEY_CAP ? new Set(keys) : null;
 		}
 
+		// ---- pinned searches: a search kept with its conditions, sources, filters and the results already seen
+		async function pins() {
+			await writes;
+			return (await loadPins()).slice().sort((a, b) => String(a.pinnedAt).localeCompare(String(b.pinnedAt)));
+		}
+		async function pinFor(source, query) {
+			await writes;
+			let id = signature(source, query);
+			return (await loadPins()).find(p => p.id === id && p.source === source) || null;
+		}
+		async function pin(id, { filters = null, label = "" } = {}) {
+			let entry = await get(id);
+			if (!entry || entry.query?.mode === "author") return null;
+			return serial(async () => {
+				await loadPins();
+				let existing = pinList.find(p => p.id === id);
+				if (existing) return existing;
+				let stamp = now().toISOString();
+				let record = { id, source: entry.source, query: entry.query, label: label || describe(entry.query), pinnedAt: stamp,
+					seen: keysOf(entry.records, SEEN_CAP), seenAt: stamp, lastRun: entry.savedAt, partial: Boolean(entry.partial), newCount: 0, ...(filters ? { filters } : {}) };
+				pinList.push(record);
+				await writePins();
+				return record;
+			});
+		}
+		async function unpin(id) {
+			return serial(async () => { await loadPins(); pinList = pinList.filter(p => p.id !== id); await writePins(); });
+		}
+		// What a run is compared against: the keys already shown, or null when there are none.
+		async function baseline(id) {
+			await writes;
+			let found = (await loadPins()).find(p => p.id === id);
+			return found && found.seen.length ? new Set(found.seen) : null;
+		}
+		// The results were looked at: their keys join the seen set. They never replace it, so a short,
+		// partial or failed run cannot reset what was seen; an empty run, or one too large to compare, changes nothing.
+		async function markSeen(id, records) {
+			if (!Array.isArray(records) || !records.length || records.length > SEEN_CAP) return null;
+			return serial(async () => {
+				await loadPins();
+				let found = pinList.find(p => p.id === id);
+				if (!found) return null;
+				let before = new Set(found.seen), fresh = keysOf(records, SEEN_CAP).filter(k => !before.has(k));
+				found.seen = found.seen.concat(fresh).slice(0, SEEN_CAP);
+				found.seenAt = now().toISOString();
+				found.newCount = 0;
+				await writePins();
+				return { added: fresh.length };
+			});
+		}
+
 		async function remove(id) {
 			return serial(async () => {
 				await load();
@@ -205,13 +283,15 @@ var ZotPoPHistory = (function () {
 		async function clear() {
 			return serial(async () => {
 				await load();
-				for (let e of index) await io.remove(path(e.id + ".json")).catch(() => {});
-				index = [];
+				await loadPins();
+				let pinned = new Set(pinList.map(p => p.id));
+				for (let e of index) if (!pinned.has(e.id)) await io.remove(path(e.id + ".json")).catch(() => {});
+				index = index.filter(e => pinned.has(e.id));
 				await writeIndex();
 			});
 		}
 
-		return { list, save, find, get, previousKeys, remove, clear, signature, describe };
+		return { list, save, find, get, previousKeys, remove, clear, signature, describe, pins, pin, unpin, pinFor, baseline, markSeen, SEEN_CAP };
 	}
 
 	// A storage that forgets everything when the window closes: the fallback when the

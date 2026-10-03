@@ -133,11 +133,11 @@ test("the sort arrow is its own node beside the header's text and aria-sort foll
 	assert.doesNotMatch(css, /sorted-(asc|desc)::after/, "no arrow is painted at the cell's edge any more");
 });
 
-test("the markup folds the long metadata, keeps one preview button and two detail actions", () => {
+test("the markup folds the long metadata, keeps one preview button and the detail actions (queue only with Style Custom)", () => {
 	assert.equal((markup.match(/id="preview-btn"/g) || []).length, 1);
 	for (const gone of ["select-new", "copy-csv", "save-csv", "cols-mode", "toggle-metrics", "toggle-detail", "copy-pop-json", "d-preview", "d-open", "d-add"]) assert.ok(!markup.includes(`id="${gone}"`), gone + " moved into a menu");
 	const actions = /<div class="d-actions">([\s\S]*?)<\/div>/.exec(markup)[1];
-	assert.deepEqual([...actions.matchAll(/<button id="([^"]+)"/g)].map(m => m[1]), ["d-primary", "d-more"]);
+	assert.deepEqual([...actions.matchAll(/<button id="([^"]+)"/g)].map(m => m[1]), ["d-queue", "d-primary", "d-more"]);
 	const at = id => markup.indexOf(`id="${id}"`);
 	assert.ok(at("d-authors") < at("d-fold") && at("d-fold") < at("d-abstract"), "the disclosure row sits above the abstract, so a short pane scrolls the abstract and never hides the disclosure");
 	const fold = markup.slice(at("d-fold"), markup.indexOf("</details>", at("d-fold")));
