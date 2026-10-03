@@ -5924,6 +5924,25 @@ test('r20 PDF 찾기 on a paper with no file asks Zotero for it, opens nothing, 
  f.bench.destroy();
 });
 
+test('F6/F7 a dead file link is listed apart with its stored path and no PDF 찾기; a program or a copy with a file stays out of the sweep',async()=>{
+ const f=fixture();
+ f.runtime.attachmentFindings=async()=>({supplementary:[],duplicate:[],foreign:[],orphan:[],unknown:[],unread:0,
+  broken:[{id:'7',title:'Paper with a dead link',year:'2020',file:'gone.pdf',path:'/Users/x/Dropbox/old/gone.pdf',brokenID:'70'}],
+  missing:[{id:'4',title:'A paper with no file',year:'2024',findable:true},{id:'5',title:'Some program',year:'2024',findable:false,why:'논문이 아니고 DOI·주소도 없어 PDF 찾기에서 뺐습니다'}]});
+ const swept=[];f.runtime.findPDFs=async ids=>{swept.push(...ids);return {found:0,none:ids.length,failed:0,cancelled:false,done:ids.length,total:ids.length};};
+ f.runtime.findPDF=async()=>({status:'none'});
+ await f.bench.show('attachments');
+ const text=f.bench.panel.textContent.replace(/\s+/g,' ');
+ assert.match(text,/파일 연결 끊김 1/);
+ assert.match(text,/저장된 경로: \/Users\/x\/Dropbox\/old\/gone\.pdf/);
+ assert.match(text,/다시 연결/);
+ const findButtons=[...f.bench.panel.querySelectorAll('button')].filter(b=>b.textContent==='PDF 찾기');
+ assert.equal(findButtons.length,1,'only the findable paper offers PDF 찾기');
+ await f.click('PDF 모두 찾기 · 1편');
+ assert.deepEqual(swept,['4']);
+ f.bench.destroy();
+});
+
 test('r21 논문 비교 evidence cells save per paper, reach the CSV, and 종합 노트 만들기 builds one note and selects it',async()=>{
  const f=fixture();
  const store={};
@@ -6197,6 +6216,30 @@ test('the paper and collection pickers search in the page, pick by keyboard or c
  assert.match(again.bench.panel.querySelector('.sc-pick-value').textContent,/Project/);
  again.bench.destroy();
 });
+function crowd(f,from,count,refs){
+ const base=f.runtime.paperWorks(),snap=f.library.snapshot,more=[],works={...base};
+ for(let n=from;n<from+count;n++){more.push({...f.papers[0],id:String(n),key:'K'+n,title:'Crowd paper '+n,authors:'Ada Lovelace',venue:'Science'});f.refs.set(n,{id:n,libraryID:1,key:'K'+n});works['1:K'+n]={openalex:'W'+n,references:refs(n)};}
+ f.library.snapshot=async()=>[...await snap(),...more];f.runtime.paperWorks=()=>works;return more;
+}
+test('F2: the outside-cited ranking reads every paper in the collection, not just the first 180 drawn',async()=>{
+ const f=scopeFixture({graphKind:'collection',graphCollection:'40',graphSub:false});
+ const more=crowd(f,100,200,n=>n>=290?['TOPX','TOPY']:['x'+n]);
+ f.library.collections=async()=>[{id:'40',name:'Project',count:200,itemIDs:more.map(m=>Number(m.id)),parentID:null}];
+ await f.bench.show('graph');await settle();
+ const heads=[...f.bench.panel.querySelectorAll('.sc-scope-lists .sc-section-head')].map(h=>h.textContent.replace(/\s+/g,' ').trim());
+ assert.ok(heads.includes('이 컬렉션이 많이 인용하는 바깥 논문 2'),'papers 280-299 sit past the 180 drawn but still count: '+heads.join('|'));
+ f.bench.destroy();
+});
+test('F9: a one-paper graph whose lists are cut at 60 nodes says how many more there are inside each list',async()=>{
+ const f=scopeFixture({graphKind:'paper',graphPaper:'1'});
+ crowd(f,100,80,()=>['W1']);
+ await f.bench.show('graph');await settle();
+ const more=[...f.bench.panel.querySelectorAll('.sc-scope-lists .sc-list-more')].map(b=>b.textContent.replace(/\s+/g,' ').trim());
+ assert.ok(more.length>=1&&more.every(t=>/편 더 \(모두 보기\)/.test(t)),'each cut list offers the rest: '+more.join('|'));
+ f.click('편 더 (모두 보기)');await settle();
+ assert.equal(f.bench.panel.querySelectorAll('.sc-scope-lists .sc-list-more').length,0,'all shown, nothing left to offer');
+ f.bench.destroy();
+});
 test('the collection graph draws only that folder, with its tiles, lists and the outside works it cites most; sub-collections are a toggle',async()=>{
  const f=scopeFixture({graphKind:'collection',graphCollection:'40',graphSub:false});
  await f.bench.show('graph');await settle();
@@ -6216,5 +6259,79 @@ test('the collection graph draws only that folder, with its tiles, lists and the
  assert.equal([...panel.querySelectorAll('svg.sc-graph circle')].filter(c=>!c.getAttribute('data-ghost')).length,4);
  f.click('관련 문헌');await settle();
  assert.ok(panel.querySelector('svg.sc-graph'),'the other modes still draw in a collection scope');
+ f.bench.destroy();
+});
+
+test('every button whose handler writes to the library carries data-writes, and the self-check sweep skips by it in any language',async()=>{
+ const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const listed=new Set([...src.match(/WRITES_LIBRARY=new Set\(\[(.*?)\]\)/s)[1].matchAll(/'([^']+)'/g)].map(m=>m[1]));
+ const writers=/library\.(setRemark|addTags|removeTags|restoreTags|noteFromAnnotations|createNote|unrelate|relate|trashItems|synthesisNote|saveToCollection|renameTagBranch|recolorAnnotations|mergeAnnotations|memoToNote)\(|runtime\.(importWork|trashAttachments|mergePreprintIntoPublished)\(/;
+ const missing=[];
+ for(const chunk of src.split(/(?=\bbutton\()/).slice(1)){
+  const label=chunk.match(/^button\('([^']+)'/);
+  /* the handler is what follows up to the next button; cut at a blank-level boundary by taking the first 1500 chars */
+  const body=chunk.slice(0,1500).split(/\n\s*(?:const|let|function)\s/)[0].split(/\bbutton\(/)[0];
+  if(writers.test(body)&&!(label&&listed.has(label[1]))&&!/data-writes/.test(chunk.slice(0,1500).split(/\n\s*const\s/)[0]))missing.push(label?label[1]:chunk.slice(0,60));
+ }
+ assert.deepEqual(missing,[],'writers not marked');
+ const f=fixture();
+ await f.bench.show('annotations');
+ const move=f.findButton('노트로 옮기기');
+ assert.equal(move.getAttribute('data-writes'),'library');
+ move.textContent='Move to note';
+ const sc=fs.readFileSync(new URL('../src/selfcheck.js',import.meta.url),'utf8');
+ const filter=sc.match(/\.filter\(b => [^\n]*data-opens[^\n]*\)/)[0];
+ assert.match(filter,/hasAttribute\('data-writes'\)/);
+ assert.equal(move.hasAttribute('data-writes'),true,'English text or Korean, the attribute is what the sweep reads');
+ assert.equal(/Move to note/.test(move.textContent)&&!/가져오기|노트로|옮기기/.test(move.textContent),true,'the English label is not matched by the Korean verbs');
+ f.bench.destroy();
+});
+
+test('a bulk PDF search survives a re-render: stop stays, start is off, no second run, destroy cancels',async()=>{
+ const f=fixture();
+ f.runtime.attachmentFindings=async()=>({supplementary:[],duplicate:[],foreign:[],orphan:[],unknown:[],unread:0,
+  missing:[{id:'4',title:'No file A',year:'2024'},{id:'5',title:'No file B',year:'2024'}]});
+ f.runtime.cleanupFindings=async()=>({merge:[],copies:[]});
+ let runs=0,signal=null,release;
+ f.runtime.findPDFs=(ids,{signal:s})=>{runs++;signal=s;return new Promise(resolve=>{release=()=>resolve({found:0,none:2,failed:0,cancelled:false,done:2,total:2});s.addEventListener('abort',()=>resolve({found:0,none:0,failed:0,cancelled:true,done:0,total:2}));});};
+ await f.bench.show('attachments');
+ await f.click('PDF 모두 찾기 · 2편');
+ assert.equal(runs,1);
+ await f.bench.render();await settle();
+ const stop=f.findButton('중지');assert.ok(stop&&!stop.hidden,'the stop button is back after the panel redraws');
+ const start=f.findButton('PDF 모두 찾기 · 2편');assert.equal(start.disabled,true,'start is off while the search runs');
+ start.dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(runs,1,'a second click does not run the same papers again');
+ f.bench.destroy();await settle();
+ assert.equal(signal.aborted,true,'closing the panel cancels the search');
+});
+
+test('the graph collection picker follows the library: no previous library list, stale answers dropped, a new list redraws',async()=>{
+ const f=fixture();
+ const gate={};
+ f.library.collections=(lib)=>new Promise(resolve=>{gate[lib]=()=>resolve(lib===1?[{id:'4',name:'Lib one coll',count:2,parentID:null}]:[{id:'40',name:'Lib two coll',count:1,parentID:null}]);});
+ f.bench.state.graphKind='collection';
+ await f.bench.show('graph');
+ gate[1]();await settle();await settle();
+ assert.match(f.body().textContent,/Lib one coll/);
+ f.setLibrary(2);
+ await f.bench.render();await settle();
+ assert.ok(!/Lib one coll/.test(f.body().textContent),'the other library collections are not offered');
+ gate[2]();await settle();await settle();
+ assert.match(f.body().textContent,/Lib two coll/,'the new list is drawn when it arrives');
+ f.bench.destroy();
+});
+
+test('two collection papers that share only an outside work are drawn with it, not dropped as isolated',async()=>{
+ const f=scopeFixture({graphKind:'collection',graphCollection:'41',graphSub:false});
+ const works=f.runtime.paperWorks();
+ works['1:K12']={openalex:'W12',references:['W9']};works['1:K13']={openalex:'W13',references:['W9']};
+ f.runtime.cache.workMeta.W9={id:'W9',title:'Shared outside work',year:2010,citations:5};
+ await f.bench.show('graph');await settle();
+ const panel=f.bench.panel;
+ const circles=[...panel.querySelectorAll('svg.sc-graph circle')];
+ assert.equal(circles.filter(c=>!c.getAttribute('data-ghost')).length,2,'both papers are on the map');
+ assert.equal(circles.filter(c=>c.getAttribute('data-ghost')).length,1,'with the work they share');
+ assert.match(panel.textContent,/Shared outside work/);
  f.bench.destroy();
 });

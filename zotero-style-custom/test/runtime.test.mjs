@@ -3277,7 +3277,7 @@ test('mergePreprintIntoPublished carries tags, status, rating, memo and notes, r
   const pre = paper(fx.item(1, {tags: [{tag: 'topic/a', type: 0}, {tag: '/done', type: 1}]}));
   const pub = paper(fx.item(2, {tags: []}));
   pre.saveTx = async () => {}; pub.saveTx = async () => {};
-  const copy = new fx.Z.Item('note'); copy.parentID = 1; copy.setNote('<p>my note</p>'); await copy.saveTx();
+  const copy = new fx.Z.Item('note'); copy.parentID = 1; copy.parentItemID = 1; copy.setNote('<p>my note</p>'); await copy.saveTx(); pre.notes.push(copy.id);
   plugin.entry(pre).signals = {published: {doi: '10.9/pub', year: 2025}};
   plugin.signalsOf = ref => plugin.entry(ref).signals;
   plugin.entry(pre).remark = 'preprint memo';
@@ -3290,8 +3290,7 @@ test('mergePreprintIntoPublished carries tags, status, rating, memo and notes, r
   assert.deepEqual(edits, [[2, {status: 'done', rating: 4}]]);
   assert.ok(pub.pendingTags.some(t => t.tag === 'topic/a') && !pub.pendingTags.some(t => t.tag === '/done'), 'subject tags only; status goes through edit');
   assert.equal(plugin.entry(pub).remark, 'existing memo\n\npreprint memo');
-  assert.equal(pub.notes.length, 1, 'the note was copied');
-  assert.equal(pre.notes.length, 1, 'the original stays with the trashed preprint');
+  assert.equal(copy.parentItemID, 2, 'moved, not copied: nothing is left to the trash');
   assert.deepEqual(pre.relatedItems, ['2']); assert.deepEqual(pub.relatedItems, ['1']);
   assert.equal(pre.deleted, true);
   assert.equal(out.copied.notes, 1);
@@ -3402,4 +3401,203 @@ test('r22 a pending /unread promotion is never written to the stored JSON, and a
   assert.equal(p.cache.items['1:key'].promoting, undefined);
   assert.equal(p.cache.items['1:key'].seconds, 40);
   await p.stop();
+});
+
+
+// F1: the preprint's files, annotations and notes must survive the trash being emptied.
+function mergeWorld() {
+  const fx = fixture(), {plugin} = fx;
+  const {paper, all} = noteWorld(fx);
+  const kids = new Map();
+  const child = (id, note) => {
+    const c = {id, deleted: false, parentItemID: null, saves: 0, annotations: note ? [] : [`ann-of-${id}`], isNote: () => !!note,
+      getTags: () => [], isRegularItem: () => false, async saveTx() { this.saves++; if (this.failSave) throw new Error('disk'); } };
+    all.set(id, c); return c;
+  };
+  const pre = paper(fx.item(1, {tags: [{tag: 'topic/a', type: 0}]}));
+  const pub = paper(fx.item(2, {tags: [{tag: 'own', type: 0}]}));
+  const third = paper(fx.item(3, {tags: []}));
+  const wire = (item, list, collections = []) => {
+    item.collections = collections; item.getCollections = () => item.collections;
+    item.inCollection = id => item.collections.includes(id);
+    item.addToCollection = id => { if (!item.collections.includes(id)) item.collections.push(id); };
+    item.removeFromCollection = id => { item.collections = item.collections.filter(c => c !== id); };
+    item.removeRelatedItem = o => { item.relatedItems = item.relatedItems.filter(k => k !== o.key); };
+    item.addRelatedItem = o => { if (!item.relatedItems.includes(o.key)) item.relatedItems.push(o.key); };
+    item.relations = []; item.getRelationsByPredicate = pred => item.relations.filter(r => r[0] === pred).map(r => r[1]);
+    item.addRelation = (pred, obj) => { item.relations.push([pred, obj]); };
+    item.removeRelation = (pred, obj) => { item.relations = item.relations.filter(r => !(r[0] === pred && r[1] === obj)); };
+    // A real item's child list follows parentItemID.
+    item.getAttachments = () => [...all.values()].filter(c => c.parentItemID === item.id && !c.isNote()).map(c => c.id);
+    item.getNotes = () => [...all.values()].filter(c => c.parentItemID === item.id && c.isNote()).map(c => c.id);
+  };
+  wire(pre, null, [10, 20]); wire(pub, null, [20, 30]); wire(third, null, []);
+  const file = child(101), note = child(102, true);
+  file.parentItemID = 1; note.parentItemID = 1;
+  pre.relatedItems = [third.key]; third.relatedItems = [pre.key];
+  all.set(1, pre); all.set(2, pub); all.set(3, third);
+  fx.Z.Items.getByLibraryAndKey = (lib, key) => all.get(Number(key));
+  fx.Z.URI = {getItemURI: item => 'http://zotero.org/users/1/items/' + item.key};
+  plugin.entry(pre).signals = {published: {doi: '10.9/pub', year: 2025}};
+  plugin.signalsOf = ref => plugin.entry(ref).signals;
+  plugin.state = () => ({status: 'unread', rating: 0});
+  plugin.edit = async () => {};
+  plugin.findExistingWork = async () => pub;
+  return {fx, plugin, pre, pub, third, file, note, all};
+}
+
+test('F1: merging moves files (with their annotations) and notes, collections, relations, and never trashes a parent that still has children', async () => {
+  const {plugin, pre, pub, third, file, note} = mergeWorld();
+  const out = await plugin.mergePreprintIntoPublished(1);
+  assert.equal(file.parentItemID, 2); assert.equal(note.parentItemID, 2);
+  assert.deepEqual(file.annotations, ['ann-of-101'], 'annotations ride on the attachment');
+  assert.deepEqual(pre.getAttachments(), []); assert.deepEqual(pre.getNotes(), []);
+  assert.deepEqual(pub.collections.sort(), [10, 20, 30]);
+  assert.ok(pub.relatedItems.includes('3') && third.relatedItems.includes('2'), 'related items carried over');
+  assert.ok(pub.relatedItems.includes('1'), 'preprint linked');
+  assert.deepEqual(pub.getRelationsByPredicate('dc:replaces'), ['http://zotero.org/users/1/items/1']);
+  assert.equal(pre.deleted, true);
+  assert.equal(out.copied.files, 1); assert.equal(out.copied.notes, 1); assert.equal(out.copied.collections, 1); assert.equal(out.copied.related, 1);
+});
+
+test('F1: a child that cannot be moved aborts the merge, undoes the moves, and trashes nothing', async () => {
+  const {plugin, pre, pub, file, note, all} = mergeWorld();
+  note.failSave = true;
+  await assert.rejects(plugin.mergePreprintIntoPublished(1), /disk/);
+  assert.ok(!pre.deleted);
+  assert.equal(file.parentItemID, 1, 'the file that did move is back');
+  assert.equal(note.parentItemID, 1);
+  assert.deepEqual(pub.collections, [20, 30]); assert.deepEqual(pub.getRelationsByPredicate('dc:replaces'), []);
+  void all;
+});
+
+test('F1: undo moves the children back and removes only what the merge added; merging again does not duplicate', async () => {
+  const {plugin, pre, pub, third, file, note} = mergeWorld();
+  await plugin.mergePreprintIntoPublished(1);
+  assert.equal(await plugin.restorePreprint(1), true);
+  assert.equal(pre.deleted, false);
+  assert.equal(file.parentItemID, 1); assert.equal(note.parentItemID, 1);
+  assert.deepEqual(pub.collections.sort(), [20, 30], 'the collection it added is gone, its own stay');
+  assert.ok(!pub.getTags().some(t => t.tag === 'topic/a') && pub.getTags().some(t => t.tag === 'own'));
+  assert.deepEqual(pub.relatedItems, [], 'related items and the preprint link removed');
+  assert.deepEqual(third.relatedItems, ['1']);
+  assert.deepEqual(pub.getRelationsByPredicate('dc:replaces'), []);
+  await pub.saveTx();
+  await plugin.mergePreprintIntoPublished(1);
+  assert.equal(file.parentItemID, 2);
+  assert.deepEqual(pub.collections.sort(), [10, 20, 30]);
+  assert.equal(pub.getRelationsByPredicate('dc:replaces').length, 1);
+  assert.equal(pub.getNotes().length, 1, 'one note, not two');
+  assert.equal(pub.getTags().filter(t => t.tag === 'topic/a').length, 1);
+});
+
+test('F8: a published item that is itself a preprint is not a merge target', async () => {
+  const {plugin, pub, pre} = mergeWorld();
+  pub.fields.DOI = '10.1101/2024.01.01.555555';
+  await assert.rejects(plugin.mergePreprintIntoPublished(1), /프리프린트/);
+  assert.ok(!pre.deleted);
+});
+
+
+test('F5: duplicateGroups keeps different DOIs apart, strips markup, lets a blank year match, and pairs a preprint with its article', () => {
+  const dup = rows => Runtime.duplicateGroups(rows).map(g => g.items.map(r => r.id).sort());
+  const title = 'Chromatin loop extrusion by cohesin in living cells';
+  assert.deepEqual(dup([{id: 'a', title, year: '2020', doi: '10.1/a'}, {id: 'b', title, year: '2020', doi: '10.1/b'}]), [], 'two DOIs, two papers');
+  assert.deepEqual(dup([{id: 'a', title: '<i>Escherichia coli</i> stress response in long-term cultures', year: '2020', doi: ''},
+    {id: 'b', title: 'Escherichia coli stress response in long-term cultures', year: '2020', doi: ''}]), [['a', 'b']], 'markup is not part of the title');
+  assert.deepEqual(dup([{id: 'a', title, year: '', doi: ''}, {id: 'b', title, year: '2021', doi: ''}]), [['a', 'b']], 'blank year matches any');
+  assert.deepEqual(dup([{id: 'a', title, year: '2019', doi: ''}, {id: 'b', title, year: '2021', doi: ''}]), [], 'different years stay apart');
+  assert.deepEqual(dup([{id: 'a', title, year: '2020', doi: '10.1101/2020.01.02.123456'}, {id: 'b', title, year: '2021', doi: '10.1016/j.cell.2021.1'}]), [['a', 'b']], 'preprint and article differ in DOI and year yet pair');
+});
+
+test('F5: a preprint and a journal article found by title are offered for merging, not only as held twice', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const mk = (id, doi, date) => { const r = fx.item(id); r.fields = {title: 'Chromatin loop extrusion by cohesin in living cells', DOI: doi, date}; return r; };
+  const pre = mk(1, '10.1101/2020.01.02.123456', '2020'), art = mk(2, '10.1016/j.cell.2021.1', '2021'), other = mk(3, '10.2/zzz', '2018'); other.fields.title = 'A wholly different study of yeast mating types';
+  plugin.libraryItems = async () => [pre, art, other];
+  plugin.signalsOf = () => null;
+  const out = await plugin.cleanupFindings(1);
+  assert.deepEqual(out.merge.map(r => [r.id, r.publishedID]), [['1', '2']]);
+  assert.deepEqual(out.copies, []);
+});
+
+test('F6/F7: attachmentFindings separates broken file links, and keeps non-papers and copies out of the PDF-finding list', async () => {
+  const fx = fixture(), {plugin, Z} = fx;
+  const files = new Map();
+  const att = (id, name, exists, path) => { const a = {id, deleted: false, attachmentFilename: name, attachmentPath: path || name, isFileAttachment: () => true, fileExists: async () => exists, getFilePath: () => path || name}; files.set(id, a); return a; };
+  Z.Items = {get: id => files.get(Number(id))};
+  const paper = (id, fields, kids, itemType = 'journalArticle') => { const r = fx.item(id); r.fields = fields; r.itemType = itemType; r.getAttachments = () => kids; return r; };
+  const title = 'Chromatin loop extrusion by cohesin in living cells';
+  att(10, 'ok.pdf', true); att(11, 'gone.pdf', false, '/Users/x/Dropbox/old/gone.pdf');
+  const good = paper(1, {title: 'A paper that has its file here', date: '2020', DOI: '10.1/g'}, [10]);
+  const broken = paper(2, {title: 'A paper whose file link is dead now', date: '2021', DOI: '10.1/b'}, [11]);
+  const none = paper(3, {title: 'A paper with no attachment at all', date: '2022', DOI: '10.1/n'}, []);
+  const program = paper(4, {title: 'Some analysis software package name', date: '2022'}, [], 'computerProgram');
+  const withFile = paper(5, {title, date: '2020', DOI: ''}, [10]);
+  const copy = paper(6, {title, date: '2020', DOI: ''}, []);
+  plugin.libraryItems = async () => [good, broken, none, program, withFile, copy];
+  const out = await plugin.attachmentFindings(1);
+  assert.deepEqual(out.broken.map(r => [r.id, r.path]), [['2', '/Users/x/Dropbox/old/gone.pdf']]);
+  assert.ok(!out.missing.some(r => r.id === '2'), 'a dead link is not "no attachment"');
+  const flag = Object.fromEntries(out.missing.map(r => [r.id, r.findable]));
+  assert.equal(flag['3'], true);
+  assert.equal(flag['4'], false, 'a computer program with no DOI or URL');
+  assert.equal(flag['6'], false, 'another copy already has the file');
+});
+
+test('a pending older memo save never writes over a newer one (note and memo)', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const {paper} = noteWorld(fx);
+  plugin.active = true;
+  const a = paper(fx.item(1));
+  const Library = require('../src/library.js');
+  const lib = Library.create({Zotero: Object.assign(fx.Z, {Items: Object.assign(fx.Z.Items, {getAsync: async id => fx.Z.Items.get(id)})}), runtime: plugin});
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  const noteSave = fx.Z.Item.prototype.saveTx;
+  fx.Z.Item.prototype.saveTx = async function () { await new Promise(r => setTimeout(r, 20)); return noteSave.call(this); };
+  const first = lib.setRemark(1, 'old memo\n');
+  await new Promise(r => setTimeout(r, 5));
+  const second = lib.setRemark(1, 'new memo');
+  await Promise.all([first, second]);
+  fx.Z.Item.prototype.saveTx = noteSave;
+  assert.equal(plugin.entry(a).remark, 'new memo');
+  assert.equal(Runtime.memoFromNoteHTML(plugin.memoNoteOf(a).getNote()), 'new memo');
+});
+
+test('a memo note synced from another computer is adopted, never erased or silently overwritten', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const {paper} = noteWorld(fx);
+  const a = paper(fx.item(1));
+  const note = new fx.Z.Item('note');
+  note.libraryID = a.libraryID; note.parentID = a.id; note.setTags([{tag: 'style-custom:memo', type: 0}]);
+  note.setNote(Runtime.memoNoteHTML('written on the laptop'));
+  await note.saveTx();
+  // First access reads it: the local memo is empty, so it is adopted.
+  assert.equal(plugin.entry(a).remark, 'written on the laptop');
+  // 노트로 옮기기 with an empty memo no longer erases the note.
+  const b = paper(fx.item(2));
+  const n2 = new fx.Z.Item('note');
+  n2.libraryID = b.libraryID; n2.parentID = b.id; n2.setTags([{tag: 'style-custom:memo', type: 0}]);
+  n2.setNote(Runtime.memoNoteHTML('remote text'));
+  plugin.memoChecked?.clear?.();
+  await n2.saveTx();
+  plugin.cache.items[plugin.identity(b)] = {remark: ''};
+  plugin.memoChecked?.delete?.(plugin.identity(b));
+  const adopted = await plugin.memoToNote(b);
+  assert.equal(Runtime.memoFromNoteHTML(n2.getNote()), 'remote text', 'the note keeps its text');
+  assert.equal(plugin.entry(b).remark, 'remote text');
+  assert.equal(adopted.created, false);
+  // Both differ: keep both, say so.
+  const c = paper(fx.item(3));
+  const n3 = new fx.Z.Item('note');
+  n3.libraryID = c.libraryID; n3.parentID = c.id; n3.setTags([{tag: 'style-custom:memo', type: 0}]);
+  n3.setNote(Runtime.memoNoteHTML('from the other computer'));
+  await n3.saveTx();
+  plugin.cache.items[plugin.identity(c)] = {remark: 'typed here', memoSynced: 'older shared text'};
+  plugin.memoChecked?.add?.(plugin.identity(c));
+  const merged = await plugin.memoToNote(c);
+  assert.equal(merged.merged, true);
+  const text = Runtime.memoFromNoteHTML(n3.getNote());
+  assert.ok(text.includes('from the other computer') && text.includes('typed here'), 'nothing lost');
+  assert.equal(plugin.entry(c).remark, text);
 });

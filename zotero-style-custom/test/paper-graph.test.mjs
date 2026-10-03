@@ -388,3 +388,57 @@ test("outside works are ranked by how many of the set cite them, shelf copies na
   assert.equal(graph.outsideCited(set, {held, floor: 1}).some(o => o.openalex === "W1"), false, "a paper inside the set is not outside it");
   assert.equal(graph.clusterCount(["1", "2", "3", "4"], [{source: "1", target: "2"}]), 1);
 });
+
+test("F3: a paper whose only thread was trimmed from the drawing is not reported as unconnected, and the counts are the whole library's", () => {
+  const papers = [];
+  for (let i = 1; i <= 12; i++) {
+    papers.push(paper(i, "W" + i, ["core1", "core2", "core3"].concat(
+      i <= 3 ? ["tight1", "tight2", "tight3", "tight4"] : ["spread" + i])));
+  }
+  const full = graph.build(papers, {maxEdges: 900});
+  const cut = graph.build(papers, {maxEdges: 5});
+  assert.ok(cut.truncated);
+  assert.equal(cut.edges.length, 5);
+  assert.equal(cut.isolated.length, full.isolated.length, "trimming the drawing must not create unconnected papers");
+  assert.equal(cut.counted.isolated, full.counted.isolated);
+  assert.equal(cut.counted.coupled, full.counted.coupled, "the tile counts every edge found, not the drawn ones");
+  assert.equal(cut.counted.total, full.edges.length);
+  assert.equal(cut.counted.drawn, 5);
+});
+
+test("F4: two copies of one OpenAlex work are not coupled to each other and cite a missing work once", () => {
+  const built = graph.build([
+    paper(1, "W1", ["R1", "R2", "R3", "M1"]),
+    paper(2, "W1", ["R1", "R2", "R3", "M1"]),
+    paper(3, "W3", ["M1", "x"]),
+    paper(4, "W4", ["M1", "y"])
+  ], {missingFloor: 3});
+  assert.equal(built.edges.some(e => e.kind === "coupled" && [e.source, e.target].sort().join() === "1,2"), false);
+  const m1 = built.missing.find(row => row.id === "M1");
+  assert.equal(m1.citedBy.length, 3, "W1 (two copies), W3 and W4: three works, not four items");
+});
+
+test("F4: outsideCited counts distinct works, and ego citers dedupe copies", () => {
+  const set = [paper(1, "W1", ["G1", "G2"]), paper(2, "W1", ["G1", "G2"]), paper(3, "W3", ["G1"])];
+  const out = graph.outsideCited(set, {floor: 2});
+  assert.deepEqual(out.map(o => [o.openalex, o.count]), [["G1", 2]], "G1 is cited by two works; G2 by one");
+  const shelf = [paper(1, "W1", []), paper(2, "W2", ["W1"]), paper(3, "W2", ["W1"]), paper(4, "W1", ["W1"])];
+  const g = graph.egoGraph("1", shelf);
+  assert.equal(g.counts.citedBy, 1, "two copies of W2 are one citer; the second copy of the centre is not a citer");
+});
+
+test("F2: outsideCited over a whole collection past 180 papers, excluding works inside it", () => {
+  const set = [];
+  for (let i = 1; i <= 300; i++) set.push(paper(i, "W" + i, i > 200 ? ["TOP1", "TOP2", "W5"] : ["x" + i]));
+  const out = graph.outsideCited(set, {floor: 2, limit: 12});
+  assert.deepEqual(out.map(o => o.openalex).sort(), ["TOP1", "TOP2"], "papers 201-300 count, and W5 is in the collection");
+  assert.equal(out[0].count, 100);
+});
+
+test("a fetched citer that the shelf holds counts as a shelf citer even when its capped references miss the centre", () => {
+  const g = graph.egoGraph("1", [paper(1, "W1", []), paper(2, "W2", ["W9"])], {citers: [{id: "W2", title: "B"}]});
+  assert.equal(g.counts.citedBy, 1, "B is a citer of A");
+  assert.equal(g.counts.ghostCitedBy, 0, "and it is not a ghost");
+  assert.ok(g.nodes.some(n => n.id === "2" && n.role === "citedBy"), "B is a solid node");
+  assert.ok(g.edges.some(e => e.source === "2" && e.target === "1"), "with a confirmed B to A edge");
+});

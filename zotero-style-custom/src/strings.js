@@ -765,6 +765,9 @@
  "메뉴 표시": "shown in the menu",
  "메뉴·디자인": "Menus and design",
  "메모": "Note",
+ "다른 컴퓨터에서 온 메모 노트가 달라, 두 내용을 모두 남겼습니다. 이 컴퓨터의 메모는 구분선 아래에 있습니다. 노트는 열지 않았습니다.": "The memo note from another computer differs, so both texts were kept. This computer's memo is below the divider. The note was not opened.",
+ "이미 있던 메모 노트의 내용을 메모로 가져왔습니다. 노트는 바꾸지 않았습니다.": "The existing memo note's text was brought into the memo. The note was not changed.",
+ "--- 이 컴퓨터의 메모 ---": "--- This computer's memo ---",
  "메모 노트를 갱신했습니다. 노트는 열지 않았습니다.": "The memo note was updated. The note was not opened.",
  "메모 쓰기": "Write a memo",
  "메모 일치": "memo match",
@@ -1304,7 +1307,7 @@
  "연결된 노트를 찾는 중": "Finding linked notes",
  "연결됨": "Linked",
  "연결을 해제할 두 카드를 선택하세요.": "Select the two cards to unlink.",
- "연결이 너무 많아 강한 것부터 그렸습니다. 검색으로 범위를 좁히면 전부 보입니다.": "There were too many connections, so the strongest were drawn. Narrow the scope to see them all.",
+
  "연구 작업 패널": "Research panel",
  "연구 작업 패널 → 관계 그래프 · 화면 최대180노드, 검색으로 범위를 좁힘": "Research panel → Citation map · at most 180 nodes on screen; narrow the scope with a search",
  "연구 작업 패널 → 노트 · 기존 리치 노트 편집은 Zotero 네이티브 편집기로 연결": "Research panel → Notes · editing an existing rich note opens Zotero's own editor",
@@ -2156,7 +2159,7 @@
  "태그 추가·제거·경로 이름 변경·병합 사용": "Enable adding, removing, renaming and merging tags",
  "태그 표시 방식과 제목 옆 태그를 조절합니다.": "Controls how tags are shown and which appear beside the title.",
  "태그 필터 해제": "Clear tag filter",
- "태그·읽기 상태·메모·노트를 게재본에 복사하고 두 항목을 관련으로 잇고 프리프린트를 휴지통으로 보냅니다. 8초 안에 되돌릴 수 있고 Zotero 휴지통에서도 복원됩니다": "Copies tags, reading status, memo and notes to the published version, relates the two and trashes the preprint. Undo within 8 seconds, or restore it from the Zotero trash",
+ "첨부파일(주석 포함)과 노트는 게재본으로 옮기고, 태그·읽기 상태·메모·컬렉션·관련 항목은 복사한 뒤 두 항목을 잇고 빈 프리프린트를 휴지통으로 보냅니다. 8초 안에 되돌리면 옮긴 것이 모두 제자리로 돌아갑니다": "Moves attachments (with their annotations) and notes to the published version, copies tags, reading status, memo, collections and related items, links the two and trashes the emptied preprint. Undo within 8 seconds puts everything back",
  "태그가 없습니다.": "No tags.",
  "태그로 남은 평점이 없습니다.": "No ratings are left as tags.",
  "태그를 붙일 문헌을 먼저 선택하세요. 보유 문헌에서 고르거나 “현재 선택 가져오기”를 누르세요.": "Select the papers to tag first: pick them in Library papers or press “Use current selection”.",
@@ -2345,7 +2348,21 @@
  "회색": "Gray",
  "후보가 둘입니다 — 직접 고르세요: {0}": "There are two candidates — choose one: {0}",
  "후속 연구": "Follow-up work",
- "휴지통으로": "Move to trash"
+ "휴지통으로": "Move to trash",
+ "연결 {0}건 중 강한 {1}건만 그렸습니다. 검색으로 범위를 좁히면 전부 보입니다.": "Of {0} connections, the strongest {1} are drawn. Narrow the scope to see them all.",
+ "인용 · 일부만 그림": "Citations · partly drawn",
+ "연결 · 일부만 그림 ({0}개 표시)": "Connections · partly drawn ({0} shown)",
+ "{0}편 더 (모두 보기)": "{0} more (show all)",
+ "파일 연결 끊김": "Broken file link",
+ "파일 연결 끊김 · 다시 연결해야 함": "Broken file link · needs relinking",
+ "저장된 경로: {0} · Zotero에서 첨부파일을 열어 「파일 찾기」로 다시 연결하세요 (PDF 찾기는 해결책이 아닙니다)": "Stored path: {0} · In Zotero, open the attachment and use \"Locate File\" to relink it (Find PDF is not the fix)",
+ "게재본으로 찾은 항목도 프리프린트입니다. 실제 게재본을 라이브러리에 추가한 뒤 합치세요.": "The item found as the published version is itself a preprint. Add the real published version to the library, then merge.",
+ "프리프린트의 첨부파일·노트 일부를 옮기지 못해 합치지 않았습니다. 아무것도 휴지통으로 보내지 않았으니 Zotero에서 확인한 뒤 다시 시도하세요.": "Some of the preprint's attachments or notes could not be moved, so nothing was merged. Nothing was sent to the trash; check Zotero and try again.",
+ "첨부파일 {0}": "{0} attachments",
+ "컬렉션 {0}": "{0} collections",
+ "관련 항목 {0}": "{0} related items",
+ "논문이 아니고 DOI·주소도 없어 PDF 찾기에서 뺐습니다": "Not a paper and no DOI or URL, so it is left out of Find PDF",
+ "같은 논문의 다른 사본에 파일이 있어 PDF 찾기에서 뺐습니다": "Another copy of this paper already has a file, so it is left out of Find PDF"
 };
   const api = {en};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

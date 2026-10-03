@@ -260,3 +260,13 @@ test('a DOI written as a URL, in capitals or with a doi: prefix reaches the same
   assert.match(signals.openAlexTitleURL({title: 'pig tissues'}), /title\.search%3Apig%20tissues/);
   assert.equal(signals.openAlexTitleURL({}), null);
 });
+
+test('F8: only bioRxiv/medRxiv forms of 10.1101 are preprints; Genome Research is not', () => {
+  const re = signals.PREPRINT_PREFIXES;
+  assert.equal(re.test('10.1101/2022.11.11.516073'), true);
+  assert.equal(re.test('10.1101/123456'), true);
+  assert.equal(re.test('10.1101/gr.275000.120'), false);
+  assert.equal(re.test('10.1101/gad.123456.123'), false);
+  assert.equal(re.test('10.1101/lm.12345'), false);
+  assert.equal(re.test('10.48550/arXiv.2101.00001'), true);
+});

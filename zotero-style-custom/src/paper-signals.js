@@ -110,7 +110,7 @@
     (Array.isArray(relation?.[name]) ? relation[name] : [])
       .map(row => bareDOI(row?.id || row?.DOI)).filter(Boolean);
 
-  const PREPRINT_PREFIXES = /^10\.(1101|48550|21203|26434|20944|31234|31235|31219|55458|64898)\//;
+  const PREPRINT_PREFIXES = /^10\.(?:1101\/(?:\d{4}\.\d{2}\.\d{2}\.\S+|\d+)$|(?:48550|21203|26434|20944|31234|31235|31219|55458|64898)\/)/;
 
   function readCrossref(payload) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;

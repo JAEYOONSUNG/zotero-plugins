@@ -225,7 +225,14 @@
   const failures=root.CustomStyleFailures||{describe:error=>error?.message||String(error)};
   const readable=error=>failures.describe(error)||String(error?.message||error||'');
   async function run(fn){try{return await fn();}catch(error){if(!disposed)message(readable(error),true);return null;}}
+  /* Every button whose handler writes to the library (items, notes, tags,
+     collections, relations, the trash) is named here by its source label and
+     carries data-writes. The self-check sweep skips by this attribute, so it
+     holds in every language; a test scans the source for writers not listed. */
+  let sweepJob=null;/* the running 모두 찾기, if any: {controller} */
+  const WRITES_LIBRARY=new Set(['만들고 담기','관련 문헌으로 연결','선택 문헌끼리 연결 해제','메모 저장','선택 문헌에 태그 추가','선택 문헌에서 태그 제거','선택 문헌 태그 이름 변경','새 노트 저장','이 문헌 주석에서 노트 만들기','휴지통으로','선택 주석 색 바꾸기','선택 주석을 노트로','선택 주석 병합','노트로 옮기기','게재본으로 옮기기','종합 노트 만들기','첫 문헌의 노트로 저장','선택 문헌에 적용']);
   const button=(label,fn,parent,attrs={})=>{
+   if(WRITES_LIBRARY.has(label)&&!attrs['data-writes'])attrs={...attrs,'data-writes':'library'};
    const b=node('button',label,parent,{type:'button',...attrs}),key=attrs['data-action-key'];
    const busy=(element,on)=>{element.disabled=on;if(on){element.dataset.busy='true';element.setAttribute('aria-busy','true');}else{delete element.dataset.busy;element.removeAttribute('aria-busy');}};
    if(actionFeature[label]&&!enabled(actionFeature[label])){b.hidden=true;b.disabled=true;}
@@ -2007,12 +2014,19 @@
   }
   // Collections come from the library service once, and again when the list is older than half a minute.
   function graphCollectionList(){
+   const lib=graphLibraryID();
+   /* The list belongs to one library; another library's is never shown, and an answer for a library the reader has left is dropped. */
+   if(state.graphCollectionsLib!==lib){state.graphCollections=null;state.graphCollectionsAt=0;state.graphCollectionsLib=lib;}
    const fresh=state.graphCollections&&Date.now()-(state.graphCollectionsAt||0)<30000;
-   if(fresh||state.graphCollectionsLoading)return state.graphCollections||null;
-   state.graphCollectionsLoading=true;const had=!!state.graphCollections;
-   Promise.resolve().then(()=>library.collections(graphLibraryID())).then(list=>{state.graphCollections=Array.isArray(list)?list:[];state.graphCollectionsAt=Date.now();})
-    .catch(error=>{state.graphCollections=state.graphCollections||[];state.graphCollectionsAt=Date.now();runtime.Z.logError?.(error);})
-    .finally(()=>{state.graphCollectionsLoading=false;if(!had&&!disposed&&state.tab==='graph')run(render);});
+   if(fresh||state.graphCollectionsLoading===lib)return state.graphCollections||null;
+   state.graphCollectionsLoading=lib;
+   const settle=list=>{
+    if(disposed||graphLibraryID()!==lib||state.graphCollectionsLib!==lib)return false;
+    const changed=JSON.stringify(list)!==JSON.stringify(state.graphCollections);
+    state.graphCollections=list;state.graphCollectionsAt=Date.now();return changed;
+   };
+   Promise.resolve().then(()=>library.collections(lib)).then(list=>settle(Array.isArray(list)?list:[]),error=>{runtime.Z.logError?.(error);return settle(state.graphCollections||[]);})
+    .then(changed=>{if(state.graphCollectionsLoading===lib)state.graphCollectionsLoading=null;if(changed&&!disposed&&state.tab==='graph')run(render);else if(!disposed&&graphLibraryID()!==lib&&state.tab==='graph')run(render);});
    return state.graphCollections||null;
   }
   function graphCollectionOptions(query){
@@ -2239,6 +2253,8 @@
     if(!nodes.length)node('p','표시할 논문이 없습니다.',list,{class:'sc-muted'});
     for(const n of nodes.slice(0,40))scopeRow(list,n,{focus,recentre:n.kind!=='ghost'&&n.id!==id?recentre:null});
     if(nodes.length>40)node('p',`${nodes.length-40}편은 지도에서 확인하세요.`,section,{class:'sc-muted'});
+    // The header counts every paper; the 60-node cap lists fewer. Say so inside the list.
+    if(!all&&total>nodes.length)button(T(`${total-nodes.length}편 더 (모두 보기)`),()=>{state.graphAll=true;render();},section,{class:'sc-graph-info-more sc-list-more'});
    }
    if(g.cut)node('p',`연결된 ${g.total}편 중 ${g.shown}편을 그렸습니다.`,body,{class:'sc-muted sc-graph-footnote'});
    if(g.cut||all)button(all?'60개만 보기':`모두 보기 (${g.total}편)`,()=>{state.graphAll=!all;render();},body,{class:'sc-graph-info-more'});
@@ -2276,21 +2292,27 @@
    if(!withRefs){node('p','이 컬렉션 논문의 인용 목록이 아직 없습니다. “인용 목록 가져오기”를 누르면 서로의 인용 관계가 그려집니다.',body,{class:'sc-muted'});}
    const metaCache=runtime.cache&&typeof runtime.cache.workMeta==='object'?runtime.cache.workMeta:{};
    const tools=runtime.graphTools,built=tools.build(records);
-   const outside=showOutside?tools.outsideCited(records,{held:everyone,meta:metaCache,floor:2,limit:12}):[];
+   // The ranking reads every paper in the collection; only the drawing is limited to `limit` papers.
+   const outside=showOutside?tools.outsideCited(items.map(toRecord),{held:everyone,meta:metaCache,floor:2,limit:12}):[];
    const W=graphWidth(),H=graphHeight(built.nodes.length+outside.length);
-   const connected=new Set(built.nodes.map(n=>n.id));
+   /* An outside work joins the picture through any collection paper that cites it -- also one that nothing else
+      in the collection touches. Isolation is decided after these edges, not before. */
+   const inFolder=new Set([...built.nodes,...built.isolated].map(n=>n.id));
    const ghostNodes=[],ghostEdges=[];
    for(const o of outside){
-    const via=o.citedBy.filter(p=>connected.has(p));if(!via.length)continue;
+    const via=o.citedBy.filter(p=>inFolder.has(p));if(!via.length)continue;
     const gid='W:'+o.openalex;
     ghostNodes.push({id:gid,label:o.title||o.openalex,year:o.year,venue:o.venue,citations:o.citations,doi:o.doi,openalex:o.openalex,kind:'ghost',untitled:!o.title,rank:0.1,degree:via.length,inLibrary:false});
     for(const p of via)ghostEdges.push({source:p,target:gid,kind:'cites',weight:1,external:true});
    }
-   const laid=tools.layout({nodes:[...built.nodes,...ghostNodes],edges:[...built.edges,...ghostEdges],missing:[],isolated:[]},{width:W,height:H});
+   const linkedOut=new Set(ghostEdges.map(e=>e.source));
+   const stillIsolated=built.isolated.filter(n=>!linkedOut.has(n.id));
+   const joined=built.isolated.filter(n=>linkedOut.has(n.id)).map(n=>({...n,degree:ghostEdges.filter(e=>e.source===n.id).length}));
+   const laid=tools.layout({nodes:[...built.nodes,...joined,...ghostNodes],edges:[...built.edges,...ghostEdges],missing:[],isolated:[]},{width:W,height:H});
    const direct=built.edges.filter(e=>e.kind==='cites');
-   const clusters=tools.clusterCount(built.nodes.map(n=>n.id),built.edges);
-   statTiles(body,[{value:fmtN(records.length),label:'논문'},{value:fmtN(built.edges.length),label:'연결',title:'인용과 공통 참고문헌으로 이어진 쌍'},
-    {value:fmtN(clusters),label:'묶음',title:'서로 이어진 묶음의 수'},{value:fmtN(built.isolated.length),label:'연결 없는 논문',title:'이 컬렉션 안에서 어느 논문과도 이어지지 않은 논문'}],{label:'컬렉션 그래프 요약'});
+   const clusters=tools.clusterCount([...built.nodes,...joined].map(n=>n.id),[...built.edges,...ghostEdges]);
+   statTiles(body,[{value:fmtN(records.length),label:'논문'},{value:fmtN(built.truncated?built.counted.total:built.edges.length),label:built.truncated?T(`연결 · 일부만 그림 (${fmtN(built.counted.drawn)}개 표시)`):'연결',title:'인용과 공통 참고문헌으로 이어진 쌍'},
+    {value:fmtN(clusters),label:'묶음',title:'서로 이어진 묶음의 수'},{value:fmtN(stillIsolated.length),label:'연결 없는 논문',title:'이 컬렉션 안에서 어느 논문과도 이어지지 않은 논문'}],{label:'컬렉션 그래프 요약'});
    drawJournalLegend(built.nodes,body);
    const info=node('div',null,body,{class:'sc-graph-info','aria-live':'polite'});info.hidden=true;
    const lists=node('div',null,body,{class:'sc-scope-lists'});
@@ -2311,13 +2333,13 @@
     for(const[pid,count]of top){const n=laid.nodes.find(x=>x.id===pid)||{id:pid,label:itemOf(pid)?.title||pid,kind:'paper'};
      const r=scopeRow(rowsEl,{...n,citations:n.citations},{focus,recentre:null});node('p',`이 컬렉션의 ${count}편이 인용합니다`,r,{class:'sc-hit-meta sc-hit-because'});}
    }
-   if(built.isolated.length){
-    const section=node('section',null,lists,{class:'sc-group'});sectionHead('연결 없는 논문',built.isolated.length,section);
+   if(stillIsolated.length){
+    const section=node('section',null,lists,{class:'sc-group'});sectionHead('연결 없는 논문',stillIsolated.length,section);
     const rowsEl=node('div',null,section,{class:'sc-hits'});
-    for(const n of built.isolated.slice(0,30)){const c=node('div',null,rowsEl,{class:'sc-hit','data-node-id':n.id});node('p',n.label,c,{class:'sc-hit-title'});
+    for(const n of stillIsolated.slice(0,30)){const c=node('div',null,rowsEl,{class:'sc-hit','data-node-id':n.id});node('p',n.label,c,{class:'sc-hit-title'});
      node('p',[n.venue,n.year,n.references?T(`참고문헌 ${n.references}건`):T('인용 목록 없음')].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
      button('열기',()=>library.openItem(n.id),node('div',null,c,{class:'sc-hit-actions'}),{'data-opens':'window'});}
-    if(built.isolated.length>30)node('p',`${built.isolated.length-30}편 더 있습니다.`,section,{class:'sc-muted'});
+    if(stillIsolated.length>30)node('p',`${stillIsolated.length-30}편 더 있습니다.`,section,{class:'sc-muted'});
    }
    if(outside.length){
     const section=node('section',null,lists,{class:'sc-group'});sectionHead('이 컬렉션이 많이 인용하는 바깥 논문',outside.length,section);
@@ -2472,7 +2494,7 @@
     const [topID,topN]=[...citedIn].sort((a,b)=>b[1]-a[1])[0]||[];
     const top=topID?papers.find(p=>p.id===topID):null;
     // The figures are one tile row; the sentence under it names only the paper the rest stands on.
-    statTiles(body,[{value:fmtN(graph.nodes.filter(n=>n.kind==='paper').length),label:'이어진 논문'},{value:fmtN(counted.direct),label:'인용',title:'서재 안에서 확인된 인용 관계(건)'},
+    statTiles(body,[{value:fmtN(graph.nodes.filter(n=>n.kind==='paper').length),label:'이어진 논문'},{value:fmtN(counted.direct),label:graph.truncated?'인용 · 일부만 그림':'인용',title:'서재 안에서 확인된 인용 관계(건)'},
      counted.coupled?{value:fmtN(counted.coupled),label:'공통 참고문헌 쌍'}:null,{value:fmtN(clusters),label:'묶음',title:'서로 이어진 묶음의 수'}],{label:'관계 그래프 요약'});
     const parts=[top&&topN>1?T(`이 그래프 안에서 가장 많이 인용된 논문: ${String(top.title||'').slice(0,60)} (${topN}편이 인용)`):''].filter(Boolean);
     if(parts.length)node('p',parts.join(' · '),body,{class:'sc-muted sc-graph-summary sc-graph-insight'});
@@ -2737,7 +2759,7 @@
      button('열기',()=>library.openItem(n.id),node('div',null,c,{class:'sc-hit-actions'}),{'data-opens':'window'});
     }
    }
-   if(graph.truncated)node('p','연결이 너무 많아 강한 것부터 그렸습니다. 검색으로 범위를 좁히면 전부 보입니다.',body,{class:'sc-muted'});
+   if(graph.truncated)node('p',T(`연결 ${fmtN(counted.total)}건 중 강한 ${fmtN(counted.drawn)}건만 그렸습니다. 검색으로 범위를 좁히면 전부 보입니다.`),body,{class:'sc-muted'});
    if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다.`,body,{class:'sc-muted'});
   }
 
@@ -3509,7 +3531,8 @@
     await library.setRemark(item.id,field.value);
     const held=state.items.find(i=>String(i.id)===String(item.id));if(held)held.remark=field.value;
     const result=await library.memoToNote(item.id);
-    message(result.created?'메모를 노트로 옮겼습니다. 노트는 열지 않았습니다.':'메모 노트를 갱신했습니다. 노트는 열지 않았습니다.');
+    if((result.merged||result.adopted)&&typeof result.text==='string'){field.value=result.text;if(held)held.remark=result.text;}
+    message(result.merged?'다른 컴퓨터에서 온 메모 노트가 달라, 두 내용을 모두 남겼습니다. 이 컴퓨터의 메모는 구분선 아래에 있습니다. 노트는 열지 않았습니다.':result.adopted?'이미 있던 메모 노트의 내용을 메모로 가져왔습니다. 노트는 바꾸지 않았습니다.':result.created?'메모를 노트로 옮겼습니다. 노트는 열지 않았습니다.':'메모 노트를 갱신했습니다. 노트는 열지 않았습니다.');
    },box,{class:'sc-memo-to-note',title:T('이 문헌의 하위 노트(태그 style-custom:memo) 하나에 메모를 씁니다. 이후 노트를 고치면 메모도 따라갑니다')});
   }
 
@@ -3551,7 +3574,7 @@
     catch(error){runtime.Z.logError?.(error);}
     if(token!==epoch||disposed)return null;
    }
-   const total=found.supplementary.length+found.duplicate.length+found.foreign.length+(found.orphan||[]).length+found.missing.length+found.cleanup.merge.length+found.cleanup.copies.length;
+   const total=found.supplementary.length+found.duplicate.length+found.foreign.length+(found.orphan||[]).length+found.missing.length+(found.broken||[]).length+found.cleanup.merge.length+found.cleanup.copies.length;
    if(!total&&!found.unread)return null;
    return found;
   }
@@ -3564,7 +3587,7 @@
    if(state.attachmentFindingsOpen)details.open=true;
    details.addEventListener('toggle',()=>{state.attachmentFindingsOpen=details.open;});
    // Only the findings that exist: a row of zeros says nothing.
-   const facts=[['보충자료',found.supplementary.length],['중복',found.duplicate.length],['다른 논문',found.foreign.length],['보충자료만 있는 문헌',(found.orphan||[]).length],['첨부 없음',found.missing.length],['합칠 프리프린트',(found.cleanup?.merge||[]).length],['여러 번 보유',(found.cleanup?.copies||[]).length]].filter(([,count])=>count>0);
+   const facts=[['보충자료',found.supplementary.length],['중복',found.duplicate.length],['다른 논문',found.foreign.length],['보충자료만 있는 문헌',(found.orphan||[]).length],['첨부 없음',found.missing.length],['파일 연결 끊김',(found.broken||[]).length],['합칠 프리프린트',(found.cleanup?.merge||[]).length],['여러 번 보유',(found.cleanup?.copies||[]).length]].filter(([,count])=>count>0);
    node('summary',T('자료 점검')+' · '+(facts.length?facts.map(([label,count])=>`${T(label)} ${count}`).join(' · '):T('이상 없음')),details);
    if(found.unread){
     button(`아직 안 읽은 ${found.unread}개 판별`,()=>run(async()=>{
@@ -3634,7 +3657,7 @@
    /* Zotero's own "Find Available PDF" for the paper (its open-access and
       institutional resolvers); nothing opens, the outcome is said on the status line. */
    const findPDF=(row,actions)=>{
-    if(typeof runtime.findPDF!=='function')return;
+    if(typeof runtime.findPDF!=='function'||row.findable===false)return;
     button('PDF 찾기',()=>run(async()=>{
      message(`PDF를 찾는 중… ${String(row.title||'').slice(0,50)}`);
      const result=await runtime.findPDF(row.id);
@@ -3646,31 +3669,43 @@
    };
    /* Every paper without a file, one after another, with a progress line and a
       stop button. Zotero's own Find Available PDF does the finding; nothing opens. */
-   if(found.missing.length&&typeof runtime.findPDFs==='function'){
+   if(found.missing.some(row=>row.findable!==false)&&typeof runtime.findPDFs==='function'){
     const sweepBar=node('div',null,details,{class:'sc-hit-actions sc-pdf-sweep'});
-    const ordered=[...unreadMissing,...found.missing.filter(row=>!unreadMissing.includes(row))].map(row=>row.id);
-    const stop=button('중지',()=>{state.pdfSweep?.abort();},sweepBar,{class:'sc-pdf-sweep-stop'});stop.hidden=true;
+    const ordered=[...unreadMissing,...found.missing.filter(row=>!unreadMissing.includes(row))].filter(row=>row.findable!==false).map(row=>row.id);
+    /* The search is owned by the bench, not by this block of DOM: a saved PDF
+       redraws the panel, and the new block picks the running job up again --
+       stop visible, start off -- instead of offering a second run. */
+    const stop=button('중지',()=>{sweepJob?.controller.abort();},sweepBar,{class:'sc-pdf-sweep-stop'});stop.hidden=!sweepJob;
     const sweepButton=button(`PDF 모두 찾기 · ${ordered.length}편`,async()=>{
-     const controller=new AbortController();state.pdfSweep=controller;stop.hidden=false;
+     if(sweepJob)return;
+     const controller=new AbortController(),job={controller};sweepJob=job;
+     for(const current of panel.querySelectorAll('.sc-pdf-sweep-stop'))current.hidden=false;
+     for(const current of panel.querySelectorAll('.sc-pdf-sweep-start'))current.disabled=true;
      try{
-      const result=await runtime.findPDFs(ordered,{signal:controller.signal,onProgress:(done,total)=>message(`PDF 찾는 중 ${done+1}/${total}`)});
+      const result=await runtime.findPDFs(ordered,{signal:controller.signal,onProgress:(done,total)=>{if(!disposed)message(`PDF 찾는 중 ${done+1}/${total}`);}});
       if(disposed)return;
       if(result.unsupported)message('이 Zotero에서는 PDF 찾기를 쓸 수 없습니다.',true);
       else message(`PDF ${result.found}편을 찾아 붙였습니다 · 못 찾음 ${result.none}편${result.failed?` · 오류 ${result.failed}편`:''}${result.cancelled?` · ${result.done}/${result.total}편에서 중지`:''}`);
+      if(sweepJob===job)sweepJob=null;
       await render();
-     }finally{state.pdfSweep=null;stop.hidden=true;}
-    },sweepBar,{'data-opens':'download',title:T('Zotero가 오픈액세스·기관 구독 경로에서 PDF를 한 편씩 찾아 붙입니다. 중간에 멈출 수 있습니다')});
+     }finally{
+      if(sweepJob===job)sweepJob=null;
+      if(!disposed)for(const current of panel.querySelectorAll('.sc-pdf-sweep-stop'))current.hidden=true;
+      if(!disposed)for(const current of panel.querySelectorAll('.sc-pdf-sweep-start'))current.disabled=false;
+     }
+    },sweepBar,{class:'sc-pdf-sweep-start','data-opens':'download',title:T('Zotero가 오픈액세스·기관 구독 경로에서 PDF를 한 편씩 찾아 붙입니다. 중간에 멈출 수 있습니다')});
+    if(sweepJob)sweepButton.disabled=true;
     void sweepButton;
    }
    // Papers held twice over: a preprint whose published version is also here, and the same DOI or title.
    const cleanup=found.cleanup||{merge:[],copies:[]};
    section('merge','프리프린트와 게재본을 둘 다 보유 · 합치기 제안',cleanup.merge.map(row=>({...row,why:`게재본: ${row.publishedTitle||row.publishedID}`})),'warn',(row,actions)=>{
     button('게재본으로 옮기기',()=>run(async()=>{
-     const result=await runtime.mergePreprintIntoPublished(row.id);
-     const parts=[result.copied.tags?`태그 ${result.copied.tags}`:'',result.copied.status?'읽기 상태':'',result.copied.rating?'별점':'',result.copied.memo?'메모':'',result.copied.notes?`노트 ${result.copied.notes}`:''].filter(Boolean);
+     const result=await runtime.mergePreprintIntoPublished(row.id,{publishedID:row.publishedID});
+     const parts=[result.copied.tags?`태그 ${result.copied.tags}`:'',result.copied.status?'읽기 상태':'',result.copied.rating?'별점':'',result.copied.memo?'메모':'',result.copied.notes?`노트 ${result.copied.notes}`:'',result.copied.files?`첨부파일 ${result.copied.files}`:'',result.copied.collections?`컬렉션 ${result.copied.collections}`:'',result.copied.related?`관련 항목 ${result.copied.related}`:''].filter(Boolean);
      undoToast(`프리프린트를 게재본으로 합쳤습니다${parts.length?' · '+parts.join(' · '):''} · 프리프린트는 휴지통으로`,async()=>{await runtime.restorePreprint(row.id);message('프리프린트를 휴지통에서 되돌렸습니다.');await render();});
      await render();
-    }),actions,{title:T('태그·읽기 상태·메모·노트를 게재본에 복사하고 두 항목을 관련으로 잇고 프리프린트를 휴지통으로 보냅니다. 8초 안에 되돌릴 수 있고 Zotero 휴지통에서도 복원됩니다')});
+    }),actions,{title:T('첨부파일(주석 포함)과 노트는 게재본으로 옮기고, 태그·읽기 상태·메모·컬렉션·관련 항목은 복사한 뒤 두 항목을 잇고 빈 프리프린트를 휴지통으로 보냅니다. 8초 안에 되돌리면 옮긴 것이 모두 제자리로 돌아갑니다')});
    });
    section('copies','같은 DOI·제목으로 여러 번 보유',cleanup.copies.map(group=>({id:group.items[0].id,title:group.items[0].title,year:group.items[0].year,
     why:`${group.items.length}건 · ${group.reason==='doi'?'같은 DOI':'같은 제목·연도'}`,ids:group.items.map(row=>row.id)})),'warn',(row,actions)=>{
@@ -3679,6 +3714,9 @@
      message('Zotero 중복 항목 화면을 열었습니다. 합치기는 거기서 고르세요.');
     }),actions,{'data-opens':'pane',title:T('Zotero 본창의 중복 항목 화면에서 이 문헌들을 보여 줍니다. 새 창은 열리지 않습니다')});
    });
+   // The file is linked but not there (an old Dropbox path, a missing relative file). Downloading
+   // would add a second copy; the fix is to point the link at the file again.
+   section('broken','파일 연결 끊김 · 다시 연결해야 함',(found.broken||[]).map(row=>({...row,why:`저장된 경로: ${row.path||'(없음)'} · Zotero에서 첨부파일을 열어 「파일 찾기」로 다시 연결하세요 (PDF 찾기는 해결책이 아닙니다)`})),'warn');
    section('unreadMissing','안 읽었고 파일도 없는 문헌',unreadMissing,'',(row,actions)=>{findPDF(row,actions);if(isQueued(row.id))node('span',T('읽기 대기 중'),actions,{class:'sc-muted'});});
    section('readMissing','첨부파일 없음 · 읽는 중·완료',found.missing.filter(row=>!unreadMissing.includes(row)),'',findPDF);
   }
@@ -4911,7 +4949,7 @@
     // The row is stale once the paper is in: redraw it in place as owned, with 읽기 대기 on offer.
     work.inLibrary=true;work.importedItem=ownedRecord(saved,work);
     const fresh=hitRow(work,null,decorate);row.replaceWith(fresh);
-   }),actions,{title:importTip()});
+   }),actions,{'data-writes':'library',title:importTip()});
    if(work.doi)button('DOI',()=>copy(work.doi),actions);
    if(work.pdfURL)button('PDF',()=>win.Zotero.launchURL(work.pdfURL),actions,{'data-opens':'browser'});
    aroundToggle(row,actions,work);
@@ -5708,7 +5746,7 @@
       const add=button(importLabel(),()=>run(async()=>{
        const saved=await importHere(work);
        work.inLibrary=true;add.remove();node('span','보유',title,{class:'sc-line-owned'});
-      }),acts,{title:importTip()});
+      }),acts,{'data-writes':'library',title:importTip()});
       button('doi.org에서 열기',()=>{try{win.Zotero?.launchURL?.('https://doi.org/'+work.doi);}catch(_){}},acts,{'data-opens':'browser'});
      }
      if(!acts.childNodes.length)acts.remove();
@@ -6072,7 +6110,7 @@
       const record=ownedRecord(saved,work);
       if(record&&typeof ctx.redraw==='function'){ctx.byDOI.set(bareDOI(work.doi),record);ctx.redraw();}
       else{add.remove();node('span',T('보유'),status,{class:'sc-hit-owned'});}
-     }),status,{title:importTip()});}
+     }),status,{'data-writes':'library',title:importTip()});}
     }
     const actions=node('span',null,row,{class:'sc-inbox-actions'});
     /* An owned, unread paper can be put by for reading: it waits on 읽기
@@ -7701,6 +7739,7 @@
   if(runtime.Z.Notifier){notifier=runtime.Z.Notifier.registerObserver({notify:scheduleReload},['item','item-tag','collection','tab'],'style-custom-workbench');}
   const selectionTimer=win.setInterval(()=>{if(!disposed&&!win.closed&&!panel.hidden&&scopeContext()!==observedContext)run(load);},500);
   function destroy(){if(disposed)return;
+   try{sweepJob?.controller.abort();}catch(_){}
    graphResize?.disconnect?.();if(graphResizeTimer)win.clearTimeout(graphResizeTimer);
    if(tabID){const id=tabID;tabID=null;closingSelf=true;moveBack();try{win.Zotero_Tabs.close(id);}catch(_){}closingSelf=false;}
    // An edit typed a moment ago is still waiting out its timer. Closing the

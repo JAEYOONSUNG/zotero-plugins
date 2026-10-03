@@ -64,7 +64,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return this.isRegular(item) && item.isEditable() && !!library?.editable && library.libraryType !== "feed";
   }
   identity(item) { return `${item.libraryID}:${item.key}`; }
-  entry(item) { return this.cache.items[this.identity(item)] ||= {}; }
+  entry(item) { const id = this.identity(item); if (!this.memoChecked?.has(id) && typeof item?.getNotes === 'function') { try { this.adoptMemoNote(item); } catch (_) {} } return this.cache.items[id] ||= {}; }
   /* Rows for papers that are no longer in any library. Deleting a paper left
      its reading time, ratings and citation counts in the store, where they were
      re-read and re-written on every save. Run once per start, never during one. */
@@ -411,7 +411,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           if(paper!=null&&event!=='modify')this.annotationMemo.delete(paper);else{this.annotationMemo.clear();break;}
         }
       }
-      if(type==='item'&&event==='modify')for(const id of ids||[]){try{this.mirrorMemoNote(id);}catch(error){this.Z.logError?.(error);}}
+      if(type==='item'&&(event==='modify'||event==='add'))for(const id of ids||[]){try{this.mirrorMemoNote(id);}catch(error){this.Z.logError?.(error);}}
       if(type==='item'&&event==='modify')for(const id of ids||[]){try{const changed=this.Z.Items?.get?.(id);if(changed)this.forgetIfIdentityChanged(changed);}catch(error){this.Z.logError?.(error);}}
       /* A sync rewrites every item it touches. Answering each one queues a
          lookup per paper, so the queue is left alone while a sync runs and the
@@ -717,15 +717,34 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // Everything the scan found that the user can act on, gathered once so the
   // panel can list it. Detection with nowhere to go is half a feature.
   async attachmentFindings(libraryID) {
-    const found = {supplementary: [], duplicate: [], foreign: [], unknown: [], missing: [], orphan: [], unread: 0};
-    const papers = [], orphans = [];
+    const found = {supplementary: [], duplicate: [], foreign: [], unknown: [], missing: [], broken: [], orphan: [], unread: 0};
+    const papers = [], orphans = [], records = [], holders = new Set(), noFile = [];
+    const field = (item, key) => { try { return String(item.getField?.(key) || '').trim(); } catch (_) { return ''; } };
     for (const item of await this.libraryItems(libraryID)) {
       if (!this.isRegular(item)) continue;
-      const kinds = this.attachmentKinds(item);
-      const paper = {id: String(item.id), title: String(item.getField('title') || ''),
-        year: String(item.getField('date') || '').slice(0, 4)};
+      const all = this.attachmentKinds(item);
+      // A link whose file is gone is not a file: the paper cannot be read from it,
+      // and downloading is not the fix, relinking is.
+      const kinds = [];
+      for (const kind of all) {
+        const attachment = this.Z.Items.get(Number(kind.id));
+        let exists = true;
+        try { if (typeof attachment?.fileExists === 'function') exists = !!(await attachment.fileExists()); } catch (_) { exists = true; }
+        if (exists) { kinds.push(kind); continue; }
+        let path = '';
+        try { path = String(attachment.getFilePath?.() || attachment.attachmentPath || ''); } catch (_) { path = String(attachment?.attachmentPath || ''); }
+        found.broken.push({id: String(item.id), title: field(item, 'title'), year: field(item, 'date').slice(0, 4),
+          file: kind.name, path, brokenID: kind.id});
+      }
+      const paper = {id: String(item.id), title: field(item, 'title'), year: field(item, 'date').slice(0, 4)};
       papers.push(paper);
-      if (!kinds.length) { found.missing.push(paper); continue; }
+      records.push({...paper, doi: this.discoverTools.bareDOI(field(item, 'DOI')) || ''});
+      if (kinds.length) holders.add(paper.id);
+      if (!kinds.length) {
+        // Only a paper with no link at all is a candidate for "PDF 찾기".
+        if (!all.length) noFile.push({item, paper});
+        continue;
+      }
       found.unread += kinds.filter(kind => !kind.read).length;
       // An item whose every file is a supplement is a supplement that was filed
       // as its own bibliography entry -- twenty-two of them here, and only five
@@ -735,6 +754,22 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (!found[kind.kind]) continue;
         found[kind.kind].push({...paper, fileID: kind.id, file: kind.name, why: kind.why});
       }
+    }
+    // Which papers without a file are worth a download attempt: not a program or
+    // a dataset with neither DOI nor URL, and not a copy of a paper whose other
+    // copy already has the file.
+    const copyHolds = new Set();
+    for (const group of this.constructor.duplicateGroups(records)) {
+      if (group.items.some(row => holders.has(row.id))) for (const row of group.items) copyHolds.add(row.id);
+    }
+    const PAPER_TYPE = /^(journalArticle|preprint|conferencePaper|book|bookSection|thesis|report|magazineArticle|newspaperArticle)$/;
+    for (const {item, paper} of noFile) {
+      const type = String(item.itemType || '');
+      const hasID = !!(field(item, 'DOI') || field(item, 'url'));
+      let why = '';
+      if (type && !PAPER_TYPE.test(type) && !hasID) why = '논문이 아니고 DOI·주소도 없어 PDF 찾기에서 뺐습니다';
+      else if (copyHolds.has(paper.id)) why = '같은 논문의 다른 사본에 파일이 있어 PDF 찾기에서 뺐습니다';
+      found.missing.push({...paper, findable: !why, ...(why ? {why} : {})});
     }
     for (const {item, paper, kinds} of orphans) {
       const first = this.Z.Items.get(Number(kinds[0].id));
@@ -2063,20 +2098,33 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      (2) The same DOI, or the same title and year, held twice or more; those are
      listed and shown in Zotero's own Duplicate Items pane, never merged here. */
   static duplicateGroups(records) {
-    const flat = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const tools = typeof CustomStylePaperSignals !== "undefined" ? CustomStylePaperSignals : require("./paper-signals.js");
+    // Markup in a title ("<i>E. coli</i>") is not part of the words being compared.
+    const flat = value => String(value || '').replace(/<[^>]*>/g, ' ').replace(/&(?:[a-z]+|#\d+);/gi, ' ').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     const parent = new Map();
     const find = id => { while (parent.get(id) !== id) { parent.set(id, parent.get(parent.get(id))); id = parent.get(id); } return id; };
     const join = (a, b) => { const x = find(a), y = find(b); if (x !== y) parent.set(x, y); };
+    const doiOf = row => String(row.doi || '').trim().toLowerCase();
+    const isPre = row => tools.PREPRINT_PREFIXES.test(doiOf(row));
     const byDOI = new Map(), byTitle = new Map(), via = new Map();
     for (const row of records || []) {
       parent.set(row.id, row.id);
-      const doi = String(row.doi || '').trim().toLowerCase();
+      const doi = doiOf(row);
       if (doi) { if (byDOI.has(doi)) { join(row.id, byDOI.get(doi)); via.set(row.id, 'doi'); via.set(byDOI.get(doi), 'doi'); } else byDOI.set(doi, row.id); }
       const title = flat(row.title);
       if (title.split(' ').filter(word => word.length > 2).length >= 4) {
-        const key = title + '|' + String(row.year || '');
-        if (byTitle.has(key)) { join(row.id, byTitle.get(key)); if (!via.has(row.id)) via.set(row.id, 'title'); if (!via.has(byTitle.get(key))) via.set(byTitle.get(key), 'title'); }
-        else byTitle.set(key, row.id);
+        for (const other of byTitle.get(title) || []) {
+          // Two different DOIs are two different papers, unless one is the preprint of the other.
+          const pair = isPre(row) !== isPre(other);
+          if (doiOf(row) && doiOf(other) && doiOf(row) !== doiOf(other) && !pair) continue;
+          // A blank year matches any year; a preprint and its article may be a year or two apart.
+          const ya = Number(row.year), yb = Number(other.year);
+          if (ya && yb && Math.abs(ya - yb) > (pair ? 2 : 0)) continue;
+          join(row.id, other.id);
+          if (!via.has(row.id)) via.set(row.id, 'title'); if (!via.has(other.id)) via.set(other.id, 'title');
+        }
+        if (!byTitle.has(title)) byTitle.set(title, []);
+        byTitle.get(title).push(row);
       }
     }
     const groups = new Map();
@@ -2105,56 +2153,148 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const copies = this.constructor.duplicateGroups(items.map(record)).map(group => ({
       ...group, items: group.items.filter(row => !mergeIDs.has(row.id) || group.items.every(other => mergeIDs.has(other.id)))
     })).filter(group => group.items.length > 1);
-    return {merge, copies};
+    // A preprint and a journal article found by title, with no stored published-version signal,
+    // belong in the merge list too, not only in "held more than once".
+    const byID = new Map(items.map(item => [String(item.id), item]));
+    const rest = [];
+    for (const group of copies) {
+      const pre = group.items.filter(row => this._isPreprintItem(byID.get(row.id)));
+      const art = group.items.filter(row => !this._isPreprintItem(byID.get(row.id)));
+      if (!pre.length || !art.length) { rest.push(group); continue; }
+      for (const row of pre) {
+        if (mergeIDs.has(row.id)) continue;
+        const target = byID.get(art[0].id);
+        merge.push({...row, publishedID: art[0].id, publishedTitle: field(target, 'title'), linked: this._isLinked(byID.get(row.id), target)});
+        mergeIDs.add(row.id);
+      }
+      if (art.length > 1) rest.push({...group, items: art});
+    }
+    return {merge, copies: rest};
   }
-  async mergePreprintIntoPublished(preprintID) {
+  // What a merge did, kept so the undo can reverse exactly that and nothing else.
+  mergeLedger() {
+    const store = this.cache.mergeUndo;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.mergeUndo = {});
+  }
+  _isPreprintItem(item) {
+    const doi = this.signalTools.bareDOI(String(item?.getField?.('DOI') || ''));
+    if (doi && this.signalTools.PREPRINT_PREFIXES.test(doi)) return true;
+    try { return !!this.signalsOf?.(item)?.preprint; } catch (_) { return false; }
+  }
+  async mergePreprintIntoPublished(preprintID, {publishedID} = {}) {
     const preprint = this.Z.Items.get(Number(preprintID));
     if (!preprint || !this.isRegular(preprint)) throw new Error('프리프린트를 찾지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요.');
-    const status = await this.publishedStatus(preprint);
-    const held = status?.held;
+    const given = publishedID != null ? this.Z.Items.get(Number(publishedID)) : null;
+    const held = given && this.isRegular(given) && !given.deleted ? given : (await this.publishedStatus(preprint))?.held;
     if (!held || held.id === preprint.id) throw new Error('게재본이 이 라이브러리에 없어 합칠 수 없습니다. 게재본을 먼저 라이브러리에 추가하세요.');
     if (held.libraryID !== preprint.libraryID) throw new Error('게재본이 다른 라이브러리에 있어 합치지 못했습니다. 같은 라이브러리로 옮긴 뒤 다시 시도하세요.');
+    if (this._isPreprintItem(held)) throw new Error('게재본으로 찾은 항목도 프리프린트입니다. 실제 게재본을 라이브러리에 추가한 뒤 합치세요.');
     if (!this.canEdit(preprint) || !this.canEdit(held)) throw new Error('이 라이브러리는 편집할 수 없습니다. 편집할 수 있는 라이브러리에서 시도하세요.');
-    const copied = {tags: 0, notes: 0, memo: false, status: null, rating: null};
+    const copied = {tags: 0, notes: 0, files: 0, collections: 0, related: 0, memo: false, status: null, rating: null};
+    const rec = {preprint: preprint.id, held: held.id, children: [], tags: [], collections: [], related: [], linked: false, replaces: '', memo: null, status: null, rating: null};
+    const isMemoNote = note => (note.getTags?.() || []).some(tag => tag.tag === this.constructor.MEMO_NOTE_TAG);
+    const childIDs = () => [...new Set([...(preprint.getAttachments?.() || []), ...(preprint.getNotes?.() || [])])];
     const isStatus = tag => /^\/(unread|reading|done)$/i.test(String(tag).trim());
-    const have = new Set(held.getTags().map(tag => tag.tag));
-    const carry = preprint.getTags().filter(tag => !have.has(tag.tag) && !isStatus(tag.tag) && tag.tag !== this.constructor.MEMO_NOTE_TAG);
-    if (carry.length) { held.setTags([...held.getTags(), ...carry.map(tag => ({tag: tag.tag, type: tag.type || 0}))]); copied.tags = carry.length; }
-    const related = !this._isLinked(preprint, held);
-    if (related) { preprint.addRelatedItem(held); held.addRelatedItem(preprint); await preprint.saveTx(); }
-    if (carry.length || related) await held.saveTx();
-    const rank = {unread: 0, reading: 1, done: 2};
-    const from = this.state(preprint), to = this.state(held);
-    const patch = {};
-    if (rank[from.status] > rank[to.status]) { patch.status = from.status; copied.status = from.status; }
-    if (from.rating > 0 && !(to.rating > 0)) { patch.rating = from.rating; copied.rating = from.rating; }
-    if (Object.keys(patch).length) await this.edit([held], patch);
-    const memo = String(this.entry(preprint).remark || ''), mine = String(this.entry(held).remark || '');
-    if (memo && memo !== mine && !mine.includes(memo)) {
-      this.entry(held).remark = mine ? mine + '\n\n' + memo : memo; this.dirty = true; copied.memo = true;
-      await this.flush();
-      if (this.getSetting('memoToNote')) await this.memoToNote(held);
+    try {
+      // Files, their annotations and the user's notes MOVE to the published item:
+      // the trash is emptied after 30 days and must never hold the only copy.
+      // Done first, so a failure here leaves nothing else touched.
+      for (const id of childIDs()) {
+        const child = this.Z.Items.get(Number(id));
+        if (!child || child.deleted || (child.isNote?.() && isMemoNote(child))) continue;
+        const before = child.parentItemID ?? preprint.id;
+        child.parentItemID = held.id;
+        try { await child.saveTx(); } catch (error) { child.parentItemID = before; throw error; }
+        rec.children.push({id: child.id, from: preprint.id, note: !!child.isNote?.()});
+        if (child.isNote?.()) copied.notes++; else copied.files++;
+      }
+      const movedIDs = new Set(rec.children.map(child => Number(child.id)));
+      // The plugin's own memo mirror is the only child allowed to go with the preprint (its text is carried below).
+      const stuck = childIDs().filter(id => !movedIDs.has(Number(id))).map(id => this.Z.Items.get(Number(id)))
+        .filter(child => child && !child.deleted && !(child.isNote?.() && isMemoNote(child)));
+      if (stuck.length) throw new Error('프리프린트의 첨부파일·노트 일부를 옮기지 못해 합치지 않았습니다. 아무것도 휴지통으로 보내지 않았으니 Zotero에서 확인한 뒤 다시 시도하세요.');
+
+      const have = new Set(held.getTags().map(tag => tag.tag));
+      const carry = preprint.getTags().filter(tag => !have.has(tag.tag) && !isStatus(tag.tag) && tag.tag !== this.constructor.MEMO_NOTE_TAG);
+      if (carry.length) { held.setTags([...held.getTags(), ...carry.map(tag => ({tag: tag.tag, type: tag.type || 0}))]); copied.tags = carry.length; rec.tags = carry.map(tag => tag.tag); }
+      for (const id of preprint.getCollections?.() || []) {
+        if (held.inCollection?.(id)) continue;
+        held.addToCollection(id); rec.collections.push(id); copied.collections++;
+      }
+      for (const key of [...(preprint.relatedItems || [])]) {
+        if (key === held.key || held.relatedItems?.includes?.(key)) continue;
+        const other = this.Z.Items.getByLibraryAndKey?.(preprint.libraryID, key);
+        if (!other || other.deleted || other.id === held.id) continue;
+        held.addRelatedItem(other); other.addRelatedItem(held); await other.saveTx();
+        rec.related.push(key); copied.related++;
+      }
+      const linked = !this._isLinked(preprint, held);
+      if (linked) { preprint.addRelatedItem(held); held.addRelatedItem(preprint); await preprint.saveTx(); rec.linked = true; }
+      const uri = this.Z.URI?.getItemURI?.(preprint);
+      if (uri && typeof held.addRelation === 'function' && !(held.getRelationsByPredicate?.('dc:replaces') || []).includes(uri)) { held.addRelation('dc:replaces', uri); rec.replaces = uri; }
+      if (carry.length || linked || rec.collections.length || rec.related.length || rec.replaces) await held.saveTx();
+      const rank = {unread: 0, reading: 1, done: 2};
+      const from = this.state(preprint), to = this.state(held);
+      const patch = {};
+      if (rank[from.status] > rank[to.status]) { patch.status = from.status; copied.status = from.status; rec.status = {before: to.status, after: from.status}; }
+      if (from.rating > 0 && !(to.rating > 0)) { patch.rating = from.rating; copied.rating = from.rating; rec.rating = {before: to.rating || 0, after: from.rating}; }
+      if (Object.keys(patch).length) await this.edit([held], patch);
+      const memo = String(this.entry(preprint).remark || ''), mine = String(this.entry(held).remark || '');
+      if (memo && memo !== mine && !mine.includes(memo)) {
+        const after = mine ? mine + '\n\n' + memo : memo;
+        this.entry(held).remark = after; this.dirty = true; copied.memo = true; rec.memo = {before: mine, after};
+        await this.flush();
+        if (this.getSetting('memoToNote')) await this.memoToNote(held);
+      }
+    } catch (error) {
+      // Nothing was trashed; put back whatever was already moved or copied.
+      try { await this._undoMerge(rec, {untrash: false}); } catch (undoError) { this.Z.logError?.(undoError); }
+      throw error;
     }
-    // The preprint's own notes are copied, not moved, so the trash keeps the originals whole.
-    for (const id of preprint.getNotes?.() || []) {
-      const note = this.Z.Items.get(id);
-      if (!note || note.deleted || (note.getTags?.() || []).some(tag => tag.tag === this.constructor.MEMO_NOTE_TAG)) continue;
-      const copy = new this.Z.Item('note');
-      copy.libraryID = held.libraryID; copy.parentID = held.id;
-      copy.setNote(note.getNote());
-      copy.setTags((note.getTags?.() || []).map(tag => ({tag: tag.tag, type: tag.type || 0})));
-      await copy.saveTx(); copied.notes++;
-    }
+    this.mergeLedger()[String(preprint.id)] = rec; this.dirty = true;
+    try { await this.flush(); } catch (_) {}
     preprint.deleted = true;
     await preprint.saveTx();
     this.bumpState?.();
     await this.refreshWindows();
     return {published: held, preprint, copied};
   }
+  async _undoMerge(rec, {untrash = true} = {}) {
+    const get = id => this.Z.Items.get(Number(id));
+    const held = get(rec.held), preprint = get(rec.preprint);
+    for (const child of [...rec.children].reverse()) {
+      const item = get(child.id);
+      if (item && held && item.parentItemID === held.id) { item.parentItemID = child.from; await item.saveTx(); }
+    }
+    if (held) {
+      let changed = false;
+      if (rec.tags.length) { held.setTags(held.getTags().filter(tag => !rec.tags.includes(tag.tag))); changed = true; }
+      for (const id of rec.collections) { held.removeFromCollection?.(id); changed = true; }
+      for (const key of rec.related) {
+        const other = this.Z.Items.getByLibraryAndKey?.(held.libraryID, key);
+        held.removeRelatedItem?.(other || {key}); changed = true;
+        if (other) { other.removeRelatedItem?.(held); await other.saveTx(); }
+      }
+      if (rec.linked && preprint) { held.removeRelatedItem?.(preprint); preprint.removeRelatedItem?.(held); await preprint.saveTx(); changed = true; }
+      if (rec.replaces) { held.removeRelation?.('dc:replaces', rec.replaces); changed = true; }
+      if (changed) await held.saveTx();
+      const patch = {};
+      if (rec.status && this.state(held).status === rec.status.after) patch.status = rec.status.before;
+      if (rec.rating && this.state(held).rating === rec.rating.after) patch.rating = rec.rating.before;
+      if (Object.keys(patch).length) await this.edit([held], patch);
+      if (rec.memo && String(this.entry(held).remark || '') === rec.memo.after) { this.entry(held).remark = rec.memo.before; this.dirty = true; await this.flush(); }
+    }
+    if (untrash && preprint?.deleted) { preprint.deleted = false; await preprint.saveTx(); }
+    delete this.mergeLedger()[String(rec.preprint)]; this.dirty = true;
+    try { await this.flush(); } catch (_) {}
+  }
   async restorePreprint(preprintID) {
     const item = this.Z.Items.get(Number(preprintID));
     if (!item || !item.deleted) return false;
-    item.deleted = false; await item.saveTx(); this.bumpState?.(); await this.refreshWindows();
+    const rec = this.mergeLedger()[String(item.id)];
+    if (rec) await this._undoMerge(rec);
+    else { item.deleted = false; await item.saveTx(); }
+    this.bumpState?.(); await this.refreshWindows();
     return true;
   }
   // The main window's own Duplicate Items pane; no window of ours opens.
@@ -4277,31 +4417,84 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     return null;
   }
-  async memoToNote(item) {
+  /* The memo note's text as the last sync left it: what the local memo and the
+     note agreed on. A note that differs from it was written elsewhere (sync). */
+  static memoSep() { return '\n\n--- 이 컴퓨터의 메모 ---\n'; }
+  /* A tagged memo note that exists already (written on another computer and
+     synced, or by an earlier session) is read once per paper and per session:
+     with no local memo it becomes the memo. Never overwrites typed text. */
+  adoptMemoNote(item) {
+    const id = this.identity(item), checked = this.memoChecked || (this.memoChecked = new Set());
+    if (checked.has(id)) return false;
+    checked.add(id);
+    if (typeof item?.getNotes !== 'function') return false;
+    const note = this.memoNoteOf(item);
+    if (!note) return false;
+    const text = this.constructor.memoFromNoteHTML(note.getNote());
+    const row = this.cache.items[id] ||= {};
+    if (!text.trim() || String(row.remark || '') === text) { if (text.trim() && row.memoSynced === undefined) row.memoSynced = text; return false; }
+    if (!String(row.remark || '').trim() || row.memoSynced !== undefined && String(row.remark) === row.memoSynced) {
+      row.remark = text; row.memoSynced = text; this.dirty = true; return true;
+    }
+    return false;
+  }
+  async memoToNote(item, {prior} = {}) {
     if (!this.isRegular(item)) throw new Error('메모를 노트로 옮길 문헌을 찾지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요.');
     if (!this.canEdit(item)) throw new Error('이 라이브러리는 편집할 수 없어 노트를 만들지 못했습니다. 편집할 수 있는 라이브러리에서 시도하세요.');
-    const text = String(this.entry(item).remark || '');
+    /* One queue per paper, and a revision: a job that a newer call has
+       overtaken writes nothing (the newer one carries the latest text), so an
+       older save finishing late cannot put its text back. */
+    const id = this.identity(item);
+    const queues = this.memoQueues || (this.memoQueues = new Map()), revisions = this.memoRevisions || (this.memoRevisions = new Map());
+    const revision = (revisions.get(id) || 0) + 1; revisions.set(id, revision);
+    const previous = queues.get(id) || Promise.resolve();
+    const job = previous.catch(() => {}).then(() => revisions.get(id) !== revision
+      ? {created: false, text: String(this.entry(item).remark || ''), skipped: true}
+      : this._memoToNote(item, {prior}));
+    queues.set(id, job);
+    try { return await job; } finally { if (queues.get(id) === job) queues.delete(id); }
+  }
+  async _memoToNote(item, {prior} = {}) {
+    this.adoptMemoNote(item);
+    const row = this.entry(item), text = String(row.remark || '');
     let note = this.memoNoteOf(item);
     if (!text.trim() && !note) throw new Error('메모가 비어 있어 옮길 내용이 없습니다. 메모를 먼저 적으세요.');
     const created = !note;
-    if (!note) {
+    let merged = false, adopted = false, write = text;
+    if (note) {
+      const there = this.constructor.memoFromNoteHTML(note.getNote());
+      if (text.replace(/\n+$/, '') === there.replace(/\n+$/, '')) write = null;
+      else {
+        const base = row.memoSynced !== undefined ? row.memoSynced : (prior !== undefined ? String(prior) : undefined);
+        const unchanged = base !== undefined && String(base).replace(/\n+$/, '') === there.replace(/\n+$/, '');
+        if (unchanged) write = text;
+        else if (!text.trim() || there.includes(text.trim())) { write = null; adopted = true; }
+        else if (text.includes(there.trim())) write = text;
+        else if (!there.trim()) write = text;
+        else { write = there + this.constructor.memoSep() + text; merged = true; }
+      }
+    } else {
       note = new this.Z.Item('note');
       note.libraryID = item.libraryID; note.parentID = item.id;
       note.setTags([{tag: this.constructor.MEMO_NOTE_TAG, type: 0}]);
     }
-    const html = this.constructor.memoNoteHTML(text);
-    if (created || note.getNote() !== html) {
-      note.setNote(html);
+    if (write !== null) {
+      note.setNote(this.constructor.memoNoteHTML(write));
       this.memoWriting = (this.memoWriting || 0) + 1;
       try { await note.saveTx(); } finally { this.memoWriting--; }
     }
-    // The local memo mirrors the note it now has.
+    // The local memo mirrors the note it now has -- unless it was edited while the note was written.
     const mirrored = this.constructor.memoFromNoteHTML(note.getNote());
-    if (mirrored !== text) { this.entry(item).remark = mirrored; this.dirty = true; await this.flush(); }
+    const now = String(row.remark || '');
+    if (mirrored !== now && now === text) { row.remark = mirrored; this.dirty = true; }
+    row.memoSynced = mirrored; this.dirty = true;
+    await this.flush();
     this.bumpState?.();
-    return {created, text: mirrored};
+    return {created, text: mirrored, merged, adopted};
   }
-  // An edit made to the memo note inside Zotero flows back into the local memo.
+  /* An edit made to the memo note inside Zotero (or arriving by sync) flows
+     back into the local memo; a memo typed here since the last sync is kept
+     beside it, never replaced. */
   mirrorMemoNote(noteID) {
     const note = this.Z.Items?.get?.(noteID);
     if (!note || !note.isNote?.() || !note.parentID || (this.memoWriting || 0) > 0) return false;
@@ -4309,8 +4502,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const parent = this.Z.Items.get(note.parentID);
     if (!parent) return false;
     const text = this.constructor.memoFromNoteHTML(note.getNote());
-    if (text === String(this.entry(parent).remark || '')) return false;
-    this.entry(parent).remark = text; this.dirty = true; this.bumpState?.();
+    const row = this.entry(parent), mine = String(row.remark || '');
+    if (text === mine) { if (row.memoSynced !== text) { row.memoSynced = text; this.dirty = true; } return false; }
+    const typedHere = mine.trim() && mine !== row.memoSynced && !text.includes(mine.trim());
+    row.remark = typedHere ? (text.trim() ? text + this.constructor.memoSep() + mine : mine) : text;
+    row.memoSynced = text; this.dirty = true; this.bumpState?.();
     this.flush?.().catch?.(error => this.Z.logError?.(error));
     return true;
   }

@@ -448,7 +448,7 @@
         /* A result row's buttons reach outside: a title or PDF opens the
            browser, DOI overwrites the clipboard. A view switch saves the
            user's choice of view. Neither is the sweep's to press. */
-        const buttons = [...bench.panel.querySelectorAll('.sc-body button')].filter(b => !b.disabled && !b.hidden && !b.hasAttribute('data-opens') && !b.closest('.sc-hit, .sc-segmented') && b.textContent.trim() && !skip.test(b.textContent) && !seen.has(b.textContent.trim()));
+        const buttons = [...bench.panel.querySelectorAll('.sc-body button')].filter(b => !b.disabled && !b.hidden && !b.hasAttribute('data-opens') && !b.hasAttribute('data-writes') && !b.closest('.sc-hit, .sc-segmented') && b.textContent.trim() && !skip.test(b.textContent) && !seen.has(b.textContent.trim()));
         for (const b of buttons.slice(0, 12)) {
           const label = b.textContent.trim(); seen.add(label);
           if (!b.isConnected) continue;

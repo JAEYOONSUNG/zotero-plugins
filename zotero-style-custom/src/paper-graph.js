@@ -151,6 +151,9 @@
     for (const [key, count] of shared) {
       if (count < minShared) continue;
       const i = Math.floor(key / nodes.length), j = key % nodes.length;
+      // Two copies of one OpenAlex work share every reference by definition; that is
+      // a duplicate, not a relation between two papers.
+      if (nodes[i].openalex && nodes[i].openalex === nodes[j].openalex) continue;
       const score = count / Math.sqrt(nodes[i].references.size * nodes[j].references.size);
       if (score < minScore) continue;
       if (stated.has(pairKey(nodes[i].id, nodes[j].id))) continue;
@@ -163,17 +166,24 @@
     edges.sort((a, b) => (b.kind === 'cites') - (a.kind === 'cites') || b.weight - a.weight);
     const kept = edges.slice(0, maxEdges);
     const byID = new Map(nodes.map(node => [node.id, node]));
-    for (const edge of kept) {
+    // Whether a paper is connected is a fact about the whole library, not about
+    // the 900 threads that fit on the canvas: degree counts every edge found.
+    for (const edge of edges) {
       byID.get(edge.source).degree++;
       byID.get(edge.target).degree++;
     }
 
     // Work the library cites but does not hold. This is the one thing a citation
     // map tells you that reading your own shelf cannot.
-    const counts = new Map();
+    const counts = new Map(), countedWorks = new Map();
     for (const node of nodes) {
+      const work = node.openalex || 'id:' + node.id;
       for (const reference of node.references) {
         if (byWork.has(reference)) continue;
+        // Copies of one work cite a reference once, not once per copy.
+        const seen = countedWorks.get(reference) || countedWorks.set(reference, new Set()).get(reference);
+        if (seen.has(work)) continue;
+        seen.add(work);
         const row = counts.get(reference) || {id: reference, citedBy: []};
         row.citedBy.push(node.id);
         counts.set(reference, row);
@@ -211,8 +221,9 @@
     return {
       nodes: connected, isolated, edges: kept, missing, external,
       truncated: edges.length > kept.length,
-      counted: {direct: kept.filter(edge => edge.kind === 'cites' && !edge.external).length,
-        coupled: kept.filter(edge => edge.kind === 'coupled').length,
+      counted: {direct: edges.filter(edge => edge.kind === 'cites').length,
+        coupled: edges.filter(edge => edge.kind === 'coupled').length,
+        drawn: kept.filter(edge => !edge.external).length, total: edges.length,
         incoming: kept.filter(edge => edge.external).length,
         external: external.length,
         isolated: isolated.length}
@@ -624,10 +635,15 @@
       const id = bare(p.openalex);
       if (id && !owned.has(id)) owned.set(id, p);
     }
-    const counts = new Map();
+    const counts = new Map(), works = new Map();
     for (const p of papers || []) {
+      // A work held as several items cites a reference once.
+      const work = bare(p.openalex) || 'id:' + p.id;
       for (const ref of new Set((p.references || []).map(bare).filter(Boolean))) {
         if (inside.has(ref) || ref === bare(p.openalex)) continue;
+        const seen = works.get(ref) || works.set(ref, new Set()).get(ref);
+        if (seen.has(work)) continue;
+        seen.add(work);
         const row = counts.get(ref) || {openalex: ref, citedBy: []};
         row.citedBy.push(String(p.id));
         counts.set(ref, row);
@@ -685,12 +701,29 @@
       const hit = byWork.get(ref);
       if (hit && hit !== centre) libCites.push(hit); else if (!hit) ghostRefs.push(ref);
     }
-    const libCitedBy = centreWork ? list.filter(p => p !== centre && refSet(p).has(centreWork)) : [];
-    const ghostCiters = [], seenCiter = new Set();
+    // A work held as several items is one citer; a second copy of the centre is not a citer of it.
+    const seenWork = new Set();
+    const libCitedBy = centreWork ? list.filter(p => {
+      if (p === centre || bare(p.openalex) === centreWork || !refSet(p).has(centreWork)) return false;
+      const key = bare(p.openalex) || 'id:' + p.id;
+      if (seenWork.has(key)) return false;
+      seenWork.add(key); return true;
+    }) : [];
+    const ghostCiters = [], seenCiter = new Set(), confirmedCiters = new Set();
     for (const c of citers || []) {
       const id = bare(c && c.id);
-      if (!id || id === centreWork || byWork.has(id) || seenCiter.has(id)) continue;
+      if (!id || id === centreWork || seenCiter.has(id)) continue;
       seenCiter.add(id);
+      /* A fetched citer the shelf already holds is a shelf citer: the fetch is
+         the proof, whether or not its stored references (capped) name the centre. */
+      const held = byWork.get(id);
+      if (held) {
+        if (held !== centre && bare(held.openalex) !== centreWork) {
+          confirmedCiters.add(held);
+          if (!libCitedBy.includes(held) && !seenWork.has(id)) { libCitedBy.push(held); seenWork.add(id); }
+        }
+        continue;
+      }
       ghostCiters.push({openalex: id, title: text(c.title), year: Number(c.year) || null, venue: text(c.venue),
         citations: Number(c.citations) || 0, doi: text(c.doi)});
     }
@@ -702,12 +735,15 @@
     if (depth2) {
       const level = new Set([...first.keys(), String(centre.id)]);
       const firstWorks = new Set([...first.keys()].map(id => bare(byID.get(id).openalex)).filter(Boolean));
+      const seenNear = new Set();
       for (const p of list) {
-        if (level.has(String(p.id))) continue;
+        if (level.has(String(p.id)) || (centreWork && bare(p.openalex) === centreWork)) continue;
+        const nearKey = bare(p.openalex) || 'id:' + p.id;
+        if (seenNear.has(nearKey)) continue;
         const cites = [...refSet(p)].some(ref => firstWorks.has(ref));
         const w = bare(p.openalex);
         const cited = w && [...first.keys()].some(id => refSet(byID.get(id)).has(w));
-        if (cites || cited) near.push(p);
+        if (cites || cited) { near.push(p); seenNear.add(nearKey); }
       }
     }
     const counts = {
@@ -749,6 +785,7 @@
         if (n.role === 'cites') add(nodes[0].id, n.id); else add(n.id, nodes[0].id);
       }
     }
+    for (const p of confirmedCiters) add(String(p.id), nodes[0].id);
     const nodeByWork = new Map(nodes.filter(n => n.openalex).map(n => [n.openalex, n]));
     for (const n of nodes) {
       if (n.kind === 'ghost') continue;

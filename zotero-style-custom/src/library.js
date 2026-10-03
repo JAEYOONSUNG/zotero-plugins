@@ -367,7 +367,7 @@
       /* "메모를 노트로도 저장": the same text into one tagged child note, so it
          lives in Zotero too. The local memo is already saved when this runs. */
       if(runtime.memoToNote&&runtime.getSetting?.('memoToNote')&&(value.trim()||runtime.memoNoteOf?.(item))){
-        try{await runtime.memoToNote(item);}catch(error){throw new Error('메모는 저장했지만 노트로 옮기지 못했습니다: '+(error&&error.message||error));}
+        try{await runtime.memoToNote(item,{prior});}catch(error){throw new Error('메모는 저장했지만 노트로 옮기지 못했습니다: '+(error&&error.message||error));}
       }
       return value;
     }
