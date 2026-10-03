@@ -6703,6 +6703,7 @@ test('memo CAS: fast typing in one editor is not a conflict with itself (saves a
  for(const v of ['a','ab','abc']){casType(f,el,v);el.dispatchEvent(new f.win.Event('blur'));}
  await settle();
  assert.equal(f.runtime.cache.items[1].remark,'abc');assert.equal(f.body().querySelector('.sc-memo-stale'),null);
+ assertEditorsConsistent(f,'fast typing');
  f.bench.destroy();
 });
 
@@ -7298,6 +7299,7 @@ test('stale answers (R9-2): a completion that fires after a redraw never touches
  assert.equal(fresh.value,'L','the typing is not replaced');
  assert.ok(sharedDraftTexts(f).includes('L'),'and its draft is kept: '+JSON.stringify(sharedDraftTexts(f)));
  assert.equal(f.runtime.cache.memoKept,undefined,'nothing needed keeping');
+ assertEditorsConsistent(f,'R9-2');
  f.bench.destroy();
 });
 
@@ -7321,6 +7323,7 @@ test('stale answers (R9-3): a save that completes after another window saved and
  casType(f,fresh,'B2');fresh.dispatchEvent(new f.win.Event('blur'));await settle();
  assert.equal(f.runtime.cache.items[1].remark,'B2','its base is B, so saving on is not a conflict');
  assert.equal(f.body().querySelector('.sc-memo-stale'),null);
+ assertEditorsConsistent(f,'R9-3');
  f.bench.destroy();g.bench.destroy();
 });
 
@@ -7337,4 +7340,103 @@ test('invariant: every propagation of a memo answer to an editor checks its revi
  const attempt=src.slice(src.indexOf('const attempt=async('),src.indexOf('const run=async('));
  assert.match(attempt,/answerFresh\(cas\.itemID,answer\.rev\)/,'attempt checks the rev before anything else changes');
  assert.ok(attempt.indexOf('answerFresh(')<attempt.indexOf('moveBase('),'and before the base moves');
+});
+
+// The invariant every completion must leave: each connected memo editor is in exactly one of three consistent states.
+function assertEditorsConsistent(f,label=''){
+ const states=f.bench.memoEditorState();
+ assert.ok(states.length>0,label+' no editors');
+ for(const s of states){
+  const a=s.value===s.stored&&s.base===s.stored&&s.last===s.stored&&!s.box;
+  const b=s.value!==s.stored&&s.base===s.stored&&s.last!==s.value&&!s.box;
+  const c=s.value!==s.stored&&s.base!==s.stored&&s.box&&!s.used&&s.buttonsEnabled;
+  assert.ok(a||b||c,label+' inconsistent editor: '+JSON.stringify(s));
+ }
+}
+const answerWith=(row,opts,text)=>{row.remark=text;row.memoRev=(row.memoRev||0)+1;if(opts.answer)opts.answer.rev=row.memoRev;return text;};
+
+test('reconcile (R10-1): a follow after a completion never replaces input typed since the request began',async()=>{
+ const f=fixture();casLibrary(f);
+ const row=()=>f.runtime.cache.items[1];
+ f.runtime.cache.items[1]={remark:'B'};
+ let release;const gate=new Promise(r=>{release=r;});
+ const cas=f.library.setRemark;let first=true;
+ f.library.setRemark=async(id,text,opts)=>{const out=await cas(id,text,opts);if(first){first=false;await gate;return answerWith(row(),opts,'R');}return out;}; // the note R is adopted on resume
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'A');old.dispatchEvent(new f.win.Event('blur'));await settle();
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(fresh.value,'A');
+ casType(f,fresh,'X');casType(f,fresh,'A');
+ release();await settle();
+ assert.equal(fresh.value,'A','the input is not replaced by R');
+ assert.ok(sharedDraftTexts(f).includes('A'),'its draft stays: '+JSON.stringify(sharedDraftTexts(f)));
+ assertEditorsConsistent(f,'after');
+ f.bench.destroy();
+});
+
+test('reconcile (R10-2): an old completion never leaves a used box behind',async()=>{
+ const f=fixture();casLibrary(f);
+ const row=()=>f.runtime.cache.items[1];
+ f.runtime.cache.items[1]={remark:'R'};
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ row().remark='R2';row().memoRev=1; // the editor was loaded over R; the memo has since moved
+ casType(f,el,'L');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.ok(f.body().querySelector('.sc-memo-stale'));
+ let release;const gate=new Promise(r=>{release=r;});
+ const cas=f.library.setRemark;
+ f.library.setRemark=async(id,text,opts)=>{const out=await cas(id,text,opts);await gate;return out;};
+ const pending=f.click('이 편집 내용 쓰기');await settle();
+ casType(f,el,'X');casType(f,el,'L');
+ answerWith(row(),{},'N'); // saved elsewhere
+ release();await pending;await settle();
+ assertEditorsConsistent(f,'after');
+ const box=f.body().querySelector('.sc-memo-stale');
+ assert.ok(box,'a usable box is shown');
+ f.library.setRemark=cas;
+ await f.click('이 편집 내용 쓰기');
+ assert.equal(row().remark,'L','its buttons work');
+ f.bench.destroy();
+});
+
+test('reconcile (R10-3): an input typed back to the submitted text during an adopting save is a visible conflict, not a silent stall',async()=>{
+ const f=fixture();casLibrary(f);
+ const row=()=>f.runtime.cache.items[1];
+ f.runtime.cache.items[1]={remark:'L'};
+ let release;const gate=new Promise(r=>{release=r;});
+ const cas=f.library.setRemark;let first=true;
+ f.library.setRemark=async(id,text,opts)=>{const out=await cas(id,text,opts);if(first){first=false;await gate;return answerWith(row(),opts,'R');}return out;}; // R is adopted
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ const pending=f.click('노트로 옮기기');await settle();
+ casType(f,el,'X');casType(f,el,'L');
+ release();await pending;await settle();
+ assert.equal(el.value,'L');
+ assertEditorsConsistent(f,'after');
+ assert.ok(f.body().querySelector('.sc-memo-stale'),'the difference is shown');
+ f.bench.destroy();
+});
+
+test('reconcile (R10-4): a redrawn editor that shows exactly what was saved gets its base moved',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'B'};
+ let release;const gate=new Promise(r=>{release=r;});
+ const cas=f.library.setRemark;let first=true;
+ f.library.setRemark=async(id,text,opts)=>{if(first){first=false;await gate;}return cas(id,text,opts);}; // held before it writes
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'L');old.dispatchEvent(new f.win.Event('blur'));await settle();
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(fresh.value,'L','the draft is restored over base B');
+ release();await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'L');
+ assertEditorsConsistent(f,'after');
+ casType(f,fresh,'L2');fresh.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'L2','the next input is not falsely rejected');
+ assert.equal(f.body().querySelector('.sc-memo-stale'),null);
+ assertEditorsConsistent(f,'end');
+ f.bench.destroy();
 });

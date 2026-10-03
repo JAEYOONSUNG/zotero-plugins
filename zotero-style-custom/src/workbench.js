@@ -3548,6 +3548,7 @@
      unchanged), or a new editor that has had none at all. */
   function memoRevNow(itemID){try{const ref=runtime.Z.Items.get(Number(itemID));const row=ref&&runtime.entry(ref);return row?(row.memoRev||0):0;}catch(_){return 0;}}
   const answerFresh=(itemID,rev)=>rev===undefined||rev===memoRevNow(itemID);
+  function reconcileAll(itemID){for(const e of body.querySelectorAll('textarea[data-memo-item]')){if(e.dataset.memoItem!==String(itemID)||!e.isConnected)continue;memoBindings.get(e)?.reconcile?.();}}
   function editorGens(itemID){const gens=new Map();for(const e of body.querySelectorAll('textarea[data-memo-item]')){if(e.dataset.memoItem!==String(itemID)||!e.isConnected)continue;const b=memoBindings.get(e);if(b)gens.set(b,b.gen);}return gens;}
   function syncMemoEditors(itemID,text,requested,opts={}){
    if(!answerFresh(itemID,opts.rev))return false;
@@ -3589,13 +3590,14 @@
    all[key]=all[key].filter(entry=>entry.id!==id);if(!all[key].length)delete all[key];
    runtime.dirty=true;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));
   }
-  function followMemoEditors(itemID,text,source,rev){
+  function followMemoEditors(itemID,text,source,rev,gens){
    if(!answerFresh(itemID,rev))return;
    const id=String(itemID);
    for(const editor of body.querySelectorAll('textarea[data-memo-item]')){
     if(editor===source||editor.dataset.memoItem!==id||!editor.isConnected)continue;
     const binding=memoBindings.get(editor);
     // An editor nobody has touched since it loaded follows the stored memo; one with edits or an open conflict keeps them (its next save is judged against its base).
+    if(binding&&gens&&binding.gen!==(gens.get(binding)??0))continue; // input since the request began is never replaced
     if(binding&&!binding.stale&&editor.value===binding.base){if(editor.dataset.draftKey)finishDraft(editor,editor.value);binding.show(text);}
    }
   }
@@ -3609,6 +3611,27 @@
       editor's current text (possibly typed on since) builds on it. Anything else moves the base only if the editor shows it. */
    const moveBase=(text,derived=false)=>{if(!cas||(!derived&&field.value!==text))return false;binding.base=String(text);return true;};
    binding.moveBase=moveBase;
+   /* After every completion each connected editor of the paper is left in exactly one consistent state:
+      (a) it shows the stored memo: base, autosave baseline and stored are one text, no box, its own draft cleared (finishOwn);
+      (b) it shows other text on a current base: nothing is open, and the autosave baseline is invalidated so the next blur/autosave saves;
+      (c) it shows other text on an old base: a usable conflict box drawn from the stored text and the input now, with a fresh token. */
+   binding.reconcile=()=>{
+    if(!cas||!field.isConnected)return;
+    const stored=storedMemo(cas.itemID),value=field.value;
+    if(value===stored){
+     if(timer){win.clearTimeout(timer);timer=null;}
+     moveBase(stored);last=stored;clearStale();
+     if(field.dataset.draftKey)binding.finishOwn(value);
+     return;
+    }
+    if(binding.base===stored){clearStale();last=null;return;}
+    const s=binding.stale;
+    if(!(s&&!s.used&&s.stored===stored&&s.conflict.local===value&&staleBox&&staleBox.isConnected)){
+     binding.stale={stale:true,stored,conflict:{local:value,remote:stored},rev:memoRevNow(cas.itemID),used:false};field.dataset.state='stale';drawStale();
+    }
+    last=value;
+   };
+   binding.state=()=>({value:field.value,base:binding.base,last,box:!!(staleBox&&staleBox.isConnected),used:!!binding.stale?.used,buttonsEnabled:staleBox?[...staleBox.querySelectorAll('button')].every(b=>!b.disabled):true,stored:cas?storedMemo(cas.itemID):undefined});
    // The draft this binding owns right now (owner and rev), captured when a job starts; null if it owns none.
    binding.draftToken=()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return meta&&meta.owner===binding.id?{owner:meta.owner,rev:meta.rev}:null;};
    // Delete the draft only if this binding owns it, it still holds the submitted text, and (with a token) nothing wrote it since.
@@ -3679,7 +3702,7 @@
      if(binding.stale!==found||found.used){message('그 사이 상황이 바뀌어 아무것도 바꾸지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
      if(field.value!==found.conflict.local&&field.value!==found.stored){binding.stale={...found,conflict:{local:field.value,remote:found.stored}};drawStale();message('편집 내용이 그 사이 바뀌어 버리지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
      if(found.rev!==undefined&&found.rev!==memoRevNow(cas.itemID)){const now=storedMemo(cas.itemID);binding.stale={...found,stored:now,conflict:{local:field.value,remote:now},rev:memoRevNow(cas.itemID)};drawStale();message('저장된 메모가 그 사이 또 바뀌었습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
-     found.used=true;take(found.stored);followMemoEditors(cas.itemID,found.stored,field,found.rev);}),acts,{'data-writes':'cache'});
+     found.used=true;take(found.stored);followMemoEditors(cas.itemID,found.stored,field,found.rev);if(found.rev!==undefined)reconcileAll(cas.itemID);}),acts,{'data-writes':'cache'});
     button('이 편집 내용 쓰기',async()=>{await binding.overwrite(()=>field.value,found.stored,found);},acts,{'data-writes':'library'});
     button('둘 다 합치기',async()=>{await binding.overwrite(()=>{const own=field.value;return found.stored.trim()&&own.trim()?found.stored+'\n\n'+own:found.stored.trim()?found.stored:own;},found.stored,found);},acts,{'data-writes':'library',title:T('저장된 메모 아래에 이 편집 내용을 이어 붙입니다')});
    };
@@ -3687,32 +3710,36 @@
    const attempt=async(value,base,closes)=>{
     const gens=cas?editorGens(cas.itemID):null,startGen=binding.gen,answer={};
     const saved=await save(value,base,answer);
-    if(saved&&typeof saved==='object'&&saved.stale){binding.stale={...saved,used:false};field.dataset.state='stale';drawStale();return false;}
-    // The write was taken, but a newer memo exists by now: this answer changes no editor value, base, draft or box. An untouched editor just shows what is stored.
-    if(cas&&!answerFresh(cas.itemID,answer.rev)){
-     if(field.isConnected&&field.value===value&&binding.gen===startGen)binding.show(storedMemo(cas.itemID));
+    // An answer with a revision comes from the real library: every completion ends by reconciling the editors of that paper.
+    const live=!!cas&&(answer.rev!==undefined||(!!saved&&typeof saved==='object'&&saved.rev!==undefined));
+    try{
+     if(saved&&typeof saved==='object'&&saved.stale){binding.stale={...saved,used:false};field.dataset.state='stale';drawStale();return false;}
+     // The write was taken, but a newer memo exists by now: this answer changes no editor value, base, draft or box. An untouched editor just shows what is stored.
+     if(cas&&!answerFresh(cas.itemID,answer.rev)){
+      if(field.isConnected&&field.value===value&&binding.gen===startGen)binding.show(storedMemo(cas.itemID));
+      return true;
+     }
+     const stored=typeof saved==='string'?saved:value;
+     // The choice that opened this save succeeded: its box is closed whatever text came back (a visible box never keeps a used token).
+     if(closes&&binding.stale===closes)clearStale();
+     if(cas&&stored===value&&moveBase(stored,true)){
+      clearStale();
+      // A draft typed during the save was recorded over the old base: it is built on this one now.
+      const key=field.dataset.draftKey;
+      if(key&&field.value!==stored)binding.ownDraftWrite(field.value,stored);
+     }
+     /* The note's newer text, adopted because the memo had not changed since the last sync, comes back as the stored text:
+        an editor still showing what was submitted takes it (value and base together). Input typed while the save ran stays
+        as typed and keeps the old base, so its next save is a conflict. */
+     if(typeof saved==='string'&&saved!==value){
+      if(field.dataset.memoItem)syncMemoEditors(field.dataset.memoItem,saved,value,{rev:answer.rev,gens});
+      else if(field.value===value){field.value=saved;last=saved;grow();}
+      // Typed since: the typing stays, and what it was typed over is no longer stored: a fresh box with a fresh token asks.
+      if(cas&&field.isConnected&&field.value!==saved&&field.value!==value&&!binding.stale){binding.stale={stale:true,stored:saved,conflict:{local:field.value,remote:saved},used:false};field.dataset.state='stale';drawStale();}
+     }
+     if(cas)followMemoEditors(cas.itemID,stored,field,answer.rev,gens);
      return true;
-    }
-    const stored=typeof saved==='string'?saved:value;
-    // The choice that opened this save succeeded: its box is closed whatever text came back (a visible box never keeps a used token).
-    if(closes&&binding.stale===closes)clearStale();
-    if(cas&&stored===value&&moveBase(stored,true)){
-     clearStale();
-     // A draft typed during the save was recorded over the old base: it is built on this one now.
-     const key=field.dataset.draftKey;
-     if(key&&field.value!==stored)binding.ownDraftWrite(field.value,stored);
-    }
-    /* The note's newer text, adopted because the memo had not changed since the last sync, comes back as the stored text:
-       an editor still showing what was submitted takes it (value and base together). Input typed while the save ran stays
-       as typed and keeps the old base, so its next save is a conflict. */
-    if(typeof saved==='string'&&saved!==value){
-     if(field.dataset.memoItem)syncMemoEditors(field.dataset.memoItem,saved,value,{rev:answer.rev,gens});
-     else if(field.value===value){field.value=saved;last=saved;grow();}
-     // Typed since: the typing stays, and what it was typed over is no longer stored: a fresh box with a fresh token asks.
-     if(cas&&field.isConnected&&field.value!==saved&&field.value!==value&&!binding.stale){binding.stale={stale:true,stored:saved,conflict:{local:field.value,remote:saved},used:false};field.dataset.state='stale';drawStale();}
-    }
-    if(cas)followMemoEditors(cas.itemID,stored,field,answer.rev);
-    return true;
+    }finally{if(live)reconcileAll(cas.itemID);}
    };
    const run=async(options={})=>{
     const value=field.value;
@@ -3828,6 +3855,7 @@
      const result=await library.resolveMemoConflict(item.id,choice,found);
      if(result&&result.stale){message('그 사이 내용이 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);await showConflict();return;}
      if(result&&!result.conflict&&typeof result.text==='string')syncMemoEditors(item.id,result.text,typedBefore===found.local||(!saved&&typedBefore===memoBinding.base)?[typedBefore]:[],{rev:result.rev,gens});
+     if(result&&result.rev!==undefined)reconcileAll(item.id);
      if(result&&!result.resolved&&!result.conflict){message('이미 정리된 충돌이라 최신 내용을 불러왔습니다.');await showConflict();return;}
      message(choice==='note'?'노트 내용을 메모로 가져왔습니다.':choice==='local'?'이 메모를 노트에 썼습니다.':'두 내용을 이어 붙여 메모와 노트에 썼습니다.');
      await showConflict();
@@ -3850,6 +3878,7 @@
     if(!out.ok){message('저장된 메모가 그 사이 바뀌어 아무것도 쓰지 않았습니다. 위에서 어느 쪽을 쓸지 고르세요.',true);return;}
     const result=await library.memoToNote(item.id);
     if(result.adopted&&typeof result.text==='string')syncMemoEditors(item.id,result.text,submitted,{rev:result.rev,gens});
+    if(result.rev!==undefined)reconcileAll(item.id);
     await showConflict();
     message(result.conflict?'노트와 이 메모가 모두 바뀌어 아무것도 쓰지 않았습니다. 아래에서 어느 쪽을 쓸지 고르세요.':result.adopted?'노트가 더 최신이라 노트의 내용을 메모로 가져왔습니다. 노트는 바꾸지 않았습니다.':result.created?'메모를 노트로 옮겼습니다. 노트는 열지 않았습니다.':'메모 노트를 갱신했습니다. 노트는 열지 않았습니다.');
    },box,{class:'sc-memo-to-note',title:T('이 문헌의 하위 노트(태그 style-custom:memo) 하나에 메모를 씁니다. 이후 노트를 고치면 메모도 따라갑니다')});
@@ -8077,7 +8106,7 @@
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};
   const notify=(text,{error=false,full=''}={})=>{if(disposed)return;message(text,error);status.title=full&&full!==text?full:'';return panel.hidden?toggle(true):undefined;};
-  return {filters:{rules:()=>activeRules(),set:list=>{setRules(model.cleanRules(list));return render();},open:()=>{setFiltersOpen(true);},edit:kind=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,null),editor:()=>ruleDraft},toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,notify,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
+  return {memoEditorState:()=>[...body.querySelectorAll('textarea[data-memo-item]')].filter(e=>e.isConnected).map(e=>memoBindings.get(e)?.state?.()).filter(Boolean),filters:{rules:()=>activeRules(),set:list=>{setRules(model.cleanRules(list));return render();},open:()=>{setFiltersOpen(true);},edit:kind=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,null),editor:()=>ruleDraft},toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,notify,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
