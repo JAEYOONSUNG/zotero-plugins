@@ -117,6 +117,14 @@ var ZotPoPSources = (function () {
 		return [...new Set(seeds)];
 	}
 
+	// Sources whose keyword match is made server-side over fields a result row may lack.
+	// PubMed never returns an abstract in a search; for the others only a row with no abstract
+	// at all is spared, so Crossref's journal-name noise is still removed.
+	const ABSTRACT_OPTIONAL = new Set(["europepmc", "openalex", "semanticscholar", "arxiv", "osf"]);
+	function serverMatchedUnseen(r) {
+		if (r.source === "pubmed" || (!r.abstract && (r.sources || []).includes("pubmed"))) return true;
+		return !r.abstract && ABSTRACT_OPTIONAL.has(r.source);
+	}
 	function matchingRecords(records, query = {}) {
 		query = query || {};
 		// Scholar's bylines/journal names are snippets and can be truncated. Its
@@ -134,6 +142,9 @@ var ZotPoPSources = (function () {
 			// and no other box narrows it.
 			if (query.identifier) return recordHasIdentifier(r, query.identifier);
 			if (Query && !Query.matchesRecord(r, query)) return false;
+			// The server matched on fields this record does not carry (PubMed's esummary has no
+			// abstract, and its Text Word search reads abstract and MeSH). Absence is not evidence.
+			if (serverMatchedUnseen(r)) return true;
 			if (["crossref", "osf"].includes(r.source) && structuredQuery(query.keywords)
 				&& !Query.matchesTitle(query.keywords, [r.title, r.abstract].filter(Boolean).join(" "))) return false;
 			return matchesKeywords(terms, r);
@@ -207,7 +218,9 @@ var ZotPoPSources = (function () {
 				|| /arxiv\.org\/(?:abs|pdf)\/(.+?)(?:v\d+)?(?:\.pdf)?$/i.exec(raw)
 				|| /^(?:arxiv[:=])?([a-z-]+(?:\.[a-z]{2})?\/\d{7})(?:v\d+)?$/i.exec(raw);
 			if (arxiv) return { kind: "arxiv", value: arxiv[1], field };
-			let pmid = /^(?:pmid[:=]?)?(\d{7,8})$/i.exec(raw) || /pubmed\.ncbi\.nlm\.nih\.gov\/(\d+)/i.exec(raw);
+			// An explicit PMID: prefix is the user saying so, whatever the length (PMIDs run from 1 to 9 digits);
+			// bare digits count only at the 7-8 digits a modern PMID has.
+			let pmid = /^pmid[:=]?(\d{1,9})$/i.exec(raw) || /^(\d{7,8})$/.exec(raw) || /pubmed\.ncbi\.nlm\.nih\.gov\/(\d+)/i.exec(raw);
 			if (pmid) return { kind: "pmid", value: pmid[1], field };
 		}
 		return null;
@@ -1262,6 +1275,8 @@ var ZotPoPSources = (function () {
 			venue: p.journal?.name || p.venue || p.publicationVenue?.name || "",
 			doi: ext.DOI,
 			pmid: ext.PubMed || null,
+			// Semantic Scholar writes the PMC id without its prefix.
+			pmcid: ext.PubMedCentral ? "PMC" + String(ext.PubMedCentral).replace(/^PMC/i, "") : null,
 			arxiv: ext.ArXiv || null,
 			url: p.url || null,
 			pdfUrl: p.openAccessPdf?.url || null,
@@ -1383,6 +1398,14 @@ var ZotPoPSources = (function () {
 	function pubmedYear(d) {
 		let years = [yearOf(d.epubdate), yearOf(d.pubdate), yearOf(d.sortpubdate)].filter(Boolean);
 		return years.length ? Math.min(...years) : null;
+	}
+
+	// PubMed's publication types, reduced to the words the type filter and the retraction logic use.
+	function pubmedWorkType(types) {
+		let list = (Array.isArray(types) ? types : []).map(t => String(t).trim().toLowerCase());
+		if (list.includes("retraction of publication")) return "retraction";
+		if (list.some(t => t === "review" || t === "systematic review" || t === "meta-analysis")) return "review";
+		return null;
 	}
 
 	function grouped(value) {
@@ -1615,7 +1638,10 @@ var ZotPoPSources = (function () {
 						volume: d.volume || "",
 						issue: d.issue || "",
 						pages: d.pages || "",
-						itemType: "journalArticle"
+						itemType: "journalArticle",
+						workType: pubmedWorkType(d.pubtype),
+						// The paper itself; "Retraction of Publication" is the notice, as in the OpenAlex path.
+						retracted: (d.pubtype || []).some(t => /^retracted publication$/i.test(String(t).trim()))
 					}));
 				}
 				out = matchingRecords(dedupe(out), q);

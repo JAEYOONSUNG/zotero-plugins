@@ -32,6 +32,7 @@ export function mockElement(tagName = "div") {
 		get parentElement() { return this.parentNode; },
 		get isConnected() { return this.parentNode ? this.parentNode.isConnected : this.connected; },
 		get firstChild() { return this.children[0] || null; },
+		get nextSibling() { const siblings = this.parentNode?.children; return siblings ? siblings[siblings.indexOf(this) + 1] || null : null; },
 		get textContent() { return text + this.children.map(child => child.textContent || "").join(""); },
 		set textContent(value) {
 			for (const child of this.children) child.parentNode = null;
@@ -58,7 +59,7 @@ export function mockElement(tagName = "div") {
 			child.remove?.();
 			child.parentNode = this; this.children.push(child); return child;
 		},
-		insertBefore(child, reference) { child.remove?.(); child.parentNode = this; this.children.splice(this.children.indexOf(reference), 0, child); return child; },
+		insertBefore(child, reference) { child.remove?.(); child.parentNode = this; if (!reference) this.children.push(child); else this.children.splice(this.children.indexOf(reference), 0, child); return child; },
 		remove() { if (this.parentNode) { this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); this.parentNode = null; } },
 		contains(other) { return other === this || this.children.some(child => child.contains?.(other)); },
 		matches(selector) {
@@ -74,7 +75,13 @@ export function mockElement(tagName = "div") {
 		querySelector(selector) { return this.querySelectorAll(selector)[0] || null; },
 		addEventListener(name, fn) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(fn); },
 		removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
-		emit(name, event = {}) { for (const fn of listeners.get(name) || []) fn({ target: this, stopPropagation() {}, preventDefault() {}, ...event }); },
+		// Bubbles to the parents like a DOM event, so delegated handlers see a click on a child.
+		emit(name, event = {}) {
+			let stopped = false;
+			const ev = { target: this, preventDefault() {}, ...event, stopPropagation() { stopped = true; event.stopPropagation?.(); } };
+			for (let at = this; at && !stopped; at = at.parentNode) for (const fn of [...(at.listeners?.get(name) || [])]) fn(ev);
+		},
+		get listeners() { return listeners; },
 		listenerCount() { return [...listeners.values()].reduce((sum, set) => sum + set.size, 0); },
 		focus() { mockElement.active = node; }, scrollIntoView() {},
 		getBoundingClientRect() { return { left: 0, right: 100, top: 0, bottom: 30, width: 100, height: 30 }; }
@@ -88,12 +95,12 @@ export function mockElement(tagName = "div") {
 }
 
 export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {
-}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null, zotero = {}, sources = {}, previewModule = null, cite = null } = {}) {
+}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null, zotero = {}, sources = {}, previewModule = null, cite = null, globals = {} } = {}) {
 	// The author tab opens on the combined provider; tests of the other providers start from Scholar unless they save their own choice.
 	const startOnScholar = !("lastAuthorQuery" in prefs);
 	if (startOnScholar) prefs.lastAuthorQuery = JSON.stringify({ provider: "scholar" });
 	const copied = [], reloads = [];
-	const elements = new Map(), errors = [], events = new Map();
+	const elements = new Map(), errors = [], events = new Map(), counts = { created: 0 };
 	const get = id => {
 		if (!elements.has(id)) { const node = mockElement(); node.connected = true; elements.set(id, node); }
 		return elements.get(id);
@@ -103,7 +110,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		getElementById: get, querySelectorAll(selector) {
 			const match = selector.match(/^#([\w-]+)\s+(.+)$/);
 			return match ? get(match[1]).querySelectorAll(match[2]) : [];
-		}, createElement: mockElement, body: mockElement("body"),
+		}, createElement: (...args) => { counts.created++; return mockElement(...args); }, body: mockElement("body"),
 		get activeElement() { return mockElement.active || null; },
 		addEventListener: (...args) => docEvents.addEventListener(...args), removeEventListener: (...args) => docEvents.removeEventListener(...args),
 		createTextNode(value) { const node = mockElement("#text"); node.textContent = value; return node; },
@@ -137,7 +144,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 	const apiRecords = [paper("relevant", { title: "Precise match" }),
 		paper("popular", { title: "Broad review", citations: 10000, year: 2020 })];
 	const context = vm.createContext({
-		AbortController, setTimeout, clearTimeout,
+		AbortController, setTimeout, clearTimeout, ...globals,
 		window: { location: { reload() { reloads.push(1); } }, addEventListener(name, fn) { events.set(name, fn); winEvents.addEventListener(name, fn); }, openDialog, arguments: mainWindow ? [{ mainWindow }] : undefined },
 		document,
 		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set: (key, value) => { prefs[key.replace("extensions.zotpop.", "")] = value; } }, debug() {}, logError: e => errors.push(e), launchURL, Utilities: { Internal: { copyTextToClipboard: text => copied.push(String(text)) } },
@@ -174,7 +181,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		const originalRenderDetail = renderDetail;
 		renderMetrics = renderDetail = () => {};
 		cacheIO = setupStorage();
-		globalThis.harness = { tipContent, journalMark, state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, closePreview, togglePreview, syncPreview, viewerOfPreview, paintPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
+		globalThis.harness = { refreshLibraryFlags, saveCSV, tipContent, journalMark, state, runSearch, render, showInLibrary, http, stopOperation, onKeyDown, clearAll, clearFilter, syncFilterClear, openPreview, closePreview, togglePreview, syncPreview, viewerOfPreview, paintPreview, previewRecord, buildRow, setRowStatus, onDocumentScroll, restoreCachedSearch, cancelCacheRestore,
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
 			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, viewMenuItems, setLanguage, languageChoice, renderVersions, renderSignals, followAuthor, heldVersion, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			yearBins, filterSpec, addRule, openFilterPop, closeFilterPop, syncFilterUI, clearAllFilters, affLineParts, shortInstitution, renderAuthors, addVenueChip, removeVenueChip, setVenueChips, refreshVenueSuggestions, onVenueKey, wireVenueBox, ensureJournalCatalog, citeCardBody, renderCiteStrip,
@@ -184,5 +191,5 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 	`);
 	vm.runInContext(code, context);
 	if (startOnScholar) context.harness.setAuthorProvider("scholar");
-	return { copied, reloads, Z: context.Zotero, ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
+	return { copied, reloads, counts, Z: context.Zotero, ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
 }

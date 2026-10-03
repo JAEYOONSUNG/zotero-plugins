@@ -1051,7 +1051,7 @@
 			email: String(PREF("email") || ""), openAlexApiKey: String(PREF("openAlexApiKey") || ""), openAlexSpent: openAlexHeld(),
 			popSearchSource: typeof ZotPoPPoPBridge !== "undefined" && ZotPoPPoPBridge.searchSource ? (source, query, context) => ZotPoPPoPBridge.searchSource(source, query, context) : undefined,
 			onProgress: (msg, n, total) => { if (active()) { setStatus(msg); setProgress(n, total); } },
-			onResults: records => { if (active()) { received = records; state.sortKey = records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc"; displaySearchResults(records); } }, log };
+			onResults: records => { if (active()) { received = records; state.sortKey = records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc"; displaySearchResults(records, { stream: true }); } }, log };
 		try {
 			let options = { maxResults: q.maxResults, popOutputSort: "rank" };
 			let task = action === "profiles" ? ZotPoPAuthors.searchProfiles(q.authorProvider, input, http, ctx)
@@ -2219,7 +2219,18 @@
 		if (edition) ZotPoPJCR.apply(records.filter(r => r.journalIFSource !== edition));
 	}
 
-	function displaySearchResults(records) {
+	/* Providers report every page as it arrives. Redrawing the list for each one is wasted work
+	   when pages come faster than the eye reads, so streamed updates draw at most once per
+	   STREAM_FRAME (the first one at once); the final draw of a search is never deferred. */
+	const STREAM_FRAME = 120;
+	let streamTimer = null, lastStreamAt = 0;
+	function renderStreamed() {
+		if (streamTimer != null) return;
+		let wait = STREAM_FRAME - (Date.now() - lastStreamAt);
+		if (wait <= 0) { lastStreamAt = Date.now(); render(); }
+		else streamTimer = later(() => { streamTimer = null; lastStreamAt = Date.now(); render(); }, wait);
+	}
+	function displaySearchResults(records, { stream = false } = {}) {
 		settleImpactFactors(records.filter(r => !r.popOriginal && !r.authorProfile));
 		// A merged record may acquire a different source key. Carry row interaction
 		// state through a shared identifier as well as an unchanged key.
@@ -2255,7 +2266,7 @@
 		state.detailKey = detailKey;
 		// Keep received rows readable; progress continues in the status bar.
 		$("busy").hidden = !state.searching || state.records.length > 0;
-		render();
+		if (stream) renderStreamed(); else render();
 	}
 
 	function readQuery() {
@@ -2359,7 +2370,7 @@
 				if (!active()) return;
 				setStatus(msg); $("busy-text").textContent = msg; setProgress(n, total);
 			},
-			onResults: records => { if (active()) displaySearchResults(records); },
+			onResults: records => { if (active()) displaySearchResults(records, { stream: true }); },
 			log,
 			openAlexSpent: openAlexHeld()
 		};
@@ -2437,40 +2448,59 @@
 		}
 	}
 
+	let flagsGeneration = 0;
 	async function refreshLibraryFlags() {
 		let { libraryID } = currentTarget();
 		/* Read again at every search: a paper saved from the browser meanwhile
 		   stayed unmarked while the map was kept for the window's life. And a
 		   result the library holds without a DOI is found by title and year,
 		   the same rule the import uses -- the row said "not here" and the
-		   import then said "already there". */
+		   import then said "already there".
+		   Each lookup belongs to one library and one generation. Switching the target
+		   starts a newer lookup, and an older answer that arrives late is dropped whole,
+		   so rows never show another library's items as held. */
+		let generation = ++flagsGeneration;
+		let stale = () => generation !== flagsGeneration;
 		state.libraryID = libraryID;
-		state.doiMap = await ZotPoPImporter.getLibraryDOIMap(libraryID);
+		let doiMap = await ZotPoPImporter.getLibraryDOIMap(libraryID);
+		if (stale()) return;
+		state.doiMap = doiMap;
 		// The title index is read again too: a DOI corrected since the last search counts.
 		ZotPoPImporter.forgetTitleIndex?.();
 		state.heldVersions?.clear();
-		for (let r of state.records) {
-			let id = r.doi ? state.doiMap.get(r.doi) : null;
+		let records = state.records;
+		let found = new Map();
+		for (let r of records) {
+			let id = r.doi ? doiMap.get(r.doi) : null;
 			if (!id && typeof ZotPoPImporter.findByTitle === "function" && r.title) {
 				try {
 					// A copy with another DOI is another version, as the import decides.
 					id = await ZotPoPImporter.findByTitle(libraryID, r.title, r.year, { doi: r.doi });
 				} catch (e) { id = null; }
+				if (stale()) return;
 			}
+			found.set(r, id || null);
+		}
+		for (let r of records) {
+			let id = found.get(r);
 			r.inLibrary = Boolean(id);
+			// A row that is not held here must not keep the item id of another library.
 			if (id) r.libraryItemID = id;
+			else { r.libraryItemID = null; r.readState = null; r.collections = null; }
 		}
 		// Style Custom's reading state, for the items just found only.
 		try {
 			let states = typeof ZotPoPImporter.getReadingStates === "function"
-				? await ZotPoPImporter.getReadingStates(state.records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID)) : new Map();
-			for (let r of state.records) r.readState = r.inLibrary && states.get(r.libraryItemID) || null;
+				? await ZotPoPImporter.getReadingStates(records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID)) : new Map();
+			if (stale()) return;
+			for (let r of records) r.readState = r.inLibrary && states.get(r.libraryItemID) || null;
 		} catch (e) { /* only a hint */ }
 		// The collections each owned paper is filed in, for the detail: one query, no network.
 		try {
 			let paths = typeof ZotPoPImporter.getCollectionPaths === "function"
-				? await ZotPoPImporter.getCollectionPaths(state.records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID)) : new Map();
-			for (let r of state.records) r.collections = r.inLibrary && paths.get(r.libraryItemID) || null;
+				? await ZotPoPImporter.getCollectionPaths(records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID)) : new Map();
+			if (stale()) return;
+			for (let r of records) r.collections = r.inLibrary && paths.get(r.libraryItemID) || null;
 		} catch (e) { /* only a hint */ }
 		render();
 	}
@@ -3346,6 +3376,7 @@
 	}
 
 	function render() {
+		if (streamTimer != null) { cancelLater(streamTimer); streamTimer = null; }
 		syncQueryCollapse();
 		if (state.selectedOnly && !state.records.some(r => state.selected.has(r.key))) state.selectedOnly = false;
 		let spec = filterSpec();
@@ -3382,12 +3413,8 @@
 		}
 
 		let tbody = $("results-body");
-		let frag = document.createDocumentFragment();
-		for (let r of list) {
-			frag.appendChild(buildRow(r));
-		}
-		tbody.textContent = "";
-		tbody.appendChild(frag);
+		ensureRowDelegation(tbody);
+		syncRows(tbody, list);
 		// Rows are two lines tall when any of them carries an affiliation line, one line otherwise,
 		// so the rhythm of the list is the same from the first row to the last.
 		if (list.some(r => state.affLine && affLineNeeded(affLineParts(r), affiliationOf(r)))) $("results-table").setAttribute("data-aff", ""); else $("results-table").removeAttribute("data-aff");
@@ -3402,13 +3429,139 @@
 		// nothing happened, which is exactly when a user needs to know a source failed.
 		// Profiles found but no papers loaded yet: the next step is choosing one, not "found nothing".
 		let profilesOnly = searchSurface === "authors" && !state.records.length && authorSessions[activeAuthorProvider].profiles.length > 0;
-		$("empty").textContent = state.records.length ? t("emptyFiltered")
-			: profilesOnly ? t("emptyAuthorProfiles")
+		if (state.records.length) { if (!list.length) paintEmptyFiltered($("empty")); else if ($("empty").firstChild) $("empty").textContent = ""; }
+		else $("empty").textContent = profilesOnly ? t("emptyAuthorProfiles")
 			: state.searched ? t(state.lastPartial ? "emptyAfterPartial" : "emptyAfterSearch")
 			: t(searchSurface === "authors" ? "emptyInitialAuthors" : "emptyInitial");
 		updateCounts();
 		renderMetrics(list);
 		renderDetail();
+	}
+
+	/* ---- the rows of the list
+	   A row is built once per result and kept: a filter, a sort or a streaming update only reorders,
+	   adds and removes rows, and a row is rebuilt only when what it shows has changed (its signature).
+	   Clicks are handled once on the table body, not on every row. */
+	const rowCache = new Map();
+	let rowCacheScope = "", rowRecords = new Map(), delegatedBody = null;
+	const rowStats = { built: 0, reused: 0 };
+	const objectIds = new WeakMap();
+	let objectCount = 0;
+	const objectId = o => (o && typeof o === "object" ? (objectIds.get(o) || (objectIds.set(o, ++objectCount), objectCount)) : 0);
+	function rowSignature(r) {
+		let where = affiliationOf(r), row = affColumnRow(where), mark = citeMarkOf(r);
+		let identity = typeof ZotPoPJournalMarks === "undefined" || !r.venue ? null : ZotPoPJournalMarks.identify(r.venue, r.publisher);
+		return JSON.stringify([r.citations, r.citationSource, r.rank, r.popOriginal, r.popRank, r.authorString, r.title, r.titleMarkup,
+			r.year, r.venue, r.publisher, r.journalIF, r.journalIFSource, r.journalOA2y, r.journalH, r.journalAbbrev, identity?.mark, identity?.known,
+			r.doi, hasPDF(r), r.inLibrary, r.readState, r.isNew, r.retracted, r.status, r.statusClass, r.statusTitle,
+			objectId(where), row?.institution, row?.tier, row?.hIndex, row?.flag, where?.countries, affLineParts(r).length,
+			mark?.text, mark?.direction, citeFindable(r), Boolean(citeTrend(r))]);
+	}
+	// The parts of a row that follow the selection, not the paper: set on every draw, reused row or not.
+	function paintRowState(tr, r, pick) {
+		tr.classList.toggle("in-library", Boolean(r.inLibrary));
+		tr.classList.toggle("selected", state.selected.has(r.key));
+		tr.classList.toggle("not-person", Boolean(pick && !inPick(pick, r)));
+		tr.classList.toggle("focused", state.focusKey === r.key);
+		let cb = tr.querySelector("input[type=checkbox]");
+		if (cb) cb.checked = state.selected.has(r.key);
+	}
+	function syncRows(tbody, list) {
+		// What every row depends on besides its own paper: a change drops all of them.
+		let scope = [state.affLine, state.colOrder.join(","), uiLocale].join("|");
+		if (scope !== rowCacheScope) { rowCache.clear(); rowCacheScope = scope; }
+		let pick = personPick();
+		rowRecords = new Map();
+		let rows = [];
+		for (let r of list) {
+			rowRecords.set(r.key, r);
+			let sig = rowSignature(r), held = rowCache.get(r.key), tr;
+			if (held && held.sig === sig) { tr = held.tr; rowStats.reused++; paintRowState(tr, r, pick); }
+			else { tr = buildRow(r); rowStats.built++; rowCache.set(r.key, { tr, sig }); }
+			rows.push(tr);
+		}
+		// Settle the rows into place with the fewest moves: a row already in position stays.
+		let cursor = tbody.firstChild;
+		for (let tr of rows) {
+			if (tr === cursor) cursor = cursor.nextSibling;
+			else tbody.insertBefore(tr, cursor);
+		}
+		while (cursor) { let next = cursor.nextSibling; tbody.removeChild ? tbody.removeChild(cursor) : cursor.remove(); cursor = next; }
+		// Rows of results that are no longer in the search are let go; filtered-out ones are kept.
+		if (rowCache.size > state.records.length) {
+			let live = new Set(state.records.map(r => r.key));
+			for (let key of [...rowCache.keys()]) if (!live.has(key)) rowCache.delete(key);
+		}
+	}
+	function rowRecord(el) {
+		let key = el?.closest?.("tr")?.dataset?.key;
+		return key ? rowRecords.get(key) || state.records.find(r => r.key === key) || null : null;
+	}
+	function ensureRowDelegation(tbody) {
+		if (!tbody || delegatedBody === tbody) return;
+		delegatedBody = tbody;
+		tbody.addEventListener("change", e => {
+			let r = rowRecord(e.target);
+			if (r && e.target.closest?.("input")) toggleSelect(r, e.target.checked);
+		});
+		tbody.addEventListener("click", e => {
+			let r = rowRecord(e.target); if (!r) return;
+			let link = e.target.closest("a.doi-link");
+			if (link) { e.preventDefault(); e.stopPropagation(); Zotero.launchURL("https://doi.org/" + encodeURI(r.doi)); return; }
+			let cell = e.target.closest("td"), kind = cell?.dataset?.k;
+			if (cell && cell.getAttribute("role") === "button" && !e.target.closest("input")) {
+				if (kind === "pdf") { e.stopPropagation(); state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail(); openPreview(r); return; }
+				if (kind === "inLibrary") { e.stopPropagation(); showInLibrary(r); return; }
+				if (kind === "citations" && cell.dataset.cite) { e.stopPropagation(); state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail(); openCitePop(r, cell); return; }
+			}
+			if (e.target.closest("input, a, [role=button]")) return;
+			state.focusKey = r.key;
+			state.detailKey = r.key;
+			if (e.metaKey || e.ctrlKey) toggleSelect(r, !state.selected.has(r.key));
+			else { paintRows(); renderDetail(); }
+		});
+		tbody.addEventListener("dblclick", e => {
+			let r = rowRecord(e.target); if (!r) return;
+			if (e.target.closest("input, a, [role=button]")) return;
+			readRecord(r);
+		});
+		tbody.addEventListener("contextmenu", e => {
+			let r = rowRecord(e.target); if (!r) return;
+			e.preventDefault();
+			state.focusKey = r.key;
+			state.detailKey = r.key;
+			paintRows();
+			renderDetail();
+			showCtxMenu(e.clientX, e.clientY, r);
+		});
+	}
+
+	// Every filter that is narrowing the list now, in words: what the empty list names, so the reader sees what to undo.
+	function activeFilterParts() {
+		let parts = [], text = String($("filter")?.value || "").trim();
+		if (text) parts.push(t("emptyFilterText", text));
+		if (state.facet) parts.push(t("emptyFilterAuthor", state.facet.name));
+		if (state.yearRange) parts.push(t("emptyFilterYears", state.yearRange.from, state.yearRange.to));
+		for (let rule of activeRules()) parts.push(ruleText(rule));
+		if (state.libraryFilter !== "all") parts.push(t("emptyFilterLibrary", t(state.libraryFilter === "owned" ? "libOwned" : "libNew")));
+		return parts;
+	}
+	// The list is empty although the search found papers: say which filters hide them and offer one way back.
+	function paintEmptyFiltered(box) {
+		box.textContent = "";
+		let parts = activeFilterParts();
+		let msg = document.createElement("div"); msg.className = "empty-msg";
+		msg.textContent = t("emptyFiltered");
+		box.appendChild(msg);
+		if (parts.length) {
+			let list = document.createElement("div"); list.className = "empty-filters";
+			list.textContent = parts.join(" \u00b7 ");
+			box.appendChild(list);
+		}
+		let reset = document.createElement("button");
+		reset.type = "button"; reset.className = "empty-reset"; reset.textContent = t("emptyResetFilters");
+		reset.addEventListener("click", () => clearAllFilters());
+		box.appendChild(reset);
 	}
 
 	const NIL_COLUMNS = new Set(["year", "citations", "cpy", "journalIF", "journalOA2y", "venue", "authorString"]);
@@ -3446,7 +3599,6 @@
 		let cb = document.createElement("input");
 		cb.type = "checkbox"; cb.tabIndex = -1;
 		cb.checked = state.selected.has(r.key);
-		cb.addEventListener("change", () => toggleSelect(r, cb.checked));
 		c0.appendChild(cb);
 
 		decorateCiteCell(td("citations", "num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : ""), r);
@@ -3491,15 +3643,14 @@
 		let chip = tierChip(where);
 		if (chip) tierCell.appendChild(chip);
 		let doiCell = td("doi", "doi", null, r.doi ? t("thDoiTip") : ""); doiCell.dataset.marquee = "doi";
-		if (r.doi) { let link = document.createElement("a"); link.href = "#"; link.tabIndex = -1; link.textContent = r.doi; link.className = "doi-link";
-			link.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); Zotero.launchURL("https://doi.org/" + encodeURI(r.doi)); }); doiCell.appendChild(link); }
+		if (r.doi) { let link = document.createElement("a"); link.href = "#"; link.tabIndex = -1; link.textContent = r.doi; link.className = "doi-link"; doiCell.appendChild(link); }
 		let pdfCell = td("pdf", "mini pdf", hasPDF(r) ? "●" : "", hasPDF(r) ? t("thPdfClickTip") : "");
-		if (hasPDF(r)) { pdfCell.setAttribute("role", "button"); pdfCell.addEventListener("click", e => { e.stopPropagation(); state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail(); openPreview(r); }); }
+		if (hasPDF(r)) pdfCell.setAttribute("role", "button");
 		let readLabel = r.inLibrary && r.readState ? { done: t("readDone"), reading: t("readReading"), unread: t("readUnread") }[r.readState] : "";
 		let libCell = td("inLibrary", "mini lib", "", r.inLibrary ? t("thLibClickTip") : "");
 		if (r.inLibrary) { let ck = document.createElement("span"); ck.className = "pill pos"; ck.textContent = "✓"; libCell.appendChild(ck); }
 		if (readLabel) { let rs = document.createElement("span"); rs.className = "read-state"; rs.textContent = readLabel; tip(rs, t("readStateTip")); libCell.appendChild(rs); }
-		if (r.inLibrary) { libCell.setAttribute("role", "button"); libCell.addEventListener("click", e => { e.stopPropagation(); showInLibrary(r); }); }
+		if (r.inLibrary) libCell.setAttribute("role", "button");
 		let st = td("status", "status", r.status || "", r.statusTitle || "");
 		st.dataset.marquee = "status";
 		if (r.statusClass) st.classList.add(r.statusClass);
@@ -3507,25 +3658,6 @@
 		for (let c of tr.children) if (NIL_COLUMNS.has(c.dataset.k) && (!c.textContent.trim() || c.textContent.trim() === "–")) { c.textContent = "–"; c.classList.add("nil"); }
 		orderColumnCells(tr);
 
-		tr.addEventListener("click", e => {
-			if (e.target.closest("input, a, [role=button]")) return;
-			state.focusKey = r.key;
-			state.detailKey = r.key;
-			if (e.metaKey || e.ctrlKey) toggleSelect(r, !state.selected.has(r.key));
-			else { paintRows(); renderDetail(); }
-		});
-		tr.addEventListener("dblclick", e => {
-			if (e.target.closest("input, a, [role=button]")) return;
-			readRecord(r);
-		});
-		tr.addEventListener("contextmenu", e => {
-			e.preventDefault();
-			state.focusKey = r.key;
-			state.detailKey = r.key;
-			paintRows();
-			renderDetail();
-			showCtxMenu(e.clientX, e.clientY, r);
-		});
 		return tr;
 	}
 
@@ -3993,7 +4125,6 @@
 		let base = r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : "";
 		tip(cell, t("citeCellTip", base, mark ? mark.text : ""));
 		cell.setAttribute("role", "button"); cell.setAttribute("aria-haspopup", "dialog"); cell.dataset.cite = "1";
-		cell.addEventListener("click", e => { e.stopPropagation(); state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail(); openCitePop(r, cell); });
 	}
 
 	/* Bars for a list of { year, n, partial }: the value above, the year below; compact ones (the side card)
@@ -4874,9 +5005,8 @@
 			let d = new Date();
 			let p2 = n => String(n).padStart(2, "0");
 			let stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
-			let path = PathUtils.join(desktopPath(), `zotpop-${stamp}.csv`);
 			// UTF-8 BOM so Excel opens Korean text correctly
-			await IOUtils.writeUTF8(path, "\uFEFF" + csvText());
+			let path = await writeUniqueFile(desktopPath(), `zotpop-${stamp}`, ".csv", "\uFEFF" + csvText());
 			setStatus(t("csvSaved", path));
 			try { Zotero.File.reveal(Zotero.File.pathToFile(path)); } catch (e) { log("reveal failed: " + e.message); }
 		}
@@ -4884,6 +5014,24 @@
 			Zotero.logError(e);
 			setStatus(t("csvSaveFailed", e.message || e), "err");
 		}
+	}
+
+	/* An export never replaces an earlier one: the name gets -2, -3 ... on collision. The existence check
+	   is only a first guess, so the write itself refuses to overwrite and a collision found there
+	   (another export, another program) moves on to the next name. */
+	async function writeUniqueFile(dir, base, ext, text) {
+		for (let n = 1; n <= 500; n++) {
+			let path = PathUtils.join(dir, n === 1 ? base + ext : `${base}-${n}${ext}`);
+			if (await IOUtils.exists(path)) continue;
+			try {
+				await IOUtils.writeUTF8(path, text, { noOverwrite: true });
+				return path;
+			}
+			catch (e) {
+				if (!/NoModificationAllowed|exists/i.test(`${e?.name} ${e?.message}`)) throw e;
+			}
+		}
+		throw new Error("no free file name for " + base + ext);
 	}
 
 	function desktopPath() {

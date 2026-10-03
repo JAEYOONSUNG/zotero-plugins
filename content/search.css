@@ -908,3 +908,8 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 .metrics-explain { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .metrics-why { margin: 0; font-size: 11px; line-height: 16px; color: var(--muted); }
 .metrics-loadall { height: 26px; }
+
+/* The empty list after filtering: which filters are on, and the button that undoes them. */
+#empty { flex-direction: column; }
+#empty .empty-filters { color: var(--muted); }
+#empty .empty-reset { pointer-events: auto; margin-top: 4px; }

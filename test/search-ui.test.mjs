@@ -41,6 +41,9 @@ test("UI renders snapshots before completion and preserves selected merged recor
 	ui.state.sortDir = "desc";
 	const snapshot = [paper("openalex:merged", { doi: "10.1234/one", citations: 1 }), paper("later", { citations: 50 })];
 	ctx.onResults(snapshot, { final: false });
+	// Streamed pages are drawn in batches: the data is current at once, the list a frame later.
+	assert.deepEqual(Array.from(ui.state.records, r => r.key), ["openalex:merged", "later"]);
+	await new Promise(resolve => setTimeout(resolve, 200));
 	assert.deepEqual(Array.from(ui.state.visible, r => r.key), ["later", "openalex:merged"]);
 	assert.deepEqual(Array.from(ui.state.selected), ["openalex:merged"]);
 	assert.equal(ui.state.focusKey, "openalex:merged");
