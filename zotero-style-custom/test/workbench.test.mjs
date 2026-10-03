@@ -49,14 +49,17 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog,locale}={}){
   authors:['A Author','B Author'],doi:'10.1/'+id,pdfURL:'https://x/'+id+'.pdf',relevance:3,inLibrary:false});
  Object.assign(runtime,{
   identity:ref=>'key-'+ref.id,
-  // The real runtime's pending-write registry: a memo write is pending from memory to settled storage.
-  memoPendingCount:0,memoListeners:new Set(),
-  memoWritePending(){return this.memoPendingCount>0;},
-  memoPendingPriors:[],
-  memoPendingPrior(){return this.memoPendingPriors[0];},
-  memoChain:[],
-  memoChainTexts(){return this.memoChain;},
-  _memoPending(item,delta,prior,value){if(delta>0){if(this.memoPendingCount===0)this.memoChain=[String(prior??'')];this.memoChain.push(String(value??''));}this.memoPendingCount+=delta;if(delta>0)this.memoPendingPriors.push(String(prior??''));else this.memoPendingPriors.shift();if(delta<0)for(const listener of [...this.memoListeners])listener(item);},
+  // The real runtime's pending-write registry: a memo write is pending (with a token) from memory to settled storage.
+  memoPendingMap:[],memoListeners:new Set(),
+  memoPendingList(){return [...this.memoPendingMap];},
+  memoWritePending(){return this.memoPendingMap.length>0;},
+  memoPendingPrior(){return this.memoPendingMap[0]?.prior;},
+  memoChainTexts(){return this.memoPendingMap.length?[this.memoPendingMap[0].prior,...this.memoPendingMap.map(w=>w.value)]:[];},
+  _memoPending(item,delta,prior,value,token){
+   if(delta>0){const made='w'+(this.tokenSeq=(this.tokenSeq||0)+1);this.memoPendingMap.push({token:made,prior:String(prior??''),value:String(value??'')});return made;}
+   const at=token===undefined?0:this.memoPendingMap.findIndex(w=>w.token===token);if(at>=0)this.memoPendingMap.splice(at,1);
+   for(const listener of [...this.memoListeners])listener(item);
+  },
   addMemoListener(listener){this.memoListeners.add(listener);return()=>this.memoListeners.delete(listener);},
   discoverCache:new Map(),
   discoverTools:{GROUPS:['citing','reference','related'],shortID:v=>String(v).toUpperCase()},
@@ -6518,7 +6521,7 @@ test('choosing 노트 내용 쓰기 clears the old local draft and the autosave 
  saves.length=0;
  await f.click('노트 내용 쓰기');await settle();
  assert.equal(memo.value,'text from the note');
- assert.ok(!f.runtime.cache.workbenchDrafts.entries.some(([k,v])=>k!==key&&!k.includes('\u0001')&&v==='my memo'),'the editor\'s own stale draft is gone (the old fixed key belongs to no editor here and is left alone) '+JSON.stringify(f.runtime.cache.workbenchDrafts.entries));
+ assert.ok(!f.runtime.cache.workbenchDrafts.entries.some(([k,v])=>k!==key&&!k.includes('\u0001')&&v==='my memo')&&!Object.values(f.runtime.cache.memoDrafts?.drafts||{}).some(r=>r.text==='my memo'),'the editor\'s own stale draft is gone (the old fixed key belongs to no editor here and is left alone) '+JSON.stringify(f.runtime.cache.workbenchDrafts.entries));
  memo.dispatchEvent(new f.win.Event('blur'));await settle();
  assert.deepEqual(saves,[],'nothing is written back on blur');
  memo.value='my memo';memo.dispatchEvent(new f.win.Event('input',{bubbles:true}));memo.dispatchEvent(new f.win.Event('blur'));await settle();
@@ -6984,7 +6987,7 @@ test('kept drafts (R4-2): redrawing one window never deletes another window\'s s
  f.runtime.cache.items[1].remark='R';
  await f.bench.show('annotations');await settle();
  assert.ok([...f.body().querySelectorAll('.sc-memo-kept-card')].some(c=>/D1/.test(c.textContent)),'window 1 keeps its own draft as a card');
- assert.ok(JSON.stringify(f.runtime.cache.workbenchDrafts).includes('D2'),'window 2\'s draft is still in the shared cache');
+ assert.ok(sharedDraftTexts(f).includes('D2'),'window 2\'s draft is still in the shared cache');
  f.bench.destroy();g.bench.destroy();
 });
 
@@ -7031,7 +7034,7 @@ test('kept drafts (R4-4): nothing is evicted; the newest few show and the rest a
  f.bench.destroy();
 });
 
-const keptOrDraft=(f,text)=>JSON.stringify(f.runtime.cache.memoKept||{}).includes(text)||JSON.stringify(f.runtime.cache.workbenchDrafts||{}).includes(text);
+const keptOrDraft=(f,text)=>JSON.stringify(f.runtime.cache.memoKept||{}).includes(text)||JSON.stringify(f.runtime.cache.workbenchDrafts||{}).includes(text)||JSON.stringify(f.runtime.cache.memoDrafts||{}).includes(text);
 
 test('memo drafts (R5-2): a kept draft loaded in one window survives the other window typing over the shared draft key',async()=>{
  const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g);
@@ -7067,7 +7070,7 @@ test('memo drafts (R5-g): two windows typing alternately never overwrite each ot
  for(const t of ['D1','E2','D1 more','E2 more'])assert.ok(keptOrDraft(f,t),t+' survives closing both');
 });
 
-const sharedDraftTexts=f=>(f.runtime.cache.workbenchDrafts?.entries||[]).filter(e=>!e[0].includes('\u0001')).map(e=>e[1]);
+const sharedDraftTexts=f=>[...(f.runtime.cache.workbenchDrafts?.entries||[]).filter(e=>!e[0].includes('\u0001')).map(e=>e[1]),...Object.values(f.runtime.cache.memoDrafts?.drafts||{}).map(r=>r.text)];
 
 test('memo drafts (R6-2): a finishing job deletes only a draft its own binding wrote, never another window\'s draft with the same text',async()=>{
  const f=fixture();const g=fixture(f.runtime.cache);casLibrary(g);
@@ -7221,7 +7224,7 @@ test('invariant: a memo draft is written or deleted only by writeMemoDraft, the 
   const m=/^\s*(?:async )?function (\w+)\(/.exec(line)||/^\s*(binding\.\w+)=/.exec(line);
   if(m)label=m[1];
   if(/updateDraft\(/.test(line)&&!/function updateDraft\(/.test(line)){
-   if(!allowed.has(label)&&!/updateDraft\(current\.dataset\.draftKey/.test(line))bad.push((i+1)+' '+label);
+   if(!allowed.has(label)&&!/updateDraft\(current\.dataset\.draftKey/.test(line)&&!/draftStore:\{put:/.test(line))bad.push((i+1)+' '+label); // the AI box is not a memo; draftStore.put is the test hook for seeding many drafts
   }
  });
  assert.deepEqual(bad,[],'updateDraft outside the owner-checked functions');
@@ -7464,10 +7467,10 @@ test('pending writes (R11-1): an in-memory value of a write that has not settled
   if(text==='Y')await gateY; // held before it writes
   const stored=String(row().remark||'');
   if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored},rev:row().memoRev||0};
-  const prior=row().remark;row().remark=text;row().memoRev=(row().memoRev||0)+1;const mine=row().memoRev;f.runtime._memoPending({id:1},1);
+  const prior=row().remark;row().remark=text;row().memoRev=(row().memoRev||0)+1;const mine=row().memoRev;const token=f.runtime._memoPending({id:1},1,prior,text);
   try{
    if(text==='X'){await gateX;if(failX){if(row().memoRev===mine){row().remark=prior;row().memoRev++;}throw new Error('disk');}}
-  }finally{f.runtime._memoPending({id:1},-1);}
+  }finally{f.runtime._memoPending({id:1},-1,undefined,undefined,token);}
   if(opts.answer)opts.answer.rev=mine;return text;
  };
  await f.bench.show('annotations');await settle();
@@ -7564,13 +7567,13 @@ function casPending(f,{adopt=null,hold=null}={}){
   const row=f.runtime.cache.items[id]||={},stored=String(row.remark||'');
   if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored},rev:row.memoRev||0};
   const prior=row.remark;row.remark=text;row.memoRev=(row.memoRev||0)+1;
-  f.runtime._memoPending({id},1,prior,text);
+  const token=f.runtime._memoPending({id},1,prior,text);
   let out=text;
   try{
    if(state.hold)await state.hold;
    if(state.fail){row.remark=prior;row.memoRev++;throw new Error('disk');} // the write fails and rolls back
    if(state.adopt!==null&&state.adopt!==text){row.remark=state.adopt;row.memoRev++;out=state.adopt;}
-  }finally{f.runtime._memoPending({id},-1);}
+  }finally{f.runtime._memoPending({id},-1,undefined,undefined,token);}
   if(opts.answer)opts.answer.rev=row.memoRev;
   return out;
  };
@@ -7625,7 +7628,7 @@ test('reconcile (R13-2): an idle window follows the other window\'s saves withou
 
 const survives=(f,text)=>{
  const states=f.bench.memoEditorState().map(s=>s.value);
- const drafts=(f.runtime.cache.workbenchDrafts?.entries||[]).filter(e=>!e[0].includes('\u0001')).map(e=>e[1]);
+ const drafts=sharedDraftTexts(f);
  const kept=Object.values(f.runtime.cache.memoKept||{}).flat().map(e=>e.text);
  const stored=[String(f.runtime.cache.items[1]?.remark||'')];
  return [...states,...drafts,...kept,...stored].some(t=>t.includes(text));
@@ -7808,11 +7811,15 @@ test('soak: 200 seeded steps of typing, blur, delay, redraw, notifier reload, fa
   const rnd=mulberry(seed);
   const f=fixture();const state=casPending(f);
   f.runtime.cache.items[1]={remark:'BASE'};
+  for(let i=0;i<35;i++)f.bench.draftStore.put('soak-paper-'+i,'unsaved draft of paper '+i,'base '+i,'w.'+i,String(2000+i)); // more than 30 papers with unsaved drafts
   await f.bench.show('annotations');await settle();
   const editor=()=>f.body().querySelector('textarea.sc-paper-memo');
-  let last='',release=null,held=false,serial=0;
+  let last='',release=null,held=false,serial=0;const typedSet=new Set(['BASE']);
   const log=[];
   const check=label=>{
+   if(last)typedSet.add(last);
+   const keptTotal=Object.values(f.runtime.cache.memoKept||{}).flat().reduce((sum,e)=>sum+e.text.length,0),typedTotal=[...typedSet].reduce((sum,t)=>sum+t.length,0);
+   assert.ok(keptTotal<=typedTotal,`seed ${seed} ${label}: the kept cards (${keptTotal}) hold more than was ever typed (${typedTotal})`);
    assert.ok(survives(f,last)||last==='',`seed ${seed} ${label}: typed text lost: ${last.slice(0,40)}… steps=${log.slice(-6).join(',')}`);
    assert.ok(!f.body().querySelector('.sc-memo-stale'),`seed ${seed} ${label}: a conflict box in a single window; steps=${log.slice(-6).join(',')}`);
    assertEditorsConsistent(f,`seed ${seed} ${label} steps=${log.slice(-6).join(',')}`);
@@ -7838,6 +7845,141 @@ test('soak: 200 seeded steps of typing, blur, delay, redraw, notifier reload, fa
   check('end');
   stuckFocus(f);const before=snapshots(f);f.notify();await sleep(900);
   assert.ok(snapshots(f)>before,`seed ${seed}: the reload eventually ran`);
+  for(let i=0;i<35;i++)assert.ok(f.bench.draftStore.texts().includes('unsaved draft of paper '+i),`seed ${seed}: the draft of paper ${i} is still there`);
+  // A save held for ever: the panel still refreshes after the deadline, and nothing typed is lost.
+  state.hold=new Promise(()=>{});const stuck=editor();casType(f,stuck,'held for ever');stuck.dispatchEvent(new f.win.Event('blur'));await settle();
+  stuckFocus(f);const realNow=Date.now;let offset=0;Date.now=()=>realNow()+offset;
+  try{f.notify();await sleep(700);offset=6000;await sleep(700);assert.notEqual(editor()===stuck,true,`seed ${seed}: the reload cap fired`);}finally{Date.now=realNow;}
+  assert.ok(survives(f,'held for ever'));
   f.bench.destroy();
+ }
+});
+
+// Two windows of one process: one pending-write registry and one set of settle listeners.
+function shareRuntime(f,g){
+ g.runtime.memoPendingMap=f.runtime.memoPendingMap;
+ for(const l of g.runtime.memoListeners)f.runtime.memoListeners.add(l);
+ g.runtime.memoListeners=f.runtime.memoListeners;
+}
+
+test('pending chains (R16-1): only the writes pending when an editor was created may move its base; another window\'s later save is never taken as its own',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);shareRuntime(f,g);
+ const stateF=casPending(f);casPending(g);
+ f.runtime.cache.items[1]={remark:'B'};
+ let release;stateF.hold=new Promise(r=>{release=r;});
+ await f.bench.show('annotations');await settle();
+ const first=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,first,'X');first.dispatchEvent(new f.win.Event('blur'));await settle(); // window A: X written, held
+ await f.bench.show('annotations');await settle();
+ const a=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,a,'XA');
+ await g.bench.show('annotations');await settle();
+ const b=g.body().querySelector('textarea.sc-paper-memo');
+ casType(g,b,'Y');b.dispatchEvent(new g.win.Event('blur'));await settle(); // window B saves Y
+ assert.equal(f.runtime.cache.items[1].remark,'Y');
+ stateF.hold=null;release();await settle(); // A's delay is over
+ a.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'Y','XA did not overwrite Y');
+ assert.ok(f.body().querySelector('.sc-memo-stale'),'a conflict is shown instead');
+ assert.ok(survives(f,'XA'));
+ f.bench.destroy();g.bench.destroy();
+});
+
+test('memo drafts (R16-2): 40 unsaved memo drafts all stay: one record each, outside the 100-entry list',async()=>{
+ const f=fixture();
+ for(let i=0;i<40;i++)f.bench.draftStore.put('paper-'+i,'draft '+i,'base '+i,'w.'+i,String(1000+i));
+ assert.equal(f.bench.draftStore.count(),40);
+ for(let i=0;i<40;i++)assert.ok(f.bench.draftStore.texts().includes('draft '+i),'draft '+i+' is still there');
+ assert.ok((f.runtime.cache.workbenchDrafts?.entries||[]).every(e=>!e[0].startsWith('paper-')),'not in the generic list');
+ f.bench.destroy();
+});
+
+test('memo drafts (R16-2b): an older store with sidecar entries is migrated to one record per draft',async()=>{
+ const key='k1',own='\u0001own';
+ const f=fixture({items:{},workbenchDrafts:{version:1,entries:[['plain','keep me'],[key,'TEXT'],[key+own,'w1.7|3'],[key+'\u0001base','H1:abc'],[key+'\u0001bt','BASE']]}});
+ assert.deepEqual(f.runtime.cache.workbenchDrafts.entries,[['plain','keep me']],'only the ordinary draft is left in the list');
+ const record=f.runtime.cache.memoDrafts.drafts[key];
+ assert.equal(record.text,'TEXT');assert.equal(record.owner,'w1.7');assert.equal(record.rev,3);assert.equal(record.baseText,'BASE');
+ f.bench.destroy();
+});
+
+test('reload deadline (R16-3): a save held for ever still lets the panel refresh within about 5 s, and the input is kept',async()=>{
+ const f=fixture();const state=casPending(f);
+ f.runtime.cache.items[1]={remark:'B'};
+ state.hold=new Promise(()=>{}); // never released
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'TYPED');el.dispatchEvent(new f.win.Event('blur'));await settle(); // the save runs for ever
+ stuckFocus(f);
+ const realNow=Date.now;let offset=0;Date.now=()=>realNow()+offset;
+ try{
+  f.notify();await sleep(700); // deferred: a save is running
+  assert.equal(f.body().querySelector('textarea.sc-paper-memo'),el,'still waiting');
+  offset=6000;await sleep(700); // the virtual clock passes the deadline
+  assert.notEqual(f.body().querySelector('textarea.sc-paper-memo')===el,true,'the panel refreshed');
+ }finally{Date.now=realNow;}
+ assert.ok(survives(f,'TYPED'),'the input is kept');
+ f.bench.destroy();
+});
+
+test('detached editors (R16-4): input that some request already saved is not kept again, and kept entries tidy themselves',async()=>{
+ const f=fixture();const state=casPending(f);
+ f.runtime.cache.items[1]={remark:'B'};
+ let release;state.hold=new Promise(r=>{release=r;});
+ const X='x'.repeat(50002);
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,X);old.dispatchEvent(new f.win.Event('blur'));await settle(); // held
+ old.dispatchEvent(new f.win.Event('blur'));await settle(); // the same save queued again
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'Y');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ state.hold=null;release();await settle();
+ const kept=Object.values(f.runtime.cache.memoKept||{}).flat();
+ assert.ok(!kept.some(e=>e.text===X),'the saved text is not a kept card: '+kept.map(e=>e.text.length).join(','));
+ f.bench.destroy();
+ // Housekeeping: only equal-to-stored and same-owner prefixes/duplicates go.
+ const g=fixture();casLibrary(g);
+ g.runtime.cache.items[1]={remark:'S'};
+ g.runtime.cache.memoKept={'key-1':[{id:'a',text:'S',base:'',owner:'o1'},{id:'b',text:'abc',base:'',owner:'o1'},{id:'c',text:'abcdef',base:'',owner:'o1'},{id:'d',text:'abc',base:'',owner:'o2'},{id:'e',text:'zzz',base:'',owner:'o1'},{id:'f',text:'plain',base:''}]};
+ await g.bench.show('annotations');await settle();
+ assert.deepEqual(g.runtime.cache.memoKept['key-1'].map(e=>e.id),['c','d','e','f'],'S (the stored memo) and abc (a prefix of the same owner\'s abcdef) went; nothing else');
+ g.bench.destroy();
+});
+
+test('soak (two windows): one types, blurs, delays, fails and redraws, the other idles and redraws: nothing is lost, the idle one follows and never keeps cards',async()=>{
+ for(const seed of (process.env.SEEDS?process.env.SEEDS.split(',').map(Number):[11,12,13])){
+  const rnd=mulberry(seed);
+  const f=fixture();const g=fixture(f.runtime.cache);shareRuntime(f,g);
+  const state=casPending(f);casLibrary(g);
+  f.runtime.cache.items[1]={remark:'BASE'};
+  await f.bench.show('annotations');await settle();await g.bench.show('annotations');await settle();
+  const ed=w=>w.body().querySelector('textarea.sc-paper-memo');
+  let last='',release=null,held=false,serial=0;const typed=new Set(['BASE']);const log=[];
+  const check=label=>{
+   if(last)typed.add(last);
+   const keptTotal=Object.values(f.runtime.cache.memoKept||{}).flat().reduce((sum,e)=>sum+e.text.length,0),typedTotal=[...typed].reduce((sum,t)=>sum+t.length,0);
+   assert.ok(keptTotal<=typedTotal,`seed ${seed} ${label}: kept ${keptTotal} > typed ${typedTotal}`);
+   assert.ok(survives(f,last)||last==='',`seed ${seed} ${label}: typed text lost; steps=${log.slice(-6).join(',')}`);
+   assert.ok(!f.body().querySelector('.sc-memo-stale'),`seed ${seed} ${label}: a conflict box in the typing window; steps=${log.slice(-6).join(',')}`);
+   assert.ok(!g.body().querySelector('.sc-memo-stale'),`seed ${seed} ${label}: a conflict box in the idle window; steps=${log.slice(-6).join(',')}`);
+   assertEditorsConsistent(f,`seed ${seed} ${label} f`);assertEditorsConsistent(g,`seed ${seed} ${label} g`);
+  };
+  for(let step=0;step<200;step++){
+   const r=rnd(),el=ed(f);let action;
+   if(r<0.30){action='type';last=(rnd()<0.5?el.value:'')+' t'+(++serial);casType(f,el,last);}
+   else if(r<0.42){action='blur';el.dispatchEvent(new f.win.Event('blur'));}
+   else if(r<0.52){action='delay';if(!held){held=true;state.hold=new Promise(res=>{release=res;});}}
+   else if(r<0.62){action='release';if(held){held=false;state.fail=false;release();state.hold=null;}}
+   else if(r<0.68){action='fail';if(held){held=false;state.fail=true;release();await settle();state.fail=false;state.hold=null;}}
+   else if(r<0.80){action='redraw';await f.bench.show('annotations');}
+   else if(r<0.92){action='idle redraw';await g.bench.show('annotations');}
+   else if(r<0.96){action='notify';stuckFocus(f);f.notify();}
+   else{action='long';last='L'+(++serial)+'x'.repeat(50000+(serial%5));casType(f,el,last);}
+   log.push(action);await settle();check('step '+step+' '+action);
+  }
+  if(held){held=false;release();state.hold=null;}
+  await settle();ed(f).dispatchEvent(new f.win.Event('blur'));await settle();check('end');
+  f.bench.destroy();g.bench.destroy();
  }
 });

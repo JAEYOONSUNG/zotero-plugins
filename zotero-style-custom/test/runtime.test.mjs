@@ -4295,8 +4295,13 @@ test('pending writes (R15): the runtime remembers the memo before the oldest uns
   const second = w.lib.setRemark(3, 'Y'); await new Promise(r => setTimeout(r, 5));
   assert.equal(w.plugin.memoWritePending(w.c), true);
   assert.equal(w.plugin.memoPendingPrior(w.c), 'B', 'what a rollback goes back to');
+  assert.deepEqual(w.plugin.memoChainTexts(w.c), ['B', 'X', 'Y'], 'while pending: the memo before and each write');
+  assert.equal(w.plugin.memoPendingList(w.c).length, 2);
+  assert.ok(w.plugin.memoPendingList(w.c).every(entry => typeof entry.token === 'string'), 'each write has a token');
   release(); await Promise.all([first, second]);
   assert.equal(w.plugin.memoWritePending(w.c), false);
-  assert.deepEqual(w.plugin.memoChainTexts(w.c), ['B', 'X', 'Y'], 'the chain stays known after it settles');
+  assert.deepEqual(w.plugin.memoChainTexts(w.c), [], 'nothing about the chain is kept once it settles');
+  assert.equal(w.plugin.memoPendingPrior(w.c), undefined);
+  assert.deepEqual(w.plugin.memoPendingList(w.c), []);
   w.plugin.flush = orig;
 });

@@ -4522,21 +4522,24 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   /* The memo revision: a counter bumped on every change to remark, memoSynced or memoConflict, whoever made it. A writer that
      wants to undo its own write compares it with the value captured right after that write; text equality is not ownership. */
-  /* A memo write is "pending" from the moment it is in memory until its storage write has resolved or been rolled back. The in-memory
-     remark of a pending write is not yet the persisted memo; listeners hear when one settles so editors can reconcile again. */
-  memoWritePending(item) { return (this.memoPendingWrites?.get(this.identity(item)) || 0) > 0; }
-  // The memo as it was before the oldest unsettled write: what a rollback goes back to (an editor made in the meantime builds on it).
-  memoPendingPrior(item) { const list = this.memoPendingPriors?.get(this.identity(item)); return list && list.length ? list[0] : undefined; }
-  // Every memo text written (and the one before the first) while a paper had writes pending, kept until the next such stretch begins: after it settles the stored memo may be any of them.
-  memoChainTexts(item) { return this.memoChains?.get(this.identity(item)) || []; }
-  _memoPending(item, delta, prior, value) {
-    const chains = this.memoChains || (this.memoChains = new Map()), cid = this.identity(item);
-    if (delta > 0) { if (!(this.memoPendingWrites?.get(cid) > 0)) chains.set(cid, [String(prior ?? '')]); const list = chains.get(cid) || []; list.push(String(value ?? '')); chains.set(cid, list); }
-    const map = this.memoPendingWrites || (this.memoPendingWrites = new Map()), id = this.identity(item), n = (map.get(id) || 0) + delta;
-    const priors = this.memoPendingPriors || (this.memoPendingPriors = new Map()), list = priors.get(id) || [];
-    if (delta > 0) { list.push(String(prior ?? '')); priors.set(id, list); } else { list.shift(); if (list.length) priors.set(id, list); else priors.delete(id); }
-    if (n > 0) map.set(id, n); else map.delete(id);
-    if (delta < 0) for (const listener of [...(this.memoListeners || [])]) { try { listener(item); } catch (error) { this.Z.logError?.(error); } }
+  /* A memo write is "pending" from the moment it is in memory until its storage write (and note job) has resolved or been rolled back.
+     Each write has a token; the in-memory remark of a pending write is not yet the persisted memo. Listeners hear when one settles so
+     editors can reconcile again. Everything about a pending stretch is gone once the last write settles. */
+  memoPendingList(item) { return [...(this.memoPendingMap?.get(this.identity(item)) || [])]; }
+  memoWritePending(item) { return this.memoPendingList(item).length > 0; }
+  // The memo as it was before the oldest unsettled write: what a rollback goes back to.
+  memoPendingPrior(item) { return this.memoPendingList(item)[0]?.prior; }
+  // The texts the memo may be once the writes now pending settle: the one before the first, and each write's own.
+  memoChainTexts(item) { const list = this.memoPendingList(item); return list.length ? [list[0].prior, ...list.map(w => w.value)] : []; }
+  _memoPending(item, delta, prior, value, token) {
+    const map = this.memoPendingMap || (this.memoPendingMap = new Map()), id = this.identity(item), list = map.get(id) || [];
+    let made;
+    if (delta > 0) { made = 'w' + (this._memoToken = (this._memoToken || 0) + 1); list.push({token: made, prior: String(prior ?? ''), value: String(value ?? '')}); map.set(id, list); return made; }
+    const at = token === undefined ? 0 : list.findIndex(w => w.token === token);
+    if (at >= 0) list.splice(at, 1);
+    if (list.length) map.set(id, list); else map.delete(id);
+    for (const listener of [...(this.memoListeners || [])]) { try { listener(item); } catch (error) { this.Z.logError?.(error); } }
+    return undefined;
   }
   addMemoListener(listener) { (this.memoListeners || (this.memoListeners = new Set())).add(listener); return () => this.memoListeners.delete(listener); }
   _memoBump(row) { row.memoRev = (row.memoRev || 0) + 1; this.dirty = true; return row.memoRev; }

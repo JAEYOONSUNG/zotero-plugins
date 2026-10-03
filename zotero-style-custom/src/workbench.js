@@ -106,16 +106,61 @@
   const BASE_TAG='H1:';
   const baseTag=text=>BASE_TAG+hashOf(text);
   const ownerWindow=owner=>String(owner).split('.')[0];
-  function draftMeta(key){const raw=cachedDrafts().get(key+DRAFT_OWN);if(typeof raw!=='string')return null;const cut=raw.lastIndexOf('|');return cut<0?null:{owner:raw.slice(0,cut),rev:Number(raw.slice(cut+1))};}
-  function updateDraft(key,value,base,owner){
-   if(!key||key.length>1000||/password|secret|api.?key|access.?token|bearer/i.test(key))return;
-   const saved=cachedDrafts(),before=draftMeta(key);saved.delete(key);drafts.delete(key);saved.delete(key+DRAFT_BASE);drafts.delete(key+DRAFT_BASE);saved.delete(key+DRAFT_OWN);drafts.delete(key+DRAFT_OWN);saved.delete(key+DRAFT_TRUNC);drafts.delete(key+DRAFT_TRUNC);saved.delete(key+DRAFT_BASETEXT);drafts.delete(key+DRAFT_BASETEXT);
-   if(value!==undefined){const limit=typeof owner==='string'?MEMO_DRAFT_MAX:DRAFT_LENGTH;const cut=String(value).length>limit;value=String(value).slice(0,limit);saved.set(key,value);drafts.set(key,value);if(cut){saved.set(key+DRAFT_TRUNC,'1');drafts.set(key+DRAFT_TRUNC,'1');}if(typeof owner==='string'){const o=owner+'|'+((before?.rev||0)+1);saved.set(key+DRAFT_OWN,o);drafts.set(key+DRAFT_OWN,o);}if(typeof base==='string'||(base&&typeof base.tagged==='string')){const b=typeof base==='string'?baseTag(base):base.tagged;saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);if(typeof base==='string'&&typeof owner==='string'){saved.set(key+DRAFT_BASETEXT,base);drafts.set(key+DRAFT_BASETEXT,base);}}}
-   trimDrafts(saved,true);
-   for(const existing of drafts.keys())if(!saved.has(existing))drafts.delete(existing);
-   runtime.cache.workbenchDrafts={version:1,entries:[...saved]};runtime.dirty=true;
+  /* Memo drafts are one record each in their own store (runtime.cache.memoDrafts, keyed by the editor's draft key), outside the
+     generic draft list and its entry cap: {text, base (tagged hash), baseText, owner, rev, item, at}. Nothing is cut and nothing is
+     dropped silently: a store over its caps moves the oldest drafts to the kept drafts of their paper first. */
+  const MEMO_DRAFT_COUNT=400;
+  // Reading never writes into the cache: the store is created by the first draft.
+  function memoStore(forWrite=false){const m=runtime.cache.memoDrafts;if(m&&m.version===1&&m.drafts&&typeof m.drafts==='object'&&!Array.isArray(m.drafts))return m.drafts;return forWrite?(runtime.cache.memoDrafts={version:1,drafts:{}}).drafts:{};}
+  const memoRecord=key=>{const r=memoStore()[key];return r&&typeof r.text==='string'?r:undefined;};
+  const draftMeta=key=>{const r=memoRecord(key);return r?{owner:r.owner,rev:r.rev}:null;};
+  // The text of a draft key: a memo draft's record, else an ordinary (or legacy plain) draft.
+  const draftText=key=>{const r=memoRecord(key);return r?r.text:cachedDrafts().get(key);};
+  // Earlier versions kept a memo draft as sidecar entries next to the text in the generic list: they become one record each.
+  function migrateMemoDrafts(){
+   const saved=runtime.cache.workbenchDrafts;if(!saved||saved.version!==1||!Array.isArray(saved.entries))return;
+   const map=new Map(saved.entries.filter(e=>Array.isArray(e)&&e.length===2&&typeof e[0]==='string'&&typeof e[1]==='string'));
+   const owners=[...map.keys()].filter(k=>k.endsWith(DRAFT_OWN));if(!owners.length)return;
+   const store=memoStore(true);
+   for(const ownKey of owners){
+    const key=ownKey.slice(0,-DRAFT_OWN.length),raw=map.get(ownKey),cut=raw.lastIndexOf('|');
+    if(map.has(key)&&cut>0&&!store[key])store[key]={text:map.get(key),base:map.get(key+DRAFT_BASE),baseText:map.get(key+DRAFT_BASETEXT),owner:raw.slice(0,cut),rev:Number(raw.slice(cut+1))||1,item:undefined,at:Date.now()};
+    for(const k of [key,key+DRAFT_BASE,key+DRAFT_OWN,key+DRAFT_TRUNC,key+DRAFT_BASETEXT])map.delete(k);
+   }
+   runtime.cache.workbenchDrafts={version:1,entries:[...map]};runtime.dirty=true;
+  }
+  function scheduleDraftFlush(){
+   runtime.dirty=true;
    if(draftTimer)win.clearTimeout(draftTimer);
    draftTimer=win.setTimeout(()=>{draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));},250);
+  }
+  migrateMemoDrafts();drafts.clear();for(const [key,value] of cachedDrafts())drafts.set(key,value);
+  function putMemoDraft(key,value,base,owner,itemID){
+   const store=memoStore(true),prev=store[key];
+   const raw=typeof base==='string'?base:undefined,tagged=typeof base==='string'?baseTag(base):(base&&typeof base.tagged==='string'?base.tagged:undefined);
+   store[key]={text:String(value),base:tagged,baseText:raw!==undefined?raw:(tagged!==undefined&&prev&&prev.base===tagged?prev.baseText:undefined),owner,rev:(prev?.rev||0)+1,item:itemID!==undefined?itemID:prev?.item,at:Date.now()};
+   const saved=cachedDrafts();if(saved.has(key)){for(const k of [key,key+DRAFT_BASE,key+DRAFT_OWN,key+DRAFT_TRUNC,key+DRAFT_BASETEXT]){saved.delete(k);drafts.delete(k);}runtime.cache.workbenchDrafts={version:1,entries:[...saved]};}
+   // Over a cap, the oldest drafts go to their paper's kept drafts first; one that cannot be kept stays.
+   const keys=Object.keys(store);let total=keys.reduce((sum,k)=>sum+store[k].text.length,0);
+   if(keys.length>MEMO_DRAFT_COUNT||total>MEMO_TOTAL){
+    for(const k of keys.sort((x,y)=>(store[x].at||0)-(store[y].at||0))){
+     if(Object.keys(store).length<=MEMO_DRAFT_COUNT&&total<=MEMO_TOTAL)break;
+     if(k===key||store[k].item===undefined)continue;
+     keepDraft(store[k].item,store[k].text,store[k].base,false,store[k].owner);total-=store[k].text.length;delete store[k];
+    }
+   }
+   scheduleDraftFlush();
+  }
+  function updateDraft(key,value,base,owner,itemID){
+   if(!key||key.length>1000||/password|secret|api.?key|access.?token|bearer/i.test(key))return;
+   if(typeof owner==='string'&&value!==undefined)return putMemoDraft(key,value,base,owner,itemID);
+   const store=memoStore();if(store[key])delete store[key];
+   const saved=cachedDrafts();for(const k of [key,key+DRAFT_BASE,key+DRAFT_OWN,key+DRAFT_TRUNC,key+DRAFT_BASETEXT]){saved.delete(k);drafts.delete(k);}
+   if(value!==undefined){value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);}
+   trimDrafts(saved,true);
+   for(const existing of drafts.keys())if(!saved.has(existing))drafts.delete(existing);
+   runtime.cache.workbenchDrafts={version:1,entries:[...saved]};
+   scheduleDraftFlush();
   }
   const hiddenTabs=()=>new Set([...(Array.isArray(runtime.cache.hiddenWorkbenchTabs)?runtime.cache.hiddenWorkbenchTabs:[]).filter(id=>id!=='appearance'&&TABS.some(([key])=>key===id)),...Object.entries(tabFeature).filter(([,feature])=>!enabled(feature)).map(([id])=>id)]);
   const listeners=[];
@@ -1344,12 +1389,12 @@
   function writeMemoDraft(input){
    const binding=memoBindings.get(input),key=input.dataset.draftKey;
    if(binding&&binding.base!==undefined&&binding.itemID!==undefined){
-    const saved=cachedDrafts(),existing=saved.get(key),meta=draftMeta(key);
+    const record=memoRecord(key),existing=draftText(key),meta=draftMeta(key);
     // Foreign: any shared draft this binding did not write (its owner may be alive, closed, or unknown) that differs from the new text and
     // the stored memo goes to the kept drafts first. A closed owner only matters when a draft is claimed on restore, never for overwriting.
     const foreign=typeof existing==='string'&&(!meta||meta.owner!==binding.id)&&existing!==input.value&&existing!==storedMemo(binding.itemID);
-    if(foreign)keepDraft(binding.itemID,existing,saved.get(key+DRAFT_BASE),saved.has(key+DRAFT_TRUNC));
-    updateDraft(key,input.value,binding.base,binding.id);
+    if(foreign)keepDraft(binding.itemID,existing,record?record.base:undefined,false,record?record.owner:undefined);
+    updateDraft(key,input.value,binding.base,binding.id,binding.itemID);
     if(foreign)binding.drawKept?.();
     return;
    }
@@ -3596,12 +3641,30 @@
   const KEPT_SHOWN=3; // how many kept drafts show before the toggle; none is ever deleted but by its own buttons
   const keptKey=itemID=>{try{const ref=runtime.Z.Items.get(Number(itemID));return ref?String(runtime.identity(ref)):String(itemID);}catch(_){return String(itemID);}};
   const keptList=itemID=>{const all=runtime.cache.memoKept,list=all&&typeof all==='object'?all[keptKey(itemID)]:null;return Array.isArray(list)?list:[];};
-  function keepDraft(itemID,text,base,truncated=false){
+  /* Texts that some request saved successfully (hashes, last 50 per paper): a detached editor's input that was saved is not kept again. */
+  const savedHashes=new Map();
+  const noteSaved=(itemID,text)=>{const key=String(itemID),set=savedHashes.get(key)||[];const h=hashOf(text);const at=set.indexOf(h);if(at>=0)set.splice(at,1);set.push(h);while(set.length>50)set.shift();savedHashes.set(key,set);};
+  const wasSaved=(itemID,text)=>(savedHashes.get(String(itemID))||[]).includes(hashOf(text));
+  function keepDraft(itemID,text,base,truncated=false,owner){
    const all=runtime.cache.memoKept&&typeof runtime.cache.memoKept==='object'&&!Array.isArray(runtime.cache.memoKept)?runtime.cache.memoKept:(runtime.cache.memoKept={});
    const list=all[keptKey(itemID)]||(all[keptKey(itemID)]=[]);
    if(list.some(entry=>entry.text===text))return;
-   list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text),base:String(base??''),truncated:!!truncated,at:new Date().toISOString()});
+   list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text),base:String(base??''),truncated:!!truncated,owner,at:new Date().toISOString()});
+   tidyKept(itemID);
    runtime.dirty=true;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));
+  }
+  /* Housekeeping, and nothing else: a kept entry goes when its text is the stored memo now, or when it is a prefix of (or a duplicate
+     of) another entry of the same owner. */
+  function tidyKept(itemID){
+   const all=runtime.cache.memoKept,key=keptKey(itemID),list=all&&typeof all==='object'?all[key]:null;
+   if(!Array.isArray(list))return;
+   const stored=storedMemo(itemID);
+   const keep=list.filter((entry,i)=>{
+    if(entry.text===stored)return false;
+    if(entry.owner!==undefined&&list.some((other,j)=>j!==i&&other.owner===entry.owner&&other.text.length>=entry.text.length&&other.text.startsWith(entry.text)&&(other.text.length>entry.text.length||j<i)))return false;
+    return true;
+   });
+   if(keep.length!==list.length){if(keep.length)all[key]=keep;else delete all[key];runtime.dirty=true;}
   }
   function dropKept(itemID,id){
    const all=runtime.cache.memoKept,key=keptKey(itemID);
@@ -3635,7 +3698,9 @@
    binding.moveBase=moveBase;
    binding.loaded=cas?String(cas.base??''):undefined; // the text this editor was created with
    // Created over the in-memory value of a write that has not settled: the editor builds on it while it stands, and on the memo before it if it rolls back.
-   if(cas&&memoPendingNow(cas.itemID)){const prior=(()=>{try{return runtime.memoPendingPrior?.(runtime.Z.Items.get(Number(cas.itemID)));}catch(_){return undefined;}})();if(typeof prior==='string'&&prior!==binding.base){binding.confirmIf=binding.base;binding.base=prior;}binding.chainBorn=true;}
+   /* The writes pending when this editor is created are the only ones that may move its base when they settle (their tokens and texts are recorded here). A write that starts later, from any editor or window, is judged by the normal check. */
+   const captureKnown=()=>{try{const list=runtime.memoPendingList?.(runtime.Z.Items.get(Number(cas.itemID)))||[];if(!list.length)return undefined;binding.known={tokens:new Set(list.map(w=>w.token)),texts:[list[0].prior,...list.map(w=>w.value)]};return list[0].prior;}catch(_){return undefined;}};
+   if(cas&&memoPendingNow(cas.itemID)){const prior=captureKnown();if(typeof prior==='string'&&prior!==binding.base){binding.confirmIf=binding.base;binding.base=prior;}}
    /* After every completion each connected editor of the paper is left in exactly one consistent state:
       (a) it shows the stored memo: base, autosave baseline and stored are one text, no box, its own draft cleared (finishOwn);
       (b) it shows other text on a current base: nothing is open, and the autosave baseline is invalidated so the next blur/autosave saves;
@@ -3644,16 +3709,20 @@
     if(!cas||!field.isConnected)return;
     const stored=storedMemo(cas.itemID),value=field.value;
     // A restored value that was an unsettled write: if that write landed the base becomes it; if it rolled back the base stays on the memo it was typed over.
+    const wasConfirm=binding.confirmIf;
     if(!memoPendingNow(cas.itemID)){
      // A base that moves also moves the base its own draft was recorded over, or a redraw would not restore it.
      const rebaseDraft=()=>{if(field.dataset.draftKey&&value!==stored&&binding.draftToken())binding.ownDraftWrite(value,stored);};
      if(binding.confirmIf!==undefined){if(stored===binding.confirmIf){moveBase(stored,true);rebaseDraft();}binding.confirmIf=undefined;}
-     // Made while writes were pending: after they settle the stored memo may be any text of that chain (a failed older write does not roll back under a newer one), and all of them are this editor's own history.
-     if(binding.chainBorn){binding.chainBorn=false;let chain=[];try{chain=runtime.memoChainTexts?.(runtime.Z.Items.get(Number(cas.itemID)))||[];}catch(_){}if(chain.includes(stored)){moveBase(stored,true);rebaseDraft();}}
+     /* Made while writes were pending: when THOSE writes have settled, the stored memo may be any text of that stretch (a failed older write does not roll back under a newer one), and those are this editor's own history. A text from a write it did not know about is not. */
+     if(binding.known){
+      const live=(()=>{try{return runtime.memoPendingList?.(runtime.Z.Items.get(Number(cas.itemID)))||[];}catch(_){return [];}})();
+      if(!live.some(w=>binding.known.tokens.has(w.token))){const known=binding.known;binding.known=null;if(known.texts.includes(stored)){moveBase(stored,true);rebaseDraft();}}
+     }
     }
     // An editor nobody typed into since it last showed a stored text just follows the stored memo: no draft, no box.
-    const holdsDraft=(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return !!meta&&meta.owner===binding.id&&cachedDrafts().has(key);})();
-    if(!binding.unsaved&&!holdsDraft&&(value===binding.base||(binding.confirmIf!==undefined&&value===binding.confirmIf))){
+    const holdsDraft=(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return !!meta&&meta.owner===binding.id&&draftText(key)!==undefined;})();
+    if(!binding.unsaved&&!holdsDraft&&(value===binding.base||value===binding.loaded||value===wasConfirm)){
      if(value!==stored)binding.show(stored);
      else if(!memoPendingNow(cas.itemID)){moveBase(stored);last=stored;clearStale();}
      return;
@@ -3667,7 +3736,7 @@
      return;
     }
     // The input differs from the stored memo: it must be in this editor's own draft (written through the ownership rules), or a redraw would lose it.
-    const ownDraft=()=>{const key=field.dataset.draftKey;if(!key)return;const meta=draftMeta(key);if(meta&&meta.owner===binding.id&&cachedDrafts().get(key)===value)return;writeMemoDraft(field);};
+    const ownDraft=()=>{const key=field.dataset.draftKey;if(!key)return;const meta=draftMeta(key);if(meta&&meta.owner===binding.id&&draftText(key)===value)return;writeMemoDraft(field);};
     if(binding.base===stored){clearStale();last=null;ownDraft();return;}
     const s=binding.stale;
     if(!(s&&!s.used&&s.stored===stored&&s.conflict.local===value&&staleBox&&staleBox.isConnected)){
@@ -3675,7 +3744,7 @@
     }
     last=value;ownDraft();
    };
-   binding.state=()=>({unsaved:binding.unsaved,pending:cas?memoPendingNow(cas.itemID):false,ownDraft:(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return meta&&meta.owner===binding.id?cachedDrafts().get(key):undefined;})(),value:field.value,base:binding.base,last,box:!!(staleBox&&staleBox.isConnected),used:!!binding.stale?.used,buttonsEnabled:staleBox?[...staleBox.querySelectorAll('button')].every(b=>!b.disabled):true,stored:cas?storedMemo(cas.itemID):undefined});
+   binding.state=()=>({unsaved:binding.unsaved,pending:cas?memoPendingNow(cas.itemID):false,ownDraft:(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return meta&&meta.owner===binding.id?draftText(key):undefined;})(),value:field.value,base:binding.base,last,box:!!(staleBox&&staleBox.isConnected),used:!!binding.stale?.used,buttonsEnabled:staleBox?[...staleBox.querySelectorAll('button')].every(b=>!b.disabled):true,stored:cas?storedMemo(cas.itemID):undefined});
    // The draft this binding owns right now (owner and rev), captured when a job starts; null if it owns none.
    binding.draftToken=()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return meta&&meta.owner===binding.id?{owner:meta.owner,rev:meta.rev}:null;};
    // Delete the draft only if this binding owns it, it still holds the submitted text, and (with a token) nothing wrote it since.
@@ -3684,24 +3753,25 @@
     const meta=draftMeta(key);
     if(!meta||meta.owner!==binding.id)return false;
     if(token&&(token.owner!==meta.owner||token.rev!==meta.rev))return false;
-    if(cachedDrafts().get(key)!==String(submitted))return false;
+    if(draftText(key)!==String(submitted))return false;
     updateDraft(key,undefined);return true;
    };
    const clearStale=()=>{binding.stale=null;if(staleBox){staleBox.remove();staleBox=null;}if(field.dataset.state==='stale')field.dataset.state='';};
    // The editor takes a stored text as its own: value, base and autosave baseline together.
-   binding.show=text=>{if(timer){win.clearTimeout(timer);timer=null;}field.value=text;grow();last=text;binding.unsaved=false;if(moveBase(text))clearStale();};
+   binding.show=text=>{if(timer){win.clearTimeout(timer);timer=null;}field.value=text;grow();last=text;binding.unsaved=false;binding.loaded=text;if(moveBase(text))clearStale();};
    const take=text=>{const prior=field.value;if(field.dataset.draftKey)finishDraft(field,prior);binding.show(text);};
    // Puts a kept draft into THIS editor as ordinary unsaved input; true only when it is in a connected editor's value and draft.
    binding.loadKept=entry=>{
     if(!field.isConnected)return false;
     const mine=field.value,next=!mine.trim()||mine===binding.base?entry.text:mine+'\n\n'+entry.text;
     field.value=next;grow();field.dispatchEvent(new win.Event('input',{bubbles:true}));
-    return field.isConnected&&field.value===next&&(!field.dataset.draftKey||drafts.get(field.dataset.draftKey)===next);
+    return field.isConnected&&field.value===next&&(!field.dataset.draftKey||draftText(field.dataset.draftKey)===next);
    };
    let keptExpanded=false;
    const drawKept=()=>{
     if(!cas||!cas.host||!cas.host.isConnected)return;
     if(keptBox){keptBox.remove();keptBox=null;}
+    tidyKept(cas.itemID);
     const list=keptList(cas.itemID).slice().reverse();if(!list.length)return; // newest first
     keptBox=node('div',null,cas.host,{class:'sc-memo-kept'});
     for(const entry of keptExpanded?list:list.slice(0,KEPT_SHOWN)){
@@ -3759,6 +3829,8 @@
     const gens=cas?editorGens(cas.itemID):null,startGen=binding.gen,answer={};
     let saved,failure=null;
     try{saved=await save(value,base,answer);}catch(error){failure=error;}
+    // Saved by this request (whatever happens to the answer on screen): a detached editor holding the same text has nothing left to keep.
+    if(cas&&(failure?failure.memoSaved===true:!(saved&&typeof saved==='object'&&saved.stale)))noteSaved(cas.itemID,value);
     // An answer with a revision (or a failure) comes from the real library: every completion ends by reconciling the editors of that paper, in one common finally.
     const live=!!cas&&(failure!==null||answer.rev!==undefined||(!!saved&&typeof saved==='object'&&saved.rev!==undefined));
     try{
@@ -3799,8 +3871,9 @@
    binding.preserveDetached=()=>{
     const value=field.value;if(!cas||value===binding.base)return;
     const key=field.dataset.draftKey,meta=key?draftMeta(key):null;
-    if(meta&&meta.owner===binding.id&&cachedDrafts().get(key)===value)return;
-    keepDraft(cas.itemID,value,baseTag(binding.base));
+    if(meta&&meta.owner===binding.id&&draftText(key)===value)return;
+    if(wasSaved(cas.itemID,value))return;
+    keepDraft(cas.itemID,value,baseTag(binding.base),false,binding.id);
    };
    binding.timerPending=()=>!!timer;
    binding.cancelTimer=()=>{if(timer){win.clearTimeout(timer);timer=null;}};
@@ -3873,27 +3946,27 @@
    binding.restore=()=>{
     const key=field.dataset.draftKey;
     if(!cas||!key)return;
-    const saved=cachedDrafts(),draft=saved.get(key);
+    const record=memoRecord(key),legacy=record?undefined:cachedDrafts().get(key),draft=record?record.text:legacy;
     if(typeof draft!=='string')return;
-    const meta=draftMeta(key),draftBase=saved.get(key+DRAFT_BASE),truncated=saved.has(key+DRAFT_TRUNC);
+    const meta=draftMeta(key),draftBase=record?record.base:undefined,truncated=!record&&cachedDrafts().has(key+DRAFT_TRUNC);
     const stored=storedMemo(cas.itemID);
     const sameAsStored=draft===stored||(truncated&&stored.slice(0,DRAFT_LENGTH)===draft);
     // The stored memo the draft was typed over, as text, when it is on record and matches its hash.
-    const baseText=saved.get(key+DRAFT_BASETEXT),baseOK=typeof baseText==='string'&&typeof draftBase==='string'&&baseTag(baseText)===draftBase;
+    const baseText=record?record.baseText:undefined,baseOK=typeof baseText==='string'&&typeof draftBase==='string'&&baseTag(baseText)===draftBase;
     const claimBase=baseOK?baseText:(typeof draftBase==='string'?{tagged:draftBase}:undefined);
     const otherLive=!!meta&&ownerWindow(meta.owner)!==WINDOW_ID&&LIVE_DRAFT_WINDOWS.has(ownerWindow(meta.owner));
-    if(otherLive){if(!sameAsStored&&draft!==field.value){keepDraft(cas.itemID,draft,draftBase,truncated);drawKept();}return;}
+    if(otherLive){if(!sameAsStored&&draft!==field.value){keepDraft(cas.itemID,draft,draftBase,truncated,meta.owner);drawKept();}return;}
     // The value came from a draft: it is unsaved input until a save of exactly that value is confirmed (a leftover equal to the stored memo is just dropped, unless that memo is a write still in flight).
     if(draft===field.value&&!truncated){
      if(draft===stored&&!memoPendingNow(cas.itemID)){binding.dropDraft(meta);return;}
      // The editor shows what a write (still in flight) put in memory: its base is the memo that draft was typed over, so a rollback to it is an ordinary unsaved edit, not a conflict.
      if(baseOK&&baseText!==binding.base&&draft!==baseText){moveBase(baseText,true);binding.confirmIf=draft;}
-     if(memoPendingNow(cas.itemID))binding.chainBorn=true;
+     if(memoPendingNow(cas.itemID)&&!binding.known)captureKnown();
      binding.claimDraft(draft,claimBase,meta);binding.unsaved=true;return;
     }
     if(sameAsStored){binding.dropDraft(meta);return;}
     if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.loaded){field.value=draft;grow();binding.unsaved=true;binding.claimDraft(draft,claimBase,meta);return;}
-    keepDraft(cas.itemID,draft,draftBase,truncated);binding.dropDraft(meta);drawKept();
+    keepDraft(cas.itemID,draft,draftBase,truncated,meta?meta.owner:undefined);binding.dropDraft(meta);drawKept();
    };
    memoBindings.set(field,binding);
    drawKept();
@@ -8123,7 +8196,7 @@
       broken: after 자세히 the scope stayed on the selection, and the
       selection went away with the next click in the tree. With nothing to
       show, the scope falls back to the library. */
-   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';state.selectionLabel='';restoreKept();}const token=++epoch;state.exploreCount=null;state.tabCount=null;clear();for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});
+   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';state.selectionLabel='';restoreKept();}const token=++epoch;state.exploreCount=null;state.tabCount=null;clear();reloadDeferSince=0;for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});
    // Said in the panel, never in a modal: the first background write into Extra.
    if(runtime.cache?.citationExtraNoticePending){win.setTimeout(()=>{if(disposed||panel.hidden||!runtime.cache.citationExtraNoticePending)return;message("인용 수를 Extra 필드에 'Citations: N (출처, 날짜)' 한 줄로 기록합니다. 원하지 않으면 설정 → Style Custom → 인용 수·IF → '논문 추가·수정 시 인용 수 조회 후 Extra 저장'을 끄세요.");delete runtime.cache.citationExtraNoticePending;runtime.dirty=true;},0);}try{
    switch(state.tab){case'explore':{
@@ -8184,7 +8257,7 @@
    if(disposed||panel.hidden)return;
    if(typing()){reloadPending=true;return;}
    if(memoBusy()){if(!reloadDeferSince)reloadDeferSince=Date.now();reloadTimer=win.setTimeout(reloadAgain,300);return;}
-   reloadDeferSince=0;notifierLoad=true;run(load);
+   notifierLoad=true;run(load); // the deadline is kept across load() and reset only by an actual render
   }
   const scheduleReload=()=>{if(disposed||panel.hidden)return;if(typing()){reloadPending=true;return;}reloadPending=false;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(reloadAgain,200);};
   panel.addEventListener('focusout',()=>{if(reloadPending)win.setTimeout(()=>{if(reloadPending&&!typing())scheduleReload();},0);});
@@ -8204,7 +8277,7 @@
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};
   const notify=(text,{error=false,full=''}={})=>{if(disposed)return;message(text,error);status.title=full&&full!==text?full:'';return panel.hidden?toggle(true):undefined;};
-  return {memoEditorState:()=>[...body.querySelectorAll('textarea[data-memo-item]')].filter(e=>e.isConnected).map(e=>memoBindings.get(e)?.state?.()).filter(Boolean),filters:{rules:()=>activeRules(),set:list=>{setRules(model.cleanRules(list));return render();},open:()=>{setFiltersOpen(true);},edit:kind=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,null),editor:()=>ruleDraft},toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,notify,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
+  return {draftStore:{put:(key,text,base,owner,itemID)=>updateDraft(key,text,base,owner,itemID),count:()=>Object.keys(memoStore()).length,texts:()=>Object.values(memoStore()).map(r=>r.text)},memoEditorState:()=>[...body.querySelectorAll('textarea[data-memo-item]')].filter(e=>e.isConnected).map(e=>memoBindings.get(e)?.state?.()).filter(Boolean),filters:{rules:()=>activeRules(),set:list=>{setRules(model.cleanRules(list));return render();},open:()=>{setFiltersOpen(true);},edit:kind=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,null),editor:()=>ruleDraft},toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,notify,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
