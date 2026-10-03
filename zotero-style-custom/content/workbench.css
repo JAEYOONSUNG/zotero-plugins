@@ -2973,3 +2973,24 @@
 #style-custom-workbench .sc-matrix-edit { width: 100%; min-width: 14ch; min-height: 3.2em; resize: vertical; box-sizing: border-box; font: inherit; line-height: var(--sc-lh-body); color: inherit; background: transparent; border: 1px solid transparent; border-radius: var(--sc-radius-sm); padding: 4px 6px; }
 #style-custom-workbench .sc-matrix-edit:hover { border-color: var(--sc-border); }
 #style-custom-workbench .sc-matrix-edit:focus { border-color: var(--sc-border-strong); background: var(--sc-surface); outline: none; }
+/* 관계 그래프 범위: 라이브러리 · 컬렉션 · 논문 하나, with an in-page picker (no native popup). */
+#style-custom-workbench .sc-graph-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2) var(--sc-space-3); }
+#style-custom-workbench .sc-graph-scope-label { font-weight: var(--sc-fw-strong); color: var(--sc-text); white-space: nowrap; }
+#style-custom-workbench .sc-graph-scope .sc-check { white-space: nowrap; }
+#style-custom-workbench .sc-pick-trigger { display: inline-flex; align-items: center; gap: var(--sc-space-2); max-width: 36ch; min-width: 0; white-space: nowrap; }
+#style-custom-workbench .sc-pick-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-pick-slot:empty { display: none; }
+#style-custom-workbench .sc-pick-panel { display: grid; gap: var(--sc-space-2); margin: 0 0 var(--sc-space-3); padding: var(--sc-space-3); border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); }
+#style-custom-workbench .sc-pick-panel[hidden] { display: none; }
+#style-custom-workbench .sc-pick-list { display: grid; gap: 2px; max-height: 280px; overflow-y: auto; }
+#style-custom-workbench .sc-pick-option { display: flex; align-items: baseline; gap: var(--sc-space-2); min-width: 0; width: 100%; padding-block: 6px; padding-inline-end: 8px; text-align: start; background: transparent; box-shadow: none; color: var(--sc-text); border-radius: var(--sc-radius-sm); }
+#style-custom-workbench .sc-pick-option:hover { background: var(--sc-fill-hover); }
+#style-custom-workbench .sc-pick-option[aria-selected=true] { background: var(--sc-fill); font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-pick-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-pick-sub { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sc-muted); font-size: var(--sc-fs-meta); }
+#style-custom-workbench .sc-pick-option .sc-count { margin-inline-start: auto; }
+#style-custom-workbench .sc-pick-empty { margin: 0; padding: var(--sc-space-2); }
+#style-custom-workbench .sc-scope-lists { display: grid; gap: var(--sc-space-4); margin-block-start: var(--sc-space-3); }
+#style-custom-workbench .sc-scope-lists [data-node-id][aria-current=true],
+#style-custom-workbench .sc-graph-info [data-node-id] { background: var(--sc-fill); }
+#style-custom-workbench .sc-graph-info .sc-hit { border: 0; }

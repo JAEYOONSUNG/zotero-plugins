@@ -69,6 +69,7 @@
   }
   // Only an explicit new choice enables OpenAlex. Old subject picks never
   // decide which taxonomy the journals tab opens with.
+  state.graphKind=['library','collection','paper'].includes(ui.graphKind)?ui.graphKind:'library';state.graphPaper=ui.graphPaper?String(ui.graphPaper):null;state.graphCollection=ui.graphCollection?String(ui.graphCollection):null;state.graphSub=ui.graphSub!==false;state.graphDepth2=ui.graphDepth2===true;
   state.journalBrowser=ui.journalBrowser==='openalex'?'openalex':'jcr';
   state.jcrBrowserState=ui.jcrBrowserState&&typeof ui.jcrBrowserState==='object'?ui.jcrBrowserState:null;
   const enabled=id=>runtime.featureEnabled?.(id)!==false;
@@ -270,10 +271,14 @@
    return saveUI({inboxSeen:next});
   }
   // Many marks in one write (모두 확인함 and its undo), so one press is one save.
-  function setSeenMany(keys,on,stamp=null){
+  // `evicted` collects the marks the 3,000 cap pushed out by this very write, and
+  // `restore` (an earlier `evicted`) puts them back on undo, leaving every
+  // change made since alone.
+  function setSeenMany(keys,on,stamp=null,{evicted=null,restore=null}={}){
    const next={...seenAll()};
    for(const key of keys){if(on)next[key]=stamp?.[key]||new Date().toISOString();else delete next[key];}
-   const all=Object.keys(next);if(all.length>3000)for(const k of all.sort((x,y)=>String(next[x]).localeCompare(String(next[y]))).slice(0,all.length-3000))delete next[k];
+   if(restore){const unmarked=new Set(keys);for(const [k,v] of Object.entries(restore))if(!(k in next)&&!unmarked.has(k))next[k]=v;}
+   const all=Object.keys(next);if(all.length>3000)for(const k of all.sort((x,y)=>String(next[x]).localeCompare(String(next[y]))).slice(0,all.length-3000)){if(evicted)evicted[k]=next[k];delete next[k];}
    return saveUI({inboxSeen:next});
   }
   /* The two inboxes are worked through from the keyboard: inside the list,
@@ -1978,11 +1983,361 @@
    svg.setAttribute('aria-label',label);body.appendChild(svg);
    return svg;
   }
+  /* ---- 관계 그래프 범위: 라이브러리 · 컬렉션 · 논문 하나 ------------------
+     The scope is chosen at the top of the tab and kept. Library is the whole
+     shelf as before; 컬렉션 draws only the papers filed in one folder (and
+     optionally below it); 논문 하나 draws one paper with what it cites and what
+     cites it. Both read the reference lists already stored, so neither asks
+     OpenAlex anything; the one request in this block is "외부 인용 논문도 보기",
+     and it is made only when that button is pressed. */
+  const GRAPH_KINDS=[['library','라이브러리'],['collection','컬렉션'],['paper','논문 하나']];
+  const graphRecord=works=>item=>{
+   const work=works[item.libraryID+':'+item.key]||works[String(item.id)]||null;
+   return {id:String(item.id),title:item.title,year:Number(item.year)||null,citations:Number(item.citations)||0,venue:item.venue,
+    openalex:bareWork(work&&work.openalex),references:work&&Array.isArray(work.references)?work.references.map(bareWork):[]};
+  };
+  const itemOf=id=>state.items.find(i=>String(i.id)===String(id))||null;
+  const graphLibraryID=()=>win.ZoteroPane?.getSelectedLibraryID?.()||runtime.Z.Libraries?.userLibraryID||1;
+  // The paper the one-paper graph is about: the reader's pick, else the first selected paper (kept from then on).
+  function graphPaperID(){
+   if(state.graphPaper&&itemOf(state.graphPaper))return String(state.graphPaper);
+   const first=[...state.selected].find(id=>itemOf(id));
+   if(first!=null){state.graphPaper=String(first);saveUI({graphPaper:state.graphPaper});return state.graphPaper;}
+   return null;
+  }
+  // Collections come from the library service once, and again when the list is older than half a minute.
+  function graphCollectionList(){
+   const fresh=state.graphCollections&&Date.now()-(state.graphCollectionsAt||0)<30000;
+   if(fresh||state.graphCollectionsLoading)return state.graphCollections||null;
+   state.graphCollectionsLoading=true;const had=!!state.graphCollections;
+   Promise.resolve().then(()=>library.collections(graphLibraryID())).then(list=>{state.graphCollections=Array.isArray(list)?list:[];state.graphCollectionsAt=Date.now();})
+    .catch(error=>{state.graphCollections=state.graphCollections||[];state.graphCollectionsAt=Date.now();runtime.Z.logError?.(error);})
+    .finally(()=>{state.graphCollectionsLoading=false;if(!had&&!disposed&&state.tab==='graph')run(render);});
+   return state.graphCollections||null;
+  }
+  function graphCollectionOptions(query){
+   const list=graphCollectionList()||[],q=String(query||'').trim().toLowerCase();
+   const kids=new Map();for(const c of list){const k=c.parentID==null?'':String(c.parentID);if(!kids.has(k))kids.set(k,[]);kids.get(k).push(c);}
+   const byID=new Map(list.map(c=>[String(c.id),c]));
+   const pathOf=c=>{const parts=[c.name];let p=c.parentID!=null?byID.get(String(c.parentID)):null,guard=0;while(p&&guard++<20){parts.unshift(p.name);p=p.parentID!=null?byID.get(String(p.parentID)):null;}return parts;};
+   const out=[],walk=(parent,depth)=>{for(const c of (kids.get(parent)||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name)))){
+    if(q){if(String(c.name).toLowerCase().includes(q))out.push({id:String(c.id),text:pathOf(c).join(' › '),count:c.count,depth:0});}
+    else out.push({id:String(c.id),text:c.name,count:c.count,depth});
+    walk(String(c.id),depth+1);}};
+   walk('',0);return out;
+  }
+  function graphPaperOptions(query){
+   const q=String(query||'').trim().toLowerCase();
+   const rowsOut=state.items.filter(i=>!q||[i.title,i.authors,i.venue,i.year].join(' ').toLowerCase().includes(q));
+   return rowsOut.map(i=>({id:String(i.id),text:i.title||'제목 없음',sub:[String(i.authors||'').split(';')[0].trim(),i.year].filter(Boolean).join(' · '),depth:0}));
+  }
+  /* The picker is an in-page list under the scope bar, never a native popup or a window: a search box over a
+     listbox. Down arrow moves into the list, up and down move inside it, Enter picks, Escape closes. */
+  function graphPicker(slot,trigger,{label,options,currentID,onPick,open}){
+   const panel=node('div',null,slot,{class:'sc-pick-panel',role:'group','aria-label':label});panel.hidden=!open;
+   trigger.setAttribute('aria-expanded',String(!!open));
+   const search=node('input',null,panel,{type:'search',placeholder:label+' 검색','aria-label':label+' 검색'});
+   const list=node('div',null,panel,{class:'sc-pick-list',role:'listbox','aria-label':label});
+   const MAX=60;
+   const options$=()=>[...list.querySelectorAll('[role=option]')];
+   const fill=()=>{
+    list.replaceChildren();const all=options(search.value);
+    if(!all.length)node('p',search.value?'맞는 항목이 없습니다.':'고를 수 있는 항목이 없습니다.',list,{class:'sc-muted sc-pick-empty'});
+    for(const o of all.slice(0,MAX)){
+     const opt=node('button',null,list,{type:'button',role:'option','aria-selected':String(String(o.id)===String(currentID)),'data-value':o.id,class:'sc-pick-option'});
+     opt.style.paddingInlineStart=(8+(o.depth||0)*16)+'px';
+     node('span',o.text,opt,{class:'sc-pick-text'});
+     if(o.sub)node('span',o.sub,opt,{class:'sc-pick-sub'});
+     if(o.count!=null)node('span',String(o.count),opt,{class:'sc-count'});
+     opt.addEventListener('click',()=>onPick(o.id));
+    }
+    if(all.length>MAX)node('p',`${all.length-MAX}개 더 있습니다. 검색으로 좁히세요.`,list,{class:'sc-muted sc-pick-empty'});
+   };
+   fill();search.addEventListener('input',fill);
+   const close=()=>{panel.hidden=true;trigger.setAttribute('aria-expanded','false');trigger.focus?.();};
+   panel.addEventListener('keydown',e=>{
+    const opts=options$(),at=opts.indexOf(e.target);
+    if(e.key==='Escape'){e.preventDefault();close();}
+    else if(e.key==='ArrowDown'){e.preventDefault();(opts[at+1]||opts[0])?.focus?.();}
+    else if(e.key==='ArrowUp'){e.preventDefault();if(at<=0)search.focus?.();else opts[at-1].focus?.();}
+    else if(e.key==='Home'&&at>=0){e.preventDefault();opts[0]?.focus?.();}
+    else if(e.key==='End'&&at>=0){e.preventDefault();opts[opts.length-1]?.focus?.();}
+    else if(e.key==='Enter'&&e.target===search){e.preventDefault();const first=opts[0];if(first)onPick(first.getAttribute('data-value'));}
+   });
+   trigger.addEventListener('click',()=>{const show=panel.hidden;panel.hidden=!show;trigger.setAttribute('aria-expanded',String(show));if(show)search.focus?.();});
+   return panel;
+  }
+  function drawGraphScope(){
+   const kind=state.graphKind;
+   const sb=bar();sb.classList.add('sc-graph-scope');
+   node('span','범위',sb,{class:'sc-graph-scope-label'});
+   const seg=node('div',null,sb,{class:'sc-segmented',role:'group','aria-label':'그래프 범위'});
+   for(const[k,label]of GRAPH_KINDS)button(label,()=>{state.graphKind=k;saveUI({graphKind:k});render();},seg,{'aria-pressed':String(kind===k),'data-graph-kind':k});
+   const slot=node('div',null,body,{class:'sc-pick-slot'});
+   if(kind==='collection'){
+    const list=graphCollectionList(),current=list&&list.find(c=>String(c.id)===String(state.graphCollection));
+    const trigger=button('',()=>{},sb,{class:'sc-pick-trigger','aria-haspopup':'listbox','aria-label':'컬렉션 고르기'});
+    node('span',current?current.name:(list?'컬렉션 고르기':'컬렉션을 불러오는 중'),trigger,{class:'sc-pick-value'});node('span','▾',trigger,{'aria-hidden':'true'});
+    if(list)graphPicker(slot,trigger,{label:'컬렉션',options:graphCollectionOptions,currentID:state.graphCollection,open:!current,
+     onPick:id=>{state.graphCollection=String(id);saveUI({graphCollection:String(id)});render();}});
+    check('하위 컬렉션 포함',state.graphSub,on=>{state.graphSub=on;saveUI({graphSub:on});render();},sb);
+   }else if(kind==='paper'){
+    const id=graphPaperID(),current=id&&itemOf(id);
+    const trigger=button('',()=>{},sb,{class:'sc-pick-trigger','aria-haspopup':'listbox','aria-label':'논문 고르기'});
+    node('span',current?String(current.title||'제목 없음'):'논문 고르기',trigger,{class:'sc-pick-value'});node('span','▾',trigger,{'aria-hidden':'true'});
+    graphPicker(slot,trigger,{label:'논문',options:graphPaperOptions,currentID:id,open:!current,
+     onPick:pick=>{state.graphPaper=String(pick);state.graphAll=false;saveUI({graphPaper:String(pick)});render();}});
+    check('2단계(내 문헌만)',state.graphDepth2,on=>{state.graphDepth2=on;saveUI({graphDepth2:on});render();},sb);
+   }
+  }
+  const shortGraphTitle=title=>{const s=plain(title||'').trim();if(s.length<=26)return s;
+   let cut=s.slice(0,26).replace(/\s+\S*$/,'');
+   while(/\s(and|of|the|in|for|to|a|an|on|with|by|at|from)$/i.test(cut))cut=cut.replace(/\s+\S+$/,'');
+   return (cut||s.slice(0,26))+'…';};
+  /* One map for both new scopes: shelf papers are solid in the journal's colour, papers not on the shelf are hollow
+     circles with a firm ring. Arrows point from the citing paper to the cited one. Clicking, or Enter on, a node
+     focuses it in the list and the preview below; the centre paper of a one-paper graph is ringed. */
+  function drawScopeMap(laid,{W,H,label,centreID,onFocus,before}){
+   const tools=runtime.graphTools,identity=runtime.journalIdentity||{identify:()=>null,colours:()=>null};
+   const svg=graphCanvas(W,H,laid.nodes.length,label);
+   const mapFrame=node('div',null,null,{class:'sc-graph-frame'});mapFrame.appendChild(svg);
+   if(before)body.insertBefore(mapFrame,before);else body.appendChild(mapFrame);
+   const defs=doc.createElementNS(SVG,'defs'),marker=doc.createElementNS(SVG,'marker');
+   for(const[k,v]of Object.entries({id:'sc-arrow',viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'5',markerHeight:'5',orient:'auto-start-reverse'}))marker.setAttribute(k,v);
+   const head=doc.createElementNS(SVG,'path');head.setAttribute('d','M0 0 L8 4 L0 8 z');head.setAttribute('fill','var(--sc-graph-line)');marker.appendChild(head);defs.appendChild(marker);svg.appendChild(defs);
+   const group=doc.createElementNS(SVG,'g');svg.appendChild(group);
+   const pos=new Map(laid.nodes.map(n=>[n.id,n])),near=new Map(laid.nodes.map(n=>[n.id,new Set()])),lines=[];
+   for(const e of laid.edges){
+    const a=pos.get(String(e.source)),c=pos.get(String(e.target));if(!a||!c)continue;
+    near.get(a.id).add(c.id);near.get(c.id).add(a.id);
+    const dx=c.x-a.x,dy=c.y-a.y,dist=Math.hypot(dx,dy)||1,pull=(c.r||6)+0.5,cited=e.kind==='cites';
+    const line=doc.createElementNS(SVG,'line');
+    for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2:cited?c.x-dx/dist*pull:c.x,y2:cited?c.y-dy/dist*pull:c.y}))line.setAttribute(k,v);
+    line.setAttribute('stroke','var(--sc-graph-line)');// In a one-paper graph the lines to the centre carry the picture; the neighbours' own citations stay faint behind it.
+    const side=(!!centreID&&a.id!==centreID&&c.id!==centreID)||!!e.external;
+    line.setAttribute('stroke-width',cited?(side?0.8:1.4):Math.min(2.2,0.5+(e.weight||0.3)*4));
+    line.setAttribute('stroke-opacity',cited?(side?0.22:0.65):0.3);line.dataset.side=side?'1':'';
+    if(cited)line.setAttribute('marker-end','url(#sc-arrow)');else line.setAttribute('stroke-dasharray','2 3');
+    line.setAttribute('data-a',a.id);line.setAttribute('data-b',c.id);lines.push(line);group.appendChild(line);
+   }
+   for(const n of laid.nodes)n.labelText=[shortGraphTitle(n.label),n.year].filter(Boolean).join(' · ')||T('제목 없음');
+   const placeAll=()=>tools.placeLabels(laid.nodes,{width:W,height:H,lineHeight:14,pad:4,limit:32,first:new Set([centreID,state.graphFocus].filter(Boolean)),avoidDots:true});
+   let labelled=placeAll();const marks=new Map(),activators=new Map();
+   for(const n of laid.nodes){
+    const g=doc.createElementNS(SVG,'g');g.setAttribute('transform',`translate(${n.x} ${n.y})`);
+    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',plain(n.label)+(n.kind==='ghost'?' · '+T('내 서재에 없음'):''));
+    const id=n.venue?identity.identify(n.venue):null,tone=id?identity.colours(id,{dark:darkScheme()}):null;
+    const ghost=n.kind==='ghost',centre=n.id===centreID,r=n.r||6;
+    const circle=doc.createElementNS(SVG,'circle');circle.setAttribute('r',r);
+    circle.setAttribute('fill',ghost?'var(--sc-surface)':centre?'var(--sc-lime)':(tone?tone.fill:'var(--sc-fill)'));
+    circle.setAttribute('stroke',ghost?'var(--sc-border-strong)':(tone?tone.ink:'var(--sc-muted)'));
+    circle.setAttribute('stroke-width',ghost?2:centre?2.4:1);
+    if(ghost)circle.setAttribute('data-ghost','1');
+    g.appendChild(circle);
+    const label=doc.createElementNS(SVG,'text');label.setAttribute('x',r+4);label.setAttribute('y','3.5');label.setAttribute('class','sc-graph-label');label.textContent=n.labelText;
+    if(!labelled.has(n.id))label.setAttribute('display','none');
+    g.appendChild(label);
+    const title=doc.createElementNS(SVG,'title');title.textContent=`${plain(n.label)}\n`+[n.venue,n.year,ghost?T('내 서재에 없음'):null,T(`인용 ${n.citations||0}`)].filter(Boolean).join(' · ');g.appendChild(title);
+    const emphasise=on=>{
+     for(const line of lines){const hit=!on||line.getAttribute('data-a')===on||line.getAttribute('data-b')===on;const base=line.dataset.side?0.22:line.getAttribute('marker-end')?0.65:0.3;line.setAttribute('stroke-opacity',on?(hit?0.85:0.05):base);}
+     for(const[key,m]of marks){const close=!on||key===on||near.get(on).has(key);m.circle.setAttribute('opacity',close?1:0.25);
+      const show=on?(key===on||(close&&labelled.has(key))):labelled.has(key);if(show)m.label.removeAttribute('display');else m.label.setAttribute('display','none');}
+    };
+    const activate=()=>{state.graphFocus=n.id;labelled=placeAll();for(const[key,m]of marks)m.circle.setAttribute('stroke-width',key===n.id?2.6:(m.n.kind==='ghost'?2:m.n.id===centreID?2.4:1));emphasise(n.id);onFocus(n);};
+    activators.set(n.id,activate);g.addEventListener('click',activate);
+    g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate();}});
+    g.addEventListener('mouseenter',()=>emphasise(n.id));g.addEventListener('mouseleave',()=>emphasise(null));
+    g.addEventListener('focus',()=>emphasise(n.id));g.addEventListener('blur',()=>emphasise(null));
+    marks.set(n.id,{g,label,circle,n});group.appendChild(g);
+   }
+   const zoomBar=node('div',null,mapFrame,{class:'sc-graph-zoom',role:'group','aria-label':T('확대·축소')});let zoom=1;
+   const frame=()=>{const w=W/zoom,h=H/zoom;svg.setAttribute('viewBox',`${(W-w)/2} ${(H-h)/2} ${w} ${h}`);};
+   button('확대',()=>{zoom=Math.min(3,zoom+.25);frame();},zoomBar);button('축소',()=>{zoom=Math.max(1,zoom-.25);frame();},zoomBar);
+   return {svg,pos,select:id=>{const a=activators.get(id);if(a)a();return !!a;}};
+  }
+  // A paper row in the side lists: the title focuses it on the map, the buttons act on it.
+  function scopeRow(parent,n,{focus,recentre}){
+   const held=n.kind!=='ghost'?itemOf(n.id):null;
+   let row;
+   if(held){
+    row=node('div',null,parent,{class:'sc-hit','data-node-id':n.id});
+    button(held.title||n.label,()=>focus(n.id),row,{class:'sc-hit-title sc-hit-title-link',title:'지도에서 보기'});
+    node('p',[held.status==='done'?T('완료'):held.status==='reading'?T('읽는 중'):T('안 읽음'),held.year,held.venue,T(`인용 ${n.citations||0}`)].filter(Boolean).join(' · '),row,{class:'sc-hit-meta'});
+    const acts=node('div',null,row,{class:'sc-hit-actions'});
+    if(recentre)button('이 논문 중심으로',()=>recentre(n.id),acts);
+    button('열기',()=>library.openItem(n.id),acts,{'data-opens':'window'});
+   }else{
+    row=hitRow({title:n.untitled?'':n.label,year:n.year,venue:n.venue,doi:n.doi||'',citations:n.citations||null,inLibrary:false,id:n.openalex},null);
+    parent.appendChild(row);
+    if(n.untitled){const t=row.querySelector('.sc-hit-title');if(t)t.textContent='제목 미확인 · '+n.openalex;}
+    row.setAttribute('data-node-id',n.id);
+    const acts=row.querySelector('.sc-hit-actions')||node('div',null,row,{class:'sc-hit-actions'});
+    button('지도에서 보기',()=>focus(n.id),acts);
+   }
+   return row;
+  }
+  // Which row is "current": marked, and brought into view in its list.
+  function markScopeRow(host,id){
+   for(const r of host.querySelectorAll('[data-node-id]')){const on=r.getAttribute('data-node-id')===String(id);if(on)r.setAttribute('aria-current','true');else r.removeAttribute('aria-current');if(on)r.scrollIntoView?.({block:'nearest'});}
+  }
+  function drawPaperScope(b){
+   const id=graphPaperID(),centreItem=id&&itemOf(id);
+   if(!centreItem){emptyCard(body,{title:'논문 하나를 고르세요',hint:'위 목록에서 논문을 고르거나, 문헌 목록에서 하나를 선택하고 돌아오세요.'});return;}
+   if(state.graphMode!=='citations')return drawLegacyGraph(b,egoLegacyItems(centreItem));
+   const works=runtime.paperWorks?runtime.paperWorks():{},records=state.items.map(graphRecord(works));
+   const key=centreItem.libraryID+':'+centreItem.key,work=works[key]||works[String(centreItem.id)]||null;
+   const store=typeof runtime.citedByStore==='function'?runtime.citedByStore():{},cached=store[key]||null;
+   const metaCache=runtime.cache&&typeof runtime.cache.workMeta==='object'?runtime.cache.workMeta:{};
+   const all=!!state.graphAll;
+   const g=runtime.graphTools.egoGraph(id,records,{meta:metaCache,citers:cached?cached.citers:[],depth2:state.graphDepth2,limit:60,all});
+   if(!work||!work.openalex){
+    node('p','이 논문의 인용 목록이 아직 없습니다. OpenAlex에서 한 번 가져오면 이 논문의 참고문헌과 인용한 내 문헌이 보입니다.',body,{class:'sc-muted'});
+    if(!work&&typeof runtime.sweepPaperWorks==='function')button('이 논문의 인용 목록 가져오기',()=>run(async()=>{
+     const found=await runtime.Z.Items.getAsync(Number(id));
+     const report=await runtime.sweepPaperWorks(found?[found]:[],{});
+     message(report.found?`참고문헌 ${report.references}건을 가져왔습니다.`:'OpenAlex에서 이 논문을 찾지 못했습니다.');await render();
+    }),b,{class:'sc-fetch-action'});
+    return;
+   }
+   // 외부 인용 논문: one metered request, only on this press; a stored answer is used without asking again.
+   if(!cached&&typeof runtime.sweepCitedBy==='function'){
+    const ask=button('',()=>run(async()=>{
+     const found=await runtime.Z.Items.getAsync(Number(id));
+     const report=await runtime.sweepCitedBy(found?[found]:[],{limit:50});
+     message(report.errors?'외부 인용 논문을 가져오지 못했습니다.':`외부 인용 논문 ${report.citers}편을 가져왔습니다.`);await render();
+    }),b,{class:'sc-fetch-action','data-action-key':'graph-external-citers'});
+    node('span',T('외부 인용 논문도 보기'),ask);node('span',T('OpenAlex · 요청 1회'),ask,{class:'sc-fetch-quota'});
+   }else if(cached)node('span',T(`외부 인용 ${g.counts.ghostCitedBy}편 · 저장된 목록`),b,{class:'sc-muted'});
+   const untitled=g.nodes.filter(n=>n.kind==='ghost'&&n.untitled);
+   if(untitled.length&&typeof runtime.worksByID==='function'){
+    const ask=button('',()=>run(async()=>{await runtime.worksByID(untitled.slice(0,50).map(n=>n.openalex));await render();}),b,{class:'sc-fetch-action'});
+    node('span',T('제목 불러오기'),ask);node('span',T(`OpenAlex · ${untitled.length}편 · 요청 ${Math.ceil(Math.min(50,untitled.length)/50)}회`),ask,{class:'sc-fetch-quota'});
+   }
+   const W=graphWidth(),H=Math.max(380,Math.min(560,Math.round(W*0.62)));
+   const laid=runtime.graphTools.egoLayout(g,{width:W,height:H});
+   statTiles(body,[{value:fmtN(g.counts.cites),label:'이 논문이 인용',title:'이 논문의 참고문헌 수'},{value:fmtN(g.counts.citedBy),label:'이 논문을 인용',title:'내 문헌과, 가져온 외부 논문 중 이 논문을 인용한 수'},
+    {value:fmtN(g.counts.library),label:'내 문헌',title:'이 논문과 직접 연결된 내 서재의 논문'},g.counts.near?{value:fmtN(g.counts.near),label:'2단계'}:null],{label:'논문 하나 그래프 요약'});
+   drawJournalLegend(g.nodes.filter(n=>n.kind!=='ghost'),body);
+   const info=node('div',null,body,{class:'sc-graph-info','aria-live':'polite'});info.hidden=true;
+   const lists=node('div',null,body,{class:'sc-scope-lists'});
+   let mapApi=null;
+   const focus=nodeID=>{if(mapApi&&mapApi.select(nodeID))return;const n=laid.nodes.find(x=>x.id===nodeID);if(n){state.graphFocus=n.id;show(n);}};
+   const recentre=pick=>{state.graphPaper=String(pick);state.graphAll=false;state.graphFocus=null;saveUI({graphPaper:String(pick)});render();};
+   const show=(n,quiet)=>{
+    info.hidden=false;info.replaceChildren();
+    scopeRow(info,n,{focus,recentre:n.kind!=='ghost'&&n.id!==id?recentre:null});
+    markScopeRow(lists,n.id);
+    if(!quiet&&n.kind!=='ghost')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}
+   };
+   mapApi=drawScopeMap(laid,{W,H,label:'논문 하나 인용 관계 그래프',centreID:id,onFocus:show,before:info});
+   body.insertBefore(node('p','실선 화살표는 인용(인용하는 논문 → 인용되는 논문) · 속이 빈 원은 내 서재에 없는 논문 · 왼쪽은 이 논문이 인용한 논문, 오른쪽은 이 논문을 인용한 논문',null,{class:'sc-muted sc-graph-caption'}),info);
+   const groups=[['이 논문이 인용',g.nodes.filter(n=>n.role==='cites'||n.role==='both'),g.counts.cites],['이 논문을 인용',g.nodes.filter(n=>n.role==='citedBy'||n.role==='both'),g.counts.citedBy],
+    ['내 문헌',g.nodes.filter(n=>n.kind==='paper'),g.counts.library+g.counts.near]];
+   for(const[label,nodes,total]of groups){
+    const section=node('section',null,lists,{class:'sc-group'});sectionHead(label,total,section);
+    const list=node('div',null,section,{class:'sc-hits'});
+    if(!nodes.length)node('p','표시할 논문이 없습니다.',list,{class:'sc-muted'});
+    for(const n of nodes.slice(0,40))scopeRow(list,n,{focus,recentre:n.kind!=='ghost'&&n.id!==id?recentre:null});
+    if(nodes.length>40)node('p',`${nodes.length-40}편은 지도에서 확인하세요.`,section,{class:'sc-muted'});
+   }
+   if(g.cut)node('p',`연결된 ${g.total}편 중 ${g.shown}편을 그렸습니다.`,body,{class:'sc-muted sc-graph-footnote'});
+   if(g.cut||all)button(all?'60개만 보기':`모두 보기 (${g.total}편)`,()=>{state.graphAll=!all;render();},body,{class:'sc-graph-info-more'});
+   if(state.graphFocus){const n=laid.nodes.find(x=>x.id===state.graphFocus);if(n)show(n,true);}
+  }
+  // The other graph kinds around one paper: the paper and whoever shares a tag, an author or a related link with it.
+  function egoLegacyItems(centreItem){
+   const raw=library.graph(state.items.slice(0,500),{mode:state.graphMode==='citations'?'related':state.graphMode});
+   const ids=new Set([String(centreItem.id)]);
+   for(const e of raw.edges){if(String(e.source)===String(centreItem.id))ids.add(String(e.target));if(String(e.target)===String(centreItem.id))ids.add(String(e.source));}
+   return state.items.filter(i=>ids.has(String(i.id)));
+  }
+  function drawCollectionScope(b){
+   const list=graphCollectionList();
+   if(!list){node('p','컬렉션을 불러오는 중입니다.',body,{class:'sc-muted'});return;}
+   const chosen=list.find(c=>String(c.id)===String(state.graphCollection));
+   if(!chosen){emptyCard(body,{title:'컬렉션을 고르세요',hint:'위 목록에서 논문을 모아 두는 컬렉션을 고르면 그 안의 논문끼리의 관계를 그립니다.'});return;}
+   const ids=runtime.graphTools.collectionItemIDs(list,chosen.id,{sub:state.graphSub});
+   const items=state.items.filter(i=>ids.has(String(i.id)));
+   if(!items.length){emptyCard(body,{title:'이 컬렉션에는 논문이 없습니다',hint:state.graphSub?'':'하위 컬렉션 포함을 켜 보세요.'});return;}
+   if(state.graphMode!=='citations')return drawLegacyGraph(b,items);
+   const limit=setting('graphNodeLimit',180),works=runtime.paperWorks?runtime.paperWorks():{};
+   const shownItems=items.slice(0,limit),toRecord=graphRecord(works);
+   const records=shownItems.map(toRecord),everyone=state.items.map(toRecord);
+   const withRefs=records.filter(r=>r.references.length).length;
+   const unasked=shownItems.filter(i=>!(works[i.libraryID+':'+i.key]||works[String(i.id)])).length;
+   if(unasked&&typeof runtime.sweepPaperWorks==='function'){const fetchLists=button('',()=>run(async()=>{
+    const wanted=[];for(const i of shownItems){const found=await runtime.Z.Items.getAsync(Number(i.id));if(found)wanted.push(found);}
+    const report=await runtime.sweepPaperWorks(wanted,{onProgress:(done,total)=>message(`인용 목록 ${done}/${total}`)});
+    message(`${report.found}편에서 참고문헌 ${report.references}건`+(report.missing?` · OpenAlex에 없음 ${report.missing}`:''));await render();
+   }),b,{class:'sc-fetch-action'});
+   node('span',T('인용 목록 가져오기'),fetchLists);node('span',T(`OpenAlex · ${unasked}편 남음`),fetchLists,{class:'sc-fetch-quota'});}
+   const showOutside=state.graphOutside!==false;
+   check('바깥에서 많이 인용되는 논문 표시',showOutside,on=>{state.graphOutside=on;render();},b);
+   if(!withRefs){node('p','이 컬렉션 논문의 인용 목록이 아직 없습니다. “인용 목록 가져오기”를 누르면 서로의 인용 관계가 그려집니다.',body,{class:'sc-muted'});}
+   const metaCache=runtime.cache&&typeof runtime.cache.workMeta==='object'?runtime.cache.workMeta:{};
+   const tools=runtime.graphTools,built=tools.build(records);
+   const outside=showOutside?tools.outsideCited(records,{held:everyone,meta:metaCache,floor:2,limit:12}):[];
+   const W=graphWidth(),H=graphHeight(built.nodes.length+outside.length);
+   const connected=new Set(built.nodes.map(n=>n.id));
+   const ghostNodes=[],ghostEdges=[];
+   for(const o of outside){
+    const via=o.citedBy.filter(p=>connected.has(p));if(!via.length)continue;
+    const gid='W:'+o.openalex;
+    ghostNodes.push({id:gid,label:o.title||o.openalex,year:o.year,venue:o.venue,citations:o.citations,doi:o.doi,openalex:o.openalex,kind:'ghost',untitled:!o.title,rank:0.1,degree:via.length,inLibrary:false});
+    for(const p of via)ghostEdges.push({source:p,target:gid,kind:'cites',weight:1,external:true});
+   }
+   const laid=tools.layout({nodes:[...built.nodes,...ghostNodes],edges:[...built.edges,...ghostEdges],missing:[],isolated:[]},{width:W,height:H});
+   const direct=built.edges.filter(e=>e.kind==='cites');
+   const clusters=tools.clusterCount(built.nodes.map(n=>n.id),built.edges);
+   statTiles(body,[{value:fmtN(records.length),label:'논문'},{value:fmtN(built.edges.length),label:'연결',title:'인용과 공통 참고문헌으로 이어진 쌍'},
+    {value:fmtN(clusters),label:'묶음',title:'서로 이어진 묶음의 수'},{value:fmtN(built.isolated.length),label:'연결 없는 논문',title:'이 컬렉션 안에서 어느 논문과도 이어지지 않은 논문'}],{label:'컬렉션 그래프 요약'});
+   drawJournalLegend(built.nodes,body);
+   const info=node('div',null,body,{class:'sc-graph-info','aria-live':'polite'});info.hidden=true;
+   const lists=node('div',null,body,{class:'sc-scope-lists'});
+   let mapApi=null;
+   const focus=nodeID=>{if(mapApi&&mapApi.select(nodeID))return;const n=laid.nodes.find(x=>x.id===nodeID);if(n){state.graphFocus=n.id;show(n);}};
+   const show=(n,quiet)=>{info.hidden=false;info.replaceChildren();scopeRow(info,n,{focus,recentre:null});markScopeRow(lists,n.id);if(!quiet&&n.kind!=='ghost')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
+   if(!laid.nodes.length){if(withRefs)node('p','이 컬렉션 안에서는 서로 인용하거나 참고문헌을 공유하는 논문이 없습니다.',body,{class:'sc-muted'});}
+   else{
+    mapApi=drawScopeMap(laid,{W,H,label:'컬렉션 인용 관계 그래프',centreID:null,onFocus:show,before:info});
+    body.insertBefore(node('p','실선 화살표는 인용 · 점선은 공통 참고문헌 · 속이 빈 원은 이 컬렉션 밖의 논문(컬렉션 논문 여러 편이 인용) · 색은 출판사',null,{class:'sc-muted sc-graph-caption'}),info);
+   }
+   // The papers the rest of the collection stands on.
+   const cited=new Map();for(const e of direct)cited.set(e.target,(cited.get(e.target)||0)+1);
+   const top=[...cited].sort((a,c)=>c[1]-a[1]).slice(0,5);
+   if(top.length){
+    const section=node('section',null,lists,{class:'sc-group'});sectionHead('컬렉션 안에서 가장 많이 인용된 논문',top.length,section);
+    const rowsEl=node('div',null,section,{class:'sc-hits'});
+    for(const[pid,count]of top){const n=laid.nodes.find(x=>x.id===pid)||{id:pid,label:itemOf(pid)?.title||pid,kind:'paper'};
+     const r=scopeRow(rowsEl,{...n,citations:n.citations},{focus,recentre:null});node('p',`이 컬렉션의 ${count}편이 인용합니다`,r,{class:'sc-hit-meta sc-hit-because'});}
+   }
+   if(built.isolated.length){
+    const section=node('section',null,lists,{class:'sc-group'});sectionHead('연결 없는 논문',built.isolated.length,section);
+    const rowsEl=node('div',null,section,{class:'sc-hits'});
+    for(const n of built.isolated.slice(0,30)){const c=node('div',null,rowsEl,{class:'sc-hit','data-node-id':n.id});node('p',n.label,c,{class:'sc-hit-title'});
+     node('p',[n.venue,n.year,n.references?T(`참고문헌 ${n.references}건`):T('인용 목록 없음')].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
+     button('열기',()=>library.openItem(n.id),node('div',null,c,{class:'sc-hit-actions'}),{'data-opens':'window'});}
+    if(built.isolated.length>30)node('p',`${built.isolated.length-30}편 더 있습니다.`,section,{class:'sc-muted'});
+   }
+   if(outside.length){
+    const section=node('section',null,lists,{class:'sc-group'});sectionHead('이 컬렉션이 많이 인용하는 바깥 논문',outside.length,section);
+    const rowsEl=node('div',null,section,{class:'sc-hits'});
+    for(const o of outside){
+     const gn={id:o.heldID||'W:'+o.openalex,label:o.title||o.openalex,year:o.year,venue:o.venue,citations:o.citations,doi:o.doi,openalex:o.openalex,kind:o.heldID?'paper':'ghost',untitled:!o.title};
+     const r=scopeRow(rowsEl,gn,{focus,recentre:null});node('p',`이 컬렉션의 ${o.count}편이 인용합니다`+(o.heldID?' · 내 서재의 다른 곳에 있음':''),r,{class:'sc-hit-meta sc-hit-because'});
+    }
+   }
+   if(state.graphFocus){const n=laid.nodes.find(x=>x.id===state.graphFocus);if(n)show(n,true);}
+   if(items.length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다.`,body,{class:'sc-muted'});
+  }
   function drawGraph(){
+   drawGraphScope();
    const b=bar();
    const modes=node('div',null,b,{class:'sc-segmented',role:'group','aria-label':'그래프 종류'});
    for(const[mode,label]of [['citations','인용 관계'],['related','관련 문헌'],['tags','공통 태그'],['authors','공통 저자']])
     button(label,()=>{state.graphMode=mode;render();},modes,{'aria-pressed':state.graphMode===mode});
+   if(state.graphKind==='paper')return drawPaperScope(b);
+   if(state.graphKind==='collection')return drawCollectionScope(b);
    if(state.graphMode==='citations')return drawCitationGraph(b);
    return drawLegacyGraph(b);
   }
@@ -2393,9 +2748,9 @@
      labelled every one of them, so a hundred titles overlapped into a grey
      band. The graph is a different question in each mode, but "how do you draw
      a graph so it can be read" has one answer. */
-  function drawLegacyGraph(b){
+  function drawLegacyGraph(b,scopeItems){
    const limit=setting('graphNodeLimit',180);
-   const raw=library.graph(rows().slice(0,limit),{mode:state.graphMode==='citations'?'related':state.graphMode});
+   const raw=library.graph((scopeItems||rows()).slice(0,limit),{mode:state.graphMode==='citations'?'related':state.graphMode});
    if(!raw.nodes.length){empty('문헌을 가져오면 관계 그래프가 나타납니다.');return;}
    const W=graphWidth(),H=graphHeight(raw.nodes.length);
    /* The good layout when it is there, the old placer when it is not.
@@ -2466,7 +2821,7 @@
    const zoomBar=node('div',null,mapFrame,{class:'sc-graph-zoom',role:'group','aria-label':T('확대·축소')});
    button('확대',()=>{zoom=Math.min(3,zoom+.25);frame();},zoomBar);
    button('축소',()=>{zoom=Math.max(1,zoom-.25);frame();},zoomBar);
-   if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body,{class:'sc-muted'});
+   if((scopeItems||rows()).length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body,{class:'sc-muted'});
   }
   function drawTags(){
    /* Finding a topic to read comes first: the tree, searchable and sortable
@@ -3148,6 +3503,14 @@
    autoGrow(field);
    // Saved here or under a row, the memo is the same one: the search sees it either way.
    bindMemo(field,value=>Promise.resolve(library.setRemark(item.id,value)).then(result=>{const held=state.items.find(i=>String(i.id)===String(item.id));if(held)held.remark=String(value||'');return result;}),item.title||'문헌');
+   /* The memo lives in this plugin's own file; this puts the same text into one
+      child note (tagged style-custom:memo) so it is in Zotero too. The note is not opened. */
+   button('노트로 옮기기',async()=>{
+    await library.setRemark(item.id,field.value);
+    const held=state.items.find(i=>String(i.id)===String(item.id));if(held)held.remark=field.value;
+    const result=await library.memoToNote(item.id);
+    message(result.created?'메모를 노트로 옮겼습니다. 노트는 열지 않았습니다.':'메모 노트를 갱신했습니다. 노트는 열지 않았습니다.');
+   },box,{class:'sc-memo-to-note',title:T('이 문헌의 하위 노트(태그 style-custom:memo) 하나에 메모를 씁니다. 이후 노트를 고치면 메모도 따라갑니다')});
   }
 
   /* The way to a paper when none is chosen: with an empty card the hint and the buttons go inside it, centred;
@@ -3181,7 +3544,14 @@
    try{found=await runtime.attachmentFindings(win.ZoteroPane?.getSelectedLibraryID?.());}
    catch(error){runtime.Z.logError?.(error);return null;}
    if(token!==epoch||disposed)return null;
-   const total=found.supplementary.length+found.duplicate.length+found.foreign.length+(found.orphan||[]).length+found.missing.length;
+   // The clean-up list (preprint + published both held, papers held twice) rides with the scan.
+   found.cleanup={merge:[],copies:[]};
+   if(typeof runtime.cleanupFindings==='function'){
+    try{found.cleanup=await runtime.cleanupFindings(win.ZoteroPane?.getSelectedLibraryID?.());}
+    catch(error){runtime.Z.logError?.(error);}
+    if(token!==epoch||disposed)return null;
+   }
+   const total=found.supplementary.length+found.duplicate.length+found.foreign.length+(found.orphan||[]).length+found.missing.length+found.cleanup.merge.length+found.cleanup.copies.length;
    if(!total&&!found.unread)return null;
    return found;
   }
@@ -3194,7 +3564,7 @@
    if(state.attachmentFindingsOpen)details.open=true;
    details.addEventListener('toggle',()=>{state.attachmentFindingsOpen=details.open;});
    // Only the findings that exist: a row of zeros says nothing.
-   const facts=[['보충자료',found.supplementary.length],['중복',found.duplicate.length],['다른 논문',found.foreign.length],['보충자료만 있는 문헌',(found.orphan||[]).length],['첨부 없음',found.missing.length]].filter(([,count])=>count>0);
+   const facts=[['보충자료',found.supplementary.length],['중복',found.duplicate.length],['다른 논문',found.foreign.length],['보충자료만 있는 문헌',(found.orphan||[]).length],['첨부 없음',found.missing.length],['합칠 프리프린트',(found.cleanup?.merge||[]).length],['여러 번 보유',(found.cleanup?.copies||[]).length]].filter(([,count])=>count>0);
    node('summary',T('자료 점검')+' · '+(facts.length?facts.map(([label,count])=>`${T(label)} ${count}`).join(' · '):T('이상 없음')),details);
    if(found.unread){
     button(`아직 안 읽은 ${found.unread}개 판별`,()=>run(async()=>{
@@ -3274,6 +3644,41 @@
      else message(`열려 있는 PDF를 찾지 못했습니다 — ${row.title||''}`,true);
     }),actions,{'data-opens':'download',title:T('Zotero가 오픈액세스·기관 구독 경로에서 PDF를 찾아 붙입니다')});
    };
+   /* Every paper without a file, one after another, with a progress line and a
+      stop button. Zotero's own Find Available PDF does the finding; nothing opens. */
+   if(found.missing.length&&typeof runtime.findPDFs==='function'){
+    const sweepBar=node('div',null,details,{class:'sc-hit-actions sc-pdf-sweep'});
+    const ordered=[...unreadMissing,...found.missing.filter(row=>!unreadMissing.includes(row))].map(row=>row.id);
+    const stop=button('중지',()=>{state.pdfSweep?.abort();},sweepBar,{class:'sc-pdf-sweep-stop'});stop.hidden=true;
+    const sweepButton=button(`PDF 모두 찾기 · ${ordered.length}편`,async()=>{
+     const controller=new AbortController();state.pdfSweep=controller;stop.hidden=false;
+     try{
+      const result=await runtime.findPDFs(ordered,{signal:controller.signal,onProgress:(done,total)=>message(`PDF 찾는 중 ${done+1}/${total}`)});
+      if(disposed)return;
+      if(result.unsupported)message('이 Zotero에서는 PDF 찾기를 쓸 수 없습니다.',true);
+      else message(`PDF ${result.found}편을 찾아 붙였습니다 · 못 찾음 ${result.none}편${result.failed?` · 오류 ${result.failed}편`:''}${result.cancelled?` · ${result.done}/${result.total}편에서 중지`:''}`);
+      await render();
+     }finally{state.pdfSweep=null;stop.hidden=true;}
+    },sweepBar,{'data-opens':'download',title:T('Zotero가 오픈액세스·기관 구독 경로에서 PDF를 한 편씩 찾아 붙입니다. 중간에 멈출 수 있습니다')});
+    void sweepButton;
+   }
+   // Papers held twice over: a preprint whose published version is also here, and the same DOI or title.
+   const cleanup=found.cleanup||{merge:[],copies:[]};
+   section('merge','프리프린트와 게재본을 둘 다 보유 · 합치기 제안',cleanup.merge.map(row=>({...row,why:`게재본: ${row.publishedTitle||row.publishedID}`})),'warn',(row,actions)=>{
+    button('게재본으로 옮기기',()=>run(async()=>{
+     const result=await runtime.mergePreprintIntoPublished(row.id);
+     const parts=[result.copied.tags?`태그 ${result.copied.tags}`:'',result.copied.status?'읽기 상태':'',result.copied.rating?'별점':'',result.copied.memo?'메모':'',result.copied.notes?`노트 ${result.copied.notes}`:''].filter(Boolean);
+     undoToast(`프리프린트를 게재본으로 합쳤습니다${parts.length?' · '+parts.join(' · '):''} · 프리프린트는 휴지통으로`,async()=>{await runtime.restorePreprint(row.id);message('프리프린트를 휴지통에서 되돌렸습니다.');await render();});
+     await render();
+    }),actions,{title:T('태그·읽기 상태·메모·노트를 게재본에 복사하고 두 항목을 관련으로 잇고 프리프린트를 휴지통으로 보냅니다. 8초 안에 되돌릴 수 있고 Zotero 휴지통에서도 복원됩니다')});
+   });
+   section('copies','같은 DOI·제목으로 여러 번 보유',cleanup.copies.map(group=>({id:group.items[0].id,title:group.items[0].title,year:group.items[0].year,
+    why:`${group.items.length}건 · ${group.reason==='doi'?'같은 DOI':'같은 제목·연도'}`,ids:group.items.map(row=>row.id)})),'warn',(row,actions)=>{
+    button('Zotero 중복 항목에서 보기',()=>run(async()=>{
+     await runtime.showInDuplicatesPane(win,win.ZoteroPane?.getSelectedLibraryID?.(),row.ids);
+     message('Zotero 중복 항목 화면을 열었습니다. 합치기는 거기서 고르세요.');
+    }),actions,{'data-opens':'pane',title:T('Zotero 본창의 중복 항목 화면에서 이 문헌들을 보여 줍니다. 새 창은 열리지 않습니다')});
+   });
    section('unreadMissing','안 읽었고 파일도 없는 문헌',unreadMissing,'',(row,actions)=>{findPDF(row,actions);if(isQueued(row.id))node('span',T('읽기 대기 중'),actions,{class:'sc-muted'});});
    section('readMissing','첨부파일 없음 · 읽는 중·완료',found.missing.filter(row=>!unreadMissing.includes(row)),'',findPDF);
   }
@@ -4060,6 +4465,8 @@
   }
   const CLAMPED=new Set(['abstract','summary','remark']);
   // 논문 비교 evidence fields, in the order a methods table reads them; kept per paper by runtime.setEvidence.
+  // Saves still in flight; an export waits for them so the last edit is in it.
+  const evidenceSaves=new Set(),settleEvidence=async()=>{while(evidenceSaves.size)await Promise.allSettled([...evidenceSaves]);};
   const EVIDENCE=[['species','생물종/균주'],['construct','construct'],['condition','조건'],['control','대조군'],['result','결과'],['limit','한계']];
   function drawMatrix(){
    const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약'],...EVIDENCE.map(([key,label])=>['ev_'+key,label])];
@@ -4112,12 +4519,13 @@
    });
    const data=model.matrix(values,fields,flip);
    // Evidence typed into a cell lands in `values`, so the CSV is read at the click.
-   button('CSV 복사',()=>copy(model.csv(model.matrix(values,fields,flip).map((row,i)=>row.map((value,j)=>(flip?j===0:i===0)?T(fieldNames[value]||String(value)):value)))),b);
+   button('CSV 복사',async()=>{await settleEvidence();copy(model.csv(model.matrix(values,fields,flip).map((row,i)=>row.map((value,j)=>(flip?j===0:i===0)?T(fieldNames[value]||String(value)):value))));},b);
    if(typeof runtime.setEvidence==='function'){
     if(!EVIDENCE.every(([key])=>fields.includes('ev_'+key)))button('근거 칸 추가',()=>run(async()=>{
      runtime.cache.matrixFields=[...new Set([...fields,...EVIDENCE.map(([key])=>'ev_'+key)])];runtime.dirty=true;await runtime.flush();render();
     }),b,{title:T('생물종/균주 · construct · 조건 · 대조군 · 결과 · 한계 칸을 표에 넣고 직접 적습니다')});
     button('종합 노트 만들기',()=>run(async()=>{
+     await settleEvidence();
      const wanted=new Set([...state.annotationIDs].map(String)),marks=wanted.size?(await library.annotations(values.map(v=>v.id))).filter(m=>wanted.has(String(m.id))):[];
      const entries=values.map(v=>({id:v.id,evidence:EVIDENCE.map(([key,label])=>[label,v['ev_'+key]]),annotationIDs:marks.filter(m=>String(m.parentID)===String(v.id)).map(m=>m.id)}))
       .filter(entry=>entry.annotationIDs.length||entry.evidence.some(([,text])=>String(text||'').trim()));
@@ -4169,9 +4577,18 @@
      cell.textContent='';
      const area=node('textarea',null,cell,{class:'sc-matrix-edit',rows:'2','aria-label':`${T(fieldNames[field])} · ${rowItem.title}`,placeholder:T('적기')});
      area.value=String(value);
+     // Keyed by the paper, not by its title and position: same-title papers
+     // and a reordered table must not swap what was typed.
+     const ownerRef=runtime.Z.Items.get(Number(rowItem.id));
+     area.dataset.draftKey=JSON.stringify(['evidence',rowItem.libraryID??ownerRef?.libraryID??state.libraryID,rowItem.key??ownerRef?.key??rowItem.id,field]);
+     if(drafts.has(area.dataset.draftKey)){area.value=drafts.get(area.dataset.draftKey);rowItem[field]=area.value;}
+     area.addEventListener('input',()=>{rowItem[field]=area.value;});
      area.addEventListener('change',()=>run(async()=>{
       const ref=runtime.Z.Items.get(Number(rowItem.id));if(!ref)return;
-      await runtime.setEvidence(ref,{[field.slice(3)]:area.value});rowItem[field]=area.value;
+      const submitted=area.value;rowItem[field]=submitted;const save=runtime.setEvidence(ref,{[field.slice(3)]:submitted});
+      const tracked=Promise.resolve(save);evidenceSaves.add(tracked);
+      try{await tracked;}finally{evidenceSaves.delete(tracked);}
+      finishDraft(area,submitted);
      }));
     }
     if(NUMERIC.has(field))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',flip?'row':'col');if(!heading&&field)cell.dataset.field=field;});});
@@ -5729,11 +6146,12 @@
     let shownUnseen=[];
     const markAll=button('모두 확인함',()=>run(async()=>{
      const keys=shownUnseen.map(e=>seenKey(e));if(!keys.length)return;
-     await setSeenMany(keys,true);
+     const evicted={};
+     await setSeenMany(keys,true,null,{evicted});
      if(disposed||state.tab!=='authors')return;
      refreshWatched();
      message(`${keys.length}편을 확인함으로 옮겼습니다.`);
-     undoToast(`${keys.length}편을 확인함으로 옮겼습니다.`,async()=>{await setSeenMany(keys,false);if(!disposed&&state.tab==='authors')refreshWatched();message(`${keys.length}편을 미확인으로 되돌렸습니다.`);});
+     undoToast(`${keys.length}편을 확인함으로 옮겼습니다.`,async()=>{await setSeenMany(keys,false,null,{restore:evicted});if(!disposed&&state.tab==='authors')refreshWatched();message(`${keys.length}편을 미확인으로 되돌렸습니다.`);});
     }),tools,{class:'sc-inbox-mark-all',title:T('지금 목록에 보이는 안 읽은 새 논문을 모두 확인한 것으로 둡니다')});
     node('span',T('↑↓ 이동 · e 확인함'),tools,{class:'sc-muted sc-inbox-hint'});
     const focusBar=node('div',null,section,{class:'sc-inbox-focus'});
@@ -6408,7 +6826,7 @@
       if(fresh)node('span',T(`새 논문 ${fresh}`),toggle,{class:'sc-watch-group-new'});
       const notes=[];
       if(g.note)notes.push(g.note);
-      if(mode==='field'||mode==='tier'||mode==='country')if(known<watched.length)notes.push(T(`${mode==='field'?'분야':mode==='tier'?'티어':'국가'}를 아는 저자 ${known}/${watched.length}명`));
+      if(mode==='field'||mode==='tier'||mode==='country')if(known<watched.length)notes.push(T(mode==='field'?`분야를 아는 저자 ${known}/${watched.length}명`:mode==='tier'?`티어를 아는 저자 ${known}/${watched.length}명`:`국가를 아는 저자 ${known}/${watched.length}명`));
       if(g.unknown&&mode==='field')notes.push(T('다음 새 논문 확인 때 OpenAlex 주제에서 채워집니다'));
       if(notes.length)toggle.title=notes.join(' · ');
       const holder=node('div',null,box,{class:'sc-watch-group-body'});holder.hidden=closed;

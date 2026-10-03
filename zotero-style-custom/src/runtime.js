@@ -356,6 +356,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     for (const entry of Object.values(loaded.items)) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Invalid Style Custom item cache");
       if (entry.citationPending) { delete entry.citationPending; this.dirty=true; }
+      // A promotion is in flight only while the process lives; an older build wrote this flag to disk.
+      if ('promoting' in entry) { delete entry.promoting; this.dirty=true; }
     }
     this.applyLocale();
     this.rebuildJournals();
@@ -409,6 +411,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           if(paper!=null&&event!=='modify')this.annotationMemo.delete(paper);else{this.annotationMemo.clear();break;}
         }
       }
+      if(type==='item'&&event==='modify')for(const id of ids||[]){try{this.mirrorMemoNote(id);}catch(error){this.Z.logError?.(error);}}
       if(type==='item'&&event==='modify')for(const id of ids||[]){try{const changed=this.Z.Items?.get?.(id);if(changed)this.forgetIfIdentityChanged(changed);}catch(error){this.Z.logError?.(error);}}
       /* A sync rewrites every item it touches. Answering each one queues a
          lookup per paper, so the queue is left alone while a sync runs and the
@@ -468,7 +471,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const impactKey = this.journalTools.name(item.getField("publicationTitle")) + "|" + String(item.getField("ISSN") || "") + "|c2";
     if (cached.impactKey !== impactKey) { merged.impactFactor = null; merged.impactSource = null; merged.impactYear = null; }
     for (const [field, source] of [["citations", "citationSource"], ["impactFactor", "impactSource"]]) {
-      if (number(live[field])) { merged[field] = live[field]; merged[source] = live[source]; }
+      if (number(live[field])) { merged[field] = live[field]; merged[source] = live[source]; if (field === 'citations') merged.citationCheckedAt = null; }
       else if (!number(merged[field])) { merged[field] = null; merged[source] = null; }
     }
     if(providerRank&&live.impactSource?.startsWith('easyScholar'))merged.impactYear=null;
@@ -484,6 +487,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       merged.citations=lookup.count;
       merged.citationSource=lookup.source;
       merged.citationCheckedAt=lookup.checkedAt;
+    }
+    /* The works sweep (OpenAlex, by DOI) also records a citation count and the
+       time it was read. The column shows whichever of the two readings is newer;
+       on the same day the larger count stands, since counts only grow. */
+    const swept = this.paperWorks()[this.identity(item)];
+    if (swept && !swept.missing && number(swept.citations) && (swept.doi || '') === (this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI) || '')) {
+      const theirs = Date.parse(swept.checkedAt || ''), mine = Date.parse(merged.citationCheckedAt || '');
+      // An undated stored count (typed into Extra) yields only to a larger one.
+      const newer = Number.isFinite(mine) ? Number.isFinite(theirs) && (theirs > mine || (theirs === mine && swept.citations > merged.citations))
+        : swept.citations > (merged.citations ?? -1);
+      if (newer || !number(merged.citations)) {
+        merged.citations = swept.citations;
+        merged.citationSource = 'OpenAlex works sweep';
+        merged.citationCheckedAt = swept.checkedAt || null;
+      }
     }
     merged.citationKey=citationKey;
     const own = number(old.seconds) ? old.seconds : 0;
@@ -2037,6 +2055,135 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return {status: attachment ? 'found' : 'none', attachment: attachment || null};
   }
 
+  /* 자료 정리: the clean-up list. Two kinds of paper held more than once.
+     (1) A preprint whose published version is also on the shelf: the reader
+     keeps the published one; mergePreprintIntoPublished carries tags, status,
+     rating, memo and notes over, relates the two, and trashes the preprint
+     (Zotero's trash and the panel's 8 s strip both undo it).
+     (2) The same DOI, or the same title and year, held twice or more; those are
+     listed and shown in Zotero's own Duplicate Items pane, never merged here. */
+  static duplicateGroups(records) {
+    const flat = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const parent = new Map();
+    const find = id => { while (parent.get(id) !== id) { parent.set(id, parent.get(parent.get(id))); id = parent.get(id); } return id; };
+    const join = (a, b) => { const x = find(a), y = find(b); if (x !== y) parent.set(x, y); };
+    const byDOI = new Map(), byTitle = new Map(), via = new Map();
+    for (const row of records || []) {
+      parent.set(row.id, row.id);
+      const doi = String(row.doi || '').trim().toLowerCase();
+      if (doi) { if (byDOI.has(doi)) { join(row.id, byDOI.get(doi)); via.set(row.id, 'doi'); via.set(byDOI.get(doi), 'doi'); } else byDOI.set(doi, row.id); }
+      const title = flat(row.title);
+      if (title.split(' ').filter(word => word.length > 2).length >= 4) {
+        const key = title + '|' + String(row.year || '');
+        if (byTitle.has(key)) { join(row.id, byTitle.get(key)); if (!via.has(row.id)) via.set(row.id, 'title'); if (!via.has(byTitle.get(key))) via.set(byTitle.get(key), 'title'); }
+        else byTitle.set(key, row.id);
+      }
+    }
+    const groups = new Map();
+    for (const row of records || []) { const root = find(row.id); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(row); }
+    return [...groups.values()].filter(rows => rows.length > 1).map(rows => ({
+      reason: rows.some(row => via.get(row.id) === 'doi') ? 'doi' : 'title', items: rows
+    })).sort((a, b) => b.items.length - a.items.length || String(a.items[0].title).localeCompare(String(b.items[0].title)));
+  }
+  async cleanupFindings(libraryID) {
+    const items = (await this.libraryItems(libraryID)).filter(item => this.isRegular(item) && !item.deleted);
+    const field = (item, key) => { try { return String(item.getField?.(key) || '').trim(); } catch (_) { return ''; } };
+    const bare = value => this.discoverTools.bareDOI(value);
+    const record = item => ({id: String(item.id), title: field(item, 'title'), year: field(item, 'date').match(/\b(1[5-9]|20)\d{2}\b/)?.[0] || '', doi: bare(field(item, 'DOI')) || ''});
+    const byDOI = new Map();
+    for (const item of items) { const doi = bare(field(item, 'DOI')); if (doi && !byDOI.has(doi)) byDOI.set(doi, item); }
+    const merge = [];
+    for (const item of items) {
+      const published = this.signalsOf(item)?.published;
+      if (!published?.doi) continue;
+      const held = byDOI.get(bare(published.doi));
+      if (!held || held.id === item.id) continue;
+      merge.push({...record(item), publishedID: String(held.id), publishedTitle: field(held, 'title'), linked: this._isLinked(item, held)});
+    }
+    const mergeIDs = new Set(merge.map(row => row.id));
+    // A preprint offered for merging is not also reported as a copy of itself.
+    const copies = this.constructor.duplicateGroups(items.map(record)).map(group => ({
+      ...group, items: group.items.filter(row => !mergeIDs.has(row.id) || group.items.every(other => mergeIDs.has(other.id)))
+    })).filter(group => group.items.length > 1);
+    return {merge, copies};
+  }
+  async mergePreprintIntoPublished(preprintID) {
+    const preprint = this.Z.Items.get(Number(preprintID));
+    if (!preprint || !this.isRegular(preprint)) throw new Error('프리프린트를 찾지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요.');
+    const status = await this.publishedStatus(preprint);
+    const held = status?.held;
+    if (!held || held.id === preprint.id) throw new Error('게재본이 이 라이브러리에 없어 합칠 수 없습니다. 게재본을 먼저 라이브러리에 추가하세요.');
+    if (held.libraryID !== preprint.libraryID) throw new Error('게재본이 다른 라이브러리에 있어 합치지 못했습니다. 같은 라이브러리로 옮긴 뒤 다시 시도하세요.');
+    if (!this.canEdit(preprint) || !this.canEdit(held)) throw new Error('이 라이브러리는 편집할 수 없습니다. 편집할 수 있는 라이브러리에서 시도하세요.');
+    const copied = {tags: 0, notes: 0, memo: false, status: null, rating: null};
+    const isStatus = tag => /^\/(unread|reading|done)$/i.test(String(tag).trim());
+    const have = new Set(held.getTags().map(tag => tag.tag));
+    const carry = preprint.getTags().filter(tag => !have.has(tag.tag) && !isStatus(tag.tag) && tag.tag !== this.constructor.MEMO_NOTE_TAG);
+    if (carry.length) { held.setTags([...held.getTags(), ...carry.map(tag => ({tag: tag.tag, type: tag.type || 0}))]); copied.tags = carry.length; }
+    const related = !this._isLinked(preprint, held);
+    if (related) { preprint.addRelatedItem(held); held.addRelatedItem(preprint); await preprint.saveTx(); }
+    if (carry.length || related) await held.saveTx();
+    const rank = {unread: 0, reading: 1, done: 2};
+    const from = this.state(preprint), to = this.state(held);
+    const patch = {};
+    if (rank[from.status] > rank[to.status]) { patch.status = from.status; copied.status = from.status; }
+    if (from.rating > 0 && !(to.rating > 0)) { patch.rating = from.rating; copied.rating = from.rating; }
+    if (Object.keys(patch).length) await this.edit([held], patch);
+    const memo = String(this.entry(preprint).remark || ''), mine = String(this.entry(held).remark || '');
+    if (memo && memo !== mine && !mine.includes(memo)) {
+      this.entry(held).remark = mine ? mine + '\n\n' + memo : memo; this.dirty = true; copied.memo = true;
+      await this.flush();
+      if (this.getSetting('memoToNote')) await this.memoToNote(held);
+    }
+    // The preprint's own notes are copied, not moved, so the trash keeps the originals whole.
+    for (const id of preprint.getNotes?.() || []) {
+      const note = this.Z.Items.get(id);
+      if (!note || note.deleted || (note.getTags?.() || []).some(tag => tag.tag === this.constructor.MEMO_NOTE_TAG)) continue;
+      const copy = new this.Z.Item('note');
+      copy.libraryID = held.libraryID; copy.parentID = held.id;
+      copy.setNote(note.getNote());
+      copy.setTags((note.getTags?.() || []).map(tag => ({tag: tag.tag, type: tag.type || 0})));
+      await copy.saveTx(); copied.notes++;
+    }
+    preprint.deleted = true;
+    await preprint.saveTx();
+    this.bumpState?.();
+    await this.refreshWindows();
+    return {published: held, preprint, copied};
+  }
+  async restorePreprint(preprintID) {
+    const item = this.Z.Items.get(Number(preprintID));
+    if (!item || !item.deleted) return false;
+    item.deleted = false; await item.saveTx(); this.bumpState?.(); await this.refreshWindows();
+    return true;
+  }
+  // The main window's own Duplicate Items pane; no window of ours opens.
+  async showInDuplicatesPane(win, libraryID, ids) {
+    const pane = win?.ZoteroPane;
+    if (!pane || typeof pane.setVirtual !== 'function') throw new Error('Zotero 중복 항목 보기를 쓸 수 없습니다. Zotero를 다시 시작한 뒤 시도하세요.');
+    await pane.setVirtual(libraryID, 'duplicates', true, true);
+    try { await pane.itemsView?.waitForLoad?.(); } catch (_) {}
+    let selected = false;
+    try { if (typeof pane.selectItems === 'function') selected = !!(await pane.selectItems((ids || []).map(Number).filter(Number.isFinite))); } catch (_) {}
+    return {selected};
+  }
+  // Zotero's "Find Available PDF" over a list, one at a time; cancelled between papers.
+  async findPDFs(ids, {signal, onProgress} = {}) {
+    const result = {found: 0, none: 0, failed: 0, cancelled: false, unsupported: false, done: 0, total: ids.length};
+    for (const id of ids) {
+      onProgress?.(result.done, ids.length, id);
+      if (signal?.aborted) { result.cancelled = true; break; }
+      try {
+        const out = await this.findPDF(id);
+        if (out.status === 'unsupported') { result.unsupported = true; break; }
+        if (out.status === 'found') result.found++; else result.none++;
+      } catch (error) { result.failed++; this.Z.logError?.(error); }
+      result.done++;
+    }
+    if (result.found) { this.bumpState?.(); await this.refreshWindows?.(); }
+    return result;
+  }
+
   /* The paper already on the shelf for a work about to be imported: by DOI,
      else by title when the title is long enough to be evidence (four words)
      and neither side's year or DOI disagrees. Same rule ZotPoP applies. */
@@ -2063,10 +2210,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      in the collection selected behind the panel -- which the result names
      (collectionName), so the caller can say where it went. A paper already
      held is reported (existing) and not imported twice. */
-  async importWork(work, win) {
+  // `target.libraryID` pins the library (a published version goes where its
+  // preprint is, not where the pane happens to be); the selected collection is
+  // used only when it belongs to that library.
+  async importWork(work, win, target = {}) {
     if (!work?.doi) throw new Error('DOI가 없어 자동으로 가져올 수 없습니다. 문헌 정보에 DOI를 넣은 뒤 다시 실행하세요.');
-    const collection = win?.ZoteroPane?.getSelectedCollection?.();
-    const libraryID = win?.ZoteroPane?.getSelectedLibraryID?.();
+    const selected = win?.ZoteroPane?.getSelectedCollection?.();
+    const libraryID = target.libraryID ?? win?.ZoteroPane?.getSelectedLibraryID?.();
+    const collection = selected && (selected.libraryID == null || libraryID == null || selected.libraryID === libraryID) ? selected : null;
     const known = await this.findExistingWork(libraryID, work);
     if (known) return Object.assign([known], {existing: true, collectionName: ''});
     const saved = await this.importByIdentifier({DOI: work.doi}, {
@@ -3216,8 +3367,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
        chip reopened this page and each paid two metered requests. */
     const {profile, works} = await this.authorActivityCached(id, {limit, signal});
     const seen = new Set(watched?.seen || []);
+    // Papers held under 확인 필요 or turned down are not news: the list and the
+    // detail read one classification.
+    const held = new Set([...(watched?.unverified || []).map(w => w?.id), ...(watched?.rejected || [])]);
     // The same count as the card on the watchlist, which leaves out datasets.
-    const fresh = watched ? works.filter(work => !seen.has(work.id) && !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || ''))) : [];
+    const fresh = watched ? works.filter(work => !seen.has(work.id) && !held.has(work.id) && !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || ''))) : [];
     return {profile, works, fresh, watching: !!watched, checkedAt: watched?.checkedAt || null};
   }
 
@@ -4099,6 +4253,68 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return this.evidenceOf(item);
   }
 
+  /* 읽기 메모 -> 노트. The memo lives in the local JSON; this keeps one child
+     note per paper, tagged style-custom:memo, in step with it so the text is
+     in Zotero (synced, searchable, exportable). The note is never opened. The
+     local memo then mirrors the note: it is read back from it after the write,
+     and an edit made to the note in Zotero flows back into the memo. */
+  static get MEMO_NOTE_TAG() { return 'style-custom:memo'; }
+  static memoNoteHTML(text) {
+    const esc = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<div data-style-custom="memo">' + String(text ?? '').split(/\r?\n/).map(line => '<p>' + esc(line) + '</p>').join('') + '</div>';
+  }
+  static memoFromNoteHTML(html) {
+    const text = String(html ?? '')
+      .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|h[1-6]|li)>/gi, '\n').replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+    return text.replace(/\n+$/, '');
+  }
+  memoNoteOf(item) {
+    const ids = typeof item?.getNotes === 'function' ? item.getNotes() : [];
+    for (const id of ids || []) {
+      const note = this.Z.Items.get(id);
+      if (note && !note.deleted && (note.getTags?.() || []).some(tag => tag.tag === this.constructor.MEMO_NOTE_TAG)) return note;
+    }
+    return null;
+  }
+  async memoToNote(item) {
+    if (!this.isRegular(item)) throw new Error('메모를 노트로 옮길 문헌을 찾지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요.');
+    if (!this.canEdit(item)) throw new Error('이 라이브러리는 편집할 수 없어 노트를 만들지 못했습니다. 편집할 수 있는 라이브러리에서 시도하세요.');
+    const text = String(this.entry(item).remark || '');
+    let note = this.memoNoteOf(item);
+    if (!text.trim() && !note) throw new Error('메모가 비어 있어 옮길 내용이 없습니다. 메모를 먼저 적으세요.');
+    const created = !note;
+    if (!note) {
+      note = new this.Z.Item('note');
+      note.libraryID = item.libraryID; note.parentID = item.id;
+      note.setTags([{tag: this.constructor.MEMO_NOTE_TAG, type: 0}]);
+    }
+    const html = this.constructor.memoNoteHTML(text);
+    if (created || note.getNote() !== html) {
+      note.setNote(html);
+      this.memoWriting = (this.memoWriting || 0) + 1;
+      try { await note.saveTx(); } finally { this.memoWriting--; }
+    }
+    // The local memo mirrors the note it now has.
+    const mirrored = this.constructor.memoFromNoteHTML(note.getNote());
+    if (mirrored !== text) { this.entry(item).remark = mirrored; this.dirty = true; await this.flush(); }
+    this.bumpState?.();
+    return {created, text: mirrored};
+  }
+  // An edit made to the memo note inside Zotero flows back into the local memo.
+  mirrorMemoNote(noteID) {
+    const note = this.Z.Items?.get?.(noteID);
+    if (!note || !note.isNote?.() || !note.parentID || (this.memoWriting || 0) > 0) return false;
+    if (!(note.getTags?.() || []).some(tag => tag.tag === this.constructor.MEMO_NOTE_TAG)) return false;
+    const parent = this.Z.Items.get(note.parentID);
+    if (!parent) return false;
+    const text = this.constructor.memoFromNoteHTML(note.getNote());
+    if (text === String(this.entry(parent).remark || '')) return false;
+    this.entry(parent).remark = text; this.dirty = true; this.bumpState?.();
+    this.flush?.().catch?.(error => this.Z.logError?.(error));
+    return true;
+  }
+
   /* 프리프린트 -> 게재본. A stored signal says a preprint has a published
      version; this says whether that version is already on the shelf and
      whether the two are linked (related items). */
@@ -4139,7 +4355,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const {published} = status;
     let held = status.held, imported = false;
     if (!held) {
-      const saved = await this.importWork({doi: published.doi, title: '', year: published.year, venue: published.venue}, win);
+      const saved = await this.importWork({doi: published.doi, title: '', year: published.year, venue: published.venue}, win, {libraryID: preprint.libraryID});
       held = saved?.[0];
       if (!held) throw new Error('게재본을 가져오지 못했습니다. 잠시 뒤 다시 시도하세요.');
       imported = !saved.existing;
@@ -4330,10 +4546,18 @@ var CustomStyleRuntime = class CustomStyleRuntime {
            answer is as bad or worse. */
         const before = this.entry(item).signals;
         const sameDOI = !before?.doi || typeof this.bibliographyRecord !== 'function' || before.doi === this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI);
-        if (signals.partial && before && sameDOI && (Number(before.rank) || 0) > (Number(signals.rank) || 0)) { summary.ok++; continue; }
+        /* What a half answer can still add to a record it does not replace:
+           Crossref's published version. Its time goes in incompleteCheckedAt;
+           checkedAt is only ever set by a complete check, so the 30/90-day
+           re-check is not pushed back by one that could not finish. */
+        const mergeHalf = () => {
+          if (signals.published && !before.published) { before.published = signals.published; summary.newPublished++; }
+          before.incompleteCheckedAt = signals.checkedAt; this.dirty = true; summary.ok++;
+        };
+        if (signals.partial && before && sameDOI && (Number(before.rank) || 0) > (Number(signals.rank) || 0)) { mergeHalf(); continue; }
         // A re-check with OpenAlex out must not downgrade a complete record to half of one.
         if (signals.partial && before && !before.partial && sameDOI && (Number(signals.rank) || 0) <= (Number(before.rank) || 0)) {
-          before.checkedAt = signals.checkedAt; this.dirty = true; summary.ok++; continue;
+          mergeHalf(); continue;
         }
         if (typeof this.bibliographyRecord === 'function') signals.doi = this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI) || undefined;
         this.entry(item).signals = signals;
@@ -4988,9 +5212,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
        the /unread tag standing and the two disagreed. */
     const unreadTagged = record.unreadOverride || (item.getTags?.() || []).some(tag => /^\/unread$/i.test(String(tag?.tag ?? tag).trim()));
     record.seconds += seconds; record.unreadOverride = false; this.dirty = true;
-    if (unreadTagged && record.seconds >= 30 && !record.promoting && this.canEdit(item)) {
-      record.promoting = true;
-      this.edit([item], {status: 'reading'}).catch(error => this.Z.logError(error)).finally(() => { delete record.promoting; });
+    // In-progress promotions live in a Set, not in the cache: anything on the entry is flushed to disk.
+    const promotingKey = `${item.libraryID}:${item.key ?? item.id}`;
+    this._promoting ||= new Set();
+    if (unreadTagged && record.seconds >= 30 && !this._promoting.has(promotingKey) && this.canEdit(item)) {
+      this._promoting.add(promotingKey);
+      this.edit([item], {status: 'reading'}).catch(error => this.Z.logError(error)).finally(() => { this._promoting.delete(promotingKey); });
     }
     record.lastRead=new Date().toISOString();
     if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0&&Number.isInteger(location.pageIndex)&&location.pageIndex>=0&&location.pageIndex<100000&&Number.isInteger(location.totalPages)&&location.totalPages>location.pageIndex&&location.totalPages<=100000){record.readingAttachments||={};const bucket=record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:location.totalPages};bucket.pageTimes||={};bucket.pageTimes[location.pageIndex]=(Number(bucket.pageTimes[location.pageIndex])||0)+seconds;bucket.totalPages=location.totalPages;bucket.lastRead=record.lastRead;bucket.lastPageIndex=shown&&shown.attachmentID===location.attachmentID&&Number.isInteger(shown.pageIndex)&&shown.pageIndex>=0&&shown.pageIndex<bucket.totalPages?shown.pageIndex:location.pageIndex;record.readingAttachmentID=location.attachmentID;}

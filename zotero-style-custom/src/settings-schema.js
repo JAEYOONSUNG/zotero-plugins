@@ -608,6 +608,14 @@
       "default": true
     },
     {
+      "key": "memoToNote",
+      "category": "storage",
+      "label": "메모를 노트로도 저장",
+      "type": "boolean",
+      "default": false,
+      "description": "문헌 메모를 저장할 때마다 그 문헌의 하위 노트(태그 style-custom:memo) 하나에도 같은 글을 씁니다. 노트는 열리지 않습니다. 기본은 꺼짐."
+    },
+    {
       "key": "touchDateOnRead",
       "requires": "feature.updateItemDateModified",
       "category": "storage",

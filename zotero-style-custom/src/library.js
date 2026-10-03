@@ -363,7 +363,17 @@
         // An earlier failed save must not undo a later edit from this or another window.
         if(remarkRevisions.get(entry)===revision){if(prior===undefined)delete entry.remark;else entry.remark=prior;runtime.dirty=true;}
         throw error;
-      }return value;
+      }
+      /* "메모를 노트로도 저장": the same text into one tagged child note, so it
+         lives in Zotero too. The local memo is already saved when this runs. */
+      if(runtime.memoToNote&&runtime.getSetting?.('memoToNote')&&(value.trim()||runtime.memoNoteOf?.(item))){
+        try{await runtime.memoToNote(item);}catch(error){throw new Error('메모는 저장했지만 노트로 옮기지 못했습니다: '+(error&&error.message||error));}
+      }
+      return value;
+    }
+    async function memoToNote(itemID) {
+      const item=await get(itemID);guard([item]);if(!runtime?.memoToNote)throw new Error('Memo notes are unavailable');
+      return runtime.memoToNote(item);
     }
     async function setTags(ids,tags) {
       if(!Array.isArray(tags)||tags.some(t=>typeof t!=='string'||!t.trim()))throw new TypeError('Tags must be nonempty strings');
@@ -618,7 +628,7 @@
       }
       return items.length;
     }
-    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,synthesisNote,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
+    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,synthesisNote,setRemark,memoToNote,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

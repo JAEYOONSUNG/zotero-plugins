@@ -77,7 +77,7 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog}={}){
   importWork:record('importWork',[{getField:()=>'Imported paper'}])
  });
  runtime.Z={Items:{get:id=>refs.get(id),getAsync:async id=>refs.get(id)||{id}},Libraries:{userLibraryID:1},Prefs:{set:(...a)=>calls.push(['pref',...a])},Utilities:{Internal:{copyTextToClipboard:text=>calls.push(['copy',text])}},Notifier:{registerObserver:observer=>{notify=observer.notify;return 42;},unregisterObserver:id=>calls.push(['unregister',id])},logError:error=>errors.push(error)};
- const library={trashItems:record('trashItems',async ids=>ids.length),snapshot:record('snapshot',()=>papers),graph:rows=>({nodes:rows.map(i=>({id:i.id,label:i.title})),edges:[]}),tagTree:()=>[{name:'topic',path:'topic',count:2,children:[]}],notes:record('notes',[{id:'9',title:'Rich note',text:'<script>literal note</script>',modified:'today',html:'<b>unsafe raw HTML</b>'}]),annotations:record('annotations',[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'Highlight',comment:'Comment',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}]),backlinks:record('backlinks',[{id:'2',title:'Paper Beta',kind:'related'}]),attachments:record('attachments',[{id:'99',parentID:'1',title:'PDF one',contentType:'application/pdf'},{id:'100',parentID:'1',title:'PDF two',contentType:'application/pdf'}]),collections:record('collections',[{id:'4',name:'Research',count:2,parentID:null}]),openItem:record('open'),relate:record('relate'),addTags:record('addTags'),removeTags:record('removeTags'),setRemark:record('remark'),createNote:record('createNote','9'),noteFromAnnotations:record('extract','9')};
+ const library={trashItems:record('trashItems',async ids=>ids.length),snapshot:record('snapshot',()=>papers),graph:rows=>({nodes:rows.map(i=>({id:i.id,label:i.title})),edges:[]}),tagTree:()=>[{name:'topic',path:'topic',count:2,children:[]}],notes:record('notes',[{id:'9',title:'Rich note',text:'<script>literal note</script>',modified:'today',html:'<b>unsafe raw HTML</b>'}]),annotations:record('annotations',[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'Highlight',comment:'Comment',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}]),backlinks:record('backlinks',[{id:'2',title:'Paper Beta',kind:'related'}]),attachments:record('attachments',[{id:'99',parentID:'1',title:'PDF one',contentType:'application/pdf'},{id:'100',parentID:'1',title:'PDF two',contentType:'application/pdf'}]),collections:record('collections',[{id:'4',name:'Research',count:2,parentID:null}]),openItem:record('open'),relate:record('relate'),addTags:record('addTags'),removeTags:record('removeTags'),setRemark:record('remark'),memoToNote:record('memoToNote',async()=>({created:true,text:''})),createNote:record('createNote','9'),noteFromAnnotations:record('extract','9')};
  const palettes=[];const reader={annotationPalettes:()=>palettes,saveAnnotationPalette:record('savePalette',(name,entries)=>{const row={id:'palette1',name,entries};palettes.push(row);return row;}),applyAnnotationPalette:record('applyPalette'),deleteAnnotationPalette:record('deletePalette',id=>{palettes.splice(palettes.findIndex(p=>p.id===id),1);}),tabs:()=>[{id:'tab1',title:'Paper Alpha',itemID:1,selected:true}],tabGroups:()=>[{id:'g1',name:'Group',tabs:[{id:1}]}],viewGroups:()=>[{id:'v1',name:'View',columns:[{dataKey:'title'}]}],applyTheme:record('theme'),setMarginAnnotations:record('margin'),setColorLabel:record('color'),setSidebar:record('sidebar'),setVerticalTabs:record('vertical'),saveTabGroup:record('saveTabs'),restoreTabGroup:record('restoreTabs',{opened:1,missing:0}),deleteTabGroup:record('deleteTabs'),undeleteTabGroup:record('undeleteTabs'),undeleteView:record('undeleteView'),selectTab:record('selectTab'),closeTab:record('closeTab'),saveView:record('saveView'),applyView:record('applyView'),deleteView:record('deleteView')};
  Object.assign(library,{mergeAnnotations:record('mergeAnnotations','3'),unrelate:record('unrelate',2),renameTagBranch:record('renameTagBranch',{updatedItems:1,renamedTags:1,mergedTags:0}),recolorAnnotations:record('recolor',1),collectionItems:record('collectionItems',['2'])});
  Object.assign(reader,{moveTab:(...args)=>{calls.push(['moveTab',...args]);},closeOtherTabs:(...args)=>{calls.push(['closeOtherTabs',...args]);return {closed:1};},renameTabGroup:record('renameTabGroup'),updateTabGroup:record('updateTabGroup'),renameView:record('renameView'),updateView:record('updateView'),marginOptions:()=>({width:210,side:'right',textLimit:1500}),setMarginOptions:record('setMarginOptions'),resetAppearance:record('resetAppearance')});
@@ -6003,5 +6003,218 @@ test('r21 the journal header counts journals apart from the papers with no journ
  const head=f.body().querySelector('.sc-journal-reading-head').textContent.replace(/\s+/g,' ');
  assert.match(head,/저널 \d+종 · 저널 미기재 3편 · 문헌 \d+편/);
  assert.equal(Number(head.match(/저널 (\d+)종/)[1]),2,'Science and Nature; the unnamed group is not a journal');
+ f.bench.destroy();
+});
+
+test('r22 노트로 옮기기 saves the memo, writes one tagged note, opens nothing and says so',async()=>{
+ const f=fixture();
+ const calls=[];
+ f.library.setRemark=async(id,text)=>{calls.push(['setRemark',id,text]);return text;};
+ f.library.memoToNote=async id=>{calls.push(['memoToNote',id]);return {created:true,text:'x'};};
+ await f.bench.show('annotations');
+ const button=f.findButton('노트로 옮기기');assert.ok(button);
+ assert.equal(button.getAttribute('data-opens'),null,'it writes a note but opens no window');
+ await f.click('노트로 옮기기');
+ assert.deepEqual(calls.map(c=>c[0]),['setRemark','memoToNote'],'the shown text is saved first');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/노트는 열지 않았습니다/);
+ f.bench.destroy();
+});
+
+test('r22 the clean-up list: merge a preprint into its published version with an undo, view copies in the duplicates pane, find every PDF with a stop',async()=>{
+ const f=fixture();
+ f.runtime.attachmentFindings=async()=>({supplementary:[],duplicate:[],foreign:[],orphan:[],unknown:[],unread:0,
+  missing:[{id:'4',title:'No file A',year:'2024'},{id:'5',title:'No file B',year:'2024'}]});
+ f.runtime.cleanupFindings=async()=>({
+  merge:[{id:'1',title:'Preprint',year:'2024',publishedID:'2',publishedTitle:'Published',linked:false}],
+  copies:[{reason:'title',items:[{id:'7',title:'Hinge',year:'2020'},{id:'8',title:'Hinge',year:'2020'},{id:'9',title:'Hinge',year:'2020'}]}]});
+ const log=[];
+ f.runtime.mergePreprintIntoPublished=async id=>{log.push(['merge',id]);return {copied:{tags:2,status:'done',rating:null,memo:true,notes:1}};};
+ f.runtime.restorePreprint=async id=>{log.push(['restore',id]);return true;};
+ f.runtime.showInDuplicatesPane=async(win,lib,ids)=>{log.push(['dups',ids]);return {selected:true};};
+ const sweep=[];
+ f.runtime.findPDFs=async(ids,{onProgress})=>{sweep.push(ids);onProgress(0,ids.length);return {found:1,none:1,failed:0,cancelled:false,done:2,total:2};};
+ await f.bench.show('attachments');
+ const summary=f.bench.panel.querySelector('.sc-attachment-findings summary').textContent;
+ assert.match(summary,/합칠 프리프린트 1/);assert.match(summary,/여러 번 보유 1/);
+ await f.click('게재본으로 옮기기');
+ assert.deepEqual(log[0],['merge','1']);
+ const toast=f.bench.panel.querySelector('.sc-undo-toast');assert.ok(!toast.hidden);assert.match(toast.textContent,/게재본으로 합쳤습니다/);
+ toast.querySelector('button').dispatchEvent(new f.win.Event('click'));await settle();
+ assert.deepEqual(log.find(row=>row[0]==='restore'),['restore','1']);
+ const dups=f.findButton('Zotero 중복 항목에서 보기');assert.equal(dups.getAttribute('data-opens'),'pane');
+ await f.click('Zotero 중복 항목에서 보기');
+ assert.deepEqual(log.find(row=>row[0]==='dups')[1],['7','8','9']);
+ const all=f.findButton('PDF 모두 찾기 · 2편');assert.equal(all.getAttribute('data-opens'),'download','the self-check never presses it');
+ assert.ok(f.findButton('중지'));
+ await f.click('PDF 모두 찾기 · 2편');
+ assert.deepEqual(sweep,[['4','5']]);
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/PDF 1편을 찾아 붙였습니다 · 못 찾음 1편/);
+ f.bench.destroy();
+});
+
+test('r22 evidence drafts follow the paper, not its position: two same-title papers reordered keep each one text',async()=>{
+ const f=fixture();
+ const store={};
+ f.runtime.evidenceOf=ref=>({species:'',construct:'',condition:'',control:'',result:'',limit:'',...(store[ref.id]||{})});
+ f.runtime.setEvidence=async(ref,patch)=>{store[ref.id]={...(store[ref.id]||{}),...patch};};
+ f.papers.splice(0,2,{id:'1',key:'KA',libraryID:1,title:'Same title',authors:'A',year:'2025',itemType:'journalArticle',tags:[]},{id:'2',key:'KB',libraryID:1,title:'Same title',authors:'B',year:'2024',itemType:'journalArticle',tags:[]});
+ f.setSelection([]);f.bench.state.selected=new Set();
+ f.runtime.cache.matrixFields=['title','ev_species'];
+ await f.bench.show('matrix');
+ const areas=()=>[...f.body().querySelectorAll('textarea.sc-matrix-edit')];
+ assert.equal(areas().length,2);
+ areas()[0].value='only for A';areas()[0].dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ assert.notEqual(areas()[0].dataset.draftKey,areas()[1].dataset.draftKey);
+ assert.match(areas()[0].dataset.draftKey,/KA/,'keyed by library and item key');
+ f.papers.reverse();
+ await f.bench.load();await f.bench.render();
+ assert.equal(areas().length,2);
+ assert.equal(areas()[0].value,'','paper B (now first) shows nothing');
+ assert.equal(areas()[1].value,'only for A','paper A keeps its text in its new place');
+ f.bench.destroy();
+});
+
+test('r22 the last evidence edit reaches the CSV and the synthesis note even while its save is pending',async()=>{
+ const f=fixture();
+ const store={};let release;const gate=new Promise(r=>{release=r;});
+ f.runtime.evidenceOf=ref=>({species:'',construct:'',condition:'',control:'',result:'',limit:'',...(store[ref.id]||{})});
+ f.runtime.setEvidence=async(ref,patch)=>{await gate;store[ref.id]={...(store[ref.id]||{}),...patch};};
+ let made=null;f.library.synthesisNote=async entries=>{made=entries;return '77';};f.library.openItem=async()=>{};
+ f.runtime.cache.matrixFields=['title','ev_species'];
+ await f.bench.show('matrix');
+ const area=f.body().querySelector('textarea.sc-matrix-edit');
+ area.value='typed last';area.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ await f.click('CSV 복사');
+ assert.match(f.calls.filter(c=>c[0]==='copy').at(-1)[1],/typed last/,'the CSV carries the in-memory value');
+ area.dispatchEvent(new f.win.Event('change',{bubbles:true}));
+ const pressed=f.click('종합 노트 만들기');
+ await settle();assert.equal(made,null,'export waits for the pending save');
+ release();await pressed;await settle();
+ assert.ok(made,'note made after the save');
+ assert.deepEqual(made[0].evidence[0],['생물종/균주','typed last']);
+ f.bench.destroy();
+});
+
+test('r22 모두 확인함 undo also restores the older seen marks the 3,000 cap evicted, and keeps later changes',async()=>{
+ const seen={};for(let n=0;n<3000;n++)seen['old/'+String(n).padStart(4,'0')]=new Date(Date.UTC(2020,0,1)+n*1000).toISOString();
+ const f=fixture({items:{},readerSettings:{},workbenchUI:{inboxSeen:{...seen}}});
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news:[{id:'W1',title:'Alpha result',doi:'10.1/a1',date:'2026-09-03'},{id:'W2',title:'Beta result',doi:'10.1/b2',date:'2026-09-02'}]}];
+ await f.bench.show('authors');await settle();
+ await f.click('모두 확인함');
+ let now=f.runtime.cache.workbenchUI.inboxSeen;
+ assert.equal(Object.keys(now).length,3000);assert.ok(!('old/0000' in now)&&!('old/0001' in now),'the two oldest were pushed out');
+ f.runtime.cache.workbenchUI={...f.runtime.cache.workbenchUI,inboxSeen:(()=>{const o={...now,'later/x':new Date().toISOString()};delete o['old/1500'];return o;})()};
+ await f.click('되돌리기');
+ now=f.runtime.cache.workbenchUI.inboxSeen;
+ assert.ok('old/0000' in now&&'old/0001' in now,'evicted marks are back');
+ assert.ok(!('10.1/a1' in now)&&!('10.1/b2' in now));
+ assert.ok('later/x' in now&&!('old/1500' in now),'changes made after the press are kept');
+ f.bench.destroy();
+});
+
+// ---- 관계 그래프 범위: 컬렉션 · 논문 하나 ----
+function scopeFixture(ui){
+ const f=fixture({items:{},readerSettings:{marginAnnotations:true},workbenchUI:{lastTab:'graph',...ui}});
+ const extra=[10,11,12,13].map(n=>({...f.papers[0],id:String(n),key:'K'+n,title:'Scope paper '+n,authors:'Ada Lovelace',venue:'Science'}));
+ for(const n of [10,11,12,13])f.refs.set(n,{id:n,libraryID:1,key:'K'+n});
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ const works={'1:K1':{openalex:'W1',references:['W10','W11','G1','G2']},'1:K10':{openalex:'W10',references:['G1']},'1:K11':{openalex:'W11',references:['W10','G1','G2']},
+  '1:K12':{openalex:'W12',references:['W1','G1']},'1:K13':{openalex:'W13',references:['W12','G2']},'1:K2':{openalex:'W2',references:[]}};
+ f.runtime.graphTools=PaperGraph;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=JournalIdentity;
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);
+ f.runtime.cache.workMeta={G1:{id:'G1',title:'Ghost number one',year:2001,doi:'10.1/g1',citations:99},G2:{id:'G2',title:'Ghost number two',year:2005}};
+ f.store={};f.runtime.citedByStore=()=>f.store;f.fetches=0;
+ f.runtime.sweepCitedBy=async(items,o)=>{f.fetches++;f.limit=o&&o.limit;f.store['1:K1']={openalex:'W1',citers:[{id:'C1',title:'A later paper',year:2025,citations:3}]};return {found:1,citers:1,errors:0};};
+ f.library.collections=async()=>[{id:'40',name:'Project',count:2,itemIDs:[10,11],parentID:null},{id:'41',name:'Methods',count:2,itemIDs:[12,13],parentID:'40'},{id:'42',name:'Other',count:1,itemIDs:[2],parentID:null}];
+ f.click=text=>{const b=[...f.bench.panel.querySelectorAll('button')].find(x=>x.textContent.includes(text));b?.dispatchEvent(new f.bench.panel.ownerDocument.defaultView.Event('click',{bubbles:true}));return b;};
+ return f;
+}
+test('the graph tab has a scope control, and the one-paper graph draws solid shelf nodes and hollow ghosts, asking OpenAlex only when told to',async()=>{
+ const f=scopeFixture({graphKind:'paper',graphPaper:'1'})
+ await f.bench.show('graph');await settle();
+ const panel=f.bench.panel;
+ assert.deepEqual([...panel.querySelectorAll('.sc-graph-scope [data-graph-kind]')].map(b=>b.textContent),['라이브러리','컬렉션','논문 하나']);
+ assert.equal(panel.querySelector('[data-graph-kind=paper]').getAttribute('aria-pressed'),'true');
+ const circles=[...panel.querySelectorAll('svg.sc-graph circle')];
+ assert.equal(circles.filter(c=>c.getAttribute('data-ghost')).length,2,'G1 and G2 are hollow');
+ assert.equal(circles.length,1+2+1+2,'the paper, W10 and W11, the citer W12, two ghosts');
+ const heads=[...panel.querySelectorAll('.sc-scope-lists .sc-section-head')].map(h=>h.textContent.replace(/\s+/g,' ').trim());
+ assert.deepEqual(heads,['이 논문이 인용 4','이 논문을 인용 1','내 문헌 3']);
+ assert.equal(f.fetches,0,'drawing the graph asks nothing');
+ const ask=f.click('외부 인용 논문도 보기');
+ assert.ok(ask,'the button is there');
+ await settle();
+ assert.equal(f.fetches,1,'one request, on the press');assert.equal(f.limit,50);
+ assert.equal([...f.bench.panel.querySelectorAll('svg.sc-graph circle')].filter(c=>c.getAttribute('data-ghost')).length,3,'the fetched citer is a ghost now');
+ assert.equal([...f.bench.panel.querySelectorAll('button')].some(b=>b.textContent.includes('외부 인용 논문도 보기')),false,'a stored answer is not asked for again');
+ await f.bench.show('graph');await settle();assert.equal(f.fetches,1,'redrawing never asks');
+ f.bench.destroy();
+});
+test('the one-paper graph list: a ghost offers the shared add and find actions, a click focuses its row, depth 2 is a toggle',async()=>{
+ const f=scopeFixture({graphKind:'paper',graphPaper:'1'});
+ await f.bench.show('graph');await settle();
+ const ghostRow=[...f.bench.panel.querySelectorAll('.sc-scope-lists [data-node-id="W:G1"]')][0];
+ assert.ok(ghostRow,'the ghost is listed');
+ assert.match(ghostRow.textContent,/Ghost number one/);
+ assert.ok([...ghostRow.querySelectorAll('button')].some(b=>/가져오기|추가|저장/.test(b.textContent)),'a ghost with a DOI can be added');
+ const nodeG=[...f.bench.panel.querySelectorAll('svg.sc-graph g[role=button]')].find(g=>/Ghost number one/.test(g.getAttribute('aria-label')));
+ nodeG.dispatchEvent(new f.bench.panel.ownerDocument.defaultView.Event('click',{bubbles:true}));
+ assert.equal(f.bench.panel.querySelector('.sc-scope-lists [data-node-id="W:G1"]').getAttribute('aria-current'),'true');
+ assert.equal(f.bench.panel.querySelector('.sc-graph-info').hidden,false);
+ f.bench.destroy();
+ const g=scopeFixture({graphKind:'paper',graphPaper:'10',graphDepth2:false});
+ await g.bench.show('graph');await settle();
+ const before=g.bench.panel.querySelectorAll('svg.sc-graph circle').length;
+ const toggle=[...g.bench.panel.querySelectorAll('.sc-graph-scope .sc-check input')].find(i=>i.getAttribute('aria-label')==='2단계(내 문헌만)');
+ toggle.checked=true;toggle.dispatchEvent(new g.bench.panel.ownerDocument.defaultView.Event('change',{bubbles:true}));await settle();
+ assert.ok(g.bench.panel.querySelectorAll('svg.sc-graph circle').length>before,'second-step shelf papers join');
+ assert.equal(g.runtime.cache.workbenchUI.graphDepth2,true);
+ g.bench.destroy();
+});
+test('the paper and collection pickers search in the page, pick by keyboard or click, and remember the choice',async()=>{
+ const f=scopeFixture({graphKind:'paper'});
+ await f.bench.show('graph');await settle();
+ const panel=f.bench.panel,win=panel.ownerDocument.defaultView;
+ assert.ok(panel.querySelector('.sc-pick-panel'),'an in-page picker, not a window');
+ const search=panel.querySelector('.sc-pick-panel input[type=search]');
+ search.value='Scope paper 12';search.dispatchEvent(new win.Event('input',{bubbles:true}));
+ const options=[...panel.querySelectorAll('.sc-pick-option')];
+ assert.equal(options.length,1);
+ search.dispatchEvent(Object.assign(new win.Event('keydown',{bubbles:true}),{key:'Enter'}));await settle();
+ assert.equal(f.runtime.cache.workbenchUI.graphPaper,'12','Enter on the search picks the first match');
+ assert.match(panel.querySelector('.sc-pick-value').textContent,/Scope paper 12/);
+ panel.querySelector('[data-graph-kind=collection]').dispatchEvent(new win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.runtime.cache.workbenchUI.graphKind,'collection');
+ const opts=[...panel.querySelectorAll('.sc-pick-option .sc-pick-text')].map(o=>o.textContent);
+ assert.deepEqual(opts,['Other','Project','Methods'],'the tree, subcollection under its parent');
+ panel.querySelector('.sc-pick-option[data-value="40"]').dispatchEvent(new win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.runtime.cache.workbenchUI.graphCollection,'40');
+ f.bench.destroy();
+ // A new session starts where the reader left off.
+ const again=scopeFixture({...f.runtime.cache.workbenchUI});
+ await again.bench.show('graph');await settle();
+ assert.equal(again.bench.panel.querySelector('[data-graph-kind=collection]').getAttribute('aria-pressed'),'true');
+ assert.match(again.bench.panel.querySelector('.sc-pick-value').textContent,/Project/);
+ again.bench.destroy();
+});
+test('the collection graph draws only that folder, with its tiles, lists and the outside works it cites most; sub-collections are a toggle',async()=>{
+ const f=scopeFixture({graphKind:'collection',graphCollection:'40',graphSub:false});
+ await f.bench.show('graph');await settle();
+ const panel=f.bench.panel;
+ const tiles=()=>[...panel.querySelectorAll('.sc-overview-fact')].map(t=>t.textContent.replace(/\s+/g,' ').trim());
+ assert.deepEqual(tiles(),['2 논문','1 연결','1 묶음','0 연결 없는 논문']);
+ const shelfNodes=[...panel.querySelectorAll('svg.sc-graph circle')].filter(c=>!c.getAttribute('data-ghost'));
+ assert.equal(shelfNodes.length,2,'only the two papers in the folder');
+ const outside=[...panel.querySelectorAll('.sc-scope-lists .sc-section-head')].map(h=>h.textContent.replace(/\s+/g,' ').trim());
+ assert.ok(outside.includes('이 컬렉션이 많이 인용하는 바깥 논문 1'),'G1 is cited by both, G2 once is not ranked');
+ assert.ok(outside.includes('컬렉션 안에서 가장 많이 인용된 논문 1'));
+ assert.equal(f.fetches,0);
+ const sub=[...panel.querySelectorAll('.sc-graph-scope .sc-check input')].find(i=>i.getAttribute('aria-label')==='하위 컬렉션 포함');
+ sub.checked=true;sub.dispatchEvent(new panel.ownerDocument.defaultView.Event('change',{bubbles:true}));await settle();
+ assert.equal(f.runtime.cache.workbenchUI.graphSub,true);
+ assert.equal(tiles()[0],'4 논문','with sub-collections the folder holds four papers');
+ assert.equal([...panel.querySelectorAll('svg.sc-graph circle')].filter(c=>!c.getAttribute('data-ghost')).length,4);
+ f.click('관련 문헌');await settle();
+ assert.ok(panel.querySelector('svg.sc-graph'),'the other modes still draw in a collection scope');
  f.bench.destroy();
 });

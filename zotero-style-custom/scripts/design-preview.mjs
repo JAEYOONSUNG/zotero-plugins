@@ -50,6 +50,36 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph,JournalIdent
   }
  }
  for(const paper of papers){paper.key='DEMO'+paper.id;paper.libraryID=1;}
+ /* 관계 그래프 범위 (?graph=paper, ?graph=collection): papers 7-22 are filed in "Repair atlases project", 23-30 in its
+    subcollection "Methods". They cite a few works outside the collection many times, and paper 7 has references and
+    citers that are not on the shelf, so the one-paper graph shows solid and hollow nodes. Fictional. */
+ const ghostMeta={W9001:{id:'W9001',title:'A standard protocol for measuring tissue repair',year:2012,venue:'Nature Methods',citations:1840,doi:'10.5555/ghost-1'},
+  W9002:{id:'W9002',title:'Reference atlas of regeneration stages',year:2016,venue:'Cell',citations:960,doi:'10.5555/ghost-2'},
+  W9003:{id:'W9003',title:'Statistical limits of lineage tracing',year:2019,venue:'Science',citations:420,doi:'10.5555/ghost-3'},
+  W9004:{id:'W9004',title:'Benchmarking single-cell integration methods',year:2020,venue:'Nature Biotechnology',citations:530},
+  W9005:{id:'W9005',title:'An open index of tissue repair datasets',year:2021,venue:'Scientific Data',citations:75,doi:'10.5555/ghost-5'},
+  W9006:{id:'W9006',title:'Early observations of wound closure in organoids',year:2010,venue:'Development',citations:310,doi:'10.5555/ghost-6'}};
+ if(dense){
+  for(let n=7;n<=30;n++){
+   const w=denseWorks['1:DEMO'+n],extra=[];
+   if(n<=22)extra.push('W9001');
+   if(n%2)extra.push('W9002');
+   if(n%3===0)extra.push('W9003');
+   if(n>=23)extra.push('W9004');
+   if(n===12)extra.push('W9005');
+   if(n===7)extra.push('W9006');
+   w.references=[...new Set([...w.references,...extra])];
+  }
+  for(const n of [9,11,13,26])denseWorks['1:DEMO'+n].references.push('W7');
+ }
+ const citedStore={};
+ if(dense&&/graph=paper/.test(String(win.location?.search||'')+String(win.location?.hash||'')))citedStore['1:DEMO7']={openalex:'W7',checkedAt:new Date().toISOString(),citers:[
+  {id:'W9101',title:'Extending repair atlases to ageing tissue',year:2024,citations:48,venue:'Nature Aging'},
+  {id:'W9102',title:'Reanalysis of a landmark repair atlas',year:2025,citations:21,venue:'eLife'},
+  {id:'W9103',title:'Cross-species comparison of repair programmes',year:2023,citations:95,venue:'Cell Systems'},
+  {id:'W9104',title:'A review of single-cell repair atlases',year:2025,citations:12,venue:'Annual Review of Cell Biology'},
+  {id:'W9105',title:'Spatial profiling of the repair niche',year:2022,citations:130,venue:'Nature'}]};
+
  // Dates relative to today, so 최근 문헌 and its week line have something to say.
  const stamp=n=>new Date(Date.now()-n*864e5).toISOString();
  Object.assign(papers[0],{dateAdded:stamp(30),lastRead:stamp(1)});Object.assign(papers[1],{dateAdded:stamp(60),lastRead:stamp(6)});
@@ -65,7 +95,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph,JournalIdent
  const demoAction=async()=>hint('이 미리보기의 동작은 예시 데이터에만 적용됩니다. 실제 Zotero에는 연결하지 않습니다.');
  const daysAgo=n=>new Date(Date.now()-n*864e5).toISOString();
  // Reading records for the fictional papers, so the reading page shows what a reader sees.
- const cache={items:{4:{seconds:400,lastRead:daysAgo(20)},1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},matrixFields:['title','status','year','citations','ev_species','ev_construct','ev_condition','ev_control','ev_result','ev_limit'],workbenchUI:{density:(typeof process!=='undefined'&&process.env?.PREVIEW_DENSITY==='compact')||(typeof location!=='undefined'&&/[?&]density=compact/.test(location.search))?'compact':'comfortable',welcomed:true},boards:[]};
+ const cache={workMeta:ghostMeta,items:{4:{seconds:400,lastRead:daysAgo(20)},1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},matrixFields:['title','status','year','citations','ev_species','ev_construct','ev_condition','ev_control','ev_result','ev_limit'],workbenchUI:{density:(typeof process!=='undefined'&&process.env?.PREVIEW_DENSITY==='compact')||(typeof location!=='undefined'&&/[?&]density=compact/.test(location.search))?'compact':'comfortable',welcomed:true,...(()=>{const f=typeof location!=='undefined'?location.search+location.hash:'';return /graph=paper/.test(f)?{graphKind:'paper',graphPaper:'7',graphDepth2:false}:/graph=collection/.test(f)?{graphKind:'collection',graphCollection:'40',graphSub:true}:{};})()},boards:[]};
  // Fictional portraits drawn as simple shapes; everyone else shows initials.
  const face=(bg,fg)=>({url:'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><rect width="28" height="28" fill="${bg}"/><circle cx="14" cy="11" r="5" fill="${fg}"/><path d="M4 28c0-6 4-9 10-9s10 3 10 9z" fill="${fg}"/></svg>`),page:''});
  const DEMO_FACES={A1:face('#cfd8e6','#6b7a93'),A3:face('#e6d9cf','#93796b'),A5:face('#d3e3d6','#6b9374')};
@@ -223,6 +253,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph,JournalIdent
     {id:'W7',title:'Off-target profiling in primary human cells',venue:'Nature Methods',year:2024,citations:203,openAccess:false,authors:['J. Doudna','B. Oakes']}],
    fresh:[{id:'W1',title:'Compact editors from uncultivated bacteria',venue:'Science',year:2026,citations:12,openAccess:true,authors:['J. Doudna']}],
    watching:true,checkedAt:'2026-09-18'}),selected:()=>dense?[]:[refs.get(1)],pref:(_key,fallback)=>fallback,entry:ref=>cache.items[ref.id]||={},state:ref=>papers.find(p=>Number(p.id)===ref.id)||{},flush:async()=>{},refreshWindows:async()=>{},publicationTags:()=>[],refreshJournalMetrics:async()=>({updated:0,failed:0,unknown:1}),refreshPublicationRanks:demoAction,setPanelCSS:demoAction,toggleAppTheme:demoAction,setCustomFields:demoAction,canEdit:()=>true,edit:async(items,patch)=>{for(const item of items){const paper=papers.find(p=>Number(p.id)===item.id);if(paper&&patch.status)paper.status=patch.status;}},
+  citedByStore:()=>citedStore,
   paperWorks:()=>({...denseWorks,'1:DEMO1':{openalex:'W1',references:['W4','W6']},'1:DEMO2':{openalex:'W2',references:['W4']},'1:DEMO3':{openalex:'W3',references:['https://openalex.org/W1','W2','W2']},'1:DEMO4':{openalex:'W4',references:[]},'1:DEMO6':{openalex:'W6',references:[]}}),
   // So 첨부 미리보기's findings section has something to show: one supplement filed
   // under its paper, and two papers with no PDF at all, one unread and one already done.
@@ -258,7 +289,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph,JournalIdent
   const convert=tree=>[...tree.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(n=>({...n,children:convert(n.children)}));
   return convert(roots);
  };
- const library={snapshot:async()=>papers,graph:rows=>({nodes:rows.map(p=>({id:p.id,label:p.title})),edges:[{source:'1',target:'2'}]}),tagTree,notes:async ids=>ids?notes.filter(n=>!n.parentID||ids.map(String).includes(String(n.parentID))):notes,annotations:async ids=>ids?annotations.filter(a=>ids.map(String).includes(String(a.parentID))):annotations,annotationCounts:async ids=>{const wanted=ids?new Set(ids.map(String)):null;const out={};for(const a of annotations){const key=String(a.parentID);if(wanted&&!wanted.has(key))continue;out[key]=(out[key]||0)+1;}return out;},backlinks:async()=>notes.map(n=>({...n,kind:'note'})),attachments:async ids=>ids===undefined?attachmentRows:attachmentRows.filter(a=>ids.map(String).includes(String(a.parentID))),collections:async()=>[{id:'1',name:'Aeribacillus',count:0,itemIDs:[],parentID:null},{id:'2',name:'Anaylsis',count:3,itemIDs:[1,2,6],parentID:null},{id:'3',name:'Antiphage',count:2,itemIDs:[4,5],parentID:null},{id:'31',name:'Repair atlases',count:1,itemIDs:[3],parentID:'3'},{id:'4',name:'ASR',count:6},{id:'5',name:'Bacillus coagulans',count:0},{id:'6',name:'Bio-containment',count:1},{id:'7',name:'Bioinformatics',count:0},{id:'8',name:'Book chapter',count:1},{id:'9',name:'BREX',count:13}],collectionItems:async(id,{recursive=false}={})=>{const all=await library.collections();const kids=c=>all.filter(k=>k.parentID===c.id);const walk=c=>[...(c.itemIDs||[]),...(recursive?kids(c).flatMap(walk):[])];const c=all.find(x=>x.id===String(id));return c?[...new Set(walk(c).map(String))]:[];},openItem:demoAction,relate:demoAction,unrelate:async()=>0,addTags:demoAction,removeTags:demoAction,renameTagBranch:async()=>({updatedItems:0,mergedTags:0}),recolorAnnotations:async()=>0,mergeAnnotations:async()=>{await demoAction();return '11';},setRemark:async(id,text)=>{runtime.entry(refs.get(Number(id))).remark=text;},createNote:async(id,text)=>{notes.push({id:String(20+notes.length),parentID:String(id),title:'예시 새 노트',text});return notes.at(-1).id;},noteFromAnnotations:async()=>{await demoAction();return '10';}};
+ const library={snapshot:async()=>papers,graph:rows=>({nodes:rows.map(p=>({id:p.id,label:p.title})),edges:[{source:'1',target:'2'}]}),tagTree,notes:async ids=>ids?notes.filter(n=>!n.parentID||ids.map(String).includes(String(n.parentID))):notes,annotations:async ids=>ids?annotations.filter(a=>ids.map(String).includes(String(a.parentID))):annotations,annotationCounts:async ids=>{const wanted=ids?new Set(ids.map(String)):null;const out={};for(const a of annotations){const key=String(a.parentID);if(wanted&&!wanted.has(key))continue;out[key]=(out[key]||0)+1;}return out;},backlinks:async()=>notes.map(n=>({...n,kind:'note'})),attachments:async ids=>ids===undefined?attachmentRows:attachmentRows.filter(a=>ids.map(String).includes(String(a.parentID))),collections:async()=>[{id:'1',name:'Aeribacillus',count:0,itemIDs:[],parentID:null},{id:'2',name:'Anaylsis',count:3,itemIDs:[1,2,6],parentID:null},{id:'3',name:'Antiphage',count:2,itemIDs:[4,5],parentID:null},{id:'31',name:'Repair atlases',count:1,itemIDs:[3],parentID:'3'},{id:'4',name:'ASR',count:6},{id:'5',name:'Bacillus coagulans',count:0},{id:'6',name:'Bio-containment',count:1},{id:'7',name:'Bioinformatics',count:0},{id:'8',name:'Book chapter',count:1},{id:'9',name:'BREX',count:13},...(dense?[{id:'40',name:'Repair atlases project',count:16,itemIDs:Array.from({length:16},(_,i)=>7+i),parentID:null},{id:'41',name:'Methods',count:8,itemIDs:Array.from({length:8},(_,i)=>23+i),parentID:'40'},{id:'42',name:'Reading list 2026',count:6,itemIDs:[31,32,33,34,35,36],parentID:null}]:[])],collectionItems:async(id,{recursive=false}={})=>{const all=await library.collections();const kids=c=>all.filter(k=>k.parentID===c.id);const walk=c=>[...(c.itemIDs||[]),...(recursive?kids(c).flatMap(walk):[])];const c=all.find(x=>x.id===String(id));return c?[...new Set(walk(c).map(String))]:[];},openItem:demoAction,relate:demoAction,unrelate:async()=>0,addTags:demoAction,removeTags:demoAction,renameTagBranch:async()=>({updatedItems:0,mergedTags:0}),recolorAnnotations:async()=>0,mergeAnnotations:async()=>{await demoAction();return '11';},setRemark:async(id,text)=>{runtime.entry(refs.get(Number(id))).remark=text;},createNote:async(id,text)=>{notes.push({id:String(20+notes.length),parentID:String(id),title:'예시 새 노트',text});return notes.at(-1).id;},noteFromAnnotations:async()=>{await demoAction();return '10';}};
  const reader={annotationPalettes:()=>[],tabs:()=>[{id:'library',title:'라이브러리'},{id:'paper',title:papers[0].title,itemID:1,selected:true}],tabGroups:()=>[],viewGroups:()=>[],marginOptions:()=>({width:210,side:'right',textLimit:1500})};
  for(const name of ['applyTheme','resetAppearance','setMarginOptions','setMarginAnnotations','setColorLabel','setSidebar','setVerticalTabs','applyAnnotationPalette','deleteAnnotationPalette','saveTabGroup','restoreTabGroup','deleteTabGroup','selectTab','closeTab','moveTab','renameTabGroup','updateTabGroup','saveView','applyView','deleteView','renameView','updateView'])reader[name]=demoAction;
  reader.saveAnnotationPalette=async()=>({id:'demo'});reader.closeOtherTabs=()=>({closed:0});

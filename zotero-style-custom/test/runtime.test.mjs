@@ -3172,3 +3172,234 @@ test('runtime.say reports in the panel status line and never raises a modal Zote
  await plugin.say(win,'패널이 없을 때도');
  assert.equal(alerts,0,'no pop-up even with no panel open');
 });
+
+test('the citation column takes the newer of the stored count and the works-sweep count',()=>{
+ const {plugin,item}=fixture();plugin.active=true;const ref=citationItem(item,7);
+ // Undated Extra count: a larger sweep count replaces it, a smaller one does not.
+ const key=plugin.identity(ref);
+ plugin.paperWorks()[key]={v:2,doi:'10.1234/fixture',openalex:'W1',citations:1200,checkedAt:'2026-09-01T00:00:00.000Z',references:[],people:[]};
+ assert.equal(plugin.metrics(ref).citations,1200);
+ plugin.paperWorks()[key].citations=5;
+ assert.equal(plugin.metrics(ref).citations,999);
+ // A dated lookup newer than the sweep wins; an older one loses.
+ plugin.entry(ref).citationLookup={status:'ok',identity:plugin.metrics(ref).citationKey,count:1500,source:'OpenAlex',checkedAt:'2026-10-01T00:00:00.000Z'};
+ plugin.paperWorks()[key].citations=1400;
+ assert.equal(plugin.metrics(ref).citations,1500);
+ plugin.paperWorks()[key].checkedAt='2026-10-02T00:00:00.000Z';
+ assert.equal(plugin.metrics(ref).citations,1400);
+ assert.equal(plugin.metrics(ref).citationSource,'OpenAlex works sweep');
+});
+
+function noteWorld(fx) {
+  const {plugin, Z} = fx;
+  plugin.cache = {schema: 1, items: {}};
+  plugin.flush = async () => {};
+  plugin.refreshWindows = async () => {};
+  const all = new Map();
+  let nextID = 900;
+  Z.Items = {get: id => all.get(Number(id))};
+  Z.Item = class {
+    constructor(type) { this.itemType = type; this.id = nextID++; this.html = ''; this.tags = []; this.deleted = false; this.saves = 0; }
+    isNote() { return true; } isRegularItem() { return false; }
+    setNote(html) { this.html = html; } getNote() { return this.html; }
+    setTags(tags) { this.tags = tags; } getTags() { return this.tags; }
+    async saveTx() { this.saves++; all.set(this.id, this); const parent = all.get(this.parentID); if (parent && !parent.notes.includes(this.id)) parent.notes.push(this.id); }
+  };
+  const paper = base => { base.notes = []; base.getNotes = () => base.notes; base.relatedItems = []; base.addRelatedItem = o => { if (!base.relatedItems.includes(o.key)) base.relatedItems.push(o.key); }; base.saveTx = async () => {}; all.set(base.id, base); return base; };
+  return {paper, all};
+}
+
+test('memo text and note HTML round-trip, with markup escaped', () => {
+  const text = 'a < b & c\n\nsecond "line"';
+  const html = Runtime.memoNoteHTML(text);
+  assert.ok(!html.includes('< b'));
+  assert.equal(Runtime.memoFromNoteHTML(html), 'a < b & c\n\nsecond "line"');
+  assert.equal(Runtime.memoFromNoteHTML('<p>one</p><p>two<br/>three</p>'), 'one\ntwo\nthree');
+});
+
+test('memoToNote makes one tagged child note, updates it in place, and the memo mirrors it', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const {paper, all} = noteWorld(fx);
+  const a = paper(fx.item(1));
+  await assert.rejects(plugin.memoToNote(a), /비어/);
+  plugin.entry(a).remark = 'first memo';
+  const one = await plugin.memoToNote(a);
+  assert.equal(one.created, true);
+  const note = plugin.memoNoteOf(a);
+  assert.ok(note.getTags().some(t => t.tag === 'style-custom:memo'));
+  assert.equal(Runtime.memoFromNoteHTML(note.getNote()), 'first memo');
+  plugin.entry(a).remark = 'second memo';
+  const two = await plugin.memoToNote(a);
+  assert.equal(two.created, false);
+  assert.equal(a.notes.length, 1, 'still one note');
+  assert.equal(Runtime.memoFromNoteHTML(plugin.memoNoteOf(a).getNote()), 'second memo');
+  // An edit made in Zotero flows back into the local memo.
+  note.setNote(Runtime.memoNoteHTML('edited in Zotero'));
+  assert.equal(plugin.mirrorMemoNote(note.id), true);
+  assert.equal(plugin.entry(a).remark, 'edited in Zotero');
+  assert.equal(plugin.mirrorMemoNote(note.id), false, 'unchanged: nothing to do');
+  void all;
+});
+
+test('library.setRemark writes the note only when the setting is on', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const {paper} = noteWorld(fx);
+  plugin.active = true;
+  const a = paper(fx.item(1));
+  const Library = require('../src/library.js');
+  const lib = Library.create({Zotero: Object.assign(fx.Z, {Items: Object.assign(fx.Z.Items, {getAsync: async id => fx.Z.Items.get(id)})}), runtime: plugin});
+  await lib.setRemark(1, 'kept local');
+  assert.equal(plugin.memoNoteOf(a), null);
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  await lib.setRemark(1, 'now in a note');
+  assert.equal(Runtime.memoFromNoteHTML(plugin.memoNoteOf(a).getNote()), 'now in a note');
+  await lib.memoToNote(1);
+});
+
+test('duplicateGroups: same DOI or same title and year, joined transitively', () => {
+  const rows = [
+    {id: 'a', title: 'SMC hinge folding in the cell', year: '2020', doi: '10.1/x'},
+    {id: 'b', title: 'SMC hinge folding in the cell!', year: '2020', doi: ''},
+    {id: 'c', title: 'Something else entirely different here', year: '2020', doi: '10.1/x'},
+    {id: 'd', title: 'SMC hinge folding in the cell', year: '2021', doi: ''},
+    {id: 'e', title: 'Short title', year: '2020', doi: ''}, {id: 'f', title: 'Short title', year: '2020', doi: ''}
+  ];
+  const groups = Runtime.duplicateGroups(rows);
+  assert.equal(groups.length, 1, 'a different year and a short title are not duplicates');
+  assert.deepEqual(groups[0].items.map(r => r.id).sort(), ['a', 'b', 'c']);
+  assert.equal(groups[0].reason, 'doi');
+  assert.deepEqual(Runtime.duplicateGroups([]), []);
+});
+
+test('mergePreprintIntoPublished carries tags, status, rating, memo and notes, relates, trashes the preprint, and restores', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const {paper} = noteWorld(fx);
+  const pre = paper(fx.item(1, {tags: [{tag: 'topic/a', type: 0}, {tag: '/done', type: 1}]}));
+  const pub = paper(fx.item(2, {tags: []}));
+  pre.saveTx = async () => {}; pub.saveTx = async () => {};
+  const copy = new fx.Z.Item('note'); copy.parentID = 1; copy.setNote('<p>my note</p>'); await copy.saveTx();
+  plugin.entry(pre).signals = {published: {doi: '10.9/pub', year: 2025}};
+  plugin.signalsOf = ref => plugin.entry(ref).signals;
+  plugin.entry(pre).remark = 'preprint memo';
+  plugin.entry(pub).remark = 'existing memo';
+  plugin.state = ref => ref === pre ? {status: 'done', rating: 4} : {status: 'unread', rating: 0};
+  const edits = [];
+  plugin.edit = async (refs, patch) => { edits.push([refs[0].id, patch]); };
+  plugin.findExistingWork = async () => pub;
+  const out = await plugin.mergePreprintIntoPublished(1);
+  assert.deepEqual(edits, [[2, {status: 'done', rating: 4}]]);
+  assert.ok(pub.pendingTags.some(t => t.tag === 'topic/a') && !pub.pendingTags.some(t => t.tag === '/done'), 'subject tags only; status goes through edit');
+  assert.equal(plugin.entry(pub).remark, 'existing memo\n\npreprint memo');
+  assert.equal(pub.notes.length, 1, 'the note was copied');
+  assert.equal(pre.notes.length, 1, 'the original stays with the trashed preprint');
+  assert.deepEqual(pre.relatedItems, ['2']); assert.deepEqual(pub.relatedItems, ['1']);
+  assert.equal(pre.deleted, true);
+  assert.equal(out.copied.notes, 1);
+  assert.equal(await plugin.restorePreprint(1), true);
+  assert.equal(pre.deleted, false);
+  plugin.findExistingWork = async () => null;
+  await assert.rejects(plugin.mergePreprintIntoPublished(1), /게재본이/);
+});
+
+test('findPDFs goes one at a time, counts found and none, and stops when cancelled', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const order = [];
+  plugin.findPDF = async id => { order.push(id); return {status: id === '2' ? 'found' : 'none'}; };
+  plugin.refreshWindows = async () => {};
+  const seen = [];
+  const out = await plugin.findPDFs(['1', '2', '3'], {onProgress: (d, t) => seen.push(`${d}/${t}`)});
+  assert.deepEqual(order, ['1', '2', '3']);
+  assert.deepEqual([out.found, out.none, out.cancelled], [1, 2, false]);
+  assert.deepEqual(seen, ['0/3', '1/3', '2/3']);
+  const controller = new AbortController();
+  const cut = await plugin.findPDFs(['1', '2', '3'], {signal: controller.signal, onProgress: d => { if (d === 1) controller.abort(); }});
+  assert.equal(cut.cancelled, true);
+  assert.equal(cut.done, 1);
+  assert.equal(cut.found + cut.none, 1);
+});
+
+test('r22 connectPublished imports into the preprint library even while a group library and its collection are selected (real importWork)', async () => {
+  const f = discoverFixture();
+  const { plugin } = f;
+  plugin.flush = async () => {}; plugin.refreshWindows = async () => {};
+  const pre = f.item(1, { tags: [] });
+  pre.libraryID = 1; pre.relatedItems = []; pre.addRelatedItem = o => pre.relatedItems.push(o.key); pre.saveTx = async () => {};
+  const seen = [];
+  const pub = f.item(2, { tags: [] });
+  pub.libraryID = 1; pub.relatedItems = []; pub.addRelatedItem = o => pub.relatedItems.push(o.key); pub.saveTx = async () => {};
+  f.Z.Libraries.userLibraryID = 1;
+  f.Z.Translate = {Search: class {
+    setIdentifier() {} setTranslator() {}
+    async getTranslators() { return ['t']; }
+    async translate(options) { seen.push(options); return [pub]; }
+  }};
+  plugin.findExistingWork = async () => null;
+  plugin.entry(pre).signals = { published: { doi: '10.9/pub', venue: 'Nature', year: 2025 } };
+  plugin.signalsOf = ref => plugin.entry(ref).signals;
+  plugin.state = () => ({ status: '' });
+  plugin.edit = async () => {};
+  const win = {ZoteroPane: {getSelectedCollection: () => ({id: 7, libraryID: 3, name: 'Group'}), getSelectedLibraryID: () => 3}};
+  const result = await plugin.connectPublished(pre, { win });
+  assert.equal(seen[0].libraryID, 1, 'saved where the preprint is');
+  assert.equal(seen[0].collections, undefined, 'a collection of another library is not used');
+  assert.equal(result.imported, true);
+  assert.equal(result.linked, true);
+});
+
+test('r22 a re-check with OpenAlex out keeps Crossref\'s new published DOI and does not postpone the next full check', async () => {
+  const pre = {DOI: '10.1101/2022.11.11.516073', type: 'posted-content', subtype: 'preprint', title: ['A paper'], relation: {}};
+  const f = signalsFixture({DOI: '10.1101/2022.11.11.516073', answers: [crossrefAnswer(pre),
+    [/openalex\.org\/works\/doi:/, {status: 200, response: {...OA_GOLD, doi: 'https://doi.org/10.1101/2022.11.11.516073', type: 'preprint'}}]]});
+  await f.plugin.refreshPaperSignals([f.ref]);
+  const entry = f.plugin.entry(f.ref).signals;
+  assert.ok(entry && !entry.published);
+  entry.partial = false;
+  entry.checkedAt = '2020-01-01';
+  const real = f.Z.HTTP.request;
+  const later = {...pre, relation: {'is-preprint-of': [{'id-type': 'doi', id: '10.1/published'}]}};
+  f.Z.HTTP.request = async (method, url, options) => /openalex/.test(url) ? {status: 429, response: {error: 'Insufficient budget'}}
+    : /crossref/.test(url) ? {status: 200, response: {message: later}} : real(method, url, options);
+  const summary = await f.plugin.refreshPaperSignals([f.ref]);
+  const now = f.plugin.entry(f.ref).signals;
+  assert.equal(now.published?.doi, '10.1/published', 'the published DOI from Crossref is kept');
+  assert.equal(summary.newPublished, 1);
+  assert.equal(now.checkedAt, '2020-01-01', 'an incomplete check does not set the full checkedAt');
+  assert.ok(now.incompleteCheckedAt);
+  assert.equal(f.plugin.signalsStale(now), true, 'still due for a complete re-check');
+});
+
+test('r22 authorUpdates().fresh leaves out papers held as unverified or rejected', async () => {
+  const f = discoverFixture();
+  await f.plugin.watchAuthor({id: 'A1', name: 'A Zongo', institution: 'Institut Pasteur', seen: []});
+  const all = await f.plugin.authorUpdates('A1');
+  assert.ok(all.fresh.length >= 2, 'fixture has several unseen works');
+  const [a, b] = all.fresh;
+  const row = f.plugin.watchedAuthors().find(r => r.id === 'A1');
+  row.unverified = [{id: a.id, title: a.title}];
+  row.rejected = [b.id];
+  const after = await f.plugin.authorUpdates('A1');
+  assert.deepEqual(after.fresh.map(w => w.id), all.fresh.slice(2).map(w => w.id));
+});
+
+test('r22 a pending /unread promotion is never written to the stored JSON, and a stored flag is stripped on start', async () => {
+  const {plugin, Z, item} = fixture(); Z.Libraries.userLibraryID = 1;
+  plugin.active = true;
+  const ref = item(42, {tags: [{tag: '/unread', type: 0}]});
+  plugin.entry(ref).seconds = 40;
+  let release, edits = 0;
+  plugin.edit = () => { edits++; return new Promise(r => { release = r; }); };
+  await plugin.addReading(ref, 5);
+  await plugin.addReading(ref, 5);
+  assert.equal(edits, 1, 'one promotion at a time');
+  assert.doesNotMatch(JSON.stringify(plugin.cache), /promoting/, 'nothing in flight is serialised');
+  release();await new Promise(r => setTimeout(r, 0));
+  await plugin.addReading(ref, 5);
+  assert.equal(edits, 2, 'a finished promotion does not block the next');
+  release();
+  const p = fixture().plugin;
+  p.storage.read = async () => ({schema: 1, items: {'1:key': {promoting: true, seconds: 40}}});
+  await p.start({id: 'custom', version: '0.4', rootURI: 'file:///custom/'});
+  assert.equal(p.cache.items['1:key'].promoting, undefined);
+  assert.equal(p.cache.items['1:key'].seconds, 40);
+  await p.stop();
+});

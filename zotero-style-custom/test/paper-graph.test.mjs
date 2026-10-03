@@ -312,3 +312,79 @@ test("a dense graph keeps at most the limit of labels, none overlapping each oth
   const chosen = nodes[20];
   assert.ok(graph.placeLabels(nodes, {...opts, first: [chosen.id]}).has(chosen.id) || !(chosen.x + 200 < 760), "the chosen paper is offered its place first");
 });
+
+// ---- scopes: one paper, one collection ----
+const shelf = () => [
+  paper(1, "W1", ["W2", "W3", "G1", "G2"], {citations: 50}),
+  paper(2, "W2", ["G1"], {citations: 5}),
+  paper(3, "W3", [], {citations: 70}),
+  paper(4, "W4", ["W1"], {citations: 3}),      // cites the centre
+  paper(5, "W5", ["W4", "G1"]),                // two steps out: cites 4
+  paper(6, "W6", ["G9"])                       // unrelated
+];
+
+test("one paper: what it cites, what cites it, ghosts for what the shelf lacks", () => {
+  const g = graph.egoGraph("1", shelf(), {meta: {G1: {title: "Ghost one", year: 2001, citations: 900}}});
+  const byRole = role => g.nodes.filter(n => n.role === role).map(n => n.id).sort();
+  assert.equal(g.nodes[0].id, "1");
+  assert.deepEqual(byRole("cites").filter(id => !id.startsWith("W:")), ["2", "3"]);
+  assert.deepEqual(byRole("citedBy"), ["4"]);
+  const ghosts = g.nodes.filter(n => n.kind === "ghost");
+  assert.deepEqual(ghosts.map(n => n.id), ["W:G1", "W:G2"], "the more cited ghost first");
+  assert.equal(ghosts[0].label, "Ghost one");
+  assert.equal(ghosts[1].untitled, true);
+  assert.ok(g.nodes.every(n => n.id !== "5" && n.id !== "6"), "depth 2 is off by default");
+  assert.deepEqual({cites: g.counts.cites, citedBy: g.counts.citedBy, library: g.counts.library}, {cites: 4, citedBy: 1, library: 3});
+  const has = (s, t) => g.edges.some(e => e.source === s && e.target === t && e.kind === "cites");
+  assert.ok(has("1", "2") && has("1", "W:G1") && has("4", "1"), "arrows point from the citing paper");
+  assert.ok(has("2", "W:G1"), "a shelf neighbour's own citation of a drawn ghost is an edge too");
+});
+
+test("one paper: depth 2 adds only shelf papers, and fetched citers become ghosts", () => {
+  const g = graph.egoGraph("1", shelf(), {depth2: true, citers: [{id: "C1", title: "Later work", citations: 4}, {id: "W4"}, {id: "C1"}]});
+  const near = g.nodes.filter(n => n.role === "near").map(n => n.id);
+  assert.deepEqual(near, ["5"]);
+  assert.ok(g.nodes.every(n => n.id !== "6"));
+  assert.equal(g.counts.near, 1);
+  const later = g.nodes.find(n => n.id === "W:C1");
+  assert.equal(later.role, "citedBy");
+  assert.equal(g.nodes.filter(n => n.openalex === "C1").length, 1, "a citer fetched twice is one node");
+  assert.equal(g.nodes.filter(n => n.id === "4").length, 1, "a citer already on the shelf is not also a ghost");
+  assert.equal(g.counts.citedBy, 2);
+});
+
+test("one paper: at most sixty nodes unless asked for all, shelf papers kept first", () => {
+  const many = [paper(1, "W1", Array.from({length: 100}, (_, i) => "G" + i)), paper(2, "W2", ["W1"])];
+  const g = graph.egoGraph("1", many, {limit: 60});
+  assert.equal(g.nodes.length, 60);
+  assert.ok(g.nodes.some(n => n.id === "2"), "the shelf paper survives the cut");
+  assert.equal(g.cut, true);
+  assert.equal(g.total, 102);
+  const all = graph.egoGraph("1", many, {all: true});
+  assert.equal(all.nodes.length, 102);
+  assert.equal(all.cut, false);
+  assert.equal(graph.egoGraph("nope", many), null);
+  const laid = graph.egoLayout(all, {width: 760, height: 520});
+  assert.ok(laid.nodes.every(n => n.x >= 0 && n.x <= 760 && n.y >= 0 && n.y <= 520));
+});
+
+test("a collection is its own papers, and with sub the ones filed below it", () => {
+  const cols = [{id: "1", parentID: null, itemIDs: [1, 2]}, {id: "2", parentID: "1", itemIDs: [3]}, {id: "3", parentID: "2", itemIDs: [4, 2]}, {id: "4", parentID: null, itemIDs: [9]}];
+  assert.deepEqual([...graph.collectionItemIDs(cols, "1", {sub: false})].sort(), ["1", "2"]);
+  assert.deepEqual([...graph.collectionItemIDs(cols, "1", {sub: true})].sort(), ["1", "2", "3", "4"]);
+  assert.deepEqual([...graph.collectionItemIDs(cols, "2")].sort(), ["2", "3", "4"]);
+  assert.equal(graph.collectionItemIDs(cols, "missing").size, 0);
+  const loop = [{id: "1", parentID: "2", itemIDs: [1]}, {id: "2", parentID: "1", itemIDs: [2]}];
+  assert.equal(graph.collectionItemIDs(loop, "1").size, 2, "a cycle ends");
+});
+
+test("outside works are ranked by how many of the set cite them, shelf copies named", () => {
+  const set = [paper(1, "W1", ["G1", "G2", "W7"]), paper(2, "W2", ["G1", "G2", "G3"]), paper(3, "W3", ["G1", "W1"])];
+  const held = [...set, paper(7, "W7", [], {title: "Held elsewhere"})];
+  const out = graph.outsideCited(set, {held, meta: {G2: {title: "Two", citations: 5}}, floor: 2});
+  assert.deepEqual(out.map(o => [o.openalex, o.count]), [["G1", 3], ["G2", 2]], "G3 is cited once and W7 is cited once");
+  assert.equal(out[1].title, "Two");
+  assert.equal(graph.outsideCited(set, {held, floor: 1}).find(o => o.openalex === "W7").heldID, "7");
+  assert.equal(graph.outsideCited(set, {held, floor: 1}).some(o => o.openalex === "W1"), false, "a paper inside the set is not outside it");
+  assert.equal(graph.clusterCount(["1", "2", "3", "4"], [{source: "1", target: "2"}]), 1);
+});

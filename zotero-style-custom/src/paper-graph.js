@@ -575,7 +575,231 @@
     return min + (max - min) * Math.sqrt(value);
   }
 
-  const api = {build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels, placeLabelSides, textWidth};
+  /* ---- Scopes: one paper, or one collection -------------------------------
+     The whole-library map answers "what does my shelf look like". Two narrower
+     questions come up more: "what does this one paper sit between" and "does
+     this folder I collect into hang together". Both are read off the reference
+     lists already stored, so neither asks OpenAlex anything; only the papers
+     that cite a paper, which a shelf cannot know, are ever fetched, and only
+     when the reader presses the button. */
+
+  const bare = value => {
+    const id = text(value).split('/').pop();
+    return /^w\d+$/i.test(id) ? id.toUpperCase() : text(value);
+  };
+
+  // The papers filed in one collection, and with `sub` the ones filed below it.
+  // collections: [{id, parentID, itemIDs}] as library.collections() returns them.
+  function collectionItemIDs(collections, rootID, {sub = true} = {}) {
+    const list = Array.isArray(collections) ? collections : [];
+    const kids = new Map();
+    for (const c of list) {
+      const key = c.parentID == null ? '' : String(c.parentID);
+      if (!kids.has(key)) kids.set(key, []);
+      kids.get(key).push(c);
+    }
+    const byID = new Map(list.map(c => [String(c.id), c]));
+    const out = new Set(), seen = new Set();
+    const walk = id => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const c = byID.get(id);
+      if (!c) return;
+      for (const item of c.itemIDs || []) out.add(String(item));
+      if (sub) for (const kid of kids.get(id) || []) walk(String(kid.id));
+    };
+    walk(String(rootID));
+    return out;
+  }
+
+  /* The papers outside a set that the set cites most.
+
+     papers: the set; held: every paper on the shelf (to say which of the
+     outside ones is already owned, elsewhere). Only works cited by `floor` or
+     more of the set count: one citation is the long tail. */
+  function outsideCited(papers, {held = [], meta = {}, floor = 2, limit = 12} = {}) {
+    const inside = new Set((papers || []).map(p => bare(p.openalex)).filter(Boolean));
+    const owned = new Map();
+    for (const p of held || []) {
+      const id = bare(p.openalex);
+      if (id && !owned.has(id)) owned.set(id, p);
+    }
+    const counts = new Map();
+    for (const p of papers || []) {
+      for (const ref of new Set((p.references || []).map(bare).filter(Boolean))) {
+        if (inside.has(ref) || ref === bare(p.openalex)) continue;
+        const row = counts.get(ref) || {openalex: ref, citedBy: []};
+        row.citedBy.push(String(p.id));
+        counts.set(ref, row);
+      }
+    }
+    return [...counts.values()]
+      .filter(row => row.citedBy.length >= floor)
+      .map(row => {
+        const m = meta[row.openalex] || {}, mine = owned.get(row.openalex) || null;
+        return {openalex: row.openalex, citedBy: row.citedBy, count: row.citedBy.length,
+          title: text(m.title) || (mine && text(mine.title)) || '', year: Number(m.year) || (mine && Number(mine.year)) || null,
+          venue: text(m.venue) || (mine && text(mine.venue)) || '', doi: text(m.doi),
+          citations: Number(m.citations) || 0, heldID: mine ? String(mine.id) : null};
+      })
+      .sort((a, b) => b.count - a.count || b.citations - a.citations || (a.openalex < b.openalex ? -1 : 1))
+      .slice(0, limit);
+  }
+
+  // How many separate groups the nodes form through the given edges.
+  function clusterCount(nodeIDs, edges) {
+    const parent = new Map([...nodeIDs].map(id => [String(id), String(id)]));
+    const find = id => { while (parent.get(id) !== id) { parent.set(id, parent.get(parent.get(id))); id = parent.get(id); } return id; };
+    const touched = new Set();
+    for (const e of edges || []) {
+      const a = String(e.source), b = String(e.target);
+      if (!parent.has(a) || !parent.has(b)) continue;
+      parent.set(find(a), find(b));
+      touched.add(a); touched.add(b);
+    }
+    return new Set([...touched].map(find)).size;
+  }
+
+  /* One paper and the papers around it.
+
+     centreID: the paper; papers: every paper on the shelf, [{id, title, year,
+     citations, venue, openalex, references}]; meta: titles for work ids not on
+     the shelf (a cache, may be empty); citers: papers citing the centre that
+     were fetched earlier. Shelf papers are solid nodes, the rest ghosts.
+
+     Nodes are capped at `limit` (the centre, then shelf papers, then the most
+     cited ghosts) unless `all`. */
+  function egoGraph(centreID, papers, {meta = {}, citers = [], depth2 = false, limit = 60, all = false} = {}) {
+    const list = (Array.isArray(papers) ? papers : []).filter(p => p && p.id != null);
+    const byID = new Map(list.map(p => [String(p.id), p]));
+    const centre = byID.get(String(centreID));
+    if (!centre) return null;
+    const refSet = p => p._refs || (p._refs = new Set((p.references || []).map(bare).filter(Boolean)));
+    const byWork = new Map();
+    for (const p of list) { const id = bare(p.openalex); if (id && !byWork.has(id)) byWork.set(id, p); }
+    const centreWork = bare(centre.openalex);
+
+    const libCites = [], ghostRefs = [];
+    for (const ref of refSet(centre)) {
+      if (ref === centreWork) continue;
+      const hit = byWork.get(ref);
+      if (hit && hit !== centre) libCites.push(hit); else if (!hit) ghostRefs.push(ref);
+    }
+    const libCitedBy = centreWork ? list.filter(p => p !== centre && refSet(p).has(centreWork)) : [];
+    const ghostCiters = [], seenCiter = new Set();
+    for (const c of citers || []) {
+      const id = bare(c && c.id);
+      if (!id || id === centreWork || byWork.has(id) || seenCiter.has(id)) continue;
+      seenCiter.add(id);
+      ghostCiters.push({openalex: id, title: text(c.title), year: Number(c.year) || null, venue: text(c.venue),
+        citations: Number(c.citations) || 0, doi: text(c.doi)});
+    }
+    const first = new Map();   // shelf paper id -> role
+    for (const p of libCites) first.set(String(p.id), 'cites');
+    for (const p of libCitedBy) first.set(String(p.id), first.has(String(p.id)) ? 'both' : 'citedBy');
+
+    const near = [];
+    if (depth2) {
+      const level = new Set([...first.keys(), String(centre.id)]);
+      const firstWorks = new Set([...first.keys()].map(id => bare(byID.get(id).openalex)).filter(Boolean));
+      for (const p of list) {
+        if (level.has(String(p.id))) continue;
+        const cites = [...refSet(p)].some(ref => firstWorks.has(ref));
+        const w = bare(p.openalex);
+        const cited = w && [...first.keys()].some(id => refSet(byID.get(id)).has(w));
+        if (cites || cited) near.push(p);
+      }
+    }
+    const counts = {
+      cites: libCites.length + ghostRefs.length,
+      citedBy: libCitedBy.length + ghostCiters.length,
+      library: first.size, near: near.length,
+      ghostCites: ghostRefs.length, ghostCitedBy: ghostCiters.length
+    };
+
+    const cap = all ? Infinity : Math.max(0, limit - 1);
+    const ghosts = [
+      ...ghostRefs.map(id => { const m = meta[id] || {}; return {openalex: id, role: 'cites', title: text(m.title), year: Number(m.year) || null,
+        venue: text(m.venue), citations: Number(m.citations) || 0, doi: text(m.doi)}; }),
+      ...ghostCiters.map(c => ({...c, role: 'citedBy'}))
+    ].sort((a, b) => b.citations - a.citations || (a.openalex < b.openalex ? -1 : 1));
+    const shelf = [...libCites.filter(p => first.get(String(p.id)) === 'cites'),
+      ...libCitedBy].filter((p, i, a) => a.indexOf(p) === i);
+    const ordered = [];
+    for (const p of shelf) ordered.push({p, role: first.get(String(p.id))});
+    for (const p of near) ordered.push({p, role: 'near'});
+    let used = 0;
+    const keptShelf = [], keptGhosts = [];
+    for (const row of ordered) if (used < cap) { keptShelf.push(row); used++; }
+    for (const g of ghosts) if (used < cap) { keptGhosts.push(g); used++; }
+
+    const nodes = [{id: String(centre.id), label: text(centre.title) || '(제목 없음)', year: Number(centre.year) || null,
+      citations: Number(centre.citations) || 0, venue: text(centre.venue), openalex: centreWork,
+      kind: 'centre', role: 'centre', inLibrary: true}];
+    for (const {p, role} of keptShelf) nodes.push({id: String(p.id), label: text(p.title) || '(제목 없음)', year: Number(p.year) || null,
+      citations: Number(p.citations) || 0, venue: text(p.venue), openalex: bare(p.openalex), kind: 'paper', role, inLibrary: true});
+    for (const g of keptGhosts) nodes.push({id: 'W:' + g.openalex, label: g.title || g.openalex, year: g.year, citations: g.citations,
+      venue: g.venue, openalex: g.openalex, doi: g.doi, kind: 'ghost', role: g.role, inLibrary: false, untitled: !g.title});
+
+    const shown = new Set(nodes.map(n => n.id));
+    const edges = [], seen = new Set();
+    const add = (s, t) => { const k = s + '>' + t; if (s === t || !shown.has(s) || !shown.has(t) || seen.has(k)) return; seen.add(k); edges.push({source: s, target: t, kind: 'cites'}); };
+    for (const n of nodes) {
+      if (n.kind === 'ghost') {
+        if (n.role === 'cites') add(nodes[0].id, n.id); else add(n.id, nodes[0].id);
+      }
+    }
+    const nodeByWork = new Map(nodes.filter(n => n.openalex).map(n => [n.openalex, n]));
+    for (const n of nodes) {
+      if (n.kind === 'ghost') continue;
+      const p = byID.get(n.id);
+      for (const ref of refSet(p)) { const t = nodeByWork.get(ref); if (t) add(n.id, t.id); }
+    }
+    const degree = new Map();
+    for (const e of edges) { degree.set(e.source, (degree.get(e.source) || 0) + 1); degree.set(e.target, (degree.get(e.target) || 0) + 1); }
+    for (const n of nodes) n.degree = degree.get(n.id) || 0;
+    return {nodes, edges, counts, total: 1 + first.size + near.length + ghosts.length, shown: nodes.length,
+      cut: nodes.length < 1 + first.size + near.length + ghosts.length};
+  }
+
+  /* A fixed, readable layout for one paper and its neighbours: what it cites
+     on the left, what cites it on the right, shelf papers on the inner ring,
+     ghosts and second-step papers further out. Force layout would put the
+     same star in a different place every time the data changed. */
+  function egoLayout(graph, {width = 760, height = 520, pad = 40} = {}) {
+    const cx = width / 2, cy = height / 2;
+    const nodes = graph.nodes.map(n => Object.assign({}, n));
+    const rx = width / 2 - pad - 70, ry = height / 2 - pad;
+    const groups = {cites: [], citedBy: [], both: [], near: []};
+    for (const n of nodes) if (n.role !== 'centre') groups[n.role === 'near' ? 'near' : n.role].push(n);
+    const place = (arr, from, to, ring) => {
+      arr.forEach((n, i) => {
+        const t = arr.length === 1 ? 0.5 : i / (arr.length - 1);
+        const a = from + (to - from) * t;
+        const stagger = 1 - 0.14 * (i % 2);
+        n.x = cx + Math.cos(a) * rx * ring * stagger;
+        n.y = cy + Math.sin(a) * ry * ring * stagger;
+      });
+    };
+    const split = arr => [arr.filter(n => n.kind !== 'ghost'), arr.filter(n => n.kind === 'ghost')];
+    const [citesShelf, citesGhost] = split(groups.cites), [byShelf, byGhost] = split(groups.citedBy);
+    const R = Math.PI * 0.38;
+    place(citesShelf, Math.PI - R, Math.PI + R, 0.55);
+    place(citesGhost, Math.PI - R - 0.1, Math.PI + R + 0.1, 1);
+    place(byShelf, -R, R, 0.55);
+    place(byGhost, -R - 0.1, R + 0.1, 1);
+    place(groups.both, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5, 0.5);
+    place(groups.near, -Math.PI * 0.9, Math.PI * 0.9, 1.08);
+    for (const n of nodes) {
+      if (n.role === 'centre') { n.x = cx; n.y = cy; n.r = 14; n.rank = 1; continue; }
+      n.r = n.kind === 'ghost' ? 6 : centralityRadius(n.role === 'near' ? 0.15 : 0.35);
+      n.x = Math.max(pad / 2, Math.min(width - pad / 2, n.x));
+      n.y = Math.max(pad / 2, Math.min(height - pad / 2, n.y));
+    }
+    return {nodes, edges: graph.edges};
+  }
+
+  const api = {collectionItemIDs, outsideCited, clusterCount, egoGraph, egoLayout, build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels, placeLabelSides, textWidth};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStylePaperGraph = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

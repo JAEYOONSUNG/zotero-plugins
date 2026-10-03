@@ -68,6 +68,66 @@
     return `폴더 ${dir || '없음'} · ` + said.join(' / ');
   }
 
+
+  /* Pure helpers for the checks that read the reader's own library. Each takes
+     plain data so a test can drive it without Zotero. */
+
+  // Journals named by both a JCR record and a publisher-page record: the figure
+  // the lookup returns must be the JCR one.
+  function jcrPrecedence(catalog, createJournals, nameOf) {
+    const groups = new Map();
+    for (const row of Array.isArray(catalog) ? catalog : []) {
+      const key = nameOf(row && row.title);
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row);
+    }
+    const lookup = createJournals(catalog);
+    const wins = [], losses = [];
+    let both = 0, undecided = 0;
+    for (const rows of groups.values()) {
+      const jcr = rows.filter(row => row.authority === 'jcr');
+      if (!jcr.length || jcr.length === rows.length) continue;
+      both++;
+      const probe = {getField: field => field === 'publicationTitle' ? jcr[0].title : ''};
+      const got = lookup.lookup(probe);
+      if (!got) { undecided++; continue; }
+      if (got.authority === 'jcr' && jcr.some(row => row.impactFactor === got.impactFactor)) wins.push(`${jcr[0].title} ${got.impactFactor} (JCR)`);
+      else losses.push(`${jcr[0].title} ${got.impactFactor} (${got.authority || 'non-JCR'})`);
+    }
+    return {both, wins, losses, undecided};
+  }
+
+  // Items tagged /unread (and not /reading or /done) whose shown status differs.
+  function statusContradictions(rows) {
+    const bad = [];
+    for (const row of rows || []) {
+      const tags = (row.tags || []).map(tag => String(tag && tag.tag != null ? tag.tag : tag).trim().toLowerCase());
+      if (tags.includes('/unread') && !tags.includes('/reading') && !tags.includes('/done') && row.status !== 'unread') bad.push(row.id);
+    }
+    return bad;
+  }
+
+  // Stored works whose people list names someone twice (by id, else by name).
+  function worksWithDuplicatePeople(works) {
+    let count = 0;
+    for (const work of works || []) {
+      const seen = new Set();
+      let dup = false;
+      for (const person of (work && work.people) || []) {
+        const key = person.id || String(person.name || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+        if (!key) continue;
+        if (seen.has(key)) dup = true; else seen.add(key);
+      }
+      if (dup) count++;
+    }
+    return count;
+  }
+
+  function missingMembers(target, names) {
+    return names.filter(name => !target || typeof target[name] === 'undefined');
+  }
+
   async function run(Zotero, runtime, {network = true, repair = false, fill = false, shots = false, seed = ''} = {}) {
     const results = [];
     const win = Zotero.getMainWindow && Zotero.getMainWindow();
@@ -744,6 +804,41 @@
         + (found.unread ? ` · 미판별 ${found.unread}` : '');
     }));
 
+    // Latest work, read back from the real library. Read-only; nothing opens.
+    results.push(await attempt('JCR impact factors win over publisher pages', () => {
+      const out = jcrPrecedence(runtime.catalog, records => runtime.journalTools.create(records), value => runtime.journalTools.name(value));
+      if (out.losses.length) throw new Error('a non-JCR figure won: ' + out.losses.slice(0, 5).join(' | '));
+      return `JCR와 출판사 페이지에 모두 있는 저널 ${out.both}종 · JCR 값 채택 ${out.wins.length} · 판정 보류 ${out.undecided}`
+        + (out.wins.length ? ' · 예: ' + out.wins.slice(0, 3).join(', ') : '');
+    }));
+
+    results.push(await attempt('followed authors\' unverified news', () => {
+      const rows = runtime.watchedAuthors();
+      const held = rows.map(row => ({name: row.name || row.id, n: (row.unverified || []).length})).filter(row => row.n);
+      const total = held.reduce((n, row) => n + row.n, 0);
+      held.sort((a, b) => b.n - a.n);
+      return `확인 필요 ${total}편 (저자 ${held.length}명)` + (held.length ? ' · ' + held.slice(0, 3).map(row => `${row.name} ${row.n}`).join(', ') : '');
+    }));
+
+    results.push(await attempt('the API ZotPoP calls exists', () => {
+      const names = ['queueForReading', 'isQueued', 'watchAuthor', 'watchedAuthors', 'state', 'paperWorks'];
+      const missing = missingMembers(Zotero.StyleCustom, names);
+      if (missing.length) throw new Error('Zotero.StyleCustom lacks: ' + missing.join(', '));
+      return names.join(', ');
+    }));
+
+    results.push(await attempt('reading status agrees with tags', () => {
+      const bad = statusContradictions(all.map(item => ({id: item.id, tags: item.getTags(), status: runtime.state(item).status})));
+      if (bad.length) throw new Error(`${bad.length}건: /unread 태그인데 다른 상태로 표시 (id ${bad.slice(0, 5).join(', ')})`);
+      return `${all.length}편 중 모순 0건`;
+    }));
+
+    results.push(await attempt('corresponding authors are counted once', () => {
+      const works = Object.values(runtime.paperWorks()).filter(work => work && !work.missing);
+      const dup = worksWithDuplicatePeople(works);
+      return `중복 저자 목록이 남은 논문 ${dup}편 / ${works.length}편` + (dup ? ' (다시 조회하면 정리됨)' : '');
+    }));
+
     results.push(await attempt('the panel reports what is still empty', async () => {
       const pending = await runtime.backfillPending(library);
       return `signals ${pending.signals} · journals ${pending.journals} · authors ${pending.authors}`;
@@ -1048,7 +1143,7 @@
     };
   }
 
-  const api = {run, journalLayerReport};
+  const api = {run, journalLayerReport, jcrPrecedence, statusContradictions, worksWithDuplicatePeople, missingMembers};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleSelfCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
