@@ -242,6 +242,8 @@ test("a Scholar profile page yields the person, the figures and the rows, and pa
 	assert.equal(profile.name, "Geoffrey Hinton");
 	assert.equal(profile.affiliation, "Emeritus Prof. Comp Sci, U.Toronto", "the verified-email line is not an affiliation");
 	assert.deepEqual([profile.citations, profile.hIndex, profile.i10], [1088758, 195, 550]);
+	assert.equal(profile.sinceYear, 2021, "the 'Since <year>' column is read too");
+	assert.deepEqual(profile.since, { citations: 623770, hIndex: 134, i10: 403 });
 	assert.equal(records.length, 107);
 	assert.equal(complete, true);
 	assert.equal(records[0].title, "Paper 0");

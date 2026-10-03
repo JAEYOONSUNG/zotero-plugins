@@ -64,9 +64,9 @@
 	</nav>
 	<section id="author-panel" class="author-panel glass" hidden="hidden">
 		<form id="author-form" class="author-query" onsubmit="return false;">
-			<label class="field"><span data-i18n="authorProvider"></span><select id="author-provider"><option value="scholar">Google Scholar</option><option value="orcid">ORCID</option></select></label>
+			<label class="field"><span data-i18n="authorProvider"></span><select id="author-provider"><option value="combined" data-i18n="authorProviderCombined"></option><option value="scholar">Google Scholar</option><option value="orcid">ORCID</option></select></label>
 			<label id="author-input-kind-field" class="field"><span data-i18n="authorInputKind"></span><select id="author-input-kind"><option value="auto" data-i18n="authorAutoKind"></option><option value="name" data-i18n="authorNameKind"></option><option value="profile" data-i18n="authorProfileKind"></option></select></label>
-			<label class="field grow2"><span id="author-input-label" data-i18n="authorScholarInput"></span><input id="author-input" type="text" autocomplete="off"/></label>
+			<label class="field grow2"><span id="author-input-label" data-i18n="authorCombinedInput"></span><input id="author-input" type="text" autocomplete="off"/></label>
 			<label class="field narrow"><span data-i18n="maxResults"></span><input id="author-max-results" type="number" min="1" max="2000" value="1000"/></label>
 			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="findAuthorProfiles"></span></button><button id="author-name-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-user"/></svg><span data-i18n="authorNamePapers"></span></button><button id="author-stop-btn" type="button" class="icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop"/></svg><span data-i18n="stop"></span></button><button id="author-history-btn" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history"/></svg><span data-i18n="history"></span></button></div>
 		</form>
@@ -174,7 +174,10 @@
 			<h3 data-i18n="metricsTitle"></h3>
 			<div id="metrics-years" class="metrics-years" hidden="hidden"></div>
 			<div id="metrics-trend" class="metrics-trend" hidden="hidden"></div>
+			<div id="metrics-person" class="metrics-person" hidden="hidden"></div>
 			<p id="metrics-hint" class="metrics-hint" data-i18n="metricsHint"></p>
+			<div id="metrics-scholar" class="metrics-scholar" hidden="hidden"></div>
+			<div id="metrics-calc" class="metrics-calc" hidden="hidden"></div>
 			<table id="metrics-table" hidden="hidden">
 				<tr><td data-i18n="mYears"></td><td id="m-years">–</td></tr>
 				<tr><td data-i18n="mCitationYears"></td><td id="m-cyears">–</td></tr>
@@ -191,6 +194,7 @@
 				<tr><td>hI,annual</td><td id="m-hiannual">–</td></tr>
 				<tr><td>hA-index</td><td id="m-ha">–</td></tr>
 			</table>
+			<div id="metrics-explain" class="metrics-explain" hidden="hidden"></div>
 			<div id="metrics-notes" class="metrics-notes"></div>
 		</aside>
 
@@ -205,6 +209,7 @@
 				</span>
 				<button id="filter-btn" type="button" class="icon-text filter-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="filter-pop" data-i18n-title="filterBtnTip" data-i18n-aria="filterBtn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-filter"/></svg><span data-i18n="filterBtn"></span><span id="filter-count" class="filter-count" hidden="hidden"></span></button>
 				<span id="facet-chip" class="facet-chip" hidden="hidden"><span id="facet-text"></span><button id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" aria-label="clear">×</button></span>
+				<span id="person-chip" class="facet-chip" hidden="hidden"><span id="person-text"></span><button id="person-clear" type="button" class="filter-clear" data-i18n-title="personClear" aria-label="clear">×</button></span>
 				<span class="spacer"></span>
 				<button id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="previewAction"></span></button>
 				<button id="select-none" type="button" data-i18n-title="selNoneTip" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-close"/></svg><span data-i18n="selNone"></span></button>

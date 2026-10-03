@@ -2130,13 +2130,19 @@ var ZotPoPSources = (function () {
 		let name = doc.querySelector("#gsc_prf_in")?.textContent?.trim() || "";
 		let details = [...doc.querySelectorAll(".gsc_prf_il")].map(el => el.textContent.trim());
 		let affiliation = details.find(t => t && !/^Verified email/i.test(t)) || "";
-		let stats = {};
+		let stats = {}, since = {};
+		// The "Cited by" table: a column for all years and one "Since <year>".
+		let sinceYear = parseInt(([...doc.querySelectorAll("#gsc_rsb_st th")].map(th => th.textContent).join(" ") || "").match(/Since\s+(\d{4})/i)?.[1] || "", 10);
 		for (let tr of doc.querySelectorAll("#gsc_rsb_st tr")) {
 			let label = tr.querySelector(".gsc_rsb_sc1")?.textContent?.trim().toLowerCase() || "";
 			let cells = [...tr.querySelectorAll(".gsc_rsb_std")].map(td => parseInt(td.textContent.replace(/,/g, ""), 10));
 			if (!label || !cells.length) continue;
-			if (/^citations/.test(label)) stats.citations = cells[0]; else if (/h-index/.test(label)) stats.hIndex = cells[0]; else if (/i10/.test(label)) stats.i10 = cells[0];
+			let key = /^citations/.test(label) ? "citations" : /h-index/.test(label) ? "hIndex" : /i10/.test(label) ? "i10" : null;
+			if (!key) continue;
+			stats[key] = cells[0];
+			if (Number.isFinite(cells[1])) since[key] = cells[1];
 		}
+		if (Number.isInteger(sinceYear) && Object.keys(since).length) { stats.sinceYear = sinceYear; stats.since = since; }
 		let rows = [];
 		for (let tr of doc.querySelectorAll("tr.gsc_a_tr")) {
 			let a = tr.querySelector("a.gsc_a_at");

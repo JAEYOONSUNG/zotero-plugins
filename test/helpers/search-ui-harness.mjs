@@ -89,6 +89,9 @@ export function mockElement(tagName = "div") {
 
 export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {
 }, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null, zotero = {}, sources = {}, previewModule = null } = {}) {
+	// The author tab opens on the combined provider; tests of the other providers start from Scholar unless they save their own choice.
+	const startOnScholar = !("lastAuthorQuery" in prefs);
+	if (startOnScholar) prefs.lastAuthorQuery = JSON.stringify({ provider: "scholar" });
 	const copied = [];
 	const elements = new Map(), errors = [], events = new Map();
 	const get = id => {
@@ -174,10 +177,11 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 			openHistoryEntry, openHistoryMenu, closeHistoryMenu, sortValue, matchesFilter, csvText, popOriginalJSON, displaySearchResults, checkCitations, readQuery, populateSearchSources, sourceHint, savePrefs, saveQuery, restoreQuery, setupColumnOrder, setupColumnResize, applyColumnWidths, restoreLayout, normalizeColumnOrder,
 			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, renderVersions, renderSignals, followAuthor, heldVersion, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			yearBins, filterSpec, addRule, openFilterPop, closeFilterPop, syncFilterUI, clearAllFilters, affLineParts, shortInstitution, renderAuthors, addVenueChip, removeVenueChip, setVenueChips, refreshVenueSuggestions, onVenueKey, wireVenueBox, ensureJournalCatalog,
-			searchMode: () => searchSurface, authorSessions,
+			searchMode: () => searchSurface, authorSessions, setAuthorProvider: provider => { activeAuthorProvider = provider; }, personPick, setPick, peopleClusters, setPersonMembership, unverifiedAuthorResults, validPick, metricsOwner, authorMetricsInfo,
 			get history() { return history; },
 			setOpenSelectForTest: value => { openSel = value; } };
 	`);
 	vm.runInContext(code, context);
+	if (startOnScholar) context.harness.setAuthorProvider("scholar");
 	return { copied, Z: context.Zotero, ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
 }

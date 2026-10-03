@@ -124,8 +124,11 @@
 	let translator = null;
 	let searchSurface = "papers";
 	const surfaceSnapshots = new Map();
-	const authorSessions = { scholar: { input: "", profiles: [], profile: null, action: "profiles" }, orcid: { input: "", profiles: [], profile: null, action: "profiles" } };
-	let activeAuthorProvider = "scholar";
+	const AUTHOR_PROVIDERS = ["combined", "scholar", "orcid"];
+	const authorSessions = Object.fromEntries(AUTHOR_PROVIDERS.map(key => [key, { input: "", profiles: [], profile: null, action: "profiles", pick: null }]));
+	let activeAuthorProvider = "combined";
+	const orcidIdOf = profile => profile?.provider === "orcid" ? profile.id : profile?.orcid || null;
+	const authorProviderLabel = provider => provider === "orcid" ? "ORCID" : provider === "combined" ? "OpenAlex + ORCID" : "Google Scholar";
 	let authorAction = "profiles";
 	// What a profile card remembers while the window is open: the folded-away profiles, which summaries are open,
 	// the LinkedIn address ORCID listed for a person (or false when it listed none).
@@ -432,6 +435,7 @@
 		syncFilterClear();
 		$("chk-all").addEventListener("change", e => selectVisible(e.target.checked));
 		$("facet-clear")?.addEventListener("click", () => setFacet(null));
+		$("person-clear")?.addEventListener("click", () => setPick(null));
 		$("selected-only")?.addEventListener("click", () => { state.selectedOnly = !state.selectedOnly; render(); });
 		$("select-none").addEventListener("click", () => { state.selected.clear(); render(); });
 		// Changing the library filter never touches the checks: what was chosen stays chosen.
@@ -713,7 +717,7 @@
 	function restStatus() {
 		let n = state.records.length;
 		if (!n) return t("ready");
-		let label = searchSurface === "authors" ? (activeAuthorProvider === "orcid" ? "ORCID" : "Google Scholar") : sourceLabel($("source").value);
+		let label = searchSurface === "authors" ? authorProviderLabel(activeAuthorProvider) : sourceLabel($("source").value);
 		return t("resultCount", label, n, false, 0);
 	}
 	async function settleActiveSearch() {
@@ -726,7 +730,7 @@
 		PREF("searchSurface", mode); applySearchSurface(); hideBanner(); setStatus(restStatus()); render();
 	}
 	async function switchAuthorProvider(provider) {
-		if (!["scholar", "orcid"].includes(provider)) return;
+		if (!AUTHOR_PROVIDERS.includes(provider)) return;
 		if (state.importing) { $("author-provider").value = activeAuthorProvider; return; }
 		cancelCacheRestore(); while (state.searching) await settleActiveSearch();
 		authorSessions[activeAuthorProvider].input = $("author-input").value;
@@ -744,12 +748,12 @@
 		authorSessions[activeAuthorProvider].input = $("author-input").value;
 		if (activeAuthorProvider === "scholar") authorSessions.scholar.inputKind = $("author-input-kind").value || "auto";
 		PREF("lastAuthorQuery", JSON.stringify({ provider: activeAuthorProvider, inputKind: $("author-input-kind").value || "auto", maxResults: $("author-max-results").value,
-			sessions: Object.fromEntries(Object.entries(authorSessions).map(([key, value]) => [key, { input: value.input, profile: value.profile, action: value.action, inputKind: value.inputKind }])) }));
+			sessions: Object.fromEntries(Object.entries(authorSessions).map(([key, value]) => [key, { input: value.input, profile: value.profile, action: value.action, inputKind: value.inputKind, pick: value.pick }])) }));
 	}
 	function restoreAuthorPreferences() {
 		let saved = {}; try { saved = JSON.parse(PREF("lastAuthorQuery") || "{}"); } catch (_) {}
-		activeAuthorProvider = saved.provider === "orcid" ? "orcid" : "scholar";
-		for (let key of ["scholar", "orcid"]) {
+		activeAuthorProvider = AUTHOR_PROVIDERS.includes(saved.provider) ? saved.provider : "combined";
+		for (let key of AUTHOR_PROVIDERS) {
 			let session = saved.sessions?.[key];
 			authorSessions[key].input = typeof session?.input === "string" ? session.input : "";
 			authorSessions[key].action = ["profiles", "publications", "name-papers"].includes(session?.action) ? session.action : "profiles";
@@ -757,6 +761,7 @@
 			if (session?.profile?.provider === key && typeof session.profile.id === "string") {
 				authorSessions[key].profile = session.profile; authorSessions[key].profiles = [session.profile];
 			}
+			authorSessions[key].pick = validPick(session?.pick);
 		}
 		$("author-provider").value = activeAuthorProvider;
 		$("author-input-kind").value = authorSessions[activeAuthorProvider].inputKind;
@@ -766,22 +771,23 @@
 		let max = Number(saved.maxResults); $("author-max-results").value = Number.isInteger(max) && max >= 1 && max <= 2000 ? String(max) : "1000";
 	}
 	function updateAuthorHint() {
-		let orcid = activeAuthorProvider === "orcid";
-		$("author-input-label").textContent = t(orcid ? "authorOrcidInput" : "authorScholarInput");
-		$("author-help").textContent = t(orcid ? "authorOrcidHelp" : "authorScholarHelp");
+		let orcid = activeAuthorProvider === "orcid", combined = activeAuthorProvider === "combined", kind = combined ? "Combined" : orcid ? "Orcid" : "Scholar";
+		$("author-input-label").textContent = t("author" + kind + "Input");
+		$("author-input").placeholder = combined ? t("authorCombinedInput") : "";
+		$("author-help").textContent = t("author" + kind + "Help");
 		let more = $("author-help-more"), toggle = $("author-help-toggle");
 		if (more && toggle) {
-			more.textContent = t(orcid ? "authorOrcidHelpMore" : "authorScholarHelpMore");
+			more.textContent = t("author" + kind + "HelpMore");
 			let open = state.authorHelpOpen === true;
 			more.hidden = !open; toggle.setAttribute("aria-expanded", String(open));
 		}
 		$("author-name-btn").hidden = orcid;
-		$("author-input-kind-field").hidden = orcid;
+		$("author-input-kind-field").hidden = orcid || combined;
 	}
 	function authorInputChanged() {
 		cancelCacheRestore();
 		if (searchSurface === "authors") state.searchController?.abort();
-		let session = authorSessions[activeAuthorProvider]; session.profiles = []; session.profile = null; session.action = authorAction = "profiles"; authorView.showAll = false;
+		let session = authorSessions[activeAuthorProvider]; session.profiles = []; session.profile = null; session.pick = null; session.action = authorAction = "profiles"; authorView.showAll = false;
 		saveAuthorPreferences(); renderAuthorProfiles();
 	}
 	// ------------------------------------------------------------ profile cards
@@ -870,16 +876,17 @@
 	}
 	// LinkedIn is only ever linked to, never read. For an ORCID person the record may name a profile; asked once, when pressed.
 	function linkedInState(profile) {
-		let known = profile.provider === "orcid" ? authorView.linkedin.get(profile.id) : undefined;
+		let orcidId = orcidIdOf(profile), known = orcidId ? authorView.linkedin.get(orcidId) : undefined;
 		let target = ZotPoPAuthors.linkedInTarget({ ...profile, linkedin: known || profile.linkedin });
-		let tipKey = target?.kind === "profile" ? "authorLinkedInProfileTip" : profile.provider === "orcid" && known === undefined ? "authorLinkedInMaybeTip" : "authorLinkedInSearchTip";
+		let tipKey = target?.kind === "profile" ? "authorLinkedInProfileTip" : orcidId && known === undefined ? "authorLinkedInMaybeTip" : "authorLinkedInSearchTip";
 		return { target, known, tipKey };
 	}
 	async function openLinkedIn(profile, button) {
 		let state_ = linkedInState(profile);
-		if (profile.provider === "orcid" && profile.id && state_.known === undefined) {
+		let orcidId = orcidIdOf(profile);
+		if (orcidId && state_.known === undefined) {
 			button.disabled = true;
-			try { authorView.linkedin.set(profile.id, await ZotPoPAuthors.orcidLinkedIn(profile.id, http, {}) || false); }
+			try { authorView.linkedin.set(orcidId, await ZotPoPAuthors.orcidLinkedIn(orcidId, http, {}) || false); }
 			catch (error) { log("ORCID researcher-urls failed: " + error.message); }
 			button.disabled = false; state_ = linkedInState(profile);
 		}
@@ -897,8 +904,8 @@
 			let card = document.createElement("article"); card.className = "author-profile";
 			let chosen = isChosen(profile);
 			if (chosen) card.classList.add("selected");
-			let orcid = profile.provider === "orcid" && profile.id;
-			let summaryOpen = Boolean(orcid && authorView.open.has(profile.id));
+			let orcid = orcidIdOf(profile);
+			let summaryOpen = Boolean(orcid && authorView.open.has(orcid));
 			if (summaryOpen) card.classList.add("open");
 			let info = document.createElement("div"); info.className = "author-profile-info";
 			// The name, then what is known about who this is as a badge beside it: lime for a public registry profile, amber for "not confirmed".
@@ -906,11 +913,16 @@
 			let name = document.createElement("span"); name.className = "author-profile-name"; name.textContent = profile.name || profile.id || t("authorNameUnverified");
 			head.appendChild(name);
 			let confirmed = profile.mode !== "name-search" && profile.identityConfirmed;
-			let badge = document.createElement("span");
-			badge.className = "badge " + (confirmed ? "lib" : "warn");
-			badge.textContent = t(profile.mode === "name-search" ? "authorNameUnverified" : profile.identityConfirmed ? "authorIdentityConfirmed" : "authorIdentityPending");
-			tip(badge, t(confirmed ? "authorIdentityConfirmedTip" : "authorIdentityUnconfirmedTip"));
-			head.appendChild(badge);
+			if (profile.provider === "combined" && profile.sources?.length) {
+				// Which services know this person: one badge each, OpenAlex and ORCID, instead of the generic "confirmed".
+				for (let source of profile.sources) { let b = document.createElement("span"); b.className = "badge lib"; b.textContent = source === "orcid" ? "ORCID" : "OpenAlex"; tip(b, t(source === "orcid" ? "authorSrcOrcidTip" : "authorSrcOpenAlexTip")); head.appendChild(b); }
+			} else {
+				let badge = document.createElement("span");
+				badge.className = "badge " + (confirmed ? "lib" : "warn");
+				badge.textContent = t(profile.mode === "name-search" ? "authorNameUnverified" : profile.identityConfirmed ? "authorIdentityConfirmed" : "authorIdentityPending");
+				tip(badge, t(confirmed ? "authorIdentityConfirmedTip" : "authorIdentityUnconfirmedTip"));
+				head.appendChild(badge);
+			}
 			if (chosen) { let check = document.createElement("span"); check.className = "author-profile-check"; check.appendChild(iconNode("ic-check")); head.appendChild(check); }
 			info.appendChild(head);
 			// papers, citations and h-index as small badges: what OpenAlex counts under this ORCID iD
@@ -923,7 +935,7 @@
 				info.appendChild(stats);
 			}
 			// the affiliation, and the identifier muted behind it on the same line
-			let meta = [profile.affiliation, profile.id].filter(Boolean);
+			let meta = [profile.affiliation, profile.provider === "combined" ? (profile.orcid ? "ORCID " + profile.orcid : "") : profile.id].filter(Boolean);
 			if (meta.length) { let node = document.createElement("div"); node.className = "author-profile-meta"; node.textContent = meta.join(" · ");
 				if (profile.institutions?.length > 2) node.setAttribute("data-tip", profile.institutions.join("; "));
 				info.appendChild(node); }
@@ -935,8 +947,8 @@
 			if (orcid) {
 				let toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "ghost author-sum-toggle"; toggle.setAttribute("aria-expanded", String(summaryOpen));
 				toggle.appendChild(iconNode(summaryOpen ? "ic-chevron-up" : "ic-chevron-down")); let label = document.createElement("span"); label.textContent = t(summaryOpen ? "authorSummaryHide" : "authorSummary"); toggle.appendChild(label);
-				toggle.addEventListener("click", () => toggleOrcidSummary(profile)); info.appendChild(toggle);
-				if (summaryOpen) info.appendChild(renderOrcidSummary(profile));
+				toggle.addEventListener("click", () => toggleOrcidSummary({ id: orcid })); info.appendChild(toggle);
+				if (summaryOpen) info.appendChild(renderOrcidSummary({ id: orcid }));
 			}
 			let actions = document.createElement("div"); actions.className = "author-profile-actions";
 			if (profile.id) { let load = document.createElement("button"); load.type = "button"; load.className = "author-load"; load.textContent = t("authorLoadWorks"); load.disabled = state.searching || state.importing;
@@ -944,7 +956,7 @@
 				load.addEventListener("click", () => runAuthorAction("publications", profile)); actions.appendChild(load); }
 			if (/^https:\/\//i.test(profile.url || "")) { let open = document.createElement("button"); open.type = "button"; open.textContent = t("authorOpenProfile");
 				open.addEventListener("click", () => Zotero.launchURL(profile.url)); actions.appendChild(open); }
-			if (profile.provider === "orcid" && profile.openalexId) {
+			if (profile.openalexId) {
 				let w = watchButton({ openalexId: profile.openalexId, name: profile.name || profile.id, institution: profile.affiliation || profile.lastInstitution?.name || "" }, renderAuthorProfiles);
 				if (w) { w.classList.add("author-watch"); actions.appendChild(w); }
 			}
@@ -984,7 +996,7 @@
 	}
 	async function showAuthorHistory(entry, active = () => true) {
 		let query = entry.query || {}, provider = query.authorProvider;
-		if (!["scholar", "orcid"].includes(provider)) return false;
+		if (!AUTHOR_PROVIDERS.includes(provider)) return false;
 		await refreshLibraryFlags(); if (!active()) return false;
 		if (activeAuthorProvider !== provider) { saveSurfaceResults(); activeAuthorProvider = provider; }
 		$("author-provider").value = provider; $("author-input").value = query.authorInput || "";
@@ -994,7 +1006,7 @@
 		session.inputKind = query.authorInputKind || "auto";
 		session.profile = query.authorProfile || entry.records?.[0]?.authorProfile || null;
 		session.profiles = Array.isArray(query.authorProfiles) && query.authorProfiles.length ? query.authorProfiles : session.profile ? [session.profile] : [];
-		session.action = authorAction = query.authorAction || "profiles";
+		session.action = authorAction = query.authorAction || "profiles"; session.pick = validPick(query.authorPick); state.metricsBasisUser = false;
 		state.selected.clear(); state.focusKey = null; state.detailKey = null; resetFilters();
 		state.sortKey = entry.records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc";
 		displaySearchResults(entry.records); updateAuthorHint(); renderAuthorProfiles(); saveAuthorPreferences();
@@ -1016,11 +1028,12 @@
 		if (!input.trim()) { setStatus(t("authorNeedInput"), "err"); return; }
 		if (!Number.isInteger(q.maxResults) || q.maxResults < 1 || q.maxResults > 2000) { setStatus(t("needCriteria"), "err"); return; }
 		if (typeof ZotPoPAuthors === "undefined") { setStatus(t("authorModuleUnavailable"), "err"); return; }
-		if (action === "name-papers" && (activeAuthorProvider !== "scholar" || q.authorInputKind === "profile" || ZotPoPAuthors.parseOrcid(input) || /https?:\/\//i.test(input))) { setStatus(t("authorNeedName"), "err"); return; }
+		if (action === "name-papers" && (!["scholar", "combined"].includes(activeAuthorProvider) || q.authorInputKind === "profile" || ZotPoPAuthors.parseOrcid(input) || /https?:\/\//i.test(input))) { setStatus(t("authorNeedName"), "err"); return; }
 		if (action === "publications" && (!profile?.id || profile.provider !== activeAuthorProvider)) return;
 		authorAction = action;
 		let session = authorSessions[activeAuthorProvider];
 		session.action = action;
+		state.metricsBasisUser = false; session.pick = null;
 		if (action !== "publications") { session.profiles = []; session.profile = null; authorView.showAll = false; } else { session.profile = profile; authorView.open.clear(); }
 		saveAuthorPreferences();
 		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; resetFilters();
@@ -1029,7 +1042,7 @@
 		let controller = state.searchController = new AbortController();
 		let active = () => state.searchController === controller && !controller.signal.aborted && searchSurface === "authors"
 			&& activeAuthorProvider === q.authorProvider && $("author-input").value === q.authorInput;
-		let received = [], profiles = [], message = t(action === "profiles" ? "authorLookup" : "authorLoading"), fallbackToName = false;
+		let autoPick = null, received = [], profiles = [], message = t(action === "profiles" ? "authorLookup" : "authorLoading"), fallbackToName = false;
 		$("author-search-btn").disabled = true; $("author-name-btn").disabled = true; $("author-stop-btn").disabled = false;
 		$("search-btn").disabled = true; $("busy").hidden = action === "profiles"; $("busy-text").textContent = message;
 		setStatus(message); hideBanner(); renderAuthorProfiles(); render();
@@ -1041,25 +1054,25 @@
 		try {
 			let options = { maxResults: q.maxResults, popOutputSort: "rank" };
 			let task = action === "profiles" ? ZotPoPAuthors.searchProfiles(q.authorProvider, input, http, ctx)
-				: action === "name-papers" ? ZotPoPAuthors.loadNamePublications(input, options, http, ctx) : ZotPoPAuthors.loadPublications(profile, options, http, ctx);
+				: action === "name-papers" ? ZotPoPAuthors.loadNamePublications(input, options, http, ctx, q.authorProvider) : ZotPoPAuthors.loadPublications(profile, options, http, ctx);
 			let result = await abortableAuthorTask(task, controller.signal);
 			if (!active()) throw abortError();
-			if (action === "profiles") { profiles = result; session.profiles = result; setStatus(result.length ? t("authorProfilesFound", result.length) : t("authorNoProfiles")); }
+			if (action === "profiles") { profiles = result; session.profiles = result; setStatus(result.length ? t("authorProfilesFound", result.length) : t("authorNoProfiles")); if (q.authorProvider === "combined" && result.length === 1 && result[0].direct) autoPick = result[0]; }
 			else {
 				received = result; session.profile = { ...(profile || {}), ...(result.authorProfile || result.profile || profile || {}) };
 				if (session.profile.provider) {
 					if (action === "publications" && session.profiles.some(item => item.id === session.profile.id)) session.profiles = session.profiles.map(item => item.id === session.profile.id ? session.profile : item);
 					else session.profiles = [session.profile];
 				}
-				let orcidWorks = action === "publications" && q.authorProvider === "orcid";
+				let orcidWorks = action === "publications" && q.authorProvider !== "scholar";
 				// An ORCID person's papers read newest first, whichever source they came from.
 				state.sortKey = orcidWorks ? "year" : result.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = orcidWorks ? "desc" : "asc";
 				displaySearchResults(result); await refreshLibraryFlags(); if (!active()) throw abortError();
 				let partial = Boolean(result.partial || ctx.errors.length);
-				if (orcidWorks) setStatus(t("authorOrcidWorks", session.profile.name || session.profile.id, session.profile.id, result.length, Boolean(result.partial)));
-				else setStatus(t(partial ? "incompleteResults" : "resultCount", q.authorProvider === "orcid" ? "ORCID" : "Google Scholar", result.length, false));
-				let popNotice = action !== "name-papers" && q.authorProvider !== "orcid";
-				showBanner(t(action === "name-papers" ? "authorNameUnverified" : q.authorProvider === "orcid" ? (result.authorProvenance?.via === "openalex" ? "authorOrcidViaOpenAlex" : "authorOrcidViaOrcid") : "popModeNoticeShort")
+				if (orcidWorks) setStatus(q.authorProvider === "combined" ? t("authorCombinedWorks", session.profile.name || session.profile.id, result.length, Boolean(result.partial)) : t("authorOrcidWorks", session.profile.name || session.profile.id, session.profile.id, result.length, Boolean(result.partial)));
+				else setStatus(t(partial ? "incompleteResults" : "resultCount", authorProviderLabel(q.authorProvider), result.length, false));
+				let popNotice = action !== "name-papers" && q.authorProvider === "scholar";
+				showBanner(t(action === "name-papers" ? "authorNameUnverified" : q.authorProvider === "combined" ? (result.authorProvenance?.via === "openalex" ? "authorCombinedViaOpenAlex" : "authorOrcidViaOrcid") : q.authorProvider === "orcid" ? (result.authorProvenance?.via === "openalex" ? "authorOrcidViaOpenAlex" : "authorOrcidViaOrcid") : "popModeNoticeShort")
 					+ (result.authorProvenance?.truncated ? " " + t("authorLimited", result.length, result.authorProvenance.totalGroups) : ""), null, popNotice ? { tip: t("popModeNotice") } : {});
 			}
 			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")), null, { warn: true });
@@ -1085,6 +1098,8 @@
 				$("busy").hidden = true; setProgress(null); renderAuthorProfiles(); render(); }
 			resolveDone();
 		}
+		// An ORCID iD or OpenAlex id names one person: their papers load without another click.
+		if (autoPick && searchSurface === "authors" && activeAuthorProvider === "combined" && $("author-input").value === input) { await runAuthorAction("publications", autoPick); return; }
 		if (fallbackToName) {
 			await runAuthorAction("name-papers");
 			if (searchSurface === "authors" && activeAuthorProvider === "scholar" && $("author-input").value === input) showBanner(t("scholarProfileLogin"));
@@ -1622,7 +1637,7 @@
 			let meta = document.createElement("span");
 			meta.className = "h-meta";
 			let when = t("historyWhen", daysSince(e.savedAt));
-			let provider = e.query?.mode === "author" ? (e.query.authorProvider === "orcid" ? "ORCID" : "Google Scholar") : historySources(e) || sourceLabel(e.source);
+			let provider = e.query?.mode === "author" ? authorProviderLabel(e.query.authorProvider) : historySources(e) || sourceLabel(e.source);
 			meta.textContent = e.kind === "profiles" ? t("authorHistoryProfiles", provider, e.count, when) : t("historyEntryMeta", provider, e.count, when, Boolean(e.partial));
 			let body = document.createElement("div"); body.className = "h-body";
 			body.appendChild(label);
@@ -1764,6 +1779,7 @@
 			{ label: t("dCopyDoi"), disabled: !r.doi, run: () => copyText(r.doi, t("copiedDoi")) },
 			{ label: t("dCopyCite"), run: () => copyText(citationText(r), t("copiedCite")) },
 			"-",
+			...(personPick() ? [{ label: inPick(personPick(), r) ? t("ctxNotPerson") : t("ctxIsPerson"), run: () => setPersonMembership(r, !inPick(personPick(), r)) }] : []),
 			{ label: t("dCheck"), title: t("dCheckTip"), disabled: state.checking || !(r.doi || r.arxiv || r.pmid || (r.source === "openalex" && r.sourceId)), run: () => checkCitations(r) }
 		];
 	}
@@ -2432,7 +2448,7 @@
 		if (state.selectedOnly) return state.selected.has(r.key);
 		if (!ignoreLibrary && !libraryPass(r)) return false;
 		if (state.yearRange && !ignoreYears && !(r.year >= state.yearRange.from && r.year <= state.yearRange.to)) return false;
-		if (!applyLocalFacet(r)) return false;
+		if (!applyLocalFacet(r) || !personPass(r)) return false;
 		if (typeof spec === "string") spec = Filters.compile(spec, state.rules);
 		return !spec || Filters.matches(r, spec, filterEnv, { ignoreYears, skipRule });
 	}
@@ -3307,7 +3323,7 @@
 		// so the rhythm of the list is the same from the first row to the last.
 		if (list.some(r => state.affLine && affLineNeeded(affLineParts(r), affiliationOf(r)))) $("results-table").setAttribute("data-aff", ""); else $("results-table").removeAttribute("data-aff");
 		applyColumnView();
-		syncFacetChip();
+		syncFacetChip(); syncPersonChip();
 		syncFilterUI();
 		if (!marquee) marquee = ZotPoPMarquee.attach(window, $("table-wrap"), { mode: "hover" });
 		else marquee.refresh();
@@ -3332,6 +3348,7 @@
 		tr.dataset.key = r.key;
 		if (r.inLibrary) tr.classList.add("in-library");
 		if (state.selected.has(r.key)) tr.classList.add("selected");
+		{ let pick = personPick(); if (pick && !inPick(pick, r)) tr.classList.add("not-person"); }
 		if (state.focusKey === r.key) tr.classList.add("focused");
 
 		/* Six inline tags a title may carry, drawn as what they mean. */
@@ -3532,7 +3549,7 @@
 			tip(b, full);
 			b.setAttribute("aria-pressed", String((state.metricsBasis || null) === key));
 			b.addEventListener("click", () => {
-				state.metricsBasis = key; renderMetrics(state.visible || state.records || []);
+				state.metricsBasis = key; state.metricsBasisUser = true; renderMetrics(state.visible || state.records || []);
 				// The buttons are drawn again; the keyboard stays on the one just pressed.
 				$("metrics-basis")?.querySelector?.('[aria-pressed="true"]')?.focus?.();
 			});
@@ -3619,9 +3636,190 @@
 		}
 		box.appendChild(ends);
 	}
+	// ------------------------------------------------------------ whose papers these are
+	/* A name search lists every paper under that name, namesakes included, so the figures beside it belong to no
+	   one until a person is picked: the papers are clustered locally (ZotPoPAuthors.clusterPeople) and the reader
+	   chooses the cluster, or several when one person splits. The choice is a set of record keys kept in the
+	   author session and with the recent search; papers can be moved in or out by hand afterwards. */
+	const recKey = r => ZotPoPHistory.recordKey(r);
+	function validPick(p) {
+		if (!p || typeof p !== "object" || !Array.isArray(p.keys)) return null;
+		return { name: String(p.name || ""), extra: Number.isInteger(p.extra) && p.extra > 0 ? p.extra : 0, keys: [...new Set(p.keys.filter(k => typeof k === "string"))], others: p.others === true };
+	}
+	function unverifiedAuthorResults() {
+		if (searchSurface !== "authors" || !state.records.length) return false;
+		let session = authorSessions[activeAuthorProvider], profile = state.records[0]?.authorProfile || session.profile;
+		return profile?.mode === "name-search" || profile?.identityConfirmed === false;
+	}
+	const pickSets = new WeakMap();
+	function personPick() { return unverifiedAuthorResults() ? authorSessions[activeAuthorProvider].pick || null : null; }
+	function inPick(pick, r) {
+		let set = pickSets.get(pick); if (!set) pickSets.set(pick, set = new Set(pick.keys));
+		return set.has(recKey(r));
+	}
+	function personPass(r) { let pick = personPick(); return !pick || pick.others || inPick(pick, r); }
+	let peopleMemo = { records: null, typed: null, result: null };
+	function peopleClusters() {
+		let typed = $("author-input").value;
+		if (peopleMemo.records !== state.records || peopleMemo.typed !== typed) peopleMemo = { records: state.records, typed, result: typeof ZotPoPAuthors === "undefined" ? { clusters: [], rest: null } : ZotPoPAuthors.clusterPeople(state.records, typed, recKey) };
+		return peopleMemo.result;
+	}
+	function persistPick() {
+		saveAuthorPreferences();
+		let session = authorSessions[activeAuthorProvider];
+		if (!history || !state.records.length || state.searching) return;
+		let q = authorQuery(session.action, session.profile);
+		Promise.resolve(history.save({ source: "author:" + q.authorProvider, query: { ...q, authorProfile: session.profile, authorProfiles: session.profiles, authorPick: session.pick },
+			records: stripDisplayFields(state.records), partial: Boolean(state.lastPartial) })).catch(e => log("saving the chosen person failed: " + e.message));
+	}
+	function setPick(pick) {
+		authorSessions[activeAuthorProvider].pick = pick ? validPick(pick) : null;
+		state.pickSel = new Set(); state.focusKey = null;
+		persistPick(); render();
+	}
+	function setPersonMembership(r, on) {
+		let pick = personPick(); if (!pick) return;
+		let keys = new Set(pick.keys), key = recKey(r);
+		if (on) keys.add(key); else keys.delete(key);
+		setPick({ ...pick, keys: [...keys] });
+	}
+	function personLabel(pick) { return pick.extra ? t("personChipMore", pick.name, pick.extra) : pick.name; }
+	function syncPersonChip() {
+		let chip = $("person-chip"); if (!chip) return;
+		let pick = personPick();
+		chip.hidden = !pick;
+		if (pick) { $("person-text").textContent = t("personChip", personLabel(pick), state.records.filter(r => inPick(pick, r)).length); }
+	}
+	// What the 인용 지표 card is the figures of.
+	function metricsOwner() {
+		if (searchSurface !== "authors") return null;
+		let pick = personPick(); if (pick) return pick.name;
+		let profile = state.records[0]?.authorProfile || authorSessions[activeAuthorProvider].profile;
+		return profile?.identityConfirmed === true && profile.mode !== "name-search" && profile.name ? profile.name : null;
+	}
+	function drawPersonPicker(list) {
+		let host = $("metrics-person"); if (!host) return;
+		host.textContent = "";
+		let pick = personPick(), picking = unverifiedAuthorResults() && !pick;
+		host.hidden = !unverifiedAuthorResults();
+		if (host.hidden) return;
+		if (pick) {
+			let inside = state.records.filter(r => inPick(pick, r)).length, outside = state.records.length - inside;
+			host.appendChild(fel("div", "pp-note", t("personChosen", personLabel(pick), inside)));
+			let row = fel("div", "pp-actions");
+			let again = fel("button", "ghost", t("personChange")); again.type = "button"; again.addEventListener("click", () => setPick(null)); row.appendChild(again);
+			if (outside || pick.others) {
+				let others = fel("button", "ghost", pick.others ? t("personHideOthers") : t("personShowOthers", outside)); others.type = "button";
+				others.setAttribute("aria-pressed", String(pick.others));
+				others.addEventListener("click", () => setPick({ ...pick, others: !pick.others }));
+				row.appendChild(others);
+			}
+			host.appendChild(row);
+			return;
+		}
+		let { clusters, rest } = peopleClusters();
+		state.pickSel ||= new Set();
+		host.appendChild(fel("div", "pp-lead", t("personLead")));
+		host.appendChild(fel("div", "pp-sub", t("personSub", state.records.length)));
+		let all = rest ? [...clusters, rest] : clusters;
+		let sel = state.pickSel;
+		let confirm = fel("button", "primary pp-confirm");
+		let sync = () => {
+			let chosen = all.filter(c => sel.has(c.id)), n = chosen.reduce((sum, c) => sum + c.n, 0);
+			confirm.disabled = !chosen.length; confirm.textContent = chosen.length ? t("personConfirm", n) : t("personConfirmNone");
+			for (let b of host.querySelectorAll(".pp-card")) b.setAttribute("aria-pressed", String(sel.has(b.dataset.id)));
+		};
+		let cards = fel("div", "pp-cards");
+		for (let c of all) {
+			let b = document.createElement("button"); b.type = "button"; b.className = "pp-card"; b.dataset.id = c.id;
+			b.appendChild(fel("span", "pp-name", c.rest ? t("personRest") : c.name));
+			let years = c.minYear ? (c.minYear === c.maxYear ? String(c.minYear) : c.minYear + "–" + c.maxYear) : "";
+			b.appendChild(fel("span", "pp-meta", [t("personPapers", c.n), years].filter(Boolean).join(" · ")));
+			if (c.forms.length > (c.rest ? 0 : 1)) b.appendChild(fel("span", "pp-meta", t("personForms", c.forms.slice(0, 3).map(f => f.form).join(", "))));
+			if (c.coauthors.length) b.appendChild(fel("span", "pp-meta", t("personCoauthors", c.coauthors.join(", "))));
+			if (c.venue) b.appendChild(fel("span", "pp-meta", c.venue));
+			b.addEventListener("click", () => { if (sel.has(c.id)) sel.delete(c.id); else sel.add(c.id); sync(); });
+			cards.appendChild(b);
+		}
+		confirm.type = "button";
+		host.appendChild(confirm);
+		host.appendChild(cards);
+		confirm.addEventListener("click", () => {
+			let chosen = all.filter(c => sel.has(c.id)); if (!chosen.length) return;
+			let named = chosen.filter(c => !c.rest);
+			setPick({ name: (named[0] || chosen[0]).name || t("personRest"), extra: Math.max(0, chosen.length - 1), keys: chosen.flatMap(c => c.keys), others: false });
+		});
+		sync();
+	}
+	// The profile's own "Cited by" table, as Google Scholar prints it: all years and since a year.
+	function drawScholarStats(stats) {
+		let box = $("metrics-scholar"); if (!box) return;
+		box.textContent = "";
+		box.hidden = !stats;
+		if (!stats) return;
+		box.appendChild(fel("div", "ms-title", t("scholarStatsTitle")));
+		let table = document.createElement("table"); table.className = "ms-table";
+		let head = document.createElement("tr"); table.appendChild(head); head.appendChild(fel("th", null, ""));
+		head.appendChild(fel("th", null, t("scholarStatsAll")));
+		if (stats.since) head.appendChild(fel("th", null, t("scholarStatsSince", stats.sinceYear)));
+		for (let [key, label] of [["citations", t("mCitations")], ["hIndex", "h-index"], ["i10", "i10-index"]]) {
+			if (!Number.isFinite(stats[key])) continue;
+			let tr = document.createElement("tr"); table.appendChild(tr); tr.appendChild(fel("td", null, label));
+			tr.appendChild(fel("td", null, stats[key].toLocaleString(t.locale || undefined)));
+			if (stats.since) tr.appendChild(fel("td", null, Number.isFinite(stats.since[key]) ? stats.since[key].toLocaleString(t.locale || undefined) : "–"));
+		}
+		box.appendChild(table);
+	}
+	// How the figures below were reached and why they may differ from the profile's own.
+	function drawMetricsAccount(info) {
+		let calc = $("metrics-calc"), why = $("metrics-explain");
+		if (!calc || !why) return;
+		calc.textContent = ""; why.textContent = "";
+		calc.hidden = why.hidden = true;
+		if (!info) return;
+		calc.hidden = false;
+		calc.textContent = t("metricsCalc", info.basisLabel, info.papers);
+		let lines = [];
+		if (Number.isFinite(info.total) && info.loaded < info.total) lines.push(t("metricsLoadedOf", info.total, info.loaded));
+		else if (info.truncated) lines.push(t("metricsCappedOpen", info.loaded));
+		for (let key of info.reasons) if (key !== "capped") lines.push(t("metricsWhy_" + key));
+		if (info.matches) lines.push(t("metricsWhy_match"));
+		if (!lines.length) return;
+		why.hidden = false;
+		for (let line of lines) why.appendChild(fel("p", "metrics-why", line));
+		if (info.reasons.includes("capped") && info.profile && !state.searching && Number($("author-max-results").value) < 2000) {
+			let more = fel("button", "ghost metrics-loadall", t("metricsLoadAll")); more.type = "button";
+			more.addEventListener("click", () => { $("author-max-results").value = "2000"; runAuthorAction("publications", info.profile); });
+			why.appendChild(more);
+		}
+	}
+	function authorMetricsInfo(list, m, basis, sources) {
+		let session = authorSessions[activeAuthorProvider], first = state.records[0];
+		let profile = first?.authorProfile ? { ...(session.profile || {}), ...first.authorProfile } : session.profile;
+		let verified = !unverifiedAuthorResults();
+		let source = profile?.provider === "scholar" || (!profile && activeAuthorProvider === "scholar") ? "scholar" : "other";
+		let stats = verified && profile?.scholarStats ? profile.scholarStats : null;
+		let pick = personPick();
+		let pool = pick ? state.records.filter(r => inPick(pick, r)) : state.records;
+		let total = verified && Number.isFinite(profile?.worksCount) ? profile.worksCount : null;
+		let truncated = verified && first?.authorProvenance?.truncated === true;
+		let reasons = ZotPoPAuthors.explainMetrics({ stats, computed: { citations: m.citations, hIndex: m.hIndex }, papers: m.papers, loaded: state.records.length, total, truncated,
+			filtered: list.length < pool.length, unverified: !verified && !pick, basis, source });
+		let matches = Boolean(stats) && !reasons.length && stats.citations === m.citations && stats.hIndex === m.hIndex;
+		let basisLabel = basis ? (ZotPoPSources.SOURCES?.[basis]?.label || basis).replace(/\s*[(（][^)）]*[)）]\s*$/, "") : t("metricsBasisMax");
+		return { basisLabel, papers: m.papers, loaded: state.records.length, total, truncated, reasons, matches, stats, profile: truncated || reasons.includes("capped") ? profile : null };
+	}
 	function renderMetrics(list) {
 		drawYearHistogram();
 		drawMetricsTrend(list);
+		let authors = searchSurface === "authors", owner = metricsOwner();
+		let heading = $("metrics")?.querySelector("h3"); if (heading) heading.textContent = owner ? t("metricsOf", owner) : t("metricsTitle");
+		drawPersonPicker(list); drawScholarStats(null); drawMetricsAccount(null);
+		if (authors && unverifiedAuthorResults() && !personPick()) {
+			$("metrics-hint").hidden = false; $("metrics-hint").textContent = t("personNeeded"); $("metrics-table").hidden = true; $("metrics-notes").textContent = ""; drawMetricsBasis([]);
+			return;
+		}
+		if (authors && personPick()) list = list.filter(r => inPick(personPick(), r));
 		if (searchSurface === "authors" && list.length && !list.some(record => record.citations != null && Number.isFinite(Number(record.citations)))) {
 			$("metrics-hint").hidden = false; $("metrics-hint").textContent = t("authorNoCitationData", list.length); $("metrics-table").hidden = true; return;
 		}
@@ -3633,6 +3831,8 @@
 		   reference figure across networks), or one index's own counts. Buttons,
 		   not a <select>: a native popup draws broken over this glass panel. */
 		if (!sources.includes(state.metricsBasis)) state.metricsBasis = null;
+		// Scholar's own per-paper counts are the basis for Scholar results until the reader picks another.
+		if (authors && !state.metricsBasisUser && typeof ZotPoPAuthors !== "undefined") state.metricsBasis = ZotPoPAuthors.defaultMetricsBasis(sources, { provider: state.records[0]?.authorProfile?.provider || activeAuthorProvider });
 		let m = state.metricsBasis ? ZotPoPMetrics.compute(list, undefined, { provider: state.metricsBasis }) : base;
 		drawMetricsBasis(sources);
 		let set = (id, v) => { $(id).textContent = v; };
@@ -3658,6 +3858,10 @@
 		set("m-hinorm", String(m.hiNorm));
 		set("m-hiannual", fmt(m.hiAnnual));
 		set("m-ha", String(m.hA));
+		if (authors && list.length && typeof ZotPoPAuthors !== "undefined") {
+			let info = authorMetricsInfo(list, m, state.metricsBasis, sources);
+			drawScholarStats(info.stats); drawMetricsAccount(info);
+		}
 	}
 
 	// ------------------------------------------------------------ citations over time
@@ -4434,6 +4638,7 @@
 		add(t("ctxCopyDoi"), () => copyText(r.doi, t("copiedDoi")), !r.doi);
 		add(t("ctxCopyCite"), () => copyText(citationText(r), t("copiedCite")));
 		menu.appendChild(document.createElement("hr"));
+		if (personPick()) { let pick = personPick(), inside = inPick(pick, r); add(inside ? t("ctxNotPerson") : t("ctxIsPerson"), () => setPersonMembership(r, !inside)); }
 		add(t("ctxCheck"), () => checkCitations(r), state.checking || !(r.doi || r.arxiv || r.pmid || (r.source === "openalex" && r.sourceId)));
 		menu.hidden = false;
 		let w = menu.offsetWidth, h = menu.offsetHeight;

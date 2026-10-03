@@ -56,8 +56,11 @@ var ZotPoPAuthors = (function () {
 		return max;
 	}
 	function profileIdentity(profile) {
-		return { provider: profile.provider, id: profile.id ?? null, name: profile.name || "", affiliation: profile.affiliation || "",
+		const identity = { provider: profile.provider, id: profile.id ?? null, name: profile.name || "", affiliation: profile.affiliation || "",
 			url: profile.url || "", mode: profile.mode || "profile", identityConfirmed: profile.identityConfirmed === true };
+		if (profile.scholarStats) identity.scholarStats = profile.scholarStats;
+		if (Number.isFinite(profile.worksCount)) identity.worksCount = profile.worksCount;
+		return identity;
 	}
 	function attach(records, profile, provenance, ctx) {
 		const identity = profileIdentity(profile);
@@ -233,7 +236,7 @@ var ZotPoPAuthors = (function () {
 		}
 	}
 
-	async function searchOrcidNames(value, http, ctx) {
+	async function orcidNameCandidates(value, http, ctx) {
 		const built = orcidNameQuery(value);
 		if (!built) throw new Error("Enter an ORCID iD or an author name");
 		if (typeof http?.getJSON !== "function") throw new Error("ORCID requires a JSON HTTP transport");
@@ -242,12 +245,239 @@ var ZotPoPAuthors = (function () {
 		if (!Array.isArray(rows)) throw new Error("ORCID returned an invalid search response");
 		const seen = new Set(), candidates = [];
 		for (const row of rows) { const c = orcidCandidate(row); if (c && !seen.has(c.id)) { seen.add(c.id); candidates.push(c); } }
-		await enrichCandidates(candidates, http, ctx);
-		rankOrcidCandidates(candidates, built.parsed);
 		const provenance = { provider: "orcid", endpoint: "expanded-search", query: built.q, numFound: Number(data["num-found"]) || candidates.length, capturedAt: new Date().toISOString(), complete: true, publicOnly: true };
 		for (const c of candidates) c.provenance = { provider: "orcid", endpoint: "expanded-search", capturedAt: provenance.capturedAt };
 		candidates.authorProvenance = provenance;
+		return { candidates, parsed: built.parsed, provenance };
+	}
+
+	async function searchOrcidNames(value, http, ctx) {
+		const { candidates, parsed, provenance } = await orcidNameCandidates(value, http, ctx);
+		await enrichCandidates(candidates, http, ctx);
+		rankOrcidCandidates(candidates, parsed);
+		candidates.authorProvenance = provenance;
 		return candidates;
+	}
+
+	// ---------------------------------------------------------------- combined: OpenAlex + ORCID
+	const OA_AUTHOR_SELECT = "id,orcid,display_name,display_name_alternatives,works_count,cited_by_count,summary_stats,last_known_institutions,topics";
+	const OA_AUTHOR_ROWS = 15;
+	const oaAuthorId = value => { const m = String(value ?? "").match(/A[1-9]\d*/i); return m ? m[0].toUpperCase() : null; };
+
+	function openAlexCandidate(a) {
+		const openalexId = oaAuthorId(a?.id);
+		if (!openalexId) return null;
+		const inst = a.last_known_institutions?.[0];
+		const alternatives = (Array.isArray(a.display_name_alternatives) ? a.display_name_alternatives : []).map(text).filter(Boolean);
+		const name = text(a.display_name) || openalexId;
+		return { provider: "combined", sources: ["openalex"], id: openalexId, openalexId, orcid: parseOrcid(a.orcid), name, givenNames: "", familyNames: "", creditName: name,
+			otherNames: alternatives, affiliation: "", institutions: [], worksCount: Number(a.works_count) || 0, citations: Number(a.cited_by_count) || 0,
+			hIndex: Number.isFinite(Number(a.summary_stats?.h_index)) ? Number(a.summary_stats.h_index) : null, topic: text(a.topics?.[0]?.display_name),
+			lastInstitution: inst?.display_name ? { name: inst.display_name, country: String(inst.country_code || "").toUpperCase() || null } : null,
+			url: "https://openalex.org/" + openalexId, identityConfirmed: true, mode: "profile" };
+	}
+
+	function mergeCandidate(base, orcid) {
+		base.sources = [...new Set([...base.sources, "orcid"])];
+		base.orcid = orcid.id || orcid.orcid;
+		const nameOf = orcid.creditName || [orcid.givenNames, orcid.familyNames].filter(Boolean).join(" ");
+		if (nameOf && base.name !== nameOf) base.otherNames = [...new Set([nameOf, ...(base.otherNames || []), ...(orcid.otherNames || [])])];
+		Object.assign(base, { givenNames: orcid.givenNames || base.givenNames, familyNames: orcid.familyNames || base.familyNames,
+			affiliation: orcid.affiliation || base.affiliation, institutions: orcid.institutions || base.institutions });
+		return base;
+	}
+
+	/* Exact name first, then by what OpenAlex counts under the person. A card with no works and no
+	   affiliation anywhere is `weak` and waits behind "more" while better ones exist. */
+	function rankCombinedCandidates(candidates, parsed) {
+		candidates.forEach((c, index) => {
+			c.rankIndex = index; c.nameTier = nameTier(parsed, c);
+			c.weak = !(c.worksCount > 0) && !c.affiliation && !c.lastInstitution;
+		});
+		if (candidates.every(c => c.weak)) candidates.forEach(c => { c.weak = false; });
+		candidates.sort((a, b) => Number(a.weak) - Number(b.weak) || b.nameTier - a.nameTier || (b.worksCount || 0) - (a.worksCount || 0) || a.rankIndex - b.rankIndex);
+		return candidates;
+	}
+
+	function orcidAsCombined(c) {
+		return { ...c, provider: "combined", sources: ["orcid"], orcid: c.id, openalexId: c.openalexId || null };
+	}
+
+	async function openAlexAuthorSearch(value, http, ctx) {
+		const url = "https://api.openalex.org/authors?search=" + encodeURIComponent(value) + "&per-page=" + OA_AUTHOR_ROWS + "&select=" + OA_AUTHOR_SELECT + Sources.openAlexAuth(ctx);
+		const data = await cancellable(() => Sources.withRetry(() => http.getJSON(url, {}, ctx.signal), {}, ctx), ctx);
+		return (Array.isArray(data?.results) ? data.results : []).map(openAlexCandidate).filter(Boolean);
+	}
+
+	async function searchCombined(value, http, ctx) {
+		const identifier = Query?.parseAuthorIdentifier(value);
+		const provenance = { provider: "combined", endpoint: "openalex+orcid", capturedAt: new Date().toISOString(), complete: true };
+		const finish = list => { list.authorProvenance = provenance; for (const c of list) c.provenance = { provider: "combined", capturedAt: provenance.capturedAt }; return list; };
+		if (/https?:\/\/|orcid\.org|openalex\.org|^orcid:|^\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{3}[\dXx]$|^A\d+$/i.test(value) && !identifier)
+			throw new Error("Enter a valid ORCID iD, OpenAlex author ID or profile URL, or type a name");
+		if (identifier?.type === "openalex") {
+			const url = "https://api.openalex.org/authors/" + identifier.id + "?select=" + OA_AUTHOR_SELECT + Sources.openAlexAuth(ctx);
+			const a = await cancellable(() => Sources.withRetry(() => http.getJSON(url, {}, ctx.signal), {}, ctx), ctx);
+			const c = openAlexCandidate(a);
+			if (!c) throw new Error("OpenAlex returned no author for " + identifier.id);
+			c.direct = true;
+			return finish([c]);
+		}
+		if (identifier?.type === "orcid") {
+			const person = await searchProfiles("orcid", identifier.id, http, ctx);
+			const c = orcidAsCombined(person[0]);
+			await enrichCandidates([c], http, ctx);
+			c.direct = true;
+			return finish([c]);
+		}
+		const tasks = [ctx.openAlexSpent ? Promise.reject(new Error("OpenAlex budget spent for today")) : openAlexAuthorSearch(value, http, ctx), orcidNameCandidates(value, http, ctx)];
+		const [oa, or] = await Promise.allSettled(tasks);
+		for (const r of [oa, or]) if (r.status === "rejected" && r.reason?.name === "AbortError") throw r.reason;
+		if (oa.status === "rejected" && or.status === "rejected") throw or.reason;
+		if (!ctx.errors) ctx.errors = [];
+		if (oa.status === "rejected") ctx.errors.push("OpenAlex: " + oa.reason.message);
+		if (or.status === "rejected") ctx.errors.push("ORCID: " + or.reason.message);
+		// OpenAlex sometimes holds one person as several author records that carry the same ORCID iD (the live
+		// "Sheila Ingemann" search returns two): one card, the figures added up, the works read through the iD.
+		const list = [], byOrcid = new Map(), byOa = new Map();
+		for (const c of (oa.status === "fulfilled" ? oa.value : []).slice().sort((a, b) => b.worksCount - a.worksCount)) {
+			const same = c.orcid && byOrcid.get(c.orcid);
+			if (same) {
+				same.alsoIds = [...(same.alsoIds || []), c.openalexId]; same.worksCount += c.worksCount; same.citations += c.citations;
+				same.hIndex = Math.max(same.hIndex ?? 0, c.hIndex ?? 0); same.otherNames = [...new Set([...same.otherNames, c.name, ...c.otherNames])];
+				byOa.set(c.openalexId, same); continue;
+			}
+			list.push(c); byOa.set(c.openalexId, c); if (c.orcid) byOrcid.set(c.orcid, c);
+		}
+		const orcidOnly = [];
+		for (const row of or.status === "fulfilled" ? or.value.candidates : []) {
+			const hit = byOrcid.get(row.id);
+			if (hit) mergeCandidate(hit, row); else orcidOnly.push(orcidAsCombined(row));
+		}
+		// One batched OpenAlex request for the ORCID profiles the search did not already return.
+		if (orcidOnly.length) await enrichCandidates(orcidOnly, http, ctx);
+		for (const c of orcidOnly) {
+			const hit = c.openalexId ? byOa.get(c.openalexId) : null;
+			if (hit && !hit.orcid) { hit.orcid = c.orcid; mergeCandidate(hit, c); }
+			else { c.id = c.openalexId || c.orcid; list.push(c); }
+		}
+		const parsed = or.status === "fulfilled" ? or.value.parsed : parseNameInput(value);
+		return finish(rankCombinedCandidates(list, parsed));
+	}
+
+	// ---------------------------------------------------------------- who is this paper's author: local clustering
+	/* A name search lists every paper under that name, namesakes included. Clustering the papers into people
+	   needs no network: the author's written form ("SI Jensen", "S Jensen", "Sheila Ingemann Jensen"), the
+	   co-authors, then venue and years as tie-breakers. */
+	const initialsLike = token => /^\p{Lu}{1,3}\.?$/u.test(token);
+	function nameParts(full) {
+		const value = String(full ?? "").normalize("NFC").replace(/\s+/g, " ").trim();
+		if (!value) return null;
+		let family, given;
+		if (value.includes(",")) { const [f, ...rest] = value.split(","); family = f.trim(); given = rest.join(" ").trim().split(/\s+/).filter(Boolean); }
+		else {
+			let tokens = value.split(" ");
+			if (tokens.length === 1) return { family: fold(tokens[0]), given: [], initials: "", full: false, form: value };
+			if (initialsLike(tokens.at(-1)) && !initialsLike(tokens[0])) { family = tokens.slice(0, -1).join(" "); given = [tokens.at(-1)]; }
+			else {
+				let i = tokens.length - 1; while (i > 1 && PARTICLES.has(tokens[i - 1].toLowerCase())) i--;
+				family = tokens.slice(i).join(" "); given = tokens.slice(0, i);
+			}
+		}
+		const words = given.map(token => token.replace(/\./g, "")).filter(Boolean);
+		const initials = words.map(token => initialsLike(token) ? token.toLowerCase() : fold(token)[0] || "").join("");
+		return { family: fold(family).replace(/[^\p{L}\p{N}]+/gu, ""), given: words, initials, full: words.some(token => !initialsLike(token)), form: value };
+	}
+	const firstGiven = p => p.given.find(token => !initialsLike(token)) ? fold(p.given.find(token => !initialsLike(token))) : "";
+	/* "S" ~ "SI" ~ "Sheila Ingemann": one set of initials begins the other; two full first names must agree. */
+	function formsCompatible(a, b) {
+		if (!a || !b || a.family !== b.family) return false;
+		if (!a.initials || !b.initials) return true;
+		if (!(a.initials.startsWith(b.initials) || b.initials.startsWith(a.initials))) return false;
+		const fa = firstGiven(a), fb = firstGiven(b);
+		return !(fa && fb) || fa.startsWith(fb) || fb.startsWith(fa);
+	}
+	const coauthorKey = p => p.family + "|" + (p.initials[0] || "");
+
+	/* records -> { clusters: [{ id, name, forms, n, keys, minYear, maxYear, coauthors, venue }], rest }. `typed` is the
+	   name that was searched; the author of each paper that answers to it is "the person". */
+	function clusterPeople(records, typed, keyOf = record => record.key) {
+		const parsed = parseNameInput(typed), wanted = parsed.variants.map(v => ({ family: fold(v.family).replace(/[^\p{L}\p{N}]+/gu, ""),
+			initials: v.given.map(token => isInitial(token) ? token.toLowerCase() : fold(token)[0] || "").join(""), given: v.given, full: v.given.some(token => !isInitial(token)) }));
+		const cjk = parsed.cjk ? fold(parsed.raw) : null;
+		const items = records.map((record, index) => {
+			const authors = Array.isArray(record.authors) ? record.authors : [];
+			let at = -1, me = null, alt = -1;
+			for (let i = 0; i < authors.length && at < 0; i++) {
+				const p = nameParts(authors[i]?.name || [authors[i]?.firstName, authors[i]?.lastName].filter(Boolean).join(" "));
+				if (!p) continue;
+				if (cjk ? fold(authors[i].name) === cjk : wanted.length ? wanted.some(w => formsCompatible(w, p)) : true) { at = i; me = p; }
+				else if (alt < 0 && wanted.length && wanted[0].family === p.family) alt = i;
+			}
+			// A paper whose author shares the surname but not the initials: its form is shown, never counted as a co-author.
+			const skip = at >= 0 ? at : alt;
+			const coauthors = new Map();
+			authors.forEach((a, i) => { if (i === skip) return; const p = nameParts(a?.name || [a?.firstName, a?.lastName].filter(Boolean).join(" ")); if (p?.family) coauthors.set(coauthorKey(p), a.name || p.form); });
+			return { index, record, me, altForm: alt >= 0 ? authors[alt].name : "", openalexId: at >= 0 ? authors[at].openalexId || null : null, coauthors, venue: fold(record.venue).replace(/[^\p{L}\p{N}]+/gu, " ").trim(),
+				year: Number.isFinite(record.year) ? record.year : null, key: keyOf(record) };
+		});
+		const parent = items.map((_, i) => i);
+		const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+		const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[b] = a; };
+		const placed = items.filter(item => item.me);
+		const bucket = (keyFn, join) => {
+			const map = new Map();
+			for (const item of placed) for (const key of [].concat(keyFn(item))) { if (!key) continue; if (!map.has(key)) map.set(key, []); map.get(key).push(item); }
+			for (const list of map.values()) for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (join(list[i], list[j])) union(list[i].index, list[j].index);
+		};
+		bucket(item => item.openalexId, (a, b) => formsCompatible(a.me, b.me));
+		bucket(item => [...item.coauthors.keys()], (a, b) => formsCompatible(a.me, b.me));
+		const specific = p => p.initials.length >= 2 || p.full;
+		bucket(item => item.venue && specific(item.me) ? item.me.family + "|" + item.me.initials + "|" + item.venue : null,
+			(a, b) => a.me.initials === b.me.initials && (a.year == null || b.year == null || Math.abs(a.year - b.year) <= 8));
+		const groups = new Map();
+		for (const item of placed) { const root = find(item.index); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(item); }
+		let big = [...groups.values()].filter(list => list.length > 1), lone = [...groups.values()].filter(list => list.length === 1).map(list => list[0]);
+		const leftovers = items.filter(item => !item.me);
+		for (const item of lone) {
+			const fits = big.filter(list => list.some(other => formsCompatible(other.me, item.me)));
+			if (fits.length === 1) fits[0].push(item); else leftovers.push(item);
+		}
+		const count = (values, top) => { const map = new Map(); for (const v of values) if (v) map.set(v, (map.get(v) || 0) + 1); return [...map].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]))).slice(0, top).map(x => x[0]); };
+		const describe = (list, id, rest = false) => {
+			const forms = new Map();
+			for (const item of list) { const form = item.me ? item.me.form : item.altForm; if (form) forms.set(form, (forms.get(form) || 0) + 1); }
+			const names = [...forms].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length);
+			const years = list.map(item => item.year).filter(Number.isFinite), coCount = new Map();
+			for (const item of list) for (const [key, name] of item.coauthors) { const e = coCount.get(key) || { name, n: 0 }; e.n++; coCount.set(key, e); }
+			return { id, rest, name: rest ? "" : names[0]?.[0] || "", forms: names.map(([form, n]) => ({ form, n })), n: list.length, keys: list.map(item => item.key), indices: list.map(item => item.index),
+				minYear: years.length ? Math.min(...years) : null, maxYear: years.length ? Math.max(...years) : null,
+				coauthors: [...coCount.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name)).slice(0, 3).map(e => e.name),
+				venue: count(list.map(item => item.record.venue), 1)[0] || "" };
+		};
+		big.sort((a, b) => b.length - a.length);
+		const clusters = big.map((list, i) => describe(list, "p" + (i + 1)));
+		const rest = leftovers.length ? describe(leftovers, "rest", true) : null;
+		return { clusters, rest, typed: parsed.raw };
+	}
+
+	/* Why the figures here differ from the profile's own, as an ordered list of reason keys; [] when they agree.
+	   facts: { stats (Scholar's All column), computed: { citations, hIndex }, papers, loaded, total, truncated, filtered, unverified, basis, source } */
+	function explainMetrics(facts = {}) {
+		const out = [], { stats, computed } = facts;
+		if (facts.unverified) out.push("namesakes");
+		if (facts.truncated) out.push("capped");
+		else if (Number.isFinite(facts.total) && facts.loaded < facts.total) out.push("capped");
+		if (facts.filtered) out.push("filtered");
+		if (facts.source === "scholar" && facts.basis !== "scholar") out.push("basis");
+		if (stats && computed && facts.source !== "scholar") out.push("otherIndex");
+		if (stats && computed && out.length === 0 && (stats.citations !== computed.citations || stats.hIndex !== computed.hIndex)) out.push("unknown");
+		return out;
+	}
+	/* Scholar's own per-paper counts are the default basis for Scholar results; any other result set keeps the highest-per-paper default. */
+	function defaultMetricsBasis(sources, { provider, chosen } = {}) {
+		if (chosen !== undefined) return chosen;
+		return provider === "scholar" && sources.includes("scholar") ? "scholar" : null;
 	}
 
 	// ---------------------------------------------------------------- LinkedIn (links only: nothing is fetched from LinkedIn)
@@ -381,6 +611,7 @@ var ZotPoPAuthors = (function () {
 		checkCancelled(ctx);
 		const value = String(input ?? "").trim();
 		if (!value) throw new Error("Enter an author name or profile identifier");
+		if (provider === "combined") return searchCombined(value, http, ctx);
 		if (provider === "orcid") {
 			const id = parseOrcid(value);
 			if (!id) {
@@ -486,8 +717,9 @@ var ZotPoPAuthors = (function () {
 
 	async function loadPublications(profile, options = {}, http, ctx = {}) {
 		checkCancelled(ctx);
-		if (!profile || !["orcid", "scholar"].includes(profile.provider)) throw new Error("Select a supported author profile");
+		if (!profile || !["orcid", "scholar", "combined"].includes(profile.provider)) throw new Error("Select a supported author profile");
 		const maxResults = limit(options);
+		if (profile.provider === "combined") return loadCombinedPublications(profile, options, maxResults, http, ctx);
 		if (profile.provider === "scholar") {
 			const identity = parseScholarProfile(profile.id);
 			if (!identity) throw new Error("Invalid Google Scholar profile ID");
@@ -496,7 +728,9 @@ var ZotPoPAuthors = (function () {
 				try {
 					const page = await cancellable(() => Sources.scholarProfile(identity.id, http, ctx, { maxResults, sort: options.sort }), ctx);
 					const actual = { ...profile, id: identity.id, url: identity.url, name: page.profile.name || profile.name, affiliation: page.profile.affiliation || profile.affiliation,
-						hIndex: page.profile.hIndex ?? null, citations: page.profile.citations ?? null, identityConfirmed: true };
+						hIndex: page.profile.hIndex ?? null, citations: page.profile.citations ?? null, identityConfirmed: true,
+							scholarStats: ["citations", "hIndex", "i10"].some(key => Number.isFinite(page.profile[key])) ? { citations: page.profile.citations ?? null, hIndex: page.profile.hIndex ?? null, i10: page.profile.i10 ?? null,
+								sinceYear: page.profile.sinceYear ?? null, since: page.profile.since ?? null } : undefined };
 					const provenance = { provider: "scholar", mode: "profile", method: "scholar-profile-page", authorId: identity.id, capturedAt: new Date().toISOString(),
 						identityConfirmed: true, complete: page.complete, returned: page.records.length, truncated: !page.complete, citationCountsAvailable: true, authorListComplete: false };
 					return attach(page.records, actual, provenance, ctx);
@@ -562,16 +796,63 @@ var ZotPoPAuthors = (function () {
 		return attach(records, actual, provenance, ctx);
 	}
 
-	async function loadNamePublications(name, options = {}, _http, ctx = {}) {
+	/* A merged person: their OpenAlex works by author id when it is known, else (or when that fails or is
+	   empty) through the ORCID path. The records carry the merged identity either way. */
+	async function loadCombinedPublications(profile, options, maxResults, http, ctx) {
+		const openalexId = oaAuthorId(profile.openalexId), orcid = parseOrcid(profile.orcid);
+		if (!openalexId && !orcid) throw new Error("Select a supported author profile");
+		const actual = { ...profile, provider: "combined", id: profile.id || openalexId || orcid, identityConfirmed: true };
+		const retag = (records, provenance) => {
+			const identity = profileIdentity(actual);
+			for (const record of records) { record.authorProfile = clone(identity); record.authorProvenance = clone(provenance); }
+			records.authorProfile = records.profile = clone(identity); records.authorProvenance = records.provenance = clone(provenance);
+			ctx.authorProvenance = clone(provenance);
+			return records;
+		};
+		let triedOpenAlex = false;
+		if (openalexId && !options.orcidOnly && !ctx.openAlexSpent && !(orcid && profile.alsoIds?.length)) {
+			triedOpenAlex = true;
+			const outer = ctx.onResults;
+			if (outer) ctx.onResults = (records, details) => { if (records.length) outer(records, details); };
+			try {
+				const found = await Sources.search("openalex", { authors: openalexId, sort: "date", maxResults }, http, ctx);
+				if (found.length) {
+					const total = Number.isFinite(profile.worksCount) ? profile.worksCount : null;
+					const truncated = found.length >= maxResults && (total == null || total > found.length);
+					return attach(found, actual, { provider: "combined", id: actual.id, openalexId, orcid: orcid || null, endpoint: "openalex-works", via: "openalex", capturedAt: new Date().toISOString(),
+						publicOnly: false, mode: "profile", identityConfirmed: true, totalGroups: total, returned: found.length, truncated, complete: !truncated,
+						authorListComplete: true, citationCountsAvailable: true }, ctx);
+				}
+			} catch (error) {
+				if (error.name === "AbortError") throw error;
+				if (!orcid) throw error;
+				ctx.log?.("OpenAlex works for " + openalexId + " failed, using ORCID: " + error.message);
+			} finally { if (outer) ctx.onResults = outer; }
+		}
+		if (!orcid) throw new Error("OpenAlex has no works under " + openalexId);
+		const inner = { ...actual, provider: "orcid", id: orcid };
+		const records = await loadPublications(inner, { ...options, orcidOnly: options.orcidOnly || triedOpenAlex }, http, ctx);
+		return retag(records, { ...records.authorProvenance, provider: "combined", openalexId: openalexId || null });
+	}
+
+	async function loadNamePublications(name, options = {}, http, ctx = {}, provider = "scholar") {
 		const authors = String(name ?? "").trim();
 		if (!authors) throw new Error("Enter an author name for the separate name-based paper search");
+		if (provider === "combined") {
+			// OpenAlex resolves the name to its author profiles and returns all of their works together.
+			const maxResults = limit(options);
+			const found = await Sources.search("openalex", { authors, sort: "date", maxResults }, http, ctx);
+			const profile = { provider: "combined", id: null, name: authors, affiliation: "", url: "", mode: "name-search", identityConfirmed: false };
+			return attach(found, profile, { provider: "combined", mode: "name-search", via: "openalex", endpoint: "openalex-works", identityConfirmed: false, capturedAt: new Date().toISOString(),
+				returned: found.length, truncated: found.length >= maxResults, complete: found.length < maxResults, authorListComplete: true, citationCountsAvailable: true }, ctx);
+		}
 		const result = await scholarQuery("scholar", { engine: "pop", authors, maxResults: limit(options), popOutputSort: options.popOutputSort || "rank" }, ctx);
 		const records = Sources.normalizePoPExactRecords(result.rows, "scholar", result.provenance);
 		const profile = { provider: "scholar", id: null, name: authors, affiliation: "", url: "", mode: "name-search", identityConfirmed: false };
 		return attach(records, profile, { ...clone(result.provenance), provider: "scholar", mode: "name-search", identityConfirmed: false }, ctx);
 	}
 
-	return { searchProfiles, loadPublications, loadNamePublications, parseScholarProfile, parseOrcid, parseNameInput, orcidNameQuery, rankOrcidCandidates,
+	return { searchProfiles, loadPublications, rankCombinedCandidates, clusterPeople, nameParts, formsCompatible, explainMetrics, defaultMetricsBasis, loadNamePublications, parseScholarProfile, parseOrcid, parseNameInput, orcidNameQuery, rankOrcidCandidates,
 		linkedInProfileURL, linkedInSearchURL, linkedInTarget, orcidLinkedIn, summarizeOrcidRecord, orcidSummary };
 })();
 

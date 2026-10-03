@@ -882,6 +882,31 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 .dp-message { margin: 0 auto; max-width: 420px; padding: 24px 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .dp-message[hidden], #dp-retry[hidden] { display: none; }
 #dp-retry { height: 26px; }
+
+/* ---------------------------------------------------------------- whose papers: the person picker and the profile's own figures */
+.metrics-person { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; }
+.pp-lead { font-size: 13px; line-height: 20px; font-weight: 600; color: var(--text); }
+.pp-sub, .pp-note { font-size: 12px; line-height: 18px; color: var(--muted); }
+.pp-note { color: var(--text); }
+.pp-cards { display: flex; flex-direction: column; gap: 8px; }
+.pp-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; height: auto; min-height: 32px; padding: 8px 12px; text-align: left; white-space: normal; border: 1px solid var(--border); border-radius: var(--r-box); background: var(--card); color: var(--text); }
+.pp-card[aria-pressed="true"] { border-color: var(--text); background: var(--bg-tint); }
+.pp-name { font-size: 13px; line-height: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.pp-meta { font-size: 11px; line-height: 16px; color: var(--muted); overflow-wrap: anywhere; }
+.pp-confirm { width: 100%; }
+.pp-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pp-actions button { height: 26px; }
+#results-table tbody tr.not-person td { color: var(--muted); font-style: italic; }
+.metrics-scholar { margin: 0 0 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-box); background: var(--card); }
+.ms-title { font-size: 12px; line-height: 18px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.ms-table { width: 100%; border-collapse: collapse; }
+.ms-table th { padding: 0; height: 22px; font-size: 11px; line-height: 16px; font-weight: 500; color: var(--muted); text-align: right; }
+.ms-table td { padding: 0; height: 24px; font-size: 12px; line-height: 18px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--text); border-top: 1px solid var(--border); }
+.ms-table td:first-child { text-align: left; font-weight: 400; color: var(--muted); }
+.metrics-calc { margin: 0 0 8px; font-size: 11px; line-height: 16px; color: var(--muted); }
+.metrics-explain { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.metrics-why { margin: 0; font-size: 11px; line-height: 16px; color: var(--muted); }
+.metrics-loadall { height: 26px; }
 </style></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
 	<symbol id="ic-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" /><path d="M10.4 10.4 14 14" /></symbol>
@@ -919,9 +944,9 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 	</nav>
 	<section id="author-panel" class="author-panel glass" hidden>
 		<form id="author-form" class="author-query" onsubmit="return false;">
-			<label class="field"><span data-i18n="authorProvider">저자 서비스</span><div class="sel"><select aria-hidden="true" tabindex="-1" id="author-provider"><option selected value="scholar">Google Scholar</option><option value="orcid">ORCID</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">Google Scholar</span><span class="sel-caret"></span></button></div></label>
+			<label class="field"><span data-i18n="authorProvider">저자 서비스</span><div class="sel"><select aria-hidden="true" tabindex="-1" id="author-provider"><option selected value="combined" data-i18n="authorProviderCombined">통합 검색 (OpenAlex + ORCID)</option><option value="scholar">Google Scholar</option><option value="orcid">ORCID</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">통합 검색 (OpenAlex + ORCID)</span><span class="sel-caret"></span></button></div></label>
 			<label id="author-input-kind-field" class="field"><span data-i18n="authorInputKind">Scholar 입력 종류</span><div class="sel"><select aria-hidden="true" tabindex="-1" id="author-input-kind"><option selected value="auto" data-i18n="authorAutoKind">자동 판별</option><option value="name" data-i18n="authorNameKind">저자 이름</option><option value="profile" data-i18n="authorProfileKind">프로필 URL 또는 ID</option></select><button aria-expanded="false" aria-haspopup="listbox" class="sel-btn" type="button"><span class="sel-label">자동 판별</span><span class="sel-caret"></span></button></div></label>
-			<label class="field grow2"><span id="author-input-label" data-i18n="authorScholarInput">저자 이름 또는 Scholar 프로필 URL 또는 ID</span><input value="" id="author-input" type="text" autocomplete="off"></label>
+			<label class="field grow2"><span id="author-input-label" data-i18n="authorCombinedInput">저자 이름, ORCID iD 또는 OpenAlex ID</span><input value="" id="author-input" type="text" autocomplete="off"></label>
 			<label class="field narrow"><span data-i18n="maxResults">최대 결과</span><input id="author-max-results" type="number" min="1" max="2000" value="1000"></label>
 			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search" /></svg><span data-i18n="findAuthorProfiles">프로필 찾기</span></button><button id="author-name-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-user" /></svg><span data-i18n="authorNamePapers">이름으로 논문 검색</span></button><button id="author-stop-btn" type="button" class="icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop" /></svg><span data-i18n="stop">중지</span></button><button id="author-history-btn" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history" /></svg><span data-i18n="history">최근 검색</span></button></div>
 		</form>
@@ -1018,14 +1043,17 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 			<p data-i18n="combinedSourcesHelp">PubMed·Semantic Scholar·Google Scholar를 추가해 검색 범위를 넓힐 수 있습니다. Google Scholar는 설치된 PoP 엔진이 있으면 사용하며, 서비스별 요청 한도가 적용될 수 있습니다.</p>
 		</details>
 	</form>
-	<div hidden id="banner" class="banner"><span id="banner-text">2026. 10. 3. AM 10:35:53에 저장된 결과입니다. 최신 결과를 받으려면 검색을 누르세요.</span><span class="spacer"></span><button hidden id="banner-action" type="button" class="primary"></button><button id="banner-close" type="button" class="banner-close">×</button></div>
+	<div hidden id="banner" class="banner"><span id="banner-text">2026. 10. 3. PM 12:28:48에 저장된 결과입니다. 최신 결과를 받으려면 검색을 누르세요.</span><span class="spacer"></span><button hidden id="banner-action" type="button" class="primary"></button><button id="banner-close" type="button" class="banner-close">×</button></div>
 
 	<div id="main">
 		<aside id="metrics" class="glass">
 			<h3 data-i18n="metricsTitle">인용 지표</h3>
 			<div id="metrics-years" class="metrics-years"><div class="tr-title">연도별 논문 수</div><div aria-label="연도별 결과 수" role="group" class="yr-bars"><button aria-pressed="false" aria-label="" data-tip="2022년: 2편" class="yr-bar on" type="button"><span style="height:50%"></span></button><button aria-pressed="false" aria-label="" data-tip="2023년: 1편" class="yr-bar on" type="button"><span style="height:25%"></span></button><button aria-pressed="false" aria-label="" data-tip="2024년: 3편" class="yr-bar on" type="button"><span style="height:75%"></span></button><button aria-pressed="false" aria-label="" data-tip="2025년: 4편" class="yr-bar on" type="button"><span style="height:100%"></span></button><button aria-pressed="false" aria-label="" data-tip="2026년: 3편" class="yr-bar on" type="button"><span style="height:75%"></span></button></div><div class="yr-ends"><span>2022</span><span>2026</span></div></div>
 			<div id="metrics-trend" class="metrics-trend"><div class="tr-title">연도별 인용</div><div aria-label="2017년 인용 0, 2018년 인용 0, 2019년 인용 0, 2020년 인용 0, 2021년 인용 0, 2022년 인용 0, 2023년 인용 1, 2024년 인용 94, 2025년 인용 400, 2026년 인용 226" role="img" class="tr-bars compact"><div aria-label="2017년 인용 0" data-tip="2017년 인용 0" class="tr-col"><div class="tr-wrap"><span style="height:0%" class="tr-bar"></span></div></div><div aria-label="2018년 인용 0" data-tip="2018년 인용 0" class="tr-col"><div class="tr-wrap"><span style="height:0%" class="tr-bar"></span></div></div><div aria-label="2019년 인용 0" data-tip="2019년 인용 0" class="tr-col"><div class="tr-wrap"><span style="height:0%" class="tr-bar"></span></div></div><div aria-label="2020년 인용 0" data-tip="2020년 인용 0" class="tr-col"><div class="tr-wrap"><span style="height:0%" class="tr-bar"></span></div></div><div aria-label="2021년 인용 0" data-tip="2021년 인용 0" class="tr-col"><div class="tr-wrap"><span style="height:0%" class="tr-bar"></span></div></div><div aria-label="2022년 인용 0" data-tip="2022년 인용 0" class="tr-col"><div class="tr-wrap"><span style="height:0%" class="tr-bar"></span></div></div><div aria-label="2023년 인용 1" data-tip="2023년 인용 1" class="tr-col"><div class="tr-wrap"><span style="height:0%" class="tr-bar on"></span></div></div><div aria-label="2024년 인용 94" data-tip="2024년 인용 94" class="tr-col"><div class="tr-wrap"><span style="height:24%" class="tr-bar on"></span></div></div><div aria-label="2025년 인용 400" data-tip="2025년 인용 400" class="tr-col peak"><div class="tr-wrap"><span style="height:100%" class="tr-bar on"></span></div></div><div aria-label="2026년 인용 226 (집계 중)" data-tip="2026년 인용 226 (집계 중)" class="tr-col partial"><div class="tr-wrap"><span style="height:56%" class="tr-bar on"></span></div></div></div><div class="yr-ends"><span>2017</span><span>2026</span></div><div class="tr-note">연도별 인용이 있는 13편 중 7편을 합산 (OpenAlex)</div></div>
+			<div id="metrics-person" class="metrics-person" hidden></div>
 			<p hidden id="metrics-hint" class="metrics-hint" data-i18n="metricsHint">검색 결과가 오면 결과 집합의 연도·인용 수·h-index가 여기에 표시됩니다.</p>
+			<div id="metrics-scholar" class="metrics-scholar" hidden></div>
+			<div id="metrics-calc" class="metrics-calc" hidden></div>
 			<div data-n="4" aria-label="통계 기준 색인" role="group" class="metrics-basis" id="metrics-basis"><button aria-pressed="true" data-tip="논문별 최댓값" type="button">논문별 최댓값</button><button aria-pressed="false" data-tip="OpenAlex" type="button">OpenAlex</button><button aria-pressed="false" data-tip="Crossref" type="button">Crossref</button><button aria-pressed="false" data-tip="Europe PMC (articles + preprints)" type="button">Europe PMC</button></div><table id="metrics-table">
 				<tr><td data-i18n="mYears">출판 연도</td><td id="m-years">2022–2026</td></tr>
 				<tr><td data-i18n="mCitationYears">인용 연수</td><td id="m-cyears">4</td></tr>
@@ -1042,6 +1070,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 				<tr><td>hI,annual</td><td id="m-hiannual">1.75</td></tr>
 				<tr><td>hA-index</td><td id="m-ha">8</td></tr>
 			</table>
+			<div id="metrics-explain" class="metrics-explain" hidden></div>
 			<div id="metrics-notes" class="metrics-notes"><div class="metrics-note"><div class="metrics-note-line"><span>13편 중 1편 인용 수 없음</span><button data-tip="전체 설명 보기" aria-label="전체 설명 보기" aria-expanded="false" class="ghost note-help" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-help" /></svg></button></div><p hidden class="metrics-note-full">13편 중 1편은 인용 수가 없어 0으로 세지 않고 논문당 인용에서 뺐습니다.</p></div><div class="metrics-note"><div class="metrics-note-line"><span>색인 중 가장 큰 값</span><button data-tip="전체 설명 보기" aria-label="전체 설명 보기" aria-expanded="false" class="ghost note-help" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-help" /></svg></button></div><p hidden class="metrics-note-full">인용 수는 여러 색인(OpenAlex, Crossref, Europe PMC (articles + preprints))에서 논문마다 가장 큰 값을 골랐습니다. h-index는 한 색인의 값이 아닌 참고치로 보세요.</p></div><div class="metrics-note"><div class="metrics-note-line"><span>필터 적용 결과 기준</span><button data-tip="전체 설명 보기" aria-label="전체 설명 보기" aria-expanded="false" class="ghost note-help" type="button"><svg aria-hidden="true" class="ic" viewBox="0 0 16 16"><use href="#ic-help" /></svg></button></div><p hidden class="metrics-note-full">필터 적용 후 표시된 결과 기준입니다. 통합 검색의 인용 출처는 서로 다를 수 있습니다. 각 인용 수에 마우스를 올리면 출처가 나옵니다.</p></div></div>
 		</aside>
 
@@ -1056,6 +1085,7 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 				</span>
 				<button aria-label="필터" data-tip="단어·저자·저널·기관·유형·연도·인용 수 등으로 결과를 포함하거나 제외합니다" id="filter-btn" type="button" class="icon-text filter-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="filter-pop" data-i18n-title="filterBtnTip" data-i18n-aria="filterBtn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-filter" /></svg><span data-i18n="filterBtn">필터</span><span id="filter-count" class="filter-count" hidden>0</span></button>
 				<span hidden id="facet-chip" class="facet-chip"><span id="facet-text">이름: Jenna Dowd · 이번 검색 4편</span><button data-tip="전체 결과 보기" id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" aria-label="clear">×</button></span>
+				<span id="person-chip" class="facet-chip" hidden><span id="person-text"></span><button data-tip="고른 인물 해제" id="person-clear" type="button" class="filter-clear" data-i18n-title="personClear" aria-label="clear">×</button></span>
 				<span class="spacer"></span>
 				<button aria-pressed="true" data-tip="PDF를 상세 카드 안에서 미리보기 (P)" id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf" /></svg><span data-i18n="previewAction">미리보기</span></button>
 				<button disabled data-tip="선택 모두 해제" id="select-none" type="button" data-i18n-title="selNoneTip" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-close" /></svg><span data-i18n="selNone">선택 해제</span></button>

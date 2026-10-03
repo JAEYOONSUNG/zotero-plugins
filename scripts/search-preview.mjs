@@ -120,10 +120,15 @@ function orcidFixtureAnswer(url) {
 	if (url.startsWith("https://pub.orcid.org/v3.0/expanded-search/")) return { "num-found": 4, "expanded-result": [
 		orcidRow(ORCID_IDS.other, "Jennifer", "Dowdell", []), orcidRow(ORCID_IDS.second, "Jenna", "Dowd", ["Fictional University"]),
 		orcidRow(ORCID_IDS.empty, "Jenna M.", "Dowd", ["Hanbit University"]), orcidRow(main, "Jenna A.", "Dowd", ["Aurora Medical Institute", "Example Institute of Genome Engineering"])] };
+	if (url.startsWith("https://api.openalex.org/authors?search=")) return { results: [
+		{ ...orcidAlexAuthor(main, 212, 18420, 54, "Aurora Medical Institute", "CA", "Genome editing and delivery"), display_name: "Jenna A. Dowd", display_name_alternatives: ["Jenna Dowd"] },
+		{ ...orcidAlexAuthor(ORCID_IDS.second, 14, 380, 6, "Fictional University", "US", "Plant genomics"), display_name: "Jenna Dowd", display_name_alternatives: [] },
+		{ id: "https://openalex.org/A9", orcid: null, display_name: "Jenna Dowd", display_name_alternatives: ["J. Dowd"], works_count: 3, cited_by_count: 21, summary_stats: { h_index: 2 }, last_known_institutions: [{ display_name: "Lumen University", country_code: "KR" }], topics: [{ display_name: "Soil microbiology" }] },
+		{ id: "https://openalex.org/A2", orcid: null, display_name: "J Dowd", display_name_alternatives: [], works_count: 0, cited_by_count: 0, summary_stats: { h_index: 0 }, last_known_institutions: [], topics: [] }] };
 	if (url.startsWith("https://api.openalex.org/authors?")) return { results: [
 		orcidAlexAuthor(ORCID_IDS.second, 14, 380, 6, "Fictional University", "US", "Plant genomics"),
 		orcidAlexAuthor(main, 212, 18420, 54, "Aurora Medical Institute", "CA", "Genome editing and delivery")] };
-	if (url.startsWith("https://api.openalex.org/works?filter=authorships.author.orcid:")) return { meta: { count: orcidWorksJSON.length }, results: orcidWorksJSON };
+	if (url.startsWith("https://api.openalex.org/works?filter=authorships.author.orcid:") || url.startsWith("https://api.openalex.org/works?filter=authorships.author.id:A212")) return { meta: { count: orcidWorksJSON.length }, results: orcidWorksJSON };
 	if (url.startsWith("https://api.openalex.org/")) return { meta: { count: 0 }, results: [] };
 	if (url === `https://pub.orcid.org/v3.0/${main}/person`) return { path: `/${main}/person`, name: null,
 		biography: { content: "Fictional biography for the design preview. Jenna Dowd studies how compact genome editors can be delivered across tissue barriers, and how their off-target behaviour is measured in primary human cells. She leads a small group that shares guide design rules and benchmark data openly." },
@@ -585,7 +590,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	await wait(20);
 	// ---- the author tab: a profile lookup, then that profile's papers (stubbed lookups; fictional people)
 	const dowd = recs.filter(r => r.authorString.startsWith("Jenna Dowd"));
-	const realAuthors = { searchProfiles: ctx.ZotPoPAuthors.searchProfiles, loadPublications: ctx.ZotPoPAuthors.loadPublications };
+	const realAuthors = { searchProfiles: ctx.ZotPoPAuthors.searchProfiles, loadPublications: ctx.ZotPoPAuthors.loadPublications, loadNamePublications: ctx.ZotPoPAuthors.loadNamePublications };
 	const profiles = [
 		{ provider: "scholar", id: "DEMOxAUTHOR1", name: "Jenna Dowd", affiliation: "Example Institute of Genome Engineering", url: "https://scholar.google.com/citations?user=DEMOxAUTHOR1", mode: "profile", identityConfirmed: true },
 		{ provider: "scholar", id: "DEMOxAUTHOR2", name: "Jenna M. Dowd", affiliation: "Fictional University, Dept. of Biology", url: "https://scholar.google.com/citations?user=DEMOxAUTHOR2", mode: "profile", identityConfirmed: false }
@@ -594,6 +599,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	ctx.ZotPoPAuthors.loadPublications = async profile => Object.assign(dowd.slice(), { authorProfile: profile });
 	fire(document.getElementById("mode-authors"));
 	await wait(30);
+	{ const provider = document.getElementById("author-provider"); provider.value = "scholar"; fire(provider, "change"); await wait(30); }
 	document.getElementById("author-input").value = "Jenna Dowd";
 	fire(document.getElementById("author-form"), "submit");
 	for (let i = 0; i < 100 && !document.querySelector("#author-profiles .author-profile"); i++) await wait(20);
@@ -606,14 +612,38 @@ export async function buildPreview({ locale = "en" } = {}) {
 	await wait(30);
 	trace.authors = { rows: table().length, profiles: document.querySelectorAll("#author-profiles .author-profile").length, formHidden: document.getElementById("author-panel").hidden, paperFormHidden: document.getElementById("query-form").hidden };
 	const authorsPage = page();
+	// ---- a name search with namesakes: the figures wait for a person (stubbed Scholar answer; fictional people)
+	const paper_ = (n, names, venue, year, cites) => Sources.makeRecord({ source: "scholar", sourceId: "namesake" + n, title: ["Delivery of compact editors", "Tissue barriers and cargo size", "Editor off-target maps", "Spin transport in thin films", "Magnetic anisotropy at interfaces", "Soil fungi and carbon cycling"][n - 1],
+		authors: names.map(x => { const q = x.split(" "); return { name: x, firstName: q.slice(0, -1).join(" "), lastName: q.at(-1) }; }), year, venue, citations: cites, doi: "10.5555/namesake." + n, itemType: "journalArticle" });
+	const namesakes = [paper_(1, ["JA Dowd", "S Sternfield", "P Natarajan"], "Nature Biotechnology", 2024, 88), paper_(2, ["Jenna A Dowd", "S Sternfield"], "Nature Biotechnology", 2022, 41), paper_(3, ["J Dowd", "P Natarajan", "B Oakley"], "Genome Biology", 2023, 17),
+		paper_(4, ["J Dowd", "Q Zhu", "W Tan"], "Physical Review B", 2008, 52), paper_(5, ["Dowd J", "Q Zhu"], "Physical Review B", 2011, 33), paper_(6, ["JK Dowd", "L Moreno"], "Soil Biology and Biochemistry", 2016, 9)];
+	ctx.ZotPoPAuthors.loadNamePublications = async (name, options, _http, _ctx, provider) => {
+		const profile = { provider, id: null, name, affiliation: "", url: "", mode: "name-search", identityConfirmed: false };
+		return Object.assign(namesakes.map(r => ({ ...r, authorProfile: profile })), { authorProfile: profile, partial: false });
+	};
+	{
+		const input = document.getElementById("author-input");
+		input.value = "Jenna A Dowd"; fire(input, "input");
+		fire(document.getElementById("author-name-btn"));
+		for (let i = 0; i < 100 && table().length < 6; i++) await wait(20);
+		await wait(60);
+		trace.pick = { rows: table().length, hint: text("metrics-hint"), tableHidden: document.getElementById("metrics-table").hidden, cards: [...document.querySelectorAll("#metrics-person .pp-card")].map(c => c.textContent.replace(/\s+/g, " ").trim()) };
+	}
+	const authorsPick = page();
+	{
+		fire(document.querySelector("#metrics-person .pp-card")); fire(document.querySelector("#metrics-person .pp-confirm"));
+		await wait(60);
+		trace.pick.chosen = { rows: table().length, chip: document.getElementById("person-chip").hidden ? "" : text("person-text"), papers: text("m-papers"), title: document.querySelector("#metrics h3").textContent, owner: text("metrics-person").replace(/\s+/g, " ").trim() };
+		fire(document.getElementById("person-clear")); await wait(30);
+	}
 	// ---- the same tab with ORCID: a name finds people (real authors.js; only the answers are fictional), one pick lists their papers
 	ctx.ZotPoPAuthors.searchProfiles = realAuthors.searchProfiles; ctx.ZotPoPAuthors.loadPublications = realAuthors.loadPublications;
 	orcidWorksJSON = dowd.map((r, i) => ({ id: "https://openalex.org/W9" + String(i).padStart(3, "0"), doi: "https://doi.org/" + r.doi, title: r.title, publication_year: r.year, publication_date: r.year + "-06-01", type: "article",
 		cited_by_count: r.citations, counts_by_year: [{ year: 2025, cited_by_count: Math.round(r.citations * 0.6) }], biblio: {},
-		authorships: r.authors.map((a, n) => ({ author: { display_name: a.name, orcid: a.name === "Jenna Dowd" ? "https://orcid.org/" + ORCID_IDS.main : null }, author_position: n === 0 ? "first" : "last",
+		authorships: r.authors.map((a, n) => ({ author: { display_name: a.name, id: a.name === "Jenna Dowd" ? "https://openalex.org/A212" : undefined, orcid: a.name === "Jenna Dowd" ? "https://orcid.org/" + ORCID_IDS.main : null }, author_position: n === 0 ? "first" : "last",
 			institutions: [{ display_name: "Aurora Medical Institute", country_code: "CA" }] })),
 		primary_location: { source: { id: "https://openalex.org/S9" + i, display_name: r.venue } } })).concat([{ id: "https://openalex.org/W9100", doi: "https://doi.org/10.5555/dowd.old", title: "Delivery of compact editors: an early look", publication_year: 2019, publication_date: "2019-02-01", type: "article", cited_by_count: 340, counts_by_year: [], biblio: {},
-		authorships: [{ author: { display_name: "Jenna Dowd", orcid: "https://orcid.org/" + ORCID_IDS.main }, author_position: "first", institutions: [{ display_name: "Example Institute of Genome Engineering", country_code: "GB" }] }], primary_location: { source: { display_name: "Genome Research" } } }]);
+		authorships: [{ author: { display_name: "Jenna Dowd", id: "https://openalex.org/A212", orcid: "https://orcid.org/" + ORCID_IDS.main }, author_position: "first", institutions: [{ display_name: "Example Institute of Genome Engineering", country_code: "GB" }] }], primary_location: { source: { display_name: "Genome Research" } } }]);
 	const select = document.getElementById("author-provider"); select.value = "orcid"; fire(select, "change");
 	await wait(30);
 	document.getElementById("author-input").value = "Jenna Dowd";
@@ -639,6 +669,24 @@ export async function buildPreview({ locale = "en" } = {}) {
 	trace.orcid.firstYears = table().slice(0, 3).map(r => r.querySelector('td[data-k="year"]')?.textContent || "");
 	trace.orcid.requests = { orcid: stubbed.orcid.length, alex: stubbed.orcidAlex.length };
 	const orcidWorks = page();
+	// ---- the combined provider: one OpenAlex search and one ORCID search, merged cards (stubbed; fictional people)
+	{
+		const before = stubbed.orcid.length + stubbed.orcidAlex.length;
+		select.value = "combined"; fire(select, "change"); await wait(30);
+		document.getElementById("author-input").value = "Jenna Dowd";
+		fire(document.getElementById("author-form"), "submit");
+		for (let i = 0; i < 100 && !document.querySelector("#author-profiles .author-profile"); i++) await wait(20);
+		await wait(60);
+		const cards = () => [...document.querySelectorAll("#author-profiles .author-profile")];
+		trace.combined = { cards: cards().length, names: cards().map(c => c.querySelector(".author-profile-name").textContent), badges: cards().map(c => [...c.querySelectorAll(".author-profile-head .badge")].map(b => b.textContent)),
+			more: document.querySelector("#author-profiles .author-more")?.textContent || "", requests: stubbed.orcid.length + stubbed.orcidAlex.length - before, kindHidden: document.getElementById("author-input-kind-field").hidden,
+			label: text("author-input-label"), placeholder: document.getElementById("author-input").placeholder, firstMeta: [...cards()[0].querySelectorAll(".author-profile-meta")].map(n => n.textContent), firstStats: [...cards()[0].querySelectorAll(".author-profile-stats .badge")].map(b => b.textContent) };
+		trace.combinedPage = page();
+		fire(cards()[0].querySelector("button.author-load"));
+		for (let i = 0; i < 150 && !table().length; i++) await wait(20);
+		await wait(100);
+		trace.combined.rows = table().length; trace.combined.status = text("status"); trace.combined.title = document.querySelector("#metrics h3").textContent;
+	}
 	select.value = "scholar"; fire(select, "change"); await wait(30);
 	fire(document.getElementById("mode-papers"));
 	await wait(40);
@@ -776,14 +824,14 @@ export async function buildPreview({ locale = "en" } = {}) {
 	ctx.Zotero.PDFTranslate = installed;
 	trace.signals = signals;
 	trace.translateNote = translateNote;
-	return { pinsMenuPage, pinResultsPage, pdfPage, retractedPage, signalsPage, tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
+	return { pinsMenuPage, pinResultsPage, pdfPage, retractedPage, signalsPage, tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, authorsPick, combinedPage: trace.combinedPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
 }
 
 export function checkPreview(out) {
 	const problems = [];
 	if (out.rows < 10) problems.push("expected at least 10 result rows, got " + out.rows);
 	if (out.netCalls) problems.push("network was called");
-	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["orcid", out.orcidLookup], ["orcid-summary", out.orcidSummary], ["orcid-works", out.orcidWorks], ["unfolded", out.unfolded], ["filters", out.filtersPage], ["journals", out.journalsPage], ["longspan", out.longSpanPage], ["cite", out.citePage], ["translate", out.translatedPage], ["signals", out.signalsPage], ["retracted", out.retractedPage]]) {
+	for (const [name, html] of [["results", out.results], ["detail", out.detail], ["facet", out.facet], ["import", out.importPage], ["history", out.historyPage], ["rerun", out.rerun], ["authors", out.authorsPage], ["authors-lookup", out.authorsLookup], ["authors-pick", out.authorsPick], ["authors-combined", out.combinedPage], ["orcid", out.orcidLookup], ["orcid-summary", out.orcidSummary], ["orcid-works", out.orcidWorks], ["unfolded", out.unfolded], ["filters", out.filtersPage], ["journals", out.journalsPage], ["longspan", out.longSpanPage], ["cite", out.citePage], ["translate", out.translatedPage], ["signals", out.signalsPage], ["retracted", out.retractedPage]]) {
 		if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
 		if (/(?:src|href)\s*=\s*["'](?:https?:|\/\/|chrome:|resource:)/i.test(html)) problems.push(name + ": external asset");
 		if (/url\(\s*["']?(?:https?:|\/\/|chrome:)/i.test(html)) problems.push(name + ": external css url");
@@ -855,6 +903,13 @@ export function checkPreview(out) {
 	if (!t.fold.collapsed || t.fold.expanded !== "false" || !t.fold.summary) problems.push("the paper form should fold after a search; got " + JSON.stringify(t.fold));
 	if (t.fold.afterClick.collapsed || t.fold.afterClick.expanded !== "true") problems.push("the conditions toggle should unfold the form");
 	{
+		const c = t.combined || {}, k = t.pick || {};
+		if (c.cards !== 4 || c.names?.[0] !== "Jenna A. Dowd" || !same(c.badges?.[0], ["OpenAlex", "ORCID"]) || !c.more) problems.push("the combined lookup should merge the OpenAlex and ORCID people into cards, best first, with the weak ones folded; got " + JSON.stringify([c.cards, c.names, c.badges, c.more]));
+		if (c.requests !== 3 || c.kindHidden !== true || !/OpenAlex/.test(c.label || "")) problems.push("the combined lookup should cost one OpenAlex search, one ORCID search and one enrichment, and hide the Scholar input kind; got " + JSON.stringify([c.requests, c.kindHidden, c.label]));
+		if (c.rows !== 5 || !/Jenna A\. Dowd/.test(c.title || "")) problems.push("picking a combined card should load the person's five papers and name them over the metrics; got " + JSON.stringify([c.rows, c.title]));
+		if (k.rows !== 6 || !k.tableHidden || k.cards?.length !== 3 || k.chosen?.rows !== 3 || k.chosen?.papers !== "3") problems.push("a name search should show three picker cards, no numbers, then filter to the chosen person's three papers; got " + JSON.stringify(k));
+	}
+	{
 		const o = t.orcid || {};
 		if (out.netCalls || out.stubbed.orcid.length < 4) problems.push("the ORCID states should run on the stubbed ORCID answers only; got " + JSON.stringify([out.netCalls, out.stubbed.orcid.length]));
 		if (o.cards !== 2 || !/Jenna A\. Dowd/.test(o.names?.[0] || "") || !o.more) problems.push("the ORCID lookup should show the two profiles with papers and fold the other two; got " + JSON.stringify([o.cards, o.names, o.more]));
@@ -915,6 +970,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	fs.writeFileSync(path.join(root, "docs/search-preview-unfolded.html"), out.unfolded);
 	fs.writeFileSync(path.join(root, "docs/search-preview-authors.html"), out.authorsPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-authors-lookup.html"), out.authorsLookup);
+	fs.writeFileSync(path.join(root, "docs/search-preview-authors-pick.html"), out.authorsPick);
+	fs.writeFileSync(path.join(root, "docs/search-preview-authors-combined.html"), out.combinedPage);
 	fs.writeFileSync(path.join(root, "docs/search-preview-orcid.html"), out.orcidLookup);
 	fs.writeFileSync(path.join(root, "docs/search-preview-orcid-summary.html"), out.orcidSummary);
 	fs.writeFileSync(path.join(root, "docs/search-preview-orcid-works.html"), out.orcidWorks);

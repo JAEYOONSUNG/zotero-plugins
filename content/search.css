@@ -882,3 +882,28 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 .dp-message { margin: 0 auto; max-width: 420px; padding: 24px 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .dp-message[hidden], #dp-retry[hidden] { display: none; }
 #dp-retry { height: 26px; }
+
+/* ---------------------------------------------------------------- whose papers: the person picker and the profile's own figures */
+.metrics-person { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; }
+.pp-lead { font-size: 13px; line-height: 20px; font-weight: 600; color: var(--text); }
+.pp-sub, .pp-note { font-size: 12px; line-height: 18px; color: var(--muted); }
+.pp-note { color: var(--text); }
+.pp-cards { display: flex; flex-direction: column; gap: 8px; }
+.pp-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; height: auto; min-height: 32px; padding: 8px 12px; text-align: left; white-space: normal; border: 1px solid var(--border); border-radius: var(--r-box); background: var(--card); color: var(--text); }
+.pp-card[aria-pressed="true"] { border-color: var(--text); background: var(--bg-tint); }
+.pp-name { font-size: 13px; line-height: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.pp-meta { font-size: 11px; line-height: 16px; color: var(--muted); overflow-wrap: anywhere; }
+.pp-confirm { width: 100%; }
+.pp-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pp-actions button { height: 26px; }
+#results-table tbody tr.not-person td { color: var(--muted); font-style: italic; }
+.metrics-scholar { margin: 0 0 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-box); background: var(--card); }
+.ms-title { font-size: 12px; line-height: 18px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.ms-table { width: 100%; border-collapse: collapse; }
+.ms-table th { padding: 0; height: 22px; font-size: 11px; line-height: 16px; font-weight: 500; color: var(--muted); text-align: right; }
+.ms-table td { padding: 0; height: 24px; font-size: 12px; line-height: 18px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--text); border-top: 1px solid var(--border); }
+.ms-table td:first-child { text-align: left; font-weight: 400; color: var(--muted); }
+.metrics-calc { margin: 0 0 8px; font-size: 11px; line-height: 16px; color: var(--muted); }
+.metrics-explain { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.metrics-why { margin: 0; font-size: 11px; line-height: 16px; color: var(--muted); }
+.metrics-loadall { height: 26px; }
