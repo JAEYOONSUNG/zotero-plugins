@@ -69,9 +69,13 @@
     retraction: 3, partial_retraction: 3, removal: 3, withdrawal: 3,
     expression_of_concern: 2,
     correction: 1, corrigendum: 1, erratum: 1, addendum: 1,
-    clarification: 1, new_edition: 1, new_version: 1
+    clarification: 1
   };
-  const noticeRank = type => RANK[text(type).toLowerCase().replace(/[\s-]+/g, '_')] ?? 1;
+  // A new version or edition is a different release of the work, not a notice
+  // about it: PLOS deposits a `new_version` update that points at the paper's
+  // own DOI and it was shown as CORRECTED.
+  const NEUTRAL = {new_edition: 0, new_version: 0};
+  const noticeRank = type => { const key = text(type).toLowerCase().replace(/[\s-]+/g, '_'); return key in NEUTRAL ? 0 : RANK[key] ?? 1; };
   const STATUS_BY_RANK = {3: 'retracted', 2: 'concern', 1: 'corrected', 0: 'ok'};
 
   function noticeDate(update) {
@@ -122,7 +126,8 @@
       doi, title, type, subtype: text(message.subtype),
       // A record with neither a DOI nor a title is not a Crossref work.
       valid: !!(doi || title),
-      updates: shapeUpdates(message['updated-by']),
+      // An update that names the paper itself is not a notice about it.
+      updates: shapeUpdates(message['updated-by']).filter(row => !doi || row.doi !== doi),
       // Present only when this record is itself the notice.
       noticeFor: shapeUpdates(message['update-to']),
       updatePolicy: text(message['update-policy']),
@@ -213,12 +218,24 @@
       return {status: 'notice', rank: 0,
         notices: crossref.noticeFor.map(row => ({...row, source: 'update-to'}))};
     }
-    if (!rank && openAlex?.isRetracted) {
+    if (rank < 3 && openAlex?.isRetracted && !crossref?.noticeFor?.length) {
       rank = 3;
       notices.push({doi: '', type: 'retraction', label: 'Retraction', date: '', rank: 3, source: 'openalex'});
     }
     if (!crossref && !openAlex) return {status: 'unknown', rank: 0, notices: []};
     return {status: STATUS_BY_RANK[rank], rank, notices: notices.sort((a, b) => b.rank - a.rank)};
+  }
+
+  /* A stored verdict from before new_version stopped counting: drop neutral
+     notices and any that point at the paper's own DOI, and re-derive the
+     status from what is left. Anything else is returned untouched. */
+  function repair(signals) {
+    if (!signals || !Array.isArray(signals.notices)) return signals;
+    const own = bareDOI(signals.doi);
+    const kept = signals.notices.filter(row => !(own && bareDOI(row.doi) === own) && noticeRank(row.type) > 0);
+    if (kept.length === signals.notices.length) return signals;
+    const rank = kept.reduce((worst, row) => Math.max(worst, noticeRank(row.type), row.rank || 0), 0);
+    return {...signals, notices: kept, rank, status: STATUS_BY_RANK[rank]};
   }
 
   // One record, assembled from whichever of the two services answered.
@@ -308,7 +325,7 @@
   }
 
   const api = {CROSSREF, OPENALEX, WORK_FIELDS, crossrefURL, openAlexURL, openAlexTitleURL,
-    readCrossref, readOpenAlex, publishedVersionOf, classify, summarise, badges, sortKey,
+    readCrossref, readOpenAlex, publishedVersionOf, classify, summarise, repair, badges, sortKey,
     noticeRank, oaRank, bareDOI, PREPRINT_PREFIXES};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStylePaperSignals = api;

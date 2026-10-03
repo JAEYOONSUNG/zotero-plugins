@@ -4,7 +4,10 @@ import data from '../src/data.js';
 const item = (extra = '', tags = []) => ({getField: key => key === 'extra' ? extra : key === 'publicationTitle' ? 'Nature' : '', getTags: () => tags});
 test('done survives accumulated reading and conflicting legacy tags', () => {
   assert.equal(data.readState(['/unread', '/done', '/reading'], '', 50).status, 'done');
-  assert.equal(data.readState(['/unread'], '', 1).status, 'reading');
+  // An explicit /unread tag outranks imported seconds; a glance under 30 s is not reading.
+  assert.equal(data.readState(['/unread'], '', 600).status, 'unread');
+  assert.equal(data.readState([], '', 29).status, 'unread');
+  assert.equal(data.readState([], '', 30).status, 'reading');
   assert.equal(data.readState([], '', 0).status, 'unread');
   assert.equal(data.readState(['/reading'], '', 0).status, 'reading');
 });

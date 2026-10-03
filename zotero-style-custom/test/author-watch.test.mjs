@@ -604,3 +604,53 @@ test("something the inbox already showed and nobody marked is never filed away s
   assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["W2"], "still in the inbox");
   assert.ok(!h.cache.watchedAuthors[0].seen.includes("W2"));
 });
+
+// A namesake merged into one OpenAlex profile: the paper carries the followed id but is signed from places
+// this author has never been listed at.
+const signed = (id, authorID, places, over = {}) => work(id, [authorID], {
+  authorships: [{author: {id: "https://openalex.org/" + authorID, display_name: authorID}, author_position: "first",
+    institutions: places.map(([name, ror, country]) => ({display_name: name, ror: ror ? "https://ror.org/" + ror : "", country_code: country || "US"}))}],
+  ...over
+});
+
+test("a paper signed only from places the author was never at is held as unverified, not counted", async () => {
+  const row = person("A1", {institution: "University of Illinois Urbana-Champaign", institutionRor: "RUIUC"});
+  const h = host({rows: [row], pages: [{results: [
+    signed("W1", "A1", [["University of Illinois Urbana-Champaign", "RUIUC"]]),
+    signed("W2", "A1", [["Nanjing Agricultural University", "RNAU", "CN"]]),
+    signed("W3", "A1", [])], meta: {}}]});
+  const result = await h.sweepWatchedAuthors();
+  const saved = h.cache.watchedAuthors[0];
+  assert.deepEqual(saved.news.map(n => n.id).sort(), ["W1", "W3"]);
+  assert.deepEqual(saved.unverified.map(n => n.id), ["W2"]);
+  assert.equal(saved.unverified[0].places[0], "Nanjing Agricultural University");
+  assert.equal(result.works, 2, "the held paper is not in the new-paper total");
+});
+
+test("confirming a held paper makes it news and teaches the place; rejecting remembers it", async () => {
+  const mk = () => host({rows: [person("A1", {institution: "UIUC"})], pages: [{results: [signed("W2", "A1", [["Nanjing Agricultural University", "RNAU", "CN"]])], meta: {}}]});
+  const yes = mk(); yes.resolveNamesake = Runtime.prototype.resolveNamesake;
+  await yes.sweepWatchedAuthors();
+  assert.equal(await yes.resolveNamesake("A1", "W2", true), true);
+  let saved = yes.cache.watchedAuthors[0];
+  assert.deepEqual(saved.news.map(n => n.id), ["W2"]);
+  assert.deepEqual(saved.unverified, []);
+  assert.ok(saved.placesSeen.some(pl => pl.name === "Nanjing Agricultural University"));
+  // The next sweep does not hold it again.
+  yes.pages = null;
+  const again = host({rows: yes.cache.watchedAuthors, pages: [{results: [signed("W2", "A1", [["Nanjing Agricultural University", "RNAU", "CN"]]), signed("W5", "A1", [["Nanjing Agricultural University", "RNAU", "CN"]])], meta: {}}]});
+  await again.sweepWatchedAuthors();
+  assert.deepEqual(again.cache.watchedAuthors[0].unverified, []);
+  assert.deepEqual(again.cache.watchedAuthors[0].news.map(n => n.id).sort(), ["W2", "W5"]);
+
+  const no = mk(); no.resolveNamesake = Runtime.prototype.resolveNamesake;
+  await no.sweepWatchedAuthors();
+  await no.resolveNamesake("A1", "W2", false);
+  saved = no.cache.watchedAuthors[0];
+  assert.deepEqual(saved.unverified, []);
+  assert.deepEqual(saved.news, []);
+  assert.ok(saved.seen.includes("W2") && saved.rejected.includes("W2"));
+  const later = host({rows: no.cache.watchedAuthors, pages: [{results: [signed("W2", "A1", [["Nanjing Agricultural University", "RNAU", "CN"]])], meta: {}}]});
+  await later.sweepWatchedAuthors();
+  assert.deepEqual(later.cache.watchedAuthors[0].unverified, [], "a rejected paper never comes back");
+});

@@ -178,7 +178,7 @@
       const issues = await runtime.doiIssues(doi);
       const reactions = await runtime.doiReactions(doi, [item.getField('url')].filter(Boolean));
       const status = issues?.summary?.status;
-      if (!['retracted', 'concern', 'corrected', 'clean', 'unknown'].includes(status)) throw new Error('no issue status for ' + doi);
+      if (!['retracted', 'concern', 'corrected', 'clean', 'notice', 'unknown'].includes(status)) throw new Error('no issue status for ' + doi);
       const failed = [...(issues.summary.failed || []), ...(reactions?.failed || [])];
       if (status === 'unknown' && ['Bluesky', 'Wikipedia'].every(name => failed.includes(name))) {
         throw new Error('every source failed for ' + doi + ': ' + failed.join(', '));

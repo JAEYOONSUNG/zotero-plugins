@@ -191,12 +191,15 @@ test('time-derived status preserves done and persists independent legacy snapsho
  const reference = item(42, {tags:[{tag:'/unread',type:0}]});
  plugin.legacy = {'42':{readingTime:{data:{0:120}},citedCount:{'Total(DOI)':2112}}, Science:{rank:{sciif:'47.3'}}};
  reference.getField = field => field === 'publicationTitle' ? 'Science' : '';
- assert.equal(plugin.state(reference).status,'reading');
+ assert.equal(plugin.state(reference).status,'unread','imported seconds do not outrank an explicit /unread tag');
  assert.equal(plugin.metrics(reference).impactFactor,47.3);
  assert.equal(plugin.metrics(reference).citations,2112);
  plugin.entry(reference).seconds = plugin.metrics(reference).seconds;
  await plugin.addReading(reference, 5);
+ await plugin.queue;
  assert.equal(plugin.metrics(reference).seconds,125);
+ assert.equal(plugin.state(reference).status,'reading','the first reading tick rewrote /unread to /reading');
+ assert.ok(!reference.getTags().some(t=>t.tag==='/unread'));
  await plugin.edit([reference],{status:'done'});
  await plugin.addReading(reference,5);
  assert.equal(plugin.state(reference).status,'done');

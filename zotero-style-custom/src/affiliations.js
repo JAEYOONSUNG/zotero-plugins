@@ -35,6 +35,7 @@
      The tooltip always carries the actual number, so the reader can disagree
      with where the line was drawn. These are cut points on a continuum and the
      labels are the short form, never a ranking. */
+  // ZotPoP (the search plugin at the repo root) mirrors this table: change both together.
   const TIERS = [
     {key: 't1', floor: 2000, label: 'T1', note: '기관 전체 h-index 2000 이상 (이 라이브러리 논문 상위 약 10%)'},
     {key: 't2', floor: 1400, label: 'T2', note: '기관 전체 h-index 1400 이상 (상위 약 25%)'},
@@ -64,7 +65,17 @@
      happens on older records -- the last author is the convention in this
      field, and saying which rule was used is the honest part. */
   function principals(people) {
-    const list = (Array.isArray(people) ? people : []).filter(person => person && text(person.name));
+    /* OpenAlex sometimes lists one person twice on a work (and an older store
+       may hold both). One person counts once: the same id, else the same
+       normalised name, with the corresponding flag kept if either copy has it. */
+    const keyOf = person => text(person.id) || text(person.name).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const byKey = new Map(), list = [];
+    for (const person of Array.isArray(people) ? people : []) {
+      if (!person || !text(person.name)) continue;
+      const key = keyOf(person);
+      if (byKey.has(key)) { const kept = byKey.get(key); if (person.corresponding && !kept.corresponding) kept.corresponding = true; continue; }
+      const copy = {...person}; byKey.set(key, copy); list.push(copy);
+    }
     if (!list.length) return null;
     const first = list.find(person => person.position === 'first') || list[0];
     const flagged = list.filter(person => person.corresponding);

@@ -2,6 +2,7 @@
 (function (root) {
   'use strict';
   const STATUSES = new Set(['unread', 'reading', 'done']);
+  const MIN_READING_SECONDS = 30;
   const nameOf = value => typeof value === 'string' ? value : value?.tag;
   const statusOf = value => {
     const match = /^\/(unread|reading|done)$/i.exec(String(nameOf(value) || '').trim());
@@ -43,7 +44,13 @@
   function readState(tags, extra, seconds) {
     const list = Array.isArray(tags) ? tags : [];
     const states = list.map(statusOf);
-    const status = states.includes('done') ? 'done' : states.includes('reading') || (number(seconds) || 0) > 0 ? 'reading' : 'unread';
+    /* Reading is a tag, or time spent. An explicit /unread tag is the reader's
+       word and outranks time that is only a number (imported seconds with no
+       reading of their own: 12 papers showed 읽는 중 while tagged /unread);
+       the first real reading tick rewrites the tag, so live reading still
+       turns it. Under MIN_READING_SECONDS a glance is not reading. */
+    const spent = (number(seconds) || 0) >= MIN_READING_SECONDS;
+    const status = states.includes('done') ? 'done' : states.includes('reading') ? 'reading' : states.includes('unread') ? 'unread' : spent ? 'reading' : 'unread';
     const stars = list.map(starRating).filter(n => n !== null);
     const explicit = list.map(ownRating).filter(n => n !== null);
     const raw = extraFields(extra).get('rating');

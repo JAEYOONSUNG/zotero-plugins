@@ -4540,7 +4540,7 @@
     else if(issues==='error')node('span','확인 못함',chips,{class:'sc-around-chip','data-status':'unknown'});
     else{
      const status=issues.summary?.status||'unknown';
-     node('span',ISSUE_STATUS[status]||(status==='clean'?'정정·철회 없음':'확인 못함'),chips,{class:'sc-around-chip','data-status':status});
+     node('span',ISSUE_STATUS[status]||(status==='notice'?'공지 문헌':status==='clean'?'정정·철회 없음':'확인 못함'),chips,{class:'sc-around-chip','data-status':status});
     }
     if(reactions==='loading')return;
     if(reactions==='error'||reactions.allFailed){node('span','반응 확인 못함',chips,{class:'sc-muted sc-around-chip-note'});return;}
@@ -4561,6 +4561,7 @@
     const checked=dayOf(summary.checked),line=node('div',null,issuesBox,{class:'sc-around-statusline'});
     let said;
     if(ISSUE_STATUS[status])said=ISSUE_STATUS[status];
+    else if(status==='notice')said=T('다른 논문에 대한 정정·철회 공지입니다');
     else if(status==='clean')said=T('알려진 정정·철회 없음')+(checked?' · '+T(`${checked} 확인`):'');
     else said=T('확인 못함')+(failed.length?' ('+T(`${failed.join(', ')} 응답 없음`)+')':summary.reason==='no-doi'?' ('+T('DOI 없음')+')':'');
     ext('span',said,line,{class:'sc-around-status','data-status':status,role:'status'});
@@ -5669,6 +5670,28 @@
     const seen=isSeen(entry);
     button(seen?'되돌리기':'확인함',()=>run(()=>ctx.toggle(entry,seen,row,box)),actions,{class:'sc-inbox-seen',title:T(seen?'미확인으로 되돌립니다':'이 논문을 확인한 것으로 두고 목록에서 뺍니다')});
    }
+   /* Papers carrying a followed author's id but signed from places that author
+      has never been listed at: a namesake merged into the profile is the usual
+      cause. They are not counted as news; here the reader confirms one (it
+      becomes news and teaches the row its place) or rejects it for good. */
+   function drawNamesakeGroup(watched,parent){
+    const held=watched.flatMap(person=>(person.unverified||[]).map(work=>({person,work})));
+    if(!held.length)return;
+    const fold=node('details',null,parent,{class:'sc-namesake-group'});
+    if(state.namesakeOpen)fold.open=true;
+    fold.addEventListener('toggle',()=>{state.namesakeOpen=fold.open;});
+    node('summary',T(`확인 필요 ${held.length}`),fold);
+    node('p',T('같은 이름의 다른 사람 논문일 수 있습니다. 이 저자의 알려진 소속과 겹치지 않아 새 논문 수에서 뺐습니다.'),fold,{class:'sc-muted sc-inbox-note'});
+    for(const {person,work} of held){
+     const row=node('div',null,fold,{class:'sc-author-inbox-row'});
+     node('b',work.title||work.doi||work.id,row);
+     node('p',[person.name,work.venue,(work.date||'').slice(0,4),(work.places||[]).join(', ')].filter(Boolean).join(' · '),row,{class:'sc-muted'});
+     node('p',T('동명이인일 수 있음'),row,{class:'sc-muted'});
+     const acts=node('div',null,row,{class:'sc-hit-actions'});
+     button('이 저자의 논문입니다',()=>run(async()=>{await runtime.resolveNamesake(person.id,work.id,true);if(!disposed&&state.tab==='authors')refreshWatched();}),acts,{class:'sc-namesake-confirm'});
+     button('다른 사람입니다',()=>run(async()=>{await runtime.resolveNamesake(person.id,work.id,false);if(!disposed&&state.tab==='authors')refreshWatched();}),acts,{class:'sc-namesake-reject'});
+    }
+   }
    function drawAuthorInbox(watched,parent,hook={}){
     const all=mergedNews(watched);
     if(!all.length)return;
@@ -6146,6 +6169,7 @@
     const hook={};
     drawAuthorGraph(watched,parent,hook);
     drawAuthorInbox(watched,parent,hook);
+    drawNamesakeGroup(watched,parent);
    }
    /* The followed authors as a list to keep in order: find one by name or
       place, sort by who has news or who was checked longest ago, let one go

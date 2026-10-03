@@ -119,6 +119,7 @@
       subjects: subjectsOf(raw),
       // The primary topic's name, so a grouping by topic can say what it is.
       topic: text(Array.isArray(raw.topics) ? raw.topics[0]?.display_name : ''),
+      subfieldName: text(Array.isArray(raw.topics) ? raw.topics[0]?.subfield?.display_name : ''),
       // Kept only for the paper in hand (the only record asked for with it):
       // what kind of paper it is is best read from its own words.
       abstract: raw.abstract_inverted_index ? abstractOf(raw.abstract_inverted_index).slice(0, 3000) : '',
@@ -839,6 +840,8 @@
       for (const person of work.people || []) {
         if (!wanted.has(person.id)) continue;
         if (!byAuthor.has(person.id)) byAuthor.set(person.id, []);
+        // OpenAlex sometimes lists one author twice on a work: one entry, not two.
+        if (byAuthor.get(person.id).includes(work)) continue;
         byAuthor.get(person.id).push(work);
       }
     }

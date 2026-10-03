@@ -152,7 +152,8 @@
       const rw = new Set();
       for (const row of Array.isArray(message?.['updated-by']) ? message['updated-by'] : [])
         if (/retraction.?watch/i.test(text(row?.source))) rw.add(bareDOI(row?.DOI) + '|' + text(row?.type).toLowerCase().replace(/[\s-]+/g, '_'));
-      const events = parsed.updates.map(u => ({
+      // A new version/edition (rank 0, or pointing at the paper's own DOI) is not a notice about the paper.
+      const events = parsed.updates.filter(u => u.rank > 0).map(u => ({
         date: u.date, kind: kindOfType(u.type), source: SOURCES.crossref,
         label: u.label || u.type, url: noticeURL(u.doi),
         ...(rw.has(u.doi + '|' + u.type) ? {via: 'Retraction Watch'} : {})
@@ -160,6 +161,7 @@
       for (const doi of parsed.retractedBy)
         if (!events.some(e => e.kind === 'retraction' && e.url === noticeURL(doi)))
           events.push({date: '', kind: 'retraction', source: SOURCES.crossref, label: 'Retraction', url: noticeURL(doi)});
+      Object.defineProperty(events, 'isNotice', {value: parsed.noticeFor.length > 0});
       return events;
     }
 
@@ -205,6 +207,8 @@
           const payload = await getJSON('https://api.crossref.org/works/' + encodeURIComponent(doi), {signal});
           return payload ? crossrefEvents(payload) : null;
         });
+        // The record is itself a notice (Crossref update-to): OpenAlex flags the notice is_retracted, which says nothing about this record.
+        let notice = !!crossref?.isNotice;
         if (crossref) { recognised = true; events.push(...crossref); }
         const epmc = await guarded(SOURCES.epmc, () => europePMC(doi, pmid, signal));
         if (epmc?.found) {
@@ -223,13 +227,14 @@
         const retracted = () => events.some(e => SEVERITY[e.kind] === 3);
         if (flag === null && !retracted() && !(openAlexHeld && openAlexHeld())) {
           const work = await guarded(SOURCES.openalex, () => getJSON('https://api.openalex.org/works/doi:' + encodeURIComponent(doi)
-            + '?select=id,is_retracted' + (openAlexKey && text(openAlexKey()) ? '&api_key=' + encodeURIComponent(text(openAlexKey())) : ''), {signal}));
+            + '?select=id,is_retracted,type' + (openAlexKey && text(openAlexKey()) ? '&api_key=' + encodeURIComponent(text(openAlexKey())) : ''), {signal}));
           if (work && typeof work.is_retracted === 'boolean') { flag = work.is_retracted; recognised = true; }
+          if (work && text(work.type).toLowerCase() === 'retraction') notice = true;
         }
-        if (flag && !retracted()) events.push({date: '', kind: 'retraction', source: SOURCES.openalex, label: 'Retracted (flag)', url: 'https://doi.org/' + doi});
+        if (flag && !retracted() && !notice) events.push({date: '', kind: 'retraction', source: SOURCES.openalex, label: 'Retracted (flag)', url: 'https://doi.org/' + doi});
         sortEvents(events);
         const worst = events.reduce((m, e) => Math.max(m, SEVERITY[e.kind] || 0), 0);
-        const status = worst >= 3 ? 'retracted' : worst === 2 ? 'concern' : worst === 1 ? 'corrected' : recognised ? 'clean' : 'unknown';
+        const status = worst >= 3 ? 'retracted' : worst === 2 ? 'concern' : worst === 1 ? 'corrected' : notice ? 'notice' : recognised ? 'clean' : 'unknown';
         return {events, summary: {status, checked: new Date(now()).toISOString(), failed, comments, ...(flag !== null ? {openAlexRetracted: flag} : {})}};
       }, value => value.summary.failed.length || value.summary.status === 'unknown' ? TTL.failure
         : value.events.some(e => e.kind !== 'comment') ? TTL.issuesFlagged : TTL.issuesClean);

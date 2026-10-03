@@ -56,7 +56,15 @@
       const identifiers=(String(field('ISSN')).match(/\d{4}-?\d{3}[\dXx]/g)||[]).map(issn).filter(Boolean);
       const idMatches=identifiers.flatMap(id=>ids.get(id)||[]);
       if(idMatches.length)return choose(idMatches);
-      return choose(names.flatMap(title=>titles.get(name(title))||[]));
+      const byName=[...new Set(names.flatMap(title=>titles.get(name(title))||[]))];
+      /* One title can name two different journals (Microbiology: Russian 0026-2617
+         and the Society's 1465-2080). With no ISSN to decide, records whose ISSNs
+         share nothing are not the same journal, so no figure is better than the
+         wrong one. A record with no ISSN at all is compatible with any. */
+      const sets=byName.map(r=>new Set(r.issns.map(issn)));
+      const apart=sets.some((a,i)=>a.size&&sets.some((b,j)=>j>i&&b.size&&![...a].some(x=>b.has(x))));
+      if(apart)return null;
+      return choose(byName);
     }
     return {lookup,records:all};
   }

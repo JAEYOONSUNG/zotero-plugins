@@ -456,7 +456,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (changedCitation) { merged.citations=null; merged.citationSource=null; merged.citationCheckedAt=null; }
     const legacyCitation = userLibrary && old.legacyCitationIdentity===citationKey ? this.model.readLegacyCitations(legacy[item.key]?.citedCount) : {citations:null};
     if (live.citations === null && legacyCitation.citations !== null) Object.assign(live, legacyCitation);
-    const impactKey = this.journalTools.name(item.getField("publicationTitle")) + "|" + String(item.getField("ISSN") || "");
+    const impactKey = this.journalTools.name(item.getField("publicationTitle")) + "|" + String(item.getField("ISSN") || "") + "|c2";
     if (cached.impactKey !== impactKey) { merged.impactFactor = null; merged.impactSource = null; merged.impactYear = null; }
     for (const [field, source] of [["citations", "citationSource"], ["impactFactor", "impactSource"]]) {
       if (number(live[field])) { merged[field] = live[field]; merged[source] = live[source]; }
@@ -975,7 +975,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const key = String(raw).replace(/[^0-9xX]/g, '').toUpperCase();
         if (key.length === 8 && !byIssn.has(key)) byIssn.set(key, journal);
       }
-      const folded = String(journal.title || '').trim().toLowerCase();
+      const folded = this.journalTools.name(journal.title);
       if (folded && !byTitle.has(folded)) byTitle.set(folded, journal);
     }
     entry = { byIssn, byTitle }; CustomStyleRuntime._jcrCatalogIndex.set(catalog, entry);
@@ -988,7 +988,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const key = String(raw || '').replace(/[^0-9xX]/g, '').toUpperCase();
       if (key.length === 8 && byIssn.has(key)) return byIssn.get(key);
     }
-    return byTitle.get(String(venue).trim().toLowerCase()) || null;
+    return byTitle.get(this.journalTools.name(venue)) || null;
   }
   // The one category worth leading with: the best quartile, then the highest percentile in a tie.
   _jcrBestStanding(journal) {
@@ -1022,7 +1022,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
        the raw number. Nothing invented -- no catalog, no match or no
        quartile recorded all leave this off, the same as before. */
     const journal = (!estimate && figure != null && this.jcrCatalog)
-      ? this._jcrMatch(this.jcrCatalog, title, identityInfo?.identity?.issns) : null;
+      ? this._jcrMatch(this.jcrCatalog, title, [...(identityInfo?.identity?.issns || []), ...(String(this.isRegular(item) ? item.getField('ISSN') || '' : '').match(/\d{4}-?\d{3}[\dXx]/g) || [])]) : null;
     const standing = journal ? this._jcrBestStanding(journal) : null;
     const standingText = standing && standing.quartile != null
       ? ` · Q${standing.quartile}${standing.rank != null && standing.rankTotal != null ? ` ${standing.rank}/${standing.rankTotal}` : ''}${standing.categoryKey ? ' ' + standing.categoryKey : ''}`
@@ -2638,7 +2638,91 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          already published, filed as datasets. OpenAlex types them; the type
          used to be fetched and thrown away, so a bioRxiv preprint could not
          be shown as one either. */
-      const papers = fresh.filter(work => !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || '')));
+      const initials = name => String(name || '').split(/[\s-]+/).filter(w => w && !/^(of|the|and|for|at|de|du|des|la|le)$/i.test(w)).map(w => w[0]).join('').toUpperCase();
+      const lower = v => String(v || '').toLowerCase().trim();
+      const samePlace = (a, b, rorA, rorB) => {
+        if (rorA && rorB) return rorA === rorB;
+        if (!a || !b) return false;
+        if (lower(a) === lower(b) || lower(a).includes(lower(b)) || lower(b).includes(lower(a))) return true;
+        // "University of Illinois at Urbana-Champaign" and the same without
+        // "at" are one campus written two ways.
+        const bare = name => lower(name).replace(/[,.]/g, '').split(/\s+/).filter(w => w && !/^(of|the|and|for|at|in|de|du|des|la|le)$/.test(w)).join(' ');
+        if (bare(a) && bare(a) === bare(b)) return true;
+        if (initials(a) === lower(b).toUpperCase() || initials(b) === lower(a).toUpperCase()) return true;
+        // "UC Berkeley" for "University of California, Berkeley": the
+        // leading words shortened, the campus kept.
+        const headed = name => { const w = String(name).replace(/[,.]/g, '').split(/\s+/).filter(Boolean); return w.length > 2 ? (initials(w.slice(0, -1).join(' ')) + ' ' + w[w.length - 1]).toLowerCase() : ''; };
+        // One letter off is a typo, not another university: the remembered
+        // place is typed by hand when an author is followed ("UC berkely").
+        const near = (x, y) => { if (!x || !y || Math.abs(x.length - y.length) > 1 || x.length < 8) return false; let i = 0, j = 0, slips = 0; while (i < x.length && j < y.length) { if (x[i] === y[j]) { i++; j++; continue; } if (++slips > 1) return false; if (x.length > y.length) i++; else if (y.length > x.length) j++; else { i++; j++; } } return slips + (x.length - i) + (y.length - j) <= 1; };
+        const plainA = lower(a).replace(/[,.]/g, ''), plainB = lower(b).replace(/[,.]/g, '');
+        if ((headed(a) && (headed(a) === plainB || near(headed(a), plainB))) || (headed(b) && (headed(b) === plainA || near(headed(b), plainA))) || near(plainA, plainB)) return true;
+        // "Harvard Medical School" is inside "Harvard University": a unit
+        // named after its university, which OpenAlex files under the
+        // university. The first word has to be the proper name, not a
+        // generic like "University" or "National".
+        const UNIT = /\b(school|institute|center|centre|laboratory|laboratories|lab|hospital|college|faculty|department|division|clinic|medical)\b/;
+        const GENERIC = /^(university|national|institute|the|state|college|school|center|centre|royal|federal|medical|general|technical|academy|hospital|max|mass)$/;
+        const first = name => (bare(name).split(' ')[0] || '');
+        if (first(a) && first(a) === first(b) && !GENERIC.test(first(a)) && (UNIT.test(plainA) || UNIT.test(plainB))) return true;
+        // "DTU" for "Technical University of Denmark": an acronym written in
+        // the local order, so its letters are compared as a set.
+        const acronym = name => { const m = String(name).trim().match(/^([A-Z]{2,5})(?:\s|$)/); return m ? m[1].split('').sort().join('') : ''; };
+        const letters = name => initials(name).split('').sort().join('');
+        return (!!acronym(a) && acronym(a) === letters(b)) || (!!acronym(b) && acronym(b) === letters(a));
+      };
+      /* Namesakes. OpenAlex sometimes merges two people of one name into one
+         profile, so every work carrying the followed id arrived as news. The
+         followed author's own authorship names the institutions that signed
+         the paper: if none is a place this row knows (the one followed with,
+         its listed appointments, places on papers already accepted or
+         confirmed, the profile's current places), and it is not the same
+         country and field as before, the paper is held as unverified and
+         is neither counted nor shown as news until the reader confirms it.
+         A paper that lists no institution passes. */
+      const profileNow = profiles.get(row.id);
+      const knownPlaces = [
+        {name: row.institution, ror: row.institutionRor}, {name: row.institutionGiven, ror: ''},
+        {name: row.previousInstitution, ror: row.previousInstitutionRor},
+        ...(row.places || []), ...(row.placesSeen || []), ...(profileNow?.places || [])
+      ].filter(pl => pl && pl.name);
+      const knownCountries = new Set(row.countriesSeen || []);
+      const shortOf = this.discoverTools.shortID(row.id);
+      const confirmed = new Set(row.confirmed || []), rejected = new Set(row.rejected || []);
+      const classify = work => {
+        if (confirmed.has(work.id)) return 'ok';
+        const own = (work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf));
+        const there = own?.institutions?.length ? own.institutions : (own?.institution ? [{institution: own.institution, ror: own.ror}] : []);
+        if (!there.length || !knownPlaces.length) return 'ok';
+        if (there.some(h => knownPlaces.some(pl => samePlace(pl.name, h.institution, pl.ror || '', h.ror || '')))) return 'ok';
+        if (own.country && knownCountries.has(own.country) && row.subfield && work.subfieldName === row.subfield) return 'ok';
+        return 'unverified';
+      };
+      const checked = fresh.filter(work => !rejected.has(work.id)).map(work => ({work, verdict: classify(work)}));
+      const held = checked.filter(c => c.verdict === 'unverified').map(c => c.work)
+        .filter(work => !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || '')));
+      const placesSeen = new Map((row.placesSeen || []).map(pl => [pl.name, pl]));
+      for (const {work, verdict} of checked) {
+        if (verdict !== 'ok') continue;
+        const own = (work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf));
+        for (const h of own?.institutions || []) if (h.institution && !placesSeen.has(h.institution)) placesSeen.set(h.institution, {name: h.institution, ror: h.ror || ''});
+        if (own?.country) knownCountries.add(own.country);
+      }
+      row.placesSeen = [...placesSeen.values()].slice(-30);
+      row.countriesSeen = [...knownCountries].slice(-10);
+      const papers = checked.filter(c => c.verdict === 'ok').map(c => c.work).filter(work => !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || '')));
+      {
+        const keepHeld = new Map((row.unverified || []).filter(w => !confirmed.has(w.id) && !rejected.has(w.id)).map(w => [w.id, w]));
+        for (const work of held) keepHeld.set(work.id, {
+          id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: String(work.type || ''),
+          date: work.date || (work.year ? String(work.year) : ''),
+          people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean),
+          places: ((work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf))?.institutions || []).map(h => h.institution).slice(0, 4),
+          country: (work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf))?.country || '',
+          subfield: work.subfieldName || ''
+        });
+        row.unverified = [...keepHeld.values()].sort((m, n) => String(n.date || '').localeCompare(String(m.date || ''))).slice(0, 20);
+      }
       const short = this.discoverTools.shortID(row.id);
       /* What this row was already showing before the sweep. Without it, a
          sweep that finds nothing still announces every paper the reader has
@@ -2695,39 +2779,6 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          so a ROR match settles it when both sides have one, and otherwise a
          name that is the other's initials, or contained in it, is the same
          institution. Anything left is a real change of address. */
-      const initials = name => String(name || '').split(/[\s-]+/).filter(w => w && !/^(of|the|and|for|at|de|du|des|la|le)$/i.test(w)).map(w => w[0]).join('').toUpperCase();
-      const lower = v => String(v || '').toLowerCase().trim();
-      const samePlace = (a, b, rorA, rorB) => {
-        if (rorA && rorB) return rorA === rorB;
-        if (!a || !b) return false;
-        if (lower(a) === lower(b) || lower(a).includes(lower(b)) || lower(b).includes(lower(a))) return true;
-        // "University of Illinois at Urbana-Champaign" and the same without
-        // "at" are one campus written two ways.
-        const bare = name => lower(name).replace(/[,.]/g, '').split(/\s+/).filter(w => w && !/^(of|the|and|for|at|in|de|du|des|la|le)$/.test(w)).join(' ');
-        if (bare(a) && bare(a) === bare(b)) return true;
-        if (initials(a) === lower(b).toUpperCase() || initials(b) === lower(a).toUpperCase()) return true;
-        // "UC Berkeley" for "University of California, Berkeley": the
-        // leading words shortened, the campus kept.
-        const headed = name => { const w = String(name).replace(/[,.]/g, '').split(/\s+/).filter(Boolean); return w.length > 2 ? (initials(w.slice(0, -1).join(' ')) + ' ' + w[w.length - 1]).toLowerCase() : ''; };
-        // One letter off is a typo, not another university: the remembered
-        // place is typed by hand when an author is followed ("UC berkely").
-        const near = (x, y) => { if (!x || !y || Math.abs(x.length - y.length) > 1 || x.length < 8) return false; let i = 0, j = 0, slips = 0; while (i < x.length && j < y.length) { if (x[i] === y[j]) { i++; j++; continue; } if (++slips > 1) return false; if (x.length > y.length) i++; else if (y.length > x.length) j++; else { i++; j++; } } return slips + (x.length - i) + (y.length - j) <= 1; };
-        const plainA = lower(a).replace(/[,.]/g, ''), plainB = lower(b).replace(/[,.]/g, '');
-        if ((headed(a) && (headed(a) === plainB || near(headed(a), plainB))) || (headed(b) && (headed(b) === plainA || near(headed(b), plainA))) || near(plainA, plainB)) return true;
-        // "Harvard Medical School" is inside "Harvard University": a unit
-        // named after its university, which OpenAlex files under the
-        // university. The first word has to be the proper name, not a
-        // generic like "University" or "National".
-        const UNIT = /\b(school|institute|center|centre|laboratory|laboratories|lab|hospital|college|faculty|department|division|clinic|medical)\b/;
-        const GENERIC = /^(university|national|institute|the|state|college|school|center|centre|royal|federal|medical|general|technical|academy|hospital|max|mass)$/;
-        const first = name => (bare(name).split(' ')[0] || '');
-        if (first(a) && first(a) === first(b) && !GENERIC.test(first(a)) && (UNIT.test(plainA) || UNIT.test(plainB))) return true;
-        // "DTU" for "Technical University of Denmark": an acronym written in
-        // the local order, so its letters are compared as a set.
-        const acronym = name => { const m = String(name).trim().match(/^([A-Z]{2,5})(?:\s|$)/); return m ? m[1].split('').sort().join('') : ''; };
-        const letters = name => initials(name).split('').sort().join('');
-        return (!!acronym(a) && acronym(a) === letters(b)) || (!!acronym(b) && acronym(b) === letters(a));
-      };
       const profile = profiles.get(row.id);
       // Kept for the portrait search: Wikidata is found by ORCID.
       if (profile?.orcid) row.orcid = profile.orcid;
@@ -2843,6 +2894,40 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     row.seen = [...new Set([...(row.news || []).map(work => work.id), ...(row.seen || [])])].slice(0, this.SEEN_LIMIT);
     row.news = [];
     row.checkedAt = new Date().toISOString();
+    this.cache.watchedAuthors = rows;
+    this.dirty = true;
+    await this.flush();
+    return true;
+  }
+
+  /* A paper held as "동명이인일 수 있음". Confirming files it as ordinary news
+     and teaches the row the places and country it was signed from, so the
+     same lab's next papers pass; rejecting marks it seen and remembers it, so
+     no later sweep brings it back. */
+  async resolveNamesake(authorID, workID, accept) {
+    const id = this.discoverTools.shortID(authorID);
+    const rows = this.watchedAuthors();
+    const row = rows.find(entry => entry.id === id);
+    const work = row && (row.unverified || []).find(w => w.id === workID);
+    if (!work) return false;
+    row.unverified = row.unverified.filter(w => w.id !== workID);
+    if (accept) {
+      row.confirmed = [...new Set([workID, ...(row.confirmed || [])])].slice(0, 200);
+      const placesSeen = new Map((row.placesSeen || []).map(pl => [pl.name, pl]));
+      for (const name of work.places || []) if (!placesSeen.has(name)) placesSeen.set(name, {name, ror: ''});
+      row.placesSeen = [...placesSeen.values()].slice(-30);
+      if (work.country) row.countriesSeen = [...new Set([...(row.countriesSeen || []), work.country])].slice(-10);
+      const owned = this.libraryDOIs();
+      row.news = this.keepNews([{
+        id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: work.type,
+        preprint: /preprint/i.test(work.type || '') || /rxiv|research square|preprints?\b|ssrn/i.test(work.venue || ''),
+        date: work.date, inLibrary: !!work.doi && owned.has(work.doi), people: work.people || [],
+        citations: null, position: '', corresponding: false
+      }, ...(row.news || [])]);
+    } else {
+      row.rejected = [...new Set([workID, ...(row.rejected || [])])].slice(0, 200);
+      row.seen = [...new Set([workID, ...(row.seen || [])])].slice(0, this.SEEN_LIMIT);
+    }
     this.cache.watchedAuthors = rows;
     this.dirty = true;
     await this.flush();
@@ -3365,7 +3450,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const key = this.identity(item);
       const doi = this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI);
       // Kept only while it was fetched for the DOI the paper still has.
-      if (!refetch && store[key] && (store[key].doi || '') === (doi || '')) { report.already++; continue; }
+      /* Entries written before schema 2 (the last-author fallback, 2026-09-28)
+         lack the corresponding/last author; they are refetched once, in the same
+         batches of fifty. A "missing" answer has nothing to enrich and stays. */
+      if (!refetch && store[key] && (store[key].doi || '') === (doi || '') && (store[key].missing || store[key].v >= 2)) { report.already++; continue; }
       if (!doi) { report.noDOI++; store[key] = {doi: '', missing: true, checkedAt: new Date().toISOString()}; continue; }
       wanted.push({key, doi, item});
     }
@@ -3385,7 +3473,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           report.found++;
           report.references += work.references.length;
           store[row.key] = {
-            doi: row.doi, openalex: work.id, year: work.year, citations: work.citations,
+            v: 2, doi: row.doi, openalex: work.id, year: work.year, citations: work.citations,
             venue: work.venue, references: (work.references||[]).slice(0, 500),
             // Only the two authorships the row will show. A consortium paper has
             // hundreds, and none of the rest is ever read.
@@ -3396,7 +3484,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
               const picked = this.affiliationTools.principals(work.people);
               if (!picked) return [];
               const keep = [picked.first, picked.corresponding, ...work.people.filter(person => person.corresponding)].filter(Boolean);
-              return [...new Set(keep)].slice(0, 4);
+              const seenPeople = new Set();
+              return keep.filter(person => { const k = person.id || String(person.name || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim(); if (seenPeople.has(k)) return false; seenPeople.add(k); return true; }).slice(0, 4);
             })(),
             checkedAt: new Date().toISOString()
           };
@@ -3479,7 +3568,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     for (const [ror, row] of Object.entries(known)) {
       if (row?.unknown && (!row.checkedAt || now - Date.parse(row.checkedAt) > NOT_FOUND_DAYS * 864e5)) delete known[ror];
     }
-    const wanted = this.affiliationTools.institutionsNeeded(works.map(work => ({people: work?.people})), known);
+    /* An institution's h-index drifts (WashU 1885 to 2004 crossed a tier), so a
+       found row is asked again after 180 days. Rows written before checkedAt
+       existed count as stale once. The old figure stays until the new one arrives. */
+    const STALE_DAYS = 180;
+    const stale = Object.entries(known).filter(([, row]) => row && !row.unknown && row.ror
+      && (!row.checkedAt || !(now - Date.parse(row.checkedAt) <= STALE_DAYS * 864e5))).map(([ror]) => ror);
+    const wanted = [...new Set([...this.affiliationTools.institutionsNeeded(works.map(work => ({people: work?.people})), known), ...stale])];
     if (!wanted.length) return 0;
     const options = this.discoverOptions();
     let added = 0;
@@ -3489,12 +3584,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const url = this.discoverTools.institutionsURL(batch, options);
       if (!url) continue;
       try {
+        const checkedAt = new Date().toISOString();
+        const returned = new Set();
         for (const row of this.discoverTools.readInstitutions(await this.discoverJSON(url, {signal}))) {
-          known[row.ror] = row;
+          known[row.ror] = {...row, checkedAt};
+          returned.add(row.ror);
           added++;
         }
-        const checkedAt = new Date().toISOString();
-        for (const ror of batch) if (!known[ror]) known[ror] = {ror, name: '', hIndex: null, unknown: true, checkedAt};
+        for (const ror of batch) {
+          if (!known[ror]) known[ror] = {ror, name: '', hIndex: null, unknown: true, checkedAt};
+          else if (!returned.has(ror)) known[ror].checkedAt = checkedAt;
+        }
         this.dirty = true;
       } catch (error) {
         this.Z.logError(error);
@@ -3963,7 +4063,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   // Signals found for another DOI than the paper has now are not this paper's.
   signalsOf(item) {
-    const signals = this.entry(item).signals || null;
+    const signals = this.signalTools.repair(this.entry(item).signals || null);
     if (signals?.doi && this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI) !== signals.doi) return null;
     return signals;
   }
@@ -4826,11 +4926,22 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return job.promise;
   }
   rebuildJournals() {
-    const records = new Map(this.catalog.map(r => [this.journalTools.name(r.title), r]));
+    /* One record per title, but a JCR record is never displaced by a publisher-page
+       record, whichever comes later in the catalog or the cache. */
+    const records = new Map();
+    // Two journals can share a title (Microbiology: the Russian one and the Society's):
+    // the ISSNs are part of the identity, so they are kept apart and journals.lookup decides.
+    const keyOf = r => this.journalTools.name(r.title) + '|' + (r.issns || []).map(i => this.journalTools.issn(i)).filter(Boolean).sort().join(',');
+    const offer = r => {
+      const key = keyOf(r), previous = records.get(key);
+      if (previous && previous.authority === 'jcr' && r.authority !== 'jcr') return;
+      records.set(key, r);
+    };
+    for (const r of this.catalog) offer(r);
     for (const r of Object.values(this.cache.journals || {})) {
       if (!this.journalTools.valid(r)) continue;
-      const key = this.journalTools.name(r.title), previous = records.get(key);
-      if (!previous || (r.year || 0) >= (previous.year || 0) && r.checkedAt >= previous.checkedAt) records.set(key,r);
+      const previous = records.get(keyOf(r));
+      if (!previous || (r.year || 0) >= (previous.year || 0) && r.checkedAt >= previous.checkedAt) offer(r);
     }
     this.journals = this.journalTools.create([...records.values()]);
   }
@@ -4863,7 +4974,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (!this.active || !this.isRegular(item) || !Number.isFinite(seconds) || seconds <= 0) return;
     const record = this.entry(item);
     if (!Number.isFinite(record.seconds)) record.seconds = this.metrics(item).seconds;
+    /* The first real reading (30 s) of a paper tagged /unread turns the tag to
+       /reading through the ordinary edit path; clearing the override alone left
+       the /unread tag standing and the two disagreed. */
+    const unreadTagged = record.unreadOverride || (item.getTags?.() || []).some(tag => /^\/unread$/i.test(String(tag?.tag ?? tag).trim()));
     record.seconds += seconds; record.unreadOverride = false; this.dirty = true;
+    if (unreadTagged && record.seconds >= 30 && !record.promoting && this.canEdit(item)) {
+      record.promoting = true;
+      this.edit([item], {status: 'reading'}).catch(error => this.Z.logError(error)).finally(() => { delete record.promoting; });
+    }
     record.lastRead=new Date().toISOString();
     if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0&&Number.isInteger(location.pageIndex)&&location.pageIndex>=0&&location.pageIndex<100000&&Number.isInteger(location.totalPages)&&location.totalPages>location.pageIndex&&location.totalPages<=100000){record.readingAttachments||={};const bucket=record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:location.totalPages};bucket.pageTimes||={};bucket.pageTimes[location.pageIndex]=(Number(bucket.pageTimes[location.pageIndex])||0)+seconds;bucket.totalPages=location.totalPages;bucket.lastRead=record.lastRead;bucket.lastPageIndex=shown&&shown.attachmentID===location.attachmentID&&Number.isInteger(shown.pageIndex)&&shown.pageIndex>=0&&shown.pageIndex<bucket.totalPages?shown.pageIndex:location.pageIndex;record.readingAttachmentID=location.attachmentID;}
     this.refreshReadingDisplays(item.id);
