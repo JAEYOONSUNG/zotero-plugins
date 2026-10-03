@@ -49,6 +49,11 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog,locale}={}){
   authors:['A Author','B Author'],doi:'10.1/'+id,pdfURL:'https://x/'+id+'.pdf',relevance:3,inLibrary:false});
  Object.assign(runtime,{
   identity:ref=>'key-'+ref.id,
+  // The real runtime's pending-write registry: a memo write is pending from memory to settled storage.
+  memoPendingCount:0,memoListeners:new Set(),
+  memoWritePending(){return this.memoPendingCount>0;},
+  _memoPending(item,delta){this.memoPendingCount+=delta;if(delta<0)for(const listener of [...this.memoListeners])listener(item);},
+  addMemoListener(listener){this.memoListeners.add(listener);return()=>this.memoListeners.delete(listener);},
   discoverCache:new Map(),
   discoverTools:{GROUPS:['citing','reference','related'],shortID:v=>String(v).toUpperCase()},
   relatedWorksCached:record('related',{work:{id:'W1',title:'Source'},
@@ -7347,7 +7352,8 @@ function assertEditorsConsistent(f,label=''){
  const states=f.bench.memoEditorState();
  assert.ok(states.length>0,label+' no editors');
  for(const s of states){
-  const a=s.value===s.stored&&s.base===s.stored&&s.last===s.stored&&!s.box;
+  if(s.pending)continue; // a write of this paper is in flight: its in-memory memo is not yet the stored one
+  const a=s.value===s.stored&&s.base===s.stored&&s.last===s.stored&&!s.box&&s.ownDraft===undefined; // confirmed: its own draft is gone
   const b=s.value!==s.stored&&s.base===s.stored&&s.last!==s.value&&!s.box;
   const c=s.value!==s.stored&&s.base!==s.stored&&s.box&&!s.used&&s.buttonsEnabled;
   assert.ok(a||b||c,label+' inconsistent editor: '+JSON.stringify(s));
@@ -7439,4 +7445,86 @@ test('reconcile (R10-4): a redrawn editor that shows exactly what was saved gets
  assert.equal(f.body().querySelector('.sc-memo-stale'),null);
  assertEditorsConsistent(f,'end');
  f.bench.destroy();
+});
+
+test('pending writes (R11-1): an in-memory value of a write that has not settled is not taken as stored: its draft stays and a rollback restores it',async()=>{
+ const f=fixture();
+ const row=()=>f.runtime.cache.items[1];
+ f.runtime.cache.items[1]={remark:'B'};
+ let relY,relX,failX=true;const gateY=new Promise(r=>{relY=r;}),gateX=new Promise(r=>{relX=r;});
+ f.library.setRemark=async(id,text,opts={})=>{
+  if(text==='Y')await gateY; // held before it writes
+  const stored=String(row().remark||'');
+  if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored},rev:row().memoRev||0};
+  const prior=row().remark;row().remark=text;row().memoRev=(row().memoRev||0)+1;const mine=row().memoRev;f.runtime._memoPending({id:1},1);
+  try{
+   if(text==='X'){await gateX;if(failX){if(row().memoRev===mine){row().remark=prior;row().memoRev++;}throw new Error('disk');}}
+  }finally{f.runtime._memoPending({id:1},-1);}
+  if(opts.answer)opts.answer.rev=mine;return text;
+ };
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'Y');old.dispatchEvent(new f.win.Event('blur'));await settle();
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,fresh,'X');fresh.dispatchEvent(new f.win.Event('blur'));await settle(); // X is in memory, its storage write held
+ relY();await settle(); // Y is rejected by the CAS
+ assert.ok(sharedDraftTexts(f).includes('X'),'the draft of the unsettled write stays: '+JSON.stringify(sharedDraftTexts(f)));
+ assertEditorsConsistent(f,'while pending');
+ relX();await settle(); // X's write fails and rolls back to B
+ assert.equal(row().remark,'B');
+ assertEditorsConsistent(f,'after rollback');
+ await f.bench.show('annotations');await settle();
+ assert.equal(f.body().querySelector('textarea.sc-paper-memo').value,'X','the input survives a redraw');
+ f.bench.destroy();
+});
+
+test('reconcile (R11-2): a note failure after a successful local save still moves the base, so the next save is not a false conflict',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'B'};
+ const cas=f.library.setRemark;let first=true;
+ f.library.setRemark=async(id,text,opts)=>{const out=await cas(id,text,opts);if(first){first=false;const error=new Error('메모는 저장했지만 노트로 옮기지 못했습니다: note failed');error.memoSaved=true;throw error;}return out;};
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'X');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'X');
+ casType(f,el,'Y');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'Y','no false conflict');
+ assert.equal(f.body().querySelector('.sc-memo-stale'),null);
+ assertEditorsConsistent(f,'end');
+ f.bench.destroy();
+});
+
+test('reconcile (R11-3): a stale 둘 다 합치기 still reconciles: the editor that shows the new stored memo gets its base',async()=>{
+ const f=fixture();casLibrary(f);
+ const row=()=>f.runtime.cache.items[1];
+ f.runtime.cache.items[1]={remark:'L'};
+ let release;const gate=new Promise(r=>{release=r;});
+ f.library.memoConflict=async()=>({local:'L',remote:'R'});
+ f.library.resolveMemoConflict=async()=>{await gate;return {resolved:false,stale:true,conflict:{local:'M',remote:'R'},text:row().remark,rev:row().memoRev||0};};
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(el.value,'L');
+ const pending=f.click('둘 다 합치기');await settle();
+ row().remark='M';row().memoRev=(row().memoRev||0)+1; // another writer saved M
+ casType(f,el,'M'); // and it is typed here as well
+ release();await pending;await settle();
+ assertEditorsConsistent(f,'after the stale choice');
+ casType(f,el,'N');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(row().remark,'N','the next input is not falsely rejected');
+ f.bench.destroy();
+});
+
+test('invariant: every async completion of a memo editor reconciles in a finally',()=>{
+ const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const part=(from,to)=>{const a=src.indexOf(from);assert.ok(a>0,from);const b=src.indexOf(to,a);assert.ok(b>a,to);return src.slice(a,b);};
+ const parts={
+  attempt:part('const attempt=async(','const run=async('),
+  choose:part('const choose=choice=>','const acts=node('),
+  noteMove:part("button('노트로 옮기기'","sc-memo-to-note"),
+  take:part("button('저장된 메모 쓰기'","button('이 편집 내용 쓰기'"),
+  keptLoad:part("button('입력칸에 넣기'","button('버리기'"),
+  overwrite:part('binding.overwrite=async(','if(!opts.manual)')
+ };
+ for(const [name,text] of Object.entries(parts))assert.match(text,/finally\s*\{[^}]*reconcileAll\(/,name+' reconciles in a finally');
 });

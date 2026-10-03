@@ -4223,3 +4223,32 @@ test('memo revision (R9-3): the answer of a save that another save overtook is b
   w.fx.Z.Item.prototype.saveTx = orig;
   assert.ok(answerA.rev < w.row.memoRev, 'A\'s answer is stale: ' + answerA.rev + ' < ' + w.row.memoRev);
 });
+
+test('pending writes (R11): a memo write is pending until its storage write settles or rolls back, and listeners hear it after the rollback', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  const orig = w.plugin.flush;
+  let release; const gate = new Promise(r => { release = r; }), first = {v: true};
+  w.plugin.flush = async function () { if (first.v) { first.v = false; await gate; throw new Error('disk'); } return orig.call(this); };
+  const heard = [];
+  w.plugin.addMemoListener(() => heard.push({pending: w.plugin.memoWritePending(w.c), remark: w.row.remark}));
+  const write = w.lib.setRemark(3, 'X').catch(error => error);
+  await new Promise(r => setTimeout(r, 5));
+  assert.equal(w.plugin.memoWritePending(w.c), true, 'pending while the storage write is held');
+  assert.equal(w.row.remark, 'X', 'the in-memory value is X');
+  release();
+  assert.ok((await write) instanceof Error);
+  assert.equal(w.plugin.memoWritePending(w.c), false);
+  assert.deepEqual(heard, [{pending: false, remark: 'B'}], 'listeners hear the settle after the rollback');
+  w.plugin.flush = orig;
+});
+
+test('pending writes (R11): a note failure after the local save carries memoSaved and the answer revision', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  w.plugin.memoToNote = async () => { throw new Error('note failed'); };
+  const answer = {};
+  const error = await w.lib.setRemark(3, 'X', {answer}).catch(e => e);
+  assert.equal(error.memoSaved, true);
+  assert.equal(w.row.remark, 'X');
+  assert.equal(answer.rev, w.row.memoRev);
+});

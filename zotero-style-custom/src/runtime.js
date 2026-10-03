@@ -4522,6 +4522,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   /* The memo revision: a counter bumped on every change to remark, memoSynced or memoConflict, whoever made it. A writer that
      wants to undo its own write compares it with the value captured right after that write; text equality is not ownership. */
+  /* A memo write is "pending" from the moment it is in memory until its storage write has resolved or been rolled back. The in-memory
+     remark of a pending write is not yet the persisted memo; listeners hear when one settles so editors can reconcile again. */
+  memoWritePending(item) { return (this.memoPendingWrites?.get(this.identity(item)) || 0) > 0; }
+  _memoPending(item, delta) {
+    const map = this.memoPendingWrites || (this.memoPendingWrites = new Map()), id = this.identity(item), n = (map.get(id) || 0) + delta;
+    if (n > 0) map.set(id, n); else map.delete(id);
+    if (delta < 0) for (const listener of [...(this.memoListeners || [])]) { try { listener(item); } catch (error) { this.Z.logError?.(error); } }
+  }
+  addMemoListener(listener) { (this.memoListeners || (this.memoListeners = new Set())).add(listener); return () => this.memoListeners.delete(listener); }
   _memoBump(row) { row.memoRev = (row.memoRev || 0) + 1; this.dirty = true; return row.memoRev; }
   /* What a note's text means for a paper's memo, without writing anything to the note:
      'same' (agreed), 'pull' (memo unchanged since the baseline: take the note), 'push'
