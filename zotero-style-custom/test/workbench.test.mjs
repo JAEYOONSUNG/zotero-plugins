@@ -7983,3 +7983,96 @@ test('soak (two windows): one types, blurs, delays, fails and redraws, the other
   f.bench.destroy();g.bench.destroy();
  }
 });
+
+// Caches written by the real older formats (the draft key of the detail memo editor is fixed per paper).
+const legacyKey=JSON.stringify(['remark',1,'1']);
+const fnvTag=t=>{let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return 'H1:h'+t.length+'.'+h.toString(36);};
+const openDetail=async f=>{await f.bench.show('explore');await f.click('자세히');return f.body().querySelector('[aria-label="읽기 메모"]');};
+
+test('legacy drafts (R17-1): a truncated draft from the sidecar format never shrinks the memo and is never autosaved',async()=>{
+ const stored='x'.repeat(60003);
+ const own='\u0001own';
+ // As ef55d1a wrote it: the draft cut at 50,000 characters, its owner, tagged base, base text and the trunc flag.
+ const cut=stored.slice(0,50000);
+ const f=fixture({items:{1:{remark:stored}},workbenchDrafts:{version:1,entries:[[legacyKey,cut],[legacyKey+own,'w9.4|2'],[legacyKey+'\u0001base',fnvTag(stored)],[legacyKey+'\u0001bt',stored],[legacyKey+'\u0001trunc','1']]}});
+ casLibrary(f);
+ const record=f.runtime.cache.memoDrafts.drafts[legacyKey];
+ assert.equal(record.truncated,true,'the truncated flag is kept');
+ assert.equal(record.owner,'w9.4');assert.equal(record.rev,2);assert.equal(record.base,fnvTag(stored));assert.equal(record.baseText,stored);
+ f.calls.length=0;
+ const el=await openDetail(f);
+ assert.equal(el.value.length,60003,'the editor shows the stored memo, not the cut draft');
+ el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.deepEqual(casWritten(f),[],'nothing is saved');
+ assert.equal(f.runtime.cache.items[1].remark.length,60003,'the memo did not shrink');
+ f.bench.destroy();
+ // A truncated draft that is NOT a cut of the stored memo is a marked kept card, in the editor never.
+ const g=fixture({items:{1:{remark:'now stored'}},workbenchDrafts:{version:1,entries:[[legacyKey,'y'.repeat(50000)],[legacyKey+own,'w9.4|1'],[legacyKey+'\u0001trunc','1']]}});
+ casLibrary(g);
+ const e2=await openDetail(g);
+ assert.equal(e2.value,'now stored');
+ const card=g.body().querySelector('.sc-memo-kept-card');
+ assert.ok(card&&/앞부분만/.test(card.textContent),'offered as a marked card');
+ e2.dispatchEvent(new g.win.Event('blur'));await settle();
+ assert.deepEqual(casWritten(g),[]);
+ g.bench.destroy();
+});
+
+test('legacy drafts (R17-1b): plain string drafts and old-format bases lose nothing and are never restored over a changed memo',async()=>{
+ // Plain string draft (before ownership existed) and a draft whose base is an untagged hash (before bases were tagged).
+ const f=fixture({items:{1:{remark:'stored now'}},workbenchDrafts:{version:1,entries:[[legacyKey,'typed long ago']]}});
+ casLibrary(f);
+ const el=await openDetail(f);
+ assert.equal(el.value,'stored now');
+ assert.ok(keptOrDraft(f,'typed long ago'),'the plain draft is kept: nothing is lost');
+ el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.deepEqual(casWritten(f),[]);
+ f.bench.destroy();
+ const own='\u0001own';
+ const g=fixture({items:{1:{remark:'stored now'}},workbenchDrafts:{version:1,entries:[[legacyKey,'typed over an old base'],[legacyKey+own,'w1.2|5'],[legacyKey+'\u0001base','h10.abc'],[legacyKey+'\u0001bt','old base']]}});
+ casLibrary(g);
+ assert.equal(g.runtime.cache.memoDrafts.drafts[legacyKey].base,undefined,'an untagged base is left unknown, never trusted');
+ assert.equal(g.runtime.cache.memoDrafts.drafts[legacyKey].rev,5);
+ const e2=await openDetail(g);
+ assert.equal(e2.value,'stored now');
+ assert.ok(keptOrDraft(g,'typed over an old base'));
+ g.bench.destroy();
+});
+
+test('kept cards (R17-2): a card equal to a pending write\'s in-memory value is not deleted; it goes only once the write has landed',async()=>{
+ for(const outcome of ['fail','land']){
+  const f=fixture();const state=casPending(f);
+  f.runtime.cache.items[1]={remark:'BASE'};
+  f.runtime.cache.memoKept={'key-1':[{id:'k1',text:'UNSAVED',base:'',owner:'o1'}]};
+  let release;state.hold=new Promise(r=>{release=r;});
+  const pending=f.library.setRemark(1,'UNSAVED',{base:'BASE',answer:{}}).catch(()=>{}); // in memory, held
+  await settle();
+  await f.bench.show('annotations');await settle();
+  assert.ok(f.body().querySelector('.sc-memo-kept-card'),outcome+': the card is still there while the write is pending');
+  assert.equal(f.runtime.cache.memoKept['key-1'].length,1);
+  state.fail=outcome==='fail';release();await pending;await settle();
+  if(outcome==='fail'){
+   assert.equal(f.runtime.cache.items[1].remark,'BASE');
+   assert.equal(f.runtime.cache.memoKept['key-1'].length,1,'the failed write left UNSAVED where it was: in the card');
+  }else{
+   assert.equal(f.runtime.cache.items[1].remark,'UNSAVED');
+   assert.deepEqual(f.runtime.cache.memoKept,{},'once it landed the tidy ran: the card went');
+  }
+  f.bench.destroy();
+ }
+});
+
+test('invariant: every deletion of a draft or kept card checks the paper\'s pending state',()=>{
+ const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const part=(from,to)=>{const a=src.indexOf(from);assert.ok(a>0,from);const b=src.indexOf(to,a);assert.ok(b>a,to);return src.slice(a,b);};
+ for(const [name,text] of Object.entries({
+  tidyKept:part('function tidyKept(','  function dropKept('),
+  finishOwn:part('binding.finishOwn=','return true;'),
+  dropDraft:part('binding.dropDraft=','/* Restore reads')
+ }))assert.match(text,/memoPendingNow\(/,name+' checks the pending state');
+ // The restore path drops a draft equal to the stored memo only when nothing is pending.
+ assert.match(part('binding.restore=()=>{','memoBindings.set(field,binding)'),/sameAsStored&&!memoPendingNow\(/);
+ // dropKept is the reader's own button (입력칸에 넣기 / 버리기) and nothing else.
+ const lines=src.split('\n');const calls=[];lines.forEach((l,i)=>{if(/\bdropKept\(/.test(l)&&!/function dropKept\(/.test(l))calls.push(i);});
+ for(const i of calls)assert.match(lines.slice(Math.max(0,i-12),i+1).join('\n'),/button\('(입력칸에 넣기|버리기)'/,'dropKept at line '+(i+1)+' is only reached from a card button');
+});

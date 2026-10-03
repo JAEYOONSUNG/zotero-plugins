@@ -124,7 +124,9 @@
    const store=memoStore(true);
    for(const ownKey of owners){
     const key=ownKey.slice(0,-DRAFT_OWN.length),raw=map.get(ownKey),cut=raw.lastIndexOf('|');
-    if(map.has(key)&&cut>0&&!store[key])store[key]={text:map.get(key),base:map.get(key+DRAFT_BASE),baseText:map.get(key+DRAFT_BASETEXT),owner:raw.slice(0,cut),rev:Number(raw.slice(cut+1))||1,item:undefined,at:Date.now()};
+    // Nothing the old format knew is dropped: text, owner, revision, the tagged base, the base text, and the flag that the text was cut. A base that is not in the tagged form cannot be trusted and is left unknown.
+    const oldBase=map.get(key+DRAFT_BASE);
+    if(map.has(key)&&cut>0&&!store[key])store[key]={text:map.get(key),base:typeof oldBase==='string'&&oldBase.startsWith(BASE_TAG)?oldBase:undefined,baseText:map.get(key+DRAFT_BASETEXT),owner:raw.slice(0,cut),rev:Number(raw.slice(cut+1))||1,truncated:map.has(key+DRAFT_TRUNC)||undefined,item:undefined,at:Date.now()};
     for(const k of [key,key+DRAFT_BASE,key+DRAFT_OWN,key+DRAFT_TRUNC,key+DRAFT_BASETEXT])map.delete(k);
    }
    runtime.cache.workbenchDrafts={version:1,entries:[...map]};runtime.dirty=true;
@@ -3609,7 +3611,7 @@
   function memoRevNow(itemID){try{const ref=runtime.Z.Items.get(Number(itemID));const row=ref&&runtime.entry(ref);return row?(row.memoRev||0):0;}catch(_){return 0;}}
   const answerFresh=(itemID,rev)=>rev===undefined||rev===memoRevNow(itemID);
   // When a memo write settles (resolved or rolled back) the editors of that paper reconcile again.
-  const stopMemoListener=runtime.addMemoListener?runtime.addMemoListener(item=>{if(!disposed)reconcileAll(item.id,true);}):null;
+  const stopMemoListener=runtime.addMemoListener?runtime.addMemoListener(item=>{if(disposed)return;reconcileAll(item.id,true);tidyKept(item.id);for(const e of body.querySelectorAll('textarea[data-memo-item]'))if(e.dataset.memoItem===String(item.id)&&e.isConnected)memoBindings.get(e)?.drawKept?.();}):null;
   function memoPendingNow(itemID){try{const ref=runtime.Z.Items.get(Number(itemID));return !!(ref&&runtime.memoWritePending?.(ref));}catch(_){return false;}}
   // `idleOnly`: the settle listener leaves editors that have a request of their own running; that request reconciles in its finally, after it has handled its answer.
   function reconcileAll(itemID,idleOnly=false){for(const e of body.querySelectorAll('textarea[data-memo-item]')){if(e.dataset.memoItem!==String(itemID)||!e.isConnected)continue;const b=memoBindings.get(e);if(idleOnly&&b&&b.busy>0)continue;b?.reconcile?.();}}
@@ -3658,9 +3660,10 @@
   function tidyKept(itemID){
    const all=runtime.cache.memoKept,key=keptKey(itemID),list=all&&typeof all==='object'?all[key]:null;
    if(!Array.isArray(list))return;
-   const stored=storedMemo(itemID);
+   // A card equal to the stored memo goes only when no write of this paper is pending: that stored text may be an in-memory value that a failure rolls back.
+   const stored=storedMemo(itemID),pending=memoPendingNow(itemID);
    const keep=list.filter((entry,i)=>{
-    if(entry.text===stored)return false;
+    if(!pending&&entry.text===stored)return false;
     if(entry.owner!==undefined&&list.some((other,j)=>j!==i&&other.owner===entry.owner&&other.text.length>=entry.text.length&&other.text.startsWith(entry.text)&&(other.text.length>entry.text.length||j<i)))return false;
     return true;
    });
@@ -3752,6 +3755,7 @@
     const key=field.dataset.draftKey;if(!key)return false;
     const meta=draftMeta(key);
     if(!meta||meta.owner!==binding.id)return false;
+    if(cas&&memoPendingNow(cas.itemID))return false; // never delete on the strength of an in-memory value that is still being written
     if(token&&(token.owner!==meta.owner||token.rev!==meta.rev))return false;
     if(draftText(key)!==String(submitted))return false;
     updateDraft(key,undefined);return true;
@@ -3938,7 +3942,7 @@
    binding.ownDraftWrite=(text,base)=>{if(binding.draftToken())updateDraft(field.dataset.draftKey,text,base,binding.id);};
    const sameMeta=(a,b)=>(!a&&!b)||(a&&b&&a.owner===b.owner&&a.rev===b.rev);
    binding.claimDraft=(text,base,seen)=>{if(sameMeta(draftMeta(field.dataset.draftKey),seen))updateDraft(field.dataset.draftKey,text,base,binding.id);};
-   binding.dropDraft=seen=>{if(sameMeta(draftMeta(field.dataset.draftKey),seen))updateDraft(field.dataset.draftKey,undefined);};
+   binding.dropDraft=seen=>{if(cas&&memoPendingNow(cas.itemID))return;if(sameMeta(draftMeta(field.dataset.draftKey),seen))updateDraft(field.dataset.draftKey,undefined);};
    /* Restore reads the SHARED draft as it is now (never this window's older copy). Another live window's draft is not touched:
       a copy is offered as a kept card. One of this window or of a closed one goes back into the editor only when the memo it
       was typed over is still the stored one (compared by hash) and the editor holds nothing else, and it is not truncated;
@@ -3948,7 +3952,7 @@
     if(!cas||!key)return;
     const record=memoRecord(key),legacy=record?undefined:cachedDrafts().get(key),draft=record?record.text:legacy;
     if(typeof draft!=='string')return;
-    const meta=draftMeta(key),draftBase=record?record.base:undefined,truncated=!record&&cachedDrafts().has(key+DRAFT_TRUNC);
+    const meta=draftMeta(key),draftBase=record?record.base:undefined,truncated=record?record.truncated===true:cachedDrafts().has(key+DRAFT_TRUNC);
     const stored=storedMemo(cas.itemID);
     const sameAsStored=draft===stored||(truncated&&stored.slice(0,DRAFT_LENGTH)===draft);
     // The stored memo the draft was typed over, as text, when it is on record and matches its hash.
@@ -3964,7 +3968,7 @@
      if(memoPendingNow(cas.itemID)&&!binding.known)captureKnown();
      binding.claimDraft(draft,claimBase,meta);binding.unsaved=true;return;
     }
-    if(sameAsStored){binding.dropDraft(meta);return;}
+    if(sameAsStored&&!memoPendingNow(cas.itemID)){binding.dropDraft(meta);return;}
     if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.loaded){field.value=draft;grow();binding.unsaved=true;binding.claimDraft(draft,claimBase,meta);return;}
     keepDraft(cas.itemID,draft,draftBase,truncated,meta?meta.owner:undefined);binding.dropDraft(meta);drawKept();
    };
