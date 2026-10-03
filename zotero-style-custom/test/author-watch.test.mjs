@@ -34,7 +34,8 @@ function host({rows, pages, profiles = []}) {
     libraryDOIs: () => new Set(["10.1/w9"]),
     watchedAuthors: Runtime.prototype.watchedAuthors,
     pause: Runtime.prototype.pause,
-    WATCH_LIMIT: 500, SEEN_LIMIT: 400,
+    WATCH_LIMIT: 500, SEEN_LIMIT: 400, NEWS_LIMIT: 50,
+    keepNews: Runtime.prototype.keepNews, panelSeenKeys: Runtime.prototype.panelSeenKeys,
     outOfBudget: Runtime.prototype.outOfBudget,
     watchedAuthorsByNews: Runtime.prototype.watchedAuthorsByNews,
     watchAuthor: Runtime.prototype.watchAuthor,
@@ -557,4 +558,49 @@ test("an author never checked before still sees their whole window, since there 
   const h = host({rows, pages: [page([work("W1", ["A1"], {publication_date: day(300)})]), page([])]});
   await h.sweepWatchedAuthors();
   assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["W1"], "there is nothing to measure it against yet");
+});
+
+test("an author with more than eight new papers keeps every unseen one, up to a cap of fifty", async () => {
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const many = n => Array.from({length: n}, (_, i) => work("W" + i, ["A1"], {publication_date: new Date(Date.now() - (i + 1) * 864e5).toISOString().slice(0, 10)}));
+  const h = host({rows: [person("A1", {seen: []})], pages: [page(many(12)), page([])]});
+  await h.sweepWatchedAuthors();
+  assert.equal(h.cache.watchedAuthors[0].news.length, 12, "the card must not say there is nothing left while four papers were dropped");
+  const big = host({rows: [person("A1", {seen: []})], pages: [page(many(60)), page([])]});
+  await big.sweepWatchedAuthors();
+  assert.equal(big.cache.watchedAuthors[0].news.length, 50);
+  assert.equal(big.cache.watchedAuthors[0].news[0].id, "W0", "newest first, so the oldest are the ones dropped");
+});
+
+test("papers marked seen in the panel are the ones dropped first when the cap bites", () => {
+  const h = host({rows: []});
+  h.NEWS_LIMIT = 3;
+  h.cache.workbenchUI = {inboxSeen: {"1:10.1/w1": "2026-01-01", "10.1/w3": "2026-01-01"}};
+  const make = (n, date) => ({id: "W" + n, doi: "10.1/w" + n, date});
+  const kept = h.keepNews([make(1, "2026-09-05"), make(2, "2026-09-04"), make(3, "2026-09-03"), make(4, "2026-09-02"), make(5, "2026-09-01")]);
+  assert.deepEqual(kept.map(w => w.id), ["W2", "W4", "W5"], "all three unseen stay; the two seen go");
+});
+
+test("expiry measures from the last sweep, not from the day the author was followed", async () => {
+  const followed = new Date(Date.now() - 400 * 864e5).toISOString();
+  const swept = new Date(Date.now() - 10 * 864e5).toISOString();
+  const day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const rows = [person("A1", {checkedAt: followed, sweptAt: swept, seen: []})];
+  const h = host({rows, pages: [page([work("W1", ["A1"], {publication_date: day(5)}), work("W2", ["A1"], {publication_date: day(150)})]), page([])]});
+  await h.sweepWatchedAuthors();
+  assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["W1"], "a 150-day-old paper predates the last sweep by months: back catalogue");
+  assert.ok(h.cache.watchedAuthors[0].seen.includes("W2"));
+});
+
+test("something the inbox already showed and nobody marked is never filed away silently", async () => {
+  const swept = new Date(Date.now() - 10 * 864e5).toISOString();
+  const day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const shown = {id: "W2", title: "W2 title", doi: "10.1/w2", date: day(150)};
+  const rows = [person("A1", {sweptAt: swept, seen: [], news: [shown]})];
+  const h = host({rows, pages: [page([work("W2", ["A1"], {publication_date: day(150)})]), page([])]});
+  await h.sweepWatchedAuthors();
+  assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["W2"], "still in the inbox");
+  assert.ok(!h.cache.watchedAuthors[0].seen.includes("W2"));
 });

@@ -19,6 +19,8 @@ The repository README has the illustrated tour: [../README.md](../README.md). Th
 
 ⌘/Ctrl K finds a tab by name. `/` or ⌘/Ctrl F focuses the search; Esc closes the finder, then the panel. The last tab, the panel's density and whether it was docked are remembered.
 
+**Searching the library.** The panel's search takes plain words, `"a phrase"`, `-excluded`, field terms (`title:`, `author:`, `tag:`, `journal:`, `year:2018-2022`, `collection:`, `abstract:`, `note:`), and now `OR` (capitals; also `|`) with parentheses: `(cats OR dogs) -deep author:kim`. Lowercase `or` stays a word.
+
 **The right-click menu.** Reading status and rating; search this paper in ZotPoP; related papers; follow the senior author; copy in a citation style; open the citation graph; refresh citations and journal metrics; check retractions and open access; fill the gaps from OpenAlex; look up citations for the whole library. Every entry carries a drawn sign.
 
 **Settings.** Ten categories with search, an explanation on every item, per-category defaults, and a *Start here* block naming the keys still blank. API keys are shown masked and are not cleared by restoring a category's defaults.
@@ -38,12 +40,21 @@ Figures are from the JCR 2026 release (metric year 2025); the source's own updat
 - **Citation counts** are looked up from OpenAlex (DOIs in batches) and cross-checked with Crossref's exact DOI lookup; without a DOI, only a match on title, year and first author is accepted. A paper that is added or whose metadata changes is looked up about 1.2 seconds later, and the figure is written to the Extra field as one line, `Citations: 123 (OpenAlex, 2026-09-13)`, leaving the rest of Extra alone. Successes are not re-asked for seven days, misses for one, errors for thirty minutes. An exact 0, an unknown `—` and an in-progress `…` are distinct. This can be turned off in the settings.
 - **Impact factor** comes from the shipped JCR figures matched on journal name, alias and ISSN, with the year, source and check date in the tooltip. Nothing is guessed: a preprint, book or dataset gets no journal IF, CiteScore is never shown as IF, and an unknown value is `—` with the reason, never 0.
 - **Followed authors**, their seen papers, moves and patents are kept in the same data file.
+- **Local only, not synced.** These live in `style-custom.json` on this computer and are not synced by Zotero or anything else: your memos on papers, the reading queue (keyed by `libraryID:itemKey`), the "seen" marks of the author inbox and 새 논문 (keyed by DOI or OpenAlex work id, shared by all libraries because the watchlist is), the canvas boards and their cards, and each tab's filters and search state. Use another computer and they are not there; keep a copy of the file if they matter. Status and rating are the exception (Zotero tags, above).
+
+## Authors
+
+**Following.** An author followed from a paper, a list or the authors tab is swept for new papers on request or in the background: everything not yet marked seen stays in the inbox (up to 50 per author, oldest dropped only once seen) and an unmarked paper is never filed away silently. Retraction and published-version signals are re-checked after 90 days (30 for a preprint with no published version) and the check-up notice says how many are newly retracted or newly published.
+
+**Relations and grouping.** *관계* draws who among the followed authors writes with whom, from papers already held (no request is made to draw it); picking someone narrows the inbox to them. *묶어 보기* groups the list by affiliation, tier, country or field.
+
+**LinkedIn.** The *LinkedIn* button on an author opens, in your browser, the profile listed on their public ORCID record, or LinkedIn's people search for their name and institution. Nothing is fetched from LinkedIn; the only request is to ORCID's public API, and only when you press the button.
 
 Email addresses and API keys are sent only to the service they belong to, and only if you entered them.
 
 ## Self-check
 
-When the pref `extensions.style-custom.selfCheck` is set and Zotero starts, the plugin runs its checks against the real library and writes `style-custom-selfcheck.json` next to its data file: column registration, every tab drawing, every safe button surviving a press, the panel docking into a tab, the item menu's signs and English, the translation coverage, the citation dialog, the reading history, the watchlist, and the live APIs. It opens no window. The flag clears itself.
+When the pref `extensions.style-custom.selfCheck` is set and Zotero starts, the plugin runs its 47 checks (46 when no demonstration library is named) against the real library and writes `style-custom-selfcheck.json` next to its data file: column registration, every tab drawing, every safe button surviving a press, the panel docking into a tab, the item menu's signs and English, the translation coverage, the citation dialog, the reading history, the watchlist, and the live APIs. It opens no window. The flag clears itself.
 
 ## Updates
 

@@ -25,6 +25,9 @@ function host({items = [], fetched = new Map(), budgetAt = null} = {}) {
     outOfBudget: Runtime.prototype.outOfBudget,
     pause: () => Promise.resolve(),
     itemsNeedingSignals: Runtime.prototype.itemsNeedingSignals,
+    signalsStale: Runtime.prototype.signalsStale,
+    SIGNAL_RECHECK_DAYS: 90, PREPRINT_RECHECK_DAYS: 30,
+    backfillPending: Runtime.prototype.backfillPending,
     libraryItems: Runtime.prototype.libraryItems,
     // Reading files needs no network, so it is the first stage of the backfill.
     attachmentKinds: () => [],
@@ -178,4 +181,29 @@ test("when neither service answered and the budget was the reason, the sweep sto
   h.Z.HTTP = {request: async (method, url) =>
     /crossref/.test(url) ? {status: 404, response: null} : {status: 429, response: null}};
   await assert.rejects(() => h.fetchPaperSignals({id: 1}), err => err.status === 429);
+});
+
+const daysAgo = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+
+test("a verdict older than ninety days is asked again, a preprint's after thirty", async () => {
+  const h = host({items: [paper(1), paper(2), paper(3), paper(4)]});
+  h.cache.items["1"] = {signals: {status: "standing", checkedAt: daysAgo(10)}};
+  h.cache.items["2"] = {signals: {status: "standing", checkedAt: daysAgo(120)}};
+  h.cache.items["3"] = {signals: {status: "standing", preprint: true, published: null, checkedAt: daysAgo(40)}};
+  h.cache.items["4"] = {signals: {status: "standing", preprint: true, published: {doi: "10.1/p"}, checkedAt: daysAgo(40)}};
+  assert.deepEqual((await h.itemsNeedingSignals(1)).map(i => i.id).sort(), [2, 3],
+    "old and unpublished-preprint-over-30 are queued; fresh, and a preprint already published at 40 days, are not");
+});
+
+test("a re-check counts what is newly retracted and newly published, and says so in the notice", async () => {
+  const found = new Map([
+    [1, {signals: {status: "retracted", rank: 3, checkedAt: daysAgo(0), preprint: false, published: null}, reason: "ok"}],
+    [2, {signals: {status: "standing", rank: 0, checkedAt: daysAgo(0), preprint: true, published: {doi: "10.1/p"}}, reason: "ok"}]]);
+  const h = host({items: [paper(1), paper(2)], fetched: found});
+  h.cache.items["1"] = {signals: {status: "standing", rank: 0, checkedAt: daysAgo(200)}};
+  h.cache.items["2"] = {signals: {status: "standing", rank: 0, preprint: true, published: null, checkedAt: daysAgo(60)}};
+  const report = await h.backfill({});
+  assert.equal(report.signals.newRetracted, 1);
+  assert.equal(report.signals.newPublished, 1);
+  assert.match(h.backfillSummary(report), /새로 철회 1 · 새로 게재 1/);
 });

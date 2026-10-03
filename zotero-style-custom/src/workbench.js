@@ -123,6 +123,30 @@
   const head=node('header',null,panel,{class:'sc-header'}),brand=node('div',null,head,{class:'sc-brand'});node('img',null,brand,{src:runtime.rootURI+'content/icons/style-custom.svg',width:24,height:24,alt:'','aria-hidden':'true'});node('strong','Style Custom',brand);node('span','연구 작업 패널',brand,{class:'sc-subtitle'});const headerActions=node('div',null,head,{class:'sc-header-actions'});
   const status=node('div','준비',panel,{class:'sc-status',role:'status','aria-live':'polite'});
   function message(value,error=false){if(disposed)return;status.textContent=String(T(value));status.dataset.error=String(error);}
+  /* An undo that outlives the redraw it follows: a small strip under the
+     status line, kept eight seconds, one at a time. A second delete replaces
+     the first strip (its undo is then gone, as the earlier one's time was up). */
+  const toast=node('div',null,panel,{class:'sc-undo-toast',role:'status','data-role':'undo-toast'});toast.hidden=true;
+  let toastTimer=null;
+  // Letting an author go keeps a copy of the whole row for the undo strip.
+  async function unfollow(person,after){
+   const rows=runtime.watchedAuthors?.()||[],at=rows.findIndex(r=>r.id===person.id),row=at>=0?JSON.parse(JSON.stringify(rows[at])):null;
+   await runtime.unwatchAuthor(person.id);
+   if(row)undoToast(`${person.name||row.name}을(를) 관심 저자에서 뺐습니다.`,async()=>{
+    if(typeof runtime.restoreWatchedAuthor==='function')await runtime.restoreWatchedAuthor(row,at);
+    if(!disposed&&state.tab==='authors')await after?.();
+    message(`${person.name||row.name}을(를) 다시 관심 저자로 넣었습니다.`);
+   });
+  }
+  function dismissToast(){if(toastTimer){win.clearTimeout(toastTimer);toastTimer=null;}toast.hidden=true;toast.replaceChildren();}
+  function undoToast(text,undo,ms=8000){
+   if(disposed)return;dismissToast();
+   node('span',text,toast,{class:'sc-undo-toast-text'});
+   const b=node('button','되돌리기',toast,{type:'button',class:'sc-undo-toast-button','data-action':'undo'});
+   b.addEventListener('click',()=>{if(b.disabled)return;b.disabled=true;run(async()=>{try{await undo();}finally{dismissToast();}});});
+   toast.hidden=false;
+   toastTimer=win.setTimeout(()=>{toastTimer=null;if(!disposed)dismissToast();},ms);
+  }
   // The last three features shipped and then sat empty because they waited on a
   // context-menu item nobody had a reason to look for. Putting the new one in
   // the same place would repeat that, so the panel says what is missing, where
@@ -183,19 +207,44 @@
    });return b;
   };
   function saveUI(patch){if(patch.density)runtime.Z.Prefs.set('extensions.style-custom.workbenchDensity',patch.density,true);runtime.cache.workbenchUI={...(runtime.cache.workbenchUI||{}),...patch};runtime.dirty=true;return runtime.flush();}
-  /* 확인함: one store for 저자 추적's inbox and 새 논문. Kept per library by
+  /* 확인함: one store for 저자 추적's inbox and 새 논문. Kept for all libraries by
      normalised DOI, else OpenAlex work id (never by title), apart from the news
      and the answers themselves, which a later sweep replaces. Separate from the
      reading state: marking a paper seen never changes its status. */
   const seenWorkKey=work=>String(work.doi||'').toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim()||String(work.id||'');
-  const seenKey=entry=>`${state.libraryID||''}:${entry.key}`;
-  const seenAll=()=>runtime.cache.workbenchUI?.inboxSeen||{};
+  // By work alone: the watchlist is global, so a paper marked seen in one library is seen in all of them.
+  const seenKey=entry=>String(entry.key);
+  /* Marks saved when the store was per library ("1:10.1/x") are folded into
+     the bare key, the earlier mark date winning, the first time they are read. */
+  const seenMemo={store:null};
+  function seenAll(){
+   const store=runtime.cache.workbenchUI?.inboxSeen||{};
+   if(seenMemo.store===store)return store;
+   let next=null;
+   for(const k of Object.keys(store)){
+    if(!/^\d*:/.test(k))continue;
+    next||={...store};delete next[k];
+    const bare=k.replace(/^\d*:/,'');
+    if(!bare)continue;
+    if(!next[bare]||String(store[k])<String(next[bare]))next[bare]=store[k];
+   }
+   if(next){runtime.cache.workbenchUI={...(runtime.cache.workbenchUI||{}),inboxSeen:next};runtime.dirty=true;}
+   seenMemo.store=next||store;
+   return next||store;
+  }
   const isSeen=entry=>!!entry.key&&!!seenAll()[seenKey(entry)];
   function setSeen(entry,on){
    const next={...seenAll()};
    if(on)next[seenKey(entry)]=new Date().toISOString();else delete next[seenKey(entry)];
    // Oldest go first past a few thousand; a follow list turns over long before that.
    const keys=Object.keys(next);if(keys.length>3000)for(const k of keys.sort((x,y)=>String(next[x]).localeCompare(String(next[y]))).slice(0,keys.length-3000))delete next[k];
+   return saveUI({inboxSeen:next});
+  }
+  // Many marks in one write (모두 확인함 and its undo), so one press is one save.
+  function setSeenMany(keys,on,stamp=null){
+   const next={...seenAll()};
+   for(const key of keys){if(on)next[key]=stamp?.[key]||new Date().toISOString();else delete next[key];}
+   const all=Object.keys(next);if(all.length>3000)for(const k of all.sort((x,y)=>String(next[x]).localeCompare(String(next[y]))).slice(0,all.length-3000))delete next[k];
    return saveUI({inboxSeen:next});
   }
   /* The two inboxes are worked through from the keyboard: inside the list,
@@ -893,6 +942,27 @@
   const goAnnots=button('주석',()=>navigateSelection('annotations'),tasks);
   const goCompare=button('논문 비교',()=>navigateSelection('matrix'),tasks,{'data-variant':'primary'});
   const goSide=button('주석 나란히',()=>{state.annotationCompareIDs=[...state.selected].slice(0,2).map(String);state.annotationCompare=true;return navigateSelection('annotations');},tasks);
+  /* Three things to do with whatever is chosen, without leaving the panel for
+     the Zotero window: copy the citations, put the papers in a new collection
+     (named here, in the panel), or select them in Zotero's own list. */
+  const chosenRefs=()=>[...state.selected].map(id=>runtime.Z.Items.get(Number(id))).filter(Boolean);
+  const citeAction=button('인용 복사',()=>{const refs=chosenRefs();if(!refs.length)throw new Error('인용문을 만들 문헌을 먼저 선택하세요.');return runtime.citationPanel(win,refs);},tasks,{'data-opens':'dialog',title:T('선택한 문헌의 인용문을 APA·MLA·Vancouver 등 형식으로 만들어 복사합니다')});
+  const pickAction=button('Zotero에서 선택',async()=>{
+   const ids=[...state.selected].map(Number).filter(Number.isFinite);if(!ids.length)throw new Error('먼저 문헌을 선택하세요.');
+   if(typeof win.ZoteroPane?.selectItems!=='function')throw new Error('Zotero 목록을 쓸 수 없습니다. Zotero를 다시 시작한 뒤 시도하세요.');
+   await win.ZoteroPane.selectItems(ids);message(`Zotero 목록에서 ${ids.length}편을 선택했습니다.`);
+  },tasks,{'data-opens':'pane',title:T('Zotero 목록에서 같은 문헌들을 선택합니다')});
+  const collectRow=node('div',null,footer,{class:'sc-selection-collect'});collectRow.hidden=true;
+  const collectName=node('input',null,collectRow,{'aria-label':'새 컬렉션 이름',placeholder:'새 컬렉션 이름'});
+  const collectGo=button('만들고 담기',async()=>{
+   const made=await library.saveToCollection(collectName.value,[...state.selected]);
+   collectName.value='';collectRow.hidden=true;
+   message(`컬렉션 “${made.name}”을 만들고 ${made.count}편을 담았습니다.`);
+   await load();
+  },collectRow);
+  const collectToggle=button('컬렉션으로 저장',()=>{collectRow.hidden=!collectRow.hidden;if(!collectRow.hidden)collectName.focus?.();},tasks,{'aria-expanded':'false',title:T('선택한 문헌을 새 컬렉션으로 묶습니다')});
+  collectToggle.addEventListener('click',()=>collectToggle.setAttribute('aria-expanded',String(!collectRow.hidden)));
+  collectName.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();collectGo.click();}});
   const relations=node('details',null,footer,{class:'sc-selection-relations'});node('summary',T('연결 작업'),relations);
   const relatedAction=button('관련 문헌으로 연결',async()=>{const n=state.selected.size;await library.relate([...state.selected]);await load();message(`${n}개 문헌을 서로 관련 문헌으로 연결했습니다.`);},relations);
   const unlinkAction=button('선택 문헌끼리 연결 해제',async()=>{const changed=await library.unrelate([...state.selected]);await load();message(`${changed}개 문헌의 상호 연결을 해제했습니다.`);},relations);
@@ -1111,8 +1181,8 @@
    clearSelection.disabled=nativeJCR||!count||clearSelection.dataset.busy==='true';relatedAction.disabled=nativeJCR||count<2||relatedAction.dataset.busy==='true';unlinkAction.disabled=nativeJCR||count<2||unlinkAction.dataset.busy==='true';
    // Nothing chosen: no bar. The tasks offered follow how many are chosen.
    if(!count)footer.hidden=true;
-   goNotes.hidden=goAnnots.hidden=count!==1;goCompare.hidden=count<2;goSide.hidden=count!==2;relations.hidden=count<2;
-   for(const task of [goNotes,goAnnots,goCompare,goSide])task.disabled=nativeJCR;
+   citeAction.hidden=pickAction.hidden=collectToggle.hidden=!count;if(!count)collectRow.hidden=true;goNotes.hidden=goAnnots.hidden=count!==1;goCompare.hidden=count<2;goSide.hidden=count!==2;relations.hidden=count<2;
+   for(const task of [goNotes,goAnnots,goCompare,goSide,citeAction,pickAction,collectToggle,collectGo])task.disabled=nativeJCR;
    for(const card of body.querySelectorAll('[data-item-id]'))card.dataset.selected=String(state.selected.has(card.dataset.itemId));
   }
   /* What the search box actually matches, per tab: notes by title and body,
@@ -1328,15 +1398,55 @@
   /* 읽기 대기, one store for every place that adds to it: kept per library
      by item, with when and from whom it came. Adding again keeps the first
      date and source; finished or started papers are not added in bulk. */
-  const queueKey=id=>`${state.libraryID||''}:${id}`;
-  const readingQueue=()=>runtime.cache.workbenchUI?.readingQueue||{};
+  const itemKeyOf=(()=>{let src=null,size=-1,byID=null;return id=>{if(src!==state.items||size!==(state.items||[]).length){src=state.items;size=(state.items||[]).length;byID=new Map((state.items||[]).map(i=>[String(i.id),i]));}return byID.get(String(id))?.key||'';};})();
+  // By the item's library key like the rest of the plugin's records (the numeric id is local to this profile).
+  const queueKey=(id,key)=>`${state.libraryID||''}:${key||itemKeyOf(id)||id}`;
+  /* Entries saved when the queue was keyed by numeric item id are moved to the
+     item's key as soon as the items are known; nothing is lost, a key that
+     already is one is left alone. */
+  const queueMemo={store:null,items:null};
+  function readingQueue(){
+   const store=runtime.cache.workbenchUI?.readingQueue||{};
+   if(!state.items?.length||(queueMemo.store===store&&queueMemo.items===state.items))return store;
+   const prefix=`${state.libraryID||''}:`,keys=new Set(state.items.map(i=>i.key)),ids=new Map(state.items.map(i=>[String(i.id),i.key]));
+   let next=null;
+   for(const k of Object.keys(store)){
+    if(!k.startsWith(prefix))continue;
+    const tail=k.slice(prefix.length);if(keys.has(tail))continue;
+    const key=ids.get(tail);if(!key)continue;
+    next||={...store};delete next[k];if(!next[prefix+key])next[prefix+key]=store[k];
+   }
+   if(next){runtime.cache.workbenchUI={...(runtime.cache.workbenchUI||{}),readingQueue:next};runtime.dirty=true;}
+   queueMemo.store=next||store;queueMemo.items=state.items;
+   return next||store;
+  }
   // A wait counts until reading starts after it was set; one used up by reading is no longer waiting.
   const waitUsed=(id,entry)=>{const ref=runtime.Z.Items.get(Number(id)),read=Date.parse((ref&&runtime.entry?.(ref)?.lastRead)||'');return Number.isFinite(read)&&read>Date.parse(entry?.at||'');};
   const isQueued=id=>{const entry=readingQueue()[queueKey(id)];return !!entry&&!waitUsed(id,entry);};
+  /* 추가: where an imported paper goes is said before and after. The label
+     names the collection selected behind the panel (the import lands there);
+     the status line says whether it was imported or already held. */
+  const importTarget=()=>{try{return String(win.ZoteroPane?.getSelectedCollection?.()?.name||'');}catch(_){return '';}};
+  const importLabel=()=>{const name=importTarget();return name?`추가 → ${name}`:'추가';};
+  const importTip=()=>{const name=importTarget();return name?`선택한 컬렉션 ‘${name}’에 가져옵니다`:'지금 보는 라이브러리에 가져옵니다 (선택한 컬렉션이 없습니다)';};
+  async function importHere(work){
+   message('가져오는 중… '+String(work.title||work.doi).slice(0,50));
+   const saved=await runtime.importWork(work,win);
+   const label=String(saved?.[0]?.getField?.('title')||work.title||work.doi);
+   message(saved?.existing?`이미 보유하고 있어 다시 가져오지 않았습니다 — ${label}`
+    :`추가했습니다 — ${label}${saved?.collectionName?` → ${saved.collectionName}`:''}`);
+   return saved;
+  }
+  // The panel's own shape of a paper just taken in, so its row can be drawn as owned before the list reloads.
+  function ownedRecord(saved,work){
+   const item=saved?.[0];if(!item||item.id===undefined||item.id===null)return null;
+   const known=state.items.find(i=>String(i.id)===String(item.id));if(known)return known;
+   return {id:String(item.id),key:item.key,libraryID:item.libraryID,title:String(item.getField?.('title')||work.title||''),year:String(work.year||''),venue:String(work.venue||''),doi:String(work.doi||''),authors:'',tags:[],related:[],status:'unread',seconds:0};
+  }
   function setReadingQueue(items,on,people=[],reason=null){
    const next={...readingQueue()};let changed=0;
    for(const item of items){
-    const key=queueKey(item.id);
+    const key=queueKey(item.id,item.key);
     if(on){
      // Being read or finished is past waiting; 이어 읽기 and the list have it.
      if(item.status==='done'||item.status==='reading')continue;
@@ -1389,7 +1499,10 @@
     if(!state.items.length){empty('라이브러리에 문헌이 없습니다. ZotPoP으로 논문을 찾아 추가하세요.');if(typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP 열기',()=>runtime.Z.ZotPoP.openSearch(win),bar(),{'data-variant':'primary','data-opens':'window'});return;}
     empty('조건에 맞는 문헌이 없습니다. 검색어나 필터를 지우세요. 새 논문을 찾으려면 ZotPoP 논문 검색을 사용하세요.');
     // The summary that set a filter is gone with the papers; the way back stays on the page.
-    if(state.query||state.status||Object.values(parentOptions()).some(Boolean))button('검색과 필터 지우기',()=>resetFilters.click(),bar(),{'data-variant':'primary'});
+    const emptyBar=bar();
+    if(state.query||state.status||Object.values(parentOptions()).some(Boolean))button('검색과 필터 지우기',()=>resetFilters.click(),emptyBar,{'data-variant':'primary'});
+    // Nothing held matches: the same words, one press away in ZotPoP's search of the literature.
+    if(String(state.query||'').trim()&&typeof runtime.Z?.ZotPoP?.openSearch==='function'){const typed=String(state.query).trim();button(`ZotPoP에서 ‘${typed.length>40?typed.slice(0,40)+'…':typed}’ 찾기`,()=>runtime.Z.ZotPoP.openSearch(win,{keywords:typed}),emptyBar,{'data-opens':'window',title:T('보유 문헌에 없는 논문을 ZotPoP에서 같은 검색어로 찾습니다')});}
     return;
    }
    const pageSize=setting('explorePageSize',100),key=JSON.stringify([state.tab,state.scope,items.map(i=>i.id)]);
@@ -3110,8 +3223,21 @@
       stands between them and reading. Waiting ones say so. */
    const statusOf=id=>state.items.find(i=>String(i.id)===String(id))?.status;
    const unreadMissing=found.missing.filter(row=>{const st=statusOf(row.id);return st!=='done'&&st!=='reading';});
-   section('unreadMissing','안 읽었고 파일도 없는 문헌',unreadMissing,'',(row,actions)=>{if(isQueued(row.id))node('span',T('읽기 대기 중'),actions,{class:'sc-muted'});});
-   section('readMissing','첨부파일 없음 · 읽는 중·완료',found.missing.filter(row=>!unreadMissing.includes(row)),'');
+   /* Zotero's own "Find Available PDF" for the paper (its open-access and
+      institutional resolvers); nothing opens, the outcome is said on the status line. */
+   const findPDF=(row,actions)=>{
+    if(typeof runtime.findPDF!=='function')return;
+    button('PDF 찾기',()=>run(async()=>{
+     message(`PDF를 찾는 중… ${String(row.title||'').slice(0,50)}`);
+     const result=await runtime.findPDF(row.id);
+     if(disposed)return;
+     if(result.status==='found'){message(`PDF를 찾아 붙였습니다 — ${row.title||''}`);await render();}
+     else if(result.status==='unsupported')message('이 Zotero에서는 PDF 찾기를 쓸 수 없습니다.',true);
+     else message(`열려 있는 PDF를 찾지 못했습니다 — ${row.title||''}`,true);
+    }),actions,{'data-opens':'download',title:T('Zotero가 오픈액세스·기관 구독 경로에서 PDF를 찾아 붙입니다')});
+   };
+   section('unreadMissing','안 읽었고 파일도 없는 문헌',unreadMissing,'',(row,actions)=>{findPDF(row,actions);if(isQueued(row.id))node('span',T('읽기 대기 중'),actions,{class:'sc-muted'});});
+   section('readMissing','첨부파일 없음 · 읽는 중·완료',found.missing.filter(row=>!unreadMissing.includes(row)),'',findPDF);
   }
 
   async function drawAttachments(token){
@@ -3449,12 +3575,12 @@
     return words?T(`마지막 쪽 주석: p.${page} · ${words}`):T(`마지막 쪽 주석: p.${page}`);
    };
    // 읽기 대기: papers put by for reading, oldest first, until reading starts.
-   const queue=Object.entries(runtime.cache.workbenchUI?.readingQueue||{}).filter(([key])=>key.startsWith(`${state.libraryID||''}:`));
+   const queue=Object.entries(readingQueue()).filter(([key])=>key.startsWith(`${state.libraryID||''}:`));
    const queued=[],inView=new Set(rows().map(i=>String(i.id)));
+   const byKey=new Map(state.items.map(i=>[String(i.key),i]));
    for(const [key,entry] of queue.sort((a,b)=>String(a[1].at).localeCompare(String(b[1].at)))){
     // The queue answers the same search and filters as the rest of the page.
-    const id=key.split(':').pop();if(!inView.has(id))continue;
-    const item=state.items.find(i=>String(i.id)===id);if(!item)continue;
+    const item=byKey.get(key.slice(`${state.libraryID||''}:`.length));if(!item||!inView.has(String(item.id)))continue;
     const ref=runtime.Z.Items.get(Number(item.id));const started=ref?Date.parse(runtime.entry(ref).lastRead||''):NaN;
     // Read since it was put by: it has moved on to 이어 읽기 or the list, and is not shown twice.
     if(Number.isFinite(started)&&started>Date.parse(entry.at||''))continue;
@@ -3664,7 +3790,11 @@
      const memo=String(item.remark||'').trim();
      if(memo)node('span',memo.split('\n')[0].slice(0,140),text,{class:'sc-resume-remark'});
      button('열기',()=>run(()=>library.openItem(item.id)),row,{'data-opens':'window'});
-     button('대기 해제',()=>run(async()=>{const next={...(runtime.cache.workbenchUI?.readingQueue||{})};delete next[key];await saveUI({readingQueue:next});refreshReading();}),row);
+     button('대기 해제',()=>run(async()=>{
+      const before={...readingQueue()},had=before[key];
+      const next={...before};delete next[key];await saveUI({readingQueue:next});refreshReading();
+      undoToast(`“${item.title||T('제목 없음')}”을 읽기 대기에서 뺐습니다.`,async()=>{await saveUI({readingQueue:{...readingQueue(),[key]:had}});refreshReading();});
+     }),row);
     }
     if(queued.length>10)button(state.queueAll?'10편만 보기':T(`${queued.length}편 모두 보기`),()=>{state.queueAll=!state.queueAll;refreshReading();},list,{class:'sc-local-reading-more'});
    }
@@ -3779,7 +3909,11 @@
     button('복원',async()=>{const result=await reader.restoreTabGroup(win,group.id);await render();message(`복원 ${result.opened} · 찾지 못함 ${result.missing}`);},c);
     button('탭 그룹 이름 변경',async()=>{const submitted=title.value;await reader.renameTabGroup(group.id,submitted);finishDraft(title,submitted);render();},c);
     button('현재 탭으로 그룹 갱신',async()=>{await reader.updateTabGroup(win,group.id);render();},c);
-    button('그룹 삭제',async()=>{await reader.deleteTabGroup(group.id);render();},c);
+    button('그룹 삭제',async()=>{
+     const at=reader.tabGroups().findIndex(g=>g.id===group.id);
+     await reader.deleteTabGroup(group.id);render();
+     undoToast(`탭 그룹 “${group.name}”을 지웠습니다.`,async()=>{await reader.undeleteTabGroup(group,at);await render();message(`탭 그룹 “${group.name}”을 되살렸습니다.`);});
+    },c);
    }
   }
   function drawViews(){
@@ -3791,7 +3925,11 @@
     button('적용',()=>run(async()=>{await reader.applyView(win,view.id);message(`${view.name} 뷰를 적용했습니다.`);}),c);
     button('뷰 그룹 이름 변경',async()=>{const submitted=title.value;await reader.renameView(view.id,submitted);finishDraft(title,submitted);render();},c);
     button('현재 열 배치로 뷰 갱신',async()=>{await reader.updateView(win,view.id);render();},c);
-    button('삭제',async()=>{await reader.deleteView(view.id);render();},c);
+    button('삭제',async()=>{
+     const at=reader.viewGroups().findIndex(g=>g.id===view.id);
+     await reader.deleteView(view.id);render();
+     undoToast(`뷰 그룹 “${view.name}”을 지웠습니다.`,async()=>{await reader.undeleteView(view,at);await render();message(`뷰 그룹 “${view.name}”을 되살렸습니다.`);});
+    },c);
    }
   }
   function drawCanvas(){const noBoards=!(runtime.cache.boards||[]).length;const b=noBoards?emptyActions(emptyCard(body,{title:'보드를 만들고 선택한 문헌을 카드로 추가하세요.'})):bar(),name=node('input',null,b,{placeholder:'새 보드 이름','aria-label':'보드 이름'});button('보드 만들기',async()=>{const board=model.createBoard(runtime.cache,name.value);state.boardID=board.id;runtime.dirty=true;await runtime.flush();render();},b,{'data-variant':'primary'});const select=node('select',null,b,{'aria-label':'캔버스 선택'});node('option','보드 선택',select,{value:''});for(const board of runtime.cache.boards||[])node('option',board.name,select,{value:board.id});select.value=state.boardID||'';select.addEventListener('change',()=>{state.boardID=select.value;state.cardIDs.clear();render();});const board=(runtime.cache.boards||[]).find(b=>b.id===state.boardID);
@@ -4269,22 +4407,26 @@
        library for it. 보기 selects it in the list behind the panel. */
     const mine=work.doi&&typeof runtime.itemForDOI==='function'?runtime.itemForDOI(work.doi):null;
     const acts=node('div',null,row,{class:'sc-hit-actions'});
-    if(mine&&win.ZoteroPane?.selectItem)button('보기',()=>run(async()=>{await win.ZoteroPane.selectItem(mine.id);message(`목록에서 선택했습니다 — ${String(mine.getField?.('title')||work.title||'').slice(0,60)}`);}),acts,{title:'Zotero 목록에서 이 논문 선택'});
+    const shelf=mine||work.importedItem||null;
+    if(shelf&&win.ZoteroPane?.selectItem)button('보기',()=>run(async()=>{await win.ZoteroPane.selectItem(shelf.id);message(`목록에서 선택했습니다 — ${String(shelf.getField?.('title')||work.title||'').slice(0,60)}`);}),acts,{title:'Zotero 목록에서 이 논문 선택'});
+    {/* An unread paper on the shelf can be put by for reading from here, newly added or not. */
+     const panelItem=held||work.importedItem||(mine?{id:String(mine.id),key:mine.key,status:runtime.state?.(mine)?.status||'unread'}:null);
+     if(panelItem&&panelItem.status!=='done'&&panelItem.status!=='reading'){
+      const waiting=isQueued(panelItem.id);
+      button(waiting?'대기 중':'읽기 대기',()=>run(async()=>{await setReadingQueue([panelItem],!waiting);message(waiting?'읽기 대기에서 뺐습니다.':'읽기 진행의 읽기 대기에 넣었습니다.');row.replaceWith(hitRow(work,null,decorate));}),acts,{class:'sc-local-reading-queue','aria-pressed':String(waiting)});
+     }}
     aroundToggle(row,acts,work);
     if(!acts.childNodes.length)acts.remove();
     return done();
    }
    const actions=node('div',null,row,{class:'sc-hit-actions'});
    if(!work.doi&&!work.inLibrary&&typeof runtime.Z?.ZotPoP?.openSearch==='function')button('ZotPoP에서 찾기',()=>runtime.Z.ZotPoP.openSearch(win,{title:work.title||'',year:work.year||''}),actions,{'data-opens':'window'});
-   if(work.doi)button('추가',()=>run(async()=>{
-    message('가져오는 중… ' + (work.title||work.doi).slice(0,50));
-    const saved=await runtime.importWork(work,win);
-    // The row is now stale: say so in place rather than leaving a dead button.
-    // The row is stale once the paper is in: redraw it in place as owned.
-    work.inLibrary=true;
+   if(work.doi)button(importLabel(),()=>run(async()=>{
+    const saved=await importHere(work);
+    // The row is stale once the paper is in: redraw it in place as owned, with 읽기 대기 on offer.
+    work.inLibrary=true;work.importedItem=ownedRecord(saved,work);
     const fresh=hitRow(work,null,decorate);row.replaceWith(fresh);
-    message(`추가했습니다 — ${saved[0]?.getField('title')||work.doi}`);
-   }),actions);
+   }),actions,{title:importTip()});
    if(work.doi)button('DOI',()=>copy(work.doi),actions);
    if(work.pdfURL)button('PDF',()=>win.Zotero.launchURL(work.pdfURL),actions,{'data-opens':'browser'});
    aroundToggle(row,actions,work);
@@ -5077,12 +5219,10 @@
      if(mine&&win.ZoteroPane?.selectItem)button('보기',()=>run(async()=>{await win.ZoteroPane.selectItem(mine.id);message(`목록에서 선택했습니다 — ${String(work.title||'').slice(0,60)}`);}),acts,{title:'Zotero 목록에서 이 논문 선택'});
      if(!work.inLibrary&&work.doi){
       // A milestone worth reading is worth keeping: in, without leaving the panel.
-      const add=button('추가',()=>run(async()=>{
-       message('가져오는 중… '+String(work.title||work.doi).slice(0,50));
-       await runtime.importWork(work,win);
+      const add=button(importLabel(),()=>run(async()=>{
+       const saved=await importHere(work);
        work.inLibrary=true;add.remove();node('span','보유',title,{class:'sc-line-owned'});
-       message(`추가했습니다 — ${work.title||work.doi}`);
-      }),acts);
+      }),acts,{title:importTip()});
       button('doi.org에서 열기',()=>{try{win.Zotero?.launchURL?.('https://doi.org/'+work.doi);}catch(_){}},acts,{'data-opens':'browser'});
      }
      if(!acts.childNodes.length)acts.remove();
@@ -5232,7 +5372,7 @@
      if(!inline){
       const off=button('관심 해제',()=>{
        if(!off.dataset.armed){off.dataset.armed='1';off.textContent=T('정말 해제');win.setTimeout(()=>{if(off.isConnected){delete off.dataset.armed;off.textContent=T('관심 해제');}},3000);return;}
-       return run(async()=>{await runtime.unwatchAuthor(person.id);await refreshed();});
+       return run(async()=>{await unfollow(person,refreshed);await refreshed();});
       },follow,{class:'sc-unwatch'});
      }
      /* The count is the list shown under it (the stored unseen papers when there are any), so the button and the group agree. */
@@ -5439,7 +5579,13 @@
     if(mine){node('span',T('보유'),status,{class:'sc-hit-owned'});const said=[mine.status==='done'?T('완료'):mine.status==='reading'?T('읽는 중'):T('안 읽음')];if(Number(mine.seconds)>0&&runtime.formatReadTime)said.push(runtime.formatReadTime(mine.seconds,{compact:true}));node('span',said.join(' · '),status,{class:'sc-inbox-read'});}
     else{
      // Not on the shelf: taken in from here, as from any list of suggestions.
-     if(work.doi&&typeof runtime.importWork==='function'){const add=button('추가',()=>run(async()=>{message('가져오는 중… '+String(work.title||work.doi).slice(0,50));await runtime.importWork(work,win);add.remove();node('span',T('보유'),status,{class:'sc-hit-owned'});message(`추가했습니다 — ${work.title||work.doi}`);}),status);}
+     if(work.doi&&typeof runtime.importWork==='function'){const add=button(importLabel(),()=>run(async()=>{
+      const saved=await importHere(work);
+      // Redrawn as a paper on the shelf: its reading state and 읽기 대기 appear in place.
+      const record=ownedRecord(saved,work);
+      if(record&&typeof ctx.redraw==='function'){ctx.byDOI.set(bareDOI(work.doi),record);ctx.redraw();}
+      else{add.remove();node('span',T('보유'),status,{class:'sc-hit-owned'});}
+     }),status,{title:importTip()});}
     }
     const actions=node('span',null,row,{class:'sc-inbox-actions'});
     /* An owned, unread paper can be put by for reading: it waits on 읽기
@@ -5472,7 +5618,7 @@
     sectionHead('저장된 새 논문',all.length,section);
     if(last){
      const shown=(runtime.formatStamp&&runtime.localStamp?runtime.formatStamp(runtime.localStamp(last)):String(last).replace('T',' ')).slice(0,16);
-     const note=node('p',T(`마지막 확인 ${shown} · 저자마다 최근 8편까지`),section,{class:'sc-muted sc-inbox-note'});
+     const note=node('p',T(`마지막 확인 ${shown} · 저자마다 확인 안 한 새 논문은 최대 50편까지`),section,{class:'sc-muted sc-inbox-note'});
      // What the date above does not cover, said next to it rather than left out.
      if(never)note.appendChild(doc.createTextNode(' · '+T(`${never}명은 아직 확인하지 않았습니다`)));
      else if(staleDays>7)note.appendChild(doc.createTextNode(' · '+T(`${staleDays}일 넘게 확인하지 않은 저자가 있습니다`)));
@@ -5487,6 +5633,16 @@
      viewButtons.set(key,[withCount(button('',()=>{state.inboxView=key;state.inboxAll=false;refreshWatched();},views,{'aria-pressed':String(view===key)}),label,0),label]);
     const find=node('input',null,tools,{type:'search',placeholder:T('제목·저널·저자 검색'),'aria-label':T('새 논문 검색')});
     find.value=state.inboxQuery||'';
+    // Everything the list shows now (its search and author filter included) in one press, with one undo.
+    let shownUnseen=[];
+    const markAll=button('모두 확인함',()=>run(async()=>{
+     const keys=shownUnseen.map(e=>seenKey(e));if(!keys.length)return;
+     await setSeenMany(keys,true);
+     if(disposed||state.tab!=='authors')return;
+     refreshWatched();
+     message(`${keys.length}편을 확인함으로 옮겼습니다.`);
+     undoToast(`${keys.length}편을 확인함으로 옮겼습니다.`,async()=>{await setSeenMany(keys,false);if(!disposed&&state.tab==='authors')refreshWatched();message(`${keys.length}편을 미확인으로 되돌렸습니다.`);});
+    }),tools,{class:'sc-inbox-mark-all',title:T('지금 목록에 보이는 안 읽은 새 논문을 모두 확인한 것으로 둡니다')});
     node('span',T('↑↓ 이동 · e 확인함'),tools,{class:'sc-muted sc-inbox-hint'});
     const focusBar=node('div',null,section,{class:'sc-inbox-focus'});
     const box=node('div',null,section,{class:'sc-author-inbox'});inboxKeys(box);
@@ -5510,6 +5666,7 @@
       const hay=[e.work.title,e.work.venue,...e.people.map(p=>p.name)].join(' ').toLowerCase();
       return words.every(w=>hay.includes(w));
      });
+     shownUnseen=rows.filter(e=>!isSeen(e));markAll.disabled=!shownUnseen.length;
      if(!rows.length){node('p',T(words.length?'검색어에 맞는 새 논문이 없습니다.':who?'이 저자의 해당 새 논문이 없습니다.':view==='new'?'확인하지 않은 새 논문이 없습니다.':'확인한 새 논문이 없습니다.'),box,{class:'sc-muted sc-inbox-empty'});more.hidden=true;return;}
      for(const entry of rows.slice(0,state.inboxAll?rows.length:12))drawInboxRow(entry,box,{byDOI,redraw:draw,toggle:async(entry,seen,row)=>{
       // The focus moves to the next paper's button, so a list is worked through from the keyboard.
@@ -6037,7 +6194,7 @@
     // Letting someone go drops their baseline and news: the first press only arms the button.
     const off=button('해제',()=>{
      if(!off.dataset.armed){off.dataset.armed='1';off.textContent=T('정말 해제');win.setTimeout(()=>{if(off.isConnected){delete off.dataset.armed;off.textContent=T('해제');}},3000);return;}
-     return run(async()=>{await runtime.unwatchAuthor(person.id);message(`${person.name}을(를) 관심 저자에서 뺐습니다.`);refreshWatched();});
+     return run(async()=>{await unfollow(person,refreshWatched);message(`${person.name}을(를) 관심 저자에서 뺐습니다.`);refreshWatched();});
     },act,{title:'관심 저자에서 빼기',class:'sc-unwatch'});
     // The whole row opens the person under it; its own buttons keep their own meaning.
     tr.addEventListener('click',e=>{if(e.target.closest('button:not(.sc-journal-name),a,input,select'))return;toggleWatchOpen(person,tr);});
@@ -7037,7 +7194,7 @@
    // panel must write it, not discard it.
    for(const flush of memoFields)Promise.resolve(flush()).catch(error=>runtime.Z.logError?.(error));
    memoFields=[];
-   abortAround();disposed=true;win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
+   abortAround();dismissToast();disposed=true;win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
   const accent=runtime.pref('accentColor','#374151');if(/^#[a-f\d]{6}$/i.test(accent)&&!['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=Math.max(11,Math.min(20,Number(runtime.pref('panelFontSize',13))||13))+'px';
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.

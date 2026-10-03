@@ -556,6 +556,9 @@
       if(sort){const index=api._columns.findIndex(c=>c.dataKey===sort.dataKey);if(api._columns[index].sortDirection!==sort.sortDirection){api.toggleSort(index);if(api._columns[index].sortDirection!==sort.sortDirection)api.toggleSort(index);}}
       await win.ZoteroPane.itemsView.refreshAndMaintainSelection();return layout(win);
     }
+    // Puts a deleted group back where it was (the undo of 삭제); a group already back is not duplicated.
+    async function undeleteView(group,index=-1){alive();const all=list('viewGroups');if(all.some(g=>g.id===group.id))return;const next=[...all];next.splice(index<0||index>next.length?next.length:index,0,copy(group));runtime.cache.viewGroups=next;await persist();}
+    async function undeleteTabGroup(group,index=-1){alive();const all=list('tabGroups');if(all.some(g=>g.id===group.id))return;const next=[...all];next.splice(index<0||index>next.length?next.length:index,0,copy(group));runtime.cache.tabGroups=next;await persist();}
     async function deleteView(id){alive();runtime.cache.viewGroups=list('viewGroups').filter(g=>g.id!==id);await persist();}
     function stop(){if(stopped)return;stopped=true;backlinkRevision++;backlinkCache.clear();if(backlinkObserver!==null){Z.Notifier.unregisterObserver(backlinkObserver);backlinkObserver=null;}
       if(toolbarRegistered){
@@ -572,7 +575,7 @@
     }},['item'],toolbarOwner+'-backlinks');
     const hookEntries=[['renderToolbar',toolbarHook],['renderSidebarAnnotationHeader',backlinkHook],['createAnnotationContextMenu',mergeMenuHook]];
     if(typeof Z.Reader?.registerEventListener==='function'){for(const[type,handler]of hookEntries)Z.Reader.registerEventListener(type,handler,toolbarOwner);toolbarRegistered=true;}
-    return Object.freeze({contrast,attach,applyPreferences,applyTheme,resetAppearance,marginOptions,setMarginOptions,setMarginAnnotations,setColorLabel,setSidebar,setVerticalTabs,mergeSelectedAnnotations,attachmentVersions,switchAttachmentVersion,annotationPalettes,saveAnnotationPalette,applyAnnotationPalette,deleteAnnotationPalette,setAnnotationColor,tabs,selectTab,closeTab,moveTab,closeOtherTabs,tabGroups,saveTabGroup,renameTabGroup,updateTabGroup,restoreTabGroup,deleteTabGroup,viewGroups,saveView,renameView,updateView,applyView,deleteView,stop});
+    return Object.freeze({contrast,attach,applyPreferences,applyTheme,resetAppearance,marginOptions,setMarginOptions,setMarginAnnotations,setColorLabel,setSidebar,setVerticalTabs,mergeSelectedAnnotations,attachmentVersions,switchAttachmentVersion,annotationPalettes,saveAnnotationPalette,applyAnnotationPalette,deleteAnnotationPalette,setAnnotationColor,tabs,selectTab,closeTab,moveTab,closeOtherTabs,tabGroups,saveTabGroup,renameTabGroup,updateTabGroup,restoreTabGroup,deleteTabGroup,undeleteTabGroup,viewGroups,saveView,renameView,updateView,applyView,deleteView,undeleteView,stop});
   }
   return Object.freeze({create});
 });

@@ -499,10 +499,27 @@
     async function openItem(id,options={}) {
       let item=await get(id);const pane=Z.getMainWindow?.()?.ZoteroPane;if(!pane)throw new Error('No Zotero window is available');
       const location={};if(Number.isInteger(options.pageIndex)&&options.pageIndex>=0)location.pageIndex=options.pageIndex;if(options.annotationKey)location.annotationKey=String(options.annotationKey);
-      if(item.isNote?.())return pane.openNoteWindow(item.id);
+      // A note is selected in the item pane (no separate note window); the library tab is brought forward to show it.
+      if(item.isNote?.()){try{Z.getMainWindow?.()?.Zotero_Tabs?.select?.('zotero-pane');}catch(_){}return pane.selectItem(item.id);}
       if(item.isAnnotation?.()){location.annotationKey=item.key;item=await get(item.parentID);}
       if(item.isAttachment?.()&&['application/pdf','application/epub','text/html'].includes(item.attachmentContentType)&&item.isFileAttachment?.())return Z.Reader.open(item.id,location);
       return pane.viewItems([item],undefined,{location});
+    }
+    /* 컬렉션으로 저장: a new collection named by the reader, with the chosen
+       papers in it (the papers stay where they are; a collection only lists
+       them). Child items cannot be in a collection and are left out. */
+    async function saveToCollection(name,ids) {
+      const title=String(name||'').trim();
+      if(!title)throw new Error('컬렉션 이름을 입력하세요.');
+      const input=(await selected(ids)).filter(item=>item.isRegularItem?.());
+      if(!input.length)throw new Error('컬렉션에 담을 문헌을 먼저 선택하세요.');
+      guard(input);
+      const libraries=new Set(input.map(item=>item.libraryID));
+      if(libraries.size!==1)throw new Error('서로 다른 라이브러리의 문헌은 한 컬렉션에 담을 수 없습니다. 한 라이브러리의 문헌만 골라 다시 시도하세요.');
+      const collection=new Z.Collection();collection.libraryID=[...libraries][0];collection.name=title;
+      await collection.saveTx();
+      for(const item of input){item.addToCollection(collection.id);await item.saveTx();}
+      return {id:String(collection.id),name:title,count:input.length};
     }
     async function collectionItems(collectionID,{libraryID,recursive=false}={}) {
       const chosen=Number(libraryID),id=Number(collectionID);
@@ -557,7 +574,7 @@
       }
       return items.length;
     }
-    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,collectionItems,collections};
+    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -1100,6 +1100,50 @@ test('an import goes through the same translator path Zotero uses, into the open
   assert.equal(options.saveAttachments, true, 'the PDF is the reason for importing');
 });
 
+test('importing a paper already on the shelf is reported and not done twice, by DOI and then by title', async () => {
+  const f = discoverFixture();
+  const held = f.item(1);
+  let doi = '10.1038/s41467-024-48219-y';
+  held.isRegularItem = () => true;
+  held.getField = key => ({title: 'An antiplasmid system defends bacteria', DOI: doi, date: '2024'})[key] || '';
+  f.Z.Items = {...(f.Z.Items || {}), getAll: async () => [held]};
+  let translated = 0;
+  f.Z.Translate = {Search: class {
+    setIdentifier() {} setTranslator() {}
+    async getTranslators() { return ['t']; }
+    async translate() { translated++; return [{getField: () => 'Saved'}]; }
+  }};
+  const win = {ZoteroPane: {getSelectedCollection: () => ({id: 7, name: 'Review'}), getSelectedLibraryID: () => 1}};
+  const byDOI = await f.plugin.importWork({doi: 'https://doi.org/10.1038/S41467-024-48219-Y', title: 'x'}, win);
+  assert.equal(byDOI.existing, true);
+  assert.equal(byDOI[0], held);
+  // A preprint copy under another DOI is a different version while the shelf copy has a DOI of its own...
+  const conflicting = {doi: '10.1101/2024.01.01.555', title: 'An antiplasmid system defends bacteria', year: 2024};
+  await f.plugin.importWork(conflicting, win);
+  assert.equal(translated, 1, 'two DOIs that disagree are two papers, so this one is imported');
+  // ...and the same paper when the shelf copy has none: title and year decide.
+  doi = '';
+  const byTitle = await f.plugin.importWork(conflicting, win);
+  assert.equal(byTitle.existing, true);
+  assert.equal(translated, 1, 'nothing more was imported');
+});
+
+test('a fresh import says which collection it went into', async () => {
+  const f = discoverFixture();
+  f.Z.Items = {...(f.Z.Items || {}), getAll: async () => []};
+  f.Z.Translate = {Search: class {
+    setIdentifier() {} setTranslator() {}
+    async getTranslators() { return ['t']; }
+    async translate() { return [{getField: () => 'Saved'}]; }
+  }};
+  const win = {ZoteroPane: {getSelectedCollection: () => ({id: 7, name: 'Review'}), getSelectedLibraryID: () => 1}};
+  const saved = await f.plugin.importWork({doi: '10.1/new', title: 'New'}, win);
+  assert.equal(saved.existing, false);
+  assert.equal(saved.collectionName, 'Review');
+  const bare = await f.plugin.importWork({doi: '10.1/new2', title: 'New'}, {ZoteroPane: {getSelectedLibraryID: () => 1}});
+  assert.equal(bare.collectionName, '');
+});
+
 test('a suggestion with no DOI is refused before a translator is asked for', async () => {
   const f = discoverFixture();
   f.Z.Translate = {Search: class { async getTranslators() { throw new Error('should not be reached'); } }};
@@ -1702,7 +1746,7 @@ test('a retracted paper is fetched, cached and painted as something you cannot m
   assert.match(blank.title, /아직 조회하지/);
 
   const summary = await f.plugin.refreshPaperSignals([f.ref]);
-  assert.deepEqual(summary, {ok: 1, 'not-found': 0, unsupported: 0, error: 0, remaining: 0, budgetGone: false});
+  assert.deepEqual(summary, {ok: 1, 'not-found': 0, unsupported: 0, error: 0, remaining: 0, budgetGone: false, newRetracted: 1, newPublished: 0});
   assert.equal(f.plugin.signalsOf(f.ref).status, 'retracted');
 
   const cell = f.plugin.renderCell('signals', 0, '', {}, document);
@@ -1770,7 +1814,7 @@ test('a half answer with OpenAlex out does not overrule a retraction, and signal
 test('a DOI neither service knows records nothing rather than a clean bill of health', async () => {
   const f = signalsFixture({answers: []});
   const summary = await f.plugin.refreshPaperSignals([f.ref]);
-  assert.deepEqual(summary, {ok: 0, 'not-found': 1, unsupported: 0, error: 0, remaining: 0, budgetGone: false});
+  assert.deepEqual(summary, {ok: 0, 'not-found': 1, unsupported: 0, error: 0, remaining: 0, budgetGone: false, newRetracted: 0, newPublished: 0});
   assert.equal(f.plugin.signalsOf(f.ref), null);
   assert.equal(f.errors.length, 0, 'a 404 is not an error to log');
 });
@@ -1778,7 +1822,7 @@ test('a DOI neither service knows records nothing rather than a clean bill of he
 test('a paper with no DOI is never sent to either service', async () => {
   const f = signalsFixture({DOI: ''});
   const summary = await f.plugin.refreshPaperSignals([f.ref]);
-  assert.deepEqual(summary, {ok: 0, 'not-found': 0, unsupported: 1, error: 0, remaining: 0, budgetGone: false});
+  assert.deepEqual(summary, {ok: 0, 'not-found': 0, unsupported: 1, error: 0, remaining: 0, budgetGone: false, newRetracted: 0, newPublished: 0});
   assert.deepEqual(f.asked, [], 'a title search would answer about a different paper');
 });
 

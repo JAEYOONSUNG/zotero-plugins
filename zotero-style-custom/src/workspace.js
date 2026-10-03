@@ -47,22 +47,55 @@
     anything else -- a URL, "http://x" -- is plain text, so nothing a person
     could type before is lost. */
  const FIELD_ALIASES={title:'title','제목':'title',author:'author',authors:'author','저자':'author',tag:'tag','태그':'tag',journal:'journal',venue:'journal','저널':'journal',year:'year','연도':'year',collection:'collection','컬렉션':'collection',abstract:'abstract','초록':'abstract',note:'note','메모':'note','노트':'note'};
- function parseQuery(query){
-  const terms=[],re=/(-?)(?:([\p{L}]+):)?(?:"([^"]*)"|(\S+))/gu;
-  for(const m of text(query).matchAll(re)){
-   const neg=m[1]==='-',field=m[2]?FIELD_ALIASES[m[2].toLowerCase()]:'',quoted=m[3]!==undefined;
-   let raw=quoted?m[3]:m[4];
-   if(m[2]&&!field)raw=m[2]+':'+raw;
+ /* The box's text as tokens: terms (with -, field: and "phrase"), parentheses,
+    and the operator OR (or |). OR is only an operator in capitals and on its
+    own, so "or" and "ORCID" stay words. Parentheses are always grouping. */
+ function lexQuery(query){
+  const out=[];
+  for(const m of text(query).matchAll(/(-?)\(|\)|(?<![^\s(])(?:OR|\|\|?)(?![^\s()])|(-?)(?:([\p{L}]+):)?(?:"([^"]*)"|([^\s()]+))/gu)){
+   if(m[0]==='('||m[0]==='-('){out.push({t:'open',neg:m[1]==='-'});continue;}
+   if(m[0]===')'){out.push({t:'close'});continue;}
+   if(m[3]===undefined&&m[4]===undefined&&m[5]===undefined&&/^(OR|\|\|?)$/.test(m[0])){out.push({t:'or'});continue;}
+   const neg=m[2]==='-',field=m[3]?FIELD_ALIASES[m[3].toLowerCase()]:'',quoted=m[4]!==undefined;
+   let raw=quoted?m[4]:m[5];
+   if(m[3]&&!field)raw=m[3]+':'+raw;
    const value=norm(raw).trim();if(!value)continue;
-   terms.push({neg,field:field||'',value,phrase:quoted});
+   out.push({t:'term',neg,field:field||'',value,phrase:quoted});
   }
-  return terms;
+  return out;
+ }
+ const isBoolean=query=>lexQuery(query).some(tk=>tk.t==='or'||tk.t==='open');
+ function parseQuery(query){
+  return lexQuery(query).filter(tk=>tk.t==='term').map(({neg,field,value,phrase})=>({neg,field,value,phrase}));
+ }
+ /* a b OR c d  ->  (a AND b) OR (c AND d); ( ) group; -( ) negates a group.
+    Stray ")" are dropped and an unclosed "(" is closed at the end, so no
+    typing state is an error. */
+ function parseTree(query){
+  const raw=lexQuery(query),tokens=[];let depth=0;
+  for(const tk of raw){if(tk.t==='open')depth++;if(tk.t==='close'){if(!depth)continue;depth--;}tokens.push(tk);}
+  let at=0;
+  const empty=n=>!n||(n.op==='and'&&!n.of.length);
+  function orExpr(){const alts=[andExpr()];while(tokens[at]?.t==='or'){at++;alts.push(andExpr());}const live=alts.filter(n=>!empty(n));return live.length>1?{op:'or',of:live}:live[0]||{op:'and',of:[]};}
+  function andExpr(){const of=[];while(at<tokens.length&&tokens[at].t!=='or'&&tokens[at].t!=='close'){const tk=tokens[at++];
+   if(tk.t==='open'){const inner=orExpr();if(tokens[at]?.t==='close')at++;if(!empty(inner))of.push(tk.neg?{op:'not',of:inner}:inner);}
+   else if(tk.t==='term')of.push({op:'term',term:{neg:tk.neg,field:tk.field,value:tk.value,phrase:tk.phrase}});}
+   return of.length===1?of[0]:{op:'and',of};}
+  return orExpr();
+ }
+ function evalTree(node,item,hay,starts){
+  switch(node.op){
+   case 'term':return termHit(item,hay,node.term,starts)!==node.term.neg;
+   case 'not':return !evalTree(node.of,item,hay,starts);
+   case 'or':return node.of.some(n=>evalTree(n,item,hay,starts));
+   default:return node.of.every(n=>evalTree(n,item,hay,starts));
+  }
  }
  /* The words that stay in the box once the syntax is taken out: what the
     relevance ranking should look at. */
- const plainQuery=query=>parseQuery(query).filter(t=>!t.neg&&!t.field).map(t=>t.value).join(' ');
+ const plainQuery=query=>isBoolean(query)?'':parseQuery(query).filter(t=>!t.neg&&!t.field).map(t=>t.value).join(' ');
  /* The other half of the box: only the -word and field:value terms, as a query, for code that widens the plain words itself. */
- const syntaxQuery=query=>parseQuery(query).filter(t=>t.neg||t.field).map(t=>(t.neg?'-':'')+(t.field?t.field+':':'')+(t.phrase||/\s/.test(t.value)?'"'+t.value+'"':t.value)).join(' ');
+ const syntaxQuery=query=>isBoolean(query)?'':parseQuery(query).filter(t=>t.neg||t.field).map(t=>(t.neg?'-':'')+(t.field?t.field+':':'')+(t.phrase||/\s/.test(t.value)?'"'+t.value+'"':t.value)).join(' ');
  const fieldText=(item,field)=>field==='title'?item.title:field==='author'?item.authors:field==='journal'?item.venue:field==='abstract'?item.abstract:field==='year'?item.year:field==='note'?[item.remark,...(item.noteTitles||[])].join(' '):field==='collection'?(item.collectionNames||[]).join(' / '):'';
  function yearTerm(value,year){
   const y=Number(year);if(!Number.isFinite(y)||!year)return false;
@@ -280,11 +313,12 @@
  }
  function filter(items,options={}) {
   const terms=parseQuery(options.query),initials=terms.some(t=>!t.field&&INITIAL.test(t.value)),rules=(options.rules||[]).filter(ruleActive);
+  const tree=isBoolean(options.query)?parseTree(options.query):null;
   return items.filter(item=>{
    // The reader's own memo counts: a paper is found by what was written about it.
    const hay=norm([item.title,item.authors,item.venue,item.doi,item.abstract,item.year,item.itemType,item.issn,item.remark,...(item.tags||[])].join(' '));
    const starts=initials?wordsOf(hay):null;
-   return terms.every(t=>termHit(item,hay,t,starts)!==t.neg) && (!options.type||item.itemType===options.type)
+   return (tree?evalTree(tree,item,hay,starts):terms.every(t=>termHit(item,hay,t,starts)!==t.neg)) && (!options.type||item.itemType===options.type)
     && (!options.tag||(item.tags||[]).some(t=>t===options.tag||t.startsWith(options.tag+'/')))
     && (!options.status||item.status===options.status)
     && (!options.ratingMin||Number(item.rating)>=Number(options.ratingMin))
@@ -344,6 +378,6 @@
  function unlinkCards(board,from,to){const before=board.edges.length;board.edges=board.edges.filter(e=>!((e.source===from&&e.target===to)||(e.source===to&&e.target===from)));return before-board.edges.length;}
  function deleteBoard(cache,id){const board=(cache.boards||[]).find(b=>b.id===id);if(!board)return null;cache.boards=cache.boards.filter(b=>b.id!==id);cache.boardTrash=[...(cache.boardTrash||[]),board].slice(-20);return board;}
  function restoreBoard(cache){const board=cache.boardTrash?.at(-1);if(!board)return null;if((cache.boards||[]).some(b=>b.id===board.id))throw new Error('같은 이름의 보드가 이미 있습니다. 다른 이름을 쓰세요.');cache.boardTrash.pop();cache.boards=[...(cache.boards||[]),board];return board;}
- const api={journalKeys,journalScore,journalChoices,legacyRules,parseQuery,plainQuery,syntaxQuery,RULE_KINDS,RULE_FIELDS,RULE_LABELS:KIND_LABELS,FIELD_LABELS,STATUS_LABELS,ruleActive,cleanRules,cleanRulesByTab,ruleHas,applyRules,countOptions,collectionContext,describeRule,filter,sortItems,norm,matches,relevance,rankByQuery,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
+ const api={journalKeys,journalScore,journalChoices,legacyRules,parseQuery,parseTree,isBoolean,plainQuery,syntaxQuery,RULE_KINDS,RULE_FIELDS,RULE_LABELS:KIND_LABELS,FIELD_LABELS,STATUS_LABELS,ruleActive,cleanRules,cleanRulesByTab,ruleHas,applyRules,countOptions,collectionContext,describeRule,filter,sortItems,norm,matches,relevance,rankByQuery,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
  root.CustomStyleWorkspace=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

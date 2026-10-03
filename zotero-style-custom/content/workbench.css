@@ -620,7 +620,7 @@
 #style-custom-workbench .sc-paper-card[data-status=reading] .sc-paper-heading > .sc-check::before { background: var(--sc-bar-reading); }
 #style-custom-workbench .sc-paper-card[data-status=done] .sc-paper-heading > .sc-check::before { background: var(--sc-bar-done); }
 #style-custom-workbench .sc-paper-card[data-mark] .sc-paper-heading > .sc-check::before { background: var(--sc-mark); }
-#style-custom-workbench .sc-paper-heading > .sc-check span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#style-custom-workbench .sc-paper-heading > .sc-check span { position: absolute; width: max-content; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 #style-custom-workbench .sc-paper-heading > .sc-check input { opacity: 0; transition: opacity .12s ease; }
 #style-custom-workbench .sc-paper-card:hover .sc-paper-heading > .sc-check input,
 #style-custom-workbench .sc-paper-card:focus-within .sc-paper-heading > .sc-check input,
@@ -2957,3 +2957,10 @@
 @container sc-workbench (max-width: 900px) {
   #style-custom-workbench .sc-journal-reading-row { grid-template-columns: 96px 116px minmax(0, 1fr) 60px; }
 }
+
+/* Undo strip: one line under the status text, eight seconds. */
+#style-custom-workbench .sc-undo-toast { display: flex; align-items: center; gap: var(--sc-space-2); flex-shrink: 0; margin: 0 var(--sc-content-padding) var(--sc-space-2); padding: var(--sc-space-2) var(--sc-space-3); border-radius: 12px; background: var(--sc-surface); color: var(--sc-text); border: 0; box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-undo-toast[hidden] { display: none; }
+#style-custom-workbench .sc-undo-toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#style-custom-workbench .sc-selection-collect { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex-basis: 100%; }
+#style-custom-workbench .sc-selection-collect[hidden] { display: none; }

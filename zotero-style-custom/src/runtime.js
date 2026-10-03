@@ -89,7 +89,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // Confirmed by the in-Zotero self-check on the user's own library.
   async libraryItems(libraryID) {
     const id = libraryID ?? this.Z.Libraries.userLibraryID;
-    if (!this.Z.Items.getAll) return [];
+    if (!this.Z.Items?.getAll) return [];
     const found = await this.Z.Items.getAll(id);
     return Array.isArray(found) ? found : [];
   }
@@ -2017,16 +2017,54 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return saved;
   }
 
-  // Newly imported papers should inherit the reading state a fresh item has,
-  // and land beside whatever the user was looking at.
+  /* Zotero's own PDF finder for one paper: open-access sources and the
+     institution's resolvers, as the item menu's "Find Available PDF".
+     Opens no window; the caller reports found / none. */
+  async findPDF(itemID) {
+    const item = this.Z.Items.get(Number(itemID));
+    if (!item || !this.isRegular(item)) return {status: 'none'};
+    if (typeof this.Z.Attachments?.addAvailablePDF !== 'function') return {status: 'unsupported'};
+    const attachment = await this.Z.Attachments.addAvailablePDF(item);
+    return {status: attachment ? 'found' : 'none', attachment: attachment || null};
+  }
+
+  /* The paper already on the shelf for a work about to be imported: by DOI,
+     else by title when the title is long enough to be evidence (four words)
+     and neither side's year or DOI disagrees. Same rule ZotPoP applies. */
+  async findExistingWork(libraryID, work) {
+    const bare = value => this.discoverTools.bareDOI(value);
+    const flat = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const field = (item, key) => { try { return String(item.getField(key) || '').trim(); } catch (_) { return ''; } };
+    const doi = bare(work?.doi), title = flat(work?.title);
+    const items = (await this.libraryItems(libraryID)).filter(item => this.isRegular(item));
+    if (doi) { const hit = items.find(item => bare(field(item, 'DOI')) === doi); if (hit) return hit; }
+    const words = title.split(' ').filter(w => /[^a-z0-9]/.test(w) ? w.length >= 2 : w.length > 2);
+    if (words.length < 4) return null;
+    const year = String(work?.year || '').match(/\b(1[5-9]|20)\d{2}\b/)?.[0];
+    return items.find(item => {
+      if (flat(field(item, 'title')) !== title) return false;
+      const theirs = field(item, 'date').match(/\b(1[5-9]|20)\d{2}\b/)?.[0];
+      if (year && theirs && theirs !== year) return false;
+      const theirDOI = bare(field(item, 'DOI'));
+      return !(doi && theirDOI && theirDOI !== doi);
+    }) || null;
+  }
+
+  /* Newly imported papers inherit the reading state a fresh item has and land
+     in the collection selected behind the panel -- which the result names
+     (collectionName), so the caller can say where it went. A paper already
+     held is reported (existing) and not imported twice. */
   async importWork(work, win) {
     if (!work?.doi) throw new Error('DOI가 없어 자동으로 가져올 수 없습니다. 문헌 정보에 DOI를 넣은 뒤 다시 실행하세요.');
     const collection = win?.ZoteroPane?.getSelectedCollection?.();
+    const libraryID = win?.ZoteroPane?.getSelectedLibraryID?.();
+    const known = await this.findExistingWork(libraryID, work);
+    if (known) return Object.assign([known], {existing: true, collectionName: ''});
     const saved = await this.importByIdentifier({DOI: work.doi}, {
-      libraryID: win?.ZoteroPane?.getSelectedLibraryID?.(),
+      libraryID,
       collections: collection ? [collection.id] : undefined
     });
-    return saved;
+    return Object.assign(saved, {existing: false, collectionName: collection?.name || ''});
   }
 
   // --- Impact figures beyond the curated catalogue ---
@@ -2276,6 +2314,27 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // Enough ids that a prolific lab's back catalogue cannot roll off the end and
   // be re-announced as new.
   get SEEN_LIMIT() { return 400; }
+  get NEWS_LIMIT() { return 50; }
+  // The key the panel's 확인함 store uses for a paper: bare DOI, else the work id.
+  static seenWorkKey(work) {
+    return String(work?.doi || '').toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '').trim() || String(work?.id || '');
+  }
+  // Marks the reader made in the panel. Older marks carried a library prefix ("1:10.1/x").
+  panelSeenKeys() {
+    const stored = this.cache?.workbenchUI?.inboxSeen || {};
+    return new Set(Object.keys(stored).map(key => key.replace(/^\d*:/, '')));
+  }
+  /* Every paper not yet marked seen stays, newest first, up to NEWS_LIMIT per
+     author; marked ones only fill what is left, so the oldest dropped are
+     always ones the reader has already dealt with. */
+  keepNews(works, panelSeen = this.panelSeenKeys()) {
+    const sorted = [...works].sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
+    const open = sorted.filter(work => !panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).slice(0, this.NEWS_LIMIT);
+    const room = Math.max(0, this.NEWS_LIMIT - open.length);
+    const done = sorted.filter(work => panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).slice(0, room);
+    const keep = new Set([...open, ...done]);
+    return sorted.filter(work => keep.has(work));
+  }
 
   // Pacing, without reaching for a global the rest of this class does not use:
   // Zotero.Promise is a bootstrap-scope global here and absent under test.
@@ -2335,6 +2394,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.cache.watchedAuthors = this.watchedAuthors().filter(row => row.id !== id);
     this.dirty = true;
     await this.flush();
+  }
+
+  // The undo of unwatchAuthor: the row comes back whole (baseline, news, check dates) where it was.
+  async restoreWatchedAuthor(row, index = -1) {
+    if (!row?.id) return false;
+    const rows = this.watchedAuthors();
+    if (rows.some(entry => entry.id === row.id)) return false;
+    const next = [...rows];
+    next.splice(index < 0 || index > next.length ? next.length : index, 0, JSON.parse(JSON.stringify(row)));
+    this.cache.watchedAuthors = next;
+    this.dirty = true;
+    await this.flush();
+    return true;
   }
 
   // The watchlist existed but could not be read at a glance: every row showed
@@ -2502,13 +2574,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          So anything older than the last check -- less two months of slack,
          because a publication date can precede the day OpenAlex indexed it --
          is recorded as already known rather than shown. */
-      const checkedAtOf = Date.parse(row.checkedAt || row.sweptAt || '');
+      // The last sweep, not the day the author was followed: an old follow date
+      // would push every paper since then behind the floor.
+      const checkedAtOf = Date.parse(row.sweptAt || row.checkedAt || '');
       const floor = Number.isFinite(checkedAtOf)
         ? new Date(checkedAtOf - 60 * 864e5).toISOString().slice(0, 10) : '';
       const fresh = [], backlog = [];
+      const panelSeen = this.panelSeenKeys();
+      const wasShown = new Set((row.news || []).map(work => work.id));
       for (const work of found.get(row.id) || []) {
         if (seen.has(work.id)) continue;
-        (floor && work.date && work.date < floor ? backlog : fresh).push(work);
+        // Something the inbox already showed and nobody marked is never filed away unseen.
+        const stillOpen = wasShown.has(work.id) && !panelSeen.has(CustomStyleRuntime.seenWorkKey(work));
+        (floor && work.date && work.date < floor && !stillOpen ? backlog : fresh).push(work);
       }
       fresh.sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
       if (backlog.length) {
@@ -2530,7 +2608,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const announced = new Set((row.news || []).map(work => work.id));
       const partial = unfinished.has(short) || unfinished.has(row.id) || resumed.has(short) || resumed.has(row.id);
       const earlier = partial ? (row.news || []) : [];
-      row.news = papers.slice(0, 8).map(work => ({
+      row.news = this.keepNews(papers, panelSeen).map(work => ({
         id: work.id, title: work.title, venue: work.venue, doi: work.doi,
         type: String(work.type || ''),
         preprint: /preprint/i.test(String(work.type || '')) || /rxiv|research square|preprints?\b|ssrn/i.test(String(work.venue || '')),
@@ -2547,7 +2625,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // A batch that was not read to the end adds to what the row said; it does not replace it.
       // Newest first across both runs, so a carried batch's older finds do not push out the news already shown.
       if (partial) row.news = [...row.news, ...earlier.filter(old => !row.news.some(fresh => fresh.id === old.id))]
-        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 8);
+        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, this.NEWS_LIMIT * 2);
+      if (partial) row.news = this.keepNews(row.news, panelSeen);
       /* Two things the same records say for free.
 
          Where the author signs from now. The watched row remembers the lab it
@@ -3995,7 +4074,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   cachedIssueStatus(doi) { return this.attention().peekIssues(doi)?.summary?.status || null; }
 
   async refreshPaperSignals(items, {signal, onProgress, pace = 0} = {}) {
-    const summary = {ok: 0, "not-found": 0, unsupported: 0, error: 0, remaining: 0, budgetGone: false};
+    const summary = {ok: 0, "not-found": 0, unsupported: 0, error: 0, remaining: 0, budgetGone: false, newRetracted: 0, newPublished: 0};
     const queue = [...new Set(items)].filter(item => this.isRegular(item));
     for (const [index, item] of queue.entries()) {
       if (!this.active || this.stopping || signal?.aborted) { summary.remaining = queue.length - index; break; }
@@ -4015,8 +4094,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const before = this.entry(item).signals;
         const sameDOI = !before?.doi || typeof this.bibliographyRecord !== 'function' || before.doi === this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI);
         if (signals.partial && before && sameDOI && (Number(before.rank) || 0) > (Number(signals.rank) || 0)) { summary.ok++; continue; }
+        // A re-check with OpenAlex out must not downgrade a complete record to half of one.
+        if (signals.partial && before && !before.partial && sameDOI && (Number(signals.rank) || 0) <= (Number(before.rank) || 0)) {
+          before.checkedAt = signals.checkedAt; this.dirty = true; summary.ok++; continue;
+        }
         if (typeof this.bibliographyRecord === 'function') signals.doi = this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI) || undefined;
         this.entry(item).signals = signals;
+        // What this check turned up that the last one did not have.
+        if ((Number(signals.rank) || 0) >= 3 && (Number(before?.rank) || 0) < 3) summary.newRetracted++;
+        if (signals.published && !before?.published) summary.newPublished++;
         this.dirty = true; summary.ok++;
       } catch (error) {
         if (this.outOfBudget(error)) {
@@ -4074,6 +4160,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       lines.push(`철회·공개접근 신호: ${report.signals.ok}편 확인`
         + (report.signals['not-found'] ? ` · ${report.signals['not-found']}편은 기록 없음` : '')
         + (report.signals.error ? ` · ${report.signals.error}편 조회 실패` : ''));
+      if (report.signals.newRetracted || report.signals.newPublished) {
+        lines.push(`  새로 철회 ${report.signals.newRetracted || 0} · 새로 게재 ${report.signals.newPublished || 0}`);
+      }
       if (report.signals.partialOnly) {
         lines.push(`  그중 ${report.signals.partialOnly}편은 철회 여부만 확인했습니다(공개접근 정보는 한도 복구 후 자동으로 채웁니다).`);
       }
@@ -4097,6 +4186,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // so the columns showed a dash and the panel showed nothing. This fills them
   // in the background instead, cheapest and highest-stakes first: a retracted
   // paper is the one fact worth interrupting someone for.
+  /* A verdict is not forever: a paper is retracted, a preprint gets published,
+     long after the one look. Older than 90 days is asked again; a preprint
+     with no published version yet, 30. */
+  get SIGNAL_RECHECK_DAYS() { return 90; }
+  get PREPRINT_RECHECK_DAYS() { return 30; }
+  signalsStale(known, now = Date.now()) {
+    if (!known) return true;
+    if (known.partial) return true;
+    const at = Date.parse(known.checkedAt || '');
+    // A record with no date cannot be aged; it is left as it is.
+    if (!Number.isFinite(at)) return false;
+    const days = known.preprint && !known.published ? this.PREPRINT_RECHECK_DAYS : this.SIGNAL_RECHECK_DAYS;
+    return now - at > days * 864e5;
+  }
+
   async itemsNeedingSignals(libraryID) {
     const wanted = [];
     for (const item of await this.libraryItems(libraryID)) {
@@ -4104,7 +4208,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // A partial entry carries Crossref's retraction verdict but not the
       // open-access half, so it is asked again rather than left half-answered.
       const known = this.entry(item).signals;
-      if (known && !known.partial) continue;
+      if (known && !this.signalsStale(known)) continue;
       // Without a DOI there is nothing to ask Crossref, so asking wastes a turn.
       if (!this.signalTools.bareDOI(this.citationRecord(item).doi)) continue;
       wanted.push(item);
@@ -4121,7 +4225,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!this.isRegular(item)) continue;
       if (this.attachmentKinds(item).some(kind => !kind.read)) files++;
       const known = this.entry(item).signals;
-      if ((!known || known.partial) && this.signalTools.bareDOI(this.citationRecord(item).doi)) signals++;
+      if (this.signalsStale(known) && this.signalTools.bareDOI(this.citationRecord(item).doi)) signals++;
       const record = this.journalRecord(item);
       if (!record.name && !record.issn) continue;
       // Only journals the curated catalogue does not already answer.

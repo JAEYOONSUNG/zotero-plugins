@@ -92,3 +92,24 @@ test('cards are laid out on a pitch that clears their own height, and a note doe
   assert.equal(board.nodes.filter(n => n.x === note.x && n.y === note.y).length, 1,
     'the memo takes the next free place, not the first card\'s');
 });
+
+test('the search box takes OR, parentheses and quoted phrases next to the field syntax and -exclusion', () => {
+  const items = [
+    {id: '1', title: 'Deep learning for cats', authors: 'Kim', year: '2020', tags: []},
+    {id: '2', title: 'Graph networks', authors: 'Lee', year: '2022', tags: []},
+    {id: '3', title: 'Cats and dogs', authors: 'Park', year: '2019', tags: []}];
+  const ids = query => W.filter(items, {query}).map(i => i.id).join(',');
+  assert.equal(ids('cats OR graph'), '1,2,3');
+  assert.equal(ids('(cats OR graph) -deep'), '2,3');
+  assert.equal(ids('"deep learning" OR author:park'), '1,3');
+  assert.equal(ids('title:cats year:2019-2020'), '1,3', 'the old syntax is unchanged');
+  assert.equal(ids('cats -deep'), '3');
+  assert.equal(ids('-(cats OR graph)'), '', 'a negated group');
+  assert.equal(ids('cats or graph'), '', 'lowercase or is a word, as before');
+  assert.equal(ids('ORCID'), '', 'a word that starts with OR is not the operator');
+  assert.equal(ids('cats (deep'), '1', 'an unclosed parenthesis is closed, not an error');
+  assert.equal(ids('cats) graph OR'), '', 'stray closers and a dangling OR are ignored');
+  assert.equal(W.plainQuery('cats OR graph'), '', 'a boolean query does not widen into notes by plain words');
+  assert.equal(W.isBoolean('cats OR graph'), true);
+  assert.equal(W.isBoolean('cats graph'), false);
+});

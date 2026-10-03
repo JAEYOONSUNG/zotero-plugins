@@ -78,7 +78,7 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog}={}){
  });
  runtime.Z={Items:{get:id=>refs.get(id),getAsync:async id=>refs.get(id)||{id}},Libraries:{userLibraryID:1},Prefs:{set:(...a)=>calls.push(['pref',...a])},Utilities:{Internal:{copyTextToClipboard:text=>calls.push(['copy',text])}},Notifier:{registerObserver:observer=>{notify=observer.notify;return 42;},unregisterObserver:id=>calls.push(['unregister',id])},logError:error=>errors.push(error)};
  const library={trashItems:record('trashItems',async ids=>ids.length),snapshot:record('snapshot',()=>papers),graph:rows=>({nodes:rows.map(i=>({id:i.id,label:i.title})),edges:[]}),tagTree:()=>[{name:'topic',path:'topic',count:2,children:[]}],notes:record('notes',[{id:'9',title:'Rich note',text:'<script>literal note</script>',modified:'today',html:'<b>unsafe raw HTML</b>'}]),annotations:record('annotations',[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'Highlight',comment:'Comment',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}]),backlinks:record('backlinks',[{id:'2',title:'Paper Beta',kind:'related'}]),attachments:record('attachments',[{id:'99',parentID:'1',title:'PDF one',contentType:'application/pdf'},{id:'100',parentID:'1',title:'PDF two',contentType:'application/pdf'}]),collections:record('collections',[{id:'4',name:'Research',count:2,parentID:null}]),openItem:record('open'),relate:record('relate'),addTags:record('addTags'),removeTags:record('removeTags'),setRemark:record('remark'),createNote:record('createNote','9'),noteFromAnnotations:record('extract','9')};
- const palettes=[];const reader={annotationPalettes:()=>palettes,saveAnnotationPalette:record('savePalette',(name,entries)=>{const row={id:'palette1',name,entries};palettes.push(row);return row;}),applyAnnotationPalette:record('applyPalette'),deleteAnnotationPalette:record('deletePalette',id=>{palettes.splice(palettes.findIndex(p=>p.id===id),1);}),tabs:()=>[{id:'tab1',title:'Paper Alpha',itemID:1,selected:true}],tabGroups:()=>[{id:'g1',name:'Group',tabs:[{id:1}]}],viewGroups:()=>[{id:'v1',name:'View',columns:[{dataKey:'title'}]}],applyTheme:record('theme'),setMarginAnnotations:record('margin'),setColorLabel:record('color'),setSidebar:record('sidebar'),setVerticalTabs:record('vertical'),saveTabGroup:record('saveTabs'),restoreTabGroup:record('restoreTabs',{opened:1,missing:0}),deleteTabGroup:record('deleteTabs'),selectTab:record('selectTab'),closeTab:record('closeTab'),saveView:record('saveView'),applyView:record('applyView'),deleteView:record('deleteView')};
+ const palettes=[];const reader={annotationPalettes:()=>palettes,saveAnnotationPalette:record('savePalette',(name,entries)=>{const row={id:'palette1',name,entries};palettes.push(row);return row;}),applyAnnotationPalette:record('applyPalette'),deleteAnnotationPalette:record('deletePalette',id=>{palettes.splice(palettes.findIndex(p=>p.id===id),1);}),tabs:()=>[{id:'tab1',title:'Paper Alpha',itemID:1,selected:true}],tabGroups:()=>[{id:'g1',name:'Group',tabs:[{id:1}]}],viewGroups:()=>[{id:'v1',name:'View',columns:[{dataKey:'title'}]}],applyTheme:record('theme'),setMarginAnnotations:record('margin'),setColorLabel:record('color'),setSidebar:record('sidebar'),setVerticalTabs:record('vertical'),saveTabGroup:record('saveTabs'),restoreTabGroup:record('restoreTabs',{opened:1,missing:0}),deleteTabGroup:record('deleteTabs'),undeleteTabGroup:record('undeleteTabs'),undeleteView:record('undeleteView'),selectTab:record('selectTab'),closeTab:record('closeTab'),saveView:record('saveView'),applyView:record('applyView'),deleteView:record('deleteView')};
  Object.assign(library,{mergeAnnotations:record('mergeAnnotations','3'),unrelate:record('unrelate',2),renameTagBranch:record('renameTagBranch',{updatedItems:1,renamedTags:1,mergedTags:0}),recolorAnnotations:record('recolor',1),collectionItems:record('collectionItems',['2'])});
  Object.assign(reader,{moveTab:(...args)=>{calls.push(['moveTab',...args]);},closeOtherTabs:(...args)=>{calls.push(['closeOtherTabs',...args]);return {closed:1};},renameTabGroup:record('renameTabGroup'),updateTabGroup:record('updateTabGroup'),renameView:record('renameView'),updateView:record('updateView'),marginOptions:()=>({width:210,side:'right',textLimit:1500}),setMarginOptions:record('setMarginOptions'),resetAppearance:record('resetAppearance')});
  const assist={run:record('ai','Generated result'),cancel:()=>calls.push(['cancelAI'])};
@@ -1443,7 +1443,7 @@ test('any unread paper can wait under 읽기 대기, the search reads the reader
  f.setSelection([]);
  await f.bench.show('explore');f.bench.state.selected=new Set(['1','2']);await f.bench.render();
  await f.click('안 읽은 문헌 1편 읽기 대기에 추가');
- assert.deepEqual(Object.keys(f.runtime.cache.workbenchUI.readingQueue).map(k=>k.split(':').pop()),['2'],'only the unread one');
+ assert.deepEqual(Object.keys(f.runtime.cache.workbenchUI.readingQueue).map(k=>k.split(':').pop()),['K2'],'only the unread one, by its item key');
  // Again from its row: already waiting, so the button takes it out, and nothing is duplicated.
  f.body().querySelector('[data-detail-for="2"]').click();await new Promise(r=>setTimeout(r,10));
  assert.ok(f.findButton('읽기 대기에서 빼기'));
@@ -4982,7 +4982,7 @@ test('확인함 is one store: a paper seen in 새 논문 leaves the inbox, and �
  await f.click('확인함');await settle();
  assert.deepEqual(hits(),['New paper W11'],'gone from 미확인 in 새 논문');
  assert.equal(tab('확인함'),'확인함 1');
- assert.equal(f.runtime.cache.workbenchUI.inboxSeen['1:10.1/w10']!=null||Object.keys(f.runtime.cache.workbenchUI.inboxSeen).length===1,true,'keyed by library and DOI');
+ assert.ok(f.runtime.cache.workbenchUI.inboxSeen['10.1/w10']!=null,'keyed by the work alone (DOI), not by library');
  await f.bench.show('authors');
  assert.equal(f.body().querySelectorAll('.sc-author-inbox-row').length,0,'and from the inbox');
  await f.click('확인함 1');
@@ -5748,4 +5748,178 @@ test('around: the Altmetric key is an optional password setting bound to its pre
  assert.equal(field.type, 'password');assert.equal(field.secret, true);assert.equal(field.default, '');
  assert.match(field.label, /선택/);assert.match(field.description, /Altmetric/);
  assert.match(fs.readFileSync(new URL('../prefs.js', import.meta.url), 'utf8'), /extensions\.style-custom\.altmetricKey/);
+});
+
+/* ---- 2026-10-03 round: researcher-persona review fixes ---- */
+const toastOf=f=>f.bench.panel.querySelector('.sc-undo-toast');
+const heldTimers=f=>{const timers=[],real=f.win.setTimeout;f.win.setTimeout=(fn,ms,...a)=>{timers.push([fn,ms]);return timers.length;};return {timers,restore:()=>{f.win.setTimeout=real;}};};
+
+test('r20 seen marks are keyed by the work alone, and marks saved per library are folded in',async()=>{
+ const f=fixture();
+ f.runtime.cache.workbenchUI={...(f.runtime.cache.workbenchUI||{}),inboxSeen:{'1:10.1/shared':'2026-09-02T00:00:00Z','2:10.1/shared':'2026-09-05T00:00:00Z','1:10.1/other':'2026-09-03T00:00:00Z'}};
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news:[{id:'W1',title:'Shared paper',doi:'10.1/shared',date:'2026-09-01'},{id:'W2',title:'Fresh one',doi:'10.1/fresh',date:'2026-09-01'}]}];
+ await f.bench.show('authors');
+ const titles=()=>[...f.body().querySelectorAll('.sc-author-inbox-row .sc-hit-title')].map(n=>(n.querySelector('.sc-hit-title-link')||n).textContent);
+ assert.deepEqual(titles(),['Fresh one'],'a paper marked in library 1 is seen whichever library is open');
+ assert.deepEqual(Object.keys(f.runtime.cache.workbenchUI.inboxSeen).sort(),['10.1/other','10.1/shared'],'old keys migrated, duplicates folded');
+ assert.equal(f.runtime.cache.workbenchUI.inboxSeen['10.1/shared'],'2026-09-02T00:00:00Z','the earlier mark date wins');
+ f.bench.destroy();
+});
+
+test('r20 the reading queue is keyed by library and item key, and a queue saved by numeric id is migrated',async()=>{
+ const f=fixture();
+ const known={1:{status:''},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.cache.workbenchUI={...(f.runtime.cache.workbenchUI||{}),readingQueue:{'1:1':{at:new Date(Date.now()-2000).toISOString()}}};
+ await f.bench.show('reading');
+ assert.deepEqual(Object.keys(f.runtime.cache.workbenchUI.readingQueue),['1:K1'],'the numeric id became the item key');
+ assert.equal(f.body().querySelectorAll('.sc-reading-queue-row').length,1,'and the paper still waits');
+ f.bench.destroy();
+});
+
+test('r20 대기 해제, 그룹 삭제 and 뷰 삭제 each offer an undo that puts the thing back, for eight seconds',async()=>{
+ const f=fixture();
+ const known={1:{status:''},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.cache.workbenchUI={...(f.runtime.cache.workbenchUI||{}),readingQueue:{'1:K1':{at:new Date(Date.now()-2000).toISOString(),people:['Ada']}}};
+ await f.bench.show('reading');
+ const held=heldTimers(f);
+ await f.click('대기 해제');
+ assert.equal(f.runtime.cache.workbenchUI.readingQueue['1:K1'],undefined,'taken off the queue');
+ assert.equal(toastOf(f).hidden,false);assert.match(toastOf(f).textContent,/읽기 대기에서 뺐습니다/);
+ assert.ok(held.timers.some(([,ms])=>ms===8000),'it stays eight seconds');
+ await f.click('되돌리기');
+ assert.deepEqual(f.runtime.cache.workbenchUI.readingQueue['1:K1'].people,['Ada'],'back, with who it came from');
+ assert.equal(toastOf(f).hidden,true);
+ // The strip goes by itself when its time is up.
+ await f.bench.show('views');
+ await f.click('삭제');
+ assert.match(toastOf(f).textContent,/뷰 그룹 “View”을 지웠습니다/);
+ held.timers.filter(([,ms])=>ms===8000).at(-1)[0]();
+ assert.equal(toastOf(f).hidden,true,'expired');
+ await f.click('삭제');
+ await f.click('되돌리기');
+ const undone=f.calls.find(c=>c[0]==='undeleteView');assert.equal(undone[1].id,'v1');
+ await f.bench.show('tabs');
+ await f.click('그룹 삭제');
+ await f.click('되돌리기');
+ assert.equal(f.calls.find(c=>c[0]==='undeleteTabs')[1].id,'g1');
+ held.restore();f.bench.destroy();
+});
+
+test('r20 letting an author go keeps its two presses and also offers an undo that restores the row whole',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'Ada',institution:'MIT',news:[{id:'W1'}],seen:['W0'],checkedAt:'2026-01-01T00:00:00Z'},{id:'A3',name:'Cy',institution:'',news:[],seen:[]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ f.runtime.unwatchAuthor=async id=>{const i=rows.findIndex(r=>r.id===id);if(i>=0)rows.splice(i,1);};
+ f.runtime.restoreWatchedAuthor=async(row,at)=>{rows.splice(at,0,row);f.calls.push(['restoreRow',row.id,at]);return true;};
+ await f.bench.show('authors');
+ await f.click('목록 관리');
+ const names=()=>[...f.body().querySelectorAll('.sc-watch-table td:first-child button')].map(b=>b.textContent);
+ const sizeBefore=names().length;
+ await f.click('해제');
+ assert.equal(rows.length,2,'one press only arms it');
+ await f.click('정말 해제');
+ assert.equal(rows.length,1);
+ assert.match(toastOf(f).textContent,/관심 저자에서 뺐습니다/);
+ await f.click('되돌리기');
+ assert.equal(rows.length,2,'the author is followed again');
+ assert.deepEqual(rows.find(r=>r.id==='A1').seen,['W0'],'with the baseline it had');
+ assert.equal(names().length,sizeBefore,'and the row is back in the list');
+ f.bench.destroy();
+});
+
+test('r20 모두 확인함 marks what the inbox shows (its search included) in one write, with one undo',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news:[{id:'W1',title:'Alpha result',doi:'10.1/a1',date:'2026-09-03'},{id:'W2',title:'Beta result',doi:'10.1/b2',date:'2026-09-02'},{id:'W3',title:'Alpha again',doi:'10.1/a3',date:'2026-09-01'}]}];
+ await f.bench.show('authors');await settle();
+ const rowsShown=()=>f.body().querySelectorAll('.sc-author-inbox-row').length;
+ assert.equal(rowsShown(),3);
+ f.input('새 논문 검색','alpha');await new Promise(r=>setTimeout(r,160));await settle();
+ assert.equal(rowsShown(),2);
+ const flushes=()=>f.calls.filter(c=>c[0]==='flush').length,before=flushes();
+ await f.click('모두 확인함');
+ assert.deepEqual(Object.keys(f.runtime.cache.workbenchUI.inboxSeen).sort(),['10.1/a1','10.1/a3'],'only what was shown, not Beta');
+ assert.equal(flushes()-before,1,'one save for the whole press');
+ assert.match(toastOf(f).textContent,/2편을 확인함으로 옮겼습니다/);
+ await f.click('되돌리기');
+ assert.deepEqual(Object.keys(f.runtime.cache.workbenchUI.inboxSeen||{}),[],'one undo restores them all');
+ f.bench.destroy();
+});
+
+test('r20 the selection bar copies citations, saves a collection named in the panel, and selects in Zotero',async()=>{
+ const f=fixture();
+ f.runtime.citationPanel=f.record('citationPanel',true);
+ f.library.saveToCollection=f.record('saveToCollection',{id:'9',name:'Reading list',count:1});
+ const picked=[];f.win.ZoteroPane.selectItems=async ids=>{picked.push(ids);};
+ await f.bench.show('explore');
+ f.bench.state.selected=new Set(['1']);await f.bench.render();
+ const cite=f.findButton('인용 복사'),pick=f.findButton('Zotero에서 선택'),collect=f.findButton('컬렉션으로 저장');
+ assert.ok(cite&&pick&&collect);
+ assert.equal(cite.getAttribute('data-opens'),'dialog');assert.equal(pick.getAttribute('data-opens'),'pane','both are marked so the self-check never presses them');
+ await f.click('인용 복사');
+ const call=f.calls.find(c=>c[0]==='citationPanel');assert.equal(call[2][0].id,1,'the chosen paper as a Zotero item');
+ await f.click('Zotero에서 선택');assert.deepEqual(picked,[[1]]);
+ const row=f.bench.panel.querySelector('.sc-selection-collect');assert.equal(row.hidden,true);
+ await f.click('컬렉션으로 저장');assert.equal(row.hidden,false,'the name is asked in the panel, no window');
+ f.input('새 컬렉션 이름','Reading list');
+ await f.click('만들고 담기');
+ assert.deepEqual(f.calls.find(c=>c[0]==='saveToCollection').slice(1),['Reading list',['1']]);
+ assert.equal(row.hidden,true);
+ f.bench.destroy();
+});
+
+test('r20 an empty 보유 문헌 search offers the same words in ZotPoP',async()=>{
+ const f=fixture();
+ f.runtime.Z.ZotPoP={openSearch:(...a)=>f.calls.push(['zotpop',...a])};
+ await f.bench.show('explore');
+ f.input('작업 패널 검색','zzzz nothing here');await settle();
+ const button=[...f.body().querySelectorAll('button')].find(b=>/^ZotPoP에서 ‘zzzz nothing here’ 찾기$/.test(b.textContent));
+ assert.ok(button,'named with the query');assert.equal(button.getAttribute('data-opens'),'window');
+ button.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ const call=f.calls.find(c=>c[0]==='zotpop');assert.deepEqual(call[2],{keywords:'zzzz nothing here'});
+ f.bench.destroy();
+});
+
+test('r20 an unowned paper added from the inbox is redrawn as owned and can be put on 읽기 대기; the button names the collection and a duplicate is said',async()=>{
+ const f=fixture();
+ f.win.ZoteroPane.getSelectedCollection=()=>({id:7,name:'Review'});
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news:[{id:'W1',title:'Brand new',doi:'10.1/brandnew',date:'2026-09-03'}]}];
+ f.runtime.importWork=async work=>{f.calls.push(['import',work.doi]);return Object.assign([{id:55,key:'K55',libraryID:1,getField:()=>'Brand new'}],{existing:false,collectionName:'Review'});};
+ await f.bench.show('authors');
+ const add=f.findButton('추가 → Review');assert.ok(add,'the collection is named before the press');
+ assert.match(add.getAttribute('title'),/Review/);
+ await f.click('추가 → Review');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/추가했습니다.*→ Review/,'and after it');
+ assert.equal(f.findButton('추가 → Review'),undefined,'no stale 추가 left on the row');
+ const queue=f.findButton('읽기 대기');assert.ok(queue,'the row is now an owned one, with 읽기 대기');
+ await f.click('읽기 대기');
+ assert.ok(f.runtime.cache.workbenchUI.readingQueue['1:K55'],'queued under the new item\'s library key');
+ f.runtime.importWork=async()=>Object.assign([{id:1,getField:()=>'Paper Alpha'}],{existing:true,collectionName:''});
+ f.bench.destroy();
+});
+
+test('r20 an import that finds the paper already held says so and does not claim to have added it',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news:[{id:'W1',title:'Brand new',doi:'10.1/brandnew',date:'2026-09-03'}]}];
+ f.runtime.importWork=async()=>Object.assign([{id:1,key:'K1',getField:()=>'Paper Alpha'}],{existing:true,collectionName:''});
+ await f.bench.show('authors');
+ await f.click('추가');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/이미 보유하고 있어 다시 가져오지 않았습니다/);
+ f.bench.destroy();
+});
+
+test('r20 PDF 찾기 on a paper with no file asks Zotero for it, opens nothing, and says the outcome',async()=>{
+ const f=fixture();
+ f.runtime.attachmentFindings=async()=>({supplementary:[],duplicate:[],foreign:[],orphan:[],unknown:[],unread:0,missing:[{id:'4',title:'A paper with no file',year:'2024'}]});
+ const asked=[];f.runtime.findPDF=async id=>{asked.push(id);return {status:asked.length>1?'found':'none'};};
+ await f.bench.show('attachments');
+ const find=f.findButton('PDF 찾기');assert.ok(find);assert.equal(find.getAttribute('data-opens'),'download','marked so the self-check does not fetch into the library');
+ await f.click('PDF 찾기');
+ assert.deepEqual(asked,['4']);
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/열려 있는 PDF를 찾지 못했습니다/);
+ assert.equal(f.bench.panel.querySelector('.sc-status').dataset.error,'true');
+ await f.click('PDF 찾기');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/PDF를 찾아 붙였습니다/);
+ f.bench.destroy();
 });
