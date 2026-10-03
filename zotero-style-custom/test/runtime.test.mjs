@@ -3918,3 +3918,36 @@ test('memo/note race (B): undo of a merge keeps a memo saved while the note was 
   assert.equal(noteText(memo), 'existing memo');
   assert.equal(row.memoSynced, 'existing memo', 'baseline is the note as it actually is');
 });
+
+test('memo/note race (C): undo whose note save was overtaken by an outside edit keeps that edit and the old baseline, both sides in a conflict', async () => {
+  const {fx, plugin, pre, pub} = mergeWorld();
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  const memo = new fx.Z.Item('note');
+  memo.libraryID = 1; memo.parentID = 2; memo.parentItemID = 2; memo.setTags([{tag: 'style-custom:memo', type: 0}]);
+  memo.setNote(Runtime.memoNoteHTML('existing memo')); await memo.saveTx();
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'existing memo', memoSynced: 'existing memo'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'preprint memo', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  await plugin.mergePreprintIntoPublished(1);
+  const row = plugin.entry(pub);
+  const baseline = row.memoSynced;
+  const orig = memo.saveTx;
+  memo.saveTx = async function () {
+    row.remark = 'LOCAL2';
+    this.setNote(Runtime.memoNoteHTML('EXTERNAL'));
+    plugin.mirrorMemoNote(this.id);
+    return orig.call(this);
+  };
+  await plugin.restorePreprint(1);
+  memo.saveTx = orig;
+  assert.equal(noteText(memo), 'EXTERNAL', 'the outside edit is not overwritten');
+  assert.equal(row.remark, 'LOCAL2');
+  assert.equal(row.memoSynced, baseline, 'the baseline is not taken from a note undo did not write');
+  assert.ok(row.memoConflict, 'the conflict stays open');
+  assert.equal(row.memoConflict.local, 'LOCAL2'); assert.equal(row.memoConflict.remote, 'EXTERNAL');
+  // The autosave that was waiting behind the undo writes nothing either.
+  const before = noteText(memo);
+  await plugin.memoToNote(pub).catch(() => {});
+  assert.equal(noteText(memo), before);
+  assert.equal(noteText(memo), 'EXTERNAL');
+});

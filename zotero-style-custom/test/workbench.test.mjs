@@ -6515,3 +6515,56 @@ test('choosing 노트 내용 쓰기 clears the old local draft and the autosave 
  assert.deepEqual(saves,['my memo'],'typing the old text again is a real edit and is saved (the autosave baseline moved)');
  f.bench.destroy();
 });
+
+test('a conflict already settled in another window: pressing 노트 내용 쓰기 syncs the editor to the latest text, and typing after it never writes the old text back',async()=>{
+ const f=fixture();
+ let conflict={local:'L',remote:'R'};
+ const saves=[];
+ f.library.memoConflict=async()=>conflict;
+ f.library.resolveMemoConflict=async()=>({resolved:false,conflict:null,text:'R'});
+ f.library.setRemark=async(id,text)=>{saves.push(text);return text;};
+ await f.bench.show('annotations');await settle();
+ const memo=f.body().querySelector('textarea.sc-annot-memo');
+ assert.equal(memo.value,'');
+ memo.value='L';
+ await f.click('노트 내용 쓰기');
+ assert.equal(memo.value,'R','the editor takes the latest text');
+ saves.length=0;
+ memo.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.deepEqual(saves,[],'R is the baseline: nothing is written back');
+ memo.value='R and more';memo.dispatchEvent(new f.win.Event('input',{bubbles:true}));memo.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.deepEqual(saves,['R and more'],'only what was typed after the sync is saved');
+ f.bench.destroy();
+});
+
+test('노트 내용 쓰기 that finishes after the panel was redrawn updates the editor that is on screen now and keeps what was typed since',async()=>{
+ const f=fixture();
+ let release;const gate=new Promise(r=>{release=r;});
+ const conflict={local:'L',remote:'R'};
+ const saves=[];
+ f.library.memoConflict=async()=>conflict;
+ f.library.resolveMemoConflict=async()=>{await gate;return {resolved:true,conflict:null,text:'R'};};
+ f.library.setRemark=async(id,text)=>{saves.push(text);return text;};
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-annot-memo');
+ old.value='L';old.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ saves.length=0;
+ const pending=f.click('노트 내용 쓰기');
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-annot-memo');
+ assert.notEqual(fresh,old);assert.ok(!old.isConnected);
+ assert.equal(fresh.value,'L','the redraw restores the draft');
+ release();await pending;await settle();
+ assert.equal(fresh.value,'R','the editor on screen takes the note text');
+ fresh.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.deepEqual(saves.filter(v=>v!=='R'),[],'the old text is not written back to memo or note: '+JSON.stringify(saves));
+ // Typed while a second request ran: it stays.
+ let release2;const gate2=new Promise(r=>{release2=r;});
+ f.library.resolveMemoConflict=async()=>{await gate2;return {resolved:true,conflict:null,text:'R'};};
+ fresh.value='X';
+ const second=f.click('노트 내용 쓰기');
+ fresh.value='X typed meanwhile';
+ release2();await second;await settle();
+ assert.equal(fresh.value,'X typed meanwhile');
+ f.bench.destroy();
+});

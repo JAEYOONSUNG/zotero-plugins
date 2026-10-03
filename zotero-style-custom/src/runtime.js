@@ -2313,7 +2313,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (saved.created) live.deleted = true; else live.setNote(saved.before);
         await live.saveTx();
       } finally { inflight.delete(id); }
-      if (String(row.remark || '') === memo.after) {
+      // Only a note that reads back as exactly what undo restored may set the baseline; anything else was written by someone else.
+      const restored = saved.created || String(live.getNote()) === saved.before;
+      if (!restored) {
+        // The note was edited while undo saved it: that edit stays, the old baseline stays, and both current sides wait in the conflict box.
+        if (String(row.remark || '') === memo.after) row.remark = memo.before;
+        const now = this.constructor.memoFromNoteHTML(live.getNote()), local = String(row.remark || '');
+        if (norm(local) === norm(now)) this._memoSetBase(row, now, live);
+        else row.memoConflict = {local, remote: now, at: new Date().toISOString()};
+      } else if (String(row.remark || '') === memo.after) {
         row.remark = memo.before; delete row.memoConflict;
         if (saved.syncedBefore === null) { delete row.memoSynced; delete row.memoSyncedVer; } else row.memoSynced = saved.syncedBefore;
       } else {
