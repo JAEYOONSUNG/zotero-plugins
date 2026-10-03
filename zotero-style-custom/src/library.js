@@ -355,8 +355,12 @@
       return value;
     }
 
-    async function setRemark(itemID,text) {
+    /* `options.base` is the stored memo the writer's editor was loaded from (or last confirmed). When the stored memo is
+       something else by now, nothing is written: the answer is {stale:true,stored,conflict:{local,remote}} and the writer
+       decides. Without a base the write is unconditional (programmatic callers only). */
+    async function setRemark(itemID,text,options={}) {
       const item=await get(itemID);guard([item]);if(!runtime?.entry||!runtime.flush)throw new Error('Remark storage is unavailable');
+      const stale=runtime.memoStaleWrite?.(item,text,options&&options.base);if(stale)return stale;
       const entry=runtime.entry(item),prior=entry.remark,value=String(text??'');
       const revision=(remarkRevisions.get(entry)||0)+1;remarkRevisions.set(entry,revision);entry.remark=value;runtime.dirty=true;
       try{await runtime.flush();}catch(error){

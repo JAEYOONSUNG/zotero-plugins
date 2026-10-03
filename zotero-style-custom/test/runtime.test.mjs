@@ -3951,3 +3951,70 @@ test('memo/note race (C): undo whose note save was overtaken by an outside edit 
   assert.equal(noteText(memo), before);
   assert.equal(noteText(memo), 'EXTERNAL');
 });
+
+test('memo/note race (D): a note edited to OUTSIDE during undo\'s save is judged after undo: ORIGINAL goes back to the memo, ORIGINAL vs OUTSIDE is a conflict, the ledger stays', async () => {
+  const {fx, plugin, pre, pub} = mergeWorld();
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  const memo = new fx.Z.Item('note');
+  memo.libraryID = 1; memo.parentID = 2; memo.parentItemID = 2; memo.setTags([{tag: 'style-custom:memo', type: 0}]);
+  memo.setNote(Runtime.memoNoteHTML('ORIGINAL')); await memo.saveTx();
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'ORIGINAL', memoSynced: 'ORIGINAL'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'preprint memo', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  await plugin.mergePreprintIntoPublished(1);
+  const row = plugin.entry(pub), merged = row.remark;
+  assert.equal(merged, 'ORIGINAL\n\npreprint memo');
+  const orig = memo.saveTx;
+  let mirrored;
+  memo.saveTx = async function () {
+    this.setNote(Runtime.memoNoteHTML('OUTSIDE'));
+    mirrored = plugin.mirrorMemoNote(this.id); // the real notifier path, in the middle of undo's save
+    return orig.call(this);
+  };
+  await plugin.restorePreprint(1);
+  memo.saveTx = orig;
+  await mirrored;
+  assert.equal(noteText(memo), 'OUTSIDE', 'the outside edit is not overwritten');
+  assert.equal(row.remark, 'ORIGINAL', 'what undo restores is not replaced by the outside text');
+  assert.equal(row.memoSynced, merged, 'the baseline was not moved to a text nobody confirmed');
+  assert.deepEqual({l: row.memoConflict.local, r: row.memoConflict.remote}, {l: 'ORIGINAL', r: 'OUTSIDE'});
+  assert.ok(plugin.mergeLedger()['1'], 'the ledger is kept: undo did not fully restore');
+});
+
+test('memo/note: a note edit that arrives while an operation on that paper runs waits for it (mirrorMemoNote and adoptMemoNote go through the per-paper queue)', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  let release; const gate = new Promise(r => { release = r; });
+  const job = w.plugin._memoSerial(w.c, async () => { await gate; w.row.remark = 'LOCAL'; });
+  w.note.setNote(Runtime.memoNoteHTML('OUTSIDE'));
+  const pending = w.plugin.mirrorMemoNote(w.note.id);
+  assert.ok(pending && typeof pending.then === 'function', 'it is queued, not applied now');
+  assert.equal(w.row.remark, 'B', 'nothing adopted while the other operation is in flight');
+  release(); await job;
+  assert.equal(await pending, true);
+  assert.equal(w.row.remark, 'LOCAL', 'the operation\'s result was not replaced');
+  assert.deepEqual({l: w.row.memoConflict.local, r: w.row.memoConflict.remote}, {l: 'LOCAL', r: 'OUTSIDE'});
+  // adoption on first look is skipped while an operation is in flight and happens on the next look.
+  const v = memoWorld({remark: '', note: 'from note'});
+  v.plugin.memoChecked.delete(v.plugin.identity(v.c));
+  let release2; const gate2 = new Promise(r => { release2 = r; });
+  const job2 = v.plugin._memoSerial(v.c, () => gate2);
+  assert.equal(v.plugin.adoptMemoNote(v.c), false); assert.equal(v.row.remark, '');
+  release2(); await job2; await new Promise(r => setTimeout(r, 0));
+  assert.equal(v.plugin.adoptMemoNote(v.c), true); assert.equal(v.row.remark, 'from note');
+});
+
+test('memo CAS: setRemark with a base that is no longer the stored memo writes nothing and returns both texts', async () => {
+  const w = memoWorld({remark: 'STORED', base: 'STORED', note: 'STORED'});
+  await w.setting();
+  const out = await w.lib.setRemark(3, 'MINE', {base: 'OLD'});
+  assert.equal(out.stale, true); assert.equal(out.stored, 'STORED');
+  assert.deepEqual(out.conflict, {local: 'MINE', remote: 'STORED'});
+  assert.equal(w.row.remark, 'STORED'); assert.equal(noteText(w.note), 'STORED'); assert.equal(w.note.saves, 0); assert.equal(w.row.memoSynced, 'STORED');
+  // The same text as stored is a no-op success, a matching base is a normal write, and no base stays unconditional.
+  assert.equal(await w.lib.setRemark(3, 'STORED', {base: 'OLD'}), 'STORED');
+  assert.equal(await w.lib.setRemark(3, 'NEXT', {base: 'STORED'}), 'NEXT');
+  assert.equal(w.row.remark, 'NEXT'); assert.equal(noteText(w.note), 'NEXT');
+  assert.equal((await w.lib.setRemark(3, 'MINE', {base: 'STORED'})).stale, true, 'a base from before the last write is stale too');
+  assert.equal(w.row.remark, 'NEXT');
+});

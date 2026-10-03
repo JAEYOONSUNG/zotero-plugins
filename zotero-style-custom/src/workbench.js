@@ -79,10 +79,13 @@
   const DRAFT_LIMIT=100,DRAFT_LENGTH=50000,DRAFT_TOTAL=500000;
   function cachedDrafts(){const saved=runtime.cache.workbenchDrafts;const map=new Map(saved?.version===1&&Array.isArray(saved.entries)?saved.entries.filter(entry=>Array.isArray(entry)&&entry.length===2&&typeof entry[0]==='string'&&entry[0].length<=1000&&!/password|secret|api.?key|access.?token|bearer/i.test(entry[0])&&typeof entry[1]==='string'&&entry[1].length<=DRAFT_LENGTH).slice(-DRAFT_LIMIT):[]);let total=[...map.values()].reduce((sum,value)=>sum+value.length,0);while(total>DRAFT_TOTAL){const key=map.keys().next().value;total-=map.get(key).length;map.delete(key);}return map;}
   for(const [key,value]of cachedDrafts())drafts.set(key,value);
-  function updateDraft(key,value){
+  /* A memo draft remembers the stored memo the editor was loaded from (its base) under a second key: a draft restored
+     later is only put back into an editor when that is still the stored memo; otherwise it waits as a conflict. */
+  const DRAFT_BASE='\u0001base';
+  function updateDraft(key,value,base){
    if(!key||key.length>1000||/password|secret|api.?key|access.?token|bearer/i.test(key))return;
-   const saved=cachedDrafts();saved.delete(key);drafts.delete(key);
-   if(value!==undefined){value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);}
+   const saved=cachedDrafts();saved.delete(key);drafts.delete(key);saved.delete(key+DRAFT_BASE);drafts.delete(key+DRAFT_BASE);
+   if(value!==undefined){value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);if(typeof base==='string'){const b=base.slice(0,DRAFT_LENGTH);saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);}}
    let total=[...saved.values()].reduce((sum,text)=>sum+text.length,0);
    while(saved.size>DRAFT_LIMIT||total>DRAFT_TOTAL){const oldest=saved.keys().next().value;total-=saved.get(oldest).length;saved.delete(oldest);}
    for(const existing of drafts.keys())if(!saved.has(existing))drafts.delete(existing);
@@ -1310,7 +1313,7 @@
   function selectItem(id,on){state.annotationIDs.clear();on?state.selected.add(String(id)):state.selected.delete(String(id));updateSelectionUI();}
   function one(){const list=selected();if(list.length!==1)throw new Error('문헌을 하나 선택하세요.');return list[0];}
   async function discardPreview(p){if(!p)return;try{await p.discard?.();}catch(error){runtime.Z.logError?.(error);}finally{p.remove();if(preview===p)preview=null;}}
-  function rememberDraft(event){const input=event.target;if(input?.dataset?.draftKey&&input.localName!=='select'&&!['checkbox','password'].includes(input.type))updateDraft(input.dataset.draftKey,input.value);}
+  function rememberDraft(event){const input=event.target;if(input?.dataset?.draftKey&&input.localName!=='select'&&!['checkbox','password'].includes(input.type))updateDraft(input.dataset.draftKey,input.value,memoBindings.get(input)?.base);}
   body.addEventListener('input',rememberDraft);body.addEventListener('change',rememberDraft);
   function finishDraft(input,submitted,clearValue=false){
    const key=input.dataset.draftKey;
@@ -1322,7 +1325,7 @@
   /* Applying a generated result needs a result: the button is off while the box is empty. */
   function syncAIApply(){const apply=body.querySelector('[data-ai-apply]'),copyBtn=body.querySelector('[data-ai-copy]'),out=body.querySelector('.sc-ai-output');if(out){if(apply)apply.disabled=!out.value.trim();if(copyBtn)copyBtn.disabled=!out.value.trim();}}
   body.addEventListener('input',syncAIApply);
-  function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]'))if(drafts.has(input.dataset.draftKey))input.value=drafts.get(input.dataset.draftKey);syncAIApply();}
+  function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]')){const key=input.dataset.draftKey;if(!drafts.has(key))continue;const binding=memoBindings.get(input);if(binding&&binding.base!==undefined)binding.restore(drafts.get(key),drafts.get(key+DRAFT_BASE));else input.value=drafts.get(key);}syncAIApply();}
   function clear(){
    if(jcrMount){state.jcrBrowserState=jcrMount.state;jcrMount.destroy();jcrMount=null;}
    abortAround();aroundRow=null;previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
@@ -1857,7 +1860,10 @@
       }),line,{class:'sc-paper-collection-link',title:T('클릭하면 왼쪽 컬렉션 트리에서 이 컬렉션으로 이동합니다')});
      });
     }
-    const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;const saved=await library.setRemark(item.id,submitted);finishDraft(remark,submitted);if(typeof saved==='string'&&saved!==submitted&&remark.value===submitted)remark.value=saved;syncRemark(c,typeof saved==='string'?saved:submitted);message('메모를 저장했습니다.');},c);}
+    const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.dataset.memoItem=String(item.id);
+    const loaded=String(runtime.entry(ref).remark||'');remark.value=loaded;
+    const remarkBinding=bindMemo(remark,(value,base)=>library.setRemark(item.id,value,{base}),item.title||'문헌',{manual:true,memo:{itemID:item.id,base:loaded,host:c}});
+    button('메모 저장',async()=>{const submitted=remark.value;const out=await remarkBinding.commit({force:true,throws:true});if(out.stale||!out.ok){message('저장된 메모가 그 사이 바뀌어 아무것도 덮어쓰지 않았습니다. 아래에서 고르세요.',true);return;}finishDraft(remark,submitted);syncRemark(c,remarkBinding.base);message('메모를 저장했습니다.');},c,{'data-writes':'library'});}
    if(detailed&&(state.scope!=='selected'||items.length===1))details.push((async()=>{
     const results=await Promise.allSettled([library.notes([item.id]),library.annotations([item.id])]);
     if(disposed||epoch!==generation||!c.isConnected)return;
@@ -3515,42 +3521,113 @@
    for(const editor of body.querySelectorAll('textarea[data-memo-item]'))if(editor.dataset.memoItem===id&&editor.isConnected)Promise.resolve(memoBindings.get(editor)?.refresh?.()).catch(()=>{});
    return !stale;
   }
-  function bindMemo(field,save,label){
-   let timer=null,inFlight=null,last=field.value;
-   const commit=async()=>{
+  /* Every memo editor is a compare-and-swap writer. `opts.memo={itemID,base,host}`: `base` is the stored memo this editor was
+     loaded from; it moves only to the text a successful write returned (or to what the reader chose to load). A write from
+     an editor whose base is no longer the stored memo is refused by the library ({stale}): nothing is overwritten and the
+     two texts are shown in `host` for the reader to choose. A restored draft built on an older memo goes the same way. */
+  const storedMemo=itemID=>{try{const ref=runtime.Z.Items.get(Number(itemID));return String((ref&&runtime.entry(ref).remark)||'');}catch(_){return '';}};
+  function followMemoEditors(itemID,text,source){
+   const id=String(itemID);
+   for(const editor of body.querySelectorAll('textarea[data-memo-item]')){
+    if(editor===source||editor.dataset.memoItem!==id||!editor.isConnected)continue;
+    const binding=memoBindings.get(editor);
+    // An editor nobody has touched since it loaded follows the stored memo; one with edits keeps them (its next save is judged against its base).
+    if(binding&&editor.value===binding.base){editor.value=text;if(typeof autoGrow==='function')autoGrow(editor);binding.rebase(text);}
+   }
+  }
+  function bindMemo(field,save,label,opts={}){
+   let timer=null,inFlight=null,last=field.value,chain=Promise.resolve(),staleBox=null;
+   const cas=opts.memo||null;
+   const binding={base:cas?String(cas.base??''):undefined,stale:null};
+   const clearStale=()=>{binding.stale=null;if(staleBox){staleBox.remove();staleBox=null;}if(field.dataset.state==='stale')field.dataset.state='';};
+   const take=(text)=>{field.value=text;if(typeof autoGrow==='function')autoGrow(field);binding.rebase(text);if(field.dataset.draftKey)updateDraft(field.dataset.draftKey,undefined);};
+   const drawStale=()=>{
+    if(!cas||!cas.host||!cas.host.isConnected)return;
+    if(staleBox){staleBox.remove();staleBox=null;}
+    const found=binding.stale;if(!found)return;
+    const c=staleBox=node('div',null,cas.host,{class:'sc-memo-conflict sc-memo-stale',role:'group','aria-label':'저장된 메모가 바뀌었습니다'});
+    node('strong','다른 곳에서 메모가 바뀌었습니다',c);
+    node('p','이 편집기를 연 뒤 저장된 메모가 바뀌어 아무것도 덮어쓰지 않았습니다. 어느 쪽을 쓸지 고르세요.',c,{class:'sc-muted'});
+    const two=node('div',null,c,{class:'sc-memo-conflict-texts'});
+    for(const [name,text] of [['저장된 메모',found.stored],['이 편집 내용',found.conflict.local]]){
+     const col=node('div',null,two,{class:'sc-memo-conflict-text'});node('span',name,col,{class:'sc-memo-label'});node('pre',text||'(비어 있음)',col);
+    }
+    const acts=node('div',null,c,{class:'sc-actions'});
+    button('저장된 메모 쓰기',async()=>{take(found.stored);clearStale();followMemoEditors(cas.itemID,found.stored,field);},acts,{'data-writes':'cache'});
+    button('이 편집 내용 쓰기',async()=>{await binding.overwrite(found.conflict.local,found.stored);},acts,{'data-writes':'library'});
+    button('둘 다 합치기',async()=>{await binding.overwrite(found.stored.trim()&&found.conflict.local.trim()?found.stored+'\n\n'+found.conflict.local:found.stored.trim()?found.stored:found.conflict.local,found.stored);},acts,{'data-writes':'library',title:T('저장된 메모 아래에 이 편집 내용을 이어 붙입니다')});
+   };
+   // One attempt: true when the library took it. The base moves only from what a write answered.
+   const attempt=async(value,base)=>{
+    inFlight=save(value,base);
+    const saved=await inFlight;
+    if(saved&&typeof saved==='object'&&saved.stale){binding.stale=saved;field.dataset.state='stale';drawStale();return false;}
+    const stored=typeof saved==='string'?saved:value;
+    if(cas){binding.base=stored;clearStale();}
+    /* The note's newer text, adopted because the memo had not changed since the last sync, comes back as the stored text:
+       the editor takes it. Input typed while the save ran stays as typed. */
+    if(typeof saved==='string'&&saved!==value){
+     if(field.dataset.memoItem)syncMemoEditors(field.dataset.memoItem,saved,value);
+     else if(field.value===value){field.value=saved;last=saved;if(typeof autoGrow==='function')autoGrow(field);}
+    }
+    if(cas)followMemoEditors(cas.itemID,stored,field);
+    return true;
+   };
+   const run=async(options={})=>{
     const value=field.value;
-    if(value===last)return;
+    if(value===last&&!options.force)return {ok:true,unchanged:true};
     last=value;
     field.dataset.state='saving';
     try{
-     inFlight=save(value);
-     const saved=await inFlight;
-     /* The note's newer text, adopted because the memo had not changed since the last sync, comes back as the stored text:
-        the editor takes it. Input typed while the save ran stays as typed. */
-     if(typeof saved==='string'&&saved!==value){
-      if(field.dataset.memoItem)syncMemoEditors(field.dataset.memoItem,saved,value);
-      else if(field.value===value){field.value=saved;last=saved;if(typeof autoGrow==='function')autoGrow(field);}
-     }
-     if(!field.isConnected)return;
+     const ok=await attempt(value,binding.base);
+     if(!ok)return {ok:false,stale:binding.stale};
+     if(!field.isConnected)return {ok:true};
      field.dataset.state='saved';
      win.setTimeout(()=>{if(field.dataset.state==='saved')field.dataset.state='';},1400);
+     return {ok:true};
     }catch(error){
      if(field.isConnected)field.dataset.state='failed';
      last=null;
+     if(options.throws)throw error;
      message(`${label} 메모를 저장하지 못했습니다: ${error.message}`,true);
+     return {ok:false,error};
     }
    };
-   field.addEventListener('input',()=>{
-    field.dataset.state='';
-    if(timer)win.clearTimeout(timer);
-    timer=win.setTimeout(commit,900);
-   });
-   // Leaving the field commits at once: waiting out the timer after the panel
-   // has closed would lose the edit.
-   field.addEventListener('blur',()=>{if(timer)win.clearTimeout(timer);commit();});
-   memoFields.push(()=>{if(timer)win.clearTimeout(timer);return commit();});
-   // The text the editor now holds is what is stored: the autosave baseline follows it.
-   const binding={rebase(value){if(timer){win.clearTimeout(timer);timer=null;}last=value;}};
+   // Saves of one editor never overlap: the next one starts from the base the previous one left.
+   const commit=(options={})=>{const next=chain.catch(()=>{}).then(()=>run(options));chain=next;return next;};
+   binding.commit=commit;
+   binding.overwrite=async(text,seenStored)=>{
+    const result=await (chain=chain.catch(()=>{}).then(async()=>{
+     field.value=text;if(typeof autoGrow==='function')autoGrow(field);last=text;field.dataset.state='saving';
+     try{const ok=await attempt(text,seenStored);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)updateDraft(field.dataset.draftKey,undefined);}return ok;}
+     catch(error){field.dataset.state='failed';last=null;throw error;}
+    }));
+    if(!result)message('그 사이 메모가 또 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);
+    return result;
+   };
+   if(!opts.manual){
+    field.addEventListener('input',()=>{
+     field.dataset.state='';
+     if(timer)win.clearTimeout(timer);
+     timer=win.setTimeout(()=>{commit();},900);
+    });
+    // Leaving the field commits at once: waiting out the timer after the panel
+    // has closed would lose the edit.
+    field.addEventListener('blur',()=>{if(timer)win.clearTimeout(timer);commit();});
+    memoFields.push(()=>{if(timer)win.clearTimeout(timer);return commit();});
+   }
+   // The text the editor now holds is what is stored: the autosave baseline and the CAS base follow it.
+   binding.rebase=value=>{if(timer){win.clearTimeout(timer);timer=null;}last=value;if(cas){binding.base=String(value);clearStale();}};
+   /* A saved draft is put back only when the memo it was typed over is still the stored one. Otherwise it is offered
+      next to the stored text and never autosaved. */
+   binding.restore=(draft,draftBase)=>{
+    if(!cas){field.value=draft;return;}
+    const stored=storedMemo(cas.itemID);
+    if(draft===field.value)return;
+    if(draft===stored){updateDraft(field.dataset.draftKey,undefined);return;}
+    if(draftBase===stored&&field.value===binding.base){field.value=draft;if(typeof autoGrow==='function')autoGrow(field);return;}
+    binding.stale={stale:true,stored,conflict:{local:draft,remote:stored},fromDraft:true};drawStale();
+   };
    memoBindings.set(field,binding);
    return binding;
   }
@@ -3563,9 +3640,10 @@
    field.dataset.memoItem=String(item.id);
    const ref=runtime.Z.Items.get(Number(item.id));
    field.value=(ref&&runtime.entry(ref).remark)||'';
+   const loaded=field.value;
    autoGrow(field);
    /* Memo and note never merge by themselves: when both changed, nothing is written and both texts wait here for a choice. */
-   const slot=node('div',null,box,{class:'sc-memo-conflict-slot'});
+   const slot=node('div',null,box,{class:'sc-memo-conflict-slot'}),staleHost=node('div',null,box,{class:'sc-memo-stale-slot'});
    const showConflict=async()=>{
     let found=null;
     try{found=await library.memoConflict(item.id);}catch(_){}
@@ -3597,15 +3675,15 @@
     button('둘 다 합치기',choose('both'),acts,{'data-writes':'library',title:T('노트 내용 아래에 구분선을 넣고 이 메모를 이어 붙입니다')});
    };
    // Saved here or under a row, the memo is the same one: the search sees it either way.
-   const memoBinding=bindMemo(field,value=>Promise.resolve(library.setRemark(item.id,value)).then(async result=>{const held=state.items.find(i=>String(i.id)===String(item.id));if(held&&(field.value===value||field.value===result))held.remark=typeof result==='string'?result:String(value||'');await showConflict();return result;}),item.title||'문헌');
+   const memoBinding=bindMemo(field,(value,base)=>Promise.resolve(library.setRemark(item.id,value,{base})).then(async result=>{if(result&&result.stale)return result;const held=state.items.find(i=>String(i.id)===String(item.id));if(held&&(field.value===value||field.value===result))held.remark=typeof result==='string'?result:String(value||'');await showConflict();return result;}),item.title||'문헌',{memo:{itemID:item.id,base:loaded,host:staleHost}});
    memoBinding.refresh=showConflict;
    showConflict();
    /* The memo lives in this plugin's own file; this puts the same text into one
       child note (tagged style-custom:memo) so it is in Zotero too. The note is not opened. */
    button('노트로 옮기기',async()=>{
     const submitted=field.value;
-    await library.setRemark(item.id,submitted);
-    const held=state.items.find(i=>String(i.id)===String(item.id));if(held&&field.value===submitted)held.remark=submitted;
+    const out=await memoBinding.commit({force:true,throws:true});
+    if(!out.ok){message('저장된 메모가 그 사이 바뀌어 아무것도 쓰지 않았습니다. 위에서 어느 쪽을 쓸지 고르세요.',true);return;}
     const result=await library.memoToNote(item.id);
     if(result.adopted&&typeof result.text==='string')syncMemoEditors(item.id,result.text,submitted);
     await showConflict();
@@ -4191,10 +4269,11 @@
       remarkBox.replaceChildren();
       const editor=node('div',null,remarkBox,{class:'sc-resume-memo-editor'});
       const field=node('textarea',null,editor,{rows:'2','aria-label':T(`${r.item.title} 메모`),placeholder:T('짧게 적어두세요. 노트 항목은 만들지 않습니다.')});
-      field.value=r.entry.remark||'';field.dataset.memoItem=String(r.item.id);
+      const loaded=String(r.entry.remark||'');field.value=loaded;field.dataset.memoItem=String(r.item.id);
       field.focus();
       let typing=true;for(const [type,on] of [['focus',true],['input',true],['blur',false]])field.addEventListener(type,()=>{typing=on;});
-      bindMemo(field,value=>Promise.resolve(library.setRemark(r.item.id,value)).then(result=>{
+      bindMemo(field,(value,base)=>Promise.resolve(library.setRemark(r.item.id,value,{base})).then(result=>{
+       if(result&&result.stale)return result;
        const stored=typeof result==='string'?result:String(value||'');
        // A later keystroke's save must not be overwritten by this earlier answer.
        const newest=field.value===value||field.value===stored;if(newest)r.entry.remark=stored;
@@ -4203,7 +4282,7 @@
        if(!field.isConnected||typing||field.value!==value)return result;
        renderRemarkView();
        return result;
-      }),r.item.title||'문헌');
+      }),r.item.title||'문헌',{memo:{itemID:r.item.id,base:loaded,host:editor}});
      };
      renderRemarkView();
      // No recorded date is a different fact from "read today" (days===0), and
@@ -7694,8 +7773,8 @@
    const hasAbstract=!!String(item.abstract||'').trim();
    const NEEDS_ABSTRACT=new Set(['summary','remark','tags']);
    if(aiReady&&!hasAbstract)body.insertBefore(node('p','이 문헌에는 초록이 없어 요약·메모·태그 제안은 쓸 수 없습니다. 제목 번역만 됩니다.',null,{class:'sc-muted sc-settings-note'}),b);
-   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message(task==='translate'?'제목을 AI 서버에 보내는 중…':'제목·초록을 AI 서버에 보내는 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);syncAIApply();}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b,{'data-writes':'network',title:!aiReady?T('설정에서 AI 서버를 연결하면 켜집니다'):(NEEDS_ABSTRACT.has(task)&&!hasAbstract)?T('초록이 없는 문헌입니다'):''}).disabled=!aiReady||(NEEDS_ABSTRACT.has(task)&&!hasAbstract);
-   const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary','data-ai-apply':'true'});syncAIApply();
+   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message(task==='translate'?'제목을 AI 서버에 보내는 중…':'제목·초록을 AI 서버에 보내는 중…');stopAI.hidden=false;const request=++aiEpoch;let result;const memoBase=storedMemo(item.id);try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;state.aiMemoBase=memoBase;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);syncAIApply();}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b,{'data-writes':'network',title:!aiReady?T('설정에서 AI 서버를 연결하면 켜집니다'):(NEEDS_ABSTRACT.has(task)&&!hasAbstract)?T('초록이 없는 문헌입니다'):''}).disabled=!aiReady||(NEEDS_ABSTRACT.has(task)&&!hasAbstract);
+   const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark'){const out=await library.setRemark(item.id,output.value,{base:state.aiMemoBase});if(out&&out.stale)throw new Error('이 제안을 만든 뒤 저장된 메모가 바뀌어 적용하지 않았습니다. 메모를 확인한 뒤 다시 생성하세요.');}else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary','data-ai-apply':'true'});syncAIApply();
   }
   /* The settings page as sections, each with its name, one line saying what it
      changes, its options one per line, and its action under them. It was one

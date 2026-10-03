@@ -1706,7 +1706,7 @@ test('A48 이어 읽기 메모: a row with a memo shows it as a button that swap
  field.dispatchEvent(new f.win.Event('input',{bubbles:true}));
  field.dispatchEvent(new f.win.Event('blur'));
  await settle();
- assert.deepEqual(f.calls.find(c=>c[0]==='remark'),['remark','1','Check the control condition, and the dosage']);
+ assert.deepEqual(f.calls.find(c=>c[0]==='remark'),['remark','1','Check the control condition, and the dosage',{base:'Check the control condition'}]);
  assert.equal(box().querySelector('.sc-resume-memo-editor'),null,'back to the one-line view after a successful save');
  assert.equal(box().querySelector('.sc-resume-remark').textContent,'Check the control condition, and the dosage');
  assert.equal(f.runtime.cache.items[1].remark,'Check the control condition, and the dosage','state.items\' own remark follows, as drawPaperMemo does');
@@ -6567,4 +6567,139 @@ test('노트 내용 쓰기 that finishes after the panel was redrawn updates the
  release2();await second;await settle();
  assert.equal(fresh.value,'X typed meanwhile');
  f.bench.destroy();
+});
+
+// A library whose setRemark is the real compare-and-swap rule over the shared cache (what runtime.memoStaleWrite does).
+function casLibrary(f){
+ f.library.setRemark=async(id,text,opts={})=>{
+  f.calls.push(['setRemark',String(id),text,opts.base]);
+  const row=f.runtime.cache.items[id]||={},stored=String(row.remark||'');
+  if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored}};
+  row.remark=text;return text;
+ };
+}
+const casType=(f,el,value)=>{el.value=value;el.dispatchEvent(new f.win.Event('input',{bubbles:true}));};
+const casWritten=f=>f.calls.filter(c=>c[0]==='setRemark').map(c=>c[2]);
+
+test('memo CAS (bug 2): the list-detail 읽기 메모 editor is a CAS writer: a memo that changed under it is never overwritten by 메모 저장',async()=>{
+ const f=fixture();casLibrary(f);
+ await f.bench.show('explore');await f.click('자세히');
+ const field=f.body().querySelector('[aria-label="읽기 메모"]');
+ assert.equal(field.dataset.memoItem,'1','the editor is found by syncMemoEditors');
+ casType(f,field,'L');
+ f.runtime.cache.items[1].remark='R'; // 노트 내용 쓰기 completed meanwhile
+ f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'R','nothing was written over the memo');
+ const box=f.body().querySelector('.sc-memo-stale');
+ assert.ok(box,'both texts are shown');assert.match(box.textContent,/R/);assert.match(box.textContent,/L/);
+ assert.equal(field.value,'L','what was typed is kept');
+ f.bench.destroy();
+});
+
+test('memo CAS (bug 2): a completion that lands while the list detail is open updates that editor, and an untouched one is not a conflict',async()=>{
+ const f=fixture();casLibrary(f);
+ f.library.memoConflict=async()=>({local:'L',remote:'R'});
+ f.library.resolveMemoConflict=async()=>{f.runtime.cache.items[1].remark='R';return {resolved:true,conflict:null,text:'R'};};
+ f.runtime.cache.items[1]={remark:'L'};
+ await f.bench.show('explore');await f.click('자세히');
+ const field=f.body().querySelector('[aria-label="읽기 메모"]');
+ assert.equal(field.value,'L');
+ f.runtime.cache.items[1].remark='R';
+ field.value='L2';
+ f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'R');
+ assert.ok(f.body().querySelector('.sc-memo-stale'));
+ await f.click('저장된 메모 쓰기');
+ assert.equal(field.value,'R');assert.equal(f.body().querySelector('.sc-memo-stale'),null);
+ casType(f,field,'R and more');f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'R and more','after loading the stored memo the editor is current again');
+ f.bench.destroy();
+});
+
+test('memo CAS (bug 3): a leftover draft built on an older memo is not put back into the editor or autosaved; it is offered next to the stored memo',async()=>{
+ const f=fixture();casLibrary(f);
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'L'); // draft saved with base ''
+ f.calls.length=0;
+ f.runtime.cache.items[1].remark='R'; // 노트 내용 쓰기 completed; the draft was left behind
+ await f.bench.show('explore');await settle();
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ assert.notEqual(fresh,old);
+ assert.equal(fresh.value,'R','the editor shows the stored memo, not the old draft');
+ const box=f.body().querySelector('.sc-memo-stale');
+ assert.ok(box,'the draft waits as a conflict');assert.match(box.textContent,/L/);
+ fresh.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.deepEqual(casWritten(f),[],'the blur autosave writes nothing: '+JSON.stringify(f.calls));
+ assert.equal(f.runtime.cache.items[1].remark,'R');
+ await f.click('이 편집 내용 쓰기');
+ assert.equal(f.runtime.cache.items[1].remark,'L','only the reader\'s choice writes the draft');
+ assert.equal(fresh.value,'L');
+ f.bench.destroy();
+});
+
+test('memo CAS (bug 3 sequence): 노트 내용 쓰기 pressed with a saved draft, tab switched before it finishes: the draft is never written over the result',async()=>{
+ const f=fixture();casLibrary(f);
+ let release;const gate=new Promise(r=>{release=r;});
+ f.library.memoConflict=async()=>({local:'L',remote:'R'});
+ f.library.resolveMemoConflict=async()=>{await gate;f.runtime.cache.items[1].remark='R';return {resolved:true,conflict:null,text:'R'};};
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'L');
+ const pending=f.click('노트 내용 쓰기');
+ await f.bench.show('explore');await settle();
+ release();await pending;await settle();
+ f.calls.length=0;
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ fresh.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'R');
+ assert.ok(!casWritten(f).includes('L'),'L is never written: '+JSON.stringify(casWritten(f)));
+ f.bench.destroy();
+});
+
+test('memo CAS: a reading-list row editor with a stale base is refused and the row stays open',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={seconds:125,lastRead:new Date().toISOString(),remark:'Check'};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:20,visited:5,percent:25,attachmentID:100,lastPageIndex:4}:{pages:{},total:0,visited:0,percent:0};
+ await f.bench.show('reading');
+ f.body().querySelector('.sc-resume-remark').click();
+ const field=f.body().querySelector('.sc-resume-memo-editor textarea');
+ f.runtime.cache.items[1].remark='Changed elsewhere';
+ field.value='Check, and more';field.dispatchEvent(new f.win.Event('input',{bubbles:true}));field.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'Changed elsewhere');
+ assert.ok(f.body().querySelector('.sc-resume-memo-editor .sc-memo-stale'),'the two texts are shown in the row');
+ assert.equal(f.body().querySelector('.sc-resume-memo-editor textarea'),field,'the editor stays');
+ await f.click('둘 다 합치기');
+ assert.equal(f.runtime.cache.items[1].remark,'Changed elsewhere\n\nCheck, and more');
+ f.bench.destroy();
+});
+
+test('memo CAS: a second bench with an older editor can only make a conflict, never overwrite the first bench\'s save',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g);
+ await f.bench.show('annotations');await settle();await g.bench.show('annotations');await settle();
+ const a=f.body().querySelector('textarea.sc-paper-memo'),b=g.body().querySelector('textarea.sc-paper-memo');
+ casType(f,a,'from A');a.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'from A');
+ casType(g,b,'from B');b.dispatchEvent(new g.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'from A','B did not overwrite A');
+ assert.ok(g.body().querySelector('.sc-memo-stale'),'B sees a conflict');
+ assert.equal(b.value,'from B');
+ f.bench.destroy();g.bench.destroy();
+});
+
+test('memo CAS: fast typing in one editor is not a conflict with itself (saves are chained and the base follows each answer)',async()=>{
+ const f=fixture();casLibrary(f);
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ for(const v of ['a','ab','abc']){casType(f,el,v);el.dispatchEvent(new f.win.Event('blur'));}
+ await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'abc');assert.equal(f.body().querySelector('.sc-memo-stale'),null);
+ f.bench.destroy();
+});
+
+test('memo CAS: the AI memo suggestion is applied only over the memo it was made for',async()=>{
+ const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ assert.match(src,/library\.setRemark\(item\.id,output\.value,\{base:state\.aiMemoBase\}\)/);
 });
