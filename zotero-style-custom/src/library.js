@@ -361,10 +361,14 @@
     async function setRemark(itemID,text,options={}) {
       const item=await get(itemID);guard([item]);if(!runtime?.entry||!runtime.flush)throw new Error('Remark storage is unavailable');
       const stale=runtime.memoStaleWrite?.(item,text,options&&options.base);if(stale)return stale;
+      // `options.answer` receives the memo revision the returned text was current at: a caller drops the answer if the memo has moved on since.
+      const answer=options&&options.answer&&typeof options.answer==='object'?options.answer:null;
+      let answerRev;const done=text=>{if(answer)answer.rev=answerRev;return text;};
       const entry=runtime.entry(item),prior=entry.remark,value=String(text??'');
       const revision=(remarkRevisions.get(entry)||0)+1;remarkRevisions.set(entry,revision);entry.remark=value;runtime.dirty=true;
       // The memo revision right after this write: anything that changes the memo, baseline or conflict later (a note adopted, a newer save, an undo) bumps it.
       const mine=runtime._memoBump?runtime._memoBump(entry):undefined;
+      answerRev=mine;
       try{await runtime.flush();}catch(error){
         // An earlier failed save must not undo a later edit from this or another window.
         // Only what is still this write's own is restored: a newer save (revision) or a note adopted meanwhile (remark changed) stays.
@@ -377,9 +381,10 @@
         let result;
         try{result=await runtime.memoToNote(item,{prior});}catch(error){throw new Error('메모는 저장했지만 노트로 옮기지 못했습니다: '+(error&&error.message||error));}
         // The note's newer text was adopted into the memo: the caller's editor, cache and autosave baseline must take it. A conflict returns the submitted text; the conflict itself is read with memoConflict().
-        if(result&&!result.skipped&&result.adopted&&typeof result.text==='string')return result.text;
+        // The job's own answer is current at the revision it took before any later await; a skipped or absent answer stays at this write's revision, which anything newer has moved past.
+        if(result&&!result.skipped&&typeof result.rev==='number'&&typeof result.text==='string'){answerRev=result.rev;if(result.adopted||result.text!==value)return done(result.text);}
       }
-      return value;
+      return done(value);
     }
     async function memoToNote(itemID) {
       const item=await get(itemID);guard([item]);if(!runtime?.memoToNote)throw new Error('Memo notes are unavailable');

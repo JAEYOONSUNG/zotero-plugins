@@ -4534,6 +4534,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return !remoteChanged ? 'push' : !localChanged ? 'pull' : 'conflict';
   }
   _memoNoWrite(row, note, situation) {
+    // An open conflict is never settled by adopting the note: the memo is newer than the baseline or the conflict would not exist.
+    if (situation === 'pull' && row.memoConflict) situation = 'conflict';
     const there = this.constructor.memoFromNoteHTML(note.getNote());
     if (situation === 'same') { if (row.memoSynced !== there || row.memoConflict) this._memoSetBase(row, there, note); return true; }
     if (situation === 'pull') { row.remark = there; this._memoSetBase(row, there, note); return true; }
@@ -4600,8 +4602,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (situation !== 'push') {
         // Nothing is written: agreed, adopted from the note, or held for the user.
         const changed = this._memoNoWrite(row, note, situation);
+        // The revision the returned text was current at is taken here, before any await: a later change by anyone makes this answer stale.
+        const answer = {created: false, text: String(row.remark || ''), wrote: false, adopted: situation === 'pull', conflict: situation === 'conflict', rev: row.memoRev || 0};
         if (changed) { await this.flush(); this.bumpState?.(); }
-        return {created: false, text: String(row.remark || ''), wrote: false, adopted: situation === 'pull', conflict: situation === 'conflict'};
+        return answer;
       }
     } else {
       note = new this.Z.Item('note');
@@ -4609,15 +4613,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       note.setTags([{tag: this.constructor.MEMO_NOTE_TAG, type: 0}]);
     }
     // A memo typed during the write is fine (it is newer, and the baseline is the note as written); the baseline or the conflict being changed by someone else is not.
-    const syncedBefore = row.memoSynced, conflictBefore = row.memoConflict;
+    const syncedBefore = row.memoSynced, conflictBefore = row.memoConflict, rev0 = row.memoRev || 0;
     await this._memoWrite(item, note, text);
     // The baseline moves only when the note reads back as exactly what this job wrote AND nobody else moved the baseline or the conflict meanwhile.
     const mirrored = this.constructor.memoFromNoteHTML(note.getNote());
     if (row.memoSynced === syncedBefore && row.memoConflict === conflictBefore && this.constructor.memoNorm(mirrored) === this.constructor.memoNorm(text)) this._memoSetBase(row, mirrored, note);
+    else if ((row.memoRev || 0) !== rev0) {
+      // The note no longer reads back as what this job wrote and the memo was saved meanwhile: the latest memo is not replaced by the note, both wait as a conflict.
+      row.memoConflict = {local: String(row.remark || ''), remote: mirrored, at: new Date().toISOString()}; this._memoBump(row);
+    }
     else this._memoNoWrite(row, note, this._memoSituation(row, mirrored, row.memoSynced));
+    const answer = {created, text: String(row.remark || ''), wrote: true, adopted: false, conflict: !!row.memoConflict, rev: row.memoRev || 0};
     await this.flush();
     this.bumpState?.();
-    return {created, text: String(row.remark || ''), wrote: true, adopted: false, conflict: !!row.memoConflict};
+    return answer;
   }
   /* The user's answer to a conflict: 'note' | 'local' | 'both'. `seen` is what the box showed;
      if either side changed since, nothing is written and the new texts are returned. */
@@ -4628,13 +4637,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async _resolveMemoConflict(item, choice, {seen} = {}) {
     if (!['note', 'local', 'both'].includes(choice)) throw new Error('알 수 없는 선택입니다. 노트 내용 쓰기, 이 메모 쓰기, 둘 다 합치기 중에서 고르세요.');
     const row = this.entry(item);
-    if (!row.memoConflict) return {resolved: false, conflict: null, text: String(row.remark || '')};
+    if (!row.memoConflict) return {resolved: false, conflict: null, text: String(row.remark || ''), rev: row.memoRev || 0};
     const norm = this.constructor.memoNorm;
     let note = this.memoNoteOf(item);
     const there = note ? this.constructor.memoFromNoteHTML(note.getNote()) : '', local = String(row.remark || '');
     if (seen && (norm(seen.local) !== norm(local) || norm(seen.remote) !== norm(there))) {
-      row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this._memoBump(row); await this.flush();
-      return {resolved: false, stale: true, conflict: row.memoConflict, text: local};
+      row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this._memoBump(row);
+      const answer = {resolved: false, stale: true, conflict: row.memoConflict, text: local, rev: row.memoRev || 0};
+      await this.flush();
+      return answer;
     }
     const rev0 = row.memoRev || 0; // the memo, baseline and conflict as judged above; compared again after the note is written
     const final = choice === 'note' ? there : choice === 'local' ? local
@@ -4646,13 +4657,16 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // The memo was saved while the note was written (even back to the same text): the newer memo stays, nothing is confirmed, and both sides go back into the box.
       if ((row.memoRev || 0) !== rev0 || String(row.remark || '') !== local) {
         const now = String(row.remark || ''), remote = this.constructor.memoFromNoteHTML(note.getNote());
-        row.memoConflict = {local: now, remote, at: new Date().toISOString()}; this._memoBump(row); await this.flush(); this.bumpState?.();
-        return {resolved: false, stale: true, conflict: row.memoConflict, text: String(row.remark || '')};
+        row.memoConflict = {local: now, remote, at: new Date().toISOString()}; this._memoBump(row);
+        const answer = {resolved: false, stale: true, conflict: row.memoConflict, text: String(row.remark || ''), rev: row.memoRev || 0};
+        await this.flush(); this.bumpState?.();
+        return answer;
       }
     }
     row.remark = final; this._memoSetBase(row, note ? this.constructor.memoFromNoteHTML(note.getNote()) : final, note);
+    const answer = {resolved: true, conflict: null, text: final, rev: row.memoRev || 0};
     await this.flush(); this.bumpState?.();
-    return {resolved: true, conflict: null, text: final};
+    return answer;
   }
   /* An edit made to the memo note inside Zotero (or arriving by sync). Judged against the
      baseline, never suppressed: only the text this plugin is itself writing is its own echo. */
@@ -4698,7 +4712,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (base === undefined || base === null) return null;
     const row = this.entry(item), stored = String(row.remark || ''), submitted = String(text ?? '');
     if (stored === String(base) || stored === submitted) return null;
-    return {stale: true, stored, conflict: {local: submitted, remote: stored}};
+    return {stale: true, stored, conflict: {local: submitted, remote: stored}, rev: row.memoRev || 0};
   }
 
   /* 프리프린트 -> 게재본. A stored signal says a preprint has a published

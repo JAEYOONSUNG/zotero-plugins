@@ -4172,3 +4172,54 @@ test('invariant: a runtime function that awaits and then writes memo fields comp
   }
   assert.deepEqual(bad, [], 'awaits then writes memo fields without comparing memoRev');
 });
+
+test('memo revision (R9-1): a note job whose read-back differs because the memo was saved meanwhile and the note changed outside keeps the latest memo and records a conflict; the queued mirror and job cannot adopt it', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  const orig = w.fx.Z.Item.prototype.saveTx;
+  let release; const gate = new Promise(r => { release = r; }), first = {v: true};
+  w.fx.Z.Item.prototype.saveTx = async function () { if (first.v) { first.v = false; await gate; } return orig.call(this); };
+  const a = w.lib.setRemark(3, 'L'); // window A; the note save pauses
+  await new Promise(r => setTimeout(r, 5));
+  const b = w.lib.setRemark(3, 'B'); // window B saves the memo as B
+  await new Promise(r => setTimeout(r, 5));
+  w.note.setNote(Runtime.memoNoteHTML('N')); // the outside note change
+  const mirrored = w.plugin.mirrorMemoNote(w.note.id);
+  release();
+  const answerA = await a, answerB = await b; await mirrored;
+  w.fx.Z.Item.prototype.saveTx = orig;
+  assert.equal(w.row.remark, 'B', 'the latest memo is not overwritten by N: ' + JSON.stringify([answerA, answerB]));
+  assert.ok(w.row.memoConflict, 'a conflict is recorded');
+  assert.deepEqual({l: w.row.memoConflict.local, r: w.row.memoConflict.remote}, {l: 'B', r: 'N'});
+});
+
+test('memo revision (R9): answers that carry memo text also carry the revision they were current at', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  const answer = {};
+  await w.lib.setRemark(3, 'B2', {answer});
+  assert.equal(answer.rev, w.row.memoRev, 'setRemark');
+  const stale = await w.lib.setRemark(3, 'X', {base: 'nope', answer: {}});
+  assert.equal(stale.rev, w.row.memoRev, 'a stale answer');
+  const out = await w.plugin.memoToNote(w.c);
+  assert.equal(out.rev, w.row.memoRev, 'memoToNote');
+  const v = memoWorld({remark: 'L', base: 'B', note: 'R'}); await v.setting(); await v.plugin.memoToNote(v.c);
+  const res = await v.lib.resolveMemoConflict(3, 'note', await v.lib.memoConflict(3));
+  assert.equal(res.rev, v.row.memoRev, 'resolve');
+});
+
+test('memo revision (R9-3): the answer of a save that another save overtook is behind the memo revision', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  const orig = w.fx.Z.Item.prototype.saveTx;
+  let release; const gate = new Promise(r => { release = r; }), first = {v: true};
+  w.fx.Z.Item.prototype.saveTx = async function () { if (first.v) { first.v = false; await gate; } return orig.call(this); };
+  const answerA = {};
+  const a = w.lib.setRemark(3, 'A', {answer: answerA});
+  await new Promise(r => setTimeout(r, 5));
+  const b = w.lib.setRemark(3, 'B2'); // another window saves meanwhile
+  await new Promise(r => setTimeout(r, 5));
+  release(); await Promise.all([a, b]);
+  w.fx.Z.Item.prototype.saveTx = orig;
+  assert.ok(answerA.rev < w.row.memoRev, 'A\'s answer is stale: ' + answerA.rev + ' < ' + w.row.memoRev);
+});

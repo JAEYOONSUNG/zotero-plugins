@@ -1707,7 +1707,7 @@ test('A48 이어 읽기 메모: a row with a memo shows it as a button that swap
  field.dispatchEvent(new f.win.Event('input',{bubbles:true}));
  field.dispatchEvent(new f.win.Event('blur'));
  await settle();
- assert.deepEqual(f.calls.find(c=>c[0]==='remark'),['remark','1','Check the control condition, and the dosage',{base:'Check the control condition'}]);
+ assert.deepEqual(f.calls.find(c=>c[0]==='remark'),['remark','1','Check the control condition, and the dosage',{base:'Check the control condition',answer:{}}]);
  assert.equal(box().querySelector('.sc-resume-memo-editor'),null,'back to the one-line view after a successful save');
  assert.equal(box().querySelector('.sc-resume-remark').textContent,'Check the control condition, and the dosage');
  assert.equal(f.runtime.cache.items[1].remark,'Check the control condition, and the dosage','state.items\' own remark follows, as drawPaperMemo does');
@@ -6575,8 +6575,10 @@ function casLibrary(f){
  f.library.setRemark=async(id,text,opts={})=>{
   f.calls.push(['setRemark',String(id),text,opts.base]);
   const row=f.runtime.cache.items[id]||={},stored=String(row.remark||'');
-  if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored}};
-  row.remark=text;return text;
+  if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored},rev:row.memoRev||0};
+  row.remark=text;row.memoRev=(row.memoRev||0)+1;
+  if(opts.answer)opts.answer.rev=row.memoRev; // the revision this write made: anything newer has moved past it
+  return text;
  };
 }
 const casType=(f,el,value)=>{el.value=value;el.dispatchEvent(new f.win.Event('input',{bubbles:true}));};
@@ -7192,7 +7194,7 @@ test('invariant: memo fields are written only by the allowlisted runtime/library
    assert.match(body,/_memoBump\(|_memoSetBase\(/,file+' '+name+' writes a memo field without bumping memoRev');
   }
  };
- check('runtime.js',/^  (?:static |async )*(\w+)\(.*\)\s*\{\s*$/,['_mergePreprintIntoPublished','_undoMemo','_memoSetBase','_memoNoWrite','_resolveMemoConflict','_mirrorMemoNote','connectPublished']);
+ check('runtime.js',/^  (?:static |async )*(\w+)\(.*\)\s*\{\s*$/,['_mergePreprintIntoPublished','_undoMemo','_memoSetBase','_memoNoWrite','_memoToNote','_resolveMemoConflict','_mirrorMemoNote','connectPublished']);
  check('library.js',/^\s*(?:async )?function (\w+)\(/,['setRemark']);
  const wb=read('workbench.js').join('\n');
  assert.doesNotMatch(wb,/entry(?:\([^)]*\))?\.(?:remark|memoSynced|memoConflict|memoRev)\s*=[^=]/,'the workbench never assigns a memo field of the runtime entry');
@@ -7277,4 +7279,62 @@ test('invariant: every memo editor is followed by a restore of its draft',()=>{
  const at=[];lines.forEach((l,i)=>{if(/memo:\{itemID:/.test(l))at.push(i);});
  assert.ok(at.length>=3,'the memo editors: '+at.length);
  for(const i of at)assert.match(lines.slice(i,i+25).join('\n'),/\.restore\(\)/,'memo editor at line '+(i+1)+' has no restore() after it');
+});
+
+test('stale answers (R9-2): a completion that fires after a redraw never touches the new editor the reader has typed in',async()=>{
+ const f=fixture();casLibrary(f);
+ const row=()=>f.runtime.cache.items[1];
+ f.runtime.cache.items[1]={remark:'L'};
+ let release;const gate=new Promise(r=>{release=r;});
+ f.library.memoToNote=async()=>{row().remark='R';row().memoRev=(row().memoRev||0)+1;const rev=row().memoRev;await gate;return {created:false,text:'R',wrote:false,adopted:true,conflict:false,rev};};
+ await f.bench.show('annotations');await settle();
+ const pending=f.click('노트로 옮기기'); // adopts R; the completion is paused
+ await settle();
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(fresh.value,'R','the redrawn editor shows the stored R');
+ casType(f,fresh,'L'); // typed the same text the old request submitted
+ release();await pending;await settle();
+ assert.equal(fresh.value,'L','the typing is not replaced');
+ assert.ok(sharedDraftTexts(f).includes('L'),'and its draft is kept: '+JSON.stringify(sharedDraftTexts(f)));
+ assert.equal(f.runtime.cache.memoKept,undefined,'nothing needed keeping');
+ f.bench.destroy();
+});
+
+test('stale answers (R9-3): a save that completes after another window saved and this window redrew changes nothing',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g);
+ let release;const gate=new Promise(r=>{release=r;});
+ const cas=f.library.setRemark;let first=true;
+ f.library.setRemark=async(id,text,opts)=>{const out=await cas(id,text,opts);if(first){first=false;await gate;}return out;};
+ await f.bench.show('annotations');await settle();
+ const a=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,a,'A');a.dispatchEvent(new f.win.Event('blur'));await settle(); // window 1's save of A is paused after it wrote
+ await g.bench.show('annotations');await settle();
+ const b=g.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(b.value,'A');
+ casType(g,b,'B');b.dispatchEvent(new g.win.Event('blur'));await settle(); // window 2 saves B
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(fresh.value,'B');
+ release();await settle();
+ assert.equal(fresh.value,'B','the old answer did not turn the editor back into A');
+ casType(f,fresh,'B2');fresh.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'B2','its base is B, so saving on is not a conflict');
+ assert.equal(f.body().querySelector('.sc-memo-stale'),null);
+ f.bench.destroy();g.bench.destroy();
+});
+
+test('invariant: every propagation of a memo answer to an editor checks its revision',()=>{
+ const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const lines=src.split('\n');
+ for(const name of ['syncMemoEditors','followMemoEditors']){
+  const at=src.indexOf('function '+name+'(');assert.ok(at>0,name);
+  assert.match(src.slice(at,at+400),/answerFresh\(/,name+' drops a stale answer');
+ }
+ const calls=lines.filter(l=>/\b(?:syncMemoEditors|followMemoEditors)\(/.test(l)&&!/function (?:sync|follow)MemoEditors\(/.test(l));
+ assert.ok(calls.length>=5,'call sites: '+calls.length);
+ for(const l of calls)assert.match(l,/rev/,'a propagation site passes the answer\'s rev: '+l.trim().slice(0,100));
+ const attempt=src.slice(src.indexOf('const attempt=async('),src.indexOf('const run=async('));
+ assert.match(attempt,/answerFresh\(cas\.itemID,answer\.rev\)/,'attempt checks the rev before anything else changes');
+ assert.ok(attempt.indexOf('answerFresh(')<attempt.indexOf('moveBase('),'and before the base moves');
 });
