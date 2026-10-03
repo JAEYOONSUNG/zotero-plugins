@@ -2215,7 +2215,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const isMemoNote = note => (note.getTags?.() || []).some(tag => tag.tag === this.constructor.MEMO_NOTE_TAG);
     const childIDs = () => [...new Set([...(preprint.getAttachments?.() || []), ...(preprint.getNotes?.() || [])])];
     const isStatus = tag => /^\/(unread|reading|done)$/i.test(String(tag).trim());
-    let mergeToken;
+    let mergeToken, memoPersisted = false;
     try {
       // Files, their annotations and the user's notes MOVE to the published item:
       // the trash is emptied after 30 days and must never hold the only copy.
@@ -2270,10 +2270,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         {
           this.entry(held).remark = after; this._memoBump(this.entry(held)); copied.memo = true; rec.memo = {before: mine, after, rev: this.entry(held).memoRev || 0};
           await this.flush();
-          rec.memo.rev = this.entry(held).memoRev || 0; // the revision this merge owns: a rollback restores only while it is still this
+          memoPersisted = true; // from here on a failure is a note or sync problem: the memo is saved and is never rolled back
           if (this.getSetting('memoToNote')) {
             const wrote = await this.memoToNote(held);
-            rec.memo.rev = this.entry(held).memoRev || 0;
             // What the note was, and what the merge made it, so undo can put the note and its sync baseline back with the memo.
             const noteAfter = this.memoNoteOf(held);
             // `after` is exactly the HTML the merge submitted, never what the note holds when the save returns (an outside edit may be in it): undo restores only a note that still equals it.
@@ -2283,7 +2282,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
     } catch (error) {
       // Nothing was trashed; put back whatever was already moved or copied.
-      try { await this._undoMerge(rec, {untrash: false, ownedMemoRev: typeof error?.memoRev === 'number' ? error.memoRev : rec.memo?.rev ?? (rec.memo ? this.entry(held).memoRev || 0 : undefined)}); } catch (undoError) { this.Z.logError?.(undoError); }
+      // The merge owns only the revision of its own remark write (rec.memo.rev); once the memo is saved it owns nothing more.
+      try { await this._undoMerge(rec, {untrash: false, skipMemo: memoPersisted, ownedMemoRev: rec.memo?.rev}); } catch (undoError) { this.Z.logError?.(undoError); }
       throw error;
     } finally { if (mergeToken !== undefined) this._memoPending(held, -1, undefined, undefined, mergeToken); }
     this.mergeLedger()[String(preprint.id)] = rec; this.dirty = true;
@@ -2374,7 +2374,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return restoredAll;
     } finally { this._memoPending(held, -1, undefined, undefined, pendingToken); }
   }
-  async _undoMerge(rec, {untrash = true, ownedMemoRev} = {}) {
+  async _undoMerge(rec, {untrash = true, ownedMemoRev, skipMemo = false} = {}) {
     const get = id => this.Z.Items.get(Number(id));
     const held = get(rec.held), preprint = get(rec.preprint);
     let memoRestored = true;
@@ -2398,7 +2398,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (rec.status && this.state(held).status === rec.status.after) patch.status = rec.status.before;
       if (rec.rating && this.state(held).rating === rec.rating.after) patch.rating = rec.rating.before;
       if (Object.keys(patch).length) await this.edit([held], patch);
-      if (rec.memo) memoRestored = await this._memoSerial(held, () => this._undoMemo(held, rec.memo, {ownedRev: ownedMemoRev}));
+      if (rec.memo && !skipMemo) memoRestored = await this._memoSerial(held, () => this._undoMemo(held, rec.memo, {ownedRev: ownedMemoRev}));
     }
     if (untrash && preprint?.deleted) { preprint.deleted = false; await preprint.saveTx(); }
     // A memo or note that undo could not put back (edited meanwhile) keeps the ledger: the record of what the merge did is not thrown away.

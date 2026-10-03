@@ -4533,5 +4533,29 @@ test('invariant: every rollback or compensation of a memo write compares a revis
   assert.match(rollback, /entry\.memoRev===mine/, 'setRemark restores only while its own revision stands');
   const undo = rt.slice(rt.indexOf('async _undoMemo('), rt.indexOf('async _undoMemo(') + 900);
   assert.match(undo, /ownedRev !== undefined && \(row\.memoRev \|\| 0\) !== ownedRev\) return false/, 'a merge rollback restores only while the merge still owns the memo revision');
-  assert.match(rt, /_undoMerge\(rec, \{untrash: false, ownedMemoRev:/, 'the merge failure path passes the revision it owns');
+  assert.match(rt, /_undoMerge\(rec, \{untrash: false, skipMemo: memoPersisted, ownedMemoRev: rec\.memo\?\.rev\}/, 'the merge failure path passes the revision it owns, and skips the memo once it is saved');
+  assert.doesNotMatch(rt, /rec\.memo\.rev = /, 'the owned revision is never refreshed from a note or sync step');
+});
+
+test('merge rollback (R22-1): a failure after the merge\'s memo was saved (note or sync) never rolls the memo back over a later successful save', async () => {
+  const w = await mergeWithNote();
+  const {fx, plugin, memo, pub} = w;
+  const Library = require('../src/library.js');
+  const lib = Library.create({Zotero: Object.assign(fx.Z, {Items: Object.assign(fx.Z.Items, {getAsync: async id => fx.Z.Items.get(id)})}), runtime: plugin});
+  pub.hasChanged = () => false;
+  const orig = memo.saveTx; const origFlush = plugin.flush;
+  let release; const gate = new Promise(r => { release = r; }), once = {v: true}, failSync = {v: false};
+  memo.saveTx = async function () { if (once.v) { once.v = false; await gate; } return orig.call(this); };
+  plugin.flush = async function () { if (failSync.v && plugin.memoWritePending(pub)) throw new Error('sync info'); return origFlush.call(this); };
+  const merging = plugin.mergePreprintIntoPublished(1).catch(error => error);
+  await new Promise(r => setTimeout(r, 15)); // the merge's memo is saved; its note save is held
+  const user = lib.setRemark(2, 'BASE\n\nPREPRINT').catch(error => error); // the reader saves the same text (queued behind the note job)
+  await new Promise(r => setTimeout(r, 15));
+  failSync.v = true; release(); // the note save succeeds; only the sync-info flush after it fails
+  const out = await merging;
+  failSync.v = false; await user;
+  memo.saveTx = orig; plugin.flush = origFlush;
+  assert.ok(out instanceof Error, 'the merge failed');
+  assert.equal(plugin.entry(pub).remark, 'BASE\n\nPREPRINT', 'the saved memo stands: no rollback over it');
+  assert.equal(plugin.mergeLedger()['1'], undefined, 'and no ledger was made for a failed merge');
 });

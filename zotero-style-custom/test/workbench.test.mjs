@@ -8252,3 +8252,38 @@ test('choices (R21-3): a choice whose preceding save failed writes nothing to th
  for(const b of box.querySelectorAll('button'))assert.equal(b.disabled,false,'and usable');
  f.bench.destroy();
 });
+
+test('kept cards (R22-2): 입력칸에 넣기 never replaces unsaved input, even when it equals the base: the card text goes after it',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);shareRuntime(f,g);casLibrary(f);casLibrary(g);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ const b=await openDetail(g);
+ casType(g,b,'KEPT'); // window B's draft
+ const a=await openDetail(f); // window A: B's draft is on offer as a card
+ casType(f,a,'LOCAL');
+ f.runtime.cache.items[1].remark='NEW-SAVED'; // saved elsewhere
+ casType(f,a,'BASE'); // A types the old base text again: unsaved input
+ assert.ok(f.body().querySelector('.sc-memo-kept-card'),'the KEPT card is on A');
+ await f.click('입력칸에 넣기');
+ assert.ok(a.value.includes('BASE')&&a.value.includes('KEPT'),'both: '+JSON.stringify(a.value));
+ assert.equal(a.value,'BASE\n\nKEPT');
+ f.bench.destroy();g.bench.destroy();
+});
+
+test('draft generations (R22-3): a rev is never reused after a draft is deleted, so an old card cannot delete a new draft',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g); // no shared listeners: g's card is not tidied meanwhile
+ f.runtime.cache.items[1]={remark:'BASE'};
+ const a=await openDetail(f);
+ casType(f,a,'RETYPE');
+ const key=Object.keys(f.runtime.cache.memoDrafts.drafts)[0];
+ const first=f.runtime.cache.memoDrafts.drafts[key].rev;
+ await openDetail(g);
+ assert.ok(g.body().querySelector('.sc-memo-kept-card'),'g has the card of generation '+first);
+ await f.click('메모 저장'); // saved: the draft is deleted
+ assert.equal(f.runtime.cache.memoDrafts.drafts[key],undefined);
+ casType(f,a,'RETYPE'); // the same text again: a new draft
+ const second=f.runtime.cache.memoDrafts.drafts[key].rev;
+ assert.notEqual(second,first,'a new generation, never a reused number');
+ await g.click('버리기'); // g discards the OLD card
+ assert.ok(sharedDraftTexts(f).includes('RETYPE'),'the new draft is not deleted');
+ f.bench.destroy();g.bench.destroy();
+});

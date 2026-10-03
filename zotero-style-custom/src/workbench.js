@@ -129,6 +129,7 @@
     if(map.has(key)&&cut>0&&!store[key])store[key]={text:map.get(key),base:typeof oldBase==='string'&&oldBase.startsWith(BASE_TAG)?oldBase:undefined,baseText:map.get(key+DRAFT_BASETEXT),owner:raw.slice(0,cut),rev:Number(raw.slice(cut+1))||1,truncated:map.has(key+DRAFT_TRUNC)||undefined,item:undefined,at:Date.now()};
     for(const k of [key,key+DRAFT_BASE,key+DRAFT_OWN,key+DRAFT_TRUNC,key+DRAFT_BASETEXT])map.delete(k);
    }
+   runtime.cache.memoDraftSeq=Math.max(Number(runtime.cache.memoDraftSeq)||0,...Object.values(store).map(r=>Number(r.rev)||0));
    runtime.cache.workbenchDrafts={version:1,entries:[...map]};runtime.dirty=true;
   }
   function scheduleDraftFlush(){
@@ -137,10 +138,12 @@
    draftTimer=win.setTimeout(()=>{draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));},250);
   }
   migrateMemoDrafts();drafts.clear();for(const [key,value] of cachedDrafts())drafts.set(key,value);
+  // Draft generations are unique for ever: a counter kept in the cache, so a rev is never reused after a draft is deleted (and a card of the old generation never matches a new draft).
+  function nextDraftRev(){const n=(Number(runtime.cache.memoDraftSeq)||0)+1;runtime.cache.memoDraftSeq=n;return n;}
   function putMemoDraft(key,value,base,owner,itemID){
    const store=memoStore(true),prev=store[key];
    const raw=typeof base==='string'?base:undefined,tagged=typeof base==='string'?baseTag(base):(base&&typeof base.tagged==='string'?base.tagged:undefined);
-   store[key]={text:String(value),base:tagged,baseText:raw!==undefined?raw:(tagged!==undefined&&prev&&prev.base===tagged?prev.baseText:undefined),owner,rev:(prev?.rev||0)+1,item:itemID!==undefined?itemID:prev?.item,at:Date.now()};
+   store[key]={text:String(value),base:tagged,baseText:raw!==undefined?raw:(tagged!==undefined&&prev&&prev.base===tagged?prev.baseText:undefined),owner,rev:nextDraftRev(),item:itemID!==undefined?itemID:prev?.item,at:Date.now()};
    const saved=cachedDrafts();if(saved.has(key)){for(const k of [key,key+DRAFT_BASE,key+DRAFT_OWN,key+DRAFT_TRUNC,key+DRAFT_BASETEXT]){saved.delete(k);drafts.delete(k);}runtime.cache.workbenchDrafts={version:1,entries:[...saved]};}
    // Over a cap, the oldest drafts go to their paper's kept drafts first; one that cannot be kept stays.
    const keys=Object.keys(store);let total=keys.reduce((sum,k)=>sum+store[k].text.length,0);
@@ -3666,6 +3669,8 @@
   /* The reader's own 버리기: the card goes, and so does the draft it came from, but only that exact generation (key, owner and rev all
      match; explicit, so a pending write does not hold it back). A newer draft with the same text is a different generation and stays. */
   function discardKept(itemID,entry){
+   // The card must still be in the store at click time (another window may have discarded or loaded it already).
+   if(!keptList(itemID).some(card=>card.id===entry.id))return;
    dropKept(itemID,entry.id);
    const source=entry.source,record=source&&source.key?memoRecord(source.key):undefined;
    if(record&&source.owner!==undefined&&source.rev!==undefined&&record.owner===source.owner&&record.rev===source.rev&&record.text===entry.text)updateDraft(source.key,undefined);
@@ -3685,7 +3690,7 @@
     const binding=memoBindings.get(editor);
     // An editor nobody has touched since it loaded follows the stored memo; one with edits or an open conflict keeps them (its next save is judged against its base).
     if(binding&&gens&&binding.gen!==(gens.get(binding)??0))continue; // input since the request began is never replaced
-    if(binding&&!binding.stale&&!binding.unsaved&&editor.value===binding.base){if(editor.dataset.draftKey)finishDraft(editor,editor.value);binding.show(text);}
+    if(binding&&!binding.stale&&!binding.unsaved){if(editor.dataset.draftKey)finishDraft(editor,editor.value);binding.show(text);}
    }
   }
   function bindMemo(field,save,label,opts={}){
@@ -3714,7 +3719,6 @@
     if(!cas||!field.isConnected)return;
     const stored=storedMemo(cas.itemID),value=field.value;
     // A restored value that was an unsettled write: if that write landed the base becomes it; if it rolled back the base stays on the memo it was typed over.
-    const wasConfirm=binding.confirmIf;
     if(!memoPendingNow(cas.itemID)){
      // A base that moves also moves the base its own draft was recorded over, or a redraw would not restore it.
      const rebaseDraft=()=>{if(field.dataset.draftKey&&value!==stored&&binding.draftToken())binding.ownDraftWrite(value,stored);};
@@ -3727,7 +3731,7 @@
     }
     // An editor nobody typed into since it last showed a stored text just follows the stored memo: no draft, no box.
     const holdsDraft=(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return !!meta&&meta.owner===binding.id&&draftText(key)!==undefined;})();
-    if(!binding.unsaved&&!holdsDraft&&(value===binding.base||value===binding.loaded||value===wasConfirm)){
+    if(!binding.unsaved&&!holdsDraft){
      if(value!==stored)binding.show(stored);
      else if(!memoPendingNow(cas.itemID)){moveBase(stored);last=stored;clearStale();}
      return;
@@ -3769,7 +3773,8 @@
    // Puts a kept draft into THIS editor as ordinary unsaved input; true only when it is in a connected editor's value and draft.
    binding.loadKept=entry=>{
     if(!field.isConnected)return false;
-    const mine=field.value,next=!mine.trim()||mine===binding.base?entry.text:mine+'\n\n'+entry.text;
+    // Unsaved input (or an open box) is never replaced: the card text goes after it. An editor nobody typed in just takes it.
+    const mine=field.value,next=mine===''||(!binding.unsaved&&!binding.stale)?entry.text:mine+'\n\n'+entry.text;
     field.value=next;grow();field.dispatchEvent(new win.Event('input',{bubbles:true}));
     return field.isConnected&&field.value===next&&(!field.dataset.draftKey||draftText(field.dataset.draftKey)===next);
    };
@@ -3887,6 +3892,7 @@
     /* An editor that is no longer on screen saves nothing: its input is already a draft (or a kept card) that the editor on screen
        restores, and a save from it would be judged against a base the reader no longer sees. */
     if(!field.isConnected){binding.preserveDetached();return {ok:false,detached:true};}
+    if(value!==last)binding.unsaved=true; // text that differs from the autosave baseline is input, however it got there
     if(value===last&&!options.force)return {ok:true,unchanged:true};
     last=value;
     field.dataset.state='saving';
@@ -3982,7 +3988,7 @@
      binding.claimDraft(draft,claimBase,meta);binding.unsaved=true;return;
     }
     if(sameAsStored&&!memoPendingNow(cas.itemID)){binding.dropDraft(meta);return;}
-    if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.loaded){field.value=draft;grow();binding.unsaved=true;binding.claimDraft(draft,claimBase,meta);return;}
+    if(!truncated&&draftBase===baseTag(stored)&&!binding.unsaved){field.value=draft;grow();binding.unsaved=true;binding.claimDraft(draft,claimBase,meta);return;}
     keepDraft(cas.itemID,draft,draftBase,truncated,meta?meta.owner:undefined,{key,owner:meta?meta.owner:undefined,rev:meta?meta.rev:undefined});binding.dropDraft(meta);drawKept();
    };
    memoBindings.set(field,binding);
