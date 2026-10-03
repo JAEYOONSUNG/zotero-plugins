@@ -2263,14 +2263,18 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (memo && memo !== mine && !mine.includes(memo)) {
         const after = mine ? mine + '\n\n' + memo : memo;
         const noteBefore = this.memoNoteOf(held), htmlBefore = noteBefore ? String(noteBefore.getNote()) : null, syncedBefore = this.entry(held).memoSynced;
-        this.entry(held).remark = after; this._memoBump(this.entry(held)); copied.memo = true; rec.memo = {before: mine, after};
-        await this.flush();
-        if (this.getSetting('memoToNote')) {
-          const wrote = await this.memoToNote(held);
-          // What the note was, and what the merge made it, so undo can put the note and its sync baseline back with the memo.
-          const noteAfter = this.memoNoteOf(held);
-          if (noteAfter && wrote?.wrote) rec.memo.note = {id: noteAfter.id, created: !noteBefore, before: htmlBefore, after: String(noteAfter.getNote()), syncedBefore: syncedBefore === undefined ? null : syncedBefore, syncedAfter: this.entry(held).memoSynced ?? null};
-        }
+        // The merged text is only in memory until it is saved: the paper is pending from before it is set until it is saved or rolled back.
+        const pendingToken = this._memoPending(held, 1, mine, after);
+        try {
+          this.entry(held).remark = after; this._memoBump(this.entry(held)); copied.memo = true; rec.memo = {before: mine, after};
+          await this.flush();
+          if (this.getSetting('memoToNote')) {
+            const wrote = await this.memoToNote(held);
+            // What the note was, and what the merge made it, so undo can put the note and its sync baseline back with the memo.
+            const noteAfter = this.memoNoteOf(held);
+            if (noteAfter && wrote?.wrote) rec.memo.note = {id: noteAfter.id, created: !noteBefore, before: htmlBefore, after: String(noteAfter.getNote()), syncedBefore: syncedBefore === undefined ? null : syncedBefore, syncedAfter: this.entry(held).memoSynced ?? null};
+          }
+        } finally { this._memoPending(held, -1, undefined, undefined, pendingToken); }
       }
     } catch (error) {
       // Nothing was trashed; put back whatever was already moved or copied.
@@ -2290,6 +2294,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async _undoMemo(held, memo) {
     // Returns true only when the memo and its note are both back exactly as before the merge.
     const norm = this.constructor.memoNorm, row = this.entry(held), saved = memo.note;
+    // The memo is changed in memory before it is saved: the paper is pending until undo has saved it or given up.
+    const pendingToken = this._memoPending(held, 1, String(row.remark ?? ''), memo.before);
+    try {
+    // A note undo had trashed and could not bring back (its compensation save failed) is brought back first, on any retry.
+    if (saved && saved.pendingUndelete) {
+      const trashed = this.Z.Items.get(Number(saved.id));
+      if (trashed && trashed.deleted) {
+        try { trashed.deleted = false; await trashed.saveTx(); } catch (error) { trashed.deleted = true; this.Z.logError?.(error); return false; }
+      }
+      saved.pendingUndelete = false;
+    }
     const note = saved ? this.Z.Items.get(Number(saved.id)) : this.memoNoteOf(held);
     const live = note && !note.deleted ? note : null;
     const there = live ? this.constructor.memoFromNoteHTML(live.getNote()) : '';
@@ -2318,7 +2333,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         await live.saveTx();
         // A note undo created is deleted only if nobody touched it: read after the await, against what the merge wrote.
         if (saved.created && String(live.getNote()) !== saved.after) {
-          editedMeanwhile = true; live.deleted = false; await live.saveTx();
+          editedMeanwhile = true;
+          // What the note holds is read before anything else is attempted: it is the conflict's remote side whatever happens next.
+          saved.editedNote = String(live.getNote());
+          saved.pendingUndelete = true;
+          try { live.deleted = false; await live.saveTx(); saved.pendingUndelete = false; }
+          catch (error) { live.deleted = true; this.Z.logError?.(error); } // still in the trash: the ledger remembers, a retry brings it back first
         }
       } finally { inflight.delete(id); }
       // Only a note that reads back as exactly what undo restored may set the baseline; anything else was written by someone else.
@@ -2328,7 +2348,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!restored) {
         // The note was edited while undo saved it: that edit stays, the old baseline stays, and both current sides wait in the conflict box.
         if (!moved && String(row.remark || '') === memo.after) row.remark = memo.before;
-        const now = this.constructor.memoFromNoteHTML(live.getNote()), local = String(row.remark || '');
+        const now = editedMeanwhile && saved.editedNote !== undefined ? this.constructor.memoFromNoteHTML(saved.editedNote) : this.constructor.memoFromNoteHTML(live.getNote()), local = String(row.remark || '');
         if (norm(local) === norm(now)) this._memoSetBase(row, now, live);
         else row.memoConflict = {local, remote: now, at: new Date().toISOString()};
       } else if (!moved && String(row.remark || '') === memo.after) {
@@ -2345,6 +2365,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     await this.flush();
     return restoredAll;
+    } finally { this._memoPending(held, -1, undefined, undefined, pendingToken); }
   }
   async _undoMerge(rec, {untrash = true} = {}) {
     const get = id => this.Z.Items.get(Number(id));
@@ -4547,6 +4568,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return undefined;
   }
   addMemoListener(listener) { (this.memoListeners || (this.memoListeners = new Set())).add(listener); return () => this.memoListeners.delete(listener); }
+  // A memo change made in memory with no write of its own: registered pending until the next flush has settled.
+  _memoPersist(item, prior, value) {
+    const token = this._memoPending(item, 1, prior, value);
+    Promise.resolve().then(() => this.flush()).catch(error => this.Z.logError?.(error)).finally(() => this._memoPending(item, -1, undefined, undefined, token));
+  }
   _memoBump(row) { row.memoRev = (row.memoRev || 0) + 1; this.dirty = true; return row.memoRev; }
   /* What a note's text means for a paper's memo, without writing anything to the note:
      'same' (agreed), 'pull' (memo unchanged since the baseline: take the note), 'push'
@@ -4563,7 +4589,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (situation === 'pull' && row.memoConflict) situation = 'conflict';
     const there = this.constructor.memoFromNoteHTML(note.getNote());
     if (situation === 'same') { if (row.memoSynced !== there || row.memoConflict) this._memoSetBase(row, there, note); return true; }
-    if (situation === 'pull') { row.remark = there; this._memoSetBase(row, there, note); return true; }
+    if (situation === 'pull') {
+      // Adopted into memory: pending until the cache holding it has been written (or failed to be).
+      const prior = String(row.remark || ''), item = note.parentID !== undefined ? this.Z.Items?.get?.(note.parentID) : null;
+      row.remark = there; this._memoSetBase(row, there, note);
+      if (item) this._memoPersist(item, prior, there);
+      return true;
+    }
     if (situation === 'conflict') {
       const had = row.memoConflict, local = String(row.remark || '');
       if (!had || had.local !== local || had.remote !== there) { row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this._memoBump(row); return true; }
@@ -4663,6 +4695,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async _resolveMemoConflict(item, choice, {seen} = {}) {
     if (!['note', 'local', 'both'].includes(choice)) throw new Error('알 수 없는 선택입니다. 노트 내용 쓰기, 이 메모 쓰기, 둘 다 합치기 중에서 고르세요.');
     const row = this.entry(item);
+    // Settling a conflict changes the memo in memory before it is saved: the paper is pending until it is.
+    const pendingToken = this._memoPending(item, 1, String(row.remark ?? ''), String(row.remark ?? ''));
+    try {
     if (!row.memoConflict) return {resolved: false, conflict: null, text: String(row.remark || ''), rev: row.memoRev || 0};
     const norm = this.constructor.memoNorm;
     let note = this.memoNoteOf(item);
@@ -4693,6 +4728,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const answer = {resolved: true, conflict: null, text: final, rev: row.memoRev || 0};
     await this.flush(); this.bumpState?.();
     return answer;
+    } finally { this._memoPending(item, -1, undefined, undefined, pendingToken); }
   }
   /* An edit made to the memo note inside Zotero (or arriving by sync). Judged against the
      baseline, never suppressed: only the text this plugin is itself writing is its own echo. */
@@ -4801,7 +4837,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const from = this.state(preprint)?.status;
       if ((from === 'done' || from === 'reading') && this.state(held)?.status !== from) await this.edit([held], {status: from});
       const memo = String(this.entry(preprint).remark || '');
-      if (memo && !this.entry(held).remark) { this.entry(held).remark = memo; this._memoBump(this.entry(held)); await this.flush(); }
+      if (memo && !this.entry(held).remark) {
+        const pendingToken = this._memoPending(held, 1, '', memo);
+        try { this.entry(held).remark = memo; this._memoBump(this.entry(held)); await this.flush(); } finally { this._memoPending(held, -1, undefined, undefined, pendingToken); }
+      }
     }
     this.bumpState?.();
     await this.refreshWindows();

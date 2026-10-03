@@ -8168,3 +8168,25 @@ test('soak (manual editors): typing, saving, retyping saved texts, redraws and w
   check('end');
  }
 });
+
+test('closing editors (R19-1): input equal to an old base is still kept when its window closes',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);shareRuntime(f,g);casLibrary(f);casLibrary(g);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ const a=await openDetail(f),b=await openDetail(g);
+ casType(f,a,'X'); // window A
+ casType(g,b,'NEW');await g.click('메모 저장'); // window B saves NEW
+ assert.equal(f.runtime.cache.items[1].remark,'NEW');
+ casType(f,a,'BASE'); // A types the old base text again
+ casType(g,b,'BASE');casType(g,b,'OTHER'); // B types the same, then more
+ f.bench.destroy();g.bench.destroy();
+ const kept=Object.values(f.runtime.cache.memoKept||{}).flat().map(e=>e.text);
+ assert.ok(kept.includes('BASE'),'A\'s last input is kept: '+JSON.stringify(kept)+' drafts='+JSON.stringify(sharedDraftTexts(f)));
+ assert.equal(f.runtime.cache.items[1].remark,'NEW');
+});
+
+test('invariant: preservation of a detached editor\'s input is decided by its own state, never by equality to a base',()=>{
+ const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const a=src.indexOf('binding.preserveDetached=()=>{'),text=src.slice(a,src.indexOf('};',a));
+ assert.match(text,/binding\.unsaved/);
+ assert.doesNotMatch(text.replace(/keepDraft\([^;]*;/,''),/binding\.base/,'no comparison with a base (the base is only recorded on the card)');
+});

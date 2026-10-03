@@ -4333,3 +4333,76 @@ test('memo/note (R18-3): undo does not delete a memo note it created when the no
   assert.ok(row.memoConflict, 'the memo and the edited note wait in a conflict');
   assert.equal(row.memoConflict.remote, 'EDITED MEANWHILE');
 });
+
+test('pending writes (R19-2): the merge\'s memo write is pending from before it is set until it is saved or rolled back', async () => {
+  const {plugin, pre, pub} = mergeWorld();
+  await plugin.setSetting('memoToNote', false, {apply: false});
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'BASE'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'SOURCE', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  const orig = plugin.flush;
+  let release; const gate = new Promise(r => { release = r; }), once = {v: true};
+  plugin.flush = async function () { if (plugin.memoWritePending(pub) && once.v) { once.v = false; await gate; throw new Error('disk'); } return orig.call(this); };
+  const heard = [];
+  plugin.addMemoListener(() => heard.push(plugin.memoWritePending(pub)));
+  const merge = plugin.mergePreprintIntoPublished(1).catch(error => error);
+  await new Promise(r => setTimeout(r, 15));
+  assert.equal(plugin.entry(pub).remark, 'BASE\n\nSOURCE', 'the merged value is in memory');
+  assert.equal(plugin.memoWritePending(pub), true, 'and the paper is pending');
+  assert.deepEqual(plugin.memoChainTexts(pub), ['BASE', 'BASE\n\nSOURCE']);
+  release();
+  assert.ok((await merge) instanceof Error);
+  plugin.flush = orig;
+  assert.equal(plugin.memoWritePending(pub), false, 'settled');
+  assert.ok(heard.length >= 1 && heard.every(pending => typeof pending === 'boolean'), 'listeners heard it settle');
+});
+
+test('invariant: every assignment to remark in runtime.js sits in a function that registers the paper as pending', () => {
+  const lines = require('node:fs').readFileSync(new URL('../src/runtime.js', import.meta.url), 'utf8').split('\n');
+  const hdr = /^  (?:static |async )*(\w+)\(.*\)\s*\{\s*$/;
+  const starts = []; lines.forEach((l, i) => { const m = hdr.exec(l); if (m) starts.push({name: m[1], at: i}); });
+  starts.forEach((s, k) => { s.end = k + 1 < starts.length ? starts[k + 1].at : lines.length; });
+  const found = [];
+  for (const s of starts) {
+    const text = lines.slice(s.at, s.end).join('\n');
+    if (/\.remark\s*=[^=]/.test(text)) found.push({name: s.name, ok: /_memoPending\(|_memoPersist\(/.test(text)});
+  }
+  assert.ok(found.length >= 5, 'the functions that write remark: ' + found.map(f => f.name).join(','));
+  assert.deepEqual(found.filter(f => !f.ok).map(f => f.name), [], 'each registers before it writes');
+  // The exceptions are named: setRemark in library.js registers itself (checked in the library tests).
+});
+
+test('memo/note (R19-3): a failed undelete compensation leaves the ledger remembering it; a retry brings the note back first and the conflict shows the note\'s content', async () => {
+  const {fx, plugin, pre, pub, all} = mergeWorld();
+  const first = fx.Z.Item.prototype.saveTx;
+  fx.Z.Item.prototype.saveTx = async function () { const out = await first.call(this); if (this.parentID) { this.parentItemID = this.parentID; all.set(this.id, this); } return out; };
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: ''};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'PREPRINT', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  await plugin.mergePreprintIntoPublished(1);
+  const row = plugin.entry(pub), note = plugin.memoNoteOf(pub);
+  const orig = fx.Z.Item.prototype.saveTx;
+  let release; const gate = new Promise(r => { release = r; }), calls = {n: 0};
+  fx.Z.Item.prototype.saveTx = async function () {
+    if (this === note) {
+      calls.n++;
+      if (calls.n === 1) { this.setNote(Runtime.memoNoteHTML('EDITED')); await gate; } // the delete save, edited meanwhile
+      else if (calls.n === 2) throw new Error('undelete failed'); // the compensation fails
+    }
+    return orig.call(this);
+  };
+  const undo = plugin.restorePreprint(1);
+  await new Promise(r => setTimeout(r, 10));
+  release(); await undo;
+  assert.ok(plugin.mergeLedger()['1'], 'the ledger is kept');
+  assert.equal(plugin.mergeLedger()['1'].memo.note.pendingUndelete, true, 'it remembers the note is still in the trash');
+  assert.equal(note.deleted, true);
+  assert.equal(row.memoConflict.remote, 'EDITED', 'the conflict shows the note\'s content, not an empty text');
+  await plugin.restorePreprint(1); // the retry
+  fx.Z.Item.prototype.saveTx = orig;
+  assert.equal(note.deleted, false, 'the retry brought the note back first');
+  assert.equal(noteText(note), 'EDITED');
+  assert.equal(row.memoConflict.remote, 'EDITED');
+  assert.ok(plugin.mergeLedger()['1'], 'and the ledger is still kept: nothing was resolved');
+});

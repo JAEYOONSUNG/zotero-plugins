@@ -3864,7 +3864,9 @@
    };
    // A detached editor keeps its input without ever touching a draft another binding owns: its own draft is enough; otherwise a separate kept entry.
    binding.preserveDetached=()=>{
-    const value=field.value;if(!cas||value===binding.base)return;
+    // Decided by the editor's own state only: it holds input nobody saved (`unsaved`) that is not the stored memo (and the stored memo is not a write still in flight). Never by equality to a base or any older text.
+    const value=field.value;if(!cas||!binding.unsaved)return;
+    if(value===storedMemo(cas.itemID)&&!memoPendingNow(cas.itemID))return;
     const key=field.dataset.draftKey,meta=key?draftMeta(key):null;
     if(meta&&meta.owner===binding.id&&draftText(key)===value)return;
     keepDraft(cas.itemID,value,baseTag(binding.base),false,binding.id);
