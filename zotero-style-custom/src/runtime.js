@@ -2263,7 +2263,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (memo && memo !== mine && !mine.includes(memo)) {
         const after = mine ? mine + '\n\n' + memo : memo;
         const noteBefore = this.memoNoteOf(held), htmlBefore = noteBefore ? String(noteBefore.getNote()) : null, syncedBefore = this.entry(held).memoSynced;
-        this.entry(held).remark = after; this.dirty = true; copied.memo = true; rec.memo = {before: mine, after};
+        this.entry(held).remark = after; this._memoBump(this.entry(held)); copied.memo = true; rec.memo = {before: mine, after};
         await this.flush();
         if (this.getSetting('memoToNote')) {
           const wrote = await this.memoToNote(held);
@@ -2296,7 +2296,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const memoSame = String(row.remark || '') === memo.after;
     if (!saved) {
       if (!memoSame) return false;
-      row.remark = memo.before; this.dirty = true;
+      row.remark = memo.before; this._memoBump(row);
       if (row.memoConflict) {
         if (!live) delete row.memoConflict;
         else {
@@ -2304,7 +2304,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           if (situation === 'push') delete row.memoConflict; else this._memoNoWrite(row, live, situation);
         }
       }
-      await this.flush(); return !row.memoConflict;
+      this._memoBump(row); await this.flush(); return !row.memoConflict;
     }
     let restoredAll = false;
     const noteSame = !!live && String(live.getNote()) === saved.after;
@@ -2332,9 +2332,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (saved.created) { delete row.memoSynced; delete row.memoSyncedVer; delete row.memoConflict; }
         else this._memoSetBase(row, this.constructor.memoFromNoteHTML(live.getNote()), live);
       }
-      this.dirty = true;
+      this._memoBump(row);
     } else if (norm(String(row.remark || '')) !== norm(there)) {
-      row.memoConflict = {local: String(row.remark || ''), remote: there, at: new Date().toISOString()}; this.dirty = true;
+      row.memoConflict = {local: String(row.remark || ''), remote: there, at: new Date().toISOString()}; this._memoBump(row);
     }
     await this.flush();
     return restoredAll;
@@ -4516,8 +4516,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     row.memoSynced = String(text);
     const version = note && (note.version ?? note.dateModified);
     if (version === undefined || version === null) delete row.memoSyncedVer; else row.memoSyncedVer = version;
-    delete row.memoConflict; this.dirty = true;
+    delete row.memoConflict; this._memoBump(row);
   }
+  /* The memo revision: a counter bumped on every change to remark, memoSynced or memoConflict, whoever made it. A writer that
+     wants to undo its own write compares it with the value captured right after that write; text equality is not ownership. */
+  _memoBump(row) { row.memoRev = (row.memoRev || 0) + 1; this.dirty = true; return row.memoRev; }
   /* What a note's text means for a paper's memo, without writing anything to the note:
      'same' (agreed), 'pull' (memo unchanged since the baseline: take the note), 'push'
      (note unchanged: the memo is the newer side), 'conflict' (both changed, or no baseline to tell). */
@@ -4534,7 +4537,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (situation === 'pull') { row.remark = there; this._memoSetBase(row, there, note); return true; }
     if (situation === 'conflict') {
       const had = row.memoConflict, local = String(row.remark || '');
-      if (!had || had.local !== local || had.remote !== there) { row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this.dirty = true; return true; }
+      if (!had || had.local !== local || had.remote !== there) { row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this._memoBump(row); return true; }
     }
     return false;
   }
@@ -4626,7 +4629,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     let note = this.memoNoteOf(item);
     const there = note ? this.constructor.memoFromNoteHTML(note.getNote()) : '', local = String(row.remark || '');
     if (seen && (norm(seen.local) !== norm(local) || norm(seen.remote) !== norm(there))) {
-      row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this.dirty = true; await this.flush();
+      row.memoConflict = {local, remote: there, at: new Date().toISOString()}; this._memoBump(row); await this.flush();
       return {resolved: false, stale: true, conflict: row.memoConflict, text: local};
     }
     const final = choice === 'note' ? there : choice === 'local' ? local
@@ -4638,7 +4641,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // The memo was typed while the note was saved: the newer memo stays, nothing is confirmed, and both sides go back into the box.
       if (String(row.remark || '') !== local) {
         const now = String(row.remark || ''), remote = this.constructor.memoFromNoteHTML(note.getNote());
-        row.memoConflict = {local: now, remote, at: new Date().toISOString()}; this.dirty = true; await this.flush(); this.bumpState?.();
+        row.memoConflict = {local: now, remote, at: new Date().toISOString()}; this._memoBump(row); await this.flush(); this.bumpState?.();
         return {resolved: false, stale: true, conflict: row.memoConflict, text: String(row.remark || '')};
       }
     }
@@ -4676,7 +4679,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const situation = this._memoSituation(row, text, row.memoSynced);
     if (situation === 'push') {
       // The note is back at the baseline: a pending conflict is over, the memo is simply the newer side.
-      if (row.memoConflict) { delete row.memoConflict; this.dirty = true; this.flush?.().catch?.(error => this.Z.logError?.(error)); return true; }
+      if (row.memoConflict) { delete row.memoConflict; this._memoBump(row); this.flush?.().catch?.(error => this.Z.logError?.(error)); return true; }
       return false;
     }
     const changed = this._memoNoWrite(row, note, situation);
@@ -4753,7 +4756,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const from = this.state(preprint)?.status;
       if ((from === 'done' || from === 'reading') && this.state(held)?.status !== from) await this.edit([held], {status: from});
       const memo = String(this.entry(preprint).remark || '');
-      if (memo && !this.entry(held).remark) { this.entry(held).remark = memo; this.dirty = true; await this.flush(); }
+      if (memo && !this.entry(held).remark) { this.entry(held).remark = memo; this._memoBump(this.entry(held)); await this.flush(); }
     }
     this.bumpState?.();
     await this.refreshWindows();

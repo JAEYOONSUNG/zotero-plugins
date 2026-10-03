@@ -82,10 +82,15 @@
   /* A memo draft remembers the stored memo the editor was loaded from (its base) under a second key: a draft restored
      later is only put back into an editor when that is still the stored memo; otherwise it waits as a conflict. */
   const DRAFT_BASE='\u0001base';
-  function updateDraft(key,value,base){
+  /* Ownership of a shared memo draft: next to the text the cache keeps `owner|rev` (key+DRAFT_OWN). The owner is the id of the
+     binding that wrote it (window id + binding id); rev counts the writes. Text equality never grants ownership. */
+  const DRAFT_OWN='\u0001own';
+  const WINDOW_ID=Math.random().toString(36).slice(2,10);let bindingSeq=0;
+  function draftMeta(key){const raw=cachedDrafts().get(key+DRAFT_OWN);if(typeof raw!=='string')return null;const cut=raw.lastIndexOf('|');return cut<0?null:{owner:raw.slice(0,cut),rev:Number(raw.slice(cut+1))};}
+  function updateDraft(key,value,base,owner){
    if(!key||key.length>1000||/password|secret|api.?key|access.?token|bearer/i.test(key))return;
-   const saved=cachedDrafts();saved.delete(key);drafts.delete(key);saved.delete(key+DRAFT_BASE);drafts.delete(key+DRAFT_BASE);
-   if(value!==undefined){value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);if(typeof base==='string'){const b=base.slice(0,DRAFT_LENGTH);saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);}}
+   const saved=cachedDrafts(),before=draftMeta(key);saved.delete(key);drafts.delete(key);saved.delete(key+DRAFT_BASE);drafts.delete(key+DRAFT_BASE);saved.delete(key+DRAFT_OWN);drafts.delete(key+DRAFT_OWN);
+   if(value!==undefined){value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);if(typeof owner==='string'){const o=owner+'|'+((before?.rev||0)+1);saved.set(key+DRAFT_OWN,o);drafts.set(key+DRAFT_OWN,o);}if(typeof base==='string'){const b=base.slice(0,DRAFT_LENGTH);saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);}}
    let total=[...saved.values()].reduce((sum,text)=>sum+text.length,0);
    while(saved.size>DRAFT_LIMIT||total>DRAFT_TOTAL){const oldest=saved.keys().next().value;total-=saved.get(oldest).length;saved.delete(oldest);}
    for(const existing of drafts.keys())if(!saved.has(existing))drafts.delete(existing);
@@ -1313,16 +1318,18 @@
   function selectItem(id,on){state.annotationIDs.clear();on?state.selected.add(String(id)):state.selected.delete(String(id));updateSelectionUI();}
   function one(){const list=selected();if(list.length!==1)throw new Error('문헌을 하나 선택하세요.');return list[0];}
   async function discardPreview(p){if(!p)return;try{await p.discard?.();}catch(error){runtime.Z.logError?.(error);}finally{p.remove();if(preview===p)preview=null;}}
-  /* The draft key is shared by every window. A memo editor never overwrites a draft it did not write: if the stored draft is
-     someone else's (differs from what this editor last wrote and from the new text) and is not just the stored memo, it is
-     moved to the kept drafts first, with its base. */
+  /* The draft key is shared by every window. A memo editor never overwrites a draft it did not write. Another binding of THIS
+     window (a redraw) is the same logical editor, so its draft is replaceable; a draft of another window, or an old plain
+     one, that differs from the new text and from the stored memo (an empty one included: the memo may have been cleared)
+     is moved to the kept drafts first, with its base. */
   function writeMemoDraft(input){
    const binding=memoBindings.get(input),key=input.dataset.draftKey;
    if(binding&&binding.base!==undefined&&binding.itemID!==undefined){
-    const saved=cachedDrafts(),existing=saved.get(key);
-    const foreign=typeof existing==='string'&&existing.trim()&&existing!==binding.lastDraft&&existing!==input.value&&existing!==storedMemo(binding.itemID);
+    const saved=cachedDrafts(),existing=saved.get(key),meta=draftMeta(key);
+    const ours=meta&&(meta.owner===binding.id||meta.owner.startsWith(WINDOW_ID+'.'));
+    const foreign=typeof existing==='string'&&!ours&&existing!==input.value&&existing!==storedMemo(binding.itemID);
     if(foreign)keepDraft(binding.itemID,existing,saved.get(key+DRAFT_BASE));
-    updateDraft(key,input.value,binding.base);binding.lastDraft=input.value;
+    updateDraft(key,input.value,binding.base,binding.id);
     if(foreign)binding.drawKept?.();
     return;
    }
@@ -1330,8 +1337,11 @@
   }
   function rememberDraft(event){const input=event.target;if(input?.dataset?.draftKey&&input.localName!=='select'&&!['checkbox','password'].includes(input.type))writeMemoDraft(input);}
   body.addEventListener('input',rememberDraft);body.addEventListener('change',rememberDraft);
-  function finishDraft(input,submitted,clearValue=false){
+  function finishDraft(input,submitted,clearValue=false,token){
    const key=input.dataset.draftKey;
+   // A memo draft is deleted only by the binding that owns it (and, for a completed job, only if nothing wrote it since the job began).
+   const memo=memoBindings.get(input);
+   if(memo&&memo.base!==undefined){if(!memo.finishOwn(submitted,token))return;if(clearValue)input.value='';return;}
    const latest=cachedDrafts().get(key)??drafts.get(key)??input.value;
    // The editor may have changed, or been replaced by a notifier redraw, while saving.
    if(latest!==submitted)return;
@@ -1878,7 +1888,7 @@
     const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.dataset.memoItem=String(item.id);
     const loaded=String(runtime.entry(ref).remark||'');remark.value=loaded;
     const remarkBinding=bindMemo(remark,(value,base)=>library.setRemark(item.id,value,{base}),item.title||'문헌',{manual:true,memo:{itemID:item.id,base:loaded,host:c}});
-    button('메모 저장',async()=>{const submitted=remark.value;const out=await remarkBinding.commit({force:true,throws:true});if(out.stale||!out.ok){message('저장된 메모가 그 사이 바뀌어 아무것도 덮어쓰지 않았습니다. 아래에서 고르세요.',true);return;}finishDraft(remark,submitted);syncRemark(c,remarkBinding.base);message('메모를 저장했습니다.');},c,{'data-writes':'library'});}
+    button('메모 저장',async()=>{const submitted=remark.value,token=remarkBinding.draftToken();const out=await remarkBinding.commit({force:true,throws:true});if(out.stale||!out.ok){message('저장된 메모가 그 사이 바뀌어 아무것도 덮어쓰지 않았습니다. 아래에서 고르세요.',true);return;}finishDraft(remark,submitted,false,token);syncRemark(c,remarkBinding.base);message('메모를 저장했습니다.');},c,{'data-writes':'library'});}
    if(detailed&&(state.scope!=='selected'||items.length===1))details.push((async()=>{
     const results=await Promise.allSettled([library.notes([item.id]),library.annotations([item.id])]);
     if(disposed||epoch!==generation||!c.isConnected)return;
@@ -3571,12 +3581,23 @@
   function bindMemo(field,save,label,opts={}){
    let timer=null,last=field.value,chain=Promise.resolve(),staleBox=null,keptBox=null;
    const cas=opts.memo||null;
-   const binding={base:cas?String(cas.base??''):undefined,stale:null,itemID:cas?cas.itemID:undefined,lastDraft:null};
+   const binding={base:cas?String(cas.base??''):undefined,stale:null,itemID:cas?cas.itemID:undefined,id:WINDOW_ID+'.'+(++bindingSeq)};
    const grow=()=>{if(typeof autoGrow==='function')autoGrow(field);};
    /* The only place the base moves. `derived`: the text is what this editor itself just submitted and had stored, so the
       editor's current text (possibly typed on since) builds on it. Anything else moves the base only if the editor shows it. */
    const moveBase=(text,derived=false)=>{if(!cas||(!derived&&field.value!==text))return false;binding.base=String(text);return true;};
    binding.moveBase=moveBase;
+   // The draft this binding owns right now (owner and rev), captured when a job starts; null if it owns none.
+   binding.draftToken=()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return meta&&meta.owner===binding.id?{owner:meta.owner,rev:meta.rev}:null;};
+   // Delete the draft only if this binding owns it, it still holds the submitted text, and (with a token) nothing wrote it since.
+   binding.finishOwn=(submitted,token)=>{
+    const key=field.dataset.draftKey;if(!key)return false;
+    const meta=draftMeta(key);
+    if(!meta||meta.owner!==binding.id)return false;
+    if(token&&(token.owner!==meta.owner||token.rev!==meta.rev))return false;
+    if(cachedDrafts().get(key)!==String(submitted).slice(0,DRAFT_LENGTH))return false;
+    updateDraft(key,undefined);return true;
+   };
    const clearStale=()=>{binding.stale=null;if(staleBox){staleBox.remove();staleBox=null;}if(field.dataset.state==='stale')field.dataset.state='';};
    // The editor takes a stored text as its own: value, base and autosave baseline together.
    binding.show=text=>{if(timer){win.clearTimeout(timer);timer=null;}field.value=text;grow();last=text;if(moveBase(text))clearStale();};
@@ -3649,7 +3670,7 @@
      clearStale();
      // A draft typed during the save was recorded over the old base: it is built on this one now.
      const key=field.dataset.draftKey;
-     if(key&&cachedDrafts().get(key)===field.value&&field.value!==stored){updateDraft(key,field.value,stored);binding.lastDraft=field.value;}
+     if(key&&binding.draftToken()&&cachedDrafts().get(key)===field.value.slice(0,DRAFT_LENGTH)&&field.value!==stored)updateDraft(key,field.value,stored,binding.id);
     }
     /* The note's newer text, adopted because the memo had not changed since the last sync, comes back as the stored text:
        an editor still showing what was submitted takes it (value and base together). Input typed while the save ran stays
@@ -3694,8 +3715,9 @@
      if(found&&(binding.stale!==found||found.used))return null; // the box this came from is gone, replaced or already used
      found&&(found.used=true);
      const text=pick();
+     const token=binding.draftToken();
      field.value=text;grow();last=text;field.dataset.state='saving';
-     try{const ok=await attempt(text,seenStored,found);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text);}return ok;}
+     try{const ok=await attempt(text,seenStored,found);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text,false,token);}return ok;}
      catch(error){if(found)found.used=false;field.dataset.state='failed';last=null;throw error;}
     });
     if(result===null){message('그 사이 상황이 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return false;}
@@ -3718,11 +3740,13 @@
    binding.restore=(draft,draftBase)=>{
     if(!cas){field.value=draft;return;}
     const stored=storedMemo(cas.itemID);
-    if(draft===field.value){binding.lastDraft=draft;return;}
+    const claim=()=>updateDraft(field.dataset.draftKey,draft,draftBase,binding.id);
+    if(draft===field.value){claim();return;}
     // Drafts live in a cache shared with other windows: only the entry that is exactly this draft (text and base) is removed.
     const dropOwn=()=>{const saved=cachedDrafts(),key=field.dataset.draftKey;if(saved.get(key)===draft&&(draftBase===undefined||saved.get(key+DRAFT_BASE)===draftBase))updateDraft(key,undefined);else drafts.delete(key);};
     if(draft===stored){dropOwn();return;}
-    if(draftBase===stored&&field.value===binding.base){field.value=draft;grow();binding.lastDraft=draft;return;}
+    // Drafts keep a truncated copy of the base: it is compared the same way, so a long memo is not mistaken for a changed one.
+    if(draftBase===stored.slice(0,DRAFT_LENGTH)&&field.value===binding.base){field.value=draft;grow();claim();return;}
     keepDraft(cas.itemID,draft,draftBase);dropOwn();drawKept();
    };
    memoBindings.set(field,binding);

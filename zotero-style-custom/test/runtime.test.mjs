@@ -4059,3 +4059,35 @@ test('memo/note (P1): a failed save is rolled back only if the remark is still t
   assert.equal(w.row.memoSynced, 'R');
   w.plugin.flush = orig;
 });
+
+test('memo revision (P1): a failed save is not rolled back when the outside note set the baseline to the same text meanwhile', async () => {
+  const w = memoWorld({remark: 'A', base: 'A', note: 'A'});
+  await w.setting();
+  const orig = w.plugin.flush;
+  let release; const gate = new Promise(r => { release = r; }), first = {v: true};
+  w.plugin.flush = async function () { if (first.v) { first.v = false; await gate; throw new Error('disk'); } return orig.call(this); };
+  const write = w.lib.setRemark(3, 'B').catch(error => error);
+  await new Promise(r => setTimeout(r, 0));
+  w.note.setNote(Runtime.memoNoteHTML('B')); // the outside change equals the memo being saved
+  w.plugin.mirrorMemoNote(w.note.id);
+  assert.equal(w.row.memoSynced, 'B', 'the baseline moved to B');
+  release();
+  assert.ok((await write) instanceof Error);
+  assert.equal(w.row.remark, 'B', 'the memo was not put back to A under a baseline of B');
+  assert.equal(w.row.memoSynced, 'B');
+  assert.ok(w.row.memoRev > 0);
+  w.plugin.flush = orig;
+});
+
+test('memo revision: every source of change to remark, baseline or conflict bumps memoRev', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  let rev = w.row.memoRev || 0;
+  const bumped = label => { assert.ok((w.row.memoRev || 0) > rev, label); rev = w.row.memoRev; };
+  await w.lib.setRemark(3, 'B2'); bumped('setRemark');
+  w.note.setNote(Runtime.memoNoteHTML('outside')); w.plugin.mirrorMemoNote(w.note.id); w.row.memoConflict && bumped('mirror conflict');
+  const v = memoWorld({remark: 'L', base: 'B', note: 'R'}); await v.setting(); await v.plugin.memoToNote(v.c);
+  const before = v.row.memoRev || 0;
+  await v.lib.resolveMemoConflict(3, 'note', await v.lib.memoConflict(3));
+  assert.ok(v.row.memoRev > before, 'resolve');
+});

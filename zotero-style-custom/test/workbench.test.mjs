@@ -7053,3 +7053,52 @@ test('memo drafts (R5-g): two windows typing alternately never overwrite each ot
  g.bench.destroy();
  for(const t of ['D1','E2','D1 more','E2 more'])assert.ok(keptOrDraft(f,t),t+' survives closing both');
 });
+
+const sharedDraftTexts=f=>(f.runtime.cache.workbenchDrafts?.entries||[]).filter(e=>!e[0].includes('\u0001')).map(e=>e[1]);
+
+test('memo drafts (R6-2): a finishing job deletes only a draft its own binding wrote, never another window\'s draft with the same text',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(g);
+ const row=()=>f.runtime.cache.items[1]||={};
+ f.runtime.cache.items[1]={remark:'A'};
+ let release;const gate=new Promise(r=>{release=r;});
+ f.library.setRemark=async(id,text,opts={})=>{row().remark='R';await gate;return 'R';}; // adopts the note R
+ await f.bench.show('annotations');await settle();
+ const a=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,a,'L');a.dispatchEvent(new f.win.Event('blur'));await settle();
+ await g.bench.show('annotations');await settle();
+ const b=g.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(b.value,'R');
+ casType(g,b,'L'); // window 2 edits the current memo to L
+ release();await settle();
+ assert.ok(sharedDraftTexts(f).includes('L'),'window 2\'s draft L is still there: '+JSON.stringify(sharedDraftTexts(f)));
+ f.bench.destroy();g.bench.destroy();
+});
+
+test('memo drafts (R6-3): a single window never creates a kept card: typing at the start of a 60,000-character memo, pasting, select-all delete, redraws',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'x'.repeat(60000)};
+ await f.bench.show('annotations');await settle();
+ let el=f.body().querySelector('textarea.sc-paper-memo');
+ for(const v of ['a'+'x'.repeat(60000),'ab'+'x'.repeat(60000),'abc'+'x'.repeat(60000)])casType(f,el,v);
+ casType(f,el,'pasted text '.repeat(10));
+ casType(f,el,'');
+ casType(f,el,'new text');
+ await f.bench.show('annotations');await settle();
+ el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'new text more');casType(f,el,'');casType(f,el,'z');
+ assert.equal(f.runtime.cache.memoKept,undefined,'no kept draft: '+JSON.stringify(f.runtime.cache.memoKept));
+ assert.equal(f.body().querySelector('.sc-memo-kept-card'),null);
+ f.bench.destroy();
+});
+
+test('memo drafts (R6-4): an empty draft (the memo was cleared) is a real draft: another window typing over it keeps it',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g);
+ f.runtime.cache.items[1]={remark:'X'};
+ await f.bench.show('annotations');await settle();await g.bench.show('annotations');await settle();
+ const a=f.body().querySelector('textarea.sc-paper-memo'),b=g.body().querySelector('textarea.sc-paper-memo');
+ casType(f,a,''); // cleared in window 1
+ casType(g,b,'Y');
+ const kept=Object.values(f.runtime.cache.memoKept||{}).flat();
+ assert.ok(kept.some(e=>e.text===''),'the empty draft was kept: '+JSON.stringify(kept));
+ f.bench.destroy();g.bench.destroy();
+});

@@ -363,10 +363,12 @@
       const stale=runtime.memoStaleWrite?.(item,text,options&&options.base);if(stale)return stale;
       const entry=runtime.entry(item),prior=entry.remark,value=String(text??'');
       const revision=(remarkRevisions.get(entry)||0)+1;remarkRevisions.set(entry,revision);entry.remark=value;runtime.dirty=true;
+      // The memo revision right after this write: anything that changes the memo, baseline or conflict later (a note adopted, a newer save, an undo) bumps it.
+      const mine=runtime._memoBump?runtime._memoBump(entry):undefined;
       try{await runtime.flush();}catch(error){
         // An earlier failed save must not undo a later edit from this or another window.
         // Only what is still this write's own is restored: a newer save (revision) or a note adopted meanwhile (remark changed) stays.
-        if(remarkRevisions.get(entry)===revision&&entry.remark===value){if(prior===undefined)delete entry.remark;else entry.remark=prior;runtime.dirty=true;}
+        if(remarkRevisions.get(entry)===revision&&(mine===undefined?entry.remark===value:entry.memoRev===mine)){if(prior===undefined)delete entry.remark;else entry.remark=prior;if(runtime._memoBump)runtime._memoBump(entry);runtime.dirty=true;}
         throw error;
       }
       /* "메모를 노트로도 저장": the same text into one tagged child note, so it
