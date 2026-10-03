@@ -95,11 +95,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   // One place to ask for a string, so nothing has to reach for the module.
   t(value) { return this.i18n ? this.i18n.t(value) : value; }
-  // Every dialog the plugin raises, in the chosen language; multi-line
-  // messages are translated a line at a time so a report of figures reads.
-  say(win, message) {
-    const text = String(message == null ? '' : message).split('\n').map(line => this.t(line)).join('\n');
-    return this.Z.alert(win, 'Style Custom', text);
+  // Every message a menu action reports, in the chosen language. It goes to
+  // the panel's status line (the panel opens if it was closed), never to a
+  // modal Zotero.alert: the reader is working in Zotero and a pop-up stops
+  // them. Multi-line messages are translated a line at a time so a report of
+  // figures reads; the status line joins them and keeps the full text as a tooltip.
+  say(win, message, {error = false} = {}) {
+    const lines = String(message == null ? '' : message).split('\n').map(line => this.t(line)).filter(Boolean);
+    const target = [this.windows.get(win), ...[...this.windows.values()].filter(s => !s?.workbench?.panel?.ownerDocument?.defaultView?.closed)]
+      .find(state => state?.workbench?.notify);
+    try {
+      if (target) return Promise.resolve(target.workbench.notify(lines.join(' · '), {error, full: lines.join('\n')}));
+    } catch (e) { this.Z.logError?.(e); }
+    this.Z.debug?.('Style Custom: ' + lines.join(' | '));
+    return Promise.resolve();
   }
 
   // Which language the panel speaks. `auto` follows Zotero's own locale, which
@@ -5658,7 +5667,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       action("저널 IF 공식 값 새로고침",async()=>{
         const result = await this.refreshJournalMetrics(this.selected(win), win.DOMParser);
         this.say(win,`IF 확인 ${result.updated}개 · 조회 실패 ${result.failed}개 · 미등록 저널 ${result.unknown}개. 기존 확인된 값은 유지됩니다.`);
-      },body,"journals","선택한 문헌의 저널 IF를 공식 페이지에서 다시 읽습니다.");
+      },body,"journals","선택한 문헌의 저널 중 출판사 페이지 수치(86종)가 있는 저널만 그 페이지에서 다시 읽습니다. JCR 내보내기와 OpenAlex 값은 바뀌지 않습니다.");
     }
     const poll = async () => {
       if (!this.active || win.closed || state.polling) return;

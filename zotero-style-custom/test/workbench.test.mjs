@@ -1098,10 +1098,10 @@ test('recent papers say what brought them there and when; the summary names the 
  assert.deepEqual(why.slice(0,2),[['Paper Alpha','읽음 · 2일 전'],['Paper Beta','추가 · 4일 전 · 읽기 기록 없음']]);
  await f.bench.show('explore');
  const picks=[...f.body().querySelectorAll('.sc-overview-pick')].map(p=>p.textContent);
- // Alpha: 40 in its first year; Beta: 300 over 27 years -- about 11 a year. The done paper is not offered.
+ // Alpha: 40 in its first year; Beta: 300 over 26 years (ZotPoP's convention, max(1, now - year)) -- about 12 a year. The done paper is not offered.
  assert.equal(picks.length,2);
  assert.match(picks[0],/Paper Alpha.*연 40회/);
- assert.match(picks[1],/Paper Beta.*연 11회/);
+ assert.match(picks[1],/Paper Beta.*연 12회/);
  f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'Ada Lovelace',seen:[],news:[]},{id:'A2',name:'A. M. Lovelace',seen:[],news:[]},{id:'A9',name:'Nobody Here',seen:[],news:[]}];
  await f.bench.show('authors');await f.click('조용한 저자 3명 보기');
  const cards=[...f.body().querySelectorAll('.sc-watch')];

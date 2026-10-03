@@ -353,7 +353,7 @@
         "test/workbench.test.mjs"
       ],
       "entryPoint": "워크벤치 → 문헌 탐색",
-      "condition": "상태·별점·연도 필터 및 현재 컬렉션 범위; 화면100개씩 페이지 이동",
+      "condition": "상태·별점·연도 필터 및 현재 컬렉션 범위; 기본 100개씩(설정에서 25–200개) 페이지 이동",
       "status": "implemented"
     },
     {
@@ -383,7 +383,7 @@
         "test/workbench.test.mjs"
       ],
       "entryPoint": "워크벤치 → 관계 그래프",
-      "condition": "화면 최대180노드, 검색으로 범위를 좁힘",
+      "condition": "기본 180노드(설정에서 20–180), 검색으로 범위를 좁힘",
       "status": "implemented"
     },
     {
@@ -413,7 +413,7 @@
         "test/reader-tools.test.mjs"
       ],
       "entryPoint": "읽기 진행 / PDF Style 도구",
-      "condition": "왼쪽/오른쪽, 너비160–480px, 발췌100–5000자",
+      "condition": "왼쪽/오른쪽, 기본 너비 210px(설정 160–480), 발췌 기본 1500자(설정 100–5000)",
       "status": "implemented"
     },
     {
@@ -833,7 +833,7 @@
         "test/workspace.test.mjs"
       ],
       "entryPoint": "워크벤치 → 논문 비교",
-      "condition": "화면50개씩, CSV는 전체 선택/필터 결과",
+      "condition": "기본 50개씩(설정에서 10–100개), CSV는 전체 선택/필터 결과",
       "status": "implemented"
     },
     {

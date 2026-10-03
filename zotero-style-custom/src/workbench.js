@@ -1634,7 +1634,7 @@
        title opens that paper's detail. */
     const year=new Date().getFullYear();
     const picks=items.filter(it=>it.status!=='done'&&it.status!=='reading'&&Number(it.citations)>0&&Number(it.year)&&!withdrawn(it))
-     .map(it=>({it,rate:Number(it.citations)/Math.max(1,year-Number(it.year)+1)})).sort((a,b)=>b.rate-a.rate).slice(0,3);
+     .map(it=>({it,rate:Number(it.citations)/Math.max(1,year-Number(it.year))})).sort((a,b)=>b.rate-a.rate).slice(0,3);
     /* What the papers being read, or read, cite among the unread ones here:
        the reading this library's own work leans on, from the reference lists
        the citation map already keeps -- nothing is asked for. Direct
@@ -7294,7 +7294,8 @@
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};
-  return {filters:{rules:()=>activeRules(),set:list=>{setRules(model.cleanRules(list));return render();},open:()=>{setFiltersOpen(true);},edit:kind=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,null),editor:()=>ruleDraft},toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
+  const notify=(text,{error=false,full=''}={})=>{if(disposed)return;message(text,error);status.title=full&&full!==text?full:'';return panel.hidden?toggle(true):undefined;};
+  return {filters:{rules:()=>activeRules(),set:list=>{setRules(model.cleanRules(list));return render();},open:()=>{setFiltersOpen(true);},edit:kind=>openRuleEditor({id:newRuleID(),kind,mode:ruleMode,...ruleDefaults(kind)},false,null),editor:()=>ruleDraft},toggle,load,render,refreshReading,refreshMetrics,applyPreferences,destroy,panel,state,setStatus,notify,flushSearch:applySearch,dock:()=>dock({save:false}),undock:()=>undock({save:false}),docked:()=>!!tabID,dockError:()=>dockError,show:async (tab,focus)=>{navigationEpoch++;if(TABS.some(t=>t[0]===tab))state.tab=tab;state.focus=focus||'';await toggle(true);if(hiddenTabs().has(tab))message('숨겨진 탭입니다. 스타일 편집에서 켜세요.',true);}};
  }
  const api={attach,TABS};root.CustomStyleWorkbench=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

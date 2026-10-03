@@ -104,8 +104,16 @@
   }
   async function reset(category){
    const section=categories.get(category);if(section.pending||destroyed)return;
-   // Twenty values change at once and there is no undo: ask first when the window can.
-   if(typeof win.confirm==='function'&&!win.confirm(t('{0} 분류의 설정을 모두 기본값으로 되돌릴까요? API 키·비밀번호와 직접 입력한 주소·모델·이메일·CSS는 유지됩니다.').replace('{0}',t(section.label))))return;
+   // Twenty values change at once and there is no undo: ask first, in the pane
+   // itself (a pop-up would interrupt the reader). The first press arms the
+   // button and says what will happen; a second press within six seconds does it.
+   if(!section.armed){
+    section.armed=win.setTimeout(()=>{section.armed=null;if(!destroyed)section.reset.textContent=t('이 분류 기본값 복원');},6000);
+    section.reset.textContent=t('한 번 더 누르면 되돌립니다');
+    notify(t('{0} 분류의 설정을 모두 기본값으로 되돌릴까요? API 키·비밀번호와 직접 입력한 주소·모델·이메일·CSS는 유지됩니다.').replace('{0}',t(section.label))+' '+t('되돌리려면 같은 버튼을 한 번 더 누르세요.'));
+    return;
+   }
+   win.clearTimeout(section.armed);section.armed=null;section.reset.textContent=t('이 분류 기본값 복원');
    const members=[...states.values()].filter(state=>state.spec.category===category);
    if(members.some(state=>state.pending)){notify('진행 중인 적용이 끝난 뒤 기본값으로 되돌리세요.',true);return;}
    const revisions=new Map(members.map(state=>[state,state.revision]));section.pending=true;section.reset.disabled=true;members.forEach(sync);notify(section.label+' 기본값을 적용하는 중…');
@@ -192,7 +200,7 @@
    refreshFirst();
   }
   nav.addEventListener('keydown',event=>{if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...nav.querySelectorAll('button')],index=buttons.indexOf(doc.activeElement);if(index<0)return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:Math.max(0,Math.min(buttons.length-1,index+(event.key==='ArrowDown'?1:-1)));buttons[next].focus();selectCategory(buttons[next].dataset.category);});
-  function destroy(){if(destroyed)return;destroyed=true;if(poll!==null)win.clearInterval(poll);observer?.disconnect();win.removeEventListener('unload',destroy);instances.delete(host);}
+  function destroy(){if(destroyed)return;destroyed=true;if(poll!==null)win.clearInterval(poll);for(const section of categories.values())if(section.armed)win.clearTimeout(section.armed);observer?.disconnect();win.removeEventListener('unload',destroy);instances.delete(host);}
   async function loadValues(){
    await Promise.all([...states.values()].filter(state=>!state.pending&&!categories.get(state.spec.category)?.pending).map(state=>{state.loading=state.spec.type!=='action';sync(state);return hydrate(state);}));
    if(destroyed)return;filter();const errors=[...states.values()].filter(state=>state.error).length;notify(errors?errors+'개 설정을 읽지 못했습니다. 설정 다시 읽기로 재시도하세요.':'설정을 불러왔습니다.',errors>0);await refreshStatus();

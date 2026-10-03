@@ -3158,3 +3158,17 @@ test('r21 connectPublished imports the published version, relates both, carries 
   assert.equal(again.pendingTags, null);
   void Z;
 });
+
+test('runtime.say reports in the panel status line and never raises a modal Zotero.alert',async()=>{
+ const {plugin,Z}=fixture();
+ let alerts=0;Z.alert=()=>{alerts++;};
+ const shown=[];const win={closed:false};
+ plugin.windows.set(win,{workbench:{notify:(text,opts)=>{shown.push([text,opts]);}}});
+ await plugin.say(win,'첫 줄\n둘째 줄');
+ assert.equal(alerts,0,'no pop-up');
+ assert.equal(shown.length,1);
+ assert.match(shown[0][0],/첫 줄.*둘째 줄/);
+ plugin.windows.clear();
+ await plugin.say(win,'패널이 없을 때도');
+ assert.equal(alerts,0,'no pop-up even with no panel open');
+});

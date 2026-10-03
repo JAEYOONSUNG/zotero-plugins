@@ -412,7 +412,7 @@
  "게재됨 →": "Published →",
  "결과": "Result",
  "결과 복사": "Copy result",
- "계정이 아닙니다. OpenAlex와 Crossref는 요청 URL에 ?mailto=주소를 붙이면 익명 요청보다 빠른 대기열(polite pool)에 넣어 줍니다. 대신 입력한 주소가 두 서비스의 서버 기록에 매 요청마다 남습니다. 비워 두면 아무것도 보내지 않고, 조회는 그대로 동작하되 느린 쪽 대기열을 씁니다. Zotero 로그인 계정을 대신 쓰는 일은 없습니다.": "This is not an account. OpenAlex and Crossref put a request carrying ?mailto=your-address into a faster queue than an anonymous one — their polite pool. In exchange, the address you enter appears in those two services' server logs on every request. Leave it blank and nothing is sent: lookups still work, they just use the slower queue. Your Zotero sign-in is never used instead.",
+ "계정이 아닙니다. Crossref는 요청 URL에 ?mailto=주소를 붙이면 익명 요청보다 빠른 대기열(polite pool)에 넣어 줍니다. OpenAlex에도 같은 주소가 붙지만 지금은 속도 이점이 없습니다. 입력한 주소는 이 두 서비스의 서버 기록에 요청마다 남습니다. 비워 두면 ZotPoP의 연락처 이메일이 있으면 그것을 쓰고, 둘 다 없으면 보내지 않습니다(조회는 그대로 동작하되 익명 대기열을 씁니다). Zotero 로그인 계정을 대신 쓰는 일은 없습니다.": "This is not an account. Crossref puts a request carrying ?mailto=your-address into a faster queue than an anonymous one — its polite pool. OpenAlex also receives the address, but it gives no speed benefit now. In exchange, the address you enter appears in those two services' server logs on every request. Leave it blank and ZotPoP's contact e-mail is used if it has one; with neither, nothing is sent: lookups still work, they just use the anonymous queue. Your Zotero sign-in is never used instead.",
  "공개 접근 ({0})": "Open access ({0})",
  "공개 접근본이 없습니다.": "No open-access copy.",
  "공동 저자로 실린 문헌은 관련된 관심 저자 모두에게 집계됩니다": "A paper with more than one followed author counts for each of them",
@@ -501,8 +501,8 @@
  "글자와 배경의 대비가 4.5:1 이상이어야 읽을 수 있습니다. 더 어둡거나 밝은 색을 고르세요.": "Text and background need a contrast of at least 4.5:1 to be read. Choose a darker or lighter colour.",
  "글자와 배경의 대비가 {0}:1이라 이 조합은 PDF에 칠하지 않습니다. 4.5:1 이상이 되게 고르세요.": "Text and background contrast is {0}:1, so this pair is not painted on the PDF. Choose colours that reach 4.5:1.",
  "기관 등급": "Tier",
- "기관 전체 h-index 1400 이상 (상위 약 25%)": "Institution h-index of 1400 or more (about the top 25%)",
- "기관 전체 h-index 2000 이상 (이 라이브러리 논문 상위 약 10%)": "Institution h-index of 2000 or more (about the top 10% of papers here)",
+ "기관 전체 h-index 1400 이상 (ZotPoP과 같은 기준)": "Institution h-index of 1400 or more (the same cut-point as ZotPoP)",
+ "기관 전체 h-index 2000 이상 (ZotPoP과 같은 기준)": "Institution h-index of 2000 or more (the same cut-point as ZotPoP)",
  "기관 전체 h-index 400 미만": "Institution h-index below 400",
  "기관 전체 h-index 400 이상": "Institution h-index of 400 or more",
  "기능 바로 찾기": "Jump to a feature",
@@ -1041,7 +1041,7 @@
  "선택한 문헌의 PMC 보충자료를 형식 구분 없이 내려받아 첨부합니다.": "Downloads the selected papers' PMC supplements regardless of format and attaches them.",
  "선택한 문헌의 인용 수를 OpenAlex에서 다시 가져옵니다.": "Fetches the selected papers' citation counts again from OpenAlex.",
  "선택한 문헌의 인용문을 APA·MLA·Vancouver 등 형식으로 만들어 복사합니다": "Build the selected papers' citations in APA, MLA, Vancouver and other styles and copy them",
- "선택한 문헌의 저널 IF를 공식 페이지에서 다시 읽습니다.": "Reads the impact factor for the selected paper’s journal from the official page again.",
+ "선택한 문헌의 저널 중 출판사 페이지 수치(86종)가 있는 저널만 그 페이지에서 다시 읽습니다. JCR 내보내기와 OpenAlex 값은 바뀌지 않습니다.": "Re-reads the impact factor from the publisher’s metrics page, only for journals among the 86 with such a page. Your JCR export and OpenAlex figures are not changed.",
  "선택한 문헌의 제목·초록·메모를 설정된 AI 서비스에 요청 중…": "Sending the selected titles, abstracts and notes to the configured AI service…",
  "선택한 문헌의 첨부파일": "Attachments of the selection",
  "선택한 문헌이 철회됐는지, 공개접근본이 있는지 확인합니다.": "Checks whether the selected papers are retracted and whether an open copy exists.",
@@ -2182,5 +2182,7 @@
  "눌러서 펼치기": "Click to expand",
  "논문 비교 종합": "Comparison synthesis",
  "비교 중인 문헌의 근거 칸과, 주석 탭에서 고른 주석을 한 노트로 모읍니다. 각 문헌과 주석 페이지로 가는 링크가 들어갑니다": "Gathers the evidence fields of the compared papers and the annotations picked in the Annotations tab into one note, with links to each paper and annotation page",
- "생물종/균주 · construct · 조건 · 대조군 · 결과 · 한계 칸을 표에 넣고 직접 적습니다": "Adds organism/strain · construct · conditions · control · result · limitations columns to the table to fill in yourself"
+ "생물종/균주 · construct · 조건 · 대조군 · 결과 · 한계 칸을 표에 넣고 직접 적습니다": "Adds organism/strain · construct · conditions · control · result · limitations columns to the table to fill in yourself",
+ "한 번 더 누르면 되돌립니다": "Press again to restore",
+ "되돌리려면 같은 버튼을 한 번 더 누르세요.": "Press the same button once more to restore."
 }

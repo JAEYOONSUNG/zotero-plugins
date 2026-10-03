@@ -28,8 +28,8 @@
      So the thresholds are read off the paper-weighted spread, and only the top
      two buckets carry a label at all:
 
-       h >= 2000   top tenth of papers here
-       h >= 1400   top quarter
+       h >= 2000   labelled T1 (cut-points shared with ZotPoP)
+       h >= 1400   labelled T2
        below       sorts, but says nothing on the row
 
      The tooltip always carries the actual number, so the reader can disagree
@@ -37,8 +37,8 @@
      labels are the short form, never a ranking. */
   // ZotPoP (the search plugin at the repo root) mirrors this table: change both together.
   const TIERS = [
-    {key: 't1', floor: 2000, label: 'T1', note: '기관 전체 h-index 2000 이상 (이 라이브러리 논문 상위 약 10%)'},
-    {key: 't2', floor: 1400, label: 'T2', note: '기관 전체 h-index 1400 이상 (상위 약 25%)'},
+    {key: 't1', floor: 2000, label: 'T1', note: '기관 전체 h-index 2000 이상 (ZotPoP과 같은 기준)'},
+    {key: 't2', floor: 1400, label: 'T2', note: '기관 전체 h-index 1400 이상 (ZotPoP과 같은 기준)'},
     {key: 't3', floor: 400, label: 'T3', note: '기관 전체 h-index 400 이상'},
     {key: 't4', floor: 0, label: 'T4', note: '기관 전체 h-index 400 미만'}
   ];

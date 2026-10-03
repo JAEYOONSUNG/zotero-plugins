@@ -1840,7 +1840,7 @@
       "sources": [
         {
           "file": "src/runtime.js",
-          "marker": "say(win, message) {"
+          "marker": "say(win, message, {error = false} = {}) {"
         }
       ],
       "tests": [
