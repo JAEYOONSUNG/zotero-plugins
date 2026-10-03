@@ -6920,11 +6920,100 @@ test('kept drafts: the card survives redraws, saves and follows and goes only wi
  assert.equal(f.body().querySelectorAll('.sc-memo-kept-card').length,1);
  f.runtime.cache.items[1].remark='changed elsewhere';
  await f.click('입력칸에 넣기');
- assert.ok(fresh.value.includes('KEPT TWO'));
+ assert.ok(fresh.value.includes('KEPT ONE'),'newest (TWO) was discarded first');
  assert.equal(f.body().querySelector('.sc-memo-kept-card'),null);
  assert.equal(f.runtime.cache.items[1].remark,'changed elsewhere','loading wrote nothing');
  fresh.dispatchEvent(new f.win.Event('blur'));await settle();
  assert.ok(f.body().querySelector('.sc-memo-stale'),'saving it is judged by the usual CAS: the memo changed, so it is a conflict');
  assert.equal(f.runtime.cache.items[1].remark,'changed elsewhere');
+ f.bench.destroy();
+});
+
+test('kept drafts (R4-1): 입력칸에 넣기 queued behind a save that finishes after a redraw loads into the editor on screen, and the entry goes only after that',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.memoKept={'key-1':[{id:'k1',text:'KEPT K',base:'old',at:'2026-10-03T00:00:00Z'}]};
+ let release;const gate=new Promise(r=>{release=r;});
+ const cas=f.library.setRemark;let first=true;
+ f.library.setRemark=async(id,text,opts)=>{const out=await cas(id,text,opts);if(first){first=false;await gate;}return out;};
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'X');old.dispatchEvent(new f.win.Event('blur'));await settle();
+ const pending=f.click('입력칸에 넣기');
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ release();await pending;await settle();
+ assert.ok(fresh.value.includes('KEPT K'),'the connected editor holds it: '+fresh.value);
+ assert.equal(f.body().querySelector('.sc-memo-kept-card'),null);
+ f.bench.destroy();
+});
+
+test('kept drafts (R4-1b): with no connected editor the entry is left kept',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.memoKept={'key-1':[{id:'k1',text:'KEPT K',base:'old',at:'2026-10-03T00:00:00Z'}]};
+ let release;const gate=new Promise(r=>{release=r;});
+ const cas=f.library.setRemark;let first=true;
+ f.library.setRemark=async(id,text,opts)=>{const out=await cas(id,text,opts);if(first){first=false;await gate;}return out;};
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'X');old.dispatchEvent(new f.win.Event('blur'));await settle();
+ const pending=f.click('입력칸에 넣기');
+ await f.bench.show('explore');await settle(); // the editor is gone
+ release();await pending;await settle();
+ assert.ok(JSON.stringify(f.runtime.cache.memoKept).includes('KEPT K'),'still kept');
+ f.bench.destroy();
+});
+
+test('kept drafts (R4-2): redrawing one window never deletes another window\'s shared draft',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g);
+ await f.bench.show('annotations');await settle();await g.bench.show('annotations');await settle();
+ const a=f.body().querySelector('textarea.sc-paper-memo'),b=g.body().querySelector('textarea.sc-paper-memo');
+ casType(f,a,'D1');casType(g,b,'D2');
+ f.runtime.cache.items[1].remark='R';
+ await f.bench.show('annotations');await settle();
+ assert.match(f.body().querySelector('.sc-memo-kept-card').textContent,/D1/,'window 1 keeps its own draft');
+ assert.ok(JSON.stringify(f.runtime.cache.workbenchDrafts).includes('D2'),'window 2\'s draft is still in the shared cache');
+ f.bench.destroy();g.bench.destroy();
+});
+
+test('memo CAS (R4-3): a choice that adopts a different text closes its box and the editor shows the result; typed since, a fresh box opens with live buttons',async()=>{
+ for(const typedSince of [false,true]){
+  const f=fixture();casLibrary(f);
+  f.runtime.cache.items[1]={remark:'B'};
+  await f.bench.show('annotations');await settle();
+  const el=f.body().querySelector('textarea.sc-paper-memo');
+  f.runtime.cache.items[1].remark='C'; // an outside change
+  casType(f,el,'B1');el.dispatchEvent(new f.win.Event('blur'));await settle();
+  assert.ok(f.body().querySelector('.sc-memo-stale'));
+  const cas=f.library.setRemark;let release;const gate=new Promise(r=>{release=r;});
+  f.library.setRemark=async(id,text,opts)=>{const out=await cas(id,text,opts);if(out&&out.stale)return out;if(typedSince)await gate;f.runtime.cache.items[1].remark='R';return 'R';}; // the note R is adopted
+  const pending=f.click('이 편집 내용 쓰기');await settle();
+  if(typedSince)el.value='typed more';
+  release();await pending;await settle();
+  if(!typedSince){
+   assert.equal(el.value,'R','the editor shows the adopted text');
+   assert.equal(f.body().querySelector('.sc-memo-stale'),null,'the box is closed');
+  }else{
+   assert.equal(el.value,'typed more','typing is kept');
+   const box=f.body().querySelector('.sc-memo-stale');
+   assert.ok(box,'a fresh box is open');
+   f.library.setRemark=cas;
+   for(const b of box.querySelectorAll('button'))assert.equal(b.disabled,false,'no dead buttons');
+   await f.click('이 편집 내용 쓰기');
+   assert.equal(f.runtime.cache.items[1].remark,'typed more');
+  }
+  f.bench.destroy();
+ }
+});
+
+test('kept drafts (R4-4): nothing is evicted; the newest few show and the rest are behind a toggle',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.memoKept={'key-1':Array.from({length:60},(_,i)=>({id:'k'+i,text:'DRAFT '+i,base:'x',at:'2026-10-03T00:00:00Z'}))};
+ await f.bench.show('annotations');await settle();
+ assert.equal(f.body().querySelectorAll('.sc-memo-kept-card').length,3);
+ assert.match(f.body().querySelector('.sc-memo-kept-card').textContent,/DRAFT 59/,'newest first');
+ const toggle=f.findButton('57개 더 보기');assert.ok(toggle);
+ toggle.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.body().querySelectorAll('.sc-memo-kept-card').length,60);
+ assert.equal(f.runtime.cache.memoKept['key-1'].length,60,'all are kept');
  f.bench.destroy();
 });

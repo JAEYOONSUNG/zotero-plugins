@@ -3528,7 +3528,7 @@
      A saved draft that cannot be restored safely is never offered as a conflict and never edited: it is moved to the kept
      drafts of that paper (cache.memoKept), shown as a card, and only 입력칸에 넣기 or 버리기 on that card ever removes it. */
   const storedMemo=itemID=>{try{const ref=runtime.Z.Items.get(Number(itemID));return String((ref&&runtime.entry(ref).remark)||'');}catch(_){return '';}};
-  const KEPT_LIMIT=50;
+  const KEPT_SHOWN=3; // how many kept drafts show before the toggle; none is ever deleted but by its own buttons
   const keptKey=itemID=>{try{const ref=runtime.Z.Items.get(Number(itemID));return ref?String(runtime.identity(ref)):String(itemID);}catch(_){return String(itemID);}};
   const keptList=itemID=>{const all=runtime.cache.memoKept,list=all&&typeof all==='object'?all[keptKey(itemID)]:null;return Array.isArray(list)?list:[];};
   function keepDraft(itemID,text,base){
@@ -3536,7 +3536,6 @@
    const list=all[keptKey(itemID)]||(all[keptKey(itemID)]=[]);
    if(list.some(entry=>entry.text===text))return;
    list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text).slice(0,DRAFT_LENGTH),base:String(base??''),at:new Date().toISOString()});
-   while(list.length>KEPT_LIMIT)list.shift();
    runtime.dirty=true;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));
   }
   function dropKept(itemID,id){
@@ -3567,25 +3566,41 @@
    // The editor takes a stored text as its own: value, base and autosave baseline together.
    binding.show=text=>{if(timer){win.clearTimeout(timer);timer=null;}field.value=text;grow();last=text;if(moveBase(text))clearStale();};
    const take=text=>{const prior=field.value;if(field.dataset.draftKey)finishDraft(field,prior);binding.show(text);};
+   // Puts a kept draft into THIS editor as ordinary unsaved input; true only when it is in a connected editor's value and draft.
+   binding.loadKept=entry=>{
+    if(!field.isConnected)return false;
+    const mine=field.value,next=!mine.trim()||mine===binding.base?entry.text:mine+'\n\n'+entry.text;
+    field.value=next;grow();field.dispatchEvent(new win.Event('input',{bubbles:true}));
+    return field.isConnected&&field.value===next&&(!field.dataset.draftKey||drafts.get(field.dataset.draftKey)===next);
+   };
+   let keptExpanded=false;
    const drawKept=()=>{
     if(!cas||!cas.host||!cas.host.isConnected)return;
     if(keptBox){keptBox.remove();keptBox=null;}
-    const list=keptList(cas.itemID);if(!list.length)return;
+    const list=keptList(cas.itemID).slice().reverse();if(!list.length)return; // newest first
     keptBox=node('div',null,cas.host,{class:'sc-memo-kept'});
-    for(const entry of list){
+    for(const entry of keptExpanded?list:list.slice(0,KEPT_SHOWN)){
      const card=node('div',null,keptBox,{class:'sc-memo-kept-card',role:'group','aria-label':'저장하지 못한 입력'});
      node('span','저장하지 못한 입력',card,{class:'sc-memo-label'});
      node('p','이 메모가 그 사이 바뀌어 입력칸에 되돌리지 않았습니다. 필요하면 입력칸에 넣어 직접 합치세요.',card,{class:'sc-muted'});
      node('pre',entry.text||'(비어 있음)',card);
      const acts=node('div',null,card,{class:'sc-actions'});
-     // Put into the editor as ordinary unsaved input: the base does not move, so saving it is judged like any other edit.
+     /* Put into the editor as ordinary unsaved input: the base does not move, so saving it is judged like any other edit.
+        When the job runs the panel may have been redrawn: it loads into the editor connected NOW, and the entry is deleted
+        only once it is in that editor's value and draft. With no connected editor it stays kept. */
      button('입력칸에 넣기',()=>binding.sequence(async()=>{
-      const mine=field.value,next=!mine.trim()||mine===binding.base?entry.text:mine+'\n\n'+entry.text;
-      field.value=next;grow();field.dispatchEvent(new win.Event('input',{bubbles:true}));
-      dropKept(cas.itemID,entry.id);drawKept();
+      let target=binding;
+      if(!field.isConnected){
+       target=null;
+       for(const editor of body.querySelectorAll('textarea[data-memo-item]'))if(editor.isConnected&&editor.dataset.memoItem===String(cas.itemID)&&memoBindings.get(editor)?.loadKept){target=memoBindings.get(editor);break;}
+      }
+      if(!target){message('입력칸이 닫혀 있어 넣지 못했습니다. 입력 내용은 그대로 남아 있습니다.',true);return;}
+      const done=target===binding?binding.loadKept(entry):await target.sequence(async()=>target.loadKept(entry));
+      if(done){dropKept(cas.itemID,entry.id);target.drawKept();drawKept();}
      }),acts,{'data-writes':'cache'});
      button('버리기',async()=>{dropKept(cas.itemID,entry.id);drawKept();},acts,{'data-writes':'cache'});
     }
+    if(list.length>KEPT_SHOWN)viewButton(keptExpanded?'접기':`${list.length-KEPT_SHOWN}개 더 보기`,()=>{keptExpanded=!keptExpanded;drawKept();},keptBox,{class:'sc-memo-kept-more'});
    };
    binding.drawKept=drawKept;
    const drawStale=()=>{
@@ -3609,10 +3624,12 @@
     button('둘 다 합치기',async()=>{await binding.overwrite(()=>{const own=field.value;return found.stored.trim()&&own.trim()?found.stored+'\n\n'+own:found.stored.trim()?found.stored:own;},found.stored,found);},acts,{'data-writes':'library',title:T('저장된 메모 아래에 이 편집 내용을 이어 붙입니다')});
    };
    // One attempt: true when the library took it.
-   const attempt=async(value,base)=>{
+   const attempt=async(value,base,closes)=>{
     const saved=await save(value,base);
     if(saved&&typeof saved==='object'&&saved.stale){binding.stale={...saved,used:false};field.dataset.state='stale';drawStale();return false;}
     const stored=typeof saved==='string'?saved:value;
+    // The choice that opened this save succeeded: its box is closed whatever text came back (a visible box never keeps a used token).
+    if(closes&&binding.stale===closes)clearStale();
     if(cas&&stored===value&&moveBase(stored,true)){
      clearStale();
      // A draft typed during the save was recorded over the old base: it is built on this one now.
@@ -3625,6 +3642,8 @@
     if(typeof saved==='string'&&saved!==value){
      if(field.dataset.memoItem)syncMemoEditors(field.dataset.memoItem,saved,value);
      else if(field.value===value){field.value=saved;last=saved;grow();}
+     // Typed since: the typing stays, and what it was typed over is no longer stored: a fresh box with a fresh token asks.
+     if(cas&&field.isConnected&&field.value!==saved&&field.value!==value&&!binding.stale){binding.stale={stale:true,stored:saved,conflict:{local:field.value,remote:saved},used:false};field.dataset.state='stale';drawStale();}
     }
     if(cas)followMemoEditors(cas.itemID,stored,field);
     return true;
@@ -3661,7 +3680,7 @@
      found&&(found.used=true);
      const text=pick();
      field.value=text;grow();last=text;field.dataset.state='saving';
-     try{const ok=await attempt(text,seenStored);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text);}return ok;}
+     try{const ok=await attempt(text,seenStored,found);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text);}return ok;}
      catch(error){if(found)found.used=false;field.dataset.state='failed';last=null;throw error;}
     });
     if(result===null){message('그 사이 상황이 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return false;}
@@ -3685,9 +3704,11 @@
     if(!cas){field.value=draft;return;}
     const stored=storedMemo(cas.itemID);
     if(draft===field.value)return;
-    if(draft===stored){updateDraft(field.dataset.draftKey,undefined);return;}
+    // Drafts live in a cache shared with other windows: only the entry that is exactly this draft (text and base) is removed.
+    const dropOwn=()=>{const saved=cachedDrafts(),key=field.dataset.draftKey;if(saved.get(key)===draft&&(draftBase===undefined||saved.get(key+DRAFT_BASE)===draftBase))updateDraft(key,undefined);else drafts.delete(key);};
+    if(draft===stored){dropOwn();return;}
     if(draftBase===stored&&field.value===binding.base){field.value=draft;grow();return;}
-    keepDraft(cas.itemID,draft,draftBase);updateDraft(field.dataset.draftKey,undefined);drawKept();
+    keepDraft(cas.itemID,draft,draftBase);dropOwn();drawKept();
    };
    memoBindings.set(field,binding);
    drawKept();
