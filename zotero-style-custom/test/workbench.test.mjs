@@ -6765,3 +6765,83 @@ test('memo CAS (P1-3): text typed while a conflict choice is saving is kept as a
  assert.equal(f.body().querySelector('textarea.sc-paper-memo').value,'L+MORE','after a redraw the typed text is still there');
  f.bench.destroy();
 });
+
+test('memo CAS (P1-4): 이 메모 쓰기 pressed while a save is pending waits for it and the newest input, and never deletes that input or its draft',async()=>{
+ const f=fixture();
+ const row=()=>f.runtime.cache.items[1]||={};
+ let note='R',conflict=null,gateFirst,hold=true;const gate=new Promise(r=>{gateFirst=r;});
+ f.runtime.cache.items[1]={remark:'L'};conflict={local:'L',remote:'R'};
+ f.library.memoConflict=async()=>conflict&&{...conflict};
+ f.library.setRemark=async(id,text,opts={})=>{
+  const stored=String(row().remark||'');
+  if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored}};
+  row().remark=text;if(hold&&text==='L'){hold=false;await gate;}
+  conflict=text!==note?{local:text,remote:note}:null;return text;
+ };
+ f.library.memoToNote=async()=>({created:false,text:row().remark,conflict:!!conflict});
+ f.library.resolveMemoConflict=async(id,choice,seen)=>{
+  if(!conflict||seen.local!==conflict.local||seen.remote!==conflict.remote)return {resolved:false,stale:true,conflict:conflict&&{...conflict},text:row().remark};
+  if(choice==='local')note=row().remark;else if(choice==='note')row().remark=note;
+  conflict=null;return {resolved:true,conflict:null,text:row().remark};
+ };
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(el.value,'L');
+ const move=f.click('노트로 옮기기'); // its save is delayed
+ await settle();
+ casType(f,el,'L2');el.dispatchEvent(new f.win.Event('blur'));
+ const choose=f.click('이 메모 쓰기');
+ await settle();
+ gateFirst();await move;await choose;await settle();
+ assert.equal(el.value,'L2','the newest input stays in the editor');
+ assert.equal(row().remark,'L2','and was saved');
+ assert.equal(note,'R','the choice, made for a conflict that no longer existed, wrote nothing to the note');
+ assert.ok(f.body().querySelector('.sc-memo-conflict'),'the conflict is reopened with the new texts');
+ f.bench.destroy();
+});
+
+test('memo CAS (P1-4b): a conflict choice with unsaved typed text keeps that text',async()=>{
+ const f=fixture();
+ const row=()=>f.runtime.cache.items[1]||={};
+ f.runtime.cache.items[1]={remark:'L'};let note='R',conflict={local:'L',remote:'R'};
+ f.library.memoConflict=async()=>conflict&&{...conflict};
+ f.library.setRemark=async(id,text)=>{row().remark=text;conflict=text!==note?{local:text,remote:note}:null;return text;};
+ f.library.resolveMemoConflict=async(id,choice,seen)=>{
+  if(!conflict||seen.local!==conflict.local||seen.remote!==conflict.remote)return {resolved:false,stale:true,conflict:conflict&&{...conflict},text:row().remark};
+  if(choice==='note')row().remark=note;conflict=null;return {resolved:true,conflict:null,text:row().remark};
+ };
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'L typed, autosave not yet fired');
+ await f.click('노트 내용 쓰기');
+ assert.ok(el.value.includes('L typed')||row().remark.includes('L typed'),'the typed text is not discarded: editor='+el.value+' memo='+row().remark);
+ assert.notEqual(el.value,'R');
+ f.bench.destroy();
+});
+
+test('memo CAS (P2-2): a save that completes after a redraw does not clear the conflict shown for an unsaved draft',async()=>{
+ const f=fixture();
+ let release;const gate=new Promise(r=>{release=r;});
+ const row=()=>f.runtime.cache.items[1]||={};
+ let first=true;
+ f.library.setRemark=async(id,text,opts={})=>{
+  const stored=String(row().remark||'');
+  if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored}};
+  row().remark=text;if(first&&text==='AB'){first=false;await gate;}return text;
+ };
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'AB');old.dispatchEvent(new f.win.Event('blur'));await settle();
+ casType(f,old,'ABC');
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(fresh.value,'AB');
+ assert.match(f.body().querySelector('.sc-memo-stale').textContent,/ABC/);
+ release();await settle();
+ assert.ok(f.body().querySelector('.sc-memo-stale'),'the box for the draft is still there');
+ assert.match(f.body().querySelector('.sc-memo-stale').textContent,/ABC/);
+ casType(f,fresh,'ABD');fresh.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(row().remark,'ABD');
+ assert.match(f.body().querySelector('.sc-memo-stale')?.textContent||'',/ABC/,'ABC is still offered');
+ f.bench.destroy();
+});

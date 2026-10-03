@@ -3511,7 +3511,8 @@
    let stale=false;
    for(const editor of body.querySelectorAll('textarea[data-memo-item]')){
     if(editor.dataset.memoItem!==id||!editor.isConnected)continue;
-    if(!was.includes(editor.value)){stale=true;continue;}
+    // An editor with an open conflict (a stale save or a draft on offer) keeps it: only its own choice closes it.
+    if(memoBindings.get(editor)?.stale||!was.includes(editor.value)){stale=true;continue;}
     if(editor.dataset.draftKey)for(const v of was)finishDraft(editor,v);
     editor.value=text;if(typeof autoGrow==='function')autoGrow(editor);
     memoBindings.get(editor)?.rebase(text);
@@ -3532,7 +3533,8 @@
     if(editor===source||editor.dataset.memoItem!==id||!editor.isConnected)continue;
     const binding=memoBindings.get(editor);
     // An editor nobody has touched since it loaded follows the stored memo; one with edits keeps them (its next save is judged against its base).
-    if(binding&&editor.value===binding.base){editor.value=text;if(typeof autoGrow==='function')autoGrow(editor);binding.rebase(text);}
+    const kept=editor.dataset.draftKey&&drafts.has(editor.dataset.draftKey)&&drafts.get(editor.dataset.draftKey)!==editor.value;
+    if(binding&&!binding.stale&&!kept&&editor.value===binding.base){if(editor.dataset.draftKey)finishDraft(editor,editor.value);editor.value=text;if(typeof autoGrow==='function')autoGrow(editor);binding.rebase(text);}
    }
   }
   function bindMemo(field,save,label,opts={}){
@@ -3556,11 +3558,12 @@
     // A restored draft is not in the editor (it shows the stored memo) until the reader edits there: then the editor's text is theirs.
     const mine=()=>found.fromDraft&&field.value===found.stored?found.conflict.local:field.value;
     // The buttons act on the text the editor holds when they are pressed. Discarding needs the reader to have seen it.
-    button('저장된 메모 쓰기',async()=>{
+    button('저장된 메모 쓰기',()=>binding.sequence(async()=>{
+     if(binding.stale!==found){message('그 사이 상황이 바뀌어 아무것도 바꾸지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
      if(field.value!==found.conflict.local&&field.value!==found.stored){binding.stale={...found,fromDraft:false,conflict:{local:field.value,remote:found.stored}};drawStale();message('편집 내용이 그 사이 바뀌어 버리지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
-     take(found.stored);clearStale();followMemoEditors(cas.itemID,found.stored,field);},acts,{'data-writes':'cache'});
-    button('이 편집 내용 쓰기',async()=>{await binding.overwrite(mine,found.stored);},acts,{'data-writes':'library'});
-    button('둘 다 합치기',async()=>{await binding.overwrite(()=>{const own=mine();return found.stored.trim()&&own.trim()?found.stored+'\n\n'+own:found.stored.trim()?found.stored:own;},found.stored);},acts,{'data-writes':'library',title:T('저장된 메모 아래에 이 편집 내용을 이어 붙입니다')});
+     take(found.stored);clearStale();followMemoEditors(cas.itemID,found.stored,field);}),acts,{'data-writes':'cache'});
+    button('이 편집 내용 쓰기',async()=>{await binding.overwrite(mine,found.stored,found);},acts,{'data-writes':'library'});
+    button('둘 다 합치기',async()=>{await binding.overwrite(()=>{const own=mine();return found.stored.trim()&&own.trim()?found.stored+'\n\n'+own:found.stored.trim()?found.stored:own;},found.stored,found);},acts,{'data-writes':'library',title:T('저장된 메모 아래에 이 편집 내용을 이어 붙입니다')});
    };
    // One attempt: true when the library took it. The base moves only from what a write answered.
    const attempt=async(value,base)=>{
@@ -3571,7 +3574,9 @@
     /* The base moves to a returned text only when the editor shows it: a plain save (the text came back as submitted), or an
        adopted text with nothing typed since. Typed since, the old base stays and the next save is a conflict. */
     if(cas&&(saved===value||typeof saved!=='string'||field.value===value||field.value===saved)){
-     binding.base=stored;clearStale();
+     binding.base=stored;
+     // The box for an unsaved draft is closed by its own choice only; a save of other text just brings its stored side up to date.
+     if(binding.stale?.fromDraft&&binding.stale.conflict.local!==stored){binding.stale={...binding.stale,stored};drawStale();}else clearStale();
      // A draft typed during the save was recorded over the old base: it is built on this one now.
      const key=field.dataset.draftKey;
      if(key&&drafts.has(key)&&drafts.get(key)===field.value&&field.value!==stored)updateDraft(key,field.value,stored);
@@ -3608,13 +3613,19 @@
    // Saves of one editor never overlap: the next one starts from the base the previous one left.
    const commit=(options={})=>{const next=chain.catch(()=>{}).then(()=>run(options));chain=next;return next;};
    binding.commit=commit;
-   binding.overwrite=async(pick,seenStored)=>{
-    const result=await (chain=chain.catch(()=>{}).then(async()=>{
+   // A conflict choice first lets an input that differs from the memo the box showed be saved (or refused), then judges the conflict as it is by then.
+   binding.choose=(job,shown)=>binding.sequence(async()=>{let saved=false;if(field.value!==shown){const out=await run({});saved=!out.unchanged;}return job(saved);});
+   // Whatever settles a conflict runs after the saves already queued for this editor.
+   binding.sequence=job=>{const next=chain.catch(()=>{}).then(job);chain=next;return next;};
+   binding.overwrite=async(pick,seenStored,found)=>{
+    const result=await binding.sequence(async()=>{
+     if(found&&binding.stale!==found)return null; // the box this came from is gone or was replaced: nothing to resolve
      const text=typeof pick==='function'?pick():String(pick);
      field.value=text;if(typeof autoGrow==='function')autoGrow(field);last=text;field.dataset.state='saving';
-     try{const ok=await attempt(text,seenStored);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text);}return ok;}
+     try{const ok=await attempt(text,seenStored);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text);if(binding.stale===found&&found?.fromDraft&&found.conflict.local===text)clearStale();}return ok;}
      catch(error){field.dataset.state='failed';last=null;throw error;}
-    }));
+    });
+    if(result===null){message('그 사이 상황이 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return false;}
     if(!result)message('그 사이 메모가 또 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);
     return result;
    };
@@ -3671,17 +3682,17 @@
      const col=node('div',null,two,{class:'sc-memo-conflict-text'});node('span',label,col,{class:'sc-memo-label'});
      node('pre',text||'(비어 있음)',col);
     }
-    const choose=choice=>async()=>{
+    /* A choice waits for the saves already queued for this editor and for the current input, then judges the conflict as it is.
+       Only an editor still holding exactly the memo that was resolved takes the answer; a different input (typed, or a draft) stays. */
+    const choose=choice=>()=>memoBinding.choose(async saved=>{
      const typedBefore=field.value;
      const result=await library.resolveMemoConflict(item.id,choice,found);
      if(result&&result.stale){message('그 사이 내용이 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);await showConflict();return;}
-     /* A conflict that is already gone (settled in another window) answers with the latest text and no conflict: that is a
-        "sync to latest" as well. Editors that still hold what they held at the request take it; anything typed since stays. */
-     if(result&&!result.conflict&&typeof result.text==='string')syncMemoEditors(item.id,result.text,[typedBefore,found.local]);
+     if(result&&!result.conflict&&typeof result.text==='string')syncMemoEditors(item.id,result.text,typedBefore===found.local||(!saved&&typedBefore===memoBinding.base)?[typedBefore]:[]);
      if(result&&!result.resolved&&!result.conflict){message('이미 정리된 충돌이라 최신 내용을 불러왔습니다.');await showConflict();return;}
      message(choice==='note'?'노트 내용을 메모로 가져왔습니다.':choice==='local'?'이 메모를 노트에 썼습니다.':'두 내용을 이어 붙여 메모와 노트에 썼습니다.');
      await showConflict();
-    };
+    },found.local);
     const acts=node('div',null,c,{class:'sc-actions'});
     button('노트 내용 쓰기',choose('note'),acts,{'data-writes':'library'});
     button('이 메모 쓰기',choose('local'),acts,{'data-writes':'library'});
