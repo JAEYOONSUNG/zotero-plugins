@@ -3883,3 +3883,38 @@ test('a preprint is recognised by its native item type first: two same-title pre
   assert.deepEqual(out.merge, [], 'no preprint is offered to merge into another preprint');
   assert.equal(out.copies.length, 1, 'they remain a duplicate group');
 });
+
+test('memo/note race (A): a memo typed while both-merge saves the note is kept and nothing is confirmed', async () => {
+  const w = memoWorld({remark: 'L', base: 'B', note: 'R'});
+  await w.setting(); await w.plugin.memoToNote(w.c);
+  assert.ok(w.row.memoConflict);
+  const orig = w.fx.Z.Item.prototype.saveTx;
+  w.fx.Z.Item.prototype.saveTx = async function () { w.row.remark = 'L2'; await orig.call(this); };
+  const out = await w.lib.resolveMemoConflict(3, 'both', await w.lib.memoConflict(3));
+  w.fx.Z.Item.prototype.saveTx = orig;
+  assert.equal(w.row.remark, 'L2', 'the newer local memo survives');
+  assert.notEqual(out.resolved, true);
+  assert.ok(w.row.memoConflict, 'the conflict is not cleared');
+  assert.equal(w.row.memoConflict.local, 'L2');
+  assert.equal(w.row.memoSynced, 'B', 'the baseline did not move');
+  assert.equal(w.row.memoConflict.remote, 'R' + Runtime.memoSep() + 'L');
+});
+
+test('memo/note race (B): undo of a merge keeps a memo saved while the note was being restored', async () => {
+  const {fx, plugin, pre, pub} = mergeWorld();
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  const memo = new fx.Z.Item('note');
+  memo.libraryID = 1; memo.parentID = 2; memo.parentItemID = 2; memo.setTags([{tag: 'style-custom:memo', type: 0}]);
+  memo.setNote(Runtime.memoNoteHTML('existing memo')); await memo.saveTx();
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'existing memo', memoSynced: 'existing memo'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'preprint memo', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  await plugin.mergePreprintIntoPublished(1);
+  const row = plugin.entry(pub);
+  const orig = memo.saveTx;
+  memo.saveTx = async function () { row.remark = 'typed meanwhile'; return orig.call(this); };
+  await plugin.restorePreprint(1);
+  assert.equal(row.remark, 'typed meanwhile', 'the memo typed during the undo is not overwritten');
+  assert.equal(noteText(memo), 'existing memo');
+  assert.equal(row.memoSynced, 'existing memo', 'baseline is the note as it actually is');
+});

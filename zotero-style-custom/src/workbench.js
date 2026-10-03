@@ -3524,6 +3524,8 @@
    // has closed would lose the edit.
    field.addEventListener('blur',()=>{if(timer)win.clearTimeout(timer);commit();});
    memoFields.push(()=>{if(timer)win.clearTimeout(timer);return commit();});
+   // The text the editor now holds is what is stored: the autosave baseline follows it.
+   return {rebase(value){if(timer){win.clearTimeout(timer);timer=null;}last=value;}};
   }
 
   function drawPaperMemo(item){
@@ -3551,10 +3553,20 @@
      node('pre',text||'(비어 있음)',col);
     }
     const choose=choice=>async()=>{
+     const typedBefore=field.value;
      const result=await library.resolveMemoConflict(item.id,choice,found);
      const held=state.items.find(i=>String(i.id)===String(item.id));
      if(result&&result.stale){message('그 사이 내용이 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);await showConflict();return;}
-     if(result&&typeof result.text==='string'){field.value=result.text;if(held)held.remark=result.text;autoGrow(field);}
+     if(result&&result.resolved&&typeof result.text==='string'){
+      // The row editor's unsaved copy of the old memo must not come back on the next redraw.
+      const rowKey=JSON.stringify(['remark',state.libraryID,item.id]);
+      finishDraft({dataset:{draftKey:rowKey},value:''},found.local);
+      finishDraft(field,typedBefore);finishDraft(field,found.local);
+      for(const rowField of body.querySelectorAll('[data-draft-key]'))if(rowField!==field&&rowField.dataset.draftKey===rowKey&&rowField.value===found.local)rowField.value=result.text;
+      // Text typed while the request ran is the newer input: it stays, and the autosave carries it.
+      if(field.value===typedBefore){field.value=result.text;autoGrow(field);memoBinding.rebase(result.text);}
+      if(held&&field.value===result.text)held.remark=result.text;
+     }
      message(choice==='note'?'노트 내용을 메모로 가져왔습니다.':choice==='local'?'이 메모를 노트에 썼습니다.':'두 내용을 이어 붙여 메모와 노트에 썼습니다.');
      await showConflict();
     };
@@ -3564,7 +3576,7 @@
     button('둘 다 합치기',choose('both'),acts,{'data-writes':'library',title:T('노트 내용 아래에 구분선을 넣고 이 메모를 이어 붙입니다')});
    };
    // Saved here or under a row, the memo is the same one: the search sees it either way.
-   bindMemo(field,value=>Promise.resolve(library.setRemark(item.id,value)).then(async result=>{const held=state.items.find(i=>String(i.id)===String(item.id));if(held)held.remark=typeof result==='string'?result:String(value||'');await showConflict();return result;}),item.title||'문헌');
+   const memoBinding=bindMemo(field,value=>Promise.resolve(library.setRemark(item.id,value)).then(async result=>{const held=state.items.find(i=>String(i.id)===String(item.id));if(held&&(field.value===value||field.value===result))held.remark=typeof result==='string'?result:String(value||'');await showConflict();return result;}),item.title||'문헌');
    showConflict();
    /* The memo lives in this plugin's own file; this puts the same text into one
       child note (tagged style-custom:memo) so it is in Zotero too. The note is not opened. */
@@ -4161,8 +4173,9 @@
       let typing=true;for(const [type,on] of [['focus',true],['input',true],['blur',false]])field.addEventListener(type,()=>{typing=on;});
       bindMemo(field,value=>Promise.resolve(library.setRemark(r.item.id,value)).then(result=>{
        const stored=typeof result==='string'?result:String(value||'');
-       r.entry.remark=stored;
-       const held=state.items.find(i=>String(i.id)===String(r.item.id));if(held)held.remark=stored;
+       // A later keystroke's save must not be overwritten by this earlier answer.
+       const newest=field.value===value||field.value===stored;if(newest)r.entry.remark=stored;
+       const held=state.items.find(i=>String(i.id)===String(r.item.id));if(held&&newest)held.remark=stored;
        // An autosave that lands while the reader keeps typing must not collapse the editor under them.
        if(!field.isConnected||typing||field.value!==value)return result;
        renderRemarkView();

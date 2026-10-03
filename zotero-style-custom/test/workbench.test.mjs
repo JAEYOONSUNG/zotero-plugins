@@ -6493,3 +6493,25 @@ test('a memo/note conflict shows both texts under the memo and the user\'s butto
  assert.equal(f.body().querySelector('textarea.sc-annot-memo').value,'text from the note\n\n--\nmy memo');
  f.bench.destroy();
 });
+
+test('choosing 노트 내용 쓰기 clears the old local draft and the autosave baseline: the old text does not come back',async()=>{
+ const key=JSON.stringify(['remark',1,'1']);
+ const f=fixture({items:{},workbenchDrafts:{version:1,entries:[[key,'my memo']]}});
+ let conflict={local:'my memo',remote:'text from the note'};
+ const saves=[];
+ f.library.memoConflict=async()=>conflict;
+ f.library.resolveMemoConflict=async(id,choice,seen)=>{conflict=null;return {resolved:true,text:seen.remote};};
+ f.library.setRemark=async(id,text)=>{saves.push(text);return text;};
+ await f.bench.show('annotations');await settle();
+ const memo=f.body().querySelector('textarea.sc-annot-memo');
+ memo.value='my memo';memo.dispatchEvent(new f.win.Event('input',{bubbles:true}));memo.dispatchEvent(new f.win.Event('blur'));await settle();
+ saves.length=0;
+ await f.click('노트 내용 쓰기');await settle();
+ assert.equal(memo.value,'text from the note');
+ assert.ok(!f.runtime.cache.workbenchDrafts.entries.some(([k,v])=>k===key||v==='my memo'),'the stale draft is gone '+JSON.stringify(f.runtime.cache.workbenchDrafts.entries));
+ memo.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.deepEqual(saves,[],'nothing is written back on blur');
+ memo.value='my memo';memo.dispatchEvent(new f.win.Event('input',{bubbles:true}));memo.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.deepEqual(saves,['my memo'],'typing the old text again is a real edit and is saved (the autosave baseline moved)');
+ f.bench.destroy();
+});

@@ -2313,8 +2313,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (saved.created) live.deleted = true; else live.setNote(saved.before);
         await live.saveTx();
       } finally { inflight.delete(id); }
-      row.remark = memo.before; delete row.memoConflict;
-      if (saved.syncedBefore === null) { delete row.memoSynced; delete row.memoSyncedVer; } else row.memoSynced = saved.syncedBefore;
+      if (String(row.remark || '') === memo.after) {
+        row.remark = memo.before; delete row.memoConflict;
+        if (saved.syncedBefore === null) { delete row.memoSynced; delete row.memoSyncedVer; } else row.memoSynced = saved.syncedBefore;
+      } else {
+        // A memo was saved while the note was put back: it stays, and the baseline is the note as it now is.
+        if (saved.created) { delete row.memoSynced; delete row.memoSyncedVer; delete row.memoConflict; }
+        else this._memoSetBase(row, this.constructor.memoFromNoteHTML(live.getNote()), live);
+      }
       this.dirty = true;
     } else if (norm(String(row.remark || '')) !== norm(there)) {
       row.memoConflict = {local: String(row.remark || ''), remote: there, at: new Date().toISOString()}; this.dirty = true;
@@ -4612,6 +4618,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!note) { note = new this.Z.Item('note'); note.libraryID = item.libraryID; note.parentID = item.id; note.setTags([{tag: this.constructor.MEMO_NOTE_TAG, type: 0}]); }
       await this._memoWrite(item, note, final);
       if (norm(this.constructor.memoFromNoteHTML(note.getNote())) !== norm(final)) throw new Error('노트를 쓰는 사이 노트가 다시 바뀌어 아무것도 확정하지 않았습니다. 두 내용을 다시 확인하세요.');
+      // The memo was typed while the note was saved: the newer memo stays, nothing is confirmed, and both sides go back into the box.
+      if (String(row.remark || '') !== local) {
+        const now = String(row.remark || ''), remote = this.constructor.memoFromNoteHTML(note.getNote());
+        row.memoConflict = {local: now, remote, at: new Date().toISOString()}; this.dirty = true; await this.flush(); this.bumpState?.();
+        return {resolved: false, stale: true, conflict: row.memoConflict, text: String(row.remark || '')};
+      }
     }
     row.remark = final; this._memoSetBase(row, note ? this.constructor.memoFromNoteHTML(note.getNote()) : final, note);
     await this.flush(); this.bumpState?.();
