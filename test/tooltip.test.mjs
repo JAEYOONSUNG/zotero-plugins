@@ -85,7 +85,7 @@ test("keyboard focus shows the card at once and focus leaving hides it", async (
 test("the cells' hover cards are built from the record: title, institution, journal, authors", async () => {
 	const person = (name, over) => ({ name, position: "middle", corresponding: false, institution: "", institutionId: null, country: null, institutionH: null, ...over });
 	const ui = uiHarness({ realRows: true, metrics: { citesPerYear: () => 12.5 }, search: async () => [
-		paper("p", { title: "A long paper title about loop extrusion", venue: "Science", year: 2025, citations: 40, publisher: "AAAS", journalIF: 45.8, journalIFEstimate: true, url: "https://example.invalid/p",
+		paper("p", { title: "A long paper title about loop extrusion", venue: "Science", year: 2025, citations: 40, publisher: "AAAS", journalIF: 45.8, journalIFSource: "JCR 2025", journalOA2y: 3.2, url: "https://example.invalid/p",
 			authors: ["A", "B", "C", "D", "E", "F", "G", "H"].map(name => ({ name })), authorString: "A, B, C, D, E, F, G, H",
 			people: ["A", "B", "C", "D", "E", "F", "G", "H"].map((name, i) => person(name, i === 0 ? { position: "first", institution: "Hanbit University", country: "KR", institutionH: 640 } : i === 7 ? { position: "last", corresponding: true, institution: "Lumen University", country: "CN", institutionH: 2510 } : {})) })
 	] });
@@ -101,7 +101,7 @@ test("the cells' hover cards are built from the record: title, institution, jour
 	const aff = text("affiliation", "aff");
 	assert.ok(aff.startsWith("T1") || aff.includes("Lumen University") && aff.includes("tipTierAbove|2510|T1|2000") && aff.includes("affCorresponding"), aff);
 	const journal = text("venue", "journal");
-	assert.ok(journal.startsWith("Science") && journal.includes("AAAS") && journal.includes("45.8") && journal.includes("tipEstimate"), journal);
+	assert.ok(journal.startsWith("Science") && journal.includes("AAAS") && journal.includes("45.8") && journal.includes("3.2") && journal.includes("jifTip|45.8|JCR 2025") && journal.includes("oaTip|3.2"), journal);
 	const authors = text("authorString", "authors");
 	assert.ok(authors.includes("tipAuthorsAll|8") && authors.includes("H*") && authors.includes("affCorresponding"), authors);
 	for (const k of ["title", "affiliation", "venue", "authorString"]) assert.equal(cell(k).getAttribute("title"), null, k + " has no native title");

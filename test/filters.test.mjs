@@ -149,7 +149,7 @@ test("option counts, kinds and the folded search of an option list", () => {
 	assert.deepEqual(F.typeOf(rec("t", { itemType: "thesis" })), "other");
 	assert.deepEqual(F.typeOf(rec("t", { preprintServer: "arXiv" })), "preprint");
 	assert.equal(F.hasPDF(p[3]), true, "an arXiv id is a candidate");
-	assert.equal(F.KINDS.length, 12);
+	assert.equal(F.KINDS.length, 13);
 });
 
 test("records completed after the first draw are read again", () => {
@@ -166,4 +166,42 @@ test("country:uk resolves to GB, two-letter codes still pass through", () => {
 	assert.equal(F.countryCodeFor("UK"), "GB");
 	assert.equal(F.countryCodeFor("kr"), "KR");
 	assert.equal(F.countryCodeFor("England"), "GB");
+});
+
+test("the JIF filter never reads OpenAlex's 2-year mean, and an unknown JIF is unknown", () => {
+	const papers = [
+		rec("jif4", { journalIF: 4, journalOA2y: 1.2 }),
+		rec("oa8", { journalIF: null, journalOA2y: 8 }),
+		rec("jif9", { journalIF: 9, journalOA2y: 3 }),
+		rec("none", { journalIF: null, journalOA2y: null })
+	];
+	assert.deepEqual(run(papers, "", [rule("if", "include", { min: 5 })]), ["jif9"], "IF >= 5 drops a real JIF 4 and does not keep an OA mean of 8");
+	assert.deepEqual(run(papers, "", [rule("oa2y", "include", { min: 5 })]), ["oa8"], "the OpenAlex mean has its own filter");
+	assert.ok(F.KINDS.includes("oa2y") && F.RANGE_KINDS.includes("oa2y"));
+});
+
+test("a numeric IF threshold excludes unknowns unless asked to include them", () => {
+	const papers = [rec("known", { journalIF: 9 }), rec("unknown", { journalIF: null }), rec("low", { journalIF: 2 })];
+	assert.equal(F.newRule("if").includeUnknown, false, "unknowns are out by default");
+	assert.deepEqual(run(papers, "", [rule("if", "include", { min: 5 })]), ["known"]);
+	assert.deepEqual(run(papers, "", [rule("if", "include", { min: 5, includeUnknown: true })]), ["known", "unknown"]);
+	// Excluding a range removes only papers known to be inside it; the toggle is about what an include rule lets in.
+	assert.deepEqual(run(papers, "", [rule("if", "exclude", { min: 5 })]), ["unknown", "low"]);
+});
+
+test("the All word scope reads title, abstract, authors, every affiliation, journal and keywords", () => {
+	const p = [
+		rec("abs", { title: "Plain title", abstract: "We map the zebrafish regeneration niche." }),
+		rec("aff", { title: "Other", people: [person("A B", "Karolinska Institute", "SE"), person("C D", "ETH Zurich", "CH")] }),
+		rec("kw", { title: "Third", keywords: ["optogenetics", "Neural circuits"] }),
+		rec("venue", { title: "Fourth", venue: "Journal of Obscure Methods" }),
+		rec("none", { title: "Nothing here" })
+	];
+	const all = word => run(p, "", [rule("text", "include", { field: "all", values: [word] })]);
+	assert.deepEqual(all("zebrafish"), ["abs"], "a word only in the abstract is found under All");
+	assert.deepEqual(run(p, "", [rule("text", "include", { field: "abstract", values: ["zebrafish"] })]), ["abs"], "and under Abstract");
+	assert.deepEqual(all("Zurich"), ["aff"], "the second affiliation counts, not only the first or last author's");
+	assert.deepEqual(all("optogenetics"), ["kw"]);
+	assert.deepEqual(all("obscure"), ["venue"]);
+	assert.deepEqual(run(p, "zebrafish"), [], "the filter box's bare words stay on the row text (its own scope), not the abstract");
 });

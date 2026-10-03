@@ -203,3 +203,26 @@ test("a cached count older than the held look does not rewrite it, and carries i
 	const ui = fs.readFileSync(new URL("../content/ui.js", import.meta.url), "utf8");
 	assert.ok(/snapshots\.observe\(key, res\.citations, Number\.isFinite\(res\.at\) \? res\.at : undefined\)/.test(ui));
 });
+
+test("the popover's figures come from one index: the yearly series' own, the others listed apart", () => {
+	// Semantic Scholar says 150, OpenAlex says 90 and holds the per-year series: the card must not print 150 beside OpenAlex's bars.
+	const rec = { year: 2020, citations: 150, citationSource: "semanticscholar", citationsBy: { openalex: 90, semanticscholar: 150, crossref: 60 },
+		citesByYear: years([[2024, 30], [2025, 40], [2026, 20]]) };
+	const f = Cite.figures(rec, at(2026));
+	assert.equal(f.source, "openalex");
+	assert.equal(f.total, 90, "the total is OpenAlex's, the index of the graph");
+	assert.equal(f.perYear, 90 / 6, "the yearly mean is computed from that total");
+	assert.deepEqual(f.others, [{ source: "semanticscholar", n: 150 }, { source: "crossref", n: 60 }], "other indexes are named, not blended");
+	assert.equal(f.trend.perYear, 90 / 6);
+	assert.equal(f.trend.years.at(-1).n, 20);
+});
+
+test("without a yearly series the figures are the headline count and its own source", () => {
+	const f = Cite.figures({ year: 2024, citations: 12, citationSource: "crossref" }, at(2026));
+	assert.equal(f.source, "crossref");
+	assert.equal(f.total, 12);
+	assert.equal(f.perYear, 6);
+	assert.deepEqual(f.others, []);
+	assert.equal(f.trend, null);
+	assert.equal(Cite.figures({ year: 2024 }, at(2026)).total, null);
+});

@@ -22,7 +22,7 @@
 	// one) are hidden until "all".
 	const COL_FLOOR = { inLibrary: 112, citations: 68 };
 	const DEFAULT_COLS = {
-		chk: 28, title: 200, authorString: 150, affiliation: 150, year: 58, venue: 184, citations: 68, cpy: 64, journalIF: 60,
+		chk: 28, title: 200, authorString: 150, affiliation: 150, year: 58, venue: 184, citations: 68, cpy: 64, journalIF: 60, journalOA2y: 60,
 		pdf: 60, inLibrary: 112, status: 128, rank: 60, country: 62, tier: 56, doi: 150
 	};
 
@@ -1985,6 +1985,10 @@
 
 	function normalizeColumnOrder(saved) {
 		let ordered = ["chk"];
+		// The OpenAlex mean column arrived after the JIF one: in an older saved order it joins right beside it.
+		if (Array.isArray(saved) && saved.includes("journalIF") && !saved.includes("journalOA2y")) {
+			saved = saved.slice(); saved.splice(saved.indexOf("journalIF") + 1, 0, "journalOA2y");
+		}
 		for (let key of [...(Array.isArray(saved) ? saved : []), ...COLUMN_KEYS]) {
 			if (typeof key === "string" && COLUMN_KEYS.includes(key) && !ordered.includes(key)) ordered.push(key);
 		}
@@ -2028,7 +2032,7 @@
 				if (e.target.closest?.(".rz")) return;
 				if (columnDrag || Date.now() < suppressColumnClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
 				if (state.sortKey === key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-				else { state.sortKey = key; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf", "journalIF", "tier"].includes(key) ? "desc" : "asc"; }
+				else { state.sortKey = key; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf", "journalIF", "journalOA2y", "tier"].includes(key) ? "desc" : "asc"; }
 				render();
 			});
 			th.addEventListener("dragstart", e => {
@@ -2153,6 +2157,29 @@
 		state.searchController?.abort();
 		setStatus(t(state.importing ? "stoppingImport" : "stopping"));
 	}
+	/* The default "read" action of a row (double-click, Enter). A paper the library already holds opens its own
+	   PDF in Zotero's reader; the publisher's page stays a separate action (the menu's "Open in browser").
+	   A held paper with no stored file is shown in the library and says so, rather than silently going to the web.
+	   This is a user action: nothing but a click or a key in this window reaches it. */
+	function heldItemID(r) {
+		let key = r.doi && ZotPoPSources.normalizeDOI ? ZotPoPSources.normalizeDOI(r.doi) : r.doi;
+		return r.libraryItemID || (key && state.doiMap?.get(key)) || null;
+	}
+	async function readHeldPDF(r) {
+		try {
+			let libraryID = state.libraryID ?? currentTarget().libraryID;
+			let found = typeof ZotPoPImporter?.localPDF === "function" ? await ZotPoPImporter.localPDF(libraryID, r, heldItemID(r)) : null;
+			if (found?.attachmentID != null && Zotero.Reader?.open) { await Zotero.Reader.open(found.attachmentID); return; }
+			showInLibrary(r);
+			setStatus(t("noLocalPdf"), "", { transient: true });
+		}
+		catch (e) { log("reading the local PDF failed: " + e.message); setStatus(t("readLocalFailed"), "err", { transient: true }); }
+	}
+	function readRecord(r) {
+		if (!r) return;
+		if (r.inLibrary) { readHeldPDF(r); return; }
+		if (r.url) Zotero.launchURL(r.url);
+	}
 	// The library's own copy of a paper, brought into view in the main window.
 	function showInLibrary(r) {
 		try {
@@ -2176,12 +2203,20 @@
 	}
 
 	// Results saved before the JCR table shipped, or arriving from a source that
-	// never asked it, still get the Journal Impact Factor; whatever OpenAlex figure
-	// remains is marked as the estimate it is.
+	// never asked it, still get the Journal Impact Factor. A figure in journalIF that
+	// the JCR did not give is an older record's OpenAlex 2-year mean: it moves to its
+	// own field, so the two are never read as one.
 	function settleImpactFactors(records) {
-		if (typeof ZotPoPJCR === "undefined") return;
-		ZotPoPJCR.apply(records.filter(r => r.journalIFSource !== ZotPoPJCR.EDITION));
-		for (let r of records) if (r.journalIF != null && r.journalIFSource !== ZotPoPJCR.EDITION) r.journalIFEstimate = true;
+		let edition = typeof ZotPoPJCR === "undefined" ? null : ZotPoPJCR.EDITION;
+		for (let r of records) {
+			// Only the JCR names a source for its figure; a bare journalIF is the older OpenAlex-mean-in-JIF-field shape.
+			if (r.journalIF != null && !r.journalIFSource) {
+				if (r.journalOA2y == null) r.journalOA2y = r.journalIF;
+				r.journalIF = null;
+			}
+			delete r.journalIFEstimate;
+		}
+		if (edition) ZotPoPJCR.apply(records.filter(r => r.journalIFSource !== edition));
 	}
 
 	function displaySearchResults(records) {
@@ -2484,7 +2519,7 @@
 		if (k === "inLibrary") return r.inLibrary ? 1 : 0;
 		if (k === "pdf") return hasPDF(r) ? 1 : 0;
 		let v = r[k];
-		if (v == null) return ["citations", "year", "rank", "journalIF"].includes(k) ? -1 : "";
+		if (v == null) return ["citations", "year", "rank", "journalIF", "journalOA2y"].includes(k) ? -1 : "";
 		return typeof v === "string" ? v.toLowerCase() : v;
 	}
 
@@ -2817,13 +2852,15 @@
 		if (found && found.abbrev && found.abbrev !== r.venue) facts.push([t("tipAbbrev"), found.abbrev]);
 		let publisher = r.publisher || found?.identity?.label;
 		if (publisher) facts.push([t("tipPublisher"), publisher]);
-		if (r.journalIF != null) facts.push(["IF", (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1) + (r.journalIFEstimate ? " (" + t("tipEstimate") + ")" : "")]);
+		if (r.journalIF != null) facts.push(["IF", fmt(r.journalIF, 1)]);
+		if (r.journalOA2y != null) facts.push([t("thOA"), fmt(r.journalOA2y, 1)]);
 		if (facts.length) {
 			let sect = fel("div", "tip-sect");
 			for (let [label, value] of facts) { let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", label)); line.appendChild(fel("span", label === "IF" ? "tip-strong" : "tip-name", value)); sect.appendChild(line); }
 			box.appendChild(sect);
 		}
-		if (r.journalIF != null) box.appendChild(fel("div", "tip-hint", r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH)));
+		if (r.journalIF != null) box.appendChild(fel("div", "tip-hint", t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH)));
+		if (r.journalOA2y != null) box.appendChild(fel("div", "tip-hint", t("oaTip", fmt(r.journalOA2y, 1), r.journalIF == null ? r.journalH : null)));
 		return box;
 	}
 	function tipAuthorsCard(r) {
@@ -3153,7 +3190,7 @@
 			let input = fel("input"); input.type = "number"; input.value = rule[which] == null ? "" : String(rule[which]);
 			if (rule.kind === "year") { input.min = "1500"; input.max = "2100"; }
 			else input.min = "0";
-			if (rule.kind === "if" || rule.kind === "cpy") input.step = "any";
+			if (rule.kind === "if" || rule.kind === "oa2y" || rule.kind === "cpy") input.step = "any";
 			input.setAttribute("aria-label", t("filterKind", rule.kind) + " " + label); input.setAttribute("data-fid", "rule:" + rule.id + (which === "min" ? ":first" : ":max"));
 			input.addEventListener("input", () => { cancelLater(state.rangeTimer); state.rangeTimer = later(() => { let lo = which === "min" ? input.value : (row.querySelector?.('[data-which="min"]')?.value ?? ""), hi = which === "max" ? input.value : (row.querySelector?.('[data-which="max"]')?.value ?? ""); setRuleRange(rule, lo, hi); }, 220); });
 			input.setAttribute("data-which", which);
@@ -3164,6 +3201,14 @@
 		row.appendChild(fel("span", "dash", "–"));
 		row.appendChild(make("max", t("filterMax")));
 		box.appendChild(row);
+		// A journal figure a paper may not have: say what happens to those papers, off by default.
+		if (Filters.UNKNOWN_KINDS.includes(rule.kind) && rule.mode !== "exclude") {
+			let unk = fel("label", "fp-opt"); tip(unk, t("filterUnknownTip"));
+			let cb = fel("input"); cb.type = "checkbox"; cb.checked = rule.includeUnknown === true; cb.setAttribute("data-fid", "unknown:" + rule.id);
+			cb.addEventListener("change", () => { rule.includeUnknown = cb.checked; filtersChanged(); });
+			unk.appendChild(cb); unk.appendChild(fel("span", "fp-opt-name", t("filterUnknownIn")));
+			box.appendChild(unk);
+		}
 		return box;
 	}
 	// Multi-value rules: a search box over the options, each with how many results it would leave.
@@ -3230,7 +3275,8 @@
 		evidence.push(r.citations == null ? t("evCitesUnknown", src) : t("evCites", src, r.citations));
 		let cpy = ZotPoPMetrics.citesPerYear(r);
 		if (cpy != null) evidence.push(t("evPerYear", fmt(cpy, 1)));
-		if (r.journalIF != null) evidence.push(t("evIF", fmt(r.journalIF, 1), Boolean(r.journalIFEstimate)));
+		if (r.journalIF != null) evidence.push(t("evIF", fmt(r.journalIF, 1)));
+		if (r.journalOA2y != null) evidence.push(t("evOA2y", fmt(r.journalOA2y, 1)));
 		if (hasPDF(r)) evidence.push(t("evPdf"));
 		let counts = new Map();
 		for (let other of state.records) for (let a of authorKeys(other)) {
@@ -3242,7 +3288,8 @@
 		// What the citation strip above the evidence does not already say: where the count comes from, the journal's IF, a PDF.
 		let rest = [];
 		if (src && r.citations != null) rest.push(t("evSource", src));
-		if (r.journalIF != null) rest.push(t("evIF", fmt(r.journalIF, 1), Boolean(r.journalIFEstimate)));
+		if (r.journalIF != null) rest.push(t("evIF", fmt(r.journalIF, 1)));
+		if (r.journalOA2y != null) rest.push(t("evOA2y", fmt(r.journalOA2y, 1)));
 		if (hasPDF(r)) rest.push(t("evPdf"));
 		return { evidence, rest, authors };
 	}
@@ -3364,7 +3411,7 @@
 		renderDetail();
 	}
 
-	const NIL_COLUMNS = new Set(["year", "citations", "cpy", "journalIF", "venue", "authorString"]);
+	const NIL_COLUMNS = new Set(["year", "citations", "cpy", "journalIF", "journalOA2y", "venue", "authorString"]);
 	function buildRow(r) {
 		let tr = document.createElement("tr");
 		tr.dataset.key = r.key;
@@ -3433,8 +3480,10 @@
 		let venueCell = td("venue", "venue", r.venue); venueCell.dataset.tipKind = "journal";
 		venueCell.dataset.marquee = "venue";
 		paintVenue(venueCell, r);
-		td("journalIF", "num if" + (r.journalIFEstimate ? " estimate" : ""), r.journalIF == null ? "" : (r.journalIFEstimate ? "~" : "") + fmt(r.journalIF, 1),
-			r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
+		td("journalIF", "num if", r.journalIF == null ? "" : fmt(r.journalIF, 1),
+			r.journalIF == null ? "" : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
+		td("journalOA2y", "num if oa", r.journalOA2y == null ? "" : fmt(r.journalOA2y, 1),
+			r.journalOA2y == null ? "" : t("oaTip", fmt(r.journalOA2y, 1), r.journalH));
 		let where = affiliationOf(r);
 		{ let ac = td("affiliation", "aff", null, ""); ac.dataset.tipKind = "aff"; ac.dataset.tipAlign = "start"; buildAffCell(ac, r); }
 		td("country", "mini country", where ? where.countries.map(c => (ZotPoPAffiliations.flag(c) + " " + c).trim()).join(" ") : "", affiliationTip(where));
@@ -3467,7 +3516,7 @@
 		});
 		tr.addEventListener("dblclick", e => {
 			if (e.target.closest("input, a, [role=button]")) return;
-			if (r.url) Zotero.launchURL(r.url);
+			readRecord(r);
 		});
 		tr.addEventListener("contextmenu", e => {
 			e.preventDefault();
@@ -3867,7 +3916,11 @@
 		if (list.length && m.unknownCitations) notes.push({ key: "unknown", short: t("metricsUnknownShort", m.unknownCitations, list.length), full: t("metricsUnknown", m.unknownCitations, list.length) });
 		// Several indexes each counted citations; the highest was kept per paper, so the figures below mix networks.
 		if (list.length && !state.metricsBasis && sources.length > 1) notes.push({ key: "mixed", short: t("metricsMixedShort"), full: t("metricsMixed", sources.map(key => ZotPoPSources.SOURCES?.[key]?.label || key).join(", ")) });
-		if (list.length && m.authorsTruncated) notes.push({ key: "truncated", short: t("metricsTruncated", m.authorsTruncated), full: t("metricsTruncated", m.authorsTruncated) });
+		// Per-author figures rest only on papers with a whole author list; say how many that is.
+		if (list.length && m.perAuthorPapers < m.papers) {
+			let note = m.perAuthorPapers ? t("metricsPerAuthorShare", m.perAuthorPapers, m.papers) : t("metricsPerAuthorNone", m.papers);
+			notes.push({ key: "truncated", short: note, full: note + " " + t("metricsPerAuthorWhy", m.authorsTruncated, m.authorsUnknown) });
+		}
 		if (list.length) notes.push({ key: "scope", short: t("metricsScopeShort"), full: t("metricsScope") });
 		drawMetricsNotes(notes);
 		set("m-years", m.minYear ? `${m.minYear}–${m.maxYear}` : "–");
@@ -3876,13 +3929,15 @@
 		set("m-citations", m.unknownCitations === m.papers && m.papers ? "–" : String(m.citations));
 		set("m-cpy", fmt(m.citesPerYear));
 		set("m-cpp", fmt(m.citesPerPaper));
-		set("m-cpa", fmt(m.citesPerAuthor));
-		set("m-ppa", fmt(m.papersPerAuthor));
-		set("m-app", fmt(m.authorsPerPaper));
+		// A figure that cannot be computed is said so, never shown as 0.
+		let perAuthor = v => v == null ? t("metricsNotComputable") : fmt(v);
+		set("m-cpa", perAuthor(m.citesPerAuthor));
+		set("m-ppa", perAuthor(m.papersPerAuthor));
+		set("m-app", perAuthor(m.authorsPerPaper));
 		set("m-h", String(m.hIndex));
 		set("m-g", String(m.gIndex));
-		set("m-hinorm", String(m.hiNorm));
-		set("m-hiannual", m.hiAnnual == null ? "–" : fmt(m.hiAnnual));
+		set("m-hinorm", m.hiNorm == null ? t("metricsNotComputable") : String(m.hiNorm));
+		set("m-hiannual", m.hiAnnual == null ? (m.hiNorm == null && m.papers ? t("metricsNotComputable") : "–") : fmt(m.hiAnnual));
 		set("m-ha", String(m.hA));
 		if (authors && list.length && typeof ZotPoPAuthors !== "undefined") {
 			let info = authorMetricsInfo(list, m, state.metricsBasis, sources);
@@ -3893,9 +3948,9 @@
 	// ------------------------------------------------------------ citations over time
 	// What OpenAlex counts per year, the last count seen (to say what was added since), and the card that tells it.
 	const hasCite = () => typeof ZotPoPCite !== "undefined";
-	function citeTrend(r) {
-		return hasCite() && r ? ZotPoPCite.trend({ byYear: r.citesByYear, year: r.year, citations: r.citations }) : null;
-	}
+	// One index behind the whole card: the total, yearly mean, bars and increment are the yearly series' own (OpenAlex); other indexes are listed apart.
+	const citeFigures = r => hasCite() && r ? ZotPoPCite.figures(r) : { source: r?.citationSource || null, total: r?.citations ?? null, perYear: ZotPoPMetrics.citesPerYear(r || {}), trend: null, others: [] };
+	function citeTrend(r) { return citeFigures(r).trend; }
 	// A paper can be asked about when OpenAlex can find it: by DOI, its own id or PMID.
 	function citeFindable(r) {
 		return Boolean(r && (r.doi || r.pmid || (r.source === "openalex" && /^W\d+$/.test(r.sourceId || ""))));
@@ -3976,12 +4031,12 @@
 		let box = $("d-cite");
 		if (!box) return;
 		box.textContent = "";
-		let tr = citeTrend(r), cpy = ZotPoPMetrics.citesPerYear(r);
-		if (r.citations == null && !tr) { box.hidden = true; return; }
+		let fig = citeFigures(r), tr = fig.trend, cpy = fig.perYear;
+		if (fig.total == null && !tr) { box.hidden = true; return; }
 		box.hidden = false;
 		let btn = fel("button", "cite-strip"); btn.type = "button";
 		btn.setAttribute("aria-haspopup", "dialog");
-		btn.appendChild(fel("span", "cite-strip-n", r.citations == null ? "–" : String(r.citations)));
+		btn.appendChild(fel("span", "cite-strip-n", fig.total == null ? "–" : String(fig.total)));
 		btn.appendChild(fel("span", "cite-strip-l", t("citeLabel")));
 		if (cpy != null && Number.isFinite(cpy)) btn.appendChild(fel("span", "cite-strip-avg", t("citePerYear", fmt(cpy, 1))));
 		let mark = citeMarkOf(r);
@@ -4004,10 +4059,10 @@
 		if (returnFocus && opener?.focus && opener.tagName === "BUTTON") opener.focus();
 	}
 	function citeCardBody(r, st) {
-		let tr = citeTrend(r), box = fel("div", "cite-card");
+		let fig = citeFigures(r), tr = fig.trend, box = fel("div", "cite-card");
 		let top = fel("div", "cite-top");
 		let big = fel("div", "cite-big");
-		big.appendChild(fel("span", "cite-n", r.citations == null ? "–" : String(r.citations)));
+		big.appendChild(fel("span", "cite-n", fig.total == null ? "–" : String(fig.total)));
 		big.appendChild(fel("span", "cite-l", t("citeLabel")));
 		top.appendChild(big);
 		let close = fel("button", "ghost cite-close icon-btn small"); close.type = "button";
@@ -4016,10 +4071,13 @@
 		close.addEventListener("click", () => closeCitePop(true));
 		top.appendChild(close);
 		box.appendChild(top);
-		let sub = [], cpy = ZotPoPMetrics.citesPerYear(r);
+		let sub = [], cpy = fig.perYear;
 		if (cpy != null && Number.isFinite(cpy)) sub.push(t("citePerYear", fmt(cpy, 1)));
-		sub.push(t("citeBasis"));
+		// The card says whose count it is: the label follows the index that gave the numbers.
+		sub.push(fig.source ? t("citeBasisOf", sourceLabel(fig.source)) : t("citeBasis"));
 		box.appendChild(fel("div", "cite-sub", sub.join(" · ")));
+		// Other indexes count differently; each is named with its own number, never merged into the card's.
+		if (fig.others.length) box.appendChild(fel("div", "cite-foot", t("citeOthers", fig.others.map(o => sourceLabel(o.source) + " " + o.n).join(" · "))));
 		if (tr) {
 			let sect = fel("div", "cite-sect");
 			sect.appendChild(fel("div", "cite-h", t("citeSectionYears")));
@@ -4225,6 +4283,7 @@
 	function viewerOfPreview() {
 		if (!previewViewer) previewViewer = ZotPoPPreview.createViewer({
 			fetchPDF: (url, signal) => ZotPoPPreview.fetchPDF(url, signal, Zotero),
+			readLocal: (path, signal) => ZotPoPPreview.readLocalPDF(path, signal),
 			getLibrary: () => import("resource://zotero/reader/pdf/build/pdf.mjs"),
 			createCanvas: () => document.createElement("canvas"),
 			width: () => ($("dp-view").clientWidth || 640) - 32,
@@ -4276,6 +4335,16 @@
 		state.preview.key = r.key;
 		paintPreview({ status: "loading", page: 1, pageCount: 0, title: r.title, originalURL: ZotPoPPreview.originalURL(r) });
 		let start = () => { previewPending = null; if (state.preview.on && state.preview.key === r.key) viewerOfPreview().showRecord(r); };
+		// A held paper's own PDF is read before any remote one: its path is looked up once, then the viewer starts.
+		if (r.inLibrary && r.localPDFPath === undefined && typeof ZotPoPImporter?.localPDF === "function") {
+			let go = start;
+			start = () => {
+				previewPending = null;
+				Promise.resolve(ZotPoPImporter.localPDF(state.libraryID ?? currentTarget().libraryID, r, heldItemID(r)))
+					.then(found => { r.localPDFPath = found?.path || null; }, () => { r.localPDFPath = null; })
+					.then(() => go());
+			};
+		}
 		if (follow) { previewPending = start; previewTimer = setTimeout(start, PREVIEW_FOLLOW_DELAY); } else start();
 	}
 	function openPreview(record = previewRecord()) {
@@ -4354,7 +4423,7 @@
 		let context = buildResultContext(r);
 		let evidence = $("d-evidence");
 		evidence.textContent = (cite.hidden ? context.evidence : context.rest).join(" · ");
-		tip(evidence, r.journalIF == null ? "" : r.journalIFEstimate ? t("ifTip", fmt(r.journalIF, 1), r.journalH) : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
+		tip(evidence, r.journalIF != null ? t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH) : r.journalOA2y != null ? t("oaTip", fmt(r.journalOA2y, 1), r.journalH) : "");
 
 		renderAuthors(r);
 		// Other papers of these authors in this search's results only, never the whole library.
@@ -4660,6 +4729,7 @@
 		add(state.selected.has(r.key) ? t("ctxDeselect") : t("ctxSelect"), () => toggleSelect(r, !state.selected.has(r.key)));
 		add(t("ctxAdd"), () => importRecords([r]), state.importing || state.searching);
 		menu.appendChild(document.createElement("hr"));
+		if (r.inLibrary) add(t("ctxRead"), () => readHeldPDF(r));
 		add(t("ctxOpen"), () => Zotero.launchURL(r.url), !r.url);
 		add(t("previewAction"), () => openPreview(r));
 		add(t("ctxPdf"), () => Zotero.launchURL((r.pdfUrls || [])[0] || r.pdfUrl), !((r.pdfUrls || [])[0] || r.pdfUrl));
@@ -4768,8 +4838,7 @@
 		}
 		if (e.key === "Enter" && idx >= 0) {
 			e.preventDefault();
-			let r = state.visible[idx];
-			if (r.url) Zotero.launchURL(r.url);
+			readRecord(state.visible[idx]);
 		}
 	}
 
@@ -4785,7 +4854,7 @@
 		for (let r of state.visible) {
 			lines.push([
 				r.citations ?? "", fmt(ZotPoPMetrics.citesPerYear(r)), r.popOriginal ? r.popRank : r.rank, r.authorString, r.title,
-				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2), r.journalIF == null ? "" : (r.journalIFEstimate === false && r.journalIFSource ? r.journalIFSource : "OpenAlex 2y"),
+				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2), r.journalIF == null ? "" : (r.journalIFSource || "JCR"), r.journalOA2y == null ? "" : fmt(r.journalOA2y, 2),
 				affiliationOf(r)?.first?.institution ?? "", (affiliationOf(r)?.countries || []).join("/"), affiliationOf(r)?.hIndex ?? "",
 				r.publisher, r.doi ?? "", r.url ?? "",
 				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo")

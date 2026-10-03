@@ -16,7 +16,7 @@ test("search preview drives the real handlers: Jenna facet, 3/2/1 selection, one
 	const { trace } = await buildPreview({ locale: "ko" });
 	assert.deepEqual(trace.facet.rows, ["9", "8", "10", "7"], "rows 7-10, per-year descending");
 	assert.equal(trace.facet.selected, "선택 3편 · 화면에 2편 · 필터 밖 1편");
-	assert.match(trace.facet.evidence, /^OpenAlex 기준 · 저널 IF 추정 10\.1 · PDF 후보 있음$/);
+	assert.match(trace.facet.evidence, /^OpenAlex 기준 · OpenAlex 2년 평균 10\.1 · PDF 후보 있음$/);
 	assert.match(trace.facet.line, /같은 이름의 저자: 결과 4편 · 미보유 4편/);
 	assert.equal(trace.facet.cleared, 12);
 	assert.deepEqual(trace.import.selected, ["9"]);

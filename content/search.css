@@ -354,7 +354,7 @@ input[type=checkbox] { accent-color: var(--pill); }
 	.toolbar #preview-btn span, .toolbar .filter-btn > span:not(.filter-count) { display: none; }
 	.toolbar .lib-filter button { padding: 0 4px 0 12px; gap: 4px; }
 	.toolbar button.menu-btn { padding: 0 8px 0 12px; }
-	#results-table[data-cols="basic"] [data-k="journalIF"], #results-table[data-cols="basic"] [data-k="pdf"] { display: none; }
+	#results-table[data-cols="basic"] [data-k="journalIF"], #results-table[data-cols="basic"] [data-k="journalOA2y"], #results-table[data-cols="basic"] [data-k="pdf"] { display: none; }
 	/* Narrow: the title takes whatever the compact columns leave, so the table fits the pane instead of scrolling sideways. */
 	#results-table[data-cols="basic"][data-status] [data-k="cpy"] { display: none; }
 	#cols col[data-k="title"] { width: auto !important; }

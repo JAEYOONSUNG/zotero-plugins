@@ -21,6 +21,24 @@ var ZotPoPPreview = (function () {
 		return [...new Set(urls.map(safeURL).filter(Boolean))];
 	}
 
+	/* Where to read the paper's PDF from, in order: the library's own file first (a path the plugin itself
+	   resolved from a held item, never one a source supplied), then the remote candidates. A local source is
+	   written "local:<path>"; remote ones stay plain http(s) URLs. */
+	const LOCAL = "local:";
+	function sources(record, readLocal) {
+		let path = typeof record.localPDFPath === "string" && record.localPDFPath && typeof readLocal === "function" ? record.localPDFPath : null;
+		return [...(path ? [LOCAL + path] : []), ...candidates(record)];
+	}
+	const loadSource = (source, signal, { fetchPDF, readLocal }) => source.startsWith(LOCAL) ? readLocal(source.slice(LOCAL.length), signal) : fetchPDF(source, signal);
+	// A file already in the library, read from disk; the same size and %PDF checks as a download.
+	async function readLocalPDF(path, signal, io = typeof IOUtils !== "undefined" ? IOUtils : null) {
+		if (!io) throw new Error("Local files are not available here");
+		if (signal?.aborted) throw aborted();
+		let bytes = await io.read(path);
+		if (signal?.aborted) throw aborted();
+		return pdfBytes(bytes);
+	}
+
 	function originalURL(record) {
 		let doi = String(record.doi || "").replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "").trim();
 		return safeURL(record.url) || (/^10\.\d{4,9}\/\S+$/.test(doi) ? safeURL("https://doi.org/" + doi) : null)
@@ -37,7 +55,7 @@ var ZotPoPPreview = (function () {
 
 	function createManager(openWindow) {
 		let previewWindow = null, payload, lastSignature;
-		let signature = record => JSON.stringify([record.key || record.doi || record.title, record.title, candidates(record), originalURL(record)]);
+		let signature = record => JSON.stringify([record.key || record.doi || record.title, record.title, candidates(record), originalURL(record), record.localPDFPath || null]);
 		function update(record, force = false) {
 			if (!record || !previewWindow || previewWindow.closed) return;
 			let next = signature(record);
@@ -66,7 +84,7 @@ var ZotPoPPreview = (function () {
 		};
 	}
 
-	function createController({ fetchPDF, renderPDF, onState }) {
+	function createController({ fetchPDF, readLocal, renderPDF, onState }) {
 		let version = 0, controller;
 		return {
 			async showRecord(record) {
@@ -75,12 +93,12 @@ var ZotPoPPreview = (function () {
 				let signal = controller.signal, current = ++version;
 				let active = () => current === version && !signal.aborted;
 				let info = { title: record.title || "", originalURL: originalURL(record) };
-				let urls = candidates(record);
+				let urls = sources(record, readLocal);
 				onState({ ...info, status: urls.length ? "loading" : "unavailable" });
 				let lastError;
 				for (let url of urls) {
 					try {
-						let bytes = pdfBytes(await fetchPDF(url, signal));
+						let bytes = pdfBytes(await loadSource(url, signal, { fetchPDF, readLocal }));
 						if (!active()) return;
 						let rendered = await renderPDF(bytes, signal);
 						if (!active()) return;
@@ -178,7 +196,7 @@ var ZotPoPPreview = (function () {
 	/* The preview inside the search window: one PDF is fetched and kept open while its pages are
 	   turned, and a newer request (another row, another page) cancels the older one, so a slow
 	   render never lands on the wrong paper or page. No window is created anywhere. */
-	function createViewer({ fetchPDF, getLibrary, createCanvas, width, pixelRatio, onState }) {
+	function createViewer({ fetchPDF, readLocal, getLibrary, createCanvas, width, pixelRatio, onState }) {
 		let version = 0, controller = null, session = null, record = null, info = null, page = 1, pageCount = 0, pageToken = 0, pageTask = null;
 		function release() {
 			pageTask?.cancel?.(); pageTask = null;
@@ -209,13 +227,13 @@ var ZotPoPPreview = (function () {
 				let active = () => current === version && !signal.aborted;
 				record = next; page = 1; pageCount = 0; ++pageToken;
 				info = { title: next.title || "", originalURL: originalURL(next) };
-				let urls = candidates(next);
+				let urls = sources(next, readLocal);
 				onState({ ...info, status: urls.length ? "loading" : "unavailable", page: 1, pageCount: 0 });
 				let lastError;
 				for (let url of urls) {
 					let task;
 					try {
-						let bytes = pdfBytes(await fetchPDF(url, signal));
+						let bytes = pdfBytes(await loadSource(url, signal, { fetchPDF, readLocal }));
 						if (!active()) return;
 						let library = await getLibrary();
 						if (!active()) return;
@@ -268,7 +286,7 @@ var ZotPoPPreview = (function () {
 			pixelRatio: () => win.devicePixelRatio || 1
 		});
 		let controller = createController({
-			fetchPDF: (url, signal) => fetchPDF(url, signal, zotero), renderPDF: renderer,
+			fetchPDF: (url, signal) => fetchPDF(url, signal, zotero), readLocal: (path, signal) => readLocalPDF(path, signal), renderPDF: renderer,
 			onState(state) {
 				doc.title = `${t("previewTitle")} — ${state.title}`;
 				$("preview-title").textContent = state.title;
@@ -299,7 +317,7 @@ var ZotPoPPreview = (function () {
 		if (currentRecord) controller.showRecord(currentRecord);
 	}
 
-	return { safeURL, candidates, originalURL, pdfBytes, createManager, createController, createRenderer, createViewer, fetchPDF, initWindow };
+	return { safeURL, candidates, sources, readLocalPDF, originalURL, pdfBytes, createManager, createController, createRenderer, createViewer, fetchPDF, initWindow };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPPreview;

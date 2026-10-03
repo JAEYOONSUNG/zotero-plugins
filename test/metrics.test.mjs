@@ -43,3 +43,36 @@ test("string years count; no first year leaves the annual h as null; truncated a
 	assert.equal(cut.citesPerAuthor, 4);
 	assert.equal(cut.papers, 2);
 });
+
+test("an unknown author list is not a solo author: per-author figures leave those papers out", () => {
+	// ORCID works carry no author list at all.
+	const orcid = [1, 2, 3].map(i => ({ year: 2020, citations: 9, authors: [], authorListComplete: false }));
+	const m = M.compute(orcid, 2025);
+	assert.equal(m.citesPerAuthor, null, "not 27");
+	assert.equal(m.authorsPerPaper, null, "not 1");
+	assert.equal(m.papersPerAuthor, null);
+	assert.equal(m.hiNorm, null, "not 3");
+	assert.equal(m.hiAnnual, null);
+	assert.equal(m.perAuthorPapers, 0, "no paper is eligible");
+	assert.equal(m.hIndex, 3, "figures that need no author list are untouched");
+});
+
+test("per-author figures say how many papers they were computed on", () => {
+	const known = [{ year: 2020, citations: 10, authors: [{}, {}] }, { year: 2020, citations: 8, authors: [{}, {}, {}, {}] }];
+	const empty = { year: 2020, citations: 50, authors: [] };
+	const incomplete = { year: 2020, citations: 40, authors: [{}], authorListComplete: false };
+	const m = M.compute([...known, empty, incomplete], 2025);
+	assert.equal(m.perAuthorPapers, 2);
+	assert.equal(m.papers, 4);
+	assert.equal(m.citesPerAuthor, 5 + 2);
+	assert.equal(m.authorsPerPaper, 3);
+	assert.equal(m.hiNorm, 2);
+	assert.equal(m.authorsUnknown, 2, "the empty and the incomplete list are counted as left out");
+	assert.equal(m.citations, 108, "totals still count every paper");
+});
+
+test("a record with no authors field at all is an unknown author list too", () => {
+	const m = M.compute([{ year: 2020, citations: 4 }], 2025);
+	assert.equal(m.perAuthorPapers, 0);
+	assert.equal(m.citesPerAuthor, null);
+});

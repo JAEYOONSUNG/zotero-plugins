@@ -14,9 +14,11 @@
 var ZotPoPFilters = (function () {
 	"use strict";
 
-	const KINDS = ["text", "author", "journal", "inst", "country", "type", "source", "year", "cites", "cpy", "if", "pdf"];
+	const KINDS = ["text", "author", "journal", "inst", "country", "type", "source", "year", "cites", "cpy", "if", "oa2y", "pdf"];
 	const MULTI_KINDS = ["author", "journal", "inst", "country", "type", "source", "pdf"];
-	const RANGE_KINDS = ["year", "cites", "cpy", "if"];
+	const RANGE_KINDS = ["year", "cites", "cpy", "if", "oa2y"];
+	// Journal figures a paper may simply not have: an include rule on one lets such a paper in only when asked to.
+	const UNKNOWN_KINDS = ["if", "oa2y"];
 	const TEXT_FIELDS = ["all", "title", "abstract", "author", "journal", "inst"];
 	const TYPES = ["article", "preprint", "review", "book", "other"];
 
@@ -126,7 +128,7 @@ var ZotPoPFilters = (function () {
 	/* Text of each field, folded once per record. The record is never copied or changed; the memo holds
 	   it only while the record lives. */
 	const memo = new WeakMap();
-	const SIGNATURE = ["title", "abstract", "authorString", "venue", "journalAbbrev", "doi", "year", "people", "authors"];
+	const SIGNATURE = ["title", "abstract", "authorString", "venue", "journalAbbrev", "doi", "year", "people", "authors", "keywords"];
 	function texts(r) {
 		let m = memo.get(r);
 		// Records are completed while the window is open (institutions arrive after the first draw), so the
@@ -140,6 +142,7 @@ var ZotPoPFilters = (function () {
 				author: fold([r.authorString, ...(r.authors || []).map(authorName)].join(" ")),
 				journal: fold([r.venue, r.journalAbbrev, ...(r.venueAliases || [])].filter(Boolean).join(" ")),
 				inst: fold(people.map(p => p.institution).filter(Boolean).join(" ")),
+				keywords: fold((Array.isArray(r.keywords) ? r.keywords : [r.keywords]).filter(Boolean).join(" ")),
 				doi: fold(r.doi),
 				year: String(r.year || "")
 			};
@@ -147,11 +150,19 @@ var ZotPoPFilters = (function () {
 		}
 		return m;
 	}
-	// The box's plain words match this: what the filter always searched, plus the import status shown in the row.
-	function haystack(r, env) {
+	/* The filter box's plain words match what the row shows: title, authors, journal, DOI, year, the import
+	   status and the lab and country of the row. This is the "row text" scope; it leaves the abstract out on
+	   purpose, so a bare word in the box stays about the visible columns. */
+	function rowText(r, env) {
 		let m = texts(r), where = env && env.where ? env.where(r) : null;
 		return [m.title, m.author, m.journal, m.doi, m.year, fold(r.status),
 			where ? fold([where.first?.institution, where.corresponding?.institution, ...(where.countries || [])].filter(Boolean).join(" ")) : ""].join(" ");
+	}
+	/* The "All" scope of a words rule: title, abstract, authors, every affiliation, journal and keywords, plus
+	   what the row shows. A word only in the abstract is found under All as under Abstract. */
+	function haystack(r, env) {
+		let m = texts(r);
+		return [rowText(r, env), m.abstract, m.inst, m.keywords].join(" ");
 	}
 
 	// A few names a reader types for a country: ISO code, English and Korean.
@@ -177,7 +188,9 @@ var ZotPoPFilters = (function () {
 		if (kind === "year") return Number.isInteger(r.year) ? r.year : null;
 		if (kind === "cites") return r.citations == null || !Number.isFinite(Number(r.citations)) ? null : Number(r.citations);
 		if (kind === "cpy") { let v = env && env.cpy ? env.cpy(r) : null; return v == null || !Number.isFinite(Number(v)) ? null : Number(v); }
+		// The Journal Impact Factor (JCR) and OpenAlex's 2-year mean citedness are two different figures; neither stands in for the other.
 		if (kind === "if") return r.journalIF == null || !Number.isFinite(Number(r.journalIF)) ? null : Number(r.journalIF);
+		if (kind === "oa2y") return r.journalOA2y == null || !Number.isFinite(Number(r.journalOA2y)) ? null : Number(r.journalOA2y);
 		return null;
 	}
 	const inRange = (v, range) => v != null && (range.min == null || v >= range.min) && (range.max == null || v <= range.max);
@@ -190,7 +203,7 @@ var ZotPoPFilters = (function () {
 			hit = code ? list.includes(code) : false;
 		}
 		else if (term.field) hit = m[term.field].includes(term.text);
-		else hit = haystack(r, env).includes(term.text);
+		else hit = rowText(r, env).includes(term.text);
 		return term.neg ? !hit : hit;
 	}
 
@@ -221,7 +234,7 @@ var ZotPoPFilters = (function () {
 	// ------------------------------------------------------------------ rules
 	let nextId = 1;
 	function newRule(kind, mode = "include") {
-		return { id: "r" + nextId++, kind, mode: mode === "exclude" ? "exclude" : "include", field: "all", values: [], labels: {}, min: null, max: null };
+		return { id: "r" + nextId++, kind, mode: mode === "exclude" ? "exclude" : "include", field: "all", values: [], labels: {}, min: null, max: null, includeUnknown: false };
 	}
 	function ruleActive(rule) {
 		if (!rule) return false;
@@ -245,6 +258,11 @@ var ZotPoPFilters = (function () {
 		for (let rule of spec.rules) {
 			if (opts.skipRule === "*" || opts.skipRule === rule.id) continue;
 			if (opts.ignoreYears && rule.kind === "year") continue;
+			// A paper without the figure is neither inside nor outside a range: an include rule keeps it only on request.
+			if (rule.mode !== "exclude" && UNKNOWN_KINDS.includes(rule.kind) && numberOf(rule.kind, r, env) == null) {
+				if (!rule.includeUnknown) return false;
+				continue;
+			}
 			if (ruleHolds(r, rule, env) === (rule.mode === "exclude")) return false;
 		}
 		return true;
@@ -281,7 +299,7 @@ var ZotPoPFilters = (function () {
 		return q ? options.filter(o => fold(o.label).includes(q)) : options;
 	}
 
-	return { KINDS, MULTI_KINDS, RANGE_KINDS, TEXT_FIELDS, TYPES, fold, flat, parseQuick, parseRange, authorKeys, institutions, countries, typeOf, hasPDF, sourcesOf,
+	return { KINDS, MULTI_KINDS, RANGE_KINDS, UNKNOWN_KINDS, TEXT_FIELDS, TYPES, fold, flat, parseQuick, parseRange, authorKeys, institutions, countries, typeOf, hasPDF, sourcesOf,
 		countryCodeFor, COUNTRY_NAMES, newRule, ruleActive, compile, matches, ruleHolds, tally, offered, searchOptions, numberOf };
 })();
 

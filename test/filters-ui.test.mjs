@@ -289,7 +289,7 @@ test("the preview drives the real handlers: quick syntax, rules, chips, institut
 	assert.deepEqual(t.filters.phrase.rows, [3], "a phrase, and -commentary leaves the commentary out");
 	assert.equal(t.filters.negation, 12);
 	assert.equal(t.filters.opened.hidden, false);
-	assert.equal(t.filters.opened.kinds, 12, "all twelve kinds of rule to add");
+	assert.equal(t.filters.opened.kinds, 13, "all thirteen kinds of rule to add");
 	assert.equal(t.filters.excludeJournal.rows, 10, "excluding bioRxiv and medRxiv takes two papers away");
 	assert.deepEqual(t.filters.excludeJournal.chips, ["제외저널: bioRxiv, medRxiv×"]);
 	assert.deepEqual(t.filters.author.rows, [2, 6, 7, 8, 9, 10]);
@@ -324,4 +324,17 @@ test("the preview drives the real handlers: quick syntax, rules, chips, institut
 	for (const html of [out.filtersPage, out.journalsPage, out.longSpanPage]) assert.ok(!/<script\b|<link\b/i.test(html));
 	assert.match(out.filtersPage, /class="filter-pop"[^>]*role="dialog"/);
 	assert.match(out.filtersPage, /class="fchip excl"/);
+});
+
+test("an IF threshold drops papers with no JIF by default; the popover has a toggle to keep them", async () => {
+	const ui = await loaded({ search: async () => [paper("a", { journalIF: 9, journalIFSource: "JCR 2025" }), paper("b", { journalIF: null, journalOA2y: 8 }), paper("c", { journalIF: 2, journalIFSource: "JCR 2025" })] });
+	const rule = ui.addRule("if", "include"); rule.min = 5; ui.render();
+	assert.deepEqual(keys(ui), ["a"], "OpenAlex's 8 does not pass a JIF threshold, and an unknown JIF is out by default");
+	ui.openFilterPop(rule.id);
+	const toggle = ui.get("filter-pop").querySelector(`[data-fid="unknown:${rule.id}"]`);
+	assert.ok(toggle, "the include-unknown checkbox is offered on a JIF rule");
+	toggle.checked = true; toggle.emit("change");
+	assert.deepEqual(keys(ui), ["a", "b"], "with it on, papers with no JIF stay");
+	const oa = ui.addRule("oa2y", "include"); oa.min = 5; rule.min = null; ui.render();
+	assert.deepEqual(keys(ui), ["b"], "the OpenAlex mean has its own filter");
 });

@@ -312,7 +312,7 @@ var ZotPoPSources = (function () {
 		let rec = Object.assign({
 			source: "", sourceId: "", title: "", authors: [], year: null, publicationDate: null, venue: "", publisher: "",
 			doi: null, pmid: null, pmcid: null, arxiv: null, url: null, pdfUrl: null, pdfUrls: [], citations: null, citationSource: null, citesByYear: null, sources: null,
-			journalId: null, issn: null, journalIF: null, journalH: null,
+			journalId: null, issn: null, journalIF: null, journalOA2y: null, journalH: null,
 			preprintServer: null, publishedDoi: null, publishedPmid: null, people: null, retracted: false, authorsTruncated: false,
 			volume: "", issue: "", pages: "", abstract: "", itemType: "journalArticle"
 		}, r, { doi });
@@ -756,8 +756,9 @@ var ZotPoPSources = (function () {
 
 	function applyJournal(r, st) {
 		if (!st) return;
-		// The JCR figure, when there is one, is never overwritten by the estimate.
-		if (r.journalIFSource !== JCR?.EDITION) { r.journalIF = st.if2y; r.journalIFEstimate = st.if2y != null; }
+		// OpenAlex's 2-year mean citedness is its own figure, kept apart from the JCR's Journal Impact Factor
+		// (journalIF), which only the JCR table fills. The two are never mixed in one field.
+		r.journalOA2y = st.if2y;
 		r.journalH = st.h;
 		if (!r.journalAbbrev && st.abbrev) r.journalAbbrev = st.abbrev;
 		if (!r.journalId) r.journalId = st.id;
@@ -775,7 +776,7 @@ var ZotPoPSources = (function () {
 		return name.length >= 3 ? "name:" + name : null;
 	}
 
-	// Fill journalIF / journalH on records from their OpenAlex source id, ISSN or, failing
+	// Fill journalIF (JCR) / journalOA2y / journalH on records from their OpenAlex source id, ISSN or, failing
 	// both, the journal's name. Mutates records.
 	async function enrichJournalMetrics(records, http, ctx = {}) {
 		const SELECT = "select=id,display_name,issn_l,issn,summary_stats,works_count,is_oa,is_in_doaj,abbreviated_title,alternate_titles";
@@ -786,8 +787,7 @@ var ZotPoPSources = (function () {
 		if (JCR && ctx.jcr !== false) JCR.apply(records);
 		let byId = new Map(), byIssn = new Map(), byName = new Map();
 		for (let r of records) {
-			if (r.journalIF != null && r.journalIFSource !== JCR?.EDITION) continue;
-			if (r.journalIFSource === JCR?.EDITION && r.journalH != null) continue;
+			if (r.journalOA2y != null && r.journalH != null) continue;
 			if (r.journalId) {
 				if (JOURNAL_CACHE.has(r.journalId)) applyJournal(r, JOURNAL_CACHE.get(r.journalId));
 				else { if (!byId.has(r.journalId)) byId.set(r.journalId, []); byId.get(r.journalId).push(r); }
@@ -1054,7 +1054,7 @@ var ZotPoPSources = (function () {
 		if (best) { rec.citations = best.n; rec.citationSource = best.src; }
 		// Each index's fresh count replaces its old one, so a statistic read from one index sees the re-check.
 		for (let [k, v] of Object.entries(out)) if (v != null) (rec.citationsBy ||= {})[k] = v;
-		if (rec.journalIF == null && (rec.journalId || rec.issn)) await enrichJournalMetrics([rec], http, ctx);
+		if (rec.journalOA2y == null && (rec.journalId || rec.issn)) await enrichJournalMetrics([rec], http, ctx);
 		return out;
 	}
 
@@ -1707,19 +1707,25 @@ var ZotPoPSources = (function () {
 					authors,
 					year: yearOf(xmlText(e, "published")),
 					publicationDate: xmlText(e, "published").slice(0, 10) || null,
-					venue: venue || "arXiv",
+					// The posting's own venue is arXiv; the journal that took it is the other version's.
+					venue: "arXiv",
 					journalReference,
-					doi: doi || null,
+					publishedVenue: venue || null,
+					// A search by journal still finds the posting its journal took.
+					venueAliases: venue ? [venue] : [],
+					doi: arxivDOI(arxivId),
+					publishedDoi: doi || null,
 					arxiv: arxivId,
 					url: "https://arxiv.org/abs/" + arxivId,
 					pdfUrl: pdf,
 					citations: null,
 					abstract: xmlText(e, "summary"),
 					// Every arXiv entry is a posting on arXiv, whether or not a journal has
-					// since taken it, so the archive is always named. arxiv:doi is that
-					// journal version's DOI, which is what itemType keys off.
+					// since taken it. arxiv:doi is that journal version's DOI: kept as
+					// publishedDoi, never as this posting's DOI, so the two versions stay
+					// two records (dates, abstract and PDF per version).
 					preprintServer: "arXiv",
-					itemType: doi ? "journalArticle" : "preprint"
+					itemType: "preprint"
 				}));
 			}
 			out = matchingRecords(dedupe(out), q);
@@ -2569,11 +2575,15 @@ var ZotPoPSources = (function () {
 		if (b.titleMarkup && /<(i|em|sub|sup|b|strong)>/i.test(b.titleMarkup) && !/<(i|em|sub|sup|b|strong)>/i.test(a.titleMarkup || "")
 			&& Query.titleIdentity(b.titleMarkup) === Query.titleIdentity(a.titleMarkup || a.title)) a.titleMarkup = b.titleMarkup;
 		if (!a.publishedDoi && b.publishedDoi) a.publishedDoi = b.publishedDoi;
+		if (!a.publishedVenue && b.publishedVenue) a.publishedVenue = b.publishedVenue;
 		if (!a.publishedPmid && b.publishedPmid) a.publishedPmid = b.publishedPmid;
 		if (!a.journalId && b.journalId) a.journalId = b.journalId;
 		if (!a.issn && b.issn) a.issn = b.issn;
 		if (!a.citesByYear && b.citesByYear) a.citesByYear = b.citesByYear;
-		if (a.journalIF == null && b.journalIF != null) { a.journalIF = b.journalIF; a.journalH = b.journalH; }
+		// The JIF and OpenAlex's mean are separate figures, each filled from whichever record has it.
+		if (a.journalIF == null && b.journalIF != null) { a.journalIF = b.journalIF; a.journalIFSource = b.journalIFSource; }
+		if (a.journalOA2y == null && b.journalOA2y != null) a.journalOA2y = b.journalOA2y;
+		if (a.journalH == null && b.journalH != null) a.journalH = b.journalH;
 		if (!a.volume && b.volume) a.volume = b.volume;
 		if (!a.issue && b.issue) a.issue = b.issue;
 		if (!a.pages && b.pages) a.pages = b.pages;
@@ -2679,6 +2689,11 @@ var ZotPoPSources = (function () {
 				let name = author?.name || [author?.firstName, author?.lastName].filter(Boolean).join(" ");
 				return Boolean(name && Query.matchesAuthor(name, pub.authors));
 			});
+			if (candidates.length === 0 && pre.publishedDoi && pre.publishedVenue) {
+				// The journal version is not among the rows; the posting itself says where it appeared.
+				pre.publishedAs = { key: null, title: null, doi: pre.publishedDoi, venue: pre.publishedVenue, year: null, basis: "explicit" };
+				continue;
+			}
 			if (candidates.length !== 1) continue;
 			let pub = candidates[0];
 			// The target's key and why the two were linked, so the UI can jump to the other row

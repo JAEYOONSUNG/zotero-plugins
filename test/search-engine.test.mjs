@@ -208,7 +208,10 @@ test("combined search displays fast-source results before the last source comple
 
 test("arXiv journal references retain citations while matching the actual journal name", async () => {
 	const records = await S.search("arxiv", { venue: "Nature", maxResults: 1 }, { getText: async () => `<feed><opensearch:totalResults>1</opensearch:totalResults><entry><id>https://arxiv.org/abs/2001.00001v1</id><title>An important paper</title><published>2020-01-01</published><arxiv:journal_ref>Nature 583, 82-86 (2020)</arxiv:journal_ref></entry></feed>` }, context);
-	assert.equal(records[0].venue, "Nature");
+	assert.equal(records.length, 1, "a search by journal still finds the posting");
+	assert.equal(records[0].venue, "arXiv", "the posting's own venue is arXiv");
+	assert.equal(records[0].publishedVenue, "Nature", "the journal that took it is the other version's venue");
+	assert.equal(records[0].itemType, "preprint");
 	assert.equal(records[0].journalReference, "Nature 583, 82-86 (2020)");
 });
 

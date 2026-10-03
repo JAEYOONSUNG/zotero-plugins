@@ -57,7 +57,6 @@ test("apply fills the JIF and remembers where it came from; an unknown journal i
 	assert.equal(J.apply(records), 1);
 	assert.equal(records[0].journalIF, 56.1);
 	assert.equal(records[0].journalIFSource, J.EDITION);
-	assert.equal(records[0].journalIFEstimate, false);
 	assert.equal(records[0].journalAbbrev, undefined, "the JCR's capitalised abbreviation is not copied onto the record");
 	assert.equal(records[1].journalIF, null);
 });
@@ -75,14 +74,15 @@ test("in the metrics pass the JCR figure wins and OpenAlex only supplies the h-i
 	];
 	await S.enrichJournalMetrics(records, http, {});
 	assert.equal(records[0].journalIF, 56.1, "the JCR figure, not OpenAlex's 49.9");
-	assert.equal(records[0].journalIFEstimate, false);
+	assert.equal(records[0].journalOA2y, 49.9, "OpenAlex's 2-year mean is kept in its own field beside the JIF");
 	assert.equal(records[0].journalH, 1600, "the h-index still comes from OpenAlex");
-	assert.equal(records[1].journalIF, 1.3);
-	assert.equal(records[1].journalIFEstimate, true, "an OpenAlex-only figure is marked as the estimate it is");
+	assert.equal(records[1].journalIF, null, "a journal outside the JCR has no JIF: OpenAlex's mean never stands in for it");
+	assert.equal(records[1].journalOA2y, 1.3);
 	// Switching the JCR off gives the old behaviour, for the tests that exercise it.
 	const again = [{ title: "a", venue: "Nature", issn: "0028-0836", journalId: "S1", journalIF: null, journalH: null }];
 	await S.enrichJournalMetrics(again, http, { jcr: false });
-	assert.equal(again[0].journalIF, 49.9);
+	assert.equal(again[0].journalIF, null);
+	assert.equal(again[0].journalOA2y, 49.9);
 });
 
 test("a title shared by two different journals is ambiguous; an ISSN still decides", () => {

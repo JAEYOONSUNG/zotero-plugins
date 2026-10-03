@@ -127,7 +127,7 @@ test("invalid saved orders retain known unique fields, append new fields and lea
 	for (const saved of ["bad JSON", "{}", "null", '"title"', '["title","bad","title","chk",4,null]']) {
 		const prefs = { colOrder: saved, colWidthsVersion: COL_VERSION, colWidths: '{"title":480,"year":77}' };
 		const h = setup({ prefs }), order = keys(h.get("cols"));
-		assert.equal(order.length, 16); assert.equal(new Set(order).size, 16); assert.equal(order[0], "chk");
+		assert.equal(order.length, 17); assert.equal(new Set(order).size, 17); assert.equal(order[0], "chk");
 		if (saved.startsWith("[")) assert.equal(order[1], "title");
 		assert.equal(prefs.colOrder, saved, "restoring never rewrites user preferences");
 		assert.equal(h.state.colWidths.title, 480); assert.equal(h.state.colWidths.year, 77);
@@ -175,7 +175,7 @@ test("edge drag scrolls wide tables, external drags do not reorder or scroll", (
 test("a layout saved before the institution column moved keeps its widths and order, the column joining the authors", () => {
 	const old = ["chk", "authorString", "title", "year", "venue", "citations", "cpy", "journalIF", "pdf", "inLibrary", "status", "rank", "affiliation", "country", "tier", "doi"];
 	const h = setup({ prefs: { colOrderVersion: 12, colOrder: JSON.stringify(old), colWidthsVersion: 12, colWidths: JSON.stringify({ title: 333, venue: 177 }) } });
-	assert.equal(h.state.colOrder.join(), ["chk", "authorString", "affiliation", "title", "year", "venue", "citations", "cpy", "journalIF", "pdf", "inLibrary", "status", "rank", "country", "tier", "doi"].join());
+	assert.equal(h.state.colOrder.join(), ["chk", "authorString", "affiliation", "title", "year", "venue", "citations", "cpy", "journalIF", "journalOA2y", "pdf", "inLibrary", "status", "rank", "country", "tier", "doi"].join(), "the OpenAlex mean column joins beside the JIF");
 	assert.equal(h.state.colWidths.title, 333);
 	assert.equal(h.state.colWidths.venue, 177);
 });

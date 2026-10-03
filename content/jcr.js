@@ -94,7 +94,6 @@ var ZotPoPJCR = (function () {
 			if (!hit) continue;
 			r.journalIF = hit.jif;
 			r.journalIFSource = EDITION;
-			r.journalIFEstimate = false;
 			// The JCR's own abbreviations are shouted in capitals ("NAT COMMUN"); the
 			// reference-list form comes from elsewhere, so they are not copied over.
 			n++;

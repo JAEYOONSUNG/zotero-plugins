@@ -259,3 +259,50 @@ test("the same posting reaching us twice is one result that keeps both archives'
 	assert.equal(records[0].publishedDoi, "10.1038/s41586-025-00001-0", "Crossref's journal link survives it too");
 	assert.equal(records[0].preprintServer, "bioRxiv");
 });
+
+test("an arXiv posting keeps its own DOI and links the journal version by publishedDoi", async () => {
+	const http = archives({ arxiv: [{ id: "2503.00007", title: "Sparse attention for long documents", doi: "10.1234/JOURNAL.2025.7" }] });
+	const [rec] = await S.search("arxiv", { keywords: "sparse attention", maxResults: 10 }, http, { ...ctx });
+	assert.equal(rec.itemType, "preprint", "a posting stays a preprint whether or not a journal has taken it");
+	assert.equal(rec.preprintServer, "arXiv");
+	assert.equal(rec.doi, "10.48550/arxiv.2503.00007", "the DOI is arXiv's own, not the journal's");
+	assert.equal(rec.publishedDoi, "10.1234/journal.2025.7");
+	assert.equal(rec.venue, "arXiv", "the venue of the posting is arXiv");
+});
+
+test("a preprint and its journal version are never fused into one hybrid row", async () => {
+	const posting = S.makeRecord({ source: "arxiv", sourceId: "2503.00007", title: "Sparse attention for long documents", authors: [{ firstName: "Ada", lastName: "Byrne" }],
+		year: 2025, venue: "arXiv", doi: "10.48550/arxiv.2503.00007", publishedDoi: "10.1234/journal.2025.7", arxiv: "2503.00007", preprintServer: "arXiv", itemType: "preprint", abstract: "Preprint abstract." });
+	// Semantic Scholar-style hybrid: the journal DOI plus the arXiv id on one record.
+	const article = S.makeRecord({ source: "semanticscholar", sourceId: "abc", title: "Sparse attention for long documents", authors: [{ firstName: "Ada", lastName: "Byrne" }],
+		year: 2026, venue: "Journal of Long Documents", doi: "10.1234/journal.2025.7", arxiv: "2503.00007", itemType: "journalArticle", abstract: "Published abstract." });
+	const merged = S.mergeRecords([[posting], [article]]);
+	assert.equal(merged.length, 2, "two versions stay two rows");
+	const pre = merged.find(r => r.itemType === "preprint"), pub = merged.find(r => r.itemType === "journalArticle");
+	assert.equal(pre.doi, "10.48550/arxiv.2503.00007");
+	assert.equal(pre.preprintServer, "arXiv");
+	assert.equal(pub.doi, "10.1234/journal.2025.7");
+	assert.ok(!pub.preprintServer, "the journal row is not classed as a preprint");
+	assert.equal(pre.abstract, "Preprint abstract.");
+	assert.equal(pub.abstract, "Published abstract.");
+	S.linkPreprintVersions(merged);
+	assert.equal(pre.publishedAs.doi, "10.1234/journal.2025.7");
+	assert.equal(pub.preprintOf.doi, "10.48550/arxiv.2503.00007");
+});
+
+test("a preprint whose journal version is not in the results still names it", async () => {
+	const posting = S.makeRecord({ source: "arxiv", sourceId: "2503.00007", title: "Sparse attention for long documents", year: 2025, venue: "arXiv",
+		doi: "10.48550/arxiv.2503.00007", publishedDoi: "10.1234/journal.2025.7", publishedVenue: "Journal of Long Documents", arxiv: "2503.00007", preprintServer: "arXiv", itemType: "preprint" });
+	S.linkPreprintVersions([posting]);
+	assert.equal(posting.publishedAs.venue, "Journal of Long Documents");
+	assert.equal(posting.publishedAs.doi, "10.1234/journal.2025.7");
+});
+
+test("an arXiv posting is still found by the journal that took it", async () => {
+	const feed = `<feed><opensearch:totalResults>1</opensearch:totalResults><entry><id>http://arxiv.org/abs/2503.00009v1</id><title>Deep nets</title><published>2025-03-04T00:00:00Z</published><summary>A.</summary><author><name>Ada Byrne</name></author><arxiv:doi>10.1234/x.9</arxiv:doi><arxiv:journal_ref>Nature Methods 12, 1-9 (2025)</arxiv:journal_ref></entry></feed>`;
+	const http = { async getText() { return feed; }, async getJSON() { return {}; } };
+	const recs = await S.search("arxiv", { keywords: "deep", venue: "Nature Methods", maxResults: 10 }, http, { ...ctx });
+	assert.equal(recs.length, 1);
+	assert.equal(recs[0].publishedVenue, "Nature Methods");
+	assert.equal(recs[0].venue, "arXiv");
+});

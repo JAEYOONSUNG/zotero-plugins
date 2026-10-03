@@ -58,12 +58,17 @@ var ZotPoPMetrics = (function () {
 		let minYear = years.length ? Math.min(...years) : null;
 		let maxYear = years.length ? Math.max(...years) : null;
 		let citationYears = minYear ? Math.max(1, now - minYear) : 1;
-		/* OpenAlex cuts an author list at 100: a paper whose list was cut would
-		   be divided among too few people, so it is left out of every per-author figure. */
-		let whole = records.filter(r => !r.authorsTruncated);
-		let authorsTruncated = n - whole.length;
-		let nAuthors = whole.map(r => Math.max(1, (r.authors || []).length));
+		/* Per-author figures need a whole author list. OpenAlex cuts a list at 100, and ORCID works, Scholar rows
+		   and some records carry no list at all: counted as one author each they would credit a paper's whole
+		   citation count to a single person. Such papers are left out of every per-author figure, and the
+		   result says how many papers the figures were computed on. */
+		let listKnown = r => Array.isArray(r.authors) && r.authors.length > 0 && r.authorListComplete !== false;
+		let whole = records.filter(r => !r.authorsTruncated && listKnown(r));
+		let authorsTruncated = records.filter(r => r.authorsTruncated).length;
+		let authorsUnknown = n - whole.length - authorsTruncated;
+		let nAuthors = whole.map(r => r.authors.length);
 		let normCites = whole.map((r, i) => (r.citations || 0) / nAuthors[i]);
+		let computable = whole.length > 0;
 		let annual = records.map(r => citesPerYear(r, now) || 0);
 
 		let hi = hIndex(cites);
@@ -78,14 +83,17 @@ var ZotPoPMetrics = (function () {
 			unknownCitations,
 			// Counts from more than one citation index are not one network: the h-index over them is a reference figure.
 			citationSources: [...new Set(known.flatMap(r => Object.keys(r.citationsBy || {}).length ? Object.keys(r.citationsBy) : [r.citationSource || r.source]).filter(Boolean))],
-			citesPerAuthor: normCites.reduce((a, b) => a + b, 0),
-			papersPerAuthor: nAuthors.reduce((a, b) => a + 1 / b, 0),
-			authorsPerPaper: whole.length ? nAuthors.reduce((a, b) => a + b, 0) / whole.length : 0,
+			citesPerAuthor: computable ? normCites.reduce((a, b) => a + b, 0) : null,
+			papersPerAuthor: computable ? nAuthors.reduce((a, b) => a + 1 / b, 0) : null,
+			authorsPerPaper: computable ? nAuthors.reduce((a, b) => a + b, 0) / whole.length : null,
+			// How many papers the per-author figures rest on, and how many were left out (cut off, or no list).
+			perAuthorPapers: whole.length,
 			authorsTruncated,
+			authorsUnknown,
 			hIndex: hi,
 			gIndex: gIndex(cites),
-			hiNorm,
-			hiAnnual: minYear ? hiNorm / citationYears : null,
+			hiNorm: computable ? hiNorm : null,
+			hiAnnual: minYear && computable ? hiNorm / citationYears : null,
 			hA: hIndex(annual)
 		};
 	}

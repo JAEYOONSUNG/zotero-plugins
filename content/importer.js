@@ -341,21 +341,23 @@ var ZotPoPImporter = (function () {
 		return !rec.doi || !theirs || norm(rec.doi) === theirs;
 	}
 
+	// The Journal Impact Factor is the JCR's; OpenAlex's 2-year mean is a different figure, labelled as such.
 	function journalFigureLabel(rec) {
-		return rec.journalIFEstimate === false && rec.journalIFSource ? String(rec.journalIFSource) : "OpenAlex 2y";
+		return rec.journalIFSource ? String(rec.journalIFSource) : "JCR";
 	}
 
 	async function recordCitations(item, rec) {
-		if (rec.citations == null && rec.journalIF == null) return;
+		if (rec.citations == null && rec.journalIF == null && rec.journalOA2y == null) return;
 		let extra = item.getField("extra") || "";
-		let lines = extra.split("\n").filter(l => !/^(Citations|Journal IF)\b/i.test(l));
+		let lines = extra.split("\n").filter(l => !/^(Citations|Journal IF|OpenAlex 2y mean)\b/i.test(l));
 		if (rec.citations != null) {
 			let srcKey = rec.citationSource || rec.source;
 			let label = ZotPoPSources.SOURCES[srcKey]?.label || srcKey;
 			lines.push(`Citations: ${rec.citations} (${label}, ${today()})`);
 		}
-		// Which figure it is travels with it: a JCR impact factor was written down as "OpenAlex 2y".
+		// Which figure it is travels with it.
 		if (rec.journalIF != null) lines.push(`Journal IF (${journalFigureLabel(rec)}): ${rec.journalIF.toFixed(2)} (${today()})`);
+		if (rec.journalOA2y != null) lines.push(`OpenAlex 2y mean citedness: ${Number(rec.journalOA2y).toFixed(2)} (${today()})`);
 		item.setField("extra", lines.filter(Boolean).join("\n"));
 		await item.saveTx();
 	}
@@ -372,6 +374,41 @@ var ZotPoPImporter = (function () {
 		catch (e) {
 			return false;
 		}
+	}
+
+	/* The PDF a paper already in the library has on disk: { itemID, attachmentID, path } or null. The held item
+	   is the one the caller already knows (itemID), else found by DOI, else by title and year with the import's
+	   own strict rule. Of its attachments, Zotero's best one counts when it is a PDF whose file exists; else the
+	   first PDF whose file exists. A file that has not synced down is not "local", so it is not offered. */
+	async function localPDF(libraryID, rec, itemID) {
+		try {
+			let id = itemID ?? null;
+			if (id == null && rec?.doi) id = await findByDOI(libraryID, rec.doi);
+			if (id == null && rec?.title) id = await findByTitle(libraryID, rec.title, rec.year, { doi: rec.doi });
+			let item = id != null ? (Zotero.Items.getAsync ? await Zotero.Items.getAsync(id) : Zotero.Items.get(id)) : null;
+			if (!item) return null;
+			try { await item.loadDataType?.("childItems"); } catch (e) { return null; }
+			let usable = async att => {
+				if (!att || att.deleted || att.attachmentContentType !== "application/pdf") return null;
+				let path = await att.getFilePathAsync?.();
+				return path && (await att.fileExists?.() !== false) ? path : null;
+			};
+			let candidates = [];
+			if (item.isAttachment?.()) candidates.push(item);
+			else {
+				let best = await item.getBestAttachment?.();
+				if (best) candidates.push(best);
+				let ids = item.getAttachments?.() || [];
+				let atts = ids.length ? (Zotero.Items.getAsync ? await Zotero.Items.getAsync(ids) : ids.map(i => Zotero.Items.get(i))) : [];
+				candidates.push(...(atts || []));
+			}
+			for (let att of candidates) {
+				let path = await usable(att);
+				if (path) return { itemID: item.id, attachmentID: att.id, path };
+			}
+			return null;
+		}
+		catch (e) { Zotero.logError?.(e); return null; }
 	}
 
 	/* A paper already on the shelf without a PDF gets one, when asked. Any PDF
@@ -572,5 +609,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { manualItemType, importRecord, fillPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, getReadingStates, getCollectionPaths, addTranslatedNote };
+	return { manualItemType, importRecord, fillPDF, localPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, getReadingStates, getCollectionPaths, addTranslatedNote };
 })();

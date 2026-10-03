@@ -53,6 +53,28 @@ var ZotPoPCite = (function () {
 		};
 	}
 
+	/* What one paper's citation card says, all of it from one index. The yearly series is OpenAlex's, so when a
+	   record has one the total, the yearly mean, the increment and the graph are OpenAlex's own count; without a
+	   series they are the headline count and the index that gave it. Counts other indexes gave are listed apart,
+	   never blended in. { source, total, perYear, trend, others: [{ source, n }] }. */
+	function figures(rec, now = new Date()) {
+		rec = rec || {};
+		let by = {};
+		for (let [key, value] of Object.entries(rec.citationsBy || {})) if (value != null && Number.isFinite(Number(value))) by[key] = Number(value);
+		let headline = rec.citationSource || rec.source;
+		if (rec.citations != null && Number.isFinite(Number(rec.citations)) && headline && by[headline] == null) by[headline] = Number(rec.citations);
+		let hasSeries = yearMap(rec.citesByYear, now.getFullYear()).size > 0;
+		let source = hasSeries ? "openalex" : headline || null;
+		let total = source && by[source] != null ? by[source] : null;
+		let cy = now.getFullYear(), pub = Number.isInteger(rec.year) ? rec.year : null;
+		return {
+			source, total,
+			perYear: total != null && pub != null ? total / Math.max(1, cy - pub) : null,
+			trend: hasSeries ? trend({ byYear: rec.citesByYear, year: rec.year, citations: total }, now) : null,
+			others: Object.entries(by).filter(([key]) => key !== source).sort((x, y) => y[1] - x[1]).map(([key, n]) => ({ source: key, n }))
+		};
+	}
+
 	/* The whole result set's citations per year: each paper's yearly counts added up, over the papers that
 	   have them. { years, papers, of } or null when none does. */
 	function sumByYear(records, now = new Date()) {
@@ -125,7 +147,7 @@ var ZotPoPCite = (function () {
 		return { load, observe, delta, flush, get: key => map.get(key) || null, get size() { return map.size; }, keys: () => [...map.keys()] };
 	}
 
-	return { trend, sumByYear, createSnapshots, WINDOW, VISIT_GAP };
+	return { trend, figures, sumByYear, createSnapshots, WINDOW, VISIT_GAP };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPCite;

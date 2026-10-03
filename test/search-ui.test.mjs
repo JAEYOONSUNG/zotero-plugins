@@ -493,18 +493,18 @@ test("a paper already on the shelf without a DOI is still recognised", async () 
   await assert.rejects(() => api.findByDOI(1, "10.1/x"), /duplicates/);
 });
 
-test("without the reader's own export every figure is the OpenAlex estimate", async () => {
+test("without the reader's own export an older record's OpenAlex figure moves to its own field and no JIF is claimed", async () => {
 	// The Journal Impact Factor is licensed to whoever subscribes to it, so the plugin
 	// carries none and nothing on screen may claim to be one until an export is loaded.
 	JCR.load([]);
 	const ui = uiHarness({ search: async () => [paper("nc", { venue: "Nature Communications", issn: "2041-1723", journalIF: 17.5 })] });
 	await ui.runSearch();
 	const row = ui.state.records.find(r => r.key === "nc");
-	assert.equal(row.journalIF, 17.5, "the OpenAlex figure stands");
-	assert.notEqual(row.journalIFEstimate, false, "and is not passed off as the JCR figure");
+	assert.equal(row.journalIF, null, "there is no JIF without a JCR export");
+	assert.equal(row.journalOA2y, 17.5, "the OpenAlex figure stands, under its own name");
 });
 
-test("a restored or freshly displayed result gets the JCR impact factor, and an OpenAlex-only figure is marked as an estimate", async () => {
+test("a restored or freshly displayed result gets the JCR impact factor, and an OpenAlex-only figure stays in its own field", async () => {
 	// As it is after the reader has put their own Journal Citation Reports export in
 	// the Zotero data directory; the plugin reads it from there at window load.
 	JCR.load([["Nature Communications", "NAT COMMUN", "", "2041-1723", 18.1]]);
@@ -517,16 +517,17 @@ test("a restored or freshly displayed result gets the JCR impact factor, and an 
 	await ui.runSearch();
 	const byKey = key => ui.state.records.find(r => r.key === key);
 	assert.equal(byKey("nc").journalIF, 18.1, "the JCR figure replaces a stale OpenAlex one");
-	assert.equal(byKey("nc").journalIFEstimate, false);
-	assert.equal(byKey("odd").journalIF, 1.3);
-	assert.equal(byKey("odd").journalIFEstimate, true, "not in the JCR, so the OpenAlex figure is an estimate");
+	assert.equal(byKey("nc").journalOA2y, 17.5, "the OpenAlex mean is kept beside the JIF, not replaced by it");
+	assert.equal(byKey("odd").journalIF, null, "not in the JCR: no JIF");
+	assert.equal(byKey("odd").journalOA2y, 1.3, "the OpenAlex figure is shown as the OpenAlex mean");
 	assert.equal(byKey("none").journalIF, undefined);
 	// The same holds for a search brought back from disk.
 	const [entry] = await ui.history.list();
 	const again = uiHarness({ historyFiles: files });
 	await again.openHistoryEntry(entry.id);
 	assert.equal(again.state.records.find(r => r.key === "nc").journalIF, 18.1);
-	assert.equal(again.state.records.find(r => r.key === "odd").journalIFEstimate, true);
+	assert.equal(again.state.records.find(r => r.key === "odd").journalOA2y, 1.3);
+	assert.equal(again.state.records.find(r => r.key === "odd").journalIF, null);
 	JCR.load([]);
 });
 
@@ -1106,11 +1107,10 @@ test("a JCR impact factor is saved and exported as JCR, an OpenAlex figure as Op
 	vm.createContext(sandbox);
 	vm.runInContext(source + "\nglobalThis.__api = ZotPoPImporter;", sandbox);
 	const label = sandbox.__api.journalFigureLabel;
-	assert.equal(label({ journalIF: 56.1, journalIFSource: "JCR 2025", journalIFEstimate: false }), "JCR 2025");
-	assert.equal(label({ journalIF: 18.9, journalIFEstimate: true }), "OpenAlex 2y");
-	const ui = uiHarness({ search: async () => [paper("a", { journalIF: 56.1, journalIFSource: JCR.EDITION, journalIFEstimate: false })] });
+	assert.equal(label({ journalIF: 56.1, journalIFSource: "JCR 2025" }), "JCR 2025");
+	const ui = uiHarness({ search: async () => [paper("a", { journalIF: 56.1, journalIFSource: JCR.EDITION, journalOA2y: 49.9 })] });
 	await ui.runSearch();
-	assert.ok(ui.csvText().split("\n")[1].includes(`"56.10","${JCR.EDITION}"`), "the CSV says which figure it is");
+	assert.ok(ui.csvText().split("\n")[1].includes(`"56.10","${JCR.EDITION}","49.90"`), "the CSV carries the JIF, its source and OpenAlex's mean in separate columns");
 });
 
 test("a preprint and the paper it became are two records, though their titles match", async () => {
@@ -1355,9 +1355,10 @@ test("the detail says its figures once, in one sentence, and never hides an unkn
 	const ui = await loaded({ metrics: { citesPerYear: r => r.citations == null ? null : r.citations / Math.max(1, 2026 - r.year) } });
 	const ctx = key => ui.buildResultContext(ui.state.records.find(r => r.key === key));
 	ui.state.records.find(r => r.key === "a").journalIF = 10.1;
-	ui.state.records.find(r => r.key === "a").journalIFEstimate = true;
+	ui.state.records.find(r => r.key === "a").journalIFSource = "JCR 2025";
+	ui.state.records.find(r => r.key === "a").journalOA2y = 4.2;
 	ui.state.records.find(r => r.key === "a").pdfUrl = "https://example.invalid/a.pdf";
-	assert.deepEqual(Array.from(ctx("a").evidence), ["evCites||10", "evPerYear|10.0", "evIF|10.1|true", "evPdf"]);
+	assert.deepEqual(Array.from(ctx("a").evidence), ["evCites||10", "evPerYear|10.0", "evIF|10.1", "evOA2y|4.2", "evPdf"]);
 	assert.deepEqual(Array.from(ctx("d").evidence), ["evCitesUnknown|"], "an unknown count reads as unknown");
 	assert.match(ctx("c").evidence[0], /^evCites\|\|3$/, "and a real count as a number");
 });
@@ -1523,4 +1524,88 @@ test("the ORCID LinkedIn button opens the profile ORCID lists, falling back to a
 	await other.switchAuthorProvider("scholar");
 	other.authorSessions.scholar.profiles = [{ provider: "scholar", id: "dsdG3ewAAAAJ", name: "Curtis Bonk", affiliation: "Indiana University", mode: "profile", identityConfirmed: true }]; other.renderAuthorProfiles();
 	assert.equal(other.get("author-profiles").querySelector("button.author-linkedin").getAttribute("data-tip"), "authorLinkedInSearchTip");
+});
+
+test("the citation card shows one index's total, mean and bars, and names the others apart", async () => {
+	const { default: Cite } = await import("../content/cite.js");
+	const now = new Date().getFullYear();
+	const ui = uiHarness({ cite: Cite, metrics: { citesPerYear: r => r.citations / Math.max(1, now - r.year) } });
+	const rec = paper("x", { year: now - 5, citations: 150, citationSource: "semanticscholar", citationsBy: { openalex: 90, semanticscholar: 150 },
+		citesByYear: [{ year: now - 1, n: 40 }, { year: now, n: 10 }] });
+	const card = ui.citeCardBody(rec, { phase: "done" });
+	const text = card.textContent;
+	assert.match(text, /citeBasisOf\|OpenAlex/, "the label names the index of the graph");
+	assert.ok(text.includes("90"), "the total is OpenAlex's own count");
+	assert.ok(text.includes("citePerYear|18.0"), "the yearly mean follows that total (90 / 5), not Semantic Scholar's 150");
+	assert.ok(!text.includes("citePerYear|30"), "never the 150-based mean");
+	assert.match(text, /citeOthers\|[^|]*150/, "the other index is listed with its own name and number");
+	assert.ok(text.indexOf("150") > text.indexOf("citeOthers"), "150 appears only in the 'other indexes' line");
+});
+
+function heldHarness(extra = {}) {
+	const opened = [], launches = [], asked = [];
+	const importer = { findByTitle: async () => null, getLibraryDOIMap: async () => new Map(), forgetTitleIndex() {},
+		localPDF: async (libraryID, rec, itemID) => { asked.push([libraryID, rec.key, itemID]); return "found" in extra ? extra.found : { itemID, attachmentID: 900 + itemID, path: "/zotero/storage/AAAA/paper.pdf" }; } };
+	const ui = uiHarness({ realRows: true, launchURL: url => launches.push(url), importer,
+		search: async () => [paper("held", { url: "https://publisher.example/article", inLibrary: true, libraryItemID: 5 }), paper("new", { url: "https://publisher.example/other" })],
+		zotero: { Reader: { open: async (id, location, options) => { opened.push([id, options]); } } } });
+	return { ui, opened, launches, asked };
+}
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+test("double-click on a paper already in the library reads its local PDF in Zotero's reader, not the publisher page", async () => {
+	const { ui, opened, launches, asked } = heldHarness();
+	await ui.runSearch();
+	const rows = ui.get("results-body").children;
+	const held = ui.state.records.find(r => r.key === "held"); held.inLibrary = true; held.libraryItemID = 5;
+	ui.render();
+	const row = ui.get("results-body").children.find(tr => tr.dataset.key === "held");
+	row.emit("dblclick");
+	await settle();
+	assert.deepEqual(opened.map(o => o[0]), [905], "the library's best PDF attachment is opened in the reader");
+	assert.deepEqual(launches, [], "the publisher page is not visited");
+	assert.equal(asked[0][2], 5, "the held item is the one the row already knows");
+	// A paper that is not held keeps its publisher page.
+	ui.get("results-body").children.find(tr => tr.dataset.key === "new").emit("dblclick");
+	await settle();
+	assert.deepEqual(launches, ["https://publisher.example/other"]);
+	assert.equal(opened.length, 1);
+});
+
+test("Enter on a held paper reads the local PDF; with no stored file it shows the item and says so, never opening the publisher silently", async () => {
+	const { ui, opened, launches } = heldHarness();
+	await ui.runSearch();
+	const held = ui.state.records.find(r => r.key === "held"); held.inLibrary = true; held.libraryItemID = 5;
+	ui.render();
+	ui.state.focusKey = "held";
+	ui.onKeyDown({ key: "Enter", preventDefault() {} });
+	await settle();
+	assert.equal(opened.length, 1);
+	assert.deepEqual(launches, []);
+	const none = heldHarness({ found: null });
+	await none.ui.runSearch();
+	const rec = none.ui.state.records.find(r => r.key === "held"); rec.inLibrary = true; rec.libraryItemID = 5;
+	none.ui.render();
+	none.ui.state.focusKey = "held";
+	none.ui.onKeyDown({ key: "Enter", preventDefault() {} });
+	await settle();
+	assert.equal(none.opened.length, 0);
+	assert.deepEqual(none.launches, [], "no silent publisher visit");
+	assert.match(none.ui.get("status").textContent, /noLocalPdf/);
+});
+
+test("the context menu offers reading a held paper in Zotero beside, not instead of, the publisher page", () => {
+	const source = readFileSync(new URL("../content/ui.js", import.meta.url), "utf8");
+	assert.match(source, /add\(t\("ctxRead"\)/);
+	assert.match(source, /add\(t\("ctxOpen"\)/);
+});
+
+test("the statistics say not computable, and how many papers they rest on, when author lists are unknown", async () => {
+	const { default: Metrics } = await import("../content/metrics.js");
+	const ui = uiHarness({ metrics: Metrics, search: async () => [1, 2, 3].map(i => paper("w" + i, { citations: 9, year: 2020, authors: [], authorListComplete: false })) });
+	await ui.runSearch();
+	ui.originalRenderMetrics(ui.state.records);
+	for (const id of ["m-cpa", "m-ppa", "m-app", "m-hinorm"]) assert.equal(ui.get(id).textContent, "metricsNotComputable", id + " is not 27, 1 or 3");
+	assert.equal(ui.get("m-h").textContent, "3");
+	assert.match(ui.get("metrics-notes").textContent, /metricsPerAuthorNone\|3/);
 });

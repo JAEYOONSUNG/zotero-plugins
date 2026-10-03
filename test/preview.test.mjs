@@ -260,3 +260,43 @@ test("pressing a row's PDF button right after its detail render still loads the 
 	await new Promise(r => setTimeout(r, 400));
 	assert.deepEqual(shown, [other.key], "loaded exactly once, not stuck on loading");
 });
+
+test("the preview reads the library's own PDF before any remote one, and never trusts a file: URL from a source", async () => {
+	const states = [], remote = [], local = [];
+	const controller = Preview.createController({
+		async fetchPDF(url) { remote.push(url); return bytes(); },
+		async readLocal(path) { local.push(path); return bytes(); },
+		async renderPDF() { return { canvas: {}, pageCount: 3 }; },
+		onState: state => states.push(state)
+	});
+	await controller.showRecord(paper("held", { pdfUrl: "https://example.org/remote.pdf", localPDFPath: "/zotero/storage/AAAA/held.pdf" }));
+	assert.deepEqual(local, ["/zotero/storage/AAAA/held.pdf"]);
+	assert.deepEqual(remote, [], "the remote PDF is not fetched when the local one renders");
+	assert.equal(states.at(-1).status, "ready");
+	// A source can put anything in pdfUrls; a file: URL there is still refused.
+	assert.deepEqual(Preview.candidates({ pdfUrls: ["file:///etc/passwd"], localPDFPath: "/zotero/x.pdf" }), []);
+	// A missing or unreadable local file falls back to the remote copy.
+	const fallback = [];
+	const second = Preview.createController({
+		async fetchPDF(url) { fallback.push(url); return bytes(); },
+		async readLocal() { throw new Error("file is gone"); },
+		async renderPDF() { return { canvas: {}, pageCount: 1 }; }, onState: () => {}
+	});
+	await second.showRecord(paper("held", { pdfUrl: "https://example.org/remote.pdf", localPDFPath: "/gone.pdf" }));
+	assert.deepEqual(fallback, ["https://example.org/remote.pdf"]);
+});
+
+test("a held paper's preview resolves its local PDF first and passes it to the viewer", async () => {
+	const shown = [], asked = [];
+	const fake = { page: 1, pageCount: 1, showRecord(r) { shown.push([r.key, r.localPDFPath]); }, goTo() {}, retry() {}, close() {} };
+	const ui = uiHarness({ previewModule: { ...Preview, createViewer: () => fake },
+		importer: { findByTitle: async () => null, getLibraryDOIMap: async () => new Map(), forgetTitleIndex() {},
+			localPDF: async (lib, rec, id) => { asked.push(id); return { itemID: id, attachmentID: 77, path: "/zotero/storage/AAAA/relevant.pdf" }; } },
+		search: async () => [paper("relevant", { title: "Precise match", pdfUrl: "https://example.org/remote.pdf", inLibrary: true, libraryItemID: 5 })] });
+	await ui.runSearch();
+	const rec = ui.state.records[0]; rec.inLibrary = true; rec.libraryItemID = 5;
+	ui.openPreview(rec);
+	await new Promise(r => setTimeout(r, 10));
+	assert.deepEqual(asked, [5]);
+	assert.deepEqual(shown, [["relevant", "/zotero/storage/AAAA/relevant.pdf"]]);
+});

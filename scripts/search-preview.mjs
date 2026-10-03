@@ -81,7 +81,7 @@ function records(Sources) {
 		pdfUrl: x.pdf ? "https://example.invalid/pdf/" + (i + 1) + ".pdf" : null,
 		itemType: x.preprint ? "preprint" : "journalArticle", preprintServer: x.server || null, publishedDoi: x.publishedDoi || null,
 		workType: x.review ? "review" : null, retracted: Boolean(x.retracted), people: people(names, x), sources: x.also ? [source, ...x.also] : undefined,
-		journalIF: x.jif ?? null, journalIFEstimate: x.jif != null, journalH: x.jif ? Math.round(x.jif * 6) : null,
+		journalIF: null, journalOA2y: x.jif ?? null, journalH: x.jif ? Math.round(x.jif * 6) : null,
 		openAccess: Boolean(x.pdf), citesByYear: fromPairs(CITES_BY_YEAR["demo" + (i + 1)])
 	})));
 }
@@ -740,7 +740,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	// ---- the citation trend card and a translated abstract, on one older paper with ten years of history
 	const old = OLD_PAPER, oldRecord = Sources.makeRecord({ source: "openalex", sourceId: old.sourceId, title: old.title, year: old.year, venue: old.venue, citations: old.citations, doi: old.doi,
 		authors: [{ name: "Mina Kim", firstName: "Mina", lastName: "Kim" }, { name: "Alex Rivera", firstName: "Alex", lastName: "Rivera" }], authorString: "Mina Kim, Alex Rivera",
-		abstract: old.abstract, itemType: "journalArticle", citesByYear: fromPairs(old.byYear), journalIF: 8.2, journalIFEstimate: true, journalH: 49 });
+		abstract: old.abstract, itemType: "journalArticle", citesByYear: fromPairs(old.byYear), journalIF: null, journalOA2y: 8.2, journalH: 49 });
 	override = [oldRecord, ...recs.slice(0, 8)];
 	freshWork = { id: "https://openalex.org/W14", cited_by_count: old.fresh.citations, counts_by_year: old.fresh.byYear.map(([year, n]) => ({ year, cited_by_count: n })) };
 	document.getElementById("keywords").value = "tissue repair kinetics";

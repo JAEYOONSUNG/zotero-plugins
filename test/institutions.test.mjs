@@ -52,7 +52,7 @@ test("OpenAlex authorships become people with lab, country and role; institution
 	assert.equal(a.people[1].institutionH, null, "middle authors are not looked up");
 	assert.equal(b.people[0].institutionH, 640, "the second paper's lab came from the same single request");
 	assert.equal(urls.filter(u => u.pathname === "/institutions").length, 1);
-	assert.equal(a.journalIF, 4.5, "journal metrics still arrive alongside");
+	assert.equal(a.journalOA2y, 4.5, "journal metrics still arrive alongside");
 
 	// A second search over the same labs asks nothing more of OpenAlex.
 	const before = urls.length;
@@ -102,20 +102,20 @@ test("a journal known only by name is looked up by that name, matched exactly, a
 		return { results: [{ id: "https://openalex.org/S9", display_name: "Something Else", issn: [], summary_stats: { "2yr_mean_citedness": 1, h_index: 5 } }] };
 	} };
 	const records = [
-		{ title: "a", venue: "Nature", journalId: null, issn: null, journalIF: null, journalH: null, itemType: "journalArticle" },
-		{ title: "b", venue: "nature", journalId: null, issn: null, journalIF: null, journalH: null, itemType: "journalArticle" },
-		{ title: "c", venue: "Obscure Bulletin", journalId: null, issn: null, journalIF: null, journalH: null, itemType: "journalArticle" },
-		{ title: "d", venue: "arXiv", journalId: null, issn: null, journalIF: null, journalH: null, itemType: "preprint", preprintServer: "arXiv" }
+		{ title: "a", venue: "Nature", journalId: null, issn: null, journalIF: null, journalOA2y: null, journalH: null, itemType: "journalArticle" },
+		{ title: "b", venue: "nature", journalId: null, issn: null, journalIF: null, journalOA2y: null, journalH: null, itemType: "journalArticle" },
+		{ title: "c", venue: "Obscure Bulletin", journalId: null, issn: null, journalIF: null, journalOA2y: null, journalH: null, itemType: "journalArticle" },
+		{ title: "d", venue: "arXiv", journalId: null, issn: null, journalIF: null, journalOA2y: null, journalH: null, itemType: "preprint", preprintServer: "arXiv" }
 	];
 	await S.enrichJournalMetrics(records, http, { jcr: false });
-	assert.equal(records[0].journalIF, 50, "the exact name, not the first search hit");
+	assert.equal(records[0].journalOA2y, 50, "the exact name, not the first search hit");
 	assert.equal(records[0].journalId, "S1");
-	assert.equal(records[1].journalIF, 50, "case does not make a second journal");
-	assert.equal(records[2].journalIF, null, "no exact match means no number");
-	assert.equal(records[3].journalIF, null, "a preprint server has no IF");
+	assert.equal(records[1].journalOA2y, 50, "case does not make a second journal");
+	assert.equal(records[2].journalOA2y, null, "no exact match means no number");
+	assert.equal(records[3].journalOA2y, null, "a preprint server has no IF");
 	assert.equal(urls.length, 2);
 	// Asked again, both answers -- including the miss -- come from memory.
-	await S.enrichJournalMetrics(records.map(r => ({ ...r, journalIF: null, journalId: null })), http, { jcr: false });
+	await S.enrichJournalMetrics(records.map(r => ({ ...r, journalOA2y: null, journalId: null })), http, { jcr: false });
 	assert.equal(urls.length, 2);
 });
 
@@ -126,7 +126,7 @@ test("the lookup caches round-trip through a snapshot so a new session pays noth
 		if (u.pathname === "/institutions") return { results: [{ id: "https://openalex.org/I1", display_name: "Lab", country_code: "KR", summary_stats: { h_index: 900 } }] };
 		return { results: [{ id: "https://openalex.org/S1", display_name: "J", issn: ["1-1"], summary_stats: { "2yr_mean_citedness": 2, h_index: 10 } }] };
 	} };
-	const rec = { title: "x", journalId: "S1", issn: null, journalIF: null, journalH: null,
+	const rec = { title: "x", journalId: "S1", issn: null, journalIF: null, journalOA2y: null, journalH: null,
 		people: [{ name: "A", position: "first", corresponding: false, institution: "", institutionId: "I1", country: null, institutionH: null }] };
 	await S.enrichJournalMetrics([rec], http, { jcr: false });
 	await S.enrichInstitutions([rec], http, {});
@@ -139,10 +139,10 @@ test("the lookup caches round-trip through a snapshot so a new session pays noth
 	assert.equal(T.importCaches(snapshot) > 0, true);
 	assert.equal(T.importCaches({ version: 2 }), 0);
 	assert.equal(T.importCaches({ version: 1, journals: [["bad", "string"], [1, {}]] }), 0, "malformed lines are skipped");
-	const again = { ...rec, journalIF: null, journalH: null, people: [{ ...rec.people[0], institutionH: null, institution: "" }] };
+	const again = { ...rec, journalIF: null, journalOA2y: null, journalH: null, people: [{ ...rec.people[0], institutionH: null, institution: "" }] };
 	await T.enrichJournalMetrics([again], { getJSON: () => assert.fail("must not fetch") }, { jcr: false });
 	await T.enrichInstitutions([again], { getJSON: () => assert.fail("must not fetch") }, {});
-	assert.equal(again.journalIF, 2);
+	assert.equal(again.journalOA2y, 2);
 	assert.equal(again.people[0].institutionH, 900);
 	assert.equal(again.people[0].institution, "Lab", "a lab's name is filled from the cache when the source left it blank");
 	assert.equal(again.people[0].country, "KR");
@@ -185,7 +185,7 @@ test("an answer that ages while the window stays open is asked again", async () 
 	T.importCaches({ version: 1, savedAt: new Date(now).toISOString(), journals: [["S-aging", null, now - 29 * day]], institutions: [] }, now);
 	let asked = 0;
 	const http = { getJSON: async () => { asked++; return { results: [] }; } };
-	const record = () => ({ title: "x", journalId: "S-aging", issn: null, journalIF: null, journalH: null, people: [] });
+	const record = () => ({ title: "x", journalId: "S-aging", issn: null, journalIF: null, journalOA2y: null, journalH: null, people: [] });
 	await T.enrichJournalMetrics([record()], http, { jcr: false });
 	assert.equal(asked, 0, "a recent 'not found' is used");
 	offset = 2 * day;

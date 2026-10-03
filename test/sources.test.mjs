@@ -253,20 +253,20 @@ test("proxy wrapping and candidate order", async () => {
 live("journal impact via OpenAlex source id and ISSN", async (t) => {
 	if (!await openAlexReady()) return t.skip("OpenAlex budget spent (set OPENALEX_API_KEY to test)");
 	let recs = [
-		{ title: "a", journalId: "S137773608", issn: null, journalIF: null, journalH: null },
-		{ title: "b", journalId: null, issn: "1476-4687", journalIF: null, journalH: null },
-		{ title: "c", journalId: null, issn: "0000-0000", journalIF: null, journalH: null }
+		{ title: "a", journalId: "S137773608", issn: null, journalOA2y: null, journalH: null },
+		{ title: "b", journalId: null, issn: "1476-4687", journalOA2y: null, journalH: null },
+		{ title: "c", journalId: null, issn: "0000-0000", journalOA2y: null, journalH: null }
 	];
 	await S.enrichJournalMetrics(recs, http, ctx);
-	assert.ok(recs[0].journalIF > 5, "Nature IF by id: " + recs[0].journalIF);
-	assert.ok(recs[1].journalIF > 5, "Nature IF by e-ISSN: " + recs[1].journalIF);
+	assert.ok(recs[0].journalOA2y > 5, "Nature IF by id: " + recs[0].journalOA2y);
+	assert.ok(recs[1].journalOA2y > 5, "Nature IF by e-ISSN: " + recs[1].journalOA2y);
 	assert.equal(recs[1].journalId, "S137773608");
-	assert.equal(recs[2].journalIF, null);
+	assert.equal(recs[2].journalOA2y, null);
 });
 
 live("citation check merges OpenAlex, Crossref and Semantic Scholar", async (t) => {
 	if (!await openAlexReady()) return t.skip("OpenAlex budget spent (set OPENALEX_API_KEY to test)");
-	let rec = { doi: "10.1038/s41586-020-2308-7", citations: null, journalIF: null, journalId: null, issn: null };
+	let rec = { doi: "10.1038/s41586-020-2308-7", citations: null, journalOA2y: null, journalId: null, issn: null };
 	let r = await S.checkCitations(rec, http, ctx);
 	// checkCitations swallows a provider error by design and reports null for it, so assert
 	// the merge rather than demanding that every provider answered: Crossref and Semantic
@@ -276,7 +276,7 @@ live("citation check merges OpenAlex, Crossref and Semantic Scholar", async (t) 
 	assert.ok(counts.every(v => v > 1000), "a highly cited paper should exceed 1000: " + JSON.stringify(r));
 	assert.equal(rec.citations, Math.max(...counts), "the merged count is the highest reported");
 	assert.ok(["openalex", "crossref", "semanticscholar"].includes(rec.citationSource));
-	if (r.openalex != null) assert.ok(rec.journalIF > 5, "journal IF filled from check: " + rec.journalIF);
+	if (r.openalex != null) assert.ok(rec.journalOA2y > 5, "journal IF filled from check: " + rec.journalOA2y);
 });
 
 test("a preprint and the article it became are kept apart but told about each other", () => {

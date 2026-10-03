@@ -57,7 +57,8 @@ for (const source of ["multi", "preprint"]) for (const maxResults of [1000, 2000
 		const records = await acceleratedSources().search(source, { keywords: "research", maxResults }, http, ctx);
 		assert.equal(records.length, maxResults);
 		assert.equal(new Set(records.map(row => row.doi)).size, maxResults);
-		assert.equal(records[0].sources.length, 4);
+		// arXiv's posting has its own DOI (the journal's is only the link to the other version), so it is a row of its own.
+		assert.equal(records[0].sources.length, 3);
 		for (const [provider, calls] of Object.entries(http.calls)) {
 			assert.ok(calls.at(-1).start >= 1000, `${provider} actually fetched beyond its old 200 limit`);
 			assert.ok(ctx.sourceStatus[provider].retrieved >= maxResults);
