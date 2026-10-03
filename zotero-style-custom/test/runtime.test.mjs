@@ -4285,3 +4285,18 @@ test('pending writes (R12-2): a failed sync-info flush after the note job carrie
   assert.equal(w.row.memoSynced, 'X', 'the job moved the baseline before its flush failed');
   assert.equal(answer.rev, w.row.memoRev, 'the error\'s answer is current, so the caller moves its base to X');
 });
+
+test('pending writes (R15): the runtime remembers the memo before the oldest unsettled write and every text written in the stretch', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  const orig = w.plugin.flush;
+  let release; const gate = new Promise(r => { release = r; });
+  w.plugin.flush = async function () { await gate; return orig.call(this); };
+  const first = w.lib.setRemark(3, 'X'); await new Promise(r => setTimeout(r, 5));
+  const second = w.lib.setRemark(3, 'Y'); await new Promise(r => setTimeout(r, 5));
+  assert.equal(w.plugin.memoWritePending(w.c), true);
+  assert.equal(w.plugin.memoPendingPrior(w.c), 'B', 'what a rollback goes back to');
+  release(); await Promise.all([first, second]);
+  assert.equal(w.plugin.memoWritePending(w.c), false);
+  assert.deepEqual(w.plugin.memoChainTexts(w.c), ['B', 'X', 'Y'], 'the chain stays known after it settles');
+  w.plugin.flush = orig;
+});

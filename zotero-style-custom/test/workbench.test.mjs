@@ -52,7 +52,11 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog,locale}={}){
   // The real runtime's pending-write registry: a memo write is pending from memory to settled storage.
   memoPendingCount:0,memoListeners:new Set(),
   memoWritePending(){return this.memoPendingCount>0;},
-  _memoPending(item,delta){this.memoPendingCount+=delta;if(delta<0)for(const listener of [...this.memoListeners])listener(item);},
+  memoPendingPriors:[],
+  memoPendingPrior(){return this.memoPendingPriors[0];},
+  memoChain:[],
+  memoChainTexts(){return this.memoChain;},
+  _memoPending(item,delta,prior,value){if(delta>0){if(this.memoPendingCount===0)this.memoChain=[String(prior??'')];this.memoChain.push(String(value??''));}this.memoPendingCount+=delta;if(delta>0)this.memoPendingPriors.push(String(prior??''));else this.memoPendingPriors.shift();if(delta<0)for(const listener of [...this.memoListeners])listener(item);},
   addMemoListener(listener){this.memoListeners.add(listener);return()=>this.memoListeners.delete(listener);},
   discoverCache:new Map(),
   discoverTools:{GROUPS:['citing','reference','related'],shortID:v=>String(v).toUpperCase()},
@@ -7128,7 +7132,7 @@ test('memo drafts (R7-1): the reading-log editor never writes the memo itself: a
  f.bench.destroy();
 });
 
-test('memo drafts (R7-2): a memo longer than the draft limit is never restored truncated and never autosaved shorter',async()=>{
+test('memo drafts (R7-2): a memo longer than the ordinary draft limit is kept in full, never restored cut and never autosaved shorter',async()=>{
  const f=fixture();casLibrary(f);
  const full='x'.repeat(60000)+'END';
  f.runtime.cache.items[1]={remark:'x'.repeat(60000)};
@@ -7155,7 +7159,9 @@ test('memo drafts (R7-2): a memo longer than the draft limit is never restored t
  await h.bench.show('annotations');await settle();
  assert.equal(h.body().querySelector('textarea.sc-paper-memo').value,'changed elsewhere');
  const card=h.body().querySelector('.sc-memo-kept-card');
- assert.ok(card&&/앞부분만/.test(card.textContent),'offered as a marked, truncated kept card');
+ assert.ok(card,'offered as a kept card');
+ assert.ok(card.textContent.includes('y'.repeat(60000)),'in full: a memo draft is never cut');
+ assert.doesNotMatch(card.textContent,/앞부분만/);
  assert.deepEqual(casWritten(h),[]);
  h.bench.destroy();
 });
@@ -7358,7 +7364,7 @@ function assertEditorsConsistent(f,label=''){
   const c=s.value!==s.stored&&s.base!==s.stored&&s.box&&!s.used&&s.buttonsEnabled;
   assert.ok(a||b||c,label+' inconsistent editor: '+JSON.stringify(s));
   // An input that is not the stored memo is in its own draft (no write is pending here).
-  if(b||c)assert.equal(s.ownDraft,s.value.slice(0,50000),label+' the input is in its own draft: '+JSON.stringify(s));
+  if(b||c)assert.equal(s.ownDraft,s.value,label+' the input is in its own draft: '+JSON.stringify(s));
  }
 }
 const answerWith=(row,opts,text)=>{row.remark=text;row.memoRev=(row.memoRev||0)+1;if(opts.answer)opts.answer.rev=row.memoRev;return text;};
@@ -7558,7 +7564,7 @@ function casPending(f,{adopt=null,hold=null}={}){
   const row=f.runtime.cache.items[id]||={},stored=String(row.remark||'');
   if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored},rev:row.memoRev||0};
   const prior=row.remark;row.remark=text;row.memoRev=(row.memoRev||0)+1;
-  f.runtime._memoPending({id},1);
+  f.runtime._memoPending({id},1,prior,text);
   let out=text;
   try{
    if(state.hold)await state.hold;
@@ -7687,9 +7693,151 @@ test('invariant: a detached memo editor saves nothing and its timer is cancelled
  const run=src.slice(src.indexOf('const run=async(options={})=>{'),src.indexOf('const run=async(options={})=>{')+700);
  assert.match(run,/if\(!field\.isConnected\)\{[^}]*return \{ok:false,detached:true\}/,'run returns before saving when detached');
  assert.ok(run.indexOf('isConnected')<run.indexOf('attempt('),'and before any attempt');
- const reload=src.slice(src.indexOf('const scheduleReload='),src.indexOf('panel.addEventListener(\'focusout\''));
+ const reload=src.slice(src.indexOf('let reloadDeferSince'),src.indexOf('panel.addEventListener(\'focusout\''));
+ assert.match(reload,/5000/,'and gives up waiting after about 5 s');
  assert.match(reload,/timerPending/,'a scheduled reload waits for a memo editor with an autosave pending');
  assert.match(reload,/busy>0/,'or a save running');
  const clear=src.slice(src.indexOf('function clear(){'),src.indexOf('function clear(){')+900);
  assert.match(clear,/cancelTimer/,'clear() cancels the timers of editors taken off the screen');
+});
+
+const stuckFocus=f=>{f.doc._focusedElement=null;}; // nothing in the panel is focused
+const snapshots=f=>f.calls.filter(c=>c[0]==='snapshot').length;
+
+test('long memos (R15-1): 50,013 typed characters survive a redraw in full (editor, draft or save), never cut',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'B'};
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ const long='x'.repeat(50000)+'END13_CHARS__'; // 50,013 characters
+ assert.equal(long.length,50013);
+ casType(f,el,long); // its autosave is waiting when the panel is rebuilt
+ await f.bench.show('annotations');await settle();
+ const now=f.body().querySelector('textarea.sc-paper-memo');
+ const texts=[now.value,...sharedDraftTexts(f),...Object.values(f.runtime.cache.memoKept||{}).flat().map(e=>e.text),String(f.runtime.cache.items[1].remark)];
+ assert.ok(texts.some(t=>t===long),'the whole text is somewhere: '+texts.map(t=>t.length).join(','));
+ assertEditorsConsistent(f,'after');
+ f.bench.destroy();
+});
+
+test('autosave timers (R15-2): a cancelled or skipped autosave leaves no timer behind, so a notifier reload still runs',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'BASE X');casType(f,el,'BASE'); // back to the stored text
+ el.dispatchEvent(new f.win.Event('blur'));await settle(); // the "no change" path
+ stuckFocus(f);
+ const before=snapshots(f);
+ f.notify();await sleep(900);
+ assert.ok(snapshots(f)>before,'the reload ran');
+ f.bench.destroy();
+});
+
+test('restored drafts (R15-3): a draft restored over a write that then rolls back keeps its original base, so it is an ordinary unsaved edit and saves on',async()=>{
+ const f=fixture();const state=casPending(f);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ let release;state.hold=new Promise(r=>{release=r;});
+ await f.bench.show('annotations');await settle();
+ const first=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,first,'TYPED');first.dispatchEvent(new f.win.Event('blur'));await settle();
+ await f.bench.show('annotations');await settle(); // the editor is recreated over the in-memory TYPED
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ state.fail=true;release();await settle(); // the write fails and rolls back to BASE
+ assert.equal(f.runtime.cache.items[1].remark,'BASE');
+ assert.equal(f.body().querySelector('.sc-memo-stale'),null,'no false conflict in one window');
+ assertEditorsConsistent(f,'after the rollback');
+ state.fail=false;state.hold=null;
+ casType(f,el,el.value+' NEXT');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'TYPED NEXT','TYPED NEXT is saved, not rejected');
+ assertEditorsConsistent(f,'end');
+ f.bench.destroy();
+});
+
+test('restored drafts (R15-3b): when the delayed write lands instead, the restored editor confirms it and saves more typing',async()=>{
+ const f=fixture();const state=casPending(f);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ let release;state.hold=new Promise(r=>{release=r;});
+ await f.bench.show('annotations');await settle();
+ const first=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,first,'TYPED');first.dispatchEvent(new f.win.Event('blur'));await settle();
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ release();await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'TYPED');
+ state.hold=null;
+ casType(f,el,'TYPED NEXT');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'TYPED NEXT');
+ assert.equal(f.body().querySelector('.sc-memo-stale'),null);
+ assertEditorsConsistent(f,'end');
+ f.bench.destroy();
+});
+
+test('detached editors (R15-4): a queued save of a replaced editor never replaces a draft the new editor owns',async()=>{
+ const f=fixture();const state=casPending(f);
+ f.runtime.cache.items[1]={remark:'B'};
+ let release;state.hold=new Promise(r=>{release=r;});
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'A1');old.dispatchEvent(new f.win.Event('blur'));await settle(); // held after it wrote
+ casType(f,old,'A2');old.dispatchEvent(new f.win.Event('blur'));await settle(); // queued behind it
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'NEW_B');
+ state.hold=null;release();await settle();
+ assert.ok(sharedDraftTexts(f).includes('NEW_B'),'the new editor keeps its draft: '+JSON.stringify(sharedDraftTexts(f)));
+ assert.equal(el.value,'NEW_B');
+ assert.ok(survives(f,'A2'),'the detached input is kept somewhere');
+ await f.bench.show('annotations');await settle();
+ assert.equal(f.body().querySelector('textarea.sc-paper-memo').value,'NEW_B','after the next redraw the input is NEW_B');
+ f.bench.destroy();
+});
+
+test('invariant: a notifier reload re-checks memo editors after its own lookups and gives up waiting after about 5 s',()=>{
+ const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const load=src.slice(src.indexOf('async function load(){'),src.indexOf('async function toggle('));
+ assert.match(load,/notifierLoad\)\{[^]*memoBusy\(\)/,'load() checks memoBusy before it renders');
+ assert.ok(load.indexOf('memoBusy()')<load.lastIndexOf('await render()'));
+ assert.match(src,/timer=null;commit\(\)/,'the timer callback clears its handle');
+});
+
+function mulberry(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+test('soak: 200 seeded steps of typing, blur, delay, redraw, notifier reload, failure and long text never lose a typed text, never conflict, and the reload still runs',async()=>{
+ for(const seed of (process.env.SEEDS?process.env.SEEDS.split(',').map(Number):[1,2,3,4,5])){
+  const rnd=mulberry(seed);
+  const f=fixture();const state=casPending(f);
+  f.runtime.cache.items[1]={remark:'BASE'};
+  await f.bench.show('annotations');await settle();
+  const editor=()=>f.body().querySelector('textarea.sc-paper-memo');
+  let last='',release=null,held=false,serial=0;
+  const log=[];
+  const check=label=>{
+   assert.ok(survives(f,last)||last==='',`seed ${seed} ${label}: typed text lost: ${last.slice(0,40)}… steps=${log.slice(-6).join(',')}`);
+   assert.ok(!f.body().querySelector('.sc-memo-stale'),`seed ${seed} ${label}: a conflict box in a single window; steps=${log.slice(-6).join(',')}`);
+   assertEditorsConsistent(f,`seed ${seed} ${label} steps=${log.slice(-6).join(',')}`);
+  };
+  for(let step=0;step<200;step++){
+   const r=rnd(),el=editor();
+   let action;
+   if(r<0.30){action='type';last=(rnd()<0.5?el.value:'')+' t'+(++serial);casType(f,el,last);}
+   else if(r<0.45){action='blur';el.dispatchEvent(new f.win.Event('blur'));}
+   else if(r<0.55){action='delay';if(!held){held=true;state.hold=new Promise(res=>{release=res;});}}
+   else if(r<0.65){action='release';if(held){held=false;state.fail=false;release();state.hold=null;}}
+   else if(r<0.72){action='fail';if(held){held=false;state.fail=true;release();await settle();state.fail=false;state.hold=null;}}
+   else if(r<0.88){action='redraw';await f.bench.show('annotations');}
+   else if(r<0.94){action='notify';stuckFocus(f);f.notify();}
+   else{action='long';last='L'+(++serial)+'x'.repeat(50000+(serial%5));casType(f,el,last);}
+   log.push(action);
+   await settle();
+   check('step '+step+' '+action);
+  }
+  if(held){held=false;release();state.hold=null;}
+  await settle();
+  const now=editor();now.dispatchEvent(new f.win.Event('blur'));await settle();
+  check('end');
+  stuckFocus(f);const before=snapshots(f);f.notify();await sleep(900);
+  assert.ok(snapshots(f)>before,`seed ${seed}: the reload eventually ran`);
+  f.bench.destroy();
+ }
 });

@@ -370,7 +370,7 @@
       const mine=runtime._memoBump?runtime._memoBump(entry):undefined;
       answerRev=mine;
       // Pending covers the whole chain (storage write, then the note job and its adoption): editors do not take this value as the stored memo until all of it has settled.
-      runtime._memoPending?.(item,1);
+      runtime._memoPending?.(item,1,prior,value);
       try{
       try{await runtime.flush();}catch(error){
         // An earlier failed save must not undo a later edit from this or another window.

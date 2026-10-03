@@ -4525,8 +4525,16 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   /* A memo write is "pending" from the moment it is in memory until its storage write has resolved or been rolled back. The in-memory
      remark of a pending write is not yet the persisted memo; listeners hear when one settles so editors can reconcile again. */
   memoWritePending(item) { return (this.memoPendingWrites?.get(this.identity(item)) || 0) > 0; }
-  _memoPending(item, delta) {
+  // The memo as it was before the oldest unsettled write: what a rollback goes back to (an editor made in the meantime builds on it).
+  memoPendingPrior(item) { const list = this.memoPendingPriors?.get(this.identity(item)); return list && list.length ? list[0] : undefined; }
+  // Every memo text written (and the one before the first) while a paper had writes pending, kept until the next such stretch begins: after it settles the stored memo may be any of them.
+  memoChainTexts(item) { return this.memoChains?.get(this.identity(item)) || []; }
+  _memoPending(item, delta, prior, value) {
+    const chains = this.memoChains || (this.memoChains = new Map()), cid = this.identity(item);
+    if (delta > 0) { if (!(this.memoPendingWrites?.get(cid) > 0)) chains.set(cid, [String(prior ?? '')]); const list = chains.get(cid) || []; list.push(String(value ?? '')); chains.set(cid, list); }
     const map = this.memoPendingWrites || (this.memoPendingWrites = new Map()), id = this.identity(item), n = (map.get(id) || 0) + delta;
+    const priors = this.memoPendingPriors || (this.memoPendingPriors = new Map()), list = priors.get(id) || [];
+    if (delta > 0) { list.push(String(prior ?? '')); priors.set(id, list); } else { list.shift(); if (list.length) priors.set(id, list); else priors.delete(id); }
     if (n > 0) map.set(id, n); else map.delete(id);
     if (delta < 0) for (const listener of [...(this.memoListeners || [])]) { try { listener(item); } catch (error) { this.Z.logError?.(error); } }
   }

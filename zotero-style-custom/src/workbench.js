@@ -78,8 +78,19 @@
   const setting=(key,fallback)=>runtime.getSetting?runtime.getSetting(key):runtime.pref(key,fallback);
   const tabFeature={explore:'explore',recent:'Recent',graph:'graphView',tags:'tags',notes:'noteManager',annotations:'annotationManager',backlinks:'backlinks',attachments:'attachmentPreview',tabs:'tabManager',views:'viewManager',canvas:'canvas'};
   const actionFeature={'선택 주석 색상 변경':'annotationColors','선택 주석 색 바꾸기':'annotationColors','선택 주석 병합':'reader.mergeAnnotations','참조 노트 보기':'backlinks','참조 노트':'backlinks','밝은 PDF':'PDFStyles','어두운 PDF':'PDFStyles','세피아 PDF':'PDFStyles','사용자 PDF 테마 적용':'PDFStyles','주석 팔레트 적용':'annotationColors','주석 팔레트 삭제':'annotationColors','주석 팔레트 저장':'annotationColors','색상 이름 저장':'showAnnotationColorName','여백 주석 설정 적용':'marginAnnotation','관련 문헌으로 연결':'relatedItems','선택 문헌끼리 연결 해제':'relatedItems','선택 문헌에 태그 추가':'addTags','선택 문헌에서 태그 제거':'addTags','선택 문헌 태그 이름 변경':'addTags','초록 요약':'tldr','읽기 메모 제안':'AIGenerateRemark','태그 제안':'AIGenerateTags','앱 밝게/어둡게 전환':'darkLightButton'};
-  const DRAFT_LIMIT=100,DRAFT_LENGTH=50000,DRAFT_TOTAL=500000;
-  function cachedDrafts(){const saved=runtime.cache.workbenchDrafts;const map=new Map(saved?.version===1&&Array.isArray(saved.entries)?saved.entries.filter(entry=>Array.isArray(entry)&&entry.length===2&&typeof entry[0]==='string'&&entry[0].length<=1000&&!/password|secret|api.?key|access.?token|bearer/i.test(entry[0])&&typeof entry[1]==='string'&&entry[1].length<=DRAFT_LENGTH).slice(-DRAFT_LIMIT):[]);let total=[...map.values()].reduce((sum,value)=>sum+value.length,0);while(total>DRAFT_TOTAL){const key=map.keys().next().value;total-=map.get(key).length;map.delete(key);}return map;}
+  /* Ordinary drafts are cut at DRAFT_LENGTH. A memo draft (it has an owner) is never cut: the reader's whole text is kept (up to MEMO_DRAFT_MAX, far beyond any memo). */
+  const DRAFT_LIMIT=100,DRAFT_LENGTH=50000,DRAFT_TOTAL=500000,MEMO_TOTAL=20000000,MEMO_DRAFT_MAX=5000000;
+  function cachedDrafts(){const saved=runtime.cache.workbenchDrafts;const map=new Map(saved?.version===1&&Array.isArray(saved.entries)?saved.entries.filter(entry=>Array.isArray(entry)&&entry.length===2&&typeof entry[0]==='string'&&entry[0].length<=1000&&!/password|secret|api.?key|access.?token|bearer/i.test(entry[0])&&typeof entry[1]==='string'&&entry[1].length<=MEMO_DRAFT_MAX).slice(-DRAFT_LIMIT):[]);trimDrafts(map);return map;}
+  // Ordinary drafts and memo drafts (an owner sidecar marks them) are bounded separately: a memo draft is never evicted to make room for ordinary text.
+  function trimDrafts(map,count=false){
+   const isMemo=key=>key.includes('\u0001')||map.has(key+'\u0001own');
+   const total=pred=>[...map].reduce((sum,[key,value])=>pred(key)?sum+value.length:sum,0);
+   let ordinary=total(key=>!isMemo(key));
+   for(const key of [...map.keys()]){if(ordinary<=DRAFT_TOTAL)break;if(!isMemo(key)){ordinary-=map.get(key).length;map.delete(key);}}
+   let memo=total(isMemo);
+   for(const key of [...map.keys()]){if(memo<=MEMO_TOTAL)break;if(isMemo(key)){memo-=map.get(key).length;map.delete(key);}}
+   if(count)while(map.size>DRAFT_LIMIT){const key=[...map.keys()].find(k=>!isMemo(k))??map.keys().next().value;map.delete(key);}
+  }
   for(const [key,value]of cachedDrafts())drafts.set(key,value);
   /* A memo draft remembers the stored memo the editor was loaded from (its base) under a second key: a draft restored
      later is only put back into an editor when that is still the stored memo; otherwise it waits as a conflict. */
@@ -88,7 +99,7 @@
      binding that wrote it (window id + binding id); rev counts the writes. Text equality never grants ownership. */
   const DRAFT_OWN='\u0001own';
   const WINDOW_ID=Math.random().toString(36).slice(2,10);let bindingSeq=0;LIVE_DRAFT_WINDOWS.add(WINDOW_ID);
-  const DRAFT_TRUNC='\u0001trunc';
+  const DRAFT_TRUNC='\u0001trunc',DRAFT_BASETEXT='\u0001bt'; // bt: the stored memo a memo draft was typed over, as text
   // Bases are compared by hash (the stored base would otherwise be cut like the draft): length and a 32-bit FNV-1a.
   const hashOf=text=>{text=String(text);let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return 'h'+text.length+'.'+h.toString(36);};
   // A base is stored only in the tagged form 'H1:'+hash; raw memo text is never compared with it, and a text that merely looks like a hash is just text.
@@ -98,10 +109,9 @@
   function draftMeta(key){const raw=cachedDrafts().get(key+DRAFT_OWN);if(typeof raw!=='string')return null;const cut=raw.lastIndexOf('|');return cut<0?null:{owner:raw.slice(0,cut),rev:Number(raw.slice(cut+1))};}
   function updateDraft(key,value,base,owner){
    if(!key||key.length>1000||/password|secret|api.?key|access.?token|bearer/i.test(key))return;
-   const saved=cachedDrafts(),before=draftMeta(key);saved.delete(key);drafts.delete(key);saved.delete(key+DRAFT_BASE);drafts.delete(key+DRAFT_BASE);saved.delete(key+DRAFT_OWN);drafts.delete(key+DRAFT_OWN);saved.delete(key+DRAFT_TRUNC);drafts.delete(key+DRAFT_TRUNC);
-   if(value!==undefined){const cut=String(value).length>DRAFT_LENGTH;value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);if(cut){saved.set(key+DRAFT_TRUNC,'1');drafts.set(key+DRAFT_TRUNC,'1');}if(typeof owner==='string'){const o=owner+'|'+((before?.rev||0)+1);saved.set(key+DRAFT_OWN,o);drafts.set(key+DRAFT_OWN,o);}if(typeof base==='string'||(base&&typeof base.tagged==='string')){const b=typeof base==='string'?baseTag(base):base.tagged;saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);}}
-   let total=[...saved.values()].reduce((sum,text)=>sum+text.length,0);
-   while(saved.size>DRAFT_LIMIT||total>DRAFT_TOTAL){const oldest=saved.keys().next().value;total-=saved.get(oldest).length;saved.delete(oldest);}
+   const saved=cachedDrafts(),before=draftMeta(key);saved.delete(key);drafts.delete(key);saved.delete(key+DRAFT_BASE);drafts.delete(key+DRAFT_BASE);saved.delete(key+DRAFT_OWN);drafts.delete(key+DRAFT_OWN);saved.delete(key+DRAFT_TRUNC);drafts.delete(key+DRAFT_TRUNC);saved.delete(key+DRAFT_BASETEXT);drafts.delete(key+DRAFT_BASETEXT);
+   if(value!==undefined){const limit=typeof owner==='string'?MEMO_DRAFT_MAX:DRAFT_LENGTH;const cut=String(value).length>limit;value=String(value).slice(0,limit);saved.set(key,value);drafts.set(key,value);if(cut){saved.set(key+DRAFT_TRUNC,'1');drafts.set(key+DRAFT_TRUNC,'1');}if(typeof owner==='string'){const o=owner+'|'+((before?.rev||0)+1);saved.set(key+DRAFT_OWN,o);drafts.set(key+DRAFT_OWN,o);}if(typeof base==='string'||(base&&typeof base.tagged==='string')){const b=typeof base==='string'?baseTag(base):base.tagged;saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);if(typeof base==='string'&&typeof owner==='string'){saved.set(key+DRAFT_BASETEXT,base);drafts.set(key+DRAFT_BASETEXT,base);}}}
+   trimDrafts(saved,true);
    for(const existing of drafts.keys())if(!saved.has(existing))drafts.delete(existing);
    runtime.cache.workbenchDrafts={version:1,entries:[...saved]};runtime.dirty=true;
    if(draftTimer)win.clearTimeout(draftTimer);
@@ -1367,7 +1377,7 @@
    if(jcrMount){state.jcrBrowserState=jcrMount.state;jcrMount.destroy();jcrMount=null;}
    abortAround();aroundRow=null;previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
    // Editors that were just taken off the screen: their autosave timers are cancelled (their input is already a draft the new editor restores).
-   memoFields=memoFields.filter(entry=>{if(entry.field.isConnected)return true;memoBindings.get(entry.field)?.cancelTimer?.();return false;});
+   memoFields=memoFields.filter(entry=>{if(entry.field.isConnected)return true;const gone=memoBindings.get(entry.field);gone?.preserveDetached?.();gone?.cancelTimer?.();return false;});
   }
 
   /* One empty state for every tab: the tab's own outline icon, a heading, a muted hint, and the actions the page
@@ -1468,7 +1478,10 @@
    }
    const existing=new Set(state.items.map(i=>i.id));state.selected=new Set([...state.selected].filter(id=>existing.has(id)));
    type.replaceChildren();node('option','모든 유형',type,{value:''});for(const t of [...new Set(state.items.map(i=>i.itemType))].filter(Boolean).sort())node('option',kindLabel(t),type,{value:t});type.value=state.type;drawKindChips();
-   message('');await render();
+   message('');
+   // The lookups above took time: an input typed meanwhile is not rebuilt under the reader. The reload starts over.
+   if(notifierLoad){notifierLoad=false;if(memoBusy()){if(!reloadDeferSince)reloadDeferSince=Date.now();if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(reloadAgain,300);return;}}
+   await render();
   }
   async function toggle(show){const wasHidden=panel.hidden,open=show===undefined?wasHidden:!!show;
    // Read the pane's selection before docking moves the window to another tab.
@@ -3587,7 +3600,7 @@
    const all=runtime.cache.memoKept&&typeof runtime.cache.memoKept==='object'&&!Array.isArray(runtime.cache.memoKept)?runtime.cache.memoKept:(runtime.cache.memoKept={});
    const list=all[keptKey(itemID)]||(all[keptKey(itemID)]=[]);
    if(list.some(entry=>entry.text===text))return;
-   list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text).slice(0,DRAFT_LENGTH),base:String(base??''),truncated:!!truncated||String(text).length>DRAFT_LENGTH,at:new Date().toISOString()});
+   list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text),base:String(base??''),truncated:!!truncated,at:new Date().toISOString()});
    runtime.dirty=true;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));
   }
   function dropKept(itemID,id){
@@ -3616,8 +3629,13 @@
    const grow=()=>{if(typeof autoGrow==='function')autoGrow(field);};
    /* The only place the base moves. `derived`: the text is what this editor itself just submitted and had stored, so the
       editor's current text (possibly typed on since) builds on it. Anything else moves the base only if the editor shows it. */
-   const moveBase=(text,derived=false)=>{if(!cas||(!derived&&field.value!==text))return false;binding.base=String(text);return true;};
+   const moveBase=(text,derived=false)=>{if(!cas||(!derived&&field.value!==text))return false;binding.base=String(text);binding.confirmIf=undefined;return true;};
+   // While the in-memory memo is still the unsettled write this editor was restored over, the editor builds on that text: a save is judged against it.
+   binding.effectiveBase=()=>binding.confirmIf!==undefined&&cas&&storedMemo(cas.itemID)===binding.confirmIf?binding.confirmIf:binding.base;
    binding.moveBase=moveBase;
+   binding.loaded=cas?String(cas.base??''):undefined; // the text this editor was created with
+   // Created over the in-memory value of a write that has not settled: the editor builds on it while it stands, and on the memo before it if it rolls back.
+   if(cas&&memoPendingNow(cas.itemID)){const prior=(()=>{try{return runtime.memoPendingPrior?.(runtime.Z.Items.get(Number(cas.itemID)));}catch(_){return undefined;}})();if(typeof prior==='string'&&prior!==binding.base){binding.confirmIf=binding.base;binding.base=prior;}binding.chainBorn=true;}
    /* After every completion each connected editor of the paper is left in exactly one consistent state:
       (a) it shows the stored memo: base, autosave baseline and stored are one text, no box, its own draft cleared (finishOwn);
       (b) it shows other text on a current base: nothing is open, and the autosave baseline is invalidated so the next blur/autosave saves;
@@ -3625,9 +3643,17 @@
    binding.reconcile=()=>{
     if(!cas||!field.isConnected)return;
     const stored=storedMemo(cas.itemID),value=field.value;
+    // A restored value that was an unsettled write: if that write landed the base becomes it; if it rolled back the base stays on the memo it was typed over.
+    if(!memoPendingNow(cas.itemID)){
+     // A base that moves also moves the base its own draft was recorded over, or a redraw would not restore it.
+     const rebaseDraft=()=>{if(field.dataset.draftKey&&value!==stored&&binding.draftToken())binding.ownDraftWrite(value,stored);};
+     if(binding.confirmIf!==undefined){if(stored===binding.confirmIf){moveBase(stored,true);rebaseDraft();}binding.confirmIf=undefined;}
+     // Made while writes were pending: after they settle the stored memo may be any text of that chain (a failed older write does not roll back under a newer one), and all of them are this editor's own history.
+     if(binding.chainBorn){binding.chainBorn=false;let chain=[];try{chain=runtime.memoChainTexts?.(runtime.Z.Items.get(Number(cas.itemID)))||[];}catch(_){}if(chain.includes(stored)){moveBase(stored,true);rebaseDraft();}}
+    }
     // An editor nobody typed into since it last showed a stored text just follows the stored memo: no draft, no box.
     const holdsDraft=(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return !!meta&&meta.owner===binding.id&&cachedDrafts().has(key);})();
-    if(!binding.unsaved&&!holdsDraft&&value===binding.base){
+    if(!binding.unsaved&&!holdsDraft&&(value===binding.base||(binding.confirmIf!==undefined&&value===binding.confirmIf))){
      if(value!==stored)binding.show(stored);
      else if(!memoPendingNow(cas.itemID)){moveBase(stored);last=stored;clearStale();}
      return;
@@ -3641,7 +3667,7 @@
      return;
     }
     // The input differs from the stored memo: it must be in this editor's own draft (written through the ownership rules), or a redraw would lose it.
-    const ownDraft=()=>{const key=field.dataset.draftKey;if(!key)return;const meta=draftMeta(key);if(meta&&meta.owner===binding.id&&cachedDrafts().get(key)===value.slice(0,DRAFT_LENGTH))return;writeMemoDraft(field);};
+    const ownDraft=()=>{const key=field.dataset.draftKey;if(!key)return;const meta=draftMeta(key);if(meta&&meta.owner===binding.id&&cachedDrafts().get(key)===value)return;writeMemoDraft(field);};
     if(binding.base===stored){clearStale();last=null;ownDraft();return;}
     const s=binding.stale;
     if(!(s&&!s.used&&s.stored===stored&&s.conflict.local===value&&staleBox&&staleBox.isConnected)){
@@ -3658,7 +3684,7 @@
     const meta=draftMeta(key);
     if(!meta||meta.owner!==binding.id)return false;
     if(token&&(token.owner!==meta.owner||token.rev!==meta.rev))return false;
-    if(cachedDrafts().get(key)!==String(submitted).slice(0,DRAFT_LENGTH))return false;
+    if(cachedDrafts().get(key)!==String(submitted))return false;
     updateDraft(key,undefined);return true;
    };
    const clearStale=()=>{binding.stale=null;if(staleBox){staleBox.remove();staleBox=null;}if(field.dataset.state==='stale')field.dataset.state='';};
@@ -3769,19 +3795,25 @@
      return true;
     }finally{if(live)reconcileAll(cas.itemID);}
    };
-   const ensureOwnDraft=()=>{const key=field.dataset.draftKey;if(!key)return;const meta=draftMeta(key);if(meta&&meta.owner===binding.id&&cachedDrafts().get(key)===field.value.slice(0,DRAFT_LENGTH))return;writeMemoDraft(field);};
+   // A detached editor keeps its input without ever touching a draft another binding owns: its own draft is enough; otherwise a separate kept entry.
+   binding.preserveDetached=()=>{
+    const value=field.value;if(!cas||value===binding.base)return;
+    const key=field.dataset.draftKey,meta=key?draftMeta(key):null;
+    if(meta&&meta.owner===binding.id&&cachedDrafts().get(key)===value)return;
+    keepDraft(cas.itemID,value,baseTag(binding.base));
+   };
    binding.timerPending=()=>!!timer;
    binding.cancelTimer=()=>{if(timer){win.clearTimeout(timer);timer=null;}};
    const run=async(options={})=>{
     const value=field.value;
     /* An editor that is no longer on screen saves nothing: its input is already a draft (or a kept card) that the editor on screen
        restores, and a save from it would be judged against a base the reader no longer sees. */
-    if(!field.isConnected){if(value!==binding.base)ensureOwnDraft();return {ok:false,detached:true};}
+    if(!field.isConnected){binding.preserveDetached();return {ok:false,detached:true};}
     if(value===last&&!options.force)return {ok:true,unchanged:true};
     last=value;
     field.dataset.state='saving';
     try{
-     const ok=await attempt(value,binding.base);
+     const ok=await attempt(value,binding.effectiveBase());
      if(!ok)return {ok:false,stale:binding.stale};
      if(!field.isConnected)return {ok:true};
      field.dataset.state='saved';
@@ -3817,15 +3849,16 @@
     return result;
    };
    if(!opts.manual){
+    // Every path that runs, cancels or skips the autosave leaves `timer` null: a stale handle would read as "a save is waiting" for ever.
     field.addEventListener('input',()=>{
      field.dataset.state='';
      if(timer)win.clearTimeout(timer);
-     timer=win.setTimeout(()=>{commit();},900);
+     timer=win.setTimeout(()=>{timer=null;commit();},900);
     });
     // Leaving the field commits at once: waiting out the timer after the panel
     // has closed would lose the edit.
-    field.addEventListener('blur',()=>{if(timer)win.clearTimeout(timer);commit();});
-    memoFields.push({field,flush:()=>{if(timer)win.clearTimeout(timer);return commit();}});
+    field.addEventListener('blur',()=>{if(timer){win.clearTimeout(timer);timer=null;}commit();});
+    memoFields.push({field,flush:()=>{if(timer){win.clearTimeout(timer);timer=null;}return commit();}});
    }
    /* The shared draft is only ever changed through these three, and only with the owner and revision this window just read:
       ownDraftWrite (a draft this binding owns), claimDraft and dropDraft (restore, against the meta it read). */
@@ -3845,15 +3878,21 @@
     const meta=draftMeta(key),draftBase=saved.get(key+DRAFT_BASE),truncated=saved.has(key+DRAFT_TRUNC);
     const stored=storedMemo(cas.itemID);
     const sameAsStored=draft===stored||(truncated&&stored.slice(0,DRAFT_LENGTH)===draft);
+    // The stored memo the draft was typed over, as text, when it is on record and matches its hash.
+    const baseText=saved.get(key+DRAFT_BASETEXT),baseOK=typeof baseText==='string'&&typeof draftBase==='string'&&baseTag(baseText)===draftBase;
+    const claimBase=baseOK?baseText:(typeof draftBase==='string'?{tagged:draftBase}:undefined);
     const otherLive=!!meta&&ownerWindow(meta.owner)!==WINDOW_ID&&LIVE_DRAFT_WINDOWS.has(ownerWindow(meta.owner));
     if(otherLive){if(!sameAsStored&&draft!==field.value){keepDraft(cas.itemID,draft,draftBase,truncated);drawKept();}return;}
     // The value came from a draft: it is unsaved input until a save of exactly that value is confirmed (a leftover equal to the stored memo is just dropped, unless that memo is a write still in flight).
     if(draft===field.value&&!truncated){
      if(draft===stored&&!memoPendingNow(cas.itemID)){binding.dropDraft(meta);return;}
-     binding.claimDraft(draft,typeof draftBase==='string'?{tagged:draftBase}:undefined,meta);binding.unsaved=true;return;
+     // The editor shows what a write (still in flight) put in memory: its base is the memo that draft was typed over, so a rollback to it is an ordinary unsaved edit, not a conflict.
+     if(baseOK&&baseText!==binding.base&&draft!==baseText){moveBase(baseText,true);binding.confirmIf=draft;}
+     if(memoPendingNow(cas.itemID))binding.chainBorn=true;
+     binding.claimDraft(draft,claimBase,meta);binding.unsaved=true;return;
     }
     if(sameAsStored){binding.dropDraft(meta);return;}
-    if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.base){field.value=draft;grow();binding.unsaved=true;binding.claimDraft(draft,{tagged:draftBase},meta);return;}
+    if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.loaded){field.value=draft;grow();binding.unsaved=true;binding.claimDraft(draft,claimBase,meta);return;}
     keepDraft(cas.itemID,draft,draftBase,truncated);binding.dropDraft(meta);drawKept();
    };
    memoBindings.set(field,binding);
@@ -8133,14 +8172,21 @@
      typing in the panel the reload waits, and runs when they leave the field. */
   let reloadPending=false;
   const typing=()=>{const a=doc.activeElement;return !!a&&panel.contains(a)&&(a.localName==='textarea'||a.isContentEditable===true||(a.localName==='input'&&/^(text|search|)$/.test(a.getAttribute('type')||'')));};
-  const scheduleReload=()=>{if(disposed||panel.hidden)return;if(typing()){reloadPending=true;return;}reloadPending=false;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(function again(){
-   // A memo editor with an autosave waiting or a save running is not rebuilt under the reader: the reload waits for it.
+  /* A notifier reload never rebuilds a memo under the reader: it waits while an editor has an autosave waiting or a save running,
+     re-checks after load()'s own lookups (they can take long), and after about 5 s it goes ahead anyway (every unsaved input is
+     already a draft, and the panel must not stop refreshing). */
+  let reloadDeferSince=0,notifierLoad=false;
+  const memoBusy=()=>{
+   if(reloadDeferSince&&Date.now()-reloadDeferSince>5000)return false;
+   return [...body.querySelectorAll('textarea[data-memo-item]')].some(e=>{const b=memoBindings.get(e);return !!b&&(b.timerPending?.()||b.busy>0);});
+  };
+  function reloadAgain(){
    if(disposed||panel.hidden)return;
    if(typing()){reloadPending=true;return;}
-   const busy=[...body.querySelectorAll('textarea[data-memo-item]')].some(e=>{const b=memoBindings.get(e);return !!b&&(b.timerPending?.()||b.busy>0);});
-   if(busy){reloadTimer=win.setTimeout(again,300);return;}
-   run(load);
-  },200);};
+   if(memoBusy()){if(!reloadDeferSince)reloadDeferSince=Date.now();reloadTimer=win.setTimeout(reloadAgain,300);return;}
+   reloadDeferSince=0;notifierLoad=true;run(load);
+  }
+  const scheduleReload=()=>{if(disposed||panel.hidden)return;if(typing()){reloadPending=true;return;}reloadPending=false;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(reloadAgain,200);};
   panel.addEventListener('focusout',()=>{if(reloadPending)win.setTimeout(()=>{if(reloadPending&&!typing())scheduleReload();},0);});
   if(runtime.Z.Notifier){notifier=runtime.Z.Notifier.registerObserver({notify:scheduleReload},['item','item-tag','collection','tab'],'style-custom-workbench');}
   const selectionTimer=win.setInterval(()=>{if(!disposed&&!win.closed&&!panel.hidden&&scopeContext()!==observedContext)run(load);},500);
