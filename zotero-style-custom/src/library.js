@@ -306,11 +306,13 @@
       if(!library(libraryID).editable)throw new Error('Item is read-only');
       const route=libraryID===Z.Libraries.userLibraryID?'library':'groups/'+safe(()=>Z.Groups.getGroupIDFromLibraryID(libraryID),'unavailable');
       const para=text=>escape(text).split(/\r?\n/).join('<br/>');
-      const heading=String(title||'').trim()||'종합 노트';
+      // The words written into a new note follow the panel's language, like the title the panel passes in.
+      const say=text=>{try{return runtime?.t?runtime.t(text):text;}catch(_){return text;}};
+      const heading=String(title||'').trim()||say('종합 노트');
       let html=`<h1>${escape(heading)}</h1>`;
       for(const {item,marks,evidence} of papers){
         const year=field(item,'date').match(/\b\d{4}\b/)?.[0]||'';
-        html+=`<h2><a href="zotero://select/${route}/items/${escape(item.key)}">${escape(field(item,'title')||'제목 없음')}</a>${year?' ('+year+')':''}</h2>`;
+        html+=`<h2><a href="zotero://select/${route}/items/${escape(item.key)}">${escape(field(item,'title')||say('제목 없음'))}</a>${year?' ('+year+')':''}</h2>`;
         if(evidence.length)html+='<ul>'+evidence.map(([label,text])=>`<li><b>${escape(label)}</b>: ${para(text)}</li>`).join('')+'</ul>';
         for(const {mark,file} of marks){
           const page=safe(()=>JSON.parse(mark.annotationPosition).pageIndex,null),label=String(safe(()=>mark.annotationPageLabel,'')||'')||(Number.isInteger(page)?String(page+1):'');
@@ -318,7 +320,7 @@
           const text=String(safe(()=>mark.annotationText,'')||''),comment=String(safe(()=>mark.annotationComment,'')||'');
           if(text)html+=`<blockquote><p>${para(text)}</p></blockquote>`;
           if(comment)html+=`<p>${para(comment)}</p>`;
-          html+=`<p><a href="${link}">${label?'p.'+escape(label)+' · ':''}주석 열기</a></p>`;
+          html+=`<p><a href="${link}">${label?'p.'+escape(label)+' · ':''}${say('주석 열기')}</a></p>`;
         }
       }
       const note=new Z.Item('note');note.libraryID=libraryID;note.setNote('<div data-schema-version="9">'+html+'</div>');

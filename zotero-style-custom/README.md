@@ -23,6 +23,8 @@ The repository README has the illustrated tour: [../README.md](../README.md). Th
 
 **The right-click menu.** Reading status and rating; search this paper in ZotPoP; related papers; follow the senior author; copy in a citation style; open the citation graph; refresh citations and journal metrics; check retractions and open access; fill the gaps from OpenAlex; look up citations for the whole library. Every entry carries a drawn sign.
 
+**Language.** English is the default. *Language / 언어* offers English, 한국어 and Follow Zotero / Zotero 언어 따르기 (Korean only when Zotero itself is in Korean), each named in its own language: a three-way switch at the top of the Style editor tab, and the first item of Settings → Menus and design. The panel changes at once; item-list column names and the right-click menu change when Zotero restarts. Numbers, dates and plurals follow the chosen language; paper titles, journal names, tags and memos are never translated.
+
 **Settings.** Eleven categories (Columns, Views and panels, Reader and annotations, Sidebar and tabs, Tags, Collections, Menus and design, Reading record, Citations and IF, Translate·AI, Updates) with search, an explanation on every item, per-category defaults, and a *Start here* block naming the keys still blank. API keys are shown masked and are not cleared by restoring a category's defaults.
 
 ## Journal metrics
@@ -77,6 +79,6 @@ python3 scripts/extract-strings.py              # Korean source strings → data
 python3 scripts/build-strings.py                # + data/strings-en.json → src/strings.js
 ```
 
-Korean strings in the source are the keys; every one must have an English entry, and a test fails otherwise. `manifest.json`, `package.json`, `data/features.json` and `docs/improvement-rounds.json` must carry the same version. Every improvement round is recorded in `docs/improvement-rounds.json` with the source marker and the test that cover it, and a test checks that both still exist.
+Korean strings in the source are the keys; every one must have an English entry, and a test (`test/i18n.test.mjs`) fails otherwise. English is the default language, so the same test also fails if Korean is written straight into the page without going through the dictionary. The few Korean strings that stay Korean on purpose (the language names, the Korean search examples, the memo separator marker, the developer self-check report) are listed in that test with the reason. `manifest.json`, `package.json`, `data/features.json` and `docs/improvement-rounds.json` must carry the same version. Every improvement round is recorded in `docs/improvement-rounds.json` with the source marker and the test that cover it, and a test checks that both still exist.
 
 Licence: [MIT](../LICENSE) for the code. The journal figures that ship with the plugin come from OpenAlex under CC0 1.0 and from publishers' own metrics pages; Journal Citation Reports figures are licensed to their subscriber and are not distributed, but are read from `style-custom-journals/` in the Zotero data directory when a reader puts their own export there. Third-party notices: [LICENSES.md](LICENSES.md).

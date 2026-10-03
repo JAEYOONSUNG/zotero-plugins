@@ -55,7 +55,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.readerTools=Reader.create({Zotero:this.Z,runtime:this});
     this.assist=Assist.create({Zotero:this.Z,runtime:this});
   }
-  text(english, korean) { return String(this.Z.locale || "").startsWith("ko") ? korean : english; }
+  // English unless the chosen language is Korean (the setting, not the OS).
+  text(english, korean) { return this.i18n ? (this.i18n.isKorean() ? korean : english) : english; }
   pref(name, fallback) { return this.Z.Prefs.get("extensions.style-custom." + name, true) ?? fallback; }
   isRegular(item) { return !!item?.isRegularItem?.() && !item.isFeedItem && !item.deleted; }
   canEdit(item) {
@@ -111,13 +112,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return Promise.resolve();
   }
 
-  // Which language the panel speaks. `auto` follows Zotero's own locale, which
-  // is the honest default: somebody running Zotero in English wants this in
-  // English without having to be asked.
+  // Which language the panel speaks. English is the default: a preference
+  // never set, empty or unknown gives English. `auto` follows Zotero's own
+  // locale, and 'ko-KR' is Korean; people who chose either keep it.
   applyLocale() {
-    if (!this.i18n) return 'ko-KR';
-    let choice = 'auto';
-    try { choice = this.pref('language', 'auto'); } catch (error) { }
+    if (!this.i18n) return 'en-US';
+    let choice = 'en-US';
+    try { choice = this.pref('language', 'en-US'); } catch (error) { }
     return this.i18n.use(choice, this.Z);
   }
 
@@ -320,7 +321,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     const {zero, format} = this.timeFormatMemo;
     const value=Math.max(0,Math.floor(Number(seconds)||0));if(!value&&!zero)return '';
-    if(format==='seconds')return value+'초';
+    if(format==='seconds')return value+this.t('초');
     const h=Math.floor(value/3600),m=Math.floor(value%3600/60),s=value%60;
     if(format==='clock')return [h,m,s].map(n=>String(n).padStart(2,'0')).join(':');
     /* The panel's own wording (options.compact): the two largest units only, and never a unit that is zero --
@@ -1090,10 +1091,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       ? ` · Q${standing.quartile}${standing.rank != null && standing.rankTotal != null ? ` ${standing.rank}/${standing.rankTotal}` : ''}${standing.categoryKey ? ' ' + standing.categoryKey : ''}`
       : '';
     cell.title = figure == null
-      ? (title ? `${title} · 공식 IF를 아직 확인하지 못했습니다.` : '저널 정보가 없습니다.')
+      ? (title ? `${title} · ${this.t('공식 IF를 아직 확인하지 못했습니다.')}` : this.t('저널 정보가 없습니다.'))
       : estimate
-        ? `≈ ${figure} · OpenAlex 2년 평균 피인용 · ${name || title}\n공식 JIF가 아니라 추정치입니다.`
-        : `${title}${tier ? ' · ' + tier.name : ''} · IF ${figure}${standingText}`;
+        ? `≈ ${figure} · ${this.t('OpenAlex 2년 평균 피인용')} · ${name || title}\n${this.t('공식 JIF가 아니라 추정치입니다.')}`
+        : `${title}${tier ? ' · ' + this.t(tier.name) : ''} · IF ${figure}${standingText}`;
     return cell;
   }
 
@@ -1154,7 +1155,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const badge = this.pill(doc, tier.label, tone, P);
     badge.style.fontWeight = "600";
     const h = where.hIndex ?? Math.max(where.first?.hIndex || 0, where.corresponding?.hIndex || 0);
-    badge.title = tier.note + (h > 0 ? ` · 기관 h-index ${h}` : "");
+    badge.title = this.t(tier.note) + (h > 0 ? ` · ${this.t("기관 h-index")} ${h}` : "");
     return badge;
   }
   // Everything the affiliation columns know, for a tooltip.
@@ -1162,13 +1163,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return [
       where.first ? `${this.t("1저자")} ${where.first.name} · ${where.first.institution || this.t("소속 미상")}`
         + (where.first.country ? ` (${where.first.country})` : "")
-        + (where.first.hIndex ? ` · 기관 h-index ${where.first.hIndex}` : "") : null,
+        + (where.first.hIndex ? ` · ${this.t("기관 h-index")} ${where.first.hIndex}` : "") : null,
       where.corresponding ? `${this.t("교신저자")} ${where.corresponding.name} · ${where.corresponding.institution || this.t("소속 미상")}`
         + (where.corresponding.country ? ` (${where.corresponding.country})` : "")
-        + (where.corresponding.hIndex ? ` · 기관 h-index ${where.corresponding.hIndex}` : "") : null,
-      where.correspondingKnown ? null : "교신저자 표시가 없어 마지막 저자를 교신저자로 간주했습니다.",
-      where.extraCorresponding ? `교신저자가 ${where.extraCorresponding + 1}명입니다.` : null,
-      where.international ? "국제 공동연구" : null
+        + (where.corresponding.hIndex ? ` · ${this.t("기관 h-index")} ${where.corresponding.hIndex}` : "") : null,
+      where.correspondingKnown ? null : this.t("교신저자 표시가 없어 마지막 저자를 교신저자로 간주했습니다."),
+      where.extraCorresponding ? this.t(`교신저자가 ${where.extraCorresponding + 1}명입니다.`) : null,
+      where.international ? this.t("국제 공동연구") : null
     ].filter(Boolean).join("\n");
   }
   renderCell(key, index, value, column, doc) {
@@ -1200,7 +1201,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.textContent=state.citationPending===id?"…":"—";
         cell.style.color=P.faint;
         const attempt=state.citationAttempt?.identity===id?state.citationAttempt:null;
-        cell.title=state.citationPending===id?"인용 수 조회 중":!this.openAlexKey()&&!attempt?this.t("OpenAlex 키가 없어 자동 조회를 쉬고 있습니다. 설정 → 인용 수·IF에 키를 넣거나, 우클릭 → 선택한 문헌 인용 수 새로고침을 실행하세요."):attempt?({"not-found":"일치하는 논문의 인용 수를 찾지 못했습니다.",error:"조회 실패: 기존 값은 유지됩니다.",unsupported:"확인 가능한 논문 식별자가 부족합니다."}[attempt.status]||"")+(attempt.reason?" "+attempt.reason:""):"아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.";
+        cell.title=state.citationPending===id?this.t("인용 수 조회 중"):!this.openAlexKey()&&!attempt?this.t("OpenAlex 키가 없어 자동 조회를 쉬고 있습니다. 설정 → 인용 수·IF에 키를 넣거나, 우클릭 → 선택한 문헌 인용 수 새로고침을 실행하세요."):attempt?this.t({"not-found":"일치하는 논문의 인용 수를 찾지 못했습니다.",error:"조회 실패: 기존 값은 유지됩니다.",unsupported:"확인 가능한 논문 식별자가 부족합니다."}[attempt.status]||"")+(attempt.reason?" "+attempt.reason:""):this.t("아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.");
       }
       // "Not checked" and "nothing wrong" are different answers, and only one
       // of them is safe to read as reassurance.
@@ -1208,8 +1209,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.textContent = "—";
         cell.style.color = P.faint;
         cell.title = this.signalTools.bareDOI(this.citationRecord(item).doi)
-          ? "철회·공개접근 신호를 아직 조회하지 않았습니다. 문헌 목록 오른쪽 클릭 메뉴에서 조회하세요."
-          : "DOI가 없어 철회 여부를 확인할 수 없습니다.";
+          ? this.t("철회·공개접근 신호를 아직 조회하지 않았습니다. 문헌 목록 오른쪽 클릭 메뉴에서 조회하세요.")
+          : this.t("DOI가 없어 철회 여부를 확인할 수 없습니다.");
       }
       // "Not looked up" and "no lab" are different answers, and a single-author
       // paper has a first author but nobody else to answer for it.
@@ -1270,20 +1271,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     } else if(key === 'annotationCount' && this.isRegular(item)) {
       const count=doc.createElementNS('http://www.w3.org/1999/xhtml','span');count.textContent=value;cell.appendChild(count);
       const pages=this.annotationDistribution(item),strip=doc.createElementNS('http://www.w3.org/1999/xhtml','span');
-      strip.setAttribute('aria-label','주석 위치 분포');strip.style.cssText='display:flex;gap:2px;overflow:hidden;flex:1;align-items:center;';
+      strip.setAttribute('aria-label',this.t('주석 위치 분포'));strip.style.cssText='display:flex;gap:2px;overflow:hidden;flex:1;align-items:center;';
       for(const page of pages.slice(0,120)){
-        const marker=doc.createElementNS('http://www.w3.org/1999/xhtml','button');marker.type='button';marker.title=`첨부 ${page.attachmentID} · ${page.pageIndex+1}페이지 · 주석 ${page.count}개`;
+        const marker=doc.createElementNS('http://www.w3.org/1999/xhtml','button');marker.type='button';marker.title=this.t(`첨부 ${page.attachmentID} · ${page.pageIndex+1}페이지 · 주석 ${page.count}개`);
         marker.setAttribute('aria-label',marker.title);marker.tabIndex=-1;marker.style.cssText='border:0;padding:0;min-width:4px;flex:1;height:12px;cursor:pointer;';
         let start=0;const stops=[];for(const[color,count]of page.colors){const end=start+count/page.count*100;stops.push(`${color} ${start}% ${end}%`);start=end;}
         marker.style.background=stops.length===1?page.colors[0][0]:`linear-gradient(0deg,${stops.join(',')})`;
         marker.addEventListener('click',event=>{event.stopPropagation();this.libraryService.openItem(page.attachmentID,{pageIndex:page.pageIndex}).catch(error=>this.Z.logError(error));});strip.appendChild(marker);
       }
-      cell.appendChild(strip);cell.title=`주석 ${value}개 · ${pages.length}개 페이지에 분포${pages.length>120?' · 앞 120개 위치 표시':''}. 색 막대를 클릭하면 해당 PDF 페이지로 이동합니다.`;
+      cell.appendChild(strip);cell.title=this.t(`주석 ${value}개 · ${pages.length}개 페이지에 분포`)+(pages.length>120?' · '+this.t('앞 120개 위치 표시'):'')+'. '+this.t('색 막대를 클릭하면 해당 PDF 페이지로 이동합니다.');
     } else if(['added','modified'].includes(key)&&this.getSetting('dateDisplay')==='relative') {
       /* Zotero stores these in UTC without a zone; read as local time, a paper
          added a minute ago in Seoul said "9시간 전". */
       const when=this.localStamp(value),timestamp=when?when.getTime():NaN,age=Math.max(0,Date.now()-timestamp),minutes=Math.floor(age/60000),hours=Math.floor(minutes/60),days=Math.floor(hours/24);
-      cell.textContent=Number.isFinite(timestamp)?days?days+'일 전':hours?hours+'시간 전':minutes?minutes+'분 전':'방금':value;
+      cell.textContent=Number.isFinite(timestamp)?days?this.t(`${days}일 전`):hours?this.t(`${hours}시간 전`):minutes?this.t(`${minutes}분 전`):this.t('방금'):value;
     } else if(['added','modified','lastRead'].includes(key)) {
       const when=this.localStamp(value);
       cell.textContent=when?this.formatStamp(when):String(value||'');
@@ -1333,28 +1334,28 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.appendChild(pill);
       };
       if (si.length) badge(si.length > 1 ? `SI ×${si.length}` : "SI", P.purple, si,
-        "보충자료 — 클릭하면 열립니다");
+        this.t("보충자료 — 클릭하면 열립니다"));
       // A duplicate is clutter the user can act on, and saying so is the only
       // way they ever find out.
-      if (duplicate.length) badge(duplicate.length > 1 ? `중복 ×${duplicate.length}` : "중복", P.gray, duplicate,
-        "이 문헌에 같은 파일이 두 번 붙어 있습니다 — 클릭하면 열립니다");
+      if (duplicate.length) badge(duplicate.length > 1 ? `${this.t("중복")} ×${duplicate.length}` : this.t("중복"), P.gray, duplicate,
+        this.t("이 문헌에 같은 파일이 두 번 붙어 있습니다 — 클릭하면 열립니다"));
       // A different paper filed here is a real error, not a nuance.
-      if (foreign.length) badge("다른 논문", P.red, foreign,
-        "첨부된 문서가 이 문헌의 제목을 전혀 쓰지 않습니다 — 클릭해서 확인하세요");
+      if (foreign.length) badge(this.t("다른 논문"), P.red, foreign,
+        this.t("첨부된 문서가 이 문헌의 제목을 전혀 쓰지 않습니다 — 클릭해서 확인하세요"));
       if (unsure.length && !si.length && !foreign.length) {
         const mark = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
         mark.textContent = "?";
         mark.style.cssText = `font-size:11px;color:${P.faint};`;
-        mark.title = "첫 페이지만으로는 종류를 판단하지 못한 파일입니다.";
+        mark.title = this.t("첫 페이지만으로는 종류를 판단하지 못한 파일입니다.");
         cell.appendChild(mark);
       }
       cell.title = [
-        article.length ? `본문 ${article.length}개` : null,
-        si.length ? `보충자료 ${si.length}개` : null,
-        duplicate.length ? `중복 ${duplicate.length}개` : null,
-        foreign.length ? `다른 논문 ${foreign.length}개` : null,
-        !kinds.length ? "첨부파일 없음" : null,
-        unread ? `${unread}개는 아직 내용을 읽어보지 않았습니다 (우클릭 → 첨부파일 종류 판별)` : null
+        article.length ? this.t(`본문 ${article.length}개`) : null,
+        si.length ? this.t(`보충자료 ${si.length}개`) : null,
+        duplicate.length ? this.t(`중복 ${duplicate.length}개`) : null,
+        foreign.length ? this.t(`다른 논문 ${foreign.length}개`) : null,
+        !kinds.length ? this.t("첨부파일 없음") : null,
+        unread ? this.t(`${unread}개는 아직 내용을 읽어보지 않았습니다 (우클릭 → 첨부파일 종류 판별)`) : null
       ].filter(Boolean).join(" · ");
       return cell;
     } else if (key === "signals" && this.isRegular(item)) {
@@ -1364,8 +1365,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const hasPDF = this.attachmentKinds(item).some(kind => kind.pdf && !kind.supplementary);
       for (const badge of this.signalTools.badges(signals, {hasPDF})) {
         const tone = P[badge.tone] || P.gray;
-        const chip = this.pill(doc, badge.text, tone, P);
-        chip.title = badge.title;
+        const chip = this.pill(doc, this.t(badge.text), tone, P);
+        chip.title = this.t(badge.title);
         // Every other badge is a tinted pill. A retraction is filled solid,
         // because it is the one signal that must not be skimmed past.
         if (badge.solid) {
@@ -1381,7 +1382,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         }
         cell.appendChild(chip);
       }
-      cell.title = signals ? `${signals.status} · 확인 ${signals.checkedAt}` : "";
+      cell.title = signals ? `${this.t(signals.status)} · ${this.t(`확인 ${signals.checkedAt}`)}` : "";
       return cell;
     } else if (["firstInstitution", "correspondingInstitution", "institutionTier"].includes(key) && this.isRegular(item)) {
       const where = this.affiliationOf(item);
@@ -1474,7 +1475,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       track.style.cssText = `flex:1;min-width:14px;max-width:56px;height:4px;border-radius:100px;overflow:hidden;background:${this.tint(P.gray, 0.16)};`;
       const fill = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       fill.style.cssText = `display:block;height:100%;border-radius:100px;width:${(this.citationShare(count) * 100).toFixed(1)}%;background:${this.tint(young ? P.gray : P.blue, young ? 0.7 : 0.9)};`;
-      track.title = young ? `출판 3년 이내 (${year}) — 아직 인용이 쌓이는 중이라 회색 · 길이는 로그 눈금` : '피인용 수 · 길이는 로그 눈금';
+      track.title = young ? this.t(`출판 3년 이내 (${year}) — 아직 인용이 쌓이는 중이라 회색 · 길이는 로그 눈금`) : this.t('피인용 수 · 길이는 로그 눈금');
       track.appendChild(fill); cell.appendChild(track);
     } else if (key === "collections" && this.isRegular(item)) {
       // The cell keeps only the last two levels of a tree that can run five
@@ -1498,7 +1499,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const source = metrics[key === "if" ? "impactSource" : "citationSource"] || this.t("저장된 메타데이터");
       if (key === "if" && cell.title) cell.title += ` · ${source}`; else cell.title = `${label} · ${source}`;
       if (key === "citations" && metrics.citationCheckedAt) cell.title += ` · ${metrics.citationCheckedAt}`;
-      if (key === "citations" && this.entry(item).citationAttempt?.status === "error") cell.title += " · 최근 조회 실패, 마지막 확인값 유지";
+      if (key === "citations" && this.entry(item).citationAttempt?.status === "error") cell.title += " · " + this.t("최근 조회 실패, 마지막 확인값 유지");
     }
     return cell;
   }
@@ -5293,7 +5294,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // Google Scholar shows every style at once and lets you pick by eye. A stack of
   // menu items makes you choose a format before you can see what it looks like.
   async citationPanel(win, items) {
-    if (!items.length) throw new Error('\uBB38\uD5CC\uC744 \uBA3C\uC800 \uC120\uD0DD\uD558\uC138\uC694.');
+    if (!items.length) throw new Error(this.t('문헌을 먼저 선택하세요.'));
     const doc = win.document;
     doc.getElementById('style-custom-cite')?.remove();
     const html = tag => doc.createElementNS('http://www.w3.org/1999/xhtml', tag);
@@ -5310,17 +5311,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const panel = html('div');
     panel.className = 'sc-cite-panel';
     panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', '\uC778\uC6A9');
+    panel.setAttribute('aria-label', this.t('인용문'));
     backdrop.appendChild(panel);
 
     const head = html('div');
     head.className = 'sc-cite-head';
     const title = html('h2');
-    title.textContent = items.length > 1 ? `\uC778\uC6A9 \u00b7 ${items.length}\uAC1C` : '\uC778\uC6A9';
+    title.textContent = items.length > 1 ? this.t('인용 · {0}개').replace('{0}', items.length) : this.t('인용문');
     const close = html('button');
     close.type = 'button';
     close.className = 'sc-cite-close';
-    close.setAttribute('aria-label', '\uB2EB\uAE30');
+    close.setAttribute('aria-label', this.t('닫기'));
     close.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
     head.append(title, close);
     panel.appendChild(head);
@@ -5331,7 +5332,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
     const note = html('p');
     note.className = 'sc-cite-note';
-    note.textContent = '\uD589\uC744 \uB204\uB974\uBA74 \uBCF5\uC0AC\uB429\uB2C8\uB2E4.';
+    note.textContent = this.t('행을 누르면 복사됩니다.');
     panel.appendChild(note);
 
     const dismiss = () => { backdrop.remove(); win.removeEventListener('keydown', onKey, true); };
@@ -5379,12 +5380,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // Each style is rendered on its own so one failure cannot blank the panel.
       this.citationText(items, style)
         .then(text => { value.textContent = text; })
-        .catch(error => { this.Z.logError(error); value.textContent = '\uB9CC\uB4E4 \uC218 \uC5C6\uC74C'; row.setAttribute('aria-disabled', 'true'); });
+        .catch(error => { this.Z.logError(error); value.textContent = this.t('만들 수 없음'); row.setAttribute('aria-disabled', 'true'); });
       row.setAttribute('aria-label', style.label);
       activate(row, () => {
         if (row.getAttribute('aria-disabled') === 'true' || !value.textContent.trim()) return;
         this.Z.Utilities.Internal.copyTextToClipboard(value.textContent);
-        flash(row, `${style.label} \uC778\uC6A9\uBB38\uC744 \uBCF5\uC0AC\uD588\uC2B5\uB2C8\uB2E4.`);
+        flash(row, this.t('{0} 인용문을 복사했습니다.').replace('{0}', style.label));
       });
       return row;
     };
@@ -5446,7 +5447,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         try {
           const text = await this.citationText(items, {key: format.key});
           this.Z.Utilities.Internal.copyTextToClipboard(text);
-          flash(link, `${format.label} \uD615\uC2DD\uC744 \uBCF5\uC0AC\uD588\uC2B5\uB2C8\uB2E4.`);
+          flash(link, this.t('{0} 형식을 복사했습니다.').replace('{0}', format.label));
         } catch (error) { this.Z.logError(error); note.textContent = error.message; }
       });
       exports.appendChild(link);

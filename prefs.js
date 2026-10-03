@@ -1,7 +1,8 @@
 // Default preferences for ZotPoP (extensions.zotpop.*)
-// Auto follows Zotero's own language. Defaulting to English meant a Korean
-// Zotero still got an English window until somebody found this menu.
-pref("extensions.zotpop.language", "auto");
+// English is the default. "ko" is Korean and "auto" follows Zotero's own
+// language; anyone who chose either keeps it. The choice is in the search
+// window's View menu and in the preferences pane.
+pref("extensions.zotpop.language", "en");
 pref("extensions.zotpop.email", "");
 pref("extensions.zotpop.s2ApiKey", "");
 pref("extensions.zotpop.ncbiApiKey", "");

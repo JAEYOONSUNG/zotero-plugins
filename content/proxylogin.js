@@ -24,7 +24,7 @@
 
 	const scholarMode = args.mode === "scholar";
 	function init() {
-		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "auto", Zotero.locale);
+		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "en", Zotero.locale);
 		t = ZotPoPI18N.make(locale);
 		document.title = t(scholarMode ? "scholarSessionTitle" : "loginTitle");
 		$("pl-check").textContent = t("loginCheck");

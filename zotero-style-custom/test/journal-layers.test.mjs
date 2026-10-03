@@ -24,7 +24,8 @@ const CATALOG = [
 ];
 
 function fixture({layers = {}, dir = '/fixture/style-custom-journals', catalog = CATALOG} = {}) {
-  const prefs = new Map(), columns = new Map(), items = new Map(), revealed = [], launched = [], made = [];
+  // English is the default; these tests read Korean, so the fixture chooses it the way a person would.
+  const prefs = new Map([['extensions.style-custom.language', 'ko-KR']]), columns = new Map(), items = new Map(), revealed = [], launched = [], made = [];
   const Z = {
     locale: 'ko-KR',
     Prefs: {get: key => prefs.get(key), set: (key, value) => prefs.set(key, value), registerObserver: () => 1, unregisterObserver() {}},

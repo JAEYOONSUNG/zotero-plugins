@@ -17,7 +17,7 @@ async function loaded(options = {}) {
 	ui.render();
 	return ui;
 }
-const menuItems = ui => ui.get("tbmenu").children.filter(c => c.tagName === "DIV");
+const menuItems = ui => ui.get("tbmenu").children.filter(c => c.tagName === "DIV" && c.className !== "selhead");
 
 test("selected-only answers by selection alone, and the other filters return when it is turned off", async () => {
 	const ui = await loaded();
@@ -80,7 +80,7 @@ test("the toolbar menus open on a click, move with the arrows, run on Enter and 
 	btn.emit("click", { detail: 0 });
 	assert.equal(menu.hidden, false);
 	assert.equal(btn.getAttribute("aria-expanded"), "true");
-	assert.deepEqual(menuItems(ui).map(n => n.getAttribute("role")), ["menuitemradio", "menuitemradio", "menuitemcheckbox", "menuitemcheckbox", "menuitemcheckbox"]);
+	assert.deepEqual(menuItems(ui).map(n => n.getAttribute("role")), ["menuitemradio", "menuitemradio", "menuitemcheckbox", "menuitemcheckbox", "menuitemcheckbox", "menuitemradio", "menuitemradio", "menuitemradio"], "five view items, then the three languages");
 	assert.equal(mockElement.active, menuItems(ui)[0], "opened from the keyboard, focus lands on the first item");
 	menu.emit("keydown", { key: "ArrowDown" });
 	assert.equal(mockElement.active, menuItems(ui)[1]);
@@ -110,7 +110,7 @@ test("the toolbar menus open on a click, move with the arrows, run on Enter and 
 	assert.equal(menu.hidden, false, "a disabled item leaves the menu open");
 	ui.get("view-btn").emit("click");
 	assert.equal(ui.get("d-more").getAttribute("aria-expanded"), "false");
-	assert.equal(menuItems(ui).length, 5);
+	assert.equal(menuItems(ui).length, 8);
 });
 
 test("the sort arrow is its own node beside the header's text and aria-sort follows it", async () => {

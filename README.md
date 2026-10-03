@@ -9,7 +9,7 @@ Two plugins kept in one repository and installed separately. ZotPoP: Zotero 7–
 
 ![The Zotero item list with Style Custom's columns: impact factor, citation count with a bar, reading status, the journal in its own colour, rating, reading time, file kinds, and the corresponding institution with its tier and flag](docs/images/library-columns.png)
 
-The item list above is Zotero's own, with Style Custom's columns switched on. Every picture on this page is of a demonstration library of well-known public papers. Both plugins are available in English and Korean; the language is chosen in each plugin's settings.
+The item list above is Zotero's own, with Style Custom's columns switched on. Every picture on this page is of a demonstration library of well-known public papers. Both plugins are available in English and Korean, and **English is the default**. Anyone who has already chosen a language keeps it. The language is set in each plugin (see **Language** below): English, 한국어, or Follow Zotero, which uses Korean only when Zotero itself is in Korean.
 
 ![The two buttons in the items toolbar: the ZotPoP magnifier and the Style Custom panel](docs/images/toolbar-icons.png)
 
@@ -109,6 +109,17 @@ Reading status and rating; search this paper in ZotPoP; related papers; follow t
 **Reading progress** — time and pages read in the PDF reader are recorded automatically. A page map shows which pages were read and for how long; unread papers can be picked out.
 
 **Notes, backlinks, attachment preview, nested tags, canvas, comparison, tabs, view groups, translation · AI, appearance** — write notes and send them to the trash, see the notes that point at a paper, preview attachments, browse tags as a hierarchy, arrange papers on a free canvas, compare several papers in a table (the AI reads their claims and points of contention), tidy open tabs, keep saved sets of views, translate and summarise, and set the panel's and the list's colours and fonts.
+
+### Language
+
+English is the default in both plugins; a preference that was never set, or holds an unknown value, is English. Each choice is named in its own language so it can be found whichever one is showing: **English**, **한국어**, and **Follow Zotero / Zotero 언어 따르기**.
+
+| Plugin | Where | When it applies |
+|---|---|---|
+| ZotPoP | Search window → **View** menu → *Language / 언어*; also Settings → ZotPoP → *Language / 언어* | The View menu reopens the search window in the new language at once (the last search comes back from history); if a search or import is running it applies the next time the window opens. The Tools menu entry and toolbar tooltip change when Zotero restarts. |
+| Style Custom | **Style editor** tab (the sidebar's last entry) → *Language / 언어*, a three-way switch at the top; also Settings → Style Custom → Menus and design | The panel is re-said at once. Item-list column names and the right-click menu change when Zotero restarts. |
+
+Numbers, dates, times and plurals follow the chosen language ("1 paper", "2 papers"), not the operating system's. Titles, journal names, tags, memos and author names are your data and are never translated.
 
 ### Settings
 

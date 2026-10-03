@@ -171,6 +171,8 @@
   const listeners=[];
   const i18n=runtime.i18n||{t:value=>value};
   const T=value=>i18n.t(value);
+  // Numbers, dates and region names follow the panel's language, not the operating system's.
+  const LOC=()=>i18n.locale?i18n.locale():'en-US';
   // The attributes that carry text a person reads. Everything else is passed
   // through untouched: translating a class name or an id would be a bug.
   const TEXT_ATTRS=new Set(['title','placeholder','aria-label','tooltiptext','label','alt','value']);
@@ -193,7 +195,16 @@
     const el=doc.createElementNS(HTML,tag);stack[stack.length-1].appendChild(el);stack.push(el);
    }
   }
-  const node=(tag,text,parent,attrs={})=>{const n=doc.createElementNS(HTML,tag);if(text!==null&&text!==undefined){const t=T(text);if(RICH.test(String(t)))rich(n,t);else n.textContent=t;}for(const[k,v]of Object.entries(attrs))n.setAttribute(k,TEXT_ATTRS.has(k)&&tag!=='input'?plain(T(v)):k==='placeholder'||k==='aria-label'||k==='title'?plain(T(v)):String(v));parent?.appendChild(n);if(draftContext&&['input','textarea'].includes(tag)&&attrs['aria-label']){const label=attrs['aria-label'],index=draftCounters.get(label)||0;draftCounters.set(label,index+1);n.dataset.draftKey=draftContext+'|'+label+'|'+index;}return n;};
+  /* What each element was asked to say, so a language change can say it again without rebuilding the panel: the Korean key
+     and what was shown for it. An element whose text has since been changed by the code (a count, a status line) is left alone. */
+  const CHROME=new WeakMap(),HANGUL=/[가-힣]/;
+  const remember=(n,patch)=>{const r=CHROME.get(n)||{};CHROME.set(n,Object.assign(r,patch,patch.attrs?{attrs:Object.assign(r.attrs||{},patch.attrs)}:{}));};
+  function retranslate(){
+   for(const n of [panel,...panel.querySelectorAll('*')]){const r=CHROME.get(n);if(!r)continue;
+    if(r.key!==undefined&&n.textContent===r.shown&&!n.children.length){const next=T(r.key);if(!RICH.test(String(next))){n.textContent=next;r.shown=next;}}
+    for(const[k,a]of Object.entries(r.attrs||{})){if(n.getAttribute(k)!==a.shown)continue;const next=plain(T(a.key));n.setAttribute(k,next);a.shown=next;}}
+  }
+  const node=(tag,text,parent,attrs={})=>{const n=doc.createElementNS(HTML,tag);if(text!==null&&text!==undefined){const t=T(text);if(RICH.test(String(t)))rich(n,t);else{n.textContent=t;if(typeof text==='string'&&HANGUL.test(text))remember(n,{key:text,shown:t});}}for(const[k,v]of Object.entries(attrs)){const words=(TEXT_ATTRS.has(k)&&tag!=='input')||k==='placeholder'||k==='aria-label'||k==='title';const shown=words?plain(T(v)):String(v);n.setAttribute(k,shown);if(words&&typeof v==='string'&&HANGUL.test(v))remember(n,{attrs:{[k]:{key:v,shown}}});}parent?.appendChild(n);if(draftContext&&['input','textarea'].includes(tag)&&attrs['aria-label']){const label=attrs['aria-label'],index=draftCounters.get(label)||0;draftCounters.set(label,index+1);n.dataset.draftKey=draftContext+'|'+label+'|'+index;}return n;};
   const panel=node('section',null,doc.documentElement,{id:'style-custom-workbench','aria-label':'Style Custom 연구 작업 패널'});panel.hidden=true;
   const sheet=node('link',null,doc.documentElement,{rel:'stylesheet',href:runtime.rootURI+'content/workbench.css'});
   const jcrSheet=node('link',null,doc.documentElement,{rel:'stylesheet',href:runtime.rootURI+'content/jcr-browser.css'});
@@ -492,11 +503,11 @@
    img.addEventListener('error',()=>img.remove());
    img.addEventListener('load',()=>{face.dataset.hasPhoto='true';});
    face.appendChild(img);
-   face.title=found.page?`사진 출처: ${found.page}`:'';
+   face.title=found.page?T(`사진 출처: ${found.page}`):'';
   }
   /* Country names for a tooltip, from the platform's own list when it has one. */
   function countryLabel(code){
-   try{return new Intl.DisplayNames(['ko'],{type:'region'}).of(code)||code;}catch(error){return code;}
+   try{return new Intl.DisplayNames([LOC()==='ko-KR'?'ko':'en'],{type:'region'}).of(code)||code;}catch(error){return code;}
   }
   /* A followed author's round face: the photo the plugin already holds
      (never fetched for the sake of drawing), the initials otherwise. */
@@ -843,7 +854,9 @@
    /* The search box's shorthand as code chips with a worked example each (a bare "태그:" said nothing). */
    const hint=node('p',null,rulesBox,{class:'sc-rules-hint'});
    node('span',T('검색창 빠른 문법'),hint,{class:'sc-rules-hint-label'});
-   for(const [code,note] of [['-단어','제외'],['“구절”','문장 그대로'],['제목:단어',''],['-저자:김','제외'],['연도:2018-2022',''],['태그:methods',''],['저널:Nat Methods','이름·약어 제안'],['컬렉션:Review','']]){
+   /* The search accepts the English field names as well as the Korean ones, so the examples are written in the language the panel speaks. */
+   const korean=i18n.isKorean?i18n.isKorean():true;
+   for(const [code,note] of (korean?[['-단어','제외'],['“구절”','문장 그대로'],['제목:단어',''],['-저자:김','제외'],['연도:2018-2022',''],['태그:methods',''],['저널:Nat Methods','이름·약어 제안'],['컬렉션:Review','']]:[['-word','제외'],['“phrase”','문장 그대로'],['title:word',''],['-author:kim','제외'],['year:2018-2022',''],['tag:methods',''],['journal:Nat Methods','이름·약어 제안'],['collection:Review','']])){
     const entry=node('span',null,hint,{class:'sc-rules-hint-item'});
     node('code',code,entry,{class:'sc-rules-hint-code'});
     if(note)entry.appendChild(doc.createTextNode(' '+T(note)));
@@ -1856,7 +1869,7 @@
    node('span',null,columns,{class:'sc-paper-columns-tail'});
    const list=node('div',null,body,{class:'sc-paper-list'}),details=[],generation=epoch;for(const item of page){
    const c=node('article',null,list,{class:'sc-card sc-paper-card','data-item-id':item.id,'data-status':['reading','done'].includes(item.status)?item.status:'unread','data-selected':String(state.selected.has(item.id))});
-   const heading=node('div',null,c,{class:'sc-paper-heading'}),pick=check('선택',state.selected.has(item.id),on=>selectItem(item.id,on),heading);pick.setAttribute('aria-label',item.title+' 선택');
+   const heading=node('div',null,c,{class:'sc-paper-heading'}),pick=check('선택',state.selected.has(item.id),on=>selectItem(item.id,on),heading);pick.setAttribute('aria-label',T('{0} 선택').replace('{0}',item.title));
    // The whole card selects, as an annotation card does; the checkbox was 14px of it.
    c.tabIndex=0;c.addEventListener('click',e=>{if(e.target.closest('button,input,label,textarea,a,select,summary,details'))return;selectItem(item.id,!state.selected.has(item.id));});
    c.addEventListener('dblclick',e=>{if(e.target.closest('button,input,label,textarea,a,select,summary,details'))return;run(()=>library.openItem(item.id));});
@@ -1978,7 +1991,7 @@
      if(result.value.length<=setting('inlineEvidenceCount',5))section.setAttribute('open','');
      if(!result.value.length){node('p',index?'주석이 없습니다.':'노트가 없습니다.',section);continue;}
      const evidence=node('div',null,section);let visible=0,more;
-     const append=amount=>{for(const value of result.value.slice(visible,visible+amount)){const detail=card(index?`p.${value.pageLabel||((value.pageIndex??0)+1)}`:value.title,null,evidence),text=String(value.text||'');const paragraph=node('p',text.length>setting('maxExcerptLength',1200)?text.slice(0,setting('maxExcerptLength',1200))+'…':text,detail);if(text.length>setting('maxExcerptLength',1200))button('전체 내용 보기',()=>{paragraph.textContent=text;},detail);if(index&&value.comment)node('p',value.comment,detail);button(index?'주석 원문 열기':'문헌 노트 편집',()=>library.openItem(value.id),detail,{'data-opens':'window'});}visible=Math.min(result.value.length,visible+amount);if(more){more.textContent=label+' 더 보기 · '+(result.value.length-visible)+'개 남음';if(visible>=result.value.length)more.remove();}};
+     const append=amount=>{for(const value of result.value.slice(visible,visible+amount)){const detail=card(index?`p.${value.pageLabel||((value.pageIndex??0)+1)}`:value.title,null,evidence),text=String(value.text||'');const paragraph=node('p',text.length>setting('maxExcerptLength',1200)?text.slice(0,setting('maxExcerptLength',1200))+'…':text,detail);if(text.length>setting('maxExcerptLength',1200))button('전체 내용 보기',()=>{paragraph.textContent=text;},detail);if(index&&value.comment)node('p',value.comment,detail);button(index?'주석 원문 열기':'문헌 노트 편집',()=>library.openItem(value.id),detail,{'data-opens':'window'});}visible=Math.min(result.value.length,visible+amount);if(more){more.textContent=T(`${label} 더 보기 · ${result.value.length-visible}개 남음`);if(visible>=result.value.length)more.remove();}};
      append(setting('inlineEvidenceCount',5));if(visible<result.value.length)more=viewButton(label+' 더 보기 · '+(result.value.length-visible)+'개 남음',()=>append(20),section);
     }
    })());
@@ -2301,7 +2314,7 @@
    }else{
     row=hitRow({title:n.untitled?'':n.label,year:n.year,venue:n.venue,doi:n.doi||'',citations:n.citations||null,inLibrary:false,id:n.openalex},null);
     parent.appendChild(row);
-    if(n.untitled){const t=row.querySelector('.sc-hit-title');if(t)t.textContent='제목 미확인 · '+n.openalex;}
+    if(n.untitled){const t=row.querySelector('.sc-hit-title');if(t)t.textContent=T('제목 미확인 · {0}').replace('{0}',n.openalex);}
     row.setAttribute('data-node-id',n.id);
     const acts=row.querySelector('.sc-hit-actions')||node('div',null,row,{class:'sc-hit-actions'});
     button('지도에서 보기',()=>focus(n.id),acts);
@@ -4835,7 +4848,7 @@
     const order=node('select',null,tools,{'aria-label':'읽기 기록 정렬'});
     for(const[v,l]of [['recent','최근 읽은 순'],['time','읽은 시간 긴 순'],['pages','마지막 위치 뒤 쪽 적은 순']])node('option',l,order,{value:v});
     order.value=state.readingSort==='time'?'time':state.readingSort==='pages'?'pages':'recent';
-    order.addEventListener('change',()=>{state.readingSort=order.value;state.readingPage=0;refreshReading();body.querySelector('[aria-label="읽기 기록 정렬"]')?.focus?.();});
+    order.addEventListener('change',()=>{state.readingSort=order.value;state.readingPage=0;refreshReading();body.querySelector('[aria-label="'+T('읽기 기록 정렬').replace(/"/g,'')+'"]')?.focus?.();});
     if(pages>1){
      const from=state.readingPage*PER;
      button('이전',()=>{state.readingPage--;refreshReading();},tools).disabled=!state.readingPage;
@@ -6516,7 +6529,7 @@
       const text=node('span',null,chip,{class:'sc-node-body'});
       node('span',mate.name,text,{class:'sc-node-name'});
       node('span',`${mate.papers}편${mate.last?` · ${mate.last}`:''}`,text,{class:'sc-node-meta'});
-      chip.title=[mate.name,mate.institution,`공저 ${mate.papers}편`,mateRow?'관심 저자':'',...(mate.titles||[])].filter(Boolean).join('\n');
+      chip.title=[mate.name,mate.institution,T(`공저 ${mate.papers}편`),mateRow?T('관심 저자'):'',...(mate.titles||[])].filter(Boolean).join('\n');
      }
     }
     const recent=personGroup('최근 논문',works.length,wrap,'sc-person-recent');
@@ -6620,7 +6633,7 @@
     const impact=info&&info.impactFactor!=null&&info.impactFactor!==''&&typeof info.impactFactor!=='boolean'&&Number.isFinite(Number(info.impactFactor))?Number(info.impactFactor):null;
     if(impact!=null)parts.push(el=>node('span',`IF ${impact.toFixed(1)}`,el,{class:'sc-inbox-fact',title:T('저장된 저널 IF')+(info.year?` (${info.year})`:'')}));
     const cited=Number(work.citations??mine?.citations);
-    if(Number.isFinite(cited)&&(work.citations!=null||mine?.citations!=null))parts.push(el=>node('span',T(`인용 ${cited.toLocaleString()}`),el,{class:'sc-inbox-fact',title:T('지금까지 이 논문을 인용한 논문 수')}));
+    if(Number.isFinite(cited)&&(work.citations!=null||mine?.citations!=null))parts.push(el=>node('span',T(`인용 ${cited.toLocaleString(LOC())}`),el,{class:'sc-inbox-fact',title:T('지금까지 이 논문을 인용한 논문 수')}));
     people.forEach((person,index)=>{
      // On the person's own page with no part to say there is nothing to show: no empty piece after a ' · '.
      if(ctx.self&&!rolesOf(entry.copies[index]).length)return;
@@ -7141,14 +7154,14 @@
       const mv=node('span',null,row,{class:'sc-watch-sub sc-watch-move'});
       node('span',T('소속 이동'),mv,{class:'sc-status-chip','data-tone':'amber'});
       node('span',`${moved.from||'?'} → ${moved.to}`,mv,{class:'sc-watch-moved-text'});
-      mv.title=moved.since?`소속이 바뀐 것으로 보입니다 · ${moved.since}년부터 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`:`소속이 바뀐 것으로 보입니다 · ${moved.at||''} 확인 · OpenAlex 저자 기록의 현재 소속 기준`;
+      mv.title=moved.since?T('소속이 바뀐 것으로 보입니다 · {0}년부터 · {1} 확인 · OpenAlex 저자 기록의 현재 소속 기준').replace('{0}',moved.since).replace('{1}',moved.at||''):T('소속이 바뀐 것으로 보입니다 · {0} 확인 · OpenAlex 저자 기록의 현재 소속 기준').replace('{0}',moved.at||'');
      }
      if(!moved&&!latest){sub=node('span',null,row,{class:'sc-watch-sub'});const where=runtime.placeOf?.(person.institution);if(where?.flag)node('span',where.flag,sub,{class:'sc-flag','aria-hidden':'true'});node('span',person.institution||'소속 미확인',sub);sub.title=person.institution||'';}
      /* What the shelf holds of them rides the end of the first detail line, so the name line keeps its room for the badges. */
      if(mineHost.firstChild){const first=row.querySelector('.sc-watch-sub');if(first){const subline=node('div',null,null,{class:'sc-watch-subline'});row.insertBefore(subline,first);subline.appendChild(first);subline.appendChild(mineHost.firstChild);}}
-     row.title=count?`${person.name} · 새 논문 ${count}편`
-      :person.sweptAt?`${person.name} · 새 논문 없음 (확인 ${person.sweptAt.slice(0,10)})`
-      :`${person.name} · 아직 확인하지 않음`;
+     row.title=count?`${person.name} · ${T(`새 논문 ${count}편`)}`
+      :person.sweptAt?`${person.name} · ${T(`새 논문 없음 (확인 ${person.sweptAt.slice(0,10)})`)}`
+      :`${person.name} · ${T('아직 확인하지 않음')}`;
     }
     // The quiet ones are one press away, and the press says how many.
     if(folding)button(state.watchQuietOpen?T('조용한 저자 접기'):T(`조용한 저자 ${quiet.length}명 보기`),
@@ -7245,7 +7258,7 @@
     const open=node('button',person.name,who,{class:'sc-journal-name',type:'button',title:`${person.name} · ${T('눌러서 펼치기')}`,'aria-expanded':String(state.watchOpen===person.id)});
     const place=node('td',null,tr,{class:'sc-col-place'});
     const line=placeLine(person,place);
-    if(person.institutionGiven&&person.institutionGiven!==person.institution)line.title+=` · 등록 당시: ${person.institutionGiven}`;
+    if(person.institutionGiven&&person.institutionGiven!==person.institution)line.title+=' · '+T('등록 당시: {0}').replace('{0}',person.institutionGiven);
     if(person.moved&&person.moved.to)place.classList.add('sc-watch-moved');
     // 보유·완료·안 읽음: three fixed columns near 800px width crushed name
     // and affiliation, so they share one cell now, still matched by name
@@ -7789,7 +7802,7 @@
     share('보유',g.items.length,totalPapers);
     share('시간',g.seconds,totalSeconds);
     const timeCell=node('span',null,row,{class:'sc-journal-reading-num',role:'cell'});
-    if(g.seconds>0)timeCell.textContent=runtime.formatReadTime?runtime.formatReadTime(g.seconds,{compact:true}):Math.round(g.seconds/60)+'분';else noneMark(timeCell);
+    if(g.seconds>0)timeCell.textContent=runtime.formatReadTime?runtime.formatReadTime(g.seconds,{compact:true}):Math.round(g.seconds/60)+T('분');else noneMark(timeCell);
     /* Both medians on one axis shared by every row (0 to the header's end value): a dot for the papers read or being read, a square for the unread, in two lanes so equal values never fully overlap, joined by a thin line when both exist. No record is no mark and —; a real 0 sits at the axis start. */
     const cell=node('span',null,row,{class:'sc-journal-reading-num sc-journal-reading-citation-compare',role:'cell',title:T('인용 수를 아는 문헌만으로 계산합니다'),'data-label':T('인용 중앙값')});
     const plot=node('span',null,cell,{class:'sc-journal-citation-plot','aria-hidden':'true'});
@@ -7897,7 +7910,7 @@
       registry in both views. */
    const scopes=node('div',null,controls,{class:'sc-segmented',role:'group','aria-label':'저널 범위'});
    viewButton(`내 서재 ${byVenue.size}`,()=>{journalView.scope='library';journalView.page=0;render();},scopes,{'aria-pressed':String(journalView.scope!=='all')});
-   if(registry.length)viewButton(`저장 저널 ${registry.length.toLocaleString()}`,()=>{journalView.scope='all';journalView.page=0;render();},scopes,{'aria-pressed':String(journalView.scope==='all')});
+   if(registry.length)viewButton(`저장 저널 ${registry.length.toLocaleString(LOC())}`,()=>{journalView.scope='all';journalView.page=0;render();},scopes,{'aria-pressed':String(journalView.scope==='all')});
    button('공식 JCR 카테고리 보기',()=>runtime.Z.launchURL?.('https://jcr.clarivate.com/jcr/browse-categories'),controls,
     {title:'Clarivate JCR의 Groups와 Categories · 기관 접근 또는 계정 로그인이 필요할 수 있습니다','data-opens':'browser'});
    // Journals found by name, abbreviation, publisher or field, apart from the paper search above.
@@ -7911,7 +7924,7 @@
    const grouped=viewButton(journalView.grouped?'목록으로':'분야별로 묶기',()=>{journalView.grouped=!journalView.grouped;render();},controls,{'aria-pressed':String(journalView.grouped)});
    grouped.classList.add('sc-journal-toggle');
    const known=all.filter(j=>j.levels.length).length;
-   node('span',journalView.scope==='all'?`저장 저널 ${all.length.toLocaleString()}종 · OpenAlex 분야 있음 ${known.toLocaleString()} · 내 서재 ${all.filter(j=>j.papers).length}`:`저널 ${all.length}종 · JIF 있는 저널 ${all.filter(j=>j.impact!=null).length} · 분야 알려진 저널 ${known}`,controls,{class:'sc-muted sc-journal-count'});
+   node('span',journalView.scope==='all'?`저장 저널 ${all.length.toLocaleString(LOC())}종 · OpenAlex 분야 있음 ${known.toLocaleString(LOC())} · 내 서재 ${all.filter(j=>j.papers).length}`:`저널 ${all.length}종 · JIF 있는 저널 ${all.filter(j=>j.impact!=null).length} · 분야 알려진 저널 ${known}`,controls,{class:'sc-muted sc-journal-count'});
    node('p','OpenAlex 분야별 저장 JIF 비교입니다. 로컬 순위·Q는 자체 계산이며, 저장 Q는 카테고리 미확인 원본값입니다.',body,{class:'sc-muted sc-journal-source'});
    /* One line, three menus, large to small: 대분류 › 분야 › 세부 분야. Each
       menu lists what is under the choice to its left, largest first, with
@@ -7945,7 +7958,7 @@
        list of subjects was 252 long, or missing. Each says how many subjects
        it offers; how many journals sit under them is on the menu itself. */
     node('option',`전체 · ${options.length}개`,select,{value:''});
-    select.title=`${T(label)} ${options.length}개 · ${T('분야가 있는 저널')} ${placed.toLocaleString()}종`;
+    select.title=`${T(label)} ${options.length}개 · ${T('분야가 있는 저널')} ${placed.toLocaleString(LOC())}종`;
     const unplaced=index===0?all.length-all.filter(j=>j.levels.length).length:0;
     const unknownLabel=T('분야 미상');
     if(unplaced)node('option',unknownLabel+' · '+unplaced,select,{value:'\u0000none'});
@@ -7999,7 +8012,7 @@
    const shown=shownAll.length>pageSize?shownAll.slice(journalView.page*pageSize,(journalView.page+1)*pageSize):shownAll;
    if(shownAll.length>pageSize){
     const paging=node('div',null,listArea,{class:'sc-actions sc-journal-paging'});
-    node('span',`${journalView.page*pageSize+1}–${journalView.page*pageSize+shown.length} / ${shownAll.length.toLocaleString()}`,paging,{class:'sc-muted',role:'status'});
+    node('span',`${journalView.page*pageSize+1}–${journalView.page*pageSize+shown.length} / ${shownAll.length.toLocaleString(LOC())}`,paging,{class:'sc-muted',role:'status'});
     button('이전',()=>{journalView.page--;journalView.redraw();},paging).disabled=journalView.page===0;
     button('다음',()=>{journalView.page++;journalView.redraw();},paging).disabled=journalView.page+1>=pages;
    }
@@ -8036,7 +8049,7 @@
   function journalRow(j,tbody,rank){
    const open=journalView.open.has(j.venue);
    const tr=node('tr',null,tbody,{class:'sc-journal'+(open?' sc-journal-open':''),'data-venue':j.venue});
-   node('td',rank!=null?rank.toLocaleString():'',tr,{class:'sc-col-rank sc-journal-rank',title:rank!=null?`저장된 목록에서 ${rank.toLocaleString()}번째 (JIF 순, 공식 JCR 순위 아님)`:'저장된 목록에 없음'});
+   node('td',rank!=null?rank.toLocaleString(LOC()):'',tr,{class:'sc-col-rank sc-journal-rank',title:rank!=null?`저장된 목록에서 ${rank.toLocaleString(LOC())}번째 (JIF 순, 공식 JCR 순위 아님)`:'저장된 목록에 없음'});
    if(!j.papers)tr.classList.add('sc-journal-absent');
    // The name in the journal's own colour, as text: the colour is the mark.
    const nameCell=node('td',null,tr,{class:'sc-col-name'});
@@ -8066,9 +8079,9 @@
    if(!best){rankCell.textContent='—';rankCell.classList.add('sc-journal-if-none');
     rankCell.title=T(j.impact==null?'JIF가 없으면 분야 안에서 줄을 세울 수 없습니다.':'선택한 OpenAlex 경로의 로컬 JIF 비교 순위가 없습니다.');}
    else{
-    const place=node('span',`${best.rank.toLocaleString()}/${best.of.toLocaleString()}`,rankCell,{class:'sc-field-rank'});
+    const place=node('span',`${best.rank.toLocaleString(LOC())}/${best.of.toLocaleString(LOC())}`,rankCell,{class:'sc-field-rank'});
     place.dataset.q=String(best.quartile);
-    rankCell.title=T('OpenAlex 분야와 저장 JIF의 로컬 비교 · 공식 JCR 순위 아님')+'\n'+ranks.map(r=>T(`${journalPathLabel(r)||r.name} ${r.of.toLocaleString()}종 중 ${r.rank.toLocaleString()}위 · 상위 ${r.percentile}% · 로컬 Q${r.quartile}`)).join('\n');
+    rankCell.title=T('OpenAlex 분야와 저장 JIF의 로컬 비교 · 공식 JCR 순위 아님')+'\n'+ranks.map(r=>T(`${journalPathLabel(r)||r.name} ${r.of.toLocaleString(LOC())}종 중 ${r.rank.toLocaleString(LOC())}위 · 상위 ${r.percentile}% · 로컬 Q${r.quartile}`)).join('\n');
    }
    const figure=node('td',j.impact!=null?j.impact.toFixed(1):'—',tr,{class:'sc-col-if sc-journal-if',title:j.impact!=null?`JIF ${j.impact.toFixed(1)}${j.year?' ('+j.year+')':''}${j.source?' · '+j.source:''}`:'IF 미확인'});
    if(j.impact==null)figure.classList.add('sc-journal-if-none');
@@ -8109,7 +8122,7 @@
    if(j.fields.length){const span=doc.createElementNS(HTML,'span');j.fields.forEach(f=>{node('span',f,span,{class:'sc-chip sc-chip-tiny'});});fact('field','OpenAlex 분야',span,{title:'표와 필터에 사용하는 동일한 OpenAlex 분류 경로'});}
    fact('hindex','h-index',j.hIndex!=null?String(j.hIndex):null,{title:'OpenAlex 기준 저널 h-index'});
    fact('works','발행·피인용',j.works!=null?(j.citedness!=null?T(`${compact(j.works)}편 · 2년 평균 피인용 ${j.citedness}`):T(`${compact(j.works)}편`)):null,{title:'OpenAlex 기준 누적 논문 수와 2년 평균 피인용 (공식 JIF 아님)'});
-   const access=!j.profile?null:[T(j.isOA?'전면 OA':'구독형'),j.inDoaj?T('DOAJ 등재'):'',j.apc!=null?T(j.isOA?'APC ${0}':'OA 선택 시 APC ${0}').replace('{0}',j.apc.toLocaleString()):''].filter(Boolean).join(' · ');
+   const access=!j.profile?null:[T(j.isOA?'전면 OA':'구독형'),j.inDoaj?T('DOAJ 등재'):'',j.apc!=null?T(j.isOA?'APC ${0}':'OA 선택 시 APC ${0}').replace('{0}',j.apc.toLocaleString(LOC())):''].filter(Boolean).join(' · ');
    fact('access','오픈액세스',access,{tone:j.isOA?'low':''});
    fact('country','국가',j.country?`${COUNTRY_NAMES[j.country]||j.country}`:null);
    if(j.homepage){const a=node('a',j.homepage.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,''),null,{href:'#',title:j.homepage});a.addEventListener('click',e=>{e.preventDefault();runtime.Z.launchURL&&runtime.Z.launchURL(j.homepage);});fact('link','홈페이지',a);}
@@ -8118,10 +8131,10 @@
    for(const r of profileRanks){
     const parent=r.level==='subfield'?r.field:r.domain;
     const label=rankNames.get(r.name)>1&&parent?`${parent} › ${r.name}`:r.name;
-    fact('quartile',label,`${r.rank.toLocaleString()}위 / ${r.of.toLocaleString()}종 · 상위 ${r.percentile}% · 로컬 Q${r.quartile}`,
+    fact('quartile',label,`${r.rank.toLocaleString(LOC())}위 / ${r.of.toLocaleString(LOC())}종 · 상위 ${r.percentile}% · 로컬 Q${r.quartile}`,
      {title:(journalPathLabel(r)||r.name)+'\n'+T('OpenAlex 분야와 저장 JIF의 로컬 비교 · 공식 JCR 순위 아님'),tone:r.quartile===1?'top':r.quartile===2?'high':r.quartile===3?'mid':'low'});
    }
-   if(j.globalRank)fact('quartile','로컬 JIF 순번',`${j.globalRank.toLocaleString()}번째 / ${(runtime.journalIdentity?.registryRanked?.()||[]).length.toLocaleString()}`,{title:'저장된 목록의 JIF 순번 · 공식 JCR 카테고리 순위 아님'});
+   if(j.globalRank)fact('quartile','로컬 JIF 순번',`${j.globalRank.toLocaleString(LOC())}번째 / ${(runtime.journalIdentity?.registryRanked?.()||[]).length.toLocaleString(LOC())}`,{title:'저장된 목록의 JIF 순번 · 공식 JCR 카테고리 순위 아님'});
    fact('library','내 서재',j.papers?`${j.papers}편 · 읽음 ${j.read} · 평균 피인용 ${j.avgCited}${j.span?' · '+(j.span[0]===j.span[1]?j.span[0]:j.span[0]+'–'+j.span[1]):''}`:'없음',{title:'이 서재에서 이 저널의 문헌'});
    if(!j.profile)node('p','추가 OpenAlex 프로필은 “빈 칸 채우기”로 조회할 수 있습니다. 저장된 분류는 표와 상세에서 동일하게 표시됩니다.',box,{class:'sc-muted sc-fact-note'});
    const actions=bar(box);
@@ -8158,6 +8171,23 @@
      with no headings, and nothing said which control belonged to which. */
   function drawAppearance(){
    const part=(label,note)=>{const box=node('section',null,body,{class:'sc-settings-part'});sectionHead(label,null,box);if(note)node('p',note,box,{class:'sc-muted sc-settings-note'});return box;};
+   /* The language of the panel. Each choice is named in its own language, so someone who cannot read the current one
+      can still find theirs, and the heading says both. It writes a setting, so the self-check never presses it. */
+   {
+    const lang=part('Language / 언어','기본값은 영어입니다. 패널은 바로 바뀌고, 문헌 목록의 열 이름과 오른쪽 클릭 메뉴는 Zotero를 다시 시작하면 바뀝니다.');
+    const chosen=String(setting('language','en-US')||'en-US');
+    const group=node('div',null,lang,{class:'sc-segmented sc-language',role:'group','aria-label':'Language / 언어'});
+    for(const[value,name]of [['en-US','English'],['ko-KR','한국어'],['auto','Zotero 언어 따르기 / Follow Zotero']]){
+     const choice=button(name,async()=>{
+      if(typeof runtime.setSetting!=='function')return;
+      await runtime.setSetting('language',value);
+      for(const b of group.querySelectorAll('button'))b.setAttribute('aria-pressed',String(b.dataset.value===value));
+      /* Say it again in the new language: the chrome in place, then the tab. */
+      retranslate();await render();message(value==='ko-KR'?'언어를 한국어로 바꿨습니다.':value==='auto'?'Zotero의 언어를 따릅니다.':'Language set to English.');
+     },group,{'aria-pressed':String(chosen===value),'data-value':value,'data-writes':'setting'});
+     choice.textContent=name;CHROME.delete(choice);
+    }
+   }
    const menusOn=enabled('menuVisibility');
    if(menusOn){
     const menus=part('작업 메뉴','왼쪽 목록에 보일 기능을 고릅니다. 숨긴 기능은 ⌘/Ctrl K 검색에서도 빠집니다.');
@@ -8245,7 +8275,7 @@
   function refreshMetrics(){
    if(disposed||panel.hidden)return;
    for(const item of state.items){const ref=runtime.Z.Items.get(Number(item.id));if(ref)Object.assign(item,runtime.state(ref));}
-   for(const card of body.querySelectorAll('[data-item-id]')){const item=state.items.find(row=>String(row.id)===card.dataset.itemId);if(!item)continue;card.dataset.status=item.status;const time=card.querySelector('[data-metric=time] .sc-metric-value');if(time)time.textContent=Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds,{compact:true}):Math.floor(item.seconds)+'초'):'';const status=card.querySelector('[data-metric=status]');if(status)status.textContent=({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음';}
+   for(const card of body.querySelectorAll('[data-item-id]')){const item=state.items.find(row=>String(row.id)===card.dataset.itemId);if(!item)continue;card.dataset.status=item.status;const time=card.querySelector('[data-metric=time] .sc-metric-value');if(time)time.textContent=Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds,{compact:true}):Math.floor(item.seconds)+T('초')):'';const status=card.querySelector('[data-metric=status]');if(status)status.textContent=T(({unread:'안 읽음',reading:'읽는 중',done:'완료'})[item.status]||'안 읽음');}
   }
   async function applyPreferences(){panel.dataset.density=setting('workbenchDensity',runtime.cache.workbenchUI?.density||'comfortable');syncDensity();const accent=setting('accentColor','#374151');if(['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=setting('panelFontSize',13)+'px';await render();}
   const keyboard=e=>{if(e.isComposing||panel.hidden)return;

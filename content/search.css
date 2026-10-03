@@ -690,6 +690,7 @@ label.cb { display: flex; align-items: center; gap: 8px; height: 32px; padding: 
 .selopt.on { font-weight: 600; }
 .selopt.hot, .tbmenu .selopt:focus { background: var(--row-sel); color: var(--text); }
 .tbmenu { min-width: 176px; }
+.tbmenu .selhead { padding: 6px 12px 2px 28px; color: var(--muted); font-size: 11px; font-weight: 600; line-height: 16px; white-space: nowrap; }
 .tbmenu .selopt::before { content: ""; display: inline-block; width: 16px; }
 .tbmenu .selopt[aria-checked="true"]::before { content: "✓"; }
 .tbmenu .selopt:focus { outline: none; }

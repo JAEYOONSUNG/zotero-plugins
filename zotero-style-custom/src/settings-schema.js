@@ -920,22 +920,23 @@
       "key": "language",
       "keepOnReset": true,
       "category": "menus",
-      "label": "언어 / Language",
-      "help": "자동은 Zotero 자체 언어를 따릅니다. English follows Zotero's own language when set to Auto.",
+      "label": "Language / 언어",
+      "help": "기본값은 영어입니다. 한국어를 고르면 패널이 한국어로 바뀝니다. Zotero 언어 따르기는 Zotero가 한국어일 때만 한국어를 씁니다. 패널은 바로 바뀌고, 문헌 목록의 열 이름은 Zotero를 다시 시작하면 바뀝니다.",
       "type": "select",
-      "default": "auto",
+      "literal": true,
+      "default": "en-US",
       "options": [
         {
-          "value": "auto",
-          "label": "자동 (Zotero 설정을 따름) / Auto"
+          "value": "en-US",
+          "label": "English"
         },
         {
           "value": "ko-KR",
           "label": "한국어"
         },
         {
-          "value": "en-US",
-          "label": "English"
+          "value": "auto",
+          "label": "Zotero 언어 따르기 / Follow Zotero"
         }
       ]
     },

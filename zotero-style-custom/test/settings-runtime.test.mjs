@@ -6,7 +6,7 @@ import Model from '../src/data.js';
 import Settings from '../src/settings.js';
 const settle=async()=>{for(let n=0;n<8;n++)await new Promise(resolve=>setImmediate(resolve));};
 function fixture(){
- const prefs=new Map(),columns=new Map(),items=new Map(),clockOptions=[],errors=[];
+ const prefs=new Map([['extensions.style-custom.language','ko-KR']]),columns=new Map(),items=new Map(),clockOptions=[],errors=[];
  const Z={locale:'ko-KR',Prefs:{get:key=>prefs.get(key),set:(key,value)=>prefs.set(key,value),registerObserver:()=>1,unregisterObserver(){}},Libraries:{userLibraryID:1,get:()=>({editable:true,libraryType:'user'})},Items:{get:id=>items.get(id),getAsync:async id=>items.get(id)},Reader:{_readers:[]},ItemTreeManager:{registerColumn:option=>{columns.set(option.dataKey,option);return option.dataKey;},unregisterColumn:key=>columns.delete(key)},PreferencePanes:{register:async option=>{Z.pane=option;return 'settings';},unregister(){}},DataDirectory:{dir:'/fixture'},getMainWindow:()=>null,logError:error=>errors.push(error),debug(){}};
  const storage={read:async()=>({schema:1,items:{}}),write:async()=>{}};
  const runtime=new Runtime({Zotero:Z,model:Model,marquee:{attach:()=>()=>{}},reading:{attach:(_win,options)=>{clockOptions.push(options);return ()=>{};}},storage});

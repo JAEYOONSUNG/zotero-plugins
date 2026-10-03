@@ -42,7 +42,7 @@
     const minutes = Math.max(1, Math.round((reset - now) / 60000));
     // The reader's own clock: a Korean format shown to an English reader is one
     // more conversion, which is the thing this line exists to save them.
-    const local = reset.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'});
+    const local = reset.toLocaleTimeString((root.CustomStyleI18N&&root.CustomStyleI18N.locale&&root.CustomStyleI18N.locale())||undefined, {hour: '2-digit', minute: '2-digit'});
     return {minutes, local, hours: Math.floor(minutes / 60), rest: minutes % 60};
   }
 

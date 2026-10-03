@@ -372,23 +372,74 @@ test("the journal cell carries the publisher's mark in its colour, and so does t
 	ui.state.records[0].journalAbbrev = "Science";
 });
 
-test("the window follows Zotero's own language unless told otherwise", async () => {
+test("the window is in English unless told otherwise; Follow Zotero and 한국어 are choices", async () => {
   const fs = await import("node:fs");
   const read = name => fs.readFileSync(new URL("../" + name, import.meta.url), "utf8");
-  /* Auto was supported but was not the default, so a Korean Zotero still got an
-     English window until somebody went looking for the menu. */
-  assert.match(read("prefs.js"), /extensions\.zotpop\.language",\s*"auto"/);
-  // An unset preference must land on auto too, not on English.
+  /* English is the default: a profile that never chose gets English, even under a Korean Zotero. */
+  assert.match(read("prefs.js"), /extensions\.zotpop\.language",\s*"en"/);
   for (const file of ["content/ui.js", "content/proxylogin.js"]) {
-    assert.doesNotMatch(read(file), /PREF\("language"\)\s*\|\|\s*"en"/, file);
-    assert.match(read(file), /PREF\("language"\)\s*\|\|\s*"auto"/, file);
+    assert.match(read(file), /PREF\("language"\)\s*\|\|\s*"en"/, file);
+    assert.doesNotMatch(read(file), /PREF\("language"\)\s*\|\|\s*"auto"/, file);
   }
   // And "auto" must never reach anything that expects a real language.
   assert.doesNotMatch(read("content/ui.js"), /language:\s*t\.locale\s*\|\|\s*PREF/);
-  // And it is offered first, because it is what most people want.
+  // The pane offers English, 한국어, then Follow Zotero.
   const menu = read("content/preferences.xhtml");
-  assert.ok(menu.indexOf('value="auto"') < menu.indexOf('value="en"'),
-    "auto comes before the fixed languages");
+  assert.ok(menu.indexOf('value="en"') < menu.indexOf('value="ko"') && menu.indexOf('value="ko"') < menu.indexOf('value="auto"'));
+  const I18N = (await import("../content/i18n.js")).default;
+  for (const locale of ["en", "ko"]) {
+    const s = I18N.STRINGS[locale];
+    // Each choice is named in its own language, whatever the window speaks, and the label says both.
+    assert.equal(s.prefLangEn, "English");
+    assert.equal(s.prefLangKo, "한국어");
+    assert.match(s.prefLangAuto, /Follow Zotero/);
+    assert.match(s.prefLangAuto, /Zotero 언어 따르기/);
+    assert.match(s.prefLanguage, /Language/);
+    assert.match(s.prefLanguage, /언어/);
+  }
+  // Nothing set, empty, or unknown is English; only auto asks Zotero, and only a Korean Zotero gives Korean.
+  assert.equal(I18N.resolveLocale(undefined, "ko-KR"), "en");
+  assert.equal(I18N.resolveLocale("", "ko-KR"), "en");
+  assert.equal(I18N.resolveLocale("fr", "ko-KR"), "en");
+  assert.equal(I18N.resolveLocale("auto", "ko-KR"), "ko");
+  assert.equal(I18N.resolveLocale("auto", "en-US"), "en");
+  assert.equal(I18N.resolveLocale("auto", ""), "en");
+  assert.equal(I18N.resolveLocale("auto", undefined), "en");
+  assert.equal(I18N.resolveLocale("ko", "en-US"), "ko");
+  assert.equal(I18N.resolveLocale("en", "ko-KR"), "en");
+});
+
+test("the search window's View menu has a Language group that saves the choice and reopens the window", async () => {
+  const ui = uiHarness();
+  let items = Array.from(ui.viewMenuItems());
+  const at = items.findIndex(item => item.heading === "Language / 언어");
+  assert.ok(at > 0, "a captioned group in the View menu");
+  const group = items.slice(at + 1);
+  assert.deepEqual(Array.from(group, item => item.label), ["English", "한국어", "Follow Zotero / Zotero 언어 따르기"]);
+  assert.ok(group.every(item => item.radio && !item.disabled), "radio choices, none dimmed");
+  assert.deepEqual(Array.from(group, item => item.check), [true, false, false], "English is chosen when nothing was");
+  // Choosing one writes the setting and reopens the window in it.
+  group[1].run();
+  assert.equal(ui.prefs.language, "ko");
+  assert.equal(ui.reloads.length, 1);
+  items = Array.from(ui.viewMenuItems());
+  assert.deepEqual(Array.from(items.slice(at + 1), item => item.check), [false, true, false]);
+  // The same choice again does nothing.
+  items.slice(at + 1)[1].run();
+  assert.equal(ui.reloads.length, 1);
+  items.slice(at + 1)[2].run();
+  assert.equal(ui.prefs.language, "auto");
+  // A search in progress is not interrupted: the choice is saved and the window says it applies later.
+  ui.state.searching = true;
+  Array.from(ui.viewMenuItems()).slice(at + 1)[0].run();
+  assert.equal(ui.prefs.language, "en");
+  assert.equal(ui.reloads.length, 2, "no reload while searching");
+  assert.match(ui.get("status").textContent, /^langAppliesLater/);
+  // The menu draws the caption as a caption, not as a dimmed item.
+  ui.state.searching = false;
+  ui.openToolbarMenu(ui.get("view-btn"), ui.viewMenuItems(), "view");
+  const drawn = Array.from(ui.get("tbmenu").children);
+  assert.ok(drawn.some(node => node.className === "selhead" && node.textContent === "Language / 언어"));
 });
 
 test("a paper already on the shelf without a DOI is still recognised", async () => {

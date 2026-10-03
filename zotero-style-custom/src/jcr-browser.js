@@ -3,6 +3,8 @@
    category membership, ranks or quartiles from another classification. */
 (function(root){
  'use strict';
+ /* Numbers read in the language the panel speaks, not the operating system's. */
+ const LOC=()=>{const i=root.CustomStyleI18N;return i&&typeof i.locale==='function'?i.locale():'en-US';};
  const HTML='http://www.w3.org/1999/xhtml';
  /* The journal list opens on the figure, whatever this catalog's figure is
     called, so the default order follows the loaded metric rather than a field
@@ -118,13 +120,13 @@
    const node=el('button',text,parent,{type:'button',class:'sc-jcr-button',...attrs});
    node.addEventListener('click',()=>{if(!destroyed)action(node);});return node;
   }
-  function metric(value){return typeof value==='number'&&Number.isFinite(value)?value.toLocaleString():value==null||value===''?'—':String(value);}
+  function metric(value){return typeof value==='number'&&Number.isFinite(value)?value.toLocaleString(LOC()):value==null||value===''?'—':String(value);}
   /* The figure itself. An estimate is drawn with the leading ~ that the item
      tree and the workbench already use for this same number, and carries the
      reason in its tooltip, so the column can never be read as a JIF. */
   function figureNumber(value){
    return typeof value==='number'&&Number.isFinite(value)
-    ?value.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):metric(value);
+    ?value.toLocaleString(LOC(),{minimumFractionDigits:2,maximumFractionDigits:2}):metric(value);
   }
   function figureCell(parent,value,attrs={}){
    const shown=figureNumber(value);
@@ -214,7 +216,7 @@
   function journalFallback(parent){
    const found=journalMatches();
    if(!found.length)return false;
-   el('p',`${t('검색에 맞는 저널')} ${found.length.toLocaleString()}`,parent,{class:'sc-jcr-coverage',role:'status'});
+   el('p',`${t('검색에 맞는 저널')} ${found.length.toLocaleString(LOC())}`,parent,{class:'sc-jcr-coverage',role:'status'});
    const headings=offered([['title','저널'],['categories',figure.categories],['issns','ISSN'],[figure.key,figure.value],['year','지표 연도']]);
    if(typeof options.onSearchJournal==='function')headings.push(['action','검색']);
    const body=table(parent,headings,'검색된 저널 표');
@@ -328,7 +330,7 @@
    const pages=Math.max(1,Math.ceil(rows.length/state.pageSize));state.page=Math.min(state.page,pages-1);
    const start=state.page*state.pageSize,shown=rows.slice(start,start+state.pageSize);
    const bar=el('div',null,parent,{class:'sc-jcr-pagination'});
-   el('span',rows.length?`${start+1}–${start+shown.length} / ${rows.length.toLocaleString()}`:`${t('표시 결과')} 0`,bar,{role:'status'});
+   el('span',rows.length?`${start+1}–${start+shown.length} / ${rows.length.toLocaleString(LOC())}`:`${t('표시 결과')} 0`,bar,{role:'status'});
    const sizes=[...new Set([25,50,75,100,200,state.pageSize])].sort((a,b)=>a-b);
    const label=el('label',t('페이지당'),bar,{class:'sc-jcr-page-size',for:id+'-page-size'});
    const size=el('select',null,label,{id:id+'-page-size','aria-label':t('페이지당 표시 수'),'data-focus-key':'page-size'});
@@ -388,7 +390,7 @@
    stats(context,[[figure.journalCount,category.journalCount],['인용 가능 항목',category.citableItems],['총 인용',category.totalCitations],
     [figure.median,category[figure.medianKey+'Display']??category[figure.medianKey]]]);
    const captured=catalog.journalsForCategory(category.key);
-   el('p',`${t('수집된 저널')} ${captured.length.toLocaleString()}${category.journalCount!=null?' / '+metric(category.journalCount):''}`+
+   el('p',`${t('수집된 저널')} ${captured.length.toLocaleString(LOC())}${category.journalCount!=null?' / '+metric(category.journalCount):''}`+
     (catalog.source.complete?.journals===true?'':' · '+t('전체 저널 목록 수집 미완료')),parent,{class:'sc-jcr-coverage',role:'status'});
    if(!captured.length){
     el('p',t(catalog.source.complete?.journals===true?'이 카테고리에 표시할 저널이 없습니다.':'이 카테고리의 저널 목록은 아직 수집되지 않았습니다.'),parent,{class:'sc-jcr-empty'});

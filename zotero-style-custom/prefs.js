@@ -1,3 +1,5 @@
+// Language of the panel: en-US (default), ko-KR, or auto (follow Zotero).
+pref("extensions.style-custom.language", "en-US");
 pref("extensions.style-custom.marquee", true);
 pref("extensions.style-custom.hoverDelay", 200);
 pref("extensions.style-custom.scrollSpeed", 180);

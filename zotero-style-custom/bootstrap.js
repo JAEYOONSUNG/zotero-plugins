@@ -68,7 +68,7 @@ async function startup({ id, version, rootURI }) {
         },
         async write(value) {
           const encoded=JSON.stringify(value);
-          if(encoded.length>16*1024*1024)throw new Error('Style Custom 저장 공간이 큽니다. 사용하지 않는 보드와 초안을 정리하세요.');
+          if(encoded.length>16*1024*1024)throw new Error('Style Custom storage is too large. Remove boards and drafts you no longer use.');
           await IOUtils.writeUTF8(path, encoded, { tmpPath: path + ".tmp" });
         }
       }

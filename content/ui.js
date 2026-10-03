@@ -338,7 +338,7 @@
 	// ------------------------------------------------------------ init
 	function init() {
 		loadJournalFigures();
-		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "auto", Zotero.locale || Services.locale?.appLocaleAsBCP47);
+		let locale = ZotPoPI18N.resolveLocale(PREF("language") || "en", Zotero.locale || Services.locale?.appLocaleAsBCP47);
 		t = ZotPoPI18N.make(locale);
 		uiLocale = locale;
 		document.documentElement.setAttribute("lang", locale);
@@ -1715,6 +1715,8 @@
 		menu.setAttribute("aria-label", label);
 		for (let item of items) {
 			if (item === "-") { menu.appendChild(document.createElement("hr")); continue; }
+			// A caption over a group of items: read, not chosen.
+			if (item.heading) { let h = document.createElement("div"); h.className = "selhead"; h.setAttribute("role", "presentation"); h.textContent = item.heading; menu.appendChild(h); continue; }
 			let d = document.createElement("div");
 			d.className = "selopt";
 			d.setAttribute("role", item.check === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox");
@@ -1759,14 +1761,32 @@
 		return items;
 	}
 	function setColsMode(mode) { state.colsMode = mode; applyColumnView(); saveLayout(); }
+	// The window's language: English (the default), Korean, or whatever Zotero speaks. Each is named in its
+	// own language, so a reader who cannot read the current one can still find theirs.
+	function languageChoice() { let value = PREF("language"); return value === "ko" || value === "auto" ? value : "en"; }
+	function setLanguage(choice) {
+		if (!["en", "ko", "auto"].includes(choice) || choice === languageChoice()) return;
+		PREF("language", choice);
+		// Everything the window says is made from the language at open, so it is opened again in the new one.
+		// The last search comes back from the history. A search or an import in progress is not interrupted:
+		// the choice is kept and applies the next time the window opens.
+		if (state.searching || state.importing) { setStatus(t("langAppliesLater")); return; }
+		try { window.location.reload(); } catch (e) { setStatus(t("langAppliesLater")); }
+	}
 	function viewMenuItems() {
+		let language = languageChoice();
 		return [
 			{ label: t("colsBasic"), title: t("colsModeTip"), check: state.colsMode !== "all", radio: true, run: () => setColsMode("basic") },
 			{ label: t("colsAll"), title: t("colsModeTip"), check: state.colsMode === "all", radio: true, run: () => setColsMode("all") },
 			"-",
 			{ label: t("affLineToggle"), title: t("affLineTip"), check: state.affLine, run: () => { state.affLine = !state.affLine; saveLayout(); render(); } },
 			{ label: t("metricsToggle"), title: t("metricsTip"), check: !$("metrics").hidden, run: toggleMetrics },
-			{ label: t("detailToggle"), title: t("detailTip"), check: !$("detail").hidden, run: toggleDetail }
+			{ label: t("detailToggle"), title: t("detailTip"), check: !$("detail").hidden, run: toggleDetail },
+			"-",
+			{ heading: "Language / 언어" },
+			{ label: "English", check: language === "en", radio: true, run: () => setLanguage("en") },
+			{ label: "한국어", check: language === "ko", radio: true, run: () => setLanguage("ko") },
+			{ label: "Follow Zotero / Zotero 언어 따르기", check: language === "auto", radio: true, run: () => setLanguage("auto") }
 		];
 	}
 	// What the detail's More holds: everything but the one main action.

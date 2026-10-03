@@ -621,7 +621,7 @@
     // The language toggle, proved against the running application rather than
     // against the table on its own.
     results.push(await attempt('the panel speaks the chosen language', () => {
-      const chosen = runtime.pref('language', 'auto');
+      const chosen = runtime.pref('language', 'en-US');
       const active = runtime.applyLocale();
       const samples = ['보유 문헌', '관계 그래프', '주석', '문헌을 하나 선택하세요.'];
       const shown = samples.map(text => runtime.t(text));

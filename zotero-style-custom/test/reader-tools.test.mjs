@@ -217,7 +217,7 @@ test('R08 appearance reset restores original native settings while retaining pal
 });
 test('R14 native annotation header resolves library-scoped identity and opens exact referring notes',async()=>{
  const f=fixture();f.items.set(21,{id:21,key:'ANN',libraryID:1,parentID:11,isAnnotation:()=>true});const queried=[],opened=[];f.runtime.libraryService={backlinks:async id=>{queried.push(id);return [{id:'31',title:'Exact note',kind:'note'}];},openItem:async id=>opened.push(id)};
- const hook=f.Z.Reader._registeredListeners.find(l=>l.type==='renderSidebarAnnotationHeader');let node;hook.handler({reader:f.reader,doc:f.doc,params:{annotation:{id:'ANN'}},append:n=>node=n});await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(queried,[21]);assert.equal(node.children[0].textContent,'1 notes');
+ const hook=f.Z.Reader._registeredListeners.find(l=>l.type==='renderSidebarAnnotationHeader');let node;hook.handler({reader:f.reader,doc:f.doc,params:{annotation:{id:'ANN'}},append:n=>node=n});await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(queried,[21]);assert.equal(node.children[0].textContent,'1 note');
  node.children[0].emit('click');const menu=f.doc.documentElement.children.find(n=>n.attrs['aria-label']==='Annotation backlinks');assert.equal(menu.hidden,false);menu.children[0].emit('click');await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(opened,['31']);f.service.stop();assert.equal(menu.isConnected,false);
 });
 test('R14 stale annotation headers and wrong PDF identities never publish late backlinks',async()=>{
@@ -259,7 +259,7 @@ test('R14 repeated headers share pending and completed lookups and distinct scan
 test('R14 note modifications invalidate cached counts on next poll without reacting to unrelated paper updates',async()=>{
  const f=fixture();f.items.set(21,{id:21,key:'ANN',libraryID:1,parentID:11,isAnnotation:()=>true});f.items.set(31,{id:31,isNote:()=>true});let notes=[],queries=0;f.runtime.libraryService={backlinks:async()=>{queries++;return notes;}};
  let node;f.Z.Reader._registeredListeners.find(l=>l.type==='renderSidebarAnnotationHeader').handler({reader:f.reader,doc:f.doc,params:{annotation:{id:'ANN'}},append:n=>node=n});await new Promise(resolve=>setImmediate(resolve));assert.equal(node.children[0].textContent,'0 notes');const observer=[...f.Z.Notifier.listeners.values()][0];observer.notify('modify','item',[11]);f.tick();await new Promise(resolve=>setImmediate(resolve));assert.equal(queries,1);
- notes=[{id:'31',title:'New note',kind:'note'}];observer.notify('modify','item',[31]);f.tick();await new Promise(resolve=>setImmediate(resolve));assert.equal(queries,2);assert.equal(node.children[0].textContent,'1 notes');f.service.stop();assert.equal(f.Z.Notifier.listeners.size,0);
+ notes=[{id:'31',title:'New note',kind:'note'}];observer.notify('modify','item',[31]);f.tick();await new Promise(resolve=>setImmediate(resolve));assert.equal(queries,2);assert.equal(node.children[0].textContent,'1 note');f.service.stop();assert.equal(f.Z.Notifier.listeners.size,0);
 });
 test('R15 reader validation and native menu enforce the same fifty-annotation limit as library merge',async()=>{
  const f=fixture(),keys=Array.from({length:51},(_,i)=>'ANN'+i);f.Z.Items.getByLibraryAndKeyAsync=()=>assert.fail('Oversized merge must not resolve items');await assert.rejects(f.service.mergeSelectedAnnotations(f.win,keys),/2–50/);

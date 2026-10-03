@@ -9,7 +9,8 @@ function fixture() {
   const records = new Map();
   const extras = new Map();
   const columns = new Map();
-  const prefs = new Map();
+  // These tests read Korean: English is the default now, so the fixture chooses Korean the way a person would.
+  const prefs = new Map([['extensions.style-custom.language', 'ko-KR']]);
   const observers = new Map();
   const errors = [];
   let prefCounter = 0;

@@ -8287,3 +8287,32 @@ test('draft generations (R22-3): a rev is never reused after a draft is deleted,
  assert.ok(sharedDraftTexts(f).includes('RETYPE'),'the new draft is not deleted');
  f.bench.destroy();g.bench.destroy();
 });
+
+test('모양 tab: a Language / 언어 control names each language in its own language, writes only through the setting, and re-says the panel at once',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const f=fixture({items:{},readerSettings:{}},undefined,{locale:'en-US'});
+  const stored={language:'en-US'};
+  f.runtime.getSetting=key=>stored[key];
+  f.runtime.setSetting=async(key,value)=>{f.calls.push(['setSetting',key,value]);stored[key]=value;i18n.use(value,{});return value;};
+  await f.bench.show('appearance');await f.bench.load();
+  const group=f.bench.panel.querySelector('.sc-language');
+  assert.ok(group,'the control is in the 모양 tab');
+  assert.equal(group.getAttribute('aria-label'),'Language / 언어','the label says both languages');
+  const buttons=[...group.querySelectorAll('button')];
+  assert.deepEqual(buttons.map(b=>b.textContent),['English','한국어','Zotero 언어 따르기 / Follow Zotero'],'each choice in its own language, whatever the panel speaks');
+  assert.deepEqual(buttons.map(b=>b.getAttribute('aria-pressed')),['true','false','false'],'English is chosen by default');
+  assert.ok(buttons.every(b=>b.getAttribute('data-writes')==='setting'),'a write: the self-check never presses it');
+  assert.ok(!buttons.some(b=>b.hasAttribute('data-safe')));
+  assert.ok(f.bench.panel.querySelector('nav button[data-tab=explore]').textContent==='Library','English before the change');
+  await f.click('한국어');
+  assert.deepEqual(f.calls.filter(c=>c[0]==='setSetting'),[['setSetting','language','ko-KR']]);
+  assert.equal(i18n.locale(),'ko-KR');
+  assert.equal(f.bench.panel.querySelector('nav button[data-tab=explore]').textContent,'보유 문헌','the sidebar is re-said without rebuilding the panel');
+  assert.equal(f.bench.panel.querySelector('.sc-language button[aria-pressed=true]').textContent,'한국어');
+  await f.click('English');
+  assert.equal(f.bench.panel.querySelector('nav button[data-tab=explore]').textContent,'Library');
+  assert.equal(f.bench.panel.querySelector('.sc-language button[aria-pressed=true]').textContent,'English');
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
+});
