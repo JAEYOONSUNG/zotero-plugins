@@ -7531,7 +7531,7 @@ test('invariant: every async completion of a memo editor reconciles in a finally
  for(const [name,text] of Object.entries(parts))assert.match(text,/finally\s*\{[^}]*reconcileAll\(/,name+' reconciles in a finally');
 });
 
-test('reconcile (R12-1): an input that is not the stored memo is always in its own draft, even after a mid-job settle cleared it',async()=>{
+test('reconcile (R12-1): an input that is not the stored memo is always in its own draft: typed back to the submitted text during an adopting job, it is a box and a draft',async()=>{
  const f=fixture();casLibrary(f);
  const row=()=>f.runtime.cache.items[1];
  f.runtime.cache.items[1]={remark:'BASE'};
@@ -7541,7 +7541,6 @@ test('reconcile (R12-1): an input that is not the stored memo is always in its o
  const el=f.body().querySelector('textarea.sc-paper-memo');
  const pending=f.click('노트로 옮기기');await settle(); // the local save is done, the note job is held
  casType(f,el,'X');casType(f,el,'BASE');
- f.runtime._memoPending({id:1},1);f.runtime._memoPending({id:1},-1); // a settle reaches the editors in the middle of the job
  release();await pending;await settle();
  assert.equal(el.value,'BASE');
  assertEditorsConsistent(f,'after adoption');
@@ -7550,4 +7549,69 @@ test('reconcile (R12-1): an input that is not the stored memo is always in its o
  const kept=Object.values(f.runtime.cache.memoKept||{}).flat();
  assert.ok(fresh.value==='BASE'||kept.some(e=>e.text==='BASE'),'BASE survives the redraw: editor='+fresh.value+' kept='+JSON.stringify(kept.map(e=>e.text)));
  f.bench.destroy();
+});
+
+// A library that behaves like the real one around a save: the paper is pending until the save (and an adoption) is done, and the settle listener hears it BEFORE the caller handles the answer.
+function casPending(f,{adopt=null,hold=null}={}){
+ const state={adopt,hold};
+ f.library.setRemark=async(id,text,opts={})=>{
+  const row=f.runtime.cache.items[id]||={},stored=String(row.remark||'');
+  if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored},rev:row.memoRev||0};
+  row.remark=text;row.memoRev=(row.memoRev||0)+1;
+  f.runtime._memoPending({id},1);
+  let out=text;
+  try{
+   if(state.hold)await state.hold;
+   if(state.adopt!==null&&state.adopt!==text){row.remark=state.adopt;row.memoRev++;out=state.adopt;}
+  }finally{f.runtime._memoPending({id},-1);}
+  if(opts.answer)opts.answer.rev=row.memoRev;
+  return out;
+ };
+ return state;
+}
+
+test('reconcile (R13-1): a plain note adoption shows the adopted text with no conflict box; typing during the job is a real conflict and never a kept card',async()=>{
+ const f=fixture();const state=casPending(f,{adopt:'R'});
+ f.runtime.cache.items[1]={remark:'B'};
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ await f.click('노트로 옮기기'); // without typing: memo B, note R
+ assert.equal(el.value,'R','the editor shows the adopted text');
+ assert.equal(f.body().querySelector('.sc-memo-stale'),null,'no false conflict');
+ assertEditorsConsistent(f,'adoption');
+ // A save by typing: adopted again, still no conflict.
+ state.adopt='R2';
+ casType(f,el,'T');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(el.value,'R2');assert.equal(f.body().querySelector('.sc-memo-stale'),null);
+ assertEditorsConsistent(f,'typed save');
+ // Typing while the job runs: that input is a real conflict with the adopted text.
+ let release;state.hold=new Promise(r=>{release=r;});state.adopt='R3';
+ casType(f,el,'T2');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ casType(f,el,'T2 more');
+ release();await settle();
+ assert.equal(el.value,'T2 more');
+ assert.ok(f.body().querySelector('.sc-memo-stale'),'the typed input is shown against the adopted text');
+ assertEditorsConsistent(f,'typed during');
+ assert.equal(f.runtime.cache.memoKept,undefined,'never a kept card in a single window');
+ f.bench.destroy();
+});
+
+test('reconcile (R13-2): an idle window follows the other window\'s saves without drafts or kept cards, redrawn or not',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);
+ for(const l of g.runtime.memoListeners)f.runtime.memoListeners.add(l); // one runtime in reality: both windows hear every settle
+ g.runtime.memoListeners=f.runtime.memoListeners;
+ casPending(f);casLibrary(g);
+ f.runtime.cache.items[1]={remark:'B'};
+ await f.bench.show('annotations');await settle();await g.bench.show('annotations');await settle();
+ const a=f.body().querySelector('textarea.sc-paper-memo');
+ for(const text of ['L1','L2','L3','L4','L5']){
+  casType(f,a,text);a.dispatchEvent(new f.win.Event('blur'));await settle();
+  assert.equal(g.body().querySelector('textarea.sc-paper-memo').value,text,'the idle window already follows '+text);
+  await g.bench.show('annotations');await settle();
+  assert.equal(g.body().querySelector('textarea.sc-paper-memo').value,text,'and a redraw of it shows '+text);
+  assert.equal(g.body().querySelector('.sc-memo-stale'),null);
+  assertEditorsConsistent(g,'idle '+text);
+ }
+ assert.equal(f.runtime.cache.memoKept,undefined,'no kept card piled up: '+JSON.stringify(f.runtime.cache.memoKept));
+ f.bench.destroy();g.bench.destroy();
 });

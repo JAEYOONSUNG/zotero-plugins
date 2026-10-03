@@ -3549,9 +3549,10 @@
   function memoRevNow(itemID){try{const ref=runtime.Z.Items.get(Number(itemID));const row=ref&&runtime.entry(ref);return row?(row.memoRev||0):0;}catch(_){return 0;}}
   const answerFresh=(itemID,rev)=>rev===undefined||rev===memoRevNow(itemID);
   // When a memo write settles (resolved or rolled back) the editors of that paper reconcile again.
-  const stopMemoListener=runtime.addMemoListener?runtime.addMemoListener(item=>{if(!disposed)reconcileAll(item.id);}):null;
+  const stopMemoListener=runtime.addMemoListener?runtime.addMemoListener(item=>{if(!disposed)reconcileAll(item.id,true);}):null;
   function memoPendingNow(itemID){try{const ref=runtime.Z.Items.get(Number(itemID));return !!(ref&&runtime.memoWritePending?.(ref));}catch(_){return false;}}
-  function reconcileAll(itemID){for(const e of body.querySelectorAll('textarea[data-memo-item]')){if(e.dataset.memoItem!==String(itemID)||!e.isConnected)continue;memoBindings.get(e)?.reconcile?.();}}
+  // `idleOnly`: the settle listener leaves editors that have a request of their own running; that request reconciles in its finally, after it has handled its answer.
+  function reconcileAll(itemID,idleOnly=false){for(const e of body.querySelectorAll('textarea[data-memo-item]')){if(e.dataset.memoItem!==String(itemID)||!e.isConnected)continue;const b=memoBindings.get(e);if(idleOnly&&b&&b.busy>0)continue;b?.reconcile?.();}}
   function editorGens(itemID){const gens=new Map();for(const e of body.querySelectorAll('textarea[data-memo-item]')){if(e.dataset.memoItem!==String(itemID)||!e.isConnected)continue;const b=memoBindings.get(e);if(b)gens.set(b,b.gen);}return gens;}
   function syncMemoEditors(itemID,text,requested,opts={}){
    if(!answerFresh(itemID,opts.rev))return false;
@@ -3607,8 +3608,9 @@
   function bindMemo(field,save,label,opts={}){
    let timer=null,last=field.value,chain=Promise.resolve(),staleBox=null,keptBox=null;
    const cas=opts.memo||null;
-   const binding={base:cas?String(cas.base??''):undefined,stale:null,itemID:cas?cas.itemID:undefined,id:WINDOW_ID+'.'+(++bindingSeq),gen:0};
-   field.addEventListener('input',()=>{binding.gen++;}); // input generation: a completion never replaces text typed after it began
+   const binding={base:cas?String(cas.base??''):undefined,stale:null,itemID:cas?cas.itemID:undefined,id:WINDOW_ID+'.'+(++bindingSeq),gen:0,unsaved:false,busy:0};
+   // `unsaved`: real input (typed, restored, loaded from a kept card) since the editor last showed a stored text. An editor without it only follows the stored memo.
+   field.addEventListener('input',()=>{binding.gen++;binding.unsaved=true;}); // input generation: a completion never replaces text typed after it began
    const grow=()=>{if(typeof autoGrow==='function')autoGrow(field);};
    /* The only place the base moves. `derived`: the text is what this editor itself just submitted and had stored, so the
       editor's current text (possibly typed on since) builds on it. Anything else moves the base only if the editor shows it. */
@@ -3621,11 +3623,17 @@
    binding.reconcile=()=>{
     if(!cas||!field.isConnected)return;
     const stored=storedMemo(cas.itemID),value=field.value;
+    // An editor nobody typed into since it last showed a stored text just follows the stored memo: no draft, no box.
+    if(!binding.unsaved&&value===binding.base){
+     if(value!==stored)binding.show(stored);
+     else if(!memoPendingNow(cas.itemID)){moveBase(stored);last=stored;clearStale();}
+     return;
+    }
     if(value===stored){
      // The in-memory memo of a write that has not settled is not the persisted memo: nothing is confirmed or cleared until it does.
      if(memoPendingNow(cas.itemID))return;
      if(timer){win.clearTimeout(timer);timer=null;}
-     moveBase(stored);last=stored;clearStale();
+     moveBase(stored);last=stored;clearStale();binding.unsaved=false;
      if(field.dataset.draftKey)binding.finishOwn(value);
      return;
     }
@@ -3638,7 +3646,7 @@
     }
     last=value;ownDraft();
    };
-   binding.state=()=>({pending:cas?memoPendingNow(cas.itemID):false,ownDraft:(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return meta&&meta.owner===binding.id?cachedDrafts().get(key):undefined;})(),value:field.value,base:binding.base,last,box:!!(staleBox&&staleBox.isConnected),used:!!binding.stale?.used,buttonsEnabled:staleBox?[...staleBox.querySelectorAll('button')].every(b=>!b.disabled):true,stored:cas?storedMemo(cas.itemID):undefined});
+   binding.state=()=>({unsaved:binding.unsaved,pending:cas?memoPendingNow(cas.itemID):false,ownDraft:(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return meta&&meta.owner===binding.id?cachedDrafts().get(key):undefined;})(),value:field.value,base:binding.base,last,box:!!(staleBox&&staleBox.isConnected),used:!!binding.stale?.used,buttonsEnabled:staleBox?[...staleBox.querySelectorAll('button')].every(b=>!b.disabled):true,stored:cas?storedMemo(cas.itemID):undefined});
    // The draft this binding owns right now (owner and rev), captured when a job starts; null if it owns none.
    binding.draftToken=()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return meta&&meta.owner===binding.id?{owner:meta.owner,rev:meta.rev}:null;};
    // Delete the draft only if this binding owns it, it still holds the submitted text, and (with a token) nothing wrote it since.
@@ -3652,7 +3660,7 @@
    };
    const clearStale=()=>{binding.stale=null;if(staleBox){staleBox.remove();staleBox=null;}if(field.dataset.state==='stale')field.dataset.state='';};
    // The editor takes a stored text as its own: value, base and autosave baseline together.
-   binding.show=text=>{if(timer){win.clearTimeout(timer);timer=null;}field.value=text;grow();last=text;if(moveBase(text))clearStale();};
+   binding.show=text=>{if(timer){win.clearTimeout(timer);timer=null;}field.value=text;grow();last=text;binding.unsaved=false;if(moveBase(text))clearStale();};
    const take=text=>{const prior=field.value;if(field.dataset.draftKey)finishDraft(field,prior);binding.show(text);};
    // Puts a kept draft into THIS editor as ordinary unsaved input; true only when it is in a connected editor's value and draft.
    binding.loadKept=entry=>{
@@ -3779,7 +3787,7 @@
     }
    };
    // Whatever changes this editor's text or settles a conflict runs after the saves already queued for it.
-   binding.sequence=job=>{const next=chain.catch(()=>{}).then(job);chain=next;return next;};
+   binding.sequence=job=>{const next=chain.catch(()=>{}).then(async()=>{binding.busy++;try{return await job();}finally{binding.busy--;}});chain=next;return next;};
    const commit=(options={})=>binding.sequence(()=>run(options));
    binding.commit=commit;
    // A conflict choice first lets an input that differs from the memo the box showed be saved (or refused), then judges the conflict as it is by then.
@@ -3790,7 +3798,7 @@
      found&&(found.used=true);
      const text=pick();
      const token=binding.draftToken();
-     field.value=text;grow();last=text;field.dataset.state='saving';
+     field.value=text;grow();last=text;binding.unsaved=true;field.dataset.state='saving';
      try{const ok=await attempt(text,seenStored,found);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text,false,token);}return ok;}
      catch(error){if(found)found.used=false;field.dataset.state='failed';last=null;throw error;}
      finally{if(cas)reconcileAll(cas.itemID);}
@@ -3832,7 +3840,7 @@
     if(otherLive){if(!sameAsStored&&draft!==field.value){keepDraft(cas.itemID,draft,draftBase,truncated);drawKept();}return;}
     if(draft===field.value&&!truncated){binding.claimDraft(draft,typeof draftBase==='string'?{tagged:draftBase}:undefined,meta);return;}
     if(sameAsStored){binding.dropDraft(meta);return;}
-    if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.base){field.value=draft;grow();binding.claimDraft(draft,{tagged:draftBase},meta);return;}
+    if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.base){field.value=draft;grow();binding.unsaved=true;binding.claimDraft(draft,{tagged:draftBase},meta);return;}
     keepDraft(cas.itemID,draft,draftBase,truncated);binding.dropDraft(meta);drawKept();
    };
    memoBindings.set(field,binding);
