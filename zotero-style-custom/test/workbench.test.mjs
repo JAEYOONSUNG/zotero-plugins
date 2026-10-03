@@ -7218,7 +7218,7 @@ test('invariant: memo fields are written only by the allowlisted runtime/library
 
 test('invariant: a memo draft is written or deleted only by writeMemoDraft, the binding\'s owner-checked methods, and finishDraft (non-memo path)',()=>{
  const lines=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8').split('\n');
- const allowed=new Set(['writeMemoDraft','finishDraft','binding.finishOwn','binding.ownDraftWrite','binding.claimDraft','binding.dropDraft','binding.discardSource','discardKept']);
+ const allowed=new Set(['writeMemoDraft','finishDraft','binding.finishOwn','binding.ownDraftWrite','binding.claimDraft','binding.dropDraft','discardKept']);
  let label=null;const bad=[];
  lines.forEach((line,i)=>{
   const m=/^\s*(?:async )?function (\w+)\(/.exec(line)||/^\s*(binding\.\w+)=/.exec(line);
@@ -8214,5 +8214,41 @@ test('discarded cards (R20-3): 버리기 discards the draft the card came from t
  el.dispatchEvent(new f.win.Event('blur'));await settle();
  assert.ok(!casWritten(f).includes('DISCARDED'),'a blur does not save it');
  assert.equal(f.runtime.cache.items[1].remark,'X');
+ f.bench.destroy();
+});
+
+test('discarded cards (R21-1): 버리기 on an old card never deletes a newer draft with the same text, and nothing blocks preserving it',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);shareRuntime(f,g);casLibrary(f);casLibrary(g);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ const a=await openDetail(f);
+ casType(f,a,'RETYPE'); // window A: draft generation 1
+ const b=await openDetail(g); // window B shows the card of that draft
+ assert.ok(g.body().querySelector('.sc-memo-kept-card'),'B has the card');
+ casType(f,a,'RETYPE!');casType(f,a,'RETYPE'); // A: generation 3, same text as the card
+ await g.click('버리기'); // B discards the OLD card
+ assert.equal(g.body().querySelector('.sc-memo-kept-card'),null);
+ assert.ok(sharedDraftTexts(f).includes('RETYPE'),'A\'s newer draft is not deleted');
+ f.bench.destroy();
+ assert.ok(keptOrDraft(f,'RETYPE'),'and closing A keeps it: nothing blocks preservation');
+ g.bench.destroy();
+ void b;
+});
+
+test('choices (R21-3): a choice whose preceding save failed writes nothing to the note and leaves the box usable',async()=>{
+ const f=fixture();
+ f.runtime.cache.items[1]={remark:'L'};
+ let resolved=0;
+ f.library.memoConflict=async()=>({local:'L',remote:'R'});
+ f.library.resolveMemoConflict=async()=>{resolved++;return {resolved:true,conflict:null,text:'L'};};
+ f.library.setRemark=async()=>{throw new Error('disk');}; // the save of the typed text fails
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'D');
+ await f.click('이 메모 쓰기');
+ assert.equal(resolved,0,'the note was not written');
+ assert.equal(el.value,'D','the typed text is still there');
+ const box=f.body().querySelector('.sc-memo-conflict');
+ assert.ok(box,'the box is still shown');
+ for(const b of box.querySelectorAll('button'))assert.equal(b.disabled,false,'and usable');
  f.bench.destroy();
 });

@@ -2268,10 +2268,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         // One pending token for the whole merge: it is released in the outer finally, after any rollback (an editor must not see "settled" while the memo is still going back).
         mergeToken = this._memoPending(held, 1, mine, after);
         {
-          this.entry(held).remark = after; this._memoBump(this.entry(held)); copied.memo = true; rec.memo = {before: mine, after};
+          this.entry(held).remark = after; this._memoBump(this.entry(held)); copied.memo = true; rec.memo = {before: mine, after, rev: this.entry(held).memoRev || 0};
           await this.flush();
+          rec.memo.rev = this.entry(held).memoRev || 0; // the revision this merge owns: a rollback restores only while it is still this
           if (this.getSetting('memoToNote')) {
             const wrote = await this.memoToNote(held);
+            rec.memo.rev = this.entry(held).memoRev || 0;
             // What the note was, and what the merge made it, so undo can put the note and its sync baseline back with the memo.
             const noteAfter = this.memoNoteOf(held);
             // `after` is exactly the HTML the merge submitted, never what the note holds when the save returns (an outside edit may be in it): undo restores only a note that still equals it.
@@ -2281,7 +2283,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
     } catch (error) {
       // Nothing was trashed; put back whatever was already moved or copied.
-      try { await this._undoMerge(rec, {untrash: false}); } catch (undoError) { this.Z.logError?.(undoError); }
+      try { await this._undoMerge(rec, {untrash: false, ownedMemoRev: typeof error?.memoRev === 'number' ? error.memoRev : rec.memo?.rev ?? (rec.memo ? this.entry(held).memoRev || 0 : undefined)}); } catch (undoError) { this.Z.logError?.(undoError); }
       throw error;
     } finally { if (mergeToken !== undefined) this._memoPending(held, -1, undefined, undefined, mergeToken); }
     this.mergeLedger()[String(preprint.id)] = rec; this.dirty = true;
@@ -2294,12 +2296,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   /* Undo puts the memo and its note back exactly as the merge recorded them, but only when neither
      moved since. If either did, nothing is picked for the user: both texts go into the conflict box. */
-  async _undoMemo(held, memo) {
+  async _undoMemo(held, memo, {ownedRev} = {}) {
     // Returns true only when the memo and its note are both back exactly as before the merge.
     const norm = this.constructor.memoNorm, row = this.entry(held), saved = memo.note;
     // The memo is changed in memory before it is saved: the paper is pending until undo has saved it or given up.
     const pendingToken = this._memoPending(held, 1, String(row.remark ?? ''), memo.before);
     try {
+    // A rollback of a failed merge restores only what the merge still owns: if the memo was saved since (its revision moved), that save stands.
+    if (ownedRev !== undefined && (row.memoRev || 0) !== ownedRev) return false;
     // A note undo had trashed and could not bring back (its compensation save failed) is brought back first, on any retry.
     if (saved && saved.pendingUndelete) {
       const trashed = this.Z.Items.get(Number(saved.id));
@@ -2370,7 +2374,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return restoredAll;
     } finally { this._memoPending(held, -1, undefined, undefined, pendingToken); }
   }
-  async _undoMerge(rec, {untrash = true} = {}) {
+  async _undoMerge(rec, {untrash = true, ownedMemoRev} = {}) {
     const get = id => this.Z.Items.get(Number(id));
     const held = get(rec.held), preprint = get(rec.preprint);
     let memoRestored = true;
@@ -2394,7 +2398,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (rec.status && this.state(held).status === rec.status.after) patch.status = rec.status.before;
       if (rec.rating && this.state(held).rating === rec.rating.after) patch.rating = rec.rating.before;
       if (Object.keys(patch).length) await this.edit([held], patch);
-      if (rec.memo) memoRestored = await this._memoSerial(held, () => this._undoMemo(held, rec.memo));
+      if (rec.memo) memoRestored = await this._memoSerial(held, () => this._undoMemo(held, rec.memo, {ownedRev: ownedMemoRev}));
     }
     if (untrash && preprint?.deleted) { preprint.deleted = false; await preprint.saveTx(); }
     // A memo or note that undo could not put back (edited meanwhile) keeps the ledger: the record of what the merge did is not thrown away.

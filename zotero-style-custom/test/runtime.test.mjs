@@ -4502,3 +4502,36 @@ test('pending writes (R20-2b): undo, resolve and adoption each release exactly o
   const i = src.indexOf('const pendingToken = this._memoPending(held, 1, \'\', memo);');
   assert.ok(i > 0 && /try \{[^}]*flush\(\); \} finally \{ this\._memoPending\(held, -1/.test(src.slice(i, i + 400)), 'import releases after its write, in a finally');
 });
+
+test('merge rollback (R21-2): a failed merge save never writes BASE over a later successful save of the same text', async () => {
+  const {fx, plugin, pre, pub} = mergeWorld();
+  await plugin.setSetting('memoToNote', false, {apply: false});
+  const Library = require('../src/library.js');
+  const lib = Library.create({Zotero: Object.assign(fx.Z, {Items: Object.assign(fx.Z.Items, {getAsync: async id => fx.Z.Items.get(id)})}), runtime: plugin});
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'BASE'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'SOURCE', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  pub.hasChanged = () => false;
+  const orig = plugin.flush;
+  let release; const gate = new Promise(r => { release = r; }), once = {v: true};
+  plugin.flush = async function () { if (plugin.memoWritePending(pub) && once.v) { once.v = false; await gate; throw new Error('disk'); } return orig.call(this); };
+  const merge = plugin.mergePreprintIntoPublished(1).catch(error => error);
+  await new Promise(r => setTimeout(r, 15));
+  assert.equal(plugin.entry(pub).remark, 'BASE\n\nSOURCE');
+  await lib.setRemark(2, 'BASE\n\nSOURCE'); // the reader types the same text and saves it: a successful, later write
+  release();
+  assert.ok((await merge) instanceof Error);
+  plugin.flush = orig;
+  assert.equal(plugin.entry(pub).remark, 'BASE\n\nSOURCE', 'the later save stands: the rollback did not write BASE over it');
+});
+
+test('invariant: every rollback or compensation of a memo write compares a revision, never text', () => {
+  const fs = require('node:fs');
+  const lib = fs.readFileSync(new URL('../src/library.js', import.meta.url), 'utf8');
+  const rt = fs.readFileSync(new URL('../src/runtime.js', import.meta.url), 'utf8');
+  const rollback = lib.slice(lib.indexOf('Only what is still this write'), lib.indexOf('Only what is still this write') + 500);
+  assert.match(rollback, /entry\.memoRev===mine/, 'setRemark restores only while its own revision stands');
+  const undo = rt.slice(rt.indexOf('async _undoMemo('), rt.indexOf('async _undoMemo(') + 900);
+  assert.match(undo, /ownedRev !== undefined && \(row\.memoRev \|\| 0\) !== ownedRev\) return false/, 'a merge rollback restores only while the merge still owns the memo revision');
+  assert.match(rt, /_undoMerge\(rec, \{untrash: false, ownedMemoRev:/, 'the merge failure path passes the revision it owns');
+});
