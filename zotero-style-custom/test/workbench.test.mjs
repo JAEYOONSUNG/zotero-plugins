@@ -1691,6 +1691,7 @@ test('A47 14일 넘게 멈춤: a fetched-but-unrelated recent paper reads as 연
 
 test('A48 이어 읽기 메모: a row with a memo shows it as a button that swaps to a textarea, and a save returns to the one-line view',async()=>{
  const f=fixture();
+ {const rec=f.library.setRemark;f.library.setRemark=async(...a)=>{await rec(...a);f.runtime.cache.items[a[0]].remark=a[1];return a[1];};} // only the library writes the memo now
  f.runtime.cache.items[1]={seconds:125,lastRead:new Date().toISOString(),remark:'Check the control condition'};
  f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:20,visited:5,percent:25,attachmentID:100,lastPageIndex:4}:{pages:{},total:0,visited:0,percent:0};
  await f.bench.show('reading');
@@ -6508,7 +6509,7 @@ test('choosing 노트 내용 쓰기 clears the old local draft and the autosave 
  saves.length=0;
  await f.click('노트 내용 쓰기');await settle();
  assert.equal(memo.value,'text from the note');
- assert.ok(!f.runtime.cache.workbenchDrafts.entries.some(([k,v])=>k===key||v==='my memo'),'the stale draft is gone '+JSON.stringify(f.runtime.cache.workbenchDrafts.entries));
+ assert.ok(!f.runtime.cache.workbenchDrafts.entries.some(([k,v])=>k!==key&&!k.includes('\u0001')&&v==='my memo'),'the editor\'s own stale draft is gone (the old fixed key belongs to no editor here and is left alone) '+JSON.stringify(f.runtime.cache.workbenchDrafts.entries));
  memo.dispatchEvent(new f.win.Event('blur'));await settle();
  assert.deepEqual(saves,[],'nothing is written back on blur');
  memo.value='my memo';memo.dispatchEvent(new f.win.Event('input',{bubbles:true}));memo.dispatchEvent(new f.win.Event('blur'));await settle();
@@ -6970,7 +6971,7 @@ test('kept drafts (R4-2): redrawing one window never deletes another window\'s s
  casType(f,a,'D1');casType(g,b,'D2');
  f.runtime.cache.items[1].remark='R';
  await f.bench.show('annotations');await settle();
- assert.match(f.body().querySelector('.sc-memo-kept-card').textContent,/D1/,'window 1 keeps its own draft');
+ assert.ok([...f.body().querySelectorAll('.sc-memo-kept-card')].some(c=>/D1/.test(c.textContent)),'window 1 keeps its own draft as a card');
  assert.ok(JSON.stringify(f.runtime.cache.workbenchDrafts).includes('D2'),'window 2\'s draft is still in the shared cache');
  f.bench.destroy();g.bench.destroy();
 });
@@ -7101,4 +7102,118 @@ test('memo drafts (R6-4): an empty draft (the memo was cleared) is a real draft:
  const kept=Object.values(f.runtime.cache.memoKept||{}).flat();
  assert.ok(kept.some(e=>e.text===''),'the empty draft was kept: '+JSON.stringify(kept));
  f.bench.destroy();g.bench.destroy();
+});
+
+test('memo drafts (R7-1): the reading-log editor never writes the memo itself: a save completing after another window\'s newer save leaves that memo alone',async()=>{
+ const f=fixture();
+ f.runtime.cache.items[1]={seconds:125,lastRead:new Date().toISOString(),remark:'A'};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{4:60},total:20,visited:5,percent:25,attachmentID:100,lastPageIndex:4}:{pages:{},total:0,visited:0,percent:0};
+ let release;const gate=new Promise(r=>{release=r;});
+ f.library.setRemark=async(id,text)=>{await gate;return text;}; // the library write is delayed
+ await f.bench.show('reading');
+ f.body().querySelector('.sc-resume-remark').click();
+ const field=f.body().querySelector('.sc-resume-memo-editor textarea');
+ field.value='B';field.dispatchEvent(new f.win.Event('input',{bubbles:true}));field.dispatchEvent(new f.win.Event('blur'));await settle();
+ f.runtime.cache.items[1].remark='C'; // another window saved C meanwhile
+ release();await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'C','the workbench did not assign B');
+ f.bench.destroy();
+});
+
+test('memo drafts (R7-2): a memo longer than the draft limit is never restored truncated and never autosaved shorter',async()=>{
+ const f=fixture();casLibrary(f);
+ const full='x'.repeat(60000)+'END';
+ f.runtime.cache.items[1]={remark:'x'.repeat(60000)};
+ await f.bench.show('annotations');await settle();
+ let el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,full);el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark.length,60003);
+ f.calls.length=0;
+ await f.bench.show('annotations');await settle();
+ el=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(el.value.length,60003,'the editor shows the stored memo, not the truncated draft');
+ assert.equal(f.body().querySelector('.sc-memo-kept-card'),null,'a draft that is only a cut of the stored memo is not a kept card');
+ f.bench.destroy();
+ assert.equal(f.runtime.cache.items[1].remark.length,60003,'closing wrote nothing shorter');
+ assert.deepEqual(casWritten(f),[]);
+ // An unsaved long edit is kept truncated, marked as such, and never put back into the editor.
+ const g=fixture(f.runtime.cache);casLibrary(g);
+ await g.bench.show('annotations');await settle();
+ const e2=g.body().querySelector('textarea.sc-paper-memo');
+ casType(g,e2,'y'.repeat(60000));
+ f.runtime.cache.items[1].remark='changed elsewhere';
+ g.bench.destroy();
+ const h=fixture(f.runtime.cache);casLibrary(h);
+ await h.bench.show('annotations');await settle();
+ assert.equal(h.body().querySelector('textarea.sc-paper-memo').value,'changed elsewhere');
+ const card=h.body().querySelector('.sc-memo-kept-card');
+ assert.ok(card&&/앞부분만/.test(card.textContent),'offered as a marked, truncated kept card');
+ assert.deepEqual(casWritten(h),[]);
+ h.bench.destroy();
+});
+
+test('memo drafts (R7-3): a sync after a completed save cannot delete another window\'s draft through a stand-in input',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(g);
+ f.runtime.cache.items[1]={remark:'A'};
+ let release;const gate=new Promise(r=>{release=r;});
+ f.library.setRemark=async()=>{f.runtime.cache.items[1].remark='R';await gate;return 'R';}; // adopts the note R
+ await f.bench.show('explore');await f.click('자세히');
+ f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle();
+ await g.bench.show('explore');await g.click('자세히');
+ const b=g.body().querySelector('[aria-label="읽기 메모"]');
+ assert.equal(b.value,'R');
+ casType(g,b,'A');
+ release();await settle();
+ assert.ok(sharedDraftTexts(f).includes('A'),'window 2\'s draft A survives: '+JSON.stringify(sharedDraftTexts(f)));
+ f.bench.destroy();g.bench.destroy();
+});
+
+test('memo drafts (R7-4): a window rendering again never writes its stale copy over a newer shared draft; both windows\' texts survive closing',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g);
+ await f.bench.show('explore');await f.click('자세히');await g.bench.show('explore');await g.click('자세히');
+ const a=f.body().querySelector('[aria-label="읽기 메모"]'),b=g.body().querySelector('[aria-label="읽기 메모"]');
+ casType(f,a,'DRAFT A');casType(g,b,'DRAFT B');
+ await f.bench.show('explore');await settle();
+ f.bench.destroy();g.bench.destroy();
+ for(const t of ['DRAFT A','DRAFT B'])assert.ok(keptOrDraft(f,t),t+' survives');
+});
+
+test('invariant: memo fields are written only by the allowlisted runtime/library functions, each of which bumps memoRev',()=>{
+ const read=name=>fs.readFileSync(new URL('../src/'+name,import.meta.url),'utf8').split('\n');
+ const write=/(\.remark\s*=[^=]|\.memoSynced\s*=[^=]|\.memoConflict\s*=[^=]|delete\s+[\w.()]+\.(?:memoSynced|memoConflict))/;
+ const check=(file,hdr,allowed)=>{
+  const lines=read(file);let cur=null;const found=new Map();
+  lines.forEach((line,i)=>{const m=hdr.exec(line);if(m)cur=m[m.length-1];if(write.test(line)){if(!found.has(cur))found.set(cur,[]);found.get(cur).push(i);}});
+  assert.deepEqual([...found.keys()].filter(name=>!allowed.includes(name)),[],file+': a memo field is written outside the allowlist');
+  for(const name of found.keys()){
+   const start=lines.findIndex(l=>{const m=hdr.exec(l);return m&&m[m.length-1]===name;});
+   let end=lines.findIndex((l,i)=>i>start&&hdr.test(l));if(end<0)end=lines.length;
+   const body=lines.slice(start,end).join('\n');
+   assert.match(body,/_memoBump\(|_memoSetBase\(/,file+' '+name+' writes a memo field without bumping memoRev');
+  }
+ };
+ check('runtime.js',/^  (?:static |async )*(\w+)\(.*\)\s*\{\s*$/,['_mergePreprintIntoPublished','_undoMemo','_memoSetBase','_memoNoWrite','_resolveMemoConflict','_mirrorMemoNote','connectPublished']);
+ check('library.js',/^\s*(?:async )?function (\w+)\(/,['setRemark']);
+ const wb=read('workbench.js').join('\n');
+ assert.doesNotMatch(wb,/entry(?:\([^)]*\))?\.(?:remark|memoSynced|memoConflict|memoRev)\s*=[^=]/,'the workbench never assigns a memo field of the runtime entry');
+ assert.doesNotMatch(wb,/\brow\.(?:remark|memoSynced|memoConflict)\s*=[^=]/);
+});
+
+test('invariant: a memo draft is written or deleted only by writeMemoDraft, the binding\'s owner-checked methods, and finishDraft (non-memo path)',()=>{
+ const lines=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8').split('\n');
+ const allowed=new Set(['writeMemoDraft','finishDraft','binding.finishOwn','binding.ownDraftWrite','binding.claimDraft','binding.dropDraft']);
+ let label=null;const bad=[];
+ lines.forEach((line,i)=>{
+  const m=/^\s*(?:async )?function (\w+)\(/.exec(line)||/^\s*(binding\.\w+)=/.exec(line);
+  if(m)label=m[1];
+  if(/updateDraft\(/.test(line)&&!/function updateDraft\(/.test(line)){
+   if(!allowed.has(label)&&!/updateDraft\(current\.dataset\.draftKey/.test(line))bad.push((i+1)+' '+label);
+  }
+ });
+ assert.deepEqual(bad,[],'updateDraft outside the owner-checked functions');
+ const src=lines.join('\n');
+ assert.doesNotMatch(src,/finishDraft\(\s*\{/,'finishDraft is never given a stand-in object');
+ const fd=src.slice(src.indexOf('function finishDraft('),src.indexOf('/* Applying a generated result'));
+ assert.match(fd,/memo\.finishOwn\(/);assert.match(fd,/memoItem!==undefined\)return/,'a memo editor without a binding deletes nothing');
+ for(const call of src.matchAll(/finishDraft\(([^,)]*)/g))assert.match(call[1].trim(),/^[A-Za-z_][\w.]*$/,'finishDraft first argument is a real input: '+call[1]);
 });

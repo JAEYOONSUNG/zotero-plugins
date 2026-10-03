@@ -46,6 +46,8 @@
  const TABS=[['explore','보유 문헌'],['recent','최근 문헌'],['related','관련 논문'],['authors','저자 추적'],['graph','관계 그래프'],['tags','중첩 태그'],['notes','노트'],['annotations','주석'],['backlinks','역링크'],['attachments','첨부 미리보기'],['reading','읽기 진행'],['tabs','탭 관리'],['views','뷰 그룹'],['canvas','캔버스'],['matrix','논문 비교'],['collections','컬렉션'],['journals','저널 지표'],['assist','번역·AI'],['appearance','스타일 편집']];
  const GROUPS=[['탐색',['explore','recent','related','authors','collections','journals']],['읽기',['reading','notes','annotations','attachments','backlinks']],['정리',['tags','graph','canvas','matrix']],['도구',['tabs','views','assist','appearance']]];
  const FILTER_TABS=new Set(['explore','recent','collections','journals','reading','notes','annotations','attachments','tags','graph']);
+ // Windows whose workbench is open right now: a draft owned by one of them (other than this window) is live, not a leftover.
+ const LIVE_DRAFT_WINDOWS=new Set();
  function attach(win,{runtime,library,reader,model,assist}){
   const doc=win.document;let pathAbort=null,freshAbort=null;let disposed=false,epoch=0,loadEpoch=0,previewEpoch=0,aiEpoch=0,preview=null,notifier=null,reloadTimer=null,draftTimer=null,jcrMount=null;
   // Every self-saving memo currently on screen, so an edit still inside its
@@ -85,12 +87,17 @@
   /* Ownership of a shared memo draft: next to the text the cache keeps `owner|rev` (key+DRAFT_OWN). The owner is the id of the
      binding that wrote it (window id + binding id); rev counts the writes. Text equality never grants ownership. */
   const DRAFT_OWN='\u0001own';
-  const WINDOW_ID=Math.random().toString(36).slice(2,10);let bindingSeq=0;
+  const WINDOW_ID=Math.random().toString(36).slice(2,10);let bindingSeq=0;LIVE_DRAFT_WINDOWS.add(WINDOW_ID);
+  const DRAFT_TRUNC='\u0001trunc';
+  // Bases are compared by hash (the stored base would otherwise be cut like the draft): length and a 32-bit FNV-1a.
+  const hashOf=text=>{text=String(text);let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return 'h'+text.length+'.'+h.toString(36);};
+  const isHash=value=>typeof value==='string'&&/^h\d+\.[0-9a-z]+$/.test(value);
+  const ownerWindow=owner=>String(owner).split('.')[0];
   function draftMeta(key){const raw=cachedDrafts().get(key+DRAFT_OWN);if(typeof raw!=='string')return null;const cut=raw.lastIndexOf('|');return cut<0?null:{owner:raw.slice(0,cut),rev:Number(raw.slice(cut+1))};}
   function updateDraft(key,value,base,owner){
    if(!key||key.length>1000||/password|secret|api.?key|access.?token|bearer/i.test(key))return;
-   const saved=cachedDrafts(),before=draftMeta(key);saved.delete(key);drafts.delete(key);saved.delete(key+DRAFT_BASE);drafts.delete(key+DRAFT_BASE);saved.delete(key+DRAFT_OWN);drafts.delete(key+DRAFT_OWN);
-   if(value!==undefined){value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);if(typeof owner==='string'){const o=owner+'|'+((before?.rev||0)+1);saved.set(key+DRAFT_OWN,o);drafts.set(key+DRAFT_OWN,o);}if(typeof base==='string'){const b=base.slice(0,DRAFT_LENGTH);saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);}}
+   const saved=cachedDrafts(),before=draftMeta(key);saved.delete(key);drafts.delete(key);saved.delete(key+DRAFT_BASE);drafts.delete(key+DRAFT_BASE);saved.delete(key+DRAFT_OWN);drafts.delete(key+DRAFT_OWN);saved.delete(key+DRAFT_TRUNC);drafts.delete(key+DRAFT_TRUNC);
+   if(value!==undefined){const cut=String(value).length>DRAFT_LENGTH;value=String(value).slice(0,DRAFT_LENGTH);saved.set(key,value);drafts.set(key,value);if(cut){saved.set(key+DRAFT_TRUNC,'1');drafts.set(key+DRAFT_TRUNC,'1');}if(typeof owner==='string'){const o=owner+'|'+((before?.rev||0)+1);saved.set(key+DRAFT_OWN,o);drafts.set(key+DRAFT_OWN,o);}if(typeof base==='string'){const b=isHash(base)?base:hashOf(base);saved.set(key+DRAFT_BASE,b);drafts.set(key+DRAFT_BASE,b);}}
    let total=[...saved.values()].reduce((sum,text)=>sum+text.length,0);
    while(saved.size>DRAFT_LIMIT||total>DRAFT_TOTAL){const oldest=saved.keys().next().value;total-=saved.get(oldest).length;saved.delete(oldest);}
    for(const existing of drafts.keys())if(!saved.has(existing))drafts.delete(existing);
@@ -1326,9 +1333,9 @@
    const binding=memoBindings.get(input),key=input.dataset.draftKey;
    if(binding&&binding.base!==undefined&&binding.itemID!==undefined){
     const saved=cachedDrafts(),existing=saved.get(key),meta=draftMeta(key);
-    const ours=meta&&(meta.owner===binding.id||meta.owner.startsWith(WINDOW_ID+'.'));
-    const foreign=typeof existing==='string'&&!ours&&existing!==input.value&&existing!==storedMemo(binding.itemID);
-    if(foreign)keepDraft(binding.itemID,existing,saved.get(key+DRAFT_BASE));
+    // Foreign: a live OTHER window wrote it. A leftover of a closed window or an earlier session is restorable, not protected.
+    const foreign=typeof existing==='string'&&!!meta&&ownerWindow(meta.owner)!==WINDOW_ID&&LIVE_DRAFT_WINDOWS.has(ownerWindow(meta.owner))&&existing!==input.value&&existing!==storedMemo(binding.itemID);
+    if(foreign)keepDraft(binding.itemID,existing,saved.get(key+DRAFT_BASE),saved.has(key+DRAFT_TRUNC));
     updateDraft(key,input.value,binding.base,binding.id);
     if(foreign)binding.drawKept?.();
     return;
@@ -1342,6 +1349,8 @@
    // A memo draft is deleted only by the binding that owns it (and, for a completed job, only if nothing wrote it since the job began).
    const memo=memoBindings.get(input);
    if(memo&&memo.base!==undefined){if(!memo.finishOwn(submitted,token))return;if(clearValue)input.value='';return;}
+   // A memo editor with no binding (a stand-in object, a detached node) owns nothing: it never deletes a memo draft.
+   if(input.dataset?.memoItem!==undefined)return;
    const latest=cachedDrafts().get(key)??drafts.get(key)??input.value;
    // The editor may have changed, or been replaced by a notifier redraw, while saving.
    if(latest!==submitted)return;
@@ -1350,7 +1359,7 @@
   /* Applying a generated result needs a result: the button is off while the box is empty. */
   function syncAIApply(){const apply=body.querySelector('[data-ai-apply]'),copyBtn=body.querySelector('[data-ai-copy]'),out=body.querySelector('.sc-ai-output');if(out){if(apply)apply.disabled=!out.value.trim();if(copyBtn)copyBtn.disabled=!out.value.trim();}}
   body.addEventListener('input',syncAIApply);
-  function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]')){const key=input.dataset.draftKey;if(!drafts.has(key))continue;const binding=memoBindings.get(input);if(binding&&binding.base!==undefined)binding.restore(drafts.get(key),drafts.get(key+DRAFT_BASE));else input.value=drafts.get(key);}syncAIApply();}
+  function restoreDrafts(){for(const input of body.querySelectorAll('[data-draft-key]')){const key=input.dataset.draftKey,binding=memoBindings.get(input);if(binding&&binding.base!==undefined){binding.restore();continue;}if(!drafts.has(key))continue;input.value=drafts.get(key);}syncAIApply();}
   function clear(){
    if(jcrMount){state.jcrBrowserState=jcrMount.state;jcrMount.destroy();jcrMount=null;}
    abortAround();aroundRow=null;previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
@@ -3531,8 +3540,6 @@
      the autosave carries it. `requested` is the value or values that count as "unchanged". */
   function syncMemoEditors(itemID,text,requested){
    const id=String(itemID),was=(Array.isArray(requested)?requested:[requested]).filter(v=>typeof v==='string');
-   const rowKey=JSON.stringify(['remark',state.libraryID,itemID]);
-   for(const v of was)finishDraft({dataset:{draftKey:rowKey},value:''},v);
    let stale=false;
    for(const editor of body.querySelectorAll('textarea[data-memo-item]')){
     if(editor.dataset.memoItem!==id||!editor.isConnected)continue;
@@ -3556,11 +3563,11 @@
   const KEPT_SHOWN=3; // how many kept drafts show before the toggle; none is ever deleted but by its own buttons
   const keptKey=itemID=>{try{const ref=runtime.Z.Items.get(Number(itemID));return ref?String(runtime.identity(ref)):String(itemID);}catch(_){return String(itemID);}};
   const keptList=itemID=>{const all=runtime.cache.memoKept,list=all&&typeof all==='object'?all[keptKey(itemID)]:null;return Array.isArray(list)?list:[];};
-  function keepDraft(itemID,text,base){
+  function keepDraft(itemID,text,base,truncated=false){
    const all=runtime.cache.memoKept&&typeof runtime.cache.memoKept==='object'&&!Array.isArray(runtime.cache.memoKept)?runtime.cache.memoKept:(runtime.cache.memoKept={});
    const list=all[keptKey(itemID)]||(all[keptKey(itemID)]=[]);
    if(list.some(entry=>entry.text===text))return;
-   list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text).slice(0,DRAFT_LENGTH),base:String(base??''),at:new Date().toISOString()});
+   list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text).slice(0,DRAFT_LENGTH),base:String(base??''),truncated:!!truncated||String(text).length>DRAFT_LENGTH,at:new Date().toISOString()});
    runtime.dirty=true;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));
   }
   function dropKept(itemID,id){
@@ -3619,6 +3626,7 @@
      const card=node('div',null,keptBox,{class:'sc-memo-kept-card',role:'group','aria-label':'저장하지 못한 입력'});
      node('span','저장하지 못한 입력',card,{class:'sc-memo-label'});
      node('p','이 메모가 그 사이 바뀌어 입력칸에 되돌리지 않았습니다. 필요하면 입력칸에 넣어 직접 합치세요.',card,{class:'sc-muted'});
+     if(entry.truncated)node('p','이 입력은 너무 길어 앞부분만 저장되어 있습니다. 전체가 필요하면 현재 메모와 비교해 직접 확인하세요.',card,{class:'sc-muted'});
      node('pre',entry.text||'(비어 있음)',card);
      const acts=node('div',null,card,{class:'sc-actions'});
      /* Put into the editor as ordinary unsaved input: the base does not move, so saving it is judged like any other edit.
@@ -3670,7 +3678,7 @@
      clearStale();
      // A draft typed during the save was recorded over the old base: it is built on this one now.
      const key=field.dataset.draftKey;
-     if(key&&binding.draftToken()&&cachedDrafts().get(key)===field.value.slice(0,DRAFT_LENGTH)&&field.value!==stored)updateDraft(key,field.value,stored,binding.id);
+     if(key&&field.value!==stored)binding.ownDraftWrite(field.value,stored);
     }
     /* The note's newer text, adopted because the memo had not changed since the last sync, comes back as the stored text:
        an editor still showing what was submitted takes it (value and base together). Input typed while the save ran stays
@@ -3735,19 +3743,30 @@
     field.addEventListener('blur',()=>{if(timer)win.clearTimeout(timer);commit();});
     memoFields.push(()=>{if(timer)win.clearTimeout(timer);return commit();});
    }
-   /* A saved draft goes back into the editor only when the memo it was typed over is still the stored one and the editor holds
-      nothing else. Otherwise it is kept (never autosaved, never edited) and the editor shows the stored memo. */
-   binding.restore=(draft,draftBase)=>{
-    if(!cas){field.value=draft;return;}
+   /* The shared draft is only ever changed through these three, and only with the owner and revision this window just read:
+      ownDraftWrite (a draft this binding owns), claimDraft and dropDraft (restore, against the meta it read). */
+   binding.ownDraftWrite=(text,base)=>{if(binding.draftToken())updateDraft(field.dataset.draftKey,text,base,binding.id);};
+   const sameMeta=(a,b)=>(!a&&!b)||(a&&b&&a.owner===b.owner&&a.rev===b.rev);
+   binding.claimDraft=(text,base,seen)=>{if(sameMeta(draftMeta(field.dataset.draftKey),seen))updateDraft(field.dataset.draftKey,text,base,binding.id);};
+   binding.dropDraft=seen=>{if(sameMeta(draftMeta(field.dataset.draftKey),seen))updateDraft(field.dataset.draftKey,undefined);};
+   /* Restore reads the SHARED draft as it is now (never this window's older copy). Another live window's draft is not touched:
+      a copy is offered as a kept card. One of this window or of a closed one goes back into the editor only when the memo it
+      was typed over is still the stored one (compared by hash) and the editor holds nothing else, and it is not truncated;
+      otherwise it is kept (never autosaved, never edited) and the editor shows the stored memo. */
+   binding.restore=()=>{
+    const key=field.dataset.draftKey;
+    if(!cas||!key)return;
+    const saved=cachedDrafts(),draft=saved.get(key);
+    if(typeof draft!=='string')return;
+    const meta=draftMeta(key),draftBase=saved.get(key+DRAFT_BASE),truncated=saved.has(key+DRAFT_TRUNC);
     const stored=storedMemo(cas.itemID);
-    const claim=()=>updateDraft(field.dataset.draftKey,draft,draftBase,binding.id);
-    if(draft===field.value){claim();return;}
-    // Drafts live in a cache shared with other windows: only the entry that is exactly this draft (text and base) is removed.
-    const dropOwn=()=>{const saved=cachedDrafts(),key=field.dataset.draftKey;if(saved.get(key)===draft&&(draftBase===undefined||saved.get(key+DRAFT_BASE)===draftBase))updateDraft(key,undefined);else drafts.delete(key);};
-    if(draft===stored){dropOwn();return;}
-    // Drafts keep a truncated copy of the base: it is compared the same way, so a long memo is not mistaken for a changed one.
-    if(draftBase===stored.slice(0,DRAFT_LENGTH)&&field.value===binding.base){field.value=draft;grow();claim();return;}
-    keepDraft(cas.itemID,draft,draftBase);dropOwn();drawKept();
+    const sameAsStored=draft===stored||(truncated&&stored.slice(0,DRAFT_LENGTH)===draft);
+    const otherLive=!!meta&&ownerWindow(meta.owner)!==WINDOW_ID&&LIVE_DRAFT_WINDOWS.has(ownerWindow(meta.owner));
+    if(otherLive){if(!sameAsStored&&draft!==field.value){keepDraft(cas.itemID,draft,draftBase,truncated);drawKept();}return;}
+    if(draft===field.value&&!truncated){binding.claimDraft(draft,draftBase,meta);return;}
+    if(sameAsStored){binding.dropDraft(meta);return;}
+    if(!truncated&&(draftBase===hashOf(stored)||draftBase===stored)&&field.value===binding.base){field.value=draft;grow();binding.claimDraft(draft,draftBase,meta);return;}
+    keepDraft(cas.itemID,draft,draftBase,truncated);binding.dropDraft(meta);drawKept();
    };
    memoBindings.set(field,binding);
    drawKept();
@@ -4398,7 +4417,7 @@
        if(result&&result.stale)return result;
        const stored=typeof result==='string'?result:String(value||'');
        // A later keystroke's save must not be overwritten by this earlier answer.
-       const newest=field.value===value||field.value===stored;if(newest)r.entry.remark=stored;
+       const newest=field.value===value||field.value===stored;
        const held=state.items.find(i=>String(i.id)===String(r.item.id));if(held&&newest)held.remark=stored;
        // An autosave that lands while the reader keeps typing must not collapse the editor under them.
        if(!field.isConnected||typing||field.value!==value)return result;
@@ -8026,7 +8045,7 @@
    // panel must write it, not discard it.
    for(const flush of memoFields)Promise.resolve(flush()).catch(error=>runtime.Z.logError?.(error));
    memoFields=[];
-   abortAround();dismissToast();disposed=true;win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
+   abortAround();dismissToast();disposed=true;LIVE_DRAFT_WINDOWS.delete(WINDOW_ID);win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
   const accent=runtime.pref('accentColor','#374151');if(/^#[a-f\d]{6}$/i.test(accent)&&!['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=Math.max(11,Math.min(20,Number(runtime.pref('panelFontSize',13))||13))+'px';
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.
