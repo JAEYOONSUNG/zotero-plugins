@@ -5923,3 +5923,85 @@ test('r20 PDF 찾기 on a paper with no file asks Zotero for it, opens nothing, 
  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/PDF를 찾아 붙였습니다/);
  f.bench.destroy();
 });
+
+test('r21 논문 비교 evidence cells save per paper, reach the CSV, and 종합 노트 만들기 builds one note and selects it',async()=>{
+ const f=fixture();
+ const store={};
+ f.runtime.evidenceOf=ref=>({species:'',construct:'',condition:'',control:'',result:'',limit:'',...(store[ref.id]||{})});
+ f.runtime.setEvidence=async(ref,patch)=>{store[ref.id]={...(store[ref.id]||{}),...patch};};
+ let made=null,opened=null;
+ f.library.synthesisNote=async(entries,options)=>{made={entries,options};return '77';};
+ f.library.openItem=async id=>{opened=id;};
+ await f.bench.show('matrix');
+ // Nothing written and no annotation chosen: no note.
+ await f.click('종합 노트 만들기');assert.equal(made,null,'an empty note is not made');
+ await f.click('근거 칸 추가');
+ assert.deepEqual(f.runtime.cache.matrixFields.slice(-6),['ev_species','ev_construct','ev_condition','ev_control','ev_result','ev_limit']);
+ const area=f.body().querySelector('textarea.sc-matrix-edit');assert.ok(area,'an evidence cell is a field to type in');
+ area.value='E. coli K-12';area.dispatchEvent(new f.win.Event('change',{bubbles:true}));await settle();
+ const id=Object.keys(store)[0];assert.equal(store[id].species||store[id][Object.keys(store[id])[0]],'E. coli K-12','saved on the paper');
+ await f.click('CSV 복사');const csv=f.calls.filter(c=>c[0]==='copy').at(-1)[1];assert.match(csv,/생물종\/균주/);assert.match(csv,/E\. coli K-12/);
+ await f.click('종합 노트 만들기');
+ assert.equal(made.entries.length,1,'only the paper with evidence');
+ assert.deepEqual(made.entries[0].evidence[0],['생물종/균주','E. coli K-12']);
+ assert.equal(opened,'77','the note is selected in the pane');
+ f.bench.destroy();
+});
+
+test('r21 a reading-queue entry with a reason from ZotPoP shows its one line',async()=>{
+ const f=fixture();
+ const known={1:{status:''},2:{status:''}};
+ f.runtime.state=ref=>({citations:3,impactFactor:4,...known[ref.id]});
+ f.runtime.cache.workbenchUI={...(f.runtime.cache.workbenchUI||{}),readingQueue:{'1:K1':{at:new Date(Date.now()-2000).toISOString(),people:[],reason:{text:'ZotPoP 검색: crispr',source:'zotpop'}}}};
+ await f.bench.show('reading');
+ assert.match(f.body().querySelector('.sc-reading-queue-row .sc-queue-why').textContent,/ZotPoP 검색: crispr/);
+ f.bench.destroy();
+});
+
+test('r21 a paper with a published version offers 게재본 가져와 연결, or just 연결 when it is held',async()=>{
+ const f=fixture();
+ const published={doi:'10.9/pub',venue:'Nature',year:2025};
+ let linked=false,held=null,connects=[];
+ f.runtime.publishedStatus=async()=>({published,held,linked});
+ f.runtime.connectPublished=async ref=>{connects.push(ref.id);linked=true;return {item:{getField:()=>'Pub title'},imported:!held,linked:true};};
+ f.runtime.unlinkedPublished=async()=>[];
+ f.setSelection([1]);
+ await f.bench.show('explore');
+ await f.click('자세히');await settle();
+ assert.match(f.body().querySelector('.sc-paper-published').textContent,/게재됨 · Nature · 2025/);
+ assert.ok([...f.body().querySelectorAll('.sc-published-connect')].some(b=>b.textContent==='게재본 가져와 연결'));
+ await f.click('게재본 가져와 연결');await settle();
+ assert.equal(connects.length,1);assert.match(f.body().textContent,/연결됨|이미 연결/);
+ f.bench.destroy();
+ linked=false;held={id:5};
+ const g=fixture();
+ g.runtime.publishedStatus=async()=>({published,held,linked:false});g.runtime.unlinkedPublished=async()=>[];
+ g.setSelection([1]);await g.bench.show('explore');await g.click('자세히');await settle();
+ assert.ok([...g.body().querySelectorAll('.sc-published-connect')].some(b=>b.textContent==='연결'),'already held: just 연결');
+ g.bench.destroy();
+});
+
+test('r21 a group counts new papers once even when two followed authors share one, and the opened author shows the whole name',async()=>{
+ const {f,rows}=expandFixture();
+ rows[0].name='Ada Lovelace-Montgomery-Fitzgerald III';
+ rows[2].news=[{id:'W1',title:'Genetic circuits at scale',venue:'Nature Biotechnology',date:'2026-09-02',doi:'10.1/n1',citations:12,position:'middle'},{id:'W3',title:'Another',venue:'Cell',date:'2026-09-03',doi:'10.1/n3'}];
+ await f.bench.show('authors');await f.click('목록 관리');await f.click('분야');
+ const head=[...f.body().querySelectorAll('.sc-watch-group-toggle')].map(t=>t.textContent.replace(/\s+/g,' ').trim()).find(t=>t.startsWith('Biotechnology'));
+ assert.match(head,/새 논문 3$/,'W1 (shared), W2 and W3 are three papers, not four');
+ const name=f.body().querySelector('tr.sc-watch-row[data-author-id="A1"] .sc-journal-name');
+ assert.match(name.title,/Ada Lovelace-Montgomery-Fitzgerald III/,'the tooltip carries the whole name');
+ f.body().querySelector('tr.sc-watch-row[data-author-id="A1"]').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.ok(personOf(f).querySelector('.sc-person-inline-name'));
+ f.bench.destroy();
+});
+
+test('r21 the journal header counts journals apart from the papers with no journal named',async()=>{
+ const f=fixture();
+ for(const n of [3,4,5]){f.papers.push({id:String(n),key:'K'+n,libraryID:1,title:'No venue '+n,venue:'',itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ f.setSelection([]);
+ await f.bench.show('journals');
+ const head=f.body().querySelector('.sc-journal-reading-head').textContent.replace(/\s+/g,' ');
+ assert.match(head,/저널 \d+종 · 저널 미기재 3편 · 문헌 \d+편/);
+ assert.equal(Number(head.match(/저널 (\d+)종/)[1]),2,'Science and Nature; the unnamed group is not a journal');
+ f.bench.destroy();
+});

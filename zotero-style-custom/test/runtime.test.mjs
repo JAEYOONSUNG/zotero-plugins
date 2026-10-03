@@ -3081,3 +3081,77 @@ test('placeOf reads a followed author\'s country and tier from data already held
   assert.equal(plugin.placeOf('Nowhere Institute'), null);
   assert.equal(plugin.placeOf(''), null);
 });
+
+test('r21 queueForReading adds to the reading queue under libraryID:key, with its reason, deduped', async () => {
+  const { plugin, item, Z } = fixture();
+  plugin.cache = { schema: 1, items: {} };
+  const a = item(1), b = item(2), c = item(3);
+  const byID = new Map([[1, a], [2, b], [3, c]]);
+  Z.Items = { get: id => byID.get(id) };
+  const stateOf = plugin.state.bind(plugin);
+  plugin.state = ref => ref.id === 3 ? { status: 'done' } : { status: '' };
+  plugin.flush = async () => { plugin.flushed = (plugin.flushed || 0) + 1; };
+  let refreshed = 0;
+  plugin.windows = new Map([[{ closed: false }, { workbench: { refreshReading: () => refreshed++ } }]]);
+  assert.equal(plugin.isQueued(a), false);
+  const n = await plugin.queueForReading([a, 2, c, a], { reason: 'ZotPoP 검색: crispr', source: 'zotpop' });
+  assert.equal(n, 2, 'a and b; c is finished; a is not counted twice');
+  assert.deepEqual(Object.keys(plugin.cache.workbenchUI.readingQueue).sort(), ['1:1', '1:2']);
+  assert.equal(plugin.cache.workbenchUI.readingQueue['1:1'].reason.text, 'ZotPoP 검색: crispr');
+  assert.equal(plugin.isQueued(a), true);
+  assert.equal(plugin.isQueued(2), true, 'by id as well');
+  assert.equal(plugin.isQueued(c), false);
+  assert.equal(refreshed, 1, 'the open panel is refreshed');
+  assert.equal(await plugin.queueForReading([a]), 0, 'already waiting');
+  assert.equal(refreshed, 1, 'nothing added, nothing refreshed');
+  assert.equal(await plugin.queueForReading(null), 0);
+  void stateOf;
+});
+
+test('r21 evidence is kept per item under libraryID:key and empty fields are dropped', async () => {
+  const { plugin, item } = fixture();
+  plugin.cache = { schema: 1, items: {} };
+  plugin.flush = async () => {};
+  const a = item(1);
+  assert.equal(plugin.evidenceOf(a).species, '');
+  await plugin.setEvidence(a, { species: 'E. coli', result: 'x', bogus: 'no' });
+  assert.deepEqual(Object.keys(plugin.cache.evidence), ['1:1']);
+  assert.equal(plugin.evidenceOf(a).species, 'E. coli');
+  assert.equal(plugin.cache.evidence['1:1'].bogus, undefined);
+  await plugin.setEvidence(a, { species: '', result: '' });
+  assert.equal(plugin.cache.evidence['1:1'], undefined, 'all empty: the row goes');
+});
+
+test('r21 connectPublished imports the published version, relates both, carries tags/status/memo, and deletes nothing', async () => {
+  const { plugin, item, Z } = fixture();
+  plugin.cache = { schema: 1, items: {} };
+  plugin.flush = async () => {};
+  plugin.refreshWindows = async () => {};
+  const pre = item(1, { tags: [{ tag: 'topic/a', type: 0 }, { tag: '/done', type: 1 }] }), pub = item(2, { tags: [] });
+  for (const ref of [pre, pub]) { const rel = []; ref.relatedItems = rel; ref.addRelatedItem = o => { if (!rel.includes(o.key)) rel.push(o.key); }; ref.saveTx = async () => {}; }
+  plugin.entry(pre).signals = { doi: '', published: { doi: '10.9/pub', venue: 'Nature', year: 2025 } };
+  plugin.signalsOf = ref => plugin.entry(ref).signals;
+  plugin.entry(pre).remark = 'my memo';
+  plugin.state = ref => ({ status: ref === pre ? 'done' : '' });
+  const edits = [];
+  plugin.edit = async (refs, patch) => { edits.push([refs[0].id, patch]); };
+  plugin.findExistingWork = async () => null;
+  let imports = 0;
+  plugin.importWork = async () => { imports++; return Object.assign([pub], { existing: false }); };
+  const result = await plugin.connectPublished(pre, {});
+  assert.equal(imports, 1);
+  assert.equal(result.imported, true);
+  assert.deepEqual(pre.relatedItems, ['2']);assert.deepEqual(pub.relatedItems, ['1']);
+  assert.ok(pub.pendingTags.some(t => t.tag === 'topic/a'), 'tags carried over');
+  assert.deepEqual(edits, [[2, { status: 'done' }]], 'reading status carried over');
+  assert.equal(plugin.entry(pub).remark, 'my memo');
+  // Held already: only the link, nothing copied, no import.
+  const again = item(3, { tags: [] });again.relatedItems = [];again.addRelatedItem = o => { again.relatedItems.push(o.key); };pub.relatedItems.length = 0;again.saveTx = async () => {};
+  plugin.entry(again).signals = { published: { doi: '10.9/pub' } };
+  plugin.findExistingWork = async () => pub;
+  const r2 = await plugin.connectPublished(again, {});
+  assert.equal(imports, 1);assert.equal(r2.imported, false);assert.equal(r2.linked, true);
+  assert.deepEqual(again.relatedItems, ['2']);
+  assert.equal(again.pendingTags, null);
+  void Z;
+});

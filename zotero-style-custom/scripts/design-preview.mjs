@@ -65,7 +65,7 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph,JournalIdent
  const demoAction=async()=>hint('이 미리보기의 동작은 예시 데이터에만 적용됩니다. 실제 Zotero에는 연결하지 않습니다.');
  const daysAgo=n=>new Date(Date.now()-n*864e5).toISOString();
  // Reading records for the fictional papers, so the reading page shows what a reader sees.
- const cache={items:{4:{seconds:400,lastRead:daysAgo(20)},1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},workbenchUI:{density:(typeof process!=='undefined'&&process.env?.PREVIEW_DENSITY==='compact')||(typeof location!=='undefined'&&/[?&]density=compact/.test(location.search))?'compact':'comfortable',welcomed:true},boards:[]};
+ const cache={items:{4:{seconds:400,lastRead:daysAgo(20)},1:{seconds:1240,lastRead:daysAgo(1),remark:'Fig. 3의 대조군 조건을 방법 절과 대조해 볼 것',readingAttachments:{9:{pageTimes:{0:140,1:520,2:80,3:100,5:370,6:30},totalPages:12,lastPageIndex:6,lastRead:daysAgo(1)},10:{pageTimes:{1:90},totalPages:4,lastPageIndex:1,lastRead:daysAgo(3)}},readingAttachmentID:9},2:{seconds:3200,lastRead:daysAgo(6)}},readerSettings:{colorLabels:{'#ffd400':'핵심 결과','#5fb236':'방법'}},matrixFields:['title','status','year','citations','ev_species','ev_construct','ev_condition','ev_control','ev_result','ev_limit'],workbenchUI:{density:(typeof process!=='undefined'&&process.env?.PREVIEW_DENSITY==='compact')||(typeof location!=='undefined'&&/[?&]density=compact/.test(location.search))?'compact':'comfortable',welcomed:true},boards:[]};
  // Fictional portraits drawn as simple shapes; everyone else shows initials.
  const face=(bg,fg)=>({url:'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><rect width="28" height="28" fill="${bg}"/><circle cx="14" cy="11" r="5" fill="${fg}"/><path d="M4 28c0-6 4-9 10-9s10 3 10 9z" fill="${fg}"/></svg>`),page:''});
  const DEMO_FACES={A1:face('#cfd8e6','#6b7a93'),A3:face('#e6d9cf','#93796b'),A5:face('#d3e3d6','#6b9374')};
@@ -113,6 +113,9 @@ async function mountDemo(win,Workbench,Model,ReadingPath,PaperGraph,JournalIdent
  let pending={signals:1146,journals:169,authors:109};
  const runtime={rootURI:'',cache,
   backfillPending:()=>pending,
+  // 논문 비교 evidence: two papers carry notes so the cells are shown filled and empty.
+  evidenceOf:ref=>({species:'',construct:'',condition:'',control:'',result:'',limit:'',...(ref.id===1?{species:'E. coli K-12 MG1655',construct:'pCas9 + sgRNA-lacZ',condition:'LB, 37 °C, 24 h',control:'비표적 sgRNA',result:'편집 효율 82%',limit:'한 균주에서만 확인'}:{})}),
+  setEvidence:async()=>({}),
   runBackfill:async({onProgress}={})=>{
    for(const [stage,total] of [['signals',1146],['journals',169],['authors',109]])
     for(const done of [0,Math.floor(total/2),total-1])onProgress?.({stage,done,total});

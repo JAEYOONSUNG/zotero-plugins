@@ -1568,7 +1568,9 @@
  "저널": "Journal",
  "저널 IF 공식 값 새로고침": "Refresh the journal impact factor",
  "저널 {0}종 · JIF 있는 저널 {1} · 분야 알려진 저널 {2}": "{0} journals · {1} with a JIF · {2} with a known field",
- "저널 {0}종 · 문헌 {1}편": "{0} journals · {1} papers",
+ "저널 {0}종": "{0} journals",
+ "저널 미기재 {0}편": "{0} papers with no journal",
+ "문헌 {0}편": "{0} papers",
  "저널 {0}종 중 {1}종 지표 확인 · {2}종은 OpenAlex에도 없음": "{1} of {0} journals have a metric · {2} are not in OpenAlex either",
  "저널 검색": "Search journals",
  "저널 논문 검색을 열 수 없습니다. 도구 → 부가 기능에서 ZotPoP를 설치·활성화한 뒤 다시 시도하세요.": "The journal paper search cannot open. Install and enable ZotPoP under Tools → Add-ons, then try again.",
@@ -2174,5 +2176,11 @@
  "회색": "Gray",
  "후보가 둘입니다 — 직접 고르세요: {0}": "There are two candidates — choose one: {0}",
  "후속 연구": "Follow-up work",
- "휴지통으로": "Move to trash"
+ "휴지통으로": "Move to trash",
+ "적기": "Write",
+ "게재됨": "Published",
+ "눌러서 펼치기": "Click to expand",
+ "논문 비교 종합": "Comparison synthesis",
+ "비교 중인 문헌의 근거 칸과, 주석 탭에서 고른 주석을 한 노트로 모읍니다. 각 문헌과 주석 페이지로 가는 링크가 들어갑니다": "Gathers the evidence fields of the compared papers and the annotations picked in the Annotations tab into one note, with links to each paper and annotation page",
+ "생물종/균주 · construct · 조건 · 대조군 · 결과 · 한계 칸을 표에 넣고 직접 적습니다": "Adds organism/strain · construct · conditions · control · result · limitations columns to the table to fill in yourself"
 }

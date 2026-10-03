@@ -2409,6 +2409,45 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return true;
   }
 
+  /* 읽기 대기 for other plugins (ZotPoP): the same store and keys as the
+     workbench's own queue (`libraryID:key` in cache.workbenchUI.readingQueue),
+     so 읽기 진행 shows what is added here. items are Zotero items or ids;
+     reason is the one line shown under the queue row. Returns how many were
+     added; finished, started and already-waiting papers are left alone. */
+  _queueItem(item) { return item && typeof item === 'object' ? item : this.Z.Items.get(Number(item)); }
+  isQueued(item) {
+    const ref = this._queueItem(item);
+    if (!ref?.key) return false;
+    return this._waiting(ref, (this.cache?.workbenchUI?.readingQueue || {})[this.identity(ref)]);
+  }
+  _waiting(ref, entry) {
+    if (!entry) return false;
+    const read = Date.parse(this.entry(ref).lastRead || '');
+    return !(Number.isFinite(read) && read > Date.parse(entry.at || ''));
+  }
+  async queueForReading(items, { reason, source } = {}) {
+    const list = Array.isArray(items) ? items : items == null ? [] : [items];
+    const next = { ...(this.cache.workbenchUI?.readingQueue || {}) };
+    const line = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    let added = 0;
+    for (const raw of list) {
+      const ref = this._queueItem(raw);
+      if (!ref?.key || (typeof ref.isRegularItem === 'function' && !ref.isRegularItem())) continue;
+      const status = this.state(ref)?.status;
+      if (status === 'done' || status === 'reading') continue;
+      const key = this.identity(ref);
+      if (this._waiting(ref, next[key])) continue;
+      next[key] = { at: new Date().toISOString(), people: [], ...(line || source ? { reason: { ...(line ? { text: line } : {}), ...(source ? { source: String(source).slice(0, 40) } : {}) } } : {}) };
+      added++;
+    }
+    if (!added) return 0;
+    this.cache.workbenchUI = { ...(this.cache.workbenchUI || {}), readingQueue: next };
+    this.dirty = true;
+    await this.flush();
+    try { for (const [win, state] of this.windows) if (!win.closed) state.workbench?.refreshReading?.(); } catch (error) { this.Z.logError?.(error); }
+    return added;
+  }
+
   // The watchlist existed but could not be read at a glance: every row showed
   // the same "last checked" date, so the only way to learn whether anyone had
   // published was to open all 109 of them one by one. That is exactly the cost
@@ -3927,6 +3966,95 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const signals = this.entry(item).signals || null;
     if (signals?.doi && this.discoverTools.bareDOI(this.bibliographyRecord(item).DOI) !== signals.doi) return null;
     return signals;
+  }
+
+  /* 논문 비교 evidence: what each paper says, in the reader's own words, kept
+     locally per item (`libraryID:key`) next to the other per-paper records. */
+  static get EVIDENCE_FIELDS() { return [['species', '생물종/균주'], ['construct', 'construct'], ['condition', '조건'], ['control', '대조군'], ['result', '결과'], ['limit', '한계']]; }
+  evidenceOf(item) {
+    const row = item?.key ? (this.cache?.evidence || {})[this.identity(item)] : null;
+    const out = {};
+    for (const [key] of this.constructor.EVIDENCE_FIELDS) out[key] = String(row?.[key] || '');
+    return out;
+  }
+  async setEvidence(item, patch) {
+    if (!item?.key) throw new Error('문헌을 찾을 수 없습니다. 목록을 새로 고친 뒤 다시 시도하세요.');
+    const known = new Set(this.constructor.EVIDENCE_FIELDS.map(([key]) => key));
+    const store = this.cache.evidence && typeof this.cache.evidence === 'object' ? this.cache.evidence : (this.cache.evidence = {});
+    const id = this.identity(item), row = {...(store[id] || {})};
+    for (const [key, value] of Object.entries(patch || {})) if (known.has(key)) row[key] = String(value ?? '').slice(0, 4000);
+    for (const key of Object.keys(row)) if (!row[key].trim()) delete row[key];
+    if (Object.keys(row).length) store[id] = row; else delete store[id];
+    this.dirty = true;
+    await this.flush();
+    return this.evidenceOf(item);
+  }
+
+  /* 프리프린트 -> 게재본. A stored signal says a preprint has a published
+     version; this says whether that version is already on the shelf and
+     whether the two are linked (related items). */
+  _isLinked(item, other) {
+    try { return !!item?.relatedItems?.includes?.(other.key) || !!other?.relatedItems?.includes?.(item.key); } catch (_) { return false; }
+  }
+  async publishedStatus(item, {held: given} = {}) {
+    const published = this.signalsOf(item)?.published;
+    if (!published?.doi) return null;
+    const held = given === undefined
+      ? await this.findExistingWork(item.libraryID, {doi: published.doi, title: '', year: published.year})
+      : given;
+    return {published, held: held || null, linked: !!held && this._isLinked(item, held)};
+  }
+  // Every preprint in the library whose published version is not yet linked: one pass, no request.
+  async unlinkedPublished(libraryID) {
+    const items = (await this.libraryItems(libraryID)).filter(item => this.isRegular(item));
+    const byDOI = new Map();
+    for (const item of items) { const doi = this.discoverTools.bareDOI(item.getField?.('DOI')); if (doi && !byDOI.has(doi)) byDOI.set(doi, item); }
+    const rows = [];
+    for (const item of items) {
+      const published = this.signalsOf(item)?.published;
+      if (!published?.doi) continue;
+      const held = byDOI.get(this.discoverTools.bareDOI(published.doi)) || null;
+      if (held && held.id === item.id) continue;
+      const linked = !!held && this._isLinked(item, held);
+      if (!linked) rows.push({item, published, held});
+    }
+    return rows;
+  }
+  /* Imports the published version (the duplicate check of importWork), or
+     uses the copy already held, relates the two, and -- for a copy just
+     brought in -- carries over tags, reading status and the memo. The
+     preprint stays; nothing is deleted. */
+  async connectPublished(preprint, {win} = {}) {
+    const status = await this.publishedStatus(preprint);
+    if (!status) throw new Error('이 문헌에는 게재본 기록이 없습니다. 자료 점검에서 철회·게재 신호를 먼저 채우세요.');
+    const {published} = status;
+    let held = status.held, imported = false;
+    if (!held) {
+      const saved = await this.importWork({doi: published.doi, title: '', year: published.year, venue: published.venue}, win);
+      held = saved?.[0];
+      if (!held) throw new Error('게재본을 가져오지 못했습니다. 잠시 뒤 다시 시도하세요.');
+      imported = !saved.existing;
+    }
+    if (held.libraryID !== preprint.libraryID) throw new Error('게재본이 다른 라이브러리에 있어 연결하지 못했습니다. 같은 라이브러리로 옮긴 뒤 다시 시도하세요.');
+    if (held.id === preprint.id) return {item: held, imported: false, linked: false};
+    let linked = false;
+    if (!this._isLinked(preprint, held)) {
+      preprint.addRelatedItem(held); held.addRelatedItem(preprint);
+      await preprint.saveTx(); await held.saveTx();
+      linked = true;
+    }
+    if (imported) {
+      const mine = preprint.getTags(), has = new Set(held.getTags().map(tag => tag.tag));
+      const carry = mine.filter(tag => !has.has(tag.tag));
+      if (carry.length) { held.setTags([...held.getTags(), ...carry.map(tag => ({tag: tag.tag, type: tag.type || 0}))]); await held.saveTx(); }
+      const from = this.state(preprint)?.status;
+      if ((from === 'done' || from === 'reading') && this.state(held)?.status !== from) await this.edit([held], {status: from});
+      const memo = String(this.entry(preprint).remark || '');
+      if (memo && !this.entry(held).remark) { this.entry(held).remark = memo; this.dirty = true; await this.flush(); }
+    }
+    this.bumpState?.();
+    await this.refreshWindows();
+    return {item: held, imported, linked};
   }
 
   // Crossref answers 404 for a DOI it has never registered, and OpenAlex

@@ -298,3 +298,23 @@ test('a removed automatic tag comes back automatic, on its own paper, and a whol
  await assert.rejects(f.service.trashItems([60,61]),/read-only/);
  assert.notEqual(a.deleted,true,'the first is not trashed when the second is refused');
 });
+test('r21 synthesisNote makes one standalone note from several papers: evidence, annotations, links back',async()=>{
+ const f=fixture();
+ f.add('journalArticle',6,{fields:{title:'Second <paper>',date:'2021-03-01'}});
+ f.add('attachment',7,{parentID:6,attachmentContentType:'application/pdf'});
+ f.add('annotation',8,{parentID:7,annotationText:'Second quote',annotationComment:'',annotationPosition:'{"pageIndex":4}'});
+ const id=await f.service.synthesisNote([
+  {id:1,evidence:[['생물종/균주','E. coli K-12'],['결과','']],annotationIDs:[3]},
+  {id:6,evidence:[['한계','small n & noisy']],annotationIDs:[8]}
+ ],{title:'비교 정리'});
+ const note=f.items.get(Number(id));
+ assert.equal(note.parentID,undefined,'standalone, no parent');assert.equal(note.libraryID,1);
+ assert.match(note.html,/비교 정리/);
+ assert.match(note.html,/zotero:\/\/select\/library\/items\/K1/);assert.match(note.html,/zotero:\/\/select\/library\/items\/K6/);
+ assert.match(note.html,/zotero:\/\/open-pdf\/library\/items\/K2\?page=3&amp;annotation=K3/);
+ assert.match(note.html,/zotero:\/\/open-pdf\/library\/items\/K7\?page=5&amp;annotation=K8/);
+ assert.match(note.html,/E\. coli K-12/);assert.doesNotMatch(note.html,/<b>결과/,'empty evidence is left out');
+ assert.match(note.html,/small n &amp; noisy/);assert.match(note.html,/Second &lt;paper&gt;/);
+ await assert.rejects(f.service.synthesisNote([{id:1,annotationIDs:[8]}]),/another paper/);
+ await assert.rejects(f.service.synthesisNote([]),/Select papers/);
+});

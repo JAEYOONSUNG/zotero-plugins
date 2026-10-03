@@ -282,6 +282,50 @@
       const note=await Z.EditorInstance.createNoteFromAnnotations(input,{parentID:parent.id,noSave:true});note.libraryID=parent.libraryID;note.parentID=parent.id;
       await mutate([parent,...atts,...input],()=>note.save());return String(note.id);
     }
+    /* 종합 노트: ONE standalone note (no parent) in the papers' library, built
+       from several papers' evidence fields and chosen annotations. Each paper
+       gets a heading that links back to the item, and each annotation a link
+       to its page in the reader. entries: [{id, evidence:[[label,text]],
+       annotationIDs:[id]}]. */
+    async function synthesisNote(entries,{title='',collectionID}={}) {
+      if(!Array.isArray(entries)||!entries.length)throw new Error('Select papers to summarise');
+      if(entries.length>200)throw new Error('Select at most 200 papers');
+      const papers=[];
+      for(const entry of entries){
+        const item=await get(entry.id);if(!item.isRegularItem?.())throw new Error('Select regular items');
+        const marks=[];
+        for(const id of entry.annotationIDs||[]){
+          const mark=await get(id);if(!mark.isAnnotation?.())throw new Error('Select annotations to extract');
+          const file=await get(mark.parentID);if(file.parentID!==item.id)throw new Error('Annotation belongs to another paper');
+          marks.push({mark,file});
+        }
+        papers.push({item,marks,evidence:(entry.evidence||[]).filter(([,text])=>String(text||'').trim())});
+      }
+      const libraryID=papers[0].item.libraryID;
+      if(papers.some(p=>p.item.libraryID!==libraryID))throw new Error('Select papers in the same library');
+      if(!library(libraryID).editable)throw new Error('Item is read-only');
+      const route=libraryID===Z.Libraries.userLibraryID?'library':'groups/'+safe(()=>Z.Groups.getGroupIDFromLibraryID(libraryID),'unavailable');
+      const para=text=>escape(text).split(/\r?\n/).join('<br/>');
+      const heading=String(title||'').trim()||'종합 노트';
+      let html=`<h1>${escape(heading)}</h1>`;
+      for(const {item,marks,evidence} of papers){
+        const year=field(item,'date').match(/\b\d{4}\b/)?.[0]||'';
+        html+=`<h2><a href="zotero://select/${route}/items/${escape(item.key)}">${escape(field(item,'title')||'제목 없음')}</a>${year?' ('+year+')':''}</h2>`;
+        if(evidence.length)html+='<ul>'+evidence.map(([label,text])=>`<li><b>${escape(label)}</b>: ${para(text)}</li>`).join('')+'</ul>';
+        for(const {mark,file} of marks){
+          const page=safe(()=>JSON.parse(mark.annotationPosition).pageIndex,null),label=String(safe(()=>mark.annotationPageLabel,'')||'')||(Number.isInteger(page)?String(page+1):'');
+          const link=`zotero://open-pdf/${route}/items/${escape(file.key)}?${Number.isInteger(page)?'page='+(page+1)+'&amp;':''}annotation=${escape(mark.key)}`;
+          const text=String(safe(()=>mark.annotationText,'')||''),comment=String(safe(()=>mark.annotationComment,'')||'');
+          if(text)html+=`<blockquote><p>${para(text)}</p></blockquote>`;
+          if(comment)html+=`<p>${para(comment)}</p>`;
+          html+=`<p><a href="${link}">${label?'p.'+escape(label)+' · ':''}주석 열기</a></p>`;
+        }
+      }
+      const note=new Z.Item('note');note.libraryID=libraryID;note.setNote('<div data-schema-version="9">'+html+'</div>');
+      if(collectionID)note.addToCollection(collectionID);
+      await Z.DB.executeTransaction(async()=>{await note.save();});
+      return String(note.id);
+    }
     /* A note on one annotation, written where Zotero already keeps one.
 
        The comment field on an annotation is the memo: it travels with the
@@ -574,7 +618,7 @@
       }
       return items.length;
     }
-    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
+    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,synthesisNote,setRemark,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

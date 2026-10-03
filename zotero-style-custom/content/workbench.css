@@ -1151,6 +1151,7 @@
 #style-custom-workbench .sc-person { display: flex; align-items: flex-start; gap: 12px; margin: 4px 0 0; }
 #style-custom-workbench .sc-person-who { flex: 1 1 auto; min-width: 0; }
 #style-custom-workbench .sc-person-who h3 { margin: 0 0 0; font: var(--sc-fw-strong) var(--sc-fs-brand)/var(--sc-lh-brand) var(--sc-title-font); }
+#style-custom-workbench .sc-person-who h3.sc-person-inline-name { font-size: var(--sc-fs-title); line-height: var(--sc-lh-title); overflow-wrap: anywhere; margin: 0 0 var(--sc-space-1); }
 /* Initials until a portrait is found, and permanently for anyone without one. */
 #style-custom-workbench .sc-face {
   position: relative; flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
@@ -2964,3 +2965,11 @@
 #style-custom-workbench .sc-undo-toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 #style-custom-workbench .sc-selection-collect { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex-basis: 100%; }
 #style-custom-workbench .sc-selection-collect[hidden] { display: none; }
+#style-custom-workbench .sc-published-list { display: grid; gap: var(--sc-space-2); margin-block-start: var(--sc-space-2); }
+#style-custom-workbench .sc-published-row { display: flex; align-items: center; gap: var(--sc-space-3); flex-wrap: wrap; }
+#style-custom-workbench .sc-published-title { font-weight: var(--sc-fw-medium); min-width: 0; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-published-connect { white-space: nowrap; }
+#style-custom-workbench .sc-paper-published { display: flex; align-items: center; gap: var(--sc-space-3); flex-wrap: wrap; }
+#style-custom-workbench .sc-matrix-edit { width: 100%; min-width: 14ch; min-height: 3.2em; resize: vertical; box-sizing: border-box; font: inherit; line-height: var(--sc-lh-body); color: inherit; background: transparent; border: 1px solid transparent; border-radius: var(--sc-radius-sm); padding: 4px 6px; }
+#style-custom-workbench .sc-matrix-edit:hover { border-color: var(--sc-border); }
+#style-custom-workbench .sc-matrix-edit:focus { border-color: var(--sc-border-strong); background: var(--sc-surface); outline: none; }

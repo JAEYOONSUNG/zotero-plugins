@@ -158,6 +158,19 @@
      header that flips it and is created further down, once button() exists;
      refreshNotice only runs later, by which point it is there. */
   let noticeOpen=ui.noticeOpen===true;
+  /* 프리프린트 -> 게재본: the one button for both rows and the 자료 점검 list.
+     Not held yet: 게재본 가져와 연결 (imports, links, carries tags/status/memo);
+     already held but not linked: 연결. The preprint is never removed. */
+  function publishedButton(preprint,held,parent,done){
+   const label=held?'연결':'게재본 가져와 연결';
+   return button(label,()=>run(async()=>{
+    message(held?'게재본을 연결하는 중…':'게재본을 가져오는 중…');
+    const r=await runtime.connectPublished(preprint,{win});
+    const title=String(r.item?.getField?.('title')||'').slice(0,60);
+    message(r.imported?`게재본을 가져와 프리프린트와 연결했습니다 — ${title}`:r.linked?`이미 있던 게재본을 프리프린트와 연결했습니다 — ${title}`:'이미 연결되어 있습니다.');
+    await done?.();
+   }),parent,{class:'sc-published-connect',title:held?'보유한 게재본을 이 프리프린트의 관련 문헌으로 연결합니다 (아무것도 지우지 않음)':'게재본을 가져와 이 프리프린트와 연결하고 태그·읽기 상태·메모를 옮깁니다 (프리프린트는 그대로 둡니다)'});
+  }
   async function refreshNotice(){
    if(disposed||typeof runtime.backfillPending!=='function'){noticeToggle.hidden=true;return;}
    let pending=null;
@@ -165,11 +178,14 @@
    // Zotero; doing it synchronously is what broke every sweep in this plugin.
    try{pending=await runtime.backfillPending();}catch(error){return;}
    if(disposed)return;
-   const total=(pending?.signals||0)+(pending?.journals||0)+(pending?.authors||0)+(pending?.files||0);
+   let unlinked=[];
+   try{if(typeof runtime.unlinkedPublished==='function')unlinked=await runtime.unlinkedPublished();}catch(error){runtime.Z.logError?.(error);}
+   if(disposed)return;
+   const total=(pending?.signals||0)+(pending?.journals||0)+(pending?.authors||0)+(pending?.files||0)+unlinked.length;
    if(!total||runtime.backfilling){noticeToggle.hidden=true;notice.hidden=true;return;}
    // The header button says the count without opening anything; only a press opens the row itself.
    // Papers, journals and people do not add up: the button counts the kinds of gap, and names them on hover.
-   const kinds=[pending.files&&T(`종류 미판별 첨부 ${pending.files}편`),pending.signals&&T(`철회 여부 미확인 ${pending.signals}편`),pending.journals&&T(`지표 없는 저널 ${pending.journals}종`),pending.authors&&T(`확인 안 한 관심 저자 ${pending.authors}명`)].filter(Boolean);
+   const kinds=[pending.files&&T(`종류 미판별 첨부 ${pending.files}편`),pending.signals&&T(`철회 여부 미확인 ${pending.signals}편`),pending.journals&&T(`지표 없는 저널 ${pending.journals}종`),pending.authors&&T(`확인 안 한 관심 저자 ${pending.authors}명`),unlinked.length&&T(`게재본 연결 안 됨 ${unlinked.length}편`)].filter(Boolean);
    noticeToggle.hidden=false;noticeToggle.textContent=T(`자료 점검 ${kinds.length}가지`);noticeToggle.title=kinds.join(' · ');noticeToggle.setAttribute('aria-pressed',String(noticeOpen));
    if(!noticeOpen){notice.hidden=true;return;}
    notice.hidden=false;notice.replaceChildren();
@@ -178,9 +194,10 @@
    if(pending.signals)parts.push(`철회 여부 미확인 ${pending.signals}편`);
    if(pending.journals)parts.push(`지표 없는 저널 ${pending.journals}종`);
    if(pending.authors)parts.push(`확인 안 한 관심 저자 ${pending.authors}명`);
+   if(unlinked.length)parts.push(`게재본 연결 안 됨 ${unlinked.length}편`);
    node('span',parts.join(' · '),notice,{class:'sc-notice-text'});
    const act=node('div',null,notice,{class:'sc-notice-actions'});
-   button('지금 채우기',()=>run(async()=>{
+   if(pending.files||pending.signals||pending.journals||pending.authors)button('지금 채우기',()=>run(async()=>{
     notice.hidden=true;
     const report=await runtime.runBackfill({onProgress:({stage,done,total})=>
      message(`${({signals:'철회·공개접근 신호',journals:'저널 지표',authors:'관심 저자 새 논문'})[stage]||stage} 채우는 중 ${done+1}/${total}`)});
@@ -189,6 +206,18 @@
     await refreshNotice();
    }),act);
    button('나중에',()=>{noticeOpen=false;notice.hidden=true;noticeToggle.setAttribute('aria-pressed','false');saveUI({noticeOpen});},act);
+   // Preprints whose published version is known: five at a time, each with its one action.
+   if(unlinked.length){
+    const list=node('div',null,notice,{class:'sc-published-list'});
+    for(const {item,published,held} of unlinked.slice(0,5)){
+     const row=node('div',null,list,{class:'sc-published-row'});
+     const title=String(item.getField?.('title')||T('제목 없음'));
+     node('span',title,row,{class:'sc-published-title',title});
+     node('span',[T('게재됨'),published.venue,published.year].filter(Boolean).join(' · '),row,{class:'sc-muted sc-published-venue'});
+     publishedButton(item,held,row,()=>refreshNotice());
+    }
+    if(unlinked.length>5)node('span',T(`외 ${unlinked.length-5}편은 문헌 목록의 자세히에서 연결합니다`),list,{class:'sc-muted'});
+   }
   }
   // A transport failure is not a sentence. The panel used to print the whole
   // OpenAlex URL with "failed with status code 429" on the end.
@@ -1784,6 +1813,15 @@
     const acts=node('div',null,c,{class:'sc-paper-detail-actions'});
     const waiting=isQueued(item.id);
     button(waiting?'읽기 대기에서 빼기':'읽기 대기',()=>run(async()=>{await setReadingQueue([item],!waiting);message(waiting?'읽기 대기에서 뺐습니다.':'읽기 진행의 읽기 대기에 넣었습니다.');render();}),acts,{'aria-pressed':String(waiting)});
+   }
+   if(detailed&&typeof runtime.publishedStatus==='function'){
+    const pubRef=runtime.Z.Items.get(Number(item.id)),holder=node('div',null,c,{class:'sc-paper-published'});
+    Promise.resolve(pubRef?runtime.publishedStatus(pubRef):null).then(st=>{
+     if(!st||disposed||!holder.isConnected)return;
+     const said=[T('게재됨'),st.published.venue,st.published.year].filter(Boolean).join(' · ');
+     node('span',st.linked?said+' · '+T('연결됨'):said,holder,{class:'sc-muted'});
+     if(!st.linked)publishedButton(pubRef,st.held,holder,()=>render());
+    }).catch(error=>runtime.Z.logError?.(error));
    }
    if(detailed){node('p',item.abstract||'초록이 없습니다.',c,{class:'sc-paper-detail'});const ref=runtime.Z.Items.get(Number(item.id));
     /* Where this paper is filed, each path a door back to the same jump the
@@ -3780,6 +3818,7 @@
      node('span',item.title||T('제목 없음'),text,{class:'sc-resume-title',title:item.title||''});
      const waited=Math.max(0,Math.floor((Date.now()-Date.parse(entry.at||''))/DAY));
      node('span',[item.venue,(entry.people||[]).join(', '),Number.isFinite(waited)?T(`대기 ${waited}일`):''].filter(Boolean).join(' · '),text,{class:'sc-resume-remark'});
+     if(entry.reason?.text)node('span',entry.reason.text,text,{class:'sc-resume-remark sc-queue-why',title:entry.reason.text});
      const sources=(entry.reason?.paperIDs||[]).map(id=>state.items.find(i=>String(i.id)===String(id))).filter(Boolean);
      if(sources.length){
       const why=node('details',null,text,{class:'sc-queue-reason'});
@@ -4020,8 +4059,10 @@
    search.addEventListener('input',()=>{state.matrixPickerQuery=search.value;state.matrixPickerAll=false;win.clearTimeout(typing);typing=win.setTimeout(drawResults,150);});
   }
   const CLAMPED=new Set(['abstract','summary','remark']);
+  // 논문 비교 evidence fields, in the order a methods table reads them; kept per paper by runtime.setEvidence.
+  const EVIDENCE=[['species','생물종/균주'],['construct','construct'],['condition','조건'],['control','대조군'],['result','결과'],['limit','한계']];
   function drawMatrix(){
-   const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약']];
+   const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약'],...EVIDENCE.map(([key,label])=>['ev_'+key,label])];
    // The deciding figures come right after the name, ahead of venue and
    // authors, so they fit before a docked panel runs out of width; DOI is
    // still there to add back, but nobody compares two papers by their DOI.
@@ -4064,12 +4105,29 @@
    const values=scopeItems.map(item=>{
     const ref=runtime.Z.Items.get(Number(item.id)),entry=ref?runtime.entry(ref):{};
     const seconds=Number(item.seconds)||0;
-    return {...item,tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||'',
+    const evidence=ref&&typeof runtime.evidenceOf==='function'?runtime.evidenceOf(ref):{};
+    return {...item,...Object.fromEntries(EVIDENCE.map(([key])=>['ev_'+key,evidence[key]||''])),tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||'',
      status:T(STATUS[item.status]||item.status||'안 읽음'),
      seconds:seconds>0?(runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):`${seconds}초`):''};
    });
    const data=model.matrix(values,fields,flip);
-   button('CSV 복사',()=>copy(model.csv(data.map((row,i)=>row.map((value,j)=>(flip?j===0:i===0)?T(fieldNames[value]||String(value)):value)))),b);
+   // Evidence typed into a cell lands in `values`, so the CSV is read at the click.
+   button('CSV 복사',()=>copy(model.csv(model.matrix(values,fields,flip).map((row,i)=>row.map((value,j)=>(flip?j===0:i===0)?T(fieldNames[value]||String(value)):value)))),b);
+   if(typeof runtime.setEvidence==='function'){
+    if(!EVIDENCE.every(([key])=>fields.includes('ev_'+key)))button('근거 칸 추가',()=>run(async()=>{
+     runtime.cache.matrixFields=[...new Set([...fields,...EVIDENCE.map(([key])=>'ev_'+key)])];runtime.dirty=true;await runtime.flush();render();
+    }),b,{title:T('생물종/균주 · construct · 조건 · 대조군 · 결과 · 한계 칸을 표에 넣고 직접 적습니다')});
+    button('종합 노트 만들기',()=>run(async()=>{
+     const wanted=new Set([...state.annotationIDs].map(String)),marks=wanted.size?(await library.annotations(values.map(v=>v.id))).filter(m=>wanted.has(String(m.id))):[];
+     const entries=values.map(v=>({id:v.id,evidence:EVIDENCE.map(([key,label])=>[label,v['ev_'+key]]),annotationIDs:marks.filter(m=>String(m.parentID)===String(v.id)).map(m=>m.id)}))
+      .filter(entry=>entry.annotationIDs.length||entry.evidence.some(([,text])=>String(text||'').trim()));
+     if(!entries.length){message('적어 둔 근거 칸이나 고른 주석이 없어 노트를 만들지 않았습니다. 칸에 내용을 적거나 주석 탭에서 주석을 고르세요.',true);return;}
+     const collection=win.ZoteroPane?.getSelectedCollection?.();
+     const id=await library.synthesisNote(entries,{title:T('논문 비교 종합')+' · '+new Date().toISOString().slice(0,10),collectionID:collection?.id});
+     noteCache=null;await library.openItem(id);
+     message(T(`문헌 ${entries.length}편으로 종합 노트를 만들었습니다 — 아이템 창에서 선택했습니다.`)+(marks.length?T(` 주석 ${marks.length}개 포함`):''));
+    }),b,{'data-opens':'pane',title:T('비교 중인 문헌의 근거 칸과, 주석 탭에서 고른 주석을 한 노트로 모읍니다. 각 문헌과 주석 페이지로 가는 링크가 들어갑니다')});
+   }
    const pageSize=setting('matrixPageSize',50),total=Math.ceil(values.length/pageSize),key=JSON.stringify(values.map(i=>i.id));
    if(state.matrixPageKey!==key){state.matrixPageKey=key;state.matrixPage=0;}
    state.matrixPage=Math.max(0,Math.min(state.matrixPage||0,Math.max(0,total-1)));
@@ -4098,6 +4156,7 @@
    shown.forEach((row,i)=>{const tr=node('tr',null,table);row.forEach((value,j)=>{const heading=flip?j===0:i===0;const field=flip?fields[i]:fields[j];
     // A title is the way to the paper, as it is everywhere else in the panel.
     const paper=!heading&&field==='title'?pageItems[(flip?j:i)-1]:null;
+    const rowItem=!heading?pageItems[(flip?j:i)-1]:null;
     const cell=node(heading?'th':'td',heading?(fieldNames[value]||String(value)):paper?null:String(value),tr);
     if(paper)button(String(value),()=>library.openItem(paper.id),cell,{class:'sc-link-button','data-opens':'window',title:`${value} · Zotero에서 열기`});
     /* The long prose fields are clamped on a child, not on the cell.
@@ -4106,6 +4165,15 @@
        get -- the second paper's memo printed underneath the first paper's
        inside the first paper's cell. */
     if(!heading&&!paper&&CLAMPED.has(field)){cell.textContent='';node('div',String(value),cell,{class:'sc-matrix-clamp'});}
+    if(!heading&&rowItem&&String(field||'').startsWith('ev_')&&typeof runtime.setEvidence==='function'){
+     cell.textContent='';
+     const area=node('textarea',null,cell,{class:'sc-matrix-edit',rows:'2','aria-label':`${T(fieldNames[field])} · ${rowItem.title}`,placeholder:T('적기')});
+     area.value=String(value);
+     area.addEventListener('change',()=>run(async()=>{
+      const ref=runtime.Z.Items.get(Number(rowItem.id));if(!ref)return;
+      await runtime.setEvidence(ref,{[field.slice(3)]:area.value});rowItem[field]=area.value;
+     }));
+    }
     if(NUMERIC.has(field))cell.classList.add('sc-figure-cell');if(heading)cell.setAttribute('scope',flip?'row':'col');if(!heading&&field)cell.dataset.field=field;});});
    // Only an explicit pick, not "whatever is on screen": with nothing chosen
    // the table above is the whole list, and there is no fixed set of papers
@@ -5331,7 +5399,8 @@
     let face=null;
     if(!inline){face=node('div',null,head,{class:'sc-face'});node('span',initials(profile?.name||person.name),face,{class:'sc-face-text'});}
     const who=node('div',null,head,{class:'sc-person-who'});
-    if(!inline)node('h3',profile?.name||person.name,who);
+    // The row's name is cut to fit its column; the opened panel always says the whole name.
+    node('h3',profile?.name||person.name,who,{class:inline?'sc-person-inline-name':'',title:profile?.name||person.name});
     const stats=node('p',null,who,{class:'sc-profile'});
     const places=person.places&&person.places.length>1?person.places.map(p=>p.name).join(' · '):'';
     const institution=stored?.institution||person.institution||profile?.institutions?.[0]||'';
@@ -6159,7 +6228,7 @@
     const who=node('span',null,nameCell,{class:'sc-watch-who'});
     node('span',null,who,{class:'sc-watch-chevron','aria-hidden':'true'});
     watchFace(person,who);
-    const open=node('button',person.name,who,{class:'sc-journal-name',type:'button',title:T('눌러서 펼치기'),'aria-expanded':String(state.watchOpen===person.id)});
+    const open=node('button',person.name,who,{class:'sc-journal-name',type:'button',title:`${person.name} · ${T('눌러서 펼치기')}`,'aria-expanded':String(state.watchOpen===person.id)});
     const place=node('td',null,tr,{class:'sc-col-place'});
     const line=placeLine(person,place);
     if(person.institutionGiven&&person.institutionGiven!==person.institution)line.title+=` · 등록 당시: ${person.institutionGiven}`;
@@ -6310,7 +6379,7 @@
       node('span',g.label,toggle,{class:'sc-section-head-name'});
       toggle.appendChild(doc.createTextNode(' '));
       node('span',T(`${g.people.length}명`),toggle,{class:'sc-section-head-count'});
-      const fresh=g.people.reduce((n,p)=>n+unseenWorks(p).length,0);
+      const fresh=new Set(g.people.flatMap(p=>unseenWorks(p).map(w=>seenWorkKey(w)))).size; // a paper by two followed authors counts once
       if(fresh){toggle.appendChild(doc.createTextNode(' '));}
       if(fresh)node('span',T(`새 논문 ${fresh}`),toggle,{class:'sc-watch-group-new'});
       const notes=[];
@@ -6628,7 +6697,9 @@
    const box=node('section',null,body,{class:'sc-journal-reading','aria-label':T('내 문헌 분석')});
    const head=node('div',null,box,{class:'sc-journal-reading-head'});
    node('h3',T('내 문헌 분석'),head,{class:'sc-journal-reading-title'});
-   node('span',T(`저널 ${all.length}종 · 문헌 ${all.reduce((n,g)=>n+g.items.length,0)}편`),head,{class:'sc-muted'});
+   // 저널 미기재 is the remainder, not a journal: counted apart from the 종.
+   const unnamedPapers=all.filter(g=>g.unnamed).reduce((n,g)=>n+g.items.length,0),namedCount=all.filter(g=>!g.unnamed).length;
+   node('span',[T(`저널 ${namedCount}종`),unnamedPapers&&T(`저널 미기재 ${unnamedPapers}편`),T(`문헌 ${all.reduce((n,g)=>n+g.items.length,0)}편`)].filter(Boolean).join(' · '),head,{class:'sc-muted'});
    // A search or filter above narrows this too; it says so, or a part reads as the whole library.
    const narrowed=[state.query&&T(`검색 “${state.query}”`),state.scope!=='library'&&T('선택 범위'),...Object.values(parentOptions()).filter(Boolean).length?[T('필터 적용')]:[]].filter(Boolean);
    if(narrowed.length)node('span',T('적용 중: ')+narrowed.join(' · '),head,{class:'sc-journal-reading-scope'});
