@@ -13,8 +13,10 @@ test("loads in Gecko without CommonJS", () => {
 });
 
 test("tiers are cut points on the institution h-index, and a flag is two code points", () => {
-	assert.equal(A.tierOf(1400).key, "t1");
-	assert.equal(A.tierOf(1399).key, "t2");
+	assert.equal(A.tierOf(2000).key, "t1");
+	assert.equal(A.tierOf(1999).key, "t2");
+	assert.equal(A.tierOf(1400).key, "t2");
+	assert.equal(A.tierOf(1399).key, "t3");
 	assert.equal(A.tierOf(400).key, "t3");
 	assert.equal(A.tierOf(399).key, "t4");
 	assert.equal(A.tierOf(null), null);
@@ -23,8 +25,8 @@ test("tiers are cut points on the institution h-index, and a flag is two code po
 });
 
 test("the first author and the flagged corresponding author are picked out of a long list", () => {
-	const people = [person("A First", { position: "first", institution: "KAIST", institutionId: "I1", country: "KR", institutionH: 900 }),
-		person("B Middle"), person("C Corresponding", { corresponding: true, institution: "MIT", country: "US", institutionH: 1500 }),
+	const people = [person("A First", { position: "first", institution: "KAIST", institutionId: "I1", country: "KR", institutionH: 1500 }),
+		person("B Middle"), person("C Corresponding", { corresponding: true, institution: "MIT", country: "US", institutionH: 2100 }),
 		person("D Last", { position: "last", institution: "Elsewhere", country: "DE" })];
 	const where = A.summarise(people);
 	assert.equal(where.first.institution, "KAIST");
@@ -35,7 +37,7 @@ test("the first author and the flagged corresponding author are picked out of a 
 	assert.deepEqual(where.countries, ["KR", "US"]);
 	assert.equal(where.international, true);
 	assert.equal(where.tier, "t1", "the better of the two labs sets the row's tier");
-	assert.equal(where.hIndex, 1500);
+	assert.equal(where.hIndex, 2100);
 });
 
 test("without a flag the last author stands in, and a single author is not their own correspondent", () => {
@@ -51,4 +53,11 @@ test("without a flag the last author stands in, and a single author is not their
 	assert.equal(A.summarise([]), null);
 	assert.equal(A.summarise(null), null);
 	assert.equal(A.summarise([{ name: "  " }]), null, "nameless entries do not count");
+});
+
+test("tier table is identical to Style Custom's", () => {
+	const src = fs.readFileSync(new URL("../zotero-style-custom/src/affiliations.js", import.meta.url), "utf8");
+	const floors = [...src.matchAll(/key: '(t\d)', floor: (\d+)/g)].map(m => [m[1], Number(m[2])]);
+	assert.equal(floors.length, 4);
+	assert.deepEqual(A.TIERS.map(t => [t.key, t.floor]), floors);
 });

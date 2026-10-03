@@ -3842,6 +3842,7 @@
 		if (list.length && m.unknownCitations) notes.push({ key: "unknown", short: t("metricsUnknownShort", m.unknownCitations, list.length), full: t("metricsUnknown", m.unknownCitations, list.length) });
 		// Several indexes each counted citations; the highest was kept per paper, so the figures below mix networks.
 		if (list.length && !state.metricsBasis && sources.length > 1) notes.push({ key: "mixed", short: t("metricsMixedShort"), full: t("metricsMixed", sources.map(key => ZotPoPSources.SOURCES?.[key]?.label || key).join(", ")) });
+		if (list.length && m.authorsTruncated) notes.push({ key: "truncated", short: t("metricsTruncated", m.authorsTruncated), full: t("metricsTruncated", m.authorsTruncated) });
 		if (list.length) notes.push({ key: "scope", short: t("metricsScopeShort"), full: t("metricsScope") });
 		drawMetricsNotes(notes);
 		set("m-years", m.minYear ? `${m.minYear}–${m.maxYear}` : "–");
@@ -3856,7 +3857,7 @@
 		set("m-h", String(m.hIndex));
 		set("m-g", String(m.gIndex));
 		set("m-hinorm", String(m.hiNorm));
-		set("m-hiannual", fmt(m.hiAnnual));
+		set("m-hiannual", m.hiAnnual == null ? "–" : fmt(m.hiAnnual));
 		set("m-ha", String(m.hA));
 		if (authors && list.length && typeof ZotPoPAuthors !== "undefined") {
 			let info = authorMetricsInfo(list, m, state.metricsBasis, sources);
@@ -4084,7 +4085,7 @@
 			if (res.citesByYear) r.citesByYear = res.citesByYear;
 			(r.citationsBy ||= {}).openalex = res.citations;
 			if (r.citationSource === "openalex" || r.citations == null || res.citations > r.citations) { r.citations = res.citations; r.citationSource = "openalex"; }
-			if (snapshots && key) { snapshots.observe(key, res.citations, res.cached ? undefined : Date.now()); snapshots.flush().catch(e => log("saving citation snapshots failed: " + e.message)); }
+			if (snapshots && key) { snapshots.observe(key, res.citations, Number.isFinite(res.at) ? res.at : undefined); snapshots.flush().catch(e => log("saving citation snapshots failed: " + e.message)); }
 			st = { phase: "done", delta: snapshots && key ? snapshots.delta(key) : null, at: res.at };
 			if (changed) { render(); renderDetail(); }
 		}

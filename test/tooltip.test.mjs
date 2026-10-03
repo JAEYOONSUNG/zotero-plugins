@@ -87,7 +87,7 @@ test("the cells' hover cards are built from the record: title, institution, jour
 	const ui = uiHarness({ realRows: true, metrics: { citesPerYear: () => 12.5 }, search: async () => [
 		paper("p", { title: "A long paper title about loop extrusion", venue: "Science", year: 2025, citations: 40, publisher: "AAAS", journalIF: 45.8, journalIFEstimate: true, url: "https://example.invalid/p",
 			authors: ["A", "B", "C", "D", "E", "F", "G", "H"].map(name => ({ name })), authorString: "A, B, C, D, E, F, G, H",
-			people: ["A", "B", "C", "D", "E", "F", "G", "H"].map((name, i) => person(name, i === 0 ? { position: "first", institution: "Hanbit University", country: "KR", institutionH: 640 } : i === 7 ? { position: "last", corresponding: true, institution: "Lumen University", country: "CN", institutionH: 1510 } : {})) })
+			people: ["A", "B", "C", "D", "E", "F", "G", "H"].map((name, i) => person(name, i === 0 ? { position: "first", institution: "Hanbit University", country: "KR", institutionH: 640 } : i === 7 ? { position: "last", corresponding: true, institution: "Lumen University", country: "CN", institutionH: 2510 } : {})) })
 	] });
 	await ui.runSearch();
 	const row = ui.get("results-body").firstChild, cell = k => row.children.find(c => c.dataset.k === k);
@@ -99,7 +99,7 @@ test("the cells' hover cards are built from the record: title, institution, jour
 	assert.ok(title.includes("affFirst") && title.includes("Hanbit University") && title.includes("affCorresponding") && title.includes("Lumen University"), "first and corresponding institutions");
 	assert.ok(!title.includes("titleOpenTip"), "no hint line: the status line already says how to open a row");
 	const aff = text("affiliation", "aff");
-	assert.ok(aff.startsWith("T1") || aff.includes("Lumen University") && aff.includes("tipTierAbove|1510|T1|1400") && aff.includes("affCorresponding"), aff);
+	assert.ok(aff.startsWith("T1") || aff.includes("Lumen University") && aff.includes("tipTierAbove|2510|T1|2000") && aff.includes("affCorresponding"), aff);
 	const journal = text("venue", "journal");
 	assert.ok(journal.startsWith("Science") && journal.includes("AAAS") && journal.includes("45.8") && journal.includes("tipEstimate"), journal);
 	const authors = text("authorString", "authors");

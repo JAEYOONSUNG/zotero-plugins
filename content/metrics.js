@@ -26,7 +26,8 @@ var ZotPoPMetrics = (function () {
 
 	// Age of a paper in years, minimum 1 (as in PoP)
 	function paperAge(year, now = new Date().getFullYear()) {
-		if (!year) return null;
+		year = Number(year);
+		if (!Number.isInteger(year) || year <= 0) return null;
 		return Math.max(1, now - year);
 	}
 
@@ -53,12 +54,16 @@ var ZotPoPMetrics = (function () {
 		let unknownCitations = n - known.length;
 		let cites = records.map(r => Number(r.citations) || 0);
 		let citations = cites.reduce((a, b) => a + b, 0);
-		let years = records.map(r => r.year).filter(y => Number.isFinite(y));
+		let years = records.map(r => Number(r.year)).filter(y => Number.isInteger(y) && y > 0);
 		let minYear = years.length ? Math.min(...years) : null;
 		let maxYear = years.length ? Math.max(...years) : null;
 		let citationYears = minYear ? Math.max(1, now - minYear) : 1;
-		let nAuthors = records.map(r => Math.max(1, (r.authors || []).length));
-		let normCites = records.map((r, i) => (r.citations || 0) / nAuthors[i]);
+		/* OpenAlex cuts an author list at 100: a paper whose list was cut would
+		   be divided among too few people, so it is left out of every per-author figure. */
+		let whole = records.filter(r => !r.authorsTruncated);
+		let authorsTruncated = n - whole.length;
+		let nAuthors = whole.map(r => Math.max(1, (r.authors || []).length));
+		let normCites = whole.map((r, i) => (r.citations || 0) / nAuthors[i]);
 		let annual = records.map(r => citesPerYear(r, now) || 0);
 
 		let hi = hIndex(cites);
@@ -75,11 +80,12 @@ var ZotPoPMetrics = (function () {
 			citationSources: [...new Set(known.flatMap(r => Object.keys(r.citationsBy || {}).length ? Object.keys(r.citationsBy) : [r.citationSource || r.source]).filter(Boolean))],
 			citesPerAuthor: normCites.reduce((a, b) => a + b, 0),
 			papersPerAuthor: nAuthors.reduce((a, b) => a + 1 / b, 0),
-			authorsPerPaper: n ? nAuthors.reduce((a, b) => a + b, 0) / n : 0,
+			authorsPerPaper: whole.length ? nAuthors.reduce((a, b) => a + b, 0) / whole.length : 0,
+			authorsTruncated,
 			hIndex: hi,
 			gIndex: gIndex(cites),
 			hiNorm,
-			hiAnnual: hiNorm / citationYears,
+			hiAnnual: minYear ? hiNorm / citationYears : null,
 			hA: hIndex(annual)
 		};
 	}

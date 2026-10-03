@@ -19,11 +19,11 @@ var ZotPoPAffiliations = (function () {
 
 	const text = value => String(value == null ? "" : value).replace(/\s+/g, " ").trim();
 
-	// Cut points on a continuum, taken from the measured spread of institution
-	// h-indexes rather than guessed: roughly the top tenth, third and two-thirds.
+	// Cut points on a continuum. They must stay identical to Style Custom's
+	// (test/affiliations.test.mjs compares the two tables).
 	const TIERS = [
-		{ key: "t1", floor: 1400 },
-		{ key: "t2", floor: 800 },
+		{ key: "t1", floor: 2000 },
+		{ key: "t2", floor: 1400 },
 		{ key: "t3", floor: 400 },
 		{ key: "t4", floor: 0 }
 	];

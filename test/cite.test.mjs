@@ -184,3 +184,22 @@ test("the window loads cite.js and translate.js before ui.js, and a button is re
 	assert.match(rule, /margin: 0;/); assert.match(rule, /max-height: none;/); assert.match(rule, /appearance: none;/);
 	for (const id of ["d-cite", "metrics-trend", "d-tr-run", "d-tr-lang", "d-tr-title", "d-tr-orig", "d-tr-out", "d-tr-text", "d-tr-copy"]) assert.ok(markup.includes(`id="${id}"`), id);
 });
+
+test("the peak is read over every year, not only the ten shown", () => {
+	const t = Cite.trend({ byYear: years([[2005, 10], [2006, 300], [2007, 200], [2020, 40], [2025, 50], [2026, 5]]), year: 2004, citations: 605 }, at(2026));
+	assert.deepEqual(t.peak, { year: 2006, n: 300, partial: false });
+	assert.ok(t.years.every(y => y.year >= 2017), "the chart keeps its ten-year window");
+});
+
+test("a cached count older than the held look does not rewrite it, and carries its own fetch time", async () => {
+	const { clock, make } = snaps(), s = make();
+	await s.load();
+	clock.t = 10 * 24 * 3600 * 1000;
+	s.observe("d:a", 50);
+	s.observe("d:a", 40, clock.t - 3600 * 1000 * 48);
+	assert.equal(s.get("d:a").c, 50);
+	s.observe("d:b", 7, clock.t - 5 * 24 * 3600 * 1000);
+	assert.equal(s.get("d:b").at, clock.t - 5 * 24 * 3600 * 1000, "the look is dated by the fetch");
+	const ui = fs.readFileSync(new URL("../content/ui.js", import.meta.url), "utf8");
+	assert.ok(/snapshots\.observe\(key, res\.citations, Number\.isFinite\(res\.at\) \? res\.at : undefined\)/.test(ui));
+});

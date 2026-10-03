@@ -84,3 +84,10 @@ test("in the metrics pass the JCR figure wins and OpenAlex only supplies the h-i
 	await S.enrichJournalMetrics(again, http, { jcr: false });
 	assert.equal(again[0].journalIF, 49.9);
 });
+
+test("a title shared by two different journals is ambiguous; an ISSN still decides", () => {
+	const t = J.build([["MICROBIOLOGY", "MICROBIOLOGY+", "0026-2617", "1608-3237", 1.2], ["MICROBIOLOGY-SGM", "MICROBIOL-SGM", "1350-0872", "1465-2080", 2.8], ["Microbiology", "MICROBIOL", "1350-0872", "", 2.8], ["Microbiology", "MICROB X", "9999-0001", "", 1]]);
+	assert.equal(t.find({ venue: "Microbiology" }), null);
+	assert.equal(t.find({ venue: "Microbiology", issn: "1350-0872" }).jif, 2.8);
+	assert.equal(t.find({ venue: "Microbiology-SGM" }).jif, 2.8);
+});

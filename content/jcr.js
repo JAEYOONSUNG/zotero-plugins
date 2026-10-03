@@ -49,12 +49,17 @@ var ZotPoPJCR = (function () {
 	};
 
 	function build(rows) {
-		let byIssn = new Map(), byName = new Map();
+		let byIssn = new Map(), byName = new Map(), ambiguous = new Set();
 		for (let row of rows || []) {
 			let [name, abbrev, issn, eissn, jif] = row;
 			let entry = { name, abbrev, issn, eissn, jif: Number(jif) };
 			for (let id of [issn, eissn]) { let k = issnKey(id); if (k && !byIssn.has(k)) byIssn.set(k, entry); }
-			for (let title of [name, abbrev]) { let k = flat(title); if (k && !byName.has(k)) byName.set(k, entry); }
+			for (let title of [name, abbrev]) { let k = flat(title); if (!k) continue;
+				let held = byName.get(k);
+				if (!held) byName.set(k, entry);
+				// The same title on two different journals (a Russian and a Society one both called "Microbiology"): only an ISSN may decide it.
+				else if (held !== entry && issnKey(held.issn) !== issnKey(entry.issn) && issnKey(held.eissn) !== issnKey(entry.eissn)) ambiguous.add(k);
+			}
 		}
 		return {
 			size: byIssn.size,
@@ -63,7 +68,7 @@ var ZotPoPJCR = (function () {
 				if (!record) return null;
 				for (let id of [record.issn, ...(record.issns || [])]) { let hit = byIssn.get(issnKey(id)); if (hit) return hit; }
 				for (let title of [record.venue, record.journalAbbrev, ...(record.venueAliases || [])]) {
-					let key = flat(title), hit = byName.get(ALIASES[key] || key);
+					let key = flat(title), k2 = ALIASES[key] || key, hit = ambiguous.has(k2) ? null : byName.get(k2);
 					if (hit) return hit;
 				}
 				return null;

@@ -111,7 +111,7 @@ var ZotPoPImporter = (function () {
 			for (let i = 0; i < ids.length; i += 500) {
 				let chunk = ids.slice(i, i + 500);
 				let rows = await Zotero.DB.queryAsync("SELECT IT.itemID AS itemID, T.name AS name FROM itemTags IT JOIN tags T ON IT.tagID = T.tagID "
-					+ "WHERE IT.itemID IN (" + chunk.map(() => "?").join(",") + ") AND LOWER(T.name) IN ('/done', '/reading', '/unread')", chunk);
+					+ "WHERE IT.itemID IN (" + chunk.map(() => "?").join(",") + ") AND TRIM(LOWER(T.name)) IN ('/done', '/reading', '/unread')", chunk);
 				for (let row of rows || []) {
 					let state = String(row.name).trim().toLowerCase().slice(1);
 					if (rank[state] > (rank[out.get(row.itemID)] || 0)) out.set(row.itemID, state);

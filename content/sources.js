@@ -313,7 +313,7 @@ var ZotPoPSources = (function () {
 			source: "", sourceId: "", title: "", authors: [], year: null, publicationDate: null, venue: "", publisher: "",
 			doi: null, pmid: null, pmcid: null, arxiv: null, url: null, pdfUrl: null, pdfUrls: [], citations: null, citationSource: null, citesByYear: null, sources: null,
 			journalId: null, issn: null, journalIF: null, journalH: null,
-			preprintServer: null, publishedDoi: null, publishedPmid: null, people: null, retracted: false,
+			preprintServer: null, publishedDoi: null, publishedPmid: null, people: null, retracted: false, authorsTruncated: false,
 			volume: "", issue: "", pages: "", abstract: "", itemType: "journalArticle"
 		}, r, { doi });
 		rec.publishedDoi = normalizeDOI(rec.publishedDoi);
@@ -582,7 +582,7 @@ var ZotPoPSources = (function () {
 		else if (sort === "citations") params.push("sort=cited_by_count:desc");
 		let auth = openAlexAuth(ctx);
 		if (auth) params.push(auth.replace(/^&/, "").replace(/&/g, "&"));
-		params.push("select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,counts_by_year,open_access,best_oa_location,locations,abstract_inverted_index,ids,is_retracted");
+		params.push("select=id,doi,title,display_name,publication_year,publication_date,type,authorships,primary_location,biblio,cited_by_count,counts_by_year,open_access,best_oa_location,locations,abstract_inverted_index,ids,is_retracted,is_authors_truncated");
 
 		let max = q.maxResults || 200;
 		let out = [];
@@ -629,7 +629,8 @@ var ZotPoPSources = (function () {
 					itemType: OPENALEX_TYPES[w.type] || "journalArticle",
 					// OpenAlex says "review" where itemType has only articles: kept for the results filter.
 					workType: w.type || null,
-					retracted: w.is_retracted === true
+					retracted: w.is_retracted === true && w.type !== "retraction",
+					authorsTruncated: w.is_authors_truncated === true
 				}));
 			}
 			seen += results.length;
@@ -660,13 +661,13 @@ var ZotPoPSources = (function () {
 			throwIfCancelled(ctx);
 			if (ctx.openAlexSpent) break;
 			let chunk = dois.slice(i, i + 50);
-			let url = "https://api.openalex.org/works?filter=doi:" + chunk.map(enc).join("|") + "&per-page=50&select=doi,ids,cited_by_count,counts_by_year,best_oa_location,open_access,locations,is_retracted" + openAlexAuth(ctx);
+			let url = "https://api.openalex.org/works?filter=doi:" + chunk.map(enc).join("|") + "&per-page=50&select=doi,ids,cited_by_count,counts_by_year,best_oa_location,open_access,locations,is_retracted,type" + openAlexAuth(ctx);
 			try {
 				let data = await withRetry(() => http.getJSON(url), {}, ctx);
 				for (let w of data.results || []) {
 					for (let r of byDoi.get(normalizeDOI(w.doi)) || []) {
 						r.citations = toInt(w.cited_by_count);
-						if (w.is_retracted === true) r.retracted = true;
+						if (w.is_retracted === true && (w.type || r.workType) !== "retraction") r.retracted = true;
 						if (r.citations != null) r.citationSource = "openalex";
 						if (!r.citesByYear) r.citesByYear = parseCountsByYear(w.counts_by_year);
 						if (!r.pdfUrl) r.pdfUrl = w.best_oa_location?.pdf_url || w.open_access?.oa_url || null;
@@ -2156,7 +2157,7 @@ var ZotPoPSources = (function () {
 			let cites = parseInt((citesA?.textContent || "").replace(/,/g, ""), 10);
 			let citesCluster = (citesA?.getAttribute("href") || "").match(/[?&]cites=(\d+)/)?.[1] || null;
 			let viewId = (a.getAttribute("href") || "").match(/citation_for_view=([^&]+)/)?.[1] || null;
-			rows.push({ title, authors: authorsLine.split(",").map(x => x.trim()).filter(Boolean), venue, year, cites: Number.isFinite(cites) ? cites : 0,
+			rows.push({ title, authors: authorsLine.split(",").map(x => x.trim()).filter(x => x && !/^(\.{3}|…)$/.test(x)), venue, year, cites: Number.isFinite(cites) ? cites : 0,
 				citesCluster, id: viewId ? decodeURIComponent(viewId) : null, url: scholarAbsolute(a.getAttribute("href")) });
 		}
 		let more = !!doc.querySelector("#gsc_bpf_more:not([disabled])");

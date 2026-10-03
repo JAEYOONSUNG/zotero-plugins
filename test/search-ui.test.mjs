@@ -311,12 +311,12 @@ test("picking a recent search from the menu refills the boxes and shows its resu
 test("affiliation columns sort, filter and export from the people a source supplied", async () => {
 	const people = (inst, country, h, name = "A") => [{ name, position: "first", corresponding: false, institution: inst, institutionId: "I", country, institutionH: h }];
 	const ui = uiHarness({ realRows: true, search: async () => [
-		paper("kr", { people: people("KAIST", "KR", 900) }),
-		paper("us", { people: people("MIT", "US", 1800) }),
+		paper("kr", { people: people("KAIST", "KR", 1500) }),
+		paper("us", { people: people("MIT", "US", 2100) }),
 		paper("none", { venue: "Somewhere" })
 	] });
 	await ui.runSearch();
-	assert.equal(ui.sortValue(ui.state.records[0], "tier"), 900);
+	assert.equal(ui.sortValue(ui.state.records[0], "tier"), 1500);
 	assert.equal(ui.sortValue(ui.state.records[1], "affiliation"), "1mit", "tier first, then the lab");
 	assert.equal(ui.sortValue(ui.state.records[0], "affiliation"), "2kaist");
 	assert.equal(ui.sortValue(ui.state.records[2], "affiliation"), "9", "no affiliation sorts last");
@@ -337,9 +337,9 @@ test("affiliation columns sort, filter and export from the people a source suppl
 	assert.equal(row.querySelector("span.tier").textContent, "T1");
 	const affCard = ui.tipContent(row.querySelector("td.aff"), "aff").textContent;
 	assert.equal(row.querySelector("td.aff").getAttribute("title"), null, "the native tooltip is gone; the hover card replaces it");
-	assert.match(affCard, /^MIT.*tipTierAbove\|1800\|T1\|1400.*affFirst.*A$/, "institution, tier line with its band, then which author it belongs to");
+	assert.match(affCard, /^MIT.*tipTierAbove\|2100\|T1\|2000.*affFirst.*A$/, "institution, tier line with its band, then which author it belongs to");
 	const csv = ui.csvText().split("\n");
-	assert.match(csv[1], /"MIT","US","1800"/);
+	assert.match(csv[1], /"MIT","US","2100"/);
 	assert.match(csv[3], /"","",""/);
 });
 
@@ -1382,7 +1382,7 @@ test("an import keeps its failures selected, retries only them, and tells a lost
 test("the institution cell: unknown is muted and only where the source normally has labs; the corresponding author's lab wins; other countries go in the tooltip", async () => {
 	const person = (name, over) => ({ name, position: "middle", corresponding: false, institution: "", institutionId: null, country: null, institutionH: null, ...over });
 	const ui = uiHarness({ realRows: true, search: async () => [
-		paper("both", { people: [person("A", { position: "first", institution: "Hanbit University", country: "KR", institutionH: 500 }), person("B", { position: "last", corresponding: true, institution: "Kestrel Institute", country: "GB", institutionH: 900 })] }),
+		paper("both", { people: [person("A", { position: "first", institution: "Hanbit University", country: "KR", institutionH: 500 }), person("B", { position: "last", corresponding: true, institution: "Kestrel Institute", country: "GB", institutionH: 1500 })] }),
 		paper("unk", { source: "openalex", people: [person("A", { position: "first", institution: "Hanbit University", country: "KR" }), person("B", { position: "last", corresponding: true })] }),
 		paper("oa", { source: "openalex" }),
 		paper("plain", { source: "crossref" })

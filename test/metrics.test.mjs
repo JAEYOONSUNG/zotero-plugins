@@ -28,3 +28,18 @@ test("statistics can be read from one index alone: its own counts, unknown where
 	assert.equal(M.compute(records, 2026, { provider: "openalex" }).unknownCitations, 1, "the paper OpenAlex has no count for is unknown");
 	assert.equal(M.compute(records, 2026, { provider: "crossref" }).hIndex, 2);
 });
+
+test("string years count; no first year leaves the annual h as null; truncated author lists leave per-author figures", () => {
+	const m = M.compute([{ year: "2015", citations: 10, authors: [{}, {}] }, { year: 2020, citations: 5, authors: [{}] }], 2025);
+	assert.equal(m.minYear, 2015);
+	assert.equal(m.citationYears, 10);
+	assert.equal(M.paperAge("2020", 2025), 5);
+	const none = M.compute([{ citations: 3, authors: [{}] }], 2025);
+	assert.equal(none.hiAnnual, null);
+	const cut = M.compute([{ year: 2020, citations: 10, authors: new Array(100).fill({}), authorsTruncated: true }, { year: 2020, citations: 8, authors: [{}, {}] }], 2025);
+	assert.equal(cut.authorsTruncated, 1);
+	assert.equal(cut.authorsPerPaper, 2);
+	assert.equal(cut.papersPerAuthor, 0.5);
+	assert.equal(cut.citesPerAuthor, 4);
+	assert.equal(cut.papers, 2);
+});

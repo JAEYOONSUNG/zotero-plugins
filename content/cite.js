@@ -39,7 +39,8 @@ var ZotPoPCite = (function () {
 		let yoy = last != null && prev != null && prev > 0 ? Math.round((last - prev) / prev * 100) : null;
 		let direction = last != null && prev != null ? (last > prev ? "up" : last < prev ? "down" : "flat") : null;
 		let peak = null;
-		for (let e of years) if (e.n > 0 && (!peak || e.n > peak.n)) peak = { year: e.year, n: e.n, partial: e.partial };
+		// The peak is read over every year on record from publication on; only the chart is windowed.
+		for (let [y, n] of [...map].sort((a, b) => a[0] - b[0])) if ((pub == null || y >= pub) && n > 0 && (!peak || n > peak.n)) peak = { year: y, n, partial: y === cy };
 		let total = Number.isFinite(Number(input.citations)) ? Number(input.citations) : null;
 		return {
 			years, max: Math.max(1, ...years.map(e => e.n)),
@@ -98,6 +99,8 @@ var ZotPoPCite = (function () {
 		function observe(key, count, at = now()) {
 			if (!key || !valid(count)) return null;
 			let old = map.get(key), entry;
+			// A count fetched before the look already held is older news: it must not overwrite it.
+			if (old && at < old.at) return old;
 			if (!old) entry = { c: count, at, p: null, pAt: null };
 			else if (at - old.at >= gap) entry = { c: count, at, p: old.c, pAt: old.at };
 			else entry = Object.assign({}, old, { c: count });

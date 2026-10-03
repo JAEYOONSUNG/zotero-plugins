@@ -167,8 +167,8 @@ var ZotPoPFilters = (function () {
 	};
 	function countryCodeFor(text) {
 		let q = fold(text);
-		if (/^[a-z]{2}$/.test(q)) return q.toUpperCase();
 		for (let [code, names] of Object.entries(COUNTRY_NAMES)) if (names.some(n => fold(n) === q)) return code;
+		if (/^[a-z]{2}$/.test(q)) return q.toUpperCase();
 		return null;
 	}
 

@@ -31,7 +31,7 @@ const EAST = ["Eastbridge University", "US"], KESTREL = ["Kestrel Institute", "G
 	ALTMARK = ["University of Altmark", "DE"], SATO = ["Sato Research Institute", "JP"], LUMEN = ["Lumen University", "CN"], AURORA = ["Aurora Medical Institute", "CA"];
 // Institution h-index (OpenAlex summary_stats), as the real lookup would have filled it in: T1 >= 1400, T2 >= 800, T3 >= 400, T4 below.
 // Meridian has none on purpose: a lab the lookup has not answered for yet shows its flag and name without a tier.
-const INST_H = { "Eastbridge University": 1920, "Kestrel Institute": 910, "Hanbit University": 640, "University of Altmark": 455, "Sato Research Institute": 310, "Lumen University": 1510, "Aurora Medical Institute": 260 };
+const INST_H = { "Eastbridge University": 2320, "Kestrel Institute": 1510, "Hanbit University": 640, "University of Altmark": 455, "Sato Research Institute": 310, "Lumen University": 2510, "Aurora Medical Institute": 260 };
 export const FAKE = [
 	["Mapping cellular responses across tissue repair with single-cell atlases, spatial context and longitudinal sampling in three regenerating organs", ["Mina Kim", "Alex Rivera", "Jonas Park"], 2025, "Nature Methods", 214, "openalex", { doi: "10.5555/demo.001", pdf: true, jif: 32.1, abstract: "Fictional abstract for the design preview: a single-cell atlas of repair-stage cell states across three tissues.", aff: [EAST, MERIDIAN, EAST], corr: 2, also: ["crossref"] }],
 	["A practical framework for reproducible literature synthesis", ["Sora Lee", "Lin Chen"], 2024, "Science", 97, "crossref", { doi: "10.5555/demo.002", pdf: true, jif: 45.8, abstract: "Fictional abstract for the design preview: a checklist for synthesis that another group can rerun.", aff: [HANBIT, LUMEN], corr: 1, review: true }],

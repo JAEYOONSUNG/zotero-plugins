@@ -281,3 +281,24 @@ test("a Scholar result row carries the authors that have profiles and the cluste
 	assert.equal(rec.citations, 84735);
 	assert.equal(rec.url, "https://scholar.google.com/scholar_url?url=https://example.org/p", "a relative link becomes absolute");
 });
+
+test("a retraction notice is not itself flagged retracted; truncated author lists are carried", async () => {
+	const urls = [];
+	const mk = (i, extra) => Object.assign(work(i), extra);
+	const records = await S.search("openalex", { keywords: "retraction", maxResults: 3 }, { getJSON: async url => {
+		urls.push(url);
+		return { results: [mk(1, { type: "retraction", is_retracted: true }), mk(2, { type: "article", is_retracted: true, is_authors_truncated: true }), mk(3, { type: "article", is_retracted: false })], meta: { count: 3 } };
+	} }, context);
+	const by = Object.fromEntries(records.map(r => [r.doi, r]));
+	assert.equal(by["10.1234/w1"].retracted, false);
+	assert.equal(by["10.1234/w2"].retracted, true);
+	assert.equal(by["10.1234/w2"].authorsTruncated, true);
+	assert.equal(by["10.1234/w3"].authorsTruncated, false);
+	assert.match(urls[0], /is_authors_truncated/);
+});
+
+test("a trailing ellipsis in a Scholar profile author line is not an author", () => {
+	const html = `<div id="gsc_prf_in">X</div><table><tbody id="gsc_a_b"><tr class="gsc_a_tr"><td class="gsc_a_t"><a class="gsc_a_at" href="/citations?view_op=view_citation&citation_for_view=abc:def">Paper</a><div class="gs_gray">A B, C D, E F, ...</div><div class="gs_gray">Nature, 2020</div></td><td class="gsc_a_c"><a class="gsc_a_ac">3</a></td><td class="gsc_a_y"><span class="gsc_a_h">2020</span></td></tr></tbody></table>`;
+	const page = S.parseScholarProfilePage(html, DOMParser, "abcdefghijkl");
+	assert.deepEqual(page.rows[0].authors, ["A B", "C D", "E F"]);
+});

@@ -160,3 +160,10 @@ test("records completed after the first draw are read again", () => {
 	r.title = "Changed title";
 	assert.deepEqual(run([r], "changed"), ["late"]);
 });
+
+test("country:uk resolves to GB, two-letter codes still pass through", () => {
+	assert.equal(F.countryCodeFor("uk"), "GB");
+	assert.equal(F.countryCodeFor("UK"), "GB");
+	assert.equal(F.countryCodeFor("kr"), "KR");
+	assert.equal(F.countryCodeFor("England"), "GB");
+});
