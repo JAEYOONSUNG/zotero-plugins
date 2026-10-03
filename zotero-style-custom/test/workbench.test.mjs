@@ -7557,11 +7557,12 @@ function casPending(f,{adopt=null,hold=null}={}){
  f.library.setRemark=async(id,text,opts={})=>{
   const row=f.runtime.cache.items[id]||={},stored=String(row.remark||'');
   if(opts.base!==undefined&&stored!==String(opts.base)&&stored!==text)return {stale:true,stored,conflict:{local:text,remote:stored},rev:row.memoRev||0};
-  row.remark=text;row.memoRev=(row.memoRev||0)+1;
+  const prior=row.remark;row.remark=text;row.memoRev=(row.memoRev||0)+1;
   f.runtime._memoPending({id},1);
   let out=text;
   try{
    if(state.hold)await state.hold;
+   if(state.fail){row.remark=prior;row.memoRev++;throw new Error('disk');} // the write fails and rolls back
    if(state.adopt!==null&&state.adopt!==text){row.remark=state.adopt;row.memoRev++;out=state.adopt;}
   }finally{f.runtime._memoPending({id},-1);}
   if(opts.answer)opts.answer.rev=row.memoRev;
@@ -7614,4 +7615,81 @@ test('reconcile (R13-2): an idle window follows the other window\'s saves withou
  }
  assert.equal(f.runtime.cache.memoKept,undefined,'no kept card piled up: '+JSON.stringify(f.runtime.cache.memoKept));
  f.bench.destroy();g.bench.destroy();
+});
+
+const survives=(f,text)=>{
+ const states=f.bench.memoEditorState().map(s=>s.value);
+ const drafts=(f.runtime.cache.workbenchDrafts?.entries||[]).filter(e=>!e[0].includes('\u0001')).map(e=>e[1]);
+ const kept=Object.values(f.runtime.cache.memoKept||{}).flat().map(e=>e.text);
+ const stored=[String(f.runtime.cache.items[1]?.remark||'')];
+ return [...states,...drafts,...kept,...stored].some(t=>t.includes(text));
+};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+test('restored drafts (R14-1): type, blur, delayed save, redraw, failed save, more typing and save: every typed text survives and the editors stay consistent',async()=>{
+ const f=fixture();const state=casPending(f);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ let release;state.hold=new Promise(r=>{release=r;});
+ await f.bench.show('annotations');await settle();
+ const first=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,first,'TYPED');first.dispatchEvent(new f.win.Event('blur'));await settle(); // the save is held after it wrote
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(el.value,'TYPED','the redrawn editor shows the in-memory value');
+ state.fail=true;release();await settle(); // the write fails and rolls back to BASE
+ assert.equal(f.runtime.cache.items[1].remark,'BASE');
+ assert.ok(survives(f,'TYPED'),'TYPED survives the failure');
+ assert.equal(el.value,'TYPED','the restored input was not replaced by the stored text');
+ assertEditorsConsistent(f,'after the failed save');
+ state.fail=false;state.hold=null;
+ casType(f,el,el.value+' NEXT');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.ok(survives(f,'TYPED'),'TYPED survives more typing');
+ assert.ok(survives(f,'NEXT'),'NEXT survives');
+ assertEditorsConsistent(f,'end');
+ f.bench.destroy();
+});
+
+test('autosave timers (R14-2): the editor a redraw replaced never autosaves its text over what is typed in the new one',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'B'};
+ await f.bench.show('annotations');await settle();
+ let el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'TYPED'); // its 900 ms autosave starts
+ await sleep(60);
+ await f.bench.show('annotations');await settle(); // the reload replaces the editor
+ el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'TYPED MORE');
+ await sleep(1300); // the old editor's timer would fire now
+ assert.equal(f.body().querySelector('.sc-memo-stale'),null,'no false box');
+ el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'TYPED MORE','the next autosave or blur is not stalled');
+ assert.ok(survives(f,'TYPED'));
+ assertEditorsConsistent(f,'end');
+ f.bench.destroy();
+});
+
+test('autosave timers (R14-2c): an editor that is no longer connected saves nothing; its input stays a draft',async()=>{
+ const f=fixture();casLibrary(f);
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'ZED');
+ await f.bench.show('annotations');await settle(); // the editor is replaced
+ assert.ok(!old.isConnected);
+ f.calls.length=0;
+ old.dispatchEvent(new f.win.Event('blur'));await settle(); // a stale blur or timer
+ assert.deepEqual(casWritten(f),[],'nothing is saved from the detached editor');
+ assert.ok(survives(f,'ZED'),'its input is still in a draft');
+ f.bench.destroy();
+});
+
+test('invariant: a detached memo editor saves nothing and its timer is cancelled on redraw',()=>{
+ const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
+ const run=src.slice(src.indexOf('const run=async(options={})=>{'),src.indexOf('const run=async(options={})=>{')+700);
+ assert.match(run,/if\(!field\.isConnected\)\{[^}]*return \{ok:false,detached:true\}/,'run returns before saving when detached');
+ assert.ok(run.indexOf('isConnected')<run.indexOf('attempt('),'and before any attempt');
+ const reload=src.slice(src.indexOf('const scheduleReload='),src.indexOf('panel.addEventListener(\'focusout\''));
+ assert.match(reload,/timerPending/,'a scheduled reload waits for a memo editor with an autosave pending');
+ assert.match(reload,/busy>0/,'or a save running');
+ const clear=src.slice(src.indexOf('function clear(){'),src.indexOf('function clear(){')+900);
+ assert.match(clear,/cancelTimer/,'clear() cancels the timers of editors taken off the screen');
 });

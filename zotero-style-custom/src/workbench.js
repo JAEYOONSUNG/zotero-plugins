@@ -1366,6 +1366,8 @@
   function clear(){
    if(jcrMount){state.jcrBrowserState=jcrMount.state;jcrMount.destroy();jcrMount=null;}
    abortAround();aroundRow=null;previewEpoch++;const previous=preview;preview=null;if(previous){previous.remove();void discardPreview(previous);}body.replaceChildren();visibleAnnotationIDs.clear();
+   // Editors that were just taken off the screen: their autosave timers are cancelled (their input is already a draft the new editor restores).
+   memoFields=memoFields.filter(entry=>{if(entry.field.isConnected)return true;memoBindings.get(entry.field)?.cancelTimer?.();return false;});
   }
 
   /* One empty state for every tab: the tab's own outline icon, a heading, a muted hint, and the actions the page
@@ -3602,7 +3604,7 @@
     const binding=memoBindings.get(editor);
     // An editor nobody has touched since it loaded follows the stored memo; one with edits or an open conflict keeps them (its next save is judged against its base).
     if(binding&&gens&&binding.gen!==(gens.get(binding)??0))continue; // input since the request began is never replaced
-    if(binding&&!binding.stale&&editor.value===binding.base){if(editor.dataset.draftKey)finishDraft(editor,editor.value);binding.show(text);}
+    if(binding&&!binding.stale&&!binding.unsaved&&editor.value===binding.base){if(editor.dataset.draftKey)finishDraft(editor,editor.value);binding.show(text);}
    }
   }
   function bindMemo(field,save,label,opts={}){
@@ -3624,7 +3626,8 @@
     if(!cas||!field.isConnected)return;
     const stored=storedMemo(cas.itemID),value=field.value;
     // An editor nobody typed into since it last showed a stored text just follows the stored memo: no draft, no box.
-    if(!binding.unsaved&&value===binding.base){
+    const holdsDraft=(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return !!meta&&meta.owner===binding.id&&cachedDrafts().has(key);})();
+    if(!binding.unsaved&&!holdsDraft&&value===binding.base){
      if(value!==stored)binding.show(stored);
      else if(!memoPendingNow(cas.itemID)){moveBase(stored);last=stored;clearStale();}
      return;
@@ -3766,8 +3769,14 @@
      return true;
     }finally{if(live)reconcileAll(cas.itemID);}
    };
+   const ensureOwnDraft=()=>{const key=field.dataset.draftKey;if(!key)return;const meta=draftMeta(key);if(meta&&meta.owner===binding.id&&cachedDrafts().get(key)===field.value.slice(0,DRAFT_LENGTH))return;writeMemoDraft(field);};
+   binding.timerPending=()=>!!timer;
+   binding.cancelTimer=()=>{if(timer){win.clearTimeout(timer);timer=null;}};
    const run=async(options={})=>{
     const value=field.value;
+    /* An editor that is no longer on screen saves nothing: its input is already a draft (or a kept card) that the editor on screen
+       restores, and a save from it would be judged against a base the reader no longer sees. */
+    if(!field.isConnected){if(value!==binding.base)ensureOwnDraft();return {ok:false,detached:true};}
     if(value===last&&!options.force)return {ok:true,unchanged:true};
     last=value;
     field.dataset.state='saving';
@@ -3816,7 +3825,7 @@
     // Leaving the field commits at once: waiting out the timer after the panel
     // has closed would lose the edit.
     field.addEventListener('blur',()=>{if(timer)win.clearTimeout(timer);commit();});
-    memoFields.push(()=>{if(timer)win.clearTimeout(timer);return commit();});
+    memoFields.push({field,flush:()=>{if(timer)win.clearTimeout(timer);return commit();}});
    }
    /* The shared draft is only ever changed through these three, and only with the owner and revision this window just read:
       ownDraftWrite (a draft this binding owns), claimDraft and dropDraft (restore, against the meta it read). */
@@ -3838,7 +3847,11 @@
     const sameAsStored=draft===stored||(truncated&&stored.slice(0,DRAFT_LENGTH)===draft);
     const otherLive=!!meta&&ownerWindow(meta.owner)!==WINDOW_ID&&LIVE_DRAFT_WINDOWS.has(ownerWindow(meta.owner));
     if(otherLive){if(!sameAsStored&&draft!==field.value){keepDraft(cas.itemID,draft,draftBase,truncated);drawKept();}return;}
-    if(draft===field.value&&!truncated){binding.claimDraft(draft,typeof draftBase==='string'?{tagged:draftBase}:undefined,meta);return;}
+    // The value came from a draft: it is unsaved input until a save of exactly that value is confirmed (a leftover equal to the stored memo is just dropped, unless that memo is a write still in flight).
+    if(draft===field.value&&!truncated){
+     if(draft===stored&&!memoPendingNow(cas.itemID)){binding.dropDraft(meta);return;}
+     binding.claimDraft(draft,typeof draftBase==='string'?{tagged:draftBase}:undefined,meta);binding.unsaved=true;return;
+    }
     if(sameAsStored){binding.dropDraft(meta);return;}
     if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.base){field.value=draft;grow();binding.unsaved=true;binding.claimDraft(draft,{tagged:draftBase},meta);return;}
     keepDraft(cas.itemID,draft,draftBase,truncated);binding.dropDraft(meta);drawKept();
@@ -8120,7 +8133,14 @@
      typing in the panel the reload waits, and runs when they leave the field. */
   let reloadPending=false;
   const typing=()=>{const a=doc.activeElement;return !!a&&panel.contains(a)&&(a.localName==='textarea'||a.isContentEditable===true||(a.localName==='input'&&/^(text|search|)$/.test(a.getAttribute('type')||'')));};
-  const scheduleReload=()=>{if(disposed||panel.hidden)return;if(typing()){reloadPending=true;return;}reloadPending=false;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(()=>run(load),200);};
+  const scheduleReload=()=>{if(disposed||panel.hidden)return;if(typing()){reloadPending=true;return;}reloadPending=false;if(reloadTimer)win.clearTimeout(reloadTimer);reloadTimer=win.setTimeout(function again(){
+   // A memo editor with an autosave waiting or a save running is not rebuilt under the reader: the reload waits for it.
+   if(disposed||panel.hidden)return;
+   if(typing()){reloadPending=true;return;}
+   const busy=[...body.querySelectorAll('textarea[data-memo-item]')].some(e=>{const b=memoBindings.get(e);return !!b&&(b.timerPending?.()||b.busy>0);});
+   if(busy){reloadTimer=win.setTimeout(again,300);return;}
+   run(load);
+  },200);};
   panel.addEventListener('focusout',()=>{if(reloadPending)win.setTimeout(()=>{if(reloadPending&&!typing())scheduleReload();},0);});
   if(runtime.Z.Notifier){notifier=runtime.Z.Notifier.registerObserver({notify:scheduleReload},['item','item-tag','collection','tab'],'style-custom-workbench');}
   const selectionTimer=win.setInterval(()=>{if(!disposed&&!win.closed&&!panel.hidden&&scopeContext()!==observedContext)run(load);},500);
@@ -8130,7 +8150,7 @@
    if(tabID){const id=tabID;tabID=null;closingSelf=true;moveBack();try{win.Zotero_Tabs.close(id);}catch(_){}closingSelf=false;}
    // An edit typed a moment ago is still waiting out its timer. Closing the
    // panel must write it, not discard it.
-   for(const flush of memoFields)Promise.resolve(flush()).catch(error=>runtime.Z.logError?.(error));
+   for(const entry of memoFields)Promise.resolve(entry.flush()).catch(error=>runtime.Z.logError?.(error));
    memoFields=[];
    abortAround();dismissToast();disposed=true;LIVE_DRAFT_WINDOWS.delete(WINDOW_ID);stopMemoListener?.();win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
   const accent=runtime.pref('accentColor','#374151');if(/^#[a-f\d]{6}$/i.test(accent)&&!['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=Math.max(11,Math.min(20,Number(runtime.pref('panelFontSize',13))||13))+'px';
