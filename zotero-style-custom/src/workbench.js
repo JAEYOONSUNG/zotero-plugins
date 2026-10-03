@@ -1395,7 +1395,9 @@
     // Foreign: any shared draft this binding did not write (its owner may be alive, closed, or unknown) that differs from the new text and
     // the stored memo goes to the kept drafts first. A closed owner only matters when a draft is claimed on restore, never for overwriting.
     const foreign=typeof existing==='string'&&(!meta||meta.owner!==binding.id)&&existing!==input.value&&(existing!==storedMemo(binding.itemID)||memoPendingNow(binding.itemID));
-    if(foreign)keepDraft(binding.itemID,existing,record?record.base:undefined,false,record?record.owner:undefined);
+    if(foreign)keepDraft(binding.itemID,existing,record?record.base:undefined,false,record?record.owner:undefined,record?{key,owner:record.owner,rev:record.rev}:undefined);
+    // Typing a text again is the reader's own act: a tombstone on it is lifted.
+    if(binding.itemID!==undefined)clearDiscarded(binding.itemID,input.value);
     updateDraft(key,input.value,binding.base,binding.id,binding.itemID);
     if(foreign)binding.drawKept?.();
     return;
@@ -3643,11 +3645,18 @@
   const KEPT_SHOWN=3; // how many kept drafts show before the toggle; none is ever deleted but by its own buttons
   const keptKey=itemID=>{try{const ref=runtime.Z.Items.get(Number(itemID));return ref?String(runtime.identity(ref)):String(itemID);}catch(_){return String(itemID);}};
   const keptList=itemID=>{const all=runtime.cache.memoKept,list=all&&typeof all==='object'?all[keptKey(itemID)]:null;return Array.isArray(list)?list:[];};
-  function keepDraft(itemID,text,base,truncated=false,owner){
+  /* Discard tombstones: pressing 버리기 on a card discards the text for good, including the draft the card came from (kept in the
+     store while a write is pending). A tombstone {hash, at} stops that text from being kept or restored again; it expires once no
+     draft holds the text any more and no write of the paper is pending (tidyKept). */
+  const discardedList=itemID=>{const all=runtime.cache.memoDiscarded,list=all&&typeof all==='object'&&!Array.isArray(all)?all[keptKey(itemID)]:null;return Array.isArray(list)?list:[];};
+  const isDiscarded=(itemID,text)=>{const h=hashOf(text);return discardedList(itemID).some(t=>t.hash===h);};
+  function clearDiscarded(itemID,text){const all=runtime.cache.memoDiscarded,key=keptKey(itemID);if(!all||!Array.isArray(all[key]))return;const h=hashOf(text),live=all[key].filter(t=>t.hash!==h);if(live.length!==all[key].length){if(live.length)all[key]=live;else delete all[key];runtime.dirty=true;}}
+  function keepDraft(itemID,text,base,truncated=false,owner,source){
+   if(isDiscarded(itemID,text))return;
    const all=runtime.cache.memoKept&&typeof runtime.cache.memoKept==='object'&&!Array.isArray(runtime.cache.memoKept)?runtime.cache.memoKept:(runtime.cache.memoKept={});
    const list=all[keptKey(itemID)]||(all[keptKey(itemID)]=[]);
    if(list.some(entry=>entry.text===text))return;
-   list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text),base:String(base??''),truncated:!!truncated,owner,at:new Date().toISOString()});
+   list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text),base:String(base??''),truncated:!!truncated,owner,source,at:new Date().toISOString()});
    tidyKept(itemID);
    runtime.dirty=true;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));
   }
@@ -3658,9 +3667,22 @@
    const all=runtime.cache.memoKept,key=keptKey(itemID),list=all&&typeof all==='object'?all[key]:null;
    if(!Array.isArray(list))return;
    if(memoPendingNow(itemID))return;
+   // A tombstone expires once no draft holds its text any more.
+   {const all=runtime.cache.memoDiscarded,dk=keptKey(itemID);if(all&&Array.isArray(all[dk])){const held=new Set(Object.values(memoStore()).map(r=>hashOf(r.text)));const live=all[dk].filter(t=>held.has(t.hash));if(live.length!==all[dk].length){if(live.length)all[dk]=live;else delete all[dk];runtime.dirty=true;}}}
    const stored=storedMemo(itemID);
    const keep=list.filter(entry=>entry.text!==stored);
    if(keep.length!==list.length){if(keep.length)all[key]=keep;else delete all[key];runtime.dirty=true;}
+  }
+  // The reader's own 버리기: the card, the draft it came from (explicit, so not held back by a pending write) and a tombstone.
+  function discardKept(itemID,entry){
+   dropKept(itemID,entry.id);
+   const key=keptKey(itemID),all=runtime.cache.memoDiscarded&&typeof runtime.cache.memoDiscarded==='object'&&!Array.isArray(runtime.cache.memoDiscarded)?runtime.cache.memoDiscarded:(runtime.cache.memoDiscarded={});
+   const list=all[key]||(all[key]=[]),hash=hashOf(entry.text);
+   if(!list.some(t=>t.hash===hash))list.push({hash,at:Date.now()});
+   while(list.length>20)list.shift();
+   const source=entry.source&&entry.source.key,record=source?memoRecord(source):undefined;
+   if(record&&record.text===entry.text)updateDraft(source,undefined);
+   runtime.dirty=true;
   }
   function dropKept(itemID,id){
    const all=runtime.cache.memoKept,key=keptKey(itemID);
@@ -3793,7 +3815,7 @@
       if(done){dropKept(cas.itemID,entry.id);target.drawKept();drawKept();}
       }finally{reconcileAll(cas.itemID);}
      }),acts,{'data-writes':'cache'});
-     button('버리기',async()=>{dropKept(cas.itemID,entry.id);drawKept();},acts,{'data-writes':'cache'});
+     button('버리기',async()=>{discardKept(cas.itemID,entry);drawKept();},acts,{'data-writes':'cache'});
     }
     if(list.length>KEPT_SHOWN)viewButton(keptExpanded?'접기':`${list.length-KEPT_SHOWN}개 더 보기`,()=>{keptExpanded=!keptExpanded;drawKept();},keptBox,{class:'sc-memo-kept-more'});
    };
@@ -3937,6 +3959,7 @@
    binding.ownDraftWrite=(text,base)=>{if(binding.draftToken())updateDraft(field.dataset.draftKey,text,base,binding.id);};
    const sameMeta=(a,b)=>(!a&&!b)||(a&&b&&a.owner===b.owner&&a.rev===b.rev);
    binding.claimDraft=(text,base,seen)=>{if(sameMeta(draftMeta(field.dataset.draftKey),seen))updateDraft(field.dataset.draftKey,text,base,binding.id);};
+   binding.discardSource=()=>updateDraft(field.dataset.draftKey,undefined); // only for a draft whose text carries a tombstone
    binding.dropDraft=seen=>{if(cas&&memoPendingNow(cas.itemID))return;if(sameMeta(draftMeta(field.dataset.draftKey),seen))updateDraft(field.dataset.draftKey,undefined);};
    /* Restore reads the SHARED draft as it is now (never this window's older copy). Another live window's draft is not touched:
       a copy is offered as a kept card. One of this window or of a closed one goes back into the editor only when the memo it
@@ -3947,6 +3970,8 @@
     if(!cas||!key)return;
     const record=memoRecord(key),legacy=record?undefined:cachedDrafts().get(key),draft=record?record.text:legacy;
     if(typeof draft!=='string')return;
+    // A draft the reader discarded (the tombstone) is never restored, however long a pending write kept it in the store.
+    if(isDiscarded(cas.itemID,draft)){binding.discardSource();return;}
     const meta=draftMeta(key),draftBase=record?record.base:undefined,truncated=record?record.truncated===true:cachedDrafts().has(key+DRAFT_TRUNC);
     const stored=storedMemo(cas.itemID);
     const sameAsStored=draft===stored||(truncated&&stored.slice(0,DRAFT_LENGTH)===draft);
@@ -3954,7 +3979,7 @@
     const baseText=record?record.baseText:undefined,baseOK=typeof baseText==='string'&&typeof draftBase==='string'&&baseTag(baseText)===draftBase;
     const claimBase=baseOK?baseText:(typeof draftBase==='string'?{tagged:draftBase}:undefined);
     const otherLive=!!meta&&ownerWindow(meta.owner)!==WINDOW_ID&&LIVE_DRAFT_WINDOWS.has(ownerWindow(meta.owner));
-    if(otherLive){if(!sameAsStored&&draft!==field.value){keepDraft(cas.itemID,draft,draftBase,truncated,meta.owner);drawKept();}return;}
+    if(otherLive){if(!sameAsStored&&draft!==field.value){keepDraft(cas.itemID,draft,draftBase,truncated,meta.owner,{key,owner:meta.owner,rev:meta.rev});drawKept();}return;}
     // The value came from a draft: it is unsaved input until a save of exactly that value is confirmed (a leftover equal to the stored memo is just dropped, unless that memo is a write still in flight).
     if(draft===field.value&&!truncated){
      if(draft===stored&&!memoPendingNow(cas.itemID)){binding.dropDraft(meta);return;}
@@ -3965,7 +3990,7 @@
     }
     if(sameAsStored&&!memoPendingNow(cas.itemID)){binding.dropDraft(meta);return;}
     if(!truncated&&draftBase===baseTag(stored)&&field.value===binding.loaded){field.value=draft;grow();binding.unsaved=true;binding.claimDraft(draft,claimBase,meta);return;}
-    keepDraft(cas.itemID,draft,draftBase,truncated,meta?meta.owner:undefined);binding.dropDraft(meta);drawKept();
+    keepDraft(cas.itemID,draft,draftBase,truncated,meta?meta.owner:undefined,{key,owner:meta?meta.owner:undefined,rev:meta?meta.rev:undefined});binding.dropDraft(meta);drawKept();
    };
    memoBindings.set(field,binding);
    drawKept();

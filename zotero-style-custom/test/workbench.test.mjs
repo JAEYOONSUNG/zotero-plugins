@@ -7218,7 +7218,7 @@ test('invariant: memo fields are written only by the allowlisted runtime/library
 
 test('invariant: a memo draft is written or deleted only by writeMemoDraft, the binding\'s owner-checked methods, and finishDraft (non-memo path)',()=>{
  const lines=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8').split('\n');
- const allowed=new Set(['writeMemoDraft','finishDraft','binding.finishOwn','binding.ownDraftWrite','binding.claimDraft','binding.dropDraft']);
+ const allowed=new Set(['writeMemoDraft','finishDraft','binding.finishOwn','binding.ownDraftWrite','binding.claimDraft','binding.dropDraft','binding.discardSource','discardKept']);
  let label=null;const bad=[];
  lines.forEach((line,i)=>{
   const m=/^\s*(?:async )?function (\w+)\(/.exec(line)||/^\s*(binding\.\w+)=/.exec(line);
@@ -8075,7 +8075,7 @@ test('invariant: every deletion of a draft or kept card checks the paper\'s pend
  assert.match(part('binding.restore=()=>{','memoBindings.set(field,binding)'),/sameAsStored&&!memoPendingNow\(/);
  // dropKept is the reader's own button (입력칸에 넣기 / 버리기) and nothing else.
  const lines=src.split('\n');const calls=[];lines.forEach((l,i)=>{if(/\bdropKept\(/.test(l)&&!/function dropKept\(/.test(l))calls.push(i);});
- for(const i of calls)assert.match(lines.slice(Math.max(0,i-12),i+1).join('\n'),/button\('(입력칸에 넣기|버리기)'/,'dropKept at line '+(i+1)+' is only reached from a card button');
+ for(const i of calls)assert.match(lines.slice(Math.max(0,i-12),i+1).join('\n'),/button\('(입력칸에 넣기|버리기)'|function discardKept\(/,'dropKept at line '+(i+1)+' is only reached from a card button');
 });
 
 test('closing editors (R18-1): a manual editor\'s input is kept when its window closes, even after another window typed the same text',async()=>{
@@ -8189,4 +8189,30 @@ test('invariant: preservation of a detached editor\'s input is decided by its ow
  const a=src.indexOf('binding.preserveDetached=()=>{'),text=src.slice(a,src.indexOf('};',a));
  assert.match(text,/binding\.unsaved/);
  assert.doesNotMatch(text.replace(/keepDraft\([^;]*;/,''),/binding\.base/,'no comparison with a base (the base is only recorded on the card)');
+});
+
+test('discarded cards (R20-3): 버리기 discards the draft the card came from too, and a pending write cannot bring it back',async()=>{
+ const f=fixture();const state=casPending(f);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ let release;state.hold=new Promise(r=>{release=r;});
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'X');old.dispatchEvent(new f.win.Event('blur'));await settle(); // X in memory, its write held
+ casType(f,old,'DISCARDED');
+ await f.bench.show('annotations');await settle();
+ const card=f.body().querySelector('.sc-memo-kept-card');
+ assert.ok(card&&/DISCARDED/.test(card.textContent),'it waits as a card');
+ await f.click('버리기');
+ assert.equal(f.body().querySelector('.sc-memo-kept-card'),null);
+ assert.ok(!sharedDraftTexts(f).includes('DISCARDED'),'the draft it came from is gone too, though a write is pending');
+ state.hold=null;release();await settle();
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(el.value,'X','the editor shows what was saved, not the discarded text');
+ assert.equal(f.body().querySelector('.sc-memo-kept-card'),null,'and nothing is offered again');
+ f.calls.length=0;
+ el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.ok(!casWritten(f).includes('DISCARDED'),'a blur does not save it');
+ assert.equal(f.runtime.cache.items[1].remark,'X');
+ f.bench.destroy();
 });

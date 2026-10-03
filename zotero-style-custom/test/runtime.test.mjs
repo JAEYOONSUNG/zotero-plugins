@@ -4406,3 +4406,99 @@ test('memo/note (R19-3): a failed undelete compensation leaves the ledger rememb
   assert.equal(row.memoConflict.remote, 'EDITED');
   assert.ok(plugin.mergeLedger()['1'], 'and the ledger is still kept: nothing was resolved');
 });
+
+function mergeWithNote({memoBefore = 'BASE'} = {}) {
+  const w = mergeWorld();
+  return (async () => {
+    const {fx, plugin, pre, pub} = w;
+    await plugin.setSetting('memoToNote', true, {apply: false});
+    const memo = new fx.Z.Item('note');
+    memo.libraryID = 1; memo.parentID = 2; memo.parentItemID = 2; memo.setTags([{tag: 'style-custom:memo', type: 0}]);
+    memo.setNote(Runtime.memoNoteHTML(memoBefore)); await memo.saveTx();
+    (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+    plugin.cache.items[plugin.identity(pub)] = {remark: memoBefore, memoSynced: memoBefore};
+    plugin.cache.items[plugin.identity(pre)] = {remark: 'PREPRINT', signals: {published: {doi: '10.9/pub', year: 2025}}};
+    return {...w, memo, row: plugin.entry(pub)};
+  })();
+}
+
+test('merge ledger (R20-1): the ledger keeps the HTML the merge submitted, so undo never writes over an outside edit made during the merge save', async () => {
+  const w = await mergeWithNote();
+  const {fx, plugin, memo, row} = w;
+  const orig = memo.saveTx;
+  let release; const gate = new Promise(r => { release = r; }), once = {v: true};
+  memo.saveTx = async function () { if (once.v) { once.v = false; this.setNote(Runtime.memoNoteHTML('REMOTE')); await gate; } return orig.call(this); };
+  const merging = plugin.mergePreprintIntoPublished(1);
+  await new Promise(r => setTimeout(r, 15));
+  release(); await merging;
+  memo.saveTx = orig;
+  assert.equal(noteText(memo), 'REMOTE', 'the outside edit is in the note');
+  assert.ok(row.memoConflict, 'the conflict shows');
+  const ledger = plugin.mergeLedger()['1'].memo.note;
+  assert.equal(ledger.after, Runtime.memoNoteHTML('BASE\n\nPREPRINT'), 'the ledger holds what the merge submitted, not what the note held afterwards');
+  await plugin.restorePreprint(1);
+  assert.equal(noteText(memo), 'REMOTE', 'undo did not write BASE over it');
+  assert.ok(plugin.mergeLedger()['1'], 'the ledger is kept');
+  assert.ok(row.memoConflict, 'and so is the conflict');
+});
+
+test('pending writes (R20-2): the merge holds one pending token through its rollback: listeners never hear "settled" while the memo is still going back', async () => {
+  const {plugin, pre, pub} = mergeWorld();
+  await plugin.setSetting('memoToNote', false, {apply: false});
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'BASE'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'SOURCE', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  const orig = plugin.flush;
+  let release; const gate = new Promise(r => { release = r; }), once = {v: true};
+  plugin.flush = async function () { if (plugin.memoWritePending(pub) && once.v) { once.v = false; await gate; throw new Error('disk'); } return orig.call(this); };
+  const heard = [];
+  plugin.addMemoListener(() => heard.push({pending: plugin.memoWritePending(pub), remark: plugin.entry(pub).remark}));
+  const merge = plugin.mergePreprintIntoPublished(1).catch(error => error);
+  await new Promise(r => setTimeout(r, 15));
+  release();
+  assert.ok((await merge) instanceof Error);
+  plugin.flush = orig;
+  assert.equal(plugin.entry(pub).remark, 'BASE', 'rolled back');
+  const settled = heard.filter(h => !h.pending);
+  assert.ok(settled.length >= 1);
+  assert.ok(settled.every(h => h.remark === 'BASE'), 'at every "settled" the memo is already back: ' + JSON.stringify(heard));
+  assert.deepEqual(plugin.memoPendingList(pub), [], 'nothing leaked');
+});
+
+test('pending writes (R20-2b): undo, resolve and adoption each release exactly once after a failed flush, with nothing left pending', async () => {
+  // Undo: the flush at its end fails.
+  const m = await mergeWithNote();
+  await m.plugin.mergePreprintIntoPublished(1);
+  const origFlush = m.plugin.flush; let undoFlush = 0;
+  m.plugin.flush = async function () { if (m.plugin.memoWritePending(m.pub)) { undoFlush++; throw new Error('disk'); } return origFlush.call(this); };
+  const heard = [];
+  m.plugin.addMemoListener(() => heard.push(m.plugin.memoWritePending(m.pub)));
+  await m.plugin.restorePreprint(1).catch(() => {});
+  m.plugin.flush = origFlush;
+  assert.ok(undoFlush >= 1, 'the failing flush ran while the paper was pending');
+  assert.deepEqual(m.plugin.memoPendingList(m.pub), [], 'undo left nothing pending');
+  assert.ok(heard.length >= 1 && heard.every(p => p === false || p === true));
+  // Resolve: its flush fails.
+  const r = memoWorld({remark: 'L', base: 'B', note: 'R'}); await r.setting(); await r.plugin.memoToNote(r.c);
+  const rf = r.plugin.flush; let resolveFlush = 0;
+  r.plugin.flush = async function () { if (r.plugin.memoWritePending(r.c)) { resolveFlush++; throw new Error('disk'); } return rf.call(this); };
+  await r.lib.resolveMemoConflict(3, 'note', await r.lib.memoConflict(3)).catch(() => {});
+  r.plugin.flush = rf;
+  assert.ok(resolveFlush >= 1);
+  assert.deepEqual(r.plugin.memoPendingList(r.c), [], 'resolve left nothing pending');
+  // Adoption: the pull's flush fails.
+  const a = memoWorld({remark: 'B', base: 'B', note: 'B'}); await a.setting();
+  const af = a.plugin.flush; let adoptFlush = 0;
+  a.plugin.flush = async function () { if (a.plugin.memoWritePending(a.c)) { adoptFlush++; throw new Error('disk'); } return af.call(this); };
+  a.note.setNote(Runtime.memoNoteHTML('OUTSIDE'));
+  a.plugin.mirrorMemoNote(a.note.id);
+  await new Promise(res => setTimeout(res, 15));
+  a.plugin.flush = af;
+  assert.equal(a.row.remark, 'OUTSIDE', 'adopted in memory');
+  assert.ok(adoptFlush >= 1);
+  assert.deepEqual(a.plugin.memoPendingList(a.c), [], 'adoption left nothing pending');
+  // Import: the registration is released in a finally that follows the write.
+  const src = require('node:fs').readFileSync(new URL('../src/runtime.js', import.meta.url), 'utf8');
+  const i = src.indexOf('const pendingToken = this._memoPending(held, 1, \'\', memo);');
+  assert.ok(i > 0 && /try \{[^}]*flush\(\); \} finally \{ this\._memoPending\(held, -1/.test(src.slice(i, i + 400)), 'import releases after its write, in a finally');
+});

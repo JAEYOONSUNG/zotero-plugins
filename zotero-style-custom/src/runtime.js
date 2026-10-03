@@ -2215,6 +2215,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const isMemoNote = note => (note.getTags?.() || []).some(tag => tag.tag === this.constructor.MEMO_NOTE_TAG);
     const childIDs = () => [...new Set([...(preprint.getAttachments?.() || []), ...(preprint.getNotes?.() || [])])];
     const isStatus = tag => /^\/(unread|reading|done)$/i.test(String(tag).trim());
+    let mergeToken;
     try {
       // Files, their annotations and the user's notes MOVE to the published item:
       // the trash is emptied after 30 days and must never hold the only copy.
@@ -2264,23 +2265,25 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const after = mine ? mine + '\n\n' + memo : memo;
         const noteBefore = this.memoNoteOf(held), htmlBefore = noteBefore ? String(noteBefore.getNote()) : null, syncedBefore = this.entry(held).memoSynced;
         // The merged text is only in memory until it is saved: the paper is pending from before it is set until it is saved or rolled back.
-        const pendingToken = this._memoPending(held, 1, mine, after);
-        try {
+        // One pending token for the whole merge: it is released in the outer finally, after any rollback (an editor must not see "settled" while the memo is still going back).
+        mergeToken = this._memoPending(held, 1, mine, after);
+        {
           this.entry(held).remark = after; this._memoBump(this.entry(held)); copied.memo = true; rec.memo = {before: mine, after};
           await this.flush();
           if (this.getSetting('memoToNote')) {
             const wrote = await this.memoToNote(held);
             // What the note was, and what the merge made it, so undo can put the note and its sync baseline back with the memo.
             const noteAfter = this.memoNoteOf(held);
-            if (noteAfter && wrote?.wrote) rec.memo.note = {id: noteAfter.id, created: !noteBefore, before: htmlBefore, after: String(noteAfter.getNote()), syncedBefore: syncedBefore === undefined ? null : syncedBefore, syncedAfter: this.entry(held).memoSynced ?? null};
+            // `after` is exactly the HTML the merge submitted, never what the note holds when the save returns (an outside edit may be in it): undo restores only a note that still equals it.
+            if (noteAfter && wrote?.wrote) rec.memo.note = {id: noteAfter.id, created: !noteBefore, before: htmlBefore, after: String(wrote.html), syncedBefore: syncedBefore === undefined ? null : syncedBefore, syncedAfter: this.entry(held).memoSynced ?? null};
           }
-        } finally { this._memoPending(held, -1, undefined, undefined, pendingToken); }
+        }
       }
     } catch (error) {
       // Nothing was trashed; put back whatever was already moved or copied.
       try { await this._undoMerge(rec, {untrash: false}); } catch (undoError) { this.Z.logError?.(undoError); }
       throw error;
-    }
+    } finally { if (mergeToken !== undefined) this._memoPending(held, -1, undefined, undefined, mergeToken); }
     this.mergeLedger()[String(preprint.id)] = rec; this.dirty = true;
     try { await this.flush(); } catch (_) {}
     preprint.deleted = true;
@@ -4681,7 +4684,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       row.memoConflict = {local: String(row.remark || ''), remote: mirrored, at: new Date().toISOString()}; this._memoBump(row);
     }
     else this._memoNoWrite(row, note, this._memoSituation(row, mirrored, row.memoSynced));
-    const answer = {created, text: String(row.remark || ''), wrote: true, adopted: false, conflict: !!row.memoConflict, rev: row.memoRev || 0};
+    const answer = {created, text: String(row.remark || ''), wrote: true, adopted: false, conflict: !!row.memoConflict, rev: row.memoRev || 0, html: this.constructor.memoNoteHTML(text)};
     try { await this.flush(); } catch (error) { error.memoRev = answer.rev; throw error; }
     this.bumpState?.();
     return answer;
