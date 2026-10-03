@@ -3514,35 +3514,80 @@
     // An editor with an open conflict (a stale save or a draft on offer) keeps it: only its own choice closes it.
     if(memoBindings.get(editor)?.stale||!was.includes(editor.value)){stale=true;continue;}
     if(editor.dataset.draftKey)for(const v of was)finishDraft(editor,v);
-    editor.value=text;if(typeof autoGrow==='function')autoGrow(editor);
-    memoBindings.get(editor)?.rebase(text);
+    memoBindings.get(editor)?.show(text);
    }
    const held=state.items.find(i=>String(i.id)===id);if(held&&!stale)held.remark=text;
    // A conflict box of a redrawn panel was drawn before this answer: it asks again.
    for(const editor of body.querySelectorAll('textarea[data-memo-item]'))if(editor.dataset.memoItem===id&&editor.isConnected)Promise.resolve(memoBindings.get(editor)?.refresh?.()).catch(()=>{});
    return !stale;
   }
-  /* Every memo editor is a compare-and-swap writer. `opts.memo={itemID,base,host}`: `base` is the stored memo this editor was
-     loaded from; it moves only to the text a successful write returned (or to what the reader chose to load). A write from
-     an editor whose base is no longer the stored memo is refused by the library ({stale}): nothing is overwritten and the
-     two texts are shown in `host` for the reader to choose. A restored draft built on an older memo goes the same way. */
+  /* Every memo editor is a compare-and-swap writer. `opts.memo={itemID,base,host}`: `base` is the stored memo this editor's
+     text derives from. It moves in ONE function (moveBase): to the text a save of this editor's own text returned, or to a
+     stored text the editor is made to show (`show`). A write from an editor whose base is no longer the stored memo is
+     refused by the library ({stale}): nothing is overwritten and both texts wait in `host` for the reader.
+     A saved draft that cannot be restored safely is never offered as a conflict and never edited: it is moved to the kept
+     drafts of that paper (cache.memoKept), shown as a card, and only 입력칸에 넣기 or 버리기 on that card ever removes it. */
   const storedMemo=itemID=>{try{const ref=runtime.Z.Items.get(Number(itemID));return String((ref&&runtime.entry(ref).remark)||'');}catch(_){return '';}};
+  const KEPT_LIMIT=50;
+  const keptKey=itemID=>{try{const ref=runtime.Z.Items.get(Number(itemID));return ref?String(runtime.identity(ref)):String(itemID);}catch(_){return String(itemID);}};
+  const keptList=itemID=>{const all=runtime.cache.memoKept,list=all&&typeof all==='object'?all[keptKey(itemID)]:null;return Array.isArray(list)?list:[];};
+  function keepDraft(itemID,text,base){
+   const all=runtime.cache.memoKept&&typeof runtime.cache.memoKept==='object'&&!Array.isArray(runtime.cache.memoKept)?runtime.cache.memoKept:(runtime.cache.memoKept={});
+   const list=all[keptKey(itemID)]||(all[keptKey(itemID)]=[]);
+   if(list.some(entry=>entry.text===text))return;
+   list.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),text:String(text).slice(0,DRAFT_LENGTH),base:String(base??''),at:new Date().toISOString()});
+   while(list.length>KEPT_LIMIT)list.shift();
+   runtime.dirty=true;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));
+  }
+  function dropKept(itemID,id){
+   const all=runtime.cache.memoKept,key=keptKey(itemID);
+   if(!all||!Array.isArray(all[key]))return;
+   all[key]=all[key].filter(entry=>entry.id!==id);if(!all[key].length)delete all[key];
+   runtime.dirty=true;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));
+  }
   function followMemoEditors(itemID,text,source){
    const id=String(itemID);
    for(const editor of body.querySelectorAll('textarea[data-memo-item]')){
     if(editor===source||editor.dataset.memoItem!==id||!editor.isConnected)continue;
     const binding=memoBindings.get(editor);
-    // An editor nobody has touched since it loaded follows the stored memo; one with edits keeps them (its next save is judged against its base).
-    const kept=editor.dataset.draftKey&&drafts.has(editor.dataset.draftKey)&&drafts.get(editor.dataset.draftKey)!==editor.value;
-    if(binding&&!binding.stale&&!kept&&editor.value===binding.base){if(editor.dataset.draftKey)finishDraft(editor,editor.value);editor.value=text;if(typeof autoGrow==='function')autoGrow(editor);binding.rebase(text);}
+    // An editor nobody has touched since it loaded follows the stored memo; one with edits or an open conflict keeps them (its next save is judged against its base).
+    if(binding&&!binding.stale&&editor.value===binding.base){if(editor.dataset.draftKey)finishDraft(editor,editor.value);binding.show(text);}
    }
   }
   function bindMemo(field,save,label,opts={}){
-   let timer=null,inFlight=null,last=field.value,chain=Promise.resolve(),staleBox=null;
+   let timer=null,last=field.value,chain=Promise.resolve(),staleBox=null,keptBox=null;
    const cas=opts.memo||null;
    const binding={base:cas?String(cas.base??''):undefined,stale:null};
+   const grow=()=>{if(typeof autoGrow==='function')autoGrow(field);};
+   /* The only place the base moves. `derived`: the text is what this editor itself just submitted and had stored, so the
+      editor's current text (possibly typed on since) builds on it. Anything else moves the base only if the editor shows it. */
+   const moveBase=(text,derived=false)=>{if(!cas||(!derived&&field.value!==text))return false;binding.base=String(text);return true;};
+   binding.moveBase=moveBase;
    const clearStale=()=>{binding.stale=null;if(staleBox){staleBox.remove();staleBox=null;}if(field.dataset.state==='stale')field.dataset.state='';};
-   const take=(text)=>{const prior=field.value;if(field.dataset.draftKey)finishDraft(field,prior);field.value=text;if(typeof autoGrow==='function')autoGrow(field);binding.rebase(text);};
+   // The editor takes a stored text as its own: value, base and autosave baseline together.
+   binding.show=text=>{if(timer){win.clearTimeout(timer);timer=null;}field.value=text;grow();last=text;if(moveBase(text))clearStale();};
+   const take=text=>{const prior=field.value;if(field.dataset.draftKey)finishDraft(field,prior);binding.show(text);};
+   const drawKept=()=>{
+    if(!cas||!cas.host||!cas.host.isConnected)return;
+    if(keptBox){keptBox.remove();keptBox=null;}
+    const list=keptList(cas.itemID);if(!list.length)return;
+    keptBox=node('div',null,cas.host,{class:'sc-memo-kept'});
+    for(const entry of list){
+     const card=node('div',null,keptBox,{class:'sc-memo-kept-card',role:'group','aria-label':'저장하지 못한 입력'});
+     node('span','저장하지 못한 입력',card,{class:'sc-memo-label'});
+     node('p','이 메모가 그 사이 바뀌어 입력칸에 되돌리지 않았습니다. 필요하면 입력칸에 넣어 직접 합치세요.',card,{class:'sc-muted'});
+     node('pre',entry.text||'(비어 있음)',card);
+     const acts=node('div',null,card,{class:'sc-actions'});
+     // Put into the editor as ordinary unsaved input: the base does not move, so saving it is judged like any other edit.
+     button('입력칸에 넣기',()=>binding.sequence(async()=>{
+      const mine=field.value,next=!mine.trim()||mine===binding.base?entry.text:mine+'\n\n'+entry.text;
+      field.value=next;grow();field.dispatchEvent(new win.Event('input',{bubbles:true}));
+      dropKept(cas.itemID,entry.id);drawKept();
+     }),acts,{'data-writes':'cache'});
+     button('버리기',async()=>{dropKept(cas.itemID,entry.id);drawKept();},acts,{'data-writes':'cache'});
+    }
+   };
+   binding.drawKept=drawKept;
    const drawStale=()=>{
     if(!cas||!cas.host||!cas.host.isConnected)return;
     if(staleBox){staleBox.remove();staleBox=null;}
@@ -3555,37 +3600,31 @@
      const col=node('div',null,two,{class:'sc-memo-conflict-text'});node('span',name,col,{class:'sc-memo-label'});node('pre',text||'(비어 있음)',col);
     }
     const acts=node('div',null,c,{class:'sc-actions'});
-    // A restored draft is not in the editor (it shows the stored memo) until the reader edits there: then the editor's text is theirs.
-    const mine=()=>found.fromDraft&&field.value===found.stored?found.conflict.local:field.value;
-    // The buttons act on the text the editor holds when they are pressed. Discarding needs the reader to have seen it.
+    // The buttons act on the text the editor holds when they are pressed, after the saves queued before them; each box can be used once.
     button('저장된 메모 쓰기',()=>binding.sequence(async()=>{
-     if(binding.stale!==found){message('그 사이 상황이 바뀌어 아무것도 바꾸지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
-     if(field.value!==found.conflict.local&&field.value!==found.stored){binding.stale={...found,fromDraft:false,conflict:{local:field.value,remote:found.stored}};drawStale();message('편집 내용이 그 사이 바뀌어 버리지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
-     take(found.stored);clearStale();followMemoEditors(cas.itemID,found.stored,field);}),acts,{'data-writes':'cache'});
-    button('이 편집 내용 쓰기',async()=>{await binding.overwrite(mine,found.stored,found);},acts,{'data-writes':'library'});
-    button('둘 다 합치기',async()=>{await binding.overwrite(()=>{const own=mine();return found.stored.trim()&&own.trim()?found.stored+'\n\n'+own:found.stored.trim()?found.stored:own;},found.stored,found);},acts,{'data-writes':'library',title:T('저장된 메모 아래에 이 편집 내용을 이어 붙입니다')});
+     if(binding.stale!==found||found.used){message('그 사이 상황이 바뀌어 아무것도 바꾸지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
+     if(field.value!==found.conflict.local&&field.value!==found.stored){binding.stale={...found,conflict:{local:field.value,remote:found.stored}};drawStale();message('편집 내용이 그 사이 바뀌어 버리지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
+     found.used=true;take(found.stored);followMemoEditors(cas.itemID,found.stored,field);}),acts,{'data-writes':'cache'});
+    button('이 편집 내용 쓰기',async()=>{await binding.overwrite(()=>field.value,found.stored,found);},acts,{'data-writes':'library'});
+    button('둘 다 합치기',async()=>{await binding.overwrite(()=>{const own=field.value;return found.stored.trim()&&own.trim()?found.stored+'\n\n'+own:found.stored.trim()?found.stored:own;},found.stored,found);},acts,{'data-writes':'library',title:T('저장된 메모 아래에 이 편집 내용을 이어 붙입니다')});
    };
-   // One attempt: true when the library took it. The base moves only from what a write answered.
+   // One attempt: true when the library took it.
    const attempt=async(value,base)=>{
-    inFlight=save(value,base);
-    const saved=await inFlight;
-    if(saved&&typeof saved==='object'&&saved.stale){binding.stale=saved;field.dataset.state='stale';drawStale();return false;}
+    const saved=await save(value,base);
+    if(saved&&typeof saved==='object'&&saved.stale){binding.stale={...saved,used:false};field.dataset.state='stale';drawStale();return false;}
     const stored=typeof saved==='string'?saved:value;
-    /* The base moves to a returned text only when the editor shows it: a plain save (the text came back as submitted), or an
-       adopted text with nothing typed since. Typed since, the old base stays and the next save is a conflict. */
-    if(cas&&(saved===value||typeof saved!=='string'||field.value===value||field.value===saved)){
-     binding.base=stored;
-     // The box for an unsaved draft is closed by its own choice only; a save of other text just brings its stored side up to date.
-     if(binding.stale?.fromDraft&&binding.stale.conflict.local!==stored){binding.stale={...binding.stale,stored};drawStale();}else clearStale();
+    if(cas&&stored===value&&moveBase(stored,true)){
+     clearStale();
      // A draft typed during the save was recorded over the old base: it is built on this one now.
      const key=field.dataset.draftKey;
      if(key&&drafts.has(key)&&drafts.get(key)===field.value&&field.value!==stored)updateDraft(key,field.value,stored);
     }
     /* The note's newer text, adopted because the memo had not changed since the last sync, comes back as the stored text:
-       the editor takes it. Input typed while the save ran stays as typed. */
+       an editor still showing what was submitted takes it (value and base together). Input typed while the save ran stays
+       as typed and keeps the old base, so its next save is a conflict. */
     if(typeof saved==='string'&&saved!==value){
      if(field.dataset.memoItem)syncMemoEditors(field.dataset.memoItem,saved,value);
-     else if(field.value===value){field.value=saved;last=saved;if(typeof autoGrow==='function')autoGrow(field);}
+     else if(field.value===value){field.value=saved;last=saved;grow();}
     }
     if(cas)followMemoEditors(cas.itemID,stored,field);
     return true;
@@ -3610,20 +3649,20 @@
      return {ok:false,error};
     }
    };
-   // Saves of one editor never overlap: the next one starts from the base the previous one left.
-   const commit=(options={})=>{const next=chain.catch(()=>{}).then(()=>run(options));chain=next;return next;};
+   // Whatever changes this editor's text or settles a conflict runs after the saves already queued for it.
+   binding.sequence=job=>{const next=chain.catch(()=>{}).then(job);chain=next;return next;};
+   const commit=(options={})=>binding.sequence(()=>run(options));
    binding.commit=commit;
    // A conflict choice first lets an input that differs from the memo the box showed be saved (or refused), then judges the conflict as it is by then.
    binding.choose=(job,shown)=>binding.sequence(async()=>{let saved=false;if(field.value!==shown){const out=await run({});saved=!out.unchanged;}return job(saved);});
-   // Whatever settles a conflict runs after the saves already queued for this editor.
-   binding.sequence=job=>{const next=chain.catch(()=>{}).then(job);chain=next;return next;};
    binding.overwrite=async(pick,seenStored,found)=>{
     const result=await binding.sequence(async()=>{
-     if(found&&binding.stale!==found)return null; // the box this came from is gone or was replaced: nothing to resolve
-     const text=typeof pick==='function'?pick():String(pick);
-     field.value=text;if(typeof autoGrow==='function')autoGrow(field);last=text;field.dataset.state='saving';
-     try{const ok=await attempt(text,seenStored);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text);if(binding.stale===found&&found?.fromDraft&&found.conflict.local===text)clearStale();}return ok;}
-     catch(error){field.dataset.state='failed';last=null;throw error;}
+     if(found&&(binding.stale!==found||found.used))return null; // the box this came from is gone, replaced or already used
+     found&&(found.used=true);
+     const text=pick();
+     field.value=text;grow();last=text;field.dataset.state='saving';
+     try{const ok=await attempt(text,seenStored);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text);}return ok;}
+     catch(error){if(found)found.used=false;field.dataset.state='failed';last=null;throw error;}
     });
     if(result===null){message('그 사이 상황이 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return false;}
     if(!result)message('그 사이 메모가 또 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);
@@ -3640,19 +3679,18 @@
     field.addEventListener('blur',()=>{if(timer)win.clearTimeout(timer);commit();});
     memoFields.push(()=>{if(timer)win.clearTimeout(timer);return commit();});
    }
-   // The text the editor now holds is what is stored: the autosave baseline and the CAS base follow it.
-   binding.rebase=value=>{if(timer){win.clearTimeout(timer);timer=null;}last=value;if(cas){binding.base=String(value);clearStale();}};
-   /* A saved draft is put back only when the memo it was typed over is still the stored one. Otherwise it is offered
-      next to the stored text and never autosaved. */
+   /* A saved draft goes back into the editor only when the memo it was typed over is still the stored one and the editor holds
+      nothing else. Otherwise it is kept (never autosaved, never edited) and the editor shows the stored memo. */
    binding.restore=(draft,draftBase)=>{
     if(!cas){field.value=draft;return;}
     const stored=storedMemo(cas.itemID);
     if(draft===field.value)return;
     if(draft===stored){updateDraft(field.dataset.draftKey,undefined);return;}
-    if(draftBase===stored&&field.value===binding.base){field.value=draft;if(typeof autoGrow==='function')autoGrow(field);return;}
-    binding.stale={stale:true,stored,conflict:{local:draft,remote:stored},fromDraft:true};drawStale();
+    if(draftBase===stored&&field.value===binding.base){field.value=draft;grow();return;}
+    keepDraft(cas.itemID,draft,draftBase);updateDraft(field.dataset.draftKey,undefined);drawKept();
    };
    memoBindings.set(field,binding);
+   drawKept();
    return binding;
   }
 

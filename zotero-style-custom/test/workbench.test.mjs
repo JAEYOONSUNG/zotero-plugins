@@ -6616,7 +6616,7 @@ test('memo CAS (bug 2): a completion that lands while the list detail is open up
  f.bench.destroy();
 });
 
-test('memo CAS (bug 3): a leftover draft built on an older memo is not put back into the editor or autosaved; it is offered next to the stored memo',async()=>{
+test('memo CAS (bug 3): a leftover draft built on an older memo is not put back into the editor or autosaved; it is kept as a card',async()=>{
  const f=fixture();casLibrary(f);
  await f.bench.show('annotations');await settle();
  const old=f.body().querySelector('textarea.sc-paper-memo');
@@ -6628,14 +6628,18 @@ test('memo CAS (bug 3): a leftover draft built on an older memo is not put back 
  const fresh=f.body().querySelector('textarea.sc-paper-memo');
  assert.notEqual(fresh,old);
  assert.equal(fresh.value,'R','the editor shows the stored memo, not the old draft');
- const box=f.body().querySelector('.sc-memo-stale');
- assert.ok(box,'the draft waits as a conflict');assert.match(box.textContent,/L/);
+ const card=f.body().querySelector('.sc-memo-kept-card');
+ assert.ok(card,'the draft waits as a kept card');assert.match(card.textContent,/L/);
+ assert.equal(f.body().querySelector('.sc-memo-stale'),null,'no conflict box for a draft');
  fresh.dispatchEvent(new f.win.Event('blur'));await settle();
  assert.deepEqual(casWritten(f),[],'the blur autosave writes nothing: '+JSON.stringify(f.calls));
  assert.equal(f.runtime.cache.items[1].remark,'R');
- await f.click('이 편집 내용 쓰기');
- assert.equal(f.runtime.cache.items[1].remark,'L','only the reader\'s choice writes the draft');
- assert.equal(fresh.value,'L');
+ await f.click('입력칸에 넣기');
+ assert.equal(fresh.value,'L','now it is ordinary unsaved input');
+ assert.equal(f.body().querySelector('.sc-memo-kept-card'),null,'the card is gone once loaded');
+ assert.equal(f.runtime.cache.items[1].remark,'R','loading it wrote nothing');
+ fresh.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.body().querySelector('.sc-memo-stale')!==null||f.runtime.cache.items[1].remark==='L',true);
  f.bench.destroy();
 });
 
@@ -6819,7 +6823,7 @@ test('memo CAS (P1-4b): a conflict choice with unsaved typed text keeps that tex
  f.bench.destroy();
 });
 
-test('memo CAS (P2-2): a save that completes after a redraw does not clear the conflict shown for an unsaved draft',async()=>{
+test('memo CAS (P2-2): a save that completes after a redraw leaves the kept draft alone, through later saves and redraws',async()=>{
  const f=fixture();
  let release;const gate=new Promise(r=>{release=r;});
  const row=()=>f.runtime.cache.items[1]||={};
@@ -6836,12 +6840,91 @@ test('memo CAS (P2-2): a save that completes after a redraw does not clear the c
  await f.bench.show('annotations');await settle();
  const fresh=f.body().querySelector('textarea.sc-paper-memo');
  assert.equal(fresh.value,'AB');
- assert.match(f.body().querySelector('.sc-memo-stale').textContent,/ABC/);
+ assert.match(f.body().querySelector('.sc-memo-kept-card').textContent,/ABC/);
  release();await settle();
- assert.ok(f.body().querySelector('.sc-memo-stale'),'the box for the draft is still there');
- assert.match(f.body().querySelector('.sc-memo-stale').textContent,/ABC/);
+ assert.match(f.body().querySelector('.sc-memo-kept-card').textContent,/ABC/,'the save completing does not touch it');
  casType(f,fresh,'ABD');fresh.dispatchEvent(new f.win.Event('blur'));await settle();
  assert.equal(row().remark,'ABD');
- assert.match(f.body().querySelector('.sc-memo-stale')?.textContent||'',/ABC/,'ABC is still offered');
+ assert.match(f.body().querySelector('.sc-memo-kept-card').textContent,/ABC/,'nor does the next save');
+ await f.bench.show('annotations');await settle();
+ assert.match(f.body().querySelector('.sc-memo-kept-card').textContent,/ABC/,'nor a redraw');
+ assert.ok(JSON.stringify(f.runtime.cache.memoKept).includes('ABC'),'it is in the cache');
+ await f.click('버리기');
+ assert.equal(f.body().querySelector('.sc-memo-kept-card'),null);
+ assert.equal(f.runtime.cache.memoKept&&Object.keys(f.runtime.cache.memoKept).length,0,'only 버리기 removed it');
+ f.bench.destroy();
+});
+
+test('memo CAS (P1-5): a note change that arrives during 메모 저장 makes the editor show it, so the next save cannot overwrite it with the old text',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'A'};
+ const cas=f.library.setRemark;
+ f.library.setRemark=async(id,text,opts)=>{const out=await cas(id,text,opts);f.runtime.cache.items[1].remark='R';return 'R';}; // the outside change R is adopted by the note sync
+ await f.bench.show('explore');await f.click('자세히');
+ let field=f.body().querySelector('[aria-label="읽기 메모"]');
+ casType(f,field,'DRAFT'); // a draft typed over A ...
+ f.runtime.cache.items[1].remark='B'; // ... and the memo changed under it
+ await f.bench.show('explore');if(!f.body().querySelector('[aria-label="읽기 메모"]'))await f.click('자세히');
+ field=f.body().querySelector('[aria-label="읽기 메모"]');
+ assert.equal(field.value,'B','the editor shows the stored memo; the draft waits as a kept card');
+ assert.ok(f.body().querySelector('.sc-memo-kept-card'));
+ f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(field.value,'R','the editor shows what is stored');
+ f.library.setRemark=cas;
+ f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'R');
+ // The base never moves to text the editor does not show: with other text typed during the save, the next save is a conflict.
+ f.runtime.cache.items[1]={remark:'R'};
+ let release;const gate=new Promise(r=>{release=r;});
+ f.library.setRemark=async(id,text,opts)=>{await gate;f.runtime.cache.items[1].remark='R2';return 'R2';};
+ field.value='R';field.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ const pending=f.findButton('메모 저장');pending.dispatchEvent(new f.win.Event('click'));await settle();
+ field.value='typed meanwhile';release();await settle();
+ f.library.setRemark=cas;
+ f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'R2','not overwritten');
+ assert.ok(f.body().querySelector('.sc-memo-stale'));
+ f.bench.destroy();
+});
+
+test('memo CAS (P2-3): 둘 다 합치기 closes its box, so the merge cannot be applied twice, and a kept draft is not merged by it',async()=>{
+ const f=fixture();casLibrary(f);
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'L');f.runtime.cache.items[1].remark='R';el.dispatchEvent(new f.win.Event('blur'));await settle();
+ const both=f.findButton('둘 다 합치기');
+ both.dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'R\n\nL');
+ assert.equal(f.body().querySelector('.sc-memo-stale'),null,'the box is closed by its own success');
+ both.dispatchEvent(new f.win.Event('click'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'R\n\nL','a second press of the old button writes nothing more');
+ // A restored draft never gets merge buttons: it is a kept card.
+ casType(f,el,'D');f.runtime.cache.items[1].remark='R9';
+ await f.bench.show('annotations');await settle();
+ assert.equal(f.findButton('둘 다 합치기'),undefined);assert.ok(f.body().querySelector('.sc-memo-kept-card'));
+ f.bench.destroy();
+});
+
+test('kept drafts: the card survives redraws, saves and follows and goes only with 입력칸에 넣기 or 버리기; 입력칸에 넣기 is ordinary unsaved input over the usual CAS',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.memoKept={'key-1':[{id:'k1',text:'KEPT ONE',base:'old',at:'2026-10-03T00:00:00Z'},{id:'k2',text:'KEPT TWO',base:'old',at:'2026-10-03T00:00:01Z'}]};
+ await f.bench.show('annotations');await settle();
+ assert.equal(f.body().querySelectorAll('.sc-memo-kept-card').length,2);
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'typed');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ await f.bench.show('annotations');await settle();
+ assert.equal(f.body().querySelectorAll('.sc-memo-kept-card').length,2,'saves and redraws leave them');
+ for(const b of f.bench.panel.querySelectorAll('.sc-memo-kept-card button'))assert.equal(b.getAttribute('data-writes'),'cache','the self-check never presses them');
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ await f.click('버리기');
+ assert.equal(f.body().querySelectorAll('.sc-memo-kept-card').length,1);
+ f.runtime.cache.items[1].remark='changed elsewhere';
+ await f.click('입력칸에 넣기');
+ assert.ok(fresh.value.includes('KEPT TWO'));
+ assert.equal(f.body().querySelector('.sc-memo-kept-card'),null);
+ assert.equal(f.runtime.cache.items[1].remark,'changed elsewhere','loading wrote nothing');
+ fresh.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.ok(f.body().querySelector('.sc-memo-stale'),'saving it is judged by the usual CAS: the memo changed, so it is a conflict');
+ assert.equal(f.runtime.cache.items[1].remark,'changed elsewhere');
  f.bench.destroy();
 });
