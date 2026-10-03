@@ -7017,3 +7017,39 @@ test('kept drafts (R4-4): nothing is evicted; the newest few show and the rest a
  assert.equal(f.runtime.cache.memoKept['key-1'].length,60,'all are kept');
  f.bench.destroy();
 });
+
+const keptOrDraft=(f,text)=>JSON.stringify(f.runtime.cache.memoKept||{}).includes(text)||JSON.stringify(f.runtime.cache.workbenchDrafts||{}).includes(text);
+
+test('memo drafts (R5-2): a kept draft loaded in one window survives the other window typing over the shared draft key',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g);
+ f.runtime.cache.memoKept={'key-1':[{id:'k1',text:'KEPT K',base:'old',at:'2026-10-03T00:00:00Z'}]};
+ await f.bench.show('explore');await f.click('자세히');
+ await g.bench.show('explore');await g.click('자세히');
+ await f.click('입력칸에 넣기');
+ const a=f.body().querySelector('[aria-label="읽기 메모"]');
+ assert.ok(a.value.includes('KEPT K'));
+ const b=g.body().querySelector('[aria-label="읽기 메모"]');
+ casType(g,b,'D');
+ f.bench.destroy(); // closed without saving
+ assert.ok(keptOrDraft(f,'KEPT K'),'K is still in the cache');
+ const h=fixture(f.runtime.cache);casLibrary(h);
+ await h.bench.show('explore');await h.click('자세히');
+ const c=h.body().querySelector('[aria-label="읽기 메모"]');
+ assert.ok(c.value.includes('KEPT K')||h.body().textContent.includes('KEPT K'),'and reachable on reopening');
+ g.bench.destroy();h.bench.destroy();
+});
+
+test('memo drafts (R5-g): two windows typing alternately never overwrite each other\'s draft: every text survives as a draft or a kept card',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);casLibrary(f);casLibrary(g);
+ await f.bench.show('annotations');await settle();await g.bench.show('annotations');await settle();
+ const a=f.body().querySelector('textarea.sc-paper-memo'),b=g.body().querySelector('textarea.sc-paper-memo');
+ casType(f,a,'D');casType(f,a,'D1');
+ casType(g,b,'E');casType(g,b,'E2');
+ casType(f,a,'D1 more');
+ casType(g,b,'E2 more');
+ for(const t of ['D1','E2','D1 more','E2 more'])assert.ok(keptOrDraft(f,t),t+' survives');
+ f.bench.destroy();
+ for(const t of ['D1','E2','E2 more'])assert.ok(keptOrDraft(f,t),t+' survives closing one window');
+ g.bench.destroy();
+ for(const t of ['D1','E2','D1 more','E2 more'])assert.ok(keptOrDraft(f,t),t+' survives closing both');
+});

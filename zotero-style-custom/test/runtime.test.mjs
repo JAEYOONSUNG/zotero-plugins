@@ -4041,3 +4041,21 @@ test('memo/note (P2): undo of a merge that created the note deletes it, and the 
   assert.equal(row.remark, '', 'the memo is back to what it was; the deleted note is not read again');
   assert.equal(plugin.mergeLedger()['1'], undefined);
 });
+
+test('memo/note (P1): a failed save is rolled back only if the remark is still the one it wrote: a note adopted meanwhile is kept', async () => {
+  const w = memoWorld({remark: 'A', base: 'A', note: 'A'});
+  await w.setting();
+  const orig = w.plugin.flush;
+  let release; const gate = new Promise(r => { release = r; }), first = {v: true};
+  w.plugin.flush = async function () { if (first.v) { first.v = false; await gate; throw new Error('disk'); } return orig.call(this); };
+  const write = w.lib.setRemark(3, 'A').catch(error => error);
+  await new Promise(r => setTimeout(r, 0));
+  w.note.setNote(Runtime.memoNoteHTML('R'));
+  assert.equal(w.plugin.mirrorMemoNote(w.note.id), true, 'the outside note is adopted while the write waits');
+  assert.equal(w.row.remark, 'R');
+  release();
+  assert.ok((await write) instanceof Error);
+  assert.equal(w.row.remark, 'R', 'the rollback did not put A over the adopted R');
+  assert.equal(w.row.memoSynced, 'R');
+  w.plugin.flush = orig;
+});

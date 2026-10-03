@@ -365,7 +365,8 @@
       const revision=(remarkRevisions.get(entry)||0)+1;remarkRevisions.set(entry,revision);entry.remark=value;runtime.dirty=true;
       try{await runtime.flush();}catch(error){
         // An earlier failed save must not undo a later edit from this or another window.
-        if(remarkRevisions.get(entry)===revision){if(prior===undefined)delete entry.remark;else entry.remark=prior;runtime.dirty=true;}
+        // Only what is still this write's own is restored: a newer save (revision) or a note adopted meanwhile (remark changed) stays.
+        if(remarkRevisions.get(entry)===revision&&entry.remark===value){if(prior===undefined)delete entry.remark;else entry.remark=prior;runtime.dirty=true;}
         throw error;
       }
       /* "메모를 노트로도 저장": the same text into one tagged child note, so it

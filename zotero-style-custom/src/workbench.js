@@ -1313,7 +1313,22 @@
   function selectItem(id,on){state.annotationIDs.clear();on?state.selected.add(String(id)):state.selected.delete(String(id));updateSelectionUI();}
   function one(){const list=selected();if(list.length!==1)throw new Error('문헌을 하나 선택하세요.');return list[0];}
   async function discardPreview(p){if(!p)return;try{await p.discard?.();}catch(error){runtime.Z.logError?.(error);}finally{p.remove();if(preview===p)preview=null;}}
-  function rememberDraft(event){const input=event.target;if(input?.dataset?.draftKey&&input.localName!=='select'&&!['checkbox','password'].includes(input.type))updateDraft(input.dataset.draftKey,input.value,memoBindings.get(input)?.base);}
+  /* The draft key is shared by every window. A memo editor never overwrites a draft it did not write: if the stored draft is
+     someone else's (differs from what this editor last wrote and from the new text) and is not just the stored memo, it is
+     moved to the kept drafts first, with its base. */
+  function writeMemoDraft(input){
+   const binding=memoBindings.get(input),key=input.dataset.draftKey;
+   if(binding&&binding.base!==undefined&&binding.itemID!==undefined){
+    const saved=cachedDrafts(),existing=saved.get(key);
+    const foreign=typeof existing==='string'&&existing.trim()&&existing!==binding.lastDraft&&existing!==input.value&&existing!==storedMemo(binding.itemID);
+    if(foreign)keepDraft(binding.itemID,existing,saved.get(key+DRAFT_BASE));
+    updateDraft(key,input.value,binding.base);binding.lastDraft=input.value;
+    if(foreign)binding.drawKept?.();
+    return;
+   }
+   updateDraft(key,input.value,binding?.base);
+  }
+  function rememberDraft(event){const input=event.target;if(input?.dataset?.draftKey&&input.localName!=='select'&&!['checkbox','password'].includes(input.type))writeMemoDraft(input);}
   body.addEventListener('input',rememberDraft);body.addEventListener('change',rememberDraft);
   function finishDraft(input,submitted,clearValue=false){
    const key=input.dataset.draftKey;
@@ -3556,7 +3571,7 @@
   function bindMemo(field,save,label,opts={}){
    let timer=null,last=field.value,chain=Promise.resolve(),staleBox=null,keptBox=null;
    const cas=opts.memo||null;
-   const binding={base:cas?String(cas.base??''):undefined,stale:null};
+   const binding={base:cas?String(cas.base??''):undefined,stale:null,itemID:cas?cas.itemID:undefined,lastDraft:null};
    const grow=()=>{if(typeof autoGrow==='function')autoGrow(field);};
    /* The only place the base moves. `derived`: the text is what this editor itself just submitted and had stored, so the
       editor's current text (possibly typed on since) builds on it. Anything else moves the base only if the editor shows it. */
@@ -3634,7 +3649,7 @@
      clearStale();
      // A draft typed during the save was recorded over the old base: it is built on this one now.
      const key=field.dataset.draftKey;
-     if(key&&drafts.has(key)&&drafts.get(key)===field.value&&field.value!==stored)updateDraft(key,field.value,stored);
+     if(key&&cachedDrafts().get(key)===field.value&&field.value!==stored){updateDraft(key,field.value,stored);binding.lastDraft=field.value;}
     }
     /* The note's newer text, adopted because the memo had not changed since the last sync, comes back as the stored text:
        an editor still showing what was submitted takes it (value and base together). Input typed while the save ran stays
@@ -3703,11 +3718,11 @@
    binding.restore=(draft,draftBase)=>{
     if(!cas){field.value=draft;return;}
     const stored=storedMemo(cas.itemID);
-    if(draft===field.value)return;
+    if(draft===field.value){binding.lastDraft=draft;return;}
     // Drafts live in a cache shared with other windows: only the entry that is exactly this draft (text and base) is removed.
     const dropOwn=()=>{const saved=cachedDrafts(),key=field.dataset.draftKey;if(saved.get(key)===draft&&(draftBase===undefined||saved.get(key+DRAFT_BASE)===draftBase))updateDraft(key,undefined);else drafts.delete(key);};
     if(draft===stored){dropOwn();return;}
-    if(draftBase===stored&&field.value===binding.base){field.value=draft;grow();return;}
+    if(draftBase===stored&&field.value===binding.base){field.value=draft;grow();binding.lastDraft=draft;return;}
     keepDraft(cas.itemID,draft,draftBase);dropOwn();drawKept();
    };
    memoBindings.set(field,binding);
