@@ -369,23 +369,29 @@
       // The memo revision right after this write: anything that changes the memo, baseline or conflict later (a note adopted, a newer save, an undo) bumps it.
       const mine=runtime._memoBump?runtime._memoBump(entry):undefined;
       answerRev=mine;
-      runtime._memoPending?.(item,1); // in memory but not yet persisted: editors do not take this value as the stored memo until the write settles
+      // Pending covers the whole chain (storage write, then the note job and its adoption): editors do not take this value as the stored memo until all of it has settled.
+      runtime._memoPending?.(item,1);
+      try{
       try{await runtime.flush();}catch(error){
         // An earlier failed save must not undo a later edit from this or another window.
         // Only what is still this write's own is restored: a newer save (revision) or a note adopted meanwhile (remark changed) stays.
         if(remarkRevisions.get(entry)===revision&&(mine===undefined?entry.remark===value:entry.memoRev===mine)){if(prior===undefined)delete entry.remark;else entry.remark=prior;if(runtime._memoBump)runtime._memoBump(entry);runtime.dirty=true;}
         throw error;
-      }finally{runtime._memoPending?.(item,-1);}
+      }
       /* "메모를 노트로도 저장": the same text into one tagged child note, so it
          lives in Zotero too. The local memo is already saved when this runs. */
       if(runtime.memoToNote&&runtime.getSetting?.('memoToNote')&&(value.trim()||runtime.memoNoteOf?.(item))){
         let result;
-        try{result=await runtime.memoToNote(item,{prior});}catch(error){const failed=new Error('메모는 저장했지만 노트로 옮기지 못했습니다: '+(error&&error.message||error));failed.memoSaved=true;if(answer)answer.rev=answerRev;throw failed;}
+        try{result=await runtime.memoToNote(item,{prior});}catch(error){const failed=new Error('메모는 저장했지만 노트로 옮기지 못했습니다: '+(error&&error.message||error));failed.memoSaved=true;
+          // The revision after the job's last memo-field change (when its sync-info flush failed), else this write's: the caller moves its base to the saved text if that is still current.
+          if(error&&typeof error.memoRev==='number')answerRev=error.memoRev;
+          if(answer)answer.rev=answerRev;throw failed;}
         // The note's newer text was adopted into the memo: the caller's editor, cache and autosave baseline must take it. A conflict returns the submitted text; the conflict itself is read with memoConflict().
         // The job's own answer is current at the revision it took before any later await; a skipped or absent answer stays at this write's revision, which anything newer has moved past.
         if(result&&!result.skipped&&typeof result.rev==='number'&&typeof result.text==='string'){answerRev=result.rev;if(result.adopted||result.text!==value)return done(result.text);}
       }
       return done(value);
+      }finally{runtime._memoPending?.(item,-1);}
     }
     async function memoToNote(itemID) {
       const item=await get(itemID);guard([item]);if(!runtime?.memoToNote)throw new Error('Memo notes are unavailable');

@@ -4252,3 +4252,36 @@ test('pending writes (R11): a note failure after the local save carries memoSave
   assert.equal(w.row.remark, 'X');
   assert.equal(answer.rev, w.row.memoRev);
 });
+
+test('pending writes (R12-1): a memo write stays pending through the note job, so listeners hear the paper only when all of it has settled', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  const orig = w.fx.Z.Item.prototype.saveTx;
+  let release; const gate = new Promise(r => { release = r; }), first = {v: true};
+  w.fx.Z.Item.prototype.saveTx = async function () { if (first.v) { first.v = false; await gate; } return orig.call(this); };
+  const heard = [];
+  w.plugin.addMemoListener(() => heard.push({pending: w.plugin.memoWritePending(w.c), remark: w.row.remark, synced: w.row.memoSynced}));
+  const write = w.lib.setRemark(3, 'X');
+  await new Promise(r => setTimeout(r, 10)); // the local write is done; the note save is held
+  assert.equal(w.plugin.memoWritePending(w.c), true, 'still pending while the note job runs');
+  assert.deepEqual(heard, [], 'nobody is told yet');
+  release(); await write;
+  w.fx.Z.Item.prototype.saveTx = orig;
+  assert.equal(heard.length, 1);
+  assert.deepEqual(heard[0], {pending: false, remark: 'X', synced: 'X'}, 'told once, after the note job set the baseline');
+});
+
+test('pending writes (R12-2): a failed sync-info flush after the note job carries the revision after its last memo-field change', async () => {
+  const w = memoWorld({remark: 'B', base: 'B', note: 'B'});
+  await w.setting();
+  const orig = w.plugin.flush;
+  let calls = 0;
+  w.plugin.flush = async function () { calls++; if (calls === 2) throw new Error('sync info'); return orig.call(this); }; // 1: the local write, 2: the note job's
+  const answer = {};
+  const error = await w.lib.setRemark(3, 'X', {answer}).catch(e => e);
+  w.plugin.flush = orig;
+  assert.equal(error.memoSaved, true);
+  assert.equal(noteText(w.note), 'X'); assert.equal(w.row.remark, 'X');
+  assert.equal(w.row.memoSynced, 'X', 'the job moved the baseline before its flush failed');
+  assert.equal(answer.rev, w.row.memoRev, 'the error\'s answer is current, so the caller moves its base to X');
+});

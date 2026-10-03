@@ -4613,7 +4613,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const changed = this._memoNoWrite(row, note, situation);
         // The revision the returned text was current at is taken here, before any await: a later change by anyone makes this answer stale.
         const answer = {created: false, text: String(row.remark || ''), wrote: false, adopted: situation === 'pull', conflict: situation === 'conflict', rev: row.memoRev || 0};
-        if (changed) { await this.flush(); this.bumpState?.(); }
+        // A failed sync-info flush still carries the revision after this job's last memo-field change.
+        if (changed) { try { await this.flush(); } catch (error) { error.memoRev = answer.rev; throw error; } this.bumpState?.(); }
         return answer;
       }
     } else {
@@ -4633,7 +4634,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     else this._memoNoWrite(row, note, this._memoSituation(row, mirrored, row.memoSynced));
     const answer = {created, text: String(row.remark || ''), wrote: true, adopted: false, conflict: !!row.memoConflict, rev: row.memoRev || 0};
-    await this.flush();
+    try { await this.flush(); } catch (error) { error.memoRev = answer.rev; throw error; }
     this.bumpState?.();
     return answer;
   }

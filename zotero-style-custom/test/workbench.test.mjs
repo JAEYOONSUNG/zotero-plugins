@@ -7357,6 +7357,8 @@ function assertEditorsConsistent(f,label=''){
   const b=s.value!==s.stored&&s.base===s.stored&&s.last!==s.value&&!s.box;
   const c=s.value!==s.stored&&s.base!==s.stored&&s.box&&!s.used&&s.buttonsEnabled;
   assert.ok(a||b||c,label+' inconsistent editor: '+JSON.stringify(s));
+  // An input that is not the stored memo is in its own draft (no write is pending here).
+  if(b||c)assert.equal(s.ownDraft,s.value.slice(0,50000),label+' the input is in its own draft: '+JSON.stringify(s));
  }
 }
 const answerWith=(row,opts,text)=>{row.remark=text;row.memoRev=(row.memoRev||0)+1;if(opts.answer)opts.answer.rev=row.memoRev;return text;};
@@ -7527,4 +7529,25 @@ test('invariant: every async completion of a memo editor reconciles in a finally
   overwrite:part('binding.overwrite=async(','if(!opts.manual)')
  };
  for(const [name,text] of Object.entries(parts))assert.match(text,/finally\s*\{[^}]*reconcileAll\(/,name+' reconciles in a finally');
+});
+
+test('reconcile (R12-1): an input that is not the stored memo is always in its own draft, even after a mid-job settle cleared it',async()=>{
+ const f=fixture();casLibrary(f);
+ const row=()=>f.runtime.cache.items[1];
+ f.runtime.cache.items[1]={remark:'BASE'};
+ let release;const gate=new Promise(r=>{release=r;});
+ f.library.memoToNote=async()=>{await gate;row().remark='R';row().memoRev=(row().memoRev||0)+1;return {created:false,text:'R',wrote:false,adopted:true,conflict:false,rev:row().memoRev};}; // R is adopted at the end
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ const pending=f.click('노트로 옮기기');await settle(); // the local save is done, the note job is held
+ casType(f,el,'X');casType(f,el,'BASE');
+ f.runtime._memoPending({id:1},1);f.runtime._memoPending({id:1},-1); // a settle reaches the editors in the middle of the job
+ release();await pending;await settle();
+ assert.equal(el.value,'BASE');
+ assertEditorsConsistent(f,'after adoption');
+ await f.bench.show('annotations');await settle();
+ const fresh=f.body().querySelector('textarea.sc-paper-memo');
+ const kept=Object.values(f.runtime.cache.memoKept||{}).flat();
+ assert.ok(fresh.value==='BASE'||kept.some(e=>e.text==='BASE'),'BASE survives the redraw: editor='+fresh.value+' kept='+JSON.stringify(kept.map(e=>e.text)));
+ f.bench.destroy();
 });

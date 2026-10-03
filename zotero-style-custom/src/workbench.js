@@ -3629,12 +3629,14 @@
      if(field.dataset.draftKey)binding.finishOwn(value);
      return;
     }
-    if(binding.base===stored){clearStale();last=null;return;}
+    // The input differs from the stored memo: it must be in this editor's own draft (written through the ownership rules), or a redraw would lose it.
+    const ownDraft=()=>{const key=field.dataset.draftKey;if(!key)return;const meta=draftMeta(key);if(meta&&meta.owner===binding.id&&cachedDrafts().get(key)===value.slice(0,DRAFT_LENGTH))return;writeMemoDraft(field);};
+    if(binding.base===stored){clearStale();last=null;ownDraft();return;}
     const s=binding.stale;
     if(!(s&&!s.used&&s.stored===stored&&s.conflict.local===value&&staleBox&&staleBox.isConnected)){
      binding.stale={stale:true,stored,conflict:{local:value,remote:stored},rev:memoRevNow(cas.itemID),used:false};field.dataset.state='stale';drawStale();
     }
-    last=value;
+    last=value;ownDraft();
    };
    binding.state=()=>({pending:cas?memoPendingNow(cas.itemID):false,ownDraft:(()=>{const key=field.dataset.draftKey,meta=key?draftMeta(key):null;return meta&&meta.owner===binding.id?cachedDrafts().get(key):undefined;})(),value:field.value,base:binding.base,last,box:!!(staleBox&&staleBox.isConnected),used:!!binding.stale?.used,buttonsEnabled:staleBox?[...staleBox.querySelectorAll('button')].every(b=>!b.disabled):true,stored:cas?storedMemo(cas.itemID):undefined});
    // The draft this binding owns right now (owner and rev), captured when a job starts; null if it owns none.
