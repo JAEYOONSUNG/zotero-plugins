@@ -4305,3 +4305,31 @@ test('pending writes (R15): the runtime remembers the memo before the oldest uns
   assert.deepEqual(w.plugin.memoPendingList(w.c), []);
   w.plugin.flush = orig;
 });
+
+test('memo/note (R18-3): undo does not delete a memo note it created when the note was edited while undo saved it', async () => {
+  const {fx, plugin, pre, pub, all} = mergeWorld();
+  const first = fx.Z.Item.prototype.saveTx;
+  fx.Z.Item.prototype.saveTx = async function () { const out = await first.call(this); if (this.parentID) { this.parentItemID = this.parentID; all.set(this.id, this); } return out; };
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: ''};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'PREPRINT', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  await plugin.mergePreprintIntoPublished(1);
+  const row = plugin.entry(pub), note = plugin.memoNoteOf(pub);
+  assert.ok(note, 'the merge created the memo note');
+  const orig = fx.Z.Item.prototype.saveTx;
+  let release; const gate = new Promise(r => { release = r; }), once = {v: true};
+  fx.Z.Item.prototype.saveTx = async function () {
+    if (this.deleted && once.v) { once.v = false; this.setNote(Runtime.memoNoteHTML('EDITED MEANWHILE')); await gate; }
+    return orig.call(this);
+  };
+  const undo = plugin.restorePreprint(1);
+  await new Promise(r => setTimeout(r, 10));
+  release(); await undo;
+  fx.Z.Item.prototype.saveTx = orig;
+  assert.equal(note.deleted, false, 'the edited note is not in the trash');
+  assert.equal(noteText(note), 'EDITED MEANWHILE');
+  assert.ok(plugin.mergeLedger()['1'], 'the ledger is kept');
+  assert.ok(row.memoConflict, 'the memo and the edited note wait in a conflict');
+  assert.equal(row.memoConflict.remote, 'EDITED MEANWHILE');
+});

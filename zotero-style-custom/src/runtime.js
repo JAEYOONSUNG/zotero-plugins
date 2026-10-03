@@ -2312,13 +2312,18 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const id = this.identity(held), inflight = this.memoInflight || (this.memoInflight = new Map());
       const rev0 = row.memoRev || 0; // anything that changes the memo, baseline or conflict during the awaits below bumps it
       inflight.set(id, norm(saved.created ? '' : this.constructor.memoFromNoteHTML(saved.before)));
+      let editedMeanwhile = false;
       try {
         if (saved.created) live.deleted = true; else live.setNote(saved.before);
         await live.saveTx();
+        // A note undo created is deleted only if nobody touched it: read after the await, against what the merge wrote.
+        if (saved.created && String(live.getNote()) !== saved.after) {
+          editedMeanwhile = true; live.deleted = false; await live.saveTx();
+        }
       } finally { inflight.delete(id); }
       // Only a note that reads back as exactly what undo restored may set the baseline; anything else was written by someone else.
       // (A note edit made during that save reaches mirrorMemoNote, which waits for this job and judges it afterwards.)
-      const restored = saved.created || String(live.getNote()) === saved.before;
+      const restored = saved.created ? !editedMeanwhile : String(live.getNote()) === saved.before;
       const moved = (row.memoRev || 0) !== rev0; // a memo saved meanwhile is the newest word, whatever text it holds
       if (!restored) {
         // The note was edited while undo saved it: that edit stays, the old baseline stays, and both current sides wait in the conflict box.

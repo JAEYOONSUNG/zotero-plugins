@@ -7922,7 +7922,7 @@ test('reload deadline (R16-3): a save held for ever still lets the panel refresh
  f.bench.destroy();
 });
 
-test('detached editors (R16-4): input that some request already saved is not kept again, and kept entries tidy themselves',async()=>{
+test('detached editors (R16-4): a replaced editor\'s input is kept at most once, and kept cards tidy themselves',async()=>{
  const f=fixture();const state=casPending(f);
  f.runtime.cache.items[1]={remark:'B'};
  let release;state.hold=new Promise(r=>{release=r;});
@@ -7936,14 +7936,15 @@ test('detached editors (R16-4): input that some request already saved is not kep
  casType(f,el,'Y');el.dispatchEvent(new f.win.Event('blur'));await settle();
  state.hold=null;release();await settle();
  const kept=Object.values(f.runtime.cache.memoKept||{}).flat();
- assert.ok(!kept.some(e=>e.text===X),'the saved text is not a kept card: '+kept.map(e=>e.text.length).join(','));
+ // A detached editor with unsaved input always preserves it (losing text is worse than an extra card the reader discards), but never twice.
+ assert.ok(kept.filter(e=>e.text===X).length<=1,'at most one card of it: '+kept.map(e=>e.text.length).join(','));
  f.bench.destroy();
  // Housekeeping: only equal-to-stored and same-owner prefixes/duplicates go.
  const g=fixture();casLibrary(g);
  g.runtime.cache.items[1]={remark:'S'};
  g.runtime.cache.memoKept={'key-1':[{id:'a',text:'S',base:'',owner:'o1'},{id:'b',text:'abc',base:'',owner:'o1'},{id:'c',text:'abcdef',base:'',owner:'o1'},{id:'d',text:'abc',base:'',owner:'o2'},{id:'e',text:'zzz',base:'',owner:'o1'},{id:'f',text:'plain',base:''}]};
  await g.bench.show('annotations');await settle();
- assert.deepEqual(g.runtime.cache.memoKept['key-1'].map(e=>e.id),['c','d','e','f'],'S (the stored memo) and abc (a prefix of the same owner\'s abcdef) went; nothing else');
+ assert.deepEqual(g.runtime.cache.memoKept['key-1'].map(e=>e.id),['b','c','d','e','f'],'only S (the stored memo) went: a shorter card is never dropped as a prefix');
  g.bench.destroy();
 });
 
@@ -8075,4 +8076,95 @@ test('invariant: every deletion of a draft or kept card checks the paper\'s pend
  // dropKept is the reader's own button (입력칸에 넣기 / 버리기) and nothing else.
  const lines=src.split('\n');const calls=[];lines.forEach((l,i)=>{if(/\bdropKept\(/.test(l)&&!/function dropKept\(/.test(l))calls.push(i);});
  for(const i of calls)assert.match(lines.slice(Math.max(0,i-12),i+1).join('\n'),/button\('(입력칸에 넣기|버리기)'/,'dropKept at line '+(i+1)+' is only reached from a card button');
+});
+
+test('closing editors (R18-1): a manual editor\'s input is kept when its window closes, even after another window typed the same text',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);shareRuntime(f,g);casLibrary(f);casLibrary(g);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ const a=await openDetail(f),b=await openDetail(g);
+ casType(f,a,'DRAFT-D'); // window A
+ casType(g,b,'DRAFT-D');casType(g,b,'DRAFT-E'); // window B types the same text, then more
+ f.bench.destroy(); // A closes
+ const kept=Object.values(f.runtime.cache.memoKept||{}).flat().map(e=>e.text);
+ assert.ok(kept.includes('DRAFT-D'),'D is kept: '+JSON.stringify(kept));
+ assert.ok(sharedDraftTexts(g).includes('DRAFT-E'));
+ g.bench.destroy();
+});
+
+test('closing editors (R18-1b): a draft that equals a pending write\'s in-memory value is still kept when another window types over it and the write fails',async()=>{
+ const f=fixture();const g=fixture(f.runtime.cache);shareRuntime(f,g);
+ const state=casPending(f);casLibrary(g);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ let release;state.hold=new Promise(r=>{release=r;});
+ const a=await openDetail(f);const b=await openDetail(g);
+ casType(f,a,'PENDING-P1');
+ f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle(); // in memory, its storage write held
+ casType(g,b,'OTHER-P2'); // over a draft that equals the in-memory memo
+ f.bench.destroy(); // A closes
+ state.fail=true;release();await settle(); // and its write fails
+ assert.ok(keptOrDraft(g,'PENDING-P1'),'P1 is not lost: kept='+JSON.stringify(f.runtime.cache.memoKept)+' stored='+f.runtime.cache.items[1].remark);
+ g.bench.destroy();
+});
+
+test('closing editors (R18-2): a text typed again after it was saved is still kept when its editor is replaced',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'BASE'};
+ await f.bench.show('annotations');await settle();
+ const old=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,old,'T1');old.dispatchEvent(new f.win.Event('blur'));await settle(); // T1 saved
+ casType(f,old,'T2');old.dispatchEvent(new f.win.Event('blur'));await settle(); // T2 saved
+ casType(f,old,'T1'); // typed again: unsaved
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'Q');
+ old.dispatchEvent(new f.win.Event('blur'));await settle(); // the replaced editor
+ const kept=Object.values(f.runtime.cache.memoKept||{}).flat().map(e=>e.text);
+ assert.ok(kept.includes('T1'),'T1 is kept: '+JSON.stringify(kept));
+ f.bench.destroy();
+});
+
+test('kept cards (R18-4): a newer shorter card is not dropped for being a prefix of an older longer one',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'S'};
+ f.runtime.cache.memoKept={'key-1':[{id:'old',text:'abcdef',base:'',owner:'o1'},{id:'new',text:'abc',base:'',owner:'o1'}]};
+ await f.bench.show('annotations');await settle();
+ assert.deepEqual(f.runtime.cache.memoKept['key-1'].map(e=>e.id),['old','new']);
+ f.bench.destroy();
+});
+
+test('soak (manual editors): typing, saving, retyping saved texts, redraws and windows closing never lose what a window last typed',async()=>{
+ for(const seed of (process.env.SEEDS?process.env.SEEDS.split(',').map(Number):[31,32,33])){
+  const rnd=mulberry(seed);
+  let f=fixture();f.runtime.cache.items[1]={remark:'BASE'};
+  let g=fixture(f.runtime.cache);shareRuntime(f,g);casLibrary(f);casLibrary(g);
+  const wins=[f,g];await openDetail(f);await openDetail(g);
+  const lastTyped=[null,null],saved=[];let serial=0;const log=[];
+  const editorOf=w=>w.body().querySelector('[aria-label="읽기 메모"]');
+  const anywhere=text=>{
+   const cache=f.runtime.cache;
+   const texts=[String(cache.items[1].remark||''),...sharedDraftTexts(f),...Object.values(cache.memoKept||{}).flat().map(e=>e.text)];
+   for(const w of wins)for(const s of w.bench.memoEditorState())texts.push(s.value);
+   return texts.includes(text);
+  };
+  const check=label=>{
+   for(let i=0;i<2;i++){
+    if(lastTyped[i]===null)continue;
+    if(String(f.runtime.cache.items[1].remark||'')===lastTyped[i]){lastTyped[i]=null;continue;} // it was saved: it is history now, a later save may replace it
+    assert.ok(anywhere(lastTyped[i]),`seed ${seed} ${label}: window ${i}'s last text is lost: ${lastTyped[i]}; steps=${log.slice(-6).join(',')}`);
+   }
+  };
+  for(let step=0;step<150;step++){
+   const r=rnd(),w=rnd()<0.5?0:1,win=wins[w],el=editorOf(win);let action;
+   if(!el){await openDetail(win);continue;}
+   if(r<0.30){action='type';const text='w'+w+'t'+(++serial);lastTyped[w]=text;casType(win,el,text);}
+   else if(r<0.42&&saved.length){action='retype saved';const text=saved[Math.floor(rnd()*saved.length)];lastTyped[w]=text;casType(win,el,text);}
+   else if(r<0.55){action='save';const text=el.value;await win.click('메모 저장');if(String(f.runtime.cache.items[1].remark)===text){saved.push(text);}}
+   else if(r<0.70){action='redraw';await win.bench.show('explore');if(!editorOf(win))await win.click('자세히');}
+   else if(r<0.80){action='close';win.bench.destroy();const n=fixture(f.runtime.cache);casLibrary(n);shareRuntime(wins[1-w],n);wins[w]=n;if(w===0)f=n;else g=n;await openDetail(n);lastTyped[w]=null;}
+   else{action='idle';}
+   log.push(action);await settle();check('step '+step+' '+action);
+  }
+  for(const w of wins)w.bench.destroy();
+  check('end');
+ }
 });

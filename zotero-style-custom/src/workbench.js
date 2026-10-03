@@ -1394,7 +1394,7 @@
     const record=memoRecord(key),existing=draftText(key),meta=draftMeta(key);
     // Foreign: any shared draft this binding did not write (its owner may be alive, closed, or unknown) that differs from the new text and
     // the stored memo goes to the kept drafts first. A closed owner only matters when a draft is claimed on restore, never for overwriting.
-    const foreign=typeof existing==='string'&&(!meta||meta.owner!==binding.id)&&existing!==input.value&&existing!==storedMemo(binding.itemID);
+    const foreign=typeof existing==='string'&&(!meta||meta.owner!==binding.id)&&existing!==input.value&&(existing!==storedMemo(binding.itemID)||memoPendingNow(binding.itemID));
     if(foreign)keepDraft(binding.itemID,existing,record?record.base:undefined,false,record?record.owner:undefined);
     updateDraft(key,input.value,binding.base,binding.id,binding.itemID);
     if(foreign)binding.drawKept?.();
@@ -3643,10 +3643,6 @@
   const KEPT_SHOWN=3; // how many kept drafts show before the toggle; none is ever deleted but by its own buttons
   const keptKey=itemID=>{try{const ref=runtime.Z.Items.get(Number(itemID));return ref?String(runtime.identity(ref)):String(itemID);}catch(_){return String(itemID);}};
   const keptList=itemID=>{const all=runtime.cache.memoKept,list=all&&typeof all==='object'?all[keptKey(itemID)]:null;return Array.isArray(list)?list:[];};
-  /* Texts that some request saved successfully (hashes, last 50 per paper): a detached editor's input that was saved is not kept again. */
-  const savedHashes=new Map();
-  const noteSaved=(itemID,text)=>{const key=String(itemID),set=savedHashes.get(key)||[];const h=hashOf(text);const at=set.indexOf(h);if(at>=0)set.splice(at,1);set.push(h);while(set.length>50)set.shift();savedHashes.set(key,set);};
-  const wasSaved=(itemID,text)=>(savedHashes.get(String(itemID))||[]).includes(hashOf(text));
   function keepDraft(itemID,text,base,truncated=false,owner){
    const all=runtime.cache.memoKept&&typeof runtime.cache.memoKept==='object'&&!Array.isArray(runtime.cache.memoKept)?runtime.cache.memoKept:(runtime.cache.memoKept={});
    const list=all[keptKey(itemID)]||(all[keptKey(itemID)]=[]);
@@ -3655,18 +3651,15 @@
    tidyKept(itemID);
    runtime.dirty=true;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));
   }
-  /* Housekeeping, and nothing else: a kept entry goes when its text is the stored memo now, or when it is a prefix of (or a duplicate
-     of) another entry of the same owner. */
+  /* Housekeeping, and nothing else: a kept card goes when its text is the stored memo now (and no write of this paper is pending: that
+     stored text may be an in-memory value a failure rolls back). Exact duplicates are never added (keepDraft). A shorter card is never
+     dropped for being a prefix of another: it may be the newer text. */
   function tidyKept(itemID){
    const all=runtime.cache.memoKept,key=keptKey(itemID),list=all&&typeof all==='object'?all[key]:null;
    if(!Array.isArray(list))return;
-   // A card equal to the stored memo goes only when no write of this paper is pending: that stored text may be an in-memory value that a failure rolls back.
-   const stored=storedMemo(itemID),pending=memoPendingNow(itemID);
-   const keep=list.filter((entry,i)=>{
-    if(!pending&&entry.text===stored)return false;
-    if(entry.owner!==undefined&&list.some((other,j)=>j!==i&&other.owner===entry.owner&&other.text.length>=entry.text.length&&other.text.startsWith(entry.text)&&(other.text.length>entry.text.length||j<i)))return false;
-    return true;
-   });
+   if(memoPendingNow(itemID))return;
+   const stored=storedMemo(itemID);
+   const keep=list.filter(entry=>entry.text!==stored);
    if(keep.length!==list.length){if(keep.length)all[key]=keep;else delete all[key];runtime.dirty=true;}
   }
   function dropKept(itemID,id){
@@ -3833,8 +3826,6 @@
     const gens=cas?editorGens(cas.itemID):null,startGen=binding.gen,answer={};
     let saved,failure=null;
     try{saved=await save(value,base,answer);}catch(error){failure=error;}
-    // Saved by this request (whatever happens to the answer on screen): a detached editor holding the same text has nothing left to keep.
-    if(cas&&(failure?failure.memoSaved===true:!(saved&&typeof saved==='object'&&saved.stale)))noteSaved(cas.itemID,value);
     // An answer with a revision (or a failure) comes from the real library: every completion ends by reconciling the editors of that paper, in one common finally.
     const live=!!cas&&(failure!==null||answer.rev!==undefined||(!!saved&&typeof saved==='object'&&saved.rev!==undefined));
     try{
@@ -3876,7 +3867,6 @@
     const value=field.value;if(!cas||value===binding.base)return;
     const key=field.dataset.draftKey,meta=key?draftMeta(key):null;
     if(meta&&meta.owner===binding.id&&draftText(key)===value)return;
-    if(wasSaved(cas.itemID,value))return;
     keepDraft(cas.itemID,value,baseTag(binding.base),false,binding.id);
    };
    binding.timerPending=()=>!!timer;
@@ -3936,6 +3926,9 @@
     // has closed would lose the edit.
     field.addEventListener('blur',()=>{if(timer){win.clearTimeout(timer);timer=null;}commit();});
     memoFields.push({field,flush:()=>{if(timer){win.clearTimeout(timer);timer=null;}return commit();}});
+   }else{
+    // A manual editor saves only by its button, but its input is still preserved when it goes (a redraw, or the window closing).
+    memoFields.push({field,flush:()=>{binding.preserveDetached();}});
    }
    /* The shared draft is only ever changed through these three, and only with the owner and revision this window just read:
       ownDraftWrite (a draft this binding owns), claimDraft and dropDraft (restore, against the meta it read). */
