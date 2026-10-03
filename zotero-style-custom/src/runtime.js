@@ -79,8 +79,16 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       for (const item of await this.libraryItems(library.libraryID) || []) alive.add(this.identity(item));
     }
     if (!alive.size) return 0;
+    /* A trashed preprint that was merged into its published version is "gone" to
+       the library sweep but its undo ledger still points at it: its row stays
+       until the merge is undone or the ledger is cleared. */
+    const ledgered = new Set();
+    for (const rec of Object.values(this.mergeLedger())) {
+      if (rec?.preprintKey) ledgered.add(rec.preprintKey);
+      else { try { const gone = this.Z.Items.get(Number(rec?.preprint)); if (gone) ledgered.add(this.identity(gone)); } catch (_) {} }
+    }
     let removed = 0;
-    for (const key of keys) if (!alive.has(key)) { delete store[key]; removed++; }
+    for (const key of keys) if (!alive.has(key) && !ledgered.has(key)) { delete store[key]; removed++; }
     if (removed) { this.dirty = true; this.scheduleFlush(5000); }
     return removed;
   }
@@ -2242,6 +2250,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const stuck = childIDs().filter(id => !movedIDs.has(Number(id))).map(id => this.Z.Items.get(Number(id)))
         .filter(child => child && !child.deleted && !(child.isNote?.() && isMemoNote(child)));
       if (stuck.length) throw new Error('프리프린트의 첨부파일·노트 일부를 옮기지 못해 합치지 않았습니다. 아무것도 휴지통으로 보내지 않았으니 Zotero에서 확인한 뒤 다시 시도하세요.');
+      // Reading time, per-page records and the resume position go with the files, before anything that can still fail.
+      rec.preprintKey = this.identity(preprint);
+      rec.reading = this._moveReading(preprint, held);
 
       const have = new Set(held.getTags().map(tag => tag.tag));
       const carry = preprint.getTags().filter(tag => !have.has(tag.tag) && !isStatus(tag.tag) && tag.tag !== this.constructor.MEMO_NOTE_TAG);
@@ -2382,6 +2393,87 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return restoredAll;
     } finally { this._memoPending(held, -1, undefined, undefined, pendingToken); }
   }
+  /* The preprint's reading history moves to the published item: seconds, the per-page
+     record of each file, the page to resume at and the last-read time. Moved, not
+     copied, so the two never count the same minutes. A record the published item
+     already holds for the same file is merged page by page (the larger figure wins:
+     it is the same reading) and is not added a second time to the seconds.
+     Returns what the undo needs, or null when there was nothing to move. */
+  _moveReading(preprint, held) {
+    const pe = this.entry(preprint), he = this.entry(held);
+    const num = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
+    const clone = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+    const secondsOf = (item, e) => { if (Number.isFinite(e.seconds)) return num(e.seconds); try { return num(this.metrics(item).seconds); } catch (_) { return 0; } };
+    const pages = b => Object.values(b?.pageTimes || {}).reduce((a, v) => a + num(v), 0);
+    const buckets = clone(pe.readingAttachments) || {};
+    if (pe.pageTimes && pe.readingAttachmentID && !buckets[String(pe.readingAttachmentID)]) {
+      buckets[String(pe.readingAttachmentID)] = {pageTimes: clone(pe.pageTimes), totalPages: Number(pe.totalPages) || 0, lastRead: pe.lastRead};
+    }
+    const preSeconds = secondsOf(preprint, pe);
+    if (!preSeconds && !Object.keys(buckets).length && !pe.lastRead) return null;
+    const r = {
+      seconds: 0, ids: Object.keys(buckets),
+      preBefore: {seconds: clone(pe.seconds), lastRead: clone(pe.lastRead), readingAttachments: clone(pe.readingAttachments), readingAttachmentID: clone(pe.readingAttachmentID),
+        pageTimes: clone(pe.pageTimes), totalPages: clone(pe.totalPages), metricsSeconds: clone(pe.metrics?.seconds)},
+      heldBefore: {seconds: clone(he.seconds), lastRead: clone(he.lastRead), readingAttachmentID: clone(he.readingAttachmentID), buckets: {}},
+      heldBase: secondsOf(held, he)
+    };
+    let overlap = 0;
+    he.readingAttachments ||= {};
+    for (const [id, bucket] of Object.entries(buckets)) {
+      const mine = he.readingAttachments[id];
+      r.heldBefore.buckets[id] = clone(mine) ?? null;
+      if (!mine) { he.readingAttachments[id] = bucket; continue; }
+      overlap += pages(mine);
+      const pt = {...(mine.pageTimes || {})};
+      for (const [page, v] of Object.entries(bucket.pageTimes || {})) pt[page] = Math.max(num(pt[page]), num(v));
+      const later = Date.parse(bucket.lastRead || '') > Date.parse(mine.lastRead || '') ? bucket : mine;
+      he.readingAttachments[id] = {...mine, pageTimes: pt, totalPages: Math.max(Number(mine.totalPages) || 0, Number(bucket.totalPages) || 0),
+        ...(later.lastRead ? {lastRead: later.lastRead} : {}), ...(Number.isInteger(later.lastPageIndex) ? {lastPageIndex: later.lastPageIndex} : {})};
+    }
+    r.seconds = Math.max(0, preSeconds - Math.min(preSeconds, overlap));
+    he.seconds = r.heldBase + r.seconds;
+    const newer = Date.parse(pe.lastRead || '') > Date.parse(he.lastRead || '');
+    if (pe.lastRead && (newer || !he.lastRead)) he.lastRead = pe.lastRead;
+    if (pe.readingAttachmentID && (newer || !he.readingAttachmentID)) he.readingAttachmentID = pe.readingAttachmentID;
+    r.after = {seconds: he.seconds, lastRead: he.lastRead, readingAttachmentID: he.readingAttachmentID};
+    pe.seconds = 0; if (pe.metrics) pe.metrics.seconds = 0;
+    for (const key of ['readingAttachments', 'pageTimes', 'totalPages', 'readingAttachmentID', 'lastRead']) delete pe[key];
+    this.dirty = true; this.bumpState?.();
+    return r;
+  }
+  _undoReading(preprint, held, r) {
+    const clone = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+    const put = (e, key, value) => { if (value === undefined) delete e[key]; else e[key] = clone(value); };
+    const he = held ? this.entry(held) : null, pe = preprint ? this.entry(preprint) : null;
+    const moved = {};
+    if (he) {
+      // Reading done since the merge stays where it was done; only what the merge added comes off.
+      he.seconds = Math.max(0, (Number.isFinite(he.seconds) ? he.seconds : r.after.seconds) - r.seconds);
+      if (he.lastRead === r.after.lastRead) put(he, 'lastRead', r.heldBefore.lastRead);
+      if (he.readingAttachmentID === r.after.readingAttachmentID) put(he, 'readingAttachmentID', r.heldBefore.readingAttachmentID);
+      for (const id of r.ids) {
+        const current = he.readingAttachments?.[id], before = r.heldBefore.buckets[id];
+        if (current) moved[id] = current;
+        if (before) { he.readingAttachments[id] = clone(before); } else if (he.readingAttachments) delete he.readingAttachments[id];
+      }
+      if (he.readingAttachments && !Object.keys(he.readingAttachments).length && !r.heldBefore.hadBuckets) delete he.readingAttachments;
+    }
+    if (pe) {
+      const b = r.preBefore;
+      put(pe, 'seconds', b.seconds); put(pe, 'lastRead', b.lastRead); put(pe, 'readingAttachmentID', b.readingAttachmentID);
+      put(pe, 'pageTimes', b.pageTimes); put(pe, 'totalPages', b.totalPages);
+      if (pe.metrics && b.metricsSeconds !== undefined) pe.metrics.seconds = b.metricsSeconds;
+      const restored = clone(b.readingAttachments) || {};
+      for (const id of r.ids) {
+        // A file nobody else had a record for goes back as it now stands (with any reading done since); a shared one goes back as it was.
+        if (moved[id] && !r.heldBefore.buckets[id]) restored[id] = clone(moved[id]);
+        else if (!restored[id] && moved[id]) restored[id] = clone(moved[id]);
+      }
+      if (Object.keys(restored).length) pe.readingAttachments = restored; else delete pe.readingAttachments;
+    }
+    this.dirty = true; this.bumpState?.();
+  }
   async _undoMerge(rec, {untrash = true, ownedMemoRev, skipMemo = false} = {}) {
     const get = id => this.Z.Items.get(Number(id));
     const held = get(rec.held), preprint = get(rec.preprint);
@@ -2408,6 +2500,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (Object.keys(patch).length) await this.edit([held], patch);
       if (rec.memo && !skipMemo) memoRestored = await this._memoSerial(held, () => this._undoMemo(held, rec.memo, {ownedRev: ownedMemoRev}));
     }
+    if (rec.reading) { this._undoReading(preprint, held, rec.reading); rec.reading = null; }
     if (untrash && preprint?.deleted) { preprint.deleted = false; await preprint.saveTx(); }
     // A memo or note that undo could not put back (edited meanwhile) keeps the ledger: the record of what the merge did is not thrown away.
     if (memoRestored) { delete this.mergeLedger()[String(rec.preprint)]; } else rec.memoUnrestored = true;
@@ -3852,27 +3945,54 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return Object.fromEntries(want.filter(id => store[id]).map(id => [id, store[id]]));
   }
 
-  // The paper on the shelf behind a DOI a suggestion names, so "보유" can lead to it.
-  itemForDOI(doi) {
-    const want = this.discoverTools.bareDOI(doi);
-    if (!want) return null;
-    for (const [identity, entry] of Object.entries(this.cache.items || {})) {
-      if (this.discoverTools.bareDOI(entry?.doi) !== want) continue;
-      const [libraryID, key] = identity.split(':');
-      const item = this.Z.Items.getByLibraryAndKey?.(Number(libraryID), key);
-      if (item && !item.deleted) return item;
+  /* Which library "held" refers to: the one the reader is looking at, else their own. */
+  currentLibraryID() {
+    let id = null;
+    try { id = this.Z.getMainWindow?.()?.ZoteroPane?.getSelectedLibraryID?.(); } catch (_) { }
+    return Number(id) || this.Z.Libraries.userLibraryID;
+  }
+  /* The active (not trashed) regular items with a DOI, read live from Zotero, each with the library it is in.
+     The stored rows only say which items exist: they carry no DOI, and a trashed paper's row outlives the paper. */
+  _heldRows() {
+    const keys = new Set([...Object.keys(this.cache.items || {}), ...Object.keys(this.cache.works || {})]);
+    const rows = [];
+    for (const identity of keys) {
+      const at = identity.indexOf(':');
+      if (at < 1) continue;
+      let item = null;
+      try { item = this.Z.Items.getByLibraryAndKey?.(Number(identity.slice(0, at)), identity.slice(at + 1)); } catch (_) { }
+      if (!item || item.deleted || item.isRegularItem?.() === false || item.isFeedItem) continue;
+      let doi = '';
+      try { doi = this.discoverTools.bareDOI(item.getField?.('DOI')); } catch (_) { }
+      if (doi) rows.push({doi, item, libraryID: item.libraryID ?? Number(identity.slice(0, at))});
     }
-    return null;
+    return rows;
   }
 
-  // Every DOI already on the shelf, so a suggestion can say "you have this".
-  libraryDOIs() {
+  // The paper on this library's shelf behind a DOI a suggestion names, so "보유" can lead to it.
+  itemForDOI(doi, libraryID = this.currentLibraryID()) {
+    const want = this.discoverTools.bareDOI(doi);
+    if (!want) return null;
+    return this._heldRows().find(row => row.doi === want && row.libraryID === Number(libraryID))?.item || null;
+  }
+  // The same paper in a different library, for "held in another library".
+  itemInOtherLibrary(doi, libraryID = this.currentLibraryID()) {
+    const want = this.discoverTools.bareDOI(doi);
+    if (!want) return null;
+    return this._heldRows().find(row => row.doi === want && row.libraryID !== Number(libraryID))?.item || null;
+  }
+
+  // Every DOI already on this library's shelf, so a suggestion can say "you have this".
+  libraryDOIs(libraryID = this.currentLibraryID()) {
     const owned = new Set();
-    for (const [, entry] of Object.entries(this.cache.items || {})) {
-      const doi = this.discoverTools.bareDOI(entry?.doi);
-      if (doi) owned.add(doi);
-    }
+    for (const row of this._heldRows()) if (row.libraryID === Number(libraryID)) owned.add(row.doi);
     return owned;
+  }
+  // DOIs held in some other library and not in this one.
+  otherLibraryDOIs(libraryID = this.currentLibraryID()) {
+    const here = this.libraryDOIs(libraryID), other = new Set();
+    for (const row of this._heldRows()) if (row.libraryID !== Number(libraryID) && !here.has(row.doi)) other.add(row.doi);
+    return other;
   }
 
   // Least-recently-used, so revisiting a paper is instant without pinning memory.
@@ -5888,7 +6008,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // In-progress promotions live in a Set, not in the cache: anything on the entry is flushed to disk.
     const promotingKey = `${item.libraryID}:${item.key ?? item.id}`;
     this._promoting ||= new Set();
-    if (unreadTagged && record.seconds >= 30 && !this._promoting.has(promotingKey) && this.canEdit(item)) {
+    if (this.pref('autoStatus', true) && this.featureEnabled('readStatus') && unreadTagged && record.seconds >= 30 && !this._promoting.has(promotingKey) && this.canEdit(item)) {
       this._promoting.add(promotingKey);
       this.edit([item], {status: 'reading'}).catch(error => this.Z.logError(error)).finally(() => { this._promoting.delete(promotingKey); });
     }

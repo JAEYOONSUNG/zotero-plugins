@@ -830,9 +830,15 @@
        bibliography: this list spans a whole field, where two genuinely
        different papers can share most of a title, and merging those would hide
        one of them completely. Equal titles only. */
-    const titleKey = value => text(value).toLowerCase().normalize('NFKD')
-      .replace(/<[^>]+>/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').slice(0, 14).join(' ');
+    /* Unicode letters are kept (NFKC, accents folded, Greek and CJK intact) and
+       the whole title is compared: "Estrogen receptor α" and "… β" differ only
+       in one letter that an ASCII-only key threw away. */
+    const titleKey = value => text(value).normalize('NFKC').toLowerCase().normalize('NFKD').replace(/\p{M}+/gu, '').normalize('NFKC')
+      .replace(/<[^>]+>/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     const isPreprint = work => /preprint|posted-content/i.test(text(work.type));
+    // Two records that carry different DOIs are two papers whatever their titles say,
+    // unless one of them is a preprint posting of the other.
+    const differentDOI = (a, b) => { const x = bareDOI(a.doi), y = bareDOI(b.doi); return !!x && !!y && x !== y && !isPreprint(a) && !isPreprint(b); };
     const better = (a, b) => (isPreprint(a) ? 0 : 1) - (isPreprint(b) ? 0 : 1) || (a.citations ?? 0) - (b.citations ?? 0);
     const versions = new Map();
     for (const work of byID.values()) {
@@ -840,6 +846,7 @@
       // A paper with no title to speak of is never merged into another one.
       if (!key || key.split(' ').length < 3) { versions.set(work.id, work); continue; }
       const seen = versions.get(key);
+      if (seen && differentDOI(seen, work)) { versions.set(work.id, work); continue; }
       if (!seen) { versions.set(key, work); continue; }
       const keep = better(work, seen) > 0 ? work : seen;
       const drop = keep === work ? seen : work;

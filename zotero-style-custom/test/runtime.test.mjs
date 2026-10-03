@@ -210,6 +210,28 @@ test('time-derived status preserves done and persists independent legacy snapsho
  assert.equal(plugin.metrics(reference).impactFactor,47.3);
  assert.equal(plugin.metrics(reference).citations,2112);
 });
+test('with automatic status off a reading tick records time but never writes a tag', async () => {
+ for (const off of [['extensions.style-custom.autoStatus'], ['extensions.style-custom.feature.readStatus'], ['extensions.style-custom.autoStatus', 'extensions.style-custom.feature.readStatus']]) {
+  const {plugin, Z, item} = fixture(); Z.Libraries.userLibraryID = 1;
+  plugin.active = true;
+  for (const name of off) Z.Prefs.set(name, false);
+  const reference = item(43, {tags:[{tag:'/unread',type:0}]});
+  const edits = [];
+  const realEdit = plugin.edit.bind(plugin);
+  plugin.edit = async (...args) => { edits.push(args); return realEdit(...args); };
+  plugin.entry(reference).seconds = 29;
+  await plugin.addReading(reference, 5);
+  await plugin.queue;
+  assert.equal(plugin.entry(reference).seconds, 34, 'reading time is recorded whatever the status setting says: ' + off);
+  assert.deepEqual(edits, [], 'no edit, so no tag is touched: ' + off);
+  assert.ok(reference.getTags().some(t => t.tag === '/unread'), 'the /unread tag stands');
+ }
+ const {plugin, Z, item} = fixture(); Z.Libraries.userLibraryID = 1; plugin.active = true;
+ const reference = item(44, {tags:[{tag:'/unread',type:0}]});
+ plugin.entry(reference).seconds = 29;
+ await plugin.addReading(reference, 5); await plugin.queue;
+ assert.ok(!reference.getTags().some(t => t.tag === '/unread'), 'with both settings on the promotion still happens');
+});
 test('same item key in different libraries does not import ambiguous legacy counts',()=>{
  const {plugin,item,Z}=fixture(); Z.Libraries.userLibraryID=1;
  plugin.active=true; plugin.legacy={'42':{citedCount:{'Total(DOI)':99},readingTime:{data:{0:120}}}};
@@ -968,9 +990,17 @@ function discoverFixture({work, batch, profile, authorWorks, citing} = {}) {
   return {...f, ref, asked};
 }
 
+// A paper on the shelf is a live Zotero item with that DOI in the library being looked at; stored rows carry no DOI.
+function shelve(f, doi, {key = 'K9', libraryID = 1} = {}) {
+  const held = {libraryID, key, deleted: false, isRegularItem: () => true, getField: name => (name === 'DOI' ? doi : '')};
+  f.Z.Libraries = {...(f.Z.Libraries || {}), userLibraryID: 1};
+  f.Z.Items = {...(f.Z.Items || {}), getByLibraryAndKey: (lib, k) => (lib === libraryID && k === key ? held : null)};
+  f.plugin.cache.items = {[libraryID + ':' + key]: {}};
+  return held;
+}
 test('related papers come back ranked, with the ones already shelved marked', async () => {
   const f = discoverFixture();
-  f.plugin.cache.items = {x: {doi: '10.1/cited'}};
+  shelve(f, '10.1/cited');
   const {work, suggestions} = await f.plugin.relatedWorks(f.ref);
   assert.equal(work.title, 'An antiplasmid system');
   // The paper's own bibliography outranks OpenAlex's computed "related".
@@ -1001,7 +1031,7 @@ test('authors are resolved from the paper itself, carrying their OpenAlex ids', 
 
 test("an author's recent work arrives newest first, with standing and subject area", async () => {
   const f = discoverFixture();
-  f.plugin.cache.items = {x: {doi: '10.1038/s41467-024-48219-y'}};
+  shelve(f, '10.1038/s41467-024-48219-y');
   const {profile, works} = await f.plugin.authorActivity('A1');
   assert.equal(profile.hIndex, 21);
   assert.deepEqual(profile.topics.map(t => t.name), ['Plasmid biology']);
@@ -3462,6 +3492,61 @@ test('F1: merging moves files (with their annotations) and notes, collections, r
   assert.equal(out.copied.files, 1); assert.equal(out.copied.notes, 1); assert.equal(out.copied.collections, 1); assert.equal(out.copied.related, 1);
 });
 
+test('F3: merging a preprint moves its reading history to the published item, and undo puts it back', async () => {
+  const {plugin, pre, pub} = mergeWorld();
+  const was = plugin.entry(pre);
+  was.seconds = 600; was.lastRead = '2026-09-01T00:00:00.000Z'; was.readingAttachmentID = 101;
+  was.readingAttachments = {'101': {pageTimes: {0: 200, 3: 400}, totalPages: 12, lastRead: '2026-09-01T00:00:00.000Z', lastPageIndex: 3}};
+  const mine = plugin.entry(pub);
+  mine.seconds = 100; mine.lastRead = '2026-08-01T00:00:00.000Z';
+  await plugin.mergePreprintIntoPublished(1);
+  const after = plugin.entry(pub);
+  assert.equal(after.seconds, 700, 'the published paper now carries both reading times, once each');
+  assert.equal(after.lastRead, '2026-09-01T00:00:00.000Z', 'the later last-read wins');
+  assert.deepEqual(after.readingAttachments['101'].pageTimes, {0: 200, 3: 400}, 'per-page records follow the file');
+  assert.equal(after.readingAttachments['101'].lastPageIndex, 3, 'the resume position follows the file');
+  assert.equal(after.readingAttachmentID, 101);
+  assert.equal(plugin.entry(pre).seconds || 0, 0, 'moved, not copied: the history is not counted twice');
+  assert.equal(plugin.entry(pre).readingAttachments, undefined);
+  const rec = plugin.mergeLedger()['1'];
+  assert.ok(rec.reading, 'the ledger records what moved');
+  assert.equal(rec.reading.seconds, 600);
+  // Reading goes on after the merge, then the merge is undone.
+  after.seconds += 30;
+  assert.equal(await plugin.restorePreprint(1), true);
+  assert.equal(plugin.entry(pre).seconds, 600, 'the preprint has its own time back');
+  assert.deepEqual(plugin.entry(pre).readingAttachments['101'].pageTimes, {0: 200, 3: 400});
+  assert.equal(plugin.entry(pre).lastRead, '2026-09-01T00:00:00.000Z');
+  assert.equal(plugin.entry(pub).seconds, 130, 'the published paper keeps its own 100 and the 30 read after the merge');
+  assert.equal(plugin.entry(pub).readingAttachments?.['101'], undefined);
+  assert.equal(plugin.entry(pub).lastRead, '2026-08-01T00:00:00.000Z');
+});
+
+test('F3: a published paper that already holds a record for the same file does not count it twice', async () => {
+  const {plugin, pre, pub} = mergeWorld();
+  plugin.entry(pre).seconds = 400; plugin.entry(pre).readingAttachments = {'101': {pageTimes: {0: 400}, totalPages: 5}};
+  plugin.entry(pub).seconds = 400; plugin.entry(pub).readingAttachments = {'101': {pageTimes: {0: 400}, totalPages: 5}};
+  await plugin.mergePreprintIntoPublished(1);
+  assert.equal(plugin.entry(pub).seconds, 400, 'the same 400 seconds on the same file are one record');
+  assert.deepEqual(plugin.entry(pub).readingAttachments['101'].pageTimes, {0: 400});
+});
+
+test('F3: pruning never drops the reading history of a trashed preprint that has a merge ledger', async () => {
+  const {plugin, pre, pub, fx} = mergeWorld();
+  const Z = plugin.Z; Z.Libraries.userLibraryID = 1; plugin.active = true;
+  plugin.entry(pre).seconds = 50;
+  await plugin.mergePreprintIntoPublished(1);
+  const preKey = plugin.identity(pre);
+  plugin.cache.items[preKey] = {seconds: 77, lastRead: '2026-09-01T00:00:00.000Z'};
+  for (let n = 0; n < 250; n++) plugin.cache.items['1:GONE' + n] = {seconds: 5};
+  Z.Libraries.getAll = () => [{libraryID: 1}];
+  Z.Items.getAll = async () => [pub];
+  await plugin.pruneDeletedItems();
+  assert.equal(plugin.cache.items[preKey]?.seconds, 77, 'a trashed preprint with a ledger keeps its row');
+  assert.equal(plugin.cache.items['1:GONE0'], undefined, 'other orphans still go');
+  plugin.cancelScheduledFlush();
+});
+
 test('F1: a child that cannot be moved aborts the merge, undoes the moves, and trashes nothing', async () => {
   const {plugin, pre, pub, file, note, all} = mergeWorld();
   note.failSave = true;
@@ -4755,4 +4840,27 @@ test('runtime badges are drawn at 11px with ink that reaches 4.5:1, and the T4 l
       assert.match(pill.style.cssText, /font-size:\s*11px/);
     }
   }
+});
+
+test('held papers are the active items of one library: trashed ones and other libraries do not count', () => {
+  const {plugin, Z, item} = fixture(); Z.Libraries.userLibraryID = 1;
+  const mine = item(1, {libraryID: 1}), trashed = item(2, {libraryID: 1}), group = item(3, {libraryID: 5});
+  const doi = {1: '10.1/MINE', 2: '10.1/trashed', 3: '10.1/group'};
+  for (const [id, ref] of [[1, mine], [2, trashed], [3, group]]) { ref.getField = name => name === 'DOI' ? doi[id] : ''; ref.deleted = false; ref.isRegularItem = () => true; ref.libraryID = id === 3 ? 5 : 1; ref.key = 'K' + id; }
+  trashed.deleted = true;
+  const all = new Map([['1:K1', mine], ['1:K2', trashed], ['5:K3', group]]);
+  Z.Items = {...(Z.Items || {}), getByLibraryAndKey: (lib, key) => all.get(lib + ':' + key)};
+  plugin.cache.items = {'1:K1': {doi: '10.1/stale'}, '1:K2': {}, '5:K3': {}};
+  assert.deepEqual([...plugin.libraryDOIs(1)], ['10.1/mine'], 'live DOI of the active item only; a trashed paper is not held');
+  assert.deepEqual([...plugin.libraryDOIs(5)], ['10.1/group']);
+  assert.equal(plugin.itemForDOI('10.1/trashed', 1), null, 'a trashed paper is not found');
+  assert.equal(plugin.itemForDOI('10.1/group', 1), null, 'another library does not hold it for this one');
+  assert.equal(plugin.itemForDOI('https://doi.org/10.1/MINE', 1), mine);
+  assert.equal(plugin.itemForDOI('10.1/group', 5), group);
+  assert.deepEqual([...plugin.otherLibraryDOIs(1)], ['10.1/group'], 'held elsewhere is reported separately');
+  assert.equal(plugin.itemInOtherLibrary('10.1/group', 1), group);
+  assert.equal(plugin.itemInOtherLibrary('10.1/mine', 1), null);
+  // The trash is read live: restoring the paper makes it held again.
+  trashed.deleted = false;
+  assert.ok(plugin.libraryDOIs(1).has('10.1/trashed'));
 });

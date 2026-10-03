@@ -2614,7 +2614,7 @@
       "sources": [
         {
           "file": "src/runtime.js",
-          "marker": "itemForDOI(doi) {"
+          "marker": "itemForDOI(doi, libraryID"
         },
         {
           "file": "src/workbench.js",
@@ -2818,7 +2818,7 @@
       "sources": [
         {
           "file": "src/workbench.js",
-          "marker": "노트 · ${link.parentTitle}"
+          "marker": "노트 · {0}"
         },
         {
           "file": "src/library.js",

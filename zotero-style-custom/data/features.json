@@ -557,7 +557,7 @@
       "name": "문헌 상세에 주석 직접 표시",
       "implementation": {
         "file": "src/workbench.js",
-        "marker": "library.annotations(ids())"
+        "marker": "annotationsOf(ids())"
       },
       "tests": [
         "test/workbench.test.mjs"

@@ -344,3 +344,23 @@ test('graph finds neighbours across the whole library and limits only what is dr
  assert.equal(cut.edges.length, 2000);
  assert.ok(cut.edges.some(e => e.source === '2499' || e.target === '2499'), 'the focus link is kept');
 });
+test('reading the annotations of 1,200 papers costs a few thousand lookups, not 13,000: each parent is fetched once',async()=>{
+ const f=fixture();
+ const counts={getAsync:0,getAll:0};
+ const realGet=f.Z.Items.getAsync,realAll=f.Z.Items.getAll;
+ f.Z.Items.getAsync=async id=>{counts.getAsync++;return realGet(id);};
+ f.Z.Items.getAll=async id=>{counts.getAll++;return realAll(id);};
+ let next=1000;const ids=[];
+ for(let p=0;p<1200;p++){
+  const paper=f.add('journalArticle',next++);const pdf=f.add('attachment',next++,{parentID:paper.id,attachmentContentType:'application/pdf'});ids.push(paper.id);
+  const marks=[];for(let a=0;a<10;a++)marks.push(f.add('annotation',next++,{parentID:pdf.id,annotationText:'t'+a,annotationPosition:'{"pageIndex":'+a+'}'}));
+  // The fixture's own child lookups scan every item; indexed here so 14,400 items stay quick.
+  paper.getAttachments=()=>[pdf.id];pdf.getAnnotations=()=>marks;
+ }
+ const rows=await f.service.annotations(ids);
+ assert.equal(rows.length,12000,'every annotation is read');
+ assert.equal(rows.filter(r=>r.parentID&&r.attachmentID).length,12000,'each knows its paper and file');
+ assert.ok(counts.getAsync<=2500,'parent lookups are shared: '+counts.getAsync+' getAsync calls (was about 13,200)');
+ const all=await f.service.annotations();
+ assert.ok(all.length>=12000);assert.equal(counts.getAll,1,'the whole-library read is one getAll');
+});

@@ -8309,9 +8309,11 @@ test('모양 tab: a Language / 언어 control names each language in its own lan
   assert.deepEqual(f.calls.filter(c=>c[0]==='setSetting'),[['setSetting','language','ko-KR']]);
   assert.equal(i18n.locale(),'ko-KR');
   assert.equal(f.bench.panel.querySelector('nav button[data-tab=explore]').textContent,'보유 문헌','the sidebar is re-said without rebuilding the panel');
+  assert.equal(f.bench.panel.querySelector('nav button[data-tab=reading]').textContent,'읽기 진행','the long Korean name is whole');
   assert.equal(f.bench.panel.querySelector('.sc-language button[aria-pressed=true]').textContent,'한국어');
   await f.click('English');
   assert.equal(f.bench.panel.querySelector('nav button[data-tab=explore]').textContent,'Library');
+  assert.equal(f.bench.panel.querySelector('nav button[data-tab=reading]').textContent,'Reading','back to the short English form, not the Korean or the full English name');
   assert.equal(f.bench.panel.querySelector('.sc-language button[aria-pressed=true]').textContent,'English');
   f.bench.destroy();
  }finally{i18n.use('ko-KR');}
@@ -8533,5 +8535,211 @@ test('the list summary\'s reading total is recomputed at most every few seconds,
   clock+=4000;seconds.set(1,170);f.bench.refreshMetrics(1);
   assert.match(tile().textContent,/170s/,'after a few seconds it catches up');
  }finally{Date.now=realNow;}
+ f.bench.destroy();
+});
+
+test('searching, filtering by colour and re-sorting annotations read Zotero once, not once per keystroke; an item event reads again',async()=>{
+ const f=fixture();
+ const marks=Array.from({length:30},(_,n)=>({id:String(100+n),key:'A'+n,parentID:'1',attachmentID:'99',text:n%2?'alpha finding '+n:'beta result '+n,comment:'',color:n%3?'#ffd400':'#ff6666',type:'highlight',pageLabel:String(n+1),pageIndex:n}));
+ f.library.annotations=f.record('annotations',marks);
+ await f.bench.show('annotations');await settle();
+ const reads=()=>f.calls.filter(c=>c[0]==='annotations').length;
+ const first=reads();assert.ok(first>=1);
+ for(const word of ['a','al','alpha','alpha 3','beta'])f.input('작업 패널 검색',word);await settle();
+ assert.equal(reads(),first,'five queries are answered from the cached annotations');
+ const shown=[...f.body().querySelectorAll('.sc-annot')].length;assert.ok(shown>0&&shown<30,'the query really narrowed the list: '+shown);
+ f.bench.state.color='#ff6666';await f.bench.render();f.bench.state.color='';
+ await f.bench.render();
+ assert.equal(reads(),first,'colour filter and redraw are in memory too');
+ f.notify();f.input('작업 패널 검색','alpha');await new Promise(r=>setTimeout(r,260));await settle();
+ assert.ok(reads()>first,'an item event drops the cache so the next view reads fresh');
+ const second=reads();
+ f.input('작업 패널 검색','gamma');await settle();f.input('작업 패널 검색','');await settle();
+ assert.equal(reads(),second,'and caches again after that');
+ f.bench.destroy();
+});
+
+/* ---- English: the whole panel, every tab, scanned ---------------------------
+   English is the default, so one Hangul character in the panel's own words is a
+   defect. The fixture's data is English, so every Hangul character found is
+   interface text that skipped translation (or was glued to a translated half). */
+const HANGUL_RE=/[가-힣ㄱ-ㅎㅏ-ㅣ]/;
+const TEXT_ATTRIBUTES=['title','aria-label','placeholder','alt','label','value','tooltiptext'];
+function hangulIn(root,{ignore=()=>false}={}){
+ const found=[];
+ const walk=el=>{
+  if(el.nodeType!==1)return;
+  const where=(el.localName||'')+(el.className&&typeof el.className==='string'?'.'+el.className.split(/\s+/)[0]:'');
+  for(const a of TEXT_ATTRIBUTES){const v=el.getAttribute?.(a);if(v&&HANGUL_RE.test(v)&&!ignore(v,el))found.push(`${where}[${a}] ${v.slice(0,100)}`);}
+  for(const child of el.childNodes){
+   if(child.nodeType===3){const v=child.textContent;if(v&&HANGUL_RE.test(v)&&!ignore(v,el))found.push(`${where} ${v.trim().slice(0,100)}`);}
+   else walk(child);
+  }
+ };
+ walk(root);return found;
+}
+// What is allowed to stay Korean: the name of the language in its own language.
+const NATIVE_NAMES=new Set(['한국어','Language / 언어','Zotero 언어 따르기 / Follow Zotero']);
+const allowNative=v=>[...NATIVE_NAMES].some(n=>v.includes(n));
+function englishFixture(extra={}){
+ const board={id:'b1',name:'Board one',nodes:[{id:'n1',label:'Card',x:1,y:1,note:'',color:'#ffffff'}],edges:[]};
+ return fixture({items:{},readerSettings:{},boards:[board],favoriteCollections:['4'],matrixFields:['title','authors','venue'],...extra},undefined,{locale:'en-US'});
+}
+test('English: no tab shows Hangul in its text, tooltips, labels or placeholders',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const f=englishFixture();
+  const report=[];
+  for(const [tab] of Workbench.TABS){
+   await f.bench.show(tab);await f.bench.load();await settle();
+   for(const hit of hangulIn(f.bench.panel,{ignore:allowNative}))report.push(`${tab}: ${hit}`);
+  }
+  assert.deepEqual([...new Set(report)],[],`${report.length} Hangul strings reach the English panel`);
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
+});
+
+test('English: pressing every view button on every tab still leaves no Hangul behind',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const f=englishFixture();
+  const person={id:'A1',name:'Ann Author',institution:'Somewhere',seen:[],news:[{id:'W4',title:'Fresh paper',doi:'10.1/f',date:'2026-09-01',places:[]}],works:[],unverified:[{id:'W3',title:'Namesake paper',doi:'10.1/n',date:'2020-01-01',places:['Elsewhere']}]};
+  f.runtime.watchedAuthors=()=>[person];f.runtime.watchedAuthorsByNews=()=>[person];
+  const report=[];
+  for(const [tab] of Workbench.TABS){
+   await f.bench.show(tab);await f.bench.load();await settle();
+   const count=f.bench.panel.querySelectorAll('.sc-body button[data-safe="view"]').length;
+   for(let n=0;n<Math.min(count,40);n++){
+    const b=[...f.bench.panel.querySelectorAll('.sc-body button[data-safe="view"]')][n];if(!b||b.disabled)continue;
+    const label=(b.textContent||b.getAttribute('aria-label')||'').trim().slice(0,30);
+    b.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+    for(const hit of hangulIn(f.bench.panel,{ignore:allowNative}))report.push(`${tab} after "${label}": ${hit}`);
+   }
+  }
+  assert.deepEqual([...new Set(report)],[],`${report.length} Hangul strings after pressing view buttons`);
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
+});
+
+// "1 papers" and "2 paper": the number and the noun after it must agree, wherever the panel prints a count.
+const NOUNS_FOR_COUNTS='paper|item|note|annotation|author|journal|reference|day|request|tag|file|attachment|collection|citation|connection|institution|card|link|result|page|record|group|tab|view|person|people|figure|row|source|entry|column|setting|version|document|signal|rating|pair|co-author';
+function pluralProblems(text){
+ const out=[];
+ const one=new RegExp(`(?<![\\d.,/])1 (?:(?:unread|new|recent|linked|matching|supplementary|distinct|different|standalone|quiet|followed|published|stored|extra|unconnected|duplicate|corresponding|read|held|selected|more|checked|citing) )?(${NOUNS_FOR_COUNTS.replace('person|people','people')})s\\b`,'g');
+ for(const m of text.matchAll(one))out.push(m[0]);
+ const many=new RegExp(`(?<![\\d.,/])(?:0|[2-9]|[1-9]\\d+|\\d{1,3}(?:,\\d{3})+) (?:(?:unread|new|recent|linked|matching|distinct|different|followed|published|stored|extra|selected|more|checked|citing) )?(?:${NOUNS_FOR_COUNTS.replace('|person|people','').replace('|view|','|view|')})\\b(?!s|-| of| in)`,'g');
+ for(const m of text.matchAll(many))out.push(m[0]);
+ return out;
+}
+test('English: counts agree with their nouns on every tab, at 0, 1, 2 and 1,200 papers',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const report=[];
+  for(const total of [0,1,2,1200]){
+   const f=englishFixture();
+   const rows=Array.from({length:total},(_,n)=>({id:String(n+1),key:'K'+(n+1),libraryID:1,title:'Paper '+(n+1),authors:'Ada Lovelace',year:'2025',venue:'Science',doi:'10.1/p'+(n+1),itemType:'journalArticle',tags:['topic/a'],abstract:'An abstract',related:[]}));
+   f.library.snapshot=f.record('snapshot',()=>rows);
+   for(const [tab] of Workbench.TABS){
+    await f.bench.show(tab);await f.bench.load();await settle();
+    const texts=[];const walk=el=>{for(const c of el.childNodes){if(c.nodeType===3)texts.push(c.textContent);else if(c.nodeType===1)walk(c);}};walk(f.bench.panel);
+    // Elements that sit side by side are read one at a time: "601" next to "1 item" is not "6011 item".
+    for(const piece of texts)for(const hit of pluralProblems(piece))report.push(`${total} papers, ${tab}: "${hit}" in "${piece.slice(0,80)}"`);
+    for(const el of f.bench.panel.querySelectorAll('[title],[aria-label]'))for(const a of ['title','aria-label'])for(const hit of pluralProblems(el.getAttribute(a)||''))report.push(`${total} papers, ${tab} [${a}]: "${hit}"`);
+   }
+   f.bench.destroy();
+  }
+  assert.deepEqual([...new Set(report)],[],'count and noun disagree');
+ }finally{i18n.use('ko-KR');}
+});
+
+/* Library data is not interface text. These are words the panel itself translates ("확인 {0}" is "checked {0}", "조건"
+   is "Condition", "메모" is "Note"), put into the user's own notes, quotes, tags, titles and names: in English mode they
+   must come out byte for byte as written. */
+test('English: notes, annotations, tags, titles and names that contain interface words are shown exactly as the user wrote them',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const words={note:'확인 필요',quote:'조건',comment:'메모',tag:'대조군',title:'읽기 대기',author:'완료',venue:'읽는 중',collection:'확인함',file:'열기',tabTitle:'안 읽음',group:'제목',board:'태그',card:'핵심 결과 3편'};
+  const board={id:'b1',name:words.board,nodes:[{id:'n1',label:words.card,x:1,y:1,note:'',color:'#ffffff'}],edges:[]};
+  const f=fixture({items:{},readerSettings:{},boards:[board],favoriteCollections:['4'],matrixFields:['title','authors','venue']},undefined,{locale:'en-US'});
+  f.papers[0].title=words.title;f.papers[0].authors=words.author;f.papers[0].venue=words.venue;f.papers[0].tags=[words.tag,words.note];
+  f.library.notes=f.record('notes',[{id:'9',parentID:'1',title:words.note,text:words.note+'\n'+words.quote,modified:'today',html:'<p>x</p>'}]);
+  f.library.annotations=f.record('annotations',[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:words.quote,comment:words.comment,color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}]);
+  f.library.tagTree=()=>[{name:words.tag,path:words.tag,count:2,children:[]},{name:words.note,path:words.note,count:1,children:[]}];
+  f.library.collections=f.record('collections',[{id:'4',name:words.collection,count:2,parentID:null}]);
+  f.library.attachments=f.record('attachments',[{id:'99',parentID:'1',title:words.file,contentType:'application/pdf'}]);
+  f.reader.tabs=()=>[{id:'tab1',title:words.tabTitle,itemID:1,selected:true}];
+  f.reader.tabGroups=()=>[{id:'g1',name:words.group,tabs:[{id:1}]}];
+  f.reader.viewGroups=()=>[{id:'v1',name:words.group,columns:[{dataKey:'title'}]}];
+  const seen=new Map();
+  const places=new Map();
+  const visible=el=>{const parts=[];const add=(text,where)=>{parts.push(text);places.set(text,where);};const walk=n=>{for(const c of n.childNodes){if(c.nodeType===3)add(c.textContent,(n.localName||'')+'.'+String(n.className||'').split(/\s+/)[0]);else if(c.nodeType===1){for(const a of ['title','aria-label','placeholder'])if(c.getAttribute(a))add(c.getAttribute(a),(c.localName||'')+'['+a+']');if(['textarea','input'].includes(c.localName)&&c.value)add(c.value,(c.localName||'')+'.value');walk(c);}}};walk(el);return parts;};
+  f.runtime.watchedAuthors=()=>[{id:'A1',name:words.note,institution:words.venue,seen:[],news:[{id:'W4',title:words.title,doi:'10.1/f',date:'2026-09-01',places:[]}],works:[]}];
+  f.runtime.watchedAuthorsByNews=f.runtime.watchedAuthors;
+  const expectations=[['authors',[words.note]],['journals',[words.venue]],['matrix',[words.title]],['explore',[words.title,words.author,words.venue]],['notes',[words.note,words.quote]],['annotations',[words.quote]],['tags',[words.tag,words.note]],['collections',[words.collection]],['attachments',[words.file]],['tabs',[words.tabTitle,words.group]],['views',[words.group]],['canvas',[words.board,words.card]]];
+  const problems=[];
+  for(const [tab,raws] of expectations){
+   if(tab==='canvas')f.bench.state.boardID='b1';
+   if(tab==='matrix')f.bench.state.selected=new Set(['1','2']);
+   await f.bench.show(tab);await f.bench.load();await settle();
+   const pieces=visible(f.bench.panel);
+   for(const raw of raws)if(!pieces.some(p=>p.includes(raw)))problems.push(`${tab}: "${raw}" is not shown as written`);
+   for(const bad of ['checked 필요','Memo for 내','결과 3 papers','핵심 결과 3 papers'])for(const p of pieces)if(p.includes(bad))problems.push(`${tab}: user text rewritten to "${bad}" in ${places.get(p)}`);
+  }
+  assert.deepEqual(problems,[],'user text was altered');
+  // The self-same text in Korean mode is also unchanged: the helper is not an English-only branch.
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
+});
+
+/* The rail must show every section name whole, including the active one with its count beside it ("Annotations 999+").
+   There is no layout engine here, so the width is estimated from a Helvetica advance table (system fonts run a little
+   wider and the active entry is semibold, so both are padded) against the widths the stylesheet really declares. */
+const ADV={' ':278,'·':278,'-':333,a:556,b:556,c:500,d:556,e:556,f:278,g:556,h:556,i:222,j:222,k:500,l:222,m:833,n:556,o:556,p:556,q:556,r:333,s:500,t:278,u:556,v:500,w:722,x:500,y:500,z:500,A:667,B:667,C:722,D:722,E:667,F:611,G:778,H:722,I:278,J:500,K:667,L:556,M:833,N:722,O:778,P:667,Q:778,R:722,S:667,T:611,U:722,V:667,W:944,X:667,Y:667,Z:611,0:556,1:556,2:556,3:556,4:556,5:556,6:556,7:556,8:556,9:556,'+':584,',':278};
+const textWidth=(text,px,{strong=false}={})=>[...String(text)].reduce((sum,ch)=>sum+(ADV[ch]??600),0)*px/1000*1.08*(strong?1.06:1);
+function navBudgets(css){
+ const num=(re,what)=>{const m=css.match(re);assert.ok(m,what);return Number(m[1]);};
+ const wide=num(/--sc-nav-width:\s*(\d+)px/,'default nav width');
+ const compact=num(/\[data-density=compact\][^{}]*\{[^}]*--sc-nav-width:\s*(\d+)px/,'compact nav width');
+ const narrow=num(/@container sc-workbench \(max-width: 1000px\)\s*\{[^}]*nav\s*\{\s*flex-basis:\s*(\d+)px/,'narrow nav width');
+ const compactFont=/\[data-density=compact\] \.sc-nav-label\s*\{\s*font-size:\s*var\(--sc-fs-body\)/.test(css)?12:13;
+ // Rail padding (16 left, 12 right; 8 and 8 when the panel is narrow), button padding 12+12, icon 16, gap 8.
+ const chrome=(w,padding)=>w-padding-24-16-8;
+ return [['comfortable',chrome(wide,28),13],['compact',chrome(compact,28),compactFont],['narrow panel',chrome(narrow,16),13]];
+}
+test('English: every rail label fits whole in its row at the default width, in compact density and in a narrow panel',async()=>{
+ const i18n=require('../src/i18n.js');
+ const css=fs.readFileSync(new URL('../content/workbench.css',import.meta.url),'utf8');
+ try{
+  const f=englishFixture();
+  const labels=new Map();
+  for(const b of f.bench.panel.querySelectorAll('nav button[data-tab]'))labels.set(b.dataset.tab,{label:b.querySelector('.sc-nav-label').textContent,title:b.getAttribute('title')});
+  assert.equal(labels.size,Workbench.TABS.length);
+  const short=['Library','Recent','Related','Authors','Collections','Journals','Notes','Annotations','Attachments','Backlinks','Tags','Graph','Canvas','Compare','Tabs','View groups','Style editor','Reading'];
+  for(const name of short)assert.ok([...labels.values()].some(l=>l.label===name),'short form shown: '+name);
+  assert.equal(labels.get('reading').title,'Reading progress','the full name stays in the tooltip');
+  assert.equal(labels.get('assist').label,'Translate · AI');
+  await f.bench.show('reading');
+  assert.equal(f.bench.panel.querySelector('.sc-section-title').textContent,'Reading progress','and is the page title');
+  const badge=textWidth('999+',11)+16;           // the widest count the rail prints, in a 20px pill with 8px padding
+  const problems=[];
+  for(const [scenario,room,px] of navBudgets(css)){
+   for(const [id,{label}] of labels){
+    const need=textWidth(label,px,{strong:true})+8+badge;   // active: semibold label, gap, count
+    if(need>room)problems.push(`${scenario}: "${label}" needs ${need.toFixed(0)}px of ${room}px with a "999+" count`);
+    if(textWidth(label,px)>room)problems.push(`${scenario}: "${label}" does not fit even without a count`);
+   }
+  }
+  assert.deepEqual(problems,[],'rail labels would be cut');
+  // The old full name would not have fitted: this is what the short forms fix.
+  assert.ok(textWidth('Reading progress',13,{strong:true})+8+badge>navBudgets(css)[0][1],'the full name really was too long');
+  // The active pill and its badge are untouched.
+  assert.match(css,/nav button\[data-tab\]\.active[\s\S]*?background: var\(--sc-nav-on\)/);
+  assert.match(css,/\.sc-nav-count\s*\{[^}]*margin-inline-start: auto/);
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
+});
+test('Korean: the rail shows the whole Korean names',async()=>{
+ const f=fixture();
+ for(const b of f.bench.panel.querySelectorAll('nav button[data-tab]'))assert.equal(b.querySelector('.sc-nav-label').textContent,Workbench.TABS.find(([id])=>id===b.dataset.tab)[1]);
  f.bench.destroy();
 });

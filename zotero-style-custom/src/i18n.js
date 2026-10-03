@@ -117,10 +117,40 @@
     collections: 'collection', institutions: 'institution', citations: 'citation', entries: 'entry', comments: 'comment',
     cards: 'card', batches: 'batch', errors: 'error', files: 'file', tags: 'tag', attachments: 'attachment', links: 'link',
     results: 'result', sources: 'source', rows: 'row', works: 'work', years: 'year', times: 'time', hours: 'hour', minutes: 'minute',
-    seconds: 'second', months: 'month', weeks: 'week', matches: 'match', records: 'record', groups: 'group', tabs: 'tab', views: 'view'};
-  const PLURAL_ONE = new RegExp('(?<![\\d.,])1 (' + Object.keys(SINGULAR).join('|') + ')\\b(?![.,]?\\d)', 'g');
+    seconds: 'second', months: 'month', weeks: 'week', matches: 'match', records: 'record', groups: 'group', tabs: 'tab', views: 'view',
+    'co-authors': 'co-author', pairs: 'pair', pdfs: 'PDF', signals: 'signal', documents: 'document', ratings: 'rating', columns: 'column',
+    settings: 'setting', others: 'other', details: 'detail', ifs: 'IF', patents: 'patent', versions: 'version', lists: 'list',
+    colours: 'colour', colors: 'color', figures: 'figure', points: 'point', members: 'member', steps: 'step', topics: 'topic'};
+  // Words that may stand between the number and the noun: "1 unread papers", "1 new papers".
+  const ADJECTIVES = 'unread|new|recent|recently|linked|matching|supplementary|distinct|different|standalone|quiet|followed|published|stored|extra|unconnected|duplicate|corresponding|read|held|selected|more|checked|citing';
+  const PLURAL_ONE = new RegExp('(?<![\\d.,])1 ((?:(?:' + ADJECTIVES + ') )?)(' + Object.keys(SINGULAR).map(k => k.replace(/[-]/g, '\\-')).join('|') + ')\\b(?![.,]?\\d)', 'gi');
+  // "1 paper are left" -> "1 paper is left": the verb after a singularised count follows it.
+  const VERB_ONE = /((?<![\d.,])1 (?:[A-Za-z][\w-]*)(?: [A-Za-z][\w-]*)?) (are|have|were)\b/g;
+  const AGREE = {are: 'is', have: 'has', were: 'was'};
   function singular(text) {
-    return /(^|[^\d.,])1 [a-z]/.test(text) ? text.replace(PLURAL_ONE, (whole, noun) => '1 ' + SINGULAR[noun]) : text;
+    if (!/(^|[^\d.,])1 [A-Za-z]/.test(text)) return text;
+    const out = text.replace(PLURAL_ONE, (whole, adjective, noun) => {
+      const one = SINGULAR[noun.toLowerCase()];
+      return one ? '1 ' + adjective + one : whole;
+    });
+    return out.replace(VERB_ONE, (whole, head, verb) => head + ' ' + AGREE[verb]);
+  }
+  /* Values the code fills into a translated sentence are put in last, after the
+     plural fix has looked at the sentence: a title that happens to read "1
+     papers" is the author's text and stays exactly as written. Only a number is
+     filled before the fix, because the fix is about numbers. */
+  const NUMBER = /^[\d.,]+$/;
+  function fillIn(value, lookup, missing) {
+    const held = [];
+    const filled = value.replace(/\{(\d+)\}/g, (whole, n) => {
+      const given = lookup(Number(n));
+      if (given === undefined) return missing === 'keep' ? whole : '';
+      const text = String(given);
+      if (NUMBER.test(text)) return text;
+      held.push(text);
+      return '\uE000' + (held.length - 1) + '\uE001';
+    });
+    return singular(filled).replace(/\uE000(\d+)\uE001/g, (whole, i) => held[Number(i)]);
   }
   function byPattern(text) {
     if (misses.has(text)) return undefined;
@@ -129,7 +159,7 @@
       if (!m) continue;
       const fills = new Map();
       p.order.forEach((n, i) => { if (!fills.has(n)) fills.set(n, m[i + 1]); });
-      return singular(p.value.replace(/\{(\d+)\}/g, (_, n) => (fills.has(Number(n)) ? fills.get(Number(n)) : '')));
+      return fillIn(p.value, n => fills.get(n), 'blank');
     }
     if (misses.size > 4000) misses.clear();
     misses.add(text);
@@ -151,12 +181,22 @@
   function template(strings, ...values) {
     const pattern = strings.raw.map((part, i) => part + (i < values.length ? '{' + i + '}' : '')).join('');
     const translated = t(pattern);
-    const filled = translated.replace(/\{(\d+)\}/g, (whole, index) => {
-      const value = values[Number(index)];
-      return value === undefined ? whole : String(value);
-    });
-    return current === 'ko-KR' ? filled : singular(filled);
+    if (current === 'ko-KR') return translated.replace(/\{(\d+)\}/g, (whole, index) => (values[Number(index)] === undefined ? whole : String(values[Number(index)])));
+    return fillIn(translated, i => values[i], 'keep');
   }
+  /* The same with the sentence given as a key with {0}, {1} in it and the values
+     as a list: format('비교 항목: {0}', [label]). This is the form for text that
+     joins a fixed sentence to a name, a title or a number: the sentence is
+     translated whole, the values go in as written. */
+  function format(key, values = []) {
+    const translated = current === 'ko-KR' ? key : t(key);
+    if (current === 'ko-KR') return translated.replace(/\{(\d+)\}/g, (whole, index) => (values[Number(index)] === undefined ? whole : String(values[Number(index)])));
+    return fillIn(translated, i => values[i], 'keep');
+  }
+  /* One noun with its count: count(1, 'paper', 'papers') -> "1 paper",
+     count(1200, ...) -> "1,200 papers". Korean has no plural and takes the
+     second form. For text a caller builds itself instead of from the table. */
+  function count(n, one, many) { return number(n) + ' ' + plural(n, one, many); }
 
   // What the table does not cover yet, so coverage is a number rather than an
   // impression.
@@ -166,7 +206,7 @@
     return {total: wanted.length, translated: wanted.length - missing.length, missing};
   }
 
-  const api = {t, template, use, detect, locale, isKorean, load, coverage, LOCALES, DEFAULT, singular, number, date, time, plural,
+  const api = {t, template, format, count, use, detect, locale, isKorean, load, coverage, LOCALES, DEFAULT, singular, number, date, time, plural,
     _table: () => TABLE};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleI18N = api;

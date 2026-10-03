@@ -16,21 +16,24 @@
     const pause = () => Z.Promise?.delay ? Z.Promise.delay(0) : Promise.resolve();
     const library = id => { const value=Z.Libraries.get(Number(id)); if(!value||value.libraryType==='feed') throw new Error('Library is unavailable');return value; };
     async function all(id=scope) {library(id);return (await Z.Items.getAll(Number(id),false,false)).filter(valid);}
-    async function selected(ids) {
+    async function selected(ids,lookup=get) {
       if(ids===undefined||ids===null)return all();
       if(!Array.isArray(ids))throw new TypeError('Item IDs must be an array');
-      return Promise.all([...new Set(ids.map(String))].map(get));
+      return Promise.all([...new Set(ids.map(String))].map(lookup));
     }
-    async function children(ids,kind) {
-      const input=await selected(ids), output=new Map();
+    /* One read of each item per call: a paper's attachment and an annotation's attachment are the same
+       object, and asking Zotero for it once per annotation was most of the cost of reading a library. */
+    const memoGet=(cache=new Map())=>id=>{const key=String(id);if(!cache.has(key))cache.set(key,get(id));return cache.get(key);};
+    async function children(ids,kind,lookup=get) {
+      const input=await selected(ids,lookup), output=new Map();
       const add=item=>{if(valid(item))output.set(item.id,item);};
       for(let i=0;i<input.length;i++) {
         const item=input[i];
         if(kind==='notes') {
           if(item.isNote?.())add(item);
-          else if(item.isRegularItem?.())for(const id of item.getNotes())add(await get(id));
+          else if(item.isRegularItem?.())for(const id of item.getNotes())add(await lookup(id));
         } else {
-          const attachments=item.isAttachment?.()?[item]:item.isRegularItem?.()?await Promise.all(item.getAttachments().map(get)):[];
+          const attachments=item.isAttachment?.()?[item]:item.isRegularItem?.()?await Promise.all(item.getAttachments().map(lookup)):[];
           if(kind==='annotations'&&item.isAnnotation?.())add(item);
           for(const attachment of attachments) {
             if(kind==='attachments')add(attachment);
@@ -191,9 +194,9 @@
       return out;
     }
     async function annotations(ids) {
-      const out=[];
-      for(const i of await children(ids,'annotations')) {
-        const attachment=await get(i.parentID),position=safe(()=>JSON.parse(i.annotationPosition),{});
+      const out=[],lookup=memoGet();
+      for(const i of await children(ids,'annotations',lookup)) {
+        const attachment=await lookup(i.parentID),position=safe(()=>JSON.parse(i.annotationPosition),{});
         out.push({id:String(i.id),key:i.key,parentID:attachment.parentID?String(attachment.parentID):null,attachmentID:String(attachment.id),text:i.annotationText||'',comment:i.annotationComment||'',color:i.annotationColor||'',type:i.annotationType||'',pageLabel:i.annotationPageLabel||'',pageIndex:Number.isInteger(position.pageIndex)&&position.pageIndex>=0?position.pageIndex:null,modified:field(i,'dateModified')});
       }
       return out;

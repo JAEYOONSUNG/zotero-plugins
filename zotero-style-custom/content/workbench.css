@@ -115,7 +115,7 @@
   --sc-content-padding: var(--sc-space-5);
   --sc-card-title: 500 var(--sc-fs-title)/var(--sc-lh-title) var(--sc-title-font);
   --sc-card-meta: 400 var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font);
-  --sc-nav-width: 196px;
+  --sc-nav-width: 216px;
   --sc-paper-gap: var(--sc-space-2);
   --sc-bar-reserve: 58px;
   position: fixed;
@@ -733,7 +733,8 @@
 #style-custom-workbench .sc-command-option small { color: var(--sc-muted); margin-inline-start: 8px; }
 #style-custom-workbench kbd { font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-mono); padding: 0 4px; border: 1px solid var(--sc-border); border-radius: var(--sc-radius-sm); color: var(--sc-muted); }
 
-#style-custom-workbench[data-density=compact] { --sc-h-ctl: 28px; --sc-control-height: 28px; --sc-card-padding: 10px; --sc-content-padding: 12px; --sc-paper-gap: 8px; --sc-nav-width: 172px; }
+#style-custom-workbench[data-density=compact] { --sc-h-ctl: 28px; --sc-control-height: 28px; --sc-card-padding: 10px; --sc-content-padding: 12px; --sc-paper-gap: 8px; --sc-nav-width: 212px; }
+#style-custom-workbench[data-density=compact] .sc-nav-label { font-size: var(--sc-fs-body); }
 #style-custom-workbench[data-density=compact] .sc-header { padding-block: 8px; }
 #style-custom-workbench[data-density=compact] .sc-search-row { padding-block: 8px; }
 #style-custom-workbench[data-density=compact] .sc-nav-group { margin-block-end: 12px; }
@@ -790,7 +791,7 @@
 }
 
 /* The panel is resizable independently of the application viewport. */
-@container sc-workbench (max-width: 1000px) { #style-custom-workbench .sc-shell nav { flex-basis: 172px; padding-inline: 8px; } }
+@container sc-workbench (max-width: 1000px) { #style-custom-workbench .sc-shell nav { flex-basis: 204px; padding-inline: 8px; } }
 @container sc-workbench (max-width: 760px) {
   #style-custom-workbench .sc-shell { flex-direction: column; padding: 0 var(--sc-space-3) var(--sc-space-3); }
   /* Nineteen sections wrapped into five rows of chips took a third of a narrow

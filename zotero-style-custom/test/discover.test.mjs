@@ -514,3 +514,24 @@ test("two different papers that merely share a title's worth of words are both k
   ], {seeds: ["W1"]});
   assert.equal(rows.length, 2, "this list spans a field; near titles are different papers");
 });
+
+test("estrogen receptor alpha and beta are two papers: Greek letters are kept in the title and different DOIs never merge", () => {
+  const alpha = {...fresh("W20", {date: "2026-09-01", refs: ["W1"], doi: "10.1/alpha"}), title: "Estrogen receptor α signalling in breast tissue and its role in disease"};
+  const beta = {...fresh("W21", {date: "2026-09-02", refs: ["W2"], doi: "10.1/beta"}), title: "Estrogen receptor β signalling in breast tissue and its role in disease"};
+  const rows = discover.rankFreshCiters([alpha, beta], {seeds: ["W1", "W2"]});
+  assert.equal(rows.length, 2, "α and β are different papers");
+  assert.deepEqual(rows.map(r => r.shared), [1, 1], "citation evidence is not pooled across them");
+  // The same title past the 14th word is also not a prefix match.
+  const long = "One two three four five six seven eight nine ten eleven twelve thirteen fourteen ";
+  const tails = discover.rankFreshCiters([
+    {...fresh("W22", {date: "2026-09-01", refs: ["W1"]}), title: long + "kinase A"},
+    {...fresh("W23", {date: "2026-09-02", refs: ["W2"]}), title: long + "kinase B"}
+  ], {seeds: ["W1", "W2"]});
+  assert.equal(tails.length, 2, "the whole title is compared, not its first fourteen words");
+  // Two records with different DOIs stay apart even when their titles are identical.
+  const twin = discover.rankFreshCiters([
+    {...fresh("W24", {date: "2026-09-01", refs: ["W1"], doi: "10.1/a"}), title: "A very long identical title for two things"},
+    {...fresh("W25", {date: "2026-09-02", refs: ["W2"], doi: "10.1/b"}), title: "A very long identical title for two things"}
+  ], {seeds: ["W1", "W2"]});
+  assert.equal(twin.length, 2);
+});

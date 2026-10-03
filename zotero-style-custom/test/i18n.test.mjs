@@ -266,3 +266,49 @@ test("Korean is never written straight into the page without passing through t()
   }
   assert.deepEqual(leaks, [], "these reach the page without translation");
 });
+
+test("a name or title filled into a sentence is never touched by the plural fix", () => {
+  const saved = i18n._table();
+  i18n.load({"{0} 문헌 {1}편": "{0} · {1} papers", "{0}편": "{0} papers", "비교 항목: {0}": "Compare: {0}", "읽지 않은 {0}편은 뺐습니다.": "{0} unread papers are left out."});
+  i18n.use("en-US");
+  assert.equal(i18n.format("비교 항목: {0}", ["1 papers"]), "Compare: 1 papers", "the title says 1 papers; so it stays");
+  assert.equal(i18n.template`${"1 papers"} 문헌 ${1}편`, "1 papers · 1 paper", "only the count is made singular");
+  assert.equal(i18n.t("1편"), "1 paper");
+  assert.equal(i18n.t("읽지 않은 1편은 뺐습니다."), "1 unread paper is left out.", "and the verb agrees");
+  assert.equal(i18n.t("읽지 않은 2편은 뺐습니다."), "2 unread papers are left out.");
+  i18n.use("ko-KR");
+  assert.equal(i18n.format("비교 항목: {0}", ["Title"]), "비교 항목: Title", "Korean keeps the key");
+  i18n.use("en-US");
+  i18n.load(saved);
+});
+
+test("counts of 0, 1, 2 and 1,200 read correctly through every translated sentence that has a number", () => {
+  i18n.load(strings.en);
+  i18n.use("en-US");
+  const ADJ = "(?:(?:unread|new|recent|linked|matching|supplementary|distinct|different|standalone|quiet|followed|published|stored|extra|unconnected|duplicate|corresponding|read|held|selected|more|checked|citing) )?";
+  const bad = [];
+  for (const [ko, en] of Object.entries(strings.en)) {
+    if (!/\{\d+\}/.test(ko)) continue;
+    // The plural nouns this sentence puts right after a number: those must agree with the number.
+    const plurals = [...String(en).matchAll(new RegExp("\\{\\d+\\} " + ADJ + "([A-Za-z-]+)s\\b", "g"))].map(m => m[1]).filter(w => !/^(a|i|u|ha|wa|doe|thi|hi|u)$/i.test(w) && w.length > 2);
+    if (!plurals.length) continue;
+    for (const [n, shown] of [[0, "0"], [1, "1"], [2, "2"], [1200, "1,200"]]) {
+      const out = i18n.t(ko.replace(/\{\d+\}/g, shown));
+      for (const noun of plurals) {
+        const singularForm = new RegExp("(?<![\\d.,])" + shown.replace(/[.,]/g, "\\$&") + " " + ADJ + noun + "\\b(?!s)", "i");
+        const pluralForm = new RegExp("(?<![\\d.,])" + shown.replace(/[.,]/g, "\\$&") + " " + ADJ + noun + "s\\b", "i");
+        if (n === 1 && pluralForm.test(out)) bad.push(`1: ${JSON.stringify(out.slice(0, 100))}`);
+        if (n !== 1 && singularForm.test(out)) bad.push(`${shown}: ${JSON.stringify(out.slice(0, 100))}`);
+      }
+      if (n === 1 && /(?<![\d.,])1 [A-Za-z-]+(?: [A-Za-z-]+)? (?:are|have|were)\b/.test(out)) bad.push(`verb: ${JSON.stringify(out.slice(0, 100))}`);
+    }
+  }
+  assert.deepEqual([...new Set(bad)], [], "count agreement");
+  assert.equal(i18n.count(0, "paper", "papers"), "0 papers");
+  assert.equal(i18n.count(1, "paper", "papers"), "1 paper");
+  assert.equal(i18n.count(2, "paper", "papers"), "2 papers");
+  assert.equal(i18n.count(1200, "paper", "papers"), "1,200 papers");
+  i18n.use("ko-KR");
+  assert.equal(i18n.count(1, "paper", "papers"), "1 papers", "Korean takes the one form, the table supplies the Korean words");
+  i18n.use("en-US");
+});

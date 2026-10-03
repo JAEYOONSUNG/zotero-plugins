@@ -418,3 +418,22 @@ test("specificity is a gate at a fixed floor, and a lineage too thin to draw dra
   for (let i = 0; i < 12; i++) loose.push(W("L" + i, 2012 + i, i < 4 ? ["AXIS"] : ["Z" + i]));
   assert.equal(path.milestones(W("S2", 2024, loose.map(r => r.id)), loose, [...loose, axis]), null);
 });
+
+test("estrogen receptor alpha and beta are not merged as versions, and records with different DOIs stay apart", () => {
+  const {kept} = path.mergeVersions([
+    work("A", [], {title: "Estrogen receptor α ligand binding domain structure and agonist selectivity", year: 2020}),
+    work("B", [], {title: "Estrogen receptor β ligand binding domain structure and agonist selectivity", year: 2020})
+  ]);
+  assert.equal(kept.length, 2);
+  const twins = path.mergeVersions([
+    work("T1", [], {title: "Rare sugar production by epimerases in bacteria today", year: 2020}),
+    work("T2", [], {title: "Rare sugar production by epimerases in bacteria today", year: 2020})
+  ]);
+  assert.equal(twins.kept.length, 2, "two journal records with different DOIs are two papers");
+  const sameDOI = path.mergeVersions([
+    work("S1", [], {title: "Rare sugar production by epimerases in bacteria today", year: 2020, doi: "10.1/x"}),
+    work("S2", [], {title: "Rare sugar production by epimerases in bacteria today", year: 2020, doi: "10.1/X"})
+  ]);
+  assert.equal(sameDOI.kept.length, 1, "one DOI, one paper");
+  assert.ok(path.titleKey("Estrogen receptor α").includes("α"), "Greek letters survive normalisation");
+});

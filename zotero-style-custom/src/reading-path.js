@@ -58,8 +58,13 @@
 
   // A version of the same paper has the same title, give or take case,
   // punctuation and markup.
-  const titleKey = value => text(value).toLowerCase().normalize('NFKD')
-    .replace(/<[^>]+>/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').slice(0, 14).join(' ');
+  // Unicode letters are kept (Greek α/β tell two receptors apart) and the whole title is the key.
+  const titleKey = value => text(value).normalize('NFKC').toLowerCase().normalize('NFKD').replace(/\p{M}+/gu, '').normalize('NFKC')
+    .replace(/<[^>]+>/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const bareDOI = value => text(value).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').toLowerCase();
+  const isPosting = w => /preprint|posted-content/i.test(text(w.type));
+  // Different DOIs are different papers, unless one is a preprint posting of the other.
+  const differentDOI = (a, b) => { const x = bareDOI(a.doi), y = bareDOI(b.doi); return !!x && !!y && x !== y && !isPosting(a) && !isPosting(b); };
 
   // Function words say nothing about a subject: "DNA ... and ... bacteria"
   // matched a mismatch-repair review to a methylation one.
@@ -91,7 +96,8 @@
   }
   // Named things with digits in them (Cas12a, AcrVA4, C66S) must agree
   // exactly for two titles to be one paper.
-  const named = value => rawWords(value).filter(w => /\d/.test(w)).sort().join(' ');
+  const named = value => [...rawWords(value).filter(w => /\d/.test(w)),
+    ...titleKey(value).split(' ').filter(w => w.length <= 2 && /^[\p{Script=Greek}]+$/u.test(w))].sort().join(' ');
   const sameNamed = (a, b) => named(a) === named(b);
   // Word overlap of two titles, for versions retitled between preprint and journal.
   function titleOverlap(a, b) {
@@ -406,12 +412,14 @@
     for (const w of works) {
       const key = titleKey(w.title);
       const short = !key || key.split(' ').length < 3;
+      const clear = l => !l.some(v => differentDOI(v, w));
       let list = key && byKey.get(key);
+      if (list && !clear(list)) list = lists.find(l => titleKey(l[0].title) === key && clear(l)) || null;
       if (list && short && !list.some(v => Math.abs((v.year || 0) - (w.year || 0)) <= 1)) {
-        list = lists.find(l => titleKey(l[0].title) === key && l.some(v => Math.abs((v.year || 0) - (w.year || 0)) <= 1)) || null;
+        list = lists.find(l => titleKey(l[0].title) === key && clear(l) && l.some(v => Math.abs((v.year || 0) - (w.year || 0)) <= 1)) || null;
       }
       if (!list && !short) {
-        list = lists.find(l => l.some(v => Math.abs((v.year || 0) - (w.year || 0)) <= 1
+        list = lists.find(l => clear(l) && l.some(v => Math.abs((v.year || 0) - (w.year || 0)) <= 1
           && titleOverlap(v.title, w.title) >= 0.8 && sameNamed(v.title, w.title)));
       }
       if (!list) { list = []; lists.push(list); if (key && !byKey.has(key)) byKey.set(key, list); }
