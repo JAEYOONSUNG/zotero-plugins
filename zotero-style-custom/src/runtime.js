@@ -2177,12 +2177,30 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.mergeUndo = {});
   }
   _isPreprintItem(item) {
+    // Zotero's own item type is the first and strongest evidence; a DOI prefix only speaks for an item of another type.
+    if (String(item?.itemType || '') === 'preprint') return true;
     const doi = this.signalTools.bareDOI(String(item?.getField?.('DOI') || ''));
     if (doi && this.signalTools.PREPRINT_PREFIXES.test(doi)) return true;
     try { return !!this.signalsOf?.(item)?.preprint; } catch (_) { return false; }
   }
-  async mergePreprintIntoPublished(preprintID, {publishedID} = {}) {
+  /* One merge or undo at a time per preprint: two of them interleaving
+     overwrote the undo ledger (the second saw the children already moved and
+     recorded none), and undo then left them on the published item. */
+  _mergeSerial(preprintID, job) {
+    const queues = this._mergeQueues || (this._mergeQueues = new Map()), key = String(preprintID);
+    const run = (queues.get(key) || Promise.resolve()).catch(() => {}).then(job);
+    queues.set(key, run);
+    const clear = () => { if (queues.get(key) === run) queues.delete(key); };
+    run.then(clear, clear);
+    return run;
+  }
+  mergePreprintIntoPublished(preprintID, options = {}) {
+    return this._mergeSerial(preprintID, () => this._mergePreprintIntoPublished(preprintID, options));
+  }
+  async _mergePreprintIntoPublished(preprintID, {publishedID} = {}) {
     const preprint = this.Z.Items.get(Number(preprintID));
+    // State is read when this job's turn comes, not when it was asked for: an earlier merge may have finished meanwhile.
+    if (preprint && (preprint.deleted || this.mergeLedger()[String(preprint.id)])) throw new Error('이 프리프린트는 이미 게재본에 합쳐졌습니다. 되돌리려면 휴지통에서 복원하세요.');
     if (!preprint || !this.isRegular(preprint)) throw new Error('프리프린트를 찾지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요.');
     const given = publishedID != null ? this.Z.Items.get(Number(publishedID)) : null;
     const held = given && this.isRegular(given) && !given.deleted ? given : (await this.publishedStatus(preprint))?.held;
@@ -2242,9 +2260,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const memo = String(this.entry(preprint).remark || ''), mine = String(this.entry(held).remark || '');
       if (memo && memo !== mine && !mine.includes(memo)) {
         const after = mine ? mine + '\n\n' + memo : memo;
+        const noteBefore = this.memoNoteOf(held), htmlBefore = noteBefore ? String(noteBefore.getNote()) : null, syncedBefore = this.entry(held).memoSynced;
         this.entry(held).remark = after; this.dirty = true; copied.memo = true; rec.memo = {before: mine, after};
         await this.flush();
-        if (this.getSetting('memoToNote')) await this.memoToNote(held);
+        if (this.getSetting('memoToNote')) {
+          await this.memoToNote(held);
+          // What the note was, and what the merge made it, so undo can put the note and its sync baseline back with the memo.
+          const noteAfter = this.memoNoteOf(held);
+          if (noteAfter) rec.memo.note = {id: noteAfter.id, created: !noteBefore, before: htmlBefore, after: String(noteAfter.getNote()), syncedBefore: syncedBefore === undefined ? null : syncedBefore, syncedAfter: this.entry(held).memoSynced ?? null};
+        }
       }
     } catch (error) {
       // Nothing was trashed; put back whatever was already moved or copied.
@@ -2282,13 +2306,30 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (rec.status && this.state(held).status === rec.status.after) patch.status = rec.status.before;
       if (rec.rating && this.state(held).rating === rec.rating.after) patch.rating = rec.rating.before;
       if (Object.keys(patch).length) await this.edit([held], patch);
-      if (rec.memo && String(this.entry(held).remark || '') === rec.memo.after) { this.entry(held).remark = rec.memo.before; this.dirty = true; await this.flush(); }
+      if (rec.memo && String(this.entry(held).remark || '') === rec.memo.after) {
+        const row = this.entry(held), saved = rec.memo.note, note = saved ? get(saved.id) : null;
+        row.remark = rec.memo.before; this.dirty = true;
+        // The memo note goes back with the memo, unless the note itself was edited since: then both stay as they are.
+        if (saved && note && !note.deleted && String(note.getNote()) === saved.after) {
+          this.memoWriting = (this.memoWriting || 0) + 1;
+          try {
+            if (saved.created) note.deleted = true; else note.setNote(saved.before);
+            await note.saveTx();
+          } finally { this.memoWriting--; }
+          if (saved.syncedBefore === null) delete row.memoSynced; else row.memoSynced = saved.syncedBefore;
+        } else if (saved && note && !note.deleted) {
+          // The note was edited since: keep it, and make the memo agree with it rather than losing either.
+          row.remark = rec.memo.after; row.memoSynced = this.constructor.memoFromNoteHTML(note.getNote());
+        }
+        await this.flush();
+      }
     }
     if (untrash && preprint?.deleted) { preprint.deleted = false; await preprint.saveTx(); }
     delete this.mergeLedger()[String(rec.preprint)]; this.dirty = true;
     try { await this.flush(); } catch (_) {}
   }
-  async restorePreprint(preprintID) {
+  restorePreprint(preprintID) { return this._mergeSerial(preprintID, () => this._restorePreprint(preprintID)); }
+  async _restorePreprint(preprintID) {
     const item = this.Z.Items.get(Number(preprintID));
     if (!item || !item.deleted) return false;
     const rec = this.mergeLedger()[String(item.id)];
@@ -4460,7 +4501,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     let note = this.memoNoteOf(item);
     if (!text.trim() && !note) throw new Error('메모가 비어 있어 옮길 내용이 없습니다. 메모를 먼저 적으세요.');
     const created = !note;
-    let merged = false, adopted = false, write = text;
+    let merged = false, adopted = false, write = text, remoteBefore;
     if (note) {
       const there = this.constructor.memoFromNoteHTML(note.getNote());
       if (text.replace(/\n+$/, '') === there.replace(/\n+$/, '')) write = null;
@@ -4471,7 +4512,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         else if (!text.trim() || there.includes(text.trim())) { write = null; adopted = true; }
         else if (text.includes(there.trim())) write = text;
         else if (!there.trim()) write = text;
-        else { write = there + this.constructor.memoSep() + text; merged = true; }
+        else if (base !== undefined && String(base).trim() && there.startsWith(String(base) + this.constructor.memoSep())) {
+          // An earlier merge of this paper's remote text and a now-superseded input: merge the newer input with the remote text again.
+          write = String(base) + this.constructor.memoSep() + text; merged = true; remoteBefore = String(base);
+        } else { write = there + this.constructor.memoSep() + text; merged = true; remoteBefore = there; }
       }
     } else {
       note = new this.Z.Item('note');
@@ -4487,7 +4531,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const mirrored = this.constructor.memoFromNoteHTML(note.getNote());
     const now = String(row.remark || '');
     if (mirrored !== now && now === text) { row.remark = mirrored; this.dirty = true; }
-    row.memoSynced = mirrored; this.dirty = true;
+    // A conflict merge that the user typed over while it was saved is not the new shared base: the next job merges the later input with the remote text again.
+    row.memoSynced = merged && remoteBefore !== undefined && now !== text ? remoteBefore : mirrored; this.dirty = true;
     await this.flush();
     this.bumpState?.();
     return {created, text: mirrored, merged, adopted};
@@ -4504,6 +4549,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const text = this.constructor.memoFromNoteHTML(note.getNote());
     const row = this.entry(parent), mine = String(row.remark || '');
     if (text === mine) { if (row.memoSynced !== text) { row.memoSynced = text; this.dirty = true; } return false; }
+    if (text === row.memoSynced) return false;
     const typedHere = mine.trim() && mine !== row.memoSynced && !text.includes(mine.trim());
     row.remark = typedHere ? (text.trim() ? text + this.constructor.memoSep() + mine : mine) : text;
     row.memoSynced = text; this.dirty = true; this.bumpState?.();

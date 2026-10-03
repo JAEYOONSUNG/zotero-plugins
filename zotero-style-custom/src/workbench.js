@@ -230,9 +230,15 @@
      carries data-writes. The self-check sweep skips by this attribute, so it
      holds in every language; a test scans the source for writers not listed. */
   let sweepJob=null;/* the running 모두 찾기, if any: {controller} */
+  const WRITES_CACHE_HANDLER=/\b(saveUI|setSeen|setSeenMany|setReadingQueue|saveWatchOptions|importHere|save|setRulesFor|putQuick|dropQuick|switchBrowser)\(|runtime\.(dirty\s*=[^=]|flush\(|cache\.\w+(\.\w+|\[[^\]]*\])*\s*=[^=]|set[A-Z]\w*\()|\breader\.(apply|reset|set|save|select|close|move|restore|rename|update|delete|undelete)\w*\(|\bmodel\.(create|delete|restore|add|remove|link|unlink|rename|update|set)\w*\(/;
+  const WRITES_LIBRARY_HANDLER=/library\.(setRemark|addTags|removeTags|restoreTags|noteFromAnnotations|createNote|unrelate|relate|trashItems|synthesisNote|saveToCollection|renameTagBranch|recolorAnnotations|mergeAnnotations|memoToNote)\(|runtime\.(importWork|trashAttachments|mergePreprintIntoPublished)\(/;
   const WRITES_LIBRARY=new Set(['만들고 담기','관련 문헌으로 연결','선택 문헌끼리 연결 해제','메모 저장','선택 문헌에 태그 추가','선택 문헌에서 태그 제거','선택 문헌 태그 이름 변경','새 노트 저장','이 문헌 주석에서 노트 만들기','휴지통으로','선택 주석 색 바꾸기','선택 주석을 노트로','선택 주석 병합','노트로 옮기기','게재본으로 옮기기','종합 노트 만들기','첫 문헌의 노트로 저장','선택 문헌에 적용']);
   const button=(label,fn,parent,attrs={})=>{
    if(WRITES_LIBRARY.has(label)&&!attrs['data-writes'])attrs={...attrs,'data-writes':'library'};
+   /* Persistent plugin state (boards, cards, saved views, tab groups, the queue, filters, seen marks, settings) is written
+      by a handler the sweep must not press either: the handler's own source says so, in any language and for a label
+      built at run time. data-opens buttons keep their own contract. */
+   if(!attrs['data-writes']&&!attrs['data-opens']&&typeof fn==='function'){let source='';try{source=Function.prototype.toString.call(fn);}catch(_){}if(WRITES_LIBRARY_HANDLER.test(source))attrs={...attrs,'data-writes':'library'};else if(WRITES_CACHE_HANDLER.test(source))attrs={...attrs,'data-writes':'cache'};}
    const b=node('button',label,parent,{type:'button',...attrs}),key=attrs['data-action-key'];
    const busy=(element,on)=>{element.disabled=on;if(on){element.dataset.busy='true';element.setAttribute('aria-busy','true');}else{delete element.dataset.busy;element.removeAttribute('aria-busy');}};
    if(actionFeature[label]&&!enabled(actionFeature[label])){b.hidden=true;b.disabled=true;}
@@ -1849,7 +1855,7 @@
       }),line,{class:'sc-paper-collection-link',title:T('클릭하면 왼쪽 컬렉션 트리에서 이 컬렉션으로 이동합니다')});
      });
     }
-    const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;await library.setRemark(item.id,submitted);finishDraft(remark,submitted);syncRemark(c,submitted);message('메모를 저장했습니다.');},c);}
+    const remark=node('textarea',null,c,{'aria-label':'읽기 메모',placeholder:'읽기 메모'});remark.dataset.draftKey=JSON.stringify(['remark',state.libraryID,item.id]);remark.value=runtime.entry(ref).remark||'';button('메모 저장',async()=>{const submitted=remark.value;const saved=await library.setRemark(item.id,submitted);finishDraft(remark,submitted);if(typeof saved==='string'&&saved!==submitted&&remark.value===submitted)remark.value=saved;syncRemark(c,typeof saved==='string'?saved:submitted);message('메모를 저장했습니다.');},c);}
    if(detailed&&(state.scope!=='selected'||items.length===1))details.push((async()=>{
     const results=await Promise.allSettled([library.notes([item.id]),library.annotations([item.id])]);
     if(disposed||epoch!==generation||!c.isConnected)return;
@@ -2310,7 +2316,7 @@
    const joined=built.isolated.filter(n=>linkedOut.has(n.id)).map(n=>({...n,degree:ghostEdges.filter(e=>e.source===n.id).length}));
    const laid=tools.layout({nodes:[...built.nodes,...joined,...ghostNodes],edges:[...built.edges,...ghostEdges],missing:[],isolated:[]},{width:W,height:H});
    const direct=built.edges.filter(e=>e.kind==='cites');
-   const clusters=tools.clusterCount([...built.nodes,...joined].map(n=>n.id),[...built.edges,...ghostEdges]);
+   const clusters=tools.clusterCount([...built.nodes,...joined,...ghostNodes].map(n=>n.id),[...built.edges,...ghostEdges])/* every drawn node, outside works included: two papers meeting at one are one group */;
    statTiles(body,[{value:fmtN(records.length),label:'논문'},{value:fmtN(built.truncated?built.counted.total:built.edges.length),label:built.truncated?T(`연결 · 일부만 그림 (${fmtN(built.counted.drawn)}개 표시)`):'연결',title:'인용과 공통 참고문헌으로 이어진 쌍'},
     {value:fmtN(clusters),label:'묶음',title:'서로 이어진 묶음의 수'},{value:fmtN(stillIsolated.length),label:'연결 없는 논문',title:'이 컬렉션 안에서 어느 논문과도 이어지지 않은 논문'}],{label:'컬렉션 그래프 요약'});
    drawJournalLegend(built.nodes,body);
@@ -2874,7 +2880,7 @@
     const undo=button('되돌리기',async()=>{
      if(typeof library.restoreTags==='function')await library.restoreTags(removed);
      else{const groups=new Map();for(const row of removed){if(!groups.has(row.tag))groups.set(row.tag,[]);groups.get(row.tag).push(row.id);}for(const[tag,list]of groups)await library.addTags(list,[tag]);}
-     undo.remove();await load();message(`${papers}편에 태그를 다시 붙였습니다.`);},bar());
+     undo.remove();await load();message(`${papers}편에 태그를 다시 붙였습니다.`);},bar(),{'data-writes':'library'});
    },b);button('태그 필터 해제',()=>{dropQuick('explore','q-tag','q-status');render();},b);
    sectionHead('태그 경로 이름 바꾸기',null,edit);
    const rename=bar(edit),from=node('input',null,rename,{'aria-label':'기존 태그 경로',placeholder:'기존 태그 경로'}),to=node('input',null,rename,{'aria-label':'새 태그 경로',placeholder:'새 태그 경로'});let subtree=true;
@@ -3494,7 +3500,10 @@
     field.dataset.state='saving';
     try{
      inFlight=save(value);
-     await inFlight;
+     const saved=await inFlight;
+     /* A conflict merge returns the text now stored: the editor, the baseline and the cache take it, or the next keystroke would delete the merged part.
+        Input typed while the save ran stays as typed (it is merged with the remote text on its own save). */
+     if(typeof saved==='string'&&saved!==value&&field.value===value){field.value=saved;last=saved;if(typeof autoGrow==='function')autoGrow(field);}
      if(!field.isConnected)return;
      field.dataset.state='saved';
      win.setTimeout(()=>{if(field.dataset.state==='saved')field.dataset.state='';},1400);
@@ -3524,7 +3533,7 @@
    field.value=(ref&&runtime.entry(ref).remark)||'';
    autoGrow(field);
    // Saved here or under a row, the memo is the same one: the search sees it either way.
-   bindMemo(field,value=>Promise.resolve(library.setRemark(item.id,value)).then(result=>{const held=state.items.find(i=>String(i.id)===String(item.id));if(held)held.remark=String(value||'');return result;}),item.title||'문헌');
+   bindMemo(field,value=>Promise.resolve(library.setRemark(item.id,value)).then(result=>{const held=state.items.find(i=>String(i.id)===String(item.id));if(held)held.remark=typeof result==='string'?result:String(value||'');return result;}),item.title||'문헌');
    /* The memo lives in this plugin's own file; this puts the same text into one
       child note (tagged style-custom:memo) so it is in Zotero too. The note is not opened. */
    button('노트로 옮기기',async()=>{
@@ -4118,8 +4127,9 @@
       field.focus();
       let typing=true;for(const [type,on] of [['focus',true],['input',true],['blur',false]])field.addEventListener(type,()=>{typing=on;});
       bindMemo(field,value=>Promise.resolve(library.setRemark(r.item.id,value)).then(result=>{
-       r.entry.remark=String(value||'');
-       const held=state.items.find(i=>String(i.id)===String(r.item.id));if(held)held.remark=String(value||'');
+       const stored=typeof result==='string'?result:String(value||'');
+       r.entry.remark=stored;
+       const held=state.items.find(i=>String(i.id)===String(r.item.id));if(held)held.remark=stored;
        // An autosave that lands while the reader keeps typing must not collapse the editor under them.
        if(!field.isConnected||typing||field.value!==value)return result;
        renderRemarkView();
@@ -4852,14 +4862,14 @@
          state.query='';search.value='';for(const key of ['ratingMin','yearFrom','yearTo','type','tag'])state[key]='';state.rulesByTab={};for(const [,input] of filterInputs)input.value='';type.value='';
          state.rulesByTab={explore:[quickStatus('unread')]};
          return open();
-        },mixText,{class:'sc-collection-unread',title:T('이 컬렉션의 안 읽은 문헌만 보기')});
+        },mixText,{'data-writes':'cache',class:'sc-collection-unread',title:T('이 컬렉션의 안 읽은 문헌만 보기')});
         go.addEventListener('click',event=>event.stopPropagation());
        }
        if(mix.seconds)mixText.appendChild(doc.createTextNode((said.length||mix.unread?' · ':'')+(runtime.formatReadTime?runtime.formatReadTime(mix.seconds,{compact:true}):Math.round(mix.seconds/60)+'분')));
        if(mix.last)mixText.appendChild(doc.createTextNode((said.length||mix.unread||mix.seconds?' · ':'')+ago(mix.last)));
       }
       const actions=node('div',null,row,{class:'sc-collection-actions'});
-      button('컬렉션 열기',open,actions);
+      button('컬렉션 열기',open,actions,{'data-writes':'cache'});
       if(enabled('favoriteCollections'))check('즐겨찾기',favorites.includes(c.id),on=>run(async()=>{runtime.cache.favoriteCollections=on?[...new Set([...favorites,c.id])]:favorites.filter(id=>id!==c.id);runtime.dirty=true;await runtime.flush();draw();}),actions);
       if(favorites.includes(c.id))row.classList.add('sc-collection-favorite');
       walk(c.id,depth+1,group);
@@ -6123,7 +6133,7 @@
      }),actions,{class:'sc-inbox-queue','aria-pressed':String(waiting),title:T(waiting?'다시 누르면 대기에서 뺍니다':'읽기 진행 탭의 읽기 대기에 넣습니다')});
     }
     const seen=isSeen(entry);
-    button(seen?'되돌리기':'확인함',()=>run(()=>ctx.toggle(entry,seen,row,box)),actions,{class:'sc-inbox-seen',title:T(seen?'미확인으로 되돌립니다':'이 논문을 확인한 것으로 두고 목록에서 뺍니다')});
+    button(seen?'되돌리기':'확인함',()=>run(()=>ctx.toggle(entry,seen,row,box)),actions,{'data-writes':'cache',class:'sc-inbox-seen',title:T(seen?'미확인으로 되돌립니다':'이 논문을 확인한 것으로 두고 목록에서 뺍니다')});
    }
    /* Papers carrying a followed author's id but signed from places that author
       has never been listed at: a namesake merged into the profile is the usual
@@ -7615,7 +7625,7 @@
    const hasAbstract=!!String(item.abstract||'').trim();
    const NEEDS_ABSTRACT=new Set(['summary','remark','tags']);
    if(aiReady&&!hasAbstract)body.insertBefore(node('p','이 문헌에는 초록이 없어 요약·메모·태그 제안은 쓸 수 없습니다. 제목 번역만 됩니다.',null,{class:'sc-muted sc-settings-note'}),b);
-   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message(task==='translate'?'제목을 AI 서버에 보내는 중…':'제목·초록을 AI 서버에 보내는 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);syncAIApply();}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b,{title:!aiReady?T('설정에서 AI 서버를 연결하면 켜집니다'):(NEEDS_ABSTRACT.has(task)&&!hasAbstract)?T('초록이 없는 문헌입니다'):''}).disabled=!aiReady||(NEEDS_ABSTRACT.has(task)&&!hasAbstract);
+   for(const[task,label]of [['translate','제목 번역'],['summary','초록 요약'],['remark','읽기 메모 제안'],['tags','태그 제안']])button(label,async()=>{message(task==='translate'?'제목을 AI 서버에 보내는 중…':'제목·초록을 AI 서버에 보내는 중…');stopAI.hidden=false;const request=++aiEpoch;let result;try{result=await assist.run(task,item,{language:language.value});}finally{stopAI.hidden=true;}if(disposed||panel.hidden||state.tab!=='assist'||request!==aiEpoch||state.aiItemID!==item.id||selected().length!==1||selected()[0].id!==item.id)return;state.aiTask=task;state.aiOutput=result;const current=body.querySelector('.sc-ai-output');if(current){current.value=Array.isArray(result)?result.join(', '):result;updateDraft(current.dataset.draftKey,current.value);syncAIApply();}message('AI 생성 결과입니다. 원문과 비교한 뒤 적용하세요.');},b,{'data-writes':'network',title:!aiReady?T('설정에서 AI 서버를 연결하면 켜집니다'):(NEEDS_ABSTRACT.has(task)&&!hasAbstract)?T('초록이 없는 문헌입니다'):''}).disabled=!aiReady||(NEEDS_ABSTRACT.has(task)&&!hasAbstract);
    const actions=bar();button('결과 복사',()=>copy(output.value),actions);button('선택 문헌에 적용',async()=>{if(!output.value.trim()||state.aiItemID!==item.id||!state.aiTask)throw new Error('현재 문헌의 결과를 먼저 생성하세요.');const ref=runtime.Z.Items.get(Number(item.id));if(state.aiTask==='tags')await library.addTags([item.id],output.value.split(',').map(s=>s.trim()).filter(Boolean));else if(state.aiTask==='remark')await library.setRemark(item.id,output.value);else{runtime.entry(ref)[state.aiTask==='translate'?'translatedTitle':'summary']=output.value;runtime.dirty=true;await runtime.flush();}message('확인한 결과를 저장했습니다.');await runtime.refreshWindows();},actions,{'data-variant':'primary','data-ai-apply':'true'});syncAIApply();
   }
   /* The settings page as sections, each with its name, one line saying what it

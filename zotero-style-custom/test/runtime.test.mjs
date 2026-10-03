@@ -3601,3 +3601,155 @@ test('a memo note synced from another computer is adopted, never erased or silen
   assert.ok(text.includes('from the other computer') && text.includes('typed here'), 'nothing lost');
   assert.equal(plugin.entry(c).remark, text);
 });
+
+test('typing during a conflict-merge save keeps the remote text and the later input (no base finalised)', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const {paper} = noteWorld(fx);
+  plugin.active = true;
+  const c = paper(fx.item(3));
+  const Library = require('../src/library.js');
+  const lib = Library.create({Zotero: Object.assign(fx.Z, {Items: Object.assign(fx.Z.Items, {getAsync: async id => fx.Z.Items.get(id)})}), runtime: plugin});
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  const n3 = new fx.Z.Item('note');
+  n3.libraryID = c.libraryID; n3.parentID = c.id; n3.setTags([{tag: 'style-custom:memo', type: 0}]);
+  n3.setNote(Runtime.memoNoteHTML('R remote'));
+  await n3.saveTx();
+  plugin.cache.items[plugin.identity(c)] = {remark: 'old', memoSynced: 'old'};
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(c));
+  const noteSave = fx.Z.Item.prototype.saveTx;
+  fx.Z.Item.prototype.saveTx = async function () { await new Promise(r => setTimeout(r, 20)); return noteSave.call(this); };
+  const first = lib.setRemark(3, 'L1');
+  await new Promise(r => setTimeout(r, 5));
+  const second = lib.setRemark(3, 'L2');
+  await Promise.all([first, second]);
+  fx.Z.Item.prototype.saveTx = noteSave;
+  const text = Runtime.memoFromNoteHTML(n3.getNote());
+  assert.ok(text.includes('R remote') && text.includes('L2'), 'remote and the later input both survive: ' + text);
+  assert.ok(!text.includes('L1'), 'the superseded input is not duplicated: ' + text);
+});
+
+test('identical notifier events do not re-append the conflict text', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const {paper} = noteWorld(fx);
+  const c = paper(fx.item(3));
+  const n3 = new fx.Z.Item('note');
+  n3.libraryID = c.libraryID; n3.parentID = c.id; n3.setTags([{tag: 'style-custom:memo', type: 0}]);
+  n3.setNote(Runtime.memoNoteHTML('R remote'));
+  await n3.saveTx();
+  plugin.cache.items[plugin.identity(c)] = {remark: 'L local', memoSynced: 'older'};
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(c));
+  assert.equal(plugin.mirrorMemoNote(n3.id), true);
+  const once = plugin.entry(c).remark;
+  assert.ok(once.includes('R remote') && once.includes('L local'));
+  assert.equal(plugin.mirrorMemoNote(n3.id), false, 'the same event again changes nothing');
+  assert.equal(plugin.entry(c).remark, once);
+});
+
+test('library.setRemark returns the merged text after a conflict merge', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const {paper} = noteWorld(fx);
+  plugin.active = true;
+  const c = paper(fx.item(3));
+  const Library = require('../src/library.js');
+  const lib = Library.create({Zotero: Object.assign(fx.Z, {Items: Object.assign(fx.Z.Items, {getAsync: async id => fx.Z.Items.get(id)})}), runtime: plugin});
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  const n = new fx.Z.Item('note');
+  n.libraryID = c.libraryID; n.parentID = c.id; n.setTags([{tag: 'style-custom:memo', type: 0}]);
+  n.setNote(Runtime.memoNoteHTML('R remote'));
+  await n.saveTx();
+  plugin.cache.items[plugin.identity(c)] = {remark: 'old', memoSynced: 'old'};
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(c));
+  const out = await lib.setRemark(3, 'L1');
+  assert.ok(out.includes('R remote') && out.includes('L1') && out !== 'L1');
+  assert.equal(out, plugin.entry(c).remark);
+  assert.equal(await lib.setRemark(3, out), out, 'an unchanged memo returns itself');
+});
+
+test('the self-check is read-only by default: no write method is called and a legacy rating tag is left alone', async () => {
+  const SelfCheck = require('../src/selfcheck.js');
+  const fx = fixture(), {plugin, Z} = fx;
+  const legacy = fx.item(1, {tags: [{tag: '★★★'}, {tag: 'Topic'}]});
+  plugin.cache = {schema: 1, items: {}};
+  Z.Libraries.userLibraryID = 1;
+  Z.Items = {getAll: async () => [legacy], get: () => legacy, getAsync: async () => legacy};
+  const tagsBefore = JSON.stringify(legacy.getTags()), extraBefore = legacy.getField('extra');
+  const called = [];
+  let saves = 0;
+  const saved = legacy.save; legacy.save = async function () { saves++; return saved.call(this); };
+  legacy.saveTx = async function () { saves++; throw new Error('saveTx called'); };
+  for (const name of ['edit', 'flush', 'setRemark', 'memoToNote', 'watchAuthor', 'unwatchAuthor', 'addReading', 'runBackfill', 'hideRatingTags', 'moveStrayRatingTags', 'importWork', 'setSetting', 'mergePreprintIntoPublished', 'trashAttachments']) {
+    plugin[name] = async () => { called.push(name); throw new Error(name + ' must not be called by a read-only self-check'); };
+  }
+  const report = await SelfCheck.run(Z, plugin, {network: false});
+  assert.deepEqual(called, [], 'no write method called');
+  assert.equal(saves, 0, 'the item was not saved');
+  assert.equal(JSON.stringify(legacy.getTags()), tagsBefore, 'the ★★★ tag is still there');
+  assert.equal(legacy.getField('extra'), extraBefore, 'nothing written to Extra');
+  assert.ok(report.results.length > 5, 'the run completed with a report');
+});
+
+test('two concurrent merges of one preprint move the children once and the ledger keeps them for undo', async () => {
+  const {plugin, pre, pub, file, note} = mergeWorld();
+  const slow = file.saveTx;
+  file.saveTx = async function () { await new Promise(r => setTimeout(r, 10)); return slow.call(this); };
+  const results = await Promise.allSettled([plugin.mergePreprintIntoPublished(1), plugin.mergePreprintIntoPublished(1)]);
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1, 'the second merge is refused, not run over the first');
+  assert.equal(plugin.mergeLedger()['1'].children.length, 2, 'the ledger still lists both children');
+  assert.equal(await plugin.restorePreprint(1), true);
+  assert.equal(file.parentItemID, 1); assert.equal(note.parentItemID, 1);
+  assert.equal(pre.deleted, false); void pub;
+});
+
+test('undoing a merge restores the memo note and its sync baseline, so the note does not pull the merged text back', async () => {
+  const {fx, plugin, pre, pub, all} = mergeWorld();
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  const memo = new fx.Z.Item('note');
+  memo.libraryID = 1; memo.parentID = 2; memo.parentItemID = 2; memo.setTags([{tag: 'style-custom:memo', type: 0}]);
+  memo.setNote(Runtime.memoNoteHTML('existing memo')); await memo.saveTx();
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub));
+  (plugin.memoChecked).add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'existing memo', memoSynced: 'existing memo'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'preprint memo'};
+  plugin.signalsOf = ref => plugin.entry(ref).signals;
+  plugin.entry(pre).signals = {published: {doi: '10.9/pub', year: 2025}};
+  await plugin.mergePreprintIntoPublished(1);
+  assert.equal(plugin.entry(pub).remark, 'existing memo\n\npreprint memo');
+  assert.equal(Runtime.memoFromNoteHTML(memo.getNote()), 'existing memo\n\npreprint memo');
+  await plugin.restorePreprint(1);
+  assert.equal(plugin.entry(pub).remark, 'existing memo');
+  assert.equal(Runtime.memoFromNoteHTML(memo.getNote()), 'existing memo', 'the note is back too');
+  assert.equal(plugin.entry(pub).memoSynced, 'existing memo');
+  plugin.mirrorMemoNote(memo.id);
+  assert.equal(plugin.entry(pub).remark, 'existing memo', 'nothing pulls the merged text back');
+  void all;
+});
+
+test('undo keeps both the memo and its note when either was edited after the merge', async () => {
+  const {fx, plugin, pre, pub} = mergeWorld();
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  const memo = new fx.Z.Item('note');
+  memo.libraryID = 1; memo.parentID = 2; memo.parentItemID = 2; memo.setTags([{tag: 'style-custom:memo', type: 0}]);
+  memo.setNote(Runtime.memoNoteHTML('existing memo')); await memo.saveTx();
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: 'existing memo', memoSynced: 'existing memo'};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'preprint memo'};
+  plugin.signalsOf = ref => plugin.entry(ref).signals;
+  plugin.entry(pre).signals = {published: {doi: '10.9/pub', year: 2025}};
+  await plugin.mergePreprintIntoPublished(1);
+  plugin.entry(pub).remark = 'existing memo\n\npreprint memo\n\nlater thought';
+  await plugin.restorePreprint(1);
+  assert.equal(plugin.entry(pub).remark, 'existing memo\n\npreprint memo\n\nlater thought', 'the edited memo is kept');
+  assert.ok(Runtime.memoFromNoteHTML(memo.getNote()).includes('preprint memo'), 'and so is its note');
+});
+
+test('a preprint is recognised by its native item type first: two same-title preprints are not offered as preprint to published', async () => {
+  const fx = fixture(), {plugin} = fx;
+  const mk = (id, doi) => { const r = fx.item(id); r.fields = {title: 'Chromatin loop extrusion by cohesin in living cells', DOI: doi, date: '2020'}; r.itemType = 'preprint'; return r; };
+  const a = mk(1, '10.1101/2020.01.02.123456'), b = mk(2, '');
+  plugin.libraryItems = async () => [a, b];
+  plugin.signalsOf = () => null;
+  assert.equal(plugin._isPreprintItem(b), true);
+  const out = await plugin.cleanupFindings(1);
+  assert.deepEqual(out.merge, [], 'no preprint is offered to merge into another preprint');
+  assert.equal(out.copies.length, 1, 'they remain a duplicate group');
+});

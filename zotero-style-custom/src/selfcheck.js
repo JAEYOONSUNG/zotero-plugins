@@ -460,7 +460,7 @@
         }
       }
       try { await bench.toggle(false); } catch (ignored) {}
-      runtime.cache.workbenchUI = savedUI; runtime.dirty = true;
+      if (JSON.stringify(savedUI) !== JSON.stringify(runtime.cache.workbenchUI || {})) { runtime.cache.workbenchUI = savedUI; runtime.dirty = true; }
       if (broken.length) throw new Error(broken.join(' | '));
       return `${pressed} buttons pressed across ${tabs.length} tabs, none threw`;
     }));
@@ -887,23 +887,19 @@
       return `${rows.length} rows, none empty, none overlapping`;
     }));
 
-    // The rating moved from a tag to Extra. Writing the value it already holds
-    // drives the whole transaction without changing anything the user sees.
-    results.push(await attempt('a rating round-trips through Extra', async () => {
+    /* The rating lives in Extra. The default run only reads it: writing the
+       value an item already holds is not a no-op on one that still carries a
+       legacy star tag (the tag goes and Extra gains a line), so the write that
+       drives the whole transaction is a repair step, asked for by name. */
+    results.push(await attempt('a rating is read from Extra without writing', async () => {
       const item = all.find(paper => runtime.canEdit(paper) && runtime.state(paper).rating > 0)
         || all.find(paper => runtime.canEdit(paper));
       if (!item) throw new Error('nothing editable');
-      const before = runtime.state(item).rating;
-      const extraBefore = String(item.getField('extra') || '');
-      await runtime.edit([item], {rating: before});
-      const after = runtime.state(item).rating;
+      const rating = runtime.state(item).rating;
+      if (!Number.isFinite(rating) || rating < 0 || rating > 5) throw new Error(`rating out of range: ${rating}`);
       const tags = (item.getTags() || []).map(tag => tag.tag || tag);
-      if (after !== before) throw new Error(`rating changed ${before} -> ${after}`);
       if (tags.some(tag => /^style-custom:rating:/.test(tag))) throw new Error('rating tag is still written');
-      const expected = runtime.model.updateExtra(extraBefore, {rating: before});
-      const extraAfter = String(item.getField('extra') || '');
-      if (extraAfter !== expected) throw new Error(`extra mismatch: ${JSON.stringify(extraAfter)}`);
-      return `rating ${before} kept · extra ${JSON.stringify(extraAfter).slice(0, 60)}`;
+      return `rating ${rating} · extra ${JSON.stringify(String(item.getField('extra') || '')).slice(0, 60)}`;
     }));
 
     results.push(await attempt('rating tags left in the library', async () => {
@@ -923,17 +919,10 @@
       return `${watched.length} followed · ${withNews.length} with news · limit ${runtime.WATCH_LIMIT}`;
     }));
 
-    results.push(await attempt('following one more author is possible', async () => {
-      const probe = 'A999999999';
-      const had = runtime.watchedAuthors().some(row => row.id === probe);
-      if (had) return 'probe already present; skipped';
-      await runtime.watchAuthor({id: probe, name: 'Self-check probe', institution: ''});
-      const added = runtime.watchedAuthors().some(row => row.id === probe);
-      await runtime.unwatchAuthor(probe);
-      const gone = !runtime.watchedAuthors().some(row => row.id === probe);
-      if (!added) throw new Error('could not add');
-      if (!gone) throw new Error('could not remove');
-      return `added and removed at ${runtime.watchedAuthors().length} followed`;
+    results.push(await attempt('the follow limit is known', () => {
+      const limit = runtime.WATCH_LIMIT;
+      if (!Number.isFinite(limit) || limit < 1) throw new Error('no follow limit');
+      return `${runtime.watchedAuthors().length} followed of ${limit}`;
     }));
 
     /* What the outside services are told about this caller.
@@ -1005,6 +994,34 @@
     // reading it: the rating migration they asked for, and the sweep that fills
     // the three columns that have been empty since the day they shipped.
     if (repair) {
+      results.push(await attempt('a rating round-trips through Extra', async () => {
+        const item = all.find(paper => runtime.canEdit(paper) && runtime.state(paper).rating > 0)
+          || all.find(paper => runtime.canEdit(paper));
+        if (!item) throw new Error('nothing editable');
+        const before = runtime.state(item).rating;
+        const extraBefore = String(item.getField('extra') || '');
+        await runtime.edit([item], {rating: before});
+        const after = runtime.state(item).rating;
+        const tags = (item.getTags() || []).map(tag => tag.tag || tag);
+        if (after !== before) throw new Error(`rating changed ${before} -> ${after}`);
+        if (tags.some(tag => /^style-custom:rating:/.test(tag))) throw new Error('rating tag is still written');
+        const expected = runtime.model.updateExtra(extraBefore, {rating: before});
+        const extraAfter = String(item.getField('extra') || '');
+        if (extraAfter !== expected) throw new Error(`extra mismatch: ${JSON.stringify(extraAfter)}`);
+        return `rating ${before} kept · extra ${JSON.stringify(extraAfter).slice(0, 60)}`;
+      }));
+        results.push(await attempt('following one more author is possible (repair: writes and removes a probe)', async () => {
+          const probe = 'A999999999';
+          const had = runtime.watchedAuthors().some(row => row.id === probe);
+          if (had) return 'probe already present; skipped';
+          await runtime.watchAuthor({id: probe, name: 'Self-check probe', institution: ''});
+          const added = runtime.watchedAuthors().some(row => row.id === probe);
+          await runtime.unwatchAuthor(probe);
+          const gone = !runtime.watchedAuthors().some(row => row.id === probe);
+          if (!added) throw new Error('could not add');
+          if (!gone) throw new Error('could not remove');
+          return `added and removed at ${runtime.watchedAuthors().length} followed`;
+        }));
       results.push(await attempt('rating tags moved to Extra', async () => {
         const stragglers = await runtime.visibleRatingTagItems(library);
         if (!stragglers.length) {

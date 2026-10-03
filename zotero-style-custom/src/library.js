@@ -367,7 +367,10 @@
       /* "메모를 노트로도 저장": the same text into one tagged child note, so it
          lives in Zotero too. The local memo is already saved when this runs. */
       if(runtime.memoToNote&&runtime.getSetting?.('memoToNote')&&(value.trim()||runtime.memoNoteOf?.(item))){
-        try{await runtime.memoToNote(item,{prior});}catch(error){throw new Error('메모는 저장했지만 노트로 옮기지 못했습니다: '+(error&&error.message||error));}
+        let result;
+        try{result=await runtime.memoToNote(item,{prior});}catch(error){throw new Error('메모는 저장했지만 노트로 옮기지 못했습니다: '+(error&&error.message||error));}
+        // A conflict merge changed the stored memo: the caller's editor, cache and autosave baseline must take that text, not the one it submitted.
+        if(result&&!result.skipped&&(result.merged||result.adopted)&&typeof result.text==='string')return result.text;
       }
       return value;
     }

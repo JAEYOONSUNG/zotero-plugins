@@ -6270,10 +6270,19 @@ test('every button whose handler writes to the library carries data-writes, and 
  for(const chunk of src.split(/(?=\bbutton\()/).slice(1)){
   const label=chunk.match(/^button\('([^']+)'/);
   /* the handler is what follows up to the next button; cut at a blank-level boundary by taking the first 1500 chars */
-  const body=chunk.slice(0,1500).split(/\n\s*(?:const|let|function)\s/)[0].split(/\bbutton\(/)[0];
+  const body=chunk.slice(0,1500).split(/\n\s*(?:const|let|function)\s/)[0].split(/\bbutton\(/).slice(0,2).join('');/* the first piece is empty: the chunk starts at button( */
   if(writers.test(body)&&!(label&&listed.has(label[1]))&&!/data-writes/.test(chunk.slice(0,1500).split(/\n\s*const\s/)[0]))missing.push(label?label[1]:chunk.slice(0,60));
  }
  assert.deepEqual(missing,[],'writers not marked');
+ /* Plugin-state writers (boards, cards, views, tab groups, queue, filters, seen marks, settings) are caught by the handler's own source. */
+ const cacheHandler=new RegExp(src.match(/WRITES_CACHE_HANDLER=\/(.*)\/;/)[1]);
+ const stateWriters=/runtime\.dirty=true|runtime\.flush\(|\bsaveUI\(|\bsetSeen(Many)?\(|\bsetReadingQueue\(|\breader\.(save|delete|rename|update|apply|restore|close|move|set)\w*\(|\bmodel\.(create|delete|restore|addTo|addBoard|removeCard|link|unlink|rename|update)\w*\(/;
+ const uncaught=[];
+ for(const chunk of src.split(/(?=\bbutton\()/).slice(1)){
+  const body=chunk.slice(0,900).split(/\bbutton\(/).slice(0,2).join('');
+  if(stateWriters.test(body)&&!cacheHandler.test(body)&&!/data-writes|data-opens/.test(body))uncaught.push(chunk.slice(0,60));
+ }
+ assert.deepEqual(uncaught,[],'state writers the sweep would press');
  const f=fixture();
  await f.bench.show('annotations');
  const move=f.findButton('노트로 옮기기');
@@ -6333,5 +6342,72 @@ test('two collection papers that share only an outside work are drawn with it, n
  assert.equal(circles.filter(c=>!c.getAttribute('data-ghost')).length,2,'both papers are on the map');
  assert.equal(circles.filter(c=>c.getAttribute('data-ghost')).length,1,'with the work they share');
  assert.match(panel.textContent,/Shared outside work/);
+ f.bench.destroy();
+});
+
+test('a conflict-merged memo replaces the editor text, so the next keystroke keeps the remote part',async()=>{
+ const f=fixture();
+ const saves=[];
+ f.library.setRemark=async(id,text)=>{saves.push(text);return saves.length===1?'remote part\n---\n'+text:text;};
+ await f.bench.show('annotations');
+ const memo=f.body().querySelector('textarea.sc-annot-memo');
+ memo.value='mine';memo.dispatchEvent(new f.win.Event('input',{bubbles:true}));memo.dispatchEvent(new f.win.Event('blur'));
+ await settle();
+ assert.equal(memo.value,'remote part\n---\nmine','the editor shows what was stored');
+ memo.value=memo.value+' more';memo.dispatchEvent(new f.win.Event('input',{bubbles:true}));memo.dispatchEvent(new f.win.Event('blur'));
+ await settle();
+ assert.equal(saves[1],'remote part\n---\nmine more','the merged part is not deleted by the next save');
+ f.bench.destroy();
+});
+
+test('text typed while a merging save runs is preserved in the editor',async()=>{
+ const f=fixture(),saving=deferred();
+ f.library.setRemark=async(id,text)=>{await saving.promise;return 'remote\n---\n'+text;};
+ await f.bench.show('annotations');
+ const memo=f.body().querySelector('textarea.sc-annot-memo');
+ memo.value='mine';memo.dispatchEvent(new f.win.Event('input',{bubbles:true}));memo.dispatchEvent(new f.win.Event('blur'));
+ await settle();
+ memo.value='mine plus typing';
+ saving.resolve();await settle();
+ assert.equal(memo.value,'mine plus typing');
+ f.bench.destroy();
+});
+
+test('the self-check sweep leaves every button that writes plugin state alone (boards, views, queue, settings), by attribute not wording',async()=>{
+ const board={id:'b1',name:'Board one',nodes:[{id:'n1',label:'Card',x:1,y:1,note:'',color:'#ffffff'}],edges:[]};
+ const f=fixture({items:{},readerSettings:{},boards:[board],favoriteCollections:['4'],matrixFields:['title','authors','venue']});
+ const sc=fs.readFileSync(new URL('../src/selfcheck.js',import.meta.url),'utf8');
+ assert.match(sc.match(/\.filter\(b => [^\n]*data-opens[^\n]*\)/)[0],/hasAttribute\('data-writes'\)/);
+ const pressed=[],bad=[],snap=()=>JSON.stringify(f.runtime.cache,(k,v)=>k==='lastTab'?undefined:v);/* lastTab is only where the panel was left */
+ for(const [tab] of Workbench.TABS){
+  await f.bench.show(tab);
+  /* what the sweep presses: no verb list at all, as in a UI language the list does not know */
+  const buttons=[...f.bench.panel.querySelectorAll('.sc-body button')].filter(b=>!b.disabled&&!b.hidden&&!b.hasAttribute('data-opens')&&!b.hasAttribute('data-writes')&&!b.closest('.sc-hit, .sc-segmented')&&b.textContent.trim());
+  for(const b of buttons.slice(0,40)){
+   const before=snap(),flushes=f.calls.filter(c=>['remark','addTags','removeTags','relate','trashItems'].includes(c[0])).length;
+   if(!b.isConnected)continue;
+   if(process.env.DBG)console.error('PRESS',tab,b.textContent.trim().slice(0,40));
+   b.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+   const after=snap(),flushed=f.calls.filter(c=>['remark','addTags','removeTags','relate','trashItems'].includes(c[0])).length;
+   pressed.push(tab+' · '+b.textContent.trim());
+   if(after!==before||flushed!==flushes){bad.push(tab+' · '+b.textContent.trim());if(process.env.DBG)console.error('CHG',before.slice(-300),'\n',after.slice(-300));}
+   if(f.bench.state.tab!==tab)await f.bench.show(tab);
+  }
+ }
+ assert.deepEqual(bad,[],'buttons that save plugin state without data-writes');
+ assert.ok(pressed.length>10,'the sweep really presses buttons: '+pressed.length);
+ await f.bench.show('canvas');
+ for(const label of ['보드 만들기','보드 삭제'])assert.equal([...f.bench.panel.querySelectorAll('button')].find(b=>b.textContent.trim()===label)?.getAttribute('data-writes'),'cache',label);
+ f.bench.destroy();
+});
+
+test('the collection graph counts a group formed only through an outside work (A to W and B to W is one group)',async()=>{
+ const f=scopeFixture({graphKind:'collection',graphCollection:'40',graphSub:false});
+ const more=crowd(f,100,2,()=>['TOPX']);
+ f.library.collections=async()=>[{id:'40',name:'Project',count:2,itemIDs:more.map(m=>Number(m.id)),parentID:null}];
+ await f.bench.show('graph');await settle();
+ const tiles=[...f.bench.panel.querySelectorAll('.sc-overview-fact')].map(t=>t.textContent.replace(/\s+/g,' ').trim());
+ assert.ok(tiles.includes('1 묶음'),'both papers meet at the outside work: '+tiles.join('|'));
+ assert.ok(tiles.includes('0 연결 없는 논문'),tiles.join('|'));
  f.bench.destroy();
 });
