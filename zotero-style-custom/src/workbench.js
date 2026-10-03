@@ -3540,7 +3540,7 @@
    const cas=opts.memo||null;
    const binding={base:cas?String(cas.base??''):undefined,stale:null};
    const clearStale=()=>{binding.stale=null;if(staleBox){staleBox.remove();staleBox=null;}if(field.dataset.state==='stale')field.dataset.state='';};
-   const take=(text)=>{field.value=text;if(typeof autoGrow==='function')autoGrow(field);binding.rebase(text);if(field.dataset.draftKey)updateDraft(field.dataset.draftKey,undefined);};
+   const take=(text)=>{const prior=field.value;if(field.dataset.draftKey)finishDraft(field,prior);field.value=text;if(typeof autoGrow==='function')autoGrow(field);binding.rebase(text);};
    const drawStale=()=>{
     if(!cas||!cas.host||!cas.host.isConnected)return;
     if(staleBox){staleBox.remove();staleBox=null;}
@@ -3553,9 +3553,14 @@
      const col=node('div',null,two,{class:'sc-memo-conflict-text'});node('span',name,col,{class:'sc-memo-label'});node('pre',text||'(비어 있음)',col);
     }
     const acts=node('div',null,c,{class:'sc-actions'});
-    button('저장된 메모 쓰기',async()=>{take(found.stored);clearStale();followMemoEditors(cas.itemID,found.stored,field);},acts,{'data-writes':'cache'});
-    button('이 편집 내용 쓰기',async()=>{await binding.overwrite(found.conflict.local,found.stored);},acts,{'data-writes':'library'});
-    button('둘 다 합치기',async()=>{await binding.overwrite(found.stored.trim()&&found.conflict.local.trim()?found.stored+'\n\n'+found.conflict.local:found.stored.trim()?found.stored:found.conflict.local,found.stored);},acts,{'data-writes':'library',title:T('저장된 메모 아래에 이 편집 내용을 이어 붙입니다')});
+    // A restored draft is not in the editor (it shows the stored memo) until the reader edits there: then the editor's text is theirs.
+    const mine=()=>found.fromDraft&&field.value===found.stored?found.conflict.local:field.value;
+    // The buttons act on the text the editor holds when they are pressed. Discarding needs the reader to have seen it.
+    button('저장된 메모 쓰기',async()=>{
+     if(field.value!==found.conflict.local&&field.value!==found.stored){binding.stale={...found,fromDraft:false,conflict:{local:field.value,remote:found.stored}};drawStale();message('편집 내용이 그 사이 바뀌어 버리지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);return;}
+     take(found.stored);clearStale();followMemoEditors(cas.itemID,found.stored,field);},acts,{'data-writes':'cache'});
+    button('이 편집 내용 쓰기',async()=>{await binding.overwrite(mine,found.stored);},acts,{'data-writes':'library'});
+    button('둘 다 합치기',async()=>{await binding.overwrite(()=>{const own=mine();return found.stored.trim()&&own.trim()?found.stored+'\n\n'+own:found.stored.trim()?found.stored:own;},found.stored);},acts,{'data-writes':'library',title:T('저장된 메모 아래에 이 편집 내용을 이어 붙입니다')});
    };
    // One attempt: true when the library took it. The base moves only from what a write answered.
    const attempt=async(value,base)=>{
@@ -3563,7 +3568,14 @@
     const saved=await inFlight;
     if(saved&&typeof saved==='object'&&saved.stale){binding.stale=saved;field.dataset.state='stale';drawStale();return false;}
     const stored=typeof saved==='string'?saved:value;
-    if(cas){binding.base=stored;clearStale();}
+    /* The base moves to a returned text only when the editor shows it: a plain save (the text came back as submitted), or an
+       adopted text with nothing typed since. Typed since, the old base stays and the next save is a conflict. */
+    if(cas&&(saved===value||typeof saved!=='string'||field.value===value||field.value===saved)){
+     binding.base=stored;clearStale();
+     // A draft typed during the save was recorded over the old base: it is built on this one now.
+     const key=field.dataset.draftKey;
+     if(key&&drafts.has(key)&&drafts.get(key)===field.value&&field.value!==stored)updateDraft(key,field.value,stored);
+    }
     /* The note's newer text, adopted because the memo had not changed since the last sync, comes back as the stored text:
        the editor takes it. Input typed while the save ran stays as typed. */
     if(typeof saved==='string'&&saved!==value){
@@ -3596,10 +3608,11 @@
    // Saves of one editor never overlap: the next one starts from the base the previous one left.
    const commit=(options={})=>{const next=chain.catch(()=>{}).then(()=>run(options));chain=next;return next;};
    binding.commit=commit;
-   binding.overwrite=async(text,seenStored)=>{
+   binding.overwrite=async(pick,seenStored)=>{
     const result=await (chain=chain.catch(()=>{}).then(async()=>{
+     const text=typeof pick==='function'?pick():String(pick);
      field.value=text;if(typeof autoGrow==='function')autoGrow(field);last=text;field.dataset.state='saving';
-     try{const ok=await attempt(text,seenStored);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)updateDraft(field.dataset.draftKey,undefined);}return ok;}
+     try{const ok=await attempt(text,seenStored);if(ok){field.dataset.state='saved';if(field.dataset.draftKey)finishDraft(field,text);}return ok;}
      catch(error){field.dataset.state='failed';last=null;throw error;}
     }));
     if(!result)message('그 사이 메모가 또 바뀌어 아무것도 쓰지 않았습니다. 바뀐 내용을 확인하고 다시 고르세요.',true);

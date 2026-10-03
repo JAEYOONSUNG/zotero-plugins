@@ -359,7 +359,7 @@ test('finishing an earlier note save preserves text typed while it was saving',a
  const f=fixture(),saving=deferred();f.library.createNote=()=>saving.promise;await f.bench.show('notes');f.input('새 노트 내용','First submitted note');f.findButton('새 노트 저장').dispatchEvent(new f.win.Event('click'));await settle();f.input('새 노트 내용','Next unsaved note');saving.resolve('9');await settle();assert.equal(f.body().querySelector('[aria-label="새 노트 내용"]').value,'Next unsaved note');f.bench.destroy();
 });
 test('finishing an earlier remark save preserves edits made after submission',async()=>{
- const f=fixture(),saving=deferred();f.library.setRemark=()=>saving.promise;await f.bench.show('explore');await f.click('자세히');f.input('읽기 메모','Submitted remark');f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle();f.input('읽기 메모','Newer unsaved remark');saving.resolve();await settle();await f.bench.load();assert.equal(f.body().querySelector('[aria-label="읽기 메모"]').value,'Newer unsaved remark');f.bench.destroy();
+ const f=fixture(),saving=deferred();f.library.setRemark=async(id,text)=>{await saving.promise;(f.runtime.cache.items[id]||={}).remark=text;return text;};await f.bench.show('explore');await f.click('자세히');f.input('읽기 메모','Submitted remark');f.findButton('메모 저장').dispatchEvent(new f.win.Event('click'));await settle();f.input('읽기 메모','Newer unsaved remark');saving.resolve();await settle();await f.bench.load();assert.equal(f.body().querySelector('[aria-label="읽기 메모"]').value,'Newer unsaved remark');f.bench.destroy();
 });
 test('restored select drafts cannot mislabel a newly created canvas board',async()=>{
  const f=fixture();await f.bench.show('canvas');f.input('보드 이름','Board A');await f.click('보드 만들기');const a=f.runtime.cache.boards[0];const select=f.body().querySelector('[aria-label="캔버스 선택"]');select.value=a.id;select.dispatchEvent(new f.win.Event('change',{bubbles:true}));await settle();f.input('보드 이름','Board B');await f.click('보드 만들기');const b=f.runtime.cache.boards[1];assert.equal(f.bench.state.boardID,b.id);assert.equal(f.body().querySelector('[aria-label="캔버스 선택"]').value,b.id);f.bench.destroy();
@@ -6702,4 +6702,66 @@ test('memo CAS: fast typing in one editor is not a conflict with itself (saves a
 test('memo CAS: the AI memo suggestion is applied only over the memo it was made for',async()=>{
  const src=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
  assert.match(src,/library\.setRemark\(item\.id,output\.value,\{base:state\.aiMemoBase\}\)/);
+});
+
+test('memo CAS (P1-1): a save that returns the adopted note text does not move the base when the reader typed since: the next save is a conflict',async()=>{
+ const f=fixture();casLibrary(f);
+ f.runtime.cache.items[1]={remark:'L'};
+ let release;const gate=new Promise(r=>{release=r;});
+ const cas=f.library.setRemark;
+ f.library.setRemark=async(id,text,opts)=>{if(text==='L1'){await gate;f.runtime.cache.items[1].remark='R';return 'R';}return cas(id,text,opts);};
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ assert.equal(el.value,'L');
+ casType(f,el,'L1');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ el.value='L2'; // typed while the save is pending
+ release();await settle();
+ assert.equal(el.value,'L2');
+ el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'R','L2 did not overwrite the adopted memo');
+ assert.ok(f.body().querySelector('.sc-memo-stale'),'it is a conflict');
+ f.bench.destroy();
+});
+
+test('memo CAS (P1-2): the conflict buttons write what the textarea holds when they are pressed, not the text the box was drawn with',async()=>{
+ const f=fixture();casLibrary(f);
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'L');f.runtime.cache.items[1].remark='R';el.dispatchEvent(new f.win.Event('blur'));await settle();
+ assert.ok(f.body().querySelector('.sc-memo-stale'));
+ el.value='L+NEW';
+ await f.click('이 편집 내용 쓰기');
+ assert.equal(f.runtime.cache.items[1].remark,'L+NEW');assert.equal(el.value,'L+NEW');
+ f.runtime.cache.items[1].remark='R2';
+ casType(f,el,'X');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ el.value='X+Y';
+ await f.click('둘 다 합치기');
+ assert.equal(f.runtime.cache.items[1].remark,'R2\n\nX+Y');
+ // 저장된 메모 쓰기 does not discard text the box never showed.
+ f.runtime.cache.items[1].remark='R3';
+ casType(f,el,'Z');el.dispatchEvent(new f.win.Event('blur'));await settle();
+ el.value='Z and unseen';
+ await f.click('저장된 메모 쓰기');
+ assert.equal(el.value,'Z and unseen','typed text is kept');
+ assert.equal(f.runtime.cache.items[1].remark,'R3');
+ f.bench.destroy();
+});
+
+test('memo CAS (P1-3): text typed while a conflict choice is saving is kept as a draft and survives a redraw',async()=>{
+ const f=fixture();casLibrary(f);
+ await f.bench.show('annotations');await settle();
+ const el=f.body().querySelector('textarea.sc-paper-memo');
+ casType(f,el,'L');f.runtime.cache.items[1].remark='R';el.dispatchEvent(new f.win.Event('blur'));await settle();
+ let release;const gate=new Promise(r=>{release=r;});
+ const cas=f.library.setRemark;
+ f.library.setRemark=async(id,text,opts)=>{await gate;return cas(id,text,opts);};
+ const pending=f.click('이 편집 내용 쓰기');
+ await settle();
+ casType(f,el,'L+MORE');
+ release();await pending;await settle();
+ assert.equal(f.runtime.cache.items[1].remark,'L');
+ assert.equal(el.value,'L+MORE','the textarea keeps what was typed');
+ await f.bench.show('annotations');await settle();
+ assert.equal(f.body().querySelector('textarea.sc-paper-memo').value,'L+MORE','after a redraw the typed text is still there');
+ f.bench.destroy();
 });

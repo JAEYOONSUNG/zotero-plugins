@@ -4018,3 +4018,26 @@ test('memo CAS: setRemark with a base that is no longer the stored memo writes n
   assert.equal((await w.lib.setRemark(3, 'MINE', {base: 'STORED'})).stale, true, 'a base from before the last write is stale too');
   assert.equal(w.row.remark, 'NEXT');
 });
+
+test('memo/note (P2): undo of a merge that created the note deletes it, and the notifier\'s modify on the deleted note does not bring the memo back', async () => {
+  const {fx, plugin, pre, pub, all} = mergeWorld();
+  const first = fx.Z.Item.prototype.saveTx;
+  fx.Z.Item.prototype.saveTx = async function () { const out = await first.call(this); if (this.parentID) { this.parentItemID = this.parentID; all.set(this.id, this); } return out; };
+  await plugin.setSetting('memoToNote', true, {apply: false});
+  (plugin.memoChecked ||= new Set()).add(plugin.identity(pub)); plugin.memoChecked.add(plugin.identity(pre));
+  plugin.cache.items[plugin.identity(pub)] = {remark: ''};
+  plugin.cache.items[plugin.identity(pre)] = {remark: 'PREPRINT', signals: {published: {doi: '10.9/pub', year: 2025}}};
+  await plugin.mergePreprintIntoPublished(1);
+  const row = plugin.entry(pub);
+  assert.equal(row.remark, 'PREPRINT');
+  const note = plugin.memoNoteOf(pub);
+  assert.ok(note, 'the merge created the memo note');
+  const orig = fx.Z.Item.prototype.saveTx, mirrored = [];
+  fx.Z.Item.prototype.saveTx = async function () { const out = await orig.call(this); if (this.deleted) mirrored.push(plugin.mirrorMemoNote(this.id)); return out; };
+  await plugin.restorePreprint(1);
+  fx.Z.Item.prototype.saveTx = orig;
+  await Promise.all(mirrored);
+  assert.equal(note.deleted, true);
+  assert.equal(row.remark, '', 'the memo is back to what it was; the deleted note is not read again');
+  assert.equal(plugin.mergeLedger()['1'], undefined);
+});

@@ -4659,7 +4659,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   _memoNoteContext(noteID) {
     const note = this.Z.Items?.get?.(noteID);
-    if (!note || !note.isNote?.() || !note.parentID) return null;
+    // A deleted note is not news: Zotero fires 'modify' for the save that deleted it, and its text must not come back as the memo.
+    if (!note || note.deleted || !note.isNote?.() || !note.parentID) return null;
     if (!(note.getTags?.() || []).some(tag => tag.tag === this.constructor.MEMO_NOTE_TAG)) return null;
     const parent = this.Z.Items.get(note.parentID);
     if (!parent) return null;
