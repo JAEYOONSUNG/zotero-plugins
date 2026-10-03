@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import Authors from "../content/authors.js";
 import Metrics from "../content/metrics.js";
+import Cite from "../content/cite.js";
 import { uiHarness } from "./helpers/search-ui-harness.mjs";
 
 const rec = (n, names, venue, year, extra = {}) => ({ key: "r" + n, doi: "10.5555/p" + n, title: "Paper " + n, venue, year, citations: n * 10, citationSource: "scholar",
@@ -182,4 +183,21 @@ test("a verified profile keeps its figures and names its owner; the profile's ow
 	ui.displaySearchResults(FIXTURE({ authorProfile: openalex, authorProvenance: { truncated: false } }).map(r => ({ ...r, citationsBy: undefined })));
 	ui.originalRenderMetrics(ui.state.visible);
 	assert.match(ui.get("metrics-explain").textContent, /metricsLoadedOf\|50\|6/);
+});
+
+test("with a picked person and the namesakes shown, the citation graph counts the picked person's papers like the table (item 9)", async () => {
+	const ui = uiHarness({ metrics: Metrics, cite: Cite, realRows: true, prefs: { popDataDir: "" } });
+	await ui.switchSearchMode("authors");
+	ui.get("author-input").value = TYPED;
+	ui.authorSessions.scholar.action = "name-papers";
+	const year = new Date().getFullYear() - 1;
+	ui.displaySearchResults(FIXTURE({ authorProfile: NAME_SEARCH, citesByYear: [{ year, n: 3 }, { year: year - 1, n: 2 }] }));
+	ui.originalRenderMetrics(ui.state.visible);
+	const cards = ui.get("metrics-person").querySelectorAll(".pp-card");
+	cards[0].emit("click"); ui.get("metrics-person").querySelector(".pp-confirm").emit("click");
+	ui.setPick({ ...ui.personPick(), others: true });
+	assert.equal(ui.state.visible.length, 6);
+	ui.originalRenderMetrics(ui.state.visible);
+	assert.equal(ui.get("m-papers").textContent, "3");
+	assert.match(ui.get("metrics-trend").textContent, /metricsTrendNote\|3\|3/, "the graph covers the 3 picked papers, not all 6");
 });

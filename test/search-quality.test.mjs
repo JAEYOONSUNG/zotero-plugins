@@ -248,3 +248,14 @@ test("a topic search drops provider noise that matches no query term", () => {
 	assert.deepEqual(S.keywordTerms("a AND b"), []);
 	assert.deepEqual(S.keywordTerms("title:x"), []);
 });
+
+test("a complete Crossref author list replaces OpenAlex's truncated one and clears the flag (item 11)", async () => {
+	const { default: S } = await import("../content/sources.js");
+	const names = n => Array.from({ length: n }, (_, i) => ({ name: "Author " + i }));
+	const oa = S.makeRecord({ source: "openalex", title: "Big consortium paper", doi: "10.1/big", year: 2020, authors: names(100), authorsTruncated: true });
+	const cr = S.makeRecord({ source: "crossref", title: "Big consortium paper", doi: "10.1/big", year: 2020, authors: names(150) });
+	for (const lists of [[[oa], [cr]], [[cr], [oa]]]) {
+		const [m] = S.mergeRecords(lists.map(l => l.map(r => ({ ...r, authors: [...r.authors] }))));
+		assert.equal(m.authors.length, 150); assert.equal(m.authorsTruncated, false);
+	}
+});

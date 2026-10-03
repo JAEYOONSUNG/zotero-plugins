@@ -68,7 +68,7 @@ var ZotPoPHistory = (function () {
 
 	// What the menu shows for a search: the boxes that were filled, in reading order.
 	function describe(query = {}) {
-		if (query.mode === "author") return [query.authorProvider === "orcid" ? "ORCID" : "Google Scholar", query.authorInput || query.authorProfileId].filter(Boolean).join(" · ");
+		if (query.mode === "author") return [query.authorProvider === "orcid" ? "ORCID" : query.authorProvider === "combined" ? "OpenAlex + ORCID" : "Google Scholar", query.authorInput || query.authorProfileId].filter(Boolean).join(" · ");
 		let bits = [];
 		if (query.engine === "pop") bits.push("PoP");
 		if (query.popRaw) bits.push(String(query.popRaw));
@@ -98,6 +98,8 @@ var ZotPoPHistory = (function () {
 	// A pinned search remembers what it has shown, so it keeps far more than an ordinary entry.
 	// Past this many results the comparison is not trustworthy and nothing is marked.
 	const SEEN_CAP = 3000;
+	// What a pin accumulates over its runs; past this the oldest keys go, never the newest.
+	const SEEN_STORE_CAP = 30000;
 
 	function create({ io, dir, join, max = 30, maxBytes = 12 * 1024 * 1024, now = () => new Date() } = {}) {
 		if (!io) throw new TypeError("History storage requires an io adapter");
@@ -157,7 +159,7 @@ var ZotPoPHistory = (function () {
 		}
 
 		async function save({ source, query, records, partial = false, label = "" }) {
-			let profiles = query?.mode === "author" && ["scholar", "orcid"].includes(query.authorProvider) && Array.isArray(query.authorProfiles)
+			let profiles = query?.mode === "author" && ["scholar", "orcid", "combined"].includes(query.authorProvider) && Array.isArray(query.authorProfiles)
 				? query.authorProfiles.filter(profile => profile && profile.provider === query.authorProvider && typeof profile.id === "string" && profile.id.trim()) : [];
 			if (!source || !Array.isArray(records) || !records.length && !profiles.length) return null;
 			let id = signature(source, query);
@@ -263,7 +265,7 @@ var ZotPoPHistory = (function () {
 				let found = pinList.find(p => p.id === id);
 				if (!found) return null;
 				let before = new Set(found.seen), fresh = keysOf(records, SEEN_CAP).filter(k => !before.has(k));
-				found.seen = found.seen.concat(fresh).slice(0, SEEN_CAP);
+				found.seen = found.seen.concat(fresh).slice(-SEEN_STORE_CAP);
 				found.seenAt = now().toISOString();
 				found.newCount = 0;
 				await writePins();
@@ -291,7 +293,7 @@ var ZotPoPHistory = (function () {
 			});
 		}
 
-		return { list, save, find, get, previousKeys, remove, clear, signature, describe, pins, pin, unpin, pinFor, baseline, markSeen, SEEN_CAP };
+		return { list, save, find, get, previousKeys, remove, clear, signature, describe, pins, pin, unpin, pinFor, baseline, markSeen, SEEN_CAP, SEEN_STORE_CAP };
 	}
 
 	// A storage that forgets everything when the window closes: the fallback when the

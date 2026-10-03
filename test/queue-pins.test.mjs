@@ -177,3 +177,14 @@ test("UI: running a pin again is explicit, marks new rows against the pin and co
 	assert.equal((await ui.history.pins())[0].seen.length, 3, "zero results keep the baseline");
 	assert.equal(ui.state.pinLook ?? null, null);
 });
+
+test("UI: re-running a pin restores its saved filters as opening it does (item 15)", async () => {
+	const ui = uiHarness({ search: async () => recs("a", "b").map(r => ({ ...r })) });
+	await ui.runSearch();
+	const [entry] = await ui.history.list();
+	await ui.history.pin(entry.id, { filters: { text: "alpha-filter", rules: [] } });
+	ui.get("filter").value = "";
+	const pin = (await ui.history.pins())[0];
+	await ui.openHistoryEntry(pin.id, { pin, rerun: true });
+	assert.equal(ui.get("filter").value, "alpha-filter");
+});

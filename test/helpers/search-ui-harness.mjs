@@ -88,7 +88,7 @@ export function mockElement(tagName = "div") {
 }
 
 export function uiHarness({ sort = "relevance", search, request, refreshLibraryFlags, popBridge, authorsService = Authors, openDialog, marquee, realRows = false, columns = false, launchURL = () => {
-}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null, zotero = {}, sources = {}, previewModule = null } = {}) {
+}, historyFiles = new Map(), prefs = {}, mainWindow = null, importer = null, metrics = null, zotero = {}, sources = {}, previewModule = null, cite = null } = {}) {
 	// The author tab opens on the combined provider; tests of the other providers start from Scholar unless they save their own choice.
 	const startOnScholar = !("lastAuthorQuery" in prefs);
 	if (startOnScholar) prefs.lastAuthorQuery = JSON.stringify({ provider: "scholar" });
@@ -149,6 +149,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPPoPBridge: popBridge,
 		ZotPoPAuthors: authorsService,
 		ZotPoPPreview: previewModule || Preview,
+		...(cite ? { ZotPoPCite: cite } : {}),
 		ZotPoPHistory: { ...History, memoryIO: () => History.memoryIO(historyFiles) },
 		ZotPoPAffiliations: Affiliations,
 		ZotPoPFilters: Filters,

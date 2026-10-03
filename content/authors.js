@@ -214,8 +214,15 @@ var ZotPoPAuthors = (function () {
 			+ "&select=id,orcid,display_name,works_count,cited_by_count,summary_stats,last_known_institutions,topics&per-page=50" + Sources.openAlexAuth(ctx);
 		try {
 			const data = await cancellable(() => Sources.withRetry(() => http.getJSON(url, {}, ctx.signal), {}, ctx), ctx);
-			const byId = new Map();
-			for (const a of Array.isArray(data?.results) ? data.results : []) { const id = parseOrcid(a?.orcid); if (id) byId.set(id, a); }
+			// One ORCID iD can sit on several OpenAlex author records: keep them all (the biggest leads, the rest are alsoIds).
+			const byId = new Map(), extra = new Map();
+			for (const a of Array.isArray(data?.results) ? data.results : []) {
+				const id = parseOrcid(a?.orcid); if (!id) continue;
+				const have = byId.get(id);
+				if (!have) { byId.set(id, a); continue; }
+				const [lead, rest] = (Number(a.works_count) || 0) > (Number(have.works_count) || 0) ? [a, have] : [have, a];
+				byId.set(id, lead); extra.set(id, [...(extra.get(id) || []), rest]);
+			}
 			for (const c of candidates) {
 				const a = byId.get(c.id);
 				c.enriched = true;
@@ -225,6 +232,15 @@ var ZotPoPAuthors = (function () {
 					hIndex: Number.isFinite(Number(a.summary_stats?.h_index)) ? Number(a.summary_stats.h_index) : null,
 					topic: text(a.topics?.[0]?.display_name), openalexId: Sources.openAlexAuthorId?.(a.id) || String(a.id || "").replace("https://openalex.org/", "") || null,
 					lastInstitution: inst?.display_name ? { name: inst.display_name, country: String(inst.country_code || "").toUpperCase() || null } : null });
+				const others = extra.get(c.id) || [];
+				if (others.length) {
+					const lead = { openalexId: c.openalexId, hIndex: c.hIndex };
+					c.alsoIds = [...new Set(others.map(o => oaAuthorId(o.id)).filter(Boolean))];
+					c.worksCount += others.reduce((n, o) => n + (Number(o.works_count) || 0), 0);
+					c.citations += others.reduce((n, o) => n + (Number(o.cited_by_count) || 0), 0);
+					c.hIndexes = [lead, ...others.map(o => ({ openalexId: oaAuthorId(o.id), hIndex: Number.isFinite(Number(o.summary_stats?.h_index)) ? Number(o.summary_stats.h_index) : null }))];
+					c.hIndex = null; // no honest h-index from several profiles' own figures; the union of works gives it once loaded
+				}
 			}
 			return true;
 		} catch (error) {
@@ -344,7 +360,9 @@ var ZotPoPAuthors = (function () {
 			const same = c.orcid && byOrcid.get(c.orcid);
 			if (same) {
 				same.alsoIds = [...(same.alsoIds || []), c.openalexId]; same.worksCount += c.worksCount; same.citations += c.citations;
-				same.hIndex = Math.max(same.hIndex ?? 0, c.hIndex ?? 0); same.otherNames = [...new Set([...same.otherNames, c.name, ...c.otherNames])];
+				same.hIndexes = [...(same.hIndexes || [{ openalexId: same.openalexId, hIndex: same.hIndex }]), { openalexId: c.openalexId, hIndex: c.hIndex }];
+				same.hIndex = null; // the h of a union of works is not the max of the parts; computed from the loaded works instead
+				same.otherNames = [...new Set([...same.otherNames, c.name, ...c.otherNames])];
 				byOa.set(c.openalexId, same); continue;
 			}
 			list.push(c); byOa.set(c.openalexId, c); if (c.orcid) byOrcid.set(c.orcid, c);

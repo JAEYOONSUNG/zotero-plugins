@@ -2578,7 +2578,10 @@ var ZotPoPSources = (function () {
 		if (!a.issue && b.issue) a.issue = b.issue;
 		if (!a.pages && b.pages) a.pages = b.pages;
 		if ((b.abstract || "").length > (a.abstract || "").length) a.abstract = b.abstract;
-		if ((b.authors || []).length > (a.authors || []).length) a.authors = b.authors;
+		// The author list and its completeness flag travel together; a complete list beats a truncated one.
+		if ((b.authors || []).length && (a.authorsTruncated && !b.authorsTruncated || (a.authorsTruncated === b.authorsTruncated || !a.authorsTruncated) && (b.authors || []).length > (a.authors || []).length)) {
+			a.authors = b.authors; a.authorsTruncated = b.authorsTruncated === true;
+		}
 		// The source that knows the labs and countries wins; a longer list of bare
 		// affiliation strings is not a richer one.
 		let placed = people => (people || []).some(p => p.institutionId || p.country);

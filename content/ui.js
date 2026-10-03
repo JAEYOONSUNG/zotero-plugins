@@ -929,7 +929,8 @@
 			if (profile.worksCount != null || profile.hIndex != null) {
 				let stats = document.createElement("div"); stats.className = "badges author-profile-stats";
 				let add = (text, hint) => { let chip = document.createElement("span"); chip.className = "badge"; chip.textContent = text; if (hint) tip(chip, hint); stats.appendChild(chip); };
-				if (profile.worksCount != null) add(t("authorStatWorks", Number(profile.worksCount).toLocaleString(t.locale || undefined)));
+				let hTip = profile.hIndexes?.length ? t("authorHProfilesTip", profile.hIndexes.map(x => x.openalexId + ": " + (x.hIndex ?? "?")).join(", ")) : "";
+				if (profile.worksCount != null) add(t("authorStatWorks", Number(profile.worksCount).toLocaleString(t.locale || undefined)), hTip);
 				if (profile.citations != null) add(t("authorStatCited", Number(profile.citations).toLocaleString(t.locale || undefined)));
 				if (profile.hIndex != null) add(t("authorStatH", profile.hIndex));
 				info.appendChild(stats);
@@ -1492,6 +1493,7 @@
 			// An explicit run: the rows are compared with what the pin has seen, and then count as seen.
 			state.pinLook = pin.id;
 			await runSearch();
+			restorePinFilters(pin);
 			return;
 		}
 		if (!pin) { await showHistoryEntry(entry, stillMine); return; }
@@ -3594,7 +3596,8 @@
 		let box = $("metrics-years"); if (!box) return;
 		box.textContent = "";
 		let spec = filterSpec(), counts = new Map();
-		for (let r of state.records) if (Number.isInteger(r.year) && matchesFilter(r, spec, true)) counts.set(r.year, (counts.get(r.year) || 0) + 1);
+		let pick = searchSurface === "authors" ? personPick() : null;
+		for (let r of state.records) if (Number.isInteger(r.year) && matchesFilter(r, spec, true) && (!pick || inPick(pick, r))) counts.set(r.year, (counts.get(r.year) || 0) + 1);
 		let years = [...counts.keys()];
 		box.hidden = years.length < 2 && !state.yearRange;
 		if (box.hidden) return;
@@ -3810,8 +3813,10 @@
 		return { basisLabel, papers: m.papers, loaded: state.records.length, total, truncated, reasons, matches, stats, profile: truncated || reasons.includes("capped") ? profile : null };
 	}
 	function renderMetrics(list) {
+		// The graphs and the table describe the same papers: the picked person's, not the namesakes shown beside them.
+		let pickedNow = searchSurface === "authors" ? personPick() : null;
 		drawYearHistogram();
-		drawMetricsTrend(list);
+		drawMetricsTrend(pickedNow ? list.filter(r => inPick(pickedNow, r)) : list);
 		let authors = searchSurface === "authors", owner = metricsOwner();
 		let heading = $("metrics")?.querySelector("h3"); if (heading) heading.textContent = owner ? t("metricsOf", owner) : t("metricsTitle");
 		drawPersonPicker(list); drawScholarStats(null); drawMetricsAccount(null);
@@ -4192,7 +4197,7 @@
 	   drops whatever the previous row was still doing. */
 	const PREVIEW_FOLLOW_DELAY = 150;
 	state.preview = { on: false, key: null };
-	let previewViewer = null, previewTimer = null;
+	let previewViewer = null, previewTimer = null, previewPending = null;
 	function previewRecord() {
 		return state.records.find(r => r.key === state.focusKey)
 			|| state.records.find(r => state.selected.has(r.key)) || detailRecord();
@@ -4239,14 +4244,19 @@
 		$("d-pdfview").hidden = !on;
 		if (on) $("detail").setAttribute("data-preview", ""); else $("detail").removeAttribute("data-preview");
 		$("preview-btn").setAttribute("aria-pressed", String(Boolean(state.preview.on)));
-		clearTimeout(previewTimer);
+		// A pending start for the same paper survives (openPreview() right after the row's own render must not
+		// strand it on "loading"); a button press runs it now. Only a row change or close cancels it.
+		if (on && state.preview.key === r.key) {
+			if (previewPending && !follow) { let run = previewPending; clearTimeout(previewTimer); previewPending = null; run(); }
+			return;
+		}
+		clearTimeout(previewTimer); previewPending = null;
 		if (!on) { if (state.preview.key != null) previewViewer?.close(); state.preview.key = null; return; }
-		if (state.preview.key === r.key) return;
 		previewViewer?.close();
 		state.preview.key = r.key;
 		paintPreview({ status: "loading", page: 1, pageCount: 0, title: r.title, originalURL: ZotPoPPreview.originalURL(r) });
-		let start = () => { if (state.preview.on && state.preview.key === r.key) viewerOfPreview().showRecord(r); };
-		if (follow) previewTimer = setTimeout(start, PREVIEW_FOLLOW_DELAY); else start();
+		let start = () => { previewPending = null; if (state.preview.on && state.preview.key === r.key) viewerOfPreview().showRecord(r); };
+		if (follow) { previewPending = start; previewTimer = setTimeout(start, PREVIEW_FOLLOW_DELAY); } else start();
 	}
 	function openPreview(record = previewRecord()) {
 		if (!record) return;

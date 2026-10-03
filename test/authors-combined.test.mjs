@@ -124,10 +124,27 @@ test("two OpenAlex author records with one ORCID iD (as the live search returns)
 	const list = await Authors.searchProfiles("combined", "Sheila Jensen", http, {});
 	assert.equal(list.length, 1);
 	const [card] = list;
-	assert.equal(card.openalexId, "A4"); assert.deepEqual(card.alsoIds, ["A1"]); assert.equal(card.worksCount, 50); assert.equal(card.citations, 500); assert.equal(card.hIndex, 4);
+	assert.equal(card.openalexId, "A4"); assert.deepEqual(card.alsoIds, ["A1"]); assert.equal(card.worksCount, 50); assert.equal(card.citations, 500);
+	assert.equal(card.hIndex, null, "the h of two profiles is not the max of their h"); assert.deepEqual(card.hIndexes.map(x => [x.openalexId, x.hIndex]), [["A4", 4], ["A1", 1]]);
 	assert.deepEqual(card.sources, ["openalex", "orcid"]);
 	const urls = [];
 	const records = await Authors.loadPublications({ ...card }, { maxResults: 50 }, { async getJSON(url) { urls.push(url); return { meta: { count: 1 }, results: [work(1, "A4", O1)] }; } }, {});
 	assert.match(urls[0], /authorships\.author\.orcid:/, "both records are reached through the ORCID iD");
 	assert.equal(records.authorProfile.provider, "combined");
+});
+
+test("one ORCID iD on two OpenAlex profiles found through the ORCID search keeps both ids and reads the works by the iD (item 3)", async () => {
+	const { http: base } = stub({ orcid: [orcidRow(O2, "Sheila", "Jensen")], enrich: [oaAuthor(1, "S Jensen", O2), oaAuthor(2, "Sheila Jensen", O2)] });
+	const [card] = await Authors.searchProfiles("combined", "Sheila Jensen", { async getJSON(url) { if (url.startsWith("https://api.openalex.org/authors?search=")) throw new Error("no"); return base.getJSON(url); } }, {});
+	assert.deepEqual([card.openalexId, card.alsoIds], ["A2", ["A1"]]); assert.equal(card.worksCount, 30); assert.equal(card.hIndex, null);
+	const urls = [];
+	const four = [1, 2, 3, 4].map(n => work(n, n < 3 ? "A1" : "A2", O2));
+	const records = await Authors.loadPublications({ ...card }, { maxResults: 50 }, { async getJSON(url) { urls.push(url); return { meta: { count: 4 }, results: four }; } }, {});
+	assert.equal(records.length, 4); assert.match(urls[0], /authorships\.author\.orcid:/);
+});
+
+test("two profiles with distinct [4,4] papers show no h-index of 2 (item 10)", async () => {
+	const { http } = stub({ oa: [oaAuthor(1, "Sheila Jensen", O1, { summary_stats: { h_index: 2 } }), oaAuthor(2, "Sheila I Jensen", O1, { summary_stats: { h_index: 2 } })], orcid: [orcidRow(O1, "Sheila", "Jensen")] });
+	const [card] = await Authors.searchProfiles("combined", "Sheila Jensen", http, {});
+	assert.equal(card.hIndex, null); assert.equal(card.hIndexes.length, 2);
 });

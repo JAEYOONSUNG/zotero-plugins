@@ -245,3 +245,18 @@ test("preview markup has a separate window identity and visible original/preview
 	assert.doesNotMatch(search, /id="d-preview"/, "one preview button, in the toolbar");
 	assert.equal((search.match(/preview-action/g) || []).length, 1);
 });
+
+test("pressing a row's PDF button right after its detail render still loads the preview (item 12)", async () => {
+	const shown = [];
+	const fake = { page: 1, pageCount: 1, showRecord(r) { shown.push(r.key); }, goTo() {}, retry() {}, close() {} };
+	const ui = uiHarness({ previewModule: { ...Preview, createViewer: () => fake } });
+	await ui.runSearch();
+	ui.openPreview(ui.state.records[0]);
+	shown.length = 0;
+	const other = ui.state.records[1];
+	ui.state.detailKey = other.key;
+	ui.originalRenderDetail();            // the row click: real renderDetail schedules the follow timer
+	ui.openPreview(other);                // the row's PDF button, before the timer fires
+	await new Promise(r => setTimeout(r, 400));
+	assert.deepEqual(shown, [other.key], "loaded exactly once, not stuck on loading");
+});

@@ -179,3 +179,25 @@ test("each entry keeps only capped result keys, and the last run's keys come bac
 	assert.equal((await history.get(id)).keys.length, 1000, "stored keys are capped");
 	assert.equal(await history.previousKeys("multi", { ...query, keywords: "many" }), null, "a capped key list cannot say what is new");
 });
+
+test("a combined author search is saved with its profile cards and restored (item 13)", async () => {
+	const { history } = store();
+	const profile = { provider: "combined", id: "A2", openalexId: "A2", orcid: "0000-0002-1825-0097", name: "Sheila Jensen" };
+	const query = { mode: "author", authorProvider: "combined", authorInput: "Sheila Jensen", authorAction: "profiles", maxResults: 1000, authorProfiles: [profile] };
+	const id = await history.save({ source: "author:combined", query, records: [] });
+	assert.ok(id, "profiles-only combined search is saved");
+	assert.deepEqual((await history.get(id)).query.authorProfiles, [profile]);
+	assert.match((await history.list())[0].label, /OpenAlex/);
+});
+
+test("a pin's seen set keeps its newest keys when it outgrows one run's cap (item 14)", async () => {
+	const h = History.create({ io: History.memoryIO(), dir: "h" });
+	const batch = (p, n) => Array.from({ length: n }, (_, i) => ({ key: p + i }));
+	const id = await h.save({ source: "openalex", query, records: batch("a", 3000) });
+	await h.pin(id);
+	await h.markSeen(id, batch("b", 3000));
+	const [p] = await h.pins();
+	assert.equal(p.seen.length, 6000); assert.ok(p.seen.includes("k:b2999"));
+	await h.save({ source: "openalex", query, records: batch("b", 3000) });
+	assert.equal((await h.pins())[0].newCount, 0, "already-seen results are not new");
+});
