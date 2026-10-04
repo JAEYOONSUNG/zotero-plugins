@@ -2003,7 +2003,7 @@
    // The slot is always there, so the figures line up down the list; it is
    // filled only once the paper has been rated.
    const stars=node('span',null,metrics,{class:'sc-metric sc-stars',title:item.rating?`별점 ${item.rating}/5`:'별점 없음'});stars.dataset.metric='rating';
-   node('span',item.rating?'\u2605'.repeat(item.rating)+'\u2606'.repeat(5-item.rating):'',stars,{class:'sc-metric-value'});
+   const starValue=node('span',item.rating?'\u2605'.repeat(item.rating):'',stars,{class:'sc-metric-value'});if(item.rating&&item.rating<5)node('span','\u2606'.repeat(5-item.rating),starValue,{class:'sc-star-off'});
    const timeCell=metric(metrics,{unit:'읽기',name:'time',text:Number(item.seconds)>0?(runtime.formatReadTime?runtime.formatReadTime(item.seconds,{compact:true}):Math.floor(Number(item.seconds))+'초'):'',label:'읽은 시간'});
    /* How far in, beside how long: twenty minutes on a paper says little
       until it is set against four of eight pages. A short grey meter, no

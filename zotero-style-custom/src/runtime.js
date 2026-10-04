@@ -350,7 +350,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if(cells.length){const P=this.palette(win.document);
       for(const cell of cells){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);
         if(cell.dataset.styleCustomReading==='time'){cell.textContent=this.formatReadTime(value.seconds);cell.style.color=value.seconds<=0?P.faint:P.text;cell.style.fontWeight=value.seconds>=3600?'590':'';}
-        else if(cell.firstChild&&cell.lastChild){const tone={unread:P.muted,reading:P.reading,done:P.done}[value.status]||P.muted;cell.firstChild.textContent={unread:'\u25cb',reading:'\u25d0',done:'\u25cf'}[value.status]||'\u25cb';cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status==='unread'?'':this.t({reading:'읽는 중',done:'읽음'}[value.status]||'');cell.lastChild.style.color=value.status==='unread'?P.muted:tone;cell.lastChild.style.fontWeight=value.status==='unread'?'400':'590';}}}
+        else if(cell.firstChild&&cell.lastChild){const tone={unread:P.muted,reading:P.reading,done:P.done}[value.status]||P.muted;cell.firstChild.textContent={unread:'\u25cb',reading:'\u25d0',done:'\u25cf'}[value.status]||'\u25cb';cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status==='unread'?'':this.t({reading:'읽는 중',done:'완료'}[value.status]||'');cell.lastChild.style.color=value.status==='unread'?P.muted:tone;cell.lastChild.style.fontWeight=value.status==='unread'?'400':'590';}}}
       state.workbench?.refreshMetrics?.(itemID);
     }
   }
@@ -949,8 +949,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return dark
       // Lifted a step in saturation from the first pastel set, which read as
       // muddy on a white ground; the evenness across hues is kept.
-      ? {blue:'#7EA3E1',green:'#2BB771',orange:'#D79256',red:'#E3888B',purple:'#BC8EE5',teal:'#2FB0C9',gold:'#C09D2D',amber:'#D1963D',star:'#F3C33F',reading:'#7FC3A3',done:'#3FA372',gray:'#98989D',faint:'#676770',muted:'#A0A0A6',text:'#E8E8ED',tint:0.28,dark:true}
-      : {blue:'#3068CA',green:'#1C7A4B',orange:'#9D5C25',red:'#C92F34',purple:'#9043D3',teal:'#207585',gold:'#7E681E',amber:'#8F6322',star:'#C08A0E',reading:'#3C775C',done:'#2D7854',gray:'#6A6A6F',faint:'#8B95A2',muted:'#6E6E73',text:'#1C1C1E',tint:0.18,dark:false};
+      ? {blue:'#7EA3E1',green:'#2BB771',orange:'#D79256',red:'#E3888B',purple:'#BC8EE5',teal:'#2FB0C9',gold:'#C09D2D',amber:'#D1963D',star:'#F7C948',reading:'#7FC3A3',done:'#3FA372',gray:'#98989D',faint:'#676770',muted:'#A0A0A6',text:'#E8E8ED',tint:0.28,dark:true}
+      : {blue:'#3068CA',green:'#1C7A4B',orange:'#9D5C25',red:'#C92F34',purple:'#9043D3',teal:'#207585',gold:'#7E681E',amber:'#8F6322',star:'#F2B01E',starEdge:'#C98A0B',reading:'#3C775C',done:'#2D7854',gray:'#6A6A6F',faint:'#8B95A2',muted:'#6E6E73',text:'#1C1C1E',tint:0.18,dark:false};
   }
   tint(hex, alpha) {
     const n = parseInt(hex.slice(1), 16);
@@ -1260,11 +1260,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       text.style.cssText = `color:${label === "unread" ? P.muted : tone};font-weight:${label === "unread" ? 400 : 590};`;
       cell.append(dot, text);
       if (this.isRegular(item)) {
-        cell.title = this.t({unread: "안 읽음", reading: "읽는 중", done: "완료"}[label]) + " · " + this.t("클릭하면 다음 상태로 바꿉니다");
+        cell.title = this.t({unread: "안 읽음", reading: "읽는 중", done: "완료"}[label]) + " · " + this.t("클릭해서 상태 고르기: 안 읽음 / 읽는 중 / 완료");
         cell.style.cursor = "pointer";
         // The first click on a row selects it, as everywhere in Zotero; only a click on a row already selected changes it.
         const armed = this.guardClick(cell, doc, index);
-        cell.addEventListener("click", event => { if (!armed()) return; event.stopPropagation(); if (!this.canEdit(item)) return; const next = {unread: "reading", reading: "done", done: "unread"}[label]; this.edit([item], {status: next}).catch(e => this.Z.logError(e)); });
+        cell.addEventListener("click", event => {
+          if (!armed()) return;
+          event.stopPropagation();
+          if (!this.canEdit(item)) return;
+          // A click on a selected row speaks for every selected row.
+          this.pickStatus(doc, cell, this.rowSelection(doc, item), label);
+        });
       }
     } else if (key === "rating") {
       const rating = Number(value);
@@ -1274,7 +1280,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         star.textContent = n<=rating ? "★" : "☆"; star.title = n===rating ? this.t("클릭하면 별점을 지웁니다") : this.t(`${n}/5로 매기기`); star.setAttribute("role","button");
         // A filled star is a mark, not text: it can be the light warm colour a
         // star is supposed to be instead of the dark ochre that reads as dirt.
-        star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.star:P.faint};`;
+        star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.star:P.faint};${n<=rating&&P.starEdge?`-webkit-text-stroke:1px ${P.starEdge};`:''}`;
         const armed = this.guardClick(star, doc, index);
         star.addEventListener("click", event => { if (!armed()) return; event.stopPropagation(); if (this.canEdit(item)) this.edit([item], {rating:n===rating?0:n}).catch(e=>this.Z.logError(e)); });
         cell.appendChild(star);
@@ -3759,6 +3765,46 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   rowSelected(doc, index) {
     const selection = doc?.defaultView?.ZoteroPane?.itemsView?.selection;
     return typeof selection?.isSelected === 'function' ? !!selection.isSelected(index) : true;
+  }
+  /* The papers a click on this row stands for: every selected paper when the
+     row is one of them, otherwise just the row. */
+  rowSelection(doc, item) {
+    let chosen = [];
+    try { chosen = doc.defaultView?.ZoteroPane?.getSelectedItems?.() || []; } catch (_) {}
+    chosen = chosen.filter(ref => this.isRegular(ref));
+    return chosen.length > 1 && chosen.some(ref => ref.id === item.id) ? chosen : [item];
+  }
+  /* Reading status from the item list: a small menu of the three states with
+     the current one checked, as a native popup like Zotero's own menus. Where
+     a popup cannot be made the click cycles Unread -> Reading -> Done. The
+     write is edit(), the path the context menu and the panel use. */
+  pickStatus(doc, cell, items, current) {
+    const words = {unread: "안 읽음", reading: "읽는 중", done: "완료"};
+    const apply = status => {
+      const win = doc.defaultView;
+      return this.edit(items, {status})
+        .then(() => this.say(win, this.t("읽기 상태를 바꿨습니다") + " · " + this.t(words[status]) + (items.length > 1 ? " · ×" + items.length : "")))
+        .catch(e => { this.Z.logError(e); return this.say(win, e?.message || String(e), {error: true}); });
+    };
+    const make = tag => doc.createXULElement?.(tag);
+    let popup = null;
+    try { popup = make("menupopup"); } catch (_) {}
+    const host = doc.getElementById?.("mainPopupSet") || doc.documentElement;
+    if (!popup || !host || typeof popup.openPopup !== "function") {
+      return apply({unread: "reading", reading: "done", done: "unread"}[current] || "reading");
+    }
+    for (const status of ["unread", "reading", "done"]) {
+      const entry = make("menuitem");
+      entry.setAttribute("label", this.t(words[status]));
+      entry.setAttribute("type", "checkbox");
+      if (status === current) entry.setAttribute("checked", "true");
+      entry.addEventListener("command", () => { if (status !== current) apply(status); });
+      popup.appendChild(entry);
+    }
+    popup.addEventListener("popuphidden", () => popup.remove?.(), {once: true});
+    host.appendChild(popup);
+    popup.openPopup(cell, "after_start", 0, 0, true, false);
+    return null;
   }
   /* Zotero selects a row on mousedown, so by the click it is always selected.
      The cell asks on its own mousedown, which runs before the tree's, and the

@@ -39,6 +39,8 @@
   --sc-done: #53671e;
   --sc-external: #7d5208;
   --sc-star: #94600f;
+  --sc-star-fill: #f2b01e;
+  --sc-star-edge: #c98a0b;
   /* Figure tiers (IF, rank): four hues kept for their meaning, all at one saturation and one
      luminance, the way the journal inks are drawn, so none of them is louder than the rest. */
   --sc-tone-top: #7b41ac;
@@ -776,6 +778,8 @@
     --sc-done: #c5e07b;
     --sc-external: #f4c871;
     --sc-star: #f4c871;
+    --sc-star-fill: #f7c948;
+    --sc-star-edge: transparent;
     --sc-tone-top: #c0a1db; --sc-tone-high: #97afd8; --sc-tone-mid: #6db9c8; --sc-tone-low: #5bc187;
     --sc-track: rgba(255, 255, 255, .14);
     --sc-bar: #a3a7b2;
@@ -1054,7 +1058,8 @@
 #style-custom-workbench .sc-metric[data-metric=time] .sc-metric-value { min-width: 5.2em; }
 #style-custom-workbench .sc-metric[data-tone] { font-weight: var(--sc-fw-strong); }
 #style-custom-workbench .sc-metric[data-tone] svg { opacity: 1; }
-#style-custom-workbench .sc-stars .sc-metric-value { color: var(--sc-star); letter-spacing: -1px; min-width: 4.8em; }
+#style-custom-workbench .sc-stars .sc-metric-value { color: var(--sc-star-fill); -webkit-text-stroke: 1px var(--sc-star-edge); letter-spacing: -1px; min-width: 4.8em; }
+#style-custom-workbench .sc-stars .sc-star-off { color: var(--sc-muted); -webkit-text-stroke: 0; }
 /* The colour a paper has been given wins over its reading state. */
 #style-custom-workbench .sc-paper-card[data-mark=red]    { --sc-mark: #BD6C6E; }
 #style-custom-workbench .sc-paper-card[data-mark=orange] { --sc-mark: #AA784C; }

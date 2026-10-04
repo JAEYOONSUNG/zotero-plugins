@@ -578,6 +578,41 @@ test('the click that selects a row does not also change its status; a click on a
  window.ZoteroPane=undefined;
 });
 
+test('clicking a selected status cell opens a three-state menu with the current one checked, and the choice goes through edit()',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item}=fixture();const a=item(1),b=item(2),c=item(3);
+ let selectedRows=[a,b];window.ZoteroPane={itemsView:{getRow:()=>({ref:a}),selection:{isSelected:()=>true}},getSelectedItems:()=>selectedRows};
+ plugin.isRegular=()=>true;plugin.canEdit=()=>true;plugin.value=()=>'1';
+ const edits=[],said=[];plugin.edit=async(items,change)=>{edits.push([items.map(i=>i.id),change]);};plugin.say=async(w,m)=>{said.push(m);};
+ const opened=[];document.createXULElement=tag=>{const n=document.createElement(tag);n.openPopup=(...args)=>opened.push(args);return n;};
+ const cell=plugin.renderCell('status',0,'1',{},document);document.body.appendChild(cell);
+ assert.match(cell.title,/Click to set: Unread \/ Reading \/ Done|클릭해서 상태 고르기/);
+ cell.dispatchEvent(new window.Event('mousedown',{bubbles:true}));cell.dispatchEvent(new window.Event('click',{bubbles:true}));
+ assert.equal(edits.length,0,'opening the menu changes nothing');assert.equal(opened.length,1);
+ const entries=[...document.querySelectorAll('menupopup menuitem')];
+ assert.equal(entries.length,3);assert.deepEqual(entries.map(e=>e.getAttribute('checked')),[null,'true',null],'current state (reading) is checked');
+ entries[2].dispatchEvent(new window.Event('command'));await new Promise(r=>setTimeout(r,0));
+ assert.deepEqual(edits,[[[1,2],{status:'done'}]],'every selected row gets the choice');
+ assert.equal(said.length,1,'the status line reports it');assert.match(said[0],/×2/);
+ // choosing the checked state is a no-op
+ entries[1].dispatchEvent(new window.Event('command'));await new Promise(r=>setTimeout(r,0));assert.equal(edits.length,1);
+ // a click on a row outside the selection speaks only for that row
+ selectedRows=[b,c];edits.length=0;document.querySelector('menupopup')?.remove();
+ const cell2=plugin.renderCell('status',0,'1',{},document);document.body.appendChild(cell2);cell2.dispatchEvent(new window.Event('mousedown',{bubbles:true}));cell2.dispatchEvent(new window.Event('click',{bubbles:true}));
+ [...document.querySelectorAll('menupopup menuitem')][0].dispatchEvent(new window.Event('command'));await new Promise(r=>setTimeout(r,0));
+ assert.deepEqual(edits,[[[1],{status:'unread'}]]);
+ window.ZoteroPane=undefined;
+});
+
+test('without a native popup the status click cycles unread, reading, done',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item}=fixture();const a=item(1);
+ window.ZoteroPane={itemsView:{getRow:()=>({ref:a}),selection:{isSelected:()=>true}},getSelectedItems:()=>[a]};
+ plugin.isRegular=()=>true;plugin.canEdit=()=>true;plugin.value=()=>'2';plugin.say=async()=>{};
+ const edits=[];plugin.edit=async(items,change)=>{edits.push(change);};
+ const cell=plugin.renderCell('status',0,'2',{},document);cell.dispatchEvent(new window.Event('mousedown',{bubbles:true}));cell.dispatchEvent(new window.Event('click',{bubbles:true}));
+ await new Promise(r=>setTimeout(r,0));assert.deepEqual(edits,[{status:'unread'}]);
+ window.ZoteroPane=undefined;
+});
+
 test('the annotation strip is worked out once per change, and its page marks are not Tab stops',async()=>{
  const {plugin,item,Z}=fixture(),ref=item(1);ref.getAttachments=()=>[9];
  let parses=0;const note={annotationColor:'#ffd400',dateModified:'2026-09-01 00:00:00',get annotationPosition(){parses++;return JSON.stringify({pageIndex:2,rects:[[0,0,1,1]]});}};
@@ -1531,6 +1566,10 @@ test('filled stars use gold with enough area to read, empty ones are plainly emp
   // star is supposed to be rather than the dark ochre that read as dirt.
   assert.deepEqual(stars.map(s => s.style.color), [P.star, P.star, P.star, P.faint, P.faint]);
   assert.equal(stars[0].style.fontSize, '13px');
+  // The same colour tokens as the workbench: light #F2B01E with a #C98A0B edge, dark #F7C948.
+  assert.equal(P.star.toUpperCase(), '#F2B01E');assert.equal(P.starEdge.toUpperCase(), '#C98A0B');
+  assert.match(stars[0].style.cssText, /text-stroke:\s*1px/);assert.doesNotMatch(stars[3].style.cssText, /text-stroke/);
+  assert.equal(plugin.palette({defaultView:{matchMedia:()=>({matches:true})},documentElement:{}}).star?.toUpperCase?.()??'#F7C948','#F7C948');
   assert.notEqual(P.star, P.faint);
   assert.notEqual(P.star, P.gold);
 });
